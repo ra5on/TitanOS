@@ -98,6 +98,44 @@ def archive_name(value):
     return path.parts
 
 
+def archive_mtime_ns(value):
+    """Accept bounded TAR seconds, including PAX fractions, without overflow."""
+    if type(value) is str:
+        if len(value) > 64 or not re.fullmatch(r'[+-]?[0-9]{1,20}(?:\.[0-9]{1,18})?', value):
+            raise Error("Archiv enthält eine ungültige Änderungszeit.")
+        whole, _, fraction = value.lstrip('+-').partition('.')
+        result = int(whole) * 1000000000 + int((fraction + '0'*9)[:9])
+        if value.startswith('-'): result = -result
+    elif type(value) not in (int, float) or (type(value) is float and not math.isfinite(value)):
+        raise Error("Archiv enthält eine ungültige Änderungszeit.")
+    else:
+        try:
+            result = int(value * 1000000000)
+        except (OverflowError, ValueError):
+            raise Error("Archiv enthält eine ungültige Änderungszeit.") from None
+    if not -(2**63) <= result <= 2**63 - 1:
+        raise Error("Archiv-Änderungszeit überschreitet den unterstützten Zeitbereich.")
+    return result
+
+
+def member_mtime_ns(member):
+    # tarfile substitutes zero for malformed numeric PAX values. Validate the
+    # original header and retain its exact nanoseconds before float rounding.
+    return archive_mtime_ns(member.pax_headers.get('mtime', member.mtime))
+
+
+def restore_mtime(fd, value):
+    """The caller owns a checked descriptor; never resolve a pathname here."""
+    try:
+        info = os.fstat(fd)
+        os.utime(fd, ns=(info.st_atime_ns, value))
+        if os.fstat(fd).st_mtime_ns != value:
+            raise Error("Das Zieldateisystem unterstützt die gesicherte Änderungszeit nicht.")
+        os.fsync(fd)
+    except (OSError, OverflowError, ValueError):
+        raise Error("Gesicherte Änderungszeit konnte nicht sicher wiederhergestellt werden.") from None
+
+
 def fd_json(parent, name, value):
     """Atomic JSON write that never creates a pathname on a fallback filesystem."""
     temporary = name + "." + secrets.token_hex(6)
@@ -555,6 +593,7 @@ class Backups:
             vm_members.update(tuple(disk["archive"].split("/")) for disk in manifest.get("vm_disks", []))
         for member in archive:
             parts = archive_name(member.name)
+            member_mtime_ns(member)
             ancestors = ["/".join(parts[:index]) for index in range(1, len(parts))]
             if (member.name in seen or any(seen.get(parent) == "file" for parent in ancestors) or
                     (member.isfile() and member.name in required_directories) or
@@ -606,7 +645,9 @@ class Backups:
 
     def _extract(self, backup, destination, predicate, trim=0):
         self.verify(backup)
-        with self._data_fd(destination) as rootfd:
+        # Spill directory identities to DATA rather than retaining one open FD
+        # or an unbounded list per directory. Children must finish first.
+        with self._data_fd(destination) as rootfd, tempfile.TemporaryFile(mode="w+t", dir=self.host.directory) as directory_times:
             with self._archive(backup) as (manifest, archive):
                 for member, parts in self._members(archive, manifest):
                     if not predicate(parts):
@@ -631,14 +672,40 @@ class Backups:
                                 existing = os.stat(relative[-1], dir_fd=parent, follow_symlinks=False)
                                 if not stat.S_ISDIR(existing.st_mode):
                                     raise Error("Ziel enthält einen unerwarteten Pfad.")
+                            folder = os.open(relative[-1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                            try:
+                                info = os.fstat(folder)
+                                directory_times.write(json.dumps([relative, info.st_dev, info.st_ino, member_mtime_ns(member)]) + "\n")
+                            finally:
+                                os.close(folder)
                         else:
                             fd = os.open(relative[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o660, dir_fd=parent)
                             with os.fdopen(fd, "wb") as stream:
                                 shutil.copyfileobj(archive.extractfile(member), stream, 1024 * 1024)
                                 stream.flush()
                                 os.fsync(stream.fileno())
+                                restore_mtime(stream.fileno(), member_mtime_ns(member))
                     finally:
                         os.close(parent)
+            directory_times.seek(0)
+            while line := directory_times.readline(32769):
+                if len(line) > 32768:
+                    raise Error("Gesicherte Verzeichniszeit überschreitet die Sicherheitsgrenze.")
+                relative, device, inode, modified = json.loads(line)
+                folder = os.dup(rootfd)
+                try:
+                    for component in relative:
+                        following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=folder)
+                        os.close(folder)
+                        folder = following
+                    info = os.fstat(folder)
+                    if (info.st_dev, info.st_ino) != (device, inode):
+                        raise Error("Wiederhergestelltes Verzeichnis wurde während der Zeitübernahme ersetzt.")
+                    restore_mtime(folder, modified)
+                except OSError:
+                    raise Error("Verzeichniszeit konnte nicht ohne Pfadänderung wiederhergestellt werden.") from None
+                finally:
+                    os.close(folder)
 
     def browse(self, backup, path="", offset=0, limit=200):
         """List user files only; configuration hashes are never exposed here."""

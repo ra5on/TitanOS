@@ -5,7 +5,7 @@ Ergebnisse älterer Versionen ersetzen keine Prüfung dieses Images.
 
 | Prüfung | Stand |
 | --- | --- |
-| Python/API/Sicherheitsregressionen | 1.709 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget und USB-Identitätsprüfung |
+| Python/API/Sicherheitsregressionen | 1.717 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget, USB-Identitätsprüfung und echter Archiv-Wiederherstellung mit Zeitstempeln |
 | JavaScript-Controller und Syntax | 48 UI-Suiten erfolgreich; JavaScript- und Shell-Syntax geprüft |
 | Debian-Anwendungspaket | Lokal gebaut und vollständige neue Laufzeitdateien sowie öffentlicher Schlüssel geprüft; keine Installation auf dem Build-Rechner |
 | Mobile Ansicht | Dateimanager/Docker/Fotos bei 390 Pixeln; Fotos, VM-Details/Netzwerk, Speicher, Systemsteuerung/Updates bei 320 Pixeln ohne Seitenüberlauf geprüft. Desktop-Raster und mobile Widgetüberlagerung korrigiert. Frisch mobil geöffnetes VM-Fenster wächst bei 320 → 768 → 903 Pixeln auf die verfügbare Breite; Browserkonsole ohne Warnungen oder Fehler |
@@ -18,7 +18,7 @@ Ergebnisse älterer Versionen ersetzen keine Prüfung dieses Images.
 | 8-GB-Lasttest, Installation parallel zum Dateimanager | Im GitHub-Lauf 37378699615 echte App-Installation bei 8 GiB mit gleichzeitig erreichbarem Dateimanager erfolgreich; keine Freigabe für jede beliebige App-Kombination |
 | Autostart nach RAM-Verkleinerung | Laufende und automatisch startende Docker-/VM-Grenzen gemeinsam mit NAS-Reserve geprüft; unbekannte Metadaten blockieren. Separater Offline-Guard vor Docker/libvirt hält Weboberfläche und Dateimanager erreichbar. Unit-Prüfungen erfolgreich; verpflichtender realer 8→3→8-GiB-Kaltstart mit Wiederherstellung im neuen Image ausstehend |
 | USB-Geräte für Container | Geeignete, eindeutig identifizierbare Geräte mit frischer Identitätsprüfung vor Start und Autostart; rohe Speicher-, Hub-, Netzwerk- und unbekannte USB-Geräte nicht auswählbar. Regressionstests erfolgreich; reale USB-Durchreichung auf Zielhardware ausstehend |
-| Vollständige Datenwiederherstellung auf frischem Image | Ausstehend |
+| Vollständige Datenwiederherstellung auf frischem Image | Nicht vollständig implementiert: Übernahme fremder Sicherungs-Namensräume, Rekonstruktion der Hostkonten/Speicher/Appinstallationen und integrierte App-Datenbank-Wiederherstellung fehlen |
 | Speicher voll/offline/ersetzt, Vergrößerung | Unit-Prüfungen verhindern Containerstarts bei Volumeaustausch während create/commit; Laufzeitprüfungen zusammen bewerten |
 | Mehrtägiger Dauerlauf und reale Hardware | Ausstehend |
 
@@ -33,3 +33,40 @@ Rollback stellt das Betriebssystem wieder her. Persistente Benutzerdaten und
 Container-Datenbanken werden dabei nicht rückwärts migriert. Die Kompatibilität
 der gespeicherten Konfiguration und geeignete App-Sicherungen gehören deshalb
 zu jeder Freigabeprüfung.
+
+Die vorhandene externe Sicherung archiviert ausgewählte SMB-Freigaben mit
+Prüfsumme und optional die NAS-Konfiguration. Dateien werden in einen neuen
+Ordner einer bestehenden Freigabe zurückgespielt; deren Zugriffsrechte gelten
+weiter. Datei- und Ordner-Änderungszeiten werden aus dem Archiv übernommen.
+Beliebige NAS-Ordner, Docker-Volumes und beschreibbare Container-Schichten
+werden dadurch nicht automatisch gesichert. Foto-Metadaten wie Bibliotheken,
+Alben, Favoriten und Papierkorbzuordnungen gehören zur Konfiguration;
+Foto-Originale müssen zusätzlich über die entsprechenden Freigaben gesichert
+werden. Vorschaubilder werden neu erzeugt.
+
+Ein frisches Image erzeugt einen neuen Sicherungs-Namensraum. Die bestehende
+Oberfläche bietet noch keine Übernahme oder Suche nach den Archiven eines
+früheren Namensraums; diese bleiben auf dem Sicherungsmedium vorhanden.
+Namensraum und Sicherungsziel-Einstellungen werden nicht mit der
+NAS-Konfiguration exportiert. Die Konfigurations-Wiederherstellung ist für
+denselben Host gebaut: verwaltete Linux-Konten mit passenden UIDs,
+Freigabeordner, eingebundene Speicher und übereinstimmende Appinstallationen
+müssen bereits vorhanden sein. Sie erstellt diese Voraussetzungen nicht auf
+einem leeren Image. Foto-Bibliotheken verlangen außerdem ihre ursprüngliche
+Speicherkennung; eine Zuordnung zu einem Ersatzvolume ist nicht implementiert.
+
+App-Sicherungen stoppen die verwalteten Container und archivieren deren lokale
+Konfigurationsordner einschließlich dort gespeicherter Datenbankdateien auf
+dem DATA-Speicher. Ein integrierter Rückspielvorgang für diese App-Archive fehlt.
+Sie ersetzen keine unabhängige externe Sicherung und decken zusätzliche
+Datenpfade oder native Docker-Volumes nicht automatisch ab. Eine vollständige
+Wiederherstellung von beispielsweise Nextcloud oder Immich auf einem frischen
+Image benötigt daher derzeit weitere manuelle, zur App passende Schritte.
+
+Die Regressionen prüfen echte TAR-/SQLite-Sicherungen, Dateiinhalte,
+Änderungszeiten und sichere Ablehnung ungültiger beziehungsweise ausgetauschter
+Pfade. Hostkonten, Dienste und App-Datenbanken werden dabei teilweise durch
+Test-Adapter ersetzt. Der A/B-Lauf belegt die Erhaltung vorhandener DATA-Daten
+beim Systemwechsel; er belegt keine vollständige Wiederherstellung aus
+externen Sicherungen nach einer Neuinstallation. Diese vollständige Funktion
+fehlt im aktuellen Stand und ist nicht bloß noch ungetestet.
