@@ -43,6 +43,17 @@ virt-customize -a "$task_base" --memsize 4096 \
     --delete /tmp/titan-package-changes.json --delete /tmp/titan-package-guard.json
 task_root=$(guestfish --ro -a "$task_base" -i inspect-get-roots)
 [[ "$task_root" == /dev/sda3 ]] || { echo "Unexpected expanded root: $task_root" >&2; exit 1; }
+# virt-customize can recreate guest identity before executing its commands.
+# Clean only the verified image root after its LAST customization, without
+# running guest programs; /etc is then seeded into persistent storage at boot.
+guestfish --rw -a "$task_base" -m "$task_root" <<'IDENTITY'
+truncate /etc/machine-id
+rm-f /var/lib/dbus/machine-id
+rm-f /var/lib/systemd/random-seed
+glob rm-f /etc/ssh/ssh_host_*
+sync
+umount-all
+IDENTITY
 guestfish --ro -a "$task_base" -i download /tmp/titan-BOOTX64.EFI "$task_dir/BOOTX64.EFI"
 # Export with no mounted filesystems, then check and size the regular file.
 guestfish --ro -a "$task_base" run : download "$task_root" "$task_dir/rootfs.ext4"
