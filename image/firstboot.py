@@ -106,8 +106,12 @@ def main():
         # failed. All services requiring firstboot remain stopped in that case.
         for mount in ('/var/lib/titan-system', '/etc', '/var/lib/titan', '/var/lib/titan-agent',
                       '/var/lib/titan-proxy', '/var/lib/docker', '/var/lib/containerd',
-                      '/var/lib/libvirt', '/var/lib/samba', '/var/srv/titan'):
+                      '/var/lib/libvirt', '/var/lib/samba', '/var/lib/systemd',
+                      '/var/lib/private', '/var/lib/dbus', '/var/lib/wtmpdb',
+                      '/var/cache', '/var/log', '/var/tmp', '/var/spool', '/var/srv/titan', '/home', '/tmp'):
             run(['mountpoint', '-q', mount])
+        if 'ro' not in run(['findmnt', '-nro', 'OPTIONS', '/']).stdout.strip().split(','):
+            raise RuntimeError('Titan system slot is not read-only.')
     run(['systemd-sysusers', '/usr/lib/sysusers.d/titan.conf'])
     run(['systemd-tmpfiles', '--create', '/usr/lib/tmpfiles.d/titan.conf'])
     configured = Path('/etc/titan/address')

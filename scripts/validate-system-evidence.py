@@ -8,7 +8,7 @@ import re
 
 RUNTIME={'administrator_setup_login','system_update_state_confirmation','cpu_ram_metrics',
          'smb_multiuser_access','runtime_components','docker_app_lifecycle','docker_custom_network_lifecycle','docker_multi_container_lifecycle','docker_native_workbench','login_protection','storage_data_boundary',
-         'storage_components','custom_service_containment','app_catalog_first_login','photos_lifecycle','app_install_responsiveness'}
+         'storage_components','custom_service_containment','app_catalog_first_login','photos_lifecycle','app_install_responsiveness','os_root_protection'}
 PHOTOS={'internal_data_library_created','bounded_png_upload','background_index_completed','private_preview_bytes',
         'original_bytes_match','unauthenticated_preview_denied','unauthenticated_original_denied',
         'favorite_album_roundtrip','trash_hides_original','trash_restore_exact_content','album_library_removed','test_folder_removed'}
@@ -21,6 +21,9 @@ STORAGE_BOUNDARY={'internal_data_resource_ready','default_browser_is_nas_data',
 CONTAINMENT={'legacy_root_was_running','legacy_root_was_enabled','legacy_root_stopped','legacy_root_autostart_disabled',
              'unit_file_preserved','api_start_actions_blocked','early_boot_gate_verified','management_requires_gate'}
 STORAGE_COMPONENTS={'ext4_tools','xfs_tools','zfs_module_loaded','zfs_module_matches_kernel','zpool_query','zfs_query'}
+OS_ROOT_PROTECTION={'pid1_mounts_verified','root_readonly','root_has_no_writable_alias',
+    'usr_slot_readonly','dpkg_slot_readonly','apt_slot_readonly','etc_overlay_on_data_writable',
+    'data_partition_writable','persistent_state_mounts_writable','tmpfs_writable'}
 AB={'baseline_boot_health','proxmox_style_data_growth','signed_update_staged_without_reboot',
     'update_boot_and_preserved_accounts_acls_data','manual_rollback_and_preserved_accounts_acls_data',
     'failed_candidate_fallback_after_reset','factory_defaults_follow_selected_slot'}
@@ -41,6 +44,10 @@ def validate(directory):
     passed={x['name'] for x in checks if x.get('status')=='passed'}
     if not RUNTIME.issubset(passed):raise ValueError('Required runtime check missing or failed')
     if any(x.get('status') not in ('passed','skipped') for x in checks):raise ValueError('Runtime check failed')
+    protected=next(x for x in checks if x['name']=='os_root_protection').get('values')
+    if (not isinstance(protected,dict) or set(protected)!=OS_ROOT_PROTECTION or
+            any(value is not True for value in protected.values())):
+        raise ValueError('Real host read-only OS root and writable persistent mounts were not completely verified')
     photos=next(x for x in checks if x['name']=='photos_lifecycle').get('values')
     if not isinstance(photos,dict) or set(photos)!=PHOTOS or any(value is not True for value in photos.values()):
         raise ValueError('Private Photos upload/index/download/album/trash lifecycle was not completely verified')

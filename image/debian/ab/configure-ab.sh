@@ -19,6 +19,16 @@ if dpkg-query -W -f='${Status}' cloud-initramfs-growroot 2>/dev/null | grep -q '
     apt-get purge -y cloud-initramfs-growroot
 fi
 install -d /etc/rauc /boot/titan /boot/efi /var/lib/titan-system /etc/systemd/system/rauc.service.d
+# Every bind target exists in the factory root: init-bottom never needs to
+# remount the active system slot writable to prepare runtime state.
+for task_path in var/lib/titan var/lib/titan-agent var/lib/titan-proxy var/lib/docker var/lib/containerd var/lib/libvirt var/lib/samba var/lib/systemd var/lib/private var/lib/dbus var/lib/wtmpdb var/cache var/log var/tmp var/spool var/srv/titan home tmp; do
+    mkdir -p "/$task_path"
+done
+chmod 1777 /tmp /var/tmp
+chmod 0700 /var/lib/private
+# Pre-create static package-owned directories and links while building the
+# disposable factory filesystem. Kernel/runtime rules are deliberately skipped.
+systemd-tmpfiles --create -E
 # Debian splits the CLI and D-Bus service into separate packages.
 test -f /usr/share/dbus-1/system-services/de.pengutronix.rauc.service
 test -f /usr/lib/systemd/system/rauc.service

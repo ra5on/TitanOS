@@ -463,6 +463,66 @@ print('TITAN_STORAGE_COMPONENTS:'+json.dumps(value,separators=(',',':')))
 """
 
 
+GUEST_OS_ROOT_PROTECTION = r"""
+import json,re
+from pathlib import Path
+text=Path('/proc/1/mountinfo').read_text()
+if len(text)>1024*1024: raise RuntimeError('Host mount information exceeds its bound')
+def unescape(value):
+    return re.sub(r'\\([0-7]{3})',lambda match:chr(int(match[1],8)),value)
+rows=[]
+for line in text.splitlines():
+    before,separator,after=line.partition(' - ')
+    left,right=before.split(),after.split()
+    if not separator or len(left)<6 or len(right)<3 or not re.fullmatch(r'[0-9]+:[0-9]+',left[2]):
+        raise RuntimeError('Invalid host mount information')
+    rows.append({'id':left[0],'device':left[2],'root':unescape(left[3]),'path':unescape(left[4]),
+                 'options':set(left[5].split(',')),'type':right[0],'super':set(right[2].split(','))})
+if not rows or len(rows)>4096: raise RuntimeError('Invalid host mount count')
+def exact(path):
+    matches=[row for row in rows if row['path']==path]
+    return matches[0] if len(matches)==1 else None
+def effective(path):
+    matches=[row for row in rows if row['path']=='/' or path==row['path'] or path.startswith(row['path'].rstrip('/')+'/')]
+    if not matches: return None
+    row=max(matches,key=lambda value:len(value['path']))
+    return row if sum(item['path']==row['path'] for item in matches)==1 else None
+def writable(row):
+    return bool(row and 'rw' in row['options'] and 'ro' not in row['options'] and 'rw' in row['super'] and 'ro' not in row['super'])
+def readonly(row):
+    return bool(row and 'ro' in row['options'] and 'rw' not in row['options'] and 'ro' in row['super'] and 'rw' not in row['super'])
+root,data,etc=exact('/'),exact('/var/lib/titan-system'),exact('/etc')
+root_ok=bool(root and root['root']=='/' and root['type']=='ext4' and readonly(root))
+data_ok=bool(data and data['root']=='/' and data['type']=='ext4' and writable(data) and root and data['device']!=root['device'])
+def slot(path):
+    row=effective(path)
+    return bool(root_ok and row and row['id']==root['id'] and readonly(row))
+states=('/var/lib/titan','/var/lib/titan-agent','/var/lib/titan-proxy','/var/lib/docker',
+        '/var/lib/containerd','/var/lib/libvirt','/var/lib/samba','/var/lib/systemd',
+        '/var/lib/private','/var/lib/dbus','/var/lib/wtmpdb',
+        '/var/cache','/var/log','/var/tmp','/var/spool','/var/srv/titan','/home')
+def persistent(path):
+    row=exact(path)
+    return bool(data_ok and row and row['device']==data['device'] and row['type']=='ext4'
+                and row['root']=='/persistent'+path and writable(row))
+upper=[value.partition('=')[2] for value in etc['super'] if value.startswith('upperdir=')] if etc else []
+tmp=exact('/tmp')
+value={'format':'titan-os-root-protection-v1','boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+    'pid1_mounts_verified':True,'root_readonly':root_ok,
+    'root_has_no_writable_alias':bool(root_ok and not any(row['device']==root['device'] and ('rw' in row['options'] or 'rw' in row['super']) for row in rows)),
+    'usr_slot_readonly':slot('/usr'),'dpkg_slot_readonly':slot('/var/lib/dpkg'),'apt_slot_readonly':slot('/var/lib/apt'),
+    'etc_overlay_on_data_writable':bool(data_ok and etc and etc['type']=='overlay' and writable(etc) and
+        len(upper)==1 and upper[0] in ('/root/var/lib/titan-system/persistent/etc','/var/lib/titan-system/persistent/etc')),
+    'data_partition_writable':data_ok,'persistent_state_mounts_writable':all(persistent(path) for path in states),
+    'tmpfs_writable':bool(tmp and tmp['type']=='tmpfs' and tmp['root']=='/' and writable(tmp) and {'nosuid','nodev'}.issubset(tmp['options']))}
+print('TITAN_OS_ROOT_PROTECTION:'+json.dumps(value,separators=(',',':')))
+"""
+
+OS_ROOT_PROTECTION_FIELDS={'pid1_mounts_verified','root_readonly','root_has_no_writable_alias',
+    'usr_slot_readonly','dpkg_slot_readonly','apt_slot_readonly','etc_overlay_on_data_writable',
+    'data_partition_writable','persistent_state_mounts_writable','tmpfs_writable'}
+
+
 class GuestClient:
     HOST = "10.0.2.15:5000"
     ORIGIN = "https://" + HOST
@@ -807,6 +867,41 @@ class GuestClient:
                 try: self.request('/api/terminal',{'action':'close','id':identifier})
                 except Exception: pass
 
+    def os_root_protection(self):
+        """Inspect PID 1's actual host mounts through a bounded authenticated PTY."""
+        identifier, connection = None, None
+        try:
+            created=self.request('/api/terminal',{'action':'create','cols':160,'rows':24})
+            identifier=created.get('id') if isinstance(created,dict) else None
+            if not isinstance(identifier,str) or not re.fullmatch(r'[a-f0-9]{64}',identifier):
+                raise SmokeFailure('OS root protection proof terminal is unavailable.')
+            command='python3 -c '+shlex.quote(GUEST_OS_ROOT_PROTECTION)+'\n'
+            self.request('/api/terminal',{'action':'write','id':identifier,'data':base64.b64encode(command.encode()).decode()})
+            connection=http.client.HTTPSConnection('127.0.0.1',15000,timeout=25,context=self.context)
+            connection.request('GET','/api/terminal/output?id='+identifier,
+                headers={'Host':self.HOST,'Origin':self.ORIGIN,'Cookie':self.cookie})
+            response=connection.getresponse()
+            if response.status!=200:raise SmokeFailure('OS root protection proof output is unavailable.')
+            received,output,deadline=0,bytearray(),time.monotonic()+25
+            while time.monotonic()<deadline and received<128*1024 and len(output)<=64*1024:
+                line=response.readline(16385);received+=len(line)
+                if not line or len(line)>16384:break
+                if line.startswith(b'data: '):
+                    event=json.loads(line[6:]);encoded=event.get('data') if isinstance(event,dict) else None
+                    if isinstance(encoded,str) and len(encoded)<=22000:
+                        output.extend(base64.b64decode(encoded,validate=True))
+                        match=re.search(rb'(?:^|[\r\n])TITAN_OS_ROOT_PROTECTION:(\{[^\r\n]{1,4096}\})[\r\n]',output)
+                        if match:return json.loads(match[1])
+            raise SmokeFailure('Current host OS mount protection proof was not returned.')
+        except SmokeFailure:raise
+        except Exception:
+            raise SmokeFailure('Host OS read-only mounts could not be verified in the disposable guest.') from None
+        finally:
+            if connection is not None:connection.close()
+            if isinstance(identifier,str) and re.fullmatch(r'[a-f0-9]{64}',identifier):
+                try:self.request('/api/terminal',{'action':'close','id':identifier})
+                except Exception:pass
+
     def console_assets(self):
         expected = (("/console.html", b'/console.js'),
                     ("/console.js", b'/novnc/core/rfb.js'),
@@ -1042,6 +1137,15 @@ class RuntimeSmoke:
                 or type(value['zfs_arc_size_bytes']) is not int or not 0<=value['zfs_arc_size_bytes']<2**64):
             raise SmokeFailure('Filesystem tools, the exact-kernel ZFS module or its RAM limits were not verified.')
         return {key:value[key] for key in sorted(booleans|{'kernel','zfs_arc_max_bytes','zfs_arc_min_bytes','zfs_arc_size_bytes'})}
+
+    def os_root_protection(self):
+        value=self.client.os_root_protection()
+        if (not isinstance(value,dict) or set(value)!=OS_ROOT_PROTECTION_FIELDS|{'format','boot_id'}
+                or value['format']!='titan-os-root-protection-v1'
+                or not isinstance(value['boot_id'],str) or not re.fullmatch(r'[a-f0-9-]{36}',value['boot_id'])
+                or any(value.get(key) is not True for key in OS_ROOT_PROTECTION_FIELDS)):
+            raise SmokeFailure('Actual host OS root, slot-local package state or writable persistent mounts were not fully verified.')
+        return {key:value[key] for key in sorted(OS_ROOT_PROTECTION_FIELDS)}
 
     def storage_data_boundary(self):
         catalog = self.client.request('/api/storage-locations')
@@ -1968,6 +2072,7 @@ class RuntimeSmoke:
             self.report['platform'] = 'debian-rauc'
             self.run_check('login_protection', self.login_protection)
             self.run_check('storage_data_boundary', self.storage_data_boundary)
+            self.run_check('os_root_protection', self.os_root_protection)
             self.run_check('photos_lifecycle', self.photos)
             self.run_check('custom_service_containment', self.custom_service_containment)
             self.run_check('storage_components', self.storage_components)

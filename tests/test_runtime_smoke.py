@@ -241,11 +241,12 @@ class RuntimeSmokeTests(unittest.TestCase):
     def test_debian_runtime_requires_login_protection_check(self):
         runner = smoke.RuntimeSmoke(Mock())
         runner.kvm = False
-        for name in ('setup', 'catalog', 'login_protection', 'storage_data_boundary', 'photos', 'installation_responsiveness', 'custom_service_containment', 'storage_components', 'debian_updates', 'metrics', 'smb', 'components', 'docker', 'docker_network', 'docker_stack', 'docker_native'):
+        for name in ('setup', 'catalog', 'login_protection', 'storage_data_boundary', 'os_root_protection', 'photos', 'installation_responsiveness', 'custom_service_containment', 'storage_components', 'debian_updates', 'metrics', 'smb', 'components', 'docker', 'docker_network', 'docker_stack', 'docker_native'):
             setattr(runner, name, Mock(return_value={}))
         with contextlib.redirect_stdout(io.StringIO()): report = runner.run(debian_ab=True)
         runner.login_protection.assert_called_once_with()
         runner.storage_data_boundary.assert_called_once_with()
+        runner.os_root_protection.assert_called_once_with()
         runner.photos.assert_called_once_with()
         runner.installation_responsiveness.assert_called_once_with()
         runner.custom_service_containment.assert_called_once_with()

@@ -10,8 +10,12 @@ working hardware watchdog); boot selection is not a hardware watchdog.
 `/etc` uses a persistent overlay upper layer over each slot's factory defaults.
 Unmodified OS configuration follows the selected release; local changes persist.
 NAS metadata, Samba identities, Docker/containerd, libvirt, homes and
-NAS data are persisted before PID 1 through an initramfs script. `/var/lib/dpkg`
-and the kernel belong to each system slot. The signed factory user/group UID/GID
+NAS data are persisted before PID 1 through an initramfs script. The selected
+system slot is mounted read-only before any host service runs. `/var/log`,
+`/var/cache`, `/var/tmp`, `/var/spool` and mutable systemd/D-Bus/login state use dedicated DATA
+bind mounts; `/tmp` is a bounded tmpfs. Existing A/B seeds gain these paths
+without replacing their Samba cache or application state. `/var/lib/dpkg`,
+`/var/lib/apt` and the kernel belong to each read-only system slot. The signed factory user/group UID/GID
 contract must match the running image before installation; changes require a separate migration. Configuration/data schema is fixed at
 1: releases requiring incompatible shared state are rejected. Rollback preserves
 current NAS configuration and user data; it is not a database/data restore.

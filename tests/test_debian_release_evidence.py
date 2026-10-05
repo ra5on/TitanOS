@@ -14,6 +14,7 @@ class EvidenceTests(unittest.TestCase):
         self.root=Path(self.temp.name)
         (self.root/'boot-status').write_text('passed\n')
         self.runtime={'ok':True,'raw_image_unchanged':True,'checks':[{'name':n,'status':'passed'} for n in evidence.RUNTIME]}
+        next(x for x in self.runtime['checks'] if x['name']=='os_root_protection')['values']={name:True for name in evidence.OS_ROOT_PROTECTION}
         next(x for x in self.runtime['checks'] if x['name']=='photos_lifecycle')['values']={name:True for name in evidence.PHOTOS}
         next(x for x in self.runtime['checks'] if x['name']=='app_install_responsiveness')['values']={
             'active_install_samples':1,'file_manager_usable':True,'status_usable':True,'max_request_ms':120,
@@ -58,6 +59,21 @@ class EvidenceTests(unittest.TestCase):
                     boundary['values'][field]=value;self.save()
                     with self.assertRaises(ValueError):evidence.validate(self.root)
         boundary.pop('values');self.save()
+        with self.assertRaises(ValueError):evidence.validate(self.root)
+    def test_real_os_mount_protection_cannot_be_missing_skipped_or_partial(self):
+        check=next(x for x in self.runtime['checks'] if x['name']=='os_root_protection')
+        for field in evidence.OS_ROOT_PROTECTION:
+            for value in (False,1,'true',None):
+                check['values']={name:True for name in evidence.OS_ROOT_PROTECTION}
+                check['values'][field]=value;self.save()
+                with self.subTest(field=field,value=value),self.assertRaises(ValueError):evidence.validate(self.root)
+        for values in ({}, {name:True for name in evidence.OS_ROOT_PROTECTION}|{'mounts':'private paths'}, None):
+            check['values']=values;self.save()
+            with self.subTest(values=values),self.assertRaises(ValueError):evidence.validate(self.root)
+        check['values']={name:True for name in evidence.OS_ROOT_PROTECTION}
+        check['status']='skipped';self.save()
+        with self.assertRaises(ValueError):evidence.validate(self.root)
+        self.runtime['checks'].remove(check);self.save()
         with self.assertRaises(ValueError):evidence.validate(self.root)
     def test_incomplete_or_nonboolean_root_containment_cannot_publish(self):
         check=next(x for x in self.runtime['checks'] if x['name']=='custom_service_containment')
