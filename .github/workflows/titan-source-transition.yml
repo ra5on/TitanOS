@@ -1,0 +1,25 @@
+name: Adopt reviewed TitanOS source
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/titan-source-transition.yml', '.github/scripts/apply-titan-source-transition.py', '.titan/namespace-transition.patch.gz']
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.repository == 'ra5on/TitanOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Apply exact reviewed snapshot and remove temporary transition controls
+        run: python3 .github/scripts/apply-titan-source-transition.py
+      - name: Start the permanent TitanOS checks and image pipeline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run titan-image.yml --repo ra5on/TitanOS --ref main
