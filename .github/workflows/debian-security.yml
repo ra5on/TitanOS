@@ -13,7 +13,8 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # Draft IDs are reserved even though maintenance uses published sources.
+      contents: write
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       available: ${{ steps.plan.outputs.available }}

@@ -24,6 +24,7 @@ Die neue Systemfamilie wird frisch installiert. Das Image schreibt beim Booten
 keine bestehende Installation auf einem anderen Datenträger um. Zum Testen
 mindestens 8 GB RAM und 64 GB virtuellen Speicher bereitstellen. Hardware für
 Virtualisierung und Durchreichung muss vom Host verfügbar gemacht werden.
+Der getestete Bootmodus ist UEFI (OVMF) mit deaktiviertem Secure Boot.
 
 Signaturen, Paketinventar und Ergebnisse der Image-Laufzeittests werden dem
 Download beigefügt. Ausstehende Prüfungen stehen in `docs/QA-3.0.0.md`.

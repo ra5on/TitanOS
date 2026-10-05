@@ -96,6 +96,25 @@ def allocate_version(app_version, stage, releases, previous=None):
     return '.'.join(map(str, base))
 
 
+def assert_version_available(version, token=None):
+    """Refuse a collision or uncertain lookup before an expensive image build.
+
+    The caller's token needs push access so GitHub exposes private drafts.
+    Only the authenticated endpoint's actual 404 means the release is absent;
+    permissions, outages and malformed responses must never mean "available".
+    """
+    updates.version(version)
+    if not isinstance(token, str) or not token.strip():
+        raise ValueError('Authenticated release allocation requires GH_TOKEN')
+    try:
+        api('releases/tags/titan-' + version, token)
+    except updates.Error as exc:
+        if exc.status == 404:
+            return
+        raise
+    raise ValueError('Release identity already exists; allocate a new system version')
+
+
 def supported_sources(releases, token=None):
     """Keep the two most recent frozen Titan sources per stage, at most six."""
     groups = {}
@@ -160,6 +179,7 @@ def prepare_plan(directory, token=None):
             continue
         meta, manifest = value['metadata'], value['manifest']
         version = allocate_version(meta['titan_version'], meta['titan_stage'], releases, previous=manifest)
+        assert_version_available(version, token)
         releases.append({'tag_name': 'v' + version})
         matrix.append({'version': version, 'source_ref': meta['titan_source_commit'],
                        'app_version': meta['titan_version'], 'app_stage': meta['titan_stage'],
@@ -226,6 +246,7 @@ def main():
     if args.mode == 'titan':
         releases = release_list(token, include_drafts=True)
         version = allocate_version(__version__, __release_stage__, releases)
+        assert_version_available(version, token)
         own = [item for item in releases if not item.get('draft') and any(a.get('name') == 'debian-packages.json' for a in item.get('assets', []))]
         output('initial_release', 'false' if own else 'true')
         output('version', version); output('app_version', __version__); output('app_stage', __release_stage__)

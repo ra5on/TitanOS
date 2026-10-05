@@ -29,6 +29,25 @@ class DebianWorkflowTests(unittest.TestCase):
         self.assertEqual(maintenance['jobs']['build']['strategy']['max-parallel'],'1')
         self.assertEqual(maintenance['on']['schedule'],[{'cron':'17 3 * * *','timezone':'Europe/Berlin'}])
 
+    def test_private_draft_version_allocators_can_see_reserved_release_identities(self):
+        allocators = set()
+        for path in (ROOT/'.github/workflows').glob('*.yml'):
+            document = self.load(path.name)
+            for name, job in document.get('jobs', {}).items():
+                for step in job.get('steps', []):
+                    if not re.search(r'debian-maintenance\.py\s+(?:titan|plan)(?:\s|$)', step.get('run', '')):
+                        continue
+                    allocators.add((path.name, name))
+                    # GitHub lists private drafts only for identities with push
+                    # access. A contents:read override silently hides reservations
+                    # even though the allocator asks to include draft releases.
+                    permissions = job.get('permissions', document.get('permissions', {}))
+                    self.assertEqual(permissions.get('contents'), 'write', path.name + ': ' + name)
+                    self.assertEqual(step.get('env', {}).get('GH_TOKEN'), '${{ github.token }}')
+                    checkout = next(item for item in job['steps'] if item.get('uses', '').startswith('actions/checkout@'))
+                    self.assertEqual(checkout['with'].get('persist-credentials'), 'false')
+        self.assertEqual(allocators, {('debian-image.yml', 'identity'), ('debian-security.yml', 'plan')})
+
     def test_application_smokes_and_payload_checkout_use_same_explicit_frozen_commit(self):
         reusable=self.load('debian-system-build.yml')
         package=self.load('app-packages.yml')

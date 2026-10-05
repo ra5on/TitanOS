@@ -5,6 +5,20 @@ on:
 permissions:
   contents: read
 jobs:
+  retire_obsolete_images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/titan-own-stable'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retire older image checks of this development branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/retire-obsolete-image-checks.py
   verify:
     runs-on: ubuntu-24.04
     steps:

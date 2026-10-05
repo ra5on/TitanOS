@@ -43,16 +43,20 @@ class MaintenancePlanTests(unittest.TestCase):
         with patch.object(maintenance,'api',return_value=records):
             self.assertEqual(maintenance.release_list(),records[:1])
             self.assertEqual(maintenance.release_list(include_drafts=True),records)
-        with patch.dict(os.environ,{'GITHUB_ACTIONS':'true'}), \
+        with patch.dict(os.environ,{'GITHUB_ACTIONS':'true','GH_TOKEN':'test-allocator-token'}), \
              patch('sys.argv',['debian-maintenance.py','titan']), \
              patch.object(maintenance,'release_list',return_value=records) as releases, \
              patch.object(maintenance,'__version__','3.0.0'), \
              patch.object(maintenance,'__release_stage__','stable'), \
+             patch.object(maintenance,'assert_version_available') as available, \
              patch.object(maintenance,'output') as output:
             maintenance.main()
-        releases.assert_called_once_with(os.environ.get('GH_TOKEN'),include_drafts=True)
+        releases.assert_called_once_with('test-allocator-token',include_drafts=True)
+        available.assert_called_once_with('3.0.1','test-allocator-token')
         values=dict(call.args for call in output.call_args_list)
         self.assertEqual(values['version'],'3.0.1')
+        self.assertEqual(values['app_version'],'3.0.0')
+        self.assertEqual(values['app_stage'],'stable')
         self.assertEqual(values['initial_release'],'true','A draft alone cannot authorize a published-baseline update gate')
         with patch.object(maintenance,'checked_release') as check:
             self.assertEqual(maintenance.supported_sources(records[1:]),[])
@@ -126,9 +130,11 @@ class MaintenancePlanTests(unittest.TestCase):
                 (directory/'probe-inventory-0.json').write_text(json.dumps(report))
             with patch.object(maintenance,'release_list',return_value=[source['release']]), \
                  patch.object(maintenance,'supported_sources',return_value=[source]), \
+                 patch.object(maintenance,'assert_version_available') as available, \
                  patch.object(maintenance.subprocess,'run',side_effect=probe) as run:
                 result=maintenance.prepare_plan(directory)['include']
             run.assert_called_once()
+            available.assert_called_once_with('0.5.3-alpha.2',None)
         self.assertEqual(result,[{'version':'0.5.3-alpha.2','source_ref':'c'*40,'app_version':'0.5.3',
                                  'app_stage':'alpha','system_revision':3,'previous_tag':'v0.5.3-alpha.1',
                                  'changes':1,'security_changes':1}])
@@ -147,12 +153,45 @@ class MaintenancePlanTests(unittest.TestCase):
                 (directory/'probe-inventory-0.json').write_text(json.dumps(report))
             with patch.object(maintenance,'release_list',return_value=[published,draft]) as releases, \
                  patch.object(maintenance,'supported_sources',return_value=[source]) as sources, \
+                 patch.object(maintenance,'assert_version_available') as available, \
                  patch.object(maintenance.subprocess,'run',side_effect=probe):
                 result=maintenance.prepare_plan(directory)['include']
         releases.assert_called_once_with(None,include_drafts=True)
         sources.assert_called_once_with([published],None)
         self.assertEqual(result[0]['version'],'3.0.2')
+        available.assert_called_once_with('3.0.2',None)
         self.assertEqual(result[0]['previous_tag'],'titan-3.0.0')
+
+    def test_free_version_requires_authenticated_actual_404(self):
+        with patch.object(maintenance,'api',side_effect=maintenance.updates.Error('Not found',404)) as api:
+            maintenance.assert_version_available('3.0.1','test-allocator-token')
+        api.assert_called_once_with('releases/tags/titan-3.0.1','test-allocator-token')
+        for token in (None,'', ' '):
+            with self.subTest(token=token), patch.object(maintenance,'api') as api, self.assertRaises(ValueError):
+                maintenance.assert_version_available('3.0.1',token)
+            api.assert_not_called()
+
+    def test_existing_draft_published_or_uncertain_responses_block_before_build(self):
+        for response in ({'tag_name':'titan-3.0.1','draft':True}, {'tag_name':'titan-3.0.1','draft':False}, {}, []):
+            with self.subTest(response=response), patch.object(maintenance,'api',return_value=response), self.assertRaises(ValueError):
+                maintenance.assert_version_available('3.0.1','test-allocator-token')
+        for status in (401,403,429,500,502,503):
+            with self.subTest(status=status), patch.object(maintenance,'api',side_effect=maintenance.updates.Error('Unavailable',status)), self.assertRaises(maintenance.updates.Error):
+                maintenance.assert_version_available('3.0.1','test-allocator-token')
+        # Exercise the actual strict-JSON boundary, not a mocked parse success.
+        with patch.object(maintenance.updates,'fetch',return_value=b'not-json'), self.assertRaises(maintenance.updates.Error):
+            maintenance.assert_version_available('3.0.1','test-allocator-token')
+
+    def test_collision_blocks_identity_outputs_without_changing_application_version(self):
+        with patch.dict(os.environ,{'GITHUB_ACTIONS':'true','GH_TOKEN':'test-allocator-token'}), \
+             patch('sys.argv',['debian-maintenance.py','titan']), \
+             patch.object(maintenance,'release_list',return_value=[]), \
+             patch.object(maintenance,'__version__','3.0.0'), \
+             patch.object(maintenance,'__release_stage__','stable'), \
+             patch.object(maintenance,'api',return_value={'tag_name':'titan-3.0.0','draft':True}), \
+             patch.object(maintenance,'output') as output, self.assertRaises(ValueError):
+            maintenance.main()
+        output.assert_not_called()
 
 
 @unittest.skipUnless(shutil.which('openssl'),'OpenSSL required')

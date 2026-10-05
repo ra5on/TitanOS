@@ -38,7 +38,9 @@ jobs:
   identity:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # GitHub hides draft releases from tokens without push access. The
+      # allocator must see their reserved IDs but never use them as baselines.
+      contents: write
     outputs:
       version: ${{ steps.identity.outputs.version }}
       app_version: ${{ steps.identity.outputs.app_version }}
