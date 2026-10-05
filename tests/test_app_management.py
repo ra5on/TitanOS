@@ -129,6 +129,41 @@ class AppManagementTests(unittest.TestCase):
             self.host.op_app_action("jellyfin", "start")
         self.assertFalse(any(call[0] == "docker" and ("up" in call or "create" in call) for call in self.calls))
 
+    def test_volume_replaced_during_slow_compose_create_never_starts_app(self):
+        folder=self.managed_volume()
+        record=self.host.load('volumes',[])[0]
+        replacement={**record,'uuid':'22222222-2222-4222-8222-222222222222'}
+        real=self.command
+        def command(args,**kwargs):
+            result=real(args,**kwargs)
+            if args[:2]==['docker','compose'] and len(args)>6 and args[6]=='create':
+                self.volume_ready.return_value=(replacement,folder.stat().st_dev)
+            return result
+        self.runner.side_effect=command
+        with self.assertRaisesRegex(Error,'ausgetauscht'):
+            self.host.op_app_install('jellyfin',8096,storage_id='volume:media')
+        self.assertEqual(self.containers['jellyfin']['State']['Status'],'created')
+        self.assertFalse(any(call[0] in ('start','up','restart') for call in self.compose_commands()))
+        self.assertEqual(self.host.load('apps',[])[0]['phase'],'failed')
+
+    def test_volume_replaced_during_recreate_never_restarts_existing_app(self):
+        folder=self.managed_volume()
+        self.host.op_app_install('jellyfin',8096,storage_id='volume:media')
+        self.host.op_app_action('jellyfin','stop');self.calls.clear()
+        record=self.host.load('volumes',[])[0]
+        replacement={**record,'uuid':'22222222-2222-4222-8222-222222222222'}
+        real=self.command
+        def command(args,**kwargs):
+            result=real(args,**kwargs)
+            if args[:2]==['docker','compose'] and len(args)>6 and args[6]=='create':
+                self.volume_ready.return_value=(replacement,folder.stat().st_dev)
+            return result
+        self.runner.side_effect=command
+        with self.assertRaisesRegex(Error,'ausgetauscht'):
+            self.host.op_app_action('jellyfin','restart')
+        self.assertEqual(self.containers['jellyfin']['State']['Status'],'exited')
+        self.assertFalse(any(call[0] in ('start','up','restart') for call in self.compose_commands()))
+
 
     def command(self, arguments, **kwargs):
         self.calls.append(arguments)

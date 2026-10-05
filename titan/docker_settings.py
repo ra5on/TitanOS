@@ -110,6 +110,9 @@ def update(host, container, settings):
         fresh = host.engine_container(container)
         if host.engine_active(fresh) or fresh.get('Name') != row.get('Name') or fresh.get('Config') != row.get('Config') or fresh.get('HostConfig') != row.get('HostConfig'):
             raise Error('Containerzustand wurde während der Sicherung verändert. Ansicht aktualisieren.', 409)
+        # Preserve the old container's pinned storage identity after a long
+        # commit; recreation must not adopt a newly mounted replacement volume.
+        host._engine_storage_ready(fresh)
         host.engine_docker(['rename', container, 'titan-previous-' + container[:20]])
         config['image'] = image
         try:

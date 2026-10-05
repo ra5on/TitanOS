@@ -370,6 +370,9 @@ class DockerEngineMixin:
         if not re.fullmatch(IMAGE,base):raise Error('Originalimage ist nicht gültig.')
         image=self.engine_docker(['commit','--change','LABEL io.titan.original_image='+base,container],timeout=600).strip()
         if not re.fullmatch(r'sha256:[a-f0-9]{64}',image):raise Error('Container-Sicherung konnte nicht geprüft werden.',503)
+        # A long snapshot must not silently migrate the replacement onto a
+        # filesystem that took the original volume's name in the meantime.
+        self._engine_storage_ready(self.engine_container(container))
         backup='titan-previous-'+container[:20]
         self.engine_docker(['rename',container,backup])
         config['image']=image

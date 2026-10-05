@@ -1,7 +1,10 @@
 import json
+import copy
+import contextlib
 from pathlib import Path
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 from titan.core import Error
@@ -91,6 +94,61 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.engine.engine_docker.call_args.args[0][0],'create')
         self.assertTrue(self.memory.call_args_list[0].kwargs['installation'])
         self.assertEqual(self.memory.call_args_list[1].kwargs['container'],ID)
+
+    def pinned_storage_fixture(self):
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        root=Path(temporary.name);data=root/'custom/web/data';data.mkdir(parents=True)
+        row=self.manual_stopped()
+        row['Config']['Labels'].update({'io.titan.storage':'volume:media','io.titan.storage.uuid':'old-uuid'})
+        row['Mounts']=[{'Type':'bind','RW':True,'Source':str(data),'Destination':'/data'}]
+        resource={'id':'volume:media','path':str(root),'uuid':'old-uuid'};rows={ID:row}
+        @contextlib.contextmanager
+        def fd(*args,**kwargs):yield None,dict(resource)
+        self.engine.storage_locations=SimpleNamespace(resolve=lambda *args,**kwargs:dict(resource),validate_path=lambda *args,**kwargs:dict(resource),fd=fd)
+        self.engine.engine_container=lambda key:copy.deepcopy(rows[key])
+        self.engine._app_directory=Mock();self.engine.op_app_devices=Mock(return_value={'devices':[]})
+        patcher=patch('titan.app_devices.devices',return_value=[]);patcher.start();self.addCleanup(patcher.stop)
+        def docker(args,**kwargs):
+            if args[0]=='commit':return 'sha256:'+'c'*64
+            if args[0]=='rename':rows[args[1]]['Name']='/'+args[2];return ''
+            if args[0]=='create':
+                key='b'*64;created=copy.deepcopy(row);created['Id']=key;created['Name']='/titan-custom-web'
+                created['Config']['Labels']={args[i+1].split('=',1)[0]:args[i+1].split('=',1)[1] for i,value in enumerate(args[:-1]) if value=='--label'}
+                created['State']={'Running':False,'Status':'created'};rows[key]=created
+                return key
+            if args[0]=='start':rows[args[1]]['State']={'Running':True,'Status':'running'}
+            return ''
+        return resource,rows,docker
+
+    def test_manual_create_rechecks_original_uuid_after_slow_create_before_start(self):
+        resource,rows,real=self.pinned_storage_fixture()
+        def docker(args,**kwargs):
+            result=real(args,**kwargs)
+            if args[0]=='create':resource['uuid']='replacement-uuid'
+            return result
+        self.engine.engine_docker.side_effect=docker
+        with self.assertRaisesRegex(Error,'ausgetauscht'):
+            self.engine.op_docker_container_create({'name':'web','image':'nginx:stable','storage_id':'volume:media'})
+        self.assertEqual(rows['b'*64]['State']['Status'],'created')
+        self.assertFalse(any(call.args[0][0]=='start' for call in self.engine.engine_docker.call_args_list))
+
+    def test_native_recreate_never_adopts_uuid_replaced_during_commit(self):
+        for operation in ('hardware','settings'):
+            with self.subTest(operation=operation):
+                resource,rows,real=self.pinned_storage_fixture();self.engine.engine_docker.reset_mock()
+                def docker(args,**kwargs):
+                    result=real(args,**kwargs)
+                    if args[0]=='commit':resource['uuid']='replacement-uuid'
+                    return result
+                self.engine.engine_docker.side_effect=docker
+                with self.assertRaisesRegex(Error,'ausgetauscht'):
+                    if operation=='hardware':self.engine.op_docker_container_hardware(ID,[])
+                    else:self.engine.op_docker_container_settings(ID,{'memory_mb':768})
+                calls=[call.args[0] for call in self.engine.engine_docker.call_args_list]
+                self.assertTrue(any(call[0]=='commit' for call in calls))
+                self.assertFalse(any(call[0] in ('rename','create','start') for call in calls))
+                self.assertEqual(rows[ID]['Name'],'/titan-custom-web')
+                self.assertEqual(rows[ID]['State']['Status'],'exited')
 
     def test_manual_and_foreign_start_restart_check_budget_but_stop_remains_available(self):
         row=self.manual_stopped();self.engine.engine_container=Mock(return_value=row)

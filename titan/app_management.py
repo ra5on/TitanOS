@@ -547,12 +547,16 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                 # config using the actual new container MCS before it can run.
                 options = [option for option in arguments[1:] if option != "-d"] if command != "restart" else ["--no-recreate"]
                 created = invoke("create", *options)
+                # Image pulls may take minutes. Recheck the pinned filesystem
+                # before labeling bind data or starting newly created services.
+                self.app_storage_ready(app)
                 self._app_private_config_label(app, record)
                 if command == "create":
                     return created
                 from .app_memory import check_start_memory
                 check_start_memory(app, self._app_options(app), definition,
                     self._app_inspected_containers(), telemetry=self.telemetry)
+                self.app_storage_ready(app)
                 if APPS[app].get('stack') and command == 'up':
                     return invoke('up', '-d', '--no-recreate', '--wait', '--wait-timeout', '300')
                 return invoke("restart" if command == "restart" else "start")
