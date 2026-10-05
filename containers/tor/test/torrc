@@ -1,2 +1,0 @@
-HiddenServiceDir /data/web
-HiddenServicePort 80 web:8888

@@ -1,0 +1,34 @@
+Titan
+Copyright (c) 2026 ra5on
+
+Original Titan material is licensed under the Titan Noncommercial License 1.0.
+See LICENSE. Preserve these notices and the license when sharing copies.
+
+Third-party packages, guest operating systems and container images retain
+their own licenses. The Titan license does not cover user files or data.
+
+The locally bundled terminal renderer @xterm/xterm 6.0.0 and @xterm/addon-fit
+0.11.0 are licensed under MIT by their respective contributors. See
+titan/web/vendor/terminal/*-LICENSE and manifest.json. Generated xterm styles
+are patched to carry Titan response-specific CSP nonces. These third-party
+assets retain their MIT license independently of the Titan license.
+
+Titan Debian system: Debian, Linux, Docker, Samba, ZFS, libvirt, QEMU, noVNC and Caddy retain their respective licenses. Package copyright notices remain in /usr/share/doc. Original Titan licensing does not restrict these upstream components.
+
+Installed MIT notices:
+/usr/lib/titan/titan/web/vendor/terminal/xterm-LICENSE
+/usr/lib/titan/titan/web/vendor/terminal/addon-fit-LICENSE
+
+App metadata in titan/docker-template-catalog.json is translated from the official
+LinuxServer.io images API (snapshot 2026-10-05). Source documentation:
+https://docs.linuxserver.io/API/ . Container images keep their own licenses.
+The Docker template adapters are original Titan code; no CasaOS executable code
+is bundled. Imported metadata and recipes retain their publishers rights.
+
+No Dockhand code or assets are included. Titan's Docker workbench is original
+Titan code and communicates directly with the local Docker engine.
+
+Big Bear Dockge template metadata is distributed under the MIT declaration in
+https://github.com/bigbeartechworld/big-bear-dockge/blob/main/package.json .
+Adapted templates preserve their publisher provenance. Big Bear template
+notices and license permissions apply independently of the Titan license.

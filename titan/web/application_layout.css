@@ -1,0 +1,61 @@
+/* Final shared layout contract: the viewport contains one desktop, and each
+   application chooses one scrolling content area beneath fixed commands. */
+html,body{width:100%;height:100%;margin:0;max-width:100%;overflow:hidden;overscroll-behavior-x:none}
+body:has(#auth:not([hidden])){overflow-y:auto}
+*,*::before,*::after{box-sizing:border-box}
+#shell,#shell>.workspace{height:100dvh;min-height:0;min-width:0;max-width:100%;overflow:hidden}
+#shell>.workspace{display:flex;flex-direction:column;margin:0}
+#shell .workspace>main{flex:1;min-height:0;min-width:0;max-width:100%;overflow:hidden}
+#shell .nas-window{min-height:0;min-width:0;max-height:100%;overflow:hidden;display:flex;flex-direction:column}
+#shell .nas-window-content{flex:1;min-height:0;min-width:0;max-width:100%;overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere}
+html[data-desktop-embedded=true] #shell,html[data-desktop-embedded=true] #shell>.workspace{height:100dvh;min-height:0}
+html[data-desktop-embedded=true] #shell main{display:flex;padding:0!important;min-height:0;overflow:hidden}
+html[data-desktop-embedded=true] #shell .nas-window{width:100%!important;height:100%!important;max-height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+html[data-desktop-embedded=true] #shell .nas-window-bar{display:none}
+html[data-desktop-embedded=true] #shell .nas-window-content{min-height:0;max-height:100%;height:auto;overflow:auto;display:block}
+html[data-desktop-embedded=true] #shell:is([data-page=files],[data-page=docker],[data-page=vms],[data-page=storage]) .nas-window-content{display:flex;flex-direction:column;overflow:hidden;padding:0;scrollbar-gutter:auto}
+#shell .topbar{flex:none;height:auto;min-width:0;max-width:100%}
+.desktop-window-titlebar{min-width:0}.desktop-window-controls{max-width:65%;min-width:0}
+.desktop-window-caption{flex:1;min-width:0}.desktop-window-titlebar button{touch-action:manipulation}
+.desktop-task,.shell-button,.shell-icon{touch-action:manipulation}
+.desktop-window-resize:focus-visible{outline:2px solid #1685d5;outline-offset:-3px}
+#shell :is(.panel,.form-grid,.two-columns,.page-heading,.cp-content,.um-body,.storage-workspace,.engine-content,.mv-content){min-width:0;max-width:100%}
+#shell :is(.panel-heading,.section-heading,.form-actions,.page-heading){flex-wrap:wrap}
+#shell :is(input,select,textarea,button){max-width:100%}
+#shell :is(table,pre){max-width:100%}
+#dialog{width:min(820px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:22px;overflow:auto;overscroll-behavior:contain}
+#dialog .dialog-title{top:-22px;background:#fff;min-width:0;padding:5px 0;z-index:10}
+#dialog .dialog-title h2{font-size:19px;min-width:0;overflow-wrap:anywhere}
+#dialog .form-actions{position:sticky;bottom:-22px;background:#fff;margin-top:18px;padding:14px 0 8px;z-index:9;border-top:1px solid #e6edf5}
+#dialog fieldset{min-width:0;margin:16px 0;padding:14px;border:1px solid #dce5ef;border-radius:7px}
+#dialog legend{padding:0 6px;font-size:13px;font-weight:600;color:#49627b}
+.template-option{min-width:0;margin:12px 0}.template-option .field{margin:6px 0}.template-enable{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer;min-height:38px}.template-enable input{width:19px;height:19px;min-height:0;flex:none;margin:0}.template-option.is-optional{padding:10px 12px;background:#f7faff;border-radius:6px}.template-option input:disabled,.template-option select:disabled{opacity:.6;background:#eef2f7}.template-bindings{margin:14px 0;font-size:12px;border:1px solid #dce5ef;border-radius:6px;padding:10px 12px}.template-bindings summary{cursor:pointer;font-weight:600;min-height:30px}.template-bindings h4{margin:12px 0 4px}.template-bindings ul{padding-left:18px;margin:6px 0}.template-bindings li{margin:6px 0;overflow-wrap:anywhere}
+.template-browser{min-width:0}.template-intro h3{font-size:18px;margin:0 0 6px;color:#34546f}.template-intro p{font-size:12px;color:#738396;margin:0 0 16px}.template-search{display:flex;gap:8px;flex-wrap:wrap}.template-search input{flex:1 1 220px;min-width:0}.template-search select{flex:0 1 180px;min-width:0;width:auto}.template-status{font-size:12px;color:#71849b;margin:12px 0}.template-status.is-error{color:#b53c49}.template-sources{margin:12px 0 18px;padding:12px;border:1px solid #dce5ef;border-radius:6px;background:#f9fbff;font-size:12px}.template-sources summary{min-height:30px;cursor:pointer;font-weight:600}.template-sources article{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid #e1e8f1}.template-sources article>div{min-width:0}.template-sources article small{display:block;margin-top:5px;color:#77889c;overflow-wrap:anywhere}.template-source-actions{display:flex;gap:6px;flex-wrap:wrap;flex:none}.template-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:12px}.template-card{display:flex;flex-direction:column;min-width:0;padding:16px;border:1px solid #dce5ef;border-radius:8px;background:#fff}.template-card-heading{display:flex;align-items:center;gap:12px;min-width:0}.template-card-heading>div{min-width:0}.template-card-heading h4{font-size:14px;color:#365772;margin:0;overflow-wrap:anywhere}.template-card-heading small{display:block;font-size:11px;color:#7c8b9a;margin-top:5px}.template-card p{font-size:12px;line-height:1.6;color:#6e8193;margin:14px 0;overflow-wrap:anywhere}.template-card-footer{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:auto;flex-wrap:wrap}.template-card-footer small{font-size:11px;color:#7b8da0}.template-card-footer .button{min-height:36px}
+@container app-content (max-width:700px){.two-columns,.form-grid,.sc-settings-form{grid-template-columns:minmax(0,1fr)}.um-body{grid-template-columns:minmax(0,1fr)}.cp-shell{grid-template-columns:minmax(0,1fr)}.cp-sidebar{display:flex;flex-wrap:wrap;border-right:0;border-bottom:1px solid #dce5ef;padding:8px}.cp-sidebar a{flex:1 1 140px}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){
+ #shell .workspace>main{min-height:0;overflow:hidden}
+ #shell .nas-window,#shell:not([data-page=files]):not([data-page=terminal]):not([data-page=vms]) .nas-window{height:100%!important;max-height:100%;min-height:0;overflow:hidden;display:flex}
+ #shell .nas-window-content,#shell:not([data-page=files]):not([data-page=terminal]):not([data-page=vms]) .nas-window-content{display:block;flex:1;height:auto;min-height:0;max-height:100%;overflow:auto;padding:12px}
+ html[data-desktop-embedded=true] #shell .nas-window-content{display:block;overflow:auto}
+ #shell:is([data-page=files],[data-page=docker],[data-page=vms],[data-page=storage]) .nas-window-content,html[data-desktop-embedded=true] #shell:is([data-page=files],[data-page=docker],[data-page=vms],[data-page=storage]) .nas-window-content{display:flex;flex-direction:column;overflow:hidden;padding:0}
+ #shell[data-desktop=true] .topbar{min-height:104px;padding:6px 8px;gap:4px;align-content:center;overflow:hidden}
+ #shell[data-desktop=true] .topbar-right{flex-shrink:0;margin-left:auto;gap:3px}
+ #shell[data-desktop=true] .shell-button{min-height:42px;font-size:11px;padding:7px 6px}
+ #shell[data-desktop=true] .shell-icon{width:34px;height:42px;padding:7px;flex:none}
+ #shell[data-desktop=true] #desktop-tasks{height:42px;flex:0 0 100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain}
+ #shell[data-desktop=true] main{display:block;padding:8px;overflow:hidden}
+ .desktop-window-layer{bottom:0;min-height:0}.desktop-window-caption{font-size:12px}.desktop-window-titlebar{padding:5px 8px;min-height:48px}.desktop-window-controls button{min-height:38px;min-width:38px}.desktop-account{top:54px;right:8px}
+ .desktop-menu-dialog{width:calc(100vw - 12px);max-width:calc(100vw - 12px);max-height:calc(100dvh - 12px);padding:14px}.desktop-menu-grid,[data-installed-apps]{grid-template-columns:repeat(3,minmax(0,1fr))}.desktop-menu-app{min-height:96px}.desktop-menu-app strong{font-size:11px}.desktop-add-shortcut{min-height:38px;white-space:normal}.desktop-search input{font-size:16px}.desktop-appearance>div{flex-wrap:wrap}.desktop-appearance .button{flex:1 1 80px}
+ #shell :is(.button,.button.small),#dialog :is(.button,.button.small){min-height:42px;font-size:12px}
+ #shell :is(input:not([type=checkbox],[type=radio]),select,textarea),#dialog :is(input:not([type=checkbox],[type=radio]),select,textarea){min-height:42px;font-size:16px}
+ #shell .two-columns,#shell .form-grid,#dialog .form-grid{grid-template-columns:minmax(0,1fr)}
+ #shell .page-heading>.form-actions{width:100%;justify-content:flex-start}.panel-heading>.form-actions{margin-top:0}.stat-row{gap:8px}.stat-card{min-width:0;flex:1 1 130px}
+ #dialog{width:calc(100vw - 12px);max-width:calc(100vw - 12px);max-height:calc(100dvh - 12px);padding:16px 12px;border-radius:12px}#dialog .dialog-title{top:-16px}#dialog .form-actions{bottom:-16px;padding:12px 0 7px;gap:7px}#dialog .form-actions>.button{flex:1 1 100px}#dialog .dialog-title h2{font-size:18px}#dialog fieldset{padding:10px}
+ .template-search input{flex-basis:100%}.template-search select{flex:1 1 100px}.template-sources article{align-items:flex-start;flex-wrap:wrap}.template-source-actions{width:100%}.template-source-actions .button{flex:1}.template-card{padding:12px}.template-card-footer .button{min-height:42px}
+}
+@media(max-width:360px){#shell[data-desktop=true] #widgets-toggle{width:30px}#shell[data-desktop=true] .shell-button{font-size:10px;padding:6px 5px}.desktop-menu-grid,[data-installed-apps]{grid-template-columns:repeat(2,minmax(0,1fr))}.desktop-window-titlebar{gap:4px}.desktop-shortcut .shortcut-label{font-size:10px}.desktop-widget{width:calc(100vw - 20px)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+.engine-console{border-top:1px solid #dce5ef;margin-top:18px;padding-top:12px}.engine-console form{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}.engine-console .field{flex:1 1 170px;min-width:0;margin:0}.engine-console input{min-width:0;width:100%;font-family:ui-monospace,monospace;font-size:12px}.engine-console .button{flex:none;min-height:38px}.template-validation{font-size:10px;line-height:1.5;color:#71839a;margin:0 0 14px}
+
+.engine-console .is-error{color:#b73e4c}
