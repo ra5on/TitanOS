@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
 import {Link} from 'react-router-dom'
 
-import {UmbrelLogoDraw} from '@/components/umbrel-logo-draw'
+import {TitanLogoDraw} from '@/components/titan-logo-draw'
 import {useDeviceInfo} from '@/hooks/use-device-info'
 import {useLanguage} from '@/hooks/use-language'
 import {footerClass, primaryButtonProps, SubTitle, Title} from '@/layouts/bare/shared'
@@ -43,7 +43,7 @@ export default function OnboardingStart() {
 	// A Raspberry Pi with an external drive attached first gets asked where its
 	// data should live (see external-drive.tsx); everyone else goes to the form
 	const {data: deviceInfo} = useDeviceInfo()
-	const isRaspberryPi = deviceInfo?.umbrelHostEnvironment === 'raspberry-pi'
+	const isRaspberryPi = deviceInfo?.titanHostEnvironment === 'raspberry-pi'
 	const externalDevicesQ = trpcReact.files.externalDevices.useQuery(undefined, {enabled: isRaspberryPi})
 	const hasExternalDrive = isRaspberryPi && (externalDevicesQ.data?.length ?? 0) > 0
 	const nextStep = hasExternalDrive ? '/onboarding/external-drive' : '/onboarding/create-account'
@@ -87,11 +87,11 @@ export default function OnboardingStart() {
 				<div className='grid place-items-center'>
 					<motion.div
 						className='col-start-1 row-start-1'
-						style={{viewTransitionName: 'umbrel-logo'}}
+						style={{viewTransitionName: 'titan-logo'}}
 						animate={drawn && handOffToArtwork ? {opacity: 0, scale: 0.85} : {opacity: 1, scale: 1}}
 						transition={{duration: dur(0.5), delay: dur(0.15), ease: ENTRANCE_EASE}}
 					>
-						<UmbrelLogoDraw
+						<TitanLogoDraw
 							className='w-[100px]'
 							delay={reduceMotion ? 0 : LOGO_DELAY}
 							onComplete={() => setDrawn(true)}

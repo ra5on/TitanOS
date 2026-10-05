@@ -298,7 +298,7 @@ export function BackupsRestoreWizard() {
 							onClick={() => setConfirmOpen(true)}
 							className='min-w-0 max-md:w-full'
 						>
-							{t('backups-restore.restore-umbrel')}
+							{t('backups-restore.restore-titan')}
 						</Button>
 					)}
 				</div>
@@ -335,7 +335,7 @@ export function BackupsRestoreWizard() {
 								onClick={handleConfirmRestore}
 							>
 								<span className={isStartingRestore ? 'opacity-0' : 'opacity-100'}>
-									{t('backups-restore.restore-umbrel')}
+									{t('backups-restore.restore-titan')}
 								</span>
 								{isStartingRestore && <Loader2 className='absolute h-4 w-4 animate-spin' />}
 							</AlertDialogAction>
@@ -403,7 +403,7 @@ function RepositoryStep({
 						{isLoading ? (
 							<LoadingCard />
 						) : repositories && repositories.length > 0 ? (
-							<div className='umbrel-stable-gutter max-h-[min(60vh,500px)] overflow-y-auto'>
+							<div className='titan-stable-gutter max-h-[min(60vh,500px)] overflow-y-auto'>
 								<div className='space-y-3'>
 									{repositories.map((repo) => {
 										const selected = repo.id === selectedId
@@ -550,7 +550,7 @@ function RepositoryStep({
 							actions={
 								browserRoot === '/Network' ? (
 									<Button size='sm' variant='default' onClick={() => setAddNasOpen(true)}>
-										{t('backups.add-umbrel-or-nas')}
+										{t('backups.add-titan-or-nas')}
 									</Button>
 								) : null
 							}
@@ -597,7 +597,7 @@ function BackupsStep({
 					<EmptyCard text={t('backups-restore.no-backups-found')} />
 				) : (
 					<div
-						className='umbrel-stable-gutter max-h-[45vh] overflow-hidden overflow-y-auto rounded-2xl bg-linear-to-b from-white/[0.03] to-transparent pt-1 pb-8 pl-1 md:max-h-[min(60vh,560px)]'
+						className='titan-stable-gutter max-h-[45vh] overflow-hidden overflow-y-auto rounded-2xl bg-linear-to-b from-white/[0.03] to-transparent pt-1 pb-8 pl-1 md:max-h-[min(60vh,560px)]'
 						style={{
 							maskImage: 'linear-gradient(to bottom, red 50px calc(100% - 80px), transparent)',
 						}}

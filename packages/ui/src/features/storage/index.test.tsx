@@ -8,7 +8,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../titand/source/modules/server/trpc/common'
 import StorageManagerDialog from './index'
 
 vi.mock('@/trpc/trpc', async () => {
@@ -32,7 +32,7 @@ let cache: QueryClient
 let failedQuery: string | undefined
 let unavailable: boolean
 let reads: string[]
-const queryNames = ['hardware.umbrelPro.isUmbrelPro', 'hardware.raid.getStatus', 'hardware.internalStorage.getDevices']
+const queryNames = ['hardware.titanPro.isTitanPro', 'hardware.raid.getStatus', 'hardware.internalStorage.getDevices']
 
 beforeEach(() => {
 	vi.useFakeTimers()
@@ -64,7 +64,7 @@ async function mount() {
 					return
 				}
 				const responses: Record<string, unknown> = {
-					'hardware.umbrelPro.isUmbrelPro': false,
+					'hardware.titanPro.isTitanPro': false,
 					'hardware.raid.getStatus': {
 						exists: true,
 						status: unavailable ? 'UNAVAIL' : 'ONLINE',

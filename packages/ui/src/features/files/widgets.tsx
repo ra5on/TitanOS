@@ -38,11 +38,11 @@ const dummyFileAttributes = {
 }
 export const filesWidgets: RegistryWidget<'files-list' | 'files-grid'>[] = [
 	{
-		// These widgets are Umbrel widgets, so they are always prefixed with
-		// `umbrel:`. The suffixes (here `files-recents` and `files-favorites`)
+		// These widgets are Titan widgets, so they are always prefixed with
+		// `titan:`. The suffixes (here `files-recents` and `files-favorites`)
 		// must match the key that we register in
-		// packages/umbreld/source/modules/files/widgets.ts
-		id: 'umbrel:files-recents',
+		// packages/titand/source/modules/files/widgets.ts
+		id: 'titan:files-recents',
 		type: 'files-list',
 		example: {
 			items: [
@@ -59,7 +59,7 @@ export const filesWidgets: RegistryWidget<'files-list' | 'files-grid'>[] = [
 		},
 	},
 	{
-		id: 'umbrel:files-favorites',
+		id: 'titan:files-favorites',
 		type: 'files-grid',
 		example: {
 			paths: ['/Home/Downloads', '/Home/Photos', '/Home/Videos', '/Home/Documents'],

@@ -11,7 +11,7 @@ export type Item = ItemsPage['items'][number]
 export type ItemDetail = RouterOutput['photos']['items']['get']
 
 // Every item URL is derived from the id — API responses carry no URL fields
-// (see umbreld modules/photos/CONTRACT.md). The renditions: 192 feeds the
+// (see titand modules/photos/CONTRACT.md). The renditions: 192 feeds the
 // zoomed-out mosaic and the filmstrip, 512 the grid tiles and covers, 1280
 // the lightbox's resting image.
 export type ThumbSize = 192 | 512 | 1280

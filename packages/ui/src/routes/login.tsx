@@ -4,6 +4,7 @@ import {useTranslation} from 'react-i18next'
 import {TbCircleCheckFilled} from 'react-icons/tb'
 import {useLocation} from 'react-router-dom'
 
+import TitanLogo from '@/components/titan-logo'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -14,7 +15,6 @@ import {
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {PinInput} from '@/components/ui/pin-input'
-import UmbrelLogo from '@/components/umbrel-logo'
 import {Layout} from '@/layouts/bare/shared'
 import {cn} from '@/lib/utils'
 import {AccountDock} from '@/modules/auth/account-dock'
@@ -206,8 +206,8 @@ export default function Login() {
 				<div className='fixed inset-0 bg-black/20' />
 				<div className='relative z-10 flex w-full flex-1 animate-in flex-col items-center justify-center gap-5 duration-300 fade-in'>
 					{/* A lone account's avatar says nothing the greeting doesn't —
-					    show the Umbrel logo instead, like the multi-user picker */}
-					<UmbrelLogo className='mb-4 w-32 shrink-0' />
+					    show the Titan logo instead, like the multi-user picker */}
+					<TitanLogo className='mb-4 w-32 shrink-0' />
 					<LoginForm
 						account={account}
 						password={password}
@@ -272,7 +272,7 @@ export default function Login() {
 							exit={{opacity: 0, y: -28, height: 0, marginBottom: 0}}
 							transition={{duration: 0.2}}
 						>
-							<UmbrelLogo className='w-32 shrink-0' />
+							<TitanLogo className='w-32 shrink-0' />
 						</motion.div>
 					)}
 				</AnimatePresence>

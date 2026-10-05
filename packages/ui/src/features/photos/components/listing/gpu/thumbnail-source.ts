@@ -6,7 +6,7 @@
 // is dropped by construction rather than cancelled by something that
 // remembered to. What is left is a cap, an outward walk and six promises.
 //
-// The cap is the browser's own. umbreld is plain HTTP/1.1, so a browser opens
+// The cap is the browser's own. titand is plain HTTP/1.1, so a browser opens
 // six connections per origin; a seventh request queues *inside* the browser,
 // where we can no longer reorder or usefully cancel it. Making our cap the
 // browser's cap means our queue is the only queue, and the careful ordering

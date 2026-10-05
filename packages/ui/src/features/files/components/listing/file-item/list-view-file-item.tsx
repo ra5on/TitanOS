@@ -13,8 +13,8 @@ import type {FileSystemItem} from '@/features/files/types'
 import {formatFilesystemDate} from '@/features/files/utils/format-filesystem-date'
 import {formatFilesystemSize} from '@/features/files/utils/format-filesystem-size'
 import {isDirectoryANetworkDevice} from '@/features/files/utils/is-directory-a-network-device-or-share'
+import {isDirectoryATitanBackup} from '@/features/files/utils/is-directory-a-titan-backup'
 import {isDirectoryAnExternalDrivePartition} from '@/features/files/utils/is-directory-an-external-drive-partition'
-import {isDirectoryAnUmbrelBackup} from '@/features/files/utils/is-directory-an-umbrel-backup'
 import type {Machine} from '@/features/machines/types'
 import {useIsMobile} from '@/hooks/use-is-mobile'
 import {useLanguage} from '@/hooks/use-language'
@@ -90,8 +90,8 @@ export function ListViewFileItem({
 								? t('files-type.external-drive')
 								: isDirectoryANetworkDevice(item.path)
 									? t('files-type.network-drive')
-									: isDirectoryAnUmbrelBackup(item.name)
-										? t('files-type.umbrel-backup')
+									: isDirectoryATitanBackup(item.name)
+										? t('files-type.titan-backup')
 										: // Folder sizes come from the index, so one that isn't indexed yet falls back to the label
 											item.size != null
 											? formatFilesystemSize(item.size)
@@ -151,7 +151,7 @@ export function ListViewFileItem({
 					: formatFilesystemSize(item.size ?? null)}
 			</div>
 
-			{/* TODO: Add this back in when we have a file system index in umbreld. The name header was previously flex-[3] */}
+			{/* TODO: Add this back in when we have a file system index in titand. The name header was previously flex-[3] */}
 			{/* <div className={`flex-[2] lg:hidden xl:flex ${tableStyles} text-white/60`}>
 				{isUploading ? `${formatFilesystemSize(item.speed ?? 0)}/s` : formatFilesystemDate(item.created, languageCode)}
 			</div> */}
@@ -165,8 +165,8 @@ export function ListViewFileItem({
 						? t('files-type.external-drive')
 						: isDirectoryANetworkDevice(item.path)
 							? t('files-type.network-drive')
-							: isDirectoryAnUmbrelBackup(item.name)
-								? t('files-type.umbrel-backup')
+							: isDirectoryATitanBackup(item.name)
+								? t('files-type.titan-backup')
 								: translatedFileType}
 			</div>
 		</div>

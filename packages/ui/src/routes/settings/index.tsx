@@ -118,11 +118,11 @@ function OwnerSessionsRedirect() {
 }
 
 // Troubleshoot and Terminal were settings routes before they could open over
-// any page: /settings/troubleshoot, …/umbrelos and …/app/:appId
+// any page: /settings/troubleshoot, …/titanos and …/app/:appId
 function PickerDialogRedirect({dialogKey}: {dialogKey: PickerDialogKey}) {
 	const [view, appId] = (useParams()['*'] ?? '').split('/')
 	const target: PickerTarget =
-		view === 'app' && appId ? {type: 'app', appId} : view === 'umbrelos' ? {type: 'umbrelos'} : {type: 'picker'}
+		view === 'app' && appId ? {type: 'app', appId} : view === 'titanos' ? {type: 'titanos'} : {type: 'picker'}
 	const search = withDialog(new URLSearchParams(), dialogKey, pickerTargetParams(target)).toString()
 	return <Navigate replace to={{pathname: '/settings', search}} />
 }

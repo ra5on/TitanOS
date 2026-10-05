@@ -1,5 +1,5 @@
 // Modal shown when a backup repository is detected at the selected location but
-// is not yet connected to this Umbrel. Prompts for the encryption password and
+// is not yet connected to this Titan. Prompts for the encryption password and
 // provides Connect/Cancel actions.
 import {useTranslation} from 'react-i18next'
 
@@ -32,7 +32,7 @@ export function ConnectExistingModal({
 				<DialogHeader className='items-center text-center'>
 					<img
 						src={backupsIcon}
-						alt={t('files-type.umbrel-backup')}
+						alt={t('files-type.titan-backup')}
 						className='mb-2 size-10 opacity-80'
 						draggable={false}
 					/>

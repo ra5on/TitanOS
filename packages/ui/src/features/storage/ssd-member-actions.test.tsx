@@ -9,7 +9,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../titand/source/modules/server/trpc/common'
 import type {ReplaceFailedDriveDialog} from './components/dialogs/replace-failed-drive-dialog'
 import type {SwapDialog} from './components/dialogs/swap-dialog'
 import type {RaidStatus, StorageDevice} from './hooks/use-storage'
@@ -92,7 +92,7 @@ beforeEach(() => {
 		host: 'pro',
 		devices,
 		pool: {
-			name: 'umbrel',
+			name: 'titan',
 			exists: true,
 			status: 'ONLINE',
 			raidType: 'failsafe',
@@ -122,7 +122,7 @@ afterEach(() => {
 })
 async function render() {
 	const responses: Record<string, unknown> = {
-		'hardware.umbrelPro.isUmbrelPro': fixture.host === 'pro',
+		'hardware.titanPro.isTitanPro': fixture.host === 'pro',
 		'hardware.raid.getStatus': fixture.pool,
 		'hardware.internalStorage.getDevices': fixture.devices,
 		'files.externalDevices': [],

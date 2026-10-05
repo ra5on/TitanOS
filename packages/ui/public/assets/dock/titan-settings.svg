@@ -1,10 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
-    <linearGradient id="tile" x1="20" y1="0" x2="107" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#bccada"/><stop offset="1" stop-color="#566c84"/></linearGradient>
-    <linearGradient id="shine" x1="64" y1="0" x2="64" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <filter id="depth" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#092645" flood-opacity=".16"/></filter>
+    <linearGradient id="tile" x1="64" y1="2" x2="64" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e5e9f0"/><stop offset="1" stop-color="#a6afbf"/>
+    </linearGradient>
+    <linearGradient id="light" x1="18" y1="2" x2="110" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".32"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="10" y="10" width="108" height="112" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#101a3d" flood-opacity=".18"/>
+    </filter>
+    <linearGradient id="metal" x1="64" y1="20" x2="64" y2="106" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset=".48" stop-color="#e1e7f0"/><stop offset="1" stop-color="#9da9be"/></linearGradient>
+    <linearGradient id="inner" x1="64" y1="43" x2="64" y2="85" gradientUnits="userSpaceOnUse"><stop stop-color="#eaf0f8"/><stop offset="1" stop-color="#a1adc1"/></linearGradient>
   </defs>
-  <rect x="2" y="2" width="124" height="124" rx="30" fill="url(#tile)"/>
-  <rect x="3" y="3" width="122" height="122" rx="29" fill="url(#shine)" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>
-  <g filter="url(#depth)"><polygon points="64.00,21.00 69.61,21.37 73.06,30.19 77.39,31.66 85.50,26.76 90.18,29.89 88.75,39.25 91.77,42.69 101.24,42.50 103.73,47.54 97.81,54.94 98.70,59.43 107.00,64.00 106.63,69.61 97.81,73.06 96.34,77.39 101.24,85.50 98.11,90.18 88.75,88.75 85.31,91.77 85.50,101.24 80.46,103.73 73.06,97.81 68.57,98.70 64.00,107.00 58.39,106.63 54.94,97.81 50.61,96.34 42.50,101.24 37.82,98.11 39.25,88.75 36.23,85.31 26.76,85.50 24.27,80.46 30.19,73.06 29.30,68.57 21.00,64.00 21.37,58.39 30.19,54.94 31.66,50.61 26.76,42.50 29.89,37.82 39.25,39.25 42.69,36.23 42.50,26.76 47.54,24.27 54.94,30.19 59.43,29.30" fill="#fff"/><circle cx="64" cy="64" r="24" fill="#8296ad"/><circle cx="64" cy="64" r="15" fill="#fff"/><circle cx="64" cy="64" r="8" fill="#5f7792"/></g>
+  <rect x="2" y="2" width="124" height="124" rx="29" fill="url(#tile)"/>
+  <rect x="2.75" y="2.75" width="122.5" height="122.5" rx="28.25" fill="url(#light)" stroke="#5c7294" stroke-opacity=".12" stroke-width="1.5"/>
+  <g filter="url(#shadow)">
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(0 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(30 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(60 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(90 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(120 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(150 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(180 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(210 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(240 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(270 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(300 64 64)" fill="url(#metal)"/>
+    <rect x="58" y="21" width="12" height="19" rx="3" transform="rotate(330 64 64)" fill="url(#metal)"/>
+    <circle cx="64" cy="64" r="35" fill="url(#metal)"/>
+    <circle cx="64" cy="64" r="27" fill="#657184"/>
+    <circle cx="64" cy="64" r="21" fill="url(#inner)"/>
+    <circle cx="64" cy="64" r="14" fill="#465164"/>
+    <circle cx="64" cy="64" r="8" fill="#bbc4d2"/>
+    <path d="M43 54a24 24 0 0 1 37-10" stroke="#fff" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
+  </g>
 </svg>

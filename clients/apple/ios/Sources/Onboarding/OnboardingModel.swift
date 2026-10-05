@@ -1,9 +1,9 @@
 import Observation
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // Drives the onboarding flow and owns its shared state. Discovery and auth are wired
-// through UmbrelKit (the same engine the macOS app uses) as each screen is built.
+// through TitanKit (the same engine the macOS app uses) as each screen is built.
 @MainActor
 @Observable
 final class OnboardingModel {
@@ -33,7 +33,7 @@ final class OnboardingModel {
 	var step: Step
 
 	// Discovery is either first-run (nothing is saved yet) or entered through the
-	// add-device button. Saved IDs let the latter mark known Umbrels without offering
+	// add-device button. Saved IDs let the latter mark known Titans without offering
 	// to add them again.
 	let savedIds: Set<String>
 	private(set) var configStorageIssue: Config.StorageIssue?
@@ -60,17 +60,17 @@ final class OnboardingModel {
 	// The device the user just signed into, handed to RootView on finish.
 	private var connectedDeviceId = ""
 
-	// ── Discovery (UmbrelKit) ──
+	// ── Discovery (TitanKit) ──
 	private let discovery = Discovery()
 
-	// Umbrel devices found through mDNS and identified by system.discoveryInfo.
+	// Titan devices found through mDNS and identified by system.discoveryInfo.
 	// Raw candidates never cross into the UI or persistence path.
 	private(set) var devices: [IdentifiedDevice] = []
-	private(set) var updateRequiredDevices: [Umbreld.UpdateRequiredDevice] = []
+	private(set) var updateRequiredDevices: [Titand.UpdateRequiredDevice] = []
 
 	enum DiscoveryResult: Identifiable {
 		case device(IdentifiedDevice)
-		case updateRequired(Umbreld.UpdateRequiredDevice)
+		case updateRequired(Titand.UpdateRequiredDevice)
 
 		var id: String {
 			switch self {
@@ -92,7 +92,7 @@ final class OnboardingModel {
 	private var identificationTask: Task<Void, Never>?
 	private var fallbackDiscoveryTask: Task<Void, Never>?
 	private var mdnsDevices: [IdentifiedDevice] = []
-	private var fallbackUpdateRequiredDevices: [Umbreld.UpdateRequiredDevice] = []
+	private var fallbackUpdateRequiredDevices: [Titand.UpdateRequiredDevice] = []
 	private var pendingNativeHosts: Set<String> = []
 	private var manualAddressReturnStep: Step = .noDevice
 
@@ -116,19 +116,19 @@ final class OnboardingModel {
 	// Persist the signed-in device + session, then move to the Connected screen. If
 	// either durable store fails, roll back the new session so onboarding never claims
 	// a connection that won't survive relaunch.
-	func completeSignIn(session: Umbreld.Session, account: Umbreld.Account?) async throws {
+	func completeSignIn(session: Titand.Session, account: Titand.Account?) async throws {
 		guard let device = selectedDevice else { throw SignInError.sessionStorageFailed }
 		let id = device.id
-		let target = Umbreld.Target(deviceId: id, hosts: [device.host] + device.addresses)
+		let target = Titand.Target(deviceId: id, hosts: [device.host] + device.addresses)
 		guard Keychain.setSession(session, deviceId: id) else {
 			throw SignInError.sessionStorageFailed
 		}
-		// Signing in saves access to this Umbrel; it never claims PhotoKit's single
+		// Signing in saves access to this Titan; it never claims PhotoKit's single
 		// backup destination. Only an explicit backup control may do that.
 		let loaded = Config.load()
 		if let issue = loaded.issue {
 			Keychain.deleteSession(deviceId: id)
-			try? await Umbreld.logout(target: target, session: session)
+			try? await Titand.logout(target: target, session: session)
 			throw issue
 		}
 		var config = loaded.config
@@ -154,7 +154,7 @@ final class OnboardingModel {
 			try config.save(savedDevice)
 		} catch {
 			Keychain.deleteSession(deviceId: id)
-			try? await Umbreld.logout(target: target, session: session)
+			try? await Titand.logout(target: target, session: session)
 			throw error
 		}
 		connectedDeviceId = id
@@ -166,12 +166,12 @@ final class OnboardingModel {
 		// Home's skeletons cover the gap and its own load fills in.
 		Task {
 			let target = savedDevice.nativeTarget
-			async let userInfo = try? Umbreld.user(target: target, session: session)
-			async let appList = try? Umbreld.apps(target: target, session: session)
-			async let usage = try? Umbreld.diskUsage(target: target, session: session)
-			async let favs = try? Umbreld.favorites(target: target, session: session)
+			async let userInfo = try? Titand.user(target: target, session: session)
+			async let appList = try? Titand.apps(target: target, session: session)
+			async let usage = try? Titand.diskUsage(target: target, session: session)
+			async let favs = try? Titand.favorites(target: target, session: session)
 			async let updates = session.accountId == "0"
-				? (try? await Umbreld.appUpdates(target: target, session: session)) : nil
+				? (try? await Titand.appUpdates(target: target, session: session)) : nil
 
 			if let info = await userInfo {
 				let loaded = Config.load()
@@ -246,7 +246,7 @@ final class OnboardingModel {
 
 	// A browse update can arrive first with a hostname and again with resolved IPs.
 	// Cancel the superseded batch so a slower, stale probe cannot overwrite newer
-	// results. UmbrelKit probes and deduplicates the snapshot before it reaches the UI.
+	// results. TitanKit probes and deduplicates the snapshot before it reaches the UI.
 	private func identify(_ candidates: [Candidate]) {
 		identificationTask?.cancel()
 		pendingNativeHosts = Set(candidates.map { normalizedDiscoveryHost($0.host) })
@@ -258,7 +258,7 @@ final class OnboardingModel {
 		publishDiscoveryResults()
 
 		identificationTask = Task { [weak self] in
-			let identified = await Umbreld.identify(
+			let identified = await Titand.identify(
 				candidates: candidates,
 				knownDeviceIds: savedIds
 			)
@@ -274,7 +274,7 @@ final class OnboardingModel {
 	func startFallbackDiscoveryIfNeeded() {
 		guard fallbackDiscoveryTask == nil else { return }
 		fallbackDiscoveryTask = Task { [weak self] in
-			let devices = await Umbreld.discoverFallbackHosts()
+			let devices = await Titand.discoverFallbackHosts()
 			guard !Task.isCancelled, let self else { return }
 			fallbackUpdateRequiredDevices = devices
 			publishDiscoveryResults()
@@ -308,7 +308,7 @@ final class OnboardingModel {
 	// Keep an explicitly checked address out of scan results. The dedicated route
 	// proceeds straight to sign-in and persistence still happens only after login.
 	func discoverManually(at address: String) async throws -> DiscoveryResult {
-		let result = try await Umbreld.discoverManually(at: address, knownDeviceIds: savedIds)
+		let result = try await Titand.discoverManually(at: address, knownDeviceIds: savedIds)
 		try Task.checkCancellation()
 		return switch result {
 		case .device(let device): .device(device)

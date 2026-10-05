@@ -140,7 +140,7 @@ export function useBackups(options?: {repositoriesEnabled?: boolean}) {
 // Convenience wrappers for queries
 
 /**
- * Keeps the backup-progress cache current from the event bus. umbreld pushes
+ * Keeps the backup-progress cache current from the event bus. titand pushes
  * the whole in-progress list on every change (a backup starting, each percent,
  * completion), so nothing needs to poll while idle — and polling every second
  * forever kept every page's query consumers re-rendering. Mount once for the

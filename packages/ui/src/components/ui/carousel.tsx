@@ -373,7 +373,7 @@ function CarouselDots({
 									className={cn(
 										'absolute inset-0 rounded-full bg-white',
 										countdown
-											? 'umbrel-carousel-fill'
+											? 'titan-carousel-fill'
 											: progress !== undefined &&
 													'transition-transform duration-300 ease-linear motion-reduce:transition-none',
 									)}
@@ -402,7 +402,7 @@ const carouselArrowClass =
 	'flex h-9 w-9 items-center justify-center rounded-full bg-white/10 outline-hidden transition-colors hover:bg-white/16 focus-visible:ring-2 focus-visible:ring-white/25 disabled:opacity-40 disabled:hover:bg-white/10'
 
 /** Round previous/next buttons for a carousel's control row (the
- * apps.umbrel.com banner treatment), sitting opposite the dots */
+ * apps.titan.com banner treatment), sitting opposite the dots */
 function CarouselArrows({
 	onPrev,
 	onNext,

@@ -12,13 +12,13 @@ import {t} from '@/utils/i18n'
 
 import {ShortcutIconImage} from './shortcut-icon-image'
 
-type Protocol = 'https://' | 'http://' | 'umbrel'
+type Protocol = 'https://' | 'http://' | 'titan'
 
 const PROTOCOL_OPTIONS: {value: Protocol; label: string; labelTKey?: string; placeholderTKey: string}[] = [
 	{value: 'https://', label: 'https://', placeholderTKey: 'example.com'},
 	{value: 'http://', label: 'http://', placeholderTKey: 'example.com'},
 	{
-		value: 'umbrel',
+		value: 'titan',
 		label: 'Custom Port',
 		labelTKey: 'shortcut.add.custom-port',
 		placeholderTKey: 'shortcut.add.custom-port-placeholder',
@@ -27,9 +27,9 @@ const PROTOCOL_OPTIONS: {value: Protocol; label: string; labelTKey?: string; pla
 
 /** Resolve a stored shortcut to an openable URL */
 export function resolveShortcutUrl(shortcut: {url: string}): string {
-	if (shortcut.url.startsWith('umbrel:')) {
+	if (shortcut.url.startsWith('titan:')) {
 		const {protocol, hostname} = window.location
-		return `${protocol}//${hostname}:${shortcut.url.slice('umbrel:'.length)}`
+		return `${protocol}//${hostname}:${shortcut.url.slice('titan:'.length)}`
 	}
 	return shortcut.url
 }
@@ -122,10 +122,10 @@ export function ShortcutPopover({
 			}
 			if (pageMetadataQuery.data.icon) {
 				setIcon(pageMetadataQuery.data.icon)
-				// For umbrel shortcuts, resolve icon URL relative to the device
-				if (fetchParams.url.startsWith('umbrel:')) {
+				// For titan shortcuts, resolve icon URL relative to the device
+				if (fetchParams.url.startsWith('titan:')) {
 					const {protocol: p, hostname} = window.location
-					const port = fetchParams.url.slice('umbrel:'.length).split('/')[0]
+					const port = fetchParams.url.slice('titan:'.length).split('/')[0]
 					setIconPreviewSrc(`${p}//${hostname}:${port}${new URL(pageMetadataQuery.data.icon).pathname}`)
 				} else {
 					setIconPreviewSrc(pageMetadataQuery.data.icon)
@@ -138,7 +138,7 @@ export function ShortcutPopover({
 	const buildFullUrl = useCallback((): string => {
 		const input = urlInput.trim()
 		if (!input) return ''
-		if (protocol === 'umbrel') return `umbrel:${input}`
+		if (protocol === 'titan') return `titan:${input}`
 		return `${protocol}${input}`
 	}, [protocol, urlInput])
 
@@ -169,7 +169,7 @@ export function ShortcutPopover({
 		setIsFetching(false)
 		setFetchParams(null)
 
-		if (proto === 'umbrel') {
+		if (proto === 'titan') {
 			const trimmed = input.trim()
 			const port = trimmed.split('/')[0]
 			if (!/^\d+$/.test(port)) return
@@ -191,7 +191,7 @@ export function ShortcutPopover({
 			setIcon(undefined)
 			setIsEditingName(false)
 			setTitle('')
-			setFetchParams(proto === 'umbrel' ? {url: `umbrel:${input.trim()}`} : {url: `${proto}${input.trim()}`})
+			setFetchParams(proto === 'titan' ? {url: `titan:${input.trim()}`} : {url: `${proto}${input.trim()}`})
 		}, 600)
 	}, [])
 
@@ -211,12 +211,12 @@ export function ShortcutPopover({
 		}
 
 		// Auto-switch to Custom Port when the URL points to this device
-		if (detectedProtocol !== 'umbrel') {
+		if (detectedProtocol !== 'titan') {
 			try {
 				const parsed = new URL(`${detectedProtocol}${cleaned}`)
 				if (parsed.hostname === window.location.hostname && parsed.port) {
-					detectedProtocol = 'umbrel'
-					setProtocol('umbrel')
+					detectedProtocol = 'titan'
+					setProtocol('titan')
 					cleaned = parsed.port + (parsed.pathname !== '/' ? parsed.pathname : '') + parsed.search
 				}
 			} catch {
@@ -253,14 +253,14 @@ export function ShortcutPopover({
 		const trimmedTitle = title.trim()
 		if (!trimmedTitle || !fullUrl) return
 
-		// For umbrel shortcuts, store the icon as umbrel:<port>/icon-path
+		// For titan shortcuts, store the icon as titan:<port>/icon-path
 		// instead of the full URL with IP, so it works when the IP changes
 		let storedIcon = icon
-		if (protocol === 'umbrel' && icon) {
+		if (protocol === 'titan' && icon) {
 			try {
 				const parsed = new URL(icon)
 				const port = urlInput.trim().split('/')[0]
-				storedIcon = `umbrel:${port}${parsed.pathname}${parsed.search}`
+				storedIcon = `titan:${port}${parsed.pathname}${parsed.search}`
 			} catch {
 				// Keep as-is if parsing fails
 			}

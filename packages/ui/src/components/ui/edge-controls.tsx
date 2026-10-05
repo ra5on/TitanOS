@@ -35,7 +35,7 @@ export function FilterPills<T extends string>({
 			variant='muted-primary'
 			ariaLabel={ariaLabel}
 			className={cn(
-				'settings-edge-material umbrel-hide-scrollbar h-11 min-w-0 shrink gap-1 overflow-x-auto rounded-24 border-0 bg-white/6 p-1.5 text-13 text-white',
+				'settings-edge-material titan-hide-scrollbar h-11 min-w-0 shrink gap-1 overflow-x-auto rounded-24 border-0 bg-white/6 p-1.5 text-13 text-white',
 				className,
 			)}
 			tabClassName='flex shrink-0 items-center justify-center px-2.5 pb-0 font-medium -tracking-2 hover:bg-white/10'

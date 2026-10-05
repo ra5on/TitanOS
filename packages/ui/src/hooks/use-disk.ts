@@ -29,11 +29,11 @@ export function useDisk(options: {poll?: boolean} = {}) {
 				...(diskQ.data?.apps ?? []),
 				...(diskQ.data?.machines ?? []).map((machine) => ({...machine, entity: 'machine' as const})),
 				{
-					id: 'umbreld-system',
+					id: 'titand-system',
 					used: diskQ.data?.system ?? 0,
 				},
 				{
-					id: 'umbreld-files',
+					id: 'titand-files',
 					used: diskQ.data?.files ?? 0,
 				},
 			],

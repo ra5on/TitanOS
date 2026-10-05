@@ -1,14 +1,14 @@
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 import UniformTypeIdentifiers
 
 // Shown before the first open of an app that ships default sign-in credentials
-// (umbrelOS web parity): the user copies them, then continues into the app.
+// (titanOS web parity): the user copies them, then continues into the app.
 // "Don't show this again" persists on the device via apps.hideCredentialsBeforeOpen,
 // so the choice follows the user across clients.
 struct CredentialsSheet: View {
-	let app: Umbreld.AppSummary
+	let app: Titand.AppSummary
 	let onContinue: () -> Void
 
 	@Environment(MainModel.self) private var model
@@ -76,7 +76,7 @@ struct CredentialsSheet: View {
 	private func openApp() {
 		if dontShowAgain, let target = model.nativeTarget, let session = model.session {
 			let appId = app.id
-			Task { try? await Umbreld.hideCredentialsBeforeOpen(target: target, session: session, appId: appId) }
+			Task { try? await Titand.hideCredentialsBeforeOpen(target: target, session: session, appId: appId) }
 		}
 		onContinue()
 		dismiss()

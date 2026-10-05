@@ -9,7 +9,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../../titand/source/modules/server/trpc/common'
 import {useExternalStorageDevices} from './use-external-storage-devices'
 
 vi.mock('@/trpc/trpc', async () => {

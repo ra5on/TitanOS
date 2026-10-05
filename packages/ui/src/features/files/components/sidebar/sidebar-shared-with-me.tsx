@@ -5,10 +5,10 @@ import {useMemberShares} from '@/features/files/hooks/use-member-shares'
 import {useNavigate} from '@/features/files/hooks/use-navigate'
 import {AccountAvatar} from '@/modules/auth/account-avatar'
 
-// The owner's Umbrel as a single folder entry in a member's sidebar. It roots
+// The owner's Titan as a single folder entry in a member's sidebar. It roots
 // at /Home, members can navigate down from there but only see the whitelisted
 // paths leading to what's been shared with them.
-export function SidebarOwnersUmbrel({name}: {name: string}) {
+export function SidebarOwnersTitan({name}: {name: string}) {
 	const {navigateToDirectory, currentPath} = useNavigate()
 	const {sharedWithMe} = useMemberShares()
 
@@ -20,7 +20,7 @@ export function SidebarOwnersUmbrel({name}: {name: string}) {
 			icon={
 				sharedWithMe ? (
 					// The owner's account id is the system-wide constant '0' (OWNER_USER_ID
-					// in umbreld), giving the same deterministic gradient as login/settings
+					// in titand), giving the same deterministic gradient as login/settings
 					<AccountAvatar name={sharedWithMe.ownerName} userId='0' avatarUrl={sharedWithMe.ownerAvatarUrl} size={20} />
 				) : undefined
 			}

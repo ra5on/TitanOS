@@ -36,12 +36,6 @@ export function RestoreLocationDropdown({onSelect}: RestoreLocationDropdownProps
 						<div className='text-xs opacity-60'>{t('backups-restore.browse-external-subtitle')}</div>
 					</div>
 				</DropdownMenuItem>
-				<DropdownMenuItem disabled className='block cursor-not-allowed opacity-60'>
-					<div className='flex w-full flex-col items-start'>
-						<div className='text-sm font-medium'>{t('backups-restore.browse-cloud-title')}</div>
-						<div className='text-xs opacity-60'>{t('backups-restore.browse-cloud-subtitle')}</div>
-					</div>
-				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

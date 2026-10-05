@@ -15,7 +15,7 @@ async function fixture(
 	t,
 	{english = {message: 'Hello {{name}}', stable: 'Stable'}, snapshot = english, locale = english} = {},
 ) {
-	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'umbrel-translations-'))
+	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'titan-translations-'))
 	t.after(() => fs.rm(directory, {recursive: true, force: true}))
 	await fs.mkdir(path.join(directory, 'public/locales'), {recursive: true})
 	await fs.mkdir(path.join(directory, 'translations'))

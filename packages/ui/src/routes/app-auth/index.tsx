@@ -48,10 +48,10 @@ function useAccounts() {
 
 // The same lock-screen experience as routes/login.tsx, reframed for the app
 // proxy: the app is the hero while picking an account (that step carries no
-// password to confuse), then the password step pivots to Umbrel identity —
-// avatar, greeting, and an explicit "Umbrel password" label — so nobody types
+// password to confuse), then the password step pivots to Titan identity —
+// avatar, greeting, and an explicit "Titan password" label — so nobody types
 // the app's own password here.
-export default function LoginWithUmbrel() {
+export default function LoginWithTitan() {
 	const {t} = useTranslation()
 	const [password, setPassword] = useState('')
 	const [error, setError] = useState<string>()
@@ -234,7 +234,7 @@ export default function LoginWithUmbrel() {
 								!chosen && '-translate-y-10',
 							)}
 						>
-							{/* umbrelOS + app icons fanned like a card stack (each rotated
+							{/* TitanOS + app icons fanned like a card stack (each rotated
 						    about its bottom center, app on top), with the identity-first
 						    title; exits like the lock screen's logo once chosen */}
 							<AnimatePresence initial={false}>
@@ -255,7 +255,7 @@ export default function LoginWithUmbrel() {
 													transformOrigin: 'bottom center',
 												}}
 											>
-												<AppIcon src='/assets/umbrel-ios.png' size={84} className='rounded-24 shadow-xl' />
+												<AppIcon src='/assets/titan-ios.png' size={84} className='rounded-24 shadow-xl' />
 											</div>
 											<div
 												className='absolute top-0 left-1/2'
@@ -272,7 +272,7 @@ export default function LoginWithUmbrel() {
 										{!chosen && (
 											<Title>
 												<span style={{fontFamily: "'SF Pro Rounded', 'Inter', system-ui, sans-serif"}}>
-													{t('login-with-umbrel.title')}
+													{t('login-with-titan.title')}
 												</span>
 											</Title>
 										)}
@@ -333,8 +333,8 @@ export default function LoginWithUmbrel() {
 												error={error}
 												isPending={loginIsPending}
 												onSubmit={handleSubmitPassword}
-												subtitle={app.name ? t('login-with-umbrel.description', {app: app.name}) : undefined}
-												submitLabel={app.name ? t('login-with-umbrel.open-app', {app: app.name}) : undefined}
+												subtitle={app.name ? t('login-with-titan.description', {app: app.name}) : undefined}
+												submitLabel={app.name ? t('login-with-titan.open-app', {app: app.name}) : undefined}
 											/>
 										</div>
 									</motion.div>

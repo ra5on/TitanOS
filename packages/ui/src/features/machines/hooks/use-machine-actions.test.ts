@@ -25,7 +25,7 @@ function getBackendErrorCodes(directory: string): Set<string> {
 
 describe('German VM error messages', () => {
 	test('covers every error code returned by the VM backend', () => {
-		const directory = path.resolve(import.meta.dirname, '../../../../..', 'umbreld/source/modules/machines')
+		const directory = path.resolve(import.meta.dirname, '../../../../..', 'titand/source/modules/machines')
 		const codes = getBackendErrorCodes(directory)
 		expect(codes.size).toBeGreaterThan(50)
 		for (const code of codes) {

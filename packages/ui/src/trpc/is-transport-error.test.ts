@@ -19,7 +19,7 @@ describe('isTransportError', () => {
 	})
 
 	test('an error the server answered with is not a transport error', () => {
-		// What umbreld sends when checkInitialRaidSetupStatus rethrows initialRaidSetupError
+		// What titand sends when checkInitialRaidSetupStatus rethrows initialRaidSetupError
 		const error = TRPCClientError.from({
 			error: {
 				message: 'Failed to create pool',

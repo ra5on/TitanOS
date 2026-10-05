@@ -1,0 +1,10 @@
+[Unit]
+Description=Display Titan access information on TTY
+After=titan.service
+
+[Service]
+ExecStart=/opt/titan-tty-message/titan-tty-message
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-description = "setup Rugix for umbrelOS"
+description = "setup Rugix for titanOS"
 
 dependencies = ["core/rugix-ctrl"]
 

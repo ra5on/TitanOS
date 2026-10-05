@@ -11,7 +11,7 @@ const selectedClass = tw`
   shadow-button-highlight-soft-hpx
 `
 
-// A source row (this Umbrel, a phone, a drive, a NAS) with a trailing "⋯" menu
+// A source row (this Titan, a phone, a drive, a NAS) with a trailing "⋯" menu
 // button: revealed on hover on desktop, always visible on mobile where there's
 // no hover. It opens the source details dialog.
 export function SourceItem({

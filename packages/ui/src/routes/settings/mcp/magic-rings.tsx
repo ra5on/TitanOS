@@ -4,14 +4,14 @@ import {useEffect, useRef} from 'react'
 import {cn} from '@/lib/utils'
 
 // Concentric rings rippling outward from the center — the visual for "your
-// Umbrel is broadcasting, listening for an agent". The fragment shader is
+// Titan is broadcasting, listening for an agent". The fragment shader is
 // MagicRings from reactbits.dev, re-hosted on a raw WebGL quad so it costs no
 // three.js dependency. Colors ease between variants in the render loop, so the
 // enabling→waiting→connected journey melts gray into the brand color (read
 // from the wallpaper's --color-brand variables) into green rather than
 // snapping.
 //
-// The shader is used as part of umbrelOS under ReactBits' license (MIT +
+// The shader is used as part of TitanOS under ReactBits' license (MIT +
 // Commons Clause License Condition v1.0), which requires retaining this
 // notice:
 //

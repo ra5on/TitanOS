@@ -34,7 +34,7 @@ export const EXTERNAL_STORAGE_PATH = '/External' as const
 export const NETWORK_STORAGE_PATH = '/Network' as const
 export const BACKUPS_PATH = '/Backups' as const
 
-// Roots whose direct children are created by umbrelOS itself (app data
+// Roots whose direct children are created by TitanOS itself (app data
 // directories by app installs, machine directories by Machines). Files never
 // offers to write into them: no uploads, new folders, paste or drops.
 export const SYSTEM_MANAGED_ROOT_PATHS: ReadonlySet<string> = new Set([APPS_PATH, MACHINES_PATH])
@@ -90,7 +90,7 @@ export const SORT_BY_OPTIONS = [
 ] as const
 
 // Keep these client-side sets aligned with PHOTO_EXTENSIONS and
-// VIDEO_EXTENSIONS in umbreld/source/modules/photos/types.ts.
+// VIDEO_EXTENSIONS in titand/source/modules/photos/types.ts.
 export const IMAGE_EXTENSIONS_WITH_IMAGE_THUMBNAILS = new Set([
 	'.jpg',
 	'.jpeg',

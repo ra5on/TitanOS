@@ -30,7 +30,7 @@ import {OnboardingAction, OnboardingFooter} from '@/routes/onboarding/onboarding
 export default function BackupsRestoreOnboarding() {
 	const {t} = useTranslation()
 	const {isLoading: isLoadingDeviceCheck, data: deviceInfo} = useDeviceInfo()
-	const isUmbrelPro = deviceInfo?.umbrelHostEnvironment === 'umbrel-pro'
+	const isTitanPro = deviceInfo?.titanHostEnvironment === 'titan-pro'
 
 	// Show loading state while checking device type
 	if (isLoadingDeviceCheck) {
@@ -48,8 +48,8 @@ export default function BackupsRestoreOnboarding() {
 	}
 
 	// Show Umbrel Pro specific instructions
-	if (isUmbrelPro) {
-		return <UmbrelProRestoreInstructions />
+	if (isTitanPro) {
+		return <TitanProRestoreInstructions />
 	}
 
 	// Show regular restore flow for non-Pro devices
@@ -58,7 +58,7 @@ export default function BackupsRestoreOnboarding() {
 
 // Umbrel Pro restore instructions component
 // Umbrel Pro requires completing onboarding first, then restoring via Settings
-function UmbrelProRestoreInstructions() {
+function TitanProRestoreInstructions() {
 	const {t} = useTranslation()
 	const steps = [
 		t('backups-restore-pro.step1'),
@@ -256,7 +256,7 @@ function RegularRestoreFlow() {
 							) : backups.length === 0 ? (
 								<div className='text-center text-xs opacity-60'>{t('backups-restore.no-backups-found')}</div>
 							) : (
-								<FadeScroller direction='y' className='umbrel-stable-gutter max-h-[45vh] overflow-y-auto'>
+								<FadeScroller direction='y' className='titan-stable-gutter max-h-[45vh] overflow-y-auto'>
 									<div className='space-y-2'>
 										{backups.map((backup, i) => {
 											const selected = backup.id === selectedBackupId
@@ -371,7 +371,7 @@ function RegularRestoreFlow() {
 					actions={
 						browserRoot === '/Network' ? (
 							<Button size='sm' variant='default' onClick={() => setAddNasOpen(true)}>
-								{t('backups.add-umbrel-or-nas')}
+								{t('backups.add-titan-or-nas')}
 							</Button>
 						) : null
 					}

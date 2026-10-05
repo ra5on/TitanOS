@@ -12,7 +12,7 @@ import {
 } from '@/routes/settings/mcp/agents'
 
 // The MCP hero as one morphing surface, borrowed from the cloud constellation.
-// In 'pitch' view the agents orbit the umbrelOS icon on a tilted plane — many
+// In 'pitch' view the agents orbit the TitanOS icon on a tilted plane — many
 // agents, one home in the middle. Switching to 'picker' view sends the same
 // plates flying into a tidy grid of agent tiles, so the decoration turns out
 // to have been the interface all along. The sixth satellite is the waving
@@ -152,7 +152,7 @@ export function AgentConstellation({
 
 	const satellite = ({visual, label}: {visual: McpAgentVisual; label: string}, slot: SatelliteSlot, index: number) => {
 		// The stagger applies to the mount entrance only, never to the morph. On
-		// the pitch the agents hold back until the umbrel has landed, then arrive
+		// the pitch the agents hold back until the titan has landed, then arrive
 		// in quick succession.
 		const entranceDelay = isPitch ? (mountedAsPitch ? 0.2 + index * 0.05 : 0) : mountedAsPitch ? 0 : index * 0.03
 		const orbit = orbitKeyframes(slot)
@@ -234,11 +234,11 @@ export function AgentConstellation({
 			// Two columns on phones so tile labels stay on one line; three from sm up
 			className={cn(
 				isPitch ? 'relative h-[250px]' : 'grid grid-cols-2 gap-2 sm:grid-cols-3',
-				busy && 'umbrel-pulse pointer-events-none',
+				busy && 'titan-pulse pointer-events-none',
 				className,
 			)}
 		>
-			{/* The umbrel at the center: the home the agents report to. It sits
+			{/* The titan at the center: the home the agents report to. It sits
 			    above every satellite z, so orbits pass behind it, never across it. */}
 			<AnimatePresence>
 				{isPitch && (
@@ -256,7 +256,7 @@ export function AgentConstellation({
 								transition={{duration: 7, repeat: Infinity, ease: 'easeInOut'}}
 								className='absolute -inset-8 rounded-full bg-brand/30 blur-3xl'
 							/>
-							<img src='/assets/umbrel-ios.png' alt='' className='relative size-[100px]' draggable={false} />
+							<img src='/assets/titan-ios.png' alt='' className='relative size-[100px]' draggable={false} />
 						</motion.div>
 					</div>
 				)}

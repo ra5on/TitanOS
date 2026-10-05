@@ -60,12 +60,12 @@ export function ConnectView({
 	// the setup examples — copying still yields the real thing.
 	const maskedToken = `${token.slice(0, 14)}…`
 	const agent = MCP_AGENTS.find(({id}) => id === selected)
-	// An agent installed as an app on this Umbrel connects from inside a
+	// An agent installed as an app on this Titan connects from inside a
 	// container, where the dashboard's own host may not resolve — its setup
 	// gets the fixed Docker gateway URL instead
 	const agentInstalled = agent?.appId !== undefined && installedAppIds.includes(agent.appId)
-	const onThisUmbrel = agentInstalled && !connectingElsewhere
-	const endpointUrl = onThisUmbrel ? INSTALLED_AGENT_MCP_URL : url
+	const onThisTitan = agentInstalled && !connectingElsewhere
+	const endpointUrl = onThisTitan ? INSTALLED_AGENT_MCP_URL : url
 	const snippet = (tokenValue: string) =>
 		agent ? agent.snippet(endpointUrl, tokenValue) : genericSnippet(endpointUrl, tokenValue)
 
@@ -83,7 +83,7 @@ export function ConnectView({
 		openclaw: t('mcp-connect-hint-openclaw-installed'),
 		hermes: t('mcp-connect-hint-hermes-installed'),
 	}
-	const hint = (onThisUmbrel ? installedHintByAgent[selected] : undefined) ?? hintByAgent[selected]
+	const hint = (onThisTitan ? installedHintByAgent[selected] : undefined) ?? hintByAgent[selected]
 
 	// lastRequestAt resets server-side on every enable/regenerate, so any value
 	// at all means this very token has already been used successfully
@@ -147,9 +147,9 @@ export function ConnectView({
 				</div>
 
 				{/* The tip stays out of the way when the agent lives on this very
-				    Umbrel — the container gateway URL above works regardless of
+				    Titan — the container gateway URL above works regardless of
 				    where the user roams */}
-				{!onThisUmbrel && isLocalOrigin(window.location.hostname) && <TailscaleTip endpointUrl={endpointUrl} />}
+				{!onThisTitan && isLocalOrigin(window.location.hostname) && <TailscaleTip endpointUrl={endpointUrl} />}
 			</div>
 
 			<McpStatusCard phase={connected ? 'connected' : 'waiting'} name={connectedName} agent={connectedAgent} />
@@ -226,8 +226,8 @@ function CopyCard({display, value, mono = true}: {display: string; value: string
 
 // ─── Tailscale tip ──────────────────────────────────────────────────
 // The setup snippets carry whatever host this dashboard is reached over. A
-// LAN-only origin (umbrel.local, a private IP) means the agent loses its
-// Umbrel the moment either machine leaves home — so nudge toward Tailscale,
+// LAN-only origin (titan.local, a private IP) means the agent loses its
+// Titan the moment either machine leaves home — so nudge toward Tailscale,
 // which gives both a stable, end-to-end encrypted address. Tailscale's own
 // 100.64/10 range and MagicDNS *.ts.net names read as remote-ready and get
 // no tip, as does any public domain.

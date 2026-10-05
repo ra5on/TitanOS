@@ -130,8 +130,8 @@ export function useNewFolder() {
 }
 
 // This is a best-effort check as it only compares against the currently loaded items.
-// umbreld still returns true if EEXIST, but doesn't create the folder.
-// So even if we don't throw an error here, umbreld will still handle the duplicate name.
+// titand still returns true if EEXIST, but doesn't create the folder.
+// So even if we don't throw an error here, titand will still handle the duplicate name.
 // But when we do throw an error, the user will see a toast
 function isNameAvailable(name: string, existingItems: FileSystemItem[]) {
 	const existingNames = new Set(existingItems.map((item) => item.name))

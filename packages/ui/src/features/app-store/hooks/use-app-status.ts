@@ -1,6 +1,6 @@
 import {arrayIncludes} from 'ts-extras'
 
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import {buildAppStatusMap, type AppStoreStatus} from '@/features/app-store/data/catalog'
 import {useStoreActions} from '@/features/app-store/providers/store-actions'
 import {pollStates} from '@/hooks/use-app-install'
@@ -14,7 +14,7 @@ import {AppStateOrLoading, RegistryApp, trpcReact} from '@/trpc/trpc'
  * pass from queries that are already cached — mounting this on a page with
  * hundreds of cards adds zero requests.
  */
-export function useAppStatusMap(registryId: string = UMBREL_APP_STORE_ID): Map<string, AppStoreStatus> {
+export function useAppStatusMap(registryId: string = TITAN_APP_STORE_ID): Map<string, AppStoreStatus> {
 	const {userAppsKeyed, isLoading} = useApps()
 	const availableApps = useAvailableApps(registryId)
 

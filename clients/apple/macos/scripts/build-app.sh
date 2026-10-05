@@ -2,20 +2,20 @@
 # Builds a real macOS app archive through Xcode.
 #
 # With no signing identity, exports an Apple Development-signed app for local testing.
-# Set UMBREL_SIGNING_IDENTITY to export a Developer ID-signed app for distribution.
+# Set TITAN_SIGNING_IDENTITY to export a Developer ID-signed app for distribution.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(/usr/bin/git -C "$MACOS_DIR" rev-parse --show-toplevel)"
 DIST_DIR="$MACOS_DIR/dist"
-APP="$DIST_DIR/Umbrel.app"
+APP="$DIST_DIR/Titan.app"
 BUILD_DIR="$MACOS_DIR/.build/xcode"
-ARCHIVE_PATH="$BUILD_DIR/Umbrel.xcarchive"
+ARCHIVE_PATH="$BUILD_DIR/Titan.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 EXPORT_OPTIONS="$BUILD_DIR/ExportOptions.plist"
-SIGNING_IDENTITY="${UMBREL_SIGNING_IDENTITY:-}"
-TEAM_ID="${UMBREL_TEAM_ID:-JABS8D63XG}"
+SIGNING_IDENTITY="${TITAN_SIGNING_IDENTITY:-}"
+TEAM_ID="${TITAN_TEAM_ID:-JABS8D63XG}"
 XCODEGEN_BIN="$(command -v xcodegen || true)"
 SYSTEM_TOOL_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -39,8 +39,8 @@ rm -rf "$BUILD_DIR" "$APP"
 mkdir -p "$BUILD_DIR" "$DIST_DIR"
 
 ARCHIVE_ARGS=(
-	-project "$MACOS_DIR/Umbrel.xcodeproj"
-	-scheme Umbrel
+	-project "$MACOS_DIR/Titan.xcodeproj"
+	-scheme Titan
 	-configuration Release
 	-destination generic/platform=macOS
 	-archivePath "$ARCHIVE_PATH"
@@ -49,7 +49,7 @@ ARCHIVE_ARGS=(
 )
 
 if [[ -z "$SIGNING_IDENTITY" ]]; then
-	echo "Archiving Umbrel for local testing..."
+	echo "Archiving Titan for local testing..."
 	/usr/bin/env PATH="$SYSTEM_TOOL_PATH" /usr/bin/xcodebuild \
 		"${ARCHIVE_ARGS[@]}" \
 		DEVELOPMENT_TEAM="$TEAM_ID" \
@@ -57,9 +57,9 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
 		-allowProvisioningDeviceRegistration \
 		archive
 
-	/usr/bin/ditto "$ARCHIVE_PATH/Products/Applications/Umbrel.app" "$APP"
+	/usr/bin/ditto "$ARCHIVE_PATH/Products/Applications/Titan.app" "$APP"
 else
-	echo "Archiving Umbrel for Developer ID distribution..."
+	echo "Archiving Titan for Developer ID distribution..."
 	/usr/bin/env PATH="$SYSTEM_TOOL_PATH" /usr/bin/xcodebuild \
 		"${ARCHIVE_ARGS[@]}" \
 		DEVELOPMENT_TEAM="$TEAM_ID" \
@@ -80,12 +80,12 @@ else
 		-exportOptionsPlist "$EXPORT_OPTIONS" \
 		-allowProvisioningUpdates
 
-	/usr/bin/ditto "$EXPORT_DIR/Umbrel.app" "$APP"
+	/usr/bin/ditto "$EXPORT_DIR/Titan.app" "$APP"
 fi
 
-EXPECTED_APP_IDENTIFIER="${TEAM_ID}.com.umbrel.mac"
+EXPECTED_APP_IDENTIFIER="${TEAM_ID}.io.github.ra5on.titanos.mac"
 if [[ ! -f "$APP/Contents/embedded.provisionprofile" ]]; then
-	echo "Umbrel.app is missing its embedded provisioning profile" >&2
+	echo "Titan.app is missing its embedded provisioning profile" >&2
 	exit 1
 fi
 
@@ -99,12 +99,12 @@ SIGNED_KEYCHAIN_GROUP="$(
 )"
 if [[ "$SIGNED_APP_IDENTIFIER" != "$EXPECTED_APP_IDENTIFIER" \
 	|| "$SIGNED_KEYCHAIN_GROUP" != "$EXPECTED_APP_IDENTIFIER" ]]; then
-	echo "Umbrel.app is missing its private Data Protection Keychain identity" >&2
+	echo "Titan.app is missing its private Data Protection Keychain identity" >&2
 	exit 1
 fi
 
-if ! /usr/bin/lipo "$APP/Contents/MacOS/Umbrel" -verify_arch arm64 x86_64; then
-	echo "Umbrel.app is not a universal arm64/x86_64 build" >&2
+if ! /usr/bin/lipo "$APP/Contents/MacOS/Titan" -verify_arch arm64 x86_64; then
+	echo "Titan.app is not a universal arm64/x86_64 build" >&2
 	exit 1
 fi
 

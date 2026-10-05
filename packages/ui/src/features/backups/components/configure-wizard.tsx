@@ -83,10 +83,6 @@ export function BackupsConfigureWizard() {
 		() => navigate(`/settings/backups/setup?backups-setup-tab=${EXTERNAL_STORAGE_PATH.slice(1).toLowerCase()}`),
 		[navigate],
 	)
-	const goToSetupUmbrelPrivateCloud = React.useCallback(
-		() => navigate(`/settings/backups/setup?backups-setup-tab=umbrel-private-cloud`),
-		[navigate],
-	)
 
 	return (
 		<div className='flex h-full flex-col gap-4'>
@@ -106,7 +102,6 @@ export function BackupsConfigureWizard() {
 						onViewRepo={setViewRepoId}
 						onAddNas={goToSetupNas}
 						onAddExternal={goToSetupExternal}
-						onAddUmbrelPrivateCloud={goToSetupUmbrelPrivateCloud}
 					/>
 
 					<div className='h-2' />
@@ -202,7 +197,6 @@ function LocationsSection({
 	onViewRepo,
 	onAddNas,
 	onAddExternal,
-	onAddUmbrelPrivateCloud,
 }: {
 	repositories: Array<{id: string; path: string; lastBackup?: any}>
 	doesHostHaveMountedShares: (rootPath: string) => boolean
@@ -211,7 +205,6 @@ function LocationsSection({
 	onViewRepo: (id: string) => void
 	onAddNas: () => void
 	onAddExternal: () => void
-	onAddUmbrelPrivateCloud: () => void
 }) {
 	const {t} = useTranslation()
 	const isSmallMobile = useIsSmallMobile()
@@ -232,20 +225,14 @@ function LocationsSection({
 						<DropdownMenuContent align='end' className='min-w-[280px]'>
 							<DropdownMenuItem onSelect={onAddNas}>
 								<div className='flex flex-col'>
-									<div className='text-14 font-medium'>{t('backups-setup-umbrel-or-nas')}</div>
-									<div className='text-12 text-white/40'>{t('backups-setup-nas-or-umbrel-description')}</div>
+									<div className='text-14 font-medium'>{t('backups-setup-titan-or-nas')}</div>
+									<div className='text-12 text-white/40'>{t('backups-setup-nas-or-titan-description')}</div>
 								</div>
 							</DropdownMenuItem>
 							<DropdownMenuItem onSelect={onAddExternal}>
 								<div className='flex flex-col'>
 									<div className='text-14 font-medium'>{t('external-drive')}</div>
 									<div className='text-12 text-white/40'>{t('backups-setup-external-description')}</div>
-								</div>
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={onAddUmbrelPrivateCloud}>
-								<div className='flex flex-col'>
-									<div className='text-14 font-medium'>{t('backups-setup-umbrel-private-cloud')}</div>
-									<div className='text-12 text-white/40'>{t('backups-setup-umbrel-private-cloud-description')}</div>
 								</div>
 							</DropdownMenuItem>
 						</DropdownMenuContent>
@@ -362,7 +349,7 @@ function RepositoryDetails({
 					<div className='shrink-0 text-white/60'>{t('backups-configure.path')}</div>
 					<FadeScroller
 						direction='x'
-						className='umbrel-hide-scrollbar min-w-0 overflow-x-auto text-right whitespace-nowrap'
+						className='titan-hide-scrollbar min-w-0 overflow-x-auto text-right whitespace-nowrap'
 					>
 						{getDisplayRepositoryPath(repo.path)}
 					</FadeScroller>
@@ -522,7 +509,7 @@ function BackupsList({
 	// Show max 5 backups with scroll; the gutter stays reserved so crossing
 	// the threshold doesn't reflow the rows
 	return (
-		<div className='umbrel-stable-gutter max-h-[200px] overflow-y-auto'>
+		<div className='titan-stable-gutter max-h-[200px] overflow-y-auto'>
 			<div className='divide-y divide-white/6'>
 				{backups.map((backup, index) => {
 					const id = backup.id ?? ''

@@ -130,14 +130,15 @@ const nativePlatforms: Record<string, {name: string; icon: string}> = {
 	windows: {name: 'Windows', icon: 'windows'},
 }
 
-const umbrelNativeLabels: Record<string, string> = {
-	'ios:phone': 'Umbrel for iPhone',
-	'ios:tablet': 'Umbrel for iPad',
-	'macos:desktop': 'Umbrel for Mac',
-	'android:phone': 'Umbrel for Android',
-	'android:tablet': 'Umbrel for Android tablet',
-	'windows:desktop': 'Umbrel for Windows',
-	'windows:tablet': 'Umbrel for Windows tablet',
+const nativeClientBrands: Record<string, string> = {titan: 'Titan', umbrel: 'Umbrel'}
+const nativeDeviceNames: Record<string, string> = {
+	'ios:phone': 'iPhone',
+	'ios:tablet': 'iPad',
+	'macos:desktop': 'Mac',
+	'android:phone': 'Android',
+	'android:tablet': 'Android tablet',
+	'windows:desktop': 'Windows',
+	'windows:tablet': 'Windows tablet',
 }
 
 export function parseSessionUserAgent(userAgent?: string): SessionClient {
@@ -179,13 +180,15 @@ export function parseNativeSessionClient(client: NativeSessionMetadata): Session
 	const platform = nativePlatforms[client.platform]
 	// Known clients receive product presentation; unknown identifiers remain
 	// valid and fall back without expanding the server's authentication schema.
-	const isUmbrel = client.id === 'umbrel'
-	const label = isUmbrel ? (umbrelNativeLabels[`${client.platform}:${client.deviceClass}`] ?? 'Umbrel') : client.id
+	const brand = nativeClientBrands[client.id]
+	const deviceName = nativeDeviceNames[`${client.platform}:${client.deviceClass}`]
+	const label = brand ? (deviceName ? `${brand} for ${deviceName}` : brand) : client.id
 
 	return {
 		deviceType,
 		label,
-		clientIcon: isUmbrel ? '/assets/umbrel-ios.png' : undefined,
+		// A third-party client must never be presented with Titan's own logo.
+		clientIcon: client.id === 'titan' ? '/assets/titan-ios.png' : undefined,
 		os: platform?.name,
 		osIcon: platform ? iconUrl('os', platform.icon) : undefined,
 	}

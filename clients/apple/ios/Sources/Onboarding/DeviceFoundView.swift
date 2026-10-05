@@ -1,7 +1,7 @@
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
-// Onboarding step 6. Shows one discovered Umbrel as a centered hero and multiple
+// Onboarding step 6. Shows one discovered Titan as a centered hero and multiple
 // devices in a swipeable card carousel. Connect opens the appropriate setup or
 // login drawer for the chosen device.
 struct DeviceFoundView: View {
@@ -112,7 +112,7 @@ struct DeviceFoundView: View {
 		case .updateRequired: nil
 		}
 		return VStack(spacing: 31) {
-			UmbrelDeviceRender(model: modelName)
+			TitanDeviceRender(model: modelName)
 				.frame(width: 161)
 				.shadow(color: .black.opacity(0.5), radius: 16, y: 16)
 				.accessibilityHidden(true)
@@ -140,9 +140,9 @@ struct DeviceFoundView: View {
 			}
 		case .updateRequired(let device):
 			if fullWidth {
-				OnboardingButton(title: "Update umbrelOS") { open(device) }
+				OnboardingButton(title: "Update titanOS") { open(device) }
 			} else {
-				connectButton(title: "Update umbrelOS") { open(device) }
+				connectButton(title: "Update titanOS") { open(device) }
 			}
 		case nil:
 			EmptyView()
@@ -178,7 +178,7 @@ struct DeviceFoundView: View {
 		model.advance(to: .signIn)
 	}
 
-	private func open(_ device: Umbreld.UpdateRequiredDevice) {
+	private func open(_ device: Titand.UpdateRequiredDevice) {
 		guard let url = URL(string: "http://\(device.host)") else { return }
 		openURL(url)
 	}

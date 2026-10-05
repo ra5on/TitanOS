@@ -1,7 +1,7 @@
 export const BASE_ROUTE_PATH = '/photos' as const
 
 // The presentation tier over photo/video, as the backend derives it at import
-// (see umbreld modules/photos/CONTRACT.md)
+// (see titand modules/photos/CONTRACT.md)
 export type PhotoSubKind = 'live' | 'panorama' | 'screenshot' | 'spherical'
 
 // Sidebar sections. Each maps to a child route under /photos; "all" is the
@@ -28,7 +28,7 @@ export function sectionPath(section: PhotosSection) {
 	return section === 'all' ? BASE_ROUTE_PATH : `${BASE_ROUTE_PATH}/${section}`
 }
 
-// A source's own view: /photos/source/<id>. This Umbrel itself is the 'my-umbrel' source.
+// A source's own view: /photos/source/<id>. This Titan itself is the 'my-titan' source.
 export function sourcePath(sourceId: string) {
 	return `${BASE_ROUTE_PATH}/source/${sourceId}`
 }

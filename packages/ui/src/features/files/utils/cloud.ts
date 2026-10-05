@@ -20,13 +20,13 @@ export const CLOUD_WEBDAV_FLAVORS: {
 		id: 'nextcloud',
 		displayName: 'Nextcloud',
 		exampleUrl: 'https://nextcloud.example.com',
-		exampleLocalUrl: 'http://umbrel.local:8081',
+		exampleLocalUrl: 'http://titan.local:8081',
 	},
 	{
 		id: 'owncloud',
 		displayName: 'ownCloud',
 		exampleUrl: 'https://owncloud.example.com',
-		exampleLocalUrl: 'http://umbrel.local:8666',
+		exampleLocalUrl: 'http://titan.local:8666',
 	},
 ]
 

@@ -6,8 +6,8 @@
     {
       "layers" : [
         {
-          "image-name" : "umbrel.svg",
-          "name" : "umbrel",
+          "image-name" : "titan.svg",
+          "name" : "titan",
           "position" : {
             "scale" : 5.85,
             "translation-in-points" : [

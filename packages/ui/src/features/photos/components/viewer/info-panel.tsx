@@ -53,7 +53,7 @@ export function InfoPanel({item, onClose, sheet = false}: {item: ItemDetail; onC
 	const utils = trpcReact.useUtils()
 	const homePath = useHomePath()
 	const homeDirectoryName = useHomeDirectoryName()
-	// This Umbrel goes by the account's name, as in the sidebar
+	// This Titan goes by the account's name, as in the sidebar
 	const {source} = usePhotoSource(item.source.id)
 	// When the photo was taken, at the wall clock it was taken by — the
 	// capture-time zone when the file carried it, the browser's otherwise
@@ -98,7 +98,7 @@ export function InfoPanel({item, onClose, sheet = false}: {item: ItemDetail; onC
 					<X className='size-4' />
 				</button>
 			</div>
-			<div className='umbrel-hide-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pt-2 pb-5'>
+			<div className='titan-hide-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pt-2 pb-5'>
 				{/* When it was taken, on the clock it was taken by */}
 				<div>
 					<p className='text-15 font-semibold -tracking-2 text-white/95'>
@@ -197,7 +197,7 @@ export function InfoPanel({item, onClose, sheet = false}: {item: ItemDetail; onC
 						icon={<SourceIcon type={item.source.type} size={14} />}
 						onClick={() => navigate(sourcePath(item.source.id))}
 					>
-						{source?.name ?? (item.source.type === 'umbrel' ? homeDirectoryName : item.source.name)}
+						{source?.name ?? (item.source.type === 'titan' ? homeDirectoryName : item.source.name)}
 					</Chip>
 					<p className='w-full text-11 text-white/40'>
 						{t('photos-item.imported-ago', {when: timeAgo(item.importedAt, i18n.language)})}

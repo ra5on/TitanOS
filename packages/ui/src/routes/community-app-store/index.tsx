@@ -65,7 +65,7 @@ export default function CommunityAppStoreHome() {
 							className='flex items-center gap-1 self-start underline-offset-2 outline-hidden focus-visible:underline'
 						>
 							<TbArrowLeft className='h-5 w-5' />
-							{t('community-app-store.back-to-umbrel-app-store')}
+							{t('community-app-store.back-to-titan-app-store')}
 						</button>
 						<CommunityBadge className='self-start' />
 						{/* Search sits on its own full-width row on mobile, beside the title on desktop */}

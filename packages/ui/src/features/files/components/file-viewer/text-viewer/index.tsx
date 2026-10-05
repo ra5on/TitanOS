@@ -28,7 +28,7 @@ import {
 	loadLanguageExtension,
 } from '@/features/files/components/file-viewer/text-viewer/language-map'
 import {MarkdownPreview} from '@/features/files/components/file-viewer/text-viewer/markdown-preview'
-import {umbrelTheme} from '@/features/files/components/file-viewer/text-viewer/umbrel-theme'
+import {titanTheme} from '@/features/files/components/file-viewer/text-viewer/titan-theme'
 import {ViewerWrapper} from '@/features/files/components/file-viewer/viewer-wrapper'
 import {APPS_PATH} from '@/features/files/constants'
 import {useIsFilesReadOnly} from '@/features/files/providers/files-capabilities-context'
@@ -73,7 +73,7 @@ const EDITOR_STYLE = {height: '100%', overflow: 'auto'} as const
 // Custom search highlight system using CodeMirror decorations
 const setSearchHighlights = StateEffect.define<{query: string}>()
 
-const searchHighlightMark = Decoration.mark({class: 'cm-umbrel-search-match'})
+const searchHighlightMark = Decoration.mark({class: 'cm-titan-search-match'})
 
 const searchHighlightField = StateField.define<DecorationSet>({
 	create() {
@@ -97,7 +97,7 @@ const searchHighlightField = StateField.define<DecorationSet>({
 })
 
 const searchHighlightTheme = EditorView.baseTheme({
-	'.cm-umbrel-search-match': {
+	'.cm-titan-search-match': {
 		backgroundColor: '#facc15',
 		color: '#000',
 		borderRadius: '2px',
@@ -448,7 +448,7 @@ export default function TextViewer({item}: TextViewerProps) {
 
 	// Build extensions
 	const editorExtensions = useMemo(() => {
-		const exts: Extension[] = [umbrelTheme, searchHighlightField, searchHighlightTheme]
+		const exts: Extension[] = [titanTheme, searchHighlightField, searchHighlightTheme]
 		if (languageExtension) exts.push(languageExtension)
 		if (ext === '.json') exts.push(jsonLinter(t('files-text-editor.invalid-json')))
 		return exts
@@ -508,14 +508,14 @@ export default function TextViewer({item}: TextViewerProps) {
 							<a
 								href={downloadUrl}
 								download
-								className='umbrel-button inline-flex h-[30px] items-center rounded-full border-[0.5px] border-white/20 bg-white/10 px-4 text-13 font-medium text-white/90 shadow-button-highlight-soft-hpx transition-all duration-300 hover:bg-white/15 active:scale-[0.97] active:bg-white/6'
+								className='titan-button inline-flex h-[30px] items-center rounded-full border-[0.5px] border-white/20 bg-white/10 px-4 text-13 font-medium text-white/90 shadow-button-highlight-soft-hpx transition-all duration-300 hover:bg-white/15 active:scale-[0.97] active:bg-white/6'
 							>
 								{t('files-text-editor.download')}
 							</a>
 						)}
 						<button
 							onClick={() => setViewerItem(null)}
-							className='umbrel-button inline-flex h-[30px] items-center rounded-full border-[0.5px] border-white/20 bg-white/10 px-4 text-13 font-medium text-white/90 shadow-button-highlight-soft-hpx transition-all duration-300 hover:bg-white/15 active:scale-[0.97] active:bg-white/6'
+							className='titan-button inline-flex h-[30px] items-center rounded-full border-[0.5px] border-white/20 bg-white/10 px-4 text-13 font-medium text-white/90 shadow-button-highlight-soft-hpx transition-all duration-300 hover:bg-white/15 active:scale-[0.97] active:bg-white/6'
 						>
 							{t('files-text-editor.close')}
 						</button>
@@ -597,7 +597,7 @@ export default function TextViewer({item}: TextViewerProps) {
 									{!isReadOnly && (
 										<button
 											onClick={requestEdit}
-											className='umbrel-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] border-white/10 bg-white/6 px-3 text-12 font-medium text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
+											className='titan-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] border-white/10 bg-white/6 px-3 text-12 font-medium text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
 										>
 											<RiEditLine className='h-3.5 w-3.5 opacity-80' />
 											{t('files-text-editor.edit')}
@@ -631,7 +631,7 @@ export default function TextViewer({item}: TextViewerProps) {
 													title={
 														showMarkdownPreview ? t('files-text-editor.hide-preview') : t('files-text-editor.preview')
 													}
-													className='umbrel-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] border-white/10 bg-white/6 px-3 text-12 font-medium text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
+													className='titan-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] border-white/10 bg-white/6 px-3 text-12 font-medium text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
 												>
 													{showMarkdownPreview ? (
 														<FaEyeSlash className='h-3 w-3 opacity-80' />
@@ -645,7 +645,7 @@ export default function TextViewer({item}: TextViewerProps) {
 											<button
 												onClick={handleSave}
 												disabled={saveState === 'saving' || !hasUnsavedChanges}
-												className={`umbrel-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] px-3 text-12 font-medium transition-[background-color] duration-300 ${
+												className={`titan-button inline-flex h-[30px] items-center gap-1.5 rounded-full border-[0.5px] px-3 text-12 font-medium transition-[background-color] duration-300 ${
 													hasUnsavedChanges
 														? 'border-transparent bg-brand text-white shadow-button-highlight-hpx hover:bg-brand-lighter active:bg-brand'
 														: 'border-white/10 bg-white/6 text-white/75 hover:bg-white/10 active:bg-white/6'
@@ -679,7 +679,7 @@ export default function TextViewer({item}: TextViewerProps) {
 
 									<button
 										onClick={handleClose}
-										className='umbrel-button inline-flex h-[30px] w-[30px] items-center justify-center rounded-full border-[0.5px] border-white/10 bg-white/6 text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
+										className='titan-button inline-flex h-[30px] w-[30px] items-center justify-center rounded-full border-[0.5px] border-white/10 bg-white/6 text-white/75 transition-colors duration-300 hover:bg-white/10 active:bg-white/6'
 									>
 										<RiCloseLine className='h-4 w-4 text-white/75' />
 									</button>

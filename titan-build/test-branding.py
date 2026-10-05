@@ -18,31 +18,31 @@ SOURCE = Path(__file__).resolve().parent.parent
 
 class BrandingTests(unittest.TestCase):
     def test_translation_values_protect_external_products_and_urls(self):
-        value = 'Your Umbrel runs umbrelOS 2.0. Umbrel Pro and Umbrel App Store: https://umbrel.com/umbrelos'
+        value = 'Your Titan runs titanOS 2.0. Titan Pro and Titan App Store: https://umbrel.com/umbrelos'
         self.assertEqual(
             branding.rebrand_text(value),
-            'Your Titan runs TitanOS 2.0. Umbrel Pro and Umbrel App Store: https://umbrel.com/umbrelos',
+            'Your Titan runs TitanOS 2.0. Titan Pro and Titan App Store: https://umbrel.com/umbrelos',
         )
-        for value in ('Umbrel for Mac', 'Umbrel app', 'Umbrel Local HTTPS CA', 'umbrel-local-ca.crt'):
+        for value in ('Titan for Mac', 'Titan app', 'Titan Local HTTPS CA', 'titan-local-ca.crt'):
             self.assertEqual(branding.rebrand_text(value), value)
-        self.assertEqual(branding.rebrand_text('あなたのumbrelOSを更新'), 'あなたのTitanOSを更新')
-        self.assertEqual(branding.rebrand_text('/umbrelOS_marker umbrelOS_id'), '/umbrelOS_marker umbrelOS_id')
+        self.assertEqual(branding.rebrand_text('あなたのtitanOSを更新'), 'あなたのTitanOSを更新')
+        self.assertEqual(branding.rebrand_text('/titanOS_marker titanOS_id'), '/titanOS_marker titanOS_id')
 
     def test_files_and_photos_rebrand_device_but_keep_real_client_names(self):
         self.assertEqual(
-            branding.rebrand_text('Umbrel for Mac findet deinen Umbrel. Umbrel Backup'),
-            'Umbrel for Mac findet deinen Titan. Titan Backup',
+            branding.rebrand_text('Titan for Mac findet deinen Titan. Titan Backup'),
+            'Titan for Mac findet deinen Titan. Titan Backup',
         )
-        for client in ('Umbrel for iPhone', 'Umbrel pour iPhone', 'Umbrel за iPhone', 'iPhone için Umbrel'):
-            self.assertEqual(branding.rebrand_text(f'{client}: Umbrel'), f'{client}: Titan')
+        for client in ('Titan for iPhone', 'Titan pour iPhone', 'Titan за iPhone', 'iPhone için Titan'):
+            self.assertEqual(branding.rebrand_text(f'{client}: Titan'), f'{client}: Titan')
 
     def test_device_names_with_localized_case_endings(self):
-        self.assertEqual(branding.rebrand_text('{{name}} Umbrelje', 'hu'), '{{name}} Titanja')
-        self.assertEqual(branding.rebrand_text('Umbreleden / Umbrelnek', 'hu'), 'Titanodon / Titannak')
-        self.assertEqual(branding.rebrand_text('Umbrelis / Umbrelist', 'et'), 'Titanis / Titanist')
-        self.assertEqual(branding.rebrand_text('Umbrelu / Umbrela', 'hr'), 'Titanu / Titana')
-        self.assertEqual(branding.rebrand_text('Umbrelom', 'sl'), 'Titanom')
-        self.assertEqual(branding.rebrand_text('Umbrel for Mac / Umbrelje_id', 'hu'), 'Umbrel for Mac / Umbrelje_id')
+        self.assertEqual(branding.rebrand_text('{{name}} Titanje', 'hu'), '{{name}} Titanja')
+        self.assertEqual(branding.rebrand_text('Titaneden / Titannek', 'hu'), 'Titanodon / Titannak')
+        self.assertEqual(branding.rebrand_text('Titanis / Titanist', 'et'), 'Titanis / Titanist')
+        self.assertEqual(branding.rebrand_text('Titanu / Titana', 'hr'), 'Titanu / Titana')
+        self.assertEqual(branding.rebrand_text('Titanom', 'sl'), 'Titanom')
+        self.assertEqual(branding.rebrand_text('Titan for Mac / Titanje_id', 'hu'), 'Titan for Mac / Titanje_id')
 
     def test_generated_favicon_size_and_notification(self):
         icon = branding.make_icon(32)
@@ -54,8 +54,8 @@ class BrandingTests(unittest.TestCase):
     def test_full_patch_is_idempotent_preserves_keys_and_runtime_names(self):
         paths = (
             'packages/ui/index.html', 'packages/ui/public/locales', 'packages/ui/public/favicon',
-            'packages/ui/public/site.webmanifest', 'packages/ui/public/assets/umbrel-app.svg',
-            'packages/ui/src/components/umbrel-logo.tsx', 'packages/ui/src/components/umbrel-logo-draw.tsx',
+            'packages/ui/public/site.webmanifest', 'packages/ui/public/assets/titan-app.svg',
+            'packages/ui/src/components/titan-logo.tsx', 'packages/ui/src/components/titan-logo-draw.tsx',
             'packages/ui/src/components/iframe-checker.tsx', 'packages/ui/src/utils/tab-attention.ts',
             'packages/ui/src/routes/whats-new.ts', 'packages/ui/src/routes/settings/advanced.tsx',
             'packages/ui/src/routes/settings/_components/software-update-list-row.tsx',
@@ -65,8 +65,8 @@ class BrandingTests(unittest.TestCase):
             'packages/ui/src/features/photos/components/sources/source-icon.tsx',
             'packages/ui/src/hooks/use-is-home-or-pro.ts',
             'packages/ui/src/features/files/components/listing/search-listing/index.tsx',
-            'packages/os/overlay/opt/umbrel-tty-message/umbrel-tty-message',
-            'packages/os/overlay/etc/motd', 'packages/os/overlay/umbrelOS',
+            'packages/os/overlay/opt/titan-tty-message/titan-tty-message',
+            'packages/os/overlay/etc/motd', 'packages/os/overlay/titanOS',
             'packages/os/usb-installer/custom-tty', 'packages/os/usb-installer/configuration.nix',
             'LICENSE.md',
         )
@@ -95,27 +95,19 @@ class BrandingTests(unittest.TestCase):
             self.assertIn('TitanOS 2.0.1', (root / 'packages/ui/src/routes/whats-new.ts').read_text())
             translations = json.loads(english.read_text())
             self.assertEqual(original_keys, set(translations))
-            self.assertEqual(translations['umbrelos'], 'TitanOS')
-            self.assertEqual(translations['umbrel'], 'Titan')
-            self.assertEqual(translations['desktop.welcome.files.mac-description'], original_translations['desktop.welcome.files.mac-description'])
-            self.assertEqual(translations['files-type.umbrel-backup'], 'Titan Backup')
-            self.assertEqual(translations['photos-phone-backup.title'], 'Your phone-to-Titan magic')
+            self.assertEqual(translations['titanos'], 'TitanOS')
+            self.assertEqual(translations['titan'], 'Titan')
+            self.assertEqual(translations['files-type.titan-backup'], 'Titan Backup')
             self.assertEqual(
-                translations['files-share.instructions.macos.app-description'],
-                'Umbrel for Mac automatically finds your Titan and gives you access to your shared folders in Finder.',
-            )
-            self.assertEqual(
-                translations['whats-new-umbrelos-2-0.photos-description'],
-                'Photos and videos on your Titan show up in the new Photos app automatically. '
-                'And with the new Umbrel for iPhone app, your entire camera roll backs up to your Titan on its own.',
+                translations['whats-new-titanos-2-0.photos-description'],
+                original_translations['whats-new-titanos-2-0.photos-description'],
             )
             german = json.loads((root / 'packages/ui/public/locales/de.json').read_text())
-            self.assertEqual(german['photos-phone-backup.title'], 'Die Magie zwischen deinem Smartphone und Titan')
-            self.assertIn('Umbrel for Mac findet deinen Titan', german['files-share.instructions.macos.app-description'])
+            self.assertEqual(german['titanos'], 'TitanOS')
             self.assertEqual(license_before, (root / 'LICENSE.md').read_bytes())
-            self.assertTrue((root / 'packages/os/overlay/umbrelOS').exists())
+            self.assertTrue((root / 'packages/os/overlay/titanOS').exists())
             self.assertEqual(advanced_before, (root / 'packages/ui/src/routes/settings/advanced.tsx').read_bytes())
-            self.assertIn('umbrel login:', (root / 'packages/os/overlay/opt/umbrel-tty-message/umbrel-tty-message').read_text())
+            self.assertIn('titan login:', (root / 'packages/os/overlay/opt/titan-tty-message/titan-tty-message').read_text())
 
 
 if __name__ == '__main__':

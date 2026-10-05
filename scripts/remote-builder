@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GIT_BRANCH="$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
 SAFE_BRANCH="$(echo "${GIT_BRANCH}" | tr '/' '-' | tr -cd 'a-zA-Z0-9_-')"
-REMOTE_DIR=".umbrel-builder/${SAFE_BRANCH}"
+REMOTE_DIR=".titan-builder/${SAFE_BRANCH}"
 
 # Subcommands that run on the remote host
 if [[ "${1:-}" == "--build-on-host" ]]; then
@@ -30,10 +30,10 @@ if [[ "${1:-}" == "--build-on-host" ]]; then
     command -v docker >/dev/null || (echo "Installing docker..." && apt-get update && apt-get install --yes docker.io)
     command -v qemu-system-x86_64 >/dev/null || (echo "Installing qemu..." && apt-get update && apt-get install --yes qemu-system-x86)
 
-    # Install umbreld dev dependencies
+    # Install titand dev dependencies
     echo ""
-    echo "Installing umbreld dependencies..."
-    cd "${WORK_DIR}/packages/umbreld" && npm install
+    echo "Installing titand dependencies..."
+    cd "${WORK_DIR}/packages/titand" && npm install
 
     # Build OS
     echo ""
@@ -52,7 +52,7 @@ if [[ "${1:-}" == "--test-on-host" ]]; then
     fi
     shift 2
     USER_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
-    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}/packages/umbreld"
+    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}/packages/titand"
 
     # Disable spinners and fancy progress output
     export CI=true
@@ -79,10 +79,10 @@ show_usage() {
     echo "                             With args: passes args directly to 'npm run test'"
     echo ""
     echo "Examples:"
-    echo "  $0 build umbrel@192.168.1.27"
-    echo "  $0 test umbrel@192.168.1.27"
-    echo "  $0 test umbrel@192.168.1.27 vm.test -t 'factory reset'"
-    echo "  $0 test umbrel@192.168.1.27 unit.test"
+    echo "  $0 build titan@192.168.1.27"
+    echo "  $0 test titan@192.168.1.27"
+    echo "  $0 test titan@192.168.1.27 vm.test -t 'factory reset'"
+    echo "  $0 test titan@192.168.1.27 unit.test"
     exit 1
 }
 

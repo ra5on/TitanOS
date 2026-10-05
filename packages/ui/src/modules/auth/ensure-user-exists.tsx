@@ -42,7 +42,7 @@ function EnsureUser({
 	// Show toast on error
 	useEffect(() => {
 		if (userExistsQ.isError) {
-			toast.error(t('auth.failed-to-check-if-user-exists'), {area: 'umbrelos'})
+			toast.error(t('auth.failed-to-check-if-user-exists'), {area: 'titanos'})
 		}
 	}, [userExistsQ.isError])
 

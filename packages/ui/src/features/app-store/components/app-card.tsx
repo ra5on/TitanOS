@@ -241,7 +241,7 @@ export function AppStatusLabel({
 		case 'update-available':
 			return <span className={cn(labelClass, 'text-brand-lightest')}>{t('app-store.status.update-available')}</span>
 		case 'in-progress':
-			return <span className={cn(labelClass, 'umbrel-pulse text-white/50')}>{t('app-store.status.in-progress')}</span>
+			return <span className={cn(labelClass, 'titan-pulse text-white/50')}>{t('app-store.status.in-progress')}</span>
 		case 'incompatible':
 			return <span className={cn(labelClass, 'text-white/30')}>{t('app-store.status.incompatible')}</span>
 	}

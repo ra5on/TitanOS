@@ -2,14 +2,14 @@ import {useIsMember} from '@/features/files/hooks/use-home-path'
 import {trpcReact} from '@/trpc/trpc'
 
 /**
- * Service to detect the type of network device (Umbrel or generic NAS)
+ * Service to detect the type of network device (Titan or generic NAS)
  */
 
-type NetworkDeviceType = 'umbrel' | 'nas'
+type NetworkDeviceType = 'titan' | 'nas'
 
 /**
  * Extract hostname from network path
- * @param path Network path like "/Network/umbrel.local" or "/Network/192.168.1.100"
+ * @param path Network path like "/Network/titan.local" or "/Network/192.168.1.100"
  * @returns hostname or null if invalid path
  */
 const extractHostnameFromPath = (path: string): string | null => {
@@ -22,8 +22,8 @@ const extractHostnameFromPath = (path: string): string | null => {
 }
 
 /**
- * Hook to detect and cache the type of network device (Umbrel or generic NAS)
- * @param path Network path like "/Network/umbrel.local"
+ * Hook to detect and cache the type of network device (Titan or generic NAS)
+ * @param path Network path like "/Network/titan.local"
  * @returns Device type detection state
  */
 export function useNetworkDeviceType(path: string) {
@@ -31,9 +31,9 @@ export function useNetworkDeviceType(path: string) {
 	const isMember = useIsMember()
 
 	// Optimistically determine device type based on hostname
-	const optimisticDeviceType: NetworkDeviceType = hostname?.toLowerCase().includes('umbrel') ? 'umbrel' : 'nas'
+	const optimisticDeviceType: NetworkDeviceType = hostname?.toLowerCase().includes('titan') ? 'titan' : 'nas'
 
-	const query = trpcReact.files.isServerAnUmbrelDevice.useQuery(
+	const query = trpcReact.files.isServerAnTitanDevice.useQuery(
 		{address: hostname!},
 		{
 			// Cache for 1 hour
@@ -57,7 +57,7 @@ export function useNetworkDeviceType(path: string) {
 		deviceType = 'nas'
 	} else if (query.data !== undefined) {
 		// Use actual result from TRPC query
-		deviceType = query.data === true ? 'umbrel' : 'nas'
+		deviceType = query.data === true ? 'titan' : 'nas'
 	} else {
 		// Use optimistic value while loading or on error
 		deviceType = optimisticDeviceType

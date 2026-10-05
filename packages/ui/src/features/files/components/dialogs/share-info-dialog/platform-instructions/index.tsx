@@ -1,6 +1,6 @@
 import {IOSInstructions} from '@/features/files/components/dialogs/share-info-dialog/platform-instructions/ios-instructions'
 import {MacOSInstructions} from '@/features/files/components/dialogs/share-info-dialog/platform-instructions/macos-instructions'
-import {UmbrelOSInstructions} from '@/features/files/components/dialogs/share-info-dialog/platform-instructions/umbrelos-instructions'
+import {TitanOSInstructions} from '@/features/files/components/dialogs/share-info-dialog/platform-instructions/titanos-instructions'
 import {WindowsInstructions} from '@/features/files/components/dialogs/share-info-dialog/platform-instructions/windows-instructions'
 import {Platform} from '@/features/files/components/dialogs/share-info-dialog/platform-selector'
 
@@ -33,8 +33,8 @@ export function PlatformInstructions({
 		return <IOSInstructions smbUrl={smbUrl} username={username} password={password} />
 	}
 
-	if (platform?.id === 'umbrelos') {
-		return <UmbrelOSInstructions username={username} password={password} sharename={sharename} />
+	if (platform?.id === 'titanos') {
+		return <TitanOSInstructions username={username} password={password} sharename={sharename} />
 	}
 
 	return null

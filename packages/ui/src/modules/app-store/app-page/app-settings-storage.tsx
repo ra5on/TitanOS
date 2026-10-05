@@ -936,11 +936,11 @@ export function StorageSettingsView({
 // destination device. Rendered inside AlertDialogDescription-adjacent header
 // content, so it uses only phrasing-content elements.
 function AppMoveDiagram({appIcon, destination}: {appIcon?: string; destination: 'internal' | 'removable' | 'network'}) {
-	// Internal storage is the Umbrel itself, drawn with the same mark the cloud
-	// diagrams use for the umbrelOS side
+	// Internal storage is the Titan itself, drawn with the same mark the cloud
+	// diagrams use for the TitanOS side
 	const destinationIcon =
 		destination === 'internal'
-			? '/assets/umbrel-ios.png'
+			? '/assets/titan-ios.png'
 			: destination === 'network'
 				? activeNasIcon
 				: externalStorageIcon
@@ -1053,7 +1053,7 @@ function StorageTechnicalDetails({
 				<div className='divide-y divide-white/6 rounded-8 bg-white/4 px-2.5'>
 					{mounts.map((mount) => (
 						<div key={`${mount.serviceName}:${mount.path}`} className='space-y-1.5 py-2'>
-							<StorageTechnicalDetail label={t('app-settings.storage.umbrel-service')} value={mount.serviceName} />
+							<StorageTechnicalDetail label={t('app-settings.storage.titan-service')} value={mount.serviceName} />
 							<StorageTechnicalDetail label={t('app-settings.storage.path-inside-app')} value={mount.path} />
 							{mount.image ? (
 								<StorageTechnicalDetail
@@ -1080,7 +1080,7 @@ function StorageTechnicalDetail({label, value, title}: {label: string; value: st
 			<span className='shrink-0 text-white/35'>{label}</span>
 			<span
 				dir='ltr'
-				className='umbrel-hide-scrollbar min-w-0 overflow-x-auto text-right font-mono whitespace-nowrap text-white/55'
+				className='titan-hide-scrollbar min-w-0 overflow-x-auto text-right font-mono whitespace-nowrap text-white/55'
 				title={title ?? value}
 			>
 				{value}

@@ -4,15 +4,15 @@ import {useNavigate} from 'react-router-dom'
 
 import {CopyButton} from '@/components/ui/copy-button'
 import {FadeInImg} from '@/components/ui/fade-in-img'
-import {hostEnvironmentMap, UmbrelHostEnvironment} from '@/constants'
+import {hostEnvironmentMap, TitanHostEnvironment} from '@/constants'
 import {cn} from '@/lib/utils'
 import {gpuSpecModelName} from '@/utils/gpu'
 import {maybeT} from '@/utils/i18n'
 import {maybePrettyBytes} from '@/utils/pretty-bytes'
 import {tw} from '@/utils/tw'
 
-import AnimatedUmbrelHomeIcon from './device-info-umbrel-home'
-import AnimatedUmbrelProIcon from './device-info-umbrel-pro'
+import AnimatedTitanHomeIcon from './device-info-titan-home'
+import AnimatedTitanProIcon from './device-info-titan-pro'
 
 export function formatDeviceSpecs(data?: {
 	cpu?: string
@@ -32,7 +32,7 @@ export function formatDeviceSpecs(data?: {
 }
 
 export function DeviceInfoContent({
-	umbrelHostEnvironment,
+	titanHostEnvironment,
 	device,
 	modelNumber,
 	serialNumber,
@@ -41,7 +41,7 @@ export function DeviceInfoContent({
 	storage,
 	gpus,
 }: {
-	umbrelHostEnvironment?: UmbrelHostEnvironment
+	titanHostEnvironment?: TitanHostEnvironment
 	device?: string
 	modelNumber?: string
 	serialNumber?: string
@@ -55,12 +55,8 @@ export function DeviceInfoContent({
 
 	return (
 		<div className='space-y-6'>
-			<div className={cn('flex justify-center', umbrelHostEnvironment !== 'umbrel-pro' && 'py-2')}>
-				<HostEnvironmentIcon
-					environment={umbrelHostEnvironment}
-					modelNumber={modelNumber}
-					serialNumber={serialNumber}
-				/>
+			<div className={cn('flex justify-center', titanHostEnvironment !== 'titan-pro' && 'py-2')}>
+				<HostEnvironmentIcon environment={titanHostEnvironment} modelNumber={modelNumber} serialNumber={serialNumber} />
 			</div>
 			<div className={listClass}>
 				<div className={listItemClassNarrow}>
@@ -176,24 +172,24 @@ export const HostEnvironmentIcon = ({
 	modelNumber,
 	serialNumber,
 }: {
-	environment?: UmbrelHostEnvironment
+	environment?: TitanHostEnvironment
 	modelNumber?: string
 	serialNumber?: string
 }) => {
 	const iconDimensions = {
-		'umbrel-pro': 200,
-		'umbrel-home': 128,
+		'titan-pro': 200,
+		'titan-home': 128,
 		'raspberry-pi': 64,
 		'docker-container': 72,
 		unknown: 128,
 	}
 
-	if (environment === 'umbrel-home') {
-		return <AnimatedUmbrelHomeIcon modelNumber={modelNumber} serialNumber={serialNumber} />
+	if (environment === 'titan-home') {
+		return <AnimatedTitanHomeIcon modelNumber={modelNumber} serialNumber={serialNumber} />
 	}
 
-	if (environment === 'umbrel-pro') {
-		return <AnimatedUmbrelProIcon serialNumber={serialNumber} />
+	if (environment === 'titan-pro') {
+		return <AnimatedTitanProIcon serialNumber={serialNumber} />
 	}
 
 	const icon =

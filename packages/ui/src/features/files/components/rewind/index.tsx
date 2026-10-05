@@ -287,7 +287,7 @@ export function RewindOverlay() {
 												</DropdownMenuTrigger>
 												<DropdownMenuContent
 													align='center'
-													className='umbrel-stable-gutter max-h-[60vh] overflow-y-auto overscroll-contain p-2.5'
+													className='titan-stable-gutter max-h-[60vh] overflow-y-auto overscroll-contain p-2.5'
 												>
 													{backupsForTimeline.map((b) => (
 														<DropdownMenuCheckboxItem

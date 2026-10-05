@@ -1,8 +1,7 @@
 import {DialogPortal, DialogTitle} from '@radix-ui/react-dialog'
-import {useEffect, useRef, useState, type ComponentType} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
-import {IoLogoApple} from 'react-icons/io5'
-import {TbChevronLeft, TbChevronRight, TbPlayerPlayFilled} from 'react-icons/tb'
+import {TbChevronLeft, TbChevronRight} from 'react-icons/tb'
 
 import {Button} from '@/components/ui/button'
 import {
@@ -21,7 +20,7 @@ import {
 	ImmersiveDialogOverlay,
 } from '@/components/ui/immersive-dialog'
 import {lightboxButtonClass} from '@/features/photos/components/viewer/lightbox-button'
-import {useIsUmbrelPro} from '@/hooks/use-is-umbrel-pro'
+import {useIsTitanPro} from '@/hooks/use-is-titan-pro'
 import {cn} from '@/lib/utils'
 import {WHATS_NEW_VERSION_NAME} from '@/routes/whats-new'
 import {useDialogOpenProps} from '@/utils/dialog'
@@ -47,17 +46,7 @@ type Feature = {
 	/** Optional fine print under the description */
 	noteTKey?: string
 	/** Drop the fine print on Umbrel Pro, where it doesn't apply */
-	noteHiddenOnUmbrelPro?: boolean
-	/** Optional call-to-action shown beside Next, opening in a new tab */
-	link?: {
-		href: string
-		labelTKey: string
-		icon: ComponentType<{className?: string}>
-		/** Also float the link as a glass pill over the media */
-		overlay?: boolean
-		/** Faded at the pill's right edge: the linked video's runtime */
-		overlayDuration?: string
-	}
+	noteHiddenOnTitanPro?: boolean
 } & (
 	| {image: string; video?: never; poster?: never; loop?: never}
 	| {
@@ -76,86 +65,63 @@ const FEATURES: Feature[] = [
 		video: '/assets/whats-new/welcome.mp4',
 		poster: '/assets/whats-new/welcome.webp',
 		loop: true,
-		link: {
-			href: 'https://youtu.be/lBsKk_NNg2A',
-			labelTKey: 'whats-new-umbrelos-2-0.redesign-watch-keynote',
-			icon: TbPlayerPlayFilled,
-			overlay: true,
-			overlayDuration: '10:53',
-		},
-		titleTKey: 'whats-new-umbrelos-2-0.redesign-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.redesign-description',
+		titleTKey: 'whats-new-titanos-2-0.redesign-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.redesign-description',
 	},
 	{
 		id: 'photos',
 		video: '/assets/whats-new/photos.mp4',
 		poster: '/assets/whats-new/photos.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.photos-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.photos-description',
-		link: {
-			href: 'https://link.umbrel.com/ios-app',
-			labelTKey: 'whats-new-umbrelos-2-0.photos-get-ios-app',
-			icon: IoLogoApple,
-		},
+		titleTKey: 'whats-new-titanos-2-0.photos-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.photos-description',
 	},
 	{
 		id: 'ai-agents',
 		video: '/assets/whats-new/ai-agents.mp4',
 		poster: '/assets/whats-new/ai-agents.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.ai-agents-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.ai-agents-description',
+		titleTKey: 'whats-new-titanos-2-0.ai-agents-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.ai-agents-description',
 	},
 	{
 		id: 'machines',
 		video: '/assets/whats-new/machines.mp4',
 		poster: '/assets/whats-new/machines.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.machines-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.machines-description',
+		titleTKey: 'whats-new-titanos-2-0.machines-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.machines-description',
 	},
 	{
 		id: 'multi-user',
 		video: '/assets/whats-new/multi-user.mp4',
 		poster: '/assets/whats-new/multi-user.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.multi-user-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.multi-user-description',
+		titleTKey: 'whats-new-titanos-2-0.multi-user-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.multi-user-description',
 	},
 	{
 		id: 'storage-manager',
 		image: '/assets/whats-new/storage-manager.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.storage-manager-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.storage-manager-description',
-		noteTKey: 'whats-new-umbrelos-2-0.storage-manager-note',
-		noteHiddenOnUmbrelPro: true,
+		titleTKey: 'whats-new-titanos-2-0.storage-manager-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.storage-manager-description',
+		noteTKey: 'whats-new-titanos-2-0.storage-manager-note',
+		noteHiddenOnTitanPro: true,
 	},
 	{
 		id: 'cloud',
 		video: '/assets/whats-new/cloud.mp4',
 		poster: '/assets/whats-new/cloud.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.cloud-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.cloud-description',
+		titleTKey: 'whats-new-titanos-2-0.cloud-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.cloud-description',
 	},
 	{
 		id: 'gpu',
 		image: '/assets/whats-new/gpu.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.gpu-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.gpu-description',
+		titleTKey: 'whats-new-titanos-2-0.gpu-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.gpu-description',
 	},
 	{
 		id: 'app-settings',
 		image: '/assets/whats-new/app-settings.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.app-settings-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.app-settings-description',
-	},
-	{
-		id: 'mac-app',
-		image: '/assets/whats-new/mac-app.webp',
-		titleTKey: 'whats-new-umbrelos-2-0.mac-app-heading',
-		descriptionTKey: 'whats-new-umbrelos-2-0.mac-app-description',
-		link: {
-			href: 'https://link.umbrel.com/macos-app',
-			labelTKey: 'whats-new-umbrelos-2-0.mac-app-download',
-			icon: IoLogoApple,
-		},
+		titleTKey: 'whats-new-titanos-2-0.app-settings-heading',
+		descriptionTKey: 'whats-new-titanos-2-0.app-settings-description',
 	},
 ]
 
@@ -172,9 +138,8 @@ export default function WhatsNewModal() {
 	const feature = FEATURES[currentIndex]
 	const isVideoSlide = !!feature.video
 	// Pro-gated fine print waits for the answer, so a Pro never sees it flash in
-	const umbrelPro = useIsUmbrelPro()
-	const showNote =
-		!!feature.noteTKey && (!feature.noteHiddenOnUmbrelPro || (umbrelPro.hasData && !umbrelPro.isUmbrelPro))
+	const titanPro = useIsTitanPro()
+	const showNote = !!feature.noteTKey && (!feature.noteHiddenOnTitanPro || (titanPro.hasData && !titanPro.isTitanPro))
 	// A looping video holds its slide until the user moves on, so nothing counts down
 	const isLoopingSlide = isVideoSlide && !!feature.loop
 
@@ -303,23 +268,6 @@ export default function WhatsNewModal() {
 											) : (
 												<img src={feature.image} alt='' draggable={false} className='size-full object-cover' />
 											)}
-											{feature.link?.overlay && (
-												<div className='absolute inset-0 flex items-center justify-center'>
-													<a
-														href={feature.link.href}
-														target='_blank'
-														rel='noopener noreferrer'
-														draggable={false}
-														className={cn(mediaButtonClass, 'h-12 w-auto gap-2 pr-5 pl-4 text-sm font-medium')}
-													>
-														<feature.link.icon className='size-4' />
-														{t(feature.link.labelTKey)}
-														{feature.link.overlayDuration && (
-															<span className='text-white/50 tabular-nums'>{feature.link.overlayDuration}</span>
-														)}
-													</a>
-												</div>
-											)}
 										</div>
 									</CarouselItem>
 								))}
@@ -372,15 +320,6 @@ export default function WhatsNewModal() {
 
 					{/* Footer */}
 					<ImmersiveDialogFooter className='justify-end'>
-						{feature.link && (
-							// Stacked on mobile the footer wraps in reverse, so ordering this last puts it above Next
-							<Button variant='default' size='dialog' className='max-md:order-1' asChild>
-								<a href={feature.link.href} target='_blank' rel='noopener noreferrer'>
-									<feature.link.icon className='size-3.5' />
-									{t(feature.link.labelTKey)}
-								</a>
-							</Button>
-						)}
 						<Button variant='secondary' size='dialog' onClick={handleNext}>
 							{isLastSlide ? t('whats-new.continue') : t('whats-new.next')}
 						</Button>

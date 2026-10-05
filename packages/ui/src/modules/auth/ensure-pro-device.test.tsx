@@ -9,7 +9,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../titand/source/modules/server/trpc/common'
 import {EnsureProDevice} from './ensure-pro-device'
 
 vi.mock('@/trpc/trpc', async () => {

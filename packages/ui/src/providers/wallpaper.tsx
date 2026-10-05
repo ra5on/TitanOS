@@ -20,7 +20,7 @@ import {trpcReact} from '@/trpc/trpc'
 import {keyBy} from '@/utils/misc'
 import {tw} from '@/utils/tw'
 
-import {wallpapers as wallpaperDefinitions, type WallpaperId} from '../../../umbreld/source/modules/user/wallpapers'
+import {wallpapers as wallpaperDefinitions, type WallpaperId} from '../../../titand/source/modules/user/wallpapers'
 
 export type WallpaperAvifTier = 'large' | 'medium' | 'small' | 'thumbnails'
 

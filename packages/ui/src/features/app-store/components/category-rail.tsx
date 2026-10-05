@@ -66,7 +66,7 @@ function CategoryRailPills({
 		<FadeScroller
 			ref={scrollerRef}
 			direction='x'
-			className='umbrel-hide-scrollbar -mx-2.5 flex shrink-0 gap-1 overflow-x-auto px-2.5 py-1 md:mx-0 md:px-0'
+			className='titan-hide-scrollbar -mx-2.5 flex shrink-0 gap-1 overflow-x-auto px-2.5 py-1 md:mx-0 md:px-0'
 		>
 			{navIds.map((navId) => {
 				const icon = categoryIcon(navId)
@@ -161,7 +161,7 @@ export function StorePills({
 			ref={scrollerRef}
 			direction='x'
 			className={cn(
-				'umbrel-hide-scrollbar -mx-2.5 flex shrink-0 gap-1 overflow-x-auto px-2.5 py-1 md:mx-0 md:px-0',
+				'titan-hide-scrollbar -mx-2.5 flex shrink-0 gap-1 overflow-x-auto px-2.5 py-1 md:mx-0 md:px-0',
 				className,
 			)}
 		>

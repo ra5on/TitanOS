@@ -1,6 +1,6 @@
 import Foundation
 
-// Maps umbreld lifecycle strings into the visual language used by umbrelOS.
+// Maps titand lifecycle strings into the visual language used by titanOS.
 // Unknown future values degrade to the same unavailable treatment as `unknown`.
 enum AppTilePresentation: Equatable {
 	enum Activity: String, Equatable {

@@ -12,9 +12,9 @@ const edgeColorCache = new Map<string, {bgColor: string; padded: boolean}>()
 // Resolve a stored shortcut icon path to a full URL
 export function resolveShortcutIcon(shortcut: {url: string; icon?: string}): string {
 	if (!shortcut.icon) return ''
-	if (shortcut.icon.startsWith('umbrel:')) {
+	if (shortcut.icon.startsWith('titan:')) {
 		const {protocol, hostname} = window.location
-		const rest = shortcut.icon.slice('umbrel:'.length)
+		const rest = shortcut.icon.slice('titan:'.length)
 		return `${protocol}//${hostname}:${rest}`
 	}
 	return shortcut.icon

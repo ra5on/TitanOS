@@ -4,7 +4,7 @@ import {describe, expect, it} from 'vitest'
 
 import {resolveRedirectUrl} from '@/modules/auth/redirect-url'
 
-const origin = 'https://umbrel.local'
+const origin = 'https://titan.local'
 
 describe('resolveRedirectUrl', () => {
 	it('preserves same-origin paths, searches, and hashes', () => {

@@ -23,6 +23,6 @@ export function EnsureProDevice({children}: {children?: React.ReactNode}) {
 				/>
 			</StoragePage>
 		)
-	if (deviceInfoToHostEnvironment(identityQ.data) !== 'umbrel-pro') return <Navigate to='/' replace />
+	if (deviceInfoToHostEnvironment(identityQ.data) !== 'titan-pro') return <Navigate to='/' replace />
 	return <>{children}</>
 }

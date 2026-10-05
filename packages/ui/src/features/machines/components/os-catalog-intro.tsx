@@ -131,7 +131,7 @@ function WallMonitor({
 				    frame under the overlay's blur. Dropping the class on release
 				    transitions back to rest from wherever the bob was. */}
 				<div
-					className={cn('transition-transform duration-[400ms] ease-out', floating && 'umbrel-machine-float')}
+					className={cn('transition-transform duration-[400ms] ease-out', floating && 'titan-machine-float')}
 					style={
 						{
 							'--float-amp': `${floatAmp}px`,

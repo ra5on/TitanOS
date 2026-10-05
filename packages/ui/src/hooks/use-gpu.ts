@@ -47,7 +47,7 @@ export function useGpu(options: {poll?: boolean} = {}) {
 		apps: sort(
 			[
 				...(data?.apps ?? []),
-				...(data?.devices.length ? [{id: 'umbreld-system', used: data.system, memoryUsed: data.systemMemoryUsed}] : []),
+				...(data?.devices.length ? [{id: 'titand-system', used: data.system, memoryUsed: data.systemMemoryUsed}] : []),
 			],
 			(a, b) => b.used - a.used || b.memoryUsed - a.memoryUsed,
 		),

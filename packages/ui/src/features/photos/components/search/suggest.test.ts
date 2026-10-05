@@ -13,7 +13,7 @@ const MONTHS: MonthCount[] = [
 ]
 
 const SOURCES = [
-	{id: 'my-umbrel', name: "Craig's Umbrel", count: 900},
+	{id: 'my-titan', name: "Craig's Titan", count: 900},
 	{id: 'iphone-nate', name: "Nate's iPhone", count: 300},
 ]
 const ALBUMS = [{id: 'a-iceland', name: 'Iceland Trip', count: 52}]

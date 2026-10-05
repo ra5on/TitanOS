@@ -16,7 +16,7 @@ muss dein Hypervisor die Hardwarevirtualisierung an die TitanOS-VM weitergeben
 
 ## Image importieren
 
-1. Lade [`titan-2.0.1.img.xz`](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz) und die Prüfsummen aus dem [Release v2.0.1](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1) herunter.
+1. Lade nach Veröffentlichung `titan-2.0.1.img.xz` und die Prüfsummen aus dem [Release-Bereich](https://github.com/ra5on/TitanOS/releases) herunter.
 2. Prüfe die Download-Datei anhand der dortigen Signatur- und Prüfsummenanleitung.
 3. Entpacke die Datei zu `titan-2.0.1.img`. Mit dem Werkzeug `xz` geht das beispielsweise so:
 
@@ -54,19 +54,10 @@ installiere anschließend deine Apps im App-Store.
 
 ## Bestehende TitanOS-VM aktualisieren
 
-Systemupdates werden ausschließlich als **Stable** veröffentlicht. Für
-`2.0.0-titan.1` und `2.0.0-titan.2` erfolgt der Wechsel in zwei Schritten:
-
-1. Im bisherigen Kanalmenü einmal **Stable** auswählen.
-2. Das Übergangsupdate **`2.0.0-titan.3`** installieren und neu starten.
-3. Erneut nach Updates suchen und **`2.0.1`** installieren.
-
-Das Übergangsupdate enthält kein neues Installations-Image. Eigene Hostnamen
-bleiben erhalten; der bisherige Standard `umbrel` wird zu `titan` geändert.
-Nutze bei Bedarf nach dem Neustart die IP-Adresse.
-
-Installationen auf der früheren Titan-Basis mit anderem Festplattenaufbau
-benötigen eine Neuinstallation. Sichere dafür zuvor deine Daten.
+Systemupdates werden ausschließlich als **Stable** veröffentlicht und direkt
+in den Einstellungen installiert. Die [Update-Anleitung](UPDATES.md) erklärt
+die Prüfung und Installation dieser Updates. Diese Ausgabe erfordert zunächst
+eine Neuinstallation.
 
 ## Was beim Release geprüft wird
 
@@ -75,7 +66,7 @@ Weboberfläche sowie die Versionskennung. Diese Prüfung deckt nicht jede
 Hypervisor-, Hardware-, App- oder Nested-Virtualization-Konfiguration ab.
 Die Berichte und die Dateien `titan-2.0.1.img.xz` und
 `titan-2.0.1.update` findest du beim
-[Release v2.0.1](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1).
+[Release-Bereich](https://github.com/ra5on/TitanOS/releases).
 
 [Zur Übersicht](../README.md) · [Support](https://github.com/ra5on/TitanOS/issues)
 · [Lizenz](../LICENSE.md) · [Herkunft](../UPSTREAM.md)

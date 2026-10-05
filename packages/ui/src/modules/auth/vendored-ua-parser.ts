@@ -14,7 +14,7 @@
    permission notice shall be included in all copies or substantial portions of
    the Software.
 
-   Trimmed for Umbrel's session list: only the `browser` and `os` regex tables and
+   Trimmed for Titan's session list: only the `browser` and `os` regex tables and
    the mapper they need are kept (the `cpu`/`device`/`engine` tables are dropped),
    and only names are extracted — versions are intentionally ignored because
    User-Agent reduction froze OS versions into fiction. Local deviations from

@@ -11,8 +11,8 @@ export function useExistingBackupDetection(folder: string | undefined, repositor
 	const [status, setStatus] = useState<ExistingRepoStatus>('none')
 	const [repositoryPath, setRepositoryPath] = useState<string | undefined>(undefined)
 
-	// Detect whether the selected folder contains an Umbrel backup repository and
-	// whether that repository is already configured on this Umbrel.
+	// Detect whether the selected folder contains an Titan backup repository and
+	// whether that repository is already configured on this Titan.
 	useEffect(() => {
 		let cancelled = false
 		async function detect() {
@@ -32,7 +32,7 @@ export function useExistingBackupDetection(folder: string | undefined, repositor
 				if (!cancelled) setRepositoryPath(repoPath)
 
 				// 1) First, check if this repository is already configured locally
-				// We check for both the repo path (eg. /External/USB-DISK/Data/Umbrel Backup.backup) and the folder path (eg. /External/USB-DISK/Data)
+				// We check for both the repo path (eg. /External/USB-DISK/Data/Titan Backup.backup) and the folder path (eg. /External/USB-DISK/Data)
 				const isAlreadyConfigured = (repositories || []).some((r) => r.path === repoPath || r.path === folder)
 				if (isAlreadyConfigured) {
 					if (!cancelled) setStatus('already-configured')

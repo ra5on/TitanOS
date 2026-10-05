@@ -6,10 +6,10 @@ LISTEN_TIME=1
 STATE_FILE="/tmp/power_button_state"
 PASSWORD_RESET_FLAG="/tmp/password_reset_flag"
 
-reset_umbrel_password() {
-  yaml_file="/home/umbrel/umbrel/umbrel.yaml"
+reset_titan_password() {
+  yaml_file="/home/titan/titan/titan.yaml"
 
-  echo "umbrel:umbrel" | chpasswd
+  echo "titan:titan" | chpasswd
 
   if ! [ -f "$yaml_file" ]; then
     echo "Error: File not found."
@@ -50,7 +50,7 @@ handle_press() {
     # This flag indicates that a password reset has been initiated so the previous button presses
     # don't also initiate a reset
     touch "${PASSWORD_RESET_FLAG}"
-    reset_umbrel_password
+    reset_titan_password
 
     # Remove the password reset flag after all previous button press event handlers have died
     # so future resets will work.

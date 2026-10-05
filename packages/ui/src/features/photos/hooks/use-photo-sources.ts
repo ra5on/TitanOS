@@ -6,19 +6,19 @@ export type SourceType = PhotoSource['type']
 export type SourceSettings = {scope: NonNullable<PhotoSource['scope']>}
 export type ImportScopeMode = SourceSettings['scope']['mode']
 
-// This Umbrel is scanned by umbrelOS; phones push through the Umbrel app and
+// This Titan is scanned by TitanOS; phones push through the Titan app and
 // keep their settings on the device.
 export function sourceKind(type: SourceType): 'push' | 'pull' {
 	return type === 'iphone' ? 'push' : 'pull'
 }
 
 export function usePhotoSources() {
-	// Present the built-in Umbrel source with the same account name Files uses.
+	// Present the built-in Titan source with the same account name Files uses.
 	const homeDirectoryName = useHomeDirectoryName()
 	const query = trpcReact.photos.sources.list.useQuery()
 	return {
 		sources: (query.data ?? []).map((source) =>
-			source.type === 'umbrel' ? {...source, name: homeDirectoryName} : source,
+			source.type === 'titan' ? {...source, name: homeDirectoryName} : source,
 		),
 		isLoading: query.isLoading,
 		error: query.error,

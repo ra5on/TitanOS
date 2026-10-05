@@ -1,8 +1,8 @@
-# Umbrel (iOS)
+# Titan (iOS)
 
-The iPhone companion app for connecting to umbrelOS, opening apps, and backing up
+The iPhone companion app for connecting to titanOS, opening apps, and backing up
 the photo library. Shared networking and authentication live in
-[UmbrelKit](../UmbrelKit).
+[TitanKit](../TitanKit).
 
 ## Development
 
@@ -12,13 +12,13 @@ The deployment target is iOS 26.5. The generated Xcode project is not committed.
 brew install xcodegen
 cd clients/apple/ios
 xcodegen generate
-open Umbrel.xcodeproj
+open Titan.xcodeproj
 ```
 
 Build from Xcode or the command line:
 
 ```bash
-xcodebuild -project Umbrel.xcodeproj -scheme Umbrel \
+xcodebuild -project Titan.xcodeproj -scheme Titan \
   -destination 'generic/platform=iOS Simulator' build
 ```
 
@@ -48,5 +48,5 @@ Test PhotoKit uploads on an iPhone before sharing a build. Confirm that backup:
 - starts only after setup and continues while the app is backgrounded and locked;
 - pauses without Tailscale and resumes after it reconnects;
 - reports insufficient storage and recovers through Try Again;
-- targets only the selected Umbrel; and
+- targets only the selected Titan; and
 - inventories a large library without memory termination while uploads make progress.

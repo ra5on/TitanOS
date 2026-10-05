@@ -24,7 +24,7 @@ GH
 chmod +x "$test_dir/bin/gh"
 export PATH="$test_dir/bin:$PATH"
 export TARGET_BRANCH=staging
-export GH_REPO=example/umbrel
+export GH_REPO=example/titan
 export GITHUB_OUTPUT="$test_dir/output"
 
 cat > packages/ui/public/locales/en.json <<'JSON'

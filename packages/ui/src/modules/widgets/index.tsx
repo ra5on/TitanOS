@@ -23,6 +23,7 @@ import {FourStatsWidget} from './four-stats-widget'
 import {ListEmojiWidget} from './list-emoji-widget'
 import {ListWidget} from './list-widget'
 import {WidgetContainer} from './shared/shared'
+import {localizeSystemStatsWidget, localizeSystemTextWidget} from './shared/system-widget-labels'
 import {TextWithButtonsWidget} from './text-with-buttons-widget'
 import {TextWithProgressWidget} from './text-with-progress-widget'
 import {ThreeStatsWidget} from './three-stats-widget'
@@ -61,11 +62,11 @@ export function Widget({appId, config: manifestConfig}: {appId: string; config: 
 
 	const handleClick = (link?: string) => {
 		// Handle special system/features widgets
-		if (appId === 'live-usage' && systemAppsKeyed['UMBREL_live-usage']) {
+		if (appId === 'live-usage' && systemAppsKeyed['TITAN_live-usage']) {
 			navigate(link || '?dialog=live-usage')
 			return
 		}
-		if (appId === 'files' && systemAppsKeyed['UMBREL_files']) {
+		if (appId === 'files' && systemAppsKeyed['TITAN_files']) {
 			navigate(link || `${BASE_ROUTE_PATH}${HOME_PATH}`)
 			return
 		}
@@ -89,15 +90,25 @@ export function Widget({appId, config: manifestConfig}: {appId: string; config: 
 		case 'text-with-buttons':
 			return <TextWithButtonsWidget {...(widget as WidgetConfig<'text-with-buttons'>)} onClick={handleClick} />
 		case 'text-with-progress':
-			return <TextWithProgressWidget {...(widget as WidgetConfig<'text-with-progress'>)} onClick={handleClick} />
+			return (
+				<TextWithProgressWidget
+					{...localizeSystemTextWidget(manifestConfig.id, widget as WidgetConfig<'text-with-progress'>, t)}
+					onClick={handleClick}
+				/>
+			)
 		case 'two-stats-with-guage':
 			return <TwoStatsWidget {...(widget as WidgetConfig<'two-stats-with-guage'>)} onClick={handleClick} />
 		case 'three-stats':
 			// TODO: figure out how to show the user's desired temp unit in a way that isn't brittle
-			if (manifestConfig.id === 'umbrel:system-statss') {
+			if (manifestConfig.id === 'titan:system-statss') {
 				return <SystemThreeUpWidget {...(widget as WidgetConfig<'three-stats'>)} onClick={handleClick} />
 			}
-			return <ThreeStatsWidget {...(widget as WidgetConfig<'three-stats'>)} onClick={handleClick} />
+			return (
+				<ThreeStatsWidget
+					{...localizeSystemStatsWidget(manifestConfig.id, widget as WidgetConfig<'three-stats'>, t)}
+					onClick={handleClick}
+				/>
+			)
 		case 'four-stats':
 			return <FourStatsWidget {...(widget as WidgetConfig<'four-stats'>)} onClick={handleClick} />
 		case 'list':
@@ -133,10 +144,13 @@ export function SystemThreeUpWidget({items, ...props}: ComponentPropsWithRef<typ
 export function ExampleWidget<T extends WidgetType = WidgetType>({
 	type,
 	example,
+	widgetId,
 }: {
 	type: T
 	example?: ExampleWidgetConfig<T>
+	widgetId?: string
 }) {
+	const {t} = useTranslation()
 	switch (type) {
 		case 'text-with-buttons': {
 			const w = example as WidgetConfig<'text-with-buttons'>
@@ -149,7 +163,7 @@ export function ExampleWidget<T extends WidgetType = WidgetType>({
 		}
 		case 'text-with-progress': {
 			const w = example as WidgetConfig<'text-with-progress'>
-			return <TextWithProgressWidget {...w} />
+			return <TextWithProgressWidget {...localizeSystemTextWidget(widgetId, w, t)} />
 		}
 		case 'two-stats-with-guage': {
 			const w = example as WidgetConfig<'two-stats-with-guage'>
@@ -157,7 +171,7 @@ export function ExampleWidget<T extends WidgetType = WidgetType>({
 		}
 		case 'three-stats': {
 			const w = example as WidgetConfig<'three-stats'>
-			return <ThreeStatsWidget {...w} />
+			return <ThreeStatsWidget {...localizeSystemStatsWidget(widgetId, w, t)} />
 		}
 		case 'four-stats': {
 			const w = example as WidgetConfig<'four-stats'>

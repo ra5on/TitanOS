@@ -74,7 +74,7 @@ async function render({
 				raidType='failsafe'
 				oldDeviceId={target}
 				oldDeviceFailed
-				isUmbrelPro={pro}
+				isTitanPro={pro}
 				missingDeviceType={pro ? 'ssd' : 'hdd'}
 				raidStatus={pool}
 				allDevices={devices}

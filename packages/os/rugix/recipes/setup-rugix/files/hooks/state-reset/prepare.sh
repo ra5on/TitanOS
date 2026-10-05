@@ -3,7 +3,7 @@
 # Rugix `state-reset/prepare` hook to reset the config and main disk data partition.
 #
 # Rugix calls this before a normal state reset so RAID config does not survive on the
-# config partition. umbreld also calls this directly for factory resets while the
+# config partition. titand also calls this directly for factory resets while the
 # active data mount is a RAID dataset. In that case Rugix must not reset state,
 # because that would move/reset the RAID-backed install we need onboarding recovery
 # to find. Calling only this hook clears the boot/config state and wipes the boot
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 CONFIG_PARTITION=${CONFIG_PARTITION:-"/run/rugix/mounts/config"}
-CONFIG_FILE="$CONFIG_PARTITION/umbrel.yaml"
+CONFIG_FILE="$CONFIG_PARTITION/titan.yaml"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "[INFO] no config state file detected, nothing to do"
@@ -27,23 +27,8 @@ mapfile -t DEVICES < <(yq '.raid.devices[]' "$CONFIG_FILE" 2>/dev/null || true)
 # deleting the boot config. This ordering ensures a safety failure cannot leave the device
 # in a partially reset state with its RAID boot config already removed.
 if [ ${#DEVICES[@]} -gt 0 ]; then
-    SYSTEM_INFO=$(rugix-ctrl system info)
-    BOOT_FLOW=$(echo "$SYSTEM_INFO" | jq -r ".boot.bootFlow")
-
-    # Determine the main disk data partition.
-    if [ "$BOOT_FLOW" == "mender-grub" ]; then
-        # On Mender legacy devices, the data partition is the 4th partition on the main disk.
-        MAIN_DATA_PARTITION=$(rugix-ctrl utils resolve-partition 4 | jq -r ".device" || true)
-    else
-        # On Rugix-native devices the main disk data partition is the last partition on the
-        # main disk, which is either the 7th (MBR) or the 6th (GPT) partition.
-        for partition in 7 6; do
-            MAIN_DATA_PARTITION=$(rugix-ctrl utils resolve-partition "$partition" 2>/dev/null | jq -r ".device" || true)
-            if [ -n "${MAIN_DATA_PARTITION}" ]; then
-                break
-            fi
-        done
-    fi
+    # Fresh Titan images use a native GPT layout. Partition 6 is the data slot.
+    MAIN_DATA_PARTITION=$(rugix-ctrl utils resolve-partition 6 2>/dev/null | jq -r ".device" || true)
     if [ -z "${MAIN_DATA_PARTITION}" ]; then
         echo "[ERROR] unable to determine main data partition"
         exit 1

@@ -72,7 +72,7 @@ export function ListRow({
 				'focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset',
 				'bg-linear-to-r from-transparent to-transparent hover:via-white/4',
 				onClick && 'cursor-pointer active:via-white/3',
-				isActive && 'umbrel-pulse-a-few-times',
+				isActive && 'titan-pulse-a-few-times',
 				disabled && 'pointer-events-none opacity-50',
 			)}
 			onClick={onClick}

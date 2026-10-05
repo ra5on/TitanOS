@@ -36,7 +36,7 @@ test('getCandidates excludes system drives and devices without an id', () => {
 })
 
 test('planFailsafePairs pairs drives of equal rounded size, keeping same-model drives together', () => {
-	// Ties within a size class are broken by id, and umbrel ids start with the model -
+	// Ties within a size class are broken by id, and titan ids start with the model -
 	// so same-model drives sort adjacent and pair with each other
 	const {pairs, unpaired} = planFailsafePairs([
 		device({id: 'WDC_WD60_SERIAL1'}),

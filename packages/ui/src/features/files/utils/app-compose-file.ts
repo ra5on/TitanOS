@@ -1,11 +1,11 @@
 import {APPS_PATH} from '@/features/files/constants'
 
-// umbrelOS writes these itself: docker-compose.umbreld.yml is rebuilt from the
-// app's compose file on every start, docker-compose.umbrel-user-settings.yml
+// TitanOS writes these itself: docker-compose.titand.yml is rebuilt from the
+// app's compose file on every start, docker-compose.titan-user-settings.yml
 // from App Settings whenever they change
 const GENERATED_COMPOSE_FILES: ReadonlySet<string> = new Set([
-	'docker-compose.umbreld.yml',
-	'docker-compose.umbrel-user-settings.yml',
+	'docker-compose.titand.yml',
+	'docker-compose.titan-user-settings.yml',
 ])
 
 export type AppComposeFile = {appId: string; generated: boolean}

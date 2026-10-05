@@ -61,7 +61,7 @@ export function useRewind({overlayOpen, repoOpen}: {overlayOpen: boolean; repoOp
 		}
 	}, [repoOpen, pendingRepoId, repositories])
 
-	// TODO: check if we still need this logic after we make the umbreld kopia queue change
+	// TODO: check if we still need this logic after we make the titand kopia queue change
 	/**
 	 * Attempt to detect if the requested snapshot is ALREADY mounted from a previous session
 	 * and can be reused without calling the backend again.

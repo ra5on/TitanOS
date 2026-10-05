@@ -12,7 +12,7 @@ cd "$(dirname $(readlink -f "${BASH_SOURCE[0]}"))"
 # so consecutive runs (e.g. base build then image injection) are fast.
 nix_container() {
     docker run --rm --platform linux/amd64 \
-        --volume umbrelos-usb-installer-nix:/nix \
+        --volume titanos-usb-installer-nix:/nix \
         --volume "$(readlink -f ..)":/data \
         --workdir /data/usb-installer \
         "${NIX_IMAGE}" \
@@ -23,30 +23,30 @@ nix_container() {
 # (e.g. building the amd64 ISO on an Apple Silicon machine).
 nix="nix --extra-experimental-features 'nix-command flakes' --option filter-syscalls false --print-build-logs"
 
-# Build the installer ISO without an umbrelOS image. This is the slow part of
-# the build and doesn't depend on the umbrelOS image, so CI can run it
-# concurrently with the umbrelOS image build.
+# Build the installer ISO without an titanOS image. This is the slow part of
+# the build and doesn't depend on the titanOS image, so CI can run it
+# concurrently with the titanOS image build.
 build_base() {
     echo "Building base USB installer ISO..."
     mkdir -p ../build
     nix_container "
         ${nix} build path:.#iso -o /tmp/result &&
-        cp -fL /tmp/result/iso/umbrelos-amd64-usb-installer.iso /data/build/umbrelos-amd64-usb-installer-base.iso
+        cp -fL /tmp/result/iso/titanos-amd64-usb-installer.iso /data/build/titanos-amd64-usb-installer-base.iso
     "
 }
 
-# Graft build/umbrelos-amd64.img.xz into the base ISO to produce the final
-# installer ISO. This is fast so the umbrelOS image can be dropped in as the
+# Graft build/titanos-amd64.img.xz into the base ISO to produce the final
+# installer ISO. This is fast so the titanOS image can be dropped in as the
 # last step of the build.
 inject_image() {
-    echo "Injecting umbrelOS image into USB installer ISO..."
-    rm -f ../build/umbrelos-amd64-usb-installer.iso
+    echo "Injecting titanOS image into USB installer ISO..."
+    rm -f ../build/titanos-amd64-usb-installer.iso
     nix_container "
-        ${nix} build path:.#inject-umbrelos-image -o /tmp/inject &&
-        /tmp/inject/bin/inject-umbrelos-image \
-            /data/build/umbrelos-amd64-usb-installer-base.iso \
-            /data/build/umbrelos-amd64.img.xz \
-            /data/build/umbrelos-amd64-usb-installer.iso
+        ${nix} build path:.#inject-titanos-image -o /tmp/inject &&
+        /tmp/inject/bin/inject-titanos-image \
+            /data/build/titanos-amd64-usb-installer-base.iso \
+            /data/build/titanos-amd64.img.xz \
+            /data/build/titanos-amd64-usb-installer.iso
     "
 }
 
@@ -59,7 +59,7 @@ case "${command}" in
 esac
 
 # Test CD-ROM boot (used by VMs)
-# qemu-system-x86_64 -net nic -net user -machine accel=tcg -m 2048 -bios ~/Downloads/OVMF.bin -cdrom ../build/umbrelos-amd64-usb-installer.iso
+# qemu-system-x86_64 -net nic -net user -machine accel=tcg -m 2048 -bios ~/Downloads/OVMF.bin -cdrom ../build/titanos-amd64-usb-installer.iso
 
 # Test USB boot (used by physical machines)
-# qemu-system-x86_64 -net nic -net user -machine accel=tcg -m 2048 -bios ~/Downloads/OVMF.bin -drive if=none,id=stick,format=raw,file=../build/umbrelos-amd64-usb-installer.iso -device nec-usb-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick
+# qemu-system-x86_64 -net nic -net user -machine accel=tcg -m 2048 -bios ~/Downloads/OVMF.bin -drive if=none,id=stick,format=raw,file=../build/titanos-amd64-usb-installer.iso -device nec-usb-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick

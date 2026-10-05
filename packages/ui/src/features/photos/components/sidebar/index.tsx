@@ -87,12 +87,12 @@ export function Sidebar({className}: {className?: string}) {
 			{/* Pulled left and padded back so an album card scaling up on hover isn't clipped by the scroll box's edge */}
 			<FadeScroller
 				direction='y'
-				className='umbrel-hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain lg:-ml-2 lg:pl-2'
+				className='titan-hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain lg:-ml-2 lg:pl-2'
 			>
 				<SidebarSection>{libraryItems.map(renderItem)}</SidebarSection>
 
 				<SidebarDivider />
-				{/* Sources root row (with "+" to add one), then this Umbrel itself and every device feeding the library */}
+				{/* Sources root row (with "+" to add one), then this Titan itself and every device feeding the library */}
 				<SidebarSection>
 					<SourcesRootItem onAdd={() => navigate(linkToDialog('photos-add-source'))} />
 					{sources.map((source) => (
@@ -110,7 +110,7 @@ export function Sidebar({className}: {className?: string}) {
 							</ContextMenuTrigger>
 							<ContextMenuContent>
 								<ContextMenuItem onClick={() => openDetails(source)}>{t('photos-source.manage')}</ContextMenuItem>
-								{source.type !== 'umbrel' && (
+								{source.type !== 'titan' && (
 									<ContextMenuItem className={contextMenuClasses.item.rootDestructive} onClick={() => remove(source)}>
 										{t('photos-source.remove')}
 									</ContextMenuItem>

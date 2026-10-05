@@ -59,7 +59,7 @@ export function StorefrontSectionView({
 }
 
 /**
- * The spotlight section's banners in one row, like the apps.umbrel.com
+ * The spotlight section's banners in one row, like the apps.titan.com
  * banner carousel: the active banner snaps centered while its neighbors peek
  * in from the sheet edges, auto-rotating on a 5s timer with the countdown
  * filling the active dot. The clock holds while dragging or hovering and
@@ -116,7 +116,7 @@ export function SpotlightCarousel({banners}: {banners: SpotlightBannerData[]}) {
 					onSelect={(index) => api?.scrollTo(index)}
 					countdown={countdown}
 				/>
-				{/* Arrows wrap around the ends, like the apps.umbrel.com banners */}
+				{/* Arrows wrap around the ends, like the apps.titan.com banners */}
 				<CarouselArrows
 					onPrev={() => api?.scrollTo((activeIndex - 1 + snapCount) % snapCount)}
 					onNext={() => api?.scrollTo((activeIndex + 1) % snapCount)}
@@ -144,7 +144,7 @@ export function AppRailSection({
 			    vertical axis to auto too, making any 1px of decoration scrollable */}
 			<FadeScroller
 				direction='x'
-				className={cn('umbrel-hide-scrollbar flex gap-2.5 overflow-x-auto overflow-y-hidden py-1', sheetBleedClass)}
+				className={cn('titan-hide-scrollbar flex gap-2.5 overflow-x-auto overflow-y-hidden py-1', sheetBleedClass)}
 			>
 				{apps.map((app) => (
 					<AppCardCompact key={app.id} app={app} status={statuses?.get(app.id)} />
@@ -264,7 +264,7 @@ function CategoryFeatureSection({
 					className={cn(
 						// Pulled left by the chips' own inner padding (pl-1.5) so the first
 						// icon lines up with the headline instead of sitting 6px in
-						'umbrel-hide-scrollbar -mx-4 flex gap-1.5 overflow-x-auto pr-4 pl-2.5 md:mr-0 md:-ml-1.5 md:flex-wrap md:overflow-visible md:px-0',
+						'titan-hide-scrollbar -mx-4 flex gap-1.5 overflow-x-auto pr-4 pl-2.5 md:mr-0 md:-ml-1.5 md:flex-wrap md:overflow-visible md:px-0',
 						textSide === 'right' && 'max-md:self-stretch max-md:[&>*:first-child]:ml-auto',
 					)}
 				>

@@ -71,7 +71,7 @@ export default function FullscreenConsole() {
 				<div className='absolute left-1/2 hidden -translate-x-1/2 items-center gap-1.5 sm:flex'>
 					<span className='text-13 -tracking-2 text-white/40'>{t('machines.running-on')}</span>
 					<img src='/assets/dock/titan-machines.svg' alt='' className='size-4 rounded-4' draggable={false} />
-					<span className='text-13 -tracking-2 text-white/70'>{t('machines.umbrel-machines')}</span>
+					<span className='text-13 -tracking-2 text-white/70'>{t('machines.titan-machines')}</span>
 				</div>
 				<div className='flex items-center gap-1'>
 					<DarkTooltip label={t('machines.fullscreen')} side='bottom'>

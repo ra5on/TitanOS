@@ -83,7 +83,7 @@ export function WallpaperPicker({maxW}: {maxW?: number}) {
 		<div ref={containerRef} className='flex h-7 max-w-full flex-grow-1 animate-in items-center fade-in'>
 			<div
 				className={cn(
-					'umbrel-hide-scrollbar umbrel-wallpaper-fade-scroller w-full items-center overflow-x-auto bg-red-500/0 py-5',
+					'titan-hide-scrollbar titan-wallpaper-fade-scroller w-full items-center overflow-x-auto bg-red-500/0 py-5',
 					!maxW && 'md:max-w-[350px]',
 				)}
 				ref={scrollerRef}

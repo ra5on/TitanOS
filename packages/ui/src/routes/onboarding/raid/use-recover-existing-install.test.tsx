@@ -8,7 +8,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../../titand/source/modules/server/trpc/common'
 import {useRecoverExistingInstall} from './use-recover-existing-install'
 import {STORAGE_WAIT_NOTICE_DELAY_MS} from './use-storage-wait'
 

@@ -22,7 +22,7 @@ function createScriptProcessorSink(context: AudioContext): MachineAudioSink {
 
 	// AudioWorklet is secure-context-only in Chromium. ScriptProcessor is
 	// deprecated but remains the broadly supported Web Audio fallback for an
-	// umbrelOS UI served over HTTP.
+	// TitanOS UI served over HTTP.
 	const node = context.createScriptProcessor(2_048, 0, CHANNELS)
 	node.onaudioprocess = (event) => {
 		const outputLeft = event.outputBuffer.getChannelData(0)

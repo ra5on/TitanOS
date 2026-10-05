@@ -72,7 +72,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 		if (error?.data?.code === 'UNAUTHORIZED') {
 			setRouterError(error)
 		} else {
-			toast.error(t('factory-reset-failed', {message: error.message}), {area: 'umbrelos'})
+			toast.error(t('factory-reset-failed', {message: error.message}), {area: 'titanos'})
 		}
 		setTriggered(false)
 
@@ -80,7 +80,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 		setShouldReloadOnRunning(false)
 	}
 	const onPowerActionError = () => {
-		toast.error(t('something-went-wrong'), {area: 'umbrelos', description: t('system-menu.action-failed')})
+		toast.error(t('something-went-wrong'), {area: 'titanos', description: t('system-menu.action-failed')})
 		setPowerAction(undefined)
 		setTriggered(false)
 		setShouldReloadOnRunning(false)
@@ -170,7 +170,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 	// until the system becomes 'running' again before reloading the UI.
 	// For restart and shutdown, a failed status request counts only after the
 	// mutation was acknowledged. This prevents an existing connection error from
-	// turning an action that never reached umbreld into a reload loop.
+	// turning an action that never reached titand into a reload loop.
 	useEffect(() => {
 		const acceptedPowerActionWentOffline =
 			powerAction?.phase === 'accepted' && (status !== 'running' || systemStatusQ.isError)

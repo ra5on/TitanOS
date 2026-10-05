@@ -25,19 +25,16 @@ import {toast} from '@/components/ui/toast'
 import {useHomePath} from '@/features/files/hooks/use-home-path'
 import {ChoiceCard} from '@/features/photos/components/sources/choice-card'
 import {SourceIcon} from '@/features/photos/components/sources/source-icon'
-import {UmbrelScopeSettings} from '@/features/photos/components/sources/source-settings'
+import {TitanScopeSettings} from '@/features/photos/components/sources/source-settings'
 import {sourcePath} from '@/features/photos/constants'
 import {usePhotoSourceActions, usePhotoSources, type SourceSettings} from '@/features/photos/hooks/use-photo-sources'
 import {useIsMobile} from '@/hooks/use-is-mobile'
 import {useDialogOpenProps} from '@/utils/dialog'
 
-type Step = 'kind' | 'umbrel'
+type Step = 'kind' | 'titan'
 
-// Where photos come from. iPhones register themselves from the Umbrel app, so
-// that card only hands over to it; This Umbrel is a permanent source, so its
-// card shows the live import scope (all folders / except / only) and saves
-// changes to it. Android, drives and NAS are post-v1 — their cards stay
-// visible but locked, so the roadmap reads at a glance.
+// Local NAS files can be selected now. Native phone clients, external drives
+// and network imports remain locked until Titan provides a supported flow.
 export function AddSourceDialog() {
 	const homePath = useHomePath()
 	const dialogProps = useDialogOpenProps('photos-add-source')
@@ -45,12 +42,12 @@ export function AddSourceDialog() {
 	const isMobile = useIsMobile()
 	const navigate = useNavigate()
 	const {updateSettings} = usePhotoSourceActions()
-	// This Umbrel is a permanent source; its card opens that source's scope
+	// This Titan is a permanent source; its card opens that source's scope
 	const {sources} = usePhotoSources()
-	const umbrelSource = sources.find((source) => source.type === 'umbrel')
+	const titanSource = sources.find((source) => source.type === 'titan')
 
 	const [step, setStep] = useState<Step>('kind')
-	const [umbrelScope, setUmbrelScope] = useState<SourceSettings['scope']>({mode: 'everything', paths: []})
+	const [titanScope, setTitanScope] = useState<SourceSettings['scope']>({mode: 'everything', paths: []})
 
 	// Fresh wizard every time it opens
 	useEffect(() => {
@@ -58,12 +55,12 @@ export function AddSourceDialog() {
 		setStep('kind')
 	}, [dialogProps.open])
 
-	const handleSaveUmbrel = async () => {
-		if (!umbrelSource) return
+	const handleSaveTitan = async () => {
+		if (!titanSource) return
 		try {
-			await updateSettings({id: umbrelSource.id, settings: {scope: umbrelScope}})
+			await updateSettings({id: titanSource.id, settings: {scope: titanScope}})
 			dialogProps.onOpenChange(false)
-			navigate(sourcePath(umbrelSource.id))
+			navigate(sourcePath(titanSource.id))
 		} catch {
 			toast.error(t('photos-selection.failed'), {area: 'photos'})
 		}
@@ -71,7 +68,7 @@ export function AddSourceDialog() {
 
 	const titles: Record<Step, {title: string; description?: string}> = {
 		kind: {title: t('photos-add-source.title'), description: t('photos-add-source.description')},
-		umbrel: {title: t('photos-add-source.kind-folder'), description: t('photos-add-source.umbrel-description')},
+		titan: {title: t('photos-add-source.kind-folder'), description: t('photos-add-source.titan-description')},
 	}
 	const {title, description} = titles[step]
 
@@ -89,7 +86,7 @@ export function AddSourceDialog() {
 		id: string
 		art: ReactNode
 		title: string
-		description: string
+		description?: string
 		locked?: boolean
 		open?: () => void
 	}[] = [
@@ -97,27 +94,24 @@ export function AddSourceDialog() {
 			id: 'iphone',
 			art: <SourceIcon type='iphone' size={40} />,
 			title: t('photos-add-source.kind-iphone'),
-			description: t('photos-add-source.kind-iphone-description'),
-			// The Umbrel app carries the whole flow; the card just hands over to it
-			open: () => window.open('https://link.umbrel.com/ios-app', '_blank', 'noopener,noreferrer'),
+			locked: true,
 		},
 		{
 			id: 'folder',
-			art: <SourceIcon type='umbrel' size={40} />,
+			art: <SourceIcon type='titan' size={40} />,
 			title: t('photos-add-source.kind-folder'),
 			description: t('photos-add-source.kind-folder-description'),
-			// This Umbrel is a permanent source: its card opens with the live
+			// This Titan is a permanent source: its card opens with the live
 			// scope — the status of where Photos imports from today
 			open: () => {
-				setUmbrelScope(umbrelSource?.scope ?? {mode: 'everything', paths: []})
-				setStep('umbrel')
+				setTitanScope(titanSource?.scope ?? {mode: 'everything', paths: []})
+				setStep('titan')
 			},
 		},
 		{
 			id: 'android',
 			art: <SourceIcon type='android' size={40} />,
 			title: t('photos-add-source.kind-android'),
-			description: t('photos-add-source.kind-android-description'),
 			locked: true,
 		},
 		{
@@ -137,7 +131,7 @@ export function AddSourceDialog() {
 	]
 
 	// An except/only choice with nothing picked would import everything/nothing
-	const scopeNeedsFolders = umbrelScope.mode !== 'everything' && umbrelScope.paths.length === 0
+	const scopeNeedsFolders = titanScope.mode !== 'everything' && titanScope.paths.length === 0
 
 	const body = (
 		<div className='overflow-x-hidden'>
@@ -161,9 +155,9 @@ export function AddSourceDialog() {
 						</motion.div>
 					)}
 
-					{step === 'umbrel' && (
-						<motion.div key='umbrel' {...stepFade} className='flex flex-col gap-4 py-2'>
-							<UmbrelScopeSettings rootPath={homePath} scope={umbrelScope} onChange={setUmbrelScope} />
+					{step === 'titan' && (
+						<motion.div key='titan' {...stepFade} className='flex flex-col gap-4 py-2'>
+							<TitanScopeSettings rootPath={homePath} scope={titanScope} onChange={setTitanScope} />
 							<DialogFooter className='flex-col-reverse gap-2 pt-2'>
 								<Button size='dialog' onClick={() => setStep('kind')}>
 									{t('back')}
@@ -171,8 +165,8 @@ export function AddSourceDialog() {
 								<Button
 									variant='primary'
 									size='dialog'
-									onClick={handleSaveUmbrel}
-									disabled={!umbrelSource || scopeNeedsFolders}
+									onClick={handleSaveTitan}
+									disabled={!titanSource || scopeNeedsFolders}
 								>
 									{t('photos-add-source.save')}
 								</Button>

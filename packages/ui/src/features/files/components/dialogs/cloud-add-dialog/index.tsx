@@ -491,7 +491,7 @@ export default function CloudAddDialog() {
 	}
 
 	const body = (
-		<div className='umbrel-stable-gutter flex-1 overflow-x-hidden overflow-y-auto'>
+		<div className='titan-stable-gutter flex-1 overflow-x-hidden overflow-y-auto'>
 			<AnimatedHeight transition={{type: 'spring', stiffness: 300, damping: 34}} contentClassName='relative'>
 				{/* wait: the outgoing step must finish leaving before the next one mounts, or both footers overlap */}
 				<AnimatePresence mode='wait' initial={false}>

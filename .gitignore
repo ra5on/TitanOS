@@ -16,7 +16,7 @@ node_modules
 __pycache__
 *.py[cod]
 
-# umbrel-dev
+# titan-dev
 docker-compose.override.yml
 
 # Files and data directories created by services
@@ -61,6 +61,6 @@ data/
 !logs/.gitkeep
 !tor/data/.gitkeep
 !tor/run/.gitkeep
-.umbrel-dev
+.titan-dev
 jwt
 ./bin

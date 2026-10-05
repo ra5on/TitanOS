@@ -12,15 +12,15 @@ import {cn} from '@/lib/utils'
 type IconType = SourceType | 'android' | 'external-drive' | 'network-share'
 
 // Same device artwork the Files sidebar uses for drives, NAS and phones; the
-// umbrelOS mark for this device. `size` is the box in px.
+// TitanOS mark for this device. `size` is the box in px.
 export function SourceIcon({type, size = 20, className}: {type: IconType; size?: number; className?: string}) {
 	const {t} = useTranslation()
 	const box = {width: size, height: size}
 	switch (type) {
-		case 'umbrel':
+		case 'titan':
 			return (
 				<img
-					src='/assets/umbrel-ios.png'
+					src='/assets/titan-ios.png'
 					alt='TitanOS'
 					style={{...box, borderRadius: Math.round(size * 0.23)}}
 					className={cn('shrink-0', className)}

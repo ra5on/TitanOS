@@ -2,7 +2,7 @@ import {keepPreviousData} from '@tanstack/react-query'
 
 import {trpcReact} from '@/trpc/trpc'
 
-/** Added by umbreld at registration; drives the welcome desktop until dismissed */
+/** Added by titand at registration; drives the welcome desktop until dismissed */
 export const ONBOARDING_COMPLETE_NOTIFICATION = 'onboarding-complete'
 
 /** The current account's notifications; the list is shared query state */

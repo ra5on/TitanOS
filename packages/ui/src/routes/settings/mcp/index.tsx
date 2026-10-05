@@ -58,7 +58,7 @@ function getMcpErrorMessage(message: string): string {
 }
 
 // Settings → MCP. Owner-only dialog whose moments flow into one another: the
-// first-run pitch (agents orbiting the umbrel) morphs into the agent picker,
+// first-run pitch (agents orbiting the titan) morphs into the agent picker,
 // picking a tile collapses the dialog into the status card while the token is
 // minted, the connect ceremony expands around that same card, and the enabled
 // steady state is simply the permission grants. Every transition crossfades
@@ -490,7 +490,7 @@ export default function McpDialog() {
 // ─── Enabled steady state ───────────────────────────────────────────
 // Managing MCP is managing what agents can touch, so the view opens straight
 // into the permission grants — Apps and Folders one drill-in deep, App Store
-// and Manage umbrelOS as inline switches — with the off switch as a quiet
+// and Manage TitanOS as inline switches — with the off switch as a quiet
 // action at the bottom.
 
 function EnabledView({
@@ -678,7 +678,7 @@ function EnabledView({
 			)}
 
 			<div className='flex flex-wrap justify-end gap-2'>
-				<Button disabled={disabling} className={cn(disabling && 'umbrel-pulse')} onClick={onDisable}>
+				<Button disabled={disabling} className={cn(disabling && 'titan-pulse')} onClick={onDisable}>
 					{t('mcp-disable')}
 				</Button>
 			</div>
@@ -754,7 +754,7 @@ function TokenConnectionRow({token}: {token: McpToken}) {
 }
 
 // Full-width switch row used for the single-toggle permissions (App Store,
-// Manage umbrelOS) inside the grouped permissions card
+// Manage TitanOS) inside the grouped permissions card
 function PermissionToggleRow({
 	title,
 	description,
@@ -775,7 +775,7 @@ function PermissionToggleRow({
 				<div className='text-12 leading-tight text-white/45'>{description}</div>
 			</div>
 			<Switch
-				className={cn(disabled && 'umbrel-pulse')}
+				className={cn(disabled && 'titan-pulse')}
 				checked={checked}
 				disabled={disabled}
 				onCheckedChange={onCheckedChange}

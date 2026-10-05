@@ -232,7 +232,7 @@ export function WidgetSelector({open, onOpenChange}: {open: boolean; onOpenChang
 												checked={selected.map((w) => w.id).includes(widget.id)}
 												onCheckedChange={(checked) => toggleSelected(widget.id, checked)}
 											>
-												<ExampleWidget type={widget.type} example={widget.example} />
+												<ExampleWidget widgetId={widget.id} type={widget.type} example={widget.example} />
 											</WidgetChecker>
 										</ErrorBoundary>
 									)
@@ -270,7 +270,7 @@ function WidgetSheet({
 					backdrop={<div className='fixed inset-0 z-30' onClick={() => onOpenChange(false)} />}
 					closeButton={<DialogCloseButton className='absolute top-3 right-3 z-[60] sm:top-5 sm:right-5' />}
 				>
-					<ScrollArea className='umbrel-window-surface-top h-full'>
+					<ScrollArea className='titan-window-surface-top h-full'>
 						<div
 							className={cn(
 								'flex h-full flex-col items-start gap-5 px-4 pt-6 opacity-0 md:gap-8 md:px-[80px] md:pt-12',

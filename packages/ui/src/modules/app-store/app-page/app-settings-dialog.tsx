@@ -279,7 +279,7 @@ function AppSettingsDialogForApp({
 	const setSettingsMut = trpcReact.apps.setSettings.useMutation({
 		onSuccess: invalidateApp,
 	})
-	// Umbrel login applies instantly through the app gateway (no restart), so it
+	// Titan login applies instantly through the app gateway (no restart), so it
 	// gets its own mutation instead of joining the batched save
 	const setAuthMut = trpcReact.apps.setSettings.useMutation({
 		onSuccess: invalidateApp,
@@ -400,7 +400,7 @@ function AppSettingsDialogForApp({
 		}
 	}, [closeRequestRef])
 
-	// Umbrel login is applied instantly after any required confirmation. Turning
+	// Titan login is applied instantly after any required confirmation. Turning
 	// it off always warns about exposing the app; turning it on also warns when
 	// the developer ships it off because login may break clients or integrations.
 	const appProxyAuthSupported = app.appProxyAuth?.supported === true

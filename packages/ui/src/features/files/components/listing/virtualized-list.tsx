@@ -438,7 +438,7 @@ export const VirtualizedList: React.FC<VirtualizedListProps> = ({
 			{({onItemsRendered, ref}: InfiniteLoaderRenderProps) => (
 				<FixedSizeList
 					ref={ref as React.Ref<FixedSizeList>}
-					className='umbrel-files-virtual-scroller'
+					className='titan-files-virtual-scroller'
 					height={height}
 					width={width + getGridScrollerPadding(isMobile)} // Push scrollbar into parent padding (px-3 mobile / px-6 desktop)
 					innerElementType={InnerElementWithEndSpacer}
@@ -476,7 +476,7 @@ export const VirtualizedList: React.FC<VirtualizedListProps> = ({
 				{({onItemsRendered, ref}: InfiniteLoaderRenderProps) => (
 					<FixedSizeGrid
 						ref={ref as React.Ref<FixedSizeGrid>}
-						className='umbrel-files-virtual-scroller'
+						className='titan-files-virtual-scroller'
 						height={height}
 						width={width + getGridScrollerPadding(isMobile)}
 						innerElementType={InnerElementWithEndSpacer}
@@ -511,7 +511,7 @@ export const VirtualizedList: React.FC<VirtualizedListProps> = ({
 	return (
 		<div
 			ref={containerRef}
-			className={`umbrel-files-fade-scroller h-full w-full overflow-hidden px-3 lg:px-6 ${isScrolled ? 'scrolled' : ''}`}
+			className={`titan-files-fade-scroller h-full w-full overflow-hidden px-3 lg:px-6 ${isScrolled ? 'scrolled' : ''}`}
 		>
 			{/* Containment wrapper: the FixedSizeList is rendered wider than the content area
 			    (width + 24) to push its scrollbar into parent padding. Without this wrapper,

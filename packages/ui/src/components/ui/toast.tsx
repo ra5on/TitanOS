@@ -46,7 +46,7 @@ export function Toaster() {
 }
 
 // The product area a toast comes from, shown as that area's icon
-const AREA_ICONS = {...systemIcons, umbrelos: systemIcons.system} as const
+const AREA_ICONS = {...systemIcons, titanos: systemIcons.system} as const
 export type ToastArea = keyof typeof AREA_ICONS
 
 export type ToastOptions = SonnerPrimitive.ExternalToast & {

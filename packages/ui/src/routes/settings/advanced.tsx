@@ -36,10 +36,9 @@ export default function AdvancedSettingsDrawerOrDialog() {
 	const title = t('advanced-settings')
 	const dialogProps = useSettingsDialogProps()
 	const {advancedSelection} = useParams<{
-		advancedSelection?: 'beta-program' | 'network' | 'thunderbolt' | 'tor'
+		advancedSelection?: 'network' | 'thunderbolt' | 'tor'
 	}>()
 	const [searchParams] = useSearchParams()
-
 
 	const isMobile = useIsMobile()
 
@@ -70,14 +69,14 @@ export default function AdvancedSettingsDrawerOrDialog() {
 	}, [advancedSelection, isThunderboltSupported])
 
 	const remoteTorAccessSettingRow = (
-		<div className={cn('flex flex-col gap-2', cardClass, advancedSelection === 'tor' && 'umbrel-pulse-a-few-times')}>
+		<div className={cn('flex flex-col gap-2', cardClass, advancedSelection === 'tor' && 'titan-pulse-a-few-times')}>
 			<label className='flex w-full items-center justify-between gap-x-2'>
 				<CardText
 					title={t('remote-tor-access')}
 					description={tor.enabled ? t('tor-enabled-description') : t('tor-description')}
 				/>
 				<Switch
-					className={cn('pointer-events-auto', tor.isMutLoading && 'umbrel-pulse')}
+					className={cn('pointer-events-auto', tor.isMutLoading && 'titan-pulse')}
 					checked={!!tor.enabled}
 					onCheckedChange={handleTorToggle}
 					disabled={tor.isLoading}

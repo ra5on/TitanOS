@@ -1,5 +1,5 @@
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // Full-width pill button anchored at the bottom of onboarding screens.
 // Two variants: `.subtle` (translucent violet fill, the default for
@@ -70,26 +70,26 @@ struct SolidButtonRim: View {
 	}
 }
 
-// Maps umbreld's model to the matching bundled hardware render. Unknown and
+// Maps titand's model to the matching bundled hardware render. Unknown and
 // offline devices deliberately use generic hardware rather than implying that
-// the user owns an Umbrel Home or Pro.
-func umbrelRenderName(for model: String?) -> String {
-	switch UmbrelDeviceKind(model: model) {
-	case .home: "UmbrelHome"
-	case .pro: "UmbrelPro"
+// the user owns an Titan Home or Pro.
+func titanRenderName(for model: String?) -> String {
+	switch TitanDeviceKind(model: model) {
+	case .home: "TitanHome"
+	case .pro: "TitanPro"
 	case .raspberryPi: "RaspberryPi"
 	case .generic: "GenericDevice"
 	}
 }
 
-struct UmbrelDeviceRender: View {
+struct TitanDeviceRender: View {
 	let model: String?
 
 	var body: some View {
-		let assetName = umbrelRenderName(for: model)
-		// Match umbrelOS: the bare Pi mark sits in a device-shaped tile so it has
+		let assetName = titanRenderName(for: model)
+		// Match titanOS: the bare Pi mark sits in a device-shaped tile so it has
 		// comparable visual weight to the hardware renders.
-		if UmbrelDeviceKind(model: model) == .raspberryPi {
+		if TitanDeviceKind(model: model) == .raspberryPi {
 			GeometryReader { proxy in
 				let size = min(proxy.size.width, proxy.size.height)
 				let shape = RoundedRectangle(cornerRadius: size * 27 / 128, style: .continuous)
@@ -175,7 +175,7 @@ struct OnboardingHeader: View {
 }
 
 // The alternate route appears only after discovery has produced an outcome, so it
-// reads as help for a missing Umbrel rather than a competing first choice.
+// reads as help for a missing Titan rather than a competing first choice.
 struct ManualAddressPrompt: View {
 	@Environment(OnboardingModel.self) private var model
 	var isLeading = false
@@ -185,7 +185,7 @@ struct ManualAddressPrompt: View {
 			model.showManualAddress()
 		} label: {
 			(
-				Text("Can’t find your Umbrel? ")
+				Text("Can’t find your Titan? ")
 					+ Text("Connect by address\u{00A0}\(Image(systemName: "chevron.right"))")
 					.fontWeight(.semibold)
 			)

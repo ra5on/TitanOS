@@ -1,9 +1,9 @@
 import ImageIO
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
-// Wallpaper ids are content-stable across Umbrels, so one disk cache serves every device.
+// Wallpaper ids are content-stable across Titans, so one disk cache serves every device.
 // Memory is deliberately evictable: the active model retains what it is showing, while
 // NSCache can discard other decoded bitmaps under pressure and recreate them from disk.
 @MainActor
@@ -14,7 +14,7 @@ final class WallpaperStore {
 		case fullScreen
 		case deviceCard
 
-		var rendition: Umbreld.WallpaperImageRendition {
+		var rendition: Titand.WallpaperImageRendition {
 			switch self {
 			case .fullScreen: .large
 			case .deviceCard: .medium
@@ -77,14 +77,14 @@ final class WallpaperStore {
 		return prepared.image
 	}
 
-	func load(id: String, target: Umbreld.Target) async -> UIImage? {
+	func load(id: String, target: Titand.Target) async -> UIImage? {
 		guard let image = await load(id: id, target: target, variant: .fullScreen)
 		else { return nil }
 		_ = await blurred(id: id)
 		return image
 	}
 
-	func loadCard(id: String, target: Umbreld.Target) async -> UIImage? {
+	func loadCard(id: String, target: Titand.Target) async -> UIImage? {
 		if let image = await cachedCard(id: id) { return image }
 		return await load(id: id, target: target, variant: .deviceCard)
 	}
@@ -137,7 +137,7 @@ final class WallpaperStore {
 		return prepared.image
 	}
 
-	private func load(id: String, target: Umbreld.Target, variant: Variant) async -> UIImage? {
+	private func load(id: String, target: Titand.Target, variant: Variant) async -> UIImage? {
 		if let hit = await cached(id: id, variant: variant) { return hit }
 		let key = cacheKey(id: id, variant: variant)
 		let preferred = await fetch(
@@ -167,12 +167,12 @@ final class WallpaperStore {
 
 	private func fetch(
 		id: String,
-		target: Umbreld.Target,
-		rendition: Umbreld.WallpaperImageRendition,
+		target: Titand.Target,
+		rendition: Titand.WallpaperImageRendition,
 		maxPixelSize: Int
 	) async -> (data: Data, image: PreparedWallpaperImage)? {
 		do {
-			let data = try await Umbreld.wallpaperData(
+			let data = try await Titand.wallpaperData(
 				target: target,
 				id: id,
 				rendition: rendition

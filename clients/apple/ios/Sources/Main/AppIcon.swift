@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 import UIKit
 
-// umbreld serves app icons as external SVG URLs, which AsyncImage/UIImage can't decode.
+// titand serves app icons as external SVG URLs, which AsyncImage/UIImage can't decode.
 // We fetch the SVG (cached by URL), render it in a small on-screen WKWebView, and
 // snapshot that once to a UIImage cached in memory and on disk. After an icon renders
 // once it appears instantly forever after (scrolling, tab switches, next launch), so
@@ -122,7 +122,7 @@ private final class SVGNoRedirectDelegate: NSObject, URLSessionTaskDelegate {
 	}
 }
 
-// A rounded app icon: instant from cache when available, otherwise the umbrelOS
+// A rounded app icon: instant from cache when available, otherwise the titanOS
 // placeholder plus an on-screen web view that renders the SVG and caches a snapshot.
 struct AppIconView: View {
 	let url: URL?
@@ -186,7 +186,7 @@ struct AppIconView: View {
 		}
 	}
 
-	// The umbrelOS loading/fallback icon (packages/ui assets/app-icon-placeholder.svg),
+	// The titanOS loading/fallback icon (packages/ui assets/app-icon-placeholder.svg),
 	// bundled as a vector asset so it renders on the first frame.
 	private var placeholder: some View {
 		Image("AppIconPlaceholder")

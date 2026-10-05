@@ -659,7 +659,7 @@ export function ListStorageManager() {
 					failedRaidDevices.some((failed) => failed.id === swapDeviceId) ||
 					acceleratorDevices.some((member) => member.id === swapDeviceId && member.status !== 'ONLINE')
 				}
-				isUmbrelPro={false}
+				isTitanPro={false}
 				raidStatus={raidStatus}
 				availableDevices={swapCandidates}
 				missingDeviceType={swapMemberIsAccelerator || !isHddPool ? 'ssd' : 'hdd'}
@@ -671,7 +671,7 @@ export function ListStorageManager() {
 			<InstallSsdDialog
 				open={isInstallDrivesOpen}
 				onOpenChange={setIsInstallDrivesOpen}
-				isUmbrelPro={false}
+				isTitanPro={false}
 				isHdd={isHddPool}
 			/>
 		</ImmersiveDialog>

@@ -2,7 +2,7 @@ import Observation
 import Photos
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
 // UICollectionView reuses a small set of cells no matter how large the PhotoKit
 // fetch becomes. The surrounding SwiftUI card owns presentation; this view owns

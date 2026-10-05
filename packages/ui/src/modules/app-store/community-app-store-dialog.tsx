@@ -14,7 +14,7 @@ import {Dialog, DialogHeader, DialogPortal, DialogScrollableContent, DialogTitle
 import {AnimatedInputError, Input} from '@/components/ui/input'
 import {Spinner} from '@/components/ui/loading'
 import {toast} from '@/components/ui/toast'
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import {cn} from '@/lib/utils'
 import {systemAppsKeyed} from '@/providers/apps'
 import {trpcReact} from '@/trpc/trpc'
@@ -78,9 +78,9 @@ export function CommunityAppStoreDialog() {
 	const remoteFormError = !addAppStoreMut.error?.data?.zodError && addAppStoreMut.error?.message
 	const formError = localError || remoteFormError
 
-	const nonUmbrelAppStores = (appStoresQ.data ?? [])
+	const nonTitanAppStores = (appStoresQ.data ?? [])
 		.filter((store) => store !== null)
-		.filter((store) => store.meta.id !== UMBREL_APP_STORE_ID)
+		.filter((store) => store.meta.id !== TITAN_APP_STORE_ID)
 
 	const appCountByStore = new Map(
 		(registryQ.data ?? []).filter((repo) => repo !== null).map((repo) => [repo.meta.id, repo.apps.length]),
@@ -91,8 +91,8 @@ export function CommunityAppStoreDialog() {
 	return (
 		<Dialog {...dialogProps}>
 			<DialogPortal>
-				<DialogScrollableContent showClose className='umbrel-app-store-modal'>
-					<div className='umbrel-dialog-fade-scroller umbrel-stable-gutter flex flex-col gap-y-5 overflow-y-auto px-5 py-6'>
+				<DialogScrollableContent showClose className='titan-app-store-modal'>
+					<div className='titan-dialog-fade-scroller titan-stable-gutter flex flex-col gap-y-5 overflow-y-auto px-5 py-6'>
 						<DialogHeader className='space-y-2'>
 							<DialogTitle>{title}</DialogTitle>
 							<DialogDescription className='text-13 leading-snug -tracking-2 text-white/50'>
@@ -136,7 +136,7 @@ export function CommunityAppStoreDialog() {
 							<h3 className='px-1 text-12 font-medium -tracking-2 text-white/40'>
 								{t('community-app-stores.added-title')}
 							</h3>
-							{nonUmbrelAppStores.length === 0 ? (
+							{nonTitanAppStores.length === 0 ? (
 								<div className='flex items-center justify-center rounded-12 border border-dashed border-white/10 px-4 py-6 text-center text-13 -tracking-2 text-white/30'>
 									{t('community-app-stores.empty')}
 								</div>
@@ -144,7 +144,7 @@ export function CommunityAppStoreDialog() {
 								// contain-inline-size: the scroll area's display:table wrapper would otherwise
 								// grow to the untruncated URL and push rows past the dialog
 								<ul className='flex flex-col gap-2.5 contain-inline-size md:gap-0 md:divide-y md:divide-white/6 md:overflow-hidden md:rounded-12 md:bg-white/5'>
-									{nonUmbrelAppStores.map(({url, meta}) => {
+									{nonTitanAppStores.map(({url, meta}) => {
 										const appCount = appCountByStore.get(meta.id)
 										const removing = removingUrl === url
 										const removeLabel = t('community-app-store.remove-button')
@@ -161,7 +161,7 @@ export function CommunityAppStoreDialog() {
 												)}
 											>
 												<AppIcon
-													src={systemAppsKeyed['UMBREL_app-store'].icon}
+													src={systemAppsKeyed['TITAN_app-store'].icon}
 													className='size-14 rounded-12 border-0 bg-transparent md:size-10 md:rounded-10'
 												/>
 												<div className='flex w-full min-w-0 flex-col items-center gap-1 overflow-hidden md:items-start md:gap-0.5'>

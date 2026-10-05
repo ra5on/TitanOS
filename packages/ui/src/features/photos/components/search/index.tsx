@@ -432,7 +432,7 @@ function TokenStrip() {
 		<FadeScroller
 			direction='x'
 			ref={stripRef}
-			className='umbrel-hide-scrollbar flex max-w-[calc(100%-140px)] shrink-0 items-center gap-2 overflow-x-auto'
+			className='titan-hide-scrollbar flex max-w-[calc(100%-140px)] shrink-0 items-center gap-2 overflow-x-auto'
 		>
 			{search.tokens.map((token, index) => (
 				<TokenChip key={tokenKey(token)} token={token} onRemove={() => search.removeToken(index)} />

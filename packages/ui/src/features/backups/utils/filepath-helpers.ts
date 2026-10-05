@@ -1,13 +1,13 @@
 import {APPS_PATH, EXTERNAL_STORAGE_PATH, NETWORK_STORAGE_PATH} from '@/features/files/constants'
 
-// File name used by Umbrel backups within a repository directory
-export const BACKUP_FILE_NAME = 'Umbrel Backup.backup'
+// File name used by Titan backups within a repository directory
+export const BACKUP_FILE_NAME = 'Titan Backup.backup'
 
 // Returns a display path starting from the device name up to the parent directory
-// containing the Umbrel backup file, always ending with a trailing slash.
+// containing the Titan backup file, always ending with a trailing slash.
 // Examples:
-//  - /Network/samba.orb.local/data/My Backups/Umbrel Backup.backup -> samba.orb.local/data/My Backups/
-//  - /External/USB-DISK/Umbrel Backup.backup -> USB-DISK/
+//  - /Network/samba.orb.local/data/My Backups/Titan Backup.backup -> samba.orb.local/data/My Backups/
+//  - /External/USB-DISK/Titan Backup.backup -> USB-DISK/
 //  - /Network/samba.orb.local/data/My Backups -> samba.orb.local/data/My Backups/
 export function getDisplayRepositoryPath(path: string): string {
 	const segments = path.split('/').filter(Boolean)
@@ -68,9 +68,9 @@ export function getRepositoryDisplayName(path: string): string {
 
 // Returns the path within the device (excluding the device name) and without the backup file name.
 // Example:
-//  - /Network/host/data/Umbrel Backup.backup -> /
-//  - /Network/host/data/My Backups/Umbrel Backup.backup -> /data/My Backups
-//  - /External/USB-DISK/Umbrel Backup.backup -> /
+//  - /Network/host/data/Titan Backup.backup -> /
+//  - /Network/host/data/My Backups/Titan Backup.backup -> /data/My Backups
+//  - /External/USB-DISK/Titan Backup.backup -> /
 export function getRepositoryRelativePath(path: string): string {
 	const segments = path.split('/').filter(Boolean)
 
@@ -91,7 +91,7 @@ export function getRepositoryRelativePath(path: string): string {
 }
 
 // Extracts the repository path (parent directory) from a backup file path.
-// e.g., /Network/host/data/Umbrel Backup.backup -> /Network/host/data
+// e.g., /Network/host/data/Titan Backup.backup -> /Network/host/data
 export function getRepositoryPathFromBackupFile(backupFilePath: string): string {
 	const path = backupFilePath.trim()
 	return path.endsWith(BACKUP_FILE_NAME) ? path.slice(0, -BACKUP_FILE_NAME.length).replace(/\/$/, '') || '/' : path

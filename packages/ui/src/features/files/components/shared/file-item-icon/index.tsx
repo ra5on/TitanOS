@@ -15,8 +15,8 @@ import nasIconInactive from '@/features/files/assets/nas-icon-inactive.png'
 import networkIcon from '@/features/files/assets/network-icon.png'
 import {RecentsIcon} from '@/features/files/assets/recents-icon'
 import {SharedFolderBadge} from '@/features/files/assets/shared-folder-badge'
-import umbrelDeviceActive from '@/features/files/assets/umbrel-device-icon-active.png'
-import umbrelDeviceInactive from '@/features/files/assets/umbrel-device-icon-inactive.png'
+import titanDeviceActive from '@/features/files/assets/titan-device-icon-active.png'
+import titanDeviceInactive from '@/features/files/assets/titan-device-icon-inactive.png'
 import {AnimatedFolderIcon} from '@/features/files/components/shared/file-item-icon/animated-folder-icon'
 import {
 	DocumentsIcon,
@@ -181,8 +181,8 @@ const FileItemIconContent = ({
 		)
 	}
 
-	if (item.type === 'directory' && item.name === 'Umbrel Backup.backup') {
-		return <img src={backupsIcon} alt={t('files-type.umbrel-backup')} className={className} draggable={false} />
+	if (item.type === 'directory' && item.name === 'Titan Backup.backup') {
+		return <img src={backupsIcon} alt={t('files-type.titan-backup')} className={className} draggable={false} />
 	}
 
 	// External storage for sidebar and pathbar
@@ -449,7 +449,7 @@ const CloudAccountIcon = ({path, className}: {path: string; className?: string})
 	return <CloudIcon className={className} />
 }
 
-// Component to render network device icon with Umbrel detection
+// Component to render network device icon with Titan detection
 const NetworkDeviceIcon = ({path, className}: {path: string; className?: string}) => {
 	const {t} = useTranslation()
 	const {doesHostHaveMountedShares} = useNetworkStorage()
@@ -473,11 +473,11 @@ const NetworkDeviceIcon = ({path, className}: {path: string; className?: string}
 	}
 
 	// Show appropriate icon based on device type and mount status
-	if (deviceType === 'umbrel') {
+	if (deviceType === 'titan') {
 		return (
 			<img
-				src={isMounted ? umbrelDeviceActive : umbrelDeviceInactive}
-				alt='Umbrel'
+				src={isMounted ? titanDeviceActive : titanDeviceInactive}
+				alt='Titan'
 				className={className}
 				draggable={false}
 			/>

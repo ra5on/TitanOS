@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the installable contents and Finder presentation of an Umbrel DMG."""
+"""Validate the installable contents and Finder presentation of an Titan DMG."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def require_path(path: Path) -> None:
 
 
 def validate_layout(mount: Path) -> None:
-    app = mount / "Umbrel.app"
+    app = mount / "Titan.app"
     applications = mount / "Applications"
     # dmgbuild combines the 1x and 2x source images into this Retina TIFF.
     background = mount / ".background.tiff"
@@ -96,7 +96,7 @@ def validate_layout(mount: Path) -> None:
         fail("DMG Finder settings do not reference the installer background")
 
     expected_locations = {
-        "Umbrel.app": (190, 150),
+        "Titan.app": (190, 150),
         "Applications": (470, 150),
     }
     for item, expected in expected_locations.items():
@@ -112,7 +112,7 @@ def main() -> None:
     if not image.is_file():
         fail(f"DMG not found: {image}")
 
-    with tempfile.TemporaryDirectory(prefix="umbrel-dmg-validation.") as mount_root:
+    with tempfile.TemporaryDirectory(prefix="titan-dmg-validation.") as mount_root:
         device, mount = attach(image, Path(mount_root))
         try:
             validate_layout(mount)

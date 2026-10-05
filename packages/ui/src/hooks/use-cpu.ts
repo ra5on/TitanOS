@@ -23,7 +23,7 @@ export function useCpu(options: {poll?: boolean} = {}) {
 				...(cpuQ.data?.apps ?? []),
 				...(cpuQ.data?.machines ?? []).map((machine) => ({...machine, entity: 'machine' as const})),
 				{
-					id: 'umbreld-system',
+					id: 'titand-system',
 					used: cpuQ.data?.system ?? 0,
 				},
 			],

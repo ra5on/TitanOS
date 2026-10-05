@@ -11,7 +11,7 @@ import {languageCodeToDateLocale} from '@/utils/date-time'
 import {appPageSectionLabelClass, expandTransition, ReadMoreMarkdownSection} from './shared'
 
 /**
- * "What's new" as a vertical release timeline (the apps.umbrel.com design):
+ * "What's new" as a vertical release timeline (the apps.titan.com design):
  * a hairline spine with a dot per release — the newest one lit up and
  * rippling — version rows that expand into their notes, and relative dates.
  */
@@ -84,7 +84,7 @@ function TimelineRelease({
 				className={cn(
 					'absolute rounded-full',
 					latest
-						? 'top-2 -left-7 h-3.5 w-3.5 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_0_0_5px_rgba(255,255,255,0.08)] after:absolute after:inset-0 after:rounded-full after:border after:border-white/60 after:content-[""] motion-safe:after:animate-[umbrel-ripple_2.4s_ease-out_infinite]'
+						? 'top-2 -left-7 h-3.5 w-3.5 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_0_0_5px_rgba(255,255,255,0.08)] after:absolute after:inset-0 after:rounded-full after:border after:border-white/60 after:content-[""] motion-safe:after:animate-[titan-ripple_2.4s_ease-out_infinite]'
 						: 'top-2.5 left-[-26px] h-2.5 w-2.5 bg-zinc-600',
 				)}
 			/>

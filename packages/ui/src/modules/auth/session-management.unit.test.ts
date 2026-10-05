@@ -336,7 +336,7 @@ test('uses structured native metadata for client labels and icons', () => {
 		const client = parseNativeSessionClient(expected.client)
 		assert.equal(client.label, expected.label)
 		assert.equal(client.deviceType, expected.deviceType)
-		assert.equal(client.clientIcon, '/assets/umbrel-ios.png')
+		assert.equal(client.clientIcon, undefined)
 		assert.equal(client.os, expected.os)
 		assert.equal(client.osIcon, `/assets/session-icons/os/${expected.osIcon}.png`)
 	}
@@ -357,7 +357,7 @@ test('unknown native clients degrade without requiring a UI catalog entry', () =
 	assert.equal(unknown.os, undefined)
 	assert.equal(unknown.osIcon, undefined)
 
-	const futureUmbrel = parseNativeSessionClient({
+	const futureExternalClient = parseNativeSessionClient({
 		id: 'umbrel',
 		platform: 'visionos',
 		deviceClass: 'headset',
@@ -365,6 +365,17 @@ test('unknown native clients degrade without requiring a UI catalog entry', () =
 		appBuild: '1',
 		osVersion: '3.0',
 	})
-	assert.equal(futureUmbrel.label, 'Umbrel')
-	assert.equal(futureUmbrel.clientIcon, '/assets/umbrel-ios.png')
+	assert.equal(futureExternalClient.label, 'Umbrel')
+	assert.equal(futureExternalClient.clientIcon, undefined)
+})
+
+test('identifies Titan native clients without rebranding third-party clients', () => {
+	const metadata = {appVersion: '1.0', appBuild: '1', osVersion: '26.6.1'}
+	const titan = parseNativeSessionClient({id: 'titan', platform: 'macos', deviceClass: 'desktop', ...metadata})
+	assert.equal(titan.label, 'Titan for Mac')
+	assert.equal(titan.deviceType, 'desktop')
+	assert.equal(titan.clientIcon, '/assets/titan-ios.png')
+	const futureTitan = parseNativeSessionClient({id: 'titan', platform: 'visionos', deviceClass: 'headset', ...metadata})
+	assert.equal(futureTitan.label, 'Titan')
+	assert.equal(futureTitan.clientIcon, '/assets/titan-ios.png')
 })

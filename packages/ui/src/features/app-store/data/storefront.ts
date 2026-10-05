@@ -1,4 +1,4 @@
-// Schema and resolution for the optional apps.umbrel.com storefront feed.
+// Schema and resolution for the optional apps.titan.com storefront feed.
 //
 // The feed can only ever decorate the store: every app id is resolved against
 // the local registry and silently dropped when unknown, unknown section types
@@ -37,7 +37,7 @@ const appIdSchema = z
 
 const appIdsSchema = z.array(appIdSchema).max(STOREFRONT_LIMITS.sectionAppIds)
 
-// Artwork must come from the same origin as the API itself (apps.umbrel.com in
+// Artwork must come from the same origin as the API itself (apps.titan.com in
 // production) so a bad feed can't turn devices into requesters of arbitrary
 // third-party URLs.
 const artworkUrlSchema = z
@@ -53,7 +53,7 @@ const artworkUrlSchema = z
 		}
 	}, 'artwork must be hosted alongside the storefront API')
 
-// umbrelOS is dark-only, so artwork is a single image
+// TitanOS is dark-only, so artwork is a single image
 const artworkSchema = z.object({
 	dark: artworkUrlSchema,
 })

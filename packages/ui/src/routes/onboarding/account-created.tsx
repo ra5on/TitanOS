@@ -64,7 +64,7 @@ export default function AccountCreated() {
 				className={`mt-4 ${primaryButtonProps.className}`}
 				style={primaryButtonProps.style}
 			>
-				{t('onboarding.launch-umbrelos')}
+				{t('onboarding.launch-titanos')}
 			</Link>
 		</Layout>
 	)

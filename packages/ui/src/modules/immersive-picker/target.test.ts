@@ -9,10 +9,10 @@ import {parsePickerTarget, pickerTargetParams, type PickerTarget} from './target
 const search = (query: string) => new URLSearchParams(query)
 
 describe('picker dialog target', () => {
-	test('reads the picker, umbrelOS, or an app from the URL', () => {
+	test('reads the picker, TitanOS, or an app from the URL', () => {
 		expect(parsePickerTarget('troubleshoot', search('dialog=troubleshoot'))).toEqual({type: 'picker'})
-		expect(parsePickerTarget('terminal', search('dialog=terminal&terminal-target=umbrelos'))).toEqual({
-			type: 'umbrelos',
+		expect(parsePickerTarget('terminal', search('dialog=terminal&terminal-target=titanos'))).toEqual({
+			type: 'titanos',
 		})
 		expect(parsePickerTarget('terminal', search('dialog=terminal&app=bitcoin'))).toEqual({
 			type: 'app',
@@ -27,7 +27,7 @@ describe('picker dialog target', () => {
 	})
 
 	test('every target survives the trip through the URL', () => {
-		const targets: PickerTarget[] = [{type: 'picker'}, {type: 'umbrelos'}, {type: 'app', appId: 'bitcoin'}]
+		const targets: PickerTarget[] = [{type: 'picker'}, {type: 'titanos'}, {type: 'app', appId: 'bitcoin'}]
 		for (const target of targets) {
 			const url = withDialog(search('sort=name'), 'troubleshoot', pickerTargetParams(target))
 			expect(parsePickerTarget('troubleshoot', url)).toEqual(target)

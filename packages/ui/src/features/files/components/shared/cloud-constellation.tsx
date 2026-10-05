@@ -62,7 +62,7 @@ function useProviderUnlock() {
 // else sits inset on a white plate, so every satellite reads as an app icon.
 const SELF_TILE_LOGOS = CLOUD_SELF_TILE_BRANDS
 
-// Two elliptical orbit rings around the umbrel, read as circles on a tilted
+// Two elliptical orbit rings around the titan, read as circles on a tilted
 // plane. Slow enough to feel serene, fast enough that the motion registers
 // within a modal-length glance; the rings lap each other over time.
 const ORBIT_RINGS = {
@@ -189,7 +189,7 @@ export function CloudPitchPoints({delay = 0.1}: {delay?: number}) {
 	)
 }
 
-// The cloud flowing into the umbrel over an intact link: the live counterpart
+// The cloud flowing into the titan over an intact link: the live counterpart
 // of the Rewind break diagram, shared by the connect and folder steps. With
 // morph on, the plate continues its shared-element flight from the picker
 // tile; entries that never passed the tile (an existing account) render the
@@ -205,7 +205,7 @@ export function CloudLinkDiagram({
 	layoutKey: string
 	logo: string
 	morph?: boolean
-	// The umbrel's pop-in belongs to the wizard's choreographed reveal, where
+	// The titan's pop-in belongs to the wizard's choreographed reveal, where
 	// it lands a beat after the plate's flight; surfaces that show the diagram
 	// as an established fact (the details dialog) opt out and mount it settled
 	entrance?: boolean
@@ -239,11 +239,11 @@ export function CloudLinkDiagram({
 				)}
 			</span>
 			<motion.img
-				{...(morph && {layoutId: 'cloud-diagram-umbrel'})}
+				{...(morph && {layoutId: 'cloud-diagram-titan'})}
 				initial={reducedMotion || !entrance ? false : {opacity: 0, scale: 0.85}}
 				animate={{opacity: 1, scale: 1}}
 				transition={{type: 'spring', stiffness: 300, damping: 24, delay: 0.1}}
-				src='/assets/umbrel-ios.png'
+				src='/assets/titan-ios.png'
 				alt='TitanOS'
 				className='size-14 shrink-0 rounded-[13px] object-contain'
 				draggable={false}
@@ -290,7 +290,7 @@ function cloudEntries(providers: CloudProvider[] | undefined): {
 }
 
 // The cloud providers as one morphing surface. In 'pitch' view they orbit the
-// umbrelOS icon on a tilted plane: many clouds, one home in the middle.
+// TitanOS icon on a tilted plane: many clouds, one home in the middle.
 // Switching to 'picker' view sends the same elements flying into a tidy grid
 // of provider tiles (with WebDAV demoted to a quiet footer row), so the
 // decoration turns out to have been the interface all along.
@@ -330,7 +330,7 @@ export function CloudConstellation({
 
 	const satellite = (entry: CloudEntry, slot: SatelliteSlot | undefined, index: number, isFooter = false) => {
 		// The stagger applies to the mount entrance only, never to the morph.
-		// On the pitch the clouds hold back until the umbrel has landed, then
+		// On the pitch the clouds hold back until the titan has landed, then
 		// arrive in quick succession.
 		const entranceDelay = isPitch ? (mountedAsPitch ? 0.2 + index * 0.05 : 0) : mountedAsPitch ? 0 : index * 0.03
 		const orbit = slot ? orbitKeyframes(slot) : undefined
@@ -452,7 +452,7 @@ export function CloudConstellation({
 			// Two columns on phones so tile labels stay on one line; three from sm up
 			className={cn(isPitch ? 'relative h-[260px]' : 'grid grid-cols-2 gap-2 sm:grid-cols-3', className)}
 		>
-			{/* The umbrel at the center: the place the clouds come home to. It sits
+			{/* The titan at the center: the place the clouds come home to. It sits
 			    above every satellite z, so orbits pass behind it, never across it. */}
 			<AnimatePresence>
 				{isPitch && (
@@ -470,7 +470,7 @@ export function CloudConstellation({
 								transition={{duration: 7, repeat: Infinity, ease: 'easeInOut'}}
 								className='absolute -inset-8 rounded-full bg-brand/30 blur-3xl'
 							/>
-							<img src='/assets/umbrel-ios.png' alt='' className='relative size-[108px]' draggable={false} />
+							<img src='/assets/titan-ios.png' alt='' className='relative size-[108px]' draggable={false} />
 						</motion.div>
 					</div>
 				)}

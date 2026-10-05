@@ -2,8 +2,8 @@
   "scripts": {
     "build": "./build.sh",
     "build:amd64": "SKIP_ARM64=true SKIP_PI=true npm run build",
-    "build:amd64:rugix": "SKIP_AMD64_MENDER=true SKIP_MENDER_ARTIFACTS=true npm run build:amd64",
-    "build:amd64:usb-installer:prepare": "xz --keep --force --threads=0 build/umbrelos-amd64.img",
+    "build:amd64:rugix": "npm run build:amd64",
+    "build:amd64:usb-installer:prepare": "xz --keep --force --threads=0 build/titanos-amd64.img",
     "build:amd64:usb-installer:base": "./usb-installer/build.sh base",
     "build:amd64:usb-installer:inject": "./usb-installer/build.sh inject",
     "build:amd64:usb-installer": "./usb-installer/build.sh",

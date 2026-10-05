@@ -9,8 +9,8 @@ import {languageCodeToDateLocale} from '@/utils/date-time'
 
 export function sourceTypeLabel(type: SourceType, t: TFunction): string {
 	switch (type) {
-		case 'umbrel':
-			return t('photos-source.type-umbrel')
+		case 'titan':
+			return t('photos-source.type-titan')
 		case 'iphone':
 			return t('photos-source.type-iphone')
 	}

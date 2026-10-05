@@ -532,7 +532,7 @@ function ModeDropdown<T extends string>({
 				<button
 					className={cn(
 						'flex items-center gap-1.5 rounded-8 bg-white/6 px-3 py-2 text-13 font-medium -tracking-2 text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed',
-						isLoading && 'umbrel-pulse',
+						isLoading && 'titan-pulse',
 					)}
 				>
 					{selectedLabel}

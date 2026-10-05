@@ -29,7 +29,7 @@ export function SourcesOverview() {
 		// ListingSurface's 136/164 — see its height note); on desktop the box
 		// starts 12px under the actions bar, which sits 10px below the sheet's
 		// top edge (see ListingSurface).
-		<div className='flex h-[calc(100dvh-var(--sheet-top)-136px)] flex-col md:h-[calc(100dvh-var(--sheet-top)-164px)] lg:mt-(--umbrel-photos-drop) lg:h-[calc(100vh-146px-var(--umbrel-photos-drop))]'>
+		<div className='flex h-[calc(100dvh-var(--sheet-top)-136px)] flex-col md:h-[calc(100dvh-var(--sheet-top)-164px)] lg:mt-(--titan-photos-drop) lg:h-[calc(100vh-146px-var(--titan-photos-drop))]'>
 			<Card className='relative min-h-0 flex-1 rounded-24 bg-white/4 !p-0'>
 				<ScrollArea className='h-full'>
 					<div className='grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 p-4 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] lg:p-5'>
@@ -86,7 +86,7 @@ function SourceTile({source, onOpen, onManage}: {source: PhotoSource; onOpen: ()
 								}),
 							})}
 						</span>
-						{/* Reserved even when there's no backup yet (the umbrel source never has one),
+						{/* Reserved even when there's no backup yet (the titan source never has one),
 						    so the centered tiles in a row keep their icons at the same height */}
 						<span className='text-12 text-white/40'>
 							{source.lastImportAt ? timeAgo(source.lastImportAt, i18n.language) : '\u00A0'}
@@ -104,7 +104,7 @@ function SourceTile({source, onOpen, onManage}: {source: PhotoSource; onOpen: ()
 			</div>
 			<ContextMenuContent>
 				<ContextMenuItem onClick={onManage}>{t('photos-source.manage')}</ContextMenuItem>
-				{source.type !== 'umbrel' && (
+				{source.type !== 'titan' && (
 					<ContextMenuItem className={contextMenuClasses.item.rootDestructive} onClick={() => remove(source)}>
 						{t('photos-source.remove')}
 					</ContextMenuItem>

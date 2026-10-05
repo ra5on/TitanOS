@@ -21,7 +21,7 @@ import {appPageSectionLabelClass, ReadMoreMarkdownSection} from './shared'
  * Horizontal band of app facts below the gallery: version, compatibility,
  * source, attribution, and support — the page's reference row, closed off by
  * a hairline. On desktop it spans the full content width with the leftover
- * space distributed evenly between items (apps.umbrel.com style); on smaller
+ * space distributed evenly between items (apps.titan.com style); on smaller
  * screens it falls back to a 3-column, then 2-column grid.
  */
 export function InfoBand({app}: {app: RegistryApp}) {

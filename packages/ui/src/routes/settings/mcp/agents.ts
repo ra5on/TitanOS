@@ -18,7 +18,7 @@ export type McpAgentVisual = {
 export type McpAgent = McpAgentVisual & {
 	id: McpAgentId
 	name: string
-	// App Store id for agents that can run on this device as an Umbrel app —
+	// App Store id for agents that can run on this device as an Titan app —
 	// when installed, the connect view defaults to the in-container endpoint URL
 	appId?: string
 	// Substrings matched case-insensitively against the MCP clientInfo name
@@ -26,10 +26,10 @@ export type McpAgent = McpAgentVisual & {
 	snippet: (url: string, token: string) => string
 }
 
-// Where app containers reach this device: every app joins Umbrel's shared
+// Where app containers reach this device: every app joins Titan's shared
 // Docker network, whose host-side gateway is the fixed GATEWAY_IP from the
 // app-script environment. The host the dashboard is browsed over often fails
-// inside a container (umbrel.local is mDNS, which doesn't cross the container
+// inside a container (titan.local is mDNS, which doesn't cross the container
 // boundary), so agents installed as apps get this URL instead.
 export const INSTALLED_AGENT_MCP_URL = 'http://10.21.0.1/mcp'
 
@@ -52,7 +52,7 @@ export const MCP_AGENTS: McpAgent[] = [
 		appId: 'openclaw',
 		clientMatch: ['openclaw', 'clawdbot', 'moltbot'],
 		snippet: (url, token) =>
-			`openclaw mcp set umbrel '{"url":"${url}","transport":"streamable-http","headers":{"Authorization":"Bearer ${token}"}}'`,
+			`openclaw mcp set titan '{"url":"${url}","transport":"streamable-http","headers":{"Authorization":"Bearer ${token}"}}'`,
 	},
 	{
 		id: 'hermes',
@@ -62,7 +62,7 @@ export const MCP_AGENTS: McpAgent[] = [
 		appId: 'hermes-agent',
 		clientMatch: ['hermes'],
 		snippet: (url, token) =>
-			`mcp_servers:\n  umbrel:\n    url: "${url}"\n    headers:\n      Authorization: "Bearer ${token}"`,
+			`mcp_servers:\n  titan:\n    url: "${url}"\n    headers:\n      Authorization: "Bearer ${token}"`,
 	},
 	{
 		id: 'codex',
@@ -73,7 +73,7 @@ export const MCP_AGENTS: McpAgent[] = [
 		// bearer_token_env_var), so the static-header form is the copy-pasteable one
 		clientMatch: ['codex', 'openai'],
 		snippet: (url, token) =>
-			`[mcp_servers.umbrel]\nurl = "${url}"\nhttp_headers = { "Authorization" = "Bearer ${token}" }`,
+			`[mcp_servers.titan]\nurl = "${url}"\nhttp_headers = { "Authorization" = "Bearer ${token}" }`,
 	},
 	{
 		id: 'claude-code',
@@ -81,7 +81,7 @@ export const MCP_AGENTS: McpAgent[] = [
 		logo: '/assets/mcp/claude-code.webp',
 		tile: false,
 		clientMatch: ['claude'],
-		snippet: (url, token) => `claude mcp add --transport http umbrel ${url} --header "Authorization: Bearer ${token}"`,
+		snippet: (url, token) => `claude mcp add --transport http titan ${url} --header "Authorization: Bearer ${token}"`,
 	},
 	{
 		id: 'cursor',
@@ -90,7 +90,7 @@ export const MCP_AGENTS: McpAgent[] = [
 		tile: false,
 		clientMatch: ['cursor'],
 		snippet: (url, token) =>
-			JSON.stringify({mcpServers: {umbrel: {url, headers: {Authorization: `Bearer ${token}`}}}}, null, 2),
+			JSON.stringify({mcpServers: {titan: {url, headers: {Authorization: `Bearer ${token}`}}}}, null, 2),
 	},
 ]
 
@@ -128,7 +128,7 @@ export function genericSnippet(url: string, token: string) {
 // One-click install link; Cursor decodes the base64 JSON into ~/.cursor/mcp.json
 export function cursorDeeplink(url: string, token: string) {
 	const config = btoa(JSON.stringify({url, headers: {Authorization: `Bearer ${token}`}}))
-	return `cursor://anysphere.cursor-deeplink/mcp/install?name=umbrel&config=${encodeURIComponent(config)}`
+	return `cursor://anysphere.cursor-deeplink/mcp/install?name=titan&config=${encodeURIComponent(config)}`
 }
 
 // Maps the agent's self-declared MCP clientInfo to a featured or recognized

@@ -20,8 +20,8 @@ export default function DeviceInfoDialog() {
 		return null
 	}
 
-	const umbrelHostEnvironment = deviceInfoToHostEnvironment(deviceQ.data)
-	const isUmbrelPro = umbrelHostEnvironment === 'umbrel-pro'
+	const titanHostEnvironment = deviceInfoToHostEnvironment(deviceQ.data)
+	const isTitanPro = titanHostEnvironment === 'titan-pro'
 
 	const device = deviceQ.data?.device
 	const modelNumber = deviceQ.data?.model
@@ -30,15 +30,15 @@ export default function DeviceInfoDialog() {
 
 	return (
 		<Dialog {...dialogProps}>
-			<DialogScrollableContent showClose={!isUmbrelPro}>
-				<div className={isUmbrelPro ? 'space-y-6 px-5 pb-6' : 'space-y-6 px-5 py-6'}>
-					{!isUmbrelPro && (
+			<DialogScrollableContent showClose={!isTitanPro}>
+				<div className={isTitanPro ? 'space-y-6 px-5 pb-6' : 'space-y-6 px-5 py-6'}>
+					{!isTitanPro && (
 						<DialogHeader>
 							<DialogTitle>{title}</DialogTitle>
 						</DialogHeader>
 					)}
 					<DeviceInfoContent
-						umbrelHostEnvironment={umbrelHostEnvironment}
+						titanHostEnvironment={titanHostEnvironment}
 						device={device}
 						modelNumber={modelNumber}
 						serialNumber={serialNumber}

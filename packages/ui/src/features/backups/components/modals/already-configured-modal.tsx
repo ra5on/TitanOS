@@ -1,5 +1,5 @@
-// Modal presented when the chosen backup folder already contains an Umbrel backup
-// that is currently in use on this Umbrel. Provides a quick action to manage it.
+// Modal presented when the chosen backup folder already contains an Titan backup
+// that is currently in use on this Titan. Provides a quick action to manage it.
 import {useTranslation} from 'react-i18next'
 
 import {Button} from '@/components/ui/button'

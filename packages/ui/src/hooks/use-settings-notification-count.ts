@@ -79,7 +79,7 @@ export function useSettingsNotificationCount() {
 			}
 
 			const softwareUpdateToastOptions: ToastOptions = {
-				area: 'umbrelos',
+				area: 'titanos',
 				action: {
 					label: t('notifications.view'),
 					onClick: () => {

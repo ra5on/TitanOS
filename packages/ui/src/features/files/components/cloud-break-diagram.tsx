@@ -3,7 +3,7 @@ import {ChevronRight, TriangleAlert, X} from 'lucide-react'
 import {CloudIcon} from '@/features/files/assets/cloud-icon'
 import {CLOUD_PROVIDER_LOGOS} from '@/features/files/constants'
 
-// A small cloud → umbrelOS diagram with a troubled connection: a cross for
+// A small cloud → TitanOS diagram with a troubled connection: a cross for
 // confirmations where continuing severs a cloud, an amber alert where
 // the link needs the user to act. Rendered inside an AlertDialogDescription
 // (a <p>), so it uses only phrasing-content elements.
@@ -19,7 +19,7 @@ export function CloudBreakDiagram({provider, glyph = 'cross'}: {provider?: strin
 				<CloudIcon className='size-11 shrink-0' />
 			)}
 
-			{/* Troubled connection: cloud flows toward the Umbrel, interrupted */}
+			{/* Troubled connection: cloud flows toward the Titan, interrupted */}
 			<span className='relative flex h-8 w-20 items-center'>
 				<span className='h-px w-full bg-linear-to-r from-white/5 via-white/25 to-white/5' />
 				<ChevronRight className='absolute -right-1 size-3 text-white/30' />
@@ -32,9 +32,9 @@ export function CloudBreakDiagram({provider, glyph = 'cross'}: {provider?: strin
 				</span>
 			</span>
 
-			{/* Umbrel side */}
+			{/* Titan side */}
 			<img
-				src='/assets/umbrel-ios.png'
+				src='/assets/titan-ios.png'
 				alt='TitanOS'
 				className='size-11 shrink-0 rounded-xl object-contain'
 				draggable={false}

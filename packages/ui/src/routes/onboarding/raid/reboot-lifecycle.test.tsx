@@ -15,7 +15,7 @@ import RaidErrorScreen from '@/routes/raid-error'
 import {queryClient as defaultQueryClient} from '@/trpc/query-client'
 import {trpcReact} from '@/trpc/trpc'
 
-import type {AppRouter} from '../../../../../umbreld/source/modules/server/trpc/common'
+import type {AppRouter} from '../../../../../titand/source/modules/server/trpc/common'
 import HddRaidOnboarding from '../hdd-raid'
 import HddRaidSetup from '../hdd-raid/setup'
 import RaidSetup from './setup'
@@ -162,7 +162,7 @@ async function mount(path: string) {
 				}
 				// The browser still has no token when an account becomes available after reboot.
 				if (
-					op.path === 'hardware.umbrelPro.isUmbrelPro' ||
+					op.path === 'hardware.titanPro.isTitanPro' ||
 					(userExists &&
 						[
 							'systemNg.device.getIdentity',
@@ -382,7 +382,7 @@ test.each(['Umbrel Pro', 'Umbrel Home', 'Custom PC'])(
 		await mount('/raid-error')
 		expect(host.textContent).toContain('Drive')
 		expect(host.querySelector('img[alt="onboarding.raid.ssd-tray-alt"]') !== null).toBe(name === 'Umbrel Pro')
-		expect(calls('hardware.umbrelPro.isUmbrelPro')).toBe(0)
+		expect(calls('hardware.titanPro.isTitanPro')).toBe(0)
 	},
 )
 

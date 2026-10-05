@@ -257,7 +257,7 @@ export default function MachineSettings() {
 
 				{/* The spec sheet */}
 				<div className='min-w-0 flex-1'>
-					<div className='umbrel-divide-y'>
+					<div className='titan-divide-y'>
 						<SpecRow
 							label={t('machines.configure-processor')}
 							note={t('machines.configure-processor-note', {count: maxCores})}
@@ -400,7 +400,7 @@ export default function MachineSettings() {
 								<div className='flex flex-col gap-2'>
 									{/* Column labels, once for the whole list. The protocol segment
 									    has a fixed width so the first two line up exactly; the
-									    Umbrel label splits the remaining space with Machine's. */}
+									    Titan label splits the remaining space with Machine's. */}
 									<div className='flex items-center text-[10px] -tracking-1 text-white/30'>
 										<span className='w-[58px] shrink-0 pl-3.5'>{t('machines.port-forward-protocol')}</span>
 										{/* The machine column is effectively constant (addresses are
@@ -408,12 +408,12 @@ export default function MachineSettings() {
 										<span className='w-[110px] shrink-0 pl-3 sm:w-[164px]'>
 											{t('machines.port-forward-machine-port')}
 										</span>
-										<span className='min-w-0 flex-1'>{t('machines.port-forward-umbrel-port')}</span>
+										<span className='min-w-0 flex-1'>{t('machines.port-forward-titan-port')}</span>
 									</div>
 									{portForwards.map((forward) => (
 										<div key={forward.id} className='flex items-center gap-2'>
 											{/* One pill = one routing rule: protocol, the machine's own
-										    address with its port editable, then the Umbrel address
+										    address with its port editable, then the Titan address
 										    people will actually type, with its port editable */}
 											<div className='flex h-10 min-w-0 flex-1 items-center rounded-full border-hpx border-white/10 bg-white/6 transition-colors focus-within:border-white/25'>
 												<DropdownMenu>

@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
 // The Home tab: device header, an apps grid, quick-access folders, a photo-library
 // shell, and a storage breakdown, all over the user's wallpaper.
@@ -23,9 +23,9 @@ struct HomeView: View {
 					paths: model.favoritePaths,
 					brandHSL: BrandColor.hsl(model.wallpaperBrandColorHsl),
 					loaded: model.didLoad,
-					// /files resolves to the home of whichever umbrelOS account the browser uses.
-					onViewAll: { openUmbrel(path: "/files") },
-					onOpenPath: { openUmbrel(path: "/files\($0)") }
+					// /files resolves to the home of whichever titanOS account the browser uses.
+					onViewAll: { openTitan(path: "/files") },
+					onOpenPath: { openTitan(path: "/files\($0)") }
 				)
 				LibraryPreviewSection()
 				StorageSection(
@@ -33,7 +33,7 @@ struct HomeView: View {
 					brandColorHsl: model.wallpaperBrandColorHsl,
 					loaded: model.didLoad,
 					onViewLiveUsage: {
-						openUmbrel(
+						openTitan(
 							queryItems: [
 								URLQueryItem(name: "dialog", value: "live-usage"),
 								URLQueryItem(name: "live-usage-tab", value: "storage"),
@@ -57,7 +57,7 @@ struct HomeView: View {
 		.overlay(alignment: .top) { WallpaperTopGradient() }
 		// The blurred wallpaper flows to every SectionCard for its frosted fill.
 		.environment(\.frostWallpaper, model.blurredWallpaper)
-		.alert("Can’t Reach Umbrel", isPresented: $isShowingBrowserUnavailable) {
+		.alert("Can’t Reach Titan", isPresented: $isShowingBrowserUnavailable) {
 			Button("OK", role: .cancel) {}
 		} message: {
 			Text("Check your connection and try again.")
@@ -71,7 +71,7 @@ struct HomeView: View {
 		}
 	}
 
-	private func openUmbrel(path: String = "", queryItems: [URLQueryItem] = []) {
+	private func openTitan(path: String = "", queryItems: [URLQueryItem] = []) {
 		guard !isOpeningBrowser else { return }
 		isOpeningBrowser = true
 		Task {
@@ -84,7 +84,7 @@ struct HomeView: View {
 		}
 	}
 
-	// Device title (e.g. "Patrick's Umbrel Pro") and connection status.
+	// Device title (e.g. "Patrick's Titan Pro") and connection status.
 	private var titleSection: some View {
 		VStack(alignment: .leading, spacing: 10) {
 			Group {
@@ -171,16 +171,16 @@ struct HomeView: View {
 		case .unavailable:
 			NoticeCard(
 				icon: "wifi.exclamationmark",
-				title: "Can’t reach your Umbrel",
+				title: "Can’t reach your Titan",
 				message: model.hasTailscaleBrowserAddress
-					? "You’re viewing saved information. Make sure your Umbrel is turned on, then connect this iPhone to the same network or turn on Tailscale."
-					: "You’re viewing saved information. Make sure your Umbrel is turned on and this iPhone is connected to the same network."
+					? "You’re viewing saved information. Make sure your Titan is turned on, then connect this iPhone to the same network or turn on Tailscale."
+					: "You’re viewing saved information. Make sure your Titan is turned on and this iPhone is connected to the same network."
 			)
 		case .localNetworkDenied:
 			NoticeCard(
 				icon: "network.slash",
 				title: "Local Network Access Off",
-				message: "Allow access in Settings to connect to your Umbrel.",
+				message: "Allow access in Settings to connect to your Titan.",
 				action: openSettings
 			)
 		}
@@ -205,7 +205,7 @@ struct HeaderAccessPill: View {
 			}
 			.buttonStyle(.plain)
 			.disabled(isOpeningBrowser)
-			.accessibilityLabel("Open Umbrel in a Browser")
+			.accessibilityLabel("Open Titan in a Browser")
 
 			Button { isShowingBrowserOptions = true } label: {
 				Image(systemName: "ellipsis")
@@ -222,7 +222,7 @@ struct HeaderAccessPill: View {
 		.foregroundStyle(.white.opacity(0.85))
 		.frame(height: 42)
 		.glassControl(in: Capsule())
-		.alert("Can’t Reach Umbrel", isPresented: $isShowingBrowserUnavailable) {
+		.alert("Can’t Reach Titan", isPresented: $isShowingBrowserUnavailable) {
 			Button("OK", role: .cancel) {}
 		} message: {
 			Text("Check your connection and try again.")
@@ -253,7 +253,7 @@ private struct BrowserOptionsSheet: View {
 			ScrollView(showsIndicators: false) {
 				VStack(spacing: 0) {
 					Text(
-						"Choose how this app opens your Umbrel in a web browser. This doesn’t change how the app itself connects."
+						"Choose how this app opens your Titan in a web browser. This doesn’t change how the app itself connects."
 					)
 					.font(.footnote)
 					.foregroundStyle(Theme.gray)
@@ -274,7 +274,7 @@ private struct BrowserOptionsSheet: View {
 							connectionOption(
 								icon: "wifi",
 								"Local Network Only",
-								detail: "Open using your Umbrel’s local network address",
+								detail: "Open using your Titan’s local network address",
 								connection: .localNetwork
 							)
 						}
@@ -283,7 +283,7 @@ private struct BrowserOptionsSheet: View {
 							connectionOption(
 								icon: "network",
 								"Tailscale Only",
-								detail: "Open using your Umbrel’s Tailscale address",
+								detail: "Open using your Titan’s Tailscale address",
 								connection: .tailscale
 							)
 						} else {
@@ -380,7 +380,7 @@ private struct BrowserOptionsSheet: View {
 			VStack(alignment: .leading, spacing: 4) {
 				Text("Tailscale Only")
 					.font(.subheadline.weight(.semibold))
-				Text("Open using your Umbrel’s Tailscale address")
+				Text("Open using your Titan’s Tailscale address")
 					.font(.footnote)
 			}
 			.frame(maxWidth: .infinity, alignment: .leading)
@@ -436,7 +436,7 @@ private struct BrowserAdvancedOptions: View {
 			Button("Use HTTPS Locally") { model.setDashboardUsesHTTPS(true) }
 		} message: {
 			Text(
-				"Your browser may show a privacy warning. If it does, open the details and choose the option to continue to your Umbrel. Only do this for your Umbrel and its installed apps."
+				"Your browser may show a privacy warning. If it does, open the details and choose the option to continue to your Titan. Only do this for your Titan and its installed apps."
 			)
 		}
 	}
@@ -495,8 +495,8 @@ private struct AppsSection: View {
 					EmptyStateCard(
 						icon: "circle.grid.cross.up.filled",
 						title: "Install your first app",
-						subtitle: "Open the Umbrel App Store to install apps",
-						buttonTitle: "Open Umbrel App Store",
+						subtitle: "Open the Titan App Store to install apps",
+						buttonTitle: "Open Titan App Store",
 						action: {
 							Task {
 								if let url = await model.dashboardURLForOpening(path: "/app-store") { openURL(url) }
@@ -539,7 +539,7 @@ private struct AppsSection: View {
 	}
 
 	@ViewBuilder
-	private func cell(index: Int, visible: [Umbreld.AppSummary], hasOverflow: Bool, overflow: [Umbreld.AppSummary]) -> some View {
+	private func cell(index: Int, visible: [Titand.AppSummary], hasOverflow: Bool, overflow: [Titand.AppSummary]) -> some View {
 		if hasOverflow && index == 5 {
 			Button(action: model.openApps) {
 				OverflowTile(count: overflow.count, sample: Array(overflow.prefix(3)))
@@ -557,7 +557,7 @@ private struct AppsSection: View {
 // An app icon + name label. Used both inside the Home apps card (gray-3 label) and bare
 // on the Apps tab, where white labels remain legible over the wallpaper.
 struct AppTile: View {
-	let app: Umbreld.AppSummary
+	let app: Titand.AppSummary
 	var labelColor: Color = Theme.gray3
 	var preparing = false
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -606,7 +606,7 @@ struct AppTile: View {
 	}
 }
 
-// Lifecycle work uses the same compact bar as umbrelOS: reported progress for installs
+// Lifecycle work uses the same compact bar as titanOS: reported progress for installs
 // and updates, and an indeterminate sweep for transitions without meaningful progress.
 private struct AppStateProgressBar: View {
 	let progress: Double?
@@ -643,9 +643,9 @@ private struct AppStateProgressBar: View {
 }
 
 // A tappable app tile: opens the app's web UI in the browser. App lifecycle management
-// stays in umbrelOS, so unavailable apps hand off there instead of duplicating it here.
+// stays in titanOS, so unavailable apps hand off there instead of duplicating it here.
 struct AppTileButton: View {
-	let app: Umbreld.AppSummary
+	let app: Titand.AppSummary
 	var labelColor: Color = Theme.gray3
 
 	@Environment(MainModel.self) private var model
@@ -654,10 +654,10 @@ struct AppTileButton: View {
 	@State private var activeSheet: AppLaunchSheet?
 	@State private var pendingLaunch: PendingAppLaunch?
 	@State private var launchAlert: AppLaunchAlert?
-	@State private var liveApp: Umbreld.AppSummary?
+	@State private var liveApp: Titand.AppSummary?
 	@State private var isPreparingLaunch = false
 
-	private var appForLaunch: Umbreld.AppSummary { liveApp ?? app }
+	private var appForLaunch: Titand.AppSummary { liveApp ?? app }
 
 	var body: some View {
 		let launchDisposition = AppLaunchDisposition(state: app.state)
@@ -683,10 +683,10 @@ struct AppTileButton: View {
 		) { alert in
 			switch alert {
 			case .blocked where model.canManageApps:
-				Button("Open Umbrel") { openUmbrel() }
+				Button("Open Titan") { openTitan() }
 				Button("Cancel", role: .cancel) {}
 			case .torOnly where model.canManageApps:
-				Button("Open Umbrel") { openUmbrel(path: "/settings/advanced/tor") }
+				Button("Open Titan") { openTitan(path: "/settings/advanced/tor") }
 				Button("Cancel", role: .cancel) {}
 			case .blocked, .torOnly, .unavailable:
 				Button("OK", role: .cancel) {}
@@ -739,7 +739,7 @@ struct AppTileButton: View {
 		}
 	}
 
-	private func openUmbrel(path: String = "") {
+	private func openTitan(path: String = "") {
 		Task {
 			guard let url = await model.dashboardURLForOpening(path: path) else {
 				launchAlert = .unavailable
@@ -785,8 +785,8 @@ struct AppTileButton: View {
 }
 
 private enum AppLaunchAlert {
-	case blocked(app: Umbreld.AppSummary, paused: Bool)
-	case torOnly(app: Umbreld.AppSummary)
+	case blocked(app: Titand.AppSummary, paused: Bool)
+	case torOnly(app: Titand.AppSummary)
 	case unavailable
 
 	var title: String {
@@ -796,7 +796,7 @@ private enum AppLaunchAlert {
 		case let .torOnly(app):
 			return "\(app.name ?? app.id) Uses Tor"
 		case .unavailable:
-			return "Can’t Reach Umbrel"
+			return "Can’t Reach Titan"
 		}
 	}
 
@@ -805,16 +805,16 @@ private enum AppLaunchAlert {
 		case let .blocked(_, paused):
 			if canManageApps {
 				return paused
-					? "Open Umbrel to start this app."
-					: "Open Umbrel to restart or troubleshoot this app."
+					? "Open Titan to start this app."
+					: "Open Titan to restart or troubleshoot this app."
 			}
 			return paused
-				? "Ask the Umbrel owner to start this app."
-				: "Ask the Umbrel owner to restart this app."
+				? "Ask the Titan owner to start this app."
+				: "Ask the Titan owner to restart this app."
 		case .torOnly:
 			return canManageApps
-				? "This app is only available over Tor. Open Umbrel to view your Umbrel’s Tor address."
-				: "This app is only available over Tor. Ask the owner for your Umbrel’s Tor address, then open Umbrel in Tor Browser."
+				? "This app is only available over Tor. Open Titan to view your Titan’s Tor address."
+				: "This app is only available over Tor. Ask the owner for your Titan’s Tor address, then open Titan in Tor Browser."
 		case .unavailable:
 			return "Check your connection and try again."
 		}
@@ -856,7 +856,7 @@ private enum PendingAppLaunch {
 }
 
 private struct AppHTTPSWarningSheet: View {
-	let app: Umbreld.AppSummary
+	let app: Titand.AppSummary
 	let onOpen: (Bool) -> Void
 
 	@Environment(\.dismiss) private var dismiss
@@ -881,7 +881,7 @@ private struct AppHTTPSWarningSheet: View {
 				.fixedSize(horizontal: false, vertical: true)
 				.padding(.top, 8)
 
-			Text("If it does, open the details and choose the option to continue to your Umbrel.")
+			Text("If it does, open the details and choose the option to continue to your Titan.")
 				.font(.footnote)
 				.foregroundStyle(Theme.gray.opacity(0.8))
 				.multilineTextAlignment(.center)
@@ -943,7 +943,7 @@ private struct HTTPSWarningCheckboxStyle: ToggleStyle {
 
 private struct OverflowTile: View {
 	let count: Int
-	let sample: [Umbreld.AppSummary]
+	let sample: [Titand.AppSummary]
 
 	// The fanned mini-icons in the "+N apps" stack: the front icon is largest and
 	// tilted left, shrinking / shifting right / tilting right toward the back. Slots are
@@ -986,7 +986,7 @@ private struct OverflowTile: View {
 
 // MARK: - Files
 
-// Mirrors the umbrelOS files-favorites widget: the user's first 4 favorite folders, laid
+// Mirrors the titanOS files-favorites widget: the user's first 4 favorite folders, laid
 // out 2×2 when there are four and collapsing to a single row (1×3 / 1×2 / 1×1) with fewer.
 private struct FilesSection: View {
 	let paths: [String]
@@ -997,7 +997,7 @@ private struct FilesSection: View {
 
 	var body: some View {
 		// Reserve the section with a skeleton while loading; collapse it only once the
-		// load confirms there are no favorites (rare — umbrelOS defaults to four).
+		// load confirms there are no favorites (rare — titanOS defaults to four).
 		if !loaded || !paths.isEmpty {
 			VStack(alignment: .leading, spacing: 12) {
 				SectionHeader(title: "Files", action: onViewAll) { TrailingLabel(text: "View all") }
@@ -1133,7 +1133,7 @@ private struct LibraryPreviewSection: View {
 	}
 
 	private var statusText: String {
-		if model.photoBackupIsConfiguredElsewhere { return "On another Umbrel" }
+		if model.photoBackupIsConfiguredElsewhere { return "On another Titan" }
 		return model.photoBackupStatus.text
 	}
 
@@ -1146,7 +1146,7 @@ private struct LibraryPreviewSection: View {
 // MARK: - Storage
 
 private struct StorageSection: View {
-	let disk: Umbreld.DiskUsage?
+	let disk: Titand.DiskUsage?
 	let brandColorHsl: String?
 	let loaded: Bool
 	let onViewLiveUsage: () -> Void
@@ -1238,7 +1238,7 @@ private struct StorageSection: View {
 
 // Concentric donut of categorized usage over a faint free-space track.
 private struct DonutChart: View {
-	let disk: Umbreld.DiskUsage?
+	let disk: Titand.DiskUsage?
 	let colors: [Color] // apps, files, machines, system
 
 	var body: some View {
@@ -1278,7 +1278,7 @@ private struct DonutChart: View {
 	}
 }
 
-// Matches umbrelOS's `formatStorageSize`: base-1000 SI units (pretty-bytes), 1 decimal
+// Matches titanOS's `formatStorageSize`: base-1000 SI units (pretty-bytes), 1 decimal
 // place — but rounded to a whole number once the value is 3+ digits (>=100) to keep it
 // short — with the space stripped. e.g. "25GB", "2TB", "12.4GB", "256GB".
 func formatStorageSize(_ bytes: Double) -> String {

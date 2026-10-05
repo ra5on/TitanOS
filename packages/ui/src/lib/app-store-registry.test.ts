@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest'
 
-import {appPathForIdentity, registryAppPath, UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {appPathForIdentity, registryAppPath, TITAN_APP_STORE_ID} from '@/constants/app-store'
 import type {RegistryApp} from '@/trpc/trpc'
 
 import {indexRegistryApps, resolveDependencyRegistryApp} from './app-store-registry'
@@ -8,11 +8,11 @@ import {indexRegistryApps, resolveDependencyRegistryApp} from './app-store-regis
 const registryApp = (registryId: string, id: string): RegistryApp =>
 	({appStoreId: registryId, id, name: `${registryId}:${id}`}) as RegistryApp
 
-const officialDependency = registryApp(UMBREL_APP_STORE_ID, 'bitcoin')
+const officialDependency = registryApp(TITAN_APP_STORE_ID, 'bitcoin')
 const communityDependency = registryApp('community-store', 'community-store-node')
 const otherCommunityDependency = registryApp('other-community-store', 'other-community-node')
 const repoAppsKeyed = {
-	[UMBREL_APP_STORE_ID]: {bitcoin: officialDependency},
+	[TITAN_APP_STORE_ID]: {bitcoin: officialDependency},
 	'community-store': {'community-store-node': communityDependency},
 	'other-community-store': {'other-community-node': otherCommunityDependency},
 }
@@ -21,7 +21,7 @@ describe('indexRegistryApps', () => {
 	test('indexes globally unique apps', () => {
 		expect(
 			indexRegistryApps([
-				{meta: {id: UMBREL_APP_STORE_ID}, apps: [officialDependency]},
+				{meta: {id: TITAN_APP_STORE_ID}, apps: [officialDependency]},
 				{meta: {id: 'community-store'}, apps: [communityDependency]},
 			]),
 		).toEqual({
@@ -34,7 +34,7 @@ describe('indexRegistryApps', () => {
 		const duplicateCommunityApp = registryApp('community-store', 'bitcoin')
 		expect(
 			indexRegistryApps([
-				{meta: {id: UMBREL_APP_STORE_ID}, apps: [officialDependency]},
+				{meta: {id: TITAN_APP_STORE_ID}, apps: [officialDependency]},
 				{meta: {id: 'community-store'}, apps: [duplicateCommunityApp]},
 			]),
 		).toEqual({appsKeyed: {}, ambiguousAppIds: new Set(['bitcoin'])})
@@ -106,6 +106,6 @@ describe('resolveDependencyRegistryApp', () => {
 describe('registry-qualified app paths', () => {
 	test('retains community identity while official apps use the default route', () => {
 		expect(registryAppPath(communityDependency)).toBe('/community-app-store/community-store/community-store-node')
-		expect(appPathForIdentity({registryId: UMBREL_APP_STORE_ID, appId: 'bitcoin'})).toBe('/app-store/bitcoin')
+		expect(appPathForIdentity({registryId: TITAN_APP_STORE_ID, appId: 'bitcoin'})).toBe('/app-store/bitcoin')
 	})
 })

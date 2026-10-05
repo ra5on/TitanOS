@@ -58,7 +58,7 @@ export function AppLaunchDialog() {
 					if (showCredentials) event.preventDefault()
 				}}
 			>
-				<div className='umbrel-dialog-fade-scroller flex flex-col overflow-y-auto p-6 sm:p-7'>
+				<div className='titan-dialog-fade-scroller flex flex-col overflow-y-auto p-6 sm:p-7'>
 					<DialogHeader>
 						<DialogTitle className='text-19'>{t('default-credentials.open', {app: app.name})}</DialogTitle>
 						<DialogDescription className='text-13 leading-relaxed text-white/60'>

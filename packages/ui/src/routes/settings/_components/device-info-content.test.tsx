@@ -78,7 +78,7 @@ describe('Storage device info row', () => {
 					<Routes>
 						<Route
 							path='/settings/device-info'
-							element={<DeviceInfoContent umbrelHostEnvironment='raspberry-pi' storage='1 TB SSD' />}
+							element={<DeviceInfoContent titanHostEnvironment='raspberry-pi' storage='1 TB SSD' />}
 						/>
 						<Route path='/settings/storage' element={<div>Storage Manager destination</div>} />
 					</Routes>

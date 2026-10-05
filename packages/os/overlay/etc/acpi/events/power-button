@@ -1,2 +1,2 @@
 event=button/power.*PBTN
-action=systemd-cat -t umbrel-power-button /etc/acpi/power-button.sh &
+action=systemd-cat -t titan-power-button /etc/acpi/power-button.sh &

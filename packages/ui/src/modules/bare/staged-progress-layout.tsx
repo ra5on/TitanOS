@@ -1,14 +1,14 @@
 import {AnimatePresence, motion} from 'motion/react'
 
-import UmbrelLogo from '@/components/umbrel-logo'
+import TitanLogo from '@/components/titan-logo'
 import {cn} from '@/lib/utils'
 
-// Full-screen staged-progress layout: a breathing, glowing Umbrel logo above a
+// Full-screen staged-progress layout: a breathing, glowing Titan logo above a
 // crossfading stage label, a thin progress bar, and a quiet footnote.
 //
 // Preserved from the 2026-08 onboarding design exploration ("Breeze" concept's
 // setup screen) — intended as a future replacement for the covers that show
-// long-running system operations (umbrelOS updates, migration, backup restore,
+// long-running system operations (TitanOS updates, migration, backup restore,
 // RAID setup) currently rendered via ProgressLayout. Not wired up anywhere yet.
 //
 // Purely presentational: the caller owns translation and progress state.
@@ -36,7 +36,7 @@ export function StagedProgressLayout({
 				transition={{duration: 2.6, repeat: Infinity, ease: 'easeInOut'}}
 				style={{filter: 'drop-shadow(0 0 24px rgba(255,255,255,0.35))'}}
 			>
-				<UmbrelLogo className='w-[88px]' />
+				<TitanLogo className='w-[88px]' />
 			</motion.div>
 
 			<div className='mt-10 h-6'>
@@ -56,7 +56,7 @@ export function StagedProgressLayout({
 			<div
 				className={cn(
 					'mt-5 h-1 w-[300px] overflow-hidden rounded-full bg-white/10',
-					progress === undefined && 'umbrel-bouncing-gradient',
+					progress === undefined && 'titan-bouncing-gradient',
 				)}
 			>
 				{progress !== undefined && (

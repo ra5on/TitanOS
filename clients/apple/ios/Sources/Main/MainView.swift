@@ -1,9 +1,9 @@
 import Network
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // One connected device: a four-tab layout (Home, Apps, Library, Profile) over the user's
-// umbrelOS wallpaper. Uses the native tab bar so it gets the system's Liquid Glass
+// titanOS wallpaper. Uses the native tab bar so it gets the system's Liquid Glass
 // treatment.
 //
 // Profile is a settings sheet that covers the whole screen, dock included. Its tab-bar
@@ -108,7 +108,7 @@ struct MainView: View {
 			TailscaleSetupSheet()
 				.environment(model)
 		}
-		// umbrelOS accents (primary buttons, storage donut, Profile links/toggles) follow the
+		// titanOS accents (primary buttons, storage donut, Profile links/toggles) follow the
 		// wallpaper's brand color. Set once here so every tab and the sheet inherit it.
 		.environment(\.brandColor, BrandColor.color(model.wallpaperBrandColorHsl))
 		.onAppear {
@@ -118,7 +118,7 @@ struct MainView: View {
 			model.openApps = { selection = .apps }
 			model.reconcilePhotoLibraryAccess()
 		}
-		// General Umbrel data is refreshed only while the app is visible. This task is
+		// General Titan data is refreshed only while the app is visible. This task is
 		// cancelled by SwiftUI as soon as the app enters the background, then performs
 		// one full reconciliation when it becomes active again.
 		.task(id: scenePhase) {
@@ -160,7 +160,7 @@ struct MainView: View {
 		}
 		// Apple's path monitor is an event trigger, not a reachability oracle. Its first
 		// value describes the current path; subsequent values mean Wi-Fi, cellular, or a
-		// VPN route changed. Re-resolve the Umbrel only for those actual transitions.
+		// VPN route changed. Re-resolve the Titan only for those actual transitions.
 		.task(id: scenePhase) {
 			guard scenePhase == .active else { return }
 			var receivedInitialPath = false
@@ -212,7 +212,7 @@ struct MainView: View {
 		HStack {
 			// Keep the glass compositor alive across tab changes, like the browser pill.
 			// Non-Home tabs hide the control without removing it from the hierarchy.
-			CircleIconButton(system: "chevron.left", accessibilityLabel: "All Umbrels") { model.onBack() }
+			CircleIconButton(system: "chevron.left", accessibilityLabel: "All Titans") { model.onBack() }
 				.opacity(selection == .home ? 1 : 0)
 				.allowsHitTesting(selection == .home)
 				.accessibilityHidden(selection != .home)
@@ -253,10 +253,10 @@ struct MainView: View {
 	@Environment(\.scenePhase) private var scenePhase
 }
 
-// One explanation and set of actions reused anywhere Tailscale matters. Umbrel can
+// One explanation and set of actions reused anywhere Tailscale matters. Titan can
 // detect whether its own Tailscale app has supplied an address, but iOS does not expose
 // another VPN app's signed-in state. The iPhone step therefore links to Tailscale and
-// Photo Backup verifies the fixed Umbrel endpoint before any upload can begin.
+// Photo Backup verifies the fixed Titan endpoint before any upload can begin.
 struct TailscaleSetupSheet: View {
 	@Environment(\.dismiss) private var dismiss
 
@@ -288,8 +288,8 @@ struct TailscaleSetupPage: View {
 private struct TailscaleSetupContent: View {
 	@Environment(MainModel.self) private var model
 	@Environment(\.openURL) private var openURL
-	@State private var isOpeningUmbrel = false
-	@State private var isShowingUmbrelUnavailable = false
+	@State private var isOpeningTitan = false
+	@State private var isShowingTitanUnavailable = false
 
 	var body: some View {
 		ScrollView(showsIndicators: false) {
@@ -303,7 +303,7 @@ private struct TailscaleSetupContent: View {
 					Text("Connect from anywhere")
 						.font(.title2.bold())
 						.foregroundStyle(.white)
-					Text("Tailscale privately connects this iPhone to your Umbrel. It also powers Photo Backup.")
+					Text("Tailscale privately connects this iPhone to your Titan. It also powers Photo Backup.")
 						.font(.subheadline)
 						.foregroundStyle(Theme.gray)
 						.multilineTextAlignment(.center)
@@ -314,11 +314,11 @@ private struct TailscaleSetupContent: View {
 				VStack(spacing: 12) {
 					TailscaleSetupStep(
 						number: 1,
-						title: umbrelSetupTitle,
-						message: umbrelSetupComplete
-							? "Tailscale is set up on this Umbrel."
-							: umbrelSetupMessage,
-						isComplete: umbrelSetupComplete
+						title: titanSetupTitle,
+						message: titanSetupComplete
+							? "Tailscale is set up on this Titan."
+							: titanSetupMessage,
+						isComplete: titanSetupComplete
 					)
 
 					TailscaleSetupStep(
@@ -331,9 +331,9 @@ private struct TailscaleSetupContent: View {
 						message: isCheckingIPhone
 							? "Checking the Tailscale connection…"
 							: (model.photoBackupTailscaleAddressChanged
-								? "Tailscale was reset on your Umbrel. Reconnect Photo Backup to use its new address."
+								? "Tailscale was reset on your Titan. Reconnect Photo Backup to use its new address."
 								: (model.tailscaleAvailableOnThisPhone == true
-									? "This iPhone can reach your Umbrel through Tailscale."
+									? "This iPhone can reach your Titan through Tailscale."
 									: iphoneSetupMessage)),
 						isComplete: model.tailscaleAvailableOnThisPhone == true
 							&& !model.photoBackupTailscaleAddressChanged,
@@ -349,17 +349,17 @@ private struct TailscaleSetupContent: View {
 		}
 		.scrollEdgeEffectStyle(.soft, for: .top)
 		.background(Color(hex: 0x1C1C1E).ignoresSafeArea())
-		.alert("Can’t Open Umbrel", isPresented: $isShowingUmbrelUnavailable) {
+		.alert("Can’t Open Titan", isPresented: $isShowingTitanUnavailable) {
 			Button("OK", role: .cancel) {}
 		} message: {
-			Text("Connect to your Umbrel locally, then try again.")
+			Text("Connect to your Titan locally, then try again.")
 		}
 	}
 
-	// A currently reported address is evidence that Umbrel-side setup has happened.
+	// A currently reported address is evidence that Titan-side setup has happened.
 	// A successful live probe is stronger evidence and also covers a pinned backup host.
-	private var umbrelSetupComplete: Bool {
-		model.umbrelHasTailscaleAddress || model.tailscaleAvailableOnThisPhone == true
+	private var titanSetupComplete: Bool {
+		model.titanHasTailscaleAddress || model.tailscaleAvailableOnThisPhone == true
 	}
 
 	// Once a result exists, background verification must not replace useful status
@@ -369,27 +369,27 @@ private struct TailscaleSetupContent: View {
 			&& model.tailscaleAvailableOnThisPhone == nil
 	}
 
-	private var umbrelSetupTitle: String {
-		if umbrelSetupComplete { return "Your Umbrel" }
+	private var titanSetupTitle: String {
+		if titanSetupComplete { return "Your Titan" }
 		if !model.canManageApps { return "Ask the owner" }
-		return "Set up your Umbrel"
+		return "Set up your Titan"
 	}
 
-	private var umbrelSetupMessage: String {
+	private var titanSetupMessage: String {
 		if !model.canManageApps {
-			return "The owner needs to set up Tailscale on this Umbrel and share access with you."
+			return "The owner needs to set up Tailscale on this Titan and share access with you."
 		}
 		if model.tailscaleApp != nil {
-			return "Open Tailscale on your Umbrel and sign in to finish setup."
+			return "Open Tailscale on your Titan and sign in to finish setup."
 		}
-		return "Install Tailscale from the Umbrel App Store, then open it and sign in."
+		return "Install Tailscale from the Titan App Store, then open it and sign in."
 	}
 
 	private var iphoneSetupMessage: String {
 		if !model.canManageApps {
 			return "Make sure you’ve accepted the owner’s Tailscale invitation, then connect Tailscale on this iPhone."
 		}
-		return "Make sure Tailscale is connected on this iPhone and your Umbrel. If you don’t have it on this iPhone, install it from the App Store."
+		return "Make sure Tailscale is connected on this iPhone and your Titan. If you don’t have it on this iPhone, install it from the App Store."
 	}
 
 	@ViewBuilder
@@ -402,15 +402,15 @@ private struct TailscaleSetupContent: View {
 				isLoading: model.photoBackupSetupInProgress,
 				action: model.reconnectPhotoBackupToTailscale
 			)
-		} else if !umbrelSetupComplete, model.canManageApps {
+		} else if !titanSetupComplete, model.canManageApps {
 			PrimaryActionButton(
-				title: isOpeningUmbrel
+				title: isOpeningTitan
 					? "Opening…"
 					: (model.tailscaleApp == nil
-						? "Install Tailscale on Umbrel"
-						: "Open Tailscale on Umbrel"),
-				isLoading: isOpeningUmbrel,
-				action: openTailscaleOnUmbrel
+						? "Install Tailscale on Titan"
+						: "Open Tailscale on Titan"),
+				isLoading: isOpeningTitan,
+				action: openTailscaleOnTitan
 			)
 		} else if !isCheckingIPhone
 			&& model.tailscaleAvailableOnThisPhone == false
@@ -422,11 +422,11 @@ private struct TailscaleSetupContent: View {
 		}
 	}
 
-	private func openTailscaleOnUmbrel() {
-		guard !isOpeningUmbrel else { return }
-		isOpeningUmbrel = true
+	private func openTailscaleOnTitan() {
+		guard !isOpeningTitan else { return }
+		isOpeningTitan = true
 		Task {
-			defer { isOpeningUmbrel = false }
+			defer { isOpeningTitan = false }
 			let url: URL?
 			if let app = model.tailscaleApp {
 				url = await model.appURLForOpening(app)
@@ -436,7 +436,7 @@ private struct TailscaleSetupContent: View {
 			if let url {
 				openURL(url)
 			} else {
-				isShowingUmbrelUnavailable = true
+				isShowingTitanUnavailable = true
 			}
 		}
 	}

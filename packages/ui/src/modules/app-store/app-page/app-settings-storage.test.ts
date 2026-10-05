@@ -65,7 +65,7 @@ describe('app storage destination folders', () => {
 		expect(isDataRootParentSelectable({path: '/External'})).toBe(false)
 		expect(isDataRootParentSelectable({path: '/Network/nas'})).toBe(false)
 		expect(isDataRootParentSelectable({path: '/Network/nas/media'})).toBe(false)
-		expect(isDataRootParentSelectable({path: '/Network/nas/media/Umbrel Apps'})).toBe(false)
+		expect(isDataRootParentSelectable({path: '/Network/nas/media/Titan Apps'})).toBe(false)
 		expect(isDataRootParentSelectable({path: '/Home/Apps'})).toBe(false)
 	})
 })

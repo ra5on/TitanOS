@@ -3,7 +3,7 @@
 
 using namespace metal;
 
-// Matches umbrelOS's account lens: a clear convex edge with the refractive
+// Matches titanOS's account lens: a clear convex edge with the refractive
 // index of glass. The center stays undistorted while the bevel bends the
 // underlying avatar strip; a very small RGB separation catches the rim.
 [[ stitchable ]] half4 accountLens(

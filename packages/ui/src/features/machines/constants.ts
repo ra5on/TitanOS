@@ -76,7 +76,7 @@ export const coreOptions = (threads: number | undefined) =>
 // (1-10000 GB / 1-64 cores / 1-1024 GB) and no defaults, so any non-UI caller
 // can create a Windows 11 machine with 1 core, 1 GB of RAM and a 1 GB disk that
 // cannot possibly install. These profiles belong on the catalog entries in
-// umbreld (next to the existing fixedMemoryMb / estimatedInstalledSizeMb) so the
+// titand (next to the existing fixedMemoryMb / estimatedInstalledSizeMb) so the
 // backend can (a) default the fields when omitted, (b) reject anything below the
 // per-OS minimum.
 // ─────────────────────────────────────────────────────────────────────────────

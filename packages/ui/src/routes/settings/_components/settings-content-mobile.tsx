@@ -66,7 +66,7 @@ export function SettingsContentMobile({isMember = false}: {isMember?: boolean}) 
 		? t('storage-manager.health.title')
 		: t('storage-manager.health.title-drive')
 	const ownerFirstName = userQ.data?.name ? firstNameFromFullName(userQ.data.name) : ''
-	const ownerHeading = ownerFirstName ? `${ownerFirstName}’s ${t('umbrel')}` : t('umbrel')
+	const ownerHeading = ownerFirstName ? t('files-sidebar.owners-titan', {name: ownerFirstName}) : t('titan')
 	const settingsCatalog = useMemo(
 		() =>
 			createSettingsCatalog(t, {
@@ -174,8 +174,7 @@ export function SettingsContentMobile({isMember = false}: {isMember?: boolean}) 
 					aria-label={ownerHeading}
 					className='flex w-full min-w-0 items-center justify-center gap-1 overflow-hidden py-2 text-24 leading-none font-semibold -tracking-4'
 				>
-					{ownerFirstName && <span className='min-w-0 truncate'>{ownerFirstName}’s</span>}
-					<span className='shrink-0 text-white/45'>{t('umbrel')}</span>
+					<span className='min-w-0 truncate'>{ownerHeading}</span>
 				</h2>
 			</div>
 

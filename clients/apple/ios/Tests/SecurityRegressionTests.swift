@@ -1,7 +1,7 @@
 import CryptoKit
 import UIKit
 import XCTest
-@testable import Umbrel
+@testable import Titan
 
 final class SecurityRegressionTests: XCTestCase {
 	@MainActor

@@ -79,7 +79,7 @@ export function HttpsCertificateSettingsPanel({onBack}: {onBack: () => void}) {
 		if (!status?.caCertificate) return
 		// A real navigation instead of a blob download so iOS Safari can offer
 		// its configuration profile install flow for the certificate.
-		window.location.href = await authorizedHttpUrl('/lan-ingress/umbrel-local-ca.crt')
+		window.location.href = await authorizedHttpUrl('/lan-ingress/titan-local-ca.crt')
 	}
 
 	const resetCertificate = async () => {
@@ -227,8 +227,8 @@ function HttpsCertificateDetails({
 			)}
 			{certificateAddresses.length > 0 && (
 				<div className='space-y-2 px-3 py-3 text-15 font-medium -tracking-3'>
-					<div>{t('https-access-certificate-umbrel-addresses')}</div>
-					<div className='umbrel-stable-gutter max-h-28 overflow-auto text-13 leading-snug font-normal break-words text-white/60'>
+					<div>{t('https-access-certificate-titan-addresses')}</div>
+					<div className='titan-stable-gutter max-h-28 overflow-auto text-13 leading-snug font-normal break-words text-white/60'>
 						{certificateAddresses.join(', ')}
 					</div>
 				</div>
@@ -248,7 +248,7 @@ function CertificateCopyField({value}: {value: string}) {
 		<div className='flex max-w-full items-center rounded-4 border border-dashed border-white/5 bg-white/4 text-14 leading-none text-white/40'>
 			<FadeScroller
 				direction='x'
-				className='umbrel-hide-scrollbar min-w-0 flex-1 overflow-x-auto py-1 pl-2.5 font-mono text-11 whitespace-nowrap'
+				className='titan-hide-scrollbar min-w-0 flex-1 overflow-x-auto py-1 pl-2.5 font-mono text-11 whitespace-nowrap'
 			>
 				{value}
 			</FadeScroller>

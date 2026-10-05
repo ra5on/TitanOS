@@ -17,7 +17,7 @@ import {t} from '@/utils/i18n'
 import {MachineViewerActionsProvider} from './components/machine-viewer-actions'
 
 // Console aspect ratios (width / height). Android machines boot a phone-shaped
-// 720x1560 scanout (set in umbreld's domain XML); everything else is 16:10.
+// 720x1560 scanout (set in titand's domain XML); everything else is 16:10.
 const LANDSCAPE_ASPECT_RATIO = 1.6
 const PHONE_ASPECT_RATIO = 720 / 1560
 

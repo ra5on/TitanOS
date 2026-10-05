@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>BackgroundUploadURLBase</key>
-	<string>http://umbrel.local</string>
+	<string>http://titan.local</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Umbrel Photo Backup</string>
+	<string>Titan Photo Backup</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -38,7 +38,7 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>UmbrelPhotoBackupKeychainAccessGroup</key>
+	<key>TitanPhotoBackupKeychainAccessGroup</key>
 	<string>$(APP_GROUP_IDENTIFIER)</string>
 </dict>
 </plist>

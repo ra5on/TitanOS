@@ -18,11 +18,11 @@ export type AppT = {
 	systemAppTo?: string
 }
 
-// `UMBREL_` prefix to make extra clear the distinction between system app IDs and user installable ids.
-// In `umbreld`, system app widgets are prefixed with `umbrel:`.
+// `TITAN_` prefix to make extra clear the distinction between system app IDs and user installable ids.
+// In `titand`, system app widgets are prefixed with `titan:`.
 export const systemApps = [
 	{
-		id: 'UMBREL_system',
+		id: 'TITAN_system',
 		nameKey: 'system',
 		get name() {
 			return t('system')
@@ -32,7 +32,7 @@ export const systemApps = [
 		systemAppTo: '/',
 	},
 	{
-		id: 'UMBREL_app-store',
+		id: 'TITAN_app-store',
 		nameKey: 'app-store.title',
 		get name() {
 			return t('app-store.title')
@@ -42,7 +42,7 @@ export const systemApps = [
 		systemAppTo: '/app-store',
 	},
 	{
-		id: 'UMBREL_files',
+		id: 'TITAN_files',
 		nameKey: 'files',
 		get name() {
 			return t('files')
@@ -52,7 +52,7 @@ export const systemApps = [
 		systemAppTo: '/files',
 	},
 	{
-		id: 'UMBREL_photos',
+		id: 'TITAN_photos',
 		nameKey: 'photos',
 		get name() {
 			return t('photos')
@@ -62,7 +62,7 @@ export const systemApps = [
 		systemAppTo: '/photos',
 	},
 	{
-		id: 'UMBREL_settings',
+		id: 'TITAN_settings',
 		nameKey: 'settings',
 		get name() {
 			return t('settings')
@@ -72,17 +72,17 @@ export const systemApps = [
 		systemAppTo: '/settings',
 	},
 	{
-		id: 'UMBREL_machines',
-		nameKey: 'machines.umbrel-machines',
+		id: 'TITAN_machines',
+		nameKey: 'machines.titan-machines',
 		get name() {
-			return t('machines.umbrel-machines')
+			return t('machines.titan-machines')
 		},
 		icon: systemIcons['machines'],
 		systemApp: true,
 		systemAppTo: '/machines',
 	},
 	{
-		id: 'UMBREL_live-usage',
+		id: 'TITAN_live-usage',
 		nameKey: 'live-usage',
 		get name() {
 			return t('live-usage')
@@ -94,7 +94,7 @@ export const systemApps = [
 		systemAppTo: '?dialog=live-usage',
 	},
 	{
-		id: 'UMBREL_widgets',
+		id: 'TITAN_widgets',
 		nameKey: 'widgets',
 		get name() {
 			return t('widgets')

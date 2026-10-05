@@ -30,14 +30,14 @@ export function useWidgets() {
 				}))
 		: []
 
-	// NOTE: the backend Umbrel system widgets always have an `umbrel:` prefix. For now this is good
+	// NOTE: the backend Titan system widgets always have an `titan:` prefix. For now this is good
 	// because it means we can associate them with any system app. It used to be that some system widgets
 	// were in the `settings` app. But they were moved to a new `live-usage` app.
 	const availableSystemWidgets = [
 		{
 			appId: 'live-usage',
-			icon: systemAppsKeyed['UMBREL_live-usage'].icon,
-			name: systemAppsKeyed['UMBREL_live-usage'].name,
+			icon: systemAppsKeyed['TITAN_live-usage'].icon,
+			name: systemAppsKeyed['TITAN_live-usage'].name,
 			state: 'ready' as const satisfies AppState,
 			widgets: liveUsageWidgets,
 		},
@@ -45,8 +45,8 @@ export function useWidgets() {
 		// features/files widgets
 		{
 			appId: 'files',
-			icon: systemAppsKeyed['UMBREL_files'].icon,
-			name: systemAppsKeyed['UMBREL_files'].name,
+			icon: systemAppsKeyed['TITAN_files'].icon,
+			name: systemAppsKeyed['TITAN_files'].name,
 			state: 'ready' as const satisfies AppState,
 			widgets: filesWidgets,
 		},

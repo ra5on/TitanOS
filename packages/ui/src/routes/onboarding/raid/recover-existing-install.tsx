@@ -102,11 +102,11 @@ export function RecoverExistingInstall({devices, variant = 'pro', onSetUpAsNew}:
 					<>
 						<img
 							src='/assets/onboarding/pro-front.webp'
-							alt={t('storage-manager.umbrel-pro')}
+							alt={t('storage-manager.titan-pro')}
 							draggable={false}
 							className='w-64 md:w-96'
 						/>
-						<p className='-mt-4 text-[13px] font-medium text-white/30'>{t('storage-manager.umbrel-pro')}</p>
+						<p className='-mt-4 text-[13px] font-medium text-white/30'>{t('storage-manager.titan-pro')}</p>
 					</>
 				)}
 				<div className='mt-4 w-full max-w-sm'>

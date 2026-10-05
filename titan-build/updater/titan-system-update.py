@@ -19,13 +19,13 @@ import urllib.parse
 import urllib.request
 
 REPOSITORY = "ra5on/TitanOS"
-COMPATIBILITY = "titan-umbrel-rugix-amd64-v1"
+COMPATIBILITY = "titan-rugix-amd64-v2"
 IDENTITY = Path("/usr/share/titan/release.json")
 PUBLIC_KEY = Path("/usr/share/titan/release-public.pem")
 STAGING = Path("/data/.titan-updates")
 LOCK = Path("/run/titan-system-update.lock")
 MAX_BUNDLE = 2 * 1024 ** 3 - 1
-VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-titan\.([1-9][0-9]*))?")
+VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,180}")
 
 
@@ -33,16 +33,10 @@ class UpdateError(Exception):
     pass
 
 
-class OtherChannel(UpdateError):
-    pass
-
-
 def version_key(value):
     if not isinstance(value, str) or len(value) > 100 or not VERSION.fullmatch(value):
         raise UpdateError("Ungültige Titan-Systemversion.")
-    major, minor, patch, legacy_build = VERSION.fullmatch(value).groups()
-    # Canonical stable succeeds every legacy build of the same base version.
-    return (int(major), int(minor), int(patch), 1 if legacy_build is None else 0, int(legacy_build or 0))
+    return tuple(int(number) for number in VERSION.fullmatch(value).groups())
 
 
 def decode_json(contents):
@@ -72,8 +66,8 @@ def installed(current):
     value = decode_json(protected_read(IDENTITY, 65536))
     if (not isinstance(value, dict) or value.get("version") != current or value.get("osVersion") != current
             or value.get("systemCompatibility") != COMPATIBILITY or value.get("architecture") != "amd64"
-            or value.get("stage") not in ("alpha", "beta", "stable") or platform.machine() != "x86_64"):
-        raise UpdateError("Dieses System gehört nicht zur unterstützten Titan-Rugix-Basis. Alte Titan-Images können damit nicht aktualisiert werden.")
+            or value.get("stage") != "stable" or platform.machine() != "x86_64"):
+        raise UpdateError("Dieses System gehört nicht zur unterstützten TitanOS-Installationsbasis.")
     version_key(current)
     protected_read(PUBLIC_KEY, 4096)
     return value
@@ -120,9 +114,7 @@ def asset_url(version, name):
 
 def update_asset_name(version):
     version_key(version)
-    # Only old build identities retain their shipped -amd64 filename contract.
-    suffix = "-amd64" if VERSION.fullmatch(version).group(4) is not None else ""
-    return f"titan-{version}{suffix}.update"
+    return f"titan-{version}.update"
 
 
 def verify_signature(contents, signature, key=PUBLIC_KEY):
@@ -174,15 +166,11 @@ def verify_release(version, channel, github_release):
     release = verified_json(version, "release.json", sums)
     if not isinstance(manifest, dict) or not isinstance(release, dict):
         raise UpdateError("Ungültige Titan-Releasebeschreibung.")
-    if (manifest.get("stage") in ("alpha", "beta", "stable")
-            and release.get("stage") == manifest["stage"] and manifest["stage"] != channel):
-        raise OtherChannel("Dieses Update gehört zu einem anderen Kanal.")
     required = {"schemaVersion": 1, "releaseVersion": version, "osVersion": version, "architecture": "amd64",
                 "firmware": "UEFI", "updateFormat": "rugix", "systemCompatibility": COMPATIBILITY,
-                "ownTitanUpdateChannel": True, "releaseEligible": True, "stage": channel,
-                "compatibleWithPreviousTitanRaucImages": False}
+                "ownTitanUpdateChannel": True, "releaseEligible": True, "stage": "stable"}
     if any(type(manifest.get(key)) is not type(value) or manifest.get(key) != value for key, value in required.items()):
-        raise UpdateError("Dieses Update ist nicht für die installierte Titan-Rugix-Basis und den gewählten Kanal freigegeben.")
+        raise UpdateError("Dieses Update ist nicht für die installierte TitanOS-Basis freigegeben.")
     for key, value in {"version": version, "osVersion": version, "architecture": "amd64", "stage": channel,
                        "systemCompatibility": COMPATIBILITY}.items():
         if release.get(key) != value:
@@ -192,10 +180,21 @@ def verify_release(version, channel, github_release):
             or not isinstance(verification.get("uefiHttpSmoke"), dict)
             or verification["uefiHttpSmoke"].get("status") != "passed"):
         raise UpdateError("Für dieses Update fehlt ein erfolgreicher Image-Boot-Test.")
+    boot = verification["uefiHttpSmoke"]
+    if (boot.get("installedRelease") != {"version": version, "name": f"TitanOS {version}"}
+            or type(boot.get("bootDiskSizeBytes")) is not int or boot["bootDiskSizeBytes"] < 32 * 1024**3):
+        raise UpdateError("Der Boot-Test gehört nicht zur angebotenen TitanOS-Version.")
     name = update_asset_name(version)
     assets = manifest.get("assets")
-    if not isinstance(assets, list) or not 1 <= len(assets) <= 16 or any(not isinstance(item, dict) for item in assets):
+    if (not isinstance(assets, list) or len(assets) != 2
+            or any(not isinstance(item, dict) or not isinstance(item.get("name"), str) for item in assets)
+            or {item.get("name") for item in assets} != {name, f"titan-{version}.img.xz"}):
         raise UpdateError("Ungültige Update-Dateiliste.")
+    for asset in assets:
+        if (type(asset.get("sizeBytes")) is not int or not 0 < asset["sizeBytes"] <= MAX_BUNDLE
+                or not re.fullmatch(r"[a-f0-9]{64}", str(asset.get("sha256")))
+                or sums.get(asset["name"]) != asset["sha256"]):
+            raise UpdateError("Die signierte TitanOS-Dateiliste widerspricht den Prüfsummen.")
     found = [item for item in assets if item.get("name") == name]
     if (len(found) != 1 or type(found[0].get("sizeBytes")) is not int or not 0 < found[0]["sizeBytes"] <= MAX_BUNDLE
             or not re.fullmatch(r"[a-f0-9]{64}", str(found[0].get("sha256")))
@@ -209,8 +208,8 @@ def verify_release(version, channel, github_release):
     notes = release.get("releaseNotes", "Signiertes TitanOS-Systemupdate über GitHub.")
     if not isinstance(notes, str) or len(notes) > 32768:
         raise UpdateError("Ungültige Release-Informationen.")
-    label = release.get("versionName", "TitanOS 2.0")
-    if not isinstance(label, str) or len(label) > 80 or not label.startswith("TitanOS "):
+    label = release.get("versionName")
+    if label != f"TitanOS {version}":
         raise UpdateError("Ungültiger Titan-Systemname.")
     return {"version": version, "name": label, "releaseNotes": notes,
             "asset": {**found[0], "url": asset_url(version, name)}, "stage": channel}
@@ -233,26 +232,22 @@ def latest(current, channel):
         try:
             if version_key(version) > version_key(current): candidates.append((version, item))
         except UpdateError:
-            continue  # Previous Titan/foreign release lines are never installed.
+            continue
     rejected, invalid = False, 0
-    # Authenticated releases from another channel do not consume the rejection
-    # budget; many alpha builds must not hide the newest compatible beta build.
     for version, release in sorted(candidates, key=lambda item: version_key(item[0]), reverse=True):
         try:
             return verify_release(version, channel, release)
-        except OtherChannel:
-            continue
         except UpdateError:
             rejected = True
             invalid += 1
             if invalid >= 10: break
     if rejected:
-        raise UpdateError("Es gibt noch kein vertrauenswürdig signiertes, kompatibles Update im ausgewählten Kanal.")
-    return {"version": current, "name": local.get("versionName", "TitanOS 2.0"), "releaseNotes": ""}
+        raise UpdateError("Es gibt noch kein vertrauenswürdig signiertes, kompatibles TitanOS-Update.")
+    return {"version": current, "name": local.get("versionName", f"TitanOS {current}"), "releaseNotes": ""}
 
 
 def status(**values):
-    print("umbrel-update: " + json.dumps(values, ensure_ascii=False), flush=True)
+    print("titan-update: " + json.dumps(values, ensure_ascii=False), flush=True)
 
 
 def staging_directory():

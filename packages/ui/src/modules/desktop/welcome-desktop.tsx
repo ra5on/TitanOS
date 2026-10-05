@@ -1,12 +1,9 @@
 import {motion, useReducedMotion} from 'motion/react'
 import {createContext, ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
-import {IoLogoAndroid, IoLogoApple} from 'react-icons/io5'
 import {RiCloseLine} from 'react-icons/ri'
-import {Link} from 'react-router-dom'
 
 import {AppIcon} from '@/components/app-icon'
-import {Button} from '@/components/ui/button'
 import {ButtonLink} from '@/components/ui/button-link'
 import {DarkTooltip, darkTooltipClass} from '@/components/ui/dark-tooltip'
 import {useStorefront} from '@/features/app-store/hooks/use-storefront'
@@ -33,17 +30,12 @@ import {systemAppsKeyed} from '@/providers/apps'
 import {useAvailableApps} from '@/providers/available-apps'
 import {trpcReact, type RegistryApp} from '@/trpc/trpc'
 import {focusRingOnWallpaperClass} from '@/utils/element-classes'
-import {isMac} from '@/utils/misc'
 import {tw, useBreakpoint} from '@/utils/tw'
 
 import {AppGrid} from './app-grid/app-grid'
 import {desktopVariants, desktopWidgetNode, useDesktopVariant} from './desktop-content'
 import {DockSpacer} from './dock'
 import {Header} from './header'
-
-const PHOTOS_ICON = '/assets/dock/titan-photos.svg'
-const PHONE_BACKUP_SHOT = '/assets/photos/phone-backup.webp'
-const MAC_APP_DOWNLOAD = 'https://link.umbrel.com/macos-app'
 
 // Desktop for a fresh install with no apps yet: the usual greeting and the
 // account's widgets, with a bento of starting points where the app grid would
@@ -102,7 +94,7 @@ export function WelcomeDesktop() {
 	)
 }
 
-type TipId = 'files' | 'photos' | 'app-store' | 'tailscale'
+type TipId = 'files' | 'app-store' | 'tailscale'
 type TipOffsets = Partial<Record<TipId, {x: number; y: number}>>
 
 // Closing a tip only hides it in this browser session: the notification behind
@@ -166,8 +158,8 @@ const TIP_MOVE = {type: 'spring', stiffness: 300, damping: 34, mass: 1} as const
 const TIP_FOLD = {duration: 0.35, ease: SMOOTH_OUT} as const
 const TIP_SNAP = {duration: 0} as const
 
-// Bento: Files runs wide across the top, Photos stands tall down the right,
-// and App Store (a touch wider) with Tailscale fill in beneath Files. Each
+// Bento: Files runs wide across the top, with App Store and Tailscale
+// underneath. The mobile-client promotion is not available on Titan. Each
 // card leads with its feature icon and carries a small living illustration
 // in a pool of its accent light.
 function WelcomeBento({
@@ -188,19 +180,15 @@ function WelcomeBento({
 	const {appsKeyed} = useAvailableApps()
 	const deckCards = useDeckCards(appsKeyed)
 	const tailscaleIcon = appsKeyed?.['tailscale']?.icon
-	// iPadOS can identify as a Mac. Only offer the desktop app where it can run
-	// and where this account has access to file sharing.
-	const showMacApp =
-		canShareFiles && isMac() && !/iPhone|iPad|iPod/i.test(navigator.userAgent) && navigator.maxTouchPoints < 2
 
 	const tipIds = useMemo<TipId[]>(
-		() => (isMember ? ['files', 'photos', 'app-store'] : ['files', 'photos', 'app-store', 'tailscale']),
+		() => (isMember ? ['files', 'app-store'] : ['files', 'app-store', 'tailscale']),
 		[isMember],
 	)
 	const [closed, setClosed] = useState<ReadonlySet<TipId>>(() => new Set())
 	const breakpoint = useBreakpoint()
 	const stacked = breakpoint === 'sm'
-	const {cells, offsets} = useTipOffsets(closed, stacked ? 1 : breakpoint === 'md' ? 2 : 3)
+	const {cells, offsets} = useTipOffsets(closed, stacked ? 1 : 2)
 
 	// Moves animate only on the render where a tip was closed; anything else
 	// that shifts the arrangement (a resize, a breakpoint) is the layout itself
@@ -263,10 +251,7 @@ function WelcomeBento({
 			<TipsContext.Provider value={tips}>
 				<div
 					className={cn(
-						'flex w-full max-w-[1000px] flex-col gap-4 md:grid md:min-h-min md:flex-1 md:grid-flow-dense md:grid-cols-2 lg:max-h-[616px] lg:grid-cols-[1.15fr_1fr_1fr]',
-						// Two columns: three rows for the owner; a member's two are Files
-						// and the row Photos stands in
-						isMember ? 'md:max-h-[760px]' : 'md:max-h-[932px]',
+						'flex w-full max-w-[1000px] flex-col gap-4 md:grid md:max-h-[616px] md:min-h-min md:flex-1 md:grid-flow-dense md:grid-cols-2',
 					)}
 				>
 					<BentoCard
@@ -275,101 +260,48 @@ function WelcomeBento({
 						variant='wide'
 						action={
 							<>
-								{showMacApp && (
-									<Button asChild variant='primary' className={cardButtonClass}>
-										<a href={MAC_APP_DOWNLOAD} target='_blank' rel='noopener noreferrer'>
-											<IoLogoApple className='size-3.5' />
-											{t('desktop.welcome.files.mac-download')}
-										</a>
-									</Button>
-								)}
 								<ButtonLink to='/files' className={cardButtonClass}>
 									{t('desktop.welcome.files.button')}
 								</ButtonLink>
-								{canShareFiles &&
-									(showMacApp ? (
-										<div className='basis-full'>
-											<Link
-												to='/settings/file-sharing'
-												className={cn(
-													'inline-block rounded-sm py-1 text-12 text-white/60 underline decoration-white/25 underline-offset-4 hover:text-white',
-													focusRingOnWallpaperClass,
-												)}
-											>
-												{t('desktop.welcome.files.sharing-button')}
-											</Link>
-										</div>
-									) : (
-										<ButtonLink to='/settings/file-sharing' className={cardButtonClass}>
-											{t('desktop.welcome.files.sharing-button')}
-										</ButtonLink>
-									))}
+								{canShareFiles && (
+									<ButtonLink to='/settings/file-sharing' className={cardButtonClass}>
+										{t('desktop.welcome.files.sharing-button')}
+									</ButtonLink>
+								)}
 							</>
 						}
-						icon={systemAppsKeyed['UMBREL_files'].icon}
+						icon={systemAppsKeyed['TITAN_files'].icon}
 						title={t('desktop.welcome.files.title')}
 						description={
-							showMacApp
-								? t('desktop.welcome.files.mac-description')
-								: isMember
-									? t('desktop.welcome.files.member-description')
-									: t('desktop.welcome.files.description')
+							isMember ? t('desktop.welcome.files.member-description') : t('desktop.welcome.files.description')
 						}
 						accent='#4d94ff'
 						glow={false}
-						stage={showMacApp ? <FinderPreview /> : <FilesMarquee paused={paused || closed.has('files')} />}
+						stage={<FilesMarquee paused={paused || closed.has('files')} />}
 						className='md:col-span-2'
 					/>
 					<BentoCard
-						id='photos'
-						index={1}
-						variant='tall'
-						action={
-							<>
-								<Button asChild variant='primary' className={cardButtonClass}>
-									<a href='https://link.umbrel.com/ios-app' target='_blank' rel='noopener noreferrer'>
-										<IoLogoApple className='size-3.5' />
-										{t('desktop.welcome.photos.ios')}
-									</a>
-								</Button>
-								{/* Android app isn't out yet */}
-								<Button disabled className={cardButtonClass}>
-									<IoLogoAndroid className='size-3.5' />
-									{t('desktop.welcome.photos.android')}
-								</Button>
-							</>
-						}
-						icon={PHOTOS_ICON}
-						title={t('desktop.welcome.photos.title')}
-						description={t('desktop.welcome.photos.description')}
-						accent='#fb7185'
-						stage={<PhoneShot />}
-						// Two columns: beside App Store and Tailscale (a member's App
-						// Store card alone). Three: down the right of everything.
-						className={cn('md:col-start-2 lg:col-start-auto lg:row-span-2', !isMember && 'md:row-span-2')}
-					/>
-					<BentoCard
 						id='app-store'
-						index={2}
+						index={1}
 						variant={isMember ? 'wide' : 'small'}
 						action={
 							<ButtonLink to='/app-store' className={cardButtonClass}>
 								{t('desktop.welcome.app-store.button')}
 							</ButtonLink>
 						}
-						icon={systemAppsKeyed['UMBREL_app-store'].icon}
+						icon={systemAppsKeyed['TITAN_app-store'].icon}
 						title={isMember ? t('desktop.welcome.app-store.member-title') : t('desktop.welcome.app-store.title')}
 						description={
 							isMember ? t('desktop.welcome.app-store.member-description') : t('desktop.welcome.app-store.description')
 						}
 						accent='#a78bfa'
 						ornament={<AppDeck cards={deckCards} paused={paused || closed.has('app-store')} />}
-						className={isMember ? 'lg:col-span-2' : undefined}
+						className={isMember ? 'md:col-span-2' : undefined}
 					/>
 					{!isMember && (
 						<BentoCard
 							id='tailscale'
-							index={3}
+							index={2}
 							action={
 								<ButtonLink to='/app-store/tailscale' className={cardButtonClass}>
 									{t('desktop.welcome.tailscale.button')}
@@ -409,15 +341,9 @@ type TipRect = {x: number; y: number; w: number; h: number}
 /** Tips laid out in a row or a column, centered on the cross axis; closed tips drop out */
 type TipArrangement = TipId | {row: TipArrangement[]} | {col: TipArrangement[]}
 
-// How the open tips regroup, by column count. These mirror the grid: with
-// nothing closed they resolve to every card's own cell.
-function tipArrangement(columns: 2 | 3, closed: ReadonlySet<TipId>): TipArrangement {
-	const pair: TipArrangement = {row: ['app-store', 'tailscale']}
-	if (columns === 3) return {row: [{col: ['files', pair]}, 'photos']}
-	// App Store and Tailscale stack beside Photos, and sit side by side without it
-	if (closed.has('photos')) return {col: ['files', pair]}
-	return {col: ['files', {row: [{col: ['app-store', 'tailscale']}, 'photos']}]}
-}
+// Files occupies the first row; App Store and Tailscale share the next.
+// Missing/closed cells are filtered by arrangeTips for members and dismissal.
+const tipArrangement: TipArrangement = {col: ['files', {row: ['app-store', 'tailscale']}]}
 
 type ArrangedTips = {w: number; h: number; place: (x: number, y: number, out: TipOffsets) => void}
 
@@ -461,7 +387,7 @@ function arrangeTips(
 // per the arrangement, and centered as a group in the area the full bento
 // covers. Cells are read through offset* so the cards' own transforms (and the
 // desktop's, under a sheet) don't feed back into the measurement.
-function useTipOffsets(closed: ReadonlySet<TipId>, columns: 1 | 2 | 3) {
+function useTipOffsets(closed: ReadonlySet<TipId>, columns: 1 | 2) {
 	const cells = useRef(new Map<TipId, HTMLElement>())
 	const [rects, setRects] = useState<Partial<Record<TipId, TipRect>>>({})
 
@@ -485,7 +411,7 @@ function useTipOffsets(closed: ReadonlySet<TipId>, columns: 1 | 2 | 3) {
 	const offsets = useMemo<TipOffsets>(() => {
 		const all = Object.values(rects)
 		if (columns === 1 || closed.size === 0 || all.length === 0) return {}
-		const group = arrangeTips(tipArrangement(columns, closed), rects, closed)
+		const group = arrangeTips(tipArrangement, rects, closed)
 		if (!group) return {}
 		const left = Math.min(...all.map((cell) => cell.x))
 		const top = Math.min(...all.map((cell) => cell.y))
@@ -676,29 +602,9 @@ function BentoCard({
 	)
 }
 
-const bentoCardClass = tw`umbrel-material group relative block h-full animate-in overflow-hidden rounded-24 duration-700 fade-in fill-mode-both slide-in-from-bottom-4 motion-reduce:animate-none`
+const bentoCardClass = tw`titan-material group relative block h-full animate-in overflow-hidden rounded-24 duration-700 fade-in fill-mode-both slide-in-from-bottom-4 motion-reduce:animate-none`
 
 const cardButtonClass = tw`h-8 gap-1.5 px-3.5 text-12`
-
-// A Finder window cropped by the card, with Umbrel selected in Locations.
-// The artwork is decorative; the adjacent copy and download link carry its meaning.
-function FinderPreview() {
-	const {t} = useTranslation()
-	return (
-		<div aria-hidden className='pointer-events-none absolute top-8 left-4 w-[420px] select-none'>
-			<div className='mb-4 flex items-center gap-1.5 text-12 font-medium text-white/70'>
-				<IoLogoApple className='size-3.5' />
-				{t('desktop.welcome.files.mac-label')}
-			</div>
-			<img
-				src='/assets/desktop/finder-preview.svg'
-				alt=''
-				draggable={false}
-				className='w-full max-w-none drop-shadow-2xl'
-			/>
-		</div>
-	)
-}
 
 // Real file icons drifting upward in three offset columns, each looping
 // seamlessly — files on their way home. The mask fades them in and out at
@@ -838,19 +744,5 @@ function AppDeck({cards, paused}: {cards: DeckCard[]; paused: boolean}) {
 				)
 			})}
 		</div>
-	)
-}
-
-// The Umbrel phone app's backup screen, rising out of the bottom of the
-// Photos card. The card clips it, so only the top of the phone shows; it
-// lifts a touch on hover.
-function PhoneShot() {
-	return (
-		<img
-			src={PHONE_BACKUP_SHOT}
-			alt=''
-			draggable={false}
-			className='absolute top-4 left-1/2 w-[210px] max-w-[80%] -translate-x-1/2 drop-shadow-2xl transition-transform duration-500 group-hover:-translate-y-1.5 motion-reduce:transition-none'
-		/>
 	)
 }

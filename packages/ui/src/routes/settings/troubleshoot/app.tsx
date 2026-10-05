@@ -31,7 +31,7 @@ export function TroubleshootApp({appId}: {appId: string}) {
 				<Button variant='primary' size='dialog' disabled={!appId} onClick={() => downloadUtf8Logs(appLogs, appId)}>
 					{t('troubleshoot.app-download', {app: app?.name || LOADING_DASH})}
 				</Button>
-				{/* <Button size='dialog'>{t('troubleshoot.share-with-umbrel-support')}</Button> */}
+				{/* <Button size='dialog'>{t('troubleshoot.share-with-titan-support')}</Button> */}
 			</ImmersiveDialogFooter>
 		</ImmersivePickerDialogContent>
 	)

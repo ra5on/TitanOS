@@ -1,9 +1,9 @@
 import type {RouterOutput} from '@/trpc/trpc'
 
-// ---------------------------- umbreld (server) Types ----------------------------
+// ---------------------------- titand (server) Types ----------------------------
 
 // ensure that the types are the same for files.list and files.recents
-export type UmbreldFileSystemItem = RouterOutput['files']['list']['files'][number]
+export type TitandFileSystemItem = RouterOutput['files']['list']['files'][number]
 
 export type Favorite = RouterOutput['files']['favorites'][number]
 
@@ -15,7 +15,7 @@ export type ViewPreferences = RouterOutput['files']['viewPreferences']
 
 // ---------------------------- Client Types ----------------------------
 
-export interface FileSystemItem extends UmbreldFileSystemItem {
+export interface FileSystemItem extends TitandFileSystemItem {
 	isDisconnected?: boolean // configured network host/share without a mounted share
 	isUploading?: boolean // true if the item is currently being uploaded
 	progress?: number // upload progress in percentage 0-100

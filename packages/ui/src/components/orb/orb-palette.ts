@@ -16,7 +16,7 @@ type Hsl = {h: number; s: number; l: number} // degrees, 0..100, 0..100
 
 const FALLBACK_HSL: Hsl = {h: 216, s: 80, l: 56}
 
-// "24 90% 50%" — the wallpaper definition format (see umbreld wallpapers.ts)
+// "24 90% 50%" — the wallpaper definition format (see titand wallpapers.ts)
 export function parseBrandHsl(value: string | undefined): Hsl {
 	if (!value) return FALLBACK_HSL
 	const [h, s, l] = value

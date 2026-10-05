@@ -1,14 +1,14 @@
 import CryptoKit
 import Foundation
-import UmbrelKit
+import TitanKit
 
 // Stale-while-revalidate snapshot of the data Home renders, isolated by account.
 // Written on every successful load (and prefetched during onboarding's Connected
 // screen), read synchronously when a device opens — so Home paints complete on its
 // first frame and the skeleton/cascade only ever shows when there's no snapshot yet.
 struct DeviceDataSnapshot: Codable {
-	var apps: [Umbreld.AppSummary]
-	var disk: Umbreld.DiskUsage?
+	var apps: [Titand.AppSummary]
+	var disk: Titand.DiskUsage?
 	var favoritePaths: [String]
 	var updatableApps: [String]
 }

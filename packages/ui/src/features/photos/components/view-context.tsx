@@ -67,7 +67,7 @@ export function pageSizeFor(tile: number) {
 // Photos, Panoramas, Screenshots, 360°). Free text stays text and matches
 // file names and camera make/model. Within a dimension tokens broaden (either
 // source), across dimensions they narrow (that source AND that month) — see
-// the Photos Filter contract in umbreld.
+// the Photos Filter contract in titand.
 export type SearchToken =
 	| {type: 'date'; label: string; from: number; to: number}
 	| {type: 'source'; id: string; label: string}

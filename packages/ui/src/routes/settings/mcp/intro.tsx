@@ -10,7 +10,7 @@ import type {McpAgentId} from '@/routes/settings/mcp/agents'
 import {AgentConstellation} from '@/routes/settings/mcp/constellation'
 import {PitchReplay} from '@/routes/settings/mcp/pitch-replay'
 
-// The first-run pitch: agents orbiting the umbrel, the promise shown as a
+// The first-run pitch: agents orbiting the titan, the promise shown as a
 // replayed chat, one confident CTA. The CTA morphs the constellation into the
 // agent picker — choosing a tile is what actually enables MCP, so the choice
 // lands the user in a connect view already tailored to their agent. When MCP

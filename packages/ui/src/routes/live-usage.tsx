@@ -151,7 +151,7 @@ function LiveUsageContent() {
 	const gpuUsage = useGpuForUi({poll: true})
 	const selectedTab = requestedTab === 'gpu' && !gpuUsage.isLoading && !gpuUsage.hasGpu ? 'cpu' : requestedTab
 	// The card number/chart only need the light meminfo endpoint. The per-app
-	// breakdown (docker ps + a cgroup sweep per call in umbreld) is fetched once
+	// breakdown (docker ps + a cgroup sweep per call in titand) is fetched once
 	// on open — pre-building every card's segment layer and pinning stable
 	// colors — and polls only while the memory tab is active.
 	const memorySystem = useSystemMemoryForUi({poll: true})
@@ -354,7 +354,7 @@ function StorageSection({colors}: {colors: UsageColors}) {
 					rightChildren={errors}
 				/>
 			</div>
-			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.UMBREL_system, systemAppsKeyed.UMBREL_files]} />}
+			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.TITAN_system, systemAppsKeyed.TITAN_files]} />}
 			<AppList apps={apps} colors={colors} formatValue={(item) => maybePrettyBytes(item.used, i18n.language)} />
 		</>
 	)
@@ -378,7 +378,7 @@ function MemorySection({colors, chart}: {colors: UsageColors; chart?: Array<{val
 					rightChildren={isMemoryLow && <ErrorMessage>{t('memory.low')}</ErrorMessage>}
 				/>
 			</div>
-			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.UMBREL_system]} />}
+			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.TITAN_system]} />}
 			<AppList apps={apps} colors={colors} formatValue={(item) => maybePrettyBytes(item.used, i18n.language)} />
 		</>
 	)
@@ -394,7 +394,7 @@ function CpuSection({colors, chart}: {colors: UsageColors; chart?: Array<{value:
 			<div className='sm:hidden'>
 				<UsageCard active value={value} progressLabel={secondaryValue} segments={segments} chart={chart} />
 			</div>
-			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.UMBREL_system]} />}
+			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.TITAN_system]} />}
 			<AppList
 				apps={apps}
 				colors={colors}
@@ -647,7 +647,7 @@ function GpuSection({colors, chart}: {colors: UsageColors; chart?: Array<{value:
 					<GpuDeviceDetail key={selectedDevice.id} device={selectedDevice} />
 				</>
 			)}
-			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.UMBREL_system]} />}
+			{isLoading && <AppListSkeleton systemApps={[systemAppsKeyed.TITAN_system]} />}
 			{!isLoading && (
 				<AppList
 					apps={[...listApps, ...idleApps]}
@@ -727,7 +727,7 @@ function useSegments({
 
 	const segments: BarSegment[] = []
 	// Cap the bar at the displayed used figure, not at full bar capacity: the
-	// per-app numbers can sum past it (umbreld floors the system share at 2GB),
+	// per-app numbers can sum past it (titand floors the system share at 2GB),
 	// and the bar must never overstate the number next to it
 	const usedCap = Math.min(usedFraction, 1)
 	let cursor = 0
@@ -1030,15 +1030,15 @@ function useResolveApp() {
 	return useMemo(
 		() =>
 			(id: string): {name: string; icon?: string; systemApp?: boolean} => {
-				if (id === 'umbreld-system') {
-					return {name: systemAppsKeyed.UMBREL_system.name, icon: systemAppsKeyed.UMBREL_system.icon, systemApp: true}
+				if (id === 'titand-system') {
+					return {name: systemAppsKeyed.TITAN_system.name, icon: systemAppsKeyed.TITAN_system.icon, systemApp: true}
 				}
-				if (id === 'umbreld-files') {
-					return {name: systemAppsKeyed.UMBREL_files.name, icon: systemAppsKeyed.UMBREL_files.icon, systemApp: true}
+				if (id === 'titand-files') {
+					return {name: systemAppsKeyed.TITAN_files.name, icon: systemAppsKeyed.TITAN_files.icon, systemApp: true}
 				}
 				// Apps a member can't see are folded into a single entry server-side
 				if (id === 'other') {
-					return {name: t('other'), icon: systemAppsKeyed.UMBREL_system.icon, systemApp: true}
+					return {name: t('other'), icon: systemAppsKeyed.TITAN_system.icon, systemApp: true}
 				}
 				return {name: userAppsKeyed?.[id]?.name || t('unknown-app'), icon: userAppsKeyed?.[id]?.icon}
 			},

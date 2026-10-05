@@ -3,7 +3,7 @@ import SwiftUI
 // Visual tokens shared across the main-app tabs.
 // Cards and tiles are translucent fills that sit over the user's wallpaper.
 enum Theme {
-	// umbrelOS accent blue, used for the selected tab, section chevrons and the storage bar.
+	// titanOS accent blue, used for the selected tab, section chevrons and the storage bar.
 	static let blue = Color(hex: 0x00A7E9)
 
 	// Card background: rgba(28,28,28,0.32)
@@ -595,8 +595,8 @@ struct StatusDot: View {
 
 // MARK: - Loading states
 
-// umbrelOS-style loading pulse: a slow opacity oscillation on placeholder shapes
-// (the umbrelOS UI uses the same effect via `animate-pulse`).
+// titanOS-style loading pulse: a slow opacity oscillation on placeholder shapes
+// (the titanOS UI uses the same effect via `animate-pulse`).
 private struct Pulsing: ViewModifier {
 	@State private var dim = false
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion

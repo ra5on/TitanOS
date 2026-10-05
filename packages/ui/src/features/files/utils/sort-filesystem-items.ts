@@ -5,7 +5,7 @@ const collator = new Intl.Collator('en-US', {sensitivity: 'base', numeric: true}
 
 const compareByName = (a: FileSystemItem, b: FileSystemItem) => collator.compare(a.name, b.name)
 
-// TODO: Add this back in when we have a file system index in umbreld
+// TODO: Add this back in when we have a file system index in titand
 // const compareByCreated = (a: FileSystemItem, b: FileSystemItem) => {
 // 	const aCreated = a.created ? new Date(a.created).getTime() : 0
 // 	const bCreated = b.created ? new Date(b.created).getTime() : 0
@@ -38,7 +38,7 @@ export function compareFilesystemItems(
 ): number {
 	const ascending = sortOrder === 'ascending'
 	const compare =
-		// TODO: Add this back in when we have a file system index in umbreld
+		// TODO: Add this back in when we have a file system index in titand
 		// sortBy === 'created'
 		// 	? compareByCreated :
 		sortBy === 'modified'

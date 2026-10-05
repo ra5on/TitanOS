@@ -1,14 +1,14 @@
 import {t} from '@/utils/i18n'
 import {tw} from '@/utils/tw'
 
-export {appPath, UMBREL_APP_STORE_ID} from '@/constants/app-store'
+export {appPath, TITAN_APP_STORE_ID} from '@/constants/app-store'
 
 // ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 
 // The category vocabulary app manifests can use. Apps may also declare
-// categories umbrelOS doesn't know about yet; those are handled dynamically.
+// categories TitanOS doesn't know about yet; those are handled dynamically.
 export const categories = [
 	'files',
 	'bitcoin',
@@ -24,7 +24,7 @@ export const categories = [
 
 export type Category = (typeof categories)[number]
 
-// Category order in the navigation rail, mirroring apps.umbrel.com. The rail
+// Category order in the navigation rail, mirroring apps.titan.com. The rail
 // shows the Discover and All apps destinations ahead of these.
 export const categoryNavOrder: readonly Category[] = [
 	'files',
@@ -56,7 +56,7 @@ export const categoryLabels: Record<'discover' | 'all' | Category, () => string>
 }
 
 // Small 3D category icons bundled with the OS for offline use
-// (converted from the apps.umbrel.com redesign asset set)
+// (converted from the apps.titan.com redesign asset set)
 export function categoryIcon(navId: string): string | undefined {
 	if (!(navId in categoryLabels)) return undefined
 	return `/assets/app-store/categories/${navId}.webp`
@@ -65,7 +65,7 @@ export function categoryIcon(navId: string): string | undefined {
 export const APP_STORE_EMPTY_STATE_SRC = '/assets/app-store/no-results.webp'
 
 // ---------------------------------------------------------------------------
-// Remote editorial API (apps.umbrel.com)
+// Remote editorial API (apps.titan.com)
 // ---------------------------------------------------------------------------
 
 // The storefront feed and release history are optional editorial decoration:
@@ -103,10 +103,10 @@ export const sheetBleedClass = tw`-mx-3 px-3 md:-mx-[40px] md:px-[40px] xl:-mx-[
 // The store's shared content reveal (see index.css): sections rise gently out
 // of a blur as a page appears, orchestrated with small delays so the page
 // composes itself top to bottom instead of popping in at once.
-export const storeRevealClass = tw`umbrel-store-reveal`
+export const storeRevealClass = tw`titan-store-reveal`
 // Blur-and-fade only — for elements that also carry motion-driven transforms
 // (the collapsing hero) or chrome that shouldn't visibly move
-export const storeRevealSoftClass = tw`umbrel-store-reveal-soft`
+export const storeRevealSoftClass = tw`titan-store-reveal-soft`
 // Shorter and subtler — cheap enough for every card of a large grid
-export const storeRevealCardClass = tw`umbrel-store-reveal-card`
+export const storeRevealCardClass = tw`titan-store-reveal-card`
 export const storeRevealDelay = (ms: number) => ({['--store-reveal-delay' as string]: `${ms}ms`})

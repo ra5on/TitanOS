@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Umbrel</string>
+	<string>Titan</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -37,12 +37,12 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_umbrel._tcp</string>
+		<string>_titan._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Umbrel finds your Umbrel devices on your local network.</string>
+	<string>Titan finds your Titan devices on your local network.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose Allow Full Access to automatically back up the photos and videos in your library to your Umbrel.</string>
+	<string>Choose Allow Full Access to automatically back up the photos and videos in your library to your Titan.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
@@ -52,7 +52,7 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
-	<key>UmbrelPhotoBackupKeychainAccessGroup</key>
+	<key>TitanPhotoBackupKeychainAccessGroup</key>
 	<string>$(APP_GROUP_IDENTIFIER)</string>
 </dict>
 </plist>

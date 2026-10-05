@@ -50,29 +50,3 @@ export function SoftwareUpdateConfirmDialog() {
 		</Dialog>
 	)
 }
-
-// const sampleMarkdownReleaseNotes = `
-// # What's new
-
-// Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam,
-// quisquam. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam, quisquam. Quisquam,
-
-// ## New features
-
-// ### More support:
-
-// - Added support for the Raspberry Pi 4 and 400
-// - Added support for the Raspberry Pi 5 and 500
-// - Added support for the Raspberry Pi 6 and 600
-// - Added support for the Raspberry Pi 7 and 700
-// - Added support for the Raspberry Pi 8 and 800
-
-// ### Improvements
-
-// [Lorem ipsum dolor](https://umbrel.com) sit amet consectetur adipisicing elit. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam,
-// quisquam. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam, quisquam. Quisquam,
-
-// ### Fixes
-
-// Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quam. Quam, quisquam. Quisquam, quam. Quam,
-// `

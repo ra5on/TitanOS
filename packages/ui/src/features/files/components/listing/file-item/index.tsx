@@ -9,7 +9,7 @@ import {useIsFilesReadOnly} from '@/features/files/providers/files-capabilities-
 import {useFilesStore} from '@/features/files/store/use-files-store'
 import type {FileSystemItem} from '@/features/files/types'
 import {canPerformFileOperation} from '@/features/files/utils/file-capabilities'
-import {isDirectoryAnUmbrelBackup} from '@/features/files/utils/is-directory-an-umbrel-backup'
+import {isDirectoryATitanBackup} from '@/features/files/utils/is-directory-a-titan-backup'
 import type {Machine} from '@/features/machines/types'
 import {cn} from '@/lib/utils'
 import {isBeneathModal} from '@/utils/is-beneath-modal'
@@ -187,8 +187,8 @@ const FileItemContent = ({item, items, machine}: FileItemProps & {machine: Machi
 				return
 			}
 
-			// don't allow renaming Umbrel Backup directory
-			if (isDirectoryAnUmbrelBackup(item.name)) return
+			// don't allow renaming Titan Backup directory
+			if (isDirectoryATitanBackup(item.name)) return
 
 			// don't trigger the rename if the user Entered in the input
 			if (isInInput(event)) return

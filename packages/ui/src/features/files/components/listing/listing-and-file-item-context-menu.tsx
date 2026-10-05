@@ -36,7 +36,7 @@ import {
 	isDirectoryANetworkDevice,
 	isDirectoryANetworkShare,
 } from '@/features/files/utils/is-directory-a-network-device-or-share'
-import {isDirectoryAnUmbrelBackup} from '@/features/files/utils/is-directory-an-umbrel-backup'
+import {isDirectoryATitanBackup} from '@/features/files/utils/is-directory-a-titan-backup'
 import {useQueryParams} from '@/hooks/use-query-params'
 import {useHasMembers} from '@/modules/user-sharing'
 import {useConfirmation} from '@/providers/confirmation'
@@ -149,9 +149,9 @@ export function ListingAndFileItemContextMenu({children, menuItems}: ListingAndF
 			const canOpen =
 				hasOneSelectedItem &&
 				!(item.isDisconnected && isDirectoryANetworkShare(item.path)) &&
-				!isDirectoryAnUmbrelBackup(item.name)
+				!isDirectoryATitanBackup(item.name)
 			const canRename =
-				hasOneSelectedItem && canPerformFileOperation(item, 'rename') && !isDirectoryAnUmbrelBackup(item.name)
+				hasOneSelectedItem && canPerformFileOperation(item, 'rename') && !isDirectoryATitanBackup(item.name)
 			const canDownload = selectedItems.every((selected) => !selected.isDisconnected)
 			const canCut = selectedItems.every((item) => canPerformFileOperation(item, 'move'))
 			const canCopy = selectedItems.every((item) => canPerformFileOperation(item, 'copy'))
@@ -177,7 +177,7 @@ export function ListingAndFileItemContextMenu({children, menuItems}: ListingAndF
 				!isPathShared(item.path) &&
 				!isAddingShare &&
 				canPerformFileOperation(item, 'share') &&
-				!isDirectoryAnUmbrelBackup(item.name)
+				!isDirectoryATitanBackup(item.name)
 			const canRemoveShare = canManageShares && hasOneSelectedItem && isPathShared(item.path) && !isRemovingShare
 
 			// Share a directory with member accounts (owner only, memberShares is
@@ -190,13 +190,13 @@ export function ListingAndFileItemContextMenu({children, menuItems}: ListingAndF
 				memberShares !== undefined &&
 				item.type === 'directory' &&
 				isShareableWithUsersPath &&
-				!isDirectoryAnUmbrelBackup(item.name)
+				!isDirectoryATitanBackup(item.name)
 			const canFavorite =
 				hasOneSelectedItem &&
 				!isPathFavorite(item.path) &&
 				!isAddingFavorite &&
 				canPerformFileOperation(item, 'favorite') &&
-				!isDirectoryAnUmbrelBackup(item.name)
+				!isDirectoryATitanBackup(item.name)
 			const canRemoveFavorite = hasOneSelectedItem && isPathFavorite(item.path) && !isRemovingFavorite
 			// Compressing reads the items, and it isn't offered for anything the
 			// backend keeps read-only — an installed machine's runtime state, media

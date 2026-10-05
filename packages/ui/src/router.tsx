@@ -65,7 +65,7 @@ export const router = createBrowserRouter([
 					<GlobalFilesProvider>
 						<CloudActivityProvider>
 							<Wallpaper />
-							{/* Get any notifications from umbreld and render them as alert dialogs */}
+							{/* Get any notifications from titand and render them as alert dialogs */}
 							<Notifications />
 							<AvailableAppsProvider>
 								<AppsProvider>

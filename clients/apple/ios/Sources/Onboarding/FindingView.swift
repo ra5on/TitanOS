@@ -2,7 +2,7 @@ import SwiftUI
 
 // Onboarding step 4. A live loading state: header + an animated
 // radar sweep. Discovery is already running (started on the Local Network screen); as
-// soon as an Umbrel appears we move to the results, and if nothing shows up within a
+// soon as an Titan appears we move to the results, and if nothing shows up within a
 // grace period we fall through to the no-device screen.
 struct FindingView: View {
 	@Environment(OnboardingModel.self) private var model
@@ -17,8 +17,8 @@ struct FindingView: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			OnboardingHeader(
-				title: "Finding your Umbrel",
-				subtitle: "Make sure your phone and Umbrel are on the same Wi-Fi network."
+				title: "Finding your Titan",
+				subtitle: "Make sure your phone and Titan are on the same Wi-Fi network."
 			)
 			.padding(.top, 90)
 

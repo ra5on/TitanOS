@@ -256,8 +256,8 @@ describe('app launch dialog', () => {
 	})
 
 	test.each([
-		['https://umbrel.local', 'https://umbrel.local:1234/app/'],
-		['http://umbrel.onion', 'http://demo.onion/app/'],
+		['https://titan.local', 'https://titan.local:1234/app/'],
+		['http://titan.onion', 'http://demo.onion/app/'],
 	])('does not show HTTPS guidance when already using %s', async (origin, expectedUrl) => {
 		const location = new URL(origin)
 		vi.stubGlobal('location', location)

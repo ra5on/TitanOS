@@ -30,7 +30,7 @@ export function OnboardingPage({children}: {children: React.ReactNode}) {
 				{/* System material (same recipe as modals/toasts): tinted backdrop blur,
 				    0.5px edge, inset shine, soft drop shadow. The modal radius is 24px. */}
 				<motion.div
-					className='umbrel-material flex max-h-[calc(100svh-40px)] min-h-[calc(100svh-40px)] w-full max-w-[1000px] flex-col overflow-y-auto overscroll-contain rounded-3xl p-4 md:max-h-[min(850px,calc(100svh-40px))] md:min-h-[min(700px,calc(100svh-40px))] md:p-6'
+					className='titan-material flex max-h-[calc(100svh-40px)] min-h-[calc(100svh-40px)] w-full max-w-[1000px] flex-col overflow-y-auto overscroll-contain rounded-3xl p-4 md:max-h-[min(850px,calc(100svh-40px))] md:min-h-[min(700px,calc(100svh-40px))] md:p-6'
 					// Heavier blur than the default 20px: this card is large and sits directly on the video
 					style={{viewTransitionName: 'onboarding-card', '--material-blur': '40px'} as React.CSSProperties}
 					{...cardProps}

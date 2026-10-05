@@ -60,7 +60,7 @@ test('getPoolDeviceType uses topology hints when pool members are detached', () 
 
 	assert.equal(getPoolDeviceType({...detachedPool, topology: 'mirror'}, []), 'hdd')
 	assert.equal(getPoolDeviceType({...detachedPool, topology: 'raidz'}, []), 'ssd')
-	assert.equal(getPoolDeviceType({name: 'umbrel', exists: false}, []), undefined)
+	assert.equal(getPoolDeviceType({name: 'titan', exists: false}, []), undefined)
 })
 
 test('planMirrorAdditions pairs largest drives first, allowing mismatched sizes', () => {
@@ -147,7 +147,7 @@ test('planFailsafeTransition requires a fitting SSD when the pool has an acceler
 
 function removalPool(overrides: Partial<RaidStatus> = {}): RaidStatus {
 	return {
-		name: 'umbrelos-test',
+		name: 'titanos-test',
 		exists: true,
 		raidType: 'failsafe',
 		status: 'ONLINE',

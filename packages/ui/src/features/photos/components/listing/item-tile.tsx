@@ -23,7 +23,7 @@ export const SELECT_CIRCLE = {minTile: 72, hitSize: 36} as const
 
 // The tile's classes, one string per state so a render does no class work.
 // The hover wash and the empty circle are the button's pseudo-elements.
-const tileClass = tw`group relative aspect-square w-full overflow-hidden rounded-(--umbrel-photos-tile-radius) outline-hidden focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-inset before:pointer-events-none before:absolute before:inset-0 before:z-10 hover:before:bg-white/8 after:pointer-events-none after:absolute after:top-1.5 after:left-1.5 after:z-10 after:hidden after:size-[22px] after:rounded-full after:border-[1.5px] after:border-white/85 after:bg-black/20 after:shadow-[0_1px_3px_rgb(0_0_0/0.35)]`
+const tileClass = tw`group relative aspect-square w-full overflow-hidden rounded-(--titan-photos-tile-radius) outline-hidden focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-inset before:pointer-events-none before:absolute before:inset-0 before:z-10 hover:before:bg-white/8 after:pointer-events-none after:absolute after:top-1.5 after:left-1.5 after:z-10 after:hidden after:size-[22px] after:rounded-full after:border-[1.5px] after:border-white/85 after:bg-black/20 after:shadow-[0_1px_3px_rgb(0_0_0/0.35)]`
 const tileClassByState = {
 	idle: `${tileClass} @min-[72px]:hover:after:block`,
 	selectable: `${tileClass} @min-[72px]:after:block`,
@@ -119,7 +119,7 @@ export const ItemTile = memo(function ItemTile({
 				</span>
 			)}
 			{selected && (
-				<span className='pointer-events-none absolute inset-0 rounded-(--umbrel-photos-tile-radius) border-2 border-brand'>
+				<span className='pointer-events-none absolute inset-0 rounded-(--titan-photos-tile-radius) border-2 border-brand'>
 					{/* 4px inside the 2px border: where the empty circle sits */}
 					<span className='absolute top-1 left-1 hidden size-[22px] items-center justify-center rounded-full bg-brand text-white @min-[72px]:flex'>
 						<Check className='size-3.5' strokeWidth={3} />

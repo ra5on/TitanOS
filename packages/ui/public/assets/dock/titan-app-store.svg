@@ -1,10 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
-    <linearGradient id="tile" x1="20" y1="0" x2="107" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#54e3ec"/><stop offset="1" stop-color="#1371d3"/></linearGradient>
-    <linearGradient id="shine" x1="64" y1="0" x2="64" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <filter id="depth" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#092645" flood-opacity=".16"/></filter>
+    <linearGradient id="tile" x1="64" y1="2" x2="64" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#347dff"/><stop offset="1" stop-color="#1740ca"/>
+    </linearGradient>
+    <linearGradient id="light" x1="18" y1="2" x2="110" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".32"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="10" y="10" width="108" height="112" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#101a3d" flood-opacity=".18"/>
+    </filter>
+    <linearGradient id="bag" x1="64" y1="43" x2="64" y2="105" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#dceaff"/></linearGradient>
   </defs>
-  <rect x="2" y="2" width="124" height="124" rx="30" fill="url(#tile)"/>
-  <rect x="3" y="3" width="122" height="122" rx="29" fill="url(#shine)" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>
-  <g filter="url(#depth)"><path d="m40 37 24-13 24 13v28L64 79 40 65Z" fill="#fff"/><path d="m40 37 24 14 24-14M64 51v28" stroke="#54bfdc" stroke-width="4" stroke-linejoin="round"/><path d="M25 67v17l25 15M103 67v17L78 99" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <rect x="2" y="2" width="124" height="124" rx="29" fill="url(#tile)"/>
+  <rect x="2.75" y="2.75" width="122.5" height="122.5" rx="28.25" fill="url(#light)" stroke="#ffffff" stroke-opacity=".48" stroke-width="1.5"/>
+  <g filter="url(#shadow)">
+    <path d="M46 45v-6a18 18 0 0 1 36 0v6" stroke="#e4efff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M32 43h64l7 50a11 11 0 0 1-11 12H36a11 11 0 0 1-11-12Z" fill="url(#bag)"/>
+    <path d="M34 44h60" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <rect x="43" y="60" width="17" height="17" rx="5" fill="#327cf3"/>
+    <rect x="68" y="60" width="17" height="17" rx="5" fill="#8b67e6"/>
+    <rect x="43" y="85" width="17" height="9" rx="4.5" fill="#54b8f5"/>
+    <rect x="68" y="85" width="17" height="9" rx="4.5" fill="#ffb345"/>
+  </g>
 </svg>

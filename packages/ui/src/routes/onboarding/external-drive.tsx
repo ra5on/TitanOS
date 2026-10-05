@@ -13,11 +13,11 @@ import {OnboardingAction, OnboardingFooter} from '@/routes/onboarding/onboarding
 import {RecommendedBadge} from '@/routes/onboarding/recommended-badge'
 import {trpcReact} from '@/trpc/trpc'
 
-// Raspberry Pi with an external drive attached: umbrelOS keeps its data on the
+// Raspberry Pi with an external drive attached: TitanOS keeps its data on the
 // medium it booted from (the SD card), which is rarely what someone who just
 // plugged in an SSD expects. Instead of warning them after they've filled in
 // the account form, this step asks up front where their data should live and,
-// if they pick the drive, walks them through installing umbrelOS on it.
+// if they pick the drive, walks them through installing TitanOS on it.
 
 const RECOMMEND_DRIVE_MIN_BYTES = 250_000_000_000
 
@@ -32,7 +32,7 @@ export default function ExternalDriveChoice() {
 	const navigate = useNavigate()
 	const {shutdown} = useGlobalSystemState()
 	const {data: deviceInfo, isLoading: isDeviceInfoLoading} = useDeviceInfo()
-	const isRaspberryPi = deviceInfo?.umbrelHostEnvironment === 'raspberry-pi'
+	const isRaspberryPi = deviceInfo?.titanHostEnvironment === 'raspberry-pi'
 	const externalDevicesQ = trpcReact.files.externalDevices.useQuery(undefined, {enabled: isRaspberryPi})
 	const drive = externalDevicesQ.data?.[0]
 
@@ -81,7 +81,7 @@ export default function ExternalDriveChoice() {
 								<div className='min-w-[200px] flex-1 text-white/70'>{text}</div>
 								{i === 1 && (
 									<a
-										href={links.umbrelOS}
+										href={links.TitanOS}
 										target='_blank'
 										rel='noreferrer'
 										// Hidden on mobile: the step happens on a computer, so the download belongs there

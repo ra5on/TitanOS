@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
-// The same sheet serves first-time onboarding and reconnecting a saved Umbrel.
-// Like umbrelOS, multi-user devices keep account selection and credentials in
+// The same sheet serves first-time onboarding and reconnecting a saved Titan.
+// Like titanOS, multi-user devices keep account selection and credentials in
 // one place; single-user devices retain the compact password-only form.
 struct SignInSheet: View {
 	@Environment(OnboardingModel.self) private var model
@@ -16,12 +16,12 @@ struct SignInSheet: View {
 
 	var body: some View {
 		let device = model.selectedDevice
-		let target = Umbreld.Target(
+		let target = Titand.Target(
 			deviceId: device?.id ?? "",
 			hosts: device.map { [$0.host] + $0.addresses } ?? []
 		)
-		UmbrelSignInForm(
-			title: device?.model ?? "Umbrel",
+		TitanSignInForm(
+			title: device?.model ?? "Titan",
 			target: target,
 			browserHost: device?.host ?? "",
 			preferredUserId: nil,
@@ -30,7 +30,7 @@ struct SignInSheet: View {
 					throw SignInError.sessionStorageFailed
 				}
 				guard claimedDeviceId != device.id else { return }
-				try await Umbreld.claimLocalHTTPSIdentity(device)
+				try await Titand.claimLocalHTTPSIdentity(device)
 				claimedDeviceId = device.id
 			},
 			onCancel: {
@@ -43,7 +43,7 @@ struct SignInSheet: View {
 			onRemove: nil
 		) { account, userId, password, totpToken in
 			guard model.selectedDevice != nil else { return }
-			let session = try await Umbreld.login(
+			let session = try await Titand.login(
 				target: target,
 				userId: userId,
 				password: password,
@@ -55,19 +55,19 @@ struct SignInSheet: View {
 	}
 }
 
-struct UmbrelSignInForm: View {
+struct TitanSignInForm: View {
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
 	let title: String
-	let target: Umbreld.Target
+	let target: Titand.Target
 	let browserHost: String
 	let preferredUserId: String?
 	let onPrepare: @MainActor () async throws -> Void
 	let onCancel: @MainActor () -> Void
 	let onRemove: (@MainActor () async -> Void)?
-	let onConnect: @MainActor (Umbreld.Account?, String, String, String?) async throws -> Void
+	let onConnect: @MainActor (Titand.Account?, String, String, String?) async throws -> Void
 
 	private enum Step {
 		case loadingAccounts
@@ -84,8 +84,8 @@ struct UmbrelSignInForm: View {
 	}
 
 	@State private var step: Step = .loadingAccounts
-	@State private var accounts: [Umbreld.Account] = []
-	@State private var selectedAccount: Umbreld.Account?
+	@State private var accounts: [Titand.Account] = []
+	@State private var selectedAccount: Titand.Account?
 	@State private var password = ""
 	@State private var twoFactorCode = ""
 	@State private var loading = false
@@ -135,7 +135,7 @@ struct UmbrelSignInForm: View {
 		.task { await loadAccounts() }
 		.onChange(of: scenePhase) { _, phase in
 			guard phase == .active else { return }
-			// Returning from Settings or browser-based Umbrel setup is the signal to
+			// Returning from Settings or browser-based Titan setup is the signal to
 			// re-read the authoritative account list and advance the existing sheet.
 			guard step == .localNetworkDenied || step == .setup else { return }
 			Task { await loadAccounts() }
@@ -144,20 +144,20 @@ struct UmbrelSignInForm: View {
 			connectTask?.cancel()
 			connectTask = nil
 		}
-		.alert("Remove this Umbrel?", isPresented: $isConfirmingRemoval) {
+		.alert("Remove this Titan?", isPresented: $isConfirmingRemoval) {
 			Button("Remove", role: .destructive) {
 				Task { await onRemove?() }
 			}
 			Button("Cancel", role: .cancel) {}
 		} message: {
-			Text("This removes the saved Umbrel from this iPhone. Any photo and video backups will remain on your Umbrel. You can add it again at any time.")
+			Text("This removes the saved Titan from this iPhone. Any photo and video backups will remain on your Titan. You can add it again at any time.")
 		}
 	}
 
 	private var credentials: some View {
 		VStack(spacing: 0) {
 			if hasMultipleAccounts {
-				UmbrelAccountPicker(
+				TitanAccountPicker(
 					accounts: accounts,
 					target: target,
 					selectedUserId: selectedAccount?.userId,
@@ -198,10 +198,10 @@ struct UmbrelSignInForm: View {
 
 	private var setup: some View {
 		message(
-			title: "Set up your Umbrel",
-			description: "This Umbrel hasn\u{2019}t been set up yet. Open it to create an account, then return here to sign in.",
-			actionTitle: "Open Umbrel",
-			showsUmbrelMark: true
+			title: "Set up your Titan",
+			description: "This Titan hasn\u{2019}t been set up yet. Open it to create an account, then return here to sign in.",
+			actionTitle: "Open Titan",
+			showsTitanMark: true
 		) {
 			guard let url = URL(string: "http://\(browserHost)") else { return }
 			openURL(url)
@@ -211,7 +211,7 @@ struct UmbrelSignInForm: View {
 	private var loadFailed: some View {
 		message(
 			title: "Couldn\u{2019}t connect",
-			description: "Make sure your Umbrel is online and your iPhone can reach it, then try again.",
+			description: "Make sure your Titan is online and your iPhone can reach it, then try again.",
 			actionTitle: "Try again"
 		) {
 			Task { await loadAccounts() }
@@ -221,7 +221,7 @@ struct UmbrelSignInForm: View {
 	private var localNetworkDenied: some View {
 		message(
 			title: "Local Network Access Off",
-			description: "Allow access in Settings to sign in to this Umbrel.",
+			description: "Allow access in Settings to sign in to this Titan.",
 			actionTitle: "Open Settings"
 		) {
 			guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
@@ -233,14 +233,14 @@ struct UmbrelSignInForm: View {
 		title: String,
 		description: String,
 		actionTitle: String,
-		showsUmbrelMark: Bool = false,
+		showsTitanMark: Bool = false,
 		action: @escaping () -> Void
 	) -> some View {
 		VStack(spacing: 12) {
 			Spacer()
 
-			if showsUmbrelMark {
-				Image("UmbrelMark")
+			if showsTitanMark {
+				Image("TitanMark")
 					.resizable()
 					.scaledToFit()
 					.frame(width: 52)
@@ -319,7 +319,7 @@ struct UmbrelSignInForm: View {
 		if let name = selectedAccount?.name, hasMultipleAccounts {
 			return "Log in as " + name
 		}
-		return "Log in to your Umbrel"
+		return "Log in to your Titan"
 	}
 
 	private var passwordField: some View {
@@ -424,7 +424,7 @@ struct UmbrelSignInForm: View {
 		step = .loadingAccounts
 		do {
 			try await onPrepare()
-			accounts = try await Umbreld.listAccounts(target: target)
+			accounts = try await Titand.listAccounts(target: target)
 		} catch {
 			step = await LocalNetworkProbe.isDenied() ? .localNetworkDenied : .loadFailed
 			return
@@ -443,7 +443,7 @@ struct UmbrelSignInForm: View {
 		}
 	}
 
-	private func selectAccount(_ account: Umbreld.Account) {
+	private func selectAccount(_ account: Titand.Account) {
 		if selectedAccount?.userId != account.userId {
 			selectedAccount = account
 			password = ""
@@ -473,14 +473,14 @@ struct UmbrelSignInForm: View {
 					submittedPassword,
 					submittedTwoFactorCode
 				)
-			} catch let umbrelError as Umbreld.Error where umbrelError.requiresTwoFactorAuthentication {
+			} catch let titanError as Titand.Error where titanError.requiresTwoFactorAuthentication {
 				guard !Task.isCancelled else { return }
 				step = .twoFactor
 				twoFactorCode = ""
 				focusedField = .twoFactor
 			} catch {
 				guard !Task.isCancelled else { return }
-				if (error as? Umbreld.Error)?.status == 0, await LocalNetworkProbe.isDenied() {
+				if (error as? Titand.Error)?.status == 0, await LocalNetworkProbe.isDenied() {
 					focusedField = nil
 					step = .localNetworkDenied
 				} else {

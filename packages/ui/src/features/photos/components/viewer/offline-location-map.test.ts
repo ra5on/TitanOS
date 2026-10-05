@@ -53,7 +53,7 @@ const atlas: OfflineMapData = {
 }
 
 describe('offline map resources', () => {
-	test('loads its only data resource from the Umbrel origin', async () => {
+	test('loads its only data resource from the Titan origin', async () => {
 		const fetcher = vi.fn(async () => new Response(JSON.stringify(atlas), {status: 200}))
 		const loaded = await fetchOfflineMapData(fetcher as typeof fetch)
 

@@ -11,8 +11,8 @@ export type FadeScrollerProps = ComponentPropsWithoutRef<'div'> & {
 	ref?: React.Ref<HTMLDivElement>
 }
 
-const FADE_SCROLLER_CLASS_X = 'umbrel-fade-scroller-x'
-const FADE_SCROLLER_CLASS_Y = 'umbrel-fade-scroller-y'
+const FADE_SCROLLER_CLASS_X = 'titan-fade-scroller-x'
+const FADE_SCROLLER_CLASS_Y = 'titan-fade-scroller-y'
 
 export function useFadeScroller(direction: 'x' | 'y', debug?: boolean, fadeSize = 50) {
 	const ref = useRef<HTMLDivElement>(null)

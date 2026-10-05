@@ -32,7 +32,7 @@ type DockItemProps = {
 	onClick?: (e: React.MouseEvent) => void
 } & HTMLDivProps
 
-// Matches the umbrel-dock-bounce duration in index.css; the open pill waits
+// Matches the titan-dock-bounce duration in index.css; the open pill waits
 // out the bounce before fading in
 const BOUNCE_DURATION = 0.4
 
@@ -118,7 +118,7 @@ export function DockItem({
 					'relative origin-top-left bg-cover transition-[filter] has-[:focus-visible]:brightness-125',
 					// CSS bounce (see index.css) instead of a motion variant: a JS-driven
 					// bounce stutters while the sheet's route mounts on the main thread
-					open && clickedOpen && 'umbrel-dock-bounce',
+					open && clickedOpen && 'titan-dock-bounce',
 					className,
 				)}
 				style={{

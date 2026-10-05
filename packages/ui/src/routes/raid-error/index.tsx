@@ -43,12 +43,12 @@ export default function RaidErrorScreen() {
 		enabled: mountFailureQ.data === true,
 		retry: false,
 	})
-	const isUmbrelPro = deviceInfoToHostEnvironment(identityQ.data) === 'umbrel-pro'
+	const isTitanPro = deviceInfoToHostEnvironment(identityQ.data) === 'titan-pro'
 	const healthDialog = useSsdHealthDialog()
 	const {restart, shutdown, isPowerActionPending} = useGlobalSystemState()
 	const factoryResetMut = trpcReact.system.factoryReset.useMutation({
 		onError: (error) => {
-			toast.error(t('raid-error.factory-reset-failed'), {area: 'umbrelos', description: error.message})
+			toast.error(t('raid-error.factory-reset-failed'), {area: 'titanos', description: error.message})
 		},
 	})
 	const busy = isPowerActionPending || factoryResetMut.isPending
@@ -139,7 +139,7 @@ export default function RaidErrorScreen() {
 									<StorageDeviceCard
 										key={id}
 										device={device}
-										fallbackType={isUmbrelPro ? 'ssd' : undefined}
+										fallbackType={isTitanPro ? 'ssd' : undefined}
 										identifier={id}
 										role={member ? t('storage-status.data-drive') : undefined}
 										status={
@@ -154,7 +154,7 @@ export default function RaidErrorScreen() {
 													: t('storage-status.connected')
 										}
 										onDetails={
-											device ? () => healthDialog.openDialog(device, isUmbrelPro ? device.slot : undefined) : undefined
+											device ? () => healthDialog.openDialog(device, isTitanPro ? device.slot : undefined) : undefined
 										}
 									/>
 								))}
@@ -179,7 +179,7 @@ export default function RaidErrorScreen() {
 								)}
 							</div>
 							{/* The photo's trailing shadow should not add empty scroll space. */}
-							{isUmbrelPro && (
+							{isTitanPro && (
 								<div
 									className='hidden aspect-[511/560] w-[50%] shrink-0 self-start overflow-hidden md:-mr-12 md:block'
 									style={{maskImage: 'linear-gradient(to bottom, black 97%, transparent 100%)'}}

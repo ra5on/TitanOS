@@ -14,7 +14,7 @@ import {toast} from '@/components/ui/toast'
 import {useHomePath} from '@/features/files/hooks/use-home-path'
 import {PhoneSourceName} from '@/features/photos/components/sources/phone-source-name'
 import {SourceIcon} from '@/features/photos/components/sources/source-icon'
-import {PushSourceSettings, UmbrelScopeSettings} from '@/features/photos/components/sources/source-settings'
+import {TitanScopeSettings} from '@/features/photos/components/sources/source-settings'
 import {sourceTypeLabel, timeAgo} from '@/features/photos/components/sources/source-status'
 import {usePhotoSource, usePhotoSourceActions, type PhotoSource} from '@/features/photos/hooks/use-photo-sources'
 import {useIsMobile} from '@/hooks/use-is-mobile'
@@ -82,17 +82,16 @@ function SourceDetailsBody({source}: {source: PhotoSource}) {
 	const homePath = useHomePath()
 	const {t, i18n} = useTranslation()
 	const {updateSettings} = usePhotoSourceActions()
-	// Phones keep their backup settings in the app; only their Photos display
-	// name is editable here.
-	const isUmbrel = source.type === 'umbrel'
+	// Native sources expose their display name; only the local source has import-scope settings.
+	const isTitan = source.type === 'titan'
 
 	const number = (n: number) => formatNumberI18n({n, showDecimals: false, locale: i18n.language})
 
 	return (
 		<div className='flex flex-col gap-4'>
-			{isUmbrel ? (
+			{isTitan ? (
 				<div className='flex flex-col items-center gap-3 pt-2 pb-1 text-center'>
-					<SourceIcon type='umbrel' size={64} />
+					<SourceIcon type='titan' size={64} />
 					<div>
 						<p className='text-15 font-semibold -tracking-2'>{source.name}</p>
 						<p className='mx-auto mt-1 max-w-[320px] text-12 leading-relaxed text-white/50'>
@@ -120,10 +119,10 @@ function SourceDetailsBody({source}: {source: PhotoSource}) {
 				</div>
 			)}
 
-			{/* Settings. This Umbrel gets the same big scope picker as the add
+			{/* Settings. This Titan gets the same big scope picker as the add
 			    dialog, saving as it changes. */}
-			{isUmbrel && source.scope ? (
-				<UmbrelScopeSettings
+			{isTitan && source.scope && (
+				<TitanScopeSettings
 					rootPath={homePath}
 					scope={source.scope}
 					onChange={(scope) =>
@@ -132,8 +131,6 @@ function SourceDetailsBody({source}: {source: PhotoSource}) {
 						)
 					}
 				/>
-			) : (
-				<PushSourceSettings />
 			)}
 		</div>
 	)

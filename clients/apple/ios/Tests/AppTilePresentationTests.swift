@@ -1,8 +1,8 @@
 import XCTest
-@testable import Umbrel
+@testable import Titan
 
 final class AppTilePresentationTests: XCTestCase {
-	func testAvailableAndStoppedStatesMatchUmbrelOSPresentation() {
+	func testAvailableAndStoppedStatesMatchTitanOSPresentation() {
 		let available = AppTilePresentation(state: "ready")
 		XCTAssertFalse(available.dimsIcon)
 		XCTAssertNil(available.symbolName)
@@ -25,7 +25,7 @@ final class AppTilePresentationTests: XCTestCase {
 		}
 	}
 
-	func testLifecycleActivitiesUseUmbrelOSLabels() {
+	func testLifecycleActivitiesUseTitanOSLabels() {
 		let expected = [
 			"installing": "Files",
 			"starting": "Starting\u{2026}",

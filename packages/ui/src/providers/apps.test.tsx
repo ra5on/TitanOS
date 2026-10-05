@@ -8,12 +8,12 @@ import {AppsProvider, systemAppsKeyed, useApps} from './apps'
 
 const fixtures = vi.hoisted(() => ({language: 'en'}))
 const dictionaries: Record<string, Record<string, string>> = {
-	en: {files: 'Files', photos: 'Photos', settings: 'Settings', 'machines.umbrel-machines': 'Machines'},
+	en: {files: 'Files', photos: 'Photos', settings: 'Settings', 'machines.titan-machines': 'Machines'},
 	de: {
 		files: 'Dateien',
 		photos: "Foto's",
 		settings: 'Einstellungen',
-		'machines.umbrel-machines': 'Virtuelle Maschinen',
+		'machines.titan-machines': 'Virtuelle Maschinen',
 	},
 }
 const translate = (key: string) => dictionaries[fixtures.language][key] ?? key
@@ -69,7 +69,7 @@ it('updates every provider consumer on a language change without renaming instal
 			</AppsProvider>,
 		),
 	)
-	expect(container.querySelector('[data-id="UMBREL_files"]')?.textContent).toBe('Files')
+	expect(container.querySelector('[data-id="TITAN_files"]')?.textContent).toBe('Files')
 	fixtures.language = 'de'
 	act(() =>
 		root?.render(
@@ -78,9 +78,9 @@ it('updates every provider consumer on a language change without renaming instal
 			</AppsProvider>,
 		),
 	)
-	expect(container.querySelector('[data-id="UMBREL_files"]')?.textContent).toBe('Dateien')
-	expect(container.querySelector('[data-id="UMBREL_photos"]')?.textContent).toBe("Foto's")
-	expect(container.querySelector('[data-id="UMBREL_machines"]')?.textContent).toBe('Virtuelle Maschinen')
+	expect(container.querySelector('[data-id="TITAN_files"]')?.textContent).toBe('Dateien')
+	expect(container.querySelector('[data-id="TITAN_photos"]')?.textContent).toBe("Foto's")
+	expect(container.querySelector('[data-id="TITAN_machines"]')?.textContent).toBe('Virtuelle Maschinen')
 	expect(container.querySelector('[data-id="third-party"]')?.textContent).toBe('Original App Name')
-	expect(systemAppsKeyed.UMBREL_files.systemAppTo).toBe('/files')
+	expect(systemAppsKeyed.TITAN_files.systemAppTo).toBe('/files')
 })

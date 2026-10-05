@@ -4,7 +4,7 @@
 # tmpfs overlay for runtime state) and runs the installer script on tty1.
 # The TitanOS image is not part of this configuration, it's grafted into
 # the final ISO afterwards and read from the boot medium at
-# /iso/umbrelos-amd64.img.xz.
+# /iso/titanos-amd64.img.xz.
 {
   config,
   lib,
@@ -42,7 +42,7 @@ in {
     (modulesPath + "/profiles/minimal.nix")
   ];
 
-  options.umbrel.altGraphics = lib.mkOption {
+  options.titan.altGraphics = lib.mkOption {
     type = lib.types.bool;
     default = false;
     description = "Boot with kernel modesetting instead of the safe nomodeset default.";
@@ -61,7 +61,7 @@ in {
     system.nixos.extraOSReleaseArgs.SUPPORT_END = "";
 
     isoImage = {
-      volumeID = "UMBRELINSTALLER";
+      volumeID = "TITANINSTALLER";
       makeBiosBootable = true;
       makeEfiBootable = true;
       makeUsbBootable = true;
@@ -75,7 +75,7 @@ in {
       # is a compatibility risk on devices with quirky graphics.
       forceTextMode = true;
     };
-    image.baseName = lib.mkForce "umbrelos-amd64-usb-installer";
+    image.baseName = lib.mkForce "titanos-amd64-usb-installer";
 
     system.modulesTree = lib.mkForce [prunedKernelModules];
 
@@ -93,12 +93,12 @@ in {
     # it: https://github.com/getumbrel/umbrel/issues/2013
     boot.kernelParams =
       ["quiet"]
-      ++ lib.optionals (!config.umbrel.altGraphics) ["nomodeset" "vga=normal" "fbcon=font:VGA8x16"];
+      ++ lib.optionals (!config.titan.altGraphics) ["nomodeset" "vga=normal" "fbcon=font:VGA8x16"];
 
     # Second boot menu entry ("TitanOS installer (alt graphics)") with kernel
     # modesetting enabled for devices where the nomodeset console doesn't work.
     specialisation.alt-graphics.configuration = {
-      umbrel.altGraphics = true;
+      titan.altGraphics = true;
       isoImage.configurationName = "(alt graphics)";
     };
 

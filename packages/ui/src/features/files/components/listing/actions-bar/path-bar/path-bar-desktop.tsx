@@ -65,11 +65,11 @@ export function PathBarDesktop({path}: {path: string}) {
 	const trashPath = useTrashPath()
 
 	// For members browsing the owner's files (via paths shared with them), the
-	// breadcrumb roots at "{Owner}'s Umbrel" (/Home), mirroring their sidebar
+	// breadcrumb roots at "{Owner}'s Titan" (/Home), mirroring their sidebar
 	const isMember = useIsMember()
 	const {sharedWithMe} = useMemberShares()
-	const ownersUmbrelName = sharedWithMe?.ownerName
-		? t('files-sidebar.owners-umbrel', {name: firstNameFromFullName(sharedWithMe.ownerName)})
+	const ownersTitanName = sharedWithMe?.ownerName
+		? t('files-sidebar.owners-titan', {name: firstNameFromFullName(sharedWithMe.ownerName)})
 		: ''
 
 	const segments = useMemo(() => {
@@ -86,12 +86,12 @@ export function PathBarDesktop({path}: {path: string}) {
 
 		const displaySegments = displayPath.split('/').filter(Boolean)
 
-		// Members browsing the owner's home root at "{Owner}'s Umbrel"
-		const isOwnersUmbrel = isMember && (displayPath === '/Home' || displayPath.startsWith('/Home/'))
+		// Members browsing the owner's home root at "{Owner}'s Titan"
+		const isOwnersTitan = isMember && (displayPath === '/Home' || displayPath.startsWith('/Home/'))
 
-		const rootInfo = isOwnersUmbrel
+		const rootInfo = isOwnersTitan
 			? {
-					segment: ownersUmbrelName,
+					segment: ownersTitanName,
 					type: 'home' as const,
 					path: '/Home',
 				}
@@ -165,7 +165,7 @@ export function PathBarDesktop({path}: {path: string}) {
 		homePath,
 		trashPath,
 		isMember,
-		ownersUmbrelName,
+		ownersTitanName,
 		isBrowsingExternalStorage,
 		isBrowsingNetworkStorage,
 		isUiCloudRoot,
@@ -246,7 +246,7 @@ export function PathBarDesktop({path}: {path: string}) {
 	}, [deriveIsOverflow, path])
 
 	return (
-		<FadeScroller direction='x' className='umbrel-hide-scrollbar overflow-x-auto' ref={fadeScrollerRef}>
+		<FadeScroller direction='x' className='titan-hide-scrollbar overflow-x-auto' ref={fadeScrollerRef}>
 			<ul className='flex h-8 items-center border border-transparent py-1 whitespace-nowrap' ref={breadcrumbsRef}>
 				{segments.map((segment, i) => {
 					/* First and last two segments are static, they always be fully visible */

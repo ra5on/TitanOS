@@ -1,12 +1,12 @@
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // App root and navigation:
 //  - no saved devices  → first-run onboarding
 //  - a signed-in device selected → that device's tabs
 //  - otherwise         → the all-devices list
 // Saved devices and their Keychain sessions are deliberately separate: signing out returns to
-// the list and keeps the Umbrel available for an immediate sign-in, while removing an Umbrel is
+// the list and keeps the Titan available for an immediate sign-in, while removing an Titan is
 // a distinct action. The selected device id is remembered so relaunching returns to it.
 struct RootView: View {
 	@Environment(\.scenePhase) private var scenePhase
@@ -77,13 +77,13 @@ struct RootView: View {
 			)
 		) {
 			if let device = signInDevice {
-				UmbrelSignInForm(
+				TitanSignInForm(
 					title: device.model ?? device.name,
 					target: device.nativeTarget,
 					browserHost: device.host,
 					preferredUserId: device.lastAccountId,
 					onPrepare: {
-						try await Umbreld.prepareSavedDeviceForSignIn(device.nativeTarget)
+						try await Titand.prepareSavedDeviceForSignIn(device.nativeTarget)
 					},
 					onCancel: { signInDevice = nil },
 					onRemove: {
@@ -99,7 +99,7 @@ struct RootView: View {
 						reloadSavedDevices()
 					}
 				) { account, userId, password, totpToken in
-					let session = try await Umbreld.login(
+					let session = try await Titand.login(
 						target: device.nativeTarget,
 						userId: userId,
 						password: password,
@@ -110,17 +110,17 @@ struct RootView: View {
 						throw SignInError.sessionStorageFailed
 					}
 					// Reconnecting an account must not move the iPhone library away from
-					// another Umbrel. Backup ownership changes only through backup controls.
+					// another Titan. Backup ownership changes only through backup controls.
 					let result = Config.load()
 					if let issue = result.issue {
 						Keychain.deleteSession(deviceId: device.id)
-						try? await Umbreld.logout(target: device.nativeTarget, session: session)
+						try? await Titand.logout(target: device.nativeTarget, session: session)
 						throw issue
 					}
 					var config = result.config
 					guard config.savedDevices[device.id] != nil else {
 						Keychain.deleteSession(deviceId: device.id)
-						try? await Umbreld.logout(target: device.nativeTarget, session: session)
+						try? await Titand.logout(target: device.nativeTarget, session: session)
 						throw Config.StorageIssue.saveFailed
 					}
 					do {
@@ -147,7 +147,7 @@ struct RootView: View {
 						}
 					} catch {
 						Keychain.deleteSession(deviceId: device.id)
-						try? await Umbreld.logout(target: device.nativeTarget, session: session)
+						try? await Titand.logout(target: device.nativeTarget, session: session)
 						throw error
 					}
 					connectionSnapshots[device.id] = DeviceConnectionSnapshot(

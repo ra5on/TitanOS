@@ -84,7 +84,7 @@ export function AppAccessDetail({
 							tooltip={t('mcp-all-apps-description')}
 							checked={allApps}
 							disabled={busy}
-							className={cn(busy && 'umbrel-pulse')}
+							className={cn(busy && 'titan-pulse')}
 							onCheckedChange={(checked) => onUpdate({apps: checked ? 'all' : []})}
 						/>
 						{!allApps && addAppMenu}
@@ -175,7 +175,7 @@ export function MachineAccessDetail({
 							tooltip={t('mcp-all-machines-description')}
 							checked={allMachines}
 							disabled={busy}
-							className={cn(busy && 'umbrel-pulse')}
+							className={cn(busy && 'titan-pulse')}
 							onCheckedChange={(checked) => onUpdate({machines: checked ? 'all' : []})}
 						/>
 						{!allMachines && addMachineMenu}
@@ -265,7 +265,7 @@ export function FileAccessDetail({
 							tooltip={t('mcp-all-folders-description')}
 							checked={allFolders}
 							disabled={busy}
-							className={cn(busy && 'umbrel-pulse')}
+							className={cn(busy && 'titan-pulse')}
 							onCheckedChange={(checked) => onUpdate({files: checked ? 'all' : []})}
 						/>
 						{!allFolders && (

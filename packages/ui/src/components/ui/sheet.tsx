@@ -12,7 +12,7 @@ const SheetTrigger = SheetPrimitive.Trigger
 const SheetPortal = (props: SheetPrimitive.DialogPortalProps) => <SheetPrimitive.Portal {...props} />
 SheetPortal.displayName = SheetPrimitive.Portal.displayName
 
-// The bottom-zoom side animates via the bespoke umbrel-sheet-zoom rules in
+// The bottom-zoom side animates via the bespoke titan-sheet-zoom rules in
 // index.css rather than these tw-animate utilities: tw-animate's shared
 // enter/exit keyframes also animate `filter`, which is costly on a layer this
 // large (see the rules for details)
@@ -24,7 +24,7 @@ const sheetVariants = cva('fixed z-30 gap-4 contrast-more:bg-black overflow-hidd
 		side: {
 			top: `inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top ${slideSheetAnimation}`,
 			bottom: `inset-x-0 bottom-0 data-[state=closed]:slide-out-to-bottom-1/2 data-[state=open]:slide-in-from-bottom-1/2 ${slideSheetAnimation}`,
-			'bottom-zoom': 'inset-x-0 bottom-0 umbrel-sheet-zoom',
+			'bottom-zoom': 'inset-x-0 bottom-0 titan-sheet-zoom',
 			left: `inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm ${slideSheetAnimation}`,
 			right: `inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm ${slideSheetAnimation}`,
 		},
@@ -63,7 +63,7 @@ function SheetContent({
 					sheetVariants({side}),
 					// will-change alone keeps the layer promoted; a static transform here
 					// would force the zoom keyframes through matrix interpolation
-					'umbrel-window-shadow umbrel-window-surface-top will-change-[transform]',
+					'titan-window-shadow titan-window-surface-top will-change-[transform]',
 					className,
 				)}
 				{...props}
@@ -74,7 +74,7 @@ function SheetContent({
 				    itself: Safari does not reliably clip a composited child by an ancestor's
 				    radius while that ancestor animates, and the transform keeps this layer
 				    composited so the clip applies to the child */}
-				<div className='umbrel-window-surface-top absolute inset-0 transform-gpu overflow-hidden bg-black contrast-more:hidden'>
+				<div className='titan-window-surface-top absolute inset-0 transform-gpu overflow-hidden bg-black contrast-more:hidden'>
 					{/* Fade in the wallpaper to avoid a flash when the sheet opens. The
 					    tint layer above stays constant so the fade happens under it. */}
 					{/* An empty src resolves to the current document, so fall back to the
@@ -86,15 +86,15 @@ function SheetContent({
 								src={wallpaper.url}
 								alt=''
 								aria-hidden='true'
-								className='umbrel-window-wallpaper absolute inset-0 size-full object-cover object-center opacity-0'
+								className='titan-window-wallpaper absolute inset-0 size-full object-cover object-center opacity-0'
 							/>
 						</picture>
 					)}
-					<div className='umbrel-window-tint absolute inset-0' />
+					<div className='titan-window-tint absolute inset-0' />
 				</div>
 				{children}
 				{/* Window edge and inner shine */}
-				<div className='umbrel-window-chrome umbrel-window-surface-top pointer-events-none absolute inset-0 z-50' />
+				<div className='titan-window-chrome titan-window-surface-top pointer-events-none absolute inset-0 z-50' />
 			</SheetPrimitive.Content>
 		</>
 		// </SheetPortal>

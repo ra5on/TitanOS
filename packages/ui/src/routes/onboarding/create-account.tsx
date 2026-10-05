@@ -43,8 +43,8 @@ export default function CreateAccount() {
 	const [localError, setLocalError] = useState('')
 	const [isNavigating, setIsNavigating] = useState(false)
 
-	const isRaspberryPi = deviceInfo?.umbrelHostEnvironment === 'raspberry-pi'
-	const isGeneric = deviceInfo?.umbrelHostEnvironment === 'unknown'
+	const isRaspberryPi = deviceInfo?.titanHostEnvironment === 'raspberry-pi'
+	const isGeneric = deviceInfo?.titanHostEnvironment === 'unknown'
 
 	// A Raspberry Pi with an external drive attached chooses where its data lives
 	// in the external-drive step first. Arriving from that step (SD card chosen)
@@ -79,7 +79,7 @@ export default function CreateAccount() {
 			const host = deviceInfoToHostEnvironment(identity)
 			if (!host) throw new Error('Storage identity unavailable')
 			let path: string | undefined
-			if (host === 'umbrel-pro') path = '/onboarding/raid'
+			if (host === 'titan-pro') path = '/onboarding/raid'
 			if (host === 'unknown') {
 				const inventory = await internalStorageQ.refetch()
 				if (inventory.isError || !inventory.data) throw new Error('Storage inventory unavailable')

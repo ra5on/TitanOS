@@ -6,7 +6,7 @@ import {trpcReact} from '@/trpc/trpc'
 import {type GlobalDialogKey} from '@/utils/dialog'
 
 type GlobalDialogOptions = {
-	/** umbreld refuses these to members, so the dialog never mounts for them */
+	/** titand refuses these to members, so the dialog never mounts for them */
 	ownerOnly?: boolean
 }
 

@@ -1,4 +1,4 @@
-// TODO: this should all probably be in umbreld
+// TODO: this should all probably be in titand
 
 import {FilesGridWidget, FilesListWidget, filesWidgetTypes} from '@/features/files/widgets'
 
@@ -165,7 +165,7 @@ export const liveUsageWidgets: [
 	RegistryWidget<'three-stats'>,
 ] = [
 	{
-		id: 'umbrel:storage',
+		id: 'titan:storage',
 		type: 'text-with-progress',
 		example: {
 			title: 'Storage',
@@ -175,7 +175,7 @@ export const liveUsageWidgets: [
 		},
 	},
 	{
-		id: 'umbrel:memory',
+		id: 'titan:memory',
 		type: 'text-with-progress',
 		example: {
 			title: 'Memory',
@@ -186,7 +186,7 @@ export const liveUsageWidgets: [
 		},
 	},
 	{
-		id: 'umbrel:system-stats',
+		id: 'titan:system-stats',
 		type: 'three-stats',
 		example: {
 			items: [

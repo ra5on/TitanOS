@@ -1,14 +1,14 @@
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
-// Native counterpart to umbrelOS's multi-user dock. SwiftUI owns layout and
+// Native counterpart to titanOS's multi-user dock. SwiftUI owns layout and
 // interaction; AccountLens.metal recreates the dock's clear refractive selector
 // without adding a frosted material over the avatar.
-struct UmbrelAccountPicker: View {
-	let accounts: [Umbreld.Account]
-	let target: Umbreld.Target
-	let onSelectionChange: (Umbreld.Account) -> Void
+struct TitanAccountPicker: View {
+	let accounts: [Titand.Account]
+	let target: Titand.Target
+	let onSelectionChange: (Titand.Account) -> Void
 
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -23,10 +23,10 @@ struct UmbrelAccountPicker: View {
 	private let lensChroma: CGFloat = 0.2
 
 	init(
-		accounts: [Umbreld.Account],
-		target: Umbreld.Target,
+		accounts: [Titand.Account],
+		target: Titand.Target,
 		selectedUserId: String? = nil,
-		onSelectionChange: @escaping (Umbreld.Account) -> Void
+		onSelectionChange: @escaping (Titand.Account) -> Void
 	) {
 		self.accounts = accounts
 		self.target = target
@@ -39,11 +39,11 @@ struct UmbrelAccountPicker: View {
 		)
 	}
 
-	private var arrangedAccounts: [Umbreld.Account] {
+	private var arrangedAccounts: [Titand.Account] {
 		guard let owner = accounts.first(where: { $0.userId == "0" }) else { return accounts }
 		let members = accounts.filter { $0.userId != owner.userId }
-		var left: [Umbreld.Account] = []
-		var right: [Umbreld.Account] = []
+		var left: [Titand.Account] = []
+		var right: [Titand.Account] = []
 		for (index, member) in members.enumerated() {
 			if index.isMultiple(of: 2) { right.append(member) } else { left.append(member) }
 		}
@@ -54,7 +54,7 @@ struct UmbrelAccountPicker: View {
 		arrangedAccounts.firstIndex(where: { $0.userId == selectedUserId }) ?? 0
 	}
 
-	private var selectedAccount: Umbreld.Account? {
+	private var selectedAccount: Titand.Account? {
 		arrangedAccounts[safe: selectedIndex]
 	}
 
@@ -186,8 +186,8 @@ struct UmbrelAccountPicker: View {
 }
 
 private struct AccountAvatar: View {
-	let account: Umbreld.Account
-	let target: Umbreld.Target
+	let account: Titand.Account
+	let target: Titand.Target
 	let size: CGFloat
 	@State private var image: UIImage?
 
@@ -214,7 +214,7 @@ private struct AccountAvatar: View {
 		.task(id: avatarLoadKey) {
 			image = nil
 			guard let path = account.avatarUrl,
-				let data = try? await Umbreld.accountAvatarData(target: target, path: path),
+				let data = try? await Titand.accountAvatarData(target: target, path: path),
 				!Task.isCancelled,
 				let source = UIImage(data: data),
 				let prepared = await source.byPreparingForDisplay(),
@@ -236,7 +236,7 @@ private extension Collection {
 }
 
 private enum AccountGradient {
-	// Keep this palette and hash in sync with umbrelOS's AccountAvatar. Account
+	// Keep this palette and hash in sync with titanOS's AccountAvatar. Account
 	// colours are presentation derived from the immutable id, not stored profile data.
 	private static let meshes: [LinearGradient] = [
 		mesh([(0xFA709A, 0), (0xFEE140, 1)], angle: 90),

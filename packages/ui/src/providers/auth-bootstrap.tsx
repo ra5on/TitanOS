@@ -3,7 +3,7 @@ import {useEffect} from 'react'
 import {AUTH_TOKEN_LOCAL_STORAGE_KEY, clearAuthToken} from '@/modules/auth/token-renewal'
 import {trpcReact} from '@/trpc/trpc'
 
-// Clear a stale token at page load if umbreld reports we're not logged in.
+// Clear a stale token at page load if titand reports we're not logged in.
 // Without this, a stale token can cause WS auth failures and redirect loops
 // because we have a tRPC split-link that prefers WS when a token exists.
 export function AuthBootstrap() {

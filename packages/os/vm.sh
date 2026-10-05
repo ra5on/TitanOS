@@ -10,7 +10,7 @@ QMP_SOCKET=""
 RUNNING_DEVICE_FILE="$STATE_DIR/running-device"
 
 # Defaults
-DEFAULT_DEVICE="umbrel-pro"
+DEFAULT_DEVICE="nas"
 DEFAULT_MEMORY=2048
 DEFAULT_CORES=4
 DEFAULT_DISK_SIZE="64G"
@@ -28,9 +28,9 @@ MAX_NVME_SLOTS=8
 MAX_HDD_SLOTS=8
 MAX_USB_STORAGE_SLOTS=8
 
-# Get Umbrel Pro PCIe slot number for an NVMe slot.
+# Get Titan Pro PCIe slot number for an NVMe slot.
 # Returns empty if no explicit mapping exists.
-get_umbrel_pro_pci_slot() {
+get_titan_pro_pci_slot() {
   local slot="$1"
   case "$slot" in
     1) echo "12" ;;
@@ -59,11 +59,11 @@ get_native_arch() {
 # Get default image path for an architecture
 get_default_image() {
   local arch="$1"
-  echo "$SCRIPT_DIR/build/umbrelos-${arch}.img"
+  echo "$SCRIPT_DIR/build/titanos-${arch}.img"
 }
 
 get_default_pi_image() {
-  echo "$SCRIPT_DIR/build/umbrelos-pi.img"
+  echo "$SCRIPT_DIR/build/titanos-pi.img"
 }
 
 find_command() {
@@ -89,7 +89,7 @@ find_command() {
 
 show_help() {
   cat << EOF
-vm.sh - Manage an umbrelOS QEMU virtual machine
+vm.sh - Manage an titanOS QEMU virtual machine
 
 Usage: $0 <command> [options]
 
@@ -119,7 +119,7 @@ Commands:
     usb disconnect <slot>          Disconnect USB storage from the running VM without deleting data
 
 Boot Options:
-    --device <type>                Device to emulate: umbrel-pro, umbrel-home, nas, pi (default: ${DEFAULT_DEVICE})
+    --device <type>                Device to emulate: titan-pro, titan-home, nas, pi (default: ${DEFAULT_DEVICE})
     --boot-disk <type>             Boot disk transport: default, emmc, nvme, usb, sdcard, none (default: default for device)
     --cdrom <path>                 Attach an ISO as a bootable CD-ROM (amd64 only), e.g. the USB installer
     --boot-nvme-slot <slot>        Boot from the NVMe device in this slot, e.g. after the USB installer flashed it
@@ -140,12 +140,12 @@ Environment Variables:
     VM_STATE_DIR                   Override state directory (default: ./vm-state)
 
 Examples:
-    $0 boot                                        # Boot native arch image as Umbrel Pro
-    $0 boot --device umbrel-home                   # Boot as Umbrel Home (NVMe boot, no eMMC)
+    $0 boot                                        # Boot native arch image as Titan Pro
+    $0 boot --device titan-home                   # Boot as Titan Home (NVMe boot, no eMMC)
     $0 boot --device nas                           # Boot as generic NAS (8 SSD + 8 HDD slots)
     $0 boot --device nas --boot-disk usb           # Boot generic NAS from USB storage
     $0 boot --device pi                            # Boot Pi image in an emulated Raspberry Pi 4
-    $0 boot umbrelos-amd64.img --memory 4096       # Boot specific image
+    $0 boot titanos-amd64.img --memory 4096       # Boot specific image
     $0 boot --arch arm64                           # Boot arm64 image
     $0 nvme add 1 --size 128G
     $0 sata add 1 --size 4T --type hdd
@@ -185,7 +185,7 @@ initialize_qmp_socket() {
     exit 1
   fi
   digest="${digest%% *}"
-  QMP_SOCKET="/tmp/umbrel-vm-${digest:0:16}.qmp"
+  QMP_SOCKET="/tmp/titan-vm-${digest:0:16}.qmp"
 }
 
 remove_qmp_socket() {
@@ -929,10 +929,10 @@ build_nvme_args() {
         serial="nvme${slot}"
       fi
 
-      # Umbrel Pro uses specific PCIe slot numbers to match real hardware
+      # Titan Pro uses specific PCIe slot numbers to match real hardware
       local pci_slot
-      if [[ "$device" == "umbrel-pro" ]]; then
-        pci_slot=$(get_umbrel_pro_pci_slot "$slot")
+      if [[ "$device" == "titan-pro" ]]; then
+        pci_slot=$(get_titan_pro_pci_slot "$slot")
       fi
       if [[ -z "${pci_slot:-}" ]]; then
         pci_slot=$(( 20 + slot ))
@@ -971,10 +971,10 @@ build_boot_disk_args() {
       echo "-drive ${drive_args} -device virtio-blk-pci,drive=boot,bootindex=0"
       ;;
     nvme)
-      echo "-drive ${drive_args} -device nvme,drive=boot,serial=umbrel-boot-nvme,bootindex=0"
+      echo "-drive ${drive_args} -device nvme,drive=boot,serial=titan-boot-nvme,bootindex=0"
       ;;
     usb)
-      echo "-device qemu-xhci,id=boot_xhci -drive ${drive_args} -device usb-storage,bus=boot_xhci.0,drive=boot,serial=umbrel-boot-usb,bootindex=0"
+      echo "-device qemu-xhci,id=boot_xhci -drive ${drive_args} -device usb-storage,bus=boot_xhci.0,drive=boot,serial=titan-boot-usb,bootindex=0"
       ;;
     sdcard)
       # Attaches to the SD bus of machines that have one (e.g. raspi4b).
@@ -1089,7 +1089,7 @@ extract_pi_boot_files() {
   # QEMU attaches the SD card to the legacy SDHCI controller instead of the
   # EMMC2 controller that drives the SD slot on a real Pi 4. Swap their mmc
   # aliases so the SD card is still named mmcblk0 like on real hardware
-  # (umbrelOS uses that to detect it's booting from an SD card).
+  # (titanOS uses that to detect it's booting from an SD card).
   "$fdtput" -t s "$boot_dir/bcm2711-rpi-4-b.dtb" /aliases mmc0 /soc/mmcnr@7e300000
   "$fdtput" -t s "$boot_dir/bcm2711-rpi-4-b.dtb" /aliases mmc1 /emmc2bus/mmc@7e340000
 }
@@ -1178,14 +1178,14 @@ boot_vm() {
   # Device-specific SMBIOS and default boot disk settings
   local smbios_args default_boot_disk_transport
   case "$device" in
-    umbrel-home)
+    titan-home)
       smbios_args=(-smbios "type=1,manufacturer=Umbrel,, Inc.,product=Umbrel Home,sku=U130122,family=NAS")
-      # Umbrel Home has no eMMC — the OS lives on the NVMe SSD
+      # Titan Home has no eMMC — the OS lives on the NVMe SSD
       default_boot_disk_transport="nvme"
       ;;
-    umbrel-pro)
+    titan-pro)
       smbios_args=(-smbios "type=1,manufacturer=Umbrel,, Inc.,product=Umbrel Pro,sku=U4XN1,family=NAS")
-      # Umbrel Pro boots from eMMC (virtio-blk), NVMe slots are for data SSDs
+      # Titan Pro boots from eMMC (virtio-blk), NVMe slots are for data SSDs
       default_boot_disk_transport="emmc"
       ;;
     nas)
@@ -1194,7 +1194,7 @@ boot_vm() {
       default_boot_disk_transport="emmc"
       ;;
     pi)
-      # The Pi has no SMBIOS, umbrelOS detects Pi hardware from the device
+      # The Pi has no SMBIOS, titanOS detects Pi hardware from the device
       # tree model exposed in /proc/cpuinfo.
       smbios_args=()
       # The Pi boots from an SD card.
@@ -1336,7 +1336,7 @@ boot_vm() {
   fi
 
   echo "Booting VM (${arch}, ${device}, ${boot_disk_transport} boot disk)..."
-  echo "  SSH: ssh -p ${ssh_port} umbrel@localhost"
+  echo "  SSH: ssh -p ${ssh_port} titan@localhost"
   echo "  HTTP: http://localhost:${http_port}"
   # ${arr[@]+...} guard: empty array expansion errors under set -u on bash < 4.4 (stock macOS bash 3.2)
   for port_forward in ${forward_ports[@]+"${forward_ports[@]}"}; do
@@ -1683,8 +1683,8 @@ case "$command" in
       case "$1" in
         --device)
           device="$2"
-          if [[ "$device" != "umbrel-pro" && "$device" != "umbrel-home" && "$device" != "nas" && "$device" != "pi" ]]; then
-            echo "Error: --device must be 'umbrel-pro', 'umbrel-home', 'nas', or 'pi'" >&2
+          if [[ "$device" != "titan-pro" && "$device" != "titan-home" && "$device" != "nas" && "$device" != "pi" ]]; then
+            echo "Error: --device must be 'titan-pro', 'titan-home', 'nas', or 'pi'" >&2
             exit 1
           fi
           shift 2

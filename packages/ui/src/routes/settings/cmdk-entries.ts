@@ -45,7 +45,7 @@ export function useSettingsCmdkEntries(): CmdkEntry[] {
 			subtitle: `${t('generic-in')} ${t('settings')}`,
 			keywords: [item.description, ...(item.keywords ?? [])].filter((keyword) => keyword !== undefined),
 			default: defaultItems.has(item),
-			icon: systemAppsKeyed['UMBREL_settings'].icon,
+			icon: systemAppsKeyed['TITAN_settings'].icon,
 			onSelect: () => {
 				const target = getSettingsCommandTarget(item)
 				if (target.type === 'external') window.open(target.to, '_blank', 'noopener,noreferrer')

@@ -3,7 +3,7 @@ import ExtensionFoundation
 import Foundation
 import OSLog
 import Photos
-import UmbrelKit
+import TitanKit
 import UniformTypeIdentifiers
 
 // PhotoKit is the only uploader. Each invocation advances a small durable state
@@ -15,7 +15,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 	private static let inventoryTargetPerInvocation = 4_096
 	private static let historyCheckpointSize = 1_024
 	private static let logger = Logger(
-		subsystem: "com.umbrel.app.photo-background-upload",
+		subsystem: "io.github.ra5on.titanos.app.photo-background-upload",
 		category: "PhotoBackup"
 	)
 	private let terminationLock = NSLock()
@@ -627,7 +627,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 	}
 
 	private func shouldRetry(_ job: PHAssetResourceUploadJob) -> Bool {
-		// A 507 from Umbrel is recoverable only after the user frees server
+		// A 507 from Titan is recoverable only after the user frees server
 		// storage. Spending PhotoKit's single retry immediately cannot help.
 		guard PhotoBackupIssue(responseHeaderFields: job.responseHeaderFields) == nil else { return false }
 		guard let error = job.error as? URLError else { return true }
@@ -641,8 +641,8 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 	private func successfulReceipt(for job: PHAssetResourceUploadJob) -> (resourceKey: String, bytes: Int64)? {
 		guard let key = resourceKey(for: job),
 			job.state == .succeeded,
-			job.responseHeaderFields?["x-umbrel-photo-backup-key"] == key,
-			let bytes = Int64(job.responseHeaderFields?["x-umbrel-upload-bytes"] ?? ""),
+			job.responseHeaderFields?["x-titan-photo-backup-key"] == key,
+			let bytes = Int64(job.responseHeaderFields?["x-titan-upload-bytes"] ?? ""),
 			PhotoBackupLedger.isValidResourceByteCount(bytes)
 		else { return nil }
 		return (key, bytes)
@@ -671,7 +671,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 			if let key {
 				if serverAlreadyConfirmed {
 					// The foreground app observed the exact atomically promoted resource
-					// on Umbrel before PhotoKit delivered this terminal job. Keep that
+					// on Titan before PhotoKit delivered this terminal job. Keep that
 					// stronger receipt and only release PhotoKit's bookkeeping below.
 				} else if let receipt = successfulReceipt(for: job) {
 					try ledger.recordResourceSucceeded(resourceKey: receipt.resourceKey, bytes: receipt.bytes)
@@ -797,7 +797,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 	}
 
 	private func resourceKey(for job: PHAssetResourceUploadJob) -> String? {
-		let value = job.destination.value(forHTTPHeaderField: "X-Umbrel-Photo-Backup-Key")
+		let value = job.destination.value(forHTTPHeaderField: "X-Titan-Photo-Backup-Key")
 		guard let value, value.utf8.count == 64, value.utf8.allSatisfy({ byte in
 			(byte >= 48 && byte <= 57) || (byte >= 97 && byte <= 102)
 		}) else { return nil }
@@ -905,7 +905,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 		// Avoid the resettable ledger revision: edits change the key, while each
 		// Live Photo component gets its own stable identity.
 		let key = stableKey(
-			namespace: "umbrel-photo-resource-v1",
+			namespace: "titan-photo-resource-v1",
 			parts: [
 				configuration.source.id,
 				work.localIdentifier,
@@ -918,7 +918,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 		let fileExtension = validFileExtension(originalExtension)
 			?? validFileExtension(preferredExtension)
 			?? "bin"
-		// umbreld owns the physical destination. The stable resource key makes retries
+		// titand owns the physical destination. The stable resource key makes retries
 		// idempotent while the original filename remains display metadata.
 		let destinationPath = "\(configuration.source.id)/\(key).\(fileExtension)"
 		return PlannedResource(
@@ -932,7 +932,7 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 	}
 
 	private func sourceCreationDateMilliseconds(_ date: Date) -> Int64? {
-		// Some PhotoKit resources have no embedded capture date. umbreld uses this
+		// Some PhotoKit resources have no embedded capture date. titand uses this
 		// source date only as their fallback, never over file-derived metadata.
 		guard date != .distantPast else { return nil }
 		let milliseconds = date.timeIntervalSince1970 * 1_000
@@ -966,17 +966,17 @@ final class BackgroundUploadExtension: PHBackgroundResourceUploadExtension {
 		// upload-job API has no external-power constraint, so we intentionally don't
 		// offer a charging-only preference that the system can't reliably enforce.
 		request.setValue("Bearer \(grant)", forHTTPHeaderField: "Authorization")
-		request.setValue(plan.resourceKey, forHTTPHeaderField: "X-Umbrel-Photo-Backup-Key")
-		request.setValue(plan.fileExtension, forHTTPHeaderField: "X-Umbrel-Photo-Backup-Extension")
+		request.setValue(plan.resourceKey, forHTTPHeaderField: "X-Titan-Photo-Backup-Key")
+		request.setValue(plan.fileExtension, forHTTPHeaderField: "X-Titan-Photo-Backup-Extension")
 		// Header values are ASCII; Base64 preserves PhotoKit's Unicode filename exactly.
 		request.setValue(
 			Data(plan.filename.utf8).base64EncodedString(),
-			forHTTPHeaderField: "X-Umbrel-Photo-Original-Filename-Base64"
+			forHTTPHeaderField: "X-Titan-Photo-Original-Filename-Base64"
 		)
 		if let creationDate = plan.sourceCreationDateMilliseconds {
 			request.setValue(
 				String(creationDate),
-				forHTTPHeaderField: "X-Umbrel-Photo-Creation-Date-Ms"
+				forHTTPHeaderField: "X-Titan-Photo-Creation-Date-Ms"
 			)
 		}
 		request.setValue(

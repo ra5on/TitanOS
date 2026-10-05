@@ -7,7 +7,7 @@ import {ImmersiveDialog, ImmersiveDialogOverlay} from '@/components/ui/immersive
 import {AppDropdown, ImmersivePickerDialogContentInit, ImmersivePickerItem} from '@/modules/immersive-picker'
 import {usePickerTarget} from '@/modules/immersive-picker/target'
 import {TroubleshootApp} from '@/routes/settings/troubleshoot/app'
-import TroubleshootUmbrelOs from '@/routes/settings/troubleshoot/umbrelos'
+import TroubleshootTitanOs from '@/routes/settings/troubleshoot/titanos'
 import {useDialogOpenProps} from '@/utils/dialog'
 
 export default function TroubleshootDialog() {
@@ -19,7 +19,7 @@ export default function TroubleshootDialog() {
 			<DialogPortal>
 				<ImmersiveDialogOverlay />
 				{target.type === 'picker' && <PickerDialogContent />}
-				{target.type === 'umbrelos' && <TroubleshootUmbrelOs />}
+				{target.type === 'titanos' && <TroubleshootTitanOs />}
 				{target.type === 'app' && <TroubleshootApp appId={target.appId} />}
 			</DialogPortal>
 		</ImmersiveDialog>
@@ -35,9 +35,9 @@ function PickerDialogContent() {
 	return (
 		<ImmersivePickerDialogContentInit title={t('troubleshoot-pick-title')}>
 			<ImmersivePickerItem
-				title={t('umbrelos')}
-				description={t('troubleshoot.umbrelos-description')}
-				to={linkToTarget({type: 'umbrelos'})}
+				title={t('titanos')}
+				description={t('troubleshoot.titanos-description')}
+				to={linkToTarget({type: 'titanos'})}
 			/>
 			<ImmersivePickerItem
 				title={t('troubleshoot.app')}

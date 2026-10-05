@@ -18,7 +18,7 @@ struct NoDeviceView: View {
 			VStack(spacing: 10) {
 				OnboardingHeader(
 					title: "No device found",
-					subtitle: "Make sure your phone and Umbrel are on the same Wi-Fi network."
+					subtitle: "Make sure your phone and Titan are on the same Wi-Fi network."
 				)
 				ManualAddressPrompt()
 			}

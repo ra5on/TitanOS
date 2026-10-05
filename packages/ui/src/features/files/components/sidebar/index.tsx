@@ -15,7 +15,7 @@ import {SidebarHome} from '@/features/files/components/sidebar/sidebar-home'
 import {SidebarMachines} from '@/features/files/components/sidebar/sidebar-machines'
 import {SidebarNetworkStorage} from '@/features/files/components/sidebar/sidebar-network-storage'
 import {SidebarRecents} from '@/features/files/components/sidebar/sidebar-recents'
-import {SidebarOwnersUmbrel, SidebarSharedStorage} from '@/features/files/components/sidebar/sidebar-shared-with-me'
+import {SidebarOwnersTitan, SidebarSharedStorage} from '@/features/files/components/sidebar/sidebar-shared-with-me'
 import {SidebarShares} from '@/features/files/components/sidebar/sidebar-shares'
 import {SidebarTrash} from '@/features/files/components/sidebar/sidebar-trash'
 import {useExternalStorage} from '@/features/files/hooks/use-external-storage'
@@ -49,7 +49,7 @@ export function Sidebar({className}: {className?: string}) {
 	const hasNetworkStorage = sharedWithMe?.shares.some((share) => share.path === '/Network') ?? false
 	const hasSharedApps = sharedWithMe?.shares.some((share) => share.base === 'apps') ?? false
 	const sharedWithMeLabel = sharedWithMe?.ownerName
-		? t('files-sidebar.owners-umbrel', {name: firstNameFromFullName(sharedWithMe.ownerName)})
+		? t('files-sidebar.owners-titan', {name: firstNameFromFullName(sharedWithMe.ownerName)})
 		: ''
 	const showFavorites = !isLoadingFavorites && !!favorites && favorites.length > 0
 	const showShares = canManageShares && !isLoadingShares && !!displayShares && displayShares.length > 0
@@ -77,12 +77,12 @@ export function Sidebar({className}: {className?: string}) {
 					{showMachines && <SidebarMachines />}
 				</SidebarSection>
 
-				{/* Owner's Umbrel, shown to members only when the owner has shared something from their home */}
+				{/* Owner's Titan, shown to members only when the owner has shared something from their home */}
 				{isMember && homeShares.length > 0 && (
 					<>
 						<SidebarDivider />
 						<SidebarSection label={t('files-sidebar.shared-with-you')}>
-							<SidebarOwnersUmbrel name={sharedWithMeLabel} />
+							<SidebarOwnersTitan name={sharedWithMeLabel} />
 						</SidebarSection>
 					</>
 				)}

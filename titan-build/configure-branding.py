@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Apply Titan's presentation branding to the pinned Umbrel 2.0 source.
+"""Apply current TitanOS presentation assets and numeric release labels.
 
-Only explicitly listed presentation files and translation *values* are changed.
-Runtime IDs, data paths, service names, hardware names, native-client names,
-official App Store attribution, third-party notices, and licensing stay intact.
-Run before the source is built; this does not depend on updater patch order.
+The checked-out source already uses the Titan runtime namespace. This helper
+updates version text and owned artwork without rewriting external catalog,
+hardware, license, or attribution contracts.
 """
 
 from __future__ import annotations
@@ -24,36 +23,36 @@ LANGUAGES = (
 )
 PROTECTED_PHRASES = re.compile(
     r'https?://[^\s<>"\']+|'
-    r'Umbrel (?:Home|Pro|App Store|Private Cloud|Local HTTPS CA|Support)|'
-    r'Umbrel (?:for|pour|para|per|fyrir|за|na) (?:Mac|iPhone|iOS)|'
-    r'iPhone için Umbrel|'
-    r'Umbrel(?:-App| app)\b|umbrel-local-ca\.crt',
+    r'Titan (?:Home|Pro|App Store|Private Cloud|Local HTTPS CA|Support)|'
+    r'Titan (?:for|pour|para|per|fyrir|за|na) (?:Mac|iPhone|iOS)|'
+    r'iPhone için Titan|'
+    r'Titan(?:-App| app)\b|titan-local-ca\.crt',
     re.IGNORECASE,
 )
-OS_NAME = re.compile(r'(?<![A-Za-z0-9_])(?:umbrelOS|UmbrelOS|Umbrel OS)(?![A-Za-z0-9_])')
-DEVICE_NAME = re.compile(r'(?<![A-Za-z0-9_])Umbrel(?![A-Za-z0-9_])')
+OS_NAME = re.compile(r'(?<![A-Za-z0-9_])(?:titanOS|TitanOS|Titan OS)(?![A-Za-z0-9_])')
+DEVICE_NAME = re.compile(r'(?<![A-Za-z0-9_])Titan(?![A-Za-z0-9_])')
 # These languages attach case/possessive endings to the product name. Replace
 # only the known translated device forms, never account names or runtime IDs.
 DEVICE_INFLECTIONS = {
     'hu': {
-        'Umbrelbe': 'Titanba', 'Umbreled': 'Titanod', 'Umbreleden': 'Titanodon',
-        'Umbreledet': 'Titanodat', 'Umbreledhez': 'Titanodhoz', 'Umbreledre': 'Titanodra',
-        'Umbreledről': 'Titanodról', 'Umbrelemen': 'Titanomon', 'Umbrelemet': 'Titanomat',
-        'Umbrelen': 'Titanon', 'Umbrelhez': 'Titanhoz', 'Umbrelje': 'Titanja',
-        'Umbreljében': 'Titanjában', 'Umbrelnek': 'Titannak', 'Umbrelre': 'Titanra',
-        'Umbrelről': 'Titanról', 'Umbrelt': 'Titant',
+        'Titanbe': 'Titanba', 'Titaned': 'Titanod', 'Titaneden': 'Titanodon',
+        'Titanedet': 'Titanodat', 'Titanedhez': 'Titanodhoz', 'Titanedre': 'Titanodra',
+        'Titanedről': 'Titanodról', 'Titanemen': 'Titanomon', 'Titanemet': 'Titanomat',
+        'Titanen': 'Titanon', 'Titanhez': 'Titanhoz', 'Titanje': 'Titanja',
+        'Titanjében': 'Titanjában', 'Titannek': 'Titannak', 'Titanre': 'Titanra',
+        'Titanről': 'Titanról', 'Titant': 'Titant',
     },
-    'et': {f'Umbrel{ending}': f'Titan{ending}' for ending in ('i', 'iga', 'ile', 'is', 'isse', 'ist', 'it')},
-    'hr': {f'Umbrel{ending}': f'Titan{ending}' for ending in ('a', 'om', 'u')},
-    'sl': {f'Umbrel{ending}': f'Titan{ending}' for ending in ('a', 'om', 'u')},
+    'et': {f'Titan{ending}': f'Titan{ending}' for ending in ('i', 'iga', 'ile', 'is', 'isse', 'ist', 'it')},
+    'hr': {f'Titan{ending}': f'Titan{ending}' for ending in ('a', 'om', 'u')},
+    'sl': {f'Titan{ending}': f'Titan{ending}' for ending in ('a', 'om', 'u')},
 }
 # These are actual separately published clients, not Titan products. Some
-# languages translate the words between "Umbrel" and "Mac/iPhone", so protecting
+# languages translate the words between "Titan" and "Mac/iPhone", so protecting
 # the translation keys is safer than relying only on literal English phrases.
 UPSTREAM_CLIENT_KEYS = (
     'desktop.welcome.files.mac-', 'desktop.welcome.photos.description',
     'photos-source.phone-settings-note', 'photos-empty.source-iphone-description',
-    'whats-new-umbrelos-2-0.mac-app-',
+    'whats-new-titanos-2-0.mac-app-',
 )
 
 def rebrand_text(value: str, language: str | None = None) -> str:
@@ -125,13 +124,13 @@ def apply(root: Path) -> None:
     for name in LANGUAGES:
         path = ui / f'public/locales/{name}.json'
         translations = json.loads(path.read_text())
-        if not isinstance(translations, dict) or 'umbrelos' not in translations or 'umbrel' not in translations:
+        if not isinstance(translations, dict) or 'titanos' not in translations or 'titan' not in translations:
             raise RuntimeError(f'Unexpected translations in {path}')
         for key, value in translations.items():
             if isinstance(value, str) and not key.startswith(UPSTREAM_CLIENT_KEYS):
                 translations[key] = rebrand_text(value, name)
-        translations['umbrel'] = 'Titan'
-        translations['umbrelos'] = 'TitanOS'
+        translations['titan'] = 'Titan'
+        translations['titanos'] = 'TitanOS'
         translations['beta-program'] = 'TitanOS Update-Kanal' if name == 'de' else 'TitanOS update channel'
         translations['beta-program-description'] = (
             'TitanOS erhält signierte Stable-Systemupdates. Alpha- und Beta-Kennzeichnungen gelten nur für einzelne Funktionen.'
@@ -147,24 +146,24 @@ def apply(root: Path) -> None:
         path.write_text(re.sub(r'\bTitanOS [0-9]+\.[0-9]+(?:\.[0-9]+)?(?![.\d])', version_name, path.read_text()))
 
     for relative, before, after in (
-        ('index.html', '<title>Umbrel</title>', '<title>Titan</title>'),
-        ('index.html', '<h1>umbrelOS</h1>', f'<h1>{version_name}</h1>'),
-        ('src/utils/tab-attention.ts', '`Umbrel: ${this.notification.title}`', '`Titan: ${this.notification.title}`'),
-        ('src/routes/whats-new.ts', "WHATS_NEW_VERSION_NAME = 'umbrelOS 2.0'", f"WHATS_NEW_VERSION_NAME = '{version_name}'"),
-        ('src/routes/settings/_components/software-update-list-row.tsx', '`umbrelOS ${LOADING_DASH}`', '`TitanOS ${LOADING_DASH}`'),
-        ('src/routes/settings/mobile/software-update.tsx', '`umbrelOS ${LOADING_DASH}`', '`TitanOS ${LOADING_DASH}`'),
-        ('src/features/files/components/shared/cloud-constellation.tsx', "alt='umbrelOS'", "alt='TitanOS'"),
-        ('src/features/files/components/cloud-break-diagram.tsx', "alt='umbrelOS'", "alt='TitanOS'"),
-        ('src/features/photos/components/sources/source-icon.tsx', "alt='umbrelOS'", "alt='TitanOS'"),
-        ('src/hooks/use-is-home-or-pro.ts', "t('device-name.home-or-pro')", "t('umbrel')"),
-        ('src/features/files/components/listing/search-listing/index.tsx', "userName ?? 'Umbrel'", "userName ?? 'Titan'"),
+        ('index.html', '<title>Titan</title>', '<title>Titan</title>'),
+        ('index.html', '<h1>titanOS</h1>', f'<h1>{version_name}</h1>'),
+        ('src/utils/tab-attention.ts', '`Titan: ${this.notification.title}`', '`Titan: ${this.notification.title}`'),
+        ('src/routes/whats-new.ts', "WHATS_NEW_VERSION_NAME = 'titanOS 2.0'", f"WHATS_NEW_VERSION_NAME = '{version_name}'"),
+        ('src/routes/settings/_components/software-update-list-row.tsx', '`titanOS ${LOADING_DASH}`', '`TitanOS ${LOADING_DASH}`'),
+        ('src/routes/settings/mobile/software-update.tsx', '`titanOS ${LOADING_DASH}`', '`TitanOS ${LOADING_DASH}`'),
+        ('src/features/files/components/shared/cloud-constellation.tsx', "alt='titanOS'", "alt='TitanOS'"),
+        ('src/features/files/components/cloud-break-diagram.tsx', "alt='titanOS'", "alt='TitanOS'"),
+        ('src/features/photos/components/sources/source-icon.tsx', "alt='titanOS'", "alt='TitanOS'"),
+        ('src/hooks/use-is-home-or-pro.ts', "t('device-name.home-or-pro')", "t('titan')"),
+        ('src/features/files/components/listing/search-listing/index.tsx', "userName ?? 'Titan'", "userName ?? 'Titan'"),
     ):
         replace_guarded(ui / relative, before, after)
 
     for source, destination in (
-        ('titan-logo.tsx', 'src/components/umbrel-logo.tsx'),
-        ('titan-logo-draw.tsx', 'src/components/umbrel-logo-draw.tsx'),
-        ('titan-mark.svg', 'public/assets/umbrel-app.svg'),
+        ('titan-logo.tsx', 'src/components/titan-logo.tsx'),
+        ('titan-logo-draw.tsx', 'src/components/titan-logo-draw.tsx'),
+        ('titan-mark.svg', 'public/assets/titan-app.svg'),
         ('titan-mark.svg', 'public/favicon/titan.svg'),
     ):
         (ui / destination).write_bytes((assets / source).read_bytes())
@@ -187,10 +186,10 @@ def apply(root: Path) -> None:
         struct.pack('<HHH', 0, 1, 1) + struct.pack('<BBBBHHII', 32, 32, 0, 0, 1, 32, len(png), 22) + png
     )
 
-    # Console wording only. Service IDs and filesystem markers remain compatible.
-    tty = root / 'packages/os/overlay/opt/umbrel-tty-message/umbrel-tty-message'
+    # Keep console identity aligned with the current Titan runtime.
+    tty = root / 'packages/os/overlay/opt/titan-tty-message/titan-tty-message'
     tty.write_text(re.sub(r'TitanOS [0-9]+\.[0-9]+(?:\.[0-9]+)? (?:is now accessible at:|ist jetzt erreichbar unter:)', f'{version_name} ist jetzt erreichbar unter:', tty.read_text()))
-    replace_guarded(tty, 'Your Umbrel is now accessible at:', f'{version_name} ist jetzt erreichbar unter:')
+    replace_guarded(tty, 'Your Titan is now accessible at:', f'{version_name} ist jetzt erreichbar unter:')
     motd = root / 'packages/os/overlay/etc/motd'
     motd.write_text(
         f'\n{version_name}\n\n'
@@ -200,12 +199,12 @@ def apply(root: Path) -> None:
     )
     for path in ('packages/os/usb-installer/custom-tty', 'packages/os/usb-installer/configuration.nix'):
         source = root / path
-        source.write_text(source.read_text().replace('umbrelOS', 'TitanOS'))
+        source.write_text(source.read_text().replace('titanOS', 'TitanOS'))
     print(f'Titan branding applied: Titan / {version_name}; runtime compatibility and upstream notices retained.')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('source', type=Path, help='Pinned Umbrel source directory')
+    parser.add_argument('source', type=Path, help='Pinned Titan source directory')
     args = parser.parse_args()
     apply(args.source)

@@ -1,8 +1,9 @@
 export const links = {
 	support: 'https://github.com/ra5on/TitanOS/issues',
-	umbrelOS: 'https://github.com/ra5on/TitanOS',
+	TitanOS: 'https://github.com/ra5on/TitanOS',
+	downloads: 'https://github.com/ra5on/TitanOS/releases',
 	legal: {
-		privacy: 'https://umbrel.com/legal/privacy',
-		tos: 'https://umbrel.com/legal/umbrelos/tos',
+		privacy: '/privacy.html',
+		tos: 'https://github.com/ra5on/TitanOS/blob/main/LICENSE.md',
 	},
 }

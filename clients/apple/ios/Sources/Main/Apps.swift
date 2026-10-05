@@ -1,8 +1,8 @@
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // The Apps tab: the full grid of installed apps over the wallpaper, an app/update count,
-// and links into the Umbrel App Store. Unlike Home, the icons sit directly on the
+// and links into the Titan App Store. Unlike Home, the icons sit directly on the
 // wallpaper with no card behind them.
 struct AppsView: View {
 	@Environment(MainModel.self) private var model
@@ -33,8 +33,8 @@ struct AppsView: View {
 		.overlay(alignment: .top) { WallpaperTopGradient() }
 	}
 
-	// "Apps" + "N apps · M updates", with a handoff to umbrelOS when there
-	// are updates. umbrelOS already shows release notes, individual updates, and
+	// "Apps" + "N apps · M updates", with a handoff to titanOS when there
+	// are updates. titanOS already shows release notes, individual updates, and
 	// update progress, so the native app does not duplicate that management UI.
 	@ViewBuilder
 	private var header: some View {
@@ -112,7 +112,7 @@ struct AppsView: View {
 		} label: {
 			HStack(spacing: 4) {
 				Image(systemName: "circle.grid.2x2")
-				Text("Open Umbrel App Store")
+				Text("Open Titan App Store")
 			}
 			.font(.footnote.weight(.semibold))
 			.foregroundStyle(.white)

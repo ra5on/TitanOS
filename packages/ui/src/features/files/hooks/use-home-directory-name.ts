@@ -7,5 +7,5 @@ export function useHomeDirectoryName() {
 	const {t} = useTranslation()
 	const userQuery = trpcReact.user.get.useQuery()
 	const userName = userQuery.data?.name
-	return userName ? t('files-sidebar.owners-umbrel', {name: firstNameFromFullName(userName)}) : t('umbrel')
+	return userName ? t('files-sidebar.owners-titan', {name: firstNameFromFullName(userName)}) : t('titan')
 }

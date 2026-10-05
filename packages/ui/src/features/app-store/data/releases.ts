@@ -1,5 +1,5 @@
 // Schema and reconciliation for the optional per-app release history from
-// apps.umbrel.com.
+// apps.titan.com.
 //
 // The local registry's current version and release notes remain authoritative:
 // remote history is only accepted for the same app and only shown when its

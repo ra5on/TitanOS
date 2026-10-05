@@ -44,7 +44,7 @@ function DrawerContent({
 			<DrawerPrimitive.Content
 				ref={ref}
 				className={cn(
-					'umbrel-window-shadow umbrel-window-surface-top fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col gap-5 bg-[#0A0A0A] p-5 outline-hidden',
+					'titan-window-shadow titan-window-surface-top fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col gap-5 bg-[#0A0A0A] p-5 outline-hidden',
 					fullHeight && 'top-0',
 					className,
 				)}
@@ -61,7 +61,7 @@ function DrawerContent({
 				{!withScroll && children}
 				{withScroll && <DrawerScroller>{children}</DrawerScroller>}
 				{/* Window edge and inner shine */}
-				<div className='umbrel-window-chrome umbrel-window-surface-top pointer-events-none absolute inset-0 z-50' />
+				<div className='titan-window-chrome titan-window-surface-top pointer-events-none absolute inset-0 z-50' />
 			</DrawerPrimitive.Content>
 		</DrawerPortal>
 	)
@@ -103,7 +103,7 @@ function DrawerDescription({
 
 // Put this in the content of a `Drawer` to make it scrollable. You might need to add `flex-1` to the parent.
 function DrawerScroller({children, fade = true}: {children: React.ReactNode; fade?: boolean}) {
-	const className = 'umbrel-stable-gutter flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto'
+	const className = 'titan-stable-gutter flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto'
 	if (!fade) return <div className={className}>{children}</div>
 
 	return (

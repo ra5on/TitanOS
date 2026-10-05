@@ -47,7 +47,7 @@ export function appToUrlWithAppPath(app: UserApp, protocol = location.protocol) 
 	return urlJoin(appToUrl(app, protocol), app.path ?? '')
 }
 
-const ALWAYS_OPEN_HTTPS_REQUIRED_APPS_KEY = 'UMBREL_ALWAYS_OPEN_HTTPS_REQUIRED_APPS'
+const ALWAYS_OPEN_HTTPS_REQUIRED_APPS_KEY = 'TITAN_ALWAYS_OPEN_HTTPS_REQUIRED_APPS'
 
 export function getAlwaysOpenHttpsRequiredApps() {
 	return localStorage.getItem(ALWAYS_OPEN_HTTPS_REQUIRED_APPS_KEY) === 'true'

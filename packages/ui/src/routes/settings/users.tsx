@@ -961,7 +961,7 @@ export default function UsersDialog() {
 										icon={TbTrash}
 										size='icon-only'
 										aria-label={t('users.delete-user')}
-										className={cn('shrink-0 transition-colors hover:text-destructive', isDeleting && 'umbrel-pulse')}
+										className={cn('shrink-0 transition-colors hover:text-destructive', isDeleting && 'titan-pulse')}
 										disabled={isDeleting}
 										onClick={() => setIsDeleteConfirmOpen(true)}
 									/>

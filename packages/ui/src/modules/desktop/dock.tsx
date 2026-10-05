@@ -85,7 +85,7 @@ export function Dock() {
 	const navigateToLastFilesPath = (e: React.MouseEvent) => {
 		e.preventDefault()
 		const lastFilesPath = getLastFilesPath(user?.userId)
-		navigate(lastFilesPath || systemAppsKeyed['UMBREL_files'].systemAppTo)
+		navigate(lastFilesPath || systemAppsKeyed['TITAN_files'].systemAppTo)
 	}
 
 	return (
@@ -114,35 +114,35 @@ export function Dock() {
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
-					to={systemAppsKeyed['UMBREL_files'].systemAppTo}
+					to={systemAppsKeyed['TITAN_files'].systemAppTo}
 					onClick={navigateToLastFilesPath}
 					open={pathname.startsWith('/files')}
-					bg={systemAppsKeyed['UMBREL_files'].icon}
-					label={systemAppsKeyed['UMBREL_files'].name}
+					bg={systemAppsKeyed['TITAN_files'].icon}
+					label={systemAppsKeyed['TITAN_files'].name}
 					feature='files'
 					mouseX={mouseX}
 				/>
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
-					to={systemAppsKeyed['UMBREL_photos'].systemAppTo}
-					open={pathname.startsWith(systemAppsKeyed['UMBREL_photos'].systemAppTo)}
-					bg={systemAppsKeyed['UMBREL_photos'].icon}
-					label={systemAppsKeyed['UMBREL_photos'].name}
+					to={systemAppsKeyed['TITAN_photos'].systemAppTo}
+					open={pathname.startsWith(systemAppsKeyed['TITAN_photos'].systemAppTo)}
+					bg={systemAppsKeyed['TITAN_photos'].icon}
+					label={systemAppsKeyed['TITAN_photos'].name}
 					feature='photos'
 					mouseX={mouseX}
 				/>
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
-					to={systemAppsKeyed['UMBREL_app-store'].systemAppTo}
+					to={systemAppsKeyed['TITAN_app-store'].systemAppTo}
 					open={
-						pathname.startsWith(systemAppsKeyed['UMBREL_app-store'].systemAppTo) ||
+						pathname.startsWith(systemAppsKeyed['TITAN_app-store'].systemAppTo) ||
 						// Community stores live outside /app-store but are still the App Store
 						pathname.startsWith('/community-app-store')
 					}
-					bg={systemAppsKeyed['UMBREL_app-store'].icon}
-					label={systemAppsKeyed['UMBREL_app-store'].name}
+					bg={systemAppsKeyed['TITAN_app-store'].icon}
+					label={systemAppsKeyed['TITAN_app-store'].name}
 					feature='app-store'
 					notificationCount={isMember ? undefined : appUpdateCount}
 					mouseX={mouseX}
@@ -151,10 +151,10 @@ export function Dock() {
 					<DockItem
 						iconSize={iconSize}
 						iconSizeZoomed={iconSizeZoomed}
-						to={systemAppsKeyed['UMBREL_machines'].systemAppTo}
-						open={pathname.startsWith(systemAppsKeyed['UMBREL_machines'].systemAppTo)}
-						bg={systemAppsKeyed['UMBREL_machines'].icon}
-						label={systemAppsKeyed['UMBREL_machines'].name}
+						to={systemAppsKeyed['TITAN_machines'].systemAppTo}
+						open={pathname.startsWith(systemAppsKeyed['TITAN_machines'].systemAppTo)}
+						bg={systemAppsKeyed['TITAN_machines'].icon}
+						label={systemAppsKeyed['TITAN_machines'].name}
 						feature='machines'
 						mouseX={mouseX}
 					/>
@@ -162,10 +162,10 @@ export function Dock() {
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
-					to={systemAppsKeyed['UMBREL_settings'].systemAppTo}
-					open={pathname.startsWith(systemAppsKeyed['UMBREL_settings'].systemAppTo)}
-					bg={systemAppsKeyed['UMBREL_settings'].icon}
-					label={systemAppsKeyed['UMBREL_settings'].name}
+					to={systemAppsKeyed['TITAN_settings'].systemAppTo}
+					open={pathname.startsWith(systemAppsKeyed['TITAN_settings'].systemAppTo)}
+					bg={systemAppsKeyed['TITAN_settings'].icon}
+					label={systemAppsKeyed['TITAN_settings'].name}
 					notificationCount={settingsNotificationCount}
 					mouseX={mouseX}
 				/>
@@ -174,8 +174,8 @@ export function Dock() {
 					iconSizeZoomed={iconSizeZoomed}
 					to={linkToDialog('live-usage')}
 					open={new URLSearchParams(search).get('dialog') === 'live-usage'}
-					bg={systemAppsKeyed['UMBREL_live-usage'].icon}
-					label={systemAppsKeyed['UMBREL_live-usage'].name}
+					bg={systemAppsKeyed['TITAN_live-usage'].icon}
+					label={systemAppsKeyed['TITAN_live-usage'].name}
 					mouseX={mouseX}
 				/>
 			</Glass>
@@ -197,37 +197,37 @@ export function DockPreview() {
 			}}
 		>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_files'].icon}
+				bg={systemAppsKeyed['TITAN_files'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_photos'].icon}
+				bg={systemAppsKeyed['TITAN_photos'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_app-store'].icon}
+				bg={systemAppsKeyed['TITAN_app-store'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_machines'].icon}
+				bg={systemAppsKeyed['TITAN_machines'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_settings'].icon}
+				bg={systemAppsKeyed['TITAN_settings'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_live-usage'].icon}
+				bg={systemAppsKeyed['TITAN_live-usage'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}

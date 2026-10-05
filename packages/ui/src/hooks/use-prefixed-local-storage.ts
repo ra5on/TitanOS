@@ -3,13 +3,13 @@ import {useLocalStorage} from 'react-use'
 
 /**
  * Just like `useLocalStorage`, but a few differences:
- * - The key is prefixed with `UMBREL_`
+ * - The key is prefixed with `TITAN_`
  * - Uses an effect to prevent ssr mismatch
  * Why: https://github.com/streamich/react-use/issues/702
  */
 export function usePrefixedLocalStorage<TT>(key: string, defaultValue?: TT) {
 	const [s2, setS2] = useState<TT | undefined>(undefined)
-	const [s, ss] = useLocalStorage('UMBREL_' + key, defaultValue)
+	const [s, ss] = useLocalStorage('TITAN_' + key, defaultValue)
 
 	useEffect(() => {
 		setS2(s)

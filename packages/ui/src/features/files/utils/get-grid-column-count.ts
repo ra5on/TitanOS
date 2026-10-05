@@ -40,7 +40,7 @@ export function getGridColumnCount(width: number, itemWidth = 112): number {
 
 /**
  * The listing scroller fades content at its edges (see
- * .umbrel-files-fade-scroller in index.css: a 48px bottom ramp, and a 24px top
+ * .titan-files-fade-scroller in index.css: a 48px bottom ramp, and a 24px top
  * ramp once scrolled). Scroll-into-view math pads by these so a selection
  * lands in the clearly-visible band instead of under a fade.
  */

@@ -101,7 +101,7 @@ type NotificationContent = {
  * Parses backup notification ID to extract repository ID if present.
  * Format: "backups-failing" (legacy) or "backups-failing:<repo-id>" (new)
  * TODO: remove support for legacy "backups-failing" notification format
- * that was used in umbrelOS 1.5 beta 1 and beta 2 (with no repo ID).
+ * that was used in TitanOS 1.5 beta 1 and beta 2 (with no repo ID).
  */
 function parseBackupNotificationId(notification: string): {repoId: string | null} {
 	if (notification.startsWith('backups-failing:') && notification.includes(':')) {
@@ -172,7 +172,7 @@ function getMigratedBackThatMacUpContent(): NotificationContent {
 	return {
 		title: 'Back That Mac Up - Changes Required',
 		description:
-			'umbrelOS 1.4 introduces Shared Folders over your network, which can also serve as a Time Machine backup location.\nYour current macOS backups using the Back That Mac Up app will no longer work.\nYou can uninstall Back That Mac Up and instead create a new Shared Folder using Files for Time Machine.\nIf you’d still prefer to continue using the Back That Mac Up app:\n1. Go to Time Machine settings.\n2. Remove the backup destination.\n3. Go to Finder.\n4. Press CMD+K and add smb://umbrel.local:1445.\n5. Enter "timemachine" (without quotes) as the username and password.\n6. Go back to Time Machine settings.\n7. Add a new location.\n8. Select Umbrel.\nNote: If you previously used encryption, you will need to enter your encryption password. Time Machine will then resume backups with all your previous data intact.',
+			'TitanOS 1.4 introduces Shared Folders over your network, which can also serve as a Time Machine backup location.\nYour current macOS backups using the Back That Mac Up app will no longer work.\nYou can uninstall Back That Mac Up and instead create a new Shared Folder using Files for Time Machine.\nIf you’d still prefer to continue using the Back That Mac Up app:\n1. Go to Time Machine settings.\n2. Remove the backup destination.\n3. Go to Finder.\n4. Press CMD+K and add smb://titan.local:1445.\n5. Enter "timemachine" (without quotes) as the username and password.\n6. Go back to Time Machine settings.\n7. Add a new location.\n8. Select Titan.\nNote: If you previously used encryption, you will need to enter your encryption password. Time Machine will then resume backups with all your previous data intact.',
 	}
 }
 
@@ -198,7 +198,7 @@ export function Notifications() {
 
 	// Determine if we need to query backup repositories
 	// TODO: remove support for legacy "backups-failing" notification format
-	// that was used in umbrelOS 1.5 beta 1 and beta 2 (with no repo ID)
+	// that was used in TitanOS 1.5 beta 1 and beta 2 (with no repo ID)
 	const hasBackupNotification = notifications.some((n) => n === 'backups-failing' || n.startsWith('backups-failing:'))
 
 	// Query backup repositories (only when needed)
@@ -265,20 +265,20 @@ export function Notifications() {
 	})
 
 	// Separate notifications handled elsewhere from the ones rendered here as
-	// alerts: umbrelos-updated opens What's New below, onboarding-complete is
+	// alerts: titanos-updated opens What's New below, onboarding-complete is
 	// the welcome desktop's
 	const standardNotifications = notifications.filter(
-		(n) => n !== 'umbrelos-updated' && n !== ONBOARDING_COMPLETE_NOTIFICATION,
+		(n) => n !== 'titanos-updated' && n !== ONBOARDING_COMPLETE_NOTIFICATION,
 	)
-	const showWhatsNew = notifications.includes('umbrelos-updated')
+	const showWhatsNew = notifications.includes('titanos-updated')
 
-	// Navigate to whats-new dialog when the umbrelos-updated notification is present
+	// Navigate to whats-new dialog when the titanos-updated notification is present
 	// Clear the notification immediately to prevent re-navigation
 	useEffect(() => {
 		if (showWhatsNew && versionQ.isLoading) return
 
 		if (showWhatsNew) {
-			clearNotification('umbrelos-updated')
+			clearNotification('titanos-updated')
 			if (shouldShowWhatsNew(versionQ.data?.previousVersion)) {
 				navigate(linkToDialog('whats-new'))
 			}

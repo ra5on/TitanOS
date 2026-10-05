@@ -2,7 +2,7 @@
 //
 // "Local truth, remote taste": the locally synced registry decides which apps
 // exist and what state they're in. Remote metadata (creation/update dates from
-// apps.umbrel.com) may only decorate or order apps that already exist locally,
+// apps.titan.com) may only decorate or order apps that already exist locally,
 // which is why every selector here takes local registry data as its base.
 
 import {arrayIncludes} from 'ts-extras'
@@ -216,7 +216,7 @@ export function getCategoryLabel(categoryId: string): string {
 /**
  * The navigation rail: Discover and All apps, then the predefined categories
  * (in their canonical order) that actually have apps, then any dynamic
- * categories coming from app manifests umbrelOS doesn't know about yet.
+ * categories coming from app manifests TitanOS doesn't know about yet.
  */
 export function getNavCategories(appsGroupedByCategory: Record<string, readonly unknown[]>): string[] {
 	const hasApps = (categoryId: string) => (appsGroupedByCategory[categoryId]?.length ?? 0) > 0

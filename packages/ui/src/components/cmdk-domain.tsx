@@ -15,10 +15,10 @@ export type CmdkDomain = 'everywhere' | 'files' | 'photos' | 'app-store' | 'sett
 export const CMDK_DOMAINS: readonly CmdkDomain[] = ['everywhere', 'files', 'photos', 'app-store', 'settings']
 
 const DOMAIN_APP = {
-	files: 'UMBREL_files',
-	photos: 'UMBREL_photos',
-	'app-store': 'UMBREL_app-store',
-	settings: 'UMBREL_settings',
+	files: 'TITAN_files',
+	photos: 'TITAN_photos',
+	'app-store': 'TITAN_app-store',
+	settings: 'TITAN_settings',
 } as const
 
 export function cmdkDomainIcon(domain: Exclude<CmdkDomain, 'everywhere'>) {

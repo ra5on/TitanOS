@@ -14,24 +14,24 @@ describe('getAppComposeFile', () => {
 		})
 	})
 
-	test('flags the compose files umbrelOS generates', () => {
-		expect(getAppComposeFile('/Apps/bitcoin/docker-compose.umbreld.yml')).toStrictEqual({
+	test('flags the compose files TitanOS generates', () => {
+		expect(getAppComposeFile('/Apps/bitcoin/docker-compose.titand.yml')).toStrictEqual({
 			appId: 'bitcoin',
 			generated: true,
 		})
-		expect(getAppComposeFile('/Apps/bitcoin/docker-compose.umbrel-user-settings.yml')).toStrictEqual({
+		expect(getAppComposeFile('/Apps/bitcoin/docker-compose.titan-user-settings.yml')).toStrictEqual({
 			appId: 'bitcoin',
 			generated: true,
 		})
 	})
 
 	test.each([
-		'/Apps/bitcoin/umbrel-app.yml',
+		'/Apps/bitcoin/titan-app.yml',
 		'/Apps/bitcoin/data/docker-compose.yml',
 		'/Apps/docker-compose.yml',
 		'/Apps/bitcoin',
 		'/Home/docker-compose.yml',
-		'/Backups/umbrel/Apps/bitcoin/docker-compose.yml',
+		'/Backups/titan/Apps/bitcoin/docker-compose.yml',
 		'/AppsArchive/bitcoin/docker-compose.yml',
 	])('ignores %s', (path) => {
 		expect(getAppComposeFile(path)).toBeNull()

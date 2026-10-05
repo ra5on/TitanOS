@@ -1,9 +1,9 @@
 import {useCallback, useSyncExternalStore} from 'react'
 
-const AUDIO_PREFERENCE_EVENT = 'umbrel:machine-audio-preference'
+const AUDIO_PREFERENCE_EVENT = 'titan:machine-audio-preference'
 const memoryPreferences = new Map<string, boolean>()
 
-const preferenceKey = (machineId: string) => `umbrel:machine:${machineId}:audio-muted`
+const preferenceKey = (machineId: string) => `titan:machine:${machineId}:audio-muted`
 
 function readPreference(machineId: string) {
 	try {

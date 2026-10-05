@@ -6,10 +6,10 @@ import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 import iOsIcon from '@/features/files/assets/sharing-info-platforms/ios.png'
 import macOsIcon from '@/features/files/assets/sharing-info-platforms/macos.png'
 import windowsIcon from '@/features/files/assets/sharing-info-platforms/windows.png'
-import umbrelDeviceIconActive from '@/features/files/assets/umbrel-device-icon-active.png'
+import titanDeviceIconActive from '@/features/files/assets/titan-device-icon-active.png'
 
 export type Platform = {
-	id: 'macos' | 'ios' | 'windows' | 'umbrelos'
+	id: 'macos' | 'ios' | 'windows' | 'titanos'
 	name?: string
 	icon: string
 }
@@ -18,7 +18,7 @@ export const platforms: Platform[] = [
 	{id: 'macos', name: 'macOS', icon: macOsIcon},
 	{id: 'windows', name: 'Windows', icon: windowsIcon},
 	{id: 'ios', name: 'iOS', icon: iOsIcon},
-	{id: 'umbrelos', icon: umbrelDeviceIconActive},
+	{id: 'titanos', icon: titanDeviceIconActive},
 ]
 
 export function getDefaultPlatform(): Platform | undefined {
@@ -37,7 +37,7 @@ interface PlatformSelectorProps {
 
 export function PlatformSelector({selectedPlatform, onPlatformChange}: PlatformSelectorProps) {
 	const {t} = useTranslation()
-	const platformName = (platform: Platform) => (platform.id === 'umbrelos' ? t('umbrelos') : platform.name)
+	const platformName = (platform: Platform) => (platform.id === 'titanos' ? t('titanos') : platform.name)
 	return (
 		<div className='flex items-center justify-between'>
 			<span className='text-14'>{t('files-share.instructions.how-to-access')}</span>

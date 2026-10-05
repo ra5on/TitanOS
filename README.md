@@ -32,18 +32,21 @@ Herunterfahren werden jeweils mit **Ja / Nein** bestätigt.
 
 ## Ein Blick auf TitanOS
 
-Die bisherigen Aufnahmen zeigen TitanOS 2.0.0-titan.1 aus einer separaten
-Testinstallation. Neue Aufnahmen der TitanOS-Repository-Ausgabe folgen nach
-dem ersten signierten Image-Build.
+Die Aufnahmen zeigen die gebaute Oberfläche von TitanOS 2.0.1 mit dem echten
+Backend in einer isolierten Testumgebung. [Details zu den Aufnahmen](docs/images/README.md).
 
-![TitanOS-Desktop der bisherigen Testinstallation](docs/images/titanos-desktop.jpg)
+![TitanOS-Desktop mit neuen Dock-Icons](docs/images/titanos-desktop.jpg)
+
+| Dateien | Einstellungen |
+| --- | --- |
+| ![TitanOS-Dateimanager](docs/images/titanos-files.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings.jpg) |
 
 ## Installieren
 
 Für einen x86-64-Rechner empfehlen wir **8 GB RAM**, eine **SSD ab 64 GB** und
 **UEFI mit deaktiviertem Secure Boot**.
 
-1. Nach Veröffentlichung findest du `titan-2.0.1.img.xz`, Prüfsummen und Signatur unter [Release-Bereich](https://github.com/ra5on/TitanOS/releases). Der erste Build setzt den bestehenden Signing-Key im neuen Repository voraus.
+1. Nach Veröffentlichung findest du `titan-2.0.1.img.xz`, Prüfsummen und Signatur unter [Release-Bereich](https://github.com/ra5on/TitanOS/releases).
 2. Entpacke das Image und schreibe es mit einem geeigneten Image-Werkzeug auf die Ziel-SSD. **Dabei wird der Inhalt dieses Laufwerks überschrieben.**
 3. Starte den Rechner von dieser SSD und verbinde ihn mit deinem Netzwerk.
 4. Öffne `http://titan.local/` im Browser. Falls dein Netzwerk lokale Namen nicht auflöst, verwende die IP-Adresse aus deinem Router.
@@ -63,29 +66,13 @@ TitanOS bietet ausschließlich **Stable-Systemupdates** an. Einzelne Funktionen
 können ausdrücklich als Alpha oder Beta gekennzeichnet sein; stabile Funktionen
 haben kein zusätzliches Badge.
 
-Das bisherige Repository bleibt für den Übergang erreichbar. Die signierte
-Version `2.0.1` muss dort ebenfalls veröffentlicht sein, bevor bestehende NAS
-den Wechsel anbieten.
+Systemupdates suchst und installierst du direkt in den **Einstellungen**.
+Das NAS prüft die Signatur und die Kompatibilität des vollständigen Systemupdates
+vor der Installation. Anschließend startest du TitanOS neu.
 
-Du nutzt bereits `2.0.0-titan.1` oder `2.0.0-titan.2`?
-
-1. Wähle im bisherigen Update-Kanalmenü einmal **Stable**.
-2. Installiere das angebotene Übergangsupdate **`2.0.0-titan.3`** und starte neu.
-3. Suche erneut nach Updates und installiere **`2.0.1`**.
-
-Eine installierte `2.0.0-titan.3` oder `2.0.0` kann direkt auf `2.0.1` aktualisieren.
-Dieses Update stellt den NAS-Updater auf `ra5on/TitanOS` um.
-
-Die ältere `.3`-Übergangsversion stellt nur ein Updatebundle bereit. Ihre interne `.3`-
-Kennung ermöglicht den Wechsel vom bisherigen Updater; die Oberfläche zeigt
-bereits TitanOS 2.0.0. Eigene Hostnamen bleiben erhalten. Der alte Standardname
-`umbrel` wird zu `titan`, sodass du danach `http://titan.local/` oder die
-IP-Adresse verwendest.
-
-Installationen auf der früheren Titan-Basis mit anderem Festplattenaufbau
-benötigen eine Neuinstallation. Weitere Details, das Updatebundle
-`titan-2.0.1.update` und die Prüfberichte findest du beim
-[Release-Bereich](https://github.com/ra5on/TitanOS/releases).
+Diese Ausgabe benötigt eine **Neuinstallation**. Danach laufen Updates über
+den eigenen TitanOS-Stable-Kanal. Details findest du in der
+[Update-Anleitung](docs/UPDATES.md).
 
 ## Gut zu wissen
 
@@ -100,7 +87,4 @@ OAuth-Konfigurationen. Fragen und nachvollziehbare Fehlerberichte kannst du im
 
 ---
 
-TitanOS ist ein unabhängiges Projekt auf Basis von
-[Umbrel 2.0.0](https://github.com/getumbrel/umbrel/tree/2.0.0).
-Es gelten die [Lizenz](LICENSE.md) und die Hinweise zu
-[Herkunft und Drittkomponenten](UPSTREAM.md).
+[Lizenz](LICENSE.md) · [Herkunft und Drittkomponenten](UPSTREAM.md)

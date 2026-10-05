@@ -1033,7 +1033,7 @@ export function TimelineGrid({
 						// Corner radius follows the tile size, like the gap (see tileRadius)
 						style={{
 							height: view.layout.total + endSpacer,
-							['--umbrel-photos-tile-radius' as string]: `${tileRadius(view.layout.tile)}px`,
+							['--titan-photos-tile-radius' as string]: `${tileRadius(view.layout.tile)}px`,
 						}}
 					>
 						{headers.map((header) => (

@@ -63,7 +63,7 @@ export const ListingBody = ({
 													option.sortBy === 'name' && 'flex-[5]',
 													option.sortBy === 'modified' && 'flex-[2]',
 													option.sortBy === 'size' && 'flex-[1]',
-													// TODO: Add this back in when we have a file system index in umbreld. The name column was previously flex-[3]
+													// TODO: Add this back in when we have a file system index in titand. The name column was previously flex-[3]
 													// option.sortBy === 'created' && 'flex-[2] lg:hidden xl:flex',
 													option.sortBy === 'type' && 'flex-[2]',
 												)}

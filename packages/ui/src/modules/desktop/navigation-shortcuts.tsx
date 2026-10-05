@@ -65,24 +65,24 @@ export function NavigationShortcuts() {
 				// Files reopens where the user left off, same as the dock icon
 				[NAV_SHORTCUTS.files]: pathname.startsWith('/files')
 					? null
-					: () => navigate(getLastFilesPath(userId) || systemAppsKeyed['UMBREL_files'].systemAppTo),
-				[NAV_SHORTCUTS.photos]: pathname.startsWith(systemAppsKeyed['UMBREL_photos'].systemAppTo)
+					: () => navigate(getLastFilesPath(userId) || systemAppsKeyed['TITAN_files'].systemAppTo),
+				[NAV_SHORTCUTS.photos]: pathname.startsWith(systemAppsKeyed['TITAN_photos'].systemAppTo)
 					? null
-					: () => navigate(systemAppsKeyed['UMBREL_photos'].systemAppTo),
+					: () => navigate(systemAppsKeyed['TITAN_photos'].systemAppTo),
 				[NAV_SHORTCUTS.appStore]:
-					pathname.startsWith(systemAppsKeyed['UMBREL_app-store'].systemAppTo) ||
+					pathname.startsWith(systemAppsKeyed['TITAN_app-store'].systemAppTo) ||
 					pathname.startsWith('/community-app-store')
 						? null
-						: () => navigate(systemAppsKeyed['UMBREL_app-store'].systemAppTo),
+						: () => navigate(systemAppsKeyed['TITAN_app-store'].systemAppTo),
 				// The dock hides Machines from members, so the shortcut skips them too
 				[NAV_SHORTCUTS.machines]: !isOwner
 					? undefined
-					: pathname.startsWith(systemAppsKeyed['UMBREL_machines'].systemAppTo)
+					: pathname.startsWith(systemAppsKeyed['TITAN_machines'].systemAppTo)
 						? null
-						: () => navigate(systemAppsKeyed['UMBREL_machines'].systemAppTo),
-				[NAV_SHORTCUTS.settings]: pathname.startsWith(systemAppsKeyed['UMBREL_settings'].systemAppTo)
+						: () => navigate(systemAppsKeyed['TITAN_machines'].systemAppTo),
+				[NAV_SHORTCUTS.settings]: pathname.startsWith(systemAppsKeyed['TITAN_settings'].systemAppTo)
 					? null
-					: () => navigate(systemAppsKeyed['UMBREL_settings'].systemAppTo),
+					: () => navigate(systemAppsKeyed['TITAN_settings'].systemAppTo),
 				[NAV_SHORTCUTS.liveUsage]:
 					params.get('dialog') === 'live-usage' ? null : () => navigate(linkToDialog('live-usage')),
 				// Home also closes whichever url-driven dialog is up, since

@@ -275,7 +275,7 @@ function DependencyDropdown({
 	const onOpenChange = (open: boolean) => setOpenDropdowns((prev) => ({...prev, [dependencyId]: open}))
 	return (
 		<DropdownMenu open={openDropdowns[dependencyId] ?? false} onOpenChange={onOpenChange}>
-			<DropdownMenuTrigger asChild className={cn(highlightDependency === dependencyId && 'umbrel-pulse-a-few-times')}>
+			<DropdownMenuTrigger asChild className={cn(highlightDependency === dependencyId && 'titan-pulse-a-few-times')}>
 				{/* Leaves room for the row's View + Install pair */}
 				<Button className='h-[40px] w-[256px] max-w-[calc(100%-150px)] px-4'>
 					<div className='flex min-w-0 flex-1 items-center gap-2 text-left'>

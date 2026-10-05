@@ -10,7 +10,7 @@ import {firstNameFromFullName} from '@/utils/misc'
 // Greeting + password form shared by the lock screen (single-account and
 // post-selection dock states) and the app proxy login page. Pure props — no
 // tRPC/providers — so app-auth can bundle it. The proxy page overrides the
-// subtitle/labels to say "Umbrel password ... to open {app}", the guard
+// subtitle/labels to say "Titan password ... to open {app}", the guard
 // against users typing the app's own password here.
 export function LoginForm({
 	account,

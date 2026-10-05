@@ -21,7 +21,7 @@ export const downloadUtf8Logs = (contents: string, fileNameString?: string) => {
 	const blob = new Blob([contents], {type: 'text/plain;charset=utf-8'})
 
 	// Separating sections with `_` so easier to machine-parse in the future
-	const name = ['umbrel', filenamify(fileNameString ?? 'logs'), format(new Date(), 'yyyy-MM-dd_HH-mm')].join('_')
+	const name = ['titan', filenamify(fileNameString ?? 'logs'), format(new Date(), 'yyyy-MM-dd_HH-mm')].join('_')
 
 	// Final pass: replacing strings and doing lowercase so good for urls too?
 	const finalName = name.replace(/\s+/g, '-').toLocaleLowerCase()
@@ -50,7 +50,7 @@ export function LogResults({children}: {children: string}) {
 		<div
 			ref={ref}
 			data-native-context-menu
-			className='umbrel-stable-gutter w-full flex-1 overflow-auto rounded-10 bg-black px-5 py-4'
+			className='titan-stable-gutter w-full flex-1 overflow-auto rounded-10 bg-black px-5 py-4'
 		>
 			{/* Allow text selection for copying logs/errors */}
 			<div

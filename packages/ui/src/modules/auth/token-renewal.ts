@@ -1,4 +1,4 @@
-export const AUTH_TOKEN_LOCAL_STORAGE_KEY = 'umbrel-auth-token'
+export const AUTH_TOKEN_LOCAL_STORAGE_KEY = 'titan-auth-token'
 export const AUTH_TOKEN_REFRESH_LOCAL_STORAGE_KEY = 'auth-token-last-refreshed'
 
 type AuthTokenStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>

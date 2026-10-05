@@ -135,7 +135,7 @@ export function SheetStickyHeaderTarget() {
 				tabIndex={-1}
 				onClick={scrollToTop}
 				className={cn(
-					'umbrel-window-surface-top absolute inset-0 cursor-default border-b border-white/10 bg-black',
+					'titan-window-surface-top absolute inset-0 cursor-default border-b border-white/10 bg-black',
 					showStickyHeaderSurface
 						? cn(
 								'opacity-100',

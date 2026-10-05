@@ -1,4 +1,4 @@
-# Umbrel Monorepo Agent Guide
+# Titan Monorepo Agent Guide
 
 ## Skills
 

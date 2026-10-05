@@ -1,5 +1,5 @@
 import Foundation
-import UmbrelKit
+import TitanKit
 
 // Keeps already-paired devices aligned with Bonjour while the app is active. TXT
 // ids only select possible matches; the saved CA and HTTPS discovery response must
@@ -73,7 +73,7 @@ final class SavedDeviceDiscoveryMonitor {
 			let identified = await withTaskGroup(of: IdentifiedDevice?.self) { group in
 				for (candidate, deviceId) in possibleMatches {
 					group.addTask {
-						await Umbreld.identify(candidate: candidate, expectedDeviceId: deviceId)
+						await Titand.identify(candidate: candidate, expectedDeviceId: deviceId)
 					}
 				}
 				var devices = [IdentifiedDevice]()

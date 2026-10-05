@@ -6,7 +6,7 @@ import OSLog
 import Photos
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
 // UIPageViewController asks its data source only for adjacent pages, keeping
 // navigation smooth without placing a very large PhotoKit library in one layout.
@@ -145,7 +145,7 @@ private struct FullScreenVideoPresenter: UIViewControllerRepresentable {
 
 	@MainActor
 	final class PresenterViewController: UIViewController, @preconcurrency AVPlayerViewControllerDelegate {
-		private static let logger = Logger(subsystem: "com.umbrel.app", category: "VideoPlayback")
+		private static let logger = Logger(subsystem: "io.github.ra5on.titanos.app", category: "VideoPlayback")
 
 		private var activePlayerController: AVPlayerViewController?
 		private var audioSessionIsActive = false

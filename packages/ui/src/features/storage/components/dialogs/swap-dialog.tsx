@@ -37,7 +37,7 @@ type SwapDialogProps = {
 	oldDeviceFailed?: boolean
 	/** Wording hint for a swapped member whose physical device is missing (no type to read) */
 	missingDeviceType?: 'ssd' | 'hdd'
-	isUmbrelPro: boolean
+	isTitanPro: boolean
 	raidStatus: RaidStatus | undefined
 	availableDevices: StorageDevice[]
 	allDevices: StorageDevice[]
@@ -52,7 +52,7 @@ export function SwapDialog({
 	oldDeviceId = null,
 	oldDeviceFailed = false,
 	missingDeviceType,
-	isUmbrelPro,
+	isTitanPro,
 	raidStatus,
 	availableDevices,
 	allDevices,
@@ -67,13 +67,13 @@ export function SwapDialog({
 	const [selectedReplacementId, setSelectedReplacementId] = useState<string | null>(null)
 	const [showShutdownConfirmation, setShowShutdownConfirmation] = useState(false)
 
-	const deviceName = isUmbrelPro ? t('storage-manager.umbrel-pro') : t('storage-manager.device')
+	const deviceName = isTitanPro ? t('storage-manager.titan-pro') : t('storage-manager.device')
 	const isStorageMode = raidType === 'storage'
 	const maxSlots = 4
 	// Count occupied physical slots, including drives outside the pool. Generic
 	// hardware (or an unresolved Pro slot) has unknown expansion capability.
 	const slotsKnown =
-		isUmbrelPro &&
+		isTitanPro &&
 		allDevices
 			.filter((device) => device.type === 'ssd')
 			.every((device) => device.slot && device.slot >= 1 && device.slot <= maxSlots)
@@ -399,7 +399,7 @@ export function SwapDialog({
 								</div>
 							)}
 
-							{isUmbrelPro ? (
+							{isTitanPro ? (
 								<ProInstallInstructions
 									paragraphs={[
 										t('storage-manager.swap.pro-instructions-insert-1'),
@@ -453,7 +453,7 @@ export function SwapDialog({
 			},
 			{
 				title: t('storage-manager.swap.step-shut-down-and-swap', {ssd: ssdLabel}),
-				description: isUmbrelPro
+				description: isTitanPro
 					? t('storage-manager.swap.step-shut-down-and-swap-description-pro')
 					: t('storage-manager.swap.step-shut-down-and-swap-description-other'),
 			},
@@ -565,7 +565,7 @@ export function SwapDialog({
 							</div>
 						)}
 
-						{isUmbrelPro ? (
+						{isTitanPro ? (
 							<ProInstallInstructions
 								paragraphs={[
 									isMissingMember

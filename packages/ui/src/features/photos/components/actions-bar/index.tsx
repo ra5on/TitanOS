@@ -90,7 +90,7 @@ export function ActionsBar() {
 		<nav
 			// The lg pull-up puts the bar in the sheet close button's row; xl's
 			// wider sheet padding clears the × on its own, lg needs the padding
-			className='umbrel-photos-actions relative z-10 flex h-11 w-full min-w-0 items-center gap-3 lg:-mt-[86px] lg:pr-5 xl:pr-0'
+			className='titan-photos-actions relative z-10 flex h-11 w-full min-w-0 items-center gap-3 lg:-mt-[86px] lg:pr-5 xl:pr-0'
 			aria-label={t('photos-actions.navigation')}
 		>
 			{/* Left side: on a collection page how many it holds; on a timeline the

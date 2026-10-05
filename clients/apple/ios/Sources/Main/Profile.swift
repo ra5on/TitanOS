@@ -1,6 +1,6 @@
 import Photos
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
 // The Profile sheet: a settings sheet presented over the tabs — device
 // card, photo-backup settings, notification alerts, iOS permissions, sign out and version.
@@ -70,7 +70,7 @@ struct ProfileSheet: View {
 				.truncationMode(.tail)
 				.multilineTextAlignment(.center)
 			VStack(spacing: 10) {
-				UmbrelDeviceRender(model: model.device?.model)
+				TitanDeviceRender(model: model.device?.model)
 					.frame(height: 97)
 					.shadow(color: .black.opacity(0.16), radius: 8, y: 16)
 				VStack(spacing: 4) {
@@ -91,7 +91,7 @@ struct ProfileSheet: View {
 		.background(Color(hex: 0x2C2C2E), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 	}
 
-	// "Umbrel Pro · 4TB" (storage appended once disk usage has loaded).
+	// "Titan Pro · 4TB" (storage appended once disk usage has loaded).
 	private var deviceLine: String {
 		guard let disk = model.disk else { return model.deviceLabel }
 		return "\(model.deviceLabel) \u{B7} \(formatStorageSize(disk.size))"
@@ -116,7 +116,7 @@ struct ProfileSheet: View {
 				.glassControl(in: Capsule())
 		}
 		.buttonStyle(.plain)
-		.alert("Sign out of this Umbrel?", isPresented: $isConfirmingSignOut) {
+		.alert("Sign out of this Titan?", isPresented: $isConfirmingSignOut) {
 			Button("Sign Out", role: .destructive) {
 				model.signOut()
 			}
@@ -127,7 +127,7 @@ struct ProfileSheet: View {
 	}
 
 	private var footer: some View {
-		Text("Umbrel, Inc. \u{B7} Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
+		Text("Titan, Inc. \u{B7} Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
 			.font(.footnote)
 			.foregroundStyle(Theme.gray)
 	}
@@ -256,31 +256,31 @@ private struct ConnectionDetailsPage: View {
 			InfoPageRow(
 				icon: "lock.fill",
 				title: "End-to-end encrypted",
-				message: "Traffic between this iPhone and your Umbrel is encrypted by Tailscale."
+				message: "Traffic between this iPhone and your Titan is encrypted by Tailscale."
 			)
 			InfoPageDivider()
 			InfoPageRow(
 				icon: "checkmark.shield.fill",
 				title: "Private access",
-				message: "Only devices with access to your tailnet can reach your Umbrel this way."
+				message: "Only devices with access to your tailnet can reach your Titan this way."
 			)
 		case .local:
 			InfoPageRow(
 				icon: "lock.fill",
 				title: "Encrypted with HTTPS",
-				message: "Traffic between this iPhone and your Umbrel is encrypted with HTTPS."
+				message: "Traffic between this iPhone and your Titan is encrypted with HTTPS."
 			)
 			InfoPageDivider()
 			InfoPageRow(
 				icon: "checkmark.shield.fill",
 				title: "Verified connection",
-				message: "The app verifies your Umbrel’s HTTPS certificate when establishing the connection."
+				message: "The app verifies your Titan’s HTTPS certificate when establishing the connection."
 			)
 		case nil:
 			InfoPageRow(
 				icon: "lock.fill",
 				title: "Encrypted connection",
-				message: "Traffic between this iPhone and your Umbrel is encrypted."
+				message: "Traffic between this iPhone and your Titan is encrypted."
 			)
 		}
 	}
@@ -385,20 +385,20 @@ private struct ConnectionDetailsPage: View {
 		switch model.connectionState {
 		case .connected:
 			switch model.connectionRoute {
-			case .local: "This iPhone is connected directly to your Umbrel over your local network."
+			case .local: "This iPhone is connected directly to your Titan over your local network."
 			case .tailscale: "This iPhone is connected through your private Tailscale network."
-			case nil: "This iPhone is securely connected to your Umbrel."
+			case nil: "This iPhone is securely connected to your Titan."
 			}
 		case .unavailable:
 			if model.hasKnownTailscaleAddress {
-				"Make sure your Umbrel is turned on. Connect this iPhone to the same local network, or turn on Tailscale."
+				"Make sure your Titan is turned on. Connect this iPhone to the same local network, or turn on Tailscale."
 			} else {
-				"Make sure your Umbrel is turned on and this iPhone is connected to the same network."
+				"Make sure your Titan is turned on and this iPhone is connected to the same network."
 			}
 		case .localNetworkDenied:
-			"Allow access in Settings to connect to your Umbrel on the local network."
+			"Allow access in Settings to connect to your Titan on the local network."
 		case .unverified:
-			"Checking how this iPhone can reach your Umbrel."
+			"Checking how this iPhone can reach your Titan."
 		}
 	}
 
@@ -491,7 +491,7 @@ private struct PhotoBackupDestinationRow: View {
 				Text("Photo Backup is enabled for \(destination)")
 					.font(.subheadline.weight(.medium))
 					.foregroundStyle(.white.opacity(0.9))
-				Text("Turn off Photo Backup there to use this Umbrel instead.")
+				Text("Turn off Photo Backup there to use this Titan instead.")
 					.font(.footnote.weight(.medium))
 					.foregroundStyle(Theme.gray)
 					.fixedSize(horizontal: false, vertical: true)
@@ -520,12 +520,12 @@ private struct NotificationSection: View {
 					SettingsToggle("Storage alert", isOn: .constant(false))
 				}
 				SettingsDivider()
-				SettingsRow(icon: "arrow.up.circle.fill", title: "umbrelOS updates") {
-					SettingsToggle("umbrelOS updates", isOn: .constant(false))
+				SettingsRow(icon: "arrow.up.circle.fill", title: "titanOS updates") {
+					SettingsToggle("titanOS updates", isOn: .constant(false))
 				}
 				SettingsDivider()
-				SettingsRow(icon: "app.badge", title: "umbrelOS app updates") {
-					SettingsToggle("umbrelOS app updates", isOn: .constant(false))
+				SettingsRow(icon: "app.badge", title: "titanOS app updates") {
+					SettingsToggle("titanOS app updates", isOn: .constant(false))
 				}
 			}
 			.disabled(true)

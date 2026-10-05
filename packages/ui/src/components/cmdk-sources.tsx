@@ -477,10 +477,10 @@ export function useCmdkEntries(): CmdkEntry[] | null {
 	])
 
 	function buildEntries(): CmdkEntry[] {
-		const appStore = systemAppsKeyed['UMBREL_app-store']
-		const files = systemAppsKeyed['UMBREL_files']
-		const photos = systemAppsKeyed['UMBREL_photos']
-		const machines = systemAppsKeyed['UMBREL_machines']
+		const appStore = systemAppsKeyed['TITAN_app-store']
+		const files = systemAppsKeyed['TITAN_files']
+		const photos = systemAppsKeyed['TITAN_photos']
+		const machines = systemAppsKeyed['TITAN_machines']
 		const filesEntry = (id: string, title: string, path: string): CmdkEntry => ({
 			id: `files:${id}`,
 			title,
@@ -500,8 +500,8 @@ export function useCmdkEntries(): CmdkEntry[] | null {
 				id: 'system:live-usage',
 				title: t('cmdk.live-usage'),
 				default: true,
-				icon: systemAppsKeyed['UMBREL_live-usage'].icon,
-				onSelect: () => navigate(systemAppsKeyed['UMBREL_live-usage'].systemAppTo),
+				icon: systemAppsKeyed['TITAN_live-usage'].icon,
+				onSelect: () => navigate(systemAppsKeyed['TITAN_live-usage'].systemAppTo),
 			},
 			...(isMember
 				? []
@@ -537,9 +537,9 @@ export function useCmdkEntries(): CmdkEntry[] | null {
 			{id: 'system:photos', title: photos.name, icon: photos.icon, onSelect: () => navigate(photos.systemAppTo)},
 			{
 				id: 'system:settings',
-				title: systemAppsKeyed['UMBREL_settings'].name,
-				icon: systemAppsKeyed['UMBREL_settings'].icon,
-				onSelect: () => navigate(systemAppsKeyed['UMBREL_settings'].systemAppTo),
+				title: systemAppsKeyed['TITAN_settings'].name,
+				icon: systemAppsKeyed['TITAN_settings'].icon,
+				onSelect: () => navigate(systemAppsKeyed['TITAN_settings'].systemAppTo),
 			},
 		]
 

@@ -46,7 +46,7 @@ export function useMemory(options: {poll?: boolean} = {}) {
 				...(memoryQ.data?.apps ?? []),
 				...(memoryQ.data?.machines ?? []).map((machine) => ({...machine, entity: 'machine' as const})),
 				{
-					id: 'umbreld-system',
+					id: 'titand-system',
 					used: memoryQ.data?.system ?? 0,
 				},
 			],

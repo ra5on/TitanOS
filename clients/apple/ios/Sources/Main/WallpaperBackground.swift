@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// The user's umbrelOS wallpaper as a full-screen backdrop for the main-app tabs. It
+// The user's titanOS wallpaper as a full-screen backdrop for the main-app tabs. It
 // sits behind the (transparent) scroll content; the frosted cards draw their own
 // aligned, blurred copy on top of it (see FrostBackground). The image is pinned to an
 // explicit screen size so both the backdrop and the card frost crop identically.

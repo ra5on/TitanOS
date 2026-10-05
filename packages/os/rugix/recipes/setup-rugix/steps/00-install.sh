@@ -27,5 +27,5 @@ install -D -m 644 \
 # Install the factory reset hook.
 install -D -m 755 \
     "${RECIPE_DIR}/files/hooks/state-reset/prepare.sh" \
-    "/etc/rugix/hooks/state-reset/prepare/10-umbrel.sh"
+    "/etc/rugix/hooks/state-reset/prepare/10-titan.sh"
     

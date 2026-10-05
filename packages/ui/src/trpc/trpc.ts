@@ -15,7 +15,7 @@ import {AUTH_TOKEN_LOCAL_STORAGE_KEY} from '@/modules/auth/shared'
 import {queryClient} from '@/trpc/query-client'
 import {IS_DEV} from '@/utils/misc'
 
-import {httpOnlyPaths, type AppRouter} from '../../../umbreld/source/modules/server/trpc/common'
+import {httpOnlyPaths, type AppRouter} from '../../../titand/source/modules/server/trpc/common'
 import {createReconnectResyncController} from './reconnect-resync'
 
 const {protocol, hostname, port} = location

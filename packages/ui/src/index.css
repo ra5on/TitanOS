@@ -139,7 +139,7 @@ html {
 }
 
 @layer components {
-	.umbrel-material {
+	.titan-material {
 		-webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturation))
 			brightness(var(--material-brightness));
 		backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturation))
@@ -155,30 +155,30 @@ html {
 		background-color: rgb(var(--material-tint-rgb) / var(--material-tint-opacity));
 	}
 
-	.umbrel-material-context-menu {
+	.titan-material-context-menu {
 		border-radius: var(--material-context-menu-radius);
 	}
 
-	.umbrel-material-dropdown {
+	.titan-material-dropdown {
 		border-radius: var(--material-dropdown-radius);
 	}
 
-	.umbrel-material-popover {
+	.titan-material-popover {
 		border-radius: var(--material-popover-radius);
 	}
 
-	.umbrel-material-modal {
+	.titan-material-modal {
 		border-radius: var(--material-modal-radius);
 	}
 
 	/* App Store dialogs can sit over bright gallery/editorial artwork. Keep the
 	   stronger tint local so unrelated system dialogs retain the shared recipe. */
-	.umbrel-app-store-modal {
+	.titan-app-store-modal {
 		--material-tint-opacity: 0.6;
 		--material-brightness: 80%;
 	}
 
-	.umbrel-material-toast {
+	.titan-material-toast {
 		border-radius: var(--material-toast-radius);
 		/* Lighter, airier surface than menus: softer tint, gentler blur and a
 		   tighter shadow so toasts sit quietly over any wallpaper */
@@ -207,20 +207,20 @@ html {
 		}
 	}
 
-	.umbrel-material-menu-item {
+	.titan-material-menu-item {
 		border-radius: var(--material-item-radius);
 	}
 
-	.umbrel-window-surface-top {
+	.titan-window-surface-top {
 		border-top-right-radius: var(--window-radius);
 		border-top-left-radius: var(--window-radius);
 	}
 
-	.umbrel-window-surface-all {
+	.titan-window-surface-all {
 		border-radius: var(--window-radius);
 	}
 
-	.umbrel-window-shadow {
+	.titan-window-shadow {
 		box-shadow: 0 var(--window-background-shadow-y) var(--window-background-shadow-blur)
 			rgb(0 0 0 / var(--window-background-shadow-opacity));
 	}
@@ -228,7 +228,7 @@ html {
 	/* Static stand-in for a live backdrop-filter: the same --window-background-*
 	   recipe applied as a regular filter on a wallpaper thumbnail, so the blur is
 	   computed once and cached by the GPU instead of re-sampled every frame. */
-	.umbrel-window-wallpaper {
+	.titan-window-wallpaper {
 		transform: scale(1.2);
 		filter: blur(var(--window-background-blur)) saturate(var(--window-background-saturation))
 			brightness(var(--window-background-brightness));
@@ -237,11 +237,11 @@ html {
 		background-size: cover;
 	}
 
-	.umbrel-window-tint {
+	.titan-window-tint {
 		background-color: rgb(var(--window-background-tint-rgb) / var(--window-background-tint-opacity));
 	}
 
-	.umbrel-material.umbrel-window-surface-all {
+	.titan-material.titan-window-surface-all {
 		-webkit-backdrop-filter: blur(var(--immersive-blur)) saturate(var(--window-background-saturation))
 			brightness(var(--window-background-brightness));
 		backdrop-filter: blur(var(--immersive-blur)) saturate(var(--window-background-saturation))
@@ -252,7 +252,7 @@ html {
 		background-color: rgb(var(--window-background-tint-rgb) / var(--window-background-tint-opacity));
 	}
 
-	.umbrel-window-chrome {
+	.titan-window-chrome {
 		box-shadow:
 			1px 0 0 rgb(255 255 255 / calc(var(--window-shine-opacity) * 0.3)) inset,
 			-1px 0 0 rgb(255 255 255 / calc(var(--window-shine-opacity) * 0.3)) inset,
@@ -270,24 +270,24 @@ html {
 	   what reads as the settle. The close duration must match
 	   SHEET_EXIT_DURATION_MS in layouts/sheet.tsx, which navigates away
 	   (unmounting the route) once the animation lands. */
-	.umbrel-sheet-zoom {
+	.titan-sheet-zoom {
 		transform-origin: 50% 100%;
 	}
 
-	.umbrel-sheet-zoom[data-state='open'] {
-		animation: umbrel-sheet-in 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+	.titan-sheet-zoom[data-state='open'] {
+		animation: titan-sheet-in 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
 
-	.umbrel-sheet-zoom[data-state='closed'] {
-		animation: umbrel-sheet-out 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+	.titan-sheet-zoom[data-state='closed'] {
+		animation: titan-sheet-out 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 	}
 
 	/* Compositor-driven so it can't stutter while the sheet's route mounts on the
 	   main thread. Animates `translate`, leaving `transform` to the magnification
 	   spring's inline scale. Duration matches BOUNCE_DURATION in dock-item.tsx,
 	   which times the open pill's fade-in off the bounce. */
-	.umbrel-dock-bounce {
-		animation: umbrel-dock-bounce 400ms ease-in-out;
+	.titan-dock-bounce {
+		animation: titan-dock-bounce 400ms ease-in-out;
 	}
 
 	/* Cmd+K. The dialog is a transparent stage; the orb and the card beneath
@@ -389,13 +389,13 @@ html {
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-	.umbrel-material {
+	.titan-material {
 		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
 		background-color: rgb(var(--material-tint-rgb) / 0.9);
 	}
 
-	.umbrel-material.umbrel-window-surface-all {
+	.titan-material.titan-window-surface-all {
 		background-color: rgb(var(--window-background-tint-rgb) / 0.9);
 	}
 }
@@ -407,9 +407,9 @@ html {
 		animation-duration: 0.01ms !important;
 	}
 
-	.umbrel-sheet-zoom[data-state='open'],
-	.umbrel-sheet-zoom[data-state='closed'],
-	.umbrel-dock-bounce {
+	.titan-sheet-zoom[data-state='open'],
+	.titan-sheet-zoom[data-state='closed'],
+	.titan-dock-bounce {
 		animation: none;
 	}
 
@@ -432,11 +432,11 @@ html {
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-	.umbrel-material {
+	.titan-material {
 		background-color: rgb(var(--material-tint-rgb) / 0.82);
 	}
 
-	.umbrel-material.umbrel-window-surface-all {
+	.titan-material.titan-window-surface-all {
 		background-color: rgb(var(--window-background-tint-rgb) / 0.82);
 	}
 }
@@ -458,7 +458,7 @@ html {
 	 applying this unconditionally would throw away the richer rules above. Keep it
 	 scoped so deliberately hidden scrollbars elsewhere retain `scrollbar-width: none`. */
 @supports not selector(::-webkit-scrollbar) {
-	.umbrel-files-virtual-scroller {
+	.titan-files-virtual-scroller {
 		scrollbar-color: rgb(255 255 255 / 0.15) transparent;
 		scrollbar-width: thin;
 	}
@@ -510,12 +510,12 @@ html {
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
-.umbrel-hide-scrollbar::-webkit-scrollbar {
+.titan-hide-scrollbar::-webkit-scrollbar {
 	display: none;
 }
 
 /* Hide scrollbar for IE, Edge and Firefox */
-.umbrel-hide-scrollbar {
+.titan-hide-scrollbar {
 	-ms-overflow-style: none; /* IE and Edge */
 	scrollbar-width: none; /* Firefox */
 }
@@ -524,21 +524,21 @@ html {
    crosses the overflow threshold (styling ::-webkit-scrollbar opts us out of
    overlay scrollbars, so ours always consume layout width). No-op where
    scrollbars are genuinely overlay, e.g. Firefox on macOS. */
-.umbrel-stable-gutter {
+.titan-stable-gutter {
 	scrollbar-gutter: stable;
 }
 
-.umbrel-button:active {
+.titan-button:active {
 	scale: 0.97;
 }
 
-/* The App Store's shared content reveal (the apps.umbrel.com feel): a gentle
+/* The App Store's shared content reveal (the apps.titan.com feel): a gentle
    rise while the blur melts away, on a long expo ease. Only a `from` keyframe,
    so once an animation finishes the element holds no transform and sticky
    descendants pin normally — but never put the rising variant on an ancestor
    of position:sticky (the in-flight transform would unpin it). Stagger with
    --store-reveal-delay; fill-mode both keeps elements hidden until their turn. */
-@keyframes umbrel-store-reveal {
+@keyframes titan-store-reveal {
 	from {
 		translate: 0 16px;
 		scale: 0.992;
@@ -549,20 +549,20 @@ html {
 
 /* Blur-and-fade only — safe alongside motion-driven transforms (the app
    page's collapsing hero) and for chrome that shouldn't visibly move */
-@keyframes umbrel-store-reveal-soft {
+@keyframes titan-store-reveal-soft {
 	from {
 		opacity: 0;
 		filter: blur(8px);
 	}
 }
 
-.umbrel-store-reveal {
-	animation: umbrel-store-reveal 640ms cubic-bezier(0.19, 1, 0.22, 1) both;
+.titan-store-reveal {
+	animation: titan-store-reveal 640ms cubic-bezier(0.19, 1, 0.22, 1) both;
 	animation-delay: var(--store-reveal-delay, 0ms);
 }
 
-.umbrel-store-reveal-soft {
-	animation: umbrel-store-reveal-soft 640ms cubic-bezier(0.19, 1, 0.22, 1) both;
+.titan-store-reveal-soft {
+	animation: titan-store-reveal-soft 640ms cubic-bezier(0.19, 1, 0.22, 1) both;
 	animation-delay: var(--store-reveal-delay, 0ms);
 }
 
@@ -580,7 +580,7 @@ html {
 	}
 }
 
-.umbrel-carousel-fill {
+.titan-carousel-fill {
 	animation: carousel-fill steps(40) forwards;
 }
 
@@ -602,7 +602,7 @@ html {
 	}
 }
 
-.umbrel-machine-float {
+.titan-machine-float {
 	animation: machine-float var(--float-duration) ease-in-out var(--float-delay) infinite;
 	will-change: transform;
 }
@@ -628,29 +628,29 @@ html {
 
 /* Per-card variant: shorter and subtler, cheap enough to run on every card
    of a large grid at once */
-@keyframes umbrel-store-reveal-card {
+@keyframes titan-store-reveal-card {
 	from {
 		translate: 0 10px;
 		opacity: 0;
 	}
 }
 
-.umbrel-store-reveal-card {
-	animation: umbrel-store-reveal-card 500ms cubic-bezier(0.19, 1, 0.22, 1) both;
+.titan-store-reveal-card {
+	animation: titan-store-reveal-card 500ms cubic-bezier(0.19, 1, 0.22, 1) both;
 	animation-delay: var(--store-reveal-delay, 0ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.umbrel-store-reveal,
-	.umbrel-store-reveal-soft,
-	.umbrel-store-reveal-card {
+	.titan-store-reveal,
+	.titan-store-reveal-soft,
+	.titan-store-reveal-card {
 		animation: none;
 	}
 }
 
 /* Soft ripple radiating from the newest release's dot in the app page's
-   "What's new" timeline (mirrors the apps.umbrel.com timeline) */
-@keyframes umbrel-ripple {
+   "What's new" timeline (mirrors the apps.titan.com timeline) */
+@keyframes titan-ripple {
 	0% {
 		transform: scale(1);
 		opacity: 0.7;
@@ -673,31 +673,31 @@ html {
 	inherits: false;
 }
 
-.umbrel-fade-scroller-x,
-.umbrel-fade-scroller-y {
+.titan-fade-scroller-x,
+.titan-fade-scroller-y {
 	/* 8ms animates in 5 frames assuming 60fps */
 	transition:
 		--distance1 80ms ease-out,
 		--distance2 80ms ease-out;
 }
 
-.umbrel-fade-scroller-y {
+.titan-fade-scroller-y {
 	mask-image: linear-gradient(to bottom, transparent, red var(--distance1) calc(100% - var(--distance2)), transparent);
 }
 
-.umbrel-fade-scroller-x {
+.titan-fade-scroller-x {
 	mask-image: linear-gradient(to right, transparent, red var(--distance1) calc(100% - var(--distance2)), transparent);
 }
 
-.umbrel-wallpaper-fade-scroller {
+.titan-wallpaper-fade-scroller {
 	mask-image: linear-gradient(to right, transparent, red 16px calc(100% - 16px), transparent);
 }
 
-.umbrel-dialog-fade-scroller {
+.titan-dialog-fade-scroller {
 	mask-image: linear-gradient(to bottom, transparent, red 32px calc(100% - 32px), transparent);
 }
 
-.umbrel-cmdk-fade-scroller {
+.titan-cmdk-fade-scroller {
 	mask-image: linear-gradient(to bottom, transparent, red 20px calc(100% - 20px), transparent);
 }
 
@@ -705,7 +705,7 @@ html {
    fade also keeps the item/selected-count label legible over scrolled rows; the
    extra stop drops most of the visibility by 60% into the ramp so the last ~40%
    is close to fully faded */
-.umbrel-files-fade-scroller > div > div {
+.titan-files-fade-scroller > div > div {
 	mask-image: linear-gradient(
 		to bottom,
 		red 0,
@@ -716,7 +716,7 @@ html {
 }
 
 /* Only fade the top when a user has scrolled */
-.umbrel-files-fade-scroller.scrolled > div > div {
+.titan-files-fade-scroller.scrolled > div > div {
 	mask-image: linear-gradient(
 		to bottom,
 		transparent 0,
@@ -731,13 +731,13 @@ html {
    so they read as glass — the edge material blurred, more saturated and a
    touch lighter. The tint is a background-image so it stacks with the
    controls' own background colours (and their hover states) */
-.umbrel-photos-actions .settings-edge-material {
+.titan-photos-actions .settings-edge-material {
 	-webkit-backdrop-filter: blur(8px) saturate(1.7) brightness(1.3);
 	backdrop-filter: blur(8px) saturate(1.7) brightness(1.3);
 	background-image: linear-gradient(rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.05));
 }
 
-/* The bar's rest and its pin. At rest it sits --umbrel-photos-drop below its
+/* The bar's rest and its pin. At rest it sits --titan-photos-drop below its
    place in the sheet's top row (level with the title, as Files' bar is); as the
    listing scrolls it rides up with the content and settles into that row. The
    scroller's scroll timeline drives it — scoped to the column they share,
@@ -757,23 +757,23 @@ html {
    gently as it was set down. */
 @supports (animation-timeline: scroll()) and (timeline-scope: --a) {
 	@media (min-width: 1024px) {
-		.umbrel-photos-column {
-			timeline-scope: --umbrel-photos-scroll;
+		.titan-photos-column {
+			timeline-scope: --titan-photos-scroll;
 		}
-		.umbrel-photos-scroller {
-			scroll-timeline: --umbrel-photos-scroll block;
+		.titan-photos-scroller {
+			scroll-timeline: --titan-photos-scroll block;
 		}
-		.umbrel-photos-actions {
-			transform: translateY(var(--umbrel-photos-drop, 0px));
-			animation: umbrel-photos-bar-pin cubic-bezier(0.3, 0.6, 0.6, 1) both;
-			animation-timeline: --umbrel-photos-scroll;
-			animation-range: 0 calc(var(--umbrel-photos-drop, 0px) * 2);
+		.titan-photos-actions {
+			transform: translateY(var(--titan-photos-drop, 0px));
+			animation: titan-photos-bar-pin cubic-bezier(0.3, 0.6, 0.6, 1) both;
+			animation-timeline: --titan-photos-scroll;
+			animation-range: 0 calc(var(--titan-photos-drop, 0px) * 2);
 		}
 	}
 }
-@keyframes umbrel-photos-bar-pin {
+@keyframes titan-photos-bar-pin {
 	from {
-		transform: translateY(var(--umbrel-photos-drop, 0px));
+		transform: translateY(var(--titan-photos-drop, 0px));
 	}
 	to {
 		transform: none;
@@ -781,7 +781,7 @@ html {
 }
 
 /* The Favorite pill's heart, as it fills in */
-@keyframes umbrel-photos-pop {
+@keyframes titan-photos-pop {
 	40% {
 		transform: scale(1.2);
 	}
@@ -789,10 +789,10 @@ html {
 
 /* Photos timeline. The actions bar (and a source's strip) floats over the
    scroller's top edge. Tiles scrolling up under it dissolve into the window:
-   gone from --umbrel-photos-fade-from (the last bar-height of the chrome) up, easing in from there — an
+   gone from --titan-photos-fade-from (the last bar-height of the chrome) up, easing in from there — an
    S-curve, so neither end of the fall-off reads as an edge — to fully there
-   where the first row starts (--umbrel-photos-fade-to). A classic scrollbar (the rightmost
-   --umbrel-photos-scrollbar px, reserved by the gutter so it can't resize the grid as
+   where the first row starts (--titan-photos-fade-to). A classic scrollbar (the rightmost
+   --titan-photos-scrollbar px, reserved by the gutter so it can't resize the grid as
    content comes and goes) is left out of the fade.
 
    The mask also makes Chromium render the whole grid into its own compositor
@@ -800,43 +800,43 @@ html {
    dock starves the rest of the page of raster memory on large high-DPI
    screens: text, dock icons and tiles go blank. Keep a mask even if the fade
    ever goes (a flat `linear-gradient(black, black)` does the job). */
-.umbrel-photos-scroller {
-	--umbrel-photos-fade-span: calc(var(--umbrel-photos-fade-to, 0px) - var(--umbrel-photos-fade-from, 0px));
-	--umbrel-photos-fade: linear-gradient(
+.titan-photos-scroller {
+	--titan-photos-fade-span: calc(var(--titan-photos-fade-to, 0px) - var(--titan-photos-fade-from, 0px));
+	--titan-photos-fade: linear-gradient(
 		to bottom,
-		transparent var(--umbrel-photos-fade-from, 0px),
-		rgb(0 0 0 / 0.1) calc(var(--umbrel-photos-fade-from, 0px) + var(--umbrel-photos-fade-span) * 0.2),
-		rgb(0 0 0 / 0.35) calc(var(--umbrel-photos-fade-from, 0px) + var(--umbrel-photos-fade-span) * 0.4),
-		rgb(0 0 0 / 0.65) calc(var(--umbrel-photos-fade-from, 0px) + var(--umbrel-photos-fade-span) * 0.6),
-		rgb(0 0 0 / 0.9) calc(var(--umbrel-photos-fade-from, 0px) + var(--umbrel-photos-fade-span) * 0.8),
-		black var(--umbrel-photos-fade-to, 0px)
+		transparent var(--titan-photos-fade-from, 0px),
+		rgb(0 0 0 / 0.1) calc(var(--titan-photos-fade-from, 0px) + var(--titan-photos-fade-span) * 0.2),
+		rgb(0 0 0 / 0.35) calc(var(--titan-photos-fade-from, 0px) + var(--titan-photos-fade-span) * 0.4),
+		rgb(0 0 0 / 0.65) calc(var(--titan-photos-fade-from, 0px) + var(--titan-photos-fade-span) * 0.6),
+		rgb(0 0 0 / 0.9) calc(var(--titan-photos-fade-from, 0px) + var(--titan-photos-fade-span) * 0.8),
+		black var(--titan-photos-fade-to, 0px)
 	);
-	mask-image: var(--umbrel-photos-fade);
+	mask-image: var(--titan-photos-fade);
 	mask-repeat: no-repeat;
 }
 /* With a classic scrollbar (FadedScroller sets data-scrollbar when it measures
    one) a second, opaque layer spares its strip from the fade. Only then: a
    zero-width layer is not something every engine agrees on. */
-.umbrel-photos-scroller[data-scrollbar] {
-	mask-image: var(--umbrel-photos-fade), linear-gradient(black, black);
+.titan-photos-scroller[data-scrollbar] {
+	mask-image: var(--titan-photos-fade), linear-gradient(black, black);
 	mask-position:
 		left top,
 		right top;
 	mask-size:
-		calc(100% - var(--umbrel-photos-scrollbar, 0px)) 100%,
-		var(--umbrel-photos-scrollbar, 0px) 100%;
+		calc(100% - var(--titan-photos-scrollbar, 0px)) 100%,
+		var(--titan-photos-scrollbar, 0px) 100%;
 }
 /* A scroller whose scrollbar is hidden for the time rail (FadedScroller's
    hideScrollbar); scrollbar-width is set inline, this covers WebKit engines
    without it */
-.umbrel-photos-scroller[data-scrollbar-hidden]::-webkit-scrollbar {
+.titan-photos-scroller[data-scrollbar-hidden]::-webkit-scrollbar {
 	display: none;
 }
 
-.umbrel-divide-y > * {
+.titan-divide-y > * {
 	@apply relative;
 }
-.umbrel-divide-y > * + *::before {
+.titan-divide-y > * + *::before {
 	content: '';
 	@apply absolute inset-x-0 top-0 h-px w-full bg-linear-to-r from-transparent via-white/5 to-transparent;
 }
@@ -943,7 +943,7 @@ html {
 	}
 }
 
-@keyframes umbrel-sheet-in {
+@keyframes titan-sheet-in {
 	from {
 		transform: translateY(28px) scale(0.94);
 		opacity: 0;
@@ -954,7 +954,7 @@ html {
 	}
 }
 
-@keyframes umbrel-sheet-out {
+@keyframes titan-sheet-out {
 	30% {
 		opacity: 1;
 	}
@@ -965,7 +965,7 @@ html {
 	}
 }
 
-@keyframes umbrel-dock-bounce {
+@keyframes titan-dock-bounce {
 	0%,
 	100% {
 		translate: 0 0;
@@ -998,7 +998,7 @@ html {
 	}
 }
 
-.umbrel-bouncing-gradient {
+.titan-bouncing-gradient {
 	animation: bounce-gradient 2s ease infinite;
 	background: linear-gradient(to right, transparent, white, transparent);
 	background-size: 200% 100%;
@@ -1056,7 +1056,7 @@ html {
 	}
 }
 
-.umbrel-pulse {
+.titan-pulse {
 	animation-duration: 1s;
 	animation-timing-function: ease-in-out;
 	animation-iteration-count: infinite;
@@ -1085,7 +1085,7 @@ html {
 	}
 }
 
-.umbrel-pulse-a-few-times {
+.titan-pulse-a-few-times {
 	animation-duration: 1s;
 	animation-timing-function: ease-in-out;
 	animation-iteration-count: 1;

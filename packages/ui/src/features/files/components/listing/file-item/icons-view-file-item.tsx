@@ -11,8 +11,8 @@ import {useIsTouchDevice} from '@/features/files/hooks/use-is-touch-device'
 import type {FileSystemItem} from '@/features/files/types'
 import {formatFilesystemSize} from '@/features/files/utils/format-filesystem-size'
 import {isDirectoryANetworkDevice} from '@/features/files/utils/is-directory-a-network-device-or-share'
+import {isDirectoryATitanBackup} from '@/features/files/utils/is-directory-a-titan-backup'
 import {isDirectoryAnExternalDrivePartition} from '@/features/files/utils/is-directory-an-external-drive-partition'
-import {isDirectoryAnUmbrelBackup} from '@/features/files/utils/is-directory-an-umbrel-backup'
 import type {Machine} from '@/features/machines/types'
 import {cn} from '@/lib/utils'
 
@@ -91,8 +91,8 @@ export const IconsViewFileItem = ({
 									? t('files-type.external-drive')
 									: isDirectoryANetworkDevice(item.path)
 										? t('files-type.network-drive')
-										: isDirectoryAnUmbrelBackup(item.name)
-											? t('files-type.umbrel-backup')
+										: isDirectoryATitanBackup(item.name)
+											? t('files-type.titan-backup')
 											: // Folder sizes come from the index, so one that isn't indexed yet falls back to the label
 												item.size != null
 												? formatFilesystemSize(item.size)

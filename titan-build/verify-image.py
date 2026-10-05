@@ -11,11 +11,15 @@ import signal
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
 import uuid
 import zlib
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from release_identity import validate_release
 
 
 SECTOR_SIZE = 512
@@ -220,6 +224,7 @@ def smoke_boot(image, vm_script, boot_log, timeout, release_metadata=None):
         )
     require(release_metadata is not None, "Smoke test needs the expected Titan release metadata")
     metadata = json.loads(release_metadata.read_text())
+    validate_release(metadata)
     expected_version, expected_name = metadata.get("osVersion"), metadata.get("versionName")
     require(isinstance(expected_version, str) and bool(expected_version), "Release metadata has no osVersion")
     require(isinstance(expected_name, str) and bool(expected_name), "Release metadata has no versionName")
@@ -251,7 +256,7 @@ def smoke_boot(image, vm_script, boot_log, timeout, release_metadata=None):
         with boot_log.open("wb") as log:
             # Test the documented target size in a private overlay. Flashing
             # uses the target's capacity and leaves the compact RAW unchanged.
-            process = subprocess.Popen([str(script), "boot", str(image.resolve()), "--arch", "amd64", "--device", "umbrel-home", "--memory", "4096", "--cores", "2", "--disk-size", str(MINIMUM_BOOT_DISK_SIZE), "--http-port", str(port), "--ssh-port", str(ssh_port)], env={**os.environ, "VM_STATE_DIR": str(temporary / "state")}, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+            process = subprocess.Popen([str(script), "boot", str(image.resolve()), "--arch", "amd64", "--device", "nas", "--memory", "4096", "--cores", "2", "--disk-size", str(MINIMUM_BOOT_DISK_SIZE), "--http-port", str(port), "--ssh-port", str(ssh_port)], env={**os.environ, "VM_STATE_DIR": str(temporary / "state")}, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
             last_error = "No HTTP response"
             while time.monotonic() - started < timeout:
                 require(process.poll() is None, f"QEMU exited before startup; see {boot_log}")
@@ -279,7 +284,7 @@ def smoke_boot(image, vm_script, boot_log, timeout, release_metadata=None):
             # QEMU may have been launched as root by sudo. Its private QMP
             # socket provides reliable cleanup even if sudo changed sessions.
             state_name = str((temporary / "state").resolve())
-            socket_name = f"/tmp/umbrel-vm-{hashlib.sha256(state_name.encode()).hexdigest()[:16]}.qmp"
+            socket_name = f"/tmp/titan-vm-{hashlib.sha256(state_name.encode()).hexdigest()[:16]}.qmp"
             quit_code = "import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(5); s.connect(sys.argv[1]); s.recv(4096); s.sendall(b'{\"execute\":\"qmp_capabilities\"}\\n'); s.recv(4096); s.sendall(b'{\"execute\":\"quit\"}\\n'); s.close()"
             quit_command = ["python3", "-c", quit_code, socket_name]
             try:

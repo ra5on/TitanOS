@@ -25,7 +25,7 @@ export default defineConfig({
 	],
 	// Vite 4.4.8+ blocks requests from unrecognized hosts to prevent DNS rebinding attacks.
 	// Allow all hosts since the dev server runs inside a local Docker container and is
-	// accessed via dynamic *.local hostnames (e.g. umbrel-dev.local, umbrel-dev-apps.local).
+	// accessed via dynamic *.local hostnames (e.g. titan-dev.local, titan-dev-apps.local).
 	// This only affects the dev server, not production builds.
 	server: {
 		allowedHosts: true,

@@ -4,11 +4,11 @@ import OSLog
 import Photos
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
 // Owns the connected session for the main app: the saved device and session persisted
 // by onboarding, plus the live data the tabs render (user, apps, storage, files).
-// Everything is loaded over the local network from the connected umbrelOS device.
+// Everything is loaded over the local network from the connected titanOS device.
 @MainActor
 @Observable
 final class MainModel {
@@ -49,7 +49,7 @@ final class MainModel {
 		case off
 		case settingUp
 		case backgroundRefreshUnavailable
-		case waitingForUmbrel
+		case waitingForTitan
 		case checkingStorage
 		case paused
 		case error
@@ -61,7 +61,7 @@ final class MainModel {
 			case .off: "Backup off"
 			case .settingUp: "Starting backup…"
 			case .backgroundRefreshUnavailable: "Backup paused"
-			case .waitingForUmbrel: "Waiting for Tailscale"
+			case .waitingForTitan: "Waiting for Tailscale"
 			case .checkingStorage: "Checking storage…"
 			case .paused: "Backup paused"
 			case .error: "Backup needs attention"
@@ -78,7 +78,7 @@ final class MainModel {
 			case .off: Theme.gray
 			case .backgroundRefreshUnavailable, .error, .paused: Theme.red
 			case .upToDate: Theme.online
-			case .settingUp, .waitingForUmbrel, .checkingStorage, .backingUp: Theme.syncing
+			case .settingUp, .waitingForTitan, .checkingStorage, .backingUp: Theme.syncing
 			}
 		}
 	}
@@ -135,11 +135,11 @@ final class MainModel {
 			case .checkingStorage:
 				"Backup will resume automatically if enough space is available."
 			case .insufficientStorage:
-				"Free up storage on your Umbrel, then try again."
+				"Free up storage on your Titan, then try again."
 			case .reconnect:
-				"Umbrel needs to reconnect photo backup. Your existing backups are safe."
+				"Titan needs to reconnect photo backup. Your existing backups are safe."
 			case .needsAttention:
-				"Backup couldn’t continue. Try again. If this keeps happening, contact Umbrel Support."
+				"Backup couldn’t continue. Try again. If this keeps happening, contact Titan Support."
 			}
 		}
 
@@ -161,11 +161,11 @@ final class MainModel {
 		}
 	}
 
-	private static let logger = Logger(subsystem: "com.umbrel.app", category: "PhotoBackup")
+	private static let logger = Logger(subsystem: "io.github.ra5on.titanos.app", category: "PhotoBackup")
 	// These resources have no native change-event stream. Small, foreground-only
 	// refreshes keep the UI current without maintaining a background connection or
 	// repeatedly fetching data that the visible tab cannot display.
-	// TODO: Replace polling with native change events when umbreld exposes them.
+	// TODO: Replace polling with native change events when titand exposes them.
 	private static let identityRefreshInterval: TimeInterval = 15
 	private static let appsRefreshInterval: TimeInterval = 15
 	private static let photoReceiptRefreshInterval: TimeInterval = 15
@@ -175,7 +175,7 @@ final class MainModel {
 	private static let tailscalePreferenceTimeout: TimeInterval = 1
 
 	private(set) var device: SavedDevice?
-	private(set) var session: Umbreld.Session?
+	private(set) var session: Titand.Session?
 
 	private(set) var userName: String?
 	private(set) var wallpaperImage: UIImage?
@@ -194,7 +194,7 @@ final class MainModel {
 	// without adding an unrelated UIBackgroundModes capability.
 	private(set) var backgroundRefreshStatus: UIBackgroundRefreshStatus = .available
 	// PhotoKit provides one app-wide background uploader. When it is configured for
-	// another saved Umbrel account, this screen becomes read-only instead of offering
+	// another saved Titan account, this screen becomes read-only instead of offering
 	// controls that would silently move the entire iPhone library.
 	private(set) var otherPhotoBackupDestinationName: String?
 	private(set) var tailscaleSetupPresented = false
@@ -203,9 +203,9 @@ final class MainModel {
 	private var photoBackupSetupFailure: PhotoBackupSetupFailure?
 	private(set) var photoBackupStorageRetrying = false
 	private(set) var photoBackupRecoveryRetrying = false
-	private(set) var apps: [Umbreld.AppSummary] = []
-	private(set) var disk: Umbreld.DiskUsage?
-	// The user's favorite folders (first 4), matching the umbrelOS files-favorites widget.
+	private(set) var apps: [Titand.AppSummary] = []
+	private(set) var disk: Titand.DiskUsage?
+	// The user's favorite folders (first 4), matching the titanOS files-favorites widget.
 	private(set) var favoritePaths: [String] = []
 	// Ids of installed apps with a newer version in the registry.
 	private(set) var updatableApps: [String] = []
@@ -390,12 +390,12 @@ final class MainModel {
 	}
 
 	// NWPathMonitor is deliberately only an event source. A path change means the
-	// previous endpoint winner may be stale, not that the Umbrel is offline. Keep the
+	// previous endpoint winner may be stale, not that the Titan is offline. Keep the
 	// last confirmed result on-screen while the existing authenticated resolver silently
 	// re-establishes both reachability and the active route.
 	func refreshAfterNetworkPathChange() async {
 		guard let target = nativeTarget, session != nil else { return }
-		await Umbreld.invalidateResolvedHost(for: target)
+		await Titand.invalidateResolvedHost(for: target)
 		recentlyReachableBrowserAddresses.removeAll()
 
 		async let tailscaleRefresh: Void = refreshTailscaleAvailability()
@@ -426,7 +426,7 @@ final class MainModel {
 	}
 
 	var host: String? { device?.host }
-	var nativeTarget: Umbreld.Target? { device?.nativeTarget }
+	var nativeTarget: Titand.Target? { device?.nativeTarget }
 	var dashboardUsesHTTPS: Bool { device?.dashboardUsesHTTPS == true }
 	var suppressHTTPSRequiredAppWarning: Bool { device?.suppressHTTPSRequiredAppWarning == true }
 	var browserConnectionSelection: BrowserConnection { device?.browserConnection ?? .automatic }
@@ -449,7 +449,7 @@ final class MainModel {
 		}
 		var components = URLComponents()
 		// Named routes use their normal browser scheme. A literal IP is the last-resort
-		// route and always uses Umbrel's IP-valid local certificate: Safari can let the
+		// route and always uses Titan's IP-valid local certificate: Safari can let the
 		// user continue past an untrusted-CA warning, while its HTTP-only mode may block
 		// an app-opened IP with no recovery action at all.
 		components.scheme = endpoint.isLiteralIP
@@ -460,10 +460,10 @@ final class MainModel {
 		return components.url
 	}
 
-	func appURLForOpening(_ app: Umbreld.AppSummary) async -> URL? {
+	func appURLForOpening(_ app: Titand.AppSummary) async -> URL? {
 		let requiresHTTPS = app.requiresHttps == true
 		guard let endpoint = await browserEndpointForOpening(
-			// Umbrel's local certificate covers its hostnames and interface IPs, not a
+			// Titan's local certificate covers its hostnames and interface IPs, not a
 			// user-controlled tailnet name. HTTPS-required apps therefore keep using a
 			// certificate-covered endpoint.
 			allowsTailscaleDNS: !requiresHTTPS
@@ -478,14 +478,14 @@ final class MainModel {
 	}
 
 	// Cached app tiles deliberately omit default credentials. Resolve the live app on
-	// every tap so lifecycle, credential, and HTTPS decisions always use Umbrel's
+	// every tap so lifecycle, credential, and HTTPS decisions always use Titan's
 	// current response rather than periodically refreshed presentation data.
-	func appForLaunch(id appId: String) async -> Umbreld.AppSummary? {
+	func appForLaunch(id appId: String) async -> Titand.AppSummary? {
 		guard let target = nativeTarget, let deviceId = device?.id, let session else {
 			return nil
 		}
 		do {
-			let refreshedApps = try await Umbreld.apps(target: target, session: session)
+			let refreshedApps = try await Titand.apps(target: target, session: session)
 			guard !Task.isCancelled,
 				device?.id == deviceId,
 				self.session?.accountId == session.accountId
@@ -554,24 +554,24 @@ final class MainModel {
 	}
 
 	// The device model label, e.g. "Umbrel Pro".
-	var deviceLabel: String { device?.model ?? device?.name ?? "Umbrel" }
+	var deviceLabel: String { device?.model ?? device?.name ?? "Titan" }
 
-	// Prefixes the device label with the user's name when available (e.g. "Alex's Umbrel Pro").
+	// Prefixes the device label with the user's name when available (e.g. "Alex's Titan Pro").
 	var title: String {
 		if let userName, !userName.isEmpty { return "\(userName)\u{2019}s \(deviceLabel)" }
 		return deviceLabel
 	}
 
-	// Installed apps that decoded cleanly (umbreld can return error stubs).
-	var installedApps: [Umbreld.AppSummary] { apps.filter { $0.name != nil } }
-	var tailscaleApp: Umbreld.AppSummary? { installedApps.first { $0.id == "tailscale" } }
+	// Installed apps that decoded cleanly (titand can return error stubs).
+	var installedApps: [Titand.AppSummary] { apps.filter { $0.name != nil } }
+	var tailscaleApp: Titand.AppSummary? { installedApps.first { $0.id == "tailscale" } }
 	var tailscaleConnectionStatus: String {
 		guard let tailscaleAvailableOnThisPhone else { return "Checking…" }
 		return tailscaleAvailableOnThisPhone ? "Connected" : "Not connected"
 	}
 
 	// iOS does not reveal whether the separate Tailscale app is installed, signed in,
-	// or switched on. A short identity probe to the Umbrel's known Tailscale address is
+	// or switched on. A short identity probe to the Titan's known Tailscale address is
 	// the only claim we make: whether this iPhone can reach that endpoint right now.
 	func refreshTailscaleAvailability() async {
 		guard let device, let host = tailscaleAvailabilityHost else {
@@ -581,7 +581,7 @@ final class MainModel {
 		guard !tailscaleAvailabilityCheckInProgress else { return }
 		tailscaleAvailabilityCheckInProgress = true
 		defer { tailscaleAvailabilityCheckInProgress = false }
-		let available = await Umbreld.isKnownEndpointAvailable(host: host, deviceId: device.id)
+		let available = await Titand.isKnownEndpointAvailable(host: host, deviceId: device.id)
 		guard !Task.isCancelled,
 			self.device?.id == device.id,
 			tailscaleAvailabilityHost == host
@@ -596,7 +596,7 @@ final class MainModel {
 
 	var canManageApps: Bool { accountRole == "owner" || session?.accountId == "0" }
 	var photoBackupIsConfiguredElsewhere: Bool { otherPhotoBackupDestinationName != nil }
-	// Remote-access status follows the address Umbrel currently reports. Fall back to a
+	// Remote-access status follows the address Titan currently reports. Fall back to a
 	// pinned PhotoKit address only while no current address is available. A mismatch is
 	// surfaced separately so general Tailscale access can remain connected while Photo
 	// Backup asks for an explicit endpoint repair.
@@ -605,7 +605,7 @@ final class MainModel {
 	}
 
 	var hasKnownTailscaleAddress: Bool { tailscaleAvailabilityHost != nil }
-	var umbrelHasTailscaleAddress: Bool { device?.photoBackupHost != nil }
+	var titanHasTailscaleAddress: Bool { device?.photoBackupHost != nil }
 	var photoBackupTailscaleAddressChanged: Bool {
 		guard let pinnedHost = configuredPhotoBackupTailscaleHost,
 			let reportedHost = device?.photoBackupHost
@@ -622,7 +622,7 @@ final class MainModel {
 			photoBackupSetupFailure == nil,
 			photoBackupBackgroundRefreshUnavailable
 		{
-			// Setup failures and active setup still describe work performed by Umbrel.
+			// Setup failures and active setup still describe work performed by Titan.
 			// Once setup is otherwise idle, the system-wide gate is the most immediate
 			// reason PhotoKit cannot launch the uploader.
 			return .backgroundRefreshUnavailable
@@ -636,7 +636,7 @@ final class MainModel {
 			// Enabled intent without an installed upload configuration is a durable waiting
 			// state, not perpetual setup. On launch, the lightweight Tailscale probe decides
 			// whether there is real setup work to start.
-			return .waitingForUmbrel
+			return .waitingForTitan
 		}
 		let mode = PhotoBackupPresentationMode.resolve(
 			intentEnabled: intentEnabled,
@@ -659,9 +659,9 @@ final class MainModel {
 			if photoBackupCheckingStorage { return .checkingStorage }
 			if photoBackup.issue == .insufficientStorage { return .paused }
 			if photoBackup.issue == .authenticationRequired { return .error }
-			if photoBackupTailscaleAddressChanged { return .waitingForUmbrel }
-			if tailscaleAvailableOnThisPhone == false { return .waitingForUmbrel }
-			if photoBackup.phase == .waitingForUmbrel { return .waitingForUmbrel }
+			if photoBackupTailscaleAddressChanged { return .waitingForTitan }
+			if tailscaleAvailableOnThisPhone == false { return .waitingForTitan }
+			if photoBackup.phase == .waitingForTitan { return .waitingForTitan }
 			if photoBackupHasRuntimeError { return .error }
 			if let remaining = photoBackupRemainingCount(configuration: configuration) {
 				return remaining > 0 ? .backingUp(remaining) : .upToDate
@@ -677,7 +677,7 @@ final class MainModel {
 		switch photoBackupStatus {
 		case .backgroundRefreshUnavailable:
 			return .backgroundRefreshUnavailable
-		case .waitingForUmbrel:
+		case .waitingForTitan:
 			return .waitingForTailscale
 		case .checkingStorage:
 			return .checkingStorage
@@ -766,7 +766,7 @@ final class MainModel {
 		}
 		// Turning backup off removes the live extension configuration, not the record
 		// of what already reached this account. Keep rendering that history from the
-		// account-scoped source so disabling or removing/re-adding an Umbrel never
+		// account-scoped source so disabling or removing/re-adding an Titan never
 		// makes completed backups appear to vanish.
 		let sourceId: String?
 		if let configuration {
@@ -918,7 +918,7 @@ final class MainModel {
 		guard let config = loadConfig(),
 			let savedDevice = config.savedDevices[target.deviceId]
 		else {
-			otherPhotoBackupDestinationName = "another Umbrel"
+			otherPhotoBackupDestinationName = "another Titan"
 			return
 		}
 		let deviceName = savedDevice.model ?? savedDevice.name
@@ -979,23 +979,23 @@ final class MainModel {
 		// Offline is not logout; only a definitive 401 removes the grant and returns
 		// the user to sign-in.
 		do {
-			session = try await Umbreld.renewSession(target: target, session: session)
+			session = try await Titand.renewSession(target: target, session: session)
 			if self.session != session { self.session = session }
 		} catch {
-			if (error as? Umbreld.Error)?.isAuthError == true {
+			if (error as? Titand.Error)?.isAuthError == true {
 				sessionInvalidated(deviceId: id)
 				return
 			}
 		}
 		let activeSession = session
 
-		async let userInfo = try? Umbreld.user(target: target, session: activeSession)
-		async let appList = try? Umbreld.apps(target: target, session: activeSession)
-		async let usage = try? Umbreld.diskUsage(target: target, session: activeSession)
-		async let favs = try? Umbreld.favorites(target: target, session: activeSession)
-		async let addresses = try? Umbreld.ipAddresses(target: target, session: activeSession)
+		async let userInfo = try? Titand.user(target: target, session: activeSession)
+		async let appList = try? Titand.apps(target: target, session: activeSession)
+		async let usage = try? Titand.diskUsage(target: target, session: activeSession)
+		async let favs = try? Titand.favorites(target: target, session: activeSession)
+		async let addresses = try? Titand.ipAddresses(target: target, session: activeSession)
 		async let updates = activeSession.accountId == "0"
-			? (try? await Umbreld.appUpdates(target: target, session: activeSession)) : nil
+			? (try? await Titand.appUpdates(target: target, session: activeSession)) : nil
 
 		let (info, list, newUsage, newFavorites, newAddresses, newUpdates) = await
 			(userInfo, appList, usage, favs, addresses, updates)
@@ -1016,13 +1016,13 @@ final class MainModel {
 		lastFavoritesRefresh = refreshedAt
 		lastUpdatesRefresh = refreshedAt
 
-		// Nothing answered at all: distinguish "your Umbrel is off" from "Local Network
+		// Nothing answered at all: distinguish "your Titan is off" from "Local Network
 		// access was revoked in Settings", which otherwise look identical.
 		if info != nil || list != nil || newUsage != nil || newFavorites != nil
 			|| newAddresses != nil || newUpdates != nil
 		{
 			confirmConnectionState(.connected)
-			if let resolvedHost = try? await Umbreld.resolvedHost(for: target) {
+			if let resolvedHost = try? await Titand.resolvedHost(for: target) {
 				confirmConnectionRoute(resolvedHost)
 				rememberReachableBrowserAddress(resolvedHost, at: refreshedAt)
 			}
@@ -1080,17 +1080,17 @@ final class MainModel {
 		defer { remoteRefreshInProgress = false }
 
 		// These independent local requests run together so even a sleeping or offline
-		// Umbrel costs one timeout window rather than several in sequence.
-		async let userInfo: Umbreld.UserInfo? = refreshIdentity
-			? (try? await Umbreld.user(target: target, session: session)) : nil
-		async let appList: [Umbreld.AppSummary]? = refreshApps
-			? (try? await Umbreld.apps(target: target, session: session)) : nil
-		async let usage: Umbreld.DiskUsage? = refreshDisk
-			? (try? await Umbreld.diskUsage(target: target, session: session)) : nil
+		// Titan costs one timeout window rather than several in sequence.
+		async let userInfo: Titand.UserInfo? = refreshIdentity
+			? (try? await Titand.user(target: target, session: session)) : nil
+		async let appList: [Titand.AppSummary]? = refreshApps
+			? (try? await Titand.apps(target: target, session: session)) : nil
+		async let usage: Titand.DiskUsage? = refreshDisk
+			? (try? await Titand.diskUsage(target: target, session: session)) : nil
 		async let favs: [String]? = refreshFavorites
-			? (try? await Umbreld.favorites(target: target, session: session)) : nil
-		async let updates: [Umbreld.AppUpdate]? = refreshUpdates
-			? (try? await Umbreld.appUpdates(target: target, session: session)) : nil
+			? (try? await Titand.favorites(target: target, session: session)) : nil
+		async let updates: [Titand.AppUpdate]? = refreshUpdates
+			? (try? await Titand.appUpdates(target: target, session: session)) : nil
 
 		let (info, list, newUsage, newFavorites, newUpdates) = await
 			(userInfo, appList, usage, favs, updates)
@@ -1118,7 +1118,7 @@ final class MainModel {
 			|| newFavorites != nil || newUpdates != nil
 		if receivedResponse {
 			confirmConnectionState(.connected)
-			if let resolvedHost = try? await Umbreld.resolvedHost(for: target) {
+			if let resolvedHost = try? await Titand.resolvedHost(for: target) {
 				confirmConnectionRoute(resolvedHost)
 				rememberReachableBrowserAddress(resolvedHost)
 			}
@@ -1145,13 +1145,13 @@ final class MainModel {
 	}
 
 	// PhotoKit can finish transferring a resource but defer its terminal callback until
-	// a later system activation. While Home or Library is visible, ask Umbrel only about
+	// a later system activation. While Home or Library is visible, ask Titan only about
 	// the bounded set of current resources already prepared in our ledger. An exact
 	// final-file receipt can update presentation immediately; PhotoKit still owns every
 	// upload job and later acknowledgement.
 	private func reconcilePhotoBackupServerReceipts(
-		target: Umbreld.Target,
-		session: Umbreld.Session
+		target: Titand.Target,
+		session: Titand.Session
 	) async {
 		guard let configuration = PhotoBackupStore.configuration(),
 			configuration.deviceId == target.deviceId,
@@ -1172,7 +1172,7 @@ final class MainModel {
 			)
 			guard !pending.isEmpty else { return }
 			let requestedKeys = Set(pending.map(\.resourceKey))
-			let receipts = try await Umbreld.confirmedPhotoBackupResources(
+			let receipts = try await Titand.confirmedPhotoBackupResources(
 				target: target,
 				session: session,
 				sourceId: configuration.source.id,
@@ -1200,7 +1200,7 @@ final class MainModel {
 				try presentationLedger.recordConfirmedResources(confirmed)
 			}
 			Self.logger.notice(
-				"Confirmed \(confirmed.count, privacy: .public) photo backup resources from Umbrel"
+				"Confirmed \(confirmed.count, privacy: .public) photo backup resources from Titan"
 			)
 			presentationSnapshotDate = nil
 			refreshPhotoBackupPresentation()
@@ -1208,7 +1208,7 @@ final class MainModel {
 			return
 		} catch {
 			// This is opportunistic foreground reconciliation. The extension's durable
-			// queue remains authoritative when Umbrel cannot currently be reached.
+			// queue remains authoritative when Titan cannot currently be reached.
 			let nsError = error as NSError
 			Self.logger.notice(
 				"Could not reconcile server photo receipts: domain=\(nsError.domain, privacy: .public) code=\(nsError.code, privacy: .public) description=\(nsError.localizedDescription, privacy: .private)"
@@ -1256,7 +1256,7 @@ final class MainModel {
 	private func tailscaleBrowserHostnameForOpening() async -> String? {
 		guard let target = nativeTarget, let session else { return nil }
 		do {
-			guard let hostname = try await Umbreld.tailscaleBrowserHostname(
+			guard let hostname = try await Titand.tailscaleBrowserHostname(
 				target: target,
 				session: session
 			) else { return nil }
@@ -1264,7 +1264,7 @@ final class MainModel {
 			// tailnet suffix never becomes general presentation data in this app.
 			return hostname
 		} catch {
-			// Older umbrelOS releases do not expose this optional endpoint. Their saved
+			// Older titanOS releases do not expose this optional endpoint. Their saved
 			// literal addresses continue through the same fallback path.
 			return nil
 		}
@@ -1284,7 +1284,7 @@ final class MainModel {
 			let timeout = endpoint.kind == .tailscaleDNS || endpoint.kind == .localDNS
 				? Self.tailscalePreferenceTimeout
 				: 3
-			if await Umbreld.isBrowserEndpoint(
+			if await Titand.isBrowserEndpoint(
 				host: endpoint.host,
 				expectedDeviceId: deviceId,
 				timeout: timeout
@@ -1331,7 +1331,7 @@ final class MainModel {
 		}
 	}
 
-	private func applyUserInfo(_ info: Umbreld.UserInfo, target: Umbreld.Target, deviceId: String) async {
+	private func applyUserInfo(_ info: Titand.UserInfo, target: Titand.Target, deviceId: String) async {
 		guard info.userId == session?.accountId else { return }
 		let identityChanged = userName != info.name
 			|| wallpaperId != info.wallpaper.id
@@ -1367,8 +1367,8 @@ final class MainModel {
 	// Apply one successful server snapshot without notifying SwiftUI or touching disk
 	// when every rendered value is already current.
 	private func applyDeviceData(
-		apps newApps: [Umbreld.AppSummary]?,
-		diskUsage newDiskUsage: Umbreld.DiskUsage?,
+		apps newApps: [Titand.AppSummary]?,
+		diskUsage newDiskUsage: Titand.DiskUsage?,
 		favorites newFavorites: [String]?,
 		updateIds newUpdateIds: [String]?
 	) -> Bool {
@@ -1483,7 +1483,7 @@ final class MainModel {
 	}
 
 	// Storage exhaustion is not a transient network failure: automatically retrying
-	// can resend PhotoKit's entire in-flight batch to a still-full Umbrel. Retry only
+	// can resend PhotoKit's entire in-flight batch to a still-full Titan. Retry only
 	// after an explicit user action; one failed attempt returns to the paused state.
 	func retryPhotoBackupAfterInsufficientStorage() {
 		guard let configuration = PhotoBackupStore.configuration(),
@@ -1690,7 +1690,7 @@ final class MainModel {
 
 	// Start or stop PhotoKit backup to match the Profile toggles. Backup follows
 	// the device it was enabled on, never the device screen that happens to be open:
-	// viewing another Umbrel must not retarget an entire photo library at it.
+	// viewing another Titan must not retarget an entire photo library at it.
 	func syncBackup() {
 		guard let device, let accountId = session?.accountId else { return }
 		let photos = backupPhotosEnabled
@@ -1699,9 +1699,9 @@ final class MainModel {
 		let currentConfiguration = PhotoBackupStore.configuration()
 		let configurationBelongsToAccount = currentConfiguration?.deviceId == device.id
 			&& currentConfiguration?.source.accountId == accountId
-		// Connecting or signing in to another Umbrel is never permission to move the
+		// Connecting or signing in to another Titan is never permission to move the
 		// iPhone's backup destination. The user must first turn backup off on the
-		// configured Umbrel; only then can another account claim the single uploader.
+		// configured Titan; only then can another account claim the single uploader.
 		guard currentConfiguration == nil || configurationBelongsToAccount else {
 			photoBackupSetupInProgress = false
 			photoBackupSetupFailure = nil
@@ -1880,7 +1880,7 @@ final class MainModel {
 			// `resolvedHost` deliberately caches a previous winner for normal API traffic,
 			// so it cannot prove that Tailscale is reachable now. Probe this exact endpoint
 			// without the resolver cache before pinning it for PhotoKit.
-			let available = await Umbreld.isKnownEndpointAvailable(
+			let available = await Titand.isKnownEndpointAvailable(
 				host: photoBackupHost,
 				deviceId: device.id
 			)
@@ -1894,7 +1894,7 @@ final class MainModel {
 				return
 			}
 			// PhotoKit owns the upload request and exposes no server-trust callback for
-			// Umbrel's app-pinned local CA. Restrict the HTTP destination to this verified
+			// Titan's app-pinned local CA. Restrict the HTTP destination to this verified
 			// Tailscale address; the scoped grant authorizes the account and source.
 			uploadBaseURL = "http://\(photoBackupHost)"
 		}
@@ -1943,7 +1943,7 @@ final class MainModel {
 				source = previousConfiguration.source
 				grantToken = storedGrant
 			} else {
-				let grant = try await Umbreld.createPhotoBackupGrant(
+				let grant = try await Titand.createPhotoBackupGrant(
 					target: device.nativeTarget,
 					session: session,
 					sourceId: sourceId,
@@ -1964,7 +1964,7 @@ final class MainModel {
 				// Treat an account mismatch as a protocol failure, not a recoverable UI
 				// error. Revoke the session-bound upload capability before discarding it.
 				Keychain.deletePhotoBackupGrant(deviceId: device.id, accountId: session.accountId)
-				try? await Umbreld.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
+				try? await Titand.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
 				issuedGrant = false
 				throw PhotoBackupSetupError.sourceAccountMismatch
 			}
@@ -1978,7 +1978,7 @@ final class MainModel {
 					accountId: session.accountId
 				) else {
 					if issuedGrant, storedGrant == nil {
-						try? await Umbreld.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
+						try? await Titand.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
 					}
 					throw PhotoBackupSetupError.credentialStorageFailed
 				}
@@ -1998,7 +1998,7 @@ final class MainModel {
 					&& (backupPhotosEnabled || backupVideosEnabled)
 				if issuedGrant, !newerSetupForSameTarget {
 					Keychain.deletePhotoBackupGrant(deviceId: device.id, accountId: session.accountId)
-					try? await Umbreld.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
+					try? await Titand.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
 				}
 				return
 			}
@@ -2083,7 +2083,7 @@ final class MainModel {
 			}
 			if issuedGrant, shouldRevokeIssuedGrant {
 				Keychain.deletePhotoBackupGrant(deviceId: device.id, accountId: session.accountId)
-				try? await Umbreld.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
+				try? await Titand.revokePhotoBackupGrant(target: device.nativeTarget, session: session)
 			}
 			guard backupSetupIsCurrent(
 				revision: revision,
@@ -2131,7 +2131,7 @@ final class MainModel {
 			)
 		}
 		if revokeServerGrant, let boundDevice, let boundSession {
-			try? await Umbreld.revokePhotoBackupGrant(target: boundDevice.nativeTarget, session: boundSession)
+			try? await Titand.revokePhotoBackupGrant(target: boundDevice.nativeTarget, session: boundSession)
 		}
 		refreshPhotoBackupPresentation()
 	}
@@ -2178,7 +2178,7 @@ final class MainModel {
 	// blurred companion used to frost the cards. Both come from the same image so the
 	// frosted cards align with the sharp backdrop; both are cached on disk, so this only
 	// does work the very first time a wallpaper is ever seen.
-	private func loadWallpaperImages(id: String, target: Umbreld.Target) async {
+	private func loadWallpaperImages(id: String, target: Titand.Target) async {
 		guard let image = await WallpaperStore.shared.load(id: id, target: target)
 		else { return }
 		let blur = await WallpaperStore.shared.blurred(id: id)
@@ -2204,12 +2204,12 @@ final class MainModel {
 		onLogOut()
 
 		guard let targetToRevoke, let sessionToRevoke else { return }
-		// Local sign-out must not wait for a reachable Umbrel. Server revocation is
+		// Local sign-out must not wait for a reachable Titan. Server revocation is
 		// attempted afterward without reading or writing Keychain state, so a quick
 		// subsequent sign-in is independent from this best-effort cleanup.
 		Task {
 			do {
-				try await Umbreld.logout(target: targetToRevoke, session: sessionToRevoke)
+				try await Titand.logout(target: targetToRevoke, session: sessionToRevoke)
 			} catch {
 				Self.logger.error("Server session revocation after sign-out failed: \(error.localizedDescription, privacy: .private)")
 			}
@@ -2243,10 +2243,10 @@ final class MainModel {
 		PhotoBackupPreferenceStore.removeDevice(device.id)
 
 		if let session = Keychain.readSession(deviceId: device.id).session {
-			try? await Umbreld.logout(target: device.nativeTarget, session: session)
+			try? await Titand.logout(target: device.nativeTarget, session: session)
 		}
 		Keychain.deleteSession(deviceId: device.id)
-		await Umbreld.forgetLocalHTTPSIdentity(deviceId: device.id)
+		await Titand.forgetLocalHTTPSIdentity(deviceId: device.id)
 		DeviceDataStore.delete(deviceId: device.id)
 	}
 
@@ -2295,7 +2295,7 @@ final class MainModel {
 			case .sourceStorageUnavailable:
 				return "The photo backup identity is temporarily unavailable"
 			case .sourceAccountMismatch:
-				return "The photo backup identity belongs to a different Umbrel account"
+				return "The photo backup identity belongs to a different Titan account"
 			case .sharedStorageFailed:
 				return "The extension configuration could not be saved to the App Group"
 			case .extensionNotEnabled:

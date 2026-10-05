@@ -1,4 +1,4 @@
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import type {RegistryApp, UserApp} from '@/trpc/trpc'
 
 export type DependencyAlternatives = {dependencyId: string; appIds: string[]}
@@ -23,7 +23,7 @@ export function getAppsImplementingDependency(
 	)
 	const eligibleRegistryApps = apps
 		.filter(
-			(app) => !unavailableAppIds.has(app.id) && (app.appStoreId === UMBREL_APP_STORE_ID || userAppsKeyed?.[app.id]),
+			(app) => !unavailableAppIds.has(app.id) && (app.appStoreId === TITAN_APP_STORE_ID || userAppsKeyed?.[app.id]),
 		)
 		.map((app) => userAppsKeyed?.[app.id] ?? app)
 

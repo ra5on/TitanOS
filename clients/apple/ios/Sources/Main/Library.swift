@@ -1,9 +1,9 @@
 import Photos
 import SwiftUI
 import UIKit
-import UmbrelKit
+import TitanKit
 
-// The Library tab is the iPhone's actual PhotoKit library with Umbrel backup state
+// The Library tab is the iPhone's actual PhotoKit library with Titan backup state
 // layered on top. Backup receipts never decide which assets are visible.
 struct LibraryView: View {
 	@Environment(MainModel.self) private var model
@@ -102,10 +102,10 @@ struct LibraryView: View {
 
 	private var photoBackupDescription: String {
 		if let destination = model.otherPhotoBackupDestinationName {
-			return "This iPhone can back up to one Umbrel at a time. Turn off Photo Backup on \(destination) to use this Umbrel instead."
+			return "This iPhone can back up to one Titan at a time. Turn off Photo Backup on \(destination) to use this Titan instead."
 		}
 		if !backupEnabled {
-			return "Photos and videos already backed up remain on your Umbrel."
+			return "Photos and videos already backed up remain on your Titan."
 		}
 		return "iOS schedules uploads in the background through Tailscale, even when this app is closed."
 	}
@@ -255,7 +255,7 @@ private struct PhotoBackupInfoSheet: View {
 						InfoPageRow(
 							icon: "network",
 							title: "Uses Tailscale",
-							message: "Uploads reach your Umbrel through Tailscale’s encrypted network. If Tailscale is unavailable, backup waits. You can allow cellular uploads in Profile."
+							message: "Uploads reach your Titan through Tailscale’s encrypted network. If Tailscale is unavailable, backup waits. You can allow cellular uploads in Profile."
 						)
 						InfoPageDivider()
 						InfoPageRow(
@@ -273,7 +273,7 @@ private struct PhotoBackupInfoSheet: View {
 						InfoPageRow(
 							icon: "pause.circle",
 							title: "Turning backup off",
-							message: "Turning backup off stops uploads. Anything already backed up remains on your Umbrel."
+							message: "Turning backup off stops uploads. Anything already backed up remains on your Titan."
 						)
 					}
 					.background(Color(hex: 0x2C2C2E), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -305,7 +305,7 @@ private struct PhotoBackupInfoSheet: View {
 			Text("How Photo Backup works")
 				.font(.title2.bold())
 				.foregroundStyle(.white)
-			Text("Automatically back up this iPhone’s photos and videos directly to your Umbrel.")
+			Text("Automatically back up this iPhone’s photos and videos directly to your Titan.")
 				.font(.subheadline)
 				.foregroundStyle(Theme.gray)
 				.multilineTextAlignment(.center)
@@ -353,7 +353,7 @@ struct PhotoBackupSetupCard: View {
 				NoticeCard(
 					icon: "photo.stack",
 					title: "Photo Backup is enabled for \(destination)",
-					message: "This iPhone can back up to one Umbrel at a time. Turn off Photo Backup there to use this Umbrel instead."
+					message: "This iPhone can back up to one Titan at a time. Turn off Photo Backup there to use this Titan instead."
 				)
 			} else {
 				EmptyStateCard(
@@ -401,11 +401,11 @@ struct PhotoBackupSetupCard: View {
 	private var subtitle: String {
 		switch model.photoLibrary.authorizationStatus {
 		case .limited, .denied, .restricted:
-			"Allow Full Access to view your library and use automatic backup. Existing backups remain on your Umbrel."
+			"Allow Full Access to view your library and use automatic backup. Existing backups remain on your Titan."
 		case .notDetermined:
-			"Back up this iPhone\u{2019}s photos and videos to your Umbrel through Tailscale, even when the app is closed."
+			"Back up this iPhone\u{2019}s photos and videos to your Titan through Tailscale, even when the app is closed."
 		default:
-			"Back up this iPhone\u{2019}s photos and videos to your Umbrel through Tailscale."
+			"Back up this iPhone\u{2019}s photos and videos to your Titan through Tailscale."
 		}
 	}
 }

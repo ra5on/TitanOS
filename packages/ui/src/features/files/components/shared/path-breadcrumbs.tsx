@@ -83,7 +83,7 @@ export function PathBreadcrumbs({path, className}: {path: string; className?: st
 			// shallow fade keeps the overflow affordance while scrolling either end
 			// clears its fade entirely, leaving the first and last crumbs crisp.
 			fadeSize={16}
-			className={cn('umbrel-hide-scrollbar min-w-0 flex-1 overflow-x-auto', className)}
+			className={cn('titan-hide-scrollbar min-w-0 flex-1 overflow-x-auto', className)}
 			title={path}
 		>
 			<span className='flex w-max items-center gap-1 px-0.5'>

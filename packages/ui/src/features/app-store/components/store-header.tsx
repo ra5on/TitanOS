@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {NotificationBadge} from '@/components/ui/notification-badge'
 import {SheetHeader, SheetTitle} from '@/components/ui/sheet'
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import {CategoryRail} from '@/features/app-store/components/category-rail'
 import {UpdatesDialogConnected} from '@/features/app-store/components/updates-dialog'
 import {storeRevealSoftClass} from '@/features/app-store/constants'
@@ -269,7 +269,7 @@ function CommunityAppsMenuTrigger() {
 	// Already cached by AvailableAppsProvider — no extra request
 	const registryQ = trpcReact.appStore.registry.useQuery()
 	const communityStores = (registryQ.data ?? []).filter(
-		(repo): repo is NonNullable<typeof repo> => repo !== null && repo.meta.id !== UMBREL_APP_STORE_ID,
+		(repo): repo is NonNullable<typeof repo> => repo !== null && repo.meta.id !== TITAN_APP_STORE_ID,
 	)
 	const manageLink = {search: addLinkSearchParams({dialog: 'add-community-store'})}
 

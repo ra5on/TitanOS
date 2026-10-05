@@ -163,7 +163,7 @@ export default function ShareInfoDialog() {
 					<DialogTitle>{title}</DialogTitle>
 					<DialogDescription>{description}</DialogDescription>
 				</DialogHeader>
-				<div className='umbrel-stable-gutter min-h-0 flex-1 overflow-y-auto'>{content}</div>
+				<div className='titan-stable-gutter min-h-0 flex-1 overflow-y-auto'>{content}</div>
 				<DialogCloseButton className='absolute top-2 right-2 z-50' />
 			</DialogContent>
 		</Dialog>

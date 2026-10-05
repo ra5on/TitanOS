@@ -195,10 +195,8 @@ function Empty({frame}: {filter: ItemFilter; frame: Frame}) {
 		)
 	} else if (source) {
 		title = t('photos-empty.source-title')
-		if (source.type === 'iphone') {
-			description = t('photos-empty.source-iphone-description')
-		} else {
-			description = t('photos-empty.source-umbrel-description')
+		if (source.type === 'titan') {
+			description = t('photos-empty.source-titan-description')
 			actions = <UploadPill />
 		}
 	} else if (section === 'deleted') {

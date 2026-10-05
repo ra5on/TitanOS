@@ -1,5 +1,5 @@
 #!/bin/bash
-# Generates a signed Sparkle appcast from notarized Umbrel update archives.
+# Generates a signed Sparkle appcast from notarized Titan update archives.
 # This script writes only to the supplied archive directory and uploads nothing.
 set -euo pipefail
 
@@ -12,8 +12,8 @@ UPDATES_DIR="$1"
 SPARKLE_VERSION="2.9.6"
 SPARKLE_CHECKSUM="8d5fb41d960b43f4a68aa14126bf62b098544ec8d191cdcc73eb14e63a8e7606"
 SPARKLE_ARCHIVE_URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-for-Swift-Package-Manager.zip"
-SPARKLE_KEY_ACCOUNT="${SPARKLE_KEY_ACCOUNT:-umbrel-macos-updates}"
-DOWNLOAD_URL_PREFIX="${UMBREL_UPDATE_DOWNLOAD_URL_PREFIX:-https://download.umbrel.com/macos/}"
+SPARKLE_KEY_ACCOUNT="${SPARKLE_KEY_ACCOUNT:-titan-macos-updates}"
+DOWNLOAD_URL_PREFIX="${TITAN_UPDATE_DOWNLOAD_URL_PREFIX:?Set the URL of your signed Titan native-client releases}"
 
 if [[ ! -d "$UPDATES_DIR" ]]; then
 	echo "Updates directory not found: $UPDATES_DIR" >&2
@@ -37,7 +37,7 @@ for DMG in "${DMGS[@]}"; do
 	/usr/bin/xcrun stapler validate "$DMG"
 done
 
-TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/umbrel-sparkle.XXXXXX")"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/titan-sparkle.XXXXXX")"
 SPARKLE_ARCHIVE="$TEMP_DIR/Sparkle.zip"
 
 cleanup() {

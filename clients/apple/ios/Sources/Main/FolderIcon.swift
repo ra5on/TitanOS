@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// The umbrelOS folder icon, recolored to the wallpaper's brand color. umbrelOS renders
+// The titanOS folder icon, recolored to the wallpaper's brand color. titanOS renders
 // the folder as an SVG whose body fills `hsl(var(--color-brand))` with a white type glyph
 // on top (folder-icon.tsx + embedded-overlay-icons.tsx). We port that art verbatim and
 // inject the brand color, so folders match the dashboard for any wallpaper.
@@ -55,7 +55,7 @@ private enum FolderArt {
 	private static let insertFront =
 		"M11.5798 9.90146C11.3176 8.31211 12.4022 6.87309 14.0023 6.68733L50.4821 2.45217C52.0821 2.26641 53.5918 3.40424 53.8539 4.9936L54.7352 10.3361L12.461 15.244L11.5798 9.90146Z"
 
-	// The white type glyphs, ported verbatim from umbrelOS embedded-overlay-icons.tsx
+	// The white type glyphs, ported verbatim from titanOS embedded-overlay-icons.tsx
 	// including their drop-shadow / inner-shadow filters (the embossed 3D effect).
 	// fill=currentColor resolves to black/30 via the wrapper, as in the dashboard.
 	private struct Glyph { let viewBox: String; let inner: String }
@@ -69,7 +69,7 @@ private enum FolderArt {
 	static func svg(folderName: String, brandHSL: String) -> String {
 		var glyphMarkup = ""
 		if let glyph = glyphs[folderName] {
-			// umbrelOS places the glyph at left 23%, top 28%, size 56%x56% of the folder,
+			// titanOS places the glyph at left 23%, top 28%, size 56%x56% of the folder,
 			// filled with currentColor = black/30. The nested <svg> keeps its own filters.
 			glyphMarkup = #"<svg x="13.11" y="14" width="31.92" height="28" viewBox="\#(glyph.viewBox)" overflow="visible" style="color:rgba(0,0,0,0.3)">\#(glyph.inner)</svg>"#
 		}

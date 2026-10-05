@@ -6,7 +6,7 @@ import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 
 import type {MachineAgentControl} from '@/features/machines/types'
 
-import {pointOnMotion} from '../../../../../umbreld/source/modules/machines/input-motion'
+import {pointOnMotion} from '../../../../../titand/source/modules/machines/input-motion'
 import {createAgentGlowTrail} from './agent-glow-trail'
 import {AgentPointer} from './agent-pointer'
 

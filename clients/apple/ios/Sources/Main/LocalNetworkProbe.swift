@@ -1,5 +1,5 @@
 import Foundation
-import UmbrelKit
+import TitanKit
 
 // One-shot probe of the Local Network permission for the main app: starts a short
 // browse and reads the only signal iOS provides (denial arrives as a browse error,

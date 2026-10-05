@@ -19,12 +19,12 @@ import {ShutdownConfirmationDialog} from './shutdown-confirmation-dialog'
 type InstallSsdDialogProps = {
 	open: boolean
 	onOpenChange: (open: boolean) => void
-	isUmbrelPro: boolean
+	isTitanPro: boolean
 	/** Use generic drive wording instead of SSD (list-based manager on HDD pools) */
 	isHdd?: boolean
 }
 
-export function InstallSsdDialog({open, onOpenChange, isUmbrelPro, isHdd = false}: InstallSsdDialogProps) {
+export function InstallSsdDialog({open, onOpenChange, isTitanPro, isHdd = false}: InstallSsdDialogProps) {
 	const {t} = useTranslation()
 	const [showShutdownConfirmation, setShowShutdownConfirmation] = useState(false)
 
@@ -60,7 +60,7 @@ export function InstallSsdDialog({open, onOpenChange, isUmbrelPro, isHdd = false
 							<DialogDescription>{dv('storage-manager.install-ssd.description')}</DialogDescription>
 						</DialogHeader>
 
-						{isUmbrelPro ? (
+						{isTitanPro ? (
 							<ProInstallInstructions
 								paragraphs={[
 									t('storage-manager.install-ssd.pro-instructions-1'),

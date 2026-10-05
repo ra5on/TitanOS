@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/immersive-dialog'
 import {Spinner} from '@/components/ui/loading'
 import {StorageOperationError} from '@/features/storage/components/storage-operation-error'
-import {useIsUmbrelPro} from '@/hooks/use-is-umbrel-pro'
+import {useIsTitanPro} from '@/hooks/use-is-titan-pro'
 import {useTemperatureUnit} from '@/hooks/use-temperature-unit'
 import {cn} from '@/lib/utils'
 import {trpcReact} from '@/trpc/trpc'
@@ -48,12 +48,12 @@ const SLOT_INDICES = [0, 1, 2, 3] as const
 // without a pool gets the single-drive view of its boot drive - pools are only
 // created during onboarding, so there's nothing to manage here beyond drive health.
 export default function StorageManagerDialog() {
-	const identity = useIsUmbrelPro()
-	const {isUmbrelPro, isLoading: isLoadingUmbrelPro} = identity
+	const identity = useIsTitanPro()
+	const {isTitanPro, isLoading: isLoadingTitanPro} = identity
 	const raidStatusQ = trpcReact.hardware.raid.getStatus.useQuery()
 	const devicesQ = trpcReact.hardware.internalStorage.getDevices.useQuery()
 
-	const loading = isLoadingUmbrelPro || raidStatusQ.isLoading || devicesQ.isLoading
+	const loading = isLoadingTitanPro || raidStatusQ.isLoading || devicesQ.isLoading
 	// A failed refresh must not discard usable data or unmount an open repair flow.
 	const error =
 		(!identity.hasData ? identity.error : undefined) ??
@@ -63,11 +63,11 @@ export default function StorageManagerDialog() {
 	const unknownPool =
 		raidStatusQ.data?.exists &&
 		(!['ONLINE', 'DEGRADED'].includes(raidStatusQ.data.status ?? '') ||
-			(!isUmbrelPro && !getPoolDeviceType(raidStatusQ.data, devicesQ.data ?? [])))
+			(!isTitanPro && !getPoolDeviceType(raidStatusQ.data, devicesQ.data ?? [])))
 	if (loading || error || unknownPool || configuredPoolUnavailable)
 		return (
 			<StorageUnavailable
-				fallbackType={isUmbrelPro ? 'ssd' : undefined}
+				fallbackType={isTitanPro ? 'ssd' : undefined}
 				loading={loading}
 				error={error}
 				pool={raidStatusQ.data}
@@ -81,15 +81,15 @@ export default function StorageManagerDialog() {
 			/>
 		)
 
-	if (isUmbrelPro) return <SsdStorageManager isUmbrelPro />
+	if (isTitanPro) return <SsdStorageManager isTitanPro />
 	if (!raidStatusQ.data?.exists) return <SingleDriveStorageManager devices={devicesQ.data ?? []} />
 	if (getPoolDeviceType(raidStatusQ.data, devicesQ.data ?? []) === 'ssd') {
-		return <SsdStorageManager isUmbrelPro={false} />
+		return <SsdStorageManager isTitanPro={false} />
 	}
 	return <ListStorageManager />
 }
 
-function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
+function SsdStorageManager({isTitanPro}: {isTitanPro: boolean}) {
 	const {t} = useTranslation()
 	const navigate = useNavigate()
 	const [temperatureUnit] = useTemperatureUnit()
@@ -129,7 +129,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 	// The Pro tray is positional: a pool member whose PCI slot couldn't be resolved would
 	// otherwise render nowhere, so surface that anomaly through the warning banner too
 	const hasUnmappedProMember =
-		isUmbrelPro &&
+		isTitanPro &&
 		raidStatus?.devices?.some((rd: {id: string}) => {
 			const device = allDevices.find((d) => d.id === rd.id)
 			return device && !(device.slot && device.slot >= 1 && device.slot <= 4)
@@ -156,7 +156,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 	const [failedIdForReplacement, setFailedIdForReplacement] = useState<string | null>(null)
 
 	const detectedGenericSsds = allDevices.filter((device) => device.type === 'ssd' && !device.isSystemDrive && device.id)
-	const displayedSsds = isUmbrelPro
+	const displayedSsds = isTitanPro
 		? SLOT_INDICES.map((slotIndex) => ({device: ssdSlots[slotIndex], slotNumber: slotIndex + 1}))
 		: detectedGenericSsds.map((device) => ({device, slotNumber: undefined}))
 	const canReplaceFailedSsd = isDegraded && failedRaidDevices.length > 0 && availableSsds.length > 0
@@ -178,7 +178,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 		? availableSsds.find((d) => (d.roundedSize ?? d.size) >= replacementSizeFor(primaryFailed?.id))
 		: undefined
 	const proSlotFor = (device?: StorageDevice) =>
-		isUmbrelPro && device?.slot && device.slot >= 1 && device.slot <= 4 ? device.slot : null
+		isTitanPro && device?.slot && device.slot >= 1 && device.slot <= 4 ? device.slot : null
 	const failedDeviceSlot = proSlotFor(allDevices.find((d) => d.id === primaryFailed?.id))
 
 	// Every member has one repair entry point, whether it appears in the tray or
@@ -336,7 +336,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 							<div className='flex items-center gap-2 rounded-8 bg-[#3C1C1C] p-2.5 text-13 leading-tight -tracking-2 text-[#FF3434]'>
 								<TbAlertTriangle className='h-5 w-5 shrink-0' />
 								<span className='opacity-90'>
-									{isUmbrelPro || hasKnownSsdPool
+									{isTitanPro || hasKnownSsdPool
 										? t('storage-manager.missing-ssd-warning')
 										: t('storage-manager.missing-drive-warning')}
 								</span>
@@ -344,9 +344,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 						)}
 
 						<div className='flex flex-col gap-6 md:flex-1 md:flex-row md:items-stretch md:px-6'>
-							<div
-								className={cn('flex min-w-0 flex-col gap-6', isUmbrelPro ? 'md:w-[480px] md:shrink-0' : 'md:flex-1')}
-							>
+							<div className={cn('flex min-w-0 flex-col gap-6', isTitanPro ? 'md:w-[480px] md:shrink-0' : 'md:flex-1')}>
 								{/* Mobile: SSD List Card */}
 								<div className='flex flex-col gap-6 md:hidden'>
 									<div className='flex flex-col rounded-xl bg-white/5 p-3'>
@@ -415,7 +413,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 												</div>
 											</div>
 										))}
-										{!isUmbrelPro && (
+										{!isTitanPro && (
 											<button
 												type='button'
 												onClick={() => setIsInstallSsdDialogOpen(true)}
@@ -430,7 +428,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 								{/* Desktop: Device visualization */}
 								<div className='hidden items-stretch md:flex'>
 									{/* Left: Device visualization */}
-									<div className={isUmbrelPro ? 'flex flex-col items-center gap-3' : 'hidden'}>
+									<div className={isTitanPro ? 'flex flex-col items-center gap-3' : 'hidden'}>
 										{/* Gradient border using pseudo-element technique */}
 										<div
 											className='relative h-[480px] w-[480px] rounded-[69px] border-[3px] border-transparent bg-[radial-gradient(78%_100%_at_50%_0%,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_100%)] bg-clip-padding'
@@ -544,10 +542,10 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 												</div>
 											))}
 										</div>
-										<span className='text-13 font-semibold text-white/50'>{t('storage-manager.umbrel-pro')}</span>
+										<span className='text-13 font-semibold text-white/50'>{t('storage-manager.titan-pro')}</span>
 									</div>
 
-									{!isUmbrelPro && (
+									{!isTitanPro && (
 										<div className='relative min-w-0 flex-1 self-center rounded-[32px] border-[3px] border-transparent bg-[radial-gradient(78%_100%_at_50%_0%,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_100%)] bg-clip-padding'>
 											{/* Gradient border overlay */}
 											<div
@@ -565,7 +563,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 													<Spinner size='8' />
 												</div>
 											)}
-											<div className='umbrel-hide-scrollbar w-full overflow-x-auto'>
+											<div className='titan-hide-scrollbar w-full overflow-x-auto'>
 												<div className='flex w-max min-w-full items-start justify-center gap-3 px-4 py-7'>
 													{ssdStates.map((state) => {
 														const {device, raidDevice, isReadyToAdd} = state
@@ -614,7 +612,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 									raidStatus?.devices
 										?.filter((member) => {
 											const device = allDevices.find((candidate) => candidate.id === member.id)
-											return !device || (isUmbrelPro && (!device.slot || device.slot < 1 || device.slot > 4))
+											return !device || (isTitanPro && (!device.slot || device.slot < 1 || device.slot > 4))
 										})
 										.map((member) => {
 											const device = allDevices.find((candidate) => candidate.id === member.id)
@@ -622,7 +620,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 												<div key={member.id} className='flex min-w-0 flex-col gap-2'>
 													<StorageDeviceCard
 														device={device}
-														fallbackType={isUmbrelPro ? 'ssd' : undefined}
+														fallbackType={isTitanPro ? 'ssd' : undefined}
 														identifier={member.id}
 														status={t(device ? 'storage-status.slot-unknown' : 'storage-status.not-detected')}
 														onDetails={device ? () => healthDialog.openDialog(device) : undefined}
@@ -652,13 +650,13 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 										description={
 											!raidStatus?.exists ? (
 												<p>{t('storage-manager.other-drives.pool-unavailable')}</p>
-											) : !isUmbrelPro && !hasKnownSsdPool ? (
+											) : !isTitanPro && !hasKnownSsdPool ? (
 												<p>
 													{hasMissingDrive
 														? t('storage-manager.other-drives.pool-drives-missing')
 														: t('storage-manager.other-drives.setup-unavailable')}
 												</p>
-											) : isUmbrelPro ? (
+											) : isTitanPro ? (
 												<p>{t('storage-manager.other-drives.pro')}</p>
 											) : (
 												<StorageMigrationDescription variant='hdd' />
@@ -674,7 +672,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 							<div
 								className={cn(
 									'relative flex flex-col items-center gap-4',
-									isUmbrelPro ? 'justify-center md:flex-1' : 'md:w-[240px] md:shrink-0 md:pt-6',
+									isTitanPro ? 'justify-center md:flex-1' : 'md:w-[240px] md:shrink-0 md:pt-6',
 								)}
 							>
 								<StorageDonutChart
@@ -713,7 +711,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 			<InstallSsdDialog
 				open={isInstallSsdDialogOpen}
 				onOpenChange={setIsInstallSsdDialogOpen}
-				isUmbrelPro={isUmbrelPro}
+				isTitanPro={isTitanPro}
 			/>
 
 			{/* Add to RAID Dialog (for detected but unadded device) */}
@@ -751,7 +749,7 @@ function SsdStorageManager({isUmbrelPro}: {isUmbrelPro: boolean}) {
 						? raidStatus?.devices?.some((member) => member.id === swapDeviceId && member.status !== 'ONLINE')
 						: ssdStates.some((state) => state.isFailedDrive && state.slotNumber === swapSlot)
 				}
-				isUmbrelPro={isUmbrelPro}
+				isTitanPro={isTitanPro}
 				raidStatus={raidStatus}
 				// SSD pools must be offered SSD replacements only - an unpooled rotational disk
 				// would be rejected by the backend's type check

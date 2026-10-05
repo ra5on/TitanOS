@@ -32,7 +32,7 @@ export const photosRoutes: RouteObject[] = [
 			// {path: 'people/:personId', element: <PhotosListing />},
 			// {path: 'locations/:locationId', element: <PhotosListing />},
 			{path: 'albums/:albumId', element: <PhotosListing />},
-			// A single source (this Umbrel, a phone, a drive, a NAS)
+			// A single source (this Titan, a phone, a drive, a NAS)
 			{
 				path: 'source/:sourceId',
 				element: <PhotosListing />,

@@ -25,7 +25,7 @@ vi.mock('@/hooks/use-is-home-or-pro', () => ({
 	useIsHomeOrPro: () => ({deviceName: 'Umbrel Home'}),
 }))
 vi.mock('@/providers/apps', () => ({
-	systemAppsKeyed: {UMBREL_settings: {icon: 'settings.svg'}},
+	systemAppsKeyed: {TITAN_settings: {icon: 'settings.svg'}},
 }))
 vi.mock('@/trpc/trpc', () => ({
 	trpcReact: {user: {get: {useQuery: () => ({data: {role: 'owner'}, isLoading: false})}}},

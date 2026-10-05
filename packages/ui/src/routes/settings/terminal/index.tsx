@@ -9,7 +9,7 @@ import {usePickerTarget} from '@/modules/immersive-picker/target'
 import {useDialogOpenProps} from '@/utils/dialog'
 
 import {App} from './app'
-import UmbrelOs from './umbrelos'
+import TitanOs from './titanos'
 
 export default function TerminalDialog() {
 	const dialogProps = useDialogOpenProps('terminal')
@@ -20,7 +20,7 @@ export default function TerminalDialog() {
 			<DialogPortal>
 				<ImmersiveDialogOverlay />
 				{target.type === 'picker' && <PickerDialogContent />}
-				{target.type === 'umbrelos' && <UmbrelOs />}
+				{target.type === 'titanos' && <TitanOs />}
 				{target.type === 'app' && <App appId={target.appId} />}
 			</DialogPortal>
 		</ImmersiveDialog>
@@ -36,9 +36,9 @@ function PickerDialogContent() {
 	return (
 		<ImmersivePickerDialogContentInit title={t('terminal')}>
 			<ImmersivePickerItem
-				title={t('umbrelos')}
-				description={t('terminal.umbrelos-description')}
-				to={linkToTarget({type: 'umbrelos'})}
+				title={t('titanos')}
+				description={t('terminal.titanos-description')}
+				to={linkToTarget({type: 'titanos'})}
 			/>
 			<ImmersivePickerItem
 				title={t('terminal.app')}

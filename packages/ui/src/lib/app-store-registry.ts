@@ -1,4 +1,4 @@
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import type {RegistryApp} from '@/trpc/trpc'
 
 type AppRegistry = {
@@ -57,7 +57,7 @@ export function resolveDependencyRegistryApp({
 	const currentRegistryApp = repoAppsKeyed[registryId]?.[dependencyId]
 	if (currentRegistryApp) return currentRegistryApp
 
-	const officialRegistryApp = repoAppsKeyed[UMBREL_APP_STORE_ID]?.[dependencyId]
+	const officialRegistryApp = repoAppsKeyed[TITAN_APP_STORE_ID]?.[dependencyId]
 	if (officialRegistryApp) return officialRegistryApp
 
 	return matchingRegistries[0]?.[dependencyId]

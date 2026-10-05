@@ -12,11 +12,11 @@ const BAR_HEIGHT = 44
 const BAR_GAP = 12
 const BAR_TOP = {mobile: 0, desktop: 10}
 // Content starts this far below the bar — as far as the bar is from the
-// sheet's top edge — and the fade completes there (see .umbrel-photos-scroller)
+// sheet's top edge — and the fade completes there (see .titan-photos-scroller)
 const FADE_TAIL = 10
 // How far below that the bar rests until the listing scrolls: level with the
 // sheet's title, as Files' bar is. It rides up with the content and pins at
-// BAR_TOP (see .umbrel-photos-actions), driven by the scroller's scroll
+// BAR_TOP (see .titan-photos-actions), driven by the scroller's scroll
 // timeline — where a browser has none, it simply stays pinned
 const BAR_DROP = 30
 const scrollDriven =
@@ -75,8 +75,8 @@ export function ListingSurface({children}: {children: (frame: Frame) => ReactNod
 			    66px down (bar 10+44, gap 12) plus the pull-up → 134. The right
 			    margins mirror the sheet's md/xl padding (layouts/sheet.tsx). */}
 			<div
-				className='-mt-(--umbrel-photos-inset) h-[calc(100dvh-var(--sheet-top)-136px+var(--umbrel-photos-inset))] md:h-[calc(100dvh-var(--sheet-top)-164px+var(--umbrel-photos-inset))] lg:-mr-10 lg:h-[calc(100vh-134px+var(--umbrel-photos-inset))] xl:-mr-[60px]'
-				style={{['--umbrel-photos-inset' as string]: `${barBottom + BAR_GAP}px`}}
+				className='-mt-(--titan-photos-inset) h-[calc(100dvh-var(--sheet-top)-136px+var(--titan-photos-inset))] md:h-[calc(100dvh-var(--sheet-top)-164px+var(--titan-photos-inset))] lg:-mr-10 lg:h-[calc(100vh-134px+var(--titan-photos-inset))] xl:-mr-[60px]'
+				style={{['--titan-photos-inset' as string]: `${barBottom + BAR_GAP}px`}}
 			>
 				{children(frame)}
 			</div>

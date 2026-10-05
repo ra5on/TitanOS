@@ -389,7 +389,7 @@ export default function RaidSetup({variant = 'pro'}: {variant?: RaidOnboardingVa
 				{!isGeneric && (
 					<img
 						src='/assets/onboarding/pro-front.webp'
-						alt={t('storage-manager.umbrel-pro')}
+						alt={t('storage-manager.titan-pro')}
 						draggable={false}
 						className='w-64 md:w-96'
 					/>
@@ -566,11 +566,11 @@ export default function RaidSetup({variant = 'pro'}: {variant?: RaidOnboardingVa
 					<>
 						<img
 							src='/assets/onboarding/pro-front.webp'
-							alt={t('storage-manager.umbrel-pro')}
+							alt={t('storage-manager.titan-pro')}
 							draggable={false}
 							className='w-64 md:w-96'
 						/>
-						<p className='-mt-4 text-[13px] font-medium text-white/30'>{t('storage-manager.umbrel-pro')}</p>
+						<p className='-mt-4 text-[13px] font-medium text-white/30'>{t('storage-manager.titan-pro')}</p>
 					</>
 				)}
 				{/* Progress bar */}
@@ -633,11 +633,11 @@ export default function RaidSetup({variant = 'pro'}: {variant?: RaidOnboardingVa
 					<>
 						<img
 							src='/assets/onboarding/pro-front.webp'
-							alt={t('storage-manager.umbrel-pro')}
+							alt={t('storage-manager.titan-pro')}
 							draggable={false}
 							className='w-64 md:w-96'
 						/>
-						<p className='-mt-2 text-[20px] font-semibold text-white/85'>{t('storage-manager.umbrel-pro')}</p>
+						<p className='-mt-2 text-[20px] font-semibold text-white/85'>{t('storage-manager.titan-pro')}</p>
 					</>
 				)}
 				{/* They just chose this setup; only the Pro shows its stats line under the device photo */}
@@ -667,7 +667,7 @@ export default function RaidSetup({variant = 'pro'}: {variant?: RaidOnboardingVa
 					className={`mt-4 ${primaryButtonProps.className}`}
 					style={primaryButtonProps.style}
 				>
-					{isLaunching ? t('onboarding.raid.launching') : t('onboarding.launch-umbrelos')}
+					{isLaunching ? t('onboarding.raid.launching') : t('onboarding.launch-titanos')}
 				</button>
 			</Layout>
 		)

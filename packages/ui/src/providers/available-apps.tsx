@@ -1,7 +1,7 @@
 import {createContext, useContext} from 'react'
 import {groupBy, indexBy, mapValues} from 'remeda'
 
-import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {TITAN_APP_STORE_ID} from '@/constants/app-store'
 import {indexRegistryApps} from '@/lib/app-store-registry'
 import {RegistryApp, RouterOutput, trpcReact} from '@/trpc/trpc'
 
@@ -16,7 +16,7 @@ type AppsContextT =
 			appsKeyed: Record<string, RegistryApp>
 			ambiguousAppIds: ReadonlySet<string>
 			repoAppsKeyed: Record<string, Record<string, RegistryApp>>
-			// Keyed by plain strings: manifests may declare categories umbrelOS
+			// Keyed by plain strings: manifests may declare categories TitanOS
 			// doesn't know about yet
 			repoAppsGroupedByCategory: Record<string, Record<string, RegistryApp[]>>
 	  }
@@ -49,7 +49,7 @@ export function AvailableAppsProvider({children}: {children: React.ReactNode}) {
 	return <AppsContext value={providerProps}>{children}</AppsContext>
 }
 
-export function useAvailableApps(registryId: string = UMBREL_APP_STORE_ID) {
+export function useAvailableApps(registryId: string = TITAN_APP_STORE_ID) {
 	const ctx = useContext(AppsContext)
 	if (!ctx) throw new Error('useAvailableApps must be used within AvailableAppsProvider')
 
@@ -83,7 +83,7 @@ export function useAllAvailableApps() {
 }
 
 // Allow querying for nullish app to allow the `id` to be dynamic
-export function useAvailableApp(id?: string | null, registryId: string = UMBREL_APP_STORE_ID) {
+export function useAvailableApp(id?: string | null, registryId: string = TITAN_APP_STORE_ID) {
 	const {appsKeyed, isLoading} = useAvailableApps(registryId)
 
 	if (!id) return {isLoading: false, app: undefined} as const

@@ -8,6 +8,6 @@
   "upstreamArchiveSha256": "d820bb7a5e982bcced51f74bb613ee7a1558a231d07a60646c08a6b9dfbcb4e9",
   "architecture": "amd64",
   "stage": "stable",
-  "systemCompatibility": "titan-umbrel-rugix-amd64-v1",
+  "systemCompatibility": "titan-rugix-amd64-v2",
   "updateProvider": "Titan GitHub releases (ra5on/TitanOS)"
 }

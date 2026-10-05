@@ -2,7 +2,6 @@
 import contextlib
 import hashlib
 import importlib.util
-import importlib.machinery
 import io
 import json
 from pathlib import Path
@@ -27,24 +26,26 @@ class SignedUpdaterTests(unittest.TestCase):
         self.private, self.public = self.root/'private.pem', self.root/'public.pem'
         subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(self.private)],check=True,capture_output=True)
         subprocess.run(['openssl','pkey','-in',str(self.private),'-pubout','-out',str(self.public)],check=True,capture_output=True)
-        self.version, self.current = '2.0.0', '2.0.0-titan.3'
+        self.version, self.current = '2.0.2', '2.0.1'
         self.payload = b'A disposable signed Rugix bundle fixture'
         self.name = updater.update_asset_name(self.version)
         self.release = {'version':self.version,'osVersion':self.version,'stage':'stable',
-                        'systemCompatibility':updater.COMPATIBILITY,'architecture':'amd64','versionName':'TitanOS 2.0.0'}
+                        'systemCompatibility':updater.COMPATIBILITY,'architecture':'amd64','versionName':'TitanOS 2.0.2'}
         self.asset = {'name':self.name,'sizeBytes':len(self.payload),'sha256':hashlib.sha256(self.payload).hexdigest()}
+        self.image_name=f'titan-{self.version}.img.xz'
+        self.image_payload=b'Fixture image'
+        self.image_asset={'name':self.image_name,'sizeBytes':len(self.image_payload),'sha256':hashlib.sha256(self.image_payload).hexdigest()}
         self.manifest = {'schemaVersion':1,'releaseVersion':self.version,'osVersion':self.version,
                          'architecture':'amd64','firmware':'UEFI','updateFormat':'rugix','stage':'stable',
                          'systemCompatibility':updater.COMPATIBILITY,'ownTitanUpdateChannel':True,'releaseEligible':True,
-                         'compatibleWithPreviousTitanRaucImages':False,
-                         'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'passed'}},'assets':[self.asset]}
+                         'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'passed','installedRelease':{'version':self.version,'name':f'TitanOS {self.version}'},'bootDiskSizeBytes':32*1024**3}},'assets':[self.asset,self.image_asset]}
         self.github = {'tag_name':'v'+self.version,'draft':False,'prerelease':False,
                        'assets':[{'name':self.name,'size':len(self.payload),'browser_download_url':updater.asset_url(self.version,self.name)}]}
         self.responses = {}
         self.sign()
 
     def sign(self):
-        files = {'release.json':json.dumps(self.release).encode(), 'build-manifest.json':json.dumps(self.manifest).encode(),self.name:self.payload}
+        files = {'release.json':json.dumps(self.release).encode(), 'build-manifest.json':json.dumps(self.manifest).encode(),self.name:self.payload,self.image_name:self.image_payload}
         sums = ''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(files.items())).encode()
         path = self.root/'SHA256SUMS'; path.write_bytes(sums)
         signature = subprocess.check_output(['openssl','pkeyutl','-sign','-rawin','-inkey',str(self.private),'-in',str(path)])
@@ -56,71 +57,30 @@ class SignedUpdaterTests(unittest.TestCase):
 
     def test_real_signature_accepts_exact_manifest_and_local_bundle_descriptor(self):
         result = self.verified()
-        self.assertEqual(result['version'],self.version); self.assertEqual(result['name'],'TitanOS 2.0.0')
+        self.assertEqual(result['version'],self.version); self.assertEqual(result['name'],'TitanOS 2.0.2')
         self.assertEqual(result['asset']['sha256'],hashlib.sha256(self.payload).hexdigest())
 
-    def test_installed_legacy_helper_accepts_signed_stable_bridge_then_new_helper_offers_canonical(self):
-        source = ROOT/'tests/fixtures/legacy-titan-2-updater.py.txt'
-        loader = importlib.machinery.SourceFileLoader('legacy_titan_2_updater', str(source))
-        spec = importlib.util.spec_from_loader(loader.name, loader)
-        legacy = importlib.util.module_from_spec(spec); loader.exec_module(legacy)
-        # This immutable fixture is the actual updater shipped in titan.2, not
-        # a reimplementation of its version or signature policy.
-        with self.assertRaises(legacy.UpdateError): legacy.version_key('2.0.0')
-        self.version, self.current = '2.0.0-titan.3', '2.0.0-titan.2'
-        self.name = updater.update_asset_name(self.version)
-        self.asset['name'] = self.name
-        self.release.update(version=self.version, osVersion=self.version, legacyUpdateBridgeTo='2.0.0')
-        self.manifest.update(releaseVersion=self.version, osVersion=self.version)
-        self.github.update(tag_name='v'+self.version, prerelease=False,
-                           assets=[{'name':self.name,'size':len(self.payload),'browser_download_url':legacy.asset_url(self.version,self.name)}])
-        # The old NAS still requests the original repository. Keep the fixture
-        # immutable and serve the bridge from that exact signed old-feed URL.
-        with patch.object(updater, 'REPOSITORY', legacy.REPOSITORY):
-            self.sign()
-        self.responses[f'https://api.github.com/repos/{legacy.REPOSITORY}/releases?per_page=100'] = json.dumps([self.github]).encode()
-        with patch.object(legacy, 'PUBLIC_KEY', self.public), patch.object(legacy, 'installed', return_value=self.release), \
-                patch.object(legacy, 'fetch_bytes', side_effect=lambda url,maximum:self.responses[url]):
-            offered = legacy.latest(self.current, 'stable')
-        self.assertEqual(offered['version'], '2.0.0-titan.3')
-        self.assertEqual(offered['asset']['sha256'], self.asset['sha256'])
-        self.assertGreater(updater.version_key('2.0.0'), updater.version_key(offered['version']))
-        self.assertGreater(updater.version_key('2.0.1'), updater.version_key('2.0.0'))
+    def test_latest_fetches_only_the_new_repository_and_verifies_its_signed_release(self):
+        self.responses[f'https://api.github.com/repos/{updater.REPOSITORY}/releases?per_page=100']=json.dumps([self.github]).encode()
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'installed',return_value={**self.release,'version':self.current}), patch.object(updater,'fetch_bytes',side_effect=lambda url,maximum:self.responses[url]):
+            offered=updater.latest(self.current,'stable')
+        self.assertEqual(updater.REPOSITORY,'ra5on/TitanOS')
+        self.assertEqual(offered['version'],self.version)
+        self.assertIn('/ra5on/TitanOS/',offered['asset']['url'])
 
-        # After installing a signed transition, the new helper really queries
-        # TitanOS and verifies its canonical release, rather than just sorting
-        # version strings. Identical trust and disk-layout gates still apply.
-        self.version, self.current = '2.0.1', '2.0.0'
-        self.name = updater.update_asset_name(self.version)
-        self.asset['name'] = self.name
-        self.release.pop('legacyUpdateBridgeTo', None)
-        self.release.update(version=self.version, osVersion=self.version)
-        self.manifest.update(releaseVersion=self.version, osVersion=self.version)
-        self.github.update(tag_name='v'+self.version, assets=[{'name':self.name,'size':len(self.payload),'browser_download_url':updater.asset_url(self.version,self.name)}])
-        self.sign()
-        self.responses[f'https://api.github.com/repos/{updater.REPOSITORY}/releases?per_page=100'] = json.dumps([self.github]).encode()
-        with patch.object(updater, 'PUBLIC_KEY', self.public), patch.object(updater, 'installed', return_value=self.release), \
-                patch.object(updater, 'fetch_bytes', side_effect=lambda url,maximum:self.responses[url]):
-            next_release = updater.latest(self.current, 'stable')
-        self.assertEqual(updater.REPOSITORY, 'ra5on/TitanOS')
-        self.assertEqual(next_release['version'], '2.0.1')
-        self.assertEqual(next_release['asset']['sha256'], hashlib.sha256(self.payload).hexdigest())
-        self.assertIn('/ra5on/TitanOS/', updater.asset_url(self.version,self.name))
-
-    def test_canonical_order_and_rejected_downgrades_cover_legacy_transition(self):
-        order = ['1.9.9', '2.0.0-titan.2', '2.0.0-titan.3', '2.0.0', '2.0.1', '2.1.0', '2.10.0']
+    def test_numeric_version_order_and_downgrades_are_checked_before_install(self):
+        order = ['1.9.9', '2.0.0', '2.0.1', '2.0.2', '2.1.0', '2.10.0']
         self.assertEqual(sorted(reversed(order), key=updater.version_key), order)
-        for value in ('2.0.0-beta.1', '2.0.0-alpha.1', '02.0.0', 'v2.0.0', '2.0.0+titan.1', '2.0.0-titan.0'):
+        for value in ('2.0.0-beta.1', '2.0.0-alpha.1', '02.0.0', 'v2.0.0', '2.0.0+titan.1', '2.0.0-titan.0', '2.0.0-titan.2', '2.0.0-titan.3'):
             with self.subTest(value=value), self.assertRaises(updater.UpdateError): updater.version_key(value)
-        for current, requested in [('2.0.0', '2.0.0-titan.3'), ('2.0.1', '2.0.0'), ('2.0.0', '2.0.0')]:
+        for current, requested in [('2.0.2', '2.0.1'), ('2.0.1', '2.0.0'), ('2.0.1', '2.0.1')]:
             with self.subTest(current=current, requested=requested), patch.object(updater,'latest') as latest, self.assertRaises(updater.UpdateError):
                 updater.install(current, 'stable', requested)
             latest.assert_not_called()
 
-    def test_clean_asset_names_keep_amd64_compatibility_only_for_legacy_bridges(self):
+    def test_clean_asset_names_keep_the_signed_amd64_gate(self):
         self.assertEqual(updater.update_asset_name('2.0.0'), 'titan-2.0.0.update')
         self.assertEqual(updater.update_asset_name('2.0.1'), 'titan-2.0.1.update')
-        self.assertEqual(updater.update_asset_name('2.0.0-titan.3'), 'titan-2.0.0-titan.3-amd64.update')
         # Removing an architecture suffix never removes the signed architecture
         # gate. A correctly signed ARM image must still be rejected.
         self.manifest['architecture']='arm64'; self.release['architecture']='arm64'; self.sign()
@@ -141,8 +101,8 @@ class SignedUpdaterTests(unittest.TestCase):
         with patch.object(self,'public',foreign_public), self.assertRaises(updater.UpdateError): self.verified()
 
     def test_signed_incompatible_unbooted_or_old_titan_image_is_not_offered(self):
-        for changes in ({'architecture':'arm64'},{'updateFormat':'rauc'},{'systemCompatibility':'old-titan-debian'},
-                        {'ownTitanUpdateChannel':False},{'releaseEligible':False},{'osVersion':'2.0.1'},
+        for changes in ({'architecture':'arm64'},{'updateFormat':'rauc'},{'systemCompatibility':'titan-umbrel-rugix-amd64-v1'},
+                        {'ownTitanUpdateChannel':False},{'releaseEligible':False},{'osVersion':self.current},
                         {'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'failed'}}}):
             with self.subTest(changes=changes):
                 previous=dict(self.manifest); self.manifest.update(changes); self.sign()
@@ -153,7 +113,32 @@ class SignedUpdaterTests(unittest.TestCase):
         for channel in ('alpha', 'beta'):
             with self.subTest(channel=channel), self.assertRaises(updater.UpdateError): self.verified(channel)
         self.release['stage']='alpha'; self.manifest['stage']='alpha'; self.sign()
-        with self.assertRaises(updater.OtherChannel): self.verified('stable')
+        with self.assertRaises(updater.UpdateError): self.verified('stable')
+
+    def test_fresh_install_identity_rejects_previous_disk_layout_before_network_access(self):
+        identity={**self.release,'version':self.current,'osVersion':self.current,
+                  'systemCompatibility':'titan-umbrel-rugix-amd64-v1'}
+        with patch.object(updater,'protected_read',return_value=json.dumps(identity).encode()), patch.object(updater,'fetch_bytes') as fetch:
+            with self.assertRaises(updater.UpdateError): updater.latest(self.current,'stable')
+            fetch.assert_not_called()
+
+    def test_genuinely_signed_consistent_previous_layout_cannot_be_installed(self):
+        self.manifest['systemCompatibility']='titan-umbrel-rugix-amd64-v1'
+        self.release['systemCompatibility']='titan-umbrel-rugix-amd64-v1'
+        self.sign()
+        with self.assertRaises(updater.UpdateError): self.verified()
+
+    def test_genuinely_signed_wrong_boot_version_disk_or_asset_list_is_rejected(self):
+        previous=json.loads(json.dumps(self.manifest))
+        changes=[{'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'passed',
+                      'installedRelease':{'version':self.current,'name':f'TitanOS {self.current}'},'bootDiskSizeBytes':32*1024**3}}},
+                 {'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'passed',
+                      'installedRelease':{'version':self.version,'name':f'TitanOS {self.version}'},'bootDiskSizeBytes':8*1024**3}}},
+                 {'assets':[self.asset]}, {'assets':[self.asset,{**self.image_asset,'name':['invalid']}]}]
+        for change in changes:
+            with self.subTest(change=change):
+                self.manifest={**previous,**change}; self.sign()
+                with self.assertRaises(updater.UpdateError): self.verified()
 
     def test_stale_foreign_draft_and_wrong_channel_github_releases_are_skipped(self):
         releases=[{**self.github,'tag_name':'v'+self.current},{**self.github,'draft':True},
@@ -162,19 +147,6 @@ class SignedUpdaterTests(unittest.TestCase):
         with patch.object(updater,'installed',return_value=local), patch.object(updater,'fetch_bytes',return_value=json.dumps(releases).encode()), patch.object(updater,'verify_release') as verify:
             self.assertEqual(updater.latest(self.current,'stable')['version'],self.current)
             verify.assert_not_called()
-
-    def test_check_ignores_verified_other_channel_without_false_error(self):
-        with patch.object(updater,'installed',return_value=self.release), patch.object(updater,'fetch_bytes',return_value=json.dumps([self.github]).encode()), patch.object(updater,'verify_release',side_effect=updater.OtherChannel('beta')):
-            self.assertEqual(updater.latest(self.current,'stable')['version'],self.current)
-
-    def test_authenticated_other_channel_metadata_does_not_hide_stable_release(self):
-        releases=[{**self.github,'tag_name':'v2.0.'+str(number)} for number in range(0,12)]
-        def verified(version,channel,release):
-            if version == self.version: return {'version':version,'stage':'stable'}
-            raise updater.OtherChannel('Authenticated alpha release')
-        with patch.object(updater,'installed',return_value=self.release), patch.object(updater,'fetch_bytes',return_value=json.dumps(releases).encode()), patch.object(updater,'verify_release',side_effect=verified) as verify:
-            self.assertEqual(updater.latest(self.current,'stable')['version'],self.version)
-            self.assertEqual(verify.call_count,12)
 
     def test_invalid_signature_budget_is_bounded_and_fails_closed(self):
         releases=[{**self.github,'tag_name':'v2.0.'+str(number)} for number in range(1,29)]
@@ -223,7 +195,7 @@ class SignedUpdaterTests(unittest.TestCase):
             with self.subTest(boot=boot), self.install_fixture(boot=boot) as calls:
                 with self.assertRaises(updater.UpdateError): updater.install(self.current,'stable',self.version)
                 self.assertEqual(calls,[])
-        for version in (self.current,'1.0.0-titan.1'):
+        for version in (self.current,'1.0.0'):
             with self.subTest(version=version), patch.object(updater,'latest') as latest, self.assertRaises(updater.UpdateError):
                 updater.install(self.current,'stable',version)
             latest.assert_not_called()
@@ -235,24 +207,24 @@ class SignedUpdaterTests(unittest.TestCase):
 
 
 class ConfigureUpdaterTests(unittest.TestCase):
-    def test_configuration_is_idempotent_keeps_internal_compatibility_and_has_no_cloud_script(self):
+    def test_configuration_is_idempotent_for_the_clean_stable_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             def write(name,text):
                 path=root/name; path.parent.mkdir(parents=True,exist_ok=True); path.write_text(text)
-            write('.titan/release.json',json.dumps({'version':'2.0.0','osVersion':'2.0.0','stage':'stable','systemCompatibility':updater.COMPATIBILITY,'versionName':'TitanOS 2.0.0'}))
+            write('.titan/release.json',json.dumps({'version':'2.0.1','osVersion':'2.0.1','stage':'stable','architecture':'amd64','systemCompatibility':updater.COMPATIBILITY,'versionName':'TitanOS 2.0.1'}))
             write('.titan/release-public.pem','public key fixture')
-            write('packages/umbreld/package.json','{"version":"2.0.0","versionName":"umbrelOS 2.0"}')
-            write('packages/umbreld/source/modules/system/routes.ts',"channel: z.enum(['stable', 'beta'])\nreturn (await ctx.umbreld.store.get('settings.releaseChannel')) || 'stable'")
-            write('packages/umbreld/source/index.ts',"releaseChannel: 'stable' | 'beta'\nif (!(await this.store.get('settings.releaseChannel'))) {\nawait this.store.set('settings.releaseChannel', this.version.includes('-beta') ? 'beta' : 'stable')\n}")
-            write('packages/os/overlay/etc/hostname','umbrel')
+            write('packages/titand/package.json','{"version":"2.0.1","versionName":"TitanOS 2.0.1"}')
+            write('packages/titand/source/modules/system/routes.ts',"channel: z.literal('stable')\nreturn 'stable' as const")
+            write('packages/titand/source/index.ts',"releaseChannel: 'stable'\nawait this.store.set('settings.releaseChannel', 'stable')")
+            write('packages/os/overlay/etc/hostname','titan')
             configure.configure(root); configure.configure(root)
-            package=json.loads((root/'packages/umbreld/package.json').read_text())
-            self.assertEqual(package['version'],'2.0.0');self.assertEqual(package['versionName'],'TitanOS 2.0.0')
-            self.assertIn("await this.store.set('settings.releaseChannel', 'stable')",(root/'packages/umbreld/source/index.ts').read_text())
-            self.assertEqual((root/'packages/os/overlay/etc/hostname').read_text(),'umbrel')
-            source=(root/'packages/umbreld/source/modules/system/update.ts').read_text()
-            for unwanted in ('api.umbrel.com','updateScript','bash -c','fetch('): self.assertNotIn(unwanted,source)
+            package=json.loads((root/'packages/titand/package.json').read_text())
+            self.assertEqual(package['version'],'2.0.1');self.assertEqual(package['versionName'],'TitanOS 2.0.1')
+            self.assertIn("await this.store.set('settings.releaseChannel', 'stable')",(root/'packages/titand/source/index.ts').read_text())
+            self.assertEqual((root/'packages/os/overlay/etc/hostname').read_text(),'titan')
+            source=(root/'packages/titand/source/modules/system/update.ts').read_text()
+            for unwanted in ('api.titan.com','updateScript','bash -c','fetch('): self.assertNotIn(unwanted,source)
             self.assertIn('5 * 60 * 1000',source)
             self.assertTrue((root/'packages/os/overlay/usr/libexec/titan-system-update.py').exists())
 

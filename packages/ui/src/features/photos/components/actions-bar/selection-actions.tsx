@@ -150,7 +150,7 @@ export function SelectionActions({inDeleted}: {inDeleted: boolean}) {
 				className={cn(
 					'[&>svg]:fill-current [&>svg]:transition-[fill-opacity] [&>svg]:duration-200 motion-reduce:[&>svg]:transition-none',
 					allFavorites ? '[&>svg]:[fill-opacity:1]' : '[&>svg]:[fill-opacity:0]',
-					allFavorites && pop && 'motion-safe:[&>svg]:animate-[umbrel-photos-pop_300ms_ease-out]',
+					allFavorites && pop && 'motion-safe:[&>svg]:animate-[titan-photos-pop_300ms_ease-out]',
 				)}
 			/>
 			<ActionPill

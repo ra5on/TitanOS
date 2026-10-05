@@ -23,10 +23,10 @@ function classicScrollbarWidth() {
 
 // A listing's scroller: fills its surface, and what scrolls up under the
 // actions bar floating over it dissolves into the window (the mask in
-// .umbrel-photos-scroller, fed the frame). A classic scrollbar is measured
+// .titan-photos-scroller, fed the frame). A classic scrollbar is measured
 // so the mask can leave it alone, and the content already keeps clear of it
 // — its gutter is reserved so it can't come and go with the content and
-// resize the grid (see .umbrel-photos-scroller); with overlay scrollbars
+// resize the grid (see .titan-photos-scroller); with overlay scrollbars
 // there is nothing to reserve.
 //
 // `hideScrollbar` takes the scrollbar off the edge for something that
@@ -64,16 +64,16 @@ export function FadedScroller({
 		<div
 			ref={mergeRefs([ref, ownRef])}
 			className={cn(
-				'umbrel-photos-scroller h-full w-full overflow-x-hidden overflow-y-auto overscroll-contain',
+				'titan-photos-scroller h-full w-full overflow-x-hidden overflow-y-auto overscroll-contain',
 				className,
 			)}
 			data-scrollbar={scrollbar > 0 ? '' : undefined}
 			// The WebKit rule in index.css rides this; scrollbar-width covers the rest
 			data-scrollbar-hidden={hideScrollbar ? '' : undefined}
 			style={{
-				['--umbrel-photos-fade-from' as string]: `${frame.fadeFrom}px`,
-				['--umbrel-photos-fade-to' as string]: `${frame.fadeTo}px`,
-				['--umbrel-photos-scrollbar' as string]: `${scrollbar}px`,
+				['--titan-photos-fade-from' as string]: `${frame.fadeFrom}px`,
+				['--titan-photos-fade-to' as string]: `${frame.fadeTo}px`,
+				['--titan-photos-scrollbar' as string]: `${scrollbar}px`,
 				// Focus and scrollIntoView bring things out from under the (pinned) bar
 				scrollPaddingTop: frame.fadeTo,
 				scrollbarGutter: classic > 0 ? 'stable' : 'auto',

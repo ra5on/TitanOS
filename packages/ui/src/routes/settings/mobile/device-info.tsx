@@ -26,7 +26,7 @@ export function DeviceInfoDrawer() {
 		return null
 	}
 
-	const umbrelHostEnvironment = deviceInfoToHostEnvironment(deviceQ.data)
+	const titanHostEnvironment = deviceInfoToHostEnvironment(deviceQ.data)
 
 	const device = deviceQ.data?.device
 	const modelNumber = deviceQ.data?.model
@@ -42,7 +42,7 @@ export function DeviceInfoDrawer() {
 				</DrawerHeader>
 				<DrawerScroller>
 					<DeviceInfoContent
-						umbrelHostEnvironment={umbrelHostEnvironment}
+						titanHostEnvironment={titanHostEnvironment}
 						device={device}
 						modelNumber={modelNumber}
 						serialNumber={serialNumber}

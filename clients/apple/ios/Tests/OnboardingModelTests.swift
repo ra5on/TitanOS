@@ -1,5 +1,5 @@
 import XCTest
-@testable import Umbrel
+@testable import Titan
 
 @MainActor
 final class OnboardingModelTests: XCTestCase {

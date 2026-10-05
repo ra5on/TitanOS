@@ -5,7 +5,7 @@ import type {MachineAgentControl} from '@/features/machines/types'
 import {cn} from '@/lib/utils'
 import {matchAgent, MCP_AGENTS, OTHER_AGENT} from '@/routes/settings/mcp/agents'
 
-import {pointOnMotion, type InputFeedback} from '../../../../../umbreld/source/modules/machines/input-motion'
+import {pointOnMotion, type InputFeedback} from '../../../../../titand/source/modules/machines/input-motion'
 import {createAgentGlowTrail, type AgentGlowTrail} from './agent-glow-trail'
 
 export function agentVisualFor(control: MachineAgentControl) {

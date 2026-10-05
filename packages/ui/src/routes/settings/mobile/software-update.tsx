@@ -27,7 +27,7 @@ export function SoftwareUpdateDrawer() {
 					<DrawerDescription>{t('check-for-latest-version')}</DrawerDescription>
 				</DrawerHeader>
 				<div className='flex flex-col items-center py-8'>
-					<FadeInImg src='/assets/umbrel-ios.png' className='h-[96px] w-[96px]' />
+					<FadeInImg src='/assets/titan-ios.png' className='h-[96px] w-[96px]' />
 					<div className='mb-4' />
 					<p className='text-12 -tracking-2 opacity-50'>{t('software-update.current-running')}</p>
 					<p className='text-15 -tracking-4'>{currentVersion?.name || `TitanOS ${LOADING_DASH}`}</p>

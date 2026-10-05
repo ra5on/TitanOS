@@ -14,7 +14,7 @@ const menuItemDestructiveClass = cn(menuItemClass, tw`text-destructive2-lightest
 const checkboxIndicatorWrapperClass = tw`absolute right-3 flex h-3.5 w-3.5 items-center justify-center`
 const radioIndicatorWrapperClass = tw`absolute left-2 flex h-3.5 w-3.5 items-center justify-center`
 
-const contextMenuItemClass = cn(menuItemClass, 'umbrel-material-menu-item')
+const contextMenuItemClass = cn(menuItemClass, 'titan-material-menu-item')
 
 export const contextMenuClasses = {
 	content: cn(menuContentClass, materialSurfaceClasses.contextMenu),
@@ -32,7 +32,7 @@ export const contextMenuClasses = {
 	},
 }
 
-const dropdownItemClass = cn(menuItemClass, 'umbrel-material-menu-item')
+const dropdownItemClass = cn(menuItemClass, 'titan-material-menu-item')
 export const dropdownClasses = {
 	content: cn(menuContentClass, materialSurfaceClasses.dropdown),
 	item: {

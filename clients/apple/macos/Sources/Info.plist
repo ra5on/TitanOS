@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Umbrel</string>
+	<string>Titan</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
@@ -43,22 +43,18 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_umbrel._tcp.</string>
+		<string>_titan._tcp.</string>
 	</array>
 	<key>NSHumanReadableCopyright</key>
-	<string>Umbrel, Inc.</string>
+	<string>Titan, Inc.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Umbrel finds your Umbrel devices on your local network.</string>
+	<string>Titan finds your Titan devices on your local network.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
-	<string>Umbrel mounts your Umbrel's shared folders so you can browse them in Finder.</string>
+	<string>Titan mounts your Titan's shared folders so you can browse them in Finder.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://download.umbrel.com/macos/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>6WS1H6oCszBQj8boE9u4jM3RPTyKjWLfWeqUIYfSwuA=</string>
+	<false/>
 	<key>SURequireSignedFeed</key>
 	<true/>
 	<key>SUVerifyUpdateBeforeExtraction</key>

@@ -3,7 +3,7 @@ import type {MachineState} from '@/features/machines/types'
 import {cn} from '@/lib/utils'
 
 // The retro-monitor machine icon sets: one image per display state, served
-// from public/ (umbreld's CSP disallows data: URIs, so these must never be
+// from public/ (titand's CSP disallows data: URIs, so these must never be
 // inlined). Keyed by catalog familyId; custom ISOs plus anything unknown fall
 // back to the generic disc set.
 const machineIconSets: Record<string, string> = {

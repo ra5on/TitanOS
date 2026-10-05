@@ -186,7 +186,7 @@ export default function FileSharingDrawerOrDialog() {
 	// --- Active sharing screen ---
 	const activeScreen = (
 		<div className='flex flex-col gap-y-6'>
-			{/* Share entire Umbrel */}
+			{/* Share entire Titan */}
 			<div className={listClass}>
 				<label className={listItemClass}>
 					<FileItemIcon
@@ -203,7 +203,7 @@ export default function FileSharingDrawerOrDialog() {
 						checked={homeShared}
 						onCheckedChange={handleHomeToggle}
 						disabled={isLoading}
-						className={isBusy ? 'umbrel-pulse' : undefined}
+						className={isBusy ? 'titan-pulse' : undefined}
 					/>
 				</label>
 			</div>

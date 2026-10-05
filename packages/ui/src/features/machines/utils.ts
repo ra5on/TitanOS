@@ -19,7 +19,7 @@ export const stripDiskImageExtension = (filename: string) =>
 export const isExternalOrNetworkPath = (path: string) =>
 	[EXTERNAL_STORAGE_PATH, NETWORK_STORAGE_PATH].some((root) => path === root || path.startsWith(`${root}/`))
 
-// crypto.randomUUID() is only exposed in secure contexts, while umbrelOS is
+// crypto.randomUUID() is only exposed in secure contexts, while TitanOS is
 // commonly opened over plain HTTP on the local network. getRandomValues() is
 // explicitly available in insecure contexts, so build UUIDs from it instead.
 // The Math.random fallback only covers old browsers without Web Crypto; these

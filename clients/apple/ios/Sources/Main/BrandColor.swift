@@ -9,7 +9,7 @@ enum BrandColor {
 	}
 
 	// The same brand color as a SwiftUI Color, for buttons and the storage donut. `mixWhite`
-	// (0…1) blends it toward white, matching umbrelOS's `color-mix(..., white)` lighter shades.
+	// (0…1) blends it toward white, matching titanOS's `color-mix(..., white)` lighter shades.
 	static func color(_ value: String?, mixWhite: Double = 0) -> Color {
 		let color = components(from: value)
 		return Color(
@@ -71,7 +71,7 @@ extension Color {
 }
 
 // The wallpaper-derived brand color flows down to the primary buttons and storage donut.
-// Defaults to the umbrelOS accent blue until a wallpaper is known.
+// Defaults to the titanOS accent blue until a wallpaper is known.
 private struct BrandColorKey: EnvironmentKey {
 	static let defaultValue = Theme.blue
 }

@@ -6,7 +6,7 @@ import {useIsFilesReadOnly} from '@/features/files/providers/files-capabilities-
 import {useFilesStore} from '@/features/files/store/use-files-store'
 import {FileSystemItem} from '@/features/files/types'
 import {isDirectoryANetworkShare} from '@/features/files/utils/is-directory-a-network-device-or-share'
-import {isDirectoryAnUmbrelBackup} from '@/features/files/utils/is-directory-an-umbrel-backup'
+import {isDirectoryATitanBackup} from '@/features/files/utils/is-directory-a-titan-backup'
 
 export const useItemClick = () => {
 	const isReadOnly = useIsFilesReadOnly()
@@ -87,8 +87,8 @@ export const useItemClick = () => {
 		// Hosts open their configured shares even when disconnected.
 		if (item.isDisconnected && isDirectoryANetworkShare(item.path)) return
 
-		// Don't open Umbrel Backup directory
-		if (isDirectoryAnUmbrelBackup(item.name)) return
+		// Don't open Titan Backup directory
+		if (isDirectoryATitanBackup(item.name)) return
 
 		// if touch device and the user is selecting, do nothing
 		if (isTouchDevice && isSelectingOnMobile) {

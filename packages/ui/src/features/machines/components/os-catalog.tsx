@@ -217,7 +217,7 @@ function SkeletonCatalogGroup({count}: {count: number}) {
 		<section className='flex flex-col gap-3'>
 			{/* Same text-17 strut as the real <h2>, so the header row is exactly as tall */}
 			<div className='text-17 font-semibold -tracking-2'>
-				<span className='umbrel-pulse inline-block h-[0.7em] w-20 rounded-full bg-white/8 align-middle' />
+				<span className='titan-pulse inline-block h-[0.7em] w-20 rounded-full bg-white/8 align-middle' />
 			</div>
 			<div className={catalogGridClass}>
 				{Array.from({length: count}).map((_, i) => (
@@ -233,7 +233,7 @@ function SkeletonCatalogGroup({count}: {count: number}) {
 // so swapping in the real card can't shift the layout.
 function SkeletonOsCard() {
 	return (
-		<div className='umbrel-pulse settings-edge-material flex flex-col items-center gap-4 rounded-24 bg-white/5 p-4 pt-6 md:p-6'>
+		<div className='titan-pulse settings-edge-material flex flex-col items-center gap-4 rounded-24 bg-white/5 p-4 pt-6 md:p-6'>
 			<div aria-hidden className='invisible flex flex-col items-center gap-2.5'>
 				<div className='size-24' />
 				<div className='flex flex-col items-center gap-1'>

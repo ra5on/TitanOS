@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Onboarding step 8. Success screen: the connected Umbrel's render,
+// Onboarding step 8. Success screen: the connected Titan's render,
 // "Connected", the device name, and a Continue button that finishes onboarding and
 // drops into the main app.
 struct ConnectedView: View {
@@ -11,7 +11,7 @@ struct ConnectedView: View {
 		VStack(spacing: 0) {
 			Spacer()
 
-			UmbrelDeviceRender(model: model.selectedDevice?.model)
+			TitanDeviceRender(model: model.selectedDevice?.model)
 				.frame(width: 161)
 				.shadow(color: .black.opacity(0.5), radius: 16, y: 16)
 				.accessibilityHidden(true)
@@ -22,7 +22,7 @@ struct ConnectedView: View {
 				Text("Connected")
 					.font(.system(size: titleSize, weight: .semibold))
 					.foregroundStyle(.white)
-				Text(model.selectedDevice?.model ?? "Umbrel")
+				Text(model.selectedDevice?.model ?? "Titan")
 					.font(.callout)
 					.foregroundStyle(Palette.textMuted)
 			}

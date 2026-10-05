@@ -327,7 +327,7 @@ export function useFilesOperations() {
 	// Compression operations
 	// ---------------------
 
-	// Extract archive (umbreld always extracts archive contents into a new folder named after the archive)
+	// Extract archive (titand always extracts archive contents into a new folder named after the archive)
 	const extract = trpcReact.files.unarchive.useMutation({
 		onSuccess: async (_, {path}) => {
 			const parentPath = path.substring(0, path.lastIndexOf('/'))

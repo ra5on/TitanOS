@@ -1,4 +1,4 @@
-import {UmbrelHostEnvironment} from '@/constants'
+import {TitanHostEnvironment} from '@/constants'
 import {useDeviceInfo} from '@/hooks/use-device-info'
 
 type OnboardingDevice = {
@@ -10,7 +10,7 @@ type OnboardingDevice = {
 
 const deviceConfig: Partial<
 	Record<
-		UmbrelHostEnvironment,
+		TitanHostEnvironment,
 		{
 			image: string
 			imageClassName: string
@@ -18,12 +18,12 @@ const deviceConfig: Partial<
 		}
 	>
 > = {
-	'umbrel-pro': {
+	'titan-pro': {
 		image: '/assets/onboarding/pro-front.webp',
 		imageClassName: 'w-64 md:w-96',
 		name: 'Umbrel Pro',
 	},
-	'umbrel-home': {
+	'titan-home': {
 		image: '/assets/onboarding/home-front.webp',
 		imageClassName: 'w-48 md:w-64',
 		name: 'Umbrel Home',
@@ -40,9 +40,9 @@ const DEFAULT: OnboardingDevice = {
 export function useOnboardingDevice(): OnboardingDevice {
 	const {isLoading, data} = useDeviceInfo()
 
-	if (isLoading || !data?.umbrelHostEnvironment) return DEFAULT
+	if (isLoading || !data?.titanHostEnvironment) return DEFAULT
 
-	const config = deviceConfig[data.umbrelHostEnvironment]
+	const config = deviceConfig[data.titanHostEnvironment]
 	if (!config) return DEFAULT
 
 	return {

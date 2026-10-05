@@ -123,7 +123,7 @@ describe('GlobalSystemStateProvider power actions', () => {
 	test.each([
 		['restart', 'restart.restarting'],
 		['shutdown', 'shut-down.shutting-down'],
-	] as const)('shows the %s cover only after umbreld accepts the action', async (action, coverText) => {
+	] as const)('shows the %s cover only after titand accepts the action', async (action, coverText) => {
 		await renderProvider()
 
 		await act(async () => systemState[action]())
@@ -150,8 +150,8 @@ describe('GlobalSystemStateProvider power actions', () => {
 		expect(systemState.isPowerActionPending).toBe(false)
 		expect(container.textContent).toContain('Live app')
 		expect(mocks.toastError).toHaveBeenCalledWith('something-went-wrong', {
-			area: 'umbrelos',
-			description: 'Failed to fetch',
+			area: 'titanos',
+			description: 'system-menu.action-failed',
 		})
 	})
 

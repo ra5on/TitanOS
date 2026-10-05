@@ -44,7 +44,7 @@ afterEach(() => {
 it('keeps the full path scrollable and initially shows its end', () => {
 	act(() => root.render(<FolderBreadcrumbScroller path='/Home/Photos/Trips' homePath='/Home' />))
 
-	const scroller = container.querySelector<HTMLDivElement>('.umbrel-fade-scroller-x')!
+	const scroller = container.querySelector<HTMLDivElement>('.titan-fade-scroller-x')!
 	expect(scroller.className).toContain('overflow-x-auto')
 	expect(scroller.className).toContain('whitespace-nowrap')
 	expect(scroller.firstElementChild?.className).toContain('w-max')

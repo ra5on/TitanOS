@@ -1,21 +1,21 @@
 #!/bin/bash
-# Packages a Developer ID-signed Umbrel.app for direct distribution.
+# Packages a Developer ID-signed Titan.app for direct distribution.
 # This script does not contact Apple or notarize anything.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$PACKAGE_DIR/dist"
-APP="$DIST_DIR/Umbrel.app"
+APP="$DIST_DIR/Titan.app"
 BACKGROUND_IMAGE="$PACKAGE_DIR/Resources/dmg-background.png"
 PACKAGING_DIR="$PACKAGE_DIR/packaging"
 DMG_SETTINGS="$PACKAGING_DIR/dmg-settings.py"
 DMG_VALIDATOR="$PACKAGING_DIR/validate-dmg.py"
-SIGNING_IDENTITY="${UMBREL_SIGNING_IDENTITY:-}"
+SIGNING_IDENTITY="${TITAN_SIGNING_IDENTITY:-}"
 UV_BIN="$(command -v uv || true)"
 
 if [[ -z "$SIGNING_IDENTITY" ]]; then
-	echo "Set UMBREL_SIGNING_IDENTITY to your Developer ID Application identity" >&2
+	echo "Set TITAN_SIGNING_IDENTITY to your Developer ID Application identity" >&2
 	exit 1
 fi
 
@@ -37,25 +37,25 @@ for INSTALLER_RESOURCE in "$BACKGROUND_IMAGE" "$DMG_SETTINGS" "$DMG_VALIDATOR" "
 done
 
 if ! codesign --verify --deep --strict --verbose=2 "$APP"; then
-	echo "Umbrel.app does not have a valid code signature" >&2
+	echo "Titan.app does not have a valid code signature" >&2
 	exit 1
 fi
 
-if ! /usr/bin/lipo "$APP/Contents/MacOS/Umbrel" -verify_arch arm64 x86_64; then
-	echo "Umbrel.app must contain both arm64 and x86_64" >&2
+if ! /usr/bin/lipo "$APP/Contents/MacOS/Titan" -verify_arch arm64 x86_64; then
+	echo "Titan.app must contain both arm64 and x86_64" >&2
 	exit 1
 fi
 
-for RESOURCE in Assets.car AppIcon.icns default.metallib umbrel-logo.webp; do
+for RESOURCE in Assets.car AppIcon.icns default.metallib titan-logo.webp; do
 	if [[ ! -f "$APP/Contents/Resources/$RESOURCE" ]]; then
-		echo "Umbrel.app is missing packaged resource: $RESOURCE" >&2
+		echo "Titan.app is missing packaged resource: $RESOURCE" >&2
 		exit 1
 	fi
 done
 
 SPARKLE_BINARY="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current/Sparkle"
 if [[ ! -f "$SPARKLE_BINARY" ]]; then
-	echo "Umbrel.app is missing its embedded Sparkle framework" >&2
+	echo "Titan.app is missing its embedded Sparkle framework" >&2
 	exit 1
 fi
 
@@ -65,32 +65,32 @@ SIGNED_FEED_REQUIRED="$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' 
 VERIFY_BEFORE_EXTRACTION="$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$APP/Contents/Info.plist")"
 
 if [[ "$FEED_URL" != https://* || -z "$PUBLIC_UPDATE_KEY" ]]; then
-	echo "Umbrel.app must use an HTTPS Sparkle feed and include its public update key" >&2
+	echo "Titan.app must use an HTTPS Sparkle feed and include its public update key" >&2
 	exit 1
 fi
 
 if [[ "$SIGNED_FEED_REQUIRED" != true || "$VERIFY_BEFORE_EXTRACTION" != true ]]; then
-	echo "Umbrel.app must require signed feeds and verify updates before extraction" >&2
+	echo "Titan.app must require signed feeds and verify updates before extraction" >&2
 	exit 1
 fi
 
 SIGNING_AUTHORITY="$(codesign -dvv "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
 if [[ "$SIGNING_AUTHORITY" != Developer\ ID\ Application:* ]]; then
-	echo "Umbrel.app must be signed with a Developer ID Application certificate" >&2
+	echo "Titan.app must be signed with a Developer ID Application certificate" >&2
 	exit 1
 fi
 
 SIGNING_FLAGS="$(codesign -dvv "$APP" 2>&1 | sed -n 's/^CodeDirectory .* flags=\([^ ]*\).*/\1/p' | head -1)"
 if [[ "$SIGNING_FLAGS" != *runtime* ]]; then
-	echo "Umbrel.app must enable Hardened Runtime" >&2
+	echo "Titan.app must enable Hardened Runtime" >&2
 	exit 1
 fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
-DMG="$DIST_DIR/Umbrel-$VERSION-$BUILD_NUMBER.dmg"
-TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/umbrel-dmg.XXXXXX")"
-UNSIGNED_DMG="$TEMP_DIR/Umbrel.dmg"
+DMG="$DIST_DIR/Titan-$VERSION-$BUILD_NUMBER.dmg"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/titan-dmg.XXXXXX")"
+UNSIGNED_DMG="$TEMP_DIR/Titan.dmg"
 
 cleanup() {
 	rm -rf "$TEMP_DIR"
@@ -108,7 +108,7 @@ UV_PROJECT_ENVIRONMENT="$TEMP_DIR/.venv" "$UV_BIN" run \
 	-D "app=$APP" \
 	-D "background=$BACKGROUND_IMAGE" \
 	-D "icon=$APP/Contents/Resources/AppIcon.icns" \
-	"Umbrel" \
+	"Titan" \
 	"$UNSIGNED_DMG"
 
 UV_PROJECT_ENVIRONMENT="$TEMP_DIR/.venv" "$UV_BIN" run \

@@ -6,15 +6,15 @@ export const LOADING_DASH = '–'
 
 export const SETTINGS_SYSTEM_CARDS_ID = 'settings-system-cards'
 
-export const hostEnvironments = ['umbrel-pro', 'umbrel-home', 'raspberry-pi', 'docker-container', 'unknown'] as const
-export type UmbrelHostEnvironment = (typeof hostEnvironments)[number]
+export const hostEnvironments = ['titan-pro', 'titan-home', 'raspberry-pi', 'docker-container', 'unknown'] as const
+export type TitanHostEnvironment = (typeof hostEnvironments)[number]
 
 export const hostEnvironmentMap = {
-	'umbrel-pro': {
-		icon: '/assets/system-umbrel-pro.webp',
+	'titan-pro': {
+		icon: '/assets/system-titan-pro.webp',
 	},
-	'umbrel-home': {
-		icon: '/assets/system-umbrel-home.png',
+	'titan-home': {
+		icon: '/assets/system-titan-home.png',
 	},
 	'raspberry-pi': {
 		icon: '/assets/system-pi.svg',
@@ -26,7 +26,7 @@ export const hostEnvironmentMap = {
 		icon: '/assets/system-generic-device.svg',
 	},
 } satisfies Record<
-	UmbrelHostEnvironment,
+	TitanHostEnvironment,
 	{
 		icon?: string
 	}

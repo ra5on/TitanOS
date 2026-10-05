@@ -132,7 +132,7 @@ export function DriveCard({
 	)
 }
 
-// The disk umbrelOS runs from. Shown for health visibility on custom hardware (temps and
+// The disk TitanOS runs from. Shown for health visibility on custom hardware (temps and
 // SMART via the health dialog) but never usable for storage.
 export function SystemDriveCard({device, onClick}: {device: StorageDevice; onClick?: () => void}) {
 	const {t} = useTranslation()

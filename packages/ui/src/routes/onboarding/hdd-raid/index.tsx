@@ -305,7 +305,7 @@ export default function HddRaidOnboarding() {
 	const credentials = location.state?.credentials as AccountCredentials | undefined
 
 	const {devices, isDetecting, isFetching, error, refetch} = useDetectStorageDevices()
-	// A pre-existing umbrelOS RAID install on the attached drives gets a restore-or-erase
+	// A pre-existing TitanOS RAID install on the attached drives gets a restore-or-erase
 	// choice before we offer a fresh setup (same flow as Pro onboarding)
 	const recoverableInstallQ = trpcReact.hardware.raid.hasRecoverableInstall.useQuery(undefined, {
 		enabled: !!credentials,

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// A verified alternate route for an Umbrel the completed scan did not show. A
+// A verified alternate route for an Titan the completed scan did not show. A
 // successful check opens sign-in directly; the device is not saved beforehand.
 struct ManualAddressView: View {
 	@Environment(OnboardingModel.self) private var model
@@ -27,14 +27,14 @@ struct ManualAddressView: View {
 
 			OnboardingHeader(
 				title: "Connect by address",
-				subtitle: "Enter your Umbrel’s IP address or hostname. If you’re away from home, use its Tailscale IP address or MagicDNS name. Tailscale must already be set up on this iPhone and your Umbrel."
+				subtitle: "Enter your Titan’s IP address or hostname. If you’re away from home, use its Tailscale IP address or MagicDNS name. Tailscale must already be set up on this iPhone and your Titan."
 			)
 			.padding(.top, 26)
 
 			Spacer().frame(height: 40)
 
 			VStack(alignment: .leading, spacing: 12) {
-				TextField("e.g. umbrel.local, umbrel, or 100.64.0.1", text: $address)
+				TextField("e.g. titan.local, titan, or 100.64.0.1", text: $address)
 					.keyboardType(.URL)
 					.textInputAutocapitalization(.never)
 					.autocorrectionDisabled()
@@ -53,7 +53,7 @@ struct ManualAddressView: View {
 						error = nil
 						updateRequiredHost = nil
 					}
-					.accessibilityLabel("Umbrel address")
+					.accessibilityLabel("Titan address")
 
 				if let error {
 					Text(error)
@@ -67,7 +67,7 @@ struct ManualAddressView: View {
 						Text("Update required")
 							.font(.headline)
 							.foregroundStyle(.white)
-						Text("This Umbrel needs to be updated before it can connect to the app.")
+						Text("This Titan needs to be updated before it can connect to the app.")
 							.font(.footnote)
 							.foregroundStyle(Palette.textMuted)
 							.fixedSize(horizontal: false, vertical: true)
@@ -81,7 +81,7 @@ struct ManualAddressView: View {
 
 			Group {
 				if let updateRequiredHost {
-					OnboardingButton(title: "Open Umbrel", style: .prominent) {
+					OnboardingButton(title: "Open Titan", style: .prominent) {
 						guard let url = URL(string: "http://\(updateRequiredHost)") else { return }
 						openURL(url)
 					}
@@ -127,7 +127,7 @@ struct ManualAddressView: View {
 				switch result {
 				case .device(let device):
 					guard !model.savedIds.contains(device.id) else {
-						error = "This Umbrel has already been added."
+						error = "This Titan has already been added."
 						break
 					}
 					model.selectedDevice = device

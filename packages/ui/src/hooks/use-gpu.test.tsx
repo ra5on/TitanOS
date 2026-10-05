@@ -85,7 +85,7 @@ test('formats GPU utilization, memory, devices, and app attribution for Live Usa
 		progress: 0.42200000000000004,
 		apps: [
 			{id: 'ai-app', used: 30, memoryUsed: 1.5 * 1024 ** 3},
-			{id: 'umbreld-system', used: 12.2, memoryUsed: 512 * 1024 ** 2},
+			{id: 'titand-system', used: 12.2, memoryUsed: 512 * 1024 ** 2},
 		],
 	})
 	view.unmount()

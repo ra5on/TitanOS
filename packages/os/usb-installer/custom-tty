@@ -20,12 +20,12 @@ EOF
 echo
 
 # The TitanOS image lives on the boot medium which is mounted at /iso.
-image="/iso/umbrelos-amd64.img.xz"
+image="/iso/titanos-amd64.img.xz"
 
-# If device is an Umbrel Home auto flash and shutdown non-interactively since we don't have video output.
+# If device is an Titan Home auto flash and shutdown non-interactively since we don't have video output.
 if dmidecode -t system | grep --silent 'Umbrel Home'
 then
-    echo "Umbrel Home detected."
+    echo "Titan Home detected."
     echo "Automatically flashing internal storage..."
     xz --decompress --stdout "${image}" | dd of=/dev/nvme0n1 bs=4M status=progress
     echo "TitanOS has been installed, shutting down."
@@ -33,10 +33,10 @@ then
     exit 1
 fi
 
-# If device is an Umbrel Pro auto flash and shutdown non-interactively.
+# If device is an Titan Pro auto flash and shutdown non-interactively.
 if dmidecode -t system | grep --silent 'Umbrel Pro'
 then
-    echo "Umbrel Pro detected."
+    echo "Titan Pro detected."
     echo "Automatically flashing internal storage..."
     xz --decompress --stdout "${image}" | dd of=/dev/mmcblk0 bs=4M status=progress
     echo "TitanOS has been installed, shutting down."

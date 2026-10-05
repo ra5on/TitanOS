@@ -41,7 +41,7 @@ export default function SingleDriveStorageManager({devices}: {devices: StorageDe
 	// without a pool, but still worth showing for health/SMART visibility
 	const otherDrives = devices.filter((device) => !device.isSystemDrive && device.id)
 
-	// Used/total for the disk umbrelOS (and all data) lives on
+	// Used/total for the disk TitanOS (and all data) lives on
 	const diskUsageQ = trpcReact.system.systemDiskUsage.useQuery()
 	const totalBytes = diskUsageQ.data?.size ?? bootDrive?.size ?? 0
 	const storageSizeLabel = diskUsageQ.data || bootDrive ? formatStorageSize(totalBytes) : '—'
@@ -58,9 +58,9 @@ export default function SingleDriveStorageManager({devices}: {devices: StorageDe
 
 	// Why FailSafe is out of reach on a single-drive device, shown in the mode info dialog.
 	// Umbrel Home and Raspberry Pi simply lack the slots; generic x86 devices with free
-	// slots get pointed at the reinstall path (umbrelOS boots from this same drive, so
+	// slots get pointed at the reinstall path (TitanOS boots from this same drive, so
 	// FailSafe needs a dedicated boot drive plus fresh storage drives).
-	const isLimitedSlotDevice = hostEnvironment === 'umbrel-home' || isRaspberryPi
+	const isLimitedSlotDevice = hostEnvironment === 'titan-home' || isRaspberryPi
 	const canOfferSetupGuidance = !!deviceInfoQ.data && !isLimitedSlotDevice && hostEnvironment !== 'docker-container'
 	const failsafeUnavailableReason = [
 		t('storage-manager.mode.failsafe-unavailable-single-drive'),
@@ -74,7 +74,7 @@ export default function SingleDriveStorageManager({devices}: {devices: StorageDe
 		otherDrivesDescription = <div aria-hidden='true' className='h-16' />
 	} else if (!deviceInfoQ.data) {
 		otherDrivesDescription = <p>{t('storage-manager.other-drives.device-info-unavailable')}</p>
-	} else if (hostEnvironment === 'umbrel-home') {
+	} else if (hostEnvironment === 'titan-home') {
 		otherDrivesDescription = <p>{t('storage-manager.other-drives.home')}</p>
 	} else if (isRaspberryPi) {
 		otherDrivesDescription = <p>{t('storage-manager.other-drives.pi')}</p>

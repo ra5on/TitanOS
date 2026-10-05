@@ -10,7 +10,7 @@ export function Progress({value, children}: {value?: number; children?: ReactNod
 			<ProgressPrimitive.Root
 				className={cn(
 					'relative h-1.5 w-full overflow-hidden rounded-full bg-white/10 sm:w-[80%]',
-					isNil(value) && 'umbrel-bouncing-gradient',
+					isNil(value) && 'titan-bouncing-gradient',
 				)}
 			>
 				<ProgressPrimitive.Indicator

@@ -197,7 +197,7 @@ export function Filmstrip({
 			// The headroom overlaps the lightbox stage (the viewer pulls the footer up over it), where
 			// it would swallow clicks on a video's seek bar — so the box is transparent to hits, and
 			// only the visible band below re-enables them (scrolls and wheels on it bubble to this box)
-			className='umbrel-hide-scrollbar pointer-events-none relative h-[88px] w-full overflow-x-auto overflow-y-hidden overscroll-x-contain'
+			className='titan-hide-scrollbar pointer-events-none relative h-[88px] w-full overflow-x-auto overflow-y-hidden overscroll-x-contain'
 		>
 			<div className='relative h-full' style={{width: items.length * SLOT - GAP + pad * 2}}>
 				<div className='pointer-events-auto absolute bottom-0 h-14 w-full' />

@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Onboarding step 2. Hero: title + subtitle up top, the glowing
-// 3D Umbrel app icon centered, page dots, and a Continue button at the bottom.
+// 3D Titan app icon centered, page dots, and a Continue button at the bottom.
 struct WelcomeView: View {
 	@Environment(OnboardingModel.self) private var model
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -25,15 +25,15 @@ struct WelcomeView: View {
 
 	private var header: some View {
 		OnboardingHeader(
-			title: "Your Umbrel.\nIn your pocket.",
-			subtitle: "Manage your Umbrel, launch apps, and keep your photos backed up automatically."
+			title: "Your Titan.\nIn your pocket.",
+			subtitle: "Manage your Titan, launch apps, and keep your photos backed up automatically."
 		)
 	}
 
 	// Glossy 3D icon. `.screen` blending lets the icon's dark render melt into
 	// the background so only the glow shows.
 	private var heroIcon: some View {
-		Image("UmbrelIconGlow")
+		Image("TitanIconGlow")
 			.resizable()
 			.scaledToFit()
 			.blendMode(.screen)

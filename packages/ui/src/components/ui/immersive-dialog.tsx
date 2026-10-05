@@ -65,7 +65,7 @@ export function ImmersiveDialogContent({
 			ref={ref}
 			className={cn(
 				dialogContentClass,
-				'umbrel-window-surface-all',
+				'titan-window-surface-all',
 				dialogContentAnimationClass,
 				dialogContentAnimationSlideClass,
 				short ? immersiveContentShortClass : immersiveContentTallClass,
@@ -98,7 +98,7 @@ export function ImmersiveDialogContent({
 			) : (
 				<div className={immersiveScrollAreaContentsClass}>{children}</div>
 			)}
-			<div className='umbrel-window-chrome umbrel-window-surface-all pointer-events-none absolute inset-0 z-50' />
+			<div className='titan-window-chrome titan-window-surface-all pointer-events-none absolute inset-0 z-50' />
 			<ImmersiveDialogClose />
 		</DialogContent>
 	)
@@ -124,7 +124,7 @@ export function ImmersiveDialogSplitContent({
 				ref={ref}
 				className={cn(
 					dialogContentClass,
-					'umbrel-window-surface-all',
+					'titan-window-surface-all',
 					'bg-transparent shadow-none ring-2 ring-white/3', // remove shadow from `dialogContentClass`
 					dialogContentAnimationClass,
 					dialogContentAnimationSlideClass,
@@ -141,13 +141,13 @@ export function ImmersiveDialogSplitContent({
 				<section className='hidden w-[210px] flex-col items-center justify-center bg-black/40 md:flex md:[border-top-left-radius:var(--window-radius)] md:[border-bottom-left-radius:var(--window-radius)]'>
 					{side}
 				</section>
-				<section className='umbrel-window-tint flex min-w-0 flex-1 flex-col overflow-hidden max-md:[border-radius:var(--window-radius)] md:[border-top-right-radius:var(--window-radius)] md:[border-bottom-right-radius:var(--window-radius)]'>
+				<section className='titan-window-tint flex min-w-0 flex-1 flex-col overflow-hidden max-md:[border-radius:var(--window-radius)] md:[border-top-right-radius:var(--window-radius)] md:[border-bottom-right-radius:var(--window-radius)]'>
 					<ScrollArea dialogInset className='min-h-0 flex-1'>
 						<div className={immersiveScrollAreaContentsClass}>{children}</div>
 					</ScrollArea>
 					{footer}
 				</section>
-				<div className='umbrel-window-chrome umbrel-window-surface-all pointer-events-none absolute inset-0 z-50' />
+				<div className='titan-window-chrome titan-window-surface-all pointer-events-none absolute inset-0 z-50' />
 				<ImmersiveDialogClose />
 			</DialogContent>
 		</DialogPortal>
@@ -173,7 +173,7 @@ function ImmersiveDialogClose() {
 			{/* Note, because this parent has a backdrop, this button won't have a backdrop */}
 			{/* Plain button rather than IconButton: the button variant's border and
 			    shadow utilities would override the settings-edge-material surface */}
-			<DialogClose className='settings-edge-material umbrel-material flex h-[36px] w-[36px] items-center justify-center rounded-full bg-white/6 text-white transition-[background-color,transform] duration-200 hover:bg-white/12 focus:outline-hidden focus-visible:ring-3 focus-visible:ring-white/20 active:scale-90'>
+			<DialogClose className='settings-edge-material titan-material flex h-[36px] w-[36px] items-center justify-center rounded-full bg-white/6 text-white transition-[background-color,transform] duration-200 hover:bg-white/12 focus:outline-hidden focus-visible:ring-3 focus-visible:ring-white/20 active:scale-90'>
 				<RiCloseLine className='size-5 opacity-90' />
 			</DialogClose>
 		</div>

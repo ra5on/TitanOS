@@ -33,7 +33,7 @@ export function SidebarHome() {
 		})
 	}
 
-	// Share the owner's entire Umbrel (/Home) with member accounts
+	// Share the owner's entire Titan (/Home) with member accounts
 	const openShareUsersDialog = () => {
 		navigate({
 			search: addLinkSearchParams({

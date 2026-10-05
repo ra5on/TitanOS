@@ -114,12 +114,12 @@ export default function PhotosLayout() {
 
 							{/* Files dropped anywhere on the pane upload into the library */}
 							<UploadDropZone>
-								{/* The bar rests --umbrel-photos-drop below its pinned place until
+								{/* The bar rests --titan-photos-drop below its pinned place until
 								    the listing scrolls; the listing's scroll timeline is scoped
 								    here so the bar, its sibling, can follow it */}
 								<div
-									className='umbrel-photos-column flex flex-col gap-3 lg:gap-3'
-									style={{['--umbrel-photos-drop' as string]: `${barDrop}px`}}
+									className='titan-photos-column flex flex-col gap-3 lg:gap-3'
+									style={{['--titan-photos-drop' as string]: `${barDrop}px`}}
 								>
 									<ActionsBar />
 									{/* Renders the listing for the current section */}

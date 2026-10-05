@@ -1,5 +1,5 @@
 {
-  description = "umbrelOS USB installer";
+  description = "titanOS USB installer";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -15,33 +15,33 @@
     };
 
     packages.${system} = {
-      # The installer ISO without an umbrelOS image. The image is injected
-      # afterwards with `inject-umbrelos-image` so this (slow) build can run
-      # concurrently with the umbrelOS image build.
+      # The installer ISO without an titanOS image. The image is injected
+      # afterwards with `inject-titanos-image` so this (slow) build can run
+      # concurrently with the titanOS image build.
       iso = self.nixosConfigurations.usb-installer.config.system.build.isoImage;
       default = self.packages.${system}.iso;
 
       # Produces the final installer ISO from the (image-less) base ISO and an
-      # umbrelOS image.
+      # titanOS image.
       #
       # It re-masters rather than just grafting the image in, because NixOS's
       # iso-image builds the hybrid ISO with xorriso's -isohybrid-gpt-basdat:
       # the EFI partition lives *inside* the ISO9660 area and overlaps the main
       # partition. QEMU's OVMF and MBR-reading firmware boot this fine, but
-      # GPT-preferring UEFI firmware (e.g. the Umbrel Pro) ignores a USB disk
+      # GPT-preferring UEFI firmware (e.g. the Titan Pro) ignores a USB disk
       # without a real, standalone EFI System Partition and falls through to
       # internal storage.
       #
-      # So we extract the NixOS ISO contents, add the umbrelOS image, and
+      # So we extract the NixOS ISO contents, add the titanOS image, and
       # rebuild with the standard distro layout: syslinux El Torito + isohybrid
       # MBR for BIOS, and the EFI image as a proper appended GPT EFI System
       # Partition for UEFI (CD and USB).
-      inject-umbrelos-image = pkgs.writeShellApplication {
-        name = "inject-umbrelos-image";
+      inject-titanos-image = pkgs.writeShellApplication {
+        name = "inject-titanos-image";
         runtimeInputs = [pkgs.xorriso pkgs.syslinux];
         text = ''
           base_iso="$1"
-          umbrelos_image="$2"
+          titanos_image="$2"
           output_iso="$3"
 
           workdir="$(mktemp -d)"
@@ -56,8 +56,8 @@
 
           chmod -R u+w "$tree"
 
-          # Add the umbrelOS image the installer flashes.
-          cp "$umbrelos_image" "$tree/umbrelos-amd64.img.xz"
+          # Add the titanOS image the installer flashes.
+          cp "$titanos_image" "$tree/titanos-amd64.img.xz"
 
           # Pull the EFI FAT image out of the tree to append as a real ESP, and
           # drop the stale El Torito catalog so xorriso writes a fresh one.
@@ -69,7 +69,7 @@
           # basic-data partition.
           xorriso -return_with FAILURE 32 -as mkisofs \
             -iso-level 3 \
-            -volid UMBRELINSTALLER \
+            -volid TITANINSTALLER \
             -appid nixos \
             -publisher nixos \
             -full-iso9660-filenames \

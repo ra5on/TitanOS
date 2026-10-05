@@ -45,7 +45,7 @@ export function TokensDetail({
 									<span className='min-w-0 flex-1'>
 										<span className='block truncate text-13 font-medium -tracking-2 text-white/90'>{token.label}</span>
 										<span className='block truncate font-mono text-11 text-white/35'>
-											umbrelmcp_{token.id.slice(0, 8)}_••••••••
+											titanmcp_{token.id.slice(0, 8)}_••••••••
 										</span>
 									</span>
 									<RowRemoveButton label={t('mcp-tokens-revoke')} disabled={busy} onClick={() => onRevoke(token.id)} />

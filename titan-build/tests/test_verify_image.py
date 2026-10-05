@@ -140,13 +140,13 @@ class EfiFilesystemTests(unittest.TestCase):
 
 class InstalledReleaseTests(unittest.TestCase):
     def test_exact_titan_release_is_accepted(self):
-        release = {"version": "2.0.0-titan.1", "name": "TitanOS 2.0"}
+        release = {"version": "2.0.1", "name": "TitanOS 2.0.1"}
         self.assertEqual(VERIFIER.check_system_version({"result": {"data": release}}, *release.values()), release)
 
     def test_wrong_version_or_upstream_branding_is_rejected(self):
-        for version, name in (("2.0.0", "TitanOS 2.0"), ("2.0.0-titan.1", "umbrelOS 2.0")):
+        for version, name in (("2.0.0", "TitanOS 2.0.1"), ("2.0.1", "umbrelOS 2.0")):
             with self.subTest(version=version, name=name), self.assertRaises(VERIFIER.BrandingMismatch):
-                VERIFIER.check_system_version({"result": {"data": {"version": version, "name": name}}}, "2.0.0-titan.1", "TitanOS 2.0")
+                VERIFIER.check_system_version({"result": {"data": {"version": version, "name": name}}}, "2.0.1", "TitanOS 2.0.1")
 
 
 class FirstBootCapacityTests(unittest.TestCase):

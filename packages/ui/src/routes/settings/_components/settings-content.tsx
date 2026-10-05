@@ -118,7 +118,7 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 		: t('storage-manager.health.title-drive')
 	const {settingsDialog} = useParams<{settingsDialog: 'wallpaper' | 'language' | 'software-update'}>()
 	const ownerFirstName = userQ.data?.name ? firstNameFromFullName(userQ.data.name) : ''
-	const ownerHeading = ownerFirstName ? `${ownerFirstName}’s ${t('umbrel')}` : t('umbrel')
+	const ownerHeading = ownerFirstName ? t('files-sidebar.owners-titan', {name: ownerFirstName}) : t('titan')
 
 	const settingsCatalog = useMemo(
 		() =>
@@ -271,24 +271,14 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 									<DropdownMenuContent align='end' className='min-w-[280px]'>
 										<DropdownMenuItem onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=nas')}>
 											<div className='flex flex-col'>
-												<div className='text-14 font-medium'>{t('backups-setup-umbrel-or-nas')}</div>
-												<div className='text-12 text-white/40'>{t('backups-setup-nas-or-umbrel-description')}</div>
+												<div className='text-14 font-medium'>{t('backups-setup-titan-or-nas')}</div>
+												<div className='text-12 text-white/40'>{t('backups-setup-nas-or-titan-description')}</div>
 											</div>
 										</DropdownMenuItem>
 										<DropdownMenuItem onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=external')}>
 											<div className='flex flex-col'>
 												<div className='text-14 font-medium'>{t('external-drive')}</div>
 												<div className='text-12 text-white/40'>{t('backups-setup-external-description')}</div>
-											</div>
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=umbrel-private-cloud')}
-										>
-											<div className='flex flex-col'>
-												<div className='text-14 font-medium'>{t('backups-setup-umbrel-private-cloud')}</div>
-												<div className='text-12 text-white/40'>
-													{t('backups-setup-umbrel-private-cloud-description')}
-												</div>
 											</div>
 										</DropdownMenuItem>
 									</DropdownMenuContent>
@@ -372,7 +362,7 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 						ref={sidebarScrollRef}
 						direction='y'
 						data-testid='settings-sidebar-scroller'
-						className='umbrel-hide-scrollbar min-h-0 overscroll-contain lg:h-full lg:overflow-y-auto lg:pr-[34px] lg:pb-24 lg:pl-4'
+						className='titan-hide-scrollbar min-h-0 overscroll-contain lg:h-full lg:overflow-y-auto lg:pr-[34px] lg:pb-24 lg:pl-4'
 					>
 						<div className='flex flex-col gap-3'>
 							<div className='flex shrink-0 flex-col items-center gap-5'>
@@ -403,8 +393,7 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 									aria-label={ownerHeading}
 									className='flex w-full min-w-0 items-center justify-center gap-1 overflow-hidden py-2 text-24 leading-none font-semibold -tracking-4'
 								>
-									{ownerFirstName && <span className='min-w-0 truncate'>{ownerFirstName}’s</span>}
-									<span className='shrink-0 text-white/45'>{t('umbrel')}</span>
+									<span className='min-w-0 truncate'>{ownerHeading}</span>
 								</h2>
 							</div>
 
@@ -493,7 +482,7 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 						ref={rowsScrollRef}
 						direction='y'
 						data-testid='settings-rows-scroller'
-						className='umbrel-hide-scrollbar min-w-0 overscroll-contain pt-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-24'
+						className='titan-hide-scrollbar min-w-0 overscroll-contain pt-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-24'
 					>
 						<div className='flex flex-col gap-5 pb-8'>
 							{settingsPage.categoryIds.map((categoryId) => (

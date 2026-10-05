@@ -104,7 +104,7 @@ export default function CreateMachine() {
 	const diskMinimumErrorId = useId()
 
 	// Seed the specs from the OS profile once the catalog, thread count and host
-	// memory have loaded, clamping to what this Umbrel can actually spare
+	// memory have loaded, clamping to what this Titan can actually spare
 	useEffect(() => {
 		if (specsTouched) return
 		setDiskSizeInput(String(profile.diskSizeGb))
@@ -159,7 +159,7 @@ export default function CreateMachine() {
 	const nameValue = name ?? defaultName
 	const trimmedName = nameValue.trim()
 
-	// The guest account is prefilled with the signed-in Umbrel user's name,
+	// The guest account is prefilled with the signed-in Titan user's name,
 	// squeezed into a shape every guest OS accepts
 	const defaultUsername = (userQ.data?.name ?? '')
 		.toLowerCase()
@@ -338,7 +338,7 @@ export default function CreateMachine() {
 					transition={{delay: 0.1, duration: 0.35, ease: 'easeOut'}}
 					className='min-w-0 flex-1'
 				>
-					<div className='umbrel-divide-y'>
+					<div className='titan-divide-y'>
 						<SpecRow
 							label={t('machines.configure-processor')}
 							note={t('machines.configure-processor-note', {count: maxCores})}

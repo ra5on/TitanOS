@@ -1,7 +1,7 @@
 import SwiftUI
-import UmbrelKit
+import TitanKit
 
-// The device switcher: a black screen with the Umbrel mark, a "+"
+// The device switcher: a black screen with the Titan mark, a "+"
 // to add another device, and a card per saved device showing that device's wallpaper,
 // render, name and current status. Tapping a card opens that device.
 struct AllDevicesView: View {
@@ -46,13 +46,13 @@ struct AllDevicesView: View {
 
 	private var header: some View {
 		HStack {
-			Image("UmbrelMark")
+			Image("TitanMark")
 				.resizable()
 				.scaledToFit()
 				.frame(height: 19)
 				.foregroundStyle(.white)
 			Spacer()
-			CircleIconButton(system: "plus", accessibilityLabel: "Add Umbrel", action: onAdd)
+			CircleIconButton(system: "plus", accessibilityLabel: "Add Titan", action: onAdd)
 		}
 		.padding(.leading, 28)
 		.padding(.trailing, Theme.contentInset)
@@ -102,9 +102,9 @@ private struct DeviceCard: View {
 	}
 
 	var body: some View {
-		let isSquareRender = UmbrelDeviceKind(model: device.model) == .raspberryPi
+		let isSquareRender = TitanDeviceKind(model: device.model) == .raspberryPi
 		HStack(spacing: 16) {
-			UmbrelDeviceRender(model: device.model)
+			TitanDeviceRender(model: device.model)
 				.frame(width: 71, height: isSquareRender ? 60 : 52)
 				.shadow(color: .black.opacity(0.16), radius: 8, y: 8)
 
@@ -154,9 +154,9 @@ private struct DeviceCard: View {
 				return
 			}
 			let target = device.nativeTarget
-			guard let info = try? await Umbreld.user(target: target, session: session) else {
+			guard let info = try? await Titand.user(target: target, session: session) else {
 				// A 401 during the request can definitively remove the session. Re-read
-				// instead of misreporting that signed-out state as an offline Umbrel.
+				// instead of misreporting that signed-out state as an offline Titan.
 				switch Keychain.readSession(deviceId: device.id) {
 				case .missing, .invalid:
 					sessionAvailable = false

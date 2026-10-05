@@ -158,14 +158,14 @@ export function SsdHealthDialog({device, slotNumber, open, onOpenChange}: SsdHea
 						<div className={listClass}>
 							<div className={listItemClass}>
 								<span className='shrink-0'>{t('storage-manager.health.model-and-capacity')}</span>
-								<FadeScroller direction='x' className='umbrel-hide-scrollbar min-w-0 overflow-x-auto font-normal'>
+								<FadeScroller direction='x' className='titan-hide-scrollbar min-w-0 overflow-x-auto font-normal'>
 									<span className='whitespace-nowrap select-all'>{device.model}</span>
 									<span className='whitespace-nowrap'> · {formatSize(device.size)}</span>
 								</FadeScroller>
 							</div>
 							<div className={listItemClass}>
 								<span className='shrink-0'>{t('storage-manager.health.serial-number')}</span>
-								<FadeScroller direction='x' className='umbrel-hide-scrollbar min-w-0 overflow-x-auto font-normal'>
+								<FadeScroller direction='x' className='titan-hide-scrollbar min-w-0 overflow-x-auto font-normal'>
 									<span className='whitespace-nowrap select-all'>{device.serial}</span>
 								</FadeScroller>
 							</div>

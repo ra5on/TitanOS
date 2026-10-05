@@ -28,8 +28,8 @@ if [[ "$(echo "$BUILD_NUMBERS" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" != "1" ]]
 fi
 BUILD_NUMBER="$BUILD_NUMBERS"
 
-RELEASE_DIR="$(/usr/bin/mktemp -d "/tmp/umbrel-testflight-${BUILD_NUMBER}.XXXXXX")"
-ARCHIVE_PATH="$RELEASE_DIR/Umbrel.xcarchive"
+RELEASE_DIR="$(/usr/bin/mktemp -d "/tmp/titan-testflight-${BUILD_NUMBER}.XXXXXX")"
+ARCHIVE_PATH="$RELEASE_DIR/Titan.xcarchive"
 EXPORT_PATH="$RELEASE_DIR/export"
 EXPORT_OPTIONS="$RELEASE_DIR/ExportOptions.plist"
 
@@ -48,8 +48,8 @@ cd "$IOS_DIR"
 # resolves a server-side `rsync` from PATH. Homebrew rsync is flag-incompatible
 # with Apple's copy step, so keep the entire distribution pipeline on system tools.
 /usr/bin/env PATH="$SYSTEM_TOOL_PATH" /usr/bin/xcodebuild \
-	-project Umbrel.xcodeproj \
-	-scheme Umbrel \
+	-project Titan.xcodeproj \
+	-scheme Titan \
 	-configuration Release \
 	-destination generic/platform=iOS \
 	-archivePath "$ARCHIVE_PATH" \

@@ -4,7 +4,7 @@ final class MounterSecurityTests: XCTestCase {
 	func testRecoveryReturnsOnlyTheUniqueSystemReportedMountPath() {
 		let mounts = [
 			Mounter.MountedShare(
-				host: "umbrel.local.",
+				host: "titan.local.",
 				sharename: "Documents",
 				path: "/Volumes/Documents-1"
 			),
@@ -16,24 +16,24 @@ final class MounterSecurityTests: XCTestCase {
 		]
 
 		XCTAssertEqual(
-			Mounter.recoveredMountPath(host: "UMBREL.LOCAL", sharename: "Documents", from: mounts),
+			Mounter.recoveredMountPath(host: "TITAN.LOCAL", sharename: "Documents", from: mounts),
 			"/Volumes/Documents-1"
 		)
-		XCTAssertNil(Mounter.recoveredMountPath(host: "umbrel.local", sharename: "Backup", from: mounts))
+		XCTAssertNil(Mounter.recoveredMountPath(host: "titan.local", sharename: "Backup", from: mounts))
 	}
 
 	func testRecoveryRejectsAmbiguousSystemMetadataInsteadOfGuessing() {
 		let mounts = [
-			Mounter.MountedShare(host: "umbrel.local", sharename: "Documents", path: "/Volumes/Documents"),
-			Mounter.MountedShare(host: "umbrel.local", sharename: "Documents", path: "/Volumes/Documents-1"),
+			Mounter.MountedShare(host: "titan.local", sharename: "Documents", path: "/Volumes/Documents"),
+			Mounter.MountedShare(host: "titan.local", sharename: "Documents", path: "/Volumes/Documents-1"),
 		]
 
-		XCTAssertNil(Mounter.recoveredMountPath(host: "umbrel.local", sharename: "Documents", from: mounts))
+		XCTAssertNil(Mounter.recoveredMountPath(host: "titan.local", sharename: "Documents", from: mounts))
 	}
 
 	func testOwnershipFilterLeavesAnotherNASUntouched() {
-		let umbrel = Mounter.MountedShare(
-			host: "umbrel.local.",
+		let titan = Mounter.MountedShare(
+			host: "titan.local.",
 			sharename: "Documents",
 			path: "/Volumes/Documents-1"
 		)
@@ -43,10 +43,10 @@ final class MounterSecurityTests: XCTestCase {
 			path: "/Volumes/Backup"
 		)
 
-		let owned = Mounter.shares([umbrel, otherNAS], ownedByHosts: ["UMBREL.LOCAL"])
+		let owned = Mounter.shares([titan, otherNAS], ownedByHosts: ["TITAN.LOCAL"])
 
 		XCTAssertEqual(owned.count, 1)
-		XCTAssertEqual(owned.first?.path, umbrel.path)
+		XCTAssertEqual(owned.first?.path, titan.path)
 	}
 
 	func testOwnershipFilterKeepsAProcessCreatedMountWhenItsHostIsOffline() {

@@ -39,7 +39,7 @@ function SourcePathRow({path, rootPath, onRemove}: {path: string; rootPath: stri
 
 // The folders a scope choice is about — the label and Add over a card of
 // rows, with the picker over the source's own tree. Shared by the settings
-// here and the This-Umbrel step of the add dialog.
+// here and the This-Titan step of the add dialog.
 export function ScopeFolderList({
 	rootPath,
 	scope,
@@ -98,11 +98,11 @@ export function ScopeFolderList({
 	)
 }
 
-// The This-Umbrel scope as one big picker: the Files mark and the current
+// The This-Titan scope as one big picker: the Files mark and the current
 // choice on the trigger, all three choices with a check in the menu, and the
 // folder list beneath when the choice needs one. Shared by the add dialog's
-// This-Umbrel step and the source details dialog.
-export function UmbrelScopeSettings({
+// This-Titan step and the source details dialog.
+export function TitanScopeSettings({
 	rootPath,
 	scope,
 	onChange,
@@ -115,18 +115,18 @@ export function UmbrelScopeSettings({
 	const options: {mode: ImportScopeMode; title: string; description: string}[] = [
 		{
 			mode: 'everything',
-			title: t('photos-add-source.umbrel-scope-all'),
-			description: t('photos-add-source.umbrel-scope-all-description'),
+			title: t('photos-add-source.titan-scope-all'),
+			description: t('photos-add-source.titan-scope-all-description'),
 		},
 		{
 			mode: 'everything-except',
-			title: t('photos-add-source.umbrel-scope-except'),
-			description: t('photos-add-source.umbrel-scope-except-description'),
+			title: t('photos-add-source.titan-scope-except'),
+			description: t('photos-add-source.titan-scope-except-description'),
 		},
 		{
 			mode: 'only',
-			title: t('photos-add-source.umbrel-scope-only'),
-			description: t('photos-add-source.umbrel-scope-only-description'),
+			title: t('photos-add-source.titan-scope-only'),
+			description: t('photos-add-source.titan-scope-only-description'),
 		},
 	]
 	const current = options.find((option) => option.mode === scope.mode) ?? options[0]!
@@ -164,15 +164,5 @@ export function UmbrelScopeSettings({
 			</DropdownMenu>
 			{scope.mode !== 'everything' && <ScopeFolderList rootPath={rootPath} scope={scope} onChange={onChange} />}
 		</>
-	)
-}
-
-// Phones keep their settings in the Umbrel app; there is nothing to configure here
-export function PushSourceSettings() {
-	const {t} = useTranslation()
-	return (
-		<p className='rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-12 leading-relaxed text-white/60'>
-			{t('photos-source.phone-settings-note')}
-		</p>
 	)
 }

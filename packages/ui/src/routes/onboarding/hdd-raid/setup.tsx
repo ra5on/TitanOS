@@ -158,7 +158,7 @@ export default function HddRaidSetup() {
 					className={`mt-4 ${primaryButtonProps.className}`}
 					style={primaryButtonProps.style}
 				>
-					{isLaunching ? t('onboarding.raid.launching') : t('onboarding.launch-umbrelos')}
+					{isLaunching ? t('onboarding.raid.launching') : t('onboarding.launch-titanos')}
 				</button>
 			</Layout>
 		)
