@@ -165,7 +165,9 @@ export default class Auth {
 	#appSockets = new Map<string, Set<AppSocket>>()
 	#appAccessRevision = 0
 	#sessionExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+	#sessionExpiryTasks = new Set<Promise<void>>()
 	#sessionIssuanceStates = new Map<string, SessionIssuanceState>()
+	#stopping = false
 
 	constructor(titand: Titand) {
 		this.#titand = titand
@@ -174,6 +176,7 @@ export default class Auth {
 	}
 
 	async start() {
+		this.#stopping = false
 		await fse.ensureDir(this.#directory, {mode: 0o700})
 		await fse.chmod(this.#directory, 0o700)
 
@@ -190,6 +193,7 @@ export default class Auth {
 	}
 
 	async stop() {
+		this.#stopping = true
 		for (const sockets of this.#webSockets.values()) {
 			for (const socket of sockets) socket.terminate()
 		}
@@ -200,6 +204,10 @@ export default class Auth {
 		this.#appSockets.clear()
 		for (const timeout of this.#sessionExpiryTimers.values()) clearTimeout(timeout)
 		this.#sessionExpiryTimers.clear()
+		// A timer may already be persisting expired sessions. Canceling its handle
+		// cannot cancel that write; drain the same queue before releasing auth state.
+		await this.#store.getWriteLock(async () => {})
+		await Promise.allSettled(this.#sessionExpiryTasks)
 		this.#sessions = []
 		this.#webSocketTickets.clear()
 		this.#appHandoffs.clear()
@@ -1004,6 +1012,7 @@ export default class Auth {
 	}
 
 	#scheduleSessionExpiry(session: Pick<Session, 'id' | 'expiresAt'>) {
+		if (this.#stopping) return
 		const existingTimeout = this.#sessionExpiryTimers.get(session.id)
 		if (existingTimeout) clearTimeout(existingTimeout)
 		this.#sessionExpiryTimers.delete(session.id)
@@ -1020,11 +1029,17 @@ export default class Auth {
 					this.#scheduleSessionExpiry(session)
 					return
 				}
-				await this.#removeExpiredSessions().catch((error) => {
+				const cleanup = this.#removeExpiredSessions().catch((error) => {
 					// Expiry is still authoritative if persisting the cleanup fails.
 					this.#closeSessionConnections(session.id)
 					this.#titand.logger.error('Failed to expire authentication session', error)
 				})
+				this.#sessionExpiryTasks.add(cleanup)
+				try {
+					await cleanup
+				} finally {
+					this.#sessionExpiryTasks.delete(cleanup)
+				}
 			},
 			Math.min(ONE_HOUR, Math.max(0, expiresAt - Date.now())),
 		)

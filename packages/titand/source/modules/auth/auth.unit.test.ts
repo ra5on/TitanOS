@@ -7,6 +7,7 @@ import yaml from 'js-yaml'
 
 import type Titand from '../../index.js'
 import temporaryDirectory from '../utilities/temporary-directory.js'
+import * as durableFilesystem from '../utilities/durable-filesystem.js'
 
 import Auth, {NATIVE_ACCESS_DURATION, OWNER_ACCOUNT_ID, SESSION_DURATION} from './auth.js'
 
@@ -510,6 +511,71 @@ describe('Auth', () => {
 		)
 		expect(stored).not.toContain(session.principal.sessionId)
 	})
+
+	test.each(['expiry', 'failed expiry', 'renewal'] as const)(
+		'drains an in-flight %s write before stopping',
+		async (operation) => {
+			vi.useFakeTimers()
+			vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+			const session = await auth.createSession()
+			let releaseWrite!: () => void
+			let writeEntered!: () => void
+			let writeFinished!: () => void
+			const gate = new Promise<void>((resolve) => (releaseWrite = resolve))
+			const entered = new Promise<void>((resolve) => (writeEntered = resolve))
+			const finished = new Promise<void>((resolve) => (writeFinished = resolve))
+			const writeFileDurably = durableFilesystem.writeFileDurably
+			const cleanupError = new Error('Session cleanup write failed')
+			const write = vi.spyOn(durableFilesystem, 'writeFileDurably').mockImplementationOnce(async (...args) => {
+				writeEntered()
+				await gate
+				try {
+					if (operation === 'failed expiry') throw cleanupError
+					await writeFileDurably(...args)
+				} finally {
+					writeFinished()
+				}
+			})
+			let renewal: ReturnType<Auth['renewSession']> | undefined
+			let stopping: Promise<void> | undefined
+			try {
+				if (operation !== 'renewal') vi.advanceTimersByTime(SESSION_DURATION)
+				else renewal = auth.renewSession(session.principal)
+				await entered
+				let stopped = false
+				stopping = auth.stop().then(() => {
+					stopped = true
+				})
+				await Promise.resolve()
+				expect(stopped).toBe(false)
+				releaseWrite()
+				await stopping
+				await renewal
+				expect(vi.getTimerCount()).toBe(0)
+				const stored = await import('node:fs/promises').then((fs) =>
+					fs.readFile(`${dataDirectory}/secrets/auth/sessions.yaml`, 'utf8'),
+				)
+				if (operation === 'expiry') expect(stored).not.toContain(session.principal.sessionId)
+				else expect(stored).toContain(session.principal.sessionId)
+				if (operation === 'failed expiry') {
+					expect(loggerError).toHaveBeenCalledWith('Failed to expire authentication session', cleanupError)
+				}
+				// A restart keeps active sessions and retries failed expired-session cleanup.
+				await auth.start()
+				if (operation === 'renewal') {
+					await expect(auth.authenticate(session.dashboardToken, 'dashboard')).resolves.toEqual(session.principal)
+				} else {
+					await expect(auth.authenticate(session.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
+				}
+			} finally {
+				releaseWrite()
+				await finished
+				await renewal
+				await stopping
+				write.mockRestore()
+			}
+		},
+	)
 
 	test('contains WebSocket protocol errors instead of letting EventEmitter throw', async () => {
 		const session = await auth.createSession()
