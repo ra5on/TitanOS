@@ -13,7 +13,49 @@ from .virtualization import availability
 from .hardware import gpus
 
 HELPER = Path('/usr/share/titan/install-components.sh')
+BOOT_MEMORY_REPORT = Path('/run/titan-boot-memory.json')
 SYSTEM_PATH = '/usr/sbin:/usr/bin:/sbin:/bin'
+
+
+def boot_memory_report(path=None):
+    """Read only the daemon guard's bounded, owned report; never trust its text."""
+    descriptor = None
+    try:
+        descriptor = os.open(path or BOOT_MEMORY_REPORT, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            return None
+        with os.fdopen(descriptor, 'rb') as stream:
+            descriptor = None
+            raw = stream.read(16385)
+        if len(raw) > 16384:
+            return None
+        value = json.loads(raw)
+        fields = ('total_bytes', 'reserve_bytes', 'required_bytes')
+        if (not isinstance(value, dict) or type(value.get('ok')) is not bool or
+                any(type(value.get(key)) is not int or not 0 <= value[key] < 2**63 for key in fields) or
+                value.get('reason') not in ('', 'insufficient_memory', 'invalid_state', 'unknown_memory')):
+            return None
+        result = {key: value[key] for key in ('ok', 'reason', *fields)}
+        if value['ok']:
+            result['message'] = ''
+        elif value['reason'] == 'insufficient_memory':
+            gib = 1024**3
+            needed = (value['required_bytes'] + gib - 1) // gib
+            result['message'] = (f'Der automatische Start von Docker und VMs wurde zum Schutz des NAS angehalten. '
+                f'Die eingestellten Autostarts benötigen mindestens {needed} GiB RAM; '
+                f'das System erkennt {value["total_bytes"] / gib:.1f} GiB. '
+                'Dem NAS wieder ausreichend RAM zuweisen oder die Autostarts bei noch erreichbaren Diensten reduzieren.')
+        else:
+            result['message'] = ('Der automatische Start von Docker und VMs wurde zum Schutz des NAS angehalten. '
+                'Arbeitsspeicher oder gespeicherte Autostart-Einstellungen konnten nicht sicher geprüft werden. '
+                'Systemkomponenten und letzte Änderungen prüfen.')
+        return result
+    except (OSError, ValueError, TypeError, UnicodeError):
+        return None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def run_component_helper(path, component, log_stream, timeout=1800, termination_grace=10):
@@ -74,6 +116,9 @@ class ComponentsMixin:
         result['available'] = result['compose'] and result['daemon']
         if not result['compose']:
             result['error'] = 'Docker Compose fehlt im Titan-Systemimage. Titan-Systemimage aktualisieren.'
+        guard = boot_memory_report()
+        if not result['daemon'] and guard and not guard['ok']:
+            result['error'] = guard['message']
         return result
 
     def op_components(self):
@@ -86,8 +131,11 @@ class ComponentsMixin:
                 vm['daemon'] = True
             except Error as exc:
                 vm.update(available=False, error='libvirt ist nicht erreichbar: ' + str(exc))
+        guard = boot_memory_report()
+        if not vm['daemon'] and guard and not guard['ok']:
+            vm.update(available=False, error=guard['message'])
         return {'components': {'docker': self.docker_component(), 'vms': vm},
-                'repair': self.load('component-repair', {}), 'gpus': gpus()}
+                'repair': self.load('component-repair', {}), 'gpus': gpus(), 'boot_memory': guard}
 
     def op_component_install(self, component='all'):
         if type(component) is not str or component not in ('all', 'docker', 'vms'):

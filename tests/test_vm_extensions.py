@@ -29,6 +29,7 @@ class FixtureHost(LocationsMixin, VMMixin, VMStorageMixin, VMNetworkMixin):
         self.share_root.mkdir(mode=0o755)
         self.system_root = Path('/')
         self.lock = threading.RLock()
+        self.app_memory_lock = threading.RLock()
         self._storage_locations = StorageLocations(self, self.command)
         self.vm_root = root / 'vms'
         self.vm_root.mkdir(mode=0o755)

@@ -128,7 +128,13 @@ class DockerEngineMixin:
                     raise Error('Container wurde ersetzt. Ansicht aktualisieren.', 409)
         if not managed and action in ('start', 'restart'):
             self._engine_storage_ready(row)
+            self._engine_devices_ready(row)
         return row, managed
+
+    @staticmethod
+    def _engine_devices_ready(row):
+        from .app_devices import native_hardware
+        return native_hardware(row)
 
     def _engine_storage_ready(self, row):
         labels = (row.get('Config') or {}).get('Labels') or {}
@@ -150,10 +156,10 @@ class DockerEngineMixin:
             raise Error('Container-Datenspeicher ist nicht verfügbar.', 503)
         return resource
 
-    def _engine_check_start_memory(self, memory_limit, container=None, installation=False):
+    def _engine_check_start_memory(self, memory_limit, container=None, installation=False, name=None, restart=None):
         from .app_memory import check_container_start_memory
         return check_container_start_memory(memory_limit, self._app_inspected_containers(),
-            telemetry=self.telemetry, container=container, installation=installation)
+            telemetry=self.telemetry, container=container, installation=installation,name=name,restart=restart)
 
     def op_docker_container_action(self, container, action, stop_before_remove=False):
         if action not in ('start','stop','restart','remove'):
@@ -191,6 +197,8 @@ class DockerEngineMixin:
                 state = 'removed'
             else:
                 if action in ('start', 'restart'):
+                    if managed: self.app_devices_ready(self.managed_app(managed))
+                    else: self._engine_devices_ready(row)
                     output.append(self.engine_docker([action, container], timeout=120))
                     row = self.engine_container(container)
                     if not self.engine_active(row):
@@ -293,6 +301,7 @@ class DockerEngineMixin:
             if row.get('path'):args+=['--device',row['path']+':'+row['path']+':rw']
             if type(row.get('group')) is int:groups.add(row['group'])
         for group in sorted(groups):args+=['--group-add',str(group)]
+        if chosen: args += ['--label', 'io.titan.hardware=' + json.dumps(chosen, separators=(',', ':'), sort_keys=True)]
         args+=[image,*command]
         return args
 
@@ -303,9 +312,11 @@ class DockerEngineMixin:
         memory_limit=args[args.index('--memory')+1]
         memory_lock=getattr(self, 'app_memory_lock', None)
         with memory_lock if memory_lock is not None else contextlib.nullcontext():
-            self._engine_check_start_memory(memory_limit, installation=True)
+            self._engine_check_start_memory(memory_limit, installation=True,
+                name=args[args.index('--name')+1],restart=args[args.index('--restart')+1])
             labels = [args[index+1] for index, value in enumerate(args[:-1]) if value == '--label']
             storage_id = next((value.split('=',1)[1] for value in labels if value.startswith('io.titan.storage=')), None)
+            hardware = next((json.loads(value.split('=',1)[1]) for value in labels if value.startswith('io.titan.hardware=')), [])
             with self.storage_locations.fd(storage_id, purpose='apps', create=True, write=True) if storage_id else contextlib.nullcontext() as selected:
                 if selected:
                     _, resource = selected
@@ -317,6 +328,8 @@ class DockerEngineMixin:
             self._engine_check_start_memory(memory_limit, container=container)
             if storage_id:
                 self._engine_storage_ready(self.engine_container(container))
+            from .app_devices import hardware_ready
+            hardware_ready(hardware)
             try:self.engine_docker(['start',container],timeout=120)
             except Error: raise Error('Container angelegt, Start fehlgeschlagen. Logs ansehen und erneut starten.',503) from None
         return {'ok':True,'container':container}
@@ -326,6 +339,11 @@ class DockerEngineMixin:
         return update(self, container, settings)
 
     def op_docker_container_hardware(self, container, devices):
+        memory_lock = getattr(self,'app_memory_lock',None)
+        with memory_lock if memory_lock is not None else contextlib.nullcontext():
+            return self._docker_container_hardware(container,devices)
+
+    def _docker_container_hardware(self, container, devices):
         row=self.engine_container(container)
         if (row.get('Config',{}).get('Labels') or {}).get('io.titan.manual')!='true':
             raise Error('Geräte einer Titan-App unter App-Einstellungen ändern. Fremde Container werden nicht umgebaut.')
@@ -359,8 +377,10 @@ class DockerEngineMixin:
                 config['storage_id'] = selected_storage['id']
             else:
                 config['volume'] = mounts[0]['Name']
-        self._engine_create_args(config) # Complete validation before first mutation.
-        self._engine_check_start_memory(host['Memory'], installation=True)
+        proposed = self._engine_create_args(config) # Complete validation before first mutation.
+        labels = [proposed[index+1] for index, value in enumerate(proposed[:-1]) if value == '--label']
+        hardware = next((json.loads(value.split('=',1)[1]) for value in labels if value.startswith('io.titan.hardware=')), [])
+        self._engine_check_start_memory(host['Memory'], installation=True,name=original,restart=config['restart'])
         fresh=self.engine_container(container)
         if fresh.get('State',{}).get('Running') or fresh.get('Name')!=row.get('Name'):
             raise Error('Containerzustand hat sich geändert. Ansicht aktualisieren.',409)
@@ -373,16 +393,24 @@ class DockerEngineMixin:
         # A long snapshot must not silently migrate the replacement onto a
         # filesystem that took the original volume's name in the meantime.
         self._engine_storage_ready(self.engine_container(container))
+        from .app_devices import hardware_ready
+        hardware_ready(hardware)
         backup='titan-previous-'+container[:20]
-        self.engine_docker(['rename',container,backup])
+        self._engine_check_start_memory(host['Memory'], installation=True,name=original,restart=config['restart'])
         config['image']=image
+        renamed=False;policy_changed=False
         try:
+            if config['restart']!='no':
+                self.engine_docker(['update','--restart','no',container],timeout=30);policy_changed=True
+            self.engine_docker(['rename',container,backup]);renamed=True
             result=self.op_docker_container_create(config)
         except Error:
-            ids=self.engine_docker(['ps','-aq','--no-trunc','--filter','name=^/'+original+'$']).splitlines()
-            if not ids:self.engine_docker(['rename',container,original])
+            ids=self.engine_docker(['ps','-aq','--no-trunc','--filter','name=^/'+original+'$']).splitlines() if renamed else []
+            if not ids:
+                if renamed:self.engine_docker(['rename',container,original])
+                if policy_changed:self.engine_docker(['update','--restart',config['restart'],container],timeout=30)
             raise
-        return {**result,'backup_container':container,'message':'Geräte aktualisiert. Der vorherige gestoppte Container bleibt als Sicherung erhalten; das Datenvolume wird weiterverwendet.'}
+        return {**result,'backup_container':container,'message':'Geräte aktualisiert. Der vorherige gestoppte Container bleibt als Sicherung mit deaktiviertem Autostart erhalten; das Datenvolume wird weiterverwendet.'}
 
     def op_docker_metrics(self):
         from .app_metrics import parse_stats, cgroup_memory

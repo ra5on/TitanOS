@@ -81,7 +81,7 @@ class Agent:
         raise RuntimeError('Guest command timed out')
     def python(self, code, timeout=180):
         return self.execute(['/usr/bin/python3','-c',code], timeout)
-    def ready(self, slot, version, previous_boot=None):
+    def ready(self, slot, version, previous_boot=None, require_health=True):
         deadline=time.monotonic()+360
         while time.monotonic()<deadline:
             try:
@@ -89,11 +89,154 @@ class Agent:
                 if previous_boot==boot:
                     time.sleep(2);continue
                 status=json.loads(self.python("import sys,json;sys.path.insert(0,'/usr/lib/titan');from titan.debian_updates import system_status;print(json.dumps(system_status()))"))
-                if status['health_confirmed'] and status['booted']['slot']==slot and status['current']==version:
+                if (not require_health or status['health_confirmed']) and status['booted']['slot']==slot and status['current']==version:
                     return boot,status
             except (OSError,ValueError,RuntimeError):pass
             time.sleep(3)
         raise RuntimeError('Expected healthy slot/version did not start: '+slot+' '+version)
+
+
+def launch_guest(work, accel, memory_mb=8192):
+    if memory_mb not in (3072,8192) or accel not in ('kvm','tcg'):
+        raise ValueError('Invalid disposable guest resource plan')
+    for name in ('qmp.sock','qga.sock'):
+        path=work/name
+        if path.exists():
+            if not path.is_socket():raise RuntimeError('Disposable guest socket was replaced')
+            path.unlink()
+    with (work/'console.log').open('ab') as console:
+        return subprocess.Popen(['qemu-system-x86_64','-accel',accel,'-machine','q35','-cpu','host' if accel=='kvm' else 'max',
+            '-m',str(memory_mb),'-smp','2','-display','none','-monitor','none','-serial','stdio',
+            '-qmp','unix:'+str(work/'qmp.sock')+',server=on,wait=off',
+            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
+            '-drive','if=pflash,format=raw,file='+str(work/'vars.fd'),
+            '-drive','id=titan-system,if=virtio,format=qcow2,file='+str(work/'test.qcow2'),
+            '-device','virtio-serial-pci','-chardev','socket,path='+str(work/'qga.sock')+',server=on,wait=off,id=qga',
+            '-device','virtserialport,chardev=qga,name=org.qemu.guest_agent.0',
+            '-netdev','user,id=net0,hostfwd=tcp:127.0.0.1:15000-:5000,hostfwd=tcp:127.0.0.1:15445-:445',
+            '-device','virtio-net-pci,netdev=net0'],stdout=console,stderr=console)
+
+
+# This tiny private image needs no registry and is never part of the IMG/bundle.
+# Copy only the trusted guest's sleep executable and its bounded ELF runtime.
+GUEST_BOOT_MEMORY_SETUP=r"""
+import io,json,re,subprocess,tarfile,time
+from pathlib import Path
+name='titan-ci-boot-memory';image='titan-ci-boot-memory:local'
+if subprocess.check_output(['docker','ps','-aq','--filter','name=^/'+name+'$'],text=True).strip():
+    raise RuntimeError('Disposable boot-memory container already exists')
+ldd=subprocess.check_output(['/usr/bin/ldd','/bin/sleep'],text=True,timeout=15)
+paths={'/bin/sleep'}|set(re.findall(r'(?:^|\s)(/[^\s()]+)',ldd))
+if len(paths)>16 or any(len(path)>512 for path in paths):raise RuntimeError('Invalid bounded ELF runtime')
+archive=io.BytesIO();directories=set();total=0
+with tarfile.open(fileobj=archive,mode='w') as output:
+    for path in sorted(paths):
+        source=Path(path);size=source.stat().st_size
+        if not source.is_file() or not 0<size<=8*1024**2:raise RuntimeError('Invalid runtime file')
+        total+=size
+        if total>16*1024**2:raise RuntimeError('Private runtime exceeds memory bound')
+        for parent in reversed(source.parents):
+            target=str(parent).lstrip('/')
+            if target and target not in directories:
+                node=tarfile.TarInfo(target);node.type=tarfile.DIRTYPE;node.mode=0o755
+                output.addfile(node);directories.add(target)
+        node=tarfile.TarInfo(path.lstrip('/'));node.size=size;node.mode=0o755
+        with source.open('rb') as stream:output.addfile(node,stream)
+subprocess.run(['docker','import','-',image],input=archive.getvalue(),stdout=subprocess.DEVNULL,check=True,timeout=60)
+identifier=subprocess.check_output(['docker','create','--name',name,'--restart','always','--memory','4g',
+    '--memory-swap','4g','--network','none',image,'/bin/sleep','86400'],text=True,timeout=30).strip()
+if not re.fullmatch('[a-f0-9]{64}',identifier):raise RuntimeError('Invalid private container identity')
+subprocess.run(['docker','start',identifier],stdout=subprocess.DEVNULL,check=True,timeout=30)
+time.sleep(11)
+subprocess.run(['docker','stop','--time','5',identifier],stdout=subprocess.DEVNULL,check=True,timeout=15)
+value=json.loads(subprocess.check_output(['docker','inspect',identifier],text=True,timeout=15))[0]
+if (value['State']['Running'] is not False or value['HostConfig']['Memory']!=4*1024**3 or
+    value['HostConfig']['MemorySwap']!=4*1024**3 or value['HostConfig']['RestartPolicy']['Name']!='always'):
+    raise RuntimeError('Stopped test container does not provide the boot commitment')
+print('prepared')
+"""
+
+
+GUEST_BOOT_MEMORY_OBSERVE=r"""
+import json,os,stat,subprocess
+fd=os.open('/run/titan-boot-memory.json',os.O_RDONLY|os.O_NOFOLLOW)
+with os.fdopen(fd,'rb') as stream:
+    info=os.fstat(stream.fileno())
+    if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or info.st_size>16384:
+        raise RuntimeError('Invalid boot-memory report')
+    report=json.loads(stream.read(16385))
+fields=('ok','reason','total_bytes','reserve_bytes','required_bytes')
+value={'report':{key:report[key] for key in fields},'services':{}}
+for unit in ('docker.service','libvirtd.service'):
+    text=subprocess.check_output(['systemctl','show',unit,'--property=ActiveState,Result,ExecStartPre'],text=True,timeout=15)
+    rows=dict(line.split('=',1) for line in text.splitlines() if '=' in line)
+    pre=rows.get('ExecStartPre','')
+    value['services'][unit]={'active':rows.get('ActiveState')=='active','failed':rows.get('Result')=='exit-code',
+        'guard_failed':'/usr/share/titan/boot-memory-guard.py' in pre and 'status=1' in pre}
+print(json.dumps(value,separators=(',',':')))
+"""
+
+
+BOOT_MEMORY_FIELDS={'local_test_image_created','stopped_always_container_persisted','reduced_physical_ram_verified',
+    'docker_start_blocked','libvirt_start_blocked','insufficient_memory_report_verified','web_status_usable',
+    'file_manager_usable','physical_ram_restored_verified','daemon_autostarts_recovered','test_container_image_removed'}
+
+
+def boot_memory_lifecycle(agent, client, restart, slot, version, previous_boot):
+    """Real 8 -> 3 -> 8 GiB cold boots; never simulate the guest's MemTotal."""
+    initial=client.request('/api/status',timeout=8)
+    if initial.get('demo') is not False or not 7*1024**3<=initial.get('memory_total',0)<=8*1024**3:
+        raise RuntimeError('Boot-memory lifecycle must begin in the real eight-GiB guest')
+    if agent.python(GUEST_BOOT_MEMORY_SETUP,timeout=120).strip()!='prepared':
+        raise RuntimeError('Private boot-memory test container was not created')
+    restart(3072)
+    reduced,status=agent.ready(slot,version,previous_boot,require_health=False)
+    deadline=time.monotonic()+90
+    while True:
+        try:report=blocked_boot_observation(json.loads(agent.python(GUEST_BOOT_MEMORY_OBSERVE,timeout=45)))
+        except (OSError,ValueError,RuntimeError):report=None
+        if report is not None:break
+        if time.monotonic()>=deadline:
+            raise RuntimeError('Actual reduced-RAM boot did not block both daemons through the RAM guard')
+        time.sleep(2)
+    session=client.request('/api/session',timeout=8)
+    status=client.request('/api/status',timeout=8)
+    listing=client.request('/api/files?share=%40system&path=var%2Fsrv%2Ftitan%2Fshares%2Fab-persist',timeout=8)
+    if (session.get('user',{}).get('role')!='admin' or status.get('demo') is not False or
+        status.get('memory_total')!=report['total_bytes'] or not isinstance(listing.get('entries'),list) or
+        not any(item.get('name')=='rollback-sentinel' for item in listing['entries'])):
+        raise RuntimeError('Web session, real RAM metrics or file manager failed while daemon starts were blocked')
+    restart(8192)
+    restored,status=agent.ready(slot,version,reduced)
+    current=client.request('/api/status',timeout=8)
+    if current.get('demo') is not False or not 7*1024**3<=current.get('memory_total',0)<=8*1024**3:
+        raise RuntimeError('Disposable guest physical RAM was not restored')
+    components=client.request('/api/components',timeout=45).get('components',{})
+    if any(components.get(name,{}).get('daemon') is not True for name in ('docker','vms')):
+        raise RuntimeError('Docker/libvirt did not recover after physical RAM restoration')
+    recovered=agent.python("import json,subprocess;v=json.loads(subprocess.check_output(['docker','inspect','titan-ci-boot-memory'],text=True))[0];assert v['State']['Running'] is True and v['HostConfig']['Memory']==4*1024**3 and v['HostConfig']['RestartPolicy']['Name']=='always';print('recovered')",timeout=30)
+    if recovered.strip()!='recovered':raise RuntimeError('Actual daemon autostart did not recover')
+    agent.execute(['/usr/bin/docker','rm','--force','titan-ci-boot-memory'],timeout=30)
+    agent.execute(['/usr/bin/docker','image','rm','titan-ci-boot-memory:local'],timeout=30)
+    cleanup=agent.python("import subprocess;assert not subprocess.check_output(['docker','ps','-aq','--filter','name=^/titan-ci-boot-memory$'],text=True).strip();assert not subprocess.check_output(['docker','images','-q','titan-ci-boot-memory:local'],text=True).strip();print('clean')",timeout=30)
+    if cleanup.strip()!='clean':raise RuntimeError('Private boot-memory test artifacts were not removed')
+    return restored,{key:True for key in sorted(BOOT_MEMORY_FIELDS)}
+
+
+def blocked_boot_observation(value):
+    if not isinstance(value,dict):return None
+    report=value.get('report')
+    if (not isinstance(report,dict) or set(report)!={'ok','reason','total_bytes','reserve_bytes','required_bytes'} or
+        report['ok'] is not False or report['reason']!='insufficient_memory' or
+        any(type(report[key]) is not int for key in ('total_bytes','reserve_bytes','required_bytes')) or
+        not 2*1024**3<report['total_bytes']<=3*1024**3 or not 0<report['reserve_bytes']<report['total_bytes'] or
+        report['required_bytes']!=4*1024**3+report['reserve_bytes'] or
+        not isinstance(value.get('services'),dict)):return None
+    for unit in ('docker.service','libvirtd.service'):
+        service=value['services'].get(unit)
+        if (not isinstance(service,dict) or set(service)!={'active','failed','guard_failed'} or
+                service['active'] is not False or service['failed'] is not True or service['guard_failed'] is not True):return None
+    return report
 
 
 def qmp(path, method, arguments=None):
@@ -125,7 +268,7 @@ def main():
     assert os.environ.get('GITHUB_ACTIONS')=='true' and args.confirm_disposable_guest
     image=args.image.resolve();bundle=args.bundle.resolve()
     assert image.is_file() and bundle.is_file()
-    original=sha(image);directory=image.parent
+    original=sha(image);original_bundle=sha(bundle);directory=image.parent
     baseline_image=args.baseline_image.resolve() if args.baseline_image else image
     baseline_hash=sha(baseline_image)
     identity=json.loads((directory/'ab-input/image-info.json').read_text())
@@ -151,17 +294,15 @@ def main():
             command(['guestfish','-a',str(work/'test.qcow2'),'-m','/dev/sda3','upload',str(work/'factory-probe'),'/etc/titan-ci-factory'])
             shutil.copyfile('/usr/share/OVMF/OVMF_VARS_4M.fd',work/'vars.fd')
             accel='kvm' if os.access('/dev/kvm',os.R_OK|os.W_OK) else 'tcg'
-            with (work/'console.log').open('wb') as console:
-                proc=subprocess.Popen(['qemu-system-x86_64','-accel',accel,'-machine','q35','-cpu','host' if accel=='kvm' else 'max',
-                    '-m','3072','-smp','2','-display','none','-monitor','none','-serial','stdio',
-                    '-qmp','unix:'+str(work/'qmp.sock')+',server=on,wait=off',
-                    '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
-                    '-drive','if=pflash,format=raw,file='+str(work/'vars.fd'),
-                    '-drive','id=titan-system,if=virtio,format=qcow2,file='+str(work/'test.qcow2'),
-                    '-device','virtio-serial-pci','-chardev','socket,path='+str(work/'qga.sock')+',server=on,wait=off,id=qga',
-                    '-device','virtserialport,chardev=qga,name=org.qemu.guest_agent.0',
-                    '-netdev','user,id=net0,hostfwd=tcp:127.0.0.1:15000-:5000,hostfwd=tcp:127.0.0.1:15445-:445',
-                    '-device','virtio-net-pci,netdev=net0'],stdout=console,stderr=console)
+            proc=launch_guest(work,accel)
+            def restart(memory_mb):
+                nonlocal proc
+                try:agent.execute(['/usr/bin/systemctl','poweroff','--no-block'],timeout=20)
+                except (OSError,RuntimeError):pass
+                # A cold restart only follows a clean, fully completed shutdown.
+                # Killing a guest here would hide metadata persistence failures.
+                proc.wait(timeout=90)
+                proc=launch_guest(work,accel,memory_mb)
             boot,status=agent.ready('A',baseline);passed('baseline_boot_health')
             if args.baseline_image:passed('published_release_baseline')
             else:passed('fresh_install_bootstrap_baseline')
@@ -231,6 +372,10 @@ print('prepared')
             assert status['rollback_available'] and status['rollback_options'][0]['slot']=='A'
             agent.python("from pathlib import Path;assert not Path('/etc/titan-ci-factory').exists()")
             passed('update_boot_and_preserved_accounts_acls_data')
+            boot,report['boot_memory_guard']=boot_memory_lifecycle(agent,client,restart,'B',identity['version'],boot)
+            status=json.loads(agent.python("import sys,json;sys.path.insert(0,'/usr/lib/titan');from titan.debian_updates import system_status;print(json.dumps(system_status()))"))
+            assert agent.python(snapshot_code)==snapshot
+            passed('boot_memory_guard_reduced_ram_and_recovery')
             # Existing browser session and API are used to select the real old slot.
             client.request('/api/session')
             old=status['rollback_options'][0]
@@ -289,7 +434,8 @@ finally:subprocess.run(['umount','/mnt'],check=True)
                     print((work/'console.log').read_text(errors='replace')[-20000:],flush=True)
             report['baseline_image_unchanged']=sha(baseline_image)==baseline_hash
             report['raw_image_unchanged']=sha(image)==original and report['baseline_image_unchanged']
-            report['ok']=report['ok'] and report['raw_image_unchanged']
+            report['bundle_unchanged']=sha(bundle)==original_bundle
+            report['ok']=report['ok'] and report['raw_image_unchanged'] and report['bundle_unchanged']
             (directory/'ab-test.json').write_text(json.dumps(report,indent=2)+'\n')
     assert report['ok']
 

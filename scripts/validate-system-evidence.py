@@ -24,9 +24,12 @@ STORAGE_COMPONENTS={'ext4_tools','xfs_tools','zfs_module_loaded','zfs_module_mat
 OS_ROOT_PROTECTION={'pid1_mounts_verified','root_readonly','root_has_no_writable_alias',
     'usr_slot_readonly','dpkg_slot_readonly','apt_slot_readonly','etc_overlay_on_data_writable',
     'data_partition_writable','persistent_state_mounts_writable','tmpfs_writable'}
+BOOT_MEMORY_GUARD={'local_test_image_created','stopped_always_container_persisted','reduced_physical_ram_verified',
+    'docker_start_blocked','libvirt_start_blocked','insufficient_memory_report_verified','web_status_usable',
+    'file_manager_usable','physical_ram_restored_verified','daemon_autostarts_recovered','test_container_image_removed'}
 AB={'baseline_boot_health','proxmox_style_data_growth','signed_update_staged_without_reboot',
     'update_boot_and_preserved_accounts_acls_data','manual_rollback_and_preserved_accounts_acls_data',
-    'failed_candidate_fallback_after_reset','factory_defaults_follow_selected_slot'}
+    'failed_candidate_fallback_after_reset','factory_defaults_follow_selected_slot','boot_memory_guard_reduced_ram_and_recovery'}
 
 
 def validate(directory):
@@ -37,6 +40,8 @@ def validate(directory):
     for result in (runtime,ab):
         if result.get('ok') is not True or result.get('raw_image_unchanged') is not True:
             raise ValueError('Failed checks or modified distributable image')
+    if ab.get('bundle_unchanged') is not True:
+        raise ValueError('Distributable system bundle was modified or its integrity was not verified')
     checks=runtime.get('checks')
     if not isinstance(checks,list):raise ValueError('Missing runtime checks')
     names=[x['name'] for x in checks]
@@ -85,6 +90,10 @@ def validate(directory):
         raise ValueError('Installed storage tools, running-kernel ZFS module or bounded ARC were not verified')
     if not isinstance(ab.get('checks'),list) or not AB.issubset(ab['checks']):
         raise ValueError('Required update/rollback check missing')
+    guard=ab.get('boot_memory_guard')
+    if (not isinstance(guard,dict) or set(guard)!=BOOT_MEMORY_GUARD or
+            any(value is not True for value in guard.values())):
+        raise ValueError('Real reduced-RAM boot, usable management and restored daemon autostarts were not completely verified')
     system_only = os.environ.get('TITAN_UPDATE_KIND') == 'system'
     initial_release = os.environ.get('TITAN_INITIAL_RELEASE') == 'true'
     if initial_release and (system_only or os.environ.get('TITAN_DRAFT_RELEASE') != 'true'):

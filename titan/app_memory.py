@@ -22,7 +22,7 @@ def vm_overhead(assigned):
     return max(256 * MIB, assigned // 20)
 
 
-def vm_memory_reservations(run=None, tool_present=None):
+def vm_memory_reservations(run=None, tool_present=None, autostart=False):
     """Future RAM of all active libvirt guests, including paused foreign VMs.
 
     No virsh means this host cannot have a libvirt guest managed by Titan. An
@@ -35,7 +35,7 @@ def vm_memory_reservations(run=None, tool_present=None):
         from .host import run
     base = ['virsh', '--connect', 'qemu:///system']
     try:
-        raw = run([*base, 'list', '--uuid'], timeout=15)
+        raw = run([*base, 'list', *(['--all', '--autostart'] if autostart else []), '--uuid'], timeout=15)
         identifiers = [line.strip().lower() for line in raw.splitlines() if line.strip()]
         if len(identifiers) > 256 or any(not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', identifier) for identifier in identifiers):
             raise ValueError('Ungültige aktive VM-Liste.')
@@ -64,7 +64,13 @@ def vm_memory_reservations(run=None, tool_present=None):
             result.append({'id': identifier, 'assigned_bytes': assigned, 'overhead_bytes': overhead, 'limit_bytes': assigned + overhead})
         return result
     except (Error, OSError, ValueError, TypeError, AttributeError, ET.ParseError):
-        raise Error('Der RAM-Bedarf laufender virtueller Maschinen ist nicht sicher ermittelbar. Neue Dienste wurden angehalten; libvirt-Verbindung und VM-Status prüfen.', 503) from None
+        state = 'automatisch startender' if autostart else 'laufender'
+        raise Error('Der RAM-Bedarf ' + state + ' virtueller Maschinen ist nicht sicher ermittelbar. Neue Dienste wurden angehalten; libvirt-Verbindung und VM-Status prüfen.', 503) from None
+
+
+def vm_boot_reservations(run=None, tool_present=None):
+    """Every libvirt autostart guest, including shut-off guests, at full RAM."""
+    return vm_memory_reservations(run, tool_present, autostart=True)
 
 
 def _vm_limit_total(vms):
@@ -135,8 +141,11 @@ def package_memory_plan(app, options=None):
         ceiling = limit_bytes(service.get('memory', recipe['memory']))
         if ceiling is None:
             raise Error('Die App-Vorlage enthält kein gültiges RAM-Limit.', 503)
+        completed = bool(stack and any(isinstance(other.get('depends_on'),dict) and
+            other['depends_on'].get(name,{}).get('condition') == 'service_completed_successfully' for other in raw.values()))
         members.append({'id': app if not stack or name == stack['primary'] else app + '-' + name.lower(),
-            'service': name, 'limit_bytes': ceiling, 'one_shot': name == 'office-init'})
+            'service': name, 'limit_bytes': ceiling, 'one_shot': name == 'office-init',
+            'restart': 'no' if completed else 'unless-stopped'})
     # The seed container completes before Office starts, so count the larger
     # phase once. Summing both would invent simultaneous resource consumption.
     regular = sum(item['limit_bytes'] for item in members if not item['one_shot'])
@@ -160,6 +169,91 @@ def _container_rows(containers):
 def _active(container):
     state = container.get('State', {})
     return isinstance(state, dict) and (state.get('Running') or state.get('Status') in ('running', 'restarting', 'paused'))
+
+
+def check_boot_memory(containers=None, vms=None, telemetry=None, proc='/proc', container_overrides=None, vm_override=None, raise_on_denial=True):
+    """Validate the future daemon/host boot separately from current free RAM.
+
+    Callers hold app_memory_lock until the proposed start/policy/RAM mutation
+    finishes. Candidate containers replace one immutable ID or, for newly
+    created definitions, one exact Docker name. No source/customer controls
+    these overrides directly. on-failure is counted conservatively because
+    daemon restore after an unclean exit differs across Docker versions.
+    A read-only preview may return a capacity denial; invalid metadata still
+    raises, so the preview never presents an unknown budget as an ordinary fit.
+    """
+    if type(raise_on_denial) is not bool:
+        raise Error('Ungültiger Autostart-Prüfmodus.', 503)
+    snapshot = telemetry if isinstance(telemetry, dict) else memory_snapshot(proc)
+    total = snapshot.get('memory_total')
+    if type(total) is not int or total <= 0:
+        raise Error('Gültige RAM-Kapazität fehlt. Autostart-Budget konnte nicht geprüft werden.', 503)
+    rows = _container_rows(containers)
+    if any(not isinstance(row,dict) or not isinstance(row.get('HostConfig'),dict) or not isinstance(row.get('State'),dict) for row in rows):
+        raise Error('Docker-Autostart-Inventar ist nicht sicher ermittelbar.',503)
+    overrides = container_overrides or []
+    if not isinstance(overrides, list):
+        raise Error('Ungültiges Docker-Autostart-Budget.', 503)
+    seen = set()
+    for candidate in overrides:
+        if not isinstance(candidate, dict) or set(candidate) != {'id','name','limit_bytes','restart','active'}:
+            raise Error('Ungültiger Docker-Autostart-Kandidat.', 503)
+        identifier, name = candidate['id'], candidate['name']
+        if (identifier is not None and (not isinstance(identifier,str) or not re.fullmatch(r'[a-f0-9]{64}',identifier))) or not isinstance(name,str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,190}',name):
+            raise Error('Docker-Autostart-Kandidat ist nicht eindeutig.', 503)
+        key = identifier or name
+        if key in seen or type(candidate['active']) is not bool or candidate['restart'] not in ('no','always','unless-stopped','on-failure') or limit_bytes(candidate['limit_bytes']) is None:
+            raise Error('Ungültiges Docker-Autostart-Budget.', 503)
+        seen.add(key)
+        matches = [row for row in rows if row.get('Id') == identifier] if identifier else [row for row in rows if str(row.get('Name','')).lstrip('/') == name]
+        if len(matches) > 1 or identifier is not None and len(matches) != 1:
+            raise Error('Docker-Autostart-Kandidat wurde verändert. Ansicht aktualisieren.', 409)
+        rows = [row for row in rows if row not in matches]
+        rows.append({'Id':identifier,'Name':'/'+name,'State':{'Running':candidate['active']},
+                     'HostConfig':{'Memory':candidate['limit_bytes'],'RestartPolicy':{'Name':candidate['restart']}}})
+    container_limit = 0
+    for row in rows:
+        policy = (row.get('HostConfig') or {}).get('RestartPolicy')
+        if not isinstance(policy,dict) or policy.get('Name') not in ('no','always','unless-stopped','on-failure',''):
+            raise Error('Docker-Neustartregel ist nicht sicher ermittelbar. Autostart-Budget bleibt gesperrt.',503)
+        if policy['Name'] in ('always','on-failure') or policy['Name'] == 'unless-stopped' and _active(row):
+            ceiling = limit_bytes((row.get('HostConfig') or {}).get('Memory'))
+            if ceiling is None:
+                raise Error('Ein automatisch startender Container hat keine endliche RAM-Grenze. Grenze setzen oder Autostart deaktivieren.',409)
+            container_limit += ceiling
+    guests = list(vm_boot_reservations() if vms is None else vms)
+    _vm_limit_total(guests)
+    if vm_override is not None:
+        if not isinstance(vm_override,dict) or set(vm_override) != {'id','assigned_bytes','autostart'} or not isinstance(vm_override['id'],str) or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',vm_override['id']) or type(vm_override['assigned_bytes']) is not int or not 0 < vm_override['assigned_bytes'] <= 2**63-1 or type(vm_override['autostart']) is not bool:
+            raise Error('Ungültiger VM-Autostart-Kandidat.',503)
+        guests = [guest for guest in guests if guest['id'] != vm_override['id']]
+        if vm_override['autostart']:
+            assigned = vm_override['assigned_bytes']; overhead = vm_overhead(assigned)
+            guests.append({'id':vm_override['id'],'assigned_bytes':assigned,'overhead_bytes':overhead,'limit_bytes':assigned+overhead})
+    vm_limit = _vm_limit_total(guests)
+    reserve = system_reserve(total)
+    result = {'allowed':container_limit+vm_limit+reserve<=total,'total_bytes':total,
+              'boot_container_limit_bytes':container_limit,'boot_vm_limit_bytes':vm_limit,'system_reserve_bytes':reserve,
+              'semantics':'Autostart-Obergrenzen beim nächsten System-/Docker-Start; keine aktuelle RAM-Belegung.'}
+    if not result['allowed']:
+        gib = lambda value:f'{value/GIB:.1f}'.replace('.',',')
+        result['reason'] = 'Das Autostart-Budget überschreitet den RAM dieses NAS: Docker '+gib(container_limit)+' GiB, VMs einschließlich Overhead '+gib(vm_limit)+' GiB und NAS-Reserve '+gib(reserve)+' GiB bei '+gib(total)+' GiB RAM. Autostart deaktivieren oder RAM-Grenzen verkleinern; Swap zählt nicht als RAM-Kapazität. Es wurden keine zusätzlichen Dienste gestartet.'
+        if raise_on_denial:
+            raise Error(result['reason'],409)
+    return result
+
+
+def definition_boot_overrides(definition, active=True):
+    result = []
+    for service in definition.get('services',{}).values():
+        result.append({'id':None,'name':service['container_name'],'limit_bytes':limit_bytes(service.get('mem_limit')),
+                       'restart':service.get('restart','no'),'active':active})
+    return result
+
+
+def plan_boot_overrides(plan):
+    return [{'id':None,'name':'titan-'+item['id'],'limit_bytes':item['limit_bytes'],
+             'restart':item['restart'],'active':True} for item in plan['services']]
 
 
 def _remaining(definition, containers):
@@ -227,17 +321,23 @@ def check_install_memory(app, options=None, containers=None, telemetry=None, pro
     snapshot = telemetry if isinstance(telemetry, dict) else memory_snapshot(proc)
     vms = vm_memory_reservations() if vms is None else vms
     result = memory_preflight(snapshot, plan['startup_limit_bytes'], containers, installation=True, vms=vms)
-    return {**_enforce(result, plan['office_enabled']), 'plan': plan}
+    checked = _enforce(result, plan['office_enabled'])
+    boot = check_boot_memory(containers=containers,telemetry=snapshot,
+        container_overrides=plan_boot_overrides(plan))
+    return {**checked, 'plan': plan, 'boot_budget':boot}
 
 
-def check_start_memory(app, options, definition, containers=None, telemetry=None, proc='/proc', installation=False, vms=None):
+def check_start_memory(app, options, definition, containers=None, telemetry=None, proc='/proc', installation=False, vms=None, boot_active=True):
     snapshot = telemetry if isinstance(telemetry, dict) else memory_snapshot(proc)
     if telemetry is not None and not isinstance(telemetry, dict) and hasattr(telemetry, 'sample'):
         recent = telemetry.sample()
         snapshot['memory_oom_kills_delta'] = recent.get('memory_oom_kills_delta', 0)
     vms = vm_memory_reservations() if vms is None else vms
     result = memory_preflight(snapshot, _remaining(definition, containers), containers, installation, vms=vms)
-    return _enforce(result, any(key.endswith('-eurooffice') for key in definition.get('services', {})))
+    checked = _enforce(result, any(key.endswith('-eurooffice') for key in definition.get('services', {})))
+    checked['boot_budget'] = check_boot_memory(containers=containers,telemetry=snapshot,
+        container_overrides=definition_boot_overrides(definition,active=boot_active))
+    return checked
 
 
 def check_vm_start_memory(requested_bytes, containers=None, vms=None, telemetry=None, proc='/proc', vm=None):
@@ -251,7 +351,7 @@ def check_vm_start_memory(requested_bytes, containers=None, vms=None, telemetry=
     return _enforce(result)
 
 
-def check_container_start_memory(memory_limit, containers=None, vms=None, telemetry=None, proc='/proc', container=None, installation=False):
+def check_container_start_memory(memory_limit, containers=None, vms=None, telemetry=None, proc='/proc', container=None, installation=False, name=None, restart=None):
     """Budget manual containers by finite limits and immutable Docker IDs.
 
     An active target has already contributed its limit to the running budget.
@@ -277,4 +377,12 @@ def check_container_start_memory(memory_limit, containers=None, vms=None, teleme
     snapshot = telemetry if isinstance(telemetry, dict) else memory_snapshot(proc)
     vms = vm_memory_reservations() if vms is None else vms
     result = memory_preflight(snapshot, required, rows, installation, vms=vms)
-    return _enforce(result)
+    checked = _enforce(result)
+    overrides = []
+    if container is not None:
+        overrides.append({'id':container,'name':str(target.get('Name','')).lstrip('/'),
+                          'limit_bytes':ceiling,'restart':(target.get('HostConfig') or {}).get('RestartPolicy',{}).get('Name'), 'active':True})
+    elif name is not None or restart is not None:
+        overrides.append({'id':None,'name':name,'limit_bytes':ceiling,'restart':restart,'active':True})
+    checked['boot_budget'] = check_boot_memory(containers=rows,telemetry=snapshot,container_overrides=overrides)
+    return checked

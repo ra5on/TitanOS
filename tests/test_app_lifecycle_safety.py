@@ -190,6 +190,25 @@ class AppLifecycleSafetyTests(unittest.TestCase):
         for options in ({'password':'secret'}, {'resource_profile':'invalid'}, {'office_mode':'invalid'}):
             with self.assertRaises(Error): self.host.op_app_memory_preflight('titan-nextcloud-office', options)
 
+    def test_preflight_returns_boot_only_denial_without_mutating_or_hiding_invalid_inventory(self):
+        from titan.app_memory import GIB
+        from test_boot_memory_budget import row
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*'))
+        with patch('titan.app_memory.memory_snapshot', return_value={'memory_total':8*GIB,'memory_available':7*GIB}), \
+             patch('titan.app_memory.vm_memory_reservations', return_value=[]), \
+             patch('titan.app_memory.vm_boot_reservations', return_value=[]), \
+             patch.object(self.host, '_app_inspected_containers', return_value=[row(memory=7*GIB)]) as inventory:
+            result = self.host.op_app_memory_preflight('titan-adguard')
+            self.assertFalse(result['allowed'])
+            self.assertTrue(result['limits_fit_capacity'])
+            self.assertFalse(result['boot_budget']['allowed'])
+            self.assertIn('Autostart-Budget',result['reason'])
+            self.assertEqual(result['boot_budget']['boot_container_limit_bytes'],7*GIB+result['plan']['steady_limit_bytes'])
+            inventory.return_value = [{**row(),'HostConfig':{'Memory':GIB,'RestartPolicy':{'Name':'unknown'}}}]
+            with self.assertRaises(Error): self.host.op_app_memory_preflight('titan-adguard')
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))
+        self.assertFalse(any(call[:2] in (['docker','pull'],['docker','create'],['docker','start']) for call in self.calls))
+
     def test_install_denied_before_first_config_write_or_image_pull(self):
         with patch('titan.app_memory.check_install_memory', side_effect=Error('RAM reserve',409)):
             with self.assertRaisesRegex(Error, 'RAM reserve'):

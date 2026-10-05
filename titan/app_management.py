@@ -343,7 +343,8 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
 
     def op_app_memory_preflight(self, app, options=None):
         from .app_packages import PACKAGES, RESOURCE_PROFILES
-        from .app_memory import memory_snapshot, memory_preflight, package_memory_plan, vm_memory_reservations
+        from .app_memory import (memory_snapshot, memory_preflight, package_memory_plan, vm_memory_reservations,
+                                check_boot_memory, plan_boot_overrides, vm_boot_reservations)
         if app not in APPS:
             raise Error("App-Vorlage nicht gefunden.", 404)
         options = {} if options is None else options
@@ -363,9 +364,13 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         elif "office_mode" in options:
             raise Error("Dokumentbearbeitung ist nur für Nextcloud verfügbar.")
         plan = package_memory_plan(app, values)
-        result = memory_preflight(memory_snapshot(), plan["startup_limit_bytes"],
-            self._app_inspected_containers(), installation=True, vms=vm_memory_reservations(_run))
-        return {**result, "plan": plan}
+        snapshot = memory_snapshot(); rows = self._app_inspected_containers()
+        result = memory_preflight(snapshot, plan["startup_limit_bytes"],
+            rows, installation=True, vms=vm_memory_reservations(_run))
+        boot = check_boot_memory(rows,vms=vm_boot_reservations(_run),telemetry=snapshot,
+                                 container_overrides=plan_boot_overrides(plan), raise_on_denial=False)
+        return {**result, "plan": plan,"boot_budget":boot,
+                **({"allowed":False, "reason":boot["reason"]} if not boot["allowed"] else {})}
 
     def _app_container(self, app, record, rows=None, options=None, service_key=None):
         service_key = service_key or app
@@ -530,7 +535,8 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         if arguments and arguments[0] in ("up", "restart", "create"):
             from .app_memory import check_start_memory
             check_start_memory(app, self._app_options(app), definition,
-                self._app_inspected_containers(rows), telemetry=self.telemetry)
+                self._app_inspected_containers(rows), telemetry=self.telemetry,
+                boot_active=arguments[0] != 'create')
         bindings = definition["services"][app]["volumes"]
         if any(isinstance(binding, str) for binding in bindings):
             from .host import pwd
@@ -550,6 +556,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                 # Image pulls may take minutes. Recheck the pinned filesystem
                 # before labeling bind data or starting newly created services.
                 self.app_storage_ready(app)
+                self.app_devices_ready(record)
                 self._app_private_config_label(app, record)
                 if command == "create":
                     return created
@@ -557,6 +564,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                 check_start_memory(app, self._app_options(app), definition,
                     self._app_inspected_containers(), telemetry=self.telemetry)
                 self.app_storage_ready(app)
+                self.app_devices_ready(record)
                 if APPS[app].get('stack') and command == 'up':
                     return invoke('up', '-d', '--no-recreate', '--wait', '--wait-timeout', '300')
                 return invoke("restart" if command == "restart" else "start")
@@ -764,6 +772,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
             atomic_json(directory/'options.json',values);atomic_json(path,proposed);self._app_patch_record(app,updates)
             try:
                 _run([*args,'config','--quiet']);_run([*args,'create','--force-recreate'],timeout=600)
+                self.app_devices_ready(record)
             except Error:
                 atomic_json(directory/'options.json',old_options);atomic_json(path,old_definition);self._app_patch_record(app,record,replace=True)
                 try:_run([*args,'create','--force-recreate'],timeout=600)
@@ -790,6 +799,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         try:
             _run([*args,'config','--quiet'])
             _run([*args,'create','--force-recreate'],timeout=600)
+            self.app_devices_ready({'hardware':chosen})
         except Error as exc:
             atomic_json(path,json.loads(old));self._app_patch_record(app,record,replace=True)
             try:_run([*args,'create','--force-recreate'],timeout=600)

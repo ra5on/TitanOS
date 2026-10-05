@@ -141,6 +141,19 @@ for task_service in smbd docker; do
     mkdir -p "/etc/systemd/system/$task_service.service.d"
     printf '[Unit]\nRequires=titan-firstboot.service\nAfter=titan-firstboot.service\n' > "/etc/systemd/system/$task_service.service.d/titan.conf"
 done
+# Inspect persisted autostart settings before either daemon can launch workloads.
+# The guard reads offline metadata and never activates a Docker/libvirt socket.
+# Web, agent and file services remain independent of these optional daemons.
+for task_service in docker libvirtd; do
+    mkdir -p "/usr/lib/systemd/system/$task_service.service.d"
+    cat > "/usr/lib/systemd/system/$task_service.service.d/titan-memory.conf" <<'MEMORY'
+[Unit]
+Requires=titan-firstboot.service
+After=titan-firstboot.service
+[Service]
+ExecStartPre=/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all
+MEMORY
+done
 systemctl enable firewalld.service smbd.service docker.service libvirtd.socket virtlogd.socket virtlockd.socket \
     titan-debian-grow.service titan-service-containment.service titan-firstboot.service titan-runtime.service titan-agent.service titan-web.service titan-proxy.service
 # Visible diagnostics and IP address in Proxmox's console, without a shared password.

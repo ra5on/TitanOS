@@ -224,11 +224,14 @@ class VMMixin(VMExtensionsMixin):
 
     @staticmethod
     def vm_memory_mb(root):
+        return VMMixin.vm_memory_bytes(root) // 1024**2
+
+    @staticmethod
+    def vm_memory_bytes(root):
         node = root.find("memory")
         if node is None:
             raise Error("VM-Arbeitsspeicher fehlt.")
-        # libvirt accepts both SI and binary units. Avoid float rounding for
-        # large byte counts and return the whole MiB value used by the UI.
+        # Keep exact bytes for admission; the display can round to whole MiB.
         factors = {"b": 1, "bytes": 1, "KB": 1000, "kilobytes": 1000,
                    "k": 1024, "KiB": 1024, "kibibytes": 1024,
                    "MB": 1000**2, "megabytes": 1000**2,
@@ -241,10 +244,10 @@ class VMMixin(VMExtensionsMixin):
         if multiplier is None:
             raise Error("VM-Speichereinheit wird nicht unterstützt.")
         try:
-            memory = int(node.text) * multiplier // 1024**2
+            memory = int(node.text) * multiplier
         except (ValueError, TypeError):
             raise Error("VM-Arbeitsspeicher ist ungültig.", 409) from None
-        if memory < 1:
+        if not 1024**2 <= memory <= 2**63 - 1:
             raise Error("VM-Arbeitsspeicher ist ungültig.", 409)
         return memory
 
@@ -272,19 +275,31 @@ class VMMixin(VMExtensionsMixin):
                 temporary.unlink(missing_ok=True)
 
     def redefine_vm(self, record, root):
-        path = self.directory / ("vm-" + record["name"] + ".xml")
-        self.write_vm_xml(path, ET.tostring(root, encoding="unicode"))
-        try:
-            self.command(["virsh", "define", str(path)])
-        except Exception:
+        with self.app_memory_lock:
+            self._vm_boot_memory_update(record, root)
+            path = self.directory / ("vm-" + record["name"] + ".xml")
+            self.write_vm_xml(path, ET.tostring(root, encoding="unicode"))
             try:
-                self.write_vm_xml(path, record["xml"])
                 self.command(["virsh", "define", str(path)])
             except Exception:
-                error = Error("VM-Änderung fehlgeschlagen; die bisherige Definition konnte nicht erneut bestätigt werden. Laufwerke bleiben erhalten.", 500)
-                error.retain_vm_files = True
-                raise error from None
-            raise
+                try:
+                    self.write_vm_xml(path, record["xml"])
+                    self.command(["virsh", "define", str(path)])
+                except Exception:
+                    error = Error("VM-Änderung fehlgeschlagen; die bisherige Definition konnte nicht erneut bestätigt werden. Laufwerke bleiben erhalten.", 500)
+                    error.retain_vm_files = True
+                    raise error from None
+                raise
+
+    def _vm_boot_memory_update(self, record, root):
+        assigned = self.vm_memory_bytes(root)
+        if assigned == self.vm_memory_bytes(ET.fromstring(record["xml"])):
+            return
+        from .app_memory import check_boot_memory, vm_boot_reservations
+        future = vm_boot_reservations(self.command, tool_present=True)
+        if any(item.get("id") == record["id"] for item in future):
+            check_boot_memory(self._app_inspected_containers(), vms=future, telemetry=self.telemetry,
+                vm_override={"id": record["id"], "assigned_bytes": assigned, "autostart": True})
 
     def op_vm_media(self, vm, iso=None):
         record = self.managed_vm(vm)

@@ -536,6 +536,12 @@ class Host(IdentityHostMixin, StorageServicesMixin, OfficeHostMixin, DockerEngin
                 "source_retained": bool(disk_image)}
 
     def op_vm_action(self, vm, action):
+        # Runtime starts and future boot commitments share Docker's admission
+        # lock through the actual libvirt mutation, not just through a sample.
+        with self.app_memory_lock if action in ("start", "resume", "autostart") else contextlib.nullcontext():
+            return self._vm_action(vm, action)
+
+    def _vm_action(self, vm, action):
         if action == "remove":
             return self.op_vm_remove(vm)
         if action == "start":
@@ -543,11 +549,18 @@ class Host(IdentityHostMixin, StorageServicesMixin, OfficeHostMixin, DockerEngin
             if not status["available"]:
                 raise Error(status.get("error", "KVM/libvirt ist nicht verfügbar."), 503)
         vm = self.vm_id(vm, check_cpu=action == "start")
-        if action in ("start", "resume"):
-            from .app_memory import check_vm_start_memory, vm_memory_reservations
+        if action in ("start", "resume", "autostart"):
+            from .app_memory import check_boot_memory, check_vm_start_memory, vm_boot_reservations, vm_memory_reservations
             record = self.managed_vm(vm)
-            check_vm_start_memory(record["memory_mb"] * 1024**2,
-                self._app_inspected_containers(), vms=vm_memory_reservations(run), telemetry=self.telemetry, vm=vm)
+            rows = self._app_inspected_containers()
+            future = vm_boot_reservations(self.command, tool_present=True)
+            assigned = self.vm_memory_bytes(ET.fromstring(record["xml"]))
+            candidate = ({"id": vm, "assigned_bytes": assigned, "autostart": True}
+                         if action == "autostart" else None)
+            check_boot_memory(rows, vms=future, telemetry=self.telemetry, vm_override=candidate)
+            if action in ("start", "resume"):
+                check_vm_start_memory(assigned,
+                    rows, vms=vm_memory_reservations(run), telemetry=self.telemetry, vm=vm)
         if action == "start":
             self.prepare_vm_storage_access()
             self.vm_selected_network_ready(ET.fromstring(self.managed_vm(vm)["xml"]))

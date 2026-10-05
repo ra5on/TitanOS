@@ -14,6 +14,12 @@ zweite Systempartition ermöglicht ein Rollback; persönliche Daten bleiben
 auf der Datenpartition. Ein System-Rollback setzt Datenbanken installierter
 Container nicht zurück. Vor App-Upgrades sind geeignete Datensicherungen nötig.
 
+Der Systemslot ist schreibgeschützt. Veränderbare NAS-, Container- und
+VM-Daten liegen auf der Datenpartition. Gemeinsame RAM-Grenzen berücksichtigen
+auch den nächsten Autostart; nach einer RAM-Verkleinerung können Docker und
+virtuelle Maschinen sicher gesperrt bleiben, während die Verwaltung erreichbar
+bleibt. USB-Geräte werden vor Durchreichung erneut auf ihre Identität geprüft.
+
 Die neue Systemfamilie wird frisch installiert. Das Image schreibt beim Booten
 keine bestehende Installation auf einem anderen Datenträger um. Zum Testen
 mindestens 8 GB RAM und 64 GB virtuellen Speicher bereitstellen. Hardware für

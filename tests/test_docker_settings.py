@@ -102,7 +102,8 @@ class DockerSettingsTests(EngineTests):
         self.engine.engine_docker.side_effect = lambda args, **kwargs: 'sha256:' + 'c' * 64 if args[0] == 'commit' else ''
         with self.assertRaisesRegex(Error, 'wiederhergestellt'):
             self.engine.op_docker_container_settings(ID, {'memory_mb': 768})
-        self.assertEqual(self.engine.engine_docker.call_args.args[0], ['rename', ID, 'titan-custom-web'])
+        self.assertIn(['rename',ID,'titan-custom-web'],[call.args[0] for call in self.engine.engine_docker.call_args_list])
+        self.assertEqual(self.engine.engine_docker.call_args.args[0],['update','--restart','unless-stopped',ID])
 
     def test_unexpected_recreation_failure_also_restores_name(self):
         self.configure()
@@ -111,7 +112,8 @@ class DockerSettingsTests(EngineTests):
         with self.assertRaisesRegex(Error,'wiederhergestellt') as result:
             self.engine.op_docker_container_settings(ID,{'memory_mb':768})
         self.assertNotIn('private detail',str(result.exception))
-        self.assertEqual(self.engine.engine_docker.call_args.args[0],['rename',ID,'titan-custom-web'])
+        self.assertIn(['rename',ID,'titan-custom-web'],[call.args[0] for call in self.engine.engine_docker.call_args_list])
+        self.assertEqual(self.engine.engine_docker.call_args.args[0],['update','--restart','unless-stopped',ID])
 
     def test_failed_start_removes_only_own_replacement_without_volumes(self):
         self.configure()

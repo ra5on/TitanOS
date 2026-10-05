@@ -122,7 +122,7 @@ class AppMemoryTests(unittest.TestCase):
             self.assertEqual(caught.exception.status, 503)
 
     def test_running_caps_leave_room_for_nas_instead_of_overcommitting_idle_apps(self):
-        running = [{'Name': '/other', 'State': {'Running': True}, 'HostConfig': {'Memory': 6 * GIB}}]
+        running = [{'Name': '/other', 'State': {'Running': True}, 'HostConfig': {'Memory': 6 * GIB,'RestartPolicy':{'Name':'unless-stopped'}}}]
         with self.assertRaises(Error): check_install_memory('titan-nextcloud-office', options(), running, telemetry=ram())
         result = check_install_memory('titan-adguard', containers=running, telemetry=ram())
         self.assertTrue(result['allowed'])
@@ -137,7 +137,7 @@ class AppMemoryTests(unittest.TestCase):
     def test_successful_init_is_not_counted_as_a_new_start(self):
         definition = {'services': {'app-office-init': {'container_name': 'titan-app-office-init', 'mem_limit': '512m'},
                                    'app-eurooffice': {'container_name': 'titan-app-eurooffice', 'mem_limit': '4g'}}}
-        rows = [{'Name': '/titan-app-office-init', 'State': {'Status': 'exited', 'ExitCode': 0}}]
+        rows = [{'Name': '/titan-app-office-init', 'State': {'Status': 'exited', 'ExitCode': 0},'HostConfig':{'Memory':512*MIB,'RestartPolicy':{'Name':'no'}}}]
         result = check_start_memory('app', {}, definition, rows, telemetry=ram(total=16, available=14))
         self.assertEqual(result['package_limit_bytes'], 4 * GIB)
 
@@ -187,7 +187,7 @@ class AppMemoryTests(unittest.TestCase):
 class ContainerMemoryBudgetTests(unittest.TestCase):
     def container(self, identifier='a' * 64, memory=6 * GIB, active=True, name='/manual'):
         return {'Id': identifier, 'Name': name, 'State': {'Running': active, 'Status': 'running' if active else 'exited'},
-                'HostConfig': {'Memory': memory}}
+                'HostConfig': {'Memory': memory,'RestartPolicy':{'Name':'unless-stopped'}}}
 
     def test_new_manual_container_uses_limit_without_vm_overhead(self):
         result = check_container_start_memory('2g', containers=[], vms=[], telemetry=ram())

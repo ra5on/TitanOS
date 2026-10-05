@@ -75,6 +75,7 @@ class VMManagementTests(unittest.TestCase):
                     patch.object(self.host, 'vm_id', return_value=self.vm_id), \
                     patch.object(self.host, '_app_inspected_containers', return_value=[]), \
                     patch.object(self.host, 'prepare_vm_storage_access') as storage, \
+                    patch('titan.app_memory.vm_boot_reservations', return_value=[]) as future, \
                     patch('titan.app_memory.vm_memory_reservations', return_value=[]) as reservations, \
                     patch('titan.app_memory.check_vm_start_memory', side_effect=Error('RAM reserve', 409)) as check:
                 self.calls.clear()
@@ -84,6 +85,7 @@ class VMManagementTests(unittest.TestCase):
                 self.assertEqual(check.call_args.kwargs['vm'], self.vm_id)
                 self.assertEqual(check.call_args.kwargs['vms'], [])
                 reservations.assert_called_once()
+                future.assert_called_once_with(self.host.command, tool_present=True)
                 storage.assert_not_called()
                 self.assertFalse(any(command[:2] == ['virsh', action] for command in self.calls))
 

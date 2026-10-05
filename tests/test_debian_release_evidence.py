@@ -25,7 +25,9 @@ class EvidenceTests(unittest.TestCase):
         next(x for x in self.runtime['checks'] if x['name']=='custom_service_containment')['values']={name:True for name in evidence.CONTAINMENT}
         next(x for x in self.runtime['checks'] if x['name']=='storage_components')['values']={**{name:True for name in evidence.STORAGE_COMPONENTS},
             'kernel':'6.12.63+deb13-amd64','zfs_arc_max_bytes':1073741824,'zfs_arc_min_bytes':134217728,'zfs_arc_size_bytes':0}
-        self.ab={'ok':True,'raw_image_unchanged':True,'checks':sorted(evidence.AB)+['published_release_baseline'],
+        self.ab={'ok':True,'raw_image_unchanged':True,'bundle_unchanged':True,
+                 'boot_memory_guard':{key:True for key in evidence.BOOT_MEMORY_GUARD},
+                 'checks':sorted(evidence.AB)+['published_release_baseline'],
                  'baseline_source':'published-release','baseline_version':'0.4.6-alpha.1','baseline_image_unchanged':True}
     def save(self):
         (self.root/'runtime-test.json').write_text(json.dumps(self.runtime))
@@ -41,6 +43,19 @@ class EvidenceTests(unittest.TestCase):
     def test_image_mutation_blocks_publication(self):
         self.ab['raw_image_unchanged']=False;self.save()
         with self.assertRaises(ValueError):evidence.validate(self.root)
+    def test_modified_or_unverified_system_bundle_blocks_publication(self):
+        for value in (False,1,'true',None):
+            self.ab['bundle_unchanged']=value;self.save()
+            with self.subTest(value=value),self.assertRaises(ValueError):evidence.validate(self.root)
+    def test_real_reduced_ram_boot_and_recovery_cannot_be_missing_or_partial(self):
+        for key in evidence.BOOT_MEMORY_GUARD:
+            for value in (False,1,'true',None):
+                self.ab['boot_memory_guard']={field:True for field in evidence.BOOT_MEMORY_GUARD}
+                self.ab['boot_memory_guard'][key]=value;self.save()
+                with self.subTest(key=key,value=value),self.assertRaises(ValueError):evidence.validate(self.root)
+        for value in (None,{}, {field:True for field in evidence.BOOT_MEMORY_GUARD}|{'private_path':'secret'}):
+            self.ab['boot_memory_guard']=value;self.save()
+            with self.subTest(value=value),self.assertRaises(ValueError):evidence.validate(self.root)
     def test_missing_fallback_blocks_publication(self):
         self.ab['checks'].remove('failed_candidate_fallback_after_reset');self.save()
         with self.assertRaises(ValueError):evidence.validate(self.root)

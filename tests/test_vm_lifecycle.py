@@ -108,6 +108,8 @@ class VMLifecycleTests(unittest.TestCase):
                 patch.object(self.host, '_app_inspected_containers', return_value=[]), \
                 patch('titan.app_memory.vm_memory_reservations', return_value=[]), \
                 patch('titan.app_memory.check_vm_start_memory'), \
+                patch('titan.app_memory.vm_boot_reservations', return_value=[]), \
+                patch('titan.app_memory.check_boot_memory'), \
                 patch("titan.host.run", side_effect=Error("default network missing")) as command:
             with self.assertRaises(Error) as result:
                 self.host.op_vm_action(self.vm_id, "start")
@@ -126,6 +128,8 @@ class VMLifecycleTests(unittest.TestCase):
                 patch.object(self.host, '_app_inspected_containers', return_value=[]), \
                 patch('titan.app_memory.vm_memory_reservations', return_value=[]), \
                 patch('titan.app_memory.check_vm_start_memory'), \
+                patch('titan.app_memory.vm_boot_reservations', return_value=[]), \
+                patch('titan.app_memory.check_boot_memory'), \
                 patch.object(self.host, "vm_network_ready", side_effect=lambda: events.append("network")), \
                 patch("titan.host.run", side_effect=lambda args, **kwargs: (events.append(args) or "") if args[0] == "virsh" else ""):
             self.host.op_vm_action(self.vm_id, "start")

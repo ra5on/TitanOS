@@ -48,13 +48,7 @@ def snapshot(host, row):
                 ports.append({'published': int(binding['HostPort']), 'target': int(number), 'protocol': protocol})
     except (ValueError, TypeError, KeyError):
         raise Error('Vorhandene Portzuordnungen sind ungültig.', 409) from None
-    inventory = host.op_app_devices()['devices']
-    devices = []
-    for selected in host.engine_summary(row)['hardware']:
-        found = next((device for device in inventory if selected in (device['id'], device.get('path'))), None)
-        if found is None:
-            raise Error('Ein durchgereichtes Gerät ist nicht verfügbar. Geräteeinstellungen zuerst prüfen.', 409)
-        devices.append(found['id'])
+    devices = [item['id'] for item in host._engine_devices_ready(row)]
     result = {'name': name(original[len('titan-custom-'):]), 'image': config.get('Image', ''),
               'network': network, 'ports': ports, 'devices': devices, 'memory_mb': memory // 1048576,
               'cpus': cpus // 1000000000, 'restart': (current.get('RestartPolicy') or {}).get('Name') or 'no'}
@@ -96,11 +90,11 @@ def update(host, container, settings):
         row = host.engine_container(container)
         config = {**snapshot(host, row), **settings}
         host._engine_create_args(config)
-        host._engine_check_start_memory(config['memory_mb'] * 1048576, installation=True)
+        original = row['Name'].lstrip('/')
+        host._engine_check_start_memory(config['memory_mb'] * 1048576, installation=True,name=original,restart=config['restart'])
         fresh = host.engine_container(container)
         if host.engine_active(fresh) or fresh.get('Name') != row.get('Name') or fresh.get('Config') != row.get('Config') or fresh.get('HostConfig') != row.get('HostConfig'):
             raise Error('Containerzustand wurde verändert. Ansicht aktualisieren.', 409)
-        original = row['Name'].lstrip('/')
         base = host.engine_summary(row)['image']
         if not re.fullmatch(IMAGE, base):
             raise Error('Originalimage konnte nicht geprüft werden.')
@@ -113,15 +107,21 @@ def update(host, container, settings):
         # Preserve the old container's pinned storage identity after a long
         # commit; recreation must not adopt a newly mounted replacement volume.
         host._engine_storage_ready(fresh)
-        host.engine_docker(['rename', container, 'titan-previous-' + container[:20]])
+        host._engine_devices_ready(fresh)
+        host._engine_check_start_memory(config['memory_mb'] * 1048576, installation=True,name=original,restart=config['restart'])
         config['image'] = image
+        old_policy = (row['HostConfig'].get('RestartPolicy') or {}).get('Name') or 'no'
+        renamed = False; policy_changed = False
         try:
+            if old_policy != 'no':
+                host.engine_docker(['update','--restart','no',container],timeout=30); policy_changed = True
+            host.engine_docker(['rename', container, 'titan-previous-' + container[:20]]); renamed = True
             result = host.op_docker_container_create(config)
         except Exception as error:
             # Only a freshly created, name- and ownership-verified replacement
             # can be removed. Volumes and user data are never removed here.
             try:
-                replacements = host.engine_docker(['ps', '-aq', '--no-trunc', '--filter', 'name=^/' + original + '$']).splitlines()
+                replacements = host.engine_docker(['ps', '-aq', '--no-trunc', '--filter', 'name=^/' + original + '$']).splitlines() if renamed else []
                 if len(replacements) > 1:
                     raise Error('Mehrere Ersatzcontainer gemeldet.', 409)
                 if replacements:
@@ -132,10 +132,11 @@ def update(host, container, settings):
                     if host.engine_active(changed):
                         host.engine_docker(['stop', '--time', '30', replacement], timeout=60)
                     host.engine_docker(['rm', replacement], timeout=120)
-                host.engine_docker(['rename', container, original])
+                if renamed:host.engine_docker(['rename', container, original])
+                if policy_changed:host.engine_docker(['update','--restart',old_policy,container],timeout=30)
             except Exception:
                 raise Error('Änderung fehlgeschlagen. Der bisherige Container bleibt als gestoppte Sicherung erhalten; Wiederherstellung in Docker prüfen.', 503) from None
             reason = ' ' + str(error) if isinstance(error, Error) else ''
             raise Error('Änderung fehlgeschlagen; der bisherige Container wurde wiederhergestellt.' + reason, 503) from None
         return {**result, 'backup_container': container,
-                'message': 'Einstellungen gespeichert und Container gestartet. Der vorherige Container bleibt als gestoppte Sicherung erhalten. Daten und geheime Variablen bleiben erhalten.'}
+                'message': 'Einstellungen gespeichert und Container gestartet. Der vorherige Container bleibt als gestoppte Sicherung mit deaktiviertem Autostart erhalten. Daten und geheime Variablen bleiben erhalten.'}

@@ -71,7 +71,8 @@ class EngineTests(unittest.TestCase):
         def docker(args,**kwargs):return 'sha256:'+'c'*64 if args[0]=='commit' else ''
         self.engine.engine_docker.side_effect=docker
         with self.assertRaises(Error):self.engine.op_docker_container_hardware(ID,[])
-        self.assertEqual(self.engine.engine_docker.call_args.args[0],['rename',ID,'titan-custom-web'])
+        self.assertIn(['rename',ID,'titan-custom-web'],[call.args[0] for call in self.engine.engine_docker.call_args_list])
+        self.assertEqual(self.engine.engine_docker.call_args.args[0],['update','--restart','unless-stopped',ID])
 
     def test_no_force_delete_or_volume_removal_with_container(self):
         self.engine.engine_container=Mock(return_value={'Id':ID,'Config':{},'State':{'Running':True}})
