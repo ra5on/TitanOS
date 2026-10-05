@@ -1,0 +1,48 @@
+import {useTranslation} from 'react-i18next'
+import {useNavigate} from 'react-router-dom'
+
+import {Button} from '@/components/ui/button'
+import {ImmersiveDialogFooter} from '@/components/ui/immersive-dialog'
+import {LOADING_DASH} from '@/constants'
+import {AppDropdown, ImmersivePickerDialogContent} from '@/modules/immersive-picker'
+import {usePickerTarget} from '@/modules/immersive-picker/target'
+import {useUserApp} from '@/providers/apps'
+import {downloadUtf8Logs, LogResults, TroubleshootTitleBackLink} from '@/routes/settings/troubleshoot/_shared'
+import {trpcReact} from '@/trpc/trpc'
+
+export function TroubleshootApp({appId}: {appId: string}) {
+	const {t} = useTranslation()
+	const navigate = useNavigate()
+	const {linkToTarget} = usePickerTarget('troubleshoot')
+	const setAppId = (id: string) => navigate(linkToTarget({type: 'app', appId: id}))
+
+	const {app} = useUserApp(appId)
+
+	const appLogs = useAppLogs(appId)
+
+	return (
+		<ImmersivePickerDialogContent>
+			<div className='flex w-full items-center justify-between'>
+				<TroubleshootTitleBackLink />
+				<AppDropdown appId={appId} setAppId={setAppId} />
+			</div>
+			{appLogs && <LogResults>{appLogs}</LogResults>}
+			<ImmersiveDialogFooter className='justify-center'>
+				<Button variant='primary' size='dialog' disabled={!appId} onClick={() => downloadUtf8Logs(appLogs, appId)}>
+					{t('troubleshoot.app-download', {app: app?.name || LOADING_DASH})}
+				</Button>
+				{/* <Button size='dialog'>{t('troubleshoot.share-with-umbrel-support')}</Button> */}
+			</ImmersiveDialogFooter>
+		</ImmersivePickerDialogContent>
+	)
+}
+
+function useAppLogs(appId: string) {
+	const {t} = useTranslation()
+	const troubleshootQ = trpcReact.apps.logs.useQuery({appId})
+
+	if (troubleshootQ.isLoading) return t('loading') + '...'
+	if (troubleshootQ.isError) return troubleshootQ.error.message
+
+	return troubleshootQ.data || t('troubleshoot-no-logs-yet')
+}

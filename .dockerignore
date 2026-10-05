@@ -1,0 +1,9 @@
+**/node_modules
+packages/umbreld/data
+packages/os/build
+packages/os/rugix/build
+
+.git
+worktrees
+dist
+.secrets

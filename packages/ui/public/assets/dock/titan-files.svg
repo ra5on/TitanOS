@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="tile" x1="20" y1="0" x2="107" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#5cc8ff"/><stop offset="1" stop-color="#1464e7"/></linearGradient>
+    <linearGradient id="shine" x1="64" y1="0" x2="64" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="depth" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#092645" flood-opacity=".16"/></filter>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="30" fill="url(#tile)"/>
+  <rect x="3" y="3" width="122" height="122" rx="29" fill="url(#shine)" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>
+  <g filter="url(#depth)"><path d="M23 36c0-4 3-7 7-7h20l8 8h37c4 0 7 3 7 7v48c0 6-4 10-10 10H33c-6 0-10-4-10-10Z" fill="#d8eeff"/><path d="M20 51c0-4 3-7 7-7h74c5 0 8 4 7 9l-6 36c-1 7-5 12-12 12H33c-6 0-10-4-11-10Z" fill="#fff"/><path d="M36 60h50" stroke="#b8dfff" stroke-width="5" stroke-linecap="round"/></g>
+</svg>

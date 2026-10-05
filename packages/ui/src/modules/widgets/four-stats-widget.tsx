@@ -1,0 +1,59 @@
+import {LOADING_DASH} from '@/constants'
+import {cn} from '@/lib/utils'
+import type {FourStatsItem, FourStatsWidget, FourStatsWidgetProps} from '@/modules/widgets/shared/constants'
+
+import {glassCellClass} from './shared/glass-cell'
+import {WidgetContainer, widgetTextCva} from './shared/shared'
+
+export function FourStatsWidget({
+	items,
+	link,
+	onClick,
+}: FourStatsWidgetProps & {
+	onClick?: (link?: string) => void
+}) {
+	return (
+		<WidgetContainer
+			onClick={() => onClick?.(link)}
+			className='grid grid-cols-2 grid-rows-2 gap-1 p-1.5 sm:gap-2 sm:p-2.5'
+		>
+			{items?.slice(0, 4)?.map((item) => (
+				<Item key={item.title} title={item.title} text={item.text} subtext={item.subtext} />
+			))}
+			{!items && (
+				<>
+					<Item title={LOADING_DASH} text={LOADING_DASH} subtext={LOADING_DASH} />
+					<Item title={LOADING_DASH} text={LOADING_DASH} subtext={LOADING_DASH} />
+					<Item title={LOADING_DASH} text={LOADING_DASH} subtext={LOADING_DASH} />
+					<Item title={LOADING_DASH} text={LOADING_DASH} subtext={LOADING_DASH} />
+				</>
+			)}
+		</WidgetContainer>
+	)
+}
+
+function Item(item?: FourStatsItem) {
+	return (
+		<div
+			className={cn(
+				'flex h-full flex-col justify-center rounded-5 px-1 leading-none sm:rounded-12 sm:px-5',
+				glassCellClass,
+			)}
+		>
+			<p
+				className={cn(
+					widgetTextCva({
+						opacity: 'primary',
+					}),
+					'text-[8px] sm:text-11',
+				)}
+				title={item?.text}
+			>
+				{item?.title}
+			</p>
+			<p className={widgetTextCva()}>
+				{item?.text} <span className={widgetTextCva({opacity: 'secondary'})}>{item?.subtext}</span>
+			</p>
+		</div>
+	)
+}

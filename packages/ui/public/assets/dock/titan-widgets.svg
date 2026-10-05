@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="tile" x1="20" y1="0" x2="107" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#d8a3ff"/><stop offset="1" stop-color="#8c45d4"/></linearGradient>
+    <linearGradient id="shine" x1="64" y1="0" x2="64" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="depth" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#092645" flood-opacity=".16"/></filter>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="30" fill="url(#tile)"/>
+  <rect x="3" y="3" width="122" height="122" rx="29" fill="url(#shine)" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>
+  <g filter="url(#depth)"><rect x="24" y="25" width="35" height="35" rx="9" fill="#fff"/><rect x="68" y="25" width="35" height="78" rx="9" fill="#fff" fill-opacity=".75"/><rect x="24" y="69" width="35" height="34" rx="9" fill="#fff" fill-opacity=".9"/><path d="M79 41h13M79 52h8M79 83h13" stroke="#a16bde" stroke-width="4" stroke-linecap="round"/></g>
+</svg>

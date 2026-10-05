@@ -1,0 +1,15 @@
+[Unit]
+Description=Umbrel daemon
+Wants=umbrel-custom-pre-start.service libvirtd.socket
+After=network-online.target docker.service libvirtd.socket umbrel-custom-pre-start.service
+
+[Service]
+TimeoutStopSec=15min
+ExecStart=umbreld --data-directory=/home/umbrel/umbrel
+Restart=always
+# This prevents us hitting restart rate limits and ensures we keep restarting
+# indefinitely.
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
