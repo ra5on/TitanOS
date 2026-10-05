@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ra5on/TitanOS/releases"><strong>Images &amp; Downloads</strong></a>
-  · <a href="https://github.com/ra5on/TitanOS/releases">Releases &amp; Prüfsummen</a>
+  <a href="https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz"><strong>IMG herunterladen</strong></a>
+  · <a href="https://github.com/ra5on/TitanOS/releases/tag/v2.0.1">Release &amp; Prüfsummen</a>
   · <a href="https://github.com/ra5on/TitanOS/issues">Support</a>
 </p>
 
@@ -46,7 +46,7 @@ Backend in einer isolierten Testumgebung. [Details zu den Aufnahmen](docs/images
 Für einen x86-64-Rechner empfehlen wir **8 GB RAM**, eine **SSD ab 64 GB** und
 **UEFI mit deaktiviertem Secure Boot**.
 
-1. Nach Veröffentlichung findest du `titan-2.0.1.img.xz`, Prüfsummen und Signatur unter [Release-Bereich](https://github.com/ra5on/TitanOS/releases).
+1. Lade [titan-2.0.1.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1); die [Download-Prüfung](docs/DOWNLOADS.md) erklärt die Schritte.
 2. Entpacke das Image und schreibe es mit einem geeigneten Image-Werkzeug auf die Ziel-SSD. **Dabei wird der Inhalt dieses Laufwerks überschrieben.**
 3. Starte den Rechner von dieser SSD und verbinde ihn mit deinem Netzwerk.
 4. Öffne `http://titan.local/` im Browser. Falls dein Netzwerk lokale Namen nicht auflöst, verwende die IP-Adresse aus deinem Router.
@@ -76,9 +76,12 @@ den eigenen TitanOS-Stable-Kanal. Details findest du in der
 
 ## Gut zu wissen
 
-Der Release-Build prüft den Start des tatsächlichen Images über UEFI, die
-Weboberfläche und die installierte Versionskennung. Das ist keine umfassende
-Prüfung aller Apps, Hardwarekombinationen oder VM-Szenarien.
+Das veröffentlichte Image wurde erfolgreich über UEFI auf einer 32-GiB-
+Boot-Festplatte gestartet. Dabei wurden die Weboberfläche, das Backend und die
+genaue Versionskennung **TitanOS 2.0.1** geprüft. Der signierte
+[Boot-Bericht](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/image-verification.json)
+enthält die Ergebnisse. Das ist keine umfassende Prüfung aller Apps,
+Hardwarekombinationen oder VM-Szenarien.
 
 Der App-Store verwendet externe App-Quellen; Apps werden nach der Einrichtung
 installiert. Google Drive, Dropbox und OneDrive benötigen eigene

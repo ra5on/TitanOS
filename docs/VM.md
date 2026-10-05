@@ -16,8 +16,8 @@ muss dein Hypervisor die Hardwarevirtualisierung an die TitanOS-VM weitergeben
 
 ## Image importieren
 
-1. Lade nach Veröffentlichung `titan-2.0.1.img.xz` und die Prüfsummen aus dem [Release-Bereich](https://github.com/ra5on/TitanOS/releases) herunter.
-2. Prüfe die Download-Datei anhand der dortigen Signatur- und Prüfsummenanleitung.
+1. Lade [titan-2.0.1.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1).
+2. Prüfe die Download-Datei anhand der [Signatur- und Prüfsummenanleitung](DOWNLOADS.md).
 3. Entpacke die Datei zu `titan-2.0.1.img`. Mit dem Werkzeug `xz` geht das beispielsweise so:
 
    ```sh
@@ -61,12 +61,15 @@ eine Neuinstallation.
 
 ## Was beim Release geprüft wird
 
-Der Build startet das tatsächliche Image in einer UEFI-Test-VM und prüft die
-Weboberfläche sowie die Versionskennung. Diese Prüfung deckt nicht jede
-Hypervisor-, Hardware-, App- oder Nested-Virtualization-Konfiguration ab.
+TitanOS 2.0.1 hat den Start in einer UEFI-Test-VM mit einer 32-GiB-Boot-Festplatte
+erfolgreich bestanden. Weboberfläche, Backend und Versionskennung wurden über
+das VM-Netzwerk geprüft. Der signierte
+[Boot-Bericht](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/image-verification.json)
+enthält die Ergebnisse. Diese Prüfung deckt nicht jede Hypervisor-, Hardware-,
+App- oder Nested-Virtualization-Konfiguration ab.
 Die Berichte und die Dateien `titan-2.0.1.img.xz` und
 `titan-2.0.1.update` findest du beim
-[Release-Bereich](https://github.com/ra5on/TitanOS/releases).
+[Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1).
 
 [Zur Übersicht](../README.md) · [Support](https://github.com/ra5on/TitanOS/issues)
 · [Lizenz](../LICENSE.md) · [Herkunft](../UPSTREAM.md)

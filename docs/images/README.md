@@ -2,7 +2,7 @@
 
 Die drei JPEG-Aufnahmen zeigen die gebaute Oberfläche des Quellstands
 **TitanOS 2.0.1** mit dem echten Titan-Backend in einer isolierten lokalen
-Testumgebung. Sie sind keine Aufnahme eines bereits veröffentlichten Images.
+Testumgebung. Sie wurden getrennt vom Boot-Test des Release-Images aufgenommen.
 Es wurden keine UI-Mocks oder nachträglichen Bildänderungen verwendet.
 
 - **Desktop:** Startseite mit eigenen, an iOS angelehnten Dock-Icons.
