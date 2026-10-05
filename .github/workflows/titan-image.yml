@@ -1,0 +1,165 @@
+name: TitanOS image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.titan/release.json'
+      - 'titan-build/**'
+      - '.github/workflows/titan-image.yml'
+      - 'packages/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: titan-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: github.repository == 'ra5on/TitanOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Verify complete-source bootstrap regression tests
+        run: python3 -m unittest discover -s titan-build/tests -p test_source_bootstrap.py -v
+      - name: Import and preserve the complete pinned Titan fork
+        id: source
+        run: |
+          set -euo pipefail
+          trap 'git config --local --unset-all http.https://github.com/.extraheader || true' EXIT
+          python3 titan-build/import-upstream.py
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  image:
+    needs: source
+    if: github.repository == 'ra5on/TitanOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - name: Check signing configuration before any image work
+        id: signing
+        env:
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TITAN_SIGNING_KEY" ]]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo 'Complete source is ready. Add the existing TITAN_SIGNING_KEY secret to enable signed image builds.'
+          else
+            bash titan-build/check-signing-key.sh
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Prepare disposable AMD64 builder
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils python3 openssl dosfstools mtools gdisk
+          if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
+          df -h /
+      - uses: actions/setup-node@v4
+        if: steps.signing.outputs.configured == 'true'
+        with:
+          node-version: '22'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.signing.outputs.configured == 'true'
+      - name: Expose GitHub runtime for the original Docker cache importer
+        if: steps.signing.outputs.configured == 'true'
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
+      - name: Verify fork update security and cloud authentication
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          python3 titan-build/test-branding.py
+          python3 -m unittest discover -s titan-build/tests -v
+          npm --prefix packages/umbreld ci
+          npm --prefix packages/umbreld run typecheck
+          npm --prefix packages/umbreld run test -- source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/hostname-policy.unit.test.ts
+          npm --prefix packages/ui ci
+          npm --prefix packages/ui run typecheck
+          npm --prefix packages/ui run translations:check-ui
+          npm --prefix packages/ui run test -- src/features/machines/hooks/use-machine-actions.test.ts src/providers/apps.test.tsx src/modules/desktop/system-menu.test.tsx src/modules/desktop/dock-dimensions.test.ts src/constants/feature-maturity.test.ts src/components/ui/feature-maturity-badge.test.tsx
+      - name: Determine whether the one-time stable bridge is needed
+        if: steps.signing.outputs.configured == 'true'
+        id: bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          task_version=$(python3 -c 'import json; print(json.load(open(".titan/release.json"))["version"])')
+          task_needed=false
+          if [[ "$task_version" == 2.0.0 ]]; then
+            if gh release view v2.0.0-titan.3 --json isDraft --jq .isDraft > "$RUNNER_TEMP/titan-bridge-existing" 2>/dev/null; then
+              [[ "$(cat "$RUNNER_TEMP/titan-bridge-existing")" == false ]] || task_needed=true
+            else
+              task_needed=true
+            fi
+          fi
+          echo "needed=$task_needed" >> "$GITHUB_OUTPUT"
+      - name: Build and boot-verify the stable compatibility bridge
+        if: steps.bridge.outputs.needed == 'true' && steps.signing.outputs.configured == 'true'
+        env:
+          RUN_IMAGE_SMOKE: '1'
+          TITAN_RELEASE_PROFILE: legacy-bridge
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/bridge
+        run: bash titan-build/build-image.sh
+      - name: Sign and verify stable bridge checksums
+        if: steps.bridge.outputs.needed == 'true' && steps.signing.outputs.configured == 'true'
+        env:
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/bridge
+        run: bash titan-build/sign-artifacts.sh
+      - name: Publish immutable stable bridge update
+        if: steps.bridge.outputs.needed == 'true' && steps.signing.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/bridge
+        run: bash titan-build/publish-release.sh
+      - name: Build canonical compact OS image and verify real UEFI boot
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          RUN_IMAGE_SMOKE: '1'
+          TITAN_RELEASE_PROFILE: canonical
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/canonical
+        run: bash titan-build/build-image.sh
+      - name: Sign and verify canonical release checksums
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/canonical
+        run: bash titan-build/sign-artifacts.sh
+      - name: Publish the verified stable image
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist/canonical
+        run: bash titan-build/publish-release.sh
+      - name: Retain diagnostic reports
+        if: always() && steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: titan-image-diagnostics-${{ github.run_id }}
+          path: |
+            dist/**/*.json
+            dist/**/*boot*.log
+            dist/**/*boot*.json
+            packages/os/vm-state/*.log
+          if-no-files-found: ignore
+          retention-days: 7

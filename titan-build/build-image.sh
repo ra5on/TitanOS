@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Build the full TitanOS baseline with its own branding and signed update feed.
+set -euo pipefail
+
+TASK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 "${TASK_ROOT}/titan-build/release-profile.py" "${TASK_ROOT}" "${TITAN_RELEASE_PROFILE:-canonical}"
+python3 "${TASK_ROOT}/titan-build/configure-branding.py" "${TASK_ROOT}"
+python3 "${TASK_ROOT}/titan-build/configure-updater.py" "${TASK_ROOT}"
+RELEASE_METADATA="${TASK_ROOT}/.titan/release.json"
+RELEASE_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${RELEASE_METADATA}")"
+OS_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["osVersion"])' "${RELEASE_METADATA}")"
+UPSTREAM_COMMIT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["upstreamCommit"])' "${RELEASE_METADATA}")"
+BUILD_COMMIT="$(git -C "${TASK_ROOT}" rev-parse HEAD)"
+ARTIFACT_DIR="${TITAN_ARTIFACT_DIR:-${TASK_ROOT}/dist}"
+ASSET_BASE="titan-${RELEASE_VERSION}"
+if [[ "${TITAN_RELEASE_PROFILE:-canonical}" == legacy-bridge ]]; then
+    # The shipped legacy updater requires this exact compatibility filename.
+    ASSET_BASE="${ASSET_BASE}-amd64"
+fi
+
+if [[ ! "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-titan\.[1-9][0-9]*)?$ || "${OS_VERSION}" != "${RELEASE_VERSION}" || ! "${UPSTREAM_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Unsupported baseline release version: ${RELEASE_VERSION}" >&2
+    exit 1
+fi
+if [[ "$(uname -m)" != "x86_64" ]]; then
+    echo "Build this first baseline on a native AMD64 Linux runner." >&2
+    exit 1
+fi
+for task_command in docker npm python3 xz; do
+    command -v "${task_command}" >/dev/null || { echo "Missing build tool: ${task_command}" >&2; exit 1; }
+done
+docker buildx version
+mkdir -p "${ARTIFACT_DIR}"
+ARTIFACT_DIR="$(cd "${ARTIFACT_DIR}" && pwd)"
+python3 - "${TASK_ROOT}" <<'PY'
+import shutil, sys
+available = shutil.disk_usage(sys.argv[1]).free
+required = 35 * 1024**3
+if available < required:
+    raise SystemExit(f"Need at least 35 GiB free for the OS build; available {available / 1024**3:.1f} GiB")
+PY
+
+# Preserve attribution both in the installed OS and beside every image.
+NOTICE_DIR="${TASK_ROOT}/packages/os/overlay/usr/share/doc/titan"
+mkdir -p "${NOTICE_DIR}"
+cp "${TASK_ROOT}/LICENSE.md" "${NOTICE_DIR}/LICENSE.md"
+if [[ -f "${TASK_ROOT}/UPSTREAM.md" ]]; then
+    cp "${TASK_ROOT}/UPSTREAM.md" "${NOTICE_DIR}/UPSTREAM.md"
+else
+    cat > "${NOTICE_DIR}/UPSTREAM.md" <<EOF
+# Titan baseline provenance
+
+This image is built from Umbrel ${OS_VERSION}.
+Upstream: https://github.com/getumbrel/umbrel
+Upstream commit: ${UPSTREAM_COMMIT}
+The original product behavior and software version are retained for this first test baseline.
+The upstream PolyForm Noncommercial License and individual component licenses apply.
+EOF
+fi
+cp "${NOTICE_DIR}/LICENSE.md" "${ARTIFACT_DIR}/LICENSE.md"
+cp "${NOTICE_DIR}/UPSTREAM.md" "${ARTIFACT_DIR}/UPSTREAM.md"
+cp "${RELEASE_METADATA}" "${ARTIFACT_DIR}/release.json"
+
+cd "${TASK_ROOT}/packages/os"
+# Rugix keys imported roots by path; two profiles reuse that path. Clear its
+# project state between builds so canonical cannot inherit bridge root files.
+# Docker Buildx's separate layer cache remains available for the second build.
+if [[ -d "${TASK_ROOT}/packages/os/rugix/.rugix" ]]; then
+    sudo -n rm -rf "${TASK_ROOT}/packages/os/rugix/.rugix"
+fi
+# Bake the exact Titan build version into the Rugix OS metadata.
+# Rugix-native AMD64 only: no Pi, ARM64, or legacy Mender migration artifacts.
+SKIP_CACHE_EXPORT=true npm run build:amd64:rugix -- "${OS_VERSION}"
+
+RAW_IMAGE="${ARTIFACT_DIR}/${ASSET_BASE}.img"
+mv build/umbrelos-amd64.img "${RAW_IMAGE}"
+mv build/umbrelos-amd64.update "${ARTIFACT_DIR}/${ASSET_BASE}.update"
+# Keep the compact provisioning template; first boot uses the target disk capacity.
+VERIFY_ARGUMENTS=("${RAW_IMAGE}" --manifest "${ARTIFACT_DIR}/image-verification.json" --release-metadata "${RELEASE_METADATA}")
+if [[ "${RUN_IMAGE_SMOKE:-1}" == "1" ]]; then
+    VERIFY_ARGUMENTS+=(--smoke --vm-script "${TASK_ROOT}/packages/os/vm.sh" --boot-log "${ARTIFACT_DIR}/boot-smoke.log" --timeout "${IMAGE_SMOKE_TIMEOUT:-1200}")
+fi
+python3 "${TASK_ROOT}/titan-build/verify-image.py" "${VERIFY_ARGUMENTS[@]}"
+# The bridge publishes only its verified update bundle. Fresh installs use the
+# canonical compact image, avoiding a redundant compressed bridge disk download.
+if [[ "${TITAN_RELEASE_PROFILE:-canonical}" != legacy-bridge ]]; then
+    # Streaming avoids copying the builder image's protected owner metadata.
+    xz --threads=2 --memlimit-compress=2GiB --stdout "${RAW_IMAGE}" > "${RAW_IMAGE}.xz"
+    xz --test "${RAW_IMAGE}.xz"
+fi
+rm "${RAW_IMAGE}"
+
+python3 - "${ARTIFACT_DIR}" "${RELEASE_METADATA}" "${BUILD_COMMIT}" <<'PY'
+import datetime, hashlib, json, pathlib, sys
+directory = pathlib.Path(sys.argv[1])
+release = json.loads(pathlib.Path(sys.argv[2]).read_text())
+verification = json.loads((directory / "image-verification.json").read_text())
+assets = sorted(p for p in directory.iterdir() if p.is_file() and p.name.startswith("titan-") and p.suffix in {".xz", ".update"})
+expected = {".update"} if release.get("legacyUpdateBridgeTo") else {".xz", ".update"}
+if len(assets) != len(expected) or {p.suffix for p in assets} != expected:
+    raise SystemExit("Release asset set does not match the canonical or update-only bridge profile")
+def digest(path):
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(block)
+    return hasher.hexdigest()
+for asset in assets:
+    if not 0 < asset.stat().st_size < 2 * 1024**3:
+        raise SystemExit(f"GitHub release asset must be smaller than 2 GiB: {asset.name}")
+manifest = {
+    "schemaVersion": 1,
+    "releaseVersion": release["version"],
+    "upstreamVersion": release["upstreamTag"],
+    "osVersion": release["osVersion"],
+    "stage": release["stage"],
+    "systemCompatibility": release["systemCompatibility"],
+    "upstreamRepository": release["upstreamRepository"],
+    "upstreamCommit": release["upstreamCommit"],
+    "buildCommit": sys.argv[3],
+    "builtAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "architecture": "amd64",
+    "firmware": "UEFI",
+    "updateFormat": "rugix",
+    "compatibleWithPreviousTitanRaucImages": False,
+    "updateProvider": release["updateProvider"],
+    "ownTitanUpdateChannel": True,
+    "releaseEligible": verification["structuralCheck"] == "passed" and verification["uefiHttpSmoke"]["status"] == "passed",
+    "imageVerification": verification,
+    "assets": [{"name": p.name, "sizeBytes": p.stat().st_size, "sha256": digest(p)} for p in assets],
+}
+(directory / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+checksum_files = sorted(p for p in directory.iterdir() if p.is_file() and p.name not in {"SHA256SUMS", "SHA256SUMS.sig"})
+(directory / "SHA256SUMS").write_text("".join(f"{digest(p)}  {p.name}\n" for p in checksum_files))
+print(f"Verified release assets: {', '.join(p.name for p in assets)}")
+PY
