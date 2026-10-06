@@ -1,0 +1,15 @@
+[Unit]
+Description=Titan daemon
+Wants=titan-custom-pre-start.service libvirtd.socket
+After=network-online.target docker.service libvirtd.socket titan-custom-pre-start.service
+
+[Service]
+TimeoutStopSec=15min
+ExecStart=titand --data-directory=/home/titan/titan
+Restart=always
+# This prevents us hitting restart rate limits and ensures we keep restarting
+# indefinitely.
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

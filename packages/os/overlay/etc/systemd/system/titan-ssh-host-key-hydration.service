@@ -1,0 +1,10 @@
+[Unit]
+Description=Hydrate SSH Host Keys
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/titan-ssh-host-key-hydration/titan-ssh-host-key-hydration
+
+[Install]
+WantedBy=multi-user.target

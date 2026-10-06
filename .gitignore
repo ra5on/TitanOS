@@ -1,11 +1,66 @@
-__pycache__/
+# Ignore node_modules anywhere they may be
+
+node_modules
+
+# Ignore all the bash stuff
+
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.ssh
+.viminfo
+.DS_Store
+
+# Python bytecode
+__pycache__
 *.py[cod]
-.secrets/
-.demo/
-.venv/
-dist/
-*.sqlite3
-*.sqlite3-*
-setup-token
-artifacts/
+
+# titan-dev
+docker-compose.override.yml
+
+# Files and data directories created by services
+# that we shouldn't accidently commit
+
+*.dat
 *.log
+*.cookie
+*.pid
+*.env
+bitcoin/*
+db/*
+electrs/*
+nginx/*
+events/signals/*
+lnd/*
+logs/*
+statuses/*
+tor/*
+app-data/*
+data/
+
+# Source modules for the app store, not runtime service data
+!packages/ui/src/features/app-store/data/
+!packages/ui/src/features/app-store/data/**
+
+# Git worktrees (see AGENTS.md). Git creates this on demand and does not
+# ignore nested worktrees on its own, so it only needs ignoring, not tracking.
+# Anchored so a worktrees/ directory elsewhere in the tree isn't caught.
+
+/worktrees/
+
+# Commit these files
+
+!statuses/update-status.json
+
+# Commit these empty directories
+
+!db/.gitkeep
+!events/signals/.gitkeep
+!lnd/.gitkeep
+!logs/.gitkeep
+!tor/data/.gitkeep
+!tor/run/.gitkeep
+.titan-dev
+jwt
+./bin

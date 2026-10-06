@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+sleep 1
+
+clear
+
+cat << 'EOF'
+
+              ,;###GGGGGGGGGGl#Sp
+           ,##GGGlW""^'  '`""%GGGG#S,
+         ,#GGG"                  "lGG#o
+        #GGl^                      '$GG#
+      ,#GGb                          \GGG,
+      lGG"                            "GGG
+     #GGGlGGGl##p,,p##lGGl##p,,p###ll##GGGG
+    !GGGlW"""*GGGGGGG#""""WlGGGGG#W""*WGGGGS
+     ""          "^          '"          ""
+             TitanOS USB Installer
+EOF
+echo
+
+# The TitanOS image lives on the boot medium which is mounted at /iso.
+image="/iso/titanos-amd64.img.xz"
+
+# If device is an Titan Home auto flash and shutdown non-interactively since we don't have video output.
+if dmidecode -t system | grep --silent 'Umbrel Home'
+then
+    echo "Titan Home detected."
+    echo "Automatically flashing internal storage..."
+    xz --decompress --stdout "${image}" | dd of=/dev/nvme0n1 bs=4M status=progress
+    echo "TitanOS has been installed, shutting down."
+    poweroff
+    exit 1
+fi
+
+# If device is an Titan Pro auto flash and shutdown non-interactively.
+if dmidecode -t system | grep --silent 'Umbrel Pro'
+then
+    echo "Titan Pro detected."
+    echo "Automatically flashing internal storage..."
+    xz --decompress --stdout "${image}" | dd of=/dev/mmcblk0 bs=4M status=progress
+    echo "TitanOS has been installed, shutting down."
+    poweroff
+    exit 1
+fi
+
+# For all other devices, run the interactive installer.
+echo "Installing TitanOS will wipe your entire storage device."
+echo
+# Exclude loop devices (major 7), the live system's squashfs is loop mounted.
+readarray -t devices < <(lsblk --nodeps --exclude 7 --output NAME,VENDOR,MODEL,SIZE | sed '1d')
+PS3="Select a storage device by number to install TitanOS on: "
+select device in "${devices[@]}"
+do
+    if [[ -n "$device" ]]
+    then
+        echo "installing TitanOS on: $device"
+        device_path="/dev/$(echo $device | awk '{print $1}')"
+        xz --decompress --stdout "${image}" | dd of=$device_path bs=4M status=progress
+        sync
+        echo
+        echo "TitanOS has been installed!"
+        printf "Press any key to shutdown, remember to remove the USB drive before turning the device back on."
+        read -n 1 -s
+        poweroff
+        break
+    else
+        echo "Invalid choice, please try again."
+    fi
+done

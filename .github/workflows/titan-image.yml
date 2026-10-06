@@ -1,0 +1,157 @@
+name: TitanOS image
+
+on:
+  push:
+    branches: [main, restore-titanos-fork]
+    paths:
+      - '.titan/release.json'
+      - 'titan-build/**'
+      - '.github/workflows/titan-image.yml'
+      - 'packages/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: titan-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: github.repository == 'ra5on/TitanOS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      release_needed: ${{ steps.release.outputs.release_needed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify complete-source regression tests
+        run: python3 -m unittest discover -s titan-build/tests -p test_verify_source.py -v
+      - name: Verify the current complete TitanOS checkout
+        id: source
+        run: |
+          set -euo pipefail
+          python3 titan-build/verify-source.py
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Check whether the stable release is already published
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          task_release_needed=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            task_release_needed=$(python3 titan-build/release-needed.py)
+          fi
+          echo "release_needed=$task_release_needed" >> "$GITHUB_OUTPUT"
+  checks:
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install image validation tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-utils dosfstools mtools gdisk
+      - name: Verify fork update security and cloud authentication
+        run: |
+          set -euo pipefail
+          python3 titan-build/test-branding.py
+          python3 -m unittest discover -s titan-build/tests -v
+          npm --prefix packages/titand ci
+          npm --prefix packages/titand run typecheck
+          npm --prefix packages/titand run test -- --pool=forks source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/hostname-policy.unit.test.ts source/modules/auth/auth.unit.test.ts source/modules/auth/cookies.unit.test.ts source/modules/apps/app-lifecycle.unit.test.ts source/modules/apps/app-settings.unit.test.ts source/modules/apps/manifest-compatibility.unit.test.ts source/modules/apps/schema.unit.test.ts source/modules/machines/machine-network.unit.test.ts source/modules/machines/libvirt.unit.test.ts
+          npm --prefix packages/ui ci
+          npm --prefix packages/ui run typecheck
+          npm --prefix packages/ui run translations:check-ui
+          npm --prefix packages/ui run test -- src/features/machines/hooks/use-machine-actions.test.ts src/providers/apps.test.tsx src/modules/desktop/system-menu.test.tsx src/modules/desktop/dock-dimensions.test.ts src/modules/widgets/system-widget-labels.test.tsx src/constants/feature-maturity.test.ts src/components/ui/feature-maturity-badge.test.tsx
+          npm --prefix packages/ui run build
+  image:
+    needs: [source, checks]
+    if: github.repository == 'ra5on/TitanOS' && github.ref == 'refs/heads/main' && needs.source.outputs.release_needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - name: Check signing configuration before any image work
+        id: signing
+        env:
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TITAN_SIGNING_KEY" ]]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Complete source is verified, but no image was built. Configure TITAN_SIGNING_KEY to enable signed TitanOS image builds.'
+          else
+            bash titan-build/check-signing-key.sh
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Prepare disposable AMD64 builder
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils python3 openssl dosfstools mtools gdisk
+          if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
+          df -h /
+      - uses: actions/setup-node@v4
+        if: steps.signing.outputs.configured == 'true'
+        with:
+          node-version: '22'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.signing.outputs.configured == 'true'
+      - name: Expose GitHub runtime for the original Docker cache importer
+        if: steps.signing.outputs.configured == 'true'
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
+      - name: Build compact TitanOS image and verify real UEFI boot
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          RUN_IMAGE_SMOKE: '1'
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist
+        run: bash titan-build/build-image.sh
+      - name: Sign and verify release checksums
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist
+        run: bash titan-build/sign-artifacts.sh
+      - name: Publish the verified stable image
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist
+        run: bash titan-build/publish-release.sh
+      - name: Retain diagnostic reports
+        if: always() && steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: titan-image-diagnostics-${{ github.run_id }}
+          path: |
+            dist/*.json
+            dist/*boot*.log
+            dist/*boot*.json
+            packages/os/vm-state/*.log
+          if-no-files-found: ignore
+          retention-days: 7
