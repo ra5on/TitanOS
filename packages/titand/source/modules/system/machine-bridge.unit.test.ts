@@ -313,6 +313,10 @@ describe('automatic VM LAN bridge profiles', () => {
 		})
 		const adapter = new NativeBridgeNetworkManager()
 		await expect(adapter.bridgeReady()).resolves.toBe(true)
+		// Real NetworkManager omits the default true value after saving.
+		delete profiles.bridge.connection.autoconnect
+		delete profiles.port.connection.autoconnect
+		await expect(adapter.bridgeReady()).resolves.toBe(true)
 		checkpoint = true
 		await expect(adapter.bridgeReady()).resolves.toBe(false)
 		checkpoint = false

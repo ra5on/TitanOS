@@ -286,7 +286,8 @@ export class NativeBridgeNetworkManager implements BridgeNetworkManager {
 			for (const profile of [bridge, port]) {
 				const flags = await this.#properties(profile.path, CONNECTION)
 				if (
-					value<boolean>(profile.settings.connection, 'autoconnect') !== true ||
+					// GetSettings omits defaults; autoconnect defaults to true.
+					value<boolean>(profile.settings.connection, 'autoconnect') === false ||
 					value<boolean>(flags, 'Unsaved') !== false ||
 					((value<number>(flags, 'Flags') ?? 1) & 1) !== 0
 				)
