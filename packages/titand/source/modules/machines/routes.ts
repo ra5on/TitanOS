@@ -11,6 +11,12 @@ const screenshotCoordinate = z.tuple([z.number().int().min(0), z.number().int().
 export default router({
 	capabilities: privateProcedure.query(async ({ctx}) => ctx.titand.machines.capabilities()),
 	networks: privateProcedure.query(async ({ctx}) => ctx.titand.machines.networks()),
+	prepareBridge: privateProcedure.mutation(async ({ctx}) =>
+		ctx.titand.machines.prepareBridge(ctx.principal!.sessionId),
+	),
+	confirmBridge: privateProcedure
+		.input(z.object({token: z.string().regex(/^[a-f0-9]{64}$/)}))
+		.mutation(async ({ctx, input}) => ctx.titand.machines.confirmBridge(input.token, ctx.principal!.sessionId)),
 
 	// List all machines
 	list: privateProcedure.query(async ({ctx}) => ctx.titand.machines.list()),

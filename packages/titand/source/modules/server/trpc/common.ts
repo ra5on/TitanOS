@@ -32,6 +32,10 @@ export const httpOnlyPaths = [
 	// These must acknowledge the request before LAN ingress closes so the UI knows the power action was accepted.
 	'system.restart',
 	'system.shutdown',
+	// Bridge setup must deliver its recovery token before the LAN changes and
+	// confirmation must cross a fresh HTTP connection after the move.
+	'machines.prepareBridge',
+	'machines.confirmBridge',
 	// bootstraps local HTTPS trust and sets a no-store response header
 	'system.localHttpsIdentity',
 	// The full catalog is about 1 MB. Over WebSocket the keepalive pong queues behind it,

@@ -13,6 +13,7 @@ import yaml from 'js-yaml'
 import {z} from 'zod'
 
 import type Titand from '../../index.js'
+import AutomaticMachineBridge, {AUTOMATIC_MACHINE_BRIDGE} from '../system/machine-bridge.js'
 
 import {OWNER_USER_ID} from '../user/constants.js'
 import {
@@ -956,6 +957,7 @@ export default class Machines {
 	#titand: Titand
 	#store: MachineStore
 	#libvirt: Libvirt
+	#automaticBridge: AutomaticMachineBridge
 	#operations = new Map<string, MachineState>()
 	#errors = new Map<string, string>()
 	#lastStates = new Map<string, MachineState>()
@@ -1002,6 +1004,9 @@ export default class Machines {
 		this.logger = titand.logger.createChildLogger('machines')
 		this.#store = new MachineStore(titand.dataDirectory)
 		this.#libvirt = new Libvirt(titand)
+		this.#automaticBridge = new AutomaticMachineBridge(undefined, (error) =>
+			this.logger.error('Failed restoring VM bridge networking', error),
+		)
 		this.#guestApi = new MachineGuestApi({
 			host: MACHINE_GUEST_HOST_ADDRESS,
 			port: titand.port,
@@ -1063,6 +1068,7 @@ export default class Machines {
 	}
 
 	async stop() {
+		await this.#automaticBridge.stop()
 		if (this.#pollTimer) clearInterval(this.#pollTimer)
 		this.#pollTimer = undefined
 		await Promise.allSettled(this.#omarchySetupProbes.values())
@@ -1602,7 +1608,38 @@ export default class Machines {
 	}
 
 	async networks() {
-		return {bridges: await this.#libvirt.bridges()}
+		const found = await this.#libvirt.bridges()
+		const ownedReady = found.includes(AUTOMATIC_MACHINE_BRIDGE) && (await this.#automaticBridge.bridgeReady())
+		const bridges = found.filter((bridge) => bridge !== AUTOMATIC_MACHINE_BRIDGE || ownedReady)
+		return {bridges, automaticBridge: bridges.length ? {available: false} : await this.#automaticBridge.availability()}
+	}
+
+	async prepareBridge(sessionId: string) {
+		if (!this.#automaticBridge.pending) {
+			const {bridges} = await this.networks()
+			const [bridge] = bridges
+			if (bridge) return {bridge}
+		}
+		return this.#automaticBridge.prepare(sessionId)
+	}
+
+	async confirmBridge(token: string, sessionId: string) {
+		const result = await this.#automaticBridge.confirm(token, sessionId)
+		if (result.state === 'ready')
+			await this.#titand.lanIngress
+				.refresh()
+				.catch((error) => this.logger.error('Failed refreshing ingress after bridge setup', error))
+		return result
+	}
+
+	async #validateNetwork(network: MachineNetwork) {
+		if (
+			network.mode === 'bridge' &&
+			network.bridge === AUTOMATIC_MACHINE_BRIDGE &&
+			!(await this.#automaticBridge.bridgeReady())
+		)
+			throw new Error('[machine-bridge-unavailable]')
+		await this.#libvirt.validateNetwork(network)
 	}
 
 	async #collectRuntimeResourceUsage() {
@@ -2158,7 +2195,7 @@ export default class Machines {
 		this.#assertBackupIdle()
 		if (!this.#libvirt.available) throw new Error('[virtualization-unavailable]')
 		network = machineNetworkSchema.parse(network)
-		if (network.mode !== 'nat') await this.#libvirt.validateNetwork(network)
+		if (network.mode !== 'nat') await this.#validateNetwork(network)
 		await this.#assertUniqueName(name)
 		const profile = platformProfile ?? defaultPlatformProfile(arch)
 		if (architectureForProfile(profile) !== arch) throw new Error('[machine-platform-architecture-mismatch]')
@@ -2394,7 +2431,7 @@ export default class Machines {
 			if (state === 'suspended') await this.#libvirt.stop(id, {force: true})
 			else if (state !== 'stopped') throw new Error('[machine-not-stopped]')
 			if ((definition.network?.mode ?? 'nat') === 'nat') await this.#assertPortsCanBind(definition.portForwards)
-			else await this.#libvirt.validateNetwork(definition.network!)
+			else await this.#validateNetwork(definition.network!)
 			this.#operations.set(id, 'starting')
 			this.#errors.delete(id)
 			await this.#emitMachines()
@@ -2584,7 +2621,7 @@ export default class Machines {
 					if (this.#operations.has(id) || (await this.#libvirt.state(id)) !== 'stopped')
 						throw new Error('[machine-network-change-requires-stopped]')
 				}
-				if (settings.network.mode !== 'nat') await this.#libvirt.validateNetwork(settings.network)
+				if (settings.network.mode !== 'nat') await this.#validateNetwork(settings.network)
 			}
 			if (settings.name !== undefined) await this.#assertUniqueName(settings.name, id)
 			if (settings.firmware !== undefined || settings.diskBus !== undefined) {

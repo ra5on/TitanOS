@@ -1,11 +1,13 @@
-import {createElement, useEffect, useMemo, useRef} from 'react'
+import {createElement, useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 
 import {toast} from '@/components/ui/toast'
 import {machineIconSrc} from '@/features/machines/components/os-icon'
 import {machinePath} from '@/features/machines/constants'
+import {getMachinesErrorMessage} from '@/features/machines/hooks/use-machine-actions'
+import {prepareAutomaticBridge} from '@/features/machines/prepare-bridge'
 import type {Machine, MachineAgentControl, OsImage} from '@/features/machines/types'
-import {trpcReact} from '@/trpc/trpc'
+import {trpcClient, trpcReact} from '@/trpc/trpc'
 import {t} from '@/utils/i18n'
 
 // Live-updates the machines and OS image query caches from event bus snapshots.
@@ -119,8 +121,45 @@ export function useMachineCapabilities() {
 
 export function useMachineNetworks() {
 	const query = trpcReact.machines.networks.useQuery(undefined, {staleTime: 5_000, retry: false})
+	const utils = trpcReact.useUtils()
+	const [isPreparingBridge, setIsPreparingBridge] = useState(false)
+	const [bridgeError, setBridgeError] = useState<string>()
+	const operation = useRef<AbortController | null>(null)
+	useEffect(() => () => operation.current?.abort(), [])
+	async function prepareBridge() {
+		if (operation.current) return
+		const controller = new AbortController()
+		operation.current = controller
+		setIsPreparingBridge(true)
+		setBridgeError(undefined)
+		try {
+			const bridge = await prepareAutomaticBridge({
+				prepare: (signal) => trpcClient.machines.prepareBridge.mutate(undefined, {signal}),
+				confirm: (token, signal) => trpcClient.machines.confirmBridge.mutate({token}, {signal}),
+				signal: controller.signal,
+			})
+			if (controller.signal.aborted) return
+			await utils.machines.networks.cancel()
+			utils.machines.networks.setData(undefined, (previous) => ({
+				bridges: Array.from(new Set([...(previous?.bridges ?? []), bridge])),
+				automaticBridge: previous?.automaticBridge ?? {available: false},
+			}))
+			void utils.machines.networks.invalidate()
+			return bridge
+		} catch (error) {
+			if (!controller.signal.aborted)
+				setBridgeError(getMachinesErrorMessage(error instanceof Error ? error.message : ''))
+		} finally {
+			operation.current = null
+			if (!controller.signal.aborted) setIsPreparingBridge(false)
+		}
+	}
 	return {
 		bridges: query.data?.bridges ?? [],
+		automaticBridge: query.data?.automaticBridge,
+		isPreparingBridge,
+		bridgeError,
+		prepareBridge,
 		isLoading: query.isLoading,
 		isError: query.isError,
 		refetch: query.refetch,

@@ -141,7 +141,7 @@ export default function MachineSettings() {
 	const hasFixedMemory = machine.platformProfile === 'windows-98-x86'
 	const isPowerTransition =
 		machine.state === 'starting' || machine.state === 'stopping' || machine.state === 'restarting'
-	const disabled = isSaving || isInstalling || isPowerTransition
+	const disabled = isSaving || isInstalling || isPowerTransition || networks.isPreparingBridge
 	const shutdownRequiredAfterSave =
 		machine.state === 'running' &&
 		machineSettingsRequireShutdown(machine, {
@@ -282,6 +282,10 @@ export default function MachineSettings() {
 							value={network}
 							onChange={setNetworkChoice}
 							bridges={networks.bridges}
+							automaticBridge={networks.automaticBridge}
+							isPreparingBridge={networks.isPreparingBridge}
+							bridgeError={networks.bridgeError}
+							onPrepareBridge={networks.prepareBridge}
 							disabled={disabled || !networkEditable}
 							note={
 								!networkEditable
@@ -585,7 +589,7 @@ export default function MachineSettings() {
 					{isInstalling ? t('machines.settings-unavailable-installing') : ''}
 				</span>
 				<div className='flex shrink-0 flex-col-reverse gap-2.5 sm:flex-row sm:items-center'>
-					<Button size='dialog' onClick={() => navigate(machinePath(machine.id))} disabled={isSaving}>
+					<Button size='dialog' onClick={() => navigate(machinePath(machine.id))} disabled={isSaving || networks.isPreparingBridge}>
 						{t('cancel')}
 					</Button>
 					<Button variant='primary' size='dialog' onClick={handleSave} disabled={!canSave}>

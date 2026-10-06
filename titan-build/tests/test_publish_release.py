@@ -51,9 +51,16 @@ class StablePublicationTests(unittest.TestCase):
                     'architecture':'amd64','firmware':'UEFI','updateFormat':'rugix','systemCompatibility':'titan-rugix-amd64-v2',
                     'ownTitanUpdateChannel':True,'buildCommit':head,'assets':assets,
                     'imageVerification':{'structuralCheck':'passed','uefiHttpSmoke':{'status':'passed',
-                                         'installedRelease':{'version':version,'name':'TitanOS '+version},'bootDiskSizeBytes':32*1024**3}}}
+                                         'installedRelease':{'version':version,'name':'TitanOS '+version},'bootDiskSizeBytes':32*1024**3},
+                                         'bridgeNetworkSmoke':{'status':'passed','passedTests':12,'report':'bridge-smoke.json'}}}
         manifest.update(manifest_changes or {})
         (directory/'build-manifest.json').write_text(json.dumps(manifest))
+        report = {'success':True,'numTotalTests':12,'numPassedTests':12,'numFailedTests':0,
+                  'numPendingTests':0,'numTodoTests':0,'numTotalTestSuites':4,'numPassedTestSuites':4,
+                  'numFailedTestSuites':0,'numPendingTestSuites':0,
+                  'testResults':[{'status':'passed','name':str(self.root/'packages/titand/source/modules/machines/automatic-bridge.vm.test.ts'),
+                                  'assertionResults':[{'status':'passed','fullName':f'Real bridge scenario {index}'} for index in range(12)]}]}
+        (directory/'bridge-smoke.json').write_text(json.dumps(report))
         (directory/'LICENSE.md').write_text('Fixture attribution')
         (directory/'UPSTREAM.md').write_text('Fixture source provenance')
         self.env['TITAN_ARTIFACT_DIR']=str(directory)
@@ -105,6 +112,60 @@ class StablePublicationTests(unittest.TestCase):
 
     def test_modified_asset_fails_before_any_github_call(self):
         directory=self.prepare(); (directory/'titan-2.0.1.update').write_bytes(b'Tampered')
+        self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+
+    def test_missing_skipped_failed_or_redirected_signed_bridge_evidence_blocks_publishing(self):
+        for change in (None, {'status':'skipped'}, {'status':'failed'}, {'report':'other.json'},
+                       {'report':'../bridge-smoke.json'}, {'passedTests':11}, {'passedTests':True}):
+            with self.subTest(change=change):
+                directory=self.prepare()
+                path=directory/'build-manifest.json'; manifest=json.loads(path.read_text())
+                if change is None: del manifest['imageVerification']['bridgeNetworkSmoke']
+                else: manifest['imageVerification']['bridgeNetworkSmoke'].update(change)
+                path.write_text(json.dumps(manifest)); self.sign()
+                self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+                shutil.rmtree(directory)
+
+    def test_missing_malformed_or_duplicate_key_bridge_report_blocks_publishing(self):
+        for content in (None, 'not JSON', '{"success":false,"success":true}'):
+            with self.subTest(content=content):
+                directory=self.prepare(); path=directory/'bridge-smoke.json'
+                if content is None: path.unlink()
+                else: path.write_text(content)
+                self.sign()
+                self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+                shutil.rmtree(directory)
+
+    def test_signed_report_with_failed_skipped_todo_or_inconsistent_counts_is_rejected(self):
+        changes=[{'success':False}, {'success':'true'}, {'numFailedTests':1}, {'numPendingTests':1},
+                 {'numTodoTests':1}, {'numFailedTestSuites':1}, {'numPendingTestSuites':1},
+                 {'numPassedTestSuites':3}, {'numPassedTests':11}, {'numTotalTests':13},
+                 {'numFailedTests':False}, {'numPassedTests':True}]
+        for change in changes:
+            with self.subTest(change=change):
+                directory=self.prepare(); path=directory/'bridge-smoke.json'
+                report=json.loads(path.read_text()); report.update(change)
+                path.write_text(json.dumps(report)); self.sign()
+                self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+                shutil.rmtree(directory)
+
+    def test_substituted_report_or_incomplete_assertions_is_rejected_even_when_signed(self):
+        for attack in ('foreign-test-file','empty-results','fewer-assertions','skipped-assertion','duplicate-assertions'):
+            with self.subTest(attack=attack):
+                directory=self.prepare(); path=directory/'bridge-smoke.json'; report=json.loads(path.read_text())
+                suite=report['testResults'][0]
+                if attack=='foreign-test-file': suite['name']=suite['name'].replace('automatic-bridge.vm.test.ts','unrelated.unit.test.ts')
+                elif attack=='empty-results': report['testResults']=[]
+                elif attack=='fewer-assertions': suite['assertionResults'].pop()
+                elif attack=='skipped-assertion': suite['assertionResults'][0]['status']='pending'
+                elif attack=='duplicate-assertions': suite['assertionResults'][1]=dict(suite['assertionResults'][0])
+                path.write_text(json.dumps(report)); self.sign()
+                self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+                shutil.rmtree(directory)
+
+    def test_bridge_report_cannot_be_substituted_after_signing(self):
+        directory=self.prepare(); path=directory/'bridge-smoke.json'
+        report=json.loads(path.read_text()); report['success']=False; path.write_text(json.dumps(report))
         self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
 
     def test_public_release_is_never_uploaded_over_or_edited(self):

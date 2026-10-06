@@ -1294,9 +1294,16 @@ boot_vm() {
     # AMD64 settings
     case "$(uname -s)" in
       Linux)
-        accel_args="-enable-kvm"
-        machine_args="-machine accel=kvm,type=q35"
-        cpu_args="-cpu host"
+        if [[ -c /dev/kvm && "$(uname -m)" == "x86_64" ]]; then
+          accel_args="-enable-kvm"
+          machine_args="-machine accel=kvm,type=q35"
+          cpu_args="-cpu host"
+        else
+          echo "WARNING: KVM not available, using TCG (slow)" >&2
+          accel_args="-accel tcg,thread=multi"
+          machine_args="-machine type=q35"
+          cpu_args="-cpu max"
+        fi
         qemu_sudo="sudo"
         ;;
       Darwin)
