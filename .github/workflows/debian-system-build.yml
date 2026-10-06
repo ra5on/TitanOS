@@ -142,4 +142,5 @@ jobs:
             dist/debian-image/runtime-test.json
             dist/debian-image/ab-test.json
             dist/debian-image/ab-console.log
+            dist/debian-image/ab-boot-diagnostics.json
           retention-days: 7

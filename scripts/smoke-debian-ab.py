@@ -190,6 +190,62 @@ BOOT_MEMORY_FIELDS={'local_test_image_created','stopped_always_container_persist
     'file_manager_usable','physical_ram_restored_verified','daemon_autostarts_recovered','test_container_image_removed'}
 
 
+GUEST_BOOT_DIAGNOSTICS=r"""
+import json,os,re,stat,subprocess
+units=('titan-firstboot.service','titan-runtime.service','titan-agent.service',
+       'docker.service','libvirtd.service','libvirtd.socket','virtlogd.socket','virtlockd.socket')
+states={'ActiveState':{'active','inactive','failed','activating','deactivating','reloading','maintenance','refreshing'},
+        'SubState':{'dead','running','start','start-pre','start-post','auto-restart','auto-restart-queued',
+                    'failed','listening','exited','stop','stop-sigterm','stop-post','reload','condition'},
+        'Result':{'success','exit-code','signal','timeout','start-limit-hit','watchdog','core-dump',
+                  'resources','protocol','exec-condition','dependency','trigger-limit-hit'}}
+result={'units':{}}
+for unit in units:
+    item={}
+    try:
+        response=subprocess.run(['systemctl','show',unit,
+            '--property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,ExecStartPre'],
+            capture_output=True,text=True,timeout=2,check=False)
+        if response.returncode or len(response.stdout)>16384:raise ValueError()
+        rows=[line.split('=',1) for line in response.stdout.splitlines() if '=' in line]
+        for key,value in rows:
+            if key in ('ActiveState','SubState','Result'):
+                item[key]=value if value in states[key] else 'unknown'
+            elif key in ('ExecMainCode','ExecMainStatus'):
+                item[key]=int(value) if re.fullmatch('[0-9]{1,5}',value) else None
+        item['guard_commands']=[]
+        for key,value in rows:
+            if key!='ExecStartPre':continue
+            for entry in re.findall(r'\{([^{}]*)\}',value):
+                command=dict(part.strip().split('=',1) for part in entry.split(';') if '=' in part)
+                expected='/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
+                if command.get('path')=='/usr/bin/python3' and command.get('argv[]')==expected:
+                    code=command.get('code','');status=command.get('status','')
+                    item['guard_commands'].append({'ignore_errors':command.get('ignore_errors')=='yes',
+                        'code':code if code in ('exited','killed','dumped') else 'unknown',
+                        'status':int(status) if re.fullmatch('[0-9]{1,5}',status) else None})
+    except (OSError,ValueError,subprocess.TimeoutExpired):item={'unavailable':True}
+    result['units'][unit]=item
+try:
+    fd=os.open('/run/titan-boot-memory.json',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'rb') as stream:
+        info=os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or not 0<info.st_size<=16384:
+            raise ValueError()
+        value=json.loads(stream.read(16385))
+    report={}
+    if isinstance(value,dict):
+        report['ok']=value.get('ok') if type(value.get('ok')) is bool else None
+        reason=value.get('reason')
+        report['reason']=reason if reason in ('','unknown_memory','invalid_state','insufficient_memory') else 'unknown'
+        for key in ('total_bytes','reserve_bytes','required_bytes','checked_at'):
+            v=value.get(key);report[key]=v if type(v) is int and 0<=v<2**63 else None
+    result['report']=report
+except (OSError,ValueError,TypeError):result['report']={'unavailable':True}
+print(json.dumps(result,separators=(',',':')))
+"""
+
+
 def boot_memory_lifecycle(agent, client, restart, slot, version, previous_boot):
     """Real 8 -> 3 -> 8 GiB cold boots; never simulate the guest's MemTotal."""
     initial=client.request('/api/status',timeout=8)
@@ -423,6 +479,13 @@ finally:subprocess.run(['umount','/mnt'],check=True)
             report['ok']=True
         finally:
             if proc is not None and not report['ok']:
+                try:
+                    diagnostics=json.loads(agent.python(GUEST_BOOT_DIAGNOSTICS,timeout=25))
+                    (directory/'ab-boot-diagnostics.json').write_text(json.dumps(diagnostics,indent=2)+'\n')
+                    print('TITAN_AB_BOOT_DIAGNOSTICS',flush=True)
+                    print(json.dumps(diagnostics,separators=(',',':')),flush=True)
+                except (OSError,ValueError,RuntimeError):
+                    print('Guest boot diagnostics unavailable.',flush=True)
                 try:
                     print('TITAN_AB_RAUC_DIAGNOSTICS',flush=True)
                     print(agent.execute(['/usr/bin/journalctl','-u','rauc.service','-n','100','--no-pager','-o','cat'],timeout=20)[-20000:],flush=True)

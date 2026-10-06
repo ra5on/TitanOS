@@ -38,10 +38,15 @@ elif name == 'docker':
 elif name == 'systemctl':
     if args[:1] == ['enable']:
         if mode == 'enable_defect' and args[1:] == ['docker.service']: sys.exit(1)
+        if mode == 'socket_enable_defect' and any(arg.endswith('.socket') for arg in args[1:]): sys.exit(1)
         if mode == 'socket_defect' and '--now' in args: sys.exit(1)
     elif args[:1] == ['start']:
+        if any(arg.endswith('.socket') for arg in args[1:]):
+            if mode in ('socket_defect', 'ram_blocked_sidejob'): sys.exit(1)
+            sys.exit(0)
         if mode == 'start_hangs': time.sleep(10)
-        if mode in ('ram_blocked', 'ram_blocked_settles', 'proof_hangs',
+        if mode in ('ram_blocked', 'ram_blocked_settles', 'ram_blocked_sidejob',
+                    'guard_status_wrong', 'socket_closed_after_guard', 'proof_hangs',
                     'never_settles', 'invalid_state', 'unknown_memory',
                     'daemon_defect', 'stale_report', 'socket_defect',
                     'enable_defect', 'one_daemon_ready'):
@@ -55,6 +60,18 @@ elif name == 'systemctl':
             counter.write_text(str(tries + 1))
             if tries < 3: sys.exit(1)
         sys.exit(0)
+    elif args[:2] == ['is-active', '--quiet']:
+        if mode == 'socket_defect' or args[-1] == os.environ.get('FIXTURE_SOCKET_MISSING'): sys.exit(1)
+        if mode == 'socket_closed_after_guard':
+            previous = [json.loads(line) for line in log.read_text().splitlines()]
+            if any(event['program'] == 'systemctl' and event['args'] == ['start', 'libvirtd.service'] for event in previous):
+                sys.exit(1)
+        sys.exit(0)
+    elif args[:1] == ['show']:
+        print('ActiveState=failed\nResult=start-limit-hit')
+        status = '12' if mode == 'guard_status_wrong' else '1'
+        print('ExecStartPre={ path=/usr/bin/true ; argv[]=/usr/bin/true ; ignore_errors=no ; code=exited ; status=0 }')
+        print('ExecStartPre={ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=exited ; status=' + status + ' }')
     else: sys.exit(99)
 elif name == 'virsh':
     if 'net-autostart' in args and mode == 'network_defect': sys.exit(1)
@@ -76,14 +93,14 @@ def verified_boot_memory_block(units=('docker.service', 'libvirtd.service')):
     starts = {tuple(event['args']) for event in events if event['program'] == 'systemctl'}
     required = {('start', unit) for unit in units}
     failed = {('is-failed', '--quiet', unit) for unit in units}
-    if mode not in ('ram_blocked', 'ram_blocked_settles') or not required <= starts or not failed <= starts:
+    if mode not in ('ram_blocked', 'ram_blocked_settles', 'ram_blocked_sidejob') or not required <= starts or not failed <= starts:
         return None
     return {'total_bytes': 3 * 1024**3, 'reserve_bytes': 1024**3, 'required_bytes': 4 * 1024**3}
 '''
 
 
 class DebianRuntimeRAMBlockTests(unittest.TestCase):
-    def run_runtime(self, mode='healthy', *, missing='', budget=None, component='all'):
+    def run_runtime(self, mode='healthy', *, missing='', budget=None, component='all', missing_socket='', actual_proof=False):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Path(temporary)
             programs = fixture / 'bin'
@@ -111,7 +128,26 @@ class DebianRuntimeRAMBlockTests(unittest.TestCase):
             source = (ROOT / 'packaging/debian/runtime.sh').read_text()
             source = source[source.index('source /usr/share/titan/component-functions.sh'):]
             source = source.replace('/usr/share/titan/component-functions.sh', str(library))
-            source = source.replace('/usr/lib/titan', str(package.parent))
+            source = source.replace('/usr/lib/titan', str(ROOT if actual_proof else package.parent))
+            if actual_proof:
+                # Exercise the production systemctl-show parser and both
+                # pre/post unit checks. Only offline capacity recomputation is
+                # a fixture; its file/ownership security has separate tests.
+                source = source.replace('from titan.debian_updates import verified_boot_memory_block', '''
+import json, os, pathlib, subprocess
+from titan import debian_updates as updates
+def fixture_run(args, **kwargs):
+    assert args[0] == 'systemctl' and args[1] == 'show'
+    return subprocess.run([os.environ['FIXTURE_SYSTEMCTL'], *args[1:]], check=True,
+                          text=True, capture_output=True, timeout=kwargs.get('timeout', 1)).stdout.strip()
+def fixture_capacity():
+    with pathlib.Path(os.environ['FIXTURE_LOG']).open('a') as out:
+        out.write(json.dumps({'program':'fresh-proof','args':[]}) + '\\n')
+    return {'total_bytes':3*1024**3,'reserve_bytes':1024**3,'required_bytes':4*1024**3}
+updates.run = fixture_run
+updates._fresh_memory_block = fixture_capacity
+verified_boot_memory_block = updates.verified_boot_memory_block
+''')
             if budget is not None:
                 source = source.replace('SECONDS + 24', 'SECONDS + ' + str(budget))
             script = ('set -euo pipefail\nexport LC_ALL=C.UTF-8\njson=true\ncomponent=' +
@@ -121,7 +157,9 @@ class DebianRuntimeRAMBlockTests(unittest.TestCase):
             start = time.monotonic()
             result = subprocess.run(['/bin/bash', '-c', script], capture_output=True, text=True,
                 timeout=10, env={**os.environ, 'PATH': str(programs) + ':/usr/bin:/bin',
-                                 'FIXTURE_MODE': mode, 'FIXTURE_LOG': str(log)})
+                                 'FIXTURE_MODE': mode, 'FIXTURE_LOG': str(log),
+                                 'FIXTURE_SYSTEMCTL': str(programs / 'systemctl'),
+                                 'FIXTURE_SOCKET_MISSING': missing_socket})
             elapsed = time.monotonic() - start
             events = [json.loads(line) for line in log.read_text().splitlines()]
             report = json.loads(result.stdout)
@@ -129,7 +167,8 @@ class DebianRuntimeRAMBlockTests(unittest.TestCase):
 
     def starts(self, events):
         return [event['args'] for event in events
-                if event['program'] == 'systemctl' and event['args'][:1] == ['start']]
+                if event['program'] == 'systemctl' and event['args'][:1] == ['start']
+                and len(event['args']) == 2 and event['args'][-1].endswith('.service')]
 
     def test_healthy_daemons_are_verified_without_guard_exception(self):
         result, report, events, _ = self.run_runtime()
@@ -162,6 +201,49 @@ class DebianRuntimeRAMBlockTests(unittest.TestCase):
                   and event['args'] == ['is-failed', '--quiet', 'docker.service']]
         self.assertGreaterEqual(len(probes), 4)
         self.assertEqual(events[-1]['program'], 'fresh-proof')
+
+    def test_libvirt_companion_job_failure_requires_all_real_listeners_active(self):
+        result, report, events, _ = self.run_runtime('ram_blocked_sidejob', actual_proof=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(report['ok'])
+        self.assertEqual({row['state'] for row in report['components'].values()}, {'ram_blocked'})
+        self.assertEqual(self.starts(events), [['start', 'docker.service'], ['start', 'libvirtd.service']])
+        probes = [event['args'][-1] for event in events if event['program'] == 'systemctl'
+                  and event['args'][:2] == ['is-active', '--quiet']]
+        for socket in ('libvirtd.socket', 'virtlogd.socket', 'virtlockd.socket'):
+            self.assertEqual(probes.count(socket), 2)
+        self.assertEqual(sum(event['program'] == 'systemctl' and event['args'][:1] == ['show'] for event in events), 4)
+        self.assertEqual(sum(event['program'] == 'fresh-proof' for event in events), 1)
+        self.assertFalse(any(event['program'] == 'virsh' for event in events))
+
+    def test_any_missing_required_listener_rejects_companion_exception(self):
+        for socket in ('libvirtd.socket', 'virtlogd.socket', 'virtlockd.socket'):
+            with self.subTest(socket=socket):
+                result, report, events, _ = self.run_runtime('ram_blocked_sidejob', missing_socket=socket, actual_proof=True)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertFalse(report['ok'])
+                self.assertFalse(any(event['program'] == 'fresh-proof' for event in events))
+
+    def test_listener_closed_by_later_guard_failure_is_rechecked(self):
+        result, report, events, _ = self.run_runtime('socket_closed_after_guard', actual_proof=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(report['ok'])
+        self.assertEqual(self.starts(events), [['start', 'docker.service'], ['start', 'libvirtd.service']])
+        self.assertFalse(any(event['program'] == 'fresh-proof' for event in events))
+
+    def test_active_listeners_do_not_excuse_a_nonmemory_guard_exit(self):
+        result, report, events, _ = self.run_runtime('guard_status_wrong', actual_proof=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(report['ok'])
+        self.assertTrue(any(event['program'] == 'systemctl' and event['args'][:1] == ['show'] for event in events))
+        self.assertFalse(any(event['program'] == 'fresh-proof' for event in events))
+
+    def test_failed_socket_enable_is_never_excused_by_active_listeners(self):
+        result, report, events, _ = self.run_runtime('socket_enable_defect', actual_proof=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(report['ok'])
+        self.assertNotIn(['start', 'libvirtd.service'], self.starts(events))
+        self.assertFalse(any(event['program'] == 'fresh-proof' for event in events))
 
     def test_invalid_unknown_stale_and_daemon_errors_fail_closed(self):
         for mode in ('invalid_state', 'unknown_memory', 'daemon_defect', 'stale_report'):

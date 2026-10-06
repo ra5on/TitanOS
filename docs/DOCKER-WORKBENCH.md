@@ -10,7 +10,7 @@ Docker im Hauptmenü öffnet Titans eigene Verwaltung: Projekte, Container, Imag
 
 Entfernen verwendet keine Force-/Prune-Aktionen. Nach Ja/Nein-Bestätigung wird ein laufender Container zuerst gestoppt; Datenverzeichnisse und Volumes bleiben erhalten. Ein Volume separat zu löschen entfernt dessen Daten endgültig und erfordert ebenfalls Ja/Nein. Docker lehnt das Entfernen noch verwendeter Volumes und Images ab.
 
-Vorlagen-Apps sind zusätzlich sichtbar. Ihre Aktionen werden an den bestehenden Titan-App-Manager weitergegeben; dessen Prüfung von Images, Netzwerk und Datenpfaden bleibt erhalten. Für einen Containerverbund wirkt die App-Aktion auf die gesamte zugehörige App.
+Vorlagen-Apps sind zusätzlich sichtbar. Einzelaktionen betreffen ausschließlich den ausgewählten Container. Die ausdrücklich beschrifteten Paketaktionen unter **Projekte** werden an den Titan-App-Manager weitergegeben und steuern das gesamte zugehörige App-Paket. Die Prüfung von Images, Netzwerk und Datenpfaden bleibt erhalten.
 
 RAM wird einschließlich Dateicache aus Linux-Cgroups gemessen. Wenn diese Messung nicht verfügbar ist, erscheint „—“. Gestoppte Container zeigen 0 B. Ein Docker-RAM-Limit ist eine Obergrenze, kein Verbrauchswert.
 
@@ -28,7 +28,7 @@ Das fertige Netz steht bei **Container erstellen** und bei der App-Installation 
 
 Auf dem Desktop zeigt die Container-Tabelle Namen, Image, Stack, Status, CPU/RAM, Adressen und direkte Aktionen. Mobil erscheint dieselbe Auswahl als kompakte Karten. Statusfilter und Namenssuche greifen gemeinsam; Suche und Cursor bleiben bei Hintergrundaktualisierungen erhalten. Die Live-Übersicht zeigt Containeranzahl, laufende/gestoppte Container, fehlerhafte Healthchecks und den gemessenen Gesamt-RAM. Fehlende aktive Messungen werden nicht als null Verbrauch ausgegeben.
 
-Bis zu 64 Container können für Start/Stop/Neustart ausgewählt werden. Titan prüft die gesamte Auswahl zuerst und meldet Teilfehler ausdrücklich. Mehrere ausgewählte Container einer Titan-App lösen die vorhandene App-Aktion nur einmal aus. Vorhandene Compose-Projekte werden anhand ihrer Docker-Metadaten gruppiert; Stacks können gemeinsam gestartet, gestoppt und neu gestartet werden. Hierbei wird keine externe Compose-Datei ausgeführt oder überschrieben.
+Bis zu 64 Container können für Start/Stop/Neustart ausgewählt werden. Titan prüft die gesamte Auswahl zuerst, führt die Aktion für jeden ausgewählten Container einzeln aus und meldet Teilfehler ausdrücklich. Nicht ausgewählte Dienste eines App-Pakets bleiben unverändert. Vorhandene Compose-Projekte werden anhand ihrer Docker-Metadaten gruppiert; Stacks können gemeinsam gestartet, gestoppt und neu gestartet werden. Hierbei wird keine externe Compose-Datei ausgeführt oder überschrieben.
 
 
 ## Direktes Aktionsmenü und Geräte
@@ -37,7 +37,7 @@ Ein Klick auf den Container-Namen öffnet sein Aktionsmenü direkt neben der Üb
 
 Geräte ändern erfordert einen gestoppten Container. Für Vorlagen-Apps öffnet **App-Einstellungen** die gemeinsame App-Konfiguration. Manuelle Titan-Container bieten **Einstellungen & Geräte**: Titan bewahrt den alten Container gestoppt auf, erstellt eine lokale Kopie seiner beschreibbaren Dateischicht mit derselben Datenvolume-Zuordnung und startet die Kopie. Vorherige Sicherungen heißen `titan-previous-…`. Deren Entfernen löscht das weiterverwendete Volume nicht; dieses ist keine unabhängige Datensicherung. Nur unterstützte Konfigurationen werden übernommen, fremde Container bleiben bei diesem Umbau ausgeschlossen.
 
-Der separate Einstellungsdialog unterstützt bei gestoppten manuellen Titan-Containern Ports, Umgebung, Limits und Neustartregel. Nach dieser Neuerstellung bleibt der Container gestoppt und kann anschließend bewusst gestartet werden. Die Konsole führt Administratorbefehle innerhalb des Containers mit Zeit- und Ausgabebegrenzung aus; sie ist keine interaktive Terminal-Sitzung.
+Der separate Einstellungsdialog unterstützt bei gestoppten manuellen Titan-Containern Ports, Umgebung, Limits und Neustartregel. Nach dieser Neuerstellung startet der Ersatzcontainer automatisch; der vorherige Container bleibt als gestoppte Sicherung erhalten. Vorlagenpakete bleiben nach dem Speichern ihrer App-Einstellungen dagegen gestoppt und können anschließend bewusst gestartet werden. Die Konsole führt Administratorbefehle innerhalb des Containers mit Zeit- und Ausgabebegrenzung aus; sie ist keine interaktive Terminal-Sitzung.
 
 Der aktive Betriebssystemslot bleibt schreibgeschützt. Paket-/Sicherheitskorrekturen kommen zusammen mit Titan über [signierte Systemupdates](UPDATES.md). RAM-Prüfungen berücksichtigen auch den nächsten Autostart; nach zu stark verringerter RAM-Kapazität kann der Offline-Schutz Docker und libvirt anhalten. Die Verwaltung bleibt davon unabhängig. Swap zählt nicht als zusätzliche RAM-Kapazität.
 

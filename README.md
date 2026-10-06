@@ -27,8 +27,8 @@ Die Oberfläche ist auch auf dem Smartphone bedienbar.
 | System | Anmeldeschutz, Sicherungen, signierte Systemupdates und A/B-Rollback |
 
 Vor der Docker-Installation werden Speicher, Ports und weitere Optionen angezeigt.
-Nicht unterstützte Vorlagen werden mit einem Grund ausgewiesen. Die Anwendung
-behält ihre eigene Lizenz und ihre eigenen Anforderungen.
+Nicht unterstützte Vorlagen werden ausgelassen; die Quelle zeigt deren Anzahl.
+Die Anwendung behält ihre eigene Lizenz und ihre eigenen Anforderungen.
 
 <div align="center">
 
