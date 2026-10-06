@@ -1,64 +1,111 @@
-# Titan AppStore und Geräteauswahl
+# Docker-Vorlagen und Geräte
 
-Ab **0.4.18** bietet Titan vier eigene Komplettpakete an. Alte Katalogangebote sind ausgeblendet; bereits installierte Apps und ihre Daten bleiben erhalten.
+Titan 3.0.0 verwendet seine eigene Docker-Verwaltung. Unter **Hauptmenü →
+Docker → Vorlagen** stehen Konfigurationen von LinuxServer.io und Big Bear
+Dockge zur Verfügung. Der mitgelieferte Katalog enthält 374 normalisierte
+Vorlagen. Eine Aktualisierung der Quellen kann diese Anzahl verändern.
 
-| Paket | Automatisch enthalten | Erste Anmeldung |
-| --- | --- | --- |
-| Immich | Immich Server 3.2.4, Machine Learning 3.2.4, PostgreSQL mit VectorChord, Valkey | Konto beim ersten Öffnen anlegen |
-| AdGuard Home | AdGuard Home 0.107.79 mit persistenten Einstellungen | Konto im Assistenten anlegen; internen Webport 3000 beibehalten |
-| Pi-hole | Pi-hole 2026.09.0 mit persistenten Einstellungen | Gewähltes Web-Passwort unter `/admin/` |
-| Nextcloud mit optionalem Euro-Office | Nextcloud 35, PostgreSQL 17, Redis 7, Cron; optional Euro-Office 9.3.4-hotfix.1 und Nextcloud-Connector | Gewählter Nextcloud-Administrator und Passwort |
+Ein eigener AppStore mit von Titan betreuten Komplettpaketen ist aufgeschoben.
+Die Vorlagen ersetzen keine pauschale Laufzeitprüfung jeder Anwendung. Ihre
+Konfiguration wurde normalisiert und mit Docker Compose geprüft; das bestätigt
+noch nicht Anmeldung, Funktionen oder Hardwarebeschleunigung der jeweiligen App.
+Die Freigabegrenzen stehen in [QA-3.0.0](QA-3.0.0.md).
 
-Datenbank- und Office-Schlüssel erzeugt Titan automatisch. Erneutes Starten und Wiederinstallation mit erhaltenen Daten behalten diese internen Schlüssel. Nextcloud richtet seinen Administrator nur bei einer neuen Datenbank ein; vorhandene Konten bleiben bestehen. Datenbanken sind ausschließlich im internen Paketnetz erreichbar.
+## Eine Vorlage verwenden
 
-Die Oberfläche lädt keine externen AppStore-Kataloge. Container-Images und der Nextcloud-Connector werden von ihren Herausgebern heruntergeladen. Ihre Lizenzen gelten unverändert. Die früheren Rezepte bleiben intern für bestehende Installationen und Rollback erhalten.
+1. **Docker → Vorlagen** öffnen. Suche, Quellenauswahl und A–Z/Z–A helfen beim Finden.
+2. **Einrichten** wählen und die Hinweise zur Anmeldung und die verlinkte
+   Anleitung des Herausgebers lesen. Titan erfindet keine Standardpasswörter.
+3. Den benannten Speicherbereich und gegebenenfalls eine Freigabe auswählen.
+   Titan legt die vorgesehenen Daten- und Konfigurationsverzeichnisse dort an;
+   technische Hostpfade müssen dafür nicht eingegeben werden.
+4. Vorgaben für Webport, weitere TCP-/UDP-Ports, Netzwerk und
+   Umgebungsvariablen prüfen. Optionale Ports und Datenordner lassen sich gezielt
+   einschalten. Benötigte eigene Werte, beispielsweise eine App-Adresse oder
+   Zugangsdaten zu einem externen Dienst, vor dem Installieren ergänzen.
+5. Bei Bedarf tatsächlich erkannte USB-/GPU-/NPU-Geräte auswählen und installieren.
+   Ohne Auswahl erhält der Container keinen Gerätezugriff.
 
-AdGuard und Pi-hole benötigen beide Port 53/TCP und UDP. Für den normalen Heimnetzbetrieb eines der Pakete wählen; auf derselben NAS-IP können sie nicht gleichzeitig diesen Port belegen. Alternative veröffentlichte Ports sind einstellbar, müssen aber auch von den DNS-Clients unterstützt werden.
+Enthält eine unterstützte Vorlage mehrere Dienste, legt Titan diesen Verbund
+gemeinsam an. Datenbanken oder andere Abhängigkeiten, die in der Vorlage fehlen,
+werden nicht automatisch ergänzt. Besonders LinuxServer.io-Anwendungen können
+eine separat einzurichtende Datenbank oder andere externe Dienste verlangen.
+Die jeweilige Anleitung bleibt maßgeblich.
 
-Die Installation prüft das aktuelle RAM-Budget einschließlich laufender Apps, aktiver VMs und NAS-Reserve vor dem Download. Nextcloud enthält standardmäßig Datenbank, Cache und Hintergrundaufgaben; Office ist separat auswählbar und benötigt zusätzlichen RAM. Auf einem 8-GiB-NAS zunächst ohne Office testen. Die tatsächlichen Containergrenzen und das berechnete Budget zeigt der Installationsdialog. Datenbanken und Konfigurationen liegen lokal im geschützten App-Verzeichnis; der gewählte Datenbereich enthält die Nutzdaten. Bei Wahl einer Freigabe bekommt das Paket darin einen eigenen Unterordner `Titan-Apps/<Paketkennung>`. Die App-Sicherung stoppt alle laufenden Paketdienste vor dem Sichern der Konfiguration einschließlich Datenbank. Nutzdaten separat sichern.
+Die Quellen lassen sich unter **Vorlagenquellen verwalten** aktualisieren und
+ein- oder ausblenden. Nicht unterstützte Konfigurationen werden ausgelassen;
+die Quelle zeigt die Anzahl. Titan führt keine beliebigen Compose-Dateien aus
+einem hinzugefügten Internet-Link aus. Container-Images werden bei Bedarf von
+ihren Herausgebern heruntergeladen und behalten ihre eigenen Lizenzen.
 
-### Dokumente bearbeiten
+## Installierte Anwendungen verwalten
 
-Mit gewähltem Office-Zusatz verbindet das Nextcloud-Paket Euro-Office automatisch und prüft die Verbindung. Danach öffnet Nextcloud unterstützte Dokumente direkt im Browser. Die NAS-Adresse wird im Installationsdialog vorausgefüllt; ändern, wenn die dort verwendete Adresse vom Endgerät nicht erreichbar ist. Standardmäßig sind Nextcloud und Office lokale HTTP-Dienste; für HTTPS-Zugriff beide über einen Reverse-Proxy bereitstellen und die öffentliche Office-Adresse in Nextcloud anpassen. Zertifikatsprüfungen werden nicht deaktiviert.
+Unter **Docker → Projekte** sind zusammengehörende Dienste gruppiert. Die
+Containeransicht zeigt Status, CPU/RAM, Ports und Adressen. Ein Klick öffnet
+Details mit **App öffnen**, Einstellungen, Start/Stop/Neustart und Protokollen.
+App-Links und Desktop-Verknüpfungen öffnen Anwendungen im neuen Browser-Tab.
 
-Nach Einrichtung des Office-Pakets bietet der Titan-Dateimanager die integrierte Dokumentbearbeitung unterstützter Dateien an. Der eigene Connector prüft Dateiberechtigungen, befristete Tokens, Bearbeitungssperren und Versionen vor dem Rückspeichern. Dokumentabruf, Konvertierung, signiertes Speichern und erhaltene Dateirechte werden im echten Pakettest geprüft; die interaktive Bearbeitung auf dem eigenen NAS bleibt Teil der Beta-Abnahme.
+Bei einem unterstützten Vorlagenpaket gelten gemeinsame App-Aktionen für seinen
+gesamten Verbund; Aktionen auf einen einzelnen Container betreffen nur diesen
+Dienst. Einstellungen eines Pakets lassen sich erst ändern, wenn alle seine
+Dienste gestoppt sind. Bei fehlgeschlagener Neuerstellung versucht Titan, die
+vorherige Konfiguration wiederherzustellen, und meldet Fehler ausdrücklich.
 
-Quellen: [Immich Compose](https://docs.immich.app/install/docker-compose/), [AdGuard Docker](https://github.com/AdguardTeam/AdGuardHome/wiki/Docker), [Pi-hole Docker](https://docs.pi-hole.net/docker/), [Nextcloud Docker](https://github.com/nextcloud/docker), [Euro-Office Connector](https://github.com/Euro-Office/eurooffice-nextcloud).
+Entfernen oder Deinstallieren braucht eine Ja/Nein-Bestätigung. Aufbewahrte
+Datenverzeichnisse und Docker-Volumes sind kein unabhängiges Backup. Ein
+Betriebssystem-Rollback setzt weder Nutzdaten noch App-Datenbanken zurück.
+Die vorhandene Sicherung bietet keine vollständige App-Wiederherstellung auf
+einem frischen Image; siehe [QA-3.0.0](QA-3.0.0.md).
 
-## Eine App installieren
+## Netzwerk und Arbeitsspeicher
 
-1. Im Hauptmenü **App Store** öffnen und die App wählen. Suche, Kategorien und A–Z/Z–A helfen beim Finden.
-2. Hinweise zum ersten Login lesen. Je nach App legst du den Zugang beim Installieren fest oder richtest ihn beim ersten Öffnen ein. Nicht bestätigte Zugangsdaten werden nicht als garantiertes Standardpasswort ausgegeben.
-3. Vorgaben prüfen: Webport, weitere Ports, Datenbereich und Netzwerk. Bridge mit veröffentlichtem Webport ist der einfache Standard. Ein vorhandenes eigenes Netzwerk oder Host-Netzwerk ist gezielt auswählbar. Unter **Netzwerk anpassen → Eigenes Bridge-Netz erstellen** genügt ein Name; Titan wählt ein freies privates IPv4-Subnetz. Nach erfolgreichem Anlegen wird das neue Netz direkt ausgewählt. Subnetz, Gateway und rein interne Kommunikation sind optional unter den erweiterten Einstellungen einstellbar.
-4. Bei Bedarf tatsächlich erkannte Geräte auswählen. Ohne Auswahl bekommt die App keinen Gerätezugriff.
-5. Installieren. Unter **Docker** den Container anklicken, um App öffnen, Einstellungen, Stoppen, Neustarten und Logs direkt zu erreichen.
+Bridge mit veröffentlichten Ports ist die einfache Vorgabe. Host-Netzwerk und
+vorhandene eigene Netze sind auswählbar; bei Host oder ohne Netzwerk werden
+keine separaten Portzuordnungen eingetragen. **Docker → Netzwerke → Erstellen**
+legt ein eigenes Bridge-Netz an. Ein Name genügt; ein freies Subnetz wird nach
+Prüfung vorhandener Netze und Host-Routen gewählt. Subnetz, Gateway und interne
+Kommunikation sind erweiterte Optionen. Macvlan-, Overlay- und IPv6-Netze werden
+über diese Oberfläche nicht neu angelegt.
 
-Mehrere Dienste einer App laufen zusammen in ihrem isolierten Standardnetz. Zugangsdaten werden separat mit privaten Dateirechten gespeichert und nicht in der Containerübersicht ausgegeben. Die Vorlagen geben keine beliebigen Hostpfade, den Docker-Socket oder privilegierten Containerzugriff frei. Lokale App-Bildsymbole benötigen keine externen Logo-Abfragen.
+Ein verwendetes Netzwerk kann nicht gelöscht werden. Auch gestoppte Container
+und installierte App-Pakete können die Zuordnung behalten. System- und fremde
+Netze bleiben vor der Titan-Löschaktion geschützt.
 
-## Netzwerk verwalten
-
-Unter **Docker → Netzwerke** findest du eigene, eingebaute und von Apps verwendete Netze. Die Details zeigen die verbundenen Container und zugeordneten App-Pakete. Ein eigenes Bridge-Netz kann nur entfernt werden, wenn es von keinem Container und keinem installierten App-Paket mehr verwendet wird; die Bestätigung erfolgt mit Ja/Nein. Ein gestopptes App-Paket gibt seine Netzwerkzuordnung nicht automatisch frei. System- und App-Netze werden nicht über diese Löschaktion entfernt.
-
-Titan prüft ein angegebenes oder automatisch gewähltes Subnetz gegen vorhandene Docker-Netze und Host-Routen. Eigene Macvlan-, Overlay- oder IPv6-Netze werden hier nicht angelegt. Ein internes Netz beschränkt normale externe Verbindungen; wähle es nur für Apps, deren benötigte Verbindungen damit weiterhin erreichbar sind.
+Neue Installationen und Starts prüfen frische RAM-Messwerte sowie die
+Containergrenzen, VM-Zuweisungen und NAS-Reserve. Das Budget berücksichtigt auch
+Autostarts beim nächsten Boot. Swap vergrößert die verfügbare RAM-Kapazität nicht.
+Ein Limit ist eine Obergrenze, kein gemessener Verbrauch. Nach einer Verkleinerung
+des physischen RAM kann der Offline-Schutz den Start von Docker und libvirt
+anhalten; die NAS-Verwaltung und der Dateimanager bleiben dabei unabhängig.
+Zur Wiederherstellung dem NAS wieder ausreichend RAM zuweisen. Details unter
+[RAM-Schutz](MEMORY-BUDGET.md).
 
 ## USB, Grafik und NPU
 
-Die Auswahl zeigt Hersteller, Modell und verfügbare Seriennummer sowie den tatsächlichen Linux-Gerätepfad. Nach erneutem Anstecken eines USB-Geräts seine Zuordnung überprüfen. Ein fehlendes oder neu zugeordnetes Gerät verhindert einen neuen App-Start, bis die Auswahl korrigiert wurde; Stoppen und Entfernen bleiben möglich.
+Die Auswahl zeigt erkannte Geräte mit Hersteller, Modell und Seriennummer,
+soweit verfügbar. Geeignete rohe USB-Geräte verlangen eine eindeutige
+Identität. Speicher-, Hub-, Netzwerk- und unbekannte USB-Geräte werden darüber
+nicht freigegeben. Vor Start und Autostart wird die Identität erneut geprüft;
+eine wiederverwendete USB-Adresse genügt nicht. Ein fehlendes oder ersetztes
+Gerät kann den automatischen Docker-Start sicher sperren.
 
-- Intel-/AMD-Grafik erscheint, wenn ein Rendergerät mit aktivem Kernel-Treiber vorhanden ist. AMD-Compute kann zusätzlich `/dev/kfd` benötigen.
-- NVIDIA-GPUs werden mit ihrer konkreten Kennung angeboten, wenn Treiber und NVIDIA Container Runtime einsatzbereit sind.
-- NPUs erscheinen über tatsächlich vorhandene `/dev/accel/accel*`-Geräte. Mehrere Geräte sind gemeinsam wählbar, beispielsweise Intel-Grafik und NPU.
+- Intel-/AMD-Grafik wird angeboten, wenn ein Rendergerät mit aktivem Treiber
+  vorhanden ist. AMD-Compute kann zusätzlich `/dev/kfd` benötigen.
+- NVIDIA-GPUs benötigen einen eingerichteten Treiber und eine einsatzbereite
+  NVIDIA Container Runtime.
+- NPUs werden über vorhandene `/dev/accel/accel*`-Geräte erkannt. Mehrere Geräte,
+  beispielsweise Intel-Grafik und NPU, können gemeinsam ausgewählt werden.
 
-Die App selbst benötigt passende Beschleunigungssoftware. Die Geräteauswahl installiert keine GPU-/NPU-Treiber und garantiert keine Unterstützung durch jedes Container-Image. In Proxmox muss die Hardware zuerst der Titan-VM zugewiesen werden. Physische Geräte stehen den automatisierten QEMU-Tests nicht zur Verfügung.
+Die App braucht passende Beschleunigungssoftware. Die Auswahl installiert keine
+GPU-/NPU-Treiber und garantiert keine Unterstützung durch jedes Image. Bei einer
+Titan-VM muss die Hardware zuerst durch den Host verfügbar gemacht werden.
+Reale Durchreichung bleibt Teil der Hardware-Praxistests.
 
-## Geräte nachträglich ändern
+Änderungen erfordern einen gestoppten Container beziehungsweise ein gestopptes
+Vorlagenpaket. Unterstützte manuelle Titan-Container behalten bei einem Umbau
+eine gestoppte lokale Vorgängerkopie. Das gemeinsame Datenvolume ist dabei
+weiterhin kein unabhängiges Backup. Fremde oder komplexere Konfigurationen
+werden nicht automatisch umgebaut.
 
-**App-Einstellungen → Geräte ändern**: App zuerst stoppen, Geräte auswählen und speichern. Titan legt die verwalteten Container mit der neuen Zuordnung an; gespeicherte App-Daten bleiben erhalten. Anschließend die App starten. Schlägt die Neuanlage fehl, wird die vorherige Konfiguration wiederhergestellt; ein gemeldeter Wiederherstellungsfehler muss über Status und Logs geprüft werden.
-
-Bei manuell mit Titan erstellten Containern bietet das Aktionsmenü **Einstellungen & Geräte**. Für unterstützte Konfigurationen erstellt Titan eine lokale Kopie der beschreibbaren Dateischicht, verwendet dasselbe Datenvolume und startet den neuen Container. Der vorherige Container bleibt gestoppt als Sicherung erhalten. Erst nach erfolgreicher Prüfung kann er unter Weitere Aktionen entfernt werden. Das gemeinsame Datenvolume ist kein unabhängiges Backup. Fremde Container und individuell komplexere Konfigurationen werden nicht automatisch umgebaut.
-
-## Vorhandene Apps und Rollback
-
-Bereits installierte Anwendungen aus älteren externen Quellen bleiben zur Verwaltung verfügbar. Neue externe Stores können nicht mehr über die Oberfläche hinzugefügt oder aktualisiert werden. Bestehende Quellendaten werden für diese Kompatibilität und ältere Systemstände aufbewahrt.
-
-Ein Betriebssystem-Rollback setzt App-Daten oder neue Geräteeinstellungen nicht zurück. Insbesondere ältere Versionen können neue NPU-Zuordnungen nicht vollständig bearbeiten. Vor dem Wechsel Hardware-Konfigurationen prüfen und unabhängige Sicherungen behalten.
+Quellen: [LinuxServer.io-Dokumentation](https://docs.linuxserver.io/),
+[Big Bear Dockge](https://github.com/bigbeartechworld/big-bear-dockge).

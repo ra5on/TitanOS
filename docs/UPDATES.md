@@ -1,97 +1,103 @@
 # Titan-Systemupdates und Rollback
 
-Unter **Systemsteuerung → Updates & Rollback** den Kanal **Alpha** wählen und nach
-Updates suchen. Beta und Stable bieten erst dann Versionen an, wenn entsprechende
-Veröffentlichungen vorhanden sind. Der Alpha-Kanal berücksichtigt später auch
-Beta- und Stable-Versionen.
+Unter **Systemsteuerung → Updates & Rollback** ist **Stable** die einzige
+angebotene Kanalwahl. Die Quelle ist `ra5on/TitanOS`. Release-Entwürfe werden
+nicht als verfügbare NAS-Updates angeboten.
 
-Es gibt **einen Update-Ablauf** für das gesamte NAS: eine Kanalwahl, eine
-automatische Update-Regel sowie **Jetzt prüfen → Update vorbereiten → Neu
-starten**. Neue Titan-Funktionen und Debian-Sicherheitskorrekturen werden als
-signierte vollständige Systemstände angeboten. Ein Debian-Wartungsstand
-behält die installierte Titan-Anwendung samt Oberfläche und Laufzeithelfern
-auf ihrem eingefrorenen Quellstand. Ein Funktionsrelease aktualisiert Titan
-und den passenden Systembereich gemeinsam. In den Versionsinformationen
-werden Titan-Quellstand, Systemrevision und gemessene Paketänderungen getrennt
-ausgewiesen; es gibt dafür keine zweite Update-Seite.
+Aktuell enthält Systemimage **3.0.1** die Titan-Anwendung **3.0.0** und befindet
+sich in der Freigabeprüfung. Ein erfolgreicher Build kann einen Release-Entwurf
+bereitstellen; er ersetzt weder die dokumentierten Praxistests noch eine
+ausdrückliche Stable-Freigabe. Den Stand zeigt [QA-3.0.0](QA-3.0.0.md).
 
-Ein Systemstand enthält den Debian-Systembereich einschließlich Kernel,
-Docker und VM-Komponenten. Signatur, Prüfsummen und Kompatibilität werden vor der
-Aktivierung geprüft. Titan beschreibt den inaktiven der beiden Systembereiche.
-Der laufende Stand bleibt bis zum ausdrücklich bestätigten Neustart aktiv.
+## Ein Ablauf für Titan, Debian und Sicherheitskorrekturen
 
-1. Update prüfen und vorbereiten.
-2. Laufende virtuelle Maschinen geordnet herunterfahren.
-3. „Neu starten“ wählen und mit **Ja, neu starten** bestätigen. Kein Wort abtippen.
-4. Nach erfolgreicher Startprüfung erscheint der vorherige lokale Systemstand
-   im Rollback-Dropdown. Für die Rückkehr auswählen, bestätigen und neu starten.
+**Jetzt prüfen → Update vorbereiten → Neu starten** gilt für das gesamte NAS.
+Es gibt eine gemeinsame automatische Update-Regel und eine Update-Seite.
+Debian-Pakete und Sicherheitskorrekturen gelangen über signierte Systemstände
+auf das NAS; die laufende Systempartition wird nicht mit einzelnen Paketupdates
+verändert.
 
-Direkt nach der ersten Installation ist das Dropdown noch leer. Es gibt einen
-vorherigen Systemstand, sobald das erste Update erfolgreich gestartet wurde.
-Automatische Updatesuche bzw. Vorbereitung löst keinen automatischen Neustart aus.
-Die gemeinsame Automatik lässt sich täglich oder wöchentlich prüfen lassen.
-**Manuell** meldet verfügbare Updates; **Automatisch im Wartungsfenster
-vorbereiten** lädt und prüft den angebotenen Stand am gewählten Wochentag zur
-gewählten Stunde der NAS-Zeitzone. Auch dann muss der Neustart bestätigt
-werden. Die Hintergrundprüfung läuft bei geschlossenem Browser weiter.
+Ein Debian-Wartungsstand behält die Titan-Anwendung und ihre Laufzeithelfer auf
+ihrem eingefrorenen Quellstand. Ein Funktionsrelease erneuert Titan gemeinsam
+mit dem passenden Debian-Systembereich. Die Versionsinformationen unterscheiden
+Titan-Quellstand, Systemrevision und gemessene Paketänderungen.
 
-Benutzer, Freigaberechte, NAS-Einstellungen sowie App-, VM- und Nutzdaten bleiben
-auf dem gemeinsamen Datenbereich. Rollback setzt diese Daten nicht zurück und
-ersetzt kein Backup. Unveränderte Systemkonfigurationen folgen dem ausgewählten
-Systemstand; lokale Änderungen unter `/etc` bleiben erhalten. Ein Rollback
-stellt auch die Debian-Paketversionen und damit den vorherigen Sicherheitsstand
-wieder her, nicht nur die Titan-Oberfläche.
+Das Update enthält unter anderem Debian, Kernel, Docker und VM-Komponenten.
+Signatur, Prüfsummen und Kompatibilität werden vor der Aktivierung geprüft.
+Titan beschreibt den inaktiven der beiden Systembereiche. Der laufende
+schreibgeschützte Systemslot bleibt bis zum bestätigten Neustart aktiv.
 
-## Debian-Pflege und Freigabeprüfung
+1. **Jetzt prüfen** wählen und ein angebotenes Update vorbereiten.
+2. Offene Arbeiten speichern und laufende VMs geordnet herunterfahren.
+3. **Neu starten** wählen und die Ja/Nein-Abfrage bestätigen.
+4. Nach erfolgreicher Startprüfung steht der vorherige lokale Systemstand im
+   Rollback-Dropdown. Für die Rückkehr auswählen, bestätigen und neu starten.
+
+Nach der ersten Installation gibt es noch keinen vorherigen Systemstand.
+Automatische Suche oder Vorbereitung startet das NAS nicht automatisch neu.
+
+## Automatische Suche und Wartungsfenster
+
+Die Oberfläche bietet tägliche oder wöchentliche Prüfung. **Manuell** meldet
+verfügbare Updates. **Automatisch im Wartungsfenster vorbereiten** lädt und prüft
+den angebotenen Stand am gewählten Wochentag und zur gewählten Stunde der
+NAS-Zeitzone. Der Neustart benötigt weiterhin deine Bestätigung.
+Die Hintergrundprüfung läuft auch bei geschlossenem Browser.
 
 Der GitHub-Workflow **Debian security and package maintenance** prüft täglich
-um **03:17 Uhr, Europe/Berlin** die offiziellen Debian-13-Quellen einschließlich
-des Sicherheitsarchivs. GitHub berücksichtigt die Sommer-/Winterzeit; der
-Start kann sich durch die Runner-Warteschlange verzögern. Die Prüfung läuft
-in einem neuen Container auf einem Build-Runner und verändert keine Pakete
-auf einem installierten NAS. Die automatische NAS-Updatesuche ist davon
-unabhängig und folgt der oben gewählten gemeinsamen Regel.
+um **03:17 Uhr, Europe/Berlin** offizielle Debian-13-Quellen einschließlich des
+Sicherheitsarchivs. Die Runner-Warteschlange kann den tatsächlichen Beginn
+verzögern. Der Workflow arbeitet auf einem Build-Runner und verändert keine
+Pakete auf einem installierten NAS. Die Suche in deinem NAS folgt unabhängig
+davon deiner gewählten Regel.
 
-Grundlage sind bereits veröffentlichte **signierte** Systemmanifest- und
-Paketinventar-Dateien. Je Alpha, Beta und Stable werden die zwei jüngsten
-veröffentlichten Titan-Quellstände gepflegt; mehrere Debian-Revisionen desselben
-Quellstands gelten dabei als ein Stand. Ein Sicherheitsbuild verwendet den
-exakten bisherigen Titan-Commit. Anwendungspaket und App-Installationsprüfungen
-werden aus diesem Commit gebaut, während der aktuelle Systembuilder Debian
-und die Systemkomponenten erneuert. Beide Quellstände werden signiert festgehalten.
+Grundlage der Pflege sind veröffentlichte signierte Systemmanifeste und
+Paketinventare. Für Stable werden die zwei jüngsten veröffentlichten
+Titan-Quellstände berücksichtigt; Debian-Revisionen desselben Quellstands gelten
+als ein Stand. Ein Wartungsbuild verwendet den exakten bisherigen Titan-Commit
+und einen aktuellen Systembuilder. Beide Quellstände werden signiert
+festgehalten. Ohne geeignete veröffentlichte Ausgangsversion wird keine
+Wartungsbasis erfunden.
 
-Nur neuere, vertrauenswürdige offizielle Debian-Paketversionen lösen einen
-Wartungsbuild aus. Der fertige Stand enthält die gemessene vollständige
-Paketliste und eine begrenzte Vorschau der Änderungen. Unveränderte Pakete
-führen zu keiner zusätzlichen Wartungsveröffentlichung. Vor Veröffentlichung
-müssen die vollständigen Start- und Laufzeitprüfungen sowie echte Update-,
-Rollback- und Fehler-Rückfalltests in einer wegwerfbaren VM bestehen. Für
-Wartungsstände wird der zuvor veröffentlichte, signierte Systembundle als
-Testbasis anhand seines Prüfsummennachweises und seiner eingebetteten Identität
-geprüft. Eine fehlende Prüfung blockiert die Freigabe.
+Vertrauenswürdige neuere Debian-Pakete lösen einen Wartungsbuild aus.
+Unveränderte Pakete erzeugen keine zusätzliche Veröffentlichung. Die vollständige
+Paketliste und eine begrenzte Änderungsvorschau werden beigelegt. Vor einer
+Veröffentlichung müssen Boot- und NAS-Laufzeittests sowie echte Update-,
+Rollback- und Fehler-Rückfalltests bestehen. Wartungsbuilds verwenden den zuvor
+veröffentlichten signierten Systembundle als geprüfte Testbasis. Die tägliche
+Pflege kann erst beginnen, wenn ein geeigneter Titan-Systemstand veröffentlicht
+ist. Wartung liefert Update-Bundles; nicht jede Paketkorrektur erzeugt ein neues
+Installationsimage.
 
-Ältere Releases ohne signiertes Paketinventar sind noch keine geeignete
-Wartungsbasis. Die tägliche Pflege beginnt für einen Titan-Quellstand erst,
-wenn dessen erste vollständige Freigabe mit Inventar veröffentlicht wurde.
-Der neue Ablauf veröffentlicht zunächst ausschließlich signierte
-Update-Bundles; ein intern erzeugtes Testimage wird nicht als neues
-Installationsimage angeboten.
+## Daten, Rückkehr und Grenzen
 
-Wenn ein neuer Stand seinen Start nicht bestätigt, kann der Bootloader beim
-nächsten Neustart auf den vorherigen gesunden Stand zurückgehen. Ein hängender
-Gast benötigt dafür einen Reset in Proxmox. Die beiden Systembereiche liefern
-keinen Schutz gegen einen Ausfall des gemeinsamen Datenträgers.
+Benutzer, Rechte, NAS-Konfiguration, App-/VM-Daten und persönliche Dateien liegen
+auf dem gemeinsamen Datenbereich. Unveränderte Systemkonfigurationen folgen dem
+ausgewählten Systemstand; lokale Änderungen unter `/etc` bleiben persistent.
+Ein Rollback stellt auch die früheren Debian-Paketversionen und damit den
+vorherigen Sicherheitsstand wieder her.
 
-Der gemeinsame EFI-/GRUB-Startbereich wird durch diese Alpha-Systemupdates noch
-nicht erneuert. Änderungen daran oder am Partitionslayout erfordern derzeit ein
-neues Installationsimage. Normale kompatible Titan-/Debian-Versionen werden über
-den Update-Kanal eingespielt.
+Persistente Daten und Container-Datenbanken werden nicht rückwärts migriert.
+Ein Rollback ist keine Datenwiederherstellung und schützt nicht gegen den Ausfall
+des gemeinsamen Datenträgers. Die vorhandene Sicherung ermöglicht noch keine
+vollständige Rekonstruktion von Konten, Speicher und Anwendungen auf einem
+frischen Image. Geeignete unabhängige Datensicherungen bleiben erforderlich;
+die konkreten Grenzen stehen in [QA-3.0.0](QA-3.0.0.md).
 
-[Installationsimage und Testgrenzen](TITAN-IMAGE.md). Eine bestehende anderes NAS-
-Installation lässt sich damit nicht direkt auf Titan umstellen.
+Bestätigt ein neuer Systemstand seinen Start nicht, kann der Bootloader beim
+nächsten Neustart auf den vorherigen gesunden Stand zurückgehen. Ein vollständig
+hängender Gast benötigt einen Reset durch den Host; der Ablauf ersetzt keinen
+Hardware-Watchdog. Der gemeinsame EFI-/GRUB-Bereich und Änderungen am
+Partitionslayout werden nicht durch normale Systemupdates erneuert. Solche
+Änderungen benötigen derzeit ein neues Installationsimage.
 
 ## Status in der Oberfläche
 
-Kanalwahl, automatische Prüfung, Vorbereitung und Rollback sind unter **Systemsteuerung → Updates & Rollback** zusammengeführt. Im jeweiligen Bereich erscheint der aktuelle Vorgang mit Zustand und zuletzt ausgeführten Aktionen.
+Prüfung, Vorbereitung, Neustart und Rollback sind auf einer Seite zusammengeführt.
+Ein Systemupdate meldet Angebotsprüfung, Konfigurationssicherung, Download,
+Signaturprüfung, Schreiben des inaktiven Slots und Bereitschaft zum Neustart.
+Download-Prozentwerte entstehen aus übertragenen Bytes und der signierten
+Gesamtgröße. Andere Phasen zeigen Zustand und Dauer ohne erfundenen
+Prozentfortschritt. Fehler und unterbrochene Vorgänge bleiben unterscheidbar.
 
-Ein Systemupdate meldet Angebotsprüfung, Konfigurationssicherung, Download, Signaturprüfung, Schreiben des inaktiven Slots und Bereitschaft zum Neustart. Download-Prozentwerte entstehen aus tatsächlich übertragenen Bytes und der signierten Gesamtgröße. Andere Phasen zeigen Status und Dauer ohne geschätzten Fortschrittsbalken. Fehler und unterbrochene Ausführungen sind unterscheidbar; vor einem erneuten Versuch den Systemstatus prüfen.
+[Systemimage und Testgrenzen](TITAN-IMAGE.md).

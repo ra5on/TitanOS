@@ -968,12 +968,53 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         self._app_record_result(app)
         return {"ok": True, "scope": "package", "app": app, "action": action, **result}
 
+    def _app_resume_after_backup(self, app, original):
+        """Resume only pinned, previously running services after fresh admission.
+
+        A cold archive can take minutes, during which storage, USB identities
+        and other Docker/VM RAM commitments can change. Never recreate or adopt
+        a replacement container while recovering from that archive operation.
+        """
+        from .app_memory import check_start_memory
+        with self.app_memory_lock:
+            record = self.managed_app(app)
+            self.app_storage_ready(app)
+            self.app_devices_ready(record)
+            self._app_network_validate(record.get("network"), app, record)
+            definition = json.loads((self.directory / "apps" / app / "compose.json").read_text())
+            rows = self._app_container_rows()
+            selected = {}
+            for key, identifier in original.items():
+                if key not in definition["services"]:
+                    raise Error("Ein zuvor laufender Paketdienst ist nicht mehr in der App-Konfiguration enthalten.", 409)
+                member = self._app_container(app, record, rows, service_key=key)
+                if member is None or member.get("Id") != identifier:
+                    raise Error("Ein zuvor laufender Paketdienst fehlt oder wurde während der Sicherung ersetzt. Kein Ersatzcontainer wird gestartet.", 409)
+                self._app_owned_container(app, member, key)
+                if member.get("State", {}).get("Status") == "paused":
+                    raise Error("Ein Paketdienst wurde während der Sicherung pausiert. Vor einem Wiederstart seinen Status prüfen.", 409)
+                selected[key] = definition["services"][key]
+            check_start_memory(app, self._app_options(app), {"services": selected},
+                self._app_inspected_containers(rows), telemetry=self.telemetry)
+            # Admission itself reads fresh Docker/libvirt inventories. Recheck
+            # external identities again immediately before the actual start.
+            self.app_storage_ready(app)
+            self.app_devices_ready(record)
+            self._app_network_validate(record.get("network"), app, record)
+            _run(["docker", "start", *original.values()], timeout=180)
+            rows = self._app_container_rows()
+            for key, identifier in original.items():
+                member = self._app_container(app, record, rows, service_key=key)
+                if (member is None or member.get("Id") != identifier or
+                        member.get("State", {}).get("Status") not in ("running", "restarting")):
+                    raise Error("Nicht alle zuvor laufenden Paketdienste wurden wieder gestartet. Den aktuellen Containerstatus und die Protokolle prüfen.", 503)
+
     def op_app_backup(self, app):
         self.app_storage_ready(app)
         record = self.managed_app(app)
         container = self._app_container(app, record)
         running = bool(container and container.get("State", {}).get("Status") in ("running", "restarting"))
-        package_running = []
+        original = {app: container["Id"]} if running else {}
         if APPS[app].get('stack'):
             definition = json.loads((self.directory / 'apps' / app / 'compose.json').read_text())
             rows = self._app_container_rows()
@@ -982,8 +1023,10 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                 state = (member or {}).get('State', {}).get('Status')
                 if state == 'paused':
                     raise Error('Pausierte Paketdienste vor der Sicherung fortsetzen oder stoppen.', 409)
-                if state in ('running', 'restarting'): package_running.append(member['Id'])
-            running = bool(package_running)
+                if state in ('running', 'restarting'):
+                    self._app_owned_container(app, member, key)
+                    original[key] = member['Id']
+            running = bool(original)
         if container and container.get("State", {}).get("Status") == "paused":
             raise Error("Pausierte App zuerst in Docker fortsetzen oder stoppen.", 409)
         if running:
@@ -991,19 +1034,27 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         destination = self.directory / "backups"
         destination.mkdir(exist_ok=True, mode=0o700)
         backup = destination / f"{app}-{time.time_ns()}.tar.gz"
+        archive_error = None
         try:
             arguments = ["tar", "-czf", str(backup), "-C", str(self.directory / "apps"), app]
             config = self._app_config_path(app, record)
             if config != self.directory / "apps" / app / "config":
                 arguments += ["--transform=s,^config," + app + "/package-config,", "-C", str(config.parent), "config"]
             _run(arguments, timeout=600)
-        except Exception:
+        except Exception as exc:
             backup.unlink(missing_ok=True)
-            raise
-        finally:
-            if package_running:
-                # Restore only services that were running before the cold backup.
-                _run(['docker', 'start', *package_running], timeout=180)
-            elif running:
-                self.docker(app, "up", "-d")
+            archive_error = exc
+        if original:
+            try:
+                self._app_resume_after_backup(app, original)
+            except Exception as exc:
+                archive_result = (f"Sicherung fehlgeschlagen: {self._package_redact(app, str(archive_error))}. Das unvollständige Archiv wurde entfernt. "
+                                  if archive_error else f"Die Sicherung bleibt erhalten: {backup}. ")
+                message = archive_result + ("Wiederstart der zuvor laufenden Paketdienste fehlgeschlagen: " +
+                    self._package_redact(app, str(exc)) + ". Aktuellen Containerstatus prüfen.")
+                error = Error(message, getattr(exc, "status", 503))
+                self._app_record_result(app, error)
+                raise error from None
+        if archive_error is not None:
+            raise archive_error
         return {"path": str(backup), "scope": "App-Konfiguration; Nutzdaten separat sichern.", "kept_stopped": not running}

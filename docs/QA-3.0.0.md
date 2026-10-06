@@ -5,7 +5,7 @@ Ergebnisse älterer Versionen ersetzen keine Prüfung dieses Images.
 
 | Prüfung | Stand |
 | --- | --- |
-| Python/API/Sicherheitsregressionen | 1.728 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget, USB-Identitätsprüfung, echter Archiv-Wiederherstellung mit Zeitstempeln und abgesicherter Release-Versionsvergabe |
+| Python/API/Sicherheitsregressionen | 1.737 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget, USB-Identitätsprüfung, echter Archiv-Wiederherstellung mit Zeitstempeln, abgesicherter Release-Versionsvergabe und frischer Speicher-/USB-/Netzwerk-/RAM-Prüfung vor dem Wiederstart nach App-Sicherungen |
 | JavaScript-Controller und Syntax | 48 UI-Suiten erfolgreich; JavaScript- und Shell-Syntax geprüft |
 | Debian-Anwendungspaket | Lokal gebaut und vollständige neue Laufzeitdateien sowie öffentlicher Schlüssel geprüft; keine Installation auf dem Build-Rechner |
 | Mobile Ansicht | Dateimanager/Docker/Fotos bei 390 Pixeln; Fotos, VM-Details/Netzwerk, Speicher, Systemsteuerung/Updates bei 320 Pixeln ohne Seitenüberlauf geprüft. Desktop-Raster und mobile Widgetüberlagerung korrigiert. Frisch mobil geöffnetes VM-Fenster wächst bei 320 → 768 → 903 Pixeln auf die verfügbare Breite; Browserkonsole ohne Warnungen oder Fehler |

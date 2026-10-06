@@ -418,15 +418,20 @@ class AppManagementTests(unittest.TestCase):
         self.assertEqual(self.host.load('apps', [])[0]['phase'], 'ready')
 
     def test_package_backup_stops_database_when_main_container_is_already_off(self):
+        from test_app_lifecycle_safety import AppLifecycleSafetyTests
         self.host.op_app_install('titan-immich', 2283)
         self.host.op_app_action('titan-immich', 'stop')
-        database_id = 'b' * 64
-        def member(app, record, rows=None, options=None, service_key=None):
-            if service_key == 'titan-immich-database': return {'Id':database_id,'State':{'Status':'running'}}
-            return None
+        database = AppLifecycleSafetyTests.member(self, 'titan-immich', 'titan-immich-database')
+        database_id = database['Id']
+        command = self.command
+        def stop_stack(args, **kwargs):
+            result = command(args, **kwargs)
+            if args[:2] == ['docker', 'compose'] and args[-1] == 'stop':
+                database['State'].update(Status='exited', Running=False)
+            return result
         self.calls.clear()
-        with patch.object(self.host, '_app_container', side_effect=member):
-            self.host.op_app_backup('titan-immich')
+        self.runner.side_effect = stop_stack
+        self.host.op_app_backup('titan-immich')
         stop = next(i for i,call in enumerate(self.calls) if call[:2] == ['docker','compose'] and call[-1] == 'stop')
         backup = next(i for i,call in enumerate(self.calls) if call[0] == 'tar')
         restore = next(i for i,call in enumerate(self.calls) if call == ['docker','start',database_id])
@@ -482,7 +487,8 @@ class AppManagementTests(unittest.TestCase):
         self.install()
         result = self.host.op_app_backup("jellyfin")
         self.assertFalse(result["kept_stopped"])
-        self.assertEqual(self.compose_commands(), [["stop"], ["create"], ["start"]])
+        self.assertEqual(self.compose_commands(), [["stop"]])
+        self.assertIn(['docker', 'start', self.containers['jellyfin']['Id']], self.calls)
         self.assertEqual(self.containers["jellyfin"]["State"]["Status"], "running")
 
     def test_failed_archive_removes_partial_file_and_restarts_running_app(self):
@@ -513,7 +519,8 @@ class AppManagementTests(unittest.TestCase):
         self.install()
         result = self.host.op_app_action("jellyfin", "update")
         self.assertFalse(result["kept_stopped"])
-        self.assertEqual(self.compose_commands(), [["stop"], ["create"], ["start"], ["pull"], ["create"], ["start"]])
+        self.assertEqual(self.compose_commands(), [["stop"], ["pull"], ["create"], ["start"]])
+        self.assertIn(['docker', 'start', self.containers['jellyfin']['Id']], self.calls)
 
     def test_restart_requires_a_container_and_preserves_data(self):
         self.install()
@@ -653,7 +660,8 @@ class AppManagementTests(unittest.TestCase):
         with self.assertRaises(Error): self.host.op_app_action("jellyfin", "update")
         self.assertEqual(self.containers["jellyfin"]["State"]["Status"], "running")
         self.assertEqual(self.host.load("apps", [])[0]["last_error"], "registry unreachable")
-        self.assertEqual(self.compose_commands(), [["stop"], ["create"], ["start"], ["pull"]])
+        self.assertEqual(self.compose_commands(), [["stop"], ["pull"]])
+        self.assertIn(['docker', 'start', self.containers['jellyfin']['Id']], self.calls)
 
     def test_data_replaced_with_symlink_cannot_start_or_restart(self):
         self.install()
@@ -825,8 +833,12 @@ class AppManagementTests(unittest.TestCase):
         self.enable_selinux()
         self.install()
         initial = self.containers["jellyfin"]["MountLabel"]
+        identity = self.containers["jellyfin"]["Id"]
         self.host.op_app_backup("jellyfin")
-        self.assertEqual(self.label_commands()[-1][-2], initial)
+        self.assertEqual(self.label_commands(), [])
+        self.assertEqual(self.containers["jellyfin"]["MountLabel"], initial)
+        self.assertEqual(self.config_label, initial)
+        self.assertEqual(self.containers["jellyfin"]["Id"], identity)
         self.assertEqual(self.containers["jellyfin"]["State"]["Status"], "running")
 
     def test_label_command_failure_or_label_not_applied_prevents_start(self):

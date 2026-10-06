@@ -32,3 +32,32 @@ Big Bear Dockge template metadata is distributed under the MIT declaration in
 https://github.com/bigbeartechworld/big-bear-dockge/blob/main/package.json .
 Adapted templates preserve their publisher provenance. Big Bear template
 notices and license permissions apply independently of the Titan license.
+
+Big Bear Dockge attribution and bundled license text
+Upstream author: BigBearTechWorld, as declared in upstream package.json.
+Source: https://github.com/bigbeartechworld/big-bear-dockge
+Catalog snapshot tree: f56f936883369843f8a4b99a6b786ab187af82af
+Snapshot provenance: titan/template-notices/catalog-sources.json
+Preserved recipe-library notice: titan/template-notices/Big-Bear-MIT.txt
+MIT license declaration:
+https://github.com/bigbeartechworld/big-bear-dockge/blob/main/package.json
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
