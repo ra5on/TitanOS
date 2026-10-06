@@ -1,9 +1,12 @@
+import type {MachineNetwork} from '@/features/machines/network-settings'
+
 export type MachineSettingsThatRequireShutdown = {
 	cores: number
 	memoryGb: number
 	diskSizeGb: number
 	firmware: 'uefi' | 'bios'
 	diskBus?: 'virtio' | 'sata'
+	network?: MachineNetwork
 }
 
 // The settings flow groups these resource and hardware fields under one clear
@@ -18,6 +21,10 @@ export function machineSettingsRequireShutdown(
 		current.memoryGb !== next.memoryGb ||
 		current.diskSizeGb !== next.diskSizeGb ||
 		current.firmware !== next.firmware ||
-		(current.diskBus ?? 'virtio') !== (next.diskBus ?? 'virtio')
+		(current.diskBus ?? 'virtio') !== (next.diskBus ?? 'virtio') ||
+		(current.network?.mode ?? 'nat') !== (next.network?.mode ?? 'nat') ||
+		(current.network?.mode === 'bridge' &&
+			next.network?.mode === 'bridge' &&
+			current.network.bridge !== next.network.bridge)
 	)
 }

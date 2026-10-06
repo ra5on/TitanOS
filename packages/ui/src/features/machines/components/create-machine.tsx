@@ -7,6 +7,7 @@ import {Navigate, useNavigate, useSearchParams} from 'react-router-dom'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Spinner} from '@/components/ui/loading'
+import {MachineNetworkField} from '@/features/machines/components/network-field'
 import {OsIcon} from '@/features/machines/components/os-icon'
 import {SpecRow, Stepper} from '@/features/machines/components/spec-form'
 import {
@@ -25,7 +26,13 @@ import {
 	recommendedCores,
 } from '@/features/machines/constants'
 import {useMachineActions} from '@/features/machines/hooks/use-machine-actions'
-import {useMachineCapabilities, useMachines, useOsImages} from '@/features/machines/hooks/use-machines'
+import {
+	useMachineCapabilities,
+	useMachineNetworks,
+	useMachines,
+	useOsImages,
+} from '@/features/machines/hooks/use-machines'
+import {machineNetworkAvailable, type MachineNetwork} from '@/features/machines/network-settings'
 import {stripDiskImageExtension} from '@/features/machines/utils'
 import {useCpu} from '@/hooks/use-cpu'
 import {useMemory} from '@/hooks/use-memory'
@@ -56,6 +63,7 @@ export default function CreateMachine() {
 
 	const {osImages, isLoading} = useOsImages()
 	const {capabilities} = useMachineCapabilities()
+	const networks = useMachineNetworks()
 	const {machines} = useMachines()
 	const {create} = useMachineActions()
 	const {threads} = useCpu()
@@ -97,6 +105,7 @@ export default function CreateMachine() {
 	const [arch, setArch] = useState<'amd64' | 'arm64' | null>(null)
 	const [firmware, setFirmware] = useState<'uefi' | 'bios'>('uefi')
 	const [diskBus, setDiskBus] = useState<'virtio' | 'sata'>('virtio')
+	const [networkChoice, setNetworkChoice] = useState<MachineNetwork>({mode: 'nat'})
 	const [diskDirectory, setDiskDirectory] = useState<string>()
 	const [advancedOpen, setAdvancedOpen] = useState(false)
 	const [diskBrowserOpen, setDiskBrowserOpen] = useState(false)
@@ -135,7 +144,7 @@ export default function CreateMachine() {
 			? `${osImage.name} ${osImage.variantName}`
 			: osImage.name
 		: stripDiskImageExtension(isoPath!.split('/').pop() ?? '')
-	const customSourceType = isoPath ? (/\.iso$/i.test(isoPath) ? 'installer' : 'disk-image') : undefined
+	const customSourceType = !osImage && isoPath ? (/\.iso$/i.test(isoPath) ? 'installer' : 'disk-image') : undefined
 	const sourceVersion =
 		osImage?.version ??
 		(customSourceType === 'installer'
@@ -145,7 +154,8 @@ export default function CreateMachine() {
 				: undefined)
 	const sourceOsIconId = osImage && !osImage.custom ? osImage.familyId : 'custom'
 	const {color} = getOsVisuals(sourceOsIconId)
-	const isCustomSource = !!isoPath || !!osImage?.custom
+	const isCustomSource = osImage ? !!osImage.custom : !!isoPath
+	const network: MachineNetwork = isCustomSource ? networkChoice : {mode: 'nat'}
 	const selectedArch = isCustomSource ? (arch ?? capabilities?.hostArchitecture ?? 'amd64') : osImage?.arch
 	const softwareEmulated =
 		selectedArch !== undefined &&
@@ -187,7 +197,10 @@ export default function CreateMachine() {
 	const credentialsValid =
 		(!requiresCredentials || (usernameValid && (!requiresPassword || password !== ''))) && licenseKeyValid
 
-	const canCreate = !isCreating && !!trimmedName && !nameTaken && diskSizeValid && credentialsValid
+	const networkValid =
+		machineNetworkAvailable(network, networks.bridges) &&
+		(network.mode !== 'bridge' || (!networks.isLoading && !networks.isError))
+	const canCreate = !isCreating && !!trimmedName && !nameTaken && diskSizeValid && credentialsValid && networkValid
 
 	// Keep the number field usable while typing: digits only, transient empty
 	// allowed, capped at the max
@@ -220,6 +233,7 @@ export default function CreateMachine() {
 				cores: effectiveCores,
 				memoryGb,
 				arch: selectedArch,
+				network,
 				...(isCustomSource && {
 					firmware: selectedArch === 'arm64' ? 'uefi' : firmware,
 					diskBus: selectedArch === 'arm64' ? 'virtio' : diskBus,
@@ -339,6 +353,16 @@ export default function CreateMachine() {
 					className='min-w-0 flex-1'
 				>
 					<div className='titan-divide-y'>
+						<MachineNetworkField
+							value={network}
+							onChange={setNetworkChoice}
+							bridges={networks.bridges}
+							disabled={isCreating || !isCustomSource}
+							note={!isCustomSource ? t('machines.network-catalog-note') : undefined}
+							isLoading={networks.isLoading}
+							isError={networks.isError}
+							onRefresh={() => void networks.refetch()}
+						/>
 						<SpecRow
 							label={t('machines.configure-processor')}
 							note={t('machines.configure-processor-note', {count: maxCores})}

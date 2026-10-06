@@ -3,12 +3,14 @@ import z from 'zod'
 import {router, privateProcedure} from '../server/trpc/trpc.js'
 import {MACHINE_INPUT_ACTIONS, MAX_SCROLL_AMOUNT, MAX_TYPE_TEXT_LENGTH, MAX_WAIT_SECONDS} from './machine-control.js'
 import {machineIdSchema} from './machine-id.js'
+import {machineNetworkSchema} from './machine-network.js'
 
 const windowsLicenseKey = z.string().regex(/^[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}$/i)
 const screenshotCoordinate = z.tuple([z.number().int().min(0), z.number().int().min(0)])
 
 export default router({
 	capabilities: privateProcedure.query(async ({ctx}) => ctx.titand.machines.capabilities()),
+	networks: privateProcedure.query(async ({ctx}) => ctx.titand.machines.networks()),
 
 	// List all machines
 	list: privateProcedure.query(async ({ctx}) => ctx.titand.machines.list()),
@@ -33,6 +35,7 @@ export default router({
 					firmware: z.enum(['uefi', 'bios']).optional(),
 					diskBus: z.enum(['virtio', 'sata']).optional(),
 					diskDirectory: z.string().min(1).optional(),
+					network: machineNetworkSchema.optional(),
 					username: z.string().min(1).max(32).optional(),
 					// Only used during OS setup — never part of the machine definition
 					password: z.string().min(1).max(128).optional(),
@@ -87,6 +90,7 @@ export default router({
 				// Grow-only: shrinking below the current size is rejected
 				diskSizeGb: z.number().int().min(1).max(10_000).optional(),
 				autostart: z.boolean().optional(),
+				network: machineNetworkSchema.optional(),
 				portForwards: z
 					.array(
 						z.object({

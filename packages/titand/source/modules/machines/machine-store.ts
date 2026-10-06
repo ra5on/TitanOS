@@ -7,6 +7,7 @@ import {z} from 'zod'
 
 import type {MachineDefinition} from './domain.js'
 import {machineIdSchema} from './machine-id.js'
+import {machineNetworkSchema} from './machine-network.js'
 
 const portForwardSchema = z.object({
 	id: z.string().min(1),
@@ -46,6 +47,7 @@ const machineDefinitionSchema = z
 		// stale persisted value here so Machines can migrate it before exposing or
 		// passing the definition to libvirt.
 		ipAddress: z.string().optional(),
+		network: machineNetworkSchema.optional(),
 		diskSizeGb: z.number().int().min(1).max(10_000),
 		cores: z.number().int().min(1).max(64),
 		memoryMb: z.number().int().min(128).max(1_048_576).optional(),

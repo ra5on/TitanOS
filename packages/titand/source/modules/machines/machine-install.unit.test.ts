@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import nodePath from 'node:path'
+import net from 'node:net'
 
 import fse from 'fs-extra'
 import yaml from 'js-yaml'
@@ -42,6 +43,8 @@ const libvirtControls = vi.hoisted(() => ({
 	backupCommitFailures: new Set<string>(),
 	waitForConvertAbort: false,
 	convertSignals: [] as AbortSignal[],
+	bridges: ['br0'],
+	bridgeAddress: undefined as string | undefined,
 }))
 
 vi.mock('./safe-download.js', async () => {
@@ -189,6 +192,16 @@ vi.mock('./libvirt.js', async () => {
 			async probe() {
 				return {available: true, kvmAvailable: false}
 			}
+			async bridges() {
+				return libvirtControls.bridges
+			}
+			async validateNetwork(network: {mode: string; bridge?: string}) {
+				if (network.mode === 'bridge' && !libvirtControls.bridges.includes(network.bridge!))
+					throw new Error('[machine-bridge-unavailable]')
+			}
+			async interfaceAddress() {
+				return libvirtControls.bridgeAddress
+			}
 
 			async reconcileNetwork() {
 				if (libvirtControls.reconcileNetworkFailures > 0) {
@@ -329,6 +342,8 @@ afterEach(async () => {
 	libvirtControls.backupCommitFailures.clear()
 	libvirtControls.waitForConvertAbort = false
 	libvirtControls.convertSignals.splice(0)
+	libvirtControls.bridges = ['br0']
+	libvirtControls.bridgeAddress = undefined
 	await Promise.all(roots.splice(0).map((root) => fse.remove(root)))
 })
 
@@ -362,11 +377,164 @@ async function createMachines(existingRoot?: string) {
 	return {machines, root, filesRoot, eventBus, logger}
 }
 
+describe('selectable VM network lifecycle', () => {
+	async function customMachine(network: machineDomain.MachineNetwork = {mode: 'nat'}) {
+		const context = await createMachines()
+		const imports = nodePath.join(context.filesRoot, 'External', 'imports')
+		await fse.ensureDir(imports)
+		await fsp.writeFile(nodePath.join(imports, 'source.img'), 'source')
+		const machine = await context.machines.create({
+			name: 'Network machine',
+			imagePath: '/External/imports/source.img',
+			diskSizeGb: 1,
+			cores: 1,
+			memoryGb: 1,
+			network,
+		})
+		await pWaitFor(async () =>
+			(await context.machines.list()).some(({id, state}) => id === machine.id && state === 'running'),
+		)
+		return {...context, machine}
+	}
+
+	test('creates custom Host-only machines in their own DHCP subnet', async () => {
+		const {machines, machine, root} = await customMachine({mode: 'host-only'})
+		expect((await machines.list())[0]).toMatchObject({
+			network: {mode: 'host-only'},
+			ipAddress: '10.204.0.2',
+			networkChangeAllowed: false,
+		})
+		const persisted = yaml.load(await fsp.readFile(nodePath.join(root, 'machines', machine.id, 'machine.yaml'), 'utf8'))
+		expect(persisted).toMatchObject({network: {mode: 'host-only'}, ipAddress: '10.204.0.2'})
+	})
+
+	test('keeps catalog and pending installs on NAT before any download or persisted mode change', async () => {
+		const {machines, root} = await createMachines()
+		const options = {
+			name: 'Catalog',
+			osId: process.arch === 'arm64' ? 'ubuntu-26.04-server-arm64' : 'ubuntu-26.04-server-amd64',
+			username: 'titan',
+			password: 'password',
+			diskSizeGb: 1,
+			cores: 1,
+			memoryGb: 1,
+		}
+		await expect(machines.create({...options, network: {mode: 'host-only'}})).rejects.toThrow(
+			'[machine-network-catalog-install-requires-nat]',
+		)
+		expect(downloadControls).toHaveLength(0)
+		expect(await machines.list()).toEqual([])
+		const machine = await machines.create(options)
+		await expect(machines.updateSettings(machine.id, {network: {mode: 'host-only'}})).rejects.toThrow(
+			'[machine-network-change-during-install]',
+		)
+		expect((await machines.list())[0]).toMatchObject({network: {mode: 'nat'}, networkChangeAllowed: false})
+		expect(
+			yaml.load(await fsp.readFile(nodePath.join(root, 'machines', machine.id, 'machine.yaml'), 'utf8')),
+		).toMatchObject({network: {mode: 'nat'}})
+		await pWaitFor(() => downloadControls.length === 1)
+		await downloadControls[0].resolve()
+		await pWaitFor(async () => (await machines.list()).some(({id, state}) => id === machine.id && state === 'running'))
+		await machines.stopMachine(machine.id)
+		expect((await machines.list())[0]).toMatchObject({
+			firstBootSetup: true,
+			installPending: false,
+			networkChangeAllowed: false,
+		})
+		await expect(machines.updateSettings(machine.id, {network: {mode: 'host-only'}})).rejects.toThrow(
+			'[machine-network-change-during-install]',
+		)
+	})
+
+	test('requires stopped guests, retains dormant forwards and skips their port binding on Host-only start', async () => {
+		const {machines, machine} = await customMachine()
+		await expect(machines.updateSettings(machine.id, {network: {mode: 'host-only'}})).rejects.toThrow(
+			'[machine-network-change-requires-stopped]',
+		)
+		await machines.stopMachine(machine.id)
+		const server = net.createServer()
+		try {
+			let hostPort = 40000
+			for (; hostPort < 40100; hostPort++) {
+				try {
+					await new Promise<void>((resolve, reject) => {
+						server.once('error', reject)
+						server.listen(hostPort, '0.0.0.0', resolve)
+					})
+					break
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+				}
+			}
+			expect(server.listening).toBe(true)
+			const forwards = [{id: 'ssh', protocol: 'tcp' as const, hostPort, guestPort: 22}]
+			const changed = await machines.updateSettings(machine.id, {network: {mode: 'host-only'}, portForwards: forwards})
+			expect(changed).toMatchObject({network: {mode: 'host-only'}, networkChangeAllowed: true, portForwards: forwards})
+			await expect(machines.startMachine(machine.id)).resolves.toBe(true)
+		} finally {
+			if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()))
+		}
+	})
+
+	test('shows observed bridge IPs and publishes an address that arrives after DHCP', async () => {
+		const {machines, machine, eventBus} = await customMachine({mode: 'bridge', bridge: 'br0'})
+		expect((await machines.list())[0]).toMatchObject({network: {mode: 'bridge', bridge: 'br0'}, ipAddress: ''})
+		libvirtControls.bridgeAddress = '192.168.1.42'
+		await pWaitFor(
+			() =>
+				eventBus.emit.mock.calls.some(
+					([event, payload]) =>
+						event === 'machines:updated' &&
+						payload.some((entry: any) => entry.id === machine.id && entry.ipAddress === '192.168.1.42'),
+				),
+			{interval: 25, timeout: 3_000},
+		)
+		await machines.stopMachine(machine.id)
+		libvirtControls.bridges = []
+		await expect(machines.startMachine(machine.id)).rejects.toThrow('[machine-bridge-unavailable]')
+	})
+
+	test('does not persist a failed network change or resize the disk before network preparation succeeds', async () => {
+		const {machines, machine, root} = await customMachine()
+		await machines.stopMachine(machine.id)
+		libvirtControls.reconcileNetworkFailures = 1
+		await expect(machines.updateSettings(machine.id, {network: {mode: 'host-only'}, diskSizeGb: 2})).rejects.toThrow(
+			'[machine-lan-interface-unavailable]',
+		)
+		expect(libvirtControls.resizeCalls).toHaveLength(0)
+		expect(
+			yaml.load(await fsp.readFile(nodePath.join(root, 'machines', machine.id, 'machine.yaml'), 'utf8')),
+		).toMatchObject({network: {mode: 'nat'}, ipAddress: '10.203.0.2', diskSizeGb: 1})
+	})
+
+	test('removes staged creation when network preparation fails', async () => {
+		const {machines, filesRoot} = await createMachines()
+		await fse.ensureDir(nodePath.join(filesRoot, 'External', 'imports'))
+		await fsp.writeFile(nodePath.join(filesRoot, 'External', 'imports', 'source.img'), 'source')
+		libvirtControls.reconcileNetworkFailures = 1
+		await expect(
+			machines.create({
+				name: 'Rejected',
+				imagePath: '/External/imports/source.img',
+				diskSizeGb: 1,
+				cores: 1,
+				memoryGb: 1,
+				network: {mode: 'host-only'},
+			}),
+		).rejects.toThrow('[machine-lan-interface-unavailable]')
+		expect(await machines.list()).toEqual([])
+	})
+})
+
 describe('background machine installation', () => {
 	const catalogOsId = process.arch === 'arm64' ? 'ubuntu-26.04-server-arm64' : 'ubuntu-26.04-server-amd64'
 	const catalogCreate = {osId: catalogOsId, username: 'titan', password: 'password'}
 
 	test('installs Omarchy with separate seed media and cleans up only after authenticated completion', async () => {
+		// This lifecycle fixture writes tiny fake media. Its success must not
+		// depend on the free space of the runner's tmpfs for the catalog ISO.
+		const capacity = await fsp.statfs(os.tmpdir())
+		vi.spyOn(fsp, 'statfs').mockResolvedValue({...capacity, bavail: Math.ceil((64 * 1024 ** 3) / capacity.bsize)})
 		vi.spyOn(machineDomain, 'hostArchitecture').mockReturnValue('amd64')
 		const {machines, root, eventBus} = await createMachines()
 		const machine = await machines.create({

@@ -53,18 +53,32 @@ export function Stepper({
 	)
 }
 
-export function SpecRow({label, note, children}: {label: string; note?: string; children: React.ReactNode}) {
+export function SpecRow({
+	label,
+	note,
+	children,
+	stackOnMobile = false,
+}: {
+	label: string
+	note?: string
+	children: React.ReactNode
+	stackOnMobile?: boolean
+}) {
 	const labelId = useId()
 
 	return (
-		<div role='group' aria-labelledby={labelId} className='flex items-center justify-between gap-4 py-5 sm:gap-6'>
+		<div
+			role='group'
+			aria-labelledby={labelId}
+			className={`flex justify-between gap-4 py-5 sm:gap-6 ${stackOnMobile ? 'flex-col sm:flex-row sm:items-center' : 'items-center'}`}
+		>
 			<div className='flex min-w-0 flex-1 flex-col gap-1'>
 				<span id={labelId} className='text-15 font-medium -tracking-2 text-white'>
 					{label}
 				</span>
 				{note && <span className='max-w-[280px] text-12 leading-snug -tracking-2 text-white/35'>{note}</span>}
 			</div>
-			<div className='shrink-0'>{children}</div>
+			<div className={stackOnMobile ? 'min-w-0 sm:shrink-0' : 'shrink-0'}>{children}</div>
 		</div>
 	)
 }

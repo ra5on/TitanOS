@@ -23,4 +23,15 @@ describe('machineSettingsRequireShutdown', () => {
 	test('treats an omitted disk bus as the default VirtIO bus', () => {
 		expect(machineSettingsRequireShutdown({...current, diskBus: undefined}, current)).toBe(false)
 	})
+
+	test('detects network mode and bridge changes while preserving the legacy NAT default', () => {
+		expect(machineSettingsRequireShutdown(current, {...current, network: {mode: 'nat'}})).toBe(false)
+		expect(machineSettingsRequireShutdown(current, {...current, network: {mode: 'host-only'}})).toBe(true)
+		expect(
+			machineSettingsRequireShutdown(
+				{...current, network: {mode: 'bridge', bridge: 'br0'}},
+				{...current, network: {mode: 'bridge', bridge: 'br1'}},
+			),
+		).toBe(true)
+	})
 })

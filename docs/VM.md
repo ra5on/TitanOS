@@ -1,4 +1,4 @@
-# TitanOS 2.0.1 in einer virtuellen Maschine
+# TitanOS 2.0.2 in einer virtuellen Maschine
 
 TitanOS wird als Festplatten-Image bereitgestellt. Importiere das Image in
 deine VM und starte anschließend von dieser Festplatte.
@@ -16,15 +16,15 @@ muss dein Hypervisor die Hardwarevirtualisierung an die TitanOS-VM weitergeben
 
 ## Image importieren
 
-1. Lade [titan-2.0.1.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1).
+1. Lade [titan-2.0.2.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.2/titan-2.0.2.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.2).
 2. Prüfe die Download-Datei anhand der [Signatur- und Prüfsummenanleitung](DOWNLOADS.md).
-3. Entpacke die Datei zu `titan-2.0.1.img`. Mit dem Werkzeug `xz` geht das beispielsweise so:
+3. Entpacke die Datei zu `titan-2.0.2.img`. Mit dem Werkzeug `xz` geht das beispielsweise so:
 
    ```sh
-   xz --decompress --keep titan-2.0.1.img.xz
+   xz --decompress --keep titan-2.0.2.img.xz
    ```
 
-4. Erstelle eine VM mit UEFI und importiere `titan-2.0.1.img` als ihre Boot-Festplatte. Stelle diese Festplatte an die erste Stelle der Startreihenfolge.
+4. Erstelle eine VM mit UEFI und importiere `titan-2.0.2.img` als ihre Boot-Festplatte. Stelle diese Festplatte an die erste Stelle der Startreihenfolge.
 5. **Vergrößere genau diese importierte Boot-Festplatte vor dem ersten Start auf mindestens 32 GiB, empfohlen 64 GiB.** Verwende dafür die Größenanpassung deines Hypervisors.
 6. Starte die VM.
 
@@ -56,20 +56,25 @@ installiere anschließend deine Apps im App-Store.
 
 Systemupdates werden ausschließlich als **Stable** veröffentlicht und direkt
 in den Einstellungen installiert. Die [Update-Anleitung](UPDATES.md) erklärt
-die Prüfung und Installation dieser Updates. Diese Ausgabe erfordert zunächst
-eine Neuinstallation.
+die Prüfung und Installation dieser Updates. Bestehende Installationen dieses
+TitanOS-Forks mit 2.0.1 können auf 2.0.2 aktualisiert werden. Für den Wechsel von
+Titan 3.x oder einem früheren Namensraum ist eine Neuinstallation nötig.
 
 ## Was beim Release geprüft wird
 
-TitanOS 2.0.1 hat den Start in einer UEFI-Test-VM mit einer 32-GiB-Boot-Festplatte
-erfolgreich bestanden. Weboberfläche, Backend und Versionskennung wurden über
-das VM-Netzwerk geprüft. Der signierte
+Das zuvor veröffentlichte TitanOS 2.0.1 hat den Start in einer UEFI-Test-VM mit
+einer 32-GiB-Boot-Festplatte erfolgreich bestanden. Weboberfläche, Backend und
+Versionskennung wurden über das VM-Netzwerk geprüft. Der signierte
 [Boot-Bericht](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/image-verification.json)
-enthält die Ergebnisse. Diese Prüfung deckt nicht jede Hypervisor-, Hardware-,
-App- oder Nested-Virtualization-Konfiguration ab.
+enthält die Ergebnisse dieser Ausgabe. Diese Prüfung deckt nicht jede
+Hypervisor-, Hardware-, App- oder Nested-Virtualization-Konfiguration ab.
 Die Berichte und die Dateien `titan-2.0.1.img.xz` und
 `titan-2.0.1.update` findest du beim
 [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1).
+
+Für 2.0.2 erzeugt die Veröffentlichung einen eigenen Boot-Bericht. Image und
+Update-Bundle stehen nach erfolgreichem Build, Prüfung und Veröffentlichung im
+[Release 2.0.2](https://github.com/ra5on/TitanOS/releases/tag/v2.0.2) bereit.
 
 [Zur Übersicht](../README.md) · [Support](https://github.com/ra5on/TitanOS/issues)
 · [Lizenz](../LICENSE.md) · [Herkunft](../UPSTREAM.md)
