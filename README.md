@@ -6,9 +6,9 @@
 
 [![CI](https://github.com/ra5on/TitanOS/actions/workflows/ci.yml/badge.svg)](https://github.com/ra5on/TitanOS/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/Version-3.0.1-246cff)](https://github.com/ra5on/TitanOS/releases)
-[![Freigabe](https://img.shields.io/badge/Status-Freigabepr%C3%BCfung-566879)](docs/QA-3.0.0.md)
+[![Kanal](https://img.shields.io/badge/Kanal-stable-238636)](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1)
 
-[Testimage 3.0.1](https://github.com/ra5on/TitanOS/releases/download/untagged-550c33fa993de99ab703/titan-3.0.1-amd64.img.xz) · [Probleme melden](https://github.com/ra5on/TitanOS/issues) · [Lizenz](LICENSE)
+[Image 3.0.1 herunterladen](https://github.com/ra5on/TitanOS/releases/download/titan-3.0.1/titan-3.0.1-amd64.img.xz) · [Probleme melden](https://github.com/ra5on/TitanOS/issues) · [Lizenz](LICENSE)
 
 </div>
 
@@ -39,11 +39,12 @@ Die Anwendung behält ihre eigene Lizenz und ihre eigenen Anforderungen.
 
 </div>
 
-**Testimage 3.0.1:** Boot, NAS-Funktionen, signiertes Update, Rollback und der
-echte RAM-Kaltstart sind erfolgreich geprüft. Der Download liegt als
-[Release-Entwurf](https://github.com/ra5on/TitanOS/releases/tag/untagged-550c33fa993de99ab703)
-vor und ist mit GitHub-Anmeldung für Repository-Verwalter erreichbar.
-Die öffentliche Stable-Freigabe folgt nach Praxistest und Dauerlauf.
+**Titan 3.0.1 ist veröffentlicht:** Boot, NAS-Funktionen, signiertes Update,
+Rollback und der echte RAM-Kaltstart sind erfolgreich geprüft. Das
+[Release](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1) und alle
+Downloads sind öffentlich ohne GitHub-Anmeldung erreichbar; der Updatekanal
+steht auf **stable**. Weitere Praxistests auf realer Hardware und ein
+mehrtägiger Dauerlauf sind noch offen.
 Ergebnisse stehen im [Prüfprotokoll](docs/QA-3.0.0.md), die nächsten Schritte im
 [Praxistest](docs/PRAXISTEST-3.0.0.md).
 

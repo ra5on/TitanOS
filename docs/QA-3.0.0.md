@@ -4,7 +4,9 @@ Systemimage **3.0.1**, Anwendung **3.0.0**. Der automatische Image-Lauf
 [37418063214](https://github.com/ra5on/TitanOS/actions/runs/37418063214)
 ist am 6. Oktober 2026 erfolgreich abgeschlossen. Das Image gehört zum
 [Quellcommit 2cfd33a](https://github.com/ra5on/TitanOS/commit/2cfd33a3d9c7001ee4c6ef14f49d3fde22f9e3f8).
-Der Download bleibt ein **Release-Entwurf**; Praxistest und Dauerlauf sind offen.
+Das [Release 3.0.1](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1)
+wurde am 6. Oktober 2026 auf ausdrücklichen Wunsch öffentlich für den
+Stable-Kanal freigegeben. Weitere Praxistests und der Dauerlauf sind offen.
 
 | Prüfung | Ergebnis |
 | --- | --- |
@@ -26,10 +28,14 @@ Der Download bleibt ein **Release-Entwurf**; Praxistest und Dauerlauf sind offen
 | Signierter Download | Manifest und Prüfsummen signiert; Signaturprüfung im CI erfolgreich. Alle 13 Assets vollständig hochgeladen; Hashes der separat geladenen Laufzeit-/A/B-Berichte stimmen mit den Release-Dateien überein. Beide öffentlichen Vertrauensschlüssel stimmen mit den Repository-Schlüsseln überein |
 | Mehrtägiger Dauerlauf, reale Hardware und Clients | Ausstehend; [Praxistest](PRAXISTEST-3.0.0.md) durchführen |
 
-Der [Release-Entwurf](https://github.com/ra5on/TitanOS/releases/tag/untagged-550c33fa993de99ab703)
+Das [öffentliche Release](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1)
 enthält `titan-3.0.1-amd64.img.xz` (1.192.493.740 Bytes, eine Datei), das
 RAUC-Update, Manifest, Signaturen, Paketinventar und Prüfberichte.
-Entwürfe sind mit GitHub-Anmeldung für Repository-Verwalter erreichbar.
+Die Downloads sind ohne GitHub-Anmeldung erreichbar. Der
+[Veröffentlichungslauf](https://github.com/ra5on/TitanOS/actions/runs/37425803597)
+hat Quellcommit, Tag, alle 13 Asset-Digests, beide Signaturen und die
+RAM-/Schreibschutz-Nachweise nochmals geprüft; die signierten Assets sind
+unverändert geblieben.
 Der GitHub-SHA-256-Digest des komprimierten Images lautet:
 
 ```text
@@ -40,8 +46,8 @@ Die Laufzeit- und A/B-Berichte wurden zusätzlich als GitHub-Artefakt geladen
 und mit den Release-Digests verglichen. Das komprimierte Image wurde für diesen
 zusätzlichen Abgleich nicht erneut lokal heruntergeladen.
 
-Ein Release-Entwurf kann zum Testen bereitgestellt werden. Ausstehende Prüfungen
-dürfen nicht durch ein Stable-Etikett ersetzt werden. Für die erste Systemfamilie
+Die öffentliche Freigabe lässt die oben aufgeführten praktischen Prüfungen und
+fehlenden Wiederherstellungsfunktionen weiterhin offen. Für die erste Systemfamilie
 prüft CI den echten A/B-Wechsel aus einem privaten Boot-Overlay mit einer
 älteren signierten Identität. Dieses Bootstrap-Ergebnis belegt keine Migration
 von einer fremden oder früheren Installation. Spätere Updates verwenden einen
