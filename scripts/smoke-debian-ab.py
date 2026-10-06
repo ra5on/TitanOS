@@ -240,7 +240,9 @@ BOOT_MEMORY_FIELDS={'local_test_image_created','stopped_always_container_persist
 
 GUEST_BOOT_DIAGNOSTICS=GUEST_BOOT_DAEMON_PROOF+r"""
 units=('titan-firstboot.service','titan-runtime.service','titan-agent.service',
-       'docker.service','libvirtd.service','libvirtd.socket','virtlogd.socket','virtlockd.socket')
+       'docker.service','libvirtd.service','docker.socket','libvirtd.socket','virtlogd.socket','virtlockd.socket')
+expected_sockets={'docker.socket':('docker.service','/run/docker.sock (Stream)'),
+                  'libvirtd.socket':('libvirtd.service','/run/libvirt/libvirt-sock (Stream)')}
 states={'ActiveState':{'active','inactive','failed','activating','deactivating','reloading','maintenance','refreshing'},
         'SubState':{'dead','running','start','start-pre','start-post','auto-restart','auto-restart-queued',
                     'failed','listening','exited','stop','stop-sigterm','stop-post','reload','condition'},
@@ -252,7 +254,7 @@ for unit in units:
     item={}
     try:
         response=subprocess.run(['systemctl','show',unit,
-            '--property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,ExecStart,RestartPreventExitStatus,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic'],
+            '--property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,ExecStart,RestartPreventExitStatus,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic,Triggers,Listen'],
             capture_output=True,text=True,timeout=2,check=False)
         if response.returncode or len(response.stdout)>16384:raise ValueError()
         rows=unique(line.split('=',1) for line in response.stdout.splitlines() if '=' in line)
@@ -262,6 +264,11 @@ for unit in units:
             elif key in ('ExecMainCode','ExecMainStatus'):
                 item[key]=int(value) if re.fullmatch('[0-9]{1,5}',value) else None
         if unit in expected_starts:item['guard_proof']=daemon_proof(unit,rows)
+        if unit in expected_sockets:
+            trigger,listener=expected_sockets[unit]
+            item['socket_proof']={'loaded':rows.get('LoadState')=='loaded',
+                'fixed_trigger':rows.get('Triggers','').split()==[trigger],
+                'fixed_listener':rows.get('Listen')==listener}
     except (OSError,ValueError,subprocess.TimeoutExpired):item={'unavailable':True}
     result['units'][unit]=item
 try:

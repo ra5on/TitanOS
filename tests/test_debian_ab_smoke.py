@@ -278,11 +278,12 @@ class BootMemoryUnitObservationTests(BootEvidenceFixture,unittest.TestCase):
 
 
 class BootFailureDiagnosticTests(BootEvidenceFixture,unittest.TestCase):
-    def diagnostic(self, properties, report, **options):
+    def diagnostic(self, properties, report, unit_overrides=None, **options):
         units={unit:self.service(unit,properties) for unit in START_COMMANDS}
         units.update({unit:''.join(key+'='+value+'\n' for key,value in properties.items()) for unit in
                       ('titan-firstboot.service','titan-runtime.service','titan-agent.service',
-                       'libvirtd.socket','virtlogd.socket','virtlockd.socket')})
+                       'docker.socket','libvirtd.socket','virtlogd.socket','virtlockd.socket')})
+        units.update(unit_overrides or {})
         return self.execute_evidence(ab.GUEST_BOOT_DIAGNOSTICS,report,units,**options)
 
     def test_diagnostics_capture_actual_guard_result_without_executing_or_leaking_commands(self):
@@ -298,7 +299,8 @@ class BootFailureDiagnosticTests(BootEvidenceFixture,unittest.TestCase):
         self.assertEqual(value['units']['titan-runtime.service']['Result'],'start-limit-hit')
         self.assertEqual(value['report']['required_bytes'],report['required_bytes'])
         self.assertNotIn('SECRET',json.dumps(value));self.assertNotIn('argv',json.dumps(value));self.assertNotIn(BOOT_ID,json.dumps(value))
-        self.assertEqual(len(commands),8)
+        self.assertEqual(len(commands),9)
+        self.assertTrue(any(command[2]=='docker.socket' for command in commands))
         self.assertTrue(all(command[:2]==['systemctl','show'] for command in commands))
         self.assertFalse(ab.blocked_boot_observation(value))
 
@@ -319,6 +321,34 @@ class BootFailureDiagnosticTests(BootEvidenceFixture,unittest.TestCase):
             self.assertEqual(value['units']['libvirtd.socket']['Result'],result)
             self.assertFalse(value['units']['libvirtd.service']['guard_proof']['marker_current_boot'])
             self.assertFalse(value['units']['libvirtd.service']['guard_proof']['main_exit_78'])
+
+    def test_socket_diagnostics_use_real_singleton_triggers_and_fixed_listener(self):
+        sockets={'docker.socket':('docker.service','/run/docker.sock'),
+                 'libvirtd.socket':('libvirtd.service','/run/libvirt/libvirt-sock')}
+        for unit,(trigger,listener) in sockets.items():
+            rows={'LoadState':'loaded','ActiveState':'active','SubState':'listening','Result':'success',
+                  'Triggers':trigger,'Listen':listener+' (Stream)'}
+            output=''.join(key+'='+value+'\n' for key,value in rows.items())
+            value,commands=self.diagnostic({}, {},unit_overrides={unit:output})
+            self.assertEqual(value['units'][unit]['socket_proof'],
+                             {'loaded':True,'fixed_trigger':True,'fixed_listener':True})
+            self.assertTrue(any(command[2]==unit and 'Triggers,Listen' in command[3] for command in commands))
+            self.assertIsNone(ab.blocked_boot_observation(value),'Socket diagnostics never replace independent main-process evidence')
+
+    def test_socket_diagnostics_reject_service_alias_other_triggers_and_listener_payloads(self):
+        base={'LoadState':'loaded','Triggers':'docker.service','Listen':'/run/docker.sock (Stream)'}
+        for changes,field in (({'LoadState':'not-found'},'loaded'),
+                              ({'Triggers':'','Service':'docker.service'},'fixed_trigger'),
+                              ({'Triggers':'docker.service SECRET.service'},'fixed_trigger'),
+                              ({'Triggers':'libvirtd.service'},'fixed_trigger'),
+                              ({'Listen':'/tmp/SECRET.sock (Stream)'},'fixed_listener'),
+                              ({'Listen':'/run/docker.sock (Stream) /tmp/SECRET.sock (Stream)'},'fixed_listener')):
+            with self.subTest(changes=changes):
+                rows={**base,**changes};output=''.join(key+'='+value+'\n' for key,value in rows.items())
+                value,_=self.diagnostic({}, {},unit_overrides={'docker.socket':output})
+                self.assertFalse(value['units']['docker.socket']['socket_proof'][field])
+                self.assertNotIn('SECRET',json.dumps(value))
+                self.assertNotIn('/tmp',json.dumps(value));self.assertNotIn('argv',json.dumps(value))
 
 
 if __name__ == '__main__':

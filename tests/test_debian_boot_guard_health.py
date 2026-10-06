@@ -26,7 +26,7 @@ def socket_status(unit='docker.socket', state='active', result='success'):
     service, listener = {'docker.socket': ('docker.service', '/run/docker.sock'),
                          'libvirtd.socket': ('libvirtd.service', '/run/libvirt/libvirt-sock')}[unit]
     return (f'LoadState=loaded\nActiveState={state}\nSubState=listening\nResult={result}\n'
-            f'Service={service}\nListen={listener} (Stream)\n')
+            f'Triggers={service}\nListen={listener} (Stream)\n')
 
 
 class FreshGuardProofTests(unittest.TestCase):
@@ -230,6 +230,28 @@ class GuardSocketTests(unittest.TestCase):
             self.assertTrue(updates.verified_guard_socket('docker.socket'))
         guard.assert_not_called()
         self.assertEqual(command.call_args.args[0][:3], ['systemctl', 'show', 'docker.socket'])
+        properties = command.call_args.args[0][3].removeprefix('--property=').split(',')
+        self.assertIn('Triggers', properties)
+        self.assertNotIn('Service', properties)
+
+    def test_missing_foreign_or_multiple_triggered_services_are_rejected(self):
+        # systemd 257 exposes the activated service through Unit.Triggers;
+        # Socket.Service is not a D-Bus property and must not be invented.
+        for unit, service in (('docker.socket', 'docker.service'),
+                              ('libvirtd.socket', 'libvirtd.service')):
+            for state, result in (('active', 'success'), ('failed', 'service-start-limit-hit')):
+                text = socket_status(unit, state, result)
+                expected = 'Triggers=' + service + '\n'
+                for trigger in ('', 'Triggers=\n', 'Triggers=other.service\n',
+                                'Triggers=' + service + ' other.service\n',
+                                'Triggers=' + service + ' ' + service + '\n',
+                                'Service=' + service + '\n',
+                                'Service=' + service + '\nTriggers=other.service\n'):
+                    with self.subTest(unit=unit, state=state, trigger=trigger), \
+                            patch.object(updates, 'run', return_value=text.replace(expected, trigger)), \
+                            patch.object(updates, 'verified_boot_memory_block', return_value={'total_bytes': 3}) as guard:
+                        self.assertFalse(updates.verified_guard_socket(unit))
+                        guard.assert_not_called()
 
     def test_failed_socket_requires_own_fresh_guard_and_stable_exact_identity(self):
         for unit in ('docker.socket', 'libvirtd.socket'):

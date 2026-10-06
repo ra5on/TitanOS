@@ -606,10 +606,12 @@ def verified_guard_socket(unit):
                 'libvirtd.socket': ('libvirtd.service', '/run/libvirt/libvirt-sock (Stream)')}
     if unit not in expected:
         return False
-    properties = ('LoadState', 'ActiveState', 'SubState', 'Result', 'Service', 'Listen')
+    # Socket Service= is a unit-file directive, not a D-Bus property. systemd
+    # exposes the resolved activation relationship through Unit.Triggers.
+    properties = ('LoadState', 'ActiveState', 'SubState', 'Result', 'Triggers', 'Listen')
     rows = _unit_properties(unit, properties)
     service, listener = expected[unit]
-    if (not rows or rows.get('LoadState') != 'loaded' or rows.get('Service') != service or
+    if (not rows or rows.get('LoadState') != 'loaded' or rows.get('Triggers', '').split() != [service] or
             rows.get('Listen') != listener):
         return False
     if (rows.get('ActiveState') == 'active' and rows.get('SubState') in ('listening', 'running') and
