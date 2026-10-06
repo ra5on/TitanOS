@@ -1,0 +1,59 @@
+{
+  "format": "titan-debian-original-unit-fixtures-v1",
+  "packages": [
+    {
+      "package": "docker.io",
+      "version": "26.1.5+dfsg1-9+deb13u1",
+      "architecture": "amd64",
+      "url": "https://deb.debian.org/debian/pool/main/d/docker.io/docker.io_26.1.5+dfsg1-9+deb13u1_amd64.deb",
+      "sha256": "142fe32f839a20720b2e6074b8d28d883b01bc45345f7315586b0c2d348dae87",
+      "files": [
+        {
+          "file": "docker.service",
+          "archive_member": "./usr/lib/systemd/system/docker.service",
+          "sha256": "f1499e94746c08d1d777a5931ff9628027d1a83f787649f6bbb36df6952c5c30",
+          "uid": 0,
+          "gid": 0,
+          "mode": 420,
+          "type": "regular"
+        },
+        {
+          "file": "docker.default",
+          "archive_member": "./etc/default/docker",
+          "sha256": "66117bfaf30ce29843f0c86fab2f35046b420deb8e461317152d1d20f29dd158",
+          "uid": 0,
+          "gid": 0,
+          "mode": 420,
+          "type": "regular"
+        }
+      ]
+    },
+    {
+      "package": "libvirt-daemon",
+      "version": "11.3.0-3+deb13u3",
+      "architecture": "amd64",
+      "url": "https://deb.debian.org/debian/pool/main/libv/libvirt/libvirt-daemon_11.3.0-3+deb13u3_amd64.deb",
+      "sha256": "3c5af005cf57064370871a91e225e9fdca4cd80c5ffa7fe730e11a3246c4d0fd",
+      "files": [
+        {
+          "file": "libvirtd.service",
+          "archive_member": "./usr/lib/systemd/system/libvirtd.service",
+          "sha256": "214ce9c03f8a5fbb062df29c98e386eaf8220485906cb8e1f773c8f9b6dad69d",
+          "uid": 0,
+          "gid": 0,
+          "mode": 420,
+          "type": "regular"
+        },
+        {
+          "file": "libvirtd.default",
+          "archive_member": "./etc/default/libvirtd",
+          "sha256": "000250bded764890e62778c300778804c9338c4fbc7510adffa6feab3d4bb3c8",
+          "uid": 0,
+          "gid": 0,
+          "mode": 420,
+          "type": "regular"
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,0 @@
-description = "prepare titanOS base image for Rugix"
-priority = 800_000
-dependencies = ["titanos-cleanup"]

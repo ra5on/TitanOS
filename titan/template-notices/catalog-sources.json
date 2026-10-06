@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "fetched_at": "2026-10-05",
+  "sources": [
+    {
+      "name": "LinuxServer.io",
+      "url": "https://api.linuxserver.io/api/v1/images?include_config=true&include_deprecated=false",
+      "documentation": "https://docs.linuxserver.io/API/",
+      "kind": "Public deployment metadata translated into original Titan adapters. Images retain individual licenses."
+    },
+    {
+      "name": "Big Bear Dockge",
+      "url": "https://github.com/bigbeartechworld/big-bear-dockge",
+      "snapshot_tree": "f56f936883369843f8a4b99a6b786ab187af82af",
+      "license_declaration": "https://github.com/bigbeartechworld/big-bear-dockge/blob/main/package.json",
+      "license": "MIT",
+      "notice": "Big-Bear-MIT.txt"
+    }
+  ],
+  "validation": "Supported configurations are parsed and bounded, not a claim that every third-party application has passed runtime acceptance. Unsupported templates have an explicit reason."
+}

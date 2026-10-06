@@ -1,9 +1,0 @@
-[Unit]
-Description=Run Titan custom pre-start hook
-After=local-fs.target network-online.target
-Before=titan.service
-
-[Service]
-Type=oneshot
-ExecStart=/opt/titan-custom-hooks/run-pre-start
-TimeoutStartSec=6min
