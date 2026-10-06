@@ -10,6 +10,15 @@ export function getMachinesErrorMessage(message: string) {
 	if (!code) return t('machines-error.generic')
 
 	switch (code) {
+		case 'machine-bridge-wifi':
+			return t('machines-error.machine-bridge-wifi')
+		case 'machine-bridge-unsupported':
+			return t('machines-error.machine-bridge-unsupported')
+		case 'machine-bridge-busy':
+			return t('machines-error.machine-bridge-busy')
+		case 'machine-bridge-confirmation-expired':
+		case 'machine-bridge-timeout':
+			return t('machines-error.machine-bridge-timeout')
 		case 'machine-image-download-connection-failed':
 			return t('machines-error.machine-image-download-connection-failed')
 		case 'machine-disk-shrink-not-allowed':

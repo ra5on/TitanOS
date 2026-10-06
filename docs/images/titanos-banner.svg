@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="380" viewBox="0 0 1440 380" role="img" aria-labelledby="title desc">
-  <title id="title">TitanOS 2.0.2</title>
+  <title id="title">TitanOS 2.0.3</title>
   <desc id="desc">Dein Server. Deine Apps. Deine Daten. Stable für AMD64.</desc>
   <defs>
     <linearGradient id="surface" x2="1" y2="1">
@@ -32,7 +32,7 @@
       <path d="M29 34h98v21H89v75H67V55H29z" fill="url(#mark)"/>
     </g>
     <g font-family="Arial, Helvetica, sans-serif">
-      <text x="284" y="170" font-size="68" font-weight="700" letter-spacing="-2" fill="#f2f7ff">TitanOS <tspan fill="#5dd9fb">2.0.2</tspan></text>
+      <text x="284" y="170" font-size="68" font-weight="700" letter-spacing="-2" fill="#f2f7ff">TitanOS <tspan fill="#5dd9fb">2.0.3</tspan></text>
       <text x="286" y="220" font-size="27" fill="#b8c8de">Dein Server. Deine Apps. Deine Daten.</text>
       <rect x="286" y="252" width="170" height="34" rx="17" fill="#183147" stroke="#2c4d60"/>
       <circle cx="305" cy="269" r="4" fill="#5dd9fb"/>

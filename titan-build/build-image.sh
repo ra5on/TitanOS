@@ -63,6 +63,22 @@ if [[ "${RUN_IMAGE_SMOKE:-1}" == "1" ]]; then
     VERIFY_ARGUMENTS+=(--smoke --vm-script "${TASK_ROOT}/packages/os/vm.sh" --boot-log "${ARTIFACT_DIR}/boot-smoke.log" --timeout "${IMAGE_SMOKE_TIMEOUT:-1200}")
 fi
 python3 "${TASK_ROOT}/titan-build/verify-image.py" "${VERIFY_ARGUMENTS[@]}"
+if [[ "${RUN_IMAGE_SMOKE:-1}" == "1" ]]; then
+    # Exercise the real NetworkManager bridge migration on a fresh guest before
+    # compression/signing. A failed LAN change must block release publication.
+    npm --prefix "${TASK_ROOT}/packages/titand" ci
+    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --maxWorkers=1 source/modules/machines/automatic-bridge.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/bridge-smoke.json"
+    python3 - "${ARTIFACT_DIR}/image-verification.json" "${ARTIFACT_DIR}/bridge-smoke.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+report = json.loads(pathlib.Path(sys.argv[2]).read_text())
+if report.get("success") is not True or report.get("numFailedTests") != 0 or report.get("numPendingTests") != 0 or report.get("numPassedTests", 0) < 12:
+    raise SystemExit("The real guest bridge tests did not all pass")
+verification = json.loads(path.read_text())
+verification["bridgeNetworkSmoke"] = {"status": "passed", "passedTests": report["numPassedTests"], "report": pathlib.Path(sys.argv[2]).name}
+path.write_text(json.dumps(verification, indent=2) + "\n")
+PY
+fi
 # Stream the compact disk template, then verify the compressed download.
 xz --threads=2 --memlimit-compress=2GiB --stdout "${RAW_IMAGE}" > "${RAW_IMAGE}.xz"
 xz --test "${RAW_IMAGE}.xz"
@@ -102,7 +118,7 @@ manifest = {
     "updateFormat": "rugix",
     "updateProvider": release["updateProvider"],
     "ownTitanUpdateChannel": True,
-    "releaseEligible": verification["structuralCheck"] == "passed" and verification["uefiHttpSmoke"]["status"] == "passed",
+    "releaseEligible": verification["structuralCheck"] == "passed" and verification["uefiHttpSmoke"]["status"] == "passed" and verification.get("bridgeNetworkSmoke", {}).get("status") == "passed",
     "imageVerification": verification,
     "assets": [{"name": p.name, "sizeBytes": p.stat().st_size, "sha256": digest(p)} for p in assets],
 }

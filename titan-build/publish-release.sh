@@ -27,6 +27,39 @@ if (verification.get('structuralCheck') != 'passed' or boot.get('status') != 'pa
         or boot.get('installedRelease') != {'version': version, 'name': r['versionName']}
         or type(boot.get('bootDiskSizeBytes')) is not int or boot['bootDiskSizeBytes'] < 32 * 1024**3):
     raise ValueError('The exact TitanOS release must pass a real UEFI boot on a sufficient target disk')
+bridge = verification.get('bridgeNetworkSmoke', {})
+report_path = d / 'bridge-smoke.json'
+if (not isinstance(bridge, dict) or bridge.get('status') != 'passed'
+        or bridge.get('report') != report_path.name or type(bridge.get('passedTests')) is not int
+        or bridge['passedTests'] < 12 or not report_path.is_file() or report_path.is_symlink()):
+    raise ValueError('The exact TitanOS release needs the passed real bridge network smoke report')
+def unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result: raise ValueError('Duplicate key in the bridge network smoke report')
+        result[key] = value
+    return result
+report = json.loads(report_path.read_text(), object_pairs_hook=unique_keys)
+if (not isinstance(report, dict) or report.get('success') is not True
+        or any(type(report.get(key)) is not int or report[key] != 0
+               for key in ('numFailedTests', 'numPendingTests', 'numTodoTests', 'numFailedTestSuites', 'numPendingTestSuites'))
+        or type(report.get('numPassedTests')) is not int or report['numPassedTests'] != bridge['passedTests']
+        or type(report.get('numTotalTests')) is not int or report['numTotalTests'] != report['numPassedTests']
+        or type(report.get('numTotalTestSuites')) is not int or report['numTotalTestSuites'] < 1
+        or type(report.get('numPassedTestSuites')) is not int or report['numPassedTestSuites'] != report['numTotalTestSuites']):
+    raise ValueError('Every real bridge network test must pass without failures, skips or todo tests')
+results = report.get('testResults')
+test_file = 'packages/titand/source/modules/machines/automatic-bridge.vm.test.ts'
+if (not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict)
+        or results[0].get('status') != 'passed' or not isinstance(results[0].get('name'), str)
+        or not (results[0]['name'] == test_file or results[0]['name'].endswith('/' + test_file))):
+    raise ValueError('The bridge smoke report must come from the real automatic bridge VM test file')
+assertions = results[0].get('assertionResults')
+if (not isinstance(assertions, list) or len(assertions) != report['numPassedTests']
+        or any(not isinstance(item, dict) or item.get('status') != 'passed'
+               or not isinstance(item.get('fullName'), str) or not item['fullName'] for item in assertions)
+        or len({item['fullName'] for item in assertions}) != len(assertions)):
+    raise ValueError('The bridge smoke report needs all distinct VM test assertions to have passed')
 head = subprocess.check_output(['git', '-C', sys.argv[2], 'rev-parse', 'HEAD'], text=True).strip()
 if m.get('buildCommit') != head:
     raise ValueError('The release was not built from the checkout being published')

@@ -200,7 +200,14 @@ export default function CreateMachine() {
 	const networkValid =
 		machineNetworkAvailable(network, networks.bridges) &&
 		(network.mode !== 'bridge' || (!networks.isLoading && !networks.isError))
-	const canCreate = !isCreating && !!trimmedName && !nameTaken && diskSizeValid && credentialsValid && networkValid
+	const canCreate =
+		!isCreating &&
+		!networks.isPreparingBridge &&
+		!!trimmedName &&
+		!nameTaken &&
+		diskSizeValid &&
+		credentialsValid &&
+		networkValid
 
 	// Keep the number field usable while typing: digits only, transient empty
 	// allowed, capped at the max
@@ -357,6 +364,10 @@ export default function CreateMachine() {
 							value={network}
 							onChange={setNetworkChoice}
 							bridges={networks.bridges}
+							automaticBridge={networks.automaticBridge}
+							isPreparingBridge={networks.isPreparingBridge}
+							bridgeError={networks.bridgeError}
+							onPrepareBridge={networks.prepareBridge}
 							disabled={isCreating || !isCustomSource}
 							note={!isCustomSource ? t('machines.network-catalog-note') : undefined}
 							isLoading={networks.isLoading}
@@ -724,7 +735,11 @@ export default function CreateMachine() {
 				{/* Stacked with the primary on top below sm (dialog-size buttons are
 				    full-width there), a Cancel→Create row from sm up */}
 				<div className='flex shrink-0 flex-col-reverse gap-2.5 sm:flex-row sm:items-center'>
-					<Button size='dialog' onClick={() => navigate(MACHINES_ADD_PATH)} disabled={isCreating}>
+					<Button
+						size='dialog'
+						onClick={() => navigate(MACHINES_ADD_PATH)}
+						disabled={isCreating || networks.isPreparingBridge}
+					>
 						{t('cancel')}
 					</Button>
 					<Button variant='primary' size='dialog' onClick={handleCreate} disabled={!canCreate}>

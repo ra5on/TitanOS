@@ -1,11 +1,11 @@
-/** Original Titan artwork shared by navigation, search, widgets, and notifications. */
+/** Original fork icons shared by navigation, search, widgets, and notifications. */
 export const systemIcons = {
 	system: '/assets/dock/titan-system.svg',
-	'app-store': '/assets/dock/titan-app-store.svg',
-	files: '/assets/dock/titan-files.svg',
-	photos: '/assets/dock/titan-photos.svg',
-	settings: '/assets/dock/titan-settings.svg',
-	machines: '/assets/dock/titan-machines.svg',
-	'live-usage': '/assets/dock/titan-live-usage.svg',
-	widgets: '/assets/dock/titan-widgets.svg',
+	'app-store': '/assets/dock/dock-app-store.webp',
+	files: '/assets/dock/dock-files.webp',
+	photos: '/assets/dock/dock-photos.webp',
+	settings: '/assets/dock/dock-settings.webp',
+	machines: '/assets/dock/dock-machines.webp',
+	'live-usage': '/assets/dock/dock-live-usage.webp',
+	widgets: '/assets/dock/dock-widgets.png',
 } as const

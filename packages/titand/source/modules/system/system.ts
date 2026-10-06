@@ -1,4 +1,5 @@
 import os from 'node:os'
+import path from 'node:path'
 import {isIPv4} from 'node:net'
 import {randomBytes} from 'node:crypto'
 import {setTimeout} from 'node:timers/promises'
@@ -14,6 +15,11 @@ import {escapeSpecialRegExpLiterals} from '../utilities/regexp.js'
 import pWaitFor from 'p-wait-for'
 import {getGpuDeviceUsage, type GpuDeviceUsage} from '../hardware/gpu-usage.js'
 import {resolveTitanHostname} from './hostname-policy.js'
+import {machineBridgeChangePending} from './machine-bridge.js'
+
+function assertNetworkNotChanging() {
+	if (machineBridgeChangePending()) throw new Error('[machine-bridge-busy]')
+}
 
 export async function getCpuTemperature(): Promise<{
 	warning: 'normal' | 'warm' | 'hot'
@@ -649,6 +655,7 @@ export async function getWifiNetworks() {
 }
 
 export async function deleteWifiConnections({inactiveOnly = false}: {inactiveOnly?: boolean}) {
+	assertNetworkNotChanging()
 	const connections = await $`nmcli --terse --fields UUID,TYPE,ACTIVE connection`
 	for (const connection of connections.stdout.split('\n')) {
 		const [uuid, type, active] = connection.split(':')
@@ -660,6 +667,7 @@ export async function deleteWifiConnections({inactiveOnly = false}: {inactiveOnl
 }
 
 export async function connectToWiFiNetwork({ssid, password}: {ssid: string; password?: string}) {
+	assertNetworkNotChanging()
 	let connection
 	if (password !== undefined) {
 		connection = $`nmcli device wifi connect ${ssid} password ${password}`
@@ -777,10 +785,43 @@ type NetworkInterface = {
 	dns?: string[]
 }
 
+// A bridged ethernet port has no Layer 3 configuration of its own. Keep the
+// physical NIC (and its MAC) as the user-facing interface, but read and change
+// addresses on its bridge controller.
+async function getInterfaceIpDevice(device: string): Promise<string> {
+	try {
+		const controller = path.basename(await fse.realpath(`/sys/class/net/${device}/master`))
+		if (/^[a-zA-Z0-9_.-]{1,15}$/.test(controller) && (await fse.pathExists(`/sys/class/net/${controller}/bridge`))) {
+			return controller
+		}
+	} catch {
+		// Physical interfaces which aren't bridge ports have no master symlink.
+	}
+	return device
+}
+
+const connectionUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function getActiveConnectionByDevice(device: string): Promise<string | false> {
+	try {
+		const {stdout} = await $`nmcli --get-values GENERAL.CON-UUID device show ${device}`
+		const uuid = stdout.trim()
+		return connectionUuidPattern.test(uuid) ? uuid : false
+	} catch {
+		return false
+	}
+}
+
 // Get all physical network interfaces with connection details
 export async function getNetworkInterfaces(titand?: Titand): Promise<NetworkInterface[]> {
 	const {stdout: deviceOutput} = await $`nmcli --terse --fields DEVICE,TYPE,STATE,CONNECTION device status`
 	const configuredStaticSettings = (await titand?.store.get('settings.staticIp')) ?? {}
+	const deviceStates = new Map(
+		deviceOutput.split('\n').map((line) => {
+			const [device, , state] = line.split(':')
+			return [device, state]
+		}),
+	)
 
 	const interfaces = await Promise.all(
 		deviceOutput
@@ -798,7 +839,7 @@ export async function getNetworkInterfaces(titand?: Titand): Promise<NetworkInte
 			})
 			// Only include ethernet and wifi types
 			.filter(({type}) => type === 'ethernet' || type === 'wifi')
-			.map(async ({device, type, state, connection}) => {
+			.map(async ({device, type, state}) => {
 				// For ethernet interfaces, verify they're backed by physical hardware
 				// by checking for the presence of a device symlink in sysfs. Virtual
 				// interfaces (veth, bridges, docker) won't have this.
@@ -808,18 +849,20 @@ export async function getNetworkInterfaces(titand?: Titand): Promise<NetworkInte
 				}
 
 				const mac = (await fse.readFile(`/sys/class/net/${device}/address`, 'utf8')).trim()
+				const ipDevice = await getInterfaceIpDevice(device)
 
 				const iface: NetworkInterface = {
 					id: device,
 					mac,
 					type: type as 'ethernet' | 'wifi',
-					connected: state === 'connected',
+					connected: state === 'connected' && (ipDevice === device || deviceStates.get(ipDevice) === 'connected'),
 				}
 				const configuredStaticSetting = configuredStaticSettings[mac]
 				if (configuredStaticSetting) iface.configuredStaticSettings = configuredStaticSetting
 
 				// If connected, get IP configuration from the active connection
-				if (iface.connected && connection && connection !== '--') {
+				const connection = iface.connected ? await getActiveConnectionByDevice(ipDevice) : false
+				if (connection) {
 					try {
 						const {stdout} =
 							await $`nmcli --terse --fields ipv4.method,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS connection show ${connection}`
@@ -829,6 +872,7 @@ export async function getNetworkInterfaces(titand?: Titand): Promise<NetworkInte
 						for (const connLine of stdout.split('\n')) {
 							const [key, ...valueParts] = connLine.split(':')
 							const value = valueParts.join(':')
+							if (!value || value === '--') continue
 
 							if (key === 'ipv4.method') {
 								iface.ipMethod = value === 'manual' ? 'static' : 'dhcp'
@@ -863,29 +907,50 @@ async function getInterfaceByMac(mac: string): Promise<NetworkInterface> {
 	throw new Error(`No interface found with MAC address ${mac}`)
 }
 
-// Find the saved connection name for a device, even if it's not currently connected
+// Find the IP-bearing profile, even while disconnected. Use UUIDs so duplicate
+// or localized connection names cannot select a different NIC's profile.
 async function getConnectionByDevice(device: string): Promise<string | false> {
+	const ipDevice = await getInterfaceIpDevice(device)
+	const activeConnection = await getActiveConnectionByDevice(ipDevice)
+	if (activeConnection) return activeConnection
+
 	// `nmcli device status` only shows the active connection, which is not enough
 	// when we need to clear static IP settings from a disconnected interface.
 	const {stdout: uuidsOutput} = await $`nmcli --terse --fields UUID connection show`
+	const profiles: Array<{uuid: string; device: string; type: string; controller: string; portType: string}> = []
 	for (const uuid of uuidsOutput.split('\n')) {
-		if (!uuid.trim()) continue
+		if (!connectionUuidPattern.test(uuid.trim())) continue
 		try {
-			const {stdout} = await $`nmcli --terse --fields connection.interface-name,connection.id connection show ${uuid}`
-			let connectionDevice = ''
-			let connectionId = ''
+			const {stdout} =
+				await $`nmcli --terse --fields connection.interface-name,connection.type,connection.master,connection.slave-type connection show ${uuid}`
+			const profile = {uuid: uuid.trim(), device: '', type: '', controller: '', portType: ''}
 			for (const line of stdout.split('\n')) {
 				const [key, ...valueParts] = line.split(':')
-				const value = valueParts.join(':')
-				if (key === 'connection.interface-name') connectionDevice = value
-				else if (key === 'connection.id') connectionId = value
+				const displayedValue = valueParts.join(':')
+				const value = displayedValue === '--' ? '' : displayedValue
+				if (key === 'connection.interface-name') profile.device = value
+				else if (key === 'connection.type') profile.type = value
+				else if (key === 'connection.master') profile.controller = value
+				else if (key === 'connection.slave-type') profile.portType = value
 			}
-			if (connectionDevice === device && connectionId) return connectionId
+			profiles.push(profile)
 		} catch {
 			continue
 		}
 	}
-	return false
+	// The kernel master may disappear while a NIC is disconnected. Its saved
+	// bridge-port profile still identifies the correct controller to update.
+	const bridgePort = profiles.find((profile) => profile.device === device && profile.portType === 'bridge')
+	if (bridgePort) {
+		const controller = profiles.find(
+			(profile) =>
+				profile.type === 'bridge' &&
+				(profile.uuid === bridgePort.controller || profile.device === bridgePort.controller),
+		)
+		if (!controller) throw new Error('No IP configuration found for the bridge controller')
+		return controller.uuid
+	}
+	return profiles.find((profile) => profile.device === ipDevice && !profile.portType)?.uuid ?? false
 }
 
 // Apply a static IP configuration to an interface via nmcli
@@ -902,12 +967,14 @@ async function applyStaticIp({
 	gateway: string
 	dns: string[]
 }) {
-	const {id: device} = await getInterfaceByMac(mac)
+	const {id: physicalDevice} = await getInterfaceByMac(mac)
+	const device = await getInterfaceIpDevice(physicalDevice)
 
 	// Get the connection id, or create a new connection
 	let connection = await getConnectionByDevice(device)
 	let existingConnection = true
 	if (!connection) {
+		if (device !== physicalDevice) throw new Error('No IP configuration found for the bridge controller')
 		existingConnection = false
 		const hex = randomBytes(4).toString('hex')
 		connection = `wired-connection-${hex}`
@@ -937,6 +1004,7 @@ export async function setStaticIp(
 	titand: Titand,
 	config: {mac: string; ip: string; subnetPrefix: number; gateway: string; dns: string[]},
 ) {
+	assertNetworkNotChanging()
 	const {mac, ip, subnetPrefix, gateway, dns} = config
 	const networkInterface = await getInterfaceByMac(mac)
 	if (networkInterface.type === 'wifi') throw new Error('Static IP is not supported for WiFi interfaces')
@@ -972,6 +1040,7 @@ export async function setStaticIp(
 
 // Clear static IP and revert to DHCP
 export async function clearStaticIp(titand: Titand, {mac}: {mac: string}) {
+	assertNetworkNotChanging()
 	const networkInterface = await getInterfaceByMac(mac)
 	const device = networkInterface.id
 	const connection = await getConnectionByDevice(device)
@@ -996,6 +1065,7 @@ export async function clearStaticIp(titand: Titand, {mac}: {mac: string}) {
 
 // Restore static IP settings from store on startup
 export async function restoreStaticIp(titand: Titand): Promise<void> {
+	if (machineBridgeChangePending()) return
 	const settings = await titand.store.get('settings.staticIp')
 	if (!settings) return
 
@@ -1019,6 +1089,7 @@ const syncDnsQueue = new PQueue({concurrency: 1})
 // Update DNS configuration to match user settings
 export async function syncDns() {
 	return await syncDnsQueue.add(async () => {
+		assertNetworkNotChanging()
 		const {mtimeMs: mtimeBefore} = await fse.promises.stat('/etc/resolv.conf')
 		await $`systemctl restart titan-dns-sync`
 		await setTimeout(1000) // evade restart limits
