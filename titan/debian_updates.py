@@ -12,6 +12,9 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import stat
+import subprocess
 import tempfile
 import time
 import urllib.parse
@@ -28,6 +31,8 @@ CACHE = Path('/var/lib/titan-system/updates/downloads')
 SLOTS = {'A': 'rootfs.0', 'B': 'rootfs.1'}
 BOOT_OK = Path('/run/titan-system-confirmed')
 LOCK = Path('/run/lock/titan-system-update.lock')
+BOOT_MEMORY_GUARD = Path('/usr/share/titan/boot-memory-guard.py')
+BOOT_MEMORY_REPORT = Path('/run/titan-boot-memory.json')
 MAX_BUNDLE = 2 * 1024**3 - 1
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
 
@@ -485,6 +490,143 @@ def reboot(repo, expected_digest, confirmation, database):
             'reboot_schedule': schedule, 'delay_seconds': 60, 'automatic_reboot': False}
 
 
+def _guard_failed_unit(unit):
+    """Only the fixed guard's failed ExecStartPre can excuse a stopped daemon."""
+    if unit not in ('docker.service', 'libvirtd.service'):
+        return False
+    try:
+        text = run(['systemctl', 'show', unit, '--property=ActiveState,Result,ExecStartPre'], timeout=15)
+    except Error:
+        return False
+    if len(text) > 16384:
+        return False
+    rows = dict(line.split('=', 1) for line in text.splitlines() if '=' in line)
+    # Restart=on-failure can exhaust the start limit after repeated failures of
+    # this same pre-start guard. Its recorded command must still prove exit 1.
+    if rows.get('ActiveState') != 'failed' or rows.get('Result') not in ('exit-code', 'start-limit-hit'):
+        return False
+    expected = '/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
+    for entry in re.findall(r'\{([^{}]*)\}', rows.get('ExecStartPre', '')):
+        fields = dict(part.strip().split('=', 1) for part in entry.split(';') if '=' in part)
+        if (fields.get('path') == '/usr/bin/python3' and fields.get('argv[]') == expected and
+                fields.get('ignore_errors') == 'no' and fields.get('code') == 'exited' and fields.get('status') == '1'):
+            return True
+    return False
+
+
+def _fresh_memory_block():
+    """Recompute offline: an old, malformed or untrusted report is no exemption."""
+    from .app_memory import system_reserve
+    from .updates import strict_json
+    descriptor = None
+    try:
+        helper = BOOT_MEMORY_GUARD.lstat()
+        if os.geteuid() != 0 or not stat.S_ISREG(helper.st_mode) or helper.st_uid != 0 or helper.st_mode & 0o022:
+            return None
+        try:
+            previous = BOOT_MEMORY_REPORT.lstat()
+            old = (previous.st_dev, previous.st_ino, previous.st_mtime_ns)
+        except FileNotFoundError:
+            old = None
+        started = time.time()
+        result = subprocess.run(['/usr/bin/python3', '-I', str(BOOT_MEMORY_GUARD), '--component', 'all'],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=15, env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C.UTF-8'})
+        if result.returncode != 1:
+            return None
+        descriptor = os.open(BOOT_MEMORY_REPORT, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_mode & 0o022 or
+                not 0 < before.st_size <= 16384 or
+                (before.st_dev, before.st_ino, before.st_mtime_ns) == old):
+            return None
+        with os.fdopen(descriptor, 'rb') as stream:
+            descriptor = None
+            raw = stream.read(16385)
+            after = os.fstat(stream.fileno())
+        current = BOOT_MEMORY_REPORT.lstat()
+        fingerprint = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current) or len(raw) != before.st_size:
+            return None
+        value = strict_json(raw)
+        now = time.time()
+        fields = ('total_bytes', 'reserve_bytes', 'required_bytes')
+        if (not isinstance(value, dict) or value.get('ok') is not False or
+                value.get('reason') != 'insufficient_memory' or
+                any(type(value.get(key)) is not int or not 0 < value[key] < 2**63 for key in fields) or
+                value['required_bytes'] <= value['total_bytes'] or
+                value['reserve_bytes'] != system_reserve(value['total_bytes']) or
+                type(value.get('checked_at')) is not int or not started - 1 <= value['checked_at'] <= now + 1 or
+                not started - 1 <= before.st_mtime <= now + 1):
+            return None
+        budgets = value.get('components')
+        if not isinstance(budgets, dict) or set(budgets) != {'docker', 'vms'}:
+            return None
+        for budget in budgets.values():
+            if (not isinstance(budget, dict) or
+                    any(type(budget.get(key)) is not int or not 0 <= budget[key] < 2**63 for key in ('count', 'limit_bytes'))):
+                return None
+        if value['required_bytes'] != value['reserve_bytes'] + sum(item['limit_bytes'] for item in budgets.values()):
+            return None
+        return {key: value[key] for key in fields}
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired, Error):
+        return None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _guard_management_health(report):
+    """The reachable root agent must also report the freshly measured capacity."""
+    from .rpc import receive, send
+    deadline = time.monotonic() + 15
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+            class Bounded:
+                def remaining(self):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError()
+                    stream.settimeout(remaining)
+
+                def recv(self, size):
+                    self.remaining()
+                    return stream.recv(size)
+
+                def sendall(self, data):
+                    self.remaining()
+                    stream.sendall(data)
+
+            bounded = Bounded()
+            bounded.remaining()
+            stream.connect('/run/titan/agent.sock')
+            send(bounded, {'operation': 'status', 'arguments': {}})
+            result = receive(bounded).get('result')
+            if (not isinstance(result, dict) or type(result.get('memory_total')) is not int or
+                    result['memory_total'] != report['total_bytes']):
+                raise Error('Startprüfung: titan-agent.service meldet keinen gültigen Systemstatus.', 503)
+    except (OSError, ValueError, TypeError, AttributeError, Error):
+        raise Error('Startprüfung: titan-agent.service meldet keinen gültigen Systemstatus.', 503) from None
+
+
+def verified_boot_memory_block(units=('docker.service', 'libvirtd.service')):
+    """Shared runtime/health proof; no daemon activation and no agent dependency.
+
+    Return bounded numeric capacity only after exact failed guard units and a
+    fresh offline recomputation agree. Core service/program checks remain the
+    caller's responsibility; unknown metadata is never an allowed RAM mode.
+    """
+    if (not isinstance(units, (tuple, list)) or not units or len(units) > 2 or
+            len(set(units)) != len(units) or set(units) - {'docker.service', 'libvirtd.service'}):
+        return None
+    if not all(_guard_failed_unit(unit) for unit in units):
+        return None
+    report = _fresh_memory_block()
+    if not report or not all(_guard_failed_unit(unit) for unit in units):
+        return None
+    return report
+
+
 @locked
 def confirm_boot():
     """Called once per boot after the complete NAS stack passes its start checks."""
@@ -505,13 +647,46 @@ def confirm_boot():
                  '/var/lib/libvirt', '/var/lib/samba', '/var/srv/titan'):
         run(['mountpoint', '-q', path], timeout=10)
     for unit in ('titan-firstboot.service', 'titan-runtime.service', 'titan-agent.service',
-                 'titan-web.service', 'titan-proxy.service', 'docker.service',
+                 'titan-web.service', 'titan-proxy.service',
                  'smbd.service', 'libvirtd.socket'):
         # systemctl is-active with multiple units succeeds when ANY is active.
         # Each required service must be checked independently.
-        run(['systemctl', 'is-active', '--quiet', unit], timeout=30)
-    run(['docker', 'info', '--format', '{{.ServerVersion}}'], timeout=30)
-    run(['virsh', '-c', 'qemu:///system', 'list', '--all', '--name'], timeout=30)
+        try:
+            run(['systemctl', 'is-active', '--quiet', unit], timeout=30)
+        except Error:
+            raise Error('Startprüfung: ' + unit + ' ist nicht verfügbar.', 503) from None
+    memory_block = None
+    blocked = []
+    try:
+        run(['systemctl', 'is-active', '--quiet', 'docker.service'], timeout=30)
+    except Error:
+        memory_block = verified_boot_memory_block(('docker.service',))
+        if not memory_block:
+            raise Error('Startprüfung: docker.service ist nicht verfügbar.', 503) from None
+        blocked.append('docker')
+    if 'docker' not in blocked:
+        try:
+            run(['docker', 'info', '--format', '{{.ServerVersion}}'], timeout=30)
+        except Error:
+            raise Error('Startprüfung: docker.service antwortet nicht.', 503) from None
+    if _guard_failed_unit('libvirtd.service'):
+        vm_block = verified_boot_memory_block(('libvirtd.service',))
+        if not vm_block:
+            raise Error('Startprüfung: libvirtd.service ist nicht verfügbar.', 503)
+        memory_block = vm_block
+        blocked.append('vms')
+    else:
+        try:
+            run(['virsh', '-c', 'qemu:///system', 'list', '--all', '--name'], timeout=30)
+        except Error:
+            # Socket activation may have reached the guard only on this probe.
+            vm_block = verified_boot_memory_block(('libvirtd.service',))
+            if not vm_block:
+                raise Error('Startprüfung: libvirtd.service antwortet nicht.', 503) from None
+            memory_block = vm_block
+            blocked.append('vms')
+    if blocked:
+        _guard_management_health(memory_block)
     run(['testparm', '-s'], timeout=30)
     origin = urllib.parse.urlsplit(os.environ.get('TITAN_ORIGIN', ''))
     if (origin.scheme != 'https' or not origin.hostname or origin.port != 5000 or
@@ -544,7 +719,8 @@ def confirm_boot():
     state.pop('pending', None)
     save_state(state)
     BOOT_OK.write_text(info['release_id'] + '\n')
-    return {'ok': True, 'slot': current, 'version': info['version']}
+    return {'ok': True, 'slot': current, 'version': info['version'],
+            **({'ram_protection': {'active': True, 'blocked': blocked}} if blocked else {})}
 
 
 if __name__ == '__main__':

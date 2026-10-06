@@ -158,7 +158,7 @@ print('prepared')
 
 
 GUEST_BOOT_MEMORY_OBSERVE=r"""
-import json,os,stat,subprocess
+import json,os,re,stat,subprocess
 fd=os.open('/run/titan-boot-memory.json',os.O_RDONLY|os.O_NOFOLLOW)
 with os.fdopen(fd,'rb') as stream:
     info=os.fstat(stream.fileno())
@@ -171,8 +171,16 @@ for unit in ('docker.service','libvirtd.service'):
     text=subprocess.check_output(['systemctl','show',unit,'--property=ActiveState,Result,ExecStartPre'],text=True,timeout=15)
     rows=dict(line.split('=',1) for line in text.splitlines() if '=' in line)
     pre=rows.get('ExecStartPre','')
-    value['services'][unit]={'active':rows.get('ActiveState')=='active','failed':rows.get('Result')=='exit-code',
-        'guard_failed':'/usr/share/titan/boot-memory-guard.py' in pre and 'status=1' in pre}
+    guard_failed=False
+    if len(pre)<=16384:
+        for entry in re.findall(r'\{([^{}]*)\}',pre):
+            command=dict(part.strip().split('=',1) for part in entry.split(';') if '=' in part)
+            guard_failed=guard_failed or (command.get('path')=='/usr/bin/python3' and
+                command.get('argv[]')=='/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all' and
+                command.get('ignore_errors')=='no' and command.get('code')=='exited' and command.get('status')=='1')
+    value['services'][unit]={'active':rows.get('ActiveState')=='active',
+        'failed':rows.get('ActiveState')=='failed' and rows.get('Result') in ('exit-code','start-limit-hit'),
+        'guard_failed':guard_failed}
 print(json.dumps(value,separators=(',',':')))
 """
 

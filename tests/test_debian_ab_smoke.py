@@ -2,11 +2,13 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
@@ -148,6 +150,42 @@ class BootMemoryLifecycleTests(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error: ab.main()
             self.assertEqual(error.exception.code, 2)
             command.assert_not_called()
+
+
+class BootMemoryUnitObservationTests(unittest.TestCase):
+    def observe(self, result='exit-code', status='1', command=None, state='failed'):
+        report={'ok':False,'reason':'insufficient_memory','total_bytes':3*1024**3,
+                'reserve_bytes':512*1024**2,'required_bytes':4*1024**3+512*1024**2}
+        command=command or '/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
+        unit=(f'ActiveState={state}\nResult={result}\nExecStartPre={{ path=/usr/bin/python3 ; '
+              f'argv[]={command} ; ignore_errors=no ; code=exited ; status={status} }}\n')
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'report.json';path.write_text(json.dumps(report));path.chmod(0o644)
+            original=os.fstat
+            def owned(fd):
+                info=original(fd)
+                return SimpleNamespace(st_mode=info.st_mode,st_uid=0,st_size=info.st_size)
+            script=ab.GUEST_BOOT_MEMORY_OBSERVE.replace('/run/titan-boot-memory.json',str(path))
+            with patch.object(os,'fstat',side_effect=owned),patch.object(subprocess,'check_output',return_value=unit),contextlib.redirect_stdout(io.StringIO()) as output:
+                exec(script,{})
+        return json.loads(output.getvalue())
+
+    def test_guard_restart_limit_is_an_observed_block_not_a_daemon_timeout(self):
+        for result in ('exit-code','start-limit-hit'):
+            with self.subTest(result=result):
+                self.assertIsNotNone(ab.blocked_boot_observation(self.observe(result=result)))
+        for result in ('timeout','signal','success','watchdog'):
+            with self.subTest(result=result):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(result=result)))
+        self.assertIsNone(ab.blocked_boot_observation(self.observe(state='activating')))
+
+    def test_similar_command_or_exit_status_does_not_claim_the_guard_ran(self):
+        for changes in ({'status':'12'},{'status':'0'},
+                        {'command':'/usr/bin/python3 /tmp/boot-memory-guard.py --component all'},
+                        {'command':'/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all --extra'},
+                        {'command':'/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component docker'}):
+            with self.subTest(changes=changes):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(**changes)))
 
 
 if __name__ == '__main__':
