@@ -139,6 +139,9 @@ class GuardUnitProofTests(unittest.TestCase):
         for text in (unit_status(state='active'), unit_status(result='timeout'), unit_status(status='0'),
                      unit_status(argv='/usr/bin/python3 /tmp/boot-memory-guard.py --component all'),
                      unit_status(argv=updates.DAEMON_COMMANDS['libvirtd.service'][1]),
+                     unit_status(argv=updates.DAEMON_COMMANDS['docker.service'][1].replace('$DOCKER_OPTS', '$OTHER_OPTS')),
+                     unit_status(argv=updates.DAEMON_COMMANDS['docker.service'][1].replace(' $DOCKER_OPTS', '')),
+                     unit_status(argv=updates.DAEMON_COMMANDS['docker.service'][1]+' --debug'),
                      unit_status(status='0') + '\nUnused=status=78',
                      unit_status().replace('ignore_errors=no', 'ignore_errors=yes')):
             with self.subTest(text=text), patch.object(updates, 'run', return_value=text):
@@ -167,6 +170,9 @@ class GuardUnitProofTests(unittest.TestCase):
                      good.replace('RestartPreventExitStatus=78', 'RestartPreventExitStatus='),
                      good.replace('StartTimestampMonotonic=100', 'StartTimestampMonotonic=0'),
                      good.replace('ExitTimestampMonotonic=300', 'ExitTimestampMonotonic=99'),
+                     good.replace('ExitTimestampMonotonic=300', 'ExitTimestampMonotonic=9223372036854775808'),
+                     good.replace('StartTimestampMonotonic=100', 'StartTimestampMonotonic=+100'),
+                     good.replace('ignore_errors=no', 'ignore_errors=yes ; ignore_errors=no'),
                      good + 'ExecMainStatus=78\n'):
             with self.subTest(text=text), patch.object(updates, 'run', return_value=text):
                 self.assertFalse(updates._guard_failed_unit('docker.service'))

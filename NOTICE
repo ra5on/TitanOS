@@ -61,3 +61,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Unchanged Debian service/default test fixtures retain their original licenses.
+See tests/fixtures/debian-daemon-units/README.md, provenance.json and the
+accompanying copyright and license texts. These fixtures are not Titan-owned
+code and are not included in the application package.

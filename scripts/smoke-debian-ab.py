@@ -160,7 +160,7 @@ print('prepared')
 GUEST_BOOT_DAEMON_PROOF=r"""
 import json,os,re,stat,subprocess
 expected_starts={
-    'docker.service':('docker','/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock'),
+    'docker.service':('docker','/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock $DOCKER_OPTS'),
     'libvirtd.service':('vms','/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS')}
 def fingerprint(info):
     return (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)

@@ -36,7 +36,7 @@ BOOT_MEMORY_REPORT = Path('/run/titan-boot-memory.json')
 BOOT_DAEMON_GUARD = Path('/usr/share/titan/boot-daemon-guard.py')
 BOOT_ID = Path('/proc/sys/kernel/random/boot_id')
 DAEMON_COMMANDS = {
-    'docker.service': ('docker', '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock'),
+    'docker.service': ('docker', '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock $DOCKER_OPTS'),
     'libvirtd.service': ('vms', '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS'),
 }
 DAEMON_MARKERS = {unit: Path('/run/titan-boot-daemon-' + component + '.json')
@@ -571,15 +571,25 @@ def _guard_failed_unit(unit):
             '78' not in rows.get('RestartPreventExitStatus', '').split()):
         return False
     try:
-        start, stop = (int(rows[key]) for key in ('ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic'))
+        raw_times = [rows[key] for key in ('ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic')]
+        if any(not re.fullmatch(r'[0-9]{1,19}', value) for value in raw_times):
+            return False
+        start, stop = map(int, raw_times)
     except (ValueError, KeyError):
         return False
-    if not 0 < start <= stop:
+    if not 0 < start <= stop < 2**63:
         return False
     entries = re.findall(r'\{([^{}]*)\}', rows.get('ExecStart', ''))
     if len(entries) != 1:
         return False
-    fields = dict(part.strip().split('=', 1) for part in entries[0].split(';') if '=' in part)
+    fields = {}
+    for part in entries[0].split(';'):
+        if '=' not in part:
+            continue
+        key, value = part.strip().split('=', 1)
+        if key in fields:
+            return False
+        fields[key] = value
     if (fields.get('path') != '/usr/bin/python3' or fields.get('argv[]') != DAEMON_COMMANDS[unit][1] or
             fields.get('ignore_errors') != 'no'):
         return False

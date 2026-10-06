@@ -29,6 +29,12 @@ LIBVIRT = '/usr/sbin/libvirtd'
 WRAPPER = '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py'
 
 
+class PackagedConfigurationError(ValueError):
+    def __init__(self, component, reason):
+        self.component, self.reason = component, reason
+        super().__init__('Unsupported packaged daemon configuration')
+
+
 def daemon_arguments(component, arguments):
     if not isinstance(arguments, (tuple, list)) or any(type(arg) is not str or '\0' in arg for arg in arguments):
         raise ValueError('Invalid daemon arguments')
@@ -206,7 +212,7 @@ def execute(component, arguments):
 
 def packaged_start(component, text):
     """Preserve only supported vendor ExecStart lines, including libvirt env."""
-    section, commands = '', []
+    section, commands, environment_files = '', [], []
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith(('#', ';')):
@@ -215,9 +221,17 @@ def packaged_start(component, text):
             section = line
         elif section == '[Service]' and line.startswith('ExecStart='):
             commands.append(line[len('ExecStart='):])
+        elif section == '[Service]' and line.startswith('EnvironmentFile='):
+            environment_files.append(line[len('EnvironmentFile='):])
     if len(commands) != 1 or '\\' in commands[0] or '\n' in commands[0]:
         raise ValueError('Unsupported packaged ExecStart')
     command = commands[0]
+    if component == 'docker' and command == ' '.join(DOCKER) + ' $DOCKER_OPTS':
+        # Original Debian trixie docker.io unit. systemd expands its empty
+        # default variable; effective arguments are still validated at start.
+        if environment_files != ['-/etc/default/docker']:
+            raise ValueError('Unsupported Docker environment file')
+        return command
     if component == 'vms' and command == LIBVIRT + ' $LIBVIRTD_ARGS':
         return command
     parsed = shlex.split(command)
@@ -241,10 +255,20 @@ def install_dropins(unit_root=Path('/usr/lib/systemd/system')):
     prepared = []
     for service, component in (('docker', 'docker'), ('libvirtd', 'vms')):
         unit = unit_root / (service + '.service')
-        if not trusted_file(unit) or not 0 < unit.stat().st_size <= 65536:
-            raise ValueError('Invalid packaged daemon unit')
-        command = packaged_start(component, unit.read_text())
-        daemon_arguments(component, [LIBVIRT] if '$LIBVIRTD_ARGS' in command else shlex.split(command))
+        try:
+            if not trusted_file(unit) or not 0 < unit.stat().st_size <= 65536:
+                raise ValueError('Invalid packaged daemon unit')
+            text = unit.read_text()
+        except (OSError, ValueError, UnicodeError):
+            raise PackagedConfigurationError(component, 'invalid_unit') from None
+        try:
+            command = packaged_start(component, text)
+            effective = (list(DOCKER) if component == 'docker' and command == ' '.join(DOCKER) + ' $DOCKER_OPTS'
+                         else [LIBVIRT] if component == 'vms' and command == LIBVIRT + ' $LIBVIRTD_ARGS'
+                         else shlex.split(command))
+            daemon_arguments(component, effective)
+        except ValueError:
+            raise PackagedConfigurationError(component, 'unsupported_exec_start') from None
         prepared.append((unit_root / (service + '.service.d') / 'titan-memory.conf', dropin(component, command)))
     for target, text in prepared:
         target.parent.mkdir(mode=0o755, exist_ok=True)
@@ -263,6 +287,12 @@ def main(arguments=None):
         try:
             install_dropins()
             return 0
+        except PackagedConfigurationError as error:
+            # Only fixed stage/component identifiers; never vendor argv,
+            # EnvironmentFile contents or filesystem exception messages.
+            print('Titan: unsupported packaged daemon configuration (' + error.component +
+                  ': ' + error.reason + ').', file=sys.stderr)
+            return INVALID
         except (OSError, ValueError):
             print('Titan: unsupported packaged daemon configuration.', file=sys.stderr)
             return INVALID

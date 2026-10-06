@@ -1,6 +1,8 @@
 """Main-process admission preserves systemd identity and leaves fresh evidence."""
 import contextlib
+import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -17,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('boot_daemon_guard', ROOT / 'image/boot-daemon-guard.py')
 guard = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(guard)
+TRUSTED_FILE = guard.trusted_file
+VENDOR = ROOT / 'tests/fixtures/debian-daemon-units'
 BOOT = '12345678-1234-1234-1234-123456789abc'
 
 
@@ -227,6 +231,77 @@ class BootDaemonGuardTests(unittest.TestCase):
             with self.assertRaises(ValueError): guard.install_dropins(directory)
             self.assertEqual(prior.read_text(), 'old guard, preserve until both units validated\n')
             self.assertFalse((directory / 'libvirtd.service.d').exists())
+
+    def test_original_debian_package_units_install_without_changing_vendor_configuration(self):
+        expected_hashes = {'docker.service': 'f1499e94746c08d1d777a5931ff9628027d1a83f787649f6bbb36df6952c5c30',
+                           'libvirtd.service': '214ce9c03f8a5fbb062df29c98e386eaf8220485906cb8e1f773c8f9b6dad69d'}
+        provenance = json.loads((VENDOR / 'provenance.json').read_text())
+        self.assertEqual(provenance['format'], 'titan-debian-original-unit-fixtures-v1')
+        for package in provenance['packages']:
+            self.assertTrue(package['url'].startswith('https://deb.debian.org/debian/pool/main/'))
+            for entry in package['files']:
+                self.assertEqual((entry['uid'], entry['gid'], entry['mode'], entry['type']), (0, 0, 0o644, 'regular'))
+                self.assertEqual(hashlib.sha256((VENDOR / entry['file']).read_bytes()).hexdigest(), entry['sha256'])
+        with self.fixture() as (directory, _), patch.object(guard, 'trusted_file', wraps=TRUSTED_FILE):
+            for name, digest in expected_hashes.items():
+                body = (VENDOR / name).read_bytes()
+                self.assertEqual(hashlib.sha256(body).hexdigest(), digest)
+                (directory / name).write_bytes(body)
+                (directory / name).chmod(0o644)
+            guard.install_dropins(directory)
+            for service, component, command, environment in (
+                    ('docker', 'docker', ' '.join(guard.DOCKER) + ' $DOCKER_OPTS', '-/etc/default/docker'),
+                    ('libvirtd', 'vms', guard.LIBVIRT + ' $LIBVIRTD_ARGS', '-/etc/default/libvirtd')):
+                vendor = (directory / (service + '.service')).read_text()
+                self.assertEqual(vendor, (VENDOR / (service + '.service')).read_text())
+                self.assertIn('EnvironmentFile=' + environment, vendor)
+                self.assertIn('ExecStart=' + command, vendor)
+                text = (directory / (service + '.service.d/titan-memory.conf')).read_text()
+                self.assertIn('ExecStart=' + guard.WRAPPER + ' --component ' + component + ' -- ' + command + '\n', text)
+                self.assertIn('RestartPreventExitStatus=78\n', text)
+            self.assertIn('Type=notify-reload', (directory / 'libvirtd.service').read_text())
+            self.assertIn('Environment=LIBVIRTD_ARGS="--timeout 120"', (directory / 'libvirtd.service').read_text())
+
+    def test_debian_docker_placeholder_does_not_allow_extra_flags_shell_or_other_environment(self):
+        source = (VENDOR / 'docker.service').read_text()
+        original = ' '.join(guard.DOCKER) + ' $DOCKER_OPTS'
+        self.assertEqual(guard.packaged_start('docker', source), original)
+        for replacement in (original + ' --data-root=/other', original.replace('$DOCKER_OPTS', '$OTHER'),
+                            original.replace('$DOCKER_OPTS', '${DOCKER_OPTS}'),
+                            original.replace('$DOCKER_OPTS', '$(secret)'),
+                            original.replace('$DOCKER_OPTS', '$DOCKER_OPTS; /bin/sh')):
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError):
+                guard.packaged_start('docker', source.replace(original, replacement))
+        for file in ('-/tmp/docker', '/etc/default/docker', ''):
+            with self.subTest(environment=file), self.assertRaises(ValueError):
+                guard.packaged_start('docker', source.replace('EnvironmentFile=-/etc/default/docker', 'EnvironmentFile=' + file))
+        with self.assertRaises(ValueError):
+            guard.packaged_start('docker', source.replace('EnvironmentFile=-/etc/default/docker', 'EnvironmentFile=-/etc/default/docker\nEnvironmentFile=-/tmp/extra'))
+        with self.assertRaises(ValueError):
+            guard.daemon_arguments('docker', [*guard.DOCKER, '--data-root=/other'])
+
+    def test_original_vendor_environment_defaults_only_expand_to_existing_fixed_arguments(self):
+        docker_defaults = [line.strip() for line in (VENDOR / 'docker.default').read_text().splitlines()
+                           if line.strip() and not line.lstrip().startswith('#')]
+        self.assertEqual(docker_defaults, [])
+        self.assertEqual(guard.daemon_arguments('docker', guard.DOCKER), list(guard.DOCKER))
+        self.assertEqual(guard.daemon_arguments('vms', [guard.LIBVIRT, '--timeout', '120']), [guard.LIBVIRT, '--timeout', '120'])
+
+    def test_packaged_configuration_diagnostic_has_fixed_component_reason_without_vendor_secrets(self):
+        with self.fixture() as (directory, _):
+            (directory / 'docker.service').write_text('[Service]\nExecStart=/bin/sh SECRET_ARG\n')
+            (directory / 'libvirtd.service').write_bytes((VENDOR / 'libvirtd.service').read_bytes())
+            try:
+                guard.install_dropins(directory)
+            except guard.PackagedConfigurationError as error:
+                self.assertEqual((error.component, error.reason), ('docker', 'unsupported_exec_start'))
+                with patch.object(guard, 'install_dropins', side_effect=error), contextlib.redirect_stderr(io.StringIO()) as out:
+                    self.assertEqual(guard.main(['--install-dropins']), 77)
+                self.assertIn('docker: unsupported_exec_start', out.getvalue())
+                self.assertNotIn('SECRET_ARG', out.getvalue())
+                self.assertNotIn('/bin/sh', out.getvalue())
+            else:
+                self.fail('Unknown vendor command accepted')
 
     def test_foreign_or_writable_runtime_directory_cannot_leave_authorized_denial(self):
         for owner, mode in ((1000, 0o755), (0, 0o777)):

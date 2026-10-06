@@ -154,7 +154,7 @@ class BootMemoryLifecycleTests(unittest.TestCase):
 
 BOOT_ID='11111111-2222-3333-4444-555555555555'
 START_COMMANDS={
-    'docker.service':'/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock',
+    'docker.service':'/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock $DOCKER_OPTS',
     'libvirtd.service':'/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS'}
 
 
@@ -229,10 +229,14 @@ class BootMemoryUnitObservationTests(BootEvidenceFixture,unittest.TestCase):
                         {'LoadState':'not-found'},{'RestartPreventExitStatus':'178'},
                         {'ExecStart':docker.replace('/usr/share/titan/','/tmp/')},
                         {'ExecStart':docker.replace('ignore_errors=no','ignore_errors=yes')},
+                        {'ExecStart':docker.replace('$DOCKER_OPTS','$OTHER_OPTS')},
+                        {'ExecStart':docker.replace(' $DOCKER_OPTS','')},
                         {'ExecStart':docker.replace(' ; ignore_errors',' --extra ; ignore_errors')},
                         {'ExecStart':docker+' '+docker}):
             with self.subTest(changes=changes):
-                self.assertIsNone(ab.blocked_boot_observation(self.observe(changes)))
+                value=self.observe(changes)
+                self.assertFalse(value['services']['docker.service']['guard_failed'])
+                self.assertIsNone(ab.blocked_boot_observation(value))
 
     def test_native_daemon_exit_78_without_fresh_wrapper_marker_is_not_a_guard(self):
         for kind in ('missing','symlink','oversize','duplicate','fifo'):
