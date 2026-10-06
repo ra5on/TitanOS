@@ -1,0 +1,13 @@
+{
+  "version": "2.0.1",
+  "osVersion": "2.0.1",
+  "versionName": "TitanOS 2.0.1",
+  "upstreamRepository": "https://github.com/getumbrel/umbrel",
+  "upstreamTag": "2.0.0",
+  "upstreamCommit": "9298257b0e904ca8d8270b1702672666343f0b86",
+  "upstreamArchiveSha256": "d820bb7a5e982bcced51f74bb613ee7a1558a231d07a60646c08a6b9dfbcb4e9",
+  "architecture": "amd64",
+  "stage": "stable",
+  "systemCompatibility": "titan-rugix-amd64-v2",
+  "updateProvider": "Titan GitHub releases (ra5on/TitanOS)"
+}

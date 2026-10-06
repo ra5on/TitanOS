@@ -1,7 +1,0 @@
-# /dev/root is the slot selected by the kernel, never a fixed A/B partition.
-# systemd-remount-fs must retain its read-only mount after the initramfs handoff.
-/dev/root / ext4 ro 0 0
-LABEL=TITAN-EFI /boot/efi vfat defaults,umask=0077 0 2
-LABEL=TITAN-BOOT /boot/titan ext4 defaults 0 2
-LABEL=TITAN-DATA /var/lib/titan-system ext4 defaults 0 0
-tmpfs /tmp tmpfs rw,nosuid,nodev,mode=1777,size=25% 0 0

@@ -1,0 +1,263 @@
+import {motion, useMotionValue} from 'motion/react'
+import React from 'react'
+import {useLocation, useNavigate} from 'react-router-dom'
+import {useWindowSize} from 'react-use'
+
+import {Glass} from '@/components/ui/glass'
+import {getLastFilesPath} from '@/features/files/utils/last-files-path'
+import {useAppsWithUpdates} from '@/hooks/use-apps-with-updates'
+import {useIsMobile} from '@/hooks/use-is-mobile'
+import {useSettingsNotificationCount} from '@/hooks/use-settings-notification-count'
+import {cn} from '@/lib/utils'
+import {systemAppsKeyed, useApps} from '@/providers/apps'
+import {useWallpaper} from '@/providers/wallpaper'
+import {trpcReact} from '@/trpc/trpc'
+import {useLinkToDialog} from '@/utils/dialog'
+import {tw} from '@/utils/tw'
+
+import {mobileDockIconSize} from './dock-dimensions'
+import {DockItem} from './dock-item'
+import {prefetchRouteChunks} from './prefetch-route-chunks'
+
+const DOCK_BOTTOM_PADDING_PX = 10
+
+const DOCK_DIMENSIONS_PX = {
+	preview: {
+		iconSize: 50,
+		iconSizeZoomed: 80,
+		padding: 12,
+	},
+	desktop: {
+		iconSize: 50,
+		iconSizeZoomed: 80,
+		padding: 12,
+	},
+	mobile: {
+		iconSize: 48,
+		iconSizeZoomed: 60,
+		padding: 8,
+	},
+} as const
+
+type DockDimensionsPx = {
+	iconSize: number
+	iconSizeZoomed: number
+	padding: number
+	dockHeight: number
+}
+
+function useDockDimensions(options?: {isPreview?: boolean}): DockDimensionsPx {
+	const isMobile = useIsMobile()
+	const {width: viewportWidth} = useWindowSize()
+
+	if (options?.isPreview) {
+		const {iconSize, iconSizeZoomed, padding} = DOCK_DIMENSIONS_PX.preview
+		return {iconSize, iconSizeZoomed, padding, dockHeight: iconSize + padding * 2}
+	}
+
+	const dimensions = isMobile ? DOCK_DIMENSIONS_PX.mobile : DOCK_DIMENSIONS_PX.desktop
+	const {iconSize: baseIconSize, iconSizeZoomed, padding} = dimensions
+	const iconSize = isMobile ? mobileDockIconSize(viewportWidth, baseIconSize) : baseIconSize
+	return {iconSize, iconSizeZoomed, padding, dockHeight: iconSize + padding * 2}
+}
+
+export function Dock() {
+	const {systemAppsKeyed} = useApps()
+	const {pathname, search} = useLocation()
+	const navigate = useNavigate()
+	const linkToDialog = useLinkToDialog()
+	const mouseX = useMotionValue(Infinity)
+	const settingsNotificationCount = useSettingsNotificationCount()
+	const {appsWithUpdates} = useAppsWithUpdates()
+	const isMobile = useIsMobile()
+	const {iconSize, iconSizeZoomed, padding, dockHeight} = useDockDimensions()
+	const {wallpaperImgRef} = useWallpaper()
+
+	// Members browse the app store read-only, updates are owner-only
+	const {data: user} = trpcReact.user.get.useQuery()
+	const isMember = user?.role === 'member'
+	const isOwner = user?.role === 'owner'
+
+	const appUpdateCount = appsWithUpdates.length
+
+	// Read sessionStorage at click time, not render time, because React Compiler
+	// may cache the render-time read and return a stale value.
+	const navigateToLastFilesPath = (e: React.MouseEvent) => {
+		e.preventDefault()
+		const lastFilesPath = getLastFilesPath(user?.userId)
+		navigate(lastFilesPath || systemAppsKeyed['TITAN_files'].systemAppTo)
+	}
+
+	return (
+		<motion.div
+			initial={{translateY: 80, opacity: 0}}
+			animate={{translateY: 0, opacity: 1}}
+			transition={{type: 'spring', stiffness: 200, damping: 20, delay: 0.2, duration: 0.2}}
+			// The pointer reaching the dock precedes a click by a few hundred ms —
+			// enough to finish warming a route chunk the idle prefetch didn't get to
+			onPointerEnter={prefetchRouteChunks}
+			onPointerMove={(e) => e.pointerType === 'mouse' && mouseX.set(e.pageX)}
+			onPointerLeave={() => mouseX.set(Infinity)}
+			className='shrink-0 transform-gpu will-change-transform'
+		>
+			<Glass
+				{...dockGlassProps}
+				// Only on the bare desktop: the WebGL fallback lens sees just the
+				// wallpaper, and on other routes page content scrolls under the dock
+				refractionTarget={pathname === '/' ? wallpaperImgRef : undefined}
+				className={cn(dockClass, isMobile && 'gap-2')}
+				style={{
+					height: dockHeight,
+					paddingBottom: padding,
+				}}
+			>
+				<DockItem
+					iconSize={iconSize}
+					iconSizeZoomed={iconSizeZoomed}
+					to={systemAppsKeyed['TITAN_files'].systemAppTo}
+					onClick={navigateToLastFilesPath}
+					open={pathname.startsWith('/files')}
+					bg={systemAppsKeyed['TITAN_files'].icon}
+					label={systemAppsKeyed['TITAN_files'].name}
+					feature='files'
+					mouseX={mouseX}
+				/>
+				<DockItem
+					iconSize={iconSize}
+					iconSizeZoomed={iconSizeZoomed}
+					to={systemAppsKeyed['TITAN_photos'].systemAppTo}
+					open={pathname.startsWith(systemAppsKeyed['TITAN_photos'].systemAppTo)}
+					bg={systemAppsKeyed['TITAN_photos'].icon}
+					label={systemAppsKeyed['TITAN_photos'].name}
+					feature='photos'
+					mouseX={mouseX}
+				/>
+				<DockItem
+					iconSize={iconSize}
+					iconSizeZoomed={iconSizeZoomed}
+					to={systemAppsKeyed['TITAN_app-store'].systemAppTo}
+					open={
+						pathname.startsWith(systemAppsKeyed['TITAN_app-store'].systemAppTo) ||
+						// Community stores live outside /app-store but are still the App Store
+						pathname.startsWith('/community-app-store')
+					}
+					bg={systemAppsKeyed['TITAN_app-store'].icon}
+					label={systemAppsKeyed['TITAN_app-store'].name}
+					feature='app-store'
+					notificationCount={isMember ? undefined : appUpdateCount}
+					mouseX={mouseX}
+				/>
+				{isOwner && (
+					<DockItem
+						iconSize={iconSize}
+						iconSizeZoomed={iconSizeZoomed}
+						to={systemAppsKeyed['TITAN_machines'].systemAppTo}
+						open={pathname.startsWith(systemAppsKeyed['TITAN_machines'].systemAppTo)}
+						bg={systemAppsKeyed['TITAN_machines'].icon}
+						label={systemAppsKeyed['TITAN_machines'].name}
+						feature='machines'
+						mouseX={mouseX}
+					/>
+				)}
+				<DockItem
+					iconSize={iconSize}
+					iconSizeZoomed={iconSizeZoomed}
+					to={systemAppsKeyed['TITAN_settings'].systemAppTo}
+					open={pathname.startsWith(systemAppsKeyed['TITAN_settings'].systemAppTo)}
+					bg={systemAppsKeyed['TITAN_settings'].icon}
+					label={systemAppsKeyed['TITAN_settings'].name}
+					notificationCount={settingsNotificationCount}
+					mouseX={mouseX}
+				/>
+				<DockItem
+					iconSize={iconSize}
+					iconSizeZoomed={iconSizeZoomed}
+					to={linkToDialog('live-usage')}
+					open={new URLSearchParams(search).get('dialog') === 'live-usage'}
+					bg={systemAppsKeyed['TITAN_live-usage'].icon}
+					label={systemAppsKeyed['TITAN_live-usage'].name}
+					mouseX={mouseX}
+				/>
+			</Glass>
+		</motion.div>
+	)
+}
+
+export function DockPreview() {
+	const mouseX = useMotionValue(Infinity)
+	const {iconSize, iconSizeZoomed, padding, dockHeight} = useDockDimensions({isPreview: true})
+
+	return (
+		<Glass
+			{...dockGlassProps}
+			className={dockPreviewClass}
+			style={{
+				height: dockHeight,
+				paddingBottom: padding,
+			}}
+		>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_files'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_photos'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_app-store'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_machines'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_settings'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['TITAN_live-usage'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+		</Glass>
+	)
+}
+
+// How much of the bottom of the screen the dock takes, in px: what content
+// that runs beneath it must leave clear to scroll fully into view
+export function useDockClearance() {
+	const {dockHeight} = useDockDimensions()
+	return dockHeight + DOCK_BOTTOM_PADDING_PX
+}
+
+export function DockSpacer({className}: {className?: string}) {
+	const height = useDockClearance()
+	return <div className={cn('w-full shrink-0', className)} style={{height}} />
+}
+
+export function DockBottomPositioner({children}: {children: React.ReactNode}) {
+	return (
+		<div className='fixed bottom-0 left-1/2 z-50 -translate-x-1/2' style={{paddingBottom: DOCK_BOTTOM_PADDING_PX}}>
+			{children}
+		</div>
+	)
+}
+
+// Clearer glass than the widget defaults: barely any blur or tint, hard refraction
+const dockGlassProps = {blur: 1.5, saturate: 1.4, brightness: 0.9, scale: 70, chroma: 0.24, bevel: 1.0} as const
+
+const dockClass = tw`mx-auto flex items-end gap-2.5 rounded-2xl contrast-more:bg-neutral-700 px-3 shadow-dock-drop shrink-0`
+const dockPreviewClass = tw`mx-auto flex items-end gap-4 rounded-2xl px-3 shadow-dock-drop shrink-0`

@@ -1,54 +1,93 @@
-<div align="center">
+<p align="center">
+  <img src="docs/images/titanos-banner.svg" alt="TitanOS" width="920">
+</p>
 
-# Titan
+<h1 align="center">TitanOS 2.0.1 · Stable</h1>
 
-**Deine Daten. Deine Anwendungen. Dein NAS.**
+<p align="center">
+  Ein Zuhause für deine Dateien, Apps und virtuellen Maschinen.<br>
+  Auf deinem Server, direkt im Browser.
+</p>
 
-[![CI](https://github.com/ra5on/TitanOS/actions/workflows/ci.yml/badge.svg)](https://github.com/ra5on/TitanOS/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/Version-3.0.1-246cff)](https://github.com/ra5on/TitanOS/releases)
-[![Kanal](https://img.shields.io/badge/Kanal-stable-238636)](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1)
+<p align="center">
+  <a href="https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz"><strong>IMG herunterladen</strong></a>
+  · <a href="https://github.com/ra5on/TitanOS/releases/tag/v2.0.1">Release &amp; Prüfsummen</a>
+  · <a href="https://github.com/ra5on/TitanOS/issues">Support</a>
+</p>
 
-[Image 3.0.1 herunterladen](https://github.com/ra5on/TitanOS/releases/download/titan-3.0.1/titan-3.0.1-amd64.img.xz) · [Probleme melden](https://github.com/ra5on/TitanOS/issues) · [Lizenz](LICENSE)
+## Dein Server im Überblick
 
-</div>
+TitanOS verbindet eine deutsche Oberfläche mit einem übersichtlichen Desktop.
+Im Dock erreichst du Dateien, Foto's, den App-Store, virtuelle Maschinen und
+Einstellungen. Oben links findest du das Systemmenü: Abmelden, Neustarten und
+Herunterfahren werden jeweils mit **Ja / Nein** bestätigt.
 
-![Titan Desktop](docs/images/titan-3-desktop.jpg)
-
-Titan verbindet eine deutsche Desktop-Oberfläche mit einem eigenen NAS-System.
-Verknüpfungen, Fenster und Statuswidgets passen sich deinem Arbeitsablauf an.
-Die Oberfläche ist auch auf dem Smartphone bedienbar.
-
-| Bereich | Möglichkeiten |
+| Bereich | Was du damit machen kannst |
 | --- | --- |
-| Docker | Container und Projekte, Netzwerke, Protokolle, Ressourcen und vorbefüllte LinuxServer.io- und Big-Bear-Vorlagen |
-| Dateien & Fotos | Dateiverwaltung, Vorschau und Bearbeitung, eigene Fotobibliotheken, Alben, Favoriten und Papierkorb |
-| Benutzer & Speicher | Benutzerrechte, SMB-Freigaben, benannte Speicherbereiche, ext4, XFS und ZFS |
-| Virtuelle Maschinen | BIOS und UEFI, ISO und vorhandene Disk-Images, CPU-Auswahl und integrierte Browserkonsole |
-| System | Anmeldeschutz, Sicherungen, signierte Systemupdates und A/B-Rollback |
+| Dateien & Foto's | Dateien verwalten und Fotos ansehen |
+| App-Store & Docker | Apps installieren und Container verwalten |
+| Virtuelle Maschinen | Weitere Betriebssysteme auf deinem Server betreiben |
+| Speicher & Benutzer | Laufwerke einrichten und Zugänge verwalten |
+| Einstellungen | Netzwerk, Backups und Systemupdates konfigurieren |
 
-Vor der Docker-Installation werden Speicher, Ports und weitere Optionen angezeigt.
-Nicht unterstützte Vorlagen werden ausgelassen; die Quelle zeigt deren Anzahl.
-Die Anwendung behält ihre eigene Lizenz und ihre eigenen Anforderungen.
+## Ein Blick auf TitanOS
 
-<div align="center">
+Die Aufnahmen zeigen die gebaute Oberfläche von TitanOS 2.0.1 mit dem echten
+Backend in einer isolierten Testumgebung. [Details zu den Aufnahmen](docs/images/README.md).
 
-<img src="docs/images/titan-3-files-mobile.jpg" alt="Dateimanager auf dem Smartphone" width="280">
-<img src="docs/images/titan-3-docker-mobile.jpg" alt="Docker auf dem Smartphone" width="280">
-<img src="docs/images/titan-3-photos-mobile.jpg" alt="Eigene Titan-Fotogalerie auf dem Smartphone" width="280">
-<img src="docs/images/titan-3-desktop-mobile.jpg" alt="Titan-Desktop mit eingeklapptem Widget auf dem Smartphone" width="280">
+![TitanOS-Desktop mit neuen Dock-Icons](docs/images/titanos-desktop.jpg)
 
-</div>
+| Dateien | Einstellungen |
+| --- | --- |
+| ![TitanOS-Dateimanager](docs/images/titanos-files.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings.jpg) |
 
-**Titan 3.0.1 ist veröffentlicht:** Boot, NAS-Funktionen, signiertes Update,
-Rollback und der echte RAM-Kaltstart sind erfolgreich geprüft. Das
-[Release](https://github.com/ra5on/TitanOS/releases/tag/titan-3.0.1) und alle
-Downloads sind öffentlich ohne GitHub-Anmeldung erreichbar; der Updatekanal
-steht auf **stable**. Weitere Praxistests auf realer Hardware und ein
-mehrtägiger Dauerlauf sind noch offen.
-Ergebnisse stehen im [Prüfprotokoll](docs/QA-3.0.0.md), die nächsten Schritte im
-[Praxistest](docs/PRAXISTEST-3.0.0.md).
+## Installieren
 
-Der eigene Titan-Code darf nichtkommerziell genutzt, verändert und kostenlos
-weitergegeben werden. Verkauf und andere kommerzielle Nutzung sind untersagt.
-Details stehen in der [Lizenz](LICENSE); die Rechte der verwendeten
-Drittkomponenten bleiben in ihren [eigenen Lizenzen](NOTICE) erhalten.
+Für einen x86-64-Rechner empfehlen wir **8 GB RAM**, eine **SSD ab 64 GB** und
+**UEFI mit deaktiviertem Secure Boot**.
+
+1. Lade [titan-2.0.1.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/titan-2.0.1.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.1); die [Download-Prüfung](docs/DOWNLOADS.md) erklärt die Schritte.
+2. Entpacke das Image und schreibe es mit einem geeigneten Image-Werkzeug auf die Ziel-SSD. **Dabei wird der Inhalt dieses Laufwerks überschrieben.**
+3. Starte den Rechner von dieser SSD und verbinde ihn mit deinem Netzwerk.
+4. Öffne `http://titan.local/` im Browser. Falls dein Netzwerk lokale Namen nicht auflöst, verwende die IP-Adresse aus deinem Router.
+
+Das Download-Image ist kompakt. Beim ersten Start richtet TitanOS zwei
+10-GiB-Systembereiche ein und nutzt die **volle verbleibende SSD-Kapazität für
+deine Daten**. Apps installierst du anschließend im App-Store.
+
+**Für eine VM:** Vergrößere die importierte **Boot-Festplatte vor dem ersten
+Start auf mindestens 32 GiB, empfohlen 64 GiB**. Eine zusätzliche Datendisk
+ersetzt diesen Schritt nicht. Die [VM-Anleitung](docs/VM.md) führt durch die
+Einrichtung.
+
+## Updates
+
+TitanOS bietet ausschließlich **Stable-Systemupdates** an. Einzelne Funktionen
+können ausdrücklich als Alpha oder Beta gekennzeichnet sein; stabile Funktionen
+haben kein zusätzliches Badge.
+
+Systemupdates suchst und installierst du direkt in den **Einstellungen**.
+Das NAS prüft die Signatur und die Kompatibilität des vollständigen Systemupdates
+vor der Installation. Anschließend startest du TitanOS neu.
+
+Diese Ausgabe benötigt eine **Neuinstallation**. Danach laufen Updates über
+den eigenen TitanOS-Stable-Kanal. Details findest du in der
+[Update-Anleitung](docs/UPDATES.md).
+
+## Gut zu wissen
+
+Das veröffentlichte Image wurde erfolgreich über UEFI auf einer 32-GiB-
+Boot-Festplatte gestartet. Dabei wurden die Weboberfläche, das Backend und die
+genaue Versionskennung **TitanOS 2.0.1** geprüft. Der signierte
+[Boot-Bericht](https://github.com/ra5on/TitanOS/releases/download/v2.0.1/image-verification.json)
+enthält die Ergebnisse. Das ist keine umfassende Prüfung aller Apps,
+Hardwarekombinationen oder VM-Szenarien.
+
+Der App-Store verwendet externe App-Quellen; Apps werden nach der Einrichtung
+installiert. Google Drive, Dropbox und OneDrive benötigen eigene
+OAuth-Konfigurationen. Fragen und nachvollziehbare Fehlerberichte kannst du im
+[Titan-Support auf GitHub](https://github.com/ra5on/TitanOS/issues) teilen.
+
+---
+
+[Lizenz](LICENSE.md) · [Herkunft und Drittkomponenten](UPSTREAM.md)

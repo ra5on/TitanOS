@@ -1,0 +1,223 @@
+import {useTranslation} from 'react-i18next'
+import {TbChevronRight, TbQuestionMark} from 'react-icons/tb'
+import {useNavigate} from 'react-router-dom'
+
+import {CopyButton} from '@/components/ui/copy-button'
+import {FadeInImg} from '@/components/ui/fade-in-img'
+import {hostEnvironmentMap, TitanHostEnvironment} from '@/constants'
+import {cn} from '@/lib/utils'
+import {gpuSpecModelName} from '@/utils/gpu'
+import {maybeT} from '@/utils/i18n'
+import {maybePrettyBytes} from '@/utils/pretty-bytes'
+import {tw} from '@/utils/tw'
+
+import AnimatedTitanHomeIcon from './device-info-titan-home'
+import AnimatedTitanProIcon from './device-info-titan-pro'
+
+export function formatDeviceSpecs(data?: {
+	cpu?: string
+	memorySize?: number | null
+	memoryType?: string
+	storageSize?: number | null
+	storageType?: string
+}) {
+	const cpu = data?.cpu || ''
+	const memorySize = data?.memorySize
+	const memoryType = data?.memoryType || ''
+	const memory = memorySize ? `${maybePrettyBytes(memorySize)}${memoryType ? ` ${memoryType}` : ''}` : ''
+	const storageSize = data?.storageSize
+	const storageType = data?.storageType || ''
+	const storage = storageSize ? `${maybePrettyBytes(storageSize)}${storageType ? ` ${storageType}` : ''}` : ''
+	return {cpu, memory, storage}
+}
+
+export function DeviceInfoContent({
+	titanHostEnvironment,
+	device,
+	modelNumber,
+	serialNumber,
+	cpu,
+	memory,
+	storage,
+	gpus,
+}: {
+	titanHostEnvironment?: TitanHostEnvironment
+	device?: string
+	modelNumber?: string
+	serialNumber?: string
+	cpu?: string
+	memory?: string
+	storage?: string
+	gpus?: {vendor: string; model: string}[]
+}) {
+	const {t} = useTranslation()
+	const navigate = useNavigate()
+
+	return (
+		<div className='space-y-6'>
+			<div className={cn('flex justify-center', titanHostEnvironment !== 'titan-pro' && 'py-2')}>
+				<HostEnvironmentIcon environment={titanHostEnvironment} modelNumber={modelNumber} serialNumber={serialNumber} />
+			</div>
+			<div className={listClass}>
+				<div className={listItemClassNarrow}>
+					<span>{t('device-info.device')}</span>
+					{/* pr-6 aligns text across all rows when CopyButton is present on model/serial rows */}
+					<span className={cn('font-normal', (modelNumber || serialNumber) && 'pr-6')}>{maybeT(device)}</span>
+				</div>
+				{modelNumber && (
+					<div className={listItemClassNarrow}>
+						<span>{t('device-info.model-number')}</span>
+						<span className='flex items-center gap-2 font-normal'>
+							{modelNumber} <CopyButton value={modelNumber} />
+						</span>
+					</div>
+				)}
+				{serialNumber && (
+					<div className={listItemClassNarrow}>
+						<span>{t('device-info.serial-number')}</span>
+						<span className='flex items-center gap-2 font-normal'>
+							{serialNumber} <CopyButton value={serialNumber} />
+						</span>
+					</div>
+				)}
+				{cpu && (
+					<div className={listItemClassNarrow}>
+						<span>{t('device-info.cpu')}</span>
+						<span className={cn('font-normal', (modelNumber || serialNumber) && 'pr-6')}>{cpu}</span>
+					</div>
+				)}
+				<GpuInfoRows
+					gpus={gpus ?? []}
+					label={t('device-info.gpu')}
+					alignWithCopyButtons={Boolean(modelNumber || serialNumber)}
+				/>
+				{memory && (
+					<div className={listItemClassNarrow}>
+						<span>{t('device-info.memory')}</span>
+						<span className={cn('font-normal', (modelNumber || serialNumber) && 'pr-6')}>{memory}</span>
+					</div>
+				)}
+				{storage && (
+					<div className={listItemClassNarrow}>
+						<span>{t('device-info.storage')}</span>
+						<span className='flex items-center gap-2 font-normal'>
+							{storage}
+							<button
+								type='button'
+								aria-label={t('storage-manager')}
+								className='rounded-4 opacity-20 transition-opacity hover:opacity-40 focus:outline-hidden focus-visible:opacity-60'
+								onClick={() => navigate('/settings/storage')}
+							>
+								<TbChevronRight className='shrink-0' />
+							</button>
+						</span>
+					</div>
+				)}
+			</div>
+		</div>
+	)
+}
+
+// One "GPU" row however many devices there are: each device stacks on the
+// right as its readable model name (shared naming with Live Usage) over the
+// vendor line, tagged with a small "GPU n" badge when there's more than one.
+export function GpuInfoRows({
+	gpus,
+	label,
+	alignWithCopyButtons = false,
+}: {
+	gpus: {vendor: string; model: string}[]
+	label: string
+	alignWithCopyButtons?: boolean
+}) {
+	const visibleGpus = gpus.filter(({vendor, model}) => vendor || model)
+	if (visibleGpus.length === 0) return null
+
+	return (
+		<div className={cn(listItemClass, 'h-auto min-h-[50px] py-2.5')}>
+			<span>{label}</span>
+			<span
+				className={cn(
+					'flex max-w-[70%] flex-col items-end gap-2.5 text-right font-normal',
+					alignWithCopyButtons && 'pr-6',
+				)}
+			>
+				{visibleGpus.map((gpu, index) => (
+					<span key={`${gpu.vendor}-${gpu.model}-${index}`} className='flex flex-col items-end gap-0.5'>
+						<span className='flex min-w-0 items-center gap-1.5 leading-snug'>
+							{visibleGpus.length > 1 && (
+								<span className='shrink-0 rounded-4 bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide whitespace-nowrap text-white/50'>
+									{`${label} ${index + 1}`}
+								</span>
+							)}
+							<span className='min-w-0'>{gpu.model ? gpuSpecModelName(gpu.model) : gpu.vendor}</span>
+						</span>
+						{/* With a single GPU the vendor line is dropped — the model name
+						    already identifies it, and the raw PCI vendor string is noise */}
+						{visibleGpus.length > 1 && gpu.model && gpu.vendor && (
+							<span className='text-12 text-white/40'>{gpu.vendor}</span>
+						)}
+					</span>
+				))}
+			</span>
+		</div>
+	)
+}
+const listClass = tw`divide-y divide-white/6 overflow-hidden rounded-12 bg-white/6`
+const listItemClass = tw`flex items-center gap-3 px-3 h-[50px] text-15 font-medium -tracking-3 justify-between`
+const listItemClassNarrow = cn(listItemClass, tw`h-[42px]`)
+
+export const HostEnvironmentIcon = ({
+	environment,
+	modelNumber,
+	serialNumber,
+}: {
+	environment?: TitanHostEnvironment
+	modelNumber?: string
+	serialNumber?: string
+}) => {
+	const iconDimensions = {
+		'titan-pro': 200,
+		'titan-home': 128,
+		'raspberry-pi': 64,
+		'docker-container': 72,
+		unknown: 128,
+	}
+
+	if (environment === 'titan-home') {
+		return <AnimatedTitanHomeIcon modelNumber={modelNumber} serialNumber={serialNumber} />
+	}
+
+	if (environment === 'titan-pro') {
+		return <AnimatedTitanProIcon serialNumber={serialNumber} />
+	}
+
+	const icon =
+		environment && hostEnvironmentMap[environment]?.icon ? (
+			<FadeInImg
+				src={hostEnvironmentMap[environment].icon}
+				width={iconDimensions[environment]}
+				height={iconDimensions[environment]}
+			/>
+		) : (
+			<TbQuestionMark className='h-12 w-12 text-white/50' />
+		)
+
+	// Only wrap in IconContainer for raspberry-pi and docker-container
+	if (environment === 'raspberry-pi' || environment === 'docker-container') {
+		return <IconContainer>{icon}</IconContainer>
+	}
+
+	return icon
+}
+
+const IconContainer = ({children}: {children: React.ReactNode}) => (
+	<div
+		className='grid h-32 w-32 place-items-center rounded-[27px] bg-[#52525252]'
+		style={{
+			boxShadow: '0 1px 2px #ffffff55 inset',
+		}}
+	>
+		{children}
+	</div>
+)

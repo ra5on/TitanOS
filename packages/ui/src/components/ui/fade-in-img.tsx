@@ -1,0 +1,20 @@
+import {useState} from 'react'
+
+import {cn} from '@/lib/utils'
+
+export function FadeInImg({src, alt, className, onLoad, ...props}: React.ComponentPropsWithRef<'img'>) {
+	const [loaded, setLoaded] = useState(false)
+
+	return (
+		<img
+			src={src}
+			alt={alt}
+			className={cn('transition-opacity duration-500 fill-mode-both', loaded ? 'opacity-100' : 'opacity-0', className)}
+			onLoad={(e) => {
+				setLoaded(true)
+				onLoad?.(e)
+			}}
+			{...props}
+		/>
+	)
+}

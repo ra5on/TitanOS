@@ -1,0 +1,49 @@
+import {Fragment} from 'react'
+
+import {LOADING_DASH} from '@/constants'
+import type {ListWidget, ListWidgetItem, ListWidgetProps} from '@/modules/widgets/shared/constants'
+
+import {WidgetContainer} from './shared/shared'
+
+export function ListWidget({
+	items,
+	link,
+	noItemsText = 'Nothing to show.',
+	onClick,
+}: ListWidgetProps & {
+	onClick?: (link?: string) => void
+}) {
+	return (
+		<WidgetContainer onClick={() => onClick?.(link)} className='overflow-hidden p-2 !pb-0 sm:p-4'>
+			<div
+				className='flex h-full w-full flex-col gap-2 max-sm:gap-0'
+				style={{
+					maskImage: 'linear-gradient(to bottom, red 50px calc(100% - 80px), transparent)',
+				}}
+			>
+				{!items && <ListItem subtext={undefined} text={LOADING_DASH} />}
+				{items?.length === 0 && (
+					<div className='grid h-full w-full place-items-center pb-2 text-center sm:pb-4'>{noItemsText}</div>
+				)}
+				{/* Slice just in case API sends down too much data */}
+				{items &&
+					items.length > 0 &&
+					items.slice(0, 5).map((item, i) => (
+						<Fragment key={i}>
+							{i !== 0 && <hr className='border-white/10' />}
+							<ListItem subtext={item.subtext} text={item.text} />
+						</Fragment>
+					))}
+			</div>
+		</WidgetContainer>
+	)
+}
+
+function ListItem(item?: ListWidgetItem) {
+	return (
+		<div className='text-12 leading-tight'>
+			<div className='text-10 truncate opacity-50'>{item?.subtext ?? LOADING_DASH}</div>
+			<p className='line-clamp-2 text-11 font-medium text-white sm:text-12'>{item?.text}</p>
+		</div>
+	)
+}

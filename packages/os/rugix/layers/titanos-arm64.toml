@@ -1,0 +1,16 @@
+parent = "titanos-root-arm64"
+
+recipes = [
+    # Prepare titanOS base image for Rugix.
+    "titanos-prepare",
+    # Copy titanOS boot files to boot partition.
+    "titanos-boot",
+    # Install and configure Rugix.
+    "setup-rugix",
+    # Fix `/etc/hostname` and `/etc/hosts`.
+    "fix-overlay",
+]
+
+[parameters."core/rugix-ctrl"]
+use_musl = false
+version = "v1.2.1-dev.1"

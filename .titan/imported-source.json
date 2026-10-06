@@ -1,0 +1,12 @@
+{
+  "upstreamCommit": "9298257b0e904ca8d8270b1702672666343f0b86",
+  "upstreamTag": "2.0.0",
+  "archiveSha256": "d820bb7a5e982bcced51f74bb613ee7a1558a231d07a60646c08a6b9dfbcb4e9",
+  "importedFiles": 2204,
+  "workflowPolicy": "Preserved as text; Titan image workflow is active",
+  "sourceAdaptations": [
+    "Own cloud OAuth registrations",
+    "TitanOS branding",
+    "Signed Titan GitHub update channel"
+  ]
+}
