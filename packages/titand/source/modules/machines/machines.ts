@@ -1005,7 +1005,7 @@ export default class Machines {
 		this.#store = new MachineStore(titand.dataDirectory)
 		this.#libvirt = new Libvirt(titand)
 		this.#automaticBridge = new AutomaticMachineBridge(undefined, (error) =>
-			this.logger.error('Failed restoring VM bridge networking', error),
+			this.logger.error('VM bridge network operation failed', error),
 		)
 		this.#guestApi = new MachineGuestApi({
 			host: MACHINE_GUEST_HOST_ADDRESS,

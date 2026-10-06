@@ -43,8 +43,12 @@ function freshVm() {
 		await titand.registerAndLogin()
 	})
 	afterAll(async () => await titand?.cleanup())
-	afterEach(({task}) => {
-		if (task.result?.state === 'fail') failed = true
+	afterEach(async ({task}) => {
+		if (task.result?.state === 'fail') {
+			failed = true
+			// Retain the real daemon cause before the failed guest is destroyed.
+			console.error(await titand.vm.sshAsRoot('journalctl -u titan -u NetworkManager --no-pager -n 120').catch(String))
+		}
 	})
 	beforeEach(({skip}) => {
 		if (failed) skip()
@@ -93,12 +97,16 @@ master = Path('/sys/class/net/${device}/master')
 links = json.loads(output('ip', '-json', 'link', 'show'))
 addresses = json.loads(output('ip', '-json', 'address', 'show'))
 routes = json.loads(output('ip', '-json', 'route', 'show', 'default'))
+# Docker and libvirt can create unrelated bridges during daemon startup.
+# Snapshot the physical LAN and its new controller, not asynchronous app networks.
+interfaces = {'${device}', '${bridgeName}'}
+profiles = output('nmcli', '--terse', '--fields', 'UUID,TYPE,DEVICE', 'connection', 'show').splitlines()
 print(json.dumps({
     'master': master.resolve().name if master.exists() else None,
-    'links': sorted([{'ifname': link['ifname'], 'address': link.get('address', '')} for link in links], key=lambda link: link['ifname']),
-    'addresses': sorted([{'ifname': entry['ifname'], 'addr_info': [{'family': address['family'], 'local': address['local'], 'prefixlen': address['prefixlen']} for address in entry['addr_info']]} for entry in addresses], key=lambda entry: entry['ifname']),
+    'links': sorted([{'ifname': link['ifname'], 'address': link.get('address', '')} for link in links if link['ifname'] in interfaces], key=lambda link: link['ifname']),
+    'addresses': sorted([{'ifname': entry['ifname'], 'addr_info': [{'family': address['family'], 'local': address['local'], 'prefixlen': address['prefixlen']} for address in entry['addr_info']]} for entry in addresses if entry['ifname'] in interfaces], key=lambda entry: entry['ifname']),
     'routes': [{key: route[key] for key in ('dst', 'gateway', 'dev') if key in route} for route in routes],
-    'profiles': sorted(output('nmcli', '--terse', '--fields', 'UUID,TYPE,DEVICE', 'connection', 'show').splitlines()),
+    'profiles': sorted(profile for profile in profiles if ':802-3-ethernet:' in profile or profile.endswith(':${bridgeName}')),
     'checkpoints': output('busctl', 'get-property', 'org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager', 'org.freedesktop.NetworkManager', 'Checkpoints'),
 }))
 PY`)
