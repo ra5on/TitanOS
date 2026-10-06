@@ -23,6 +23,21 @@ const choices=evaluate('appInstallFields(choicesApp)');assert.match(choices,/<se
  replies['/api/catalog']={apps:[defaultApp],source:'LinuxServer.io'};
  replies['/api/apps']={available:true,installed:[{id:defaultApp.id,name:defaultApp.name,port:8083,state:'running'}]};
  const store=await evaluate('pages.apps()');assert(store.includes('Details & Anmeldung'));assert(store.includes('Standardzugang'));assert(store.includes('data-action="app-info"'));assert(!store.includes('admin123'),'Cards give discoverable login details without exposing credentials across the whole catalog');
+ // The actual view must stay usable when Docker is intentionally blocked by
+ // the boot RAM guard; use the authenticated session, never an implicit user.
+ const availableApps=replies['/api/apps'];
+ for(const role of ['admin','user']){
+  evaluate('session.user.role='+JSON.stringify(role));
+  replies['/api/apps']={available:false,installed:[],error:'Docker wegen RAM-Schutz angehalten: <Reserve> erforderlich.'};
+  const unavailable=await evaluate('pages.apps()');
+  assert(unavailable.includes('Docker wegen RAM-Schutz angehalten: &lt;Reserve&gt; erforderlich.'));
+  assert(unavailable.includes('<h3>Calibre-Web</h3>'),'The template catalog remains visible during the protected management mode');
+  const repair=unavailable.match(/<button\b[^>]*data-action="component-install"[^>]*>/)?.[0];assert(repair);
+  assert.equal(/\bhidden\b/.test(repair),role!=='admin','Only administrators see the component repair action');
+  const install=unavailable.match(/<button\b[^>]*data-action="app-install"[^>]*>/)?.[0];assert(install);assert(/\bdisabled\b/.test(install),'Unavailable Docker cannot accept an installation');
+  assert.match(unavailable,/data-action="app-info"[^>]*data-can-install="false"/);
+ }
+ evaluate('session.user.role="admin"');replies['/api/apps']=availableApps;
  await evaluate('actions["app-info"]({dataset:{id:"calibre-web",installed:"false",canInstall:"true"}})');assert(node('#dialog-body').innerHTML.includes('admin123'));assert(node('#dialog-body').innerHTML.includes('data-action="app-install"'));
  replies['/api/apps/memory-plan']={allowed:true,available_bytes:6*1024**3,required_available_bytes:3*1024**3,plan:{startup_limit_bytes:2*1024**3,container_count:1,profile_label:'Ausgewogen',office_enabled:false}};replies['/api/storage-locations']={default_storage:'system',storage:[{id:'system',label:'Interner Speicher',path:'/var/srv/titan',available:true,capabilities:['apps','files','shares','vms']}]};replies['/api/shares']=[];replies['/api/app-devices']={devices:[],notes:[]};await evaluate('actions["app-install"]({dataset:{id:"calibre-web"}})');assert(node('#dialog-body').innerHTML.includes('data-login-mode="default"'),'Initial installation shows login guidance before submitting');
  await evaluate('actions["app-copy-login"]({dataset:{id:"calibre-web",field:"password"}})');assert.deepEqual(clipboard,['admin123']);
@@ -50,5 +65,5 @@ const choices=evaluate('appInstallFields(choicesApp)');assert.match(choices,/<se
  pending[0](plan(false,true,2));await Promise.resolve();await Promise.resolve();assert.equal(submit.disabled,true);assert.match(panel.innerHTML,/Mehr verfügbarer RAM erforderlich/);assert.match(panel.innerHTML,/Für Installation mit Reserve nötig/);assert.match(panel.innerHTML,/Obergrenzen sind kein gemessener Verbrauch/);
  form.elements['option-office_mode'].value='disabled';handlers.get('change')({target:{name:'option-office_mode'}});assert.equal(calls[1].options.office_mode,'disabled');pending[1](plan(true,false,6));await Promise.resolve();await Promise.resolve();assert.equal(submit.disabled,false);assert.match(panel.innerHTML,/4 Dienste/);assert.doesNotMatch(panel.innerHTML,/mit Euro-Office/);
  handlers.get('change')({target:{name:'option-resource_profile'}});form.elements['option-office_mode'].value='enabled';handlers.get('change')({target:{name:'option-office_mode'}});pending[3](plan(false,true,2));await Promise.resolve();pending[2](plan(true,false,6));await Promise.resolve();await Promise.resolve();assert.equal(submit.disabled,true,'Old passing preflight must not override the current blocked options');memory.dispose();assert.equal(handlers.size,0);
- console.log('Catalog/admin UI: search and curated schema, all first-login modes, public-default copy, escaping, no stored-secret exposure, install/info/manage guidance, lazy dashboard metadata and focused log navigation passed.');
+ console.log('Catalog/admin UI: unavailable Docker/RAM guard, role-aware repair controls, disabled installation, search and curated schema, all first-login modes, public-default copy, escaping, no stored-secret exposure, install/info/manage guidance, lazy dashboard metadata and focused log navigation passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
