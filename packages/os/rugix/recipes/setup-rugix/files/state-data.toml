@@ -6,3 +6,11 @@ overlay-fallback = "in-memory"
 
 [[persist]]
 directory = "/data"
+
+# Confirmed network profiles and DHCP identity must survive the discarded root
+# overlay and A/B system updates. Provisional profiles remain in NM memory only.
+[[persist]]
+directory = "/etc/NetworkManager/system-connections"
+
+[[persist]]
+directory = "/var/lib/NetworkManager"

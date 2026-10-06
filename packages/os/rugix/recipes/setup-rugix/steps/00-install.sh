@@ -4,6 +4,10 @@ set -euo pipefail
 
 apt-get install -y fdisk parted
 
+# Rugix seeds persistent directories from the image on first use. Network
+# profiles may contain credentials, so keep both backing directories root-only.
+install -d -m 700 /etc/NetworkManager/system-connections /var/lib/NetworkManager
+
 # Select bootstrapping config based on boot type
 BOOT_TYPE="${RECIPE_PARAM_BOOT_TYPE:-grub}"
 if [[ "$BOOT_TYPE" == "pi" ]]; then
@@ -28,4 +32,4 @@ install -D -m 644 \
 install -D -m 755 \
     "${RECIPE_DIR}/files/hooks/state-reset/prepare.sh" \
     "/etc/rugix/hooks/state-reset/prepare/10-titan.sh"
-    
+
