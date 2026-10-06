@@ -222,8 +222,8 @@ class VMLifecycleTests(unittest.TestCase):
         socket.__enter__.return_value = socket
         socket.getsockname.return_value = ("127.0.0.1", 51001)
         connection = MagicMock()
-        return (patch.object(self.host, "vm_id", return_value=self.vm_id),
-                patch("titan.host.run", return_value=xml or self.console_xml()),
+        return (patch.object(self.host, "managed_vm", return_value={"id": self.vm_id, "xml": xml or self.console_xml()}),
+                patch.object(self.host, "_wait_console_vnc"),
                 patch("titan.host.socket.socket", return_value=socket),
                 patch("titan.host.socket.create_connection", return_value=connection),
                 patch("titan.host.subprocess.Popen", return_value=child))
@@ -272,12 +272,13 @@ class VMLifecycleTests(unittest.TestCase):
         child.poll.return_value = None
         self.host.console_processes[self.vm_id] = (child, 50001, 5901)
         patches = self.mocked_console()
-        with patches[0], patches[1], patches[2] as socket, patches[3] as connect, patches[4] as popen:
+        with patches[0], patches[1] as ready, patches[2] as socket, patches[3] as connect, patches[4] as popen:
             result = self.host.op_console(self.vm_id)
         self.assertEqual(result, {"port": 50001})
         child.terminate.assert_not_called()
         socket.assert_not_called()
         connect.assert_called_once_with(("127.0.0.1", 50001), timeout=0.2)
+        self.assertEqual(ready.call_args.args[0], 5901)
         popen.assert_not_called()
 
     def test_console_replaces_alive_but_unreachable_bridge(self):
@@ -345,12 +346,95 @@ class VMLifecycleTests(unittest.TestCase):
     def test_console_connection_timeout_terminates_proxy_and_does_not_cache_it(self):
         child = Mock()
         patches = self.mocked_console(child=child)
-        with patches[0], patches[1], patches[2], patches[3] as connect, patches[4], patch("titan.host.time.sleep"):
+        clock = [0.0]
+        def advance(seconds):
+            clock[0] += seconds
+        with patches[0], patches[1], patches[2], patches[3] as connect, patches[4], \
+                patch("titan.host.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("titan.host.time.sleep", side_effect=advance):
             connect.side_effect = OSError("proxy not listening")
-            with self.assertRaisesRegex(Error, "nicht erreichbar"):
+            with self.assertRaisesRegex(Error, "noch nicht bereit"):
                 self.host.op_console(self.vm_id)
-        self.assertEqual(connect.call_count, 300)
+        self.assertAlmostEqual(clock[0], 20)
+        self.assertLessEqual(connect.call_count, 401)
+        self.assertGreaterEqual(connect.call_count, 399)
         child.terminate.assert_called_once()
+        self.assertNotIn(self.vm_id, self.host.console_processes)
+
+    def test_console_rechecks_qemu_and_discards_existing_proxy_on_invalid_banner(self):
+        old = Mock()
+        old.poll.return_value = None
+        self.host.console_processes[self.vm_id] = (old, 50001, 5901)
+        patches = self.mocked_console()
+        with patches[0], patches[1] as ready, patches[2], patches[3] as connect, patches[4] as popen:
+            ready.side_effect = Error("Der VM-Konsolenport antwortet nicht als VNC-Server.", 503)
+            with self.assertRaisesRegex(Error, "VNC-Server"):
+                self.host.op_console(self.vm_id)
+        old.terminate.assert_called_once()
+        self.assertNotIn(self.vm_id, self.host.console_processes)
+        connect.assert_not_called()
+        popen.assert_not_called()
+
+    def test_console_vm_validation_and_greeting_share_same_request_deadline(self):
+        patches = self.mocked_console()
+        with patches[0] as managed, patches[1] as ready, patches[2], patches[3], patches[4]:
+            self.host.op_console(self.vm_id)
+        self.assertEqual(managed.call_args.kwargs["deadline"], ready.call_args.args[1])
+        self.assertEqual(managed.call_args.args, (self.vm_id,))
+
+    def test_console_proxy_start_uses_only_budget_left_after_guest_readiness(self):
+        clock = [0.0]
+        patches = self.mocked_console()
+        def advance(seconds):
+            clock[0] += seconds
+        def greeting(target, deadline):
+            self.assertEqual(deadline, 20)
+            clock[0] = 10
+        with patches[0], patches[1] as ready, patches[2], patches[3] as connect, patches[4], \
+                patch("titan.host.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("titan.host.time.sleep", side_effect=advance):
+            ready.side_effect = greeting
+            connect.side_effect = OSError("proxy still starting")
+            with self.assertRaisesRegex(Error, "noch nicht bereit"):
+                self.host.op_console(self.vm_id)
+        self.assertAlmostEqual(clock[0], 20)
+        self.assertLessEqual(connect.call_count, 201)
+        self.assertNotIn(self.vm_id, self.host.console_processes)
+
+    def test_console_lock_wait_is_bounded_before_vm_validation(self):
+        self.host.console_lock = Mock()
+        self.host.console_lock.acquire.return_value = False
+        with patch.object(self.host, "managed_vm") as managed:
+            with self.assertRaisesRegex(Error, "noch nicht bereit"):
+                self.host.op_console(self.vm_id)
+        self.assertLessEqual(self.host.console_lock.acquire.call_args.kwargs["timeout"], 20)
+        managed.assert_not_called()
+        self.host.console_lock.release.assert_not_called()
+
+    def test_console_timeout_cleanup_kills_and_reaps_without_extending_deadline(self):
+        import subprocess
+        child = Mock()
+        child.wait.side_effect = subprocess.TimeoutExpired("websockify", 0)
+        with patch("titan.host.time.monotonic", return_value=20), \
+                patch("titan.host.threading.Thread") as reaper:
+            self.host._stop_console_child(child, deadline=20)
+        child.terminate.assert_called_once()
+        child.kill.assert_called_once()
+        self.assertEqual([call.kwargs["timeout"] for call in child.wait.call_args_list], [0, 0])
+        reaper.assert_called_once_with(target=child.wait, daemon=True)
+        reaper.return_value.start.assert_called_once()
+
+    def test_console_invalid_new_target_discards_previous_proxy_before_ready(self):
+        old = Mock()
+        old.poll.return_value = None
+        self.host.console_processes[self.vm_id] = (old, 50001, 5901)
+        patches = self.mocked_console(self.console_xml("not-a-port"))
+        with patches[0], patches[1] as ready, patches[2], patches[3], patches[4] as popen:
+            with self.assertRaises(Error):
+                self.host.op_console(self.vm_id)
+        old.terminate.assert_called_once()
+        ready.assert_not_called()
+        popen.assert_not_called()
         self.assertNotIn(self.vm_id, self.host.console_processes)
 
     def test_console_rejects_non_loopback_invalid_or_inactive_target_before_proxy_spawn(self):

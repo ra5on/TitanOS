@@ -1548,6 +1548,84 @@ class RuntimeTransportTests(unittest.TestCase):
         self.assertEqual([client_frame_payload(frame) for frame in transport.sent[1:]], [b"RFB 003.008\n", b"\x01", b"\x01"])
         self.assertNotIn("private-fixture", json.dumps(result))
 
+    def test_delayed_upgrade_uses_remaining_total_deadline_instead_of_ten_seconds(self):
+        client, transport = self.websocket_client(server_frame(rfb_fixture()))
+        clock = {"now": 0.0}
+        receive = transport.recv
+        delayed = {"done": False}
+        def recv(count):
+            if not delayed["done"]:
+                delayed["done"] = True
+                if transport.timeout < 11:
+                    raise TimeoutError("private-fixture timeout")
+                clock["now"] += 11
+            return receive(count)
+        transport.recv = recv
+        with patch.object(smoke.time, "monotonic", side_effect=lambda: clock["now"]), \
+             patch.object(smoke.socket, "create_connection"), \
+             patch.object(smoke.secrets, "token_bytes", side_effect=lambda size: bytes(size)):
+            result = client.console_rfb("fixture-vm")
+        self.assertTrue(result["authenticated_websocket"])
+        self.assertEqual(result["rfb_protocol"], "3.8")
+        self.assertGreater(transport.timeout, 10)
+        self.assertLessEqual(transport.timeout, 19)
+
+    def test_delayed_rfb_read_and_send_use_the_remaining_total_deadline(self):
+        clock = {"now": 0.0}
+        transport = MemoryTransport(server_frame(rfb_fixture()))
+        receive, send = transport.recv, transport.sendall
+        delayed = {"read": False, "send": False}
+        def recv(count):
+            if not delayed["read"]:
+                delayed["read"] = True
+                if transport.timeout < 11:
+                    raise TimeoutError("private-fixture timeout")
+                clock["now"] += 11
+            return receive(count)
+        def sendall(data):
+            if not delayed["send"]:
+                delayed["send"] = True
+                if transport.timeout < 11:
+                    raise TimeoutError("private-fixture timeout")
+                clock["now"] += 11
+            send(data)
+        transport.recv, transport.sendall = recv, sendall
+        with patch.object(smoke.time, "monotonic", side_effect=lambda: clock["now"]):
+            result = smoke.VNCWebSocket(transport, 30).handshake()
+        self.assertEqual(result["rfb_protocol"], "3.8")
+        self.assertEqual(clock["now"], 22)
+        self.assertLessEqual(transport.timeout, 8)
+
+    def test_console_transport_errors_report_only_fixed_phase_and_category(self):
+        for stage, expected in (("headers", "timeout during WebSocket upgrade"),
+                                ("rfb", "timeout during RFB setup")):
+            client, transport = self.websocket_client(server_frame(rfb_fixture()))
+            receive = transport.recv
+            def recv(count):
+                if stage == "headers" or transport.incoming.startswith(b"RFB"):
+                    raise TimeoutError("private-fixture Cookie=titan_session=private-secret")
+                return receive(count)
+            transport.recv = recv
+            with self.subTest(stage=stage), patch.object(smoke.socket, "create_connection"), \
+                 patch.object(smoke.secrets, "token_bytes", side_effect=lambda size: bytes(size)):
+                with self.assertRaisesRegex(smoke.SmokeFailure, expected) as caught:
+                    client.console_rfb("fixture-vm")
+            self.assertNotIn("private", str(caught.exception))
+
+    def test_upgrade_still_fails_at_the_existing_total_deadline(self):
+        client, transport = self.websocket_client(server_frame(rfb_fixture()))
+        clock = {"now": 0.0}
+        receive = transport.recv
+        def recv(count):
+            clock["now"] += 16
+            return receive(count)
+        transport.recv = recv
+        with patch.object(smoke.time, "monotonic", side_effect=lambda: clock["now"]), \
+             patch.object(smoke.socket, "create_connection"), \
+             patch.object(smoke.secrets, "token_bytes", side_effect=lambda size: bytes(size)):
+            with self.assertRaisesRegex(smoke.SmokeFailure, "bounded handshake"):
+                client.console_rfb("fixture-vm")
+
     def test_invalid_websocket_accept_and_anonymous_console_do_not_pass(self):
         client, _ = self.websocket_client(server_frame(rfb_fixture()), accept="private-wrong-accept")
         with patch.object(smoke.socket, "create_connection"), patch.object(smoke.secrets, "token_bytes", side_effect=lambda size: bytes(size)):

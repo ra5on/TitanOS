@@ -575,8 +575,13 @@ class Host(IdentityHostMixin, StorageServicesMixin, OfficeHostMixin, DockerEngin
         return {"output": result}
 
     def op_console(self, vm):
-        with self.console_lock:
-            return self._console(vm)
+        deadline = time.monotonic() + 20
+        if not self.console_lock.acquire(timeout=self._console_remaining(deadline)):
+            raise Error("VM-Konsole ist noch nicht bereit. Erneut verbinden.", 503)
+        try:
+            return self._console(vm, deadline)
+        finally:
+            self.console_lock.release()
 
     def close_console(self, vm):
         with self.console_lock:
@@ -585,33 +590,83 @@ class Host(IdentityHostMixin, StorageServicesMixin, OfficeHostMixin, DockerEngin
                 self._stop_console_child(process[0])
 
     @staticmethod
-    def _stop_console_child(child):
+    def _stop_console_child(child, deadline=None):
+        def wait_budget():
+            return 2 if deadline is None else min(2, max(0, deadline - time.monotonic()))
+
         child.terminate()
         try:
-            child.wait(timeout=2)
+            child.wait(timeout=wait_budget())
         except subprocess.TimeoutExpired:
             child.kill()
-            child.wait(timeout=2)
+            try:
+                child.wait(timeout=wait_budget())
+            except subprocess.TimeoutExpired:
+                if deadline is None:
+                    raise
+                # SIGKILL has been issued; reap its exit outside this request's
+                # deadline rather than blocking every other console request.
+                threading.Thread(target=child.wait, daemon=True).start()
 
-    def _console(self, vm):
-        vm = self.vm_id(vm)
-        root = ET.fromstring(run(["virsh", "dumpxml", vm]))
-        graphics = root.find("./devices/graphics[@type='vnc']")
-        if graphics is None or not 5900 <= int(graphics.get("port", "-1")) <= 65535:
-            raise Error("VM muss laufen und eine VNC-Konsole besitzen.")
-        if graphics.get("listen") != "127.0.0.1":
-            raise Error("Die VM-Konsole muss an 127.0.0.1 gebunden sein.", 403)
-        target = int(graphics.get("port"))
+    @staticmethod
+    def _console_remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Error("VM-Konsole ist noch nicht bereit. Erneut verbinden.", 503)
+        return remaining
+
+    @staticmethod
+    def _wait_console_vnc(target, deadline):
+        # Only receive the server greeting. Sending no client version/ClientInit
+        # keeps this readiness probe from replacing an existing VNC session.
+        while True:
+            remaining = Host._console_remaining(deadline)
+            try:
+                with socket.create_connection(("127.0.0.1", target), timeout=min(.25, remaining)) as connection:
+                    banner = b""
+                    while len(banner) < 12:
+                        connection.settimeout(min(.25, Host._console_remaining(deadline)))
+                        chunk = connection.recv(12 - len(banner))
+                        if not chunk:
+                            raise OSError("VNC greeting incomplete")
+                        banner += chunk
+                    if not re.fullmatch(rb"RFB [0-9]{3}\.[0-9]{3}\n", banner):
+                        raise Error("Der VM-Konsolenport antwortet nicht als VNC-Server.", 503)
+                    return
+            except OSError:
+                time.sleep(min(.05, Host._console_remaining(deadline)))
+
+    def _console(self, vm, deadline):
+        record = self.managed_vm(vm, deadline=deadline)
+        vm = record["id"]
+        root = ET.fromstring(record["xml"])
         process = self.console_processes.get(vm)
+        try:
+            graphics = root.find("./devices/graphics[@type='vnc']")
+            try:
+                target = int(graphics.get("port", "-1")) if graphics is not None else -1
+            except ValueError:
+                target = -1
+            if not 5900 <= target <= 65535:
+                raise Error("VM muss laufen und eine VNC-Konsole besitzen.")
+            if graphics.get("listen") != "127.0.0.1":
+                raise Error("Die VM-Konsole muss an 127.0.0.1 gebunden sein.", 403)
+            self._wait_console_vnc(target, deadline)
+        except Exception:
+            self.console_processes.pop(vm, None)
+            if process and process[0].poll() is None:
+                self._stop_console_child(process[0], deadline)
+            raise
         if process and process[0].poll() is None and len(process) == 3 and process[2] == target:
             try:
-                with socket.create_connection(("127.0.0.1", process[1]), timeout=0.2):
+                with socket.create_connection(("127.0.0.1", process[1]), timeout=min(.2, self._console_remaining(deadline))):
                     return {"port": process[1]}
             except OSError:
                 pass
         if process and process[0].poll() is None:
-            self._stop_console_child(process[0])
+            self._stop_console_child(process[0], deadline)
         self.console_processes.pop(vm, None)
+        self._console_remaining(deadline)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -619,17 +674,19 @@ class Host(IdentityHostMixin, StorageServicesMixin, OfficeHostMixin, DockerEngin
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # Python/websockify may start slowly under nested virtualization.
         # Keep startup bounded, but allow the proxy time to become ready.
-        for _ in range(300):
-            if child.poll() is not None:
-                raise Error("VNC-Proxy konnte nicht starten.")
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
-                    break
-            except OSError:
-                time.sleep(0.05)
-        else:
-            self._stop_console_child(child)
-            raise Error("VNC-Proxy ist nicht erreichbar.")
+        try:
+            while True:
+                remaining = self._console_remaining(deadline)
+                if child.poll() is not None:
+                    raise Error("VNC-Proxy konnte nicht starten.", 503)
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=min(.2, remaining)):
+                        break
+                except OSError:
+                    time.sleep(min(.05, self._console_remaining(deadline)))
+        except Exception:
+            self._stop_console_child(child, deadline)
+            raise
         self.console_processes[vm] = (child, port, target)
         return {"port": port}
 

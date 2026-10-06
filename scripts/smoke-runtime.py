@@ -279,7 +279,7 @@ class VNCWebSocket:
             remaining = self.deadline - time.monotonic()
             if remaining <= 0:
                 raise SmokeFailure("VM console exceeded its bounded handshake deadline.")
-            self.transport.settimeout(min(10, remaining))
+            self.transport.settimeout(remaining)
             data = self.transport.recv(min(65536, count - len(self.pending)))
             if not data:
                 raise SmokeFailure("VM console closed before RFB setup completed.")
@@ -294,7 +294,7 @@ class VNCWebSocket:
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise SmokeFailure("VM console exceeded its bounded handshake deadline.")
-        self.transport.settimeout(min(10, remaining))
+        self.transport.settimeout(remaining)
         mask = secrets.token_bytes(4)
         payload = bytes(value ^ mask[index % 4] for index, value in enumerate(data))
         self.transport.sendall(bytes([0x80 | opcode, 0x80 | len(data)]) + mask + payload)
@@ -924,11 +924,14 @@ class GuestClient:
         if not self.cookie or not isinstance(identifier, str) or not identifier or len(identifier) > 128:
             raise SmokeFailure("VM console test requires an authenticated domain identifier.")
         deadline = time.monotonic() + 30
+        phase = "TCP connection"
         key = base64.b64encode(secrets.token_bytes(16)).decode()
         expected_accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
         try:
             with socket.create_connection(("127.0.0.1", 15000), timeout=10) as raw:
+                phase = "TLS negotiation"
                 with self.context.wrap_socket(raw, server_hostname="10.0.2.15") as connection:
+                    phase = "WebSocket upgrade"
                     request = (f"GET /api/vnc?vm={quote(identifier, safe='')} HTTP/1.1\r\n"
                                f"Host: {self.HOST}\r\nOrigin: {self.ORIGIN}\r\nCookie: {self.cookie}\r\n"
                                f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
@@ -939,7 +942,7 @@ class GuestClient:
                         remaining = deadline - time.monotonic()
                         if remaining <= 0 or len(header) > 16384:
                             raise SmokeFailure("VM console WebSocket headers exceeded the bounded handshake.")
-                        connection.settimeout(min(10, remaining))
+                        connection.settimeout(remaining)
                         chunk = connection.recv(4096)
                         if not chunk:
                             raise SmokeFailure("VM console WebSocket upgrade closed prematurely.")
@@ -986,10 +989,14 @@ class GuestClient:
                         except (ValueError, TypeError, AttributeError, OSError):
                             pass
                         raise SmokeFailure("Authenticated VM console WebSocket upgrade failed (" + detail + ").")
+                    phase = "RFB setup"
                     result = VNCWebSocket(connection, deadline, pending).handshake()
                     return {"authenticated_websocket": True, **result}
-        except (OSError, http.client.HTTPException):
-            raise SmokeFailure("VM console WebSocket/RFB transport is not reachable.") from None
+        except (OSError, http.client.HTTPException) as exc:
+            category = "timeout" if isinstance(exc, TimeoutError) else "transport error"
+            # Fixed categories identify the failing stage without exposing an
+            # exception message, authenticated request, response or cookie.
+            raise SmokeFailure("VM console " + category + " during " + phase + ".") from None
 
 
 class RuntimeSmoke:

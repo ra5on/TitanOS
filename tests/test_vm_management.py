@@ -60,6 +60,21 @@ class VMManagementTests(unittest.TestCase):
         self.assertEqual(self.disk.read_bytes(), b"retained virtual disk")
         self.assertIn(["virsh", "define", str(self.metadata)], self.calls)
 
+    def test_console_validation_commands_use_remaining_shared_deadline(self):
+        self.runner.reset_mock()
+        with patch("titan.vm_management.time.monotonic", side_effect=[100, 103]):
+            self.host.managed_vm(self.vm_id, deadline=110)
+        self.assertEqual([call.kwargs["timeout"] for call in self.runner.call_args_list], [10, 7])
+        self.assertEqual([call.args[0][1] for call in self.runner.call_args_list], ["dumpxml", "domstate"])
+
+    def test_console_validation_stops_before_next_command_after_deadline(self):
+        self.runner.reset_mock()
+        with patch("titan.vm_management.time.monotonic", side_effect=[100, 111]):
+            with self.assertRaisesRegex(Error, "noch nicht bereit") as failure:
+                self.host.managed_vm(self.vm_id, deadline=110)
+        self.assertEqual(failure.exception.status, 503)
+        self.runner.assert_called_once()
+
     def test_running_vm_update_and_removal_are_rejected(self):
         self.state = "running"
         for operation in (lambda: self.host.op_vm_update(self.vm_id, 2, 2048), lambda: self.host.op_vm_remove(self.vm_id)):

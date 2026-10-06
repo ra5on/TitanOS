@@ -6,6 +6,7 @@ import pwd
 import re
 import stat
 import tempfile
+import time
 import uuid
 import xml.etree.ElementTree as ET
 
@@ -151,12 +152,20 @@ class VMMixin(VMExtensionsMixin):
             raise
         return vm_id
 
-    def managed_vm(self, value):
+    def managed_vm(self, value, *, deadline=None):
+        def command(arguments):
+            if deadline is None:
+                return self.command(arguments)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Error("VM-Konsole ist noch nicht bereit. Erneut verbinden.", 503)
+            return self.command(arguments, timeout=remaining)
+
         try:
             vm_id = str(uuid.UUID(value))
         except (ValueError, TypeError, AttributeError):
             raise Error("Ungültige VM-ID.")
-        xml = self.command(["virsh", "dumpxml", vm_id])
+        xml = command(["virsh", "dumpxml", vm_id])
         try:
             root = ET.fromstring(xml)
         except ET.ParseError:
@@ -219,7 +228,7 @@ class VMMixin(VMExtensionsMixin):
         if cpus < 1:
             raise Error("VM-Prozessoreinstellungen sind ungültig.", 409)
         return {"id": vm_id, "name": name, "disk": str(expected), "storage": location["id"], "xml": xml,
-                "state": self.command(["virsh", "domstate", vm_id]).strip(),
+                "state": command(["virsh", "domstate", vm_id]).strip(),
                 "disks": validated_disks, "cpus": cpus, "memory_mb": self.vm_memory_mb(root), "cpu_ids": self.vm_cpu_ids(root), **self.vm_media_info(root)}
 
     @staticmethod
