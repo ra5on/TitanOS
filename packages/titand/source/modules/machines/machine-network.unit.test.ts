@@ -13,6 +13,9 @@ import {
 	nextMachineIpAddress,
 	parseActiveMachineLeaseAddresses,
 	parseMachineDhcpLeases,
+	machineAddressSchema,
+	machineNetworkSchema,
+	hostOnlyNetworkConflicts,
 } from './machine-network.js'
 
 function definition(id: string, ipAddress?: string): MachineDefinition {
@@ -41,6 +44,56 @@ function definition(id: string, ipAddress?: string): MachineDefinition {
 }
 
 describe('transient machine network', () => {
+	test('validates real network selections and rejects unsafe bridge names', () => {
+		expect(machineNetworkSchema.parse({mode: 'bridge', bridge: 'br0'})).toEqual({mode: 'bridge', bridge: 'br0'})
+		for (const bridge of ['../eth0', 'br0\n', '<bridge>', 'a'.repeat(16)]) {
+			expect(machineNetworkSchema.safeParse({mode: 'bridge', bridge}).success).toBe(false)
+		}
+		expect(machineNetworkSchema.safeParse({mode: 'host'}).success).toBe(false)
+	})
+
+	test('isolates Host-only DHCP from NAT and does not advertise a router or external DNS', () => {
+		const host = {...definition('host', '10.204.0.2'), network: {mode: 'host-only' as const}}
+		const bridged = {...definition('bridged'), network: {mode: 'bridge' as const, bridge: 'br0'}}
+		const definitions = [definition('first', '10.203.0.2'), host, bridged]
+		const xml = buildMachineNetworkXml(definitions, ['1.1.1.1'], 'host-only')
+		expect(xml).toContain('<name>titan-machines-host-only</name>')
+		expect(xml).toContain("<bridge name='titan-vm-host'")
+		expect(xml).toContain("<ip address='10.204.0.1'")
+		expect(xml).not.toContain('<forward')
+		expect(xml).not.toContain('1.1.1.1')
+		expect(xml).toContain("value='dhcp-option=option:router'")
+		expect(parseMachineDhcpLeases(xml)).toEqual([{macAddress: host.macAddress, ipAddress: '10.204.0.2', name: 'host'}])
+		expect(parseMachineDhcpLeases(buildMachineNetworkXml(definitions))).toHaveLength(1)
+		expect(nextMachineIpAddress([host], {mode: 'host-only'})).toBe('10.204.0.3')
+		expect(machineAddressSchema({mode: 'host-only'}).safeParse('10.203.0.2').success).toBe(false)
+	})
+
+	test('leaves saved Host-only and bridge forwards inactive', () => {
+		const host = {
+			...definition('host', '10.204.0.2'),
+			network: {mode: 'host-only' as const},
+			portForwards: [{id: 'ssh', protocol: 'tcp' as const, hostPort: 40022, guestPort: 22}],
+		}
+		const bridge = {...host, network: {mode: 'bridge' as const, bridge: 'br0'}, ipAddress: undefined}
+		const rules = buildMachinePortForwardNftables([host, bridge])
+		expect(rules).not.toContain('40022')
+		expect(rules).not.toContain('dnat')
+	})
+
+	test('rejects overlap with LAN, Docker, VPN and local-address routes before creating Host-only', () => {
+		for (const dst of ['10.204.0.0/24', '10.204.0.128/25', '10.0.0.0/8', '10.204.0.1']) {
+			expect(hostOnlyNetworkConflicts([{dst, dev: 'eth0'}])).toBe(true)
+		}
+		expect(
+			hostOnlyNetworkConflicts([
+				{dst: 'default', dev: 'eth0'},
+				{dst: '10.203.0.0/24', dev: 'titan-vm'},
+				{dst: '10.204.0.0/24', dev: 'titan-vm-host'},
+				{dst: '172.17.0.0/16', dev: 'docker0'},
+			]),
+		).toBe(false)
+	})
 	test('allocates the first unused host address and validates the reserved subnet', () => {
 		expect(nextMachineIpAddress([definition('first', '10.203.0.2')])).toBe('10.203.0.3')
 		expect(machineIpAddressSchema.parse('10.203.0.254')).toBe('10.203.0.254')

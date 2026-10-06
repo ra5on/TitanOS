@@ -14,6 +14,8 @@ import Libvirt, {
 	buildWindows98Mbr,
 	createWithGraphicsFallback,
 	findGpuRenderNode,
+	findMachineBridges,
+	parseMachineInterfaceAddress,
 	isMissingDomainError,
 	parseQemuImgProgress,
 	parseDomainResourceStats,
@@ -23,6 +25,7 @@ import Libvirt, {
 	qemuImageInfoArguments,
 	supportsVirglGraphics,
 } from './libvirt.js'
+import {buildMachineNetworkXml} from './machine-network.js'
 
 const execaMock = vi.hoisted(() =>
 	vi.fn(async (_command?: string, _arguments?: string[], _options?: Record<string, unknown>) => ({
@@ -67,6 +70,146 @@ function definition(overrides: Partial<MachineDefinition> = {}): MachineDefiniti
 		...overrides,
 	}
 }
+
+describe('selectable machine networks', () => {
+	test('discovers physical LAN bridges including VLAN/bond uplinks and excludes isolated bridges', async () => {
+		const root = await fsp.mkdtemp(nodePath.join(os.tmpdir(), 'titan-bridges-'))
+		temporaryDirectories.push(root)
+		for (const path of [
+			'eth0/device',
+			'bond0/lower_eth0',
+			'br0/bridge',
+			'br0/brif/bond0',
+			'docker0/bridge',
+			'docker0/brif/veth0',
+			'veth0',
+			'virbr0/bridge',
+			'virbr0/brif',
+			'eth1',
+		])
+			await fse.ensureDir(nodePath.join(root, path))
+		await expect(findMachineBridges(root)).resolves.toEqual(['br0'])
+	})
+
+	test('reads only the guest MAC-matched IPv4 address from host ARP observations', () => {
+		const output = 'vnet0 02:00:00:00:00:09 ipv4 192.168.1.20/24\nvnet1 02:00:00:00:00:01 ipv4 192.168.1.42/24\n'
+		expect(parseMachineInterfaceAddress(output, '02:00:00:00:00:01')).toBe('192.168.1.42')
+		expect(parseMachineInterfaceAddress(output, '02:00:00:00:00:02')).toBeUndefined()
+		expect(
+			parseMachineInterfaceAddress('vnet1 02:00:00:00:00:01 ipv4 169.254.1.2/16', '02:00:00:00:00:01'),
+		).toBeUndefined()
+		expect(
+			parseMachineInterfaceAddress(
+				'vnet1 02:00:00:00:00:01 ipv4 10.203.0.2/24\nvnet1 02:00:00:00:00:01 ipv4 192.168.1.42/24',
+				'02:00:00:00:00:01',
+				['192.168.1.42'],
+			),
+		).toBe('192.168.1.42')
+	})
+
+	test('corroborates bridge IP against that bridge neighbours and memoizes optional observations', async () => {
+		const libvirt = new Libvirt({
+			logger: {createChildLogger: () => ({log: vi.fn(), error: vi.fn()})},
+		} as unknown as Titand)
+		const machine = definition({network: {mode: 'bridge', bridge: 'br0'}})
+		execaMock.mockResolvedValueOnce({
+			stdout: 'vnet0 02:00:00:00:00:01 ipv4 10.203.0.2/24\nvnet0 02:00:00:00:00:01 ipv4 192.168.1.42/24',
+			stderr: '',
+			exitCode: 0,
+		})
+		execaMock.mockResolvedValueOnce({
+			stdout: JSON.stringify([{dst: '192.168.1.42', lladdr: machine.macAddress, state: ['REACHABLE']}]),
+			stderr: '',
+			exitCode: 0,
+		})
+		await expect(libvirt.interfaceAddress(machine)).resolves.toBe('192.168.1.42')
+		await expect(libvirt.interfaceAddress(machine)).resolves.toBe('192.168.1.42')
+		expect(execaMock).toHaveBeenCalledTimes(2)
+		expect(execaMock.mock.calls[0][1]).toContain('--full')
+		expect(execaMock.mock.calls[1][1]).toEqual(['-json', '-4', 'neigh', 'show', 'dev', 'br0'])
+	})
+
+	test('returns unknown for failed optional ARP discovery without breaking list callers', async () => {
+		const libvirt = new Libvirt({
+			logger: {createChildLogger: () => ({log: vi.fn(), error: vi.fn()})},
+		} as unknown as Titand)
+		execaMock.mockRejectedValueOnce(new Error('timed out'))
+		const machine = definition({network: {mode: 'bridge', bridge: 'br0'}})
+		await expect(libvirt.interfaceAddress(machine)).resolves.toBeUndefined()
+		await expect(libvirt.interfaceAddress(machine)).resolves.toBeUndefined()
+		expect(execaMock).toHaveBeenCalledOnce()
+	})
+
+	test('removes the owned Host-only network when its last guest is gone, including rollback', async () => {
+		const root = await fsp.mkdtemp(nodePath.join(os.tmpdir(), 'titan-network-runtime-'))
+		temporaryDirectories.push(root)
+		const previous = process.env.TITAN_MACHINES_RUNTIME_DIR
+		process.env.TITAN_MACHINES_RUNTIME_DIR = root
+		try {
+			const libvirt = new Libvirt({
+				logger: {createChildLogger: () => ({log: vi.fn(), error: vi.fn()})},
+			} as unknown as Titand)
+			execaMock.mockImplementation(async (_command, args) => ({
+				stdout: args?.includes('net-dumpxml')
+					? buildMachineNetworkXml([], ['1.1.1.1'], args.includes('titan-machines-host-only') ? 'host-only' : 'nat')
+					: '',
+				stderr: '',
+				exitCode: 0,
+			}))
+			await fsp.writeFile(nodePath.join(root, 'host-only-network.xml'), 'owned temporary config')
+			await libvirt.reconcileNetwork([])
+			expect(
+				execaMock.mock.calls.some(
+					([command, args]) =>
+						command === 'virsh' && args?.includes('net-destroy') && args?.includes('titan-machines-host-only'),
+				),
+			).toBe(true)
+			await expect(fse.pathExists(nodePath.join(root, 'host-only-network.xml'))).resolves.toBe(false)
+		} finally {
+			if (previous === undefined) delete process.env.TITAN_MACHINES_RUNTIME_DIR
+			else process.env.TITAN_MACHINES_RUNTIME_DIR = previous
+		}
+	})
+
+	test('rejects a mode switch when an existing Host-only network cannot be removed', async () => {
+		const root = await fsp.mkdtemp(nodePath.join(os.tmpdir(), 'titan-network-remove-'))
+		temporaryDirectories.push(root)
+		const previous = process.env.TITAN_MACHINES_RUNTIME_DIR
+		process.env.TITAN_MACHINES_RUNTIME_DIR = root
+		try {
+			const libvirt = new Libvirt({
+				logger: {createChildLogger: () => ({log: vi.fn(), error: vi.fn()})},
+			} as unknown as Titand)
+			execaMock.mockImplementation(async (_command, args) => {
+				if (args?.includes('net-destroy')) throw new Error('could not destroy network')
+				return {
+					stdout: args?.includes('net-dumpxml')
+						? buildMachineNetworkXml([], ['1.1.1.1'], args.includes('titan-machines-host-only') ? 'host-only' : 'nat')
+						: '',
+					stderr: '',
+					exitCode: 0,
+				}
+			})
+			await expect(libvirt.reconcileNetwork([])).rejects.toThrow('could not destroy network')
+		} finally {
+			if (previous === undefined) delete process.env.TITAN_MACHINES_RUNTIME_DIR
+			else process.env.TITAN_MACHINES_RUNTIME_DIR = previous
+		}
+	})
+
+	test('rejects a Host-only subnet already routed through LAN before any network mutation', async () => {
+		const libvirt = new Libvirt({
+			logger: {createChildLogger: () => ({log: vi.fn(), error: vi.fn()})},
+		} as unknown as Titand)
+		execaMock.mockResolvedValueOnce({
+			stdout: JSON.stringify([{dst: '10.204.0.0/24', dev: 'eth0'}]),
+			stderr: '',
+			exitCode: 0,
+		})
+		await expect(libvirt.validateNetwork({mode: 'host-only'})).rejects.toThrow('[machine-host-only-subnet-conflict]')
+		expect(execaMock.mock.calls.map(([command]) => command)).toEqual(['ip'])
+	})
+})
 
 describe('virgl graphics', () => {
 	test('selects the first character render device and ignores ordinary files', async () => {
@@ -303,9 +446,7 @@ describe('libvirt domain state', () => {
 		expect(isMissingDomainError('Domain not found: no domain with matching name')).toBe(true)
 		expect(isMissingDomainError("error: failed to get domain 'titan-machine-missing'")).toBe(true)
 		expect(isMissingDomainError('failed to connect to the hypervisor')).toBe(false)
-		expect(isMissingDomainError("error: failed to get domain 'titan-machine-missing': monitor unavailable")).toBe(
-			false,
-		)
+		expect(isMissingDomainError("error: failed to get domain 'titan-machine-missing': monitor unavailable")).toBe(false)
 	})
 })
 

@@ -136,6 +136,18 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-network-full')
 		case 'machine-network-incompatible':
 			return t('machines-error.machine-network-incompatible')
+		case 'machine-bridge-unavailable':
+			return t('machines-error.machine-bridge-unavailable')
+		case 'machine-bridge-invalid':
+			return t('machines-error.machine-bridge-invalid')
+		case 'machine-network-change-requires-stopped':
+			return t('machines-error.machine-network-change-requires-stopped')
+		case 'machine-network-change-during-install':
+			return t('machines-error.machine-network-change-during-install')
+		case 'machine-network-catalog-install-requires-nat':
+			return t('machines-error.machine-network-catalog-install-requires-nat')
+		case 'machine-host-only-subnet-conflict':
+			return t('machines-error.machine-host-only-subnet-conflict')
 		case 'machine-not-found':
 			return t('machines-error.machine-not-found')
 		case 'machine-not-running':

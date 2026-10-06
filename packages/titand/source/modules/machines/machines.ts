@@ -25,12 +25,18 @@ import {
 	resolveAcceleration,
 	type MachineArchitecture,
 	type MachineDefinition,
+	type MachineNetwork,
 	type PlatformProfile,
 	type PortForward,
 } from './domain.js'
 import Libvirt, {QEMU_GIBIBYTE_BYTES, qemuImageFormatForPath, type QemuImageFormat} from './libvirt.js'
 import {machineIdCandidate, slugifyMachineId} from './machine-id.js'
-import {MACHINE_GUEST_HOST_ADDRESS, machineIpAddressSchema, nextMachineIpAddress} from './machine-network.js'
+import {
+	MACHINE_GUEST_HOST_ADDRESS,
+	machineAddressSchema,
+	machineNetworkSchema,
+	nextMachineIpAddress,
+} from './machine-network.js'
 import MachineStore from './machine-store.js'
 import {safeDownload} from './safe-download.js'
 import {prepareWindowsInstallMedia, type WindowsInstaller} from './windows-image.js'
@@ -109,6 +115,8 @@ export type Machine = {
 	memoryGb: number
 	storageUsedGb: number
 	ipAddress: string
+	network: MachineNetwork
+	networkChangeAllowed: boolean
 	username?: string
 	arch: MachineArchitecture
 	platformProfile: PlatformProfile
@@ -951,6 +959,7 @@ export default class Machines {
 	#operations = new Map<string, MachineState>()
 	#errors = new Map<string, string>()
 	#lastStates = new Map<string, MachineState>()
+	#lastBridgeAddresses = new Map<string, string | undefined>()
 	#lastFirstBootSetupStates = new Map<string, boolean>()
 	#pollTimer?: NodeJS.Timeout
 	#polling = false
@@ -1027,7 +1036,7 @@ export default class Machines {
 				await this.#libvirt.probe()
 				if (!this.#libvirt.available) return
 				await this.#recoverInterruptedBackups()
-				await this.#libvirt.reconcileNetwork(await this.#store.list())
+				await this.#reconcileCurrentNetwork()
 				await this.#guestApi.start()
 				this.#libvirtActivated = true
 				for (const definition of await this.#store.list()) {
@@ -1105,7 +1114,8 @@ export default class Machines {
 		try {
 			if (!this.#libvirtActivated && Date.now() >= this.#nextLibvirtProbeAt) await this.#activateLibvirt()
 			const definitions = await this.#store.list()
-			if (this.#libvirtActivated) await this.#libvirt.ensureFirewall(definitions)
+			if (this.#libvirtActivated)
+				await this.#createQueue.add(async () => this.#libvirt.ensureFirewall(await this.#store.list()))
 			const states = await Promise.all(
 				definitions.map(async (definition) => {
 					const state = await this.#state(definition)
@@ -1129,6 +1139,10 @@ export default class Machines {
 					return {
 						id: definition.id,
 						state,
+						bridgeAddress:
+							definition.network?.mode === 'bridge' && state === 'running' && this.#libvirt.available
+								? await this.#libvirt.interfaceAddress(definition).catch(() => undefined)
+								: undefined,
 						firstBootSetup: isFirstBootSetupActive(
 							definition.firstBootSetup,
 							Date.now(),
@@ -1145,13 +1159,16 @@ export default class Machines {
 					if (machine.state !== 'running') this.#forgetMachineInput(machine.id)
 				}
 				if (this.#lastFirstBootSetupStates.get(machine.id) !== machine.firstBootSetup) changed = true
+				if (this.#lastBridgeAddresses.get(machine.id) !== machine.bridgeAddress) changed = true
 				this.#lastStates.set(machine.id, machine.state)
 				this.#lastFirstBootSetupStates.set(machine.id, machine.firstBootSetup)
+				this.#lastBridgeAddresses.set(machine.id, machine.bridgeAddress)
 			}
 			for (const id of this.#lastStates.keys()) {
 				if (states.some((machine) => machine.id === id)) continue
 				this.#lastStates.delete(id)
 				this.#lastFirstBootSetupStates.delete(id)
+				this.#lastBridgeAddresses.delete(id)
 			}
 			if (changed) await this.#emitMachines()
 		} finally {
@@ -1529,7 +1546,14 @@ export default class Machines {
 				: undefined)
 		return {
 			...publicDefinition,
-			ipAddress: machineIpAddressSchema.parse(definition.ipAddress),
+			network: definition.network ?? {mode: 'nat'},
+			networkChangeAllowed: state === 'stopped' && !firstBootSetup && !installSource,
+			ipAddress:
+				definition.network?.mode === 'bridge'
+					? state === 'running' && this.#libvirt.available
+						? ((await this.#libvirt.interfaceAddress(definition).catch(() => undefined)) ?? '')
+						: ''
+					: machineAddressSchema(definition.network).parse(definition.ipAddress),
 			memoryGb: definition.memoryMb / 1_024,
 			firstBootSetup: firstBootSetupPending,
 			installPending: !!installSource,
@@ -1575,6 +1599,10 @@ export default class Machines {
 			.read(id)
 			.then(() => true)
 			.catch(() => false)
+	}
+
+	async networks() {
+		return {bridges: await this.#libvirt.bridges()}
 	}
 
 	async #collectRuntimeResourceUsage() {
@@ -1809,9 +1837,16 @@ export default class Machines {
 		const assigned: MachineDefinition[] = []
 		const used = new Set<string>()
 		for (const definition of definitions) {
-			const valid = machineIpAddressSchema.safeParse(definition.ipAddress)
+			if (definition.network?.mode === 'bridge') {
+				if (definition.ipAddress !== undefined) {
+					delete definition.ipAddress
+					await this.#store.write(definition)
+				}
+				continue
+			}
+			const valid = machineAddressSchema(definition.network).safeParse(definition.ipAddress)
 			if (!valid.success || used.has(valid.data)) {
-				definition.ipAddress = nextMachineIpAddress(assigned)
+				definition.ipAddress = nextMachineIpAddress(assigned, definition.network)
 				await this.#store.write(definition)
 			}
 			used.add(definition.ipAddress!)
@@ -1822,6 +1857,10 @@ export default class Machines {
 
 	async #ensureIpAddresses() {
 		return this.#createQueue.add(() => this.#ensureIpAddressesUnlocked())
+	}
+
+	async #reconcileCurrentNetwork() {
+		return this.#createQueue.add(async () => this.#libvirt.reconcileNetwork(await this.#store.list()))
 	}
 
 	#assertBackupIdle(id?: string) {
@@ -2093,6 +2132,7 @@ export default class Machines {
 		firmware,
 		diskBus,
 		diskDirectory,
+		network = {mode: 'nat'},
 		username,
 		password,
 		licenseKey,
@@ -2108,6 +2148,7 @@ export default class Machines {
 		firmware?: 'uefi' | 'bios'
 		diskBus?: 'virtio' | 'sata'
 		diskDirectory?: string
+		network?: MachineNetwork
 		username?: string
 		password?: string
 		licenseKey?: string
@@ -2116,6 +2157,8 @@ export default class Machines {
 	}) {
 		this.#assertBackupIdle()
 		if (!this.#libvirt.available) throw new Error('[virtualization-unavailable]')
+		network = machineNetworkSchema.parse(network)
+		if (network.mode !== 'nat') await this.#libvirt.validateNetwork(network)
 		await this.#assertUniqueName(name)
 		const profile = platformProfile ?? defaultPlatformProfile(arch)
 		if (architectureForProfile(profile) !== arch) throw new Error('[machine-platform-architecture-mismatch]')
@@ -2146,6 +2189,8 @@ export default class Machines {
 		let imageSizeMb: number
 		if (osId) {
 			sourceImage = this.#getOsImage(osId)
+			if (!sourceImage.custom && network.mode !== 'nat')
+				throw new Error('[machine-network-catalog-install-requires-nat]')
 			if (sourceImage.arch !== arch && !sourceImage.custom) throw new Error('[machine-catalog-architecture-mismatch]')
 			if (sourceImage.requiresCredentials && (!username || (!sourceImage.manualSetup && !password))) {
 				throw new Error('[machine-credentials-required]')
@@ -2202,6 +2247,7 @@ export default class Machines {
 			diskBus: imagePath ? (diskBus ?? 'virtio') : undefined,
 			uuid: randomUUID(),
 			macAddress: randomMacAddress(),
+			network,
 			diskSizeGb,
 			cores,
 			memoryMb: sourceImage?.fixedMemoryMb ?? memoryGb * 1_024,
@@ -2235,8 +2281,11 @@ export default class Machines {
 			await fse.ensureDir(nodePath.join(stagingDirectory, 'operations'))
 			await this.#createQueue.add(async () => {
 				const existing = await this.#ensureIpAddressesUnlocked()
-				const activeLeases = (await this.#libvirt.leasedIpAddresses()).map((ipAddress) => ({ipAddress}))
-				definition.ipAddress = nextMachineIpAddress([...existing, ...activeLeases])
+				const activeLeases = (
+					await this.#libvirt.leasedIpAddresses(network.mode === 'host-only' ? 'host-only' : 'nat')
+				).map((ipAddress) => ({ipAddress}))
+				if (network.mode !== 'bridge')
+					definition.ipAddress = nextMachineIpAddress([...existing, ...activeLeases], network)
 				const baseId = definition.id
 				for (let attempt = 1; ; attempt++) {
 					definition.id = machineIdCandidate(baseId, attempt)
@@ -2246,6 +2295,7 @@ export default class Machines {
 					if (definition.diskPath && (await fse.pathExists(await this.#diskSystemPath(definition)))) continue
 					await this.#store.write(definition, stagingDirectory)
 					try {
+						await this.#libvirt.reconcileNetwork([...existing, definition])
 						await fsp.rename(stagingDirectory, this.#store.directory(definition.id))
 						break
 					} catch (error) {
@@ -2256,10 +2306,11 @@ export default class Machines {
 			})
 		} catch (error) {
 			await fse.remove(stagingDirectory)
+			await this.#reconcileCurrentNetwork().catch((rollbackError) =>
+				this.logger.error('Failed restoring machine network after rejected creation', rollbackError),
+			)
 			throw error
 		}
-
-		await this.#libvirt.reconcileNetwork(await this.#store.list())
 		await this.#launchInstall(definition, {
 			username,
 			password,
@@ -2342,7 +2393,8 @@ export default class Machines {
 			const state = await this.#libvirt.state(id)
 			if (state === 'suspended') await this.#libvirt.stop(id, {force: true})
 			else if (state !== 'stopped') throw new Error('[machine-not-stopped]')
-			await this.#assertPortsCanBind(definition.portForwards)
+			if ((definition.network?.mode ?? 'nat') === 'nat') await this.#assertPortsCanBind(definition.portForwards)
+			else await this.#libvirt.validateNetwork(definition.network!)
 			this.#operations.set(id, 'starting')
 			this.#errors.delete(id)
 			await this.#emitMachines()
@@ -2350,7 +2402,7 @@ export default class Machines {
 				// The network is deliberately transient. Socket-activated libvirt
 				// daemons can forget it while the last VM is stopped, so reconstruct it
 				// before every manual start instead of assuming startup state survived.
-				await this.#libvirt.reconcileNetwork(await this.#store.list())
+				await this.#reconcileCurrentNetwork()
 				await this.#libvirt.start(definition, this.#store.directory(id), await this.#diskSystemPath(definition))
 				definition.autostart = true
 				await this.#store.write(definition)
@@ -2448,7 +2500,7 @@ export default class Machines {
 			this.#installCredentials.delete(id)
 			this.#installProgress.delete(id)
 			this.#installationStates.delete(id)
-			await this.#store.remove(id)
+			await this.#createQueue.add(() => this.#store.remove(id))
 			this.#forgetMachineInput(id)
 			// MCP bookkeeping is best effort, a failure here must never abort the uninstall
 			await this.#titand.mcp
@@ -2456,7 +2508,7 @@ export default class Machines {
 				.catch((error) => this.logger.error(`Failed to remove MCP grant for machine ${id}`, error))
 			if (externalDisk) await fse.remove(externalDisk)
 			await this.#libvirt.cleanupRuntime(id)
-			await this.#libvirt.reconcileNetwork(await this.#store.list())
+			await this.#reconcileCurrentNetwork()
 			await this.#emitMachines()
 			return true
 		})
@@ -2509,16 +2561,31 @@ export default class Machines {
 			diskBus?: 'virtio' | 'sata'
 			diskSizeGb?: number
 			autostart?: boolean
+			network?: MachineNetwork
 			portForwards?: PortForward[]
 		},
 	) {
 		return this.#withMachineLock(id, async () => {
 			this.#assertBackupIdle(id)
 			const definition = await this.#definition(id)
-
 			// Complete every fallible validation before changing firmware state or
 			// resizing the disk. A rejected combined settings request must not leave
 			// an irreversible partial change behind.
+			if (settings.network !== undefined) {
+				settings.network = machineNetworkSchema.parse(settings.network)
+				const previous = definition.network ?? {mode: 'nat'}
+				const changed =
+					settings.network.mode !== previous.mode ||
+					(settings.network.mode === 'bridge' &&
+						(previous.mode !== 'bridge' || settings.network.bridge !== previous.bridge))
+				if (changed) {
+					if (definition.installSource || definition.firstBootSetup)
+						throw new Error('[machine-network-change-during-install]')
+					if (this.#operations.has(id) || (await this.#libvirt.state(id)) !== 'stopped')
+						throw new Error('[machine-network-change-requires-stopped]')
+				}
+				if (settings.network.mode !== 'nat') await this.#libvirt.validateNetwork(settings.network)
+			}
 			if (settings.name !== undefined) await this.#assertUniqueName(settings.name, id)
 			if (settings.firmware !== undefined || settings.diskBus !== undefined) {
 				if (definition.osId !== 'custom') throw new Error('[machine-custom-setting-catalog-image]')
@@ -2542,27 +2609,55 @@ export default class Machines {
 				}
 			}
 
-			if (settings.name !== undefined) definition.name = settings.name.trim()
-			if (settings.cores !== undefined) definition.cores = settings.cores
-			if (settings.memoryGb !== undefined) definition.memoryMb = settings.memoryGb * 1_024
-			if (settings.firmware !== undefined || settings.diskBus !== undefined) {
-				if (settings.firmware !== undefined) {
-					definition.firmware = settings.firmware
-					if (
-						settings.firmware === 'uefi' &&
-						!(await fse.pathExists(nodePath.join(this.#store.directory(id), 'nvram.fd')))
-					) {
-						await this.#libvirt.initializeNvram(definition, this.#store.directory(id))
+			await this.#createQueue.add(async () => {
+				const existing = await this.#store.list()
+				if (settings.network !== undefined) {
+					definition.network = settings.network
+					if (settings.network.mode === 'bridge') delete definition.ipAddress
+					else if (!machineAddressSchema(settings.network).safeParse(definition.ipAddress).success) {
+						const leases = (await this.#libvirt.leasedIpAddresses(settings.network.mode)).map((ipAddress) => ({
+							ipAddress,
+						}))
+						definition.ipAddress = nextMachineIpAddress([...existing, ...leases], settings.network)
 					}
 				}
-				if (settings.diskBus !== undefined) definition.diskBus = settings.diskBus
-			}
-			if (diskResize) await this.#libvirt.resizeDisk(definition, diskResize.path, diskResize.sizeGb)
-			if (settings.diskSizeGb !== undefined) definition.diskSizeGb = settings.diskSizeGb
-			if (settings.autostart !== undefined) definition.autostart = settings.autostart
-			if (settings.portForwards !== undefined) definition.portForwards = settings.portForwards
-			await this.#store.write(definition)
-			if (settings.portForwards !== undefined) await this.#libvirt.reconcileFirewall(await this.#store.list())
+				if (settings.portForwards !== undefined) definition.portForwards = settings.portForwards
+				try {
+					// Network preparation precedes NVRAM or grow-only disk changes.
+					if (settings.network !== undefined)
+						await this.#libvirt.reconcileNetwork(existing.map((machine) => (machine.id === id ? definition : machine)))
+					if (settings.name !== undefined) definition.name = settings.name.trim()
+					if (settings.cores !== undefined) definition.cores = settings.cores
+					if (settings.memoryGb !== undefined) definition.memoryMb = settings.memoryGb * 1_024
+					if (settings.firmware !== undefined || settings.diskBus !== undefined) {
+						if (settings.firmware !== undefined) {
+							definition.firmware = settings.firmware
+							if (
+								settings.firmware === 'uefi' &&
+								!(await fse.pathExists(nodePath.join(this.#store.directory(id), 'nvram.fd')))
+							) {
+								await this.#libvirt.initializeNvram(definition, this.#store.directory(id))
+							}
+						}
+						if (settings.diskBus !== undefined) definition.diskBus = settings.diskBus
+					}
+					if (diskResize) await this.#libvirt.resizeDisk(definition, diskResize.path, diskResize.sizeGb)
+					if (settings.diskSizeGb !== undefined) definition.diskSizeGb = settings.diskSizeGb
+					if (settings.autostart !== undefined) definition.autostart = settings.autostart
+					await this.#store.write(definition)
+					if (settings.network === undefined && settings.portForwards !== undefined)
+						await this.#libvirt.reconcileFirewall(await this.#store.list())
+				} catch (error) {
+					if (settings.network !== undefined) {
+						await this.#libvirt
+							.reconcileNetwork(existing)
+							.catch((rollbackError) =>
+								this.logger.error(`Failed restoring machine network after rejected settings for ${id}`, rollbackError),
+							)
+					}
+					throw error
+				}
+			})
 			await this.#emitMachines()
 			return this.#view(definition)
 		})

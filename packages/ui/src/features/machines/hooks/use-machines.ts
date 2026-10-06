@@ -117,6 +117,16 @@ export function useMachineCapabilities() {
 	return {capabilities: query.data, isLoading: query.isLoading}
 }
 
+export function useMachineNetworks() {
+	const query = trpcReact.machines.networks.useQuery(undefined, {staleTime: 5_000, retry: false})
+	return {
+		bridges: query.data?.bridges ?? [],
+		isLoading: query.isLoading,
+		isError: query.isError,
+		refetch: query.refetch,
+	}
+}
+
 // Machines currently installing. Freshness comes from the single global
 // owner-only listener mounted next to this hook by FloatingIslandContainer.
 export function useInstallingMachines({enabled = true}: {enabled?: boolean} = {}) {

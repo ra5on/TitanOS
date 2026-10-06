@@ -32,6 +32,30 @@ function definition(overrides: Partial<MachineDefinition> = {}): MachineDefiniti
 }
 
 describe('libvirt domain XML', () => {
+	test('attaches an existing LAN bridge without a fabricated private IP filter', () => {
+		const xml = buildDomainXml({
+			definition: definition({network: {mode: 'bridge', bridge: 'br0'}, ipAddress: undefined}),
+			machineDirectory: '/data/machines/test',
+			runtimeDirectory: '/run/titan-machines/test',
+			acceleration: 'kvm',
+		})
+		expect(xml).toContain("<interface type='bridge'>")
+		expect(xml).toContain("<source bridge='br0'/>")
+		expect(xml).not.toContain('<filterref')
+		expect(xml).not.toContain('<port isolated=')
+		expect(xml).not.toContain('<source network=')
+	})
+
+	test('attaches Host-only to its separate managed network and keeps anti-spoofing', () => {
+		const xml = buildDomainXml({
+			definition: definition({network: {mode: 'host-only'}, ipAddress: '10.204.0.2'}),
+			machineDirectory: '/data/machines/test',
+			runtimeDirectory: '/run/titan-machines/test',
+			acceleration: 'kvm',
+		})
+		expect(xml).toContain("<source network='titan-machines-host-only'/>")
+		expect(xml).toContain("<parameter name='IP' value='10.204.0.2'/>")
+	})
 	test('attaches an Omarchy installer and its separate non-bootable configuration CD', () => {
 		const xml = buildDomainXml({
 			definition: definition({osId: 'omarchy', installMedia: 'media/install.iso', seedMedia: 'media/seed.iso'}),
@@ -243,9 +267,7 @@ describe('libvirt domain XML', () => {
 		expect(xml).toContain("source file='/run/titan-machines/import/external-disk.qcow2'")
 		expect(xml).toContain("target dev='sda' bus='sata'")
 		expect(xml).toContain("target dev='sdb' bus='sata'")
-		expect(xml).toContain(
-			"source file='/run/titan-machines/import/storage/media/install.iso' startupPolicy='optional'",
-		)
+		expect(xml).toContain("source file='/run/titan-machines/import/storage/media/install.iso' startupPolicy='optional'")
 		expect(xml).not.toContain("target dev='vda' bus='virtio'")
 	})
 

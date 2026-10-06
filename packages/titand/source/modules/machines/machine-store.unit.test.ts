@@ -39,6 +39,15 @@ function definition(id = randomUUID()): MachineDefinition {
 }
 
 describe('MachineStore', () => {
+	test('preserves the selected bridge in the portable machine definition', async () => {
+		const root = await fsp.mkdtemp(nodePath.join(os.tmpdir(), 'machine-store-network-'))
+		roots.push(root)
+		const store = new MachineStore(root)
+		await store.start()
+		const machine = {...definition(), network: {mode: 'bridge' as const, bridge: 'br0'}}
+		await store.write(machine)
+		await expect(store.read(machine.id)).resolves.toEqual(machine)
+	})
 	test('round trips a machine definition from its self-contained directory', async () => {
 		const root = await fsp.mkdtemp(nodePath.join(os.tmpdir(), 'machine-store-'))
 		roots.push(root)

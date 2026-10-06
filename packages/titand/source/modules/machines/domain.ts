@@ -4,6 +4,8 @@ export type MachineArchitecture = 'amd64' | 'arm64'
 export type PlatformProfile = 'modern-x86' | 'windows-7-x86' | 'legacy-x86' | 'windows-98-x86' | 'modern-arm64'
 export type PortForwardProtocol = 'tcp' | 'udp'
 export const MACHINE_NETWORK_NAME = 'titan-machines'
+export const MACHINE_HOST_ONLY_NETWORK_NAME = 'titan-machines-host-only'
+export type MachineNetwork = {mode: 'nat'} | {mode: 'host-only'} | {mode: 'bridge'; bridge: string}
 
 export type PortForward = {
 	id: string
@@ -44,6 +46,7 @@ export type MachineDefinition = {
 	uuid: string
 	macAddress: string
 	ipAddress?: string
+	network?: MachineNetwork
 	diskSizeGb: number
 	cores: number
 	memoryMb: number
@@ -144,7 +147,8 @@ export function buildDomainXml({
 	graphicsRenderNode?: string
 	audioPlaybackDevice?: string
 }) {
-	if (!definition.ipAddress) throw new Error('[machine-ip-address-invalid]')
+	const network = definition.network ?? {mode: 'nat'}
+	if (network.mode !== 'bridge' && !definition.ipAddress) throw new Error('[machine-ip-address-invalid]')
 	const windows7 = definition.platformProfile === 'windows-7-x86'
 	const windows98 = definition.platformProfile === 'windows-98-x86'
 	const legacy = isLegacyPlatformProfile(definition.platformProfile)
@@ -261,11 +265,10 @@ export function buildDomainXml({
     ${cdrom}
     ${definition.seedMedia ? `<disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='${escapeXml(nodePath.join(machineDirectory, definition.seedMedia))}' startupPolicy='optional'/><target dev='sdb' bus='sata'/><readonly/></disk>` : ''}
     ${bootFloppy}
-		<interface type='network'>
+		<interface type='${network.mode === 'bridge' ? 'bridge' : 'network'}'>
 			<mac address='${escapeXml(definition.macAddress)}'/>
-			<source network='${MACHINE_NETWORK_NAME}'/>
-			<port isolated='yes'/>
-			<filterref filter='clean-traffic'><parameter name='IP' value='${escapeXml(definition.ipAddress)}'/></filterref>
+			${network.mode === 'bridge' ? `<source bridge='${escapeXml(network.bridge)}'/>` : `<source network='${network.mode === 'host-only' ? MACHINE_HOST_ONLY_NETWORK_NAME : MACHINE_NETWORK_NAME}'/>`}
+			${network.mode === 'bridge' ? '' : `<port isolated='yes'/><filterref filter='clean-traffic'><parameter name='IP' value='${escapeXml(definition.ipAddress!)}'/></filterref>`}
 			<model type='${networkModel}'/>
 			${networkDriver}
 			${networkAddress}

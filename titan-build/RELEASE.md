@@ -1,21 +1,38 @@
-# TitanOS veröffentlichen
+# TitanOS 2.0.2 · Stable
 
-TitanOS erscheint ausschließlich als Stable-Version im Repository `ra5on/TitanOS`. Die Version in `.titan/release.json` ist numerisch, beispielsweise `2.0.1`. Dateinamen sind `titan-2.0.1.img.xz` und `titan-2.0.1.update`; die Oberfläche zeigt **TitanOS 2.0.1**. Der GitHub-Release-Tag lautet `v2.0.1`.
+Virtuelle Maschinen erhalten eine Netzwerkauswahl im vorhandenen Dropdown-Stil:
 
-## Voraussetzungen
+- **NAT (Standard):** Internet über das NAS; Dienste erreichst du mit Portweiterleitungen.
+- **Host-only:** Privates Netz zwischen NAS und VM, ohne Internet- oder LAN-Zugang.
+- **Heimnetz (Bridge):** Verbindung über eine bereits eingerichtete Linux-Bridge mit physischem Netzwerkanschluss.
 
-- Vollständiger aktueller Source-Checkout mit Lizenz- und Drittkomponentenhinweisen.
-- Ed25519-Schlüsselpaar: der öffentliche Schlüssel steht in `.titan/release-public.pem`; der dazu passende private Schlüssel liegt ausschließlich im Actions-Secret `TITAN_SIGNING_KEY`.
-- Ausreichend Speicherplatz und ein AMD64-Builder mit Docker, QEMU und UEFI-Firmware.
+Bei eigenen Images und ISOs kannst du das Netzwerk bereits beim Erstellen wählen.
+Kataloginstallationen verwenden zunächst NAT für ihre Einrichtung. Danach lässt
+sich das Netzwerk in den VM-Einstellungen ändern, sobald die VM ausgeschaltet ist.
+Vorhandene Portregeln bleiben gespeichert und werden ausschließlich bei NAT aktiv.
+Fehlende Bridges und Konflikte des privaten Subnetzes werden verständlich gemeldet.
+Die Bridge-IP wird angezeigt, sobald das NAS sie im gewählten Netzwerk beobachten kann.
 
-## Ablauf
+## Download und Aktualisierung
 
-Die Workflow-Datei `.github/workflows/titan-image.yml` prüft zunächst den aktuellen Checkout. Danach folgen Signaturkonfiguration, relevante Regressionstests, vollständiger Image-Build und der Boot-Test. Der Boot-Test verwendet ein mindestens 32 GiB großes Laufwerk, prüft die Weboberfläche und bestätigt die genaue TitanOS-Version. Erst danach werden Manifest und Prüfsummen signiert und die geprüften Dateien auf GitHub veröffentlicht.
+- `titan-2.0.2.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.2.update`: Vollständiges Systemupdate mit Rugix-Rollback für kompatible TitanOS-Installationen.
+- `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
+- `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 
-Ein bereits veröffentlichter Release wird nicht überschrieben. Jede Änderung benötigt eine neue Versionsnummer. In der README wird erst nach erfolgreicher Veröffentlichung ein direkter Download-Link eingetragen.
+**TitanOS 2.0.1** mit der Kennung `titan-rugix-amd64-v2` kann über die
+Systemeinstellungen aktualisiert werden. **Titan 3.x** und ältere Installationen
+mit anderem Systemaufbau benötigen eine Neuinstallation; sichere ihre Daten
+vorher außerhalb des Systems. Es gibt keinen automatischen Formatwechsel.
 
-## Neuinstallation und Updates
+Vergrößere beim VM-Test die importierte Boot-Festplatte **vor dem ersten Start
+auf mindestens 32 GiB**, empfohlen sind 64 GiB. TitanOS nutzt den verbleibenden
+Platz nach der Einrichtung für Daten. Secure Boot muss deaktiviert sein.
 
-Dieses Image beginnt mit dem Titan-Namensraum und der Kennung `titan-rugix-amd64-v2`. Es benötigt eine Neuinstallation. Alte Update-Kanäle und Übergangsupdates werden nicht angeboten. Nach dieser Installation bezieht das NAS seine späteren vollständigen Systemupdates ausschließlich aus dem signierten TitanOS-Stable-Feed auf GitHub. Der vorherige Systemslot steht für den Rollback bereit.
+Die Veröffentlichung erfolgt erst nach erfolgreichen Quell-, Regressions-,
+Image- und UEFI-Boot-Prüfungen sowie Signaturprüfung. Der Boot-Test bestätigt
+keine umfassende Prüfung aller Gastbetriebssysteme, LAN-Konfigurationen oder Hardwarekombinationen.
 
-Eine Funktion erhält nur auf ausdrückliche Vorgabe ein Alpha- oder Beta-Kennzeichen. Das ändert den System-Update-Kanal nicht.
+[VM-Netzwerke](https://github.com/ra5on/TitanOS/blob/main/docs/MACHINE-NETWORKS.md) ·
+[Download-Prüfung](https://github.com/ra5on/TitanOS/blob/main/docs/DOWNLOADS.md) ·
+[Support](https://github.com/ra5on/TitanOS/issues)

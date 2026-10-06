@@ -1,6 +1,11 @@
 # TitanOS-Systemupdates
 
-Nach der Neuinstallation von TitanOS 2.0.1 öffnest du **Einstellungen → Software-Update**. Dort kannst du nach Updates suchen, ein angebotenes Update installieren und anschließend neu starten. Es gibt nur den **Stable**-Kanal.
+Auf TitanOS 2.0.1 oder neuer öffnest du **Einstellungen → Software-Update**. Dort kannst du nach Updates suchen, ein angebotenes Update installieren und anschließend neu starten. Es gibt nur den **Stable**-Kanal.
+
+TitanOS 2.0.2 kann als Systemupdate auf bestehenden Installationen dieses
+TitanOS-Forks mit 2.0.1 installiert werden. Das Image und Update-Bundle werden
+nach erfolgreicher Prüfung im [Release 2.0.2](https://github.com/ra5on/TitanOS/releases/tag/v2.0.2)
+veröffentlicht.
 
 TitanOS prüft vor der Installation die Signatur, Prüfsummen, genaue Versionskennung und den unterstützten Festplattenaufbau. Das vollständige Systemupdate enthält die Titan-Software und die Debian-Systempakete. Deine Dateien und App-Daten bleiben auf dem separaten Datenbereich.
 

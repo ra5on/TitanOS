@@ -2,9 +2,38 @@ import {isIPv4} from 'node:net'
 
 import {z} from 'zod'
 
-import {MACHINE_NETWORK_NAME, type MachineDefinition} from './domain.js'
+import {
+	MACHINE_NETWORK_NAME,
+	MACHINE_HOST_ONLY_NETWORK_NAME,
+	type MachineDefinition,
+	type MachineNetwork,
+} from './domain.js'
 
 export const MACHINE_NETWORK_BRIDGE = 'titan-vm'
+export const MACHINE_HOST_ONLY_BRIDGE = 'titan-vm-host'
+export const MACHINE_HOST_ONLY_PREFIX = '10.204.0'
+export const machineBridgeSchema = z.string().regex(/^[a-zA-Z0-9_.-]{1,15}$(?![\s\S])/, '[machine-bridge-invalid]')
+export const machineNetworkSchema = z.discriminatedUnion('mode', [
+	z.object({mode: z.literal('nat')}),
+	z.object({mode: z.literal('host-only')}),
+	z.object({mode: z.literal('bridge'), bridge: machineBridgeSchema}),
+])
+
+export function managedMachineNetwork(mode: 'nat' | 'host-only') {
+	return mode === 'host-only'
+		? {
+				name: MACHINE_HOST_ONLY_NETWORK_NAME,
+				bridge: MACHINE_HOST_ONLY_BRIDGE,
+				prefix: MACHINE_HOST_ONLY_PREFIX,
+				host: `${MACHINE_HOST_ONLY_PREFIX}.1`,
+			}
+		: {
+				name: MACHINE_NETWORK_NAME,
+				bridge: MACHINE_NETWORK_BRIDGE,
+				prefix: MACHINE_NETWORK_PREFIX,
+				host: MACHINE_GUEST_HOST_ADDRESS,
+			}
+}
 // Keep this outside Tailscale's 100.64.0.0/10 CGNAT range, Titan's
 // 10.21.0.0/16 app network, and Docker's usual 172.16.0.0/12 pools.
 export const MACHINE_NETWORK_PREFIX = '10.203.0'
@@ -37,30 +66,50 @@ export function machineDnsServersFromResolvConf(resolvConf: string) {
 	return servers.length > 0 ? servers : [...MACHINE_DNS_FALLBACK_SERVERS]
 }
 
-export const machineIpAddressSchema = z.string().refine((value) => {
-	const prefix = `${MACHINE_NETWORK_PREFIX}.`
-	if (!value.startsWith(prefix)) return false
-	const suffix = value.slice(prefix.length)
-	if (!/^\d{1,3}$/.test(suffix)) return false
-	const host = Number(suffix)
-	return host >= MACHINE_GUEST_FIRST_ADDRESS && host <= MACHINE_GUEST_LAST_ADDRESS
-}, '[machine-ip-address-invalid]')
+export function machineAddressSchema(network: MachineNetwork = {mode: 'nat'}) {
+	const prefix = `${managedMachineNetwork(network.mode === 'host-only' ? 'host-only' : 'nat').prefix}.`
+	return z.string().refine((value) => {
+		if (!value.startsWith(prefix)) return false
+		const suffix = value.slice(prefix.length)
+		if (!/^\d{1,3}$/.test(suffix)) return false
+		const host = Number(suffix)
+		return host >= MACHINE_GUEST_FIRST_ADDRESS && host <= MACHINE_GUEST_LAST_ADDRESS
+	}, '[machine-ip-address-invalid]')
+}
 
-export function nextMachineIpAddress(definitions: Array<Pick<MachineDefinition, 'ipAddress'>>) {
+export const machineIpAddressSchema = machineAddressSchema()
+
+export function nextMachineIpAddress(
+	definitions: Array<Pick<MachineDefinition, 'ipAddress'>>,
+	network: MachineNetwork = {mode: 'nat'},
+) {
 	const used = new Set(definitions.map(({ipAddress}) => ipAddress).filter(Boolean))
 	for (let host = MACHINE_GUEST_FIRST_ADDRESS; host <= MACHINE_GUEST_LAST_ADDRESS; host++) {
-		const candidate = `${MACHINE_NETWORK_PREFIX}.${host}`
+		const candidate = `${managedMachineNetwork(network.mode === 'host-only' ? 'host-only' : 'nat').prefix}.${host}`
 		if (!used.has(candidate)) return candidate
 	}
 	throw new Error('[machine-network-full]')
 }
 
-export function parseActiveMachineLeaseAddresses(output: string) {
+export function parseActiveMachineLeaseAddresses(output: string, mode: 'nat' | 'host-only' = 'nat') {
 	const addresses = new Set<string>()
-	for (const match of output.matchAll(/\b(10\.203\.0\.\d{1,3})\/\d{1,3}\b/g)) {
-		if (machineIpAddressSchema.safeParse(match[1]).success) addresses.add(match[1])
+	for (const match of output.matchAll(/\b(\d{1,3}(?:\.\d{1,3}){3})\/\d{1,3}\b/g)) {
+		if (machineAddressSchema({mode}).safeParse(match[1]).success) addresses.add(match[1])
 	}
 	return [...addresses]
+}
+
+export function hostOnlyNetworkConflicts(routes: Array<{dst?: string; dev?: string}>) {
+	const target = MACHINE_HOST_ONLY_PREFIX.split('.').reduce((value, octet) => value * 256 + Number(octet), 0) * 256
+	return routes.some(({dst, dev}) => {
+		if (!dst || dst === 'default' || dev === MACHINE_HOST_ONLY_BRIDGE) return false
+		const [address, bits = '32'] = dst.split('/')
+		if (!isIPv4(address) || !/^\d+$/.test(bits) || Number(bits) < 1 || Number(bits) > 32) return false
+		const size = 2 ** (32 - Number(bits))
+		const number = address.split('.').reduce((value, octet) => value * 256 + Number(octet), 0)
+		const start = Math.floor(number / size) * size
+		return start <= target + 255 && start + size - 1 >= target
+	})
 }
 
 function escapeXml(value: string) {
@@ -74,22 +123,29 @@ function escapeXml(value: string) {
 
 export type MachineDhcpLease = {macAddress: string; ipAddress: string; name?: string}
 
-export function machineDhcpLeases(definitions: MachineDefinition[]): MachineDhcpLease[] {
-	return definitions.map((definition) => ({
-		macAddress: definition.macAddress,
-		ipAddress: machineIpAddressSchema.parse(definition.ipAddress),
-		name: definition.id,
-	}))
+export function machineDhcpLeases(
+	definitions: MachineDefinition[],
+	mode: 'nat' | 'host-only' = 'nat',
+): MachineDhcpLease[] {
+	return definitions
+		.filter((definition) => (definition.network?.mode ?? 'nat') === mode)
+		.map((definition) => ({
+			macAddress: definition.macAddress,
+			ipAddress: machineAddressSchema({mode}).parse(definition.ipAddress),
+			name: definition.id,
+		}))
 }
 
 export function buildMachineNetworkXml(
 	definitions: MachineDefinition[],
 	dnsServers: readonly string[] = MACHINE_DNS_FALLBACK_SERVERS,
+	mode: 'nat' | 'host-only' = 'nat',
 ) {
+	const network = managedMachineNetwork(mode)
 	if (dnsServers.length === 0 || dnsServers.some((server) => !isGuestReachableDnsServer(server))) {
 		throw new Error('[machine-dns-server-invalid]')
 	}
-	const hosts = machineDhcpLeases(definitions)
+	const hosts = machineDhcpLeases(definitions, mode)
 		.map(
 			({macAddress, ipAddress, name}) =>
 				`<host mac='${escapeXml(macAddress)}' name='${escapeXml(name!)}' ip='${escapeXml(ipAddress)}'/>`,
@@ -98,16 +154,16 @@ export function buildMachineNetworkXml(
 	const dnsOption = escapeXml(`dhcp-option=option:dns-server,${dnsServers.join(',')}`)
 	return `<?xml version='1.0' encoding='UTF-8'?>
 <network xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'>
-  <name>${MACHINE_NETWORK_NAME}</name>
-  <forward mode='nat'><nat><port start='1024' end='65535'/></nat></forward>
-  <bridge name='${MACHINE_NETWORK_BRIDGE}' stp='on' delay='0'/>
+  <name>${network.name}</name>
+  ${mode === 'nat' ? "<forward mode='nat'><nat><port start='1024' end='65535'/></nat></forward>" : ''}
+  <bridge name='${network.bridge}' stp='on' delay='0'/>
   <port isolated='yes'/>
   <dns enable='no'/>
-  <ip address='${MACHINE_GUEST_HOST_ADDRESS}' netmask='255.255.255.0'>
+  <ip address='${network.host}' netmask='255.255.255.0'>
     <dhcp>${hosts}</dhcp>
   </ip>
   <dnsmasq:options>
-    <dnsmasq:option value='${dnsOption}'/>
+    ${mode === 'nat' ? `<dnsmasq:option value='${dnsOption}'/>` : "<dnsmasq:option value='dhcp-option=option:router'/><dnsmasq:option value='dhcp-option=option:dns-server'/>"}
   </dnsmasq:options>
 </network>
 `
@@ -141,12 +197,14 @@ export function dhcpHostXml({macAddress, ipAddress, name}: MachineDhcpLease) {
 }
 
 export function buildMachinePortForwardNftables(definitions: MachineDefinition[], lanInterface?: string) {
-	const forwards = definitions.flatMap((definition) =>
-		definition.portForwards.map((forward) => ({
-			...forward,
-			ipAddress: machineIpAddressSchema.parse(definition.ipAddress),
-		})),
-	)
+	const forwards = definitions
+		.filter((definition) => (definition.network?.mode ?? 'nat') === 'nat')
+		.flatMap((definition) =>
+			definition.portForwards.map((forward) => ({
+				...forward,
+				ipAddress: machineIpAddressSchema.parse(definition.ipAddress),
+			})),
+		)
 	if (forwards.length > 0 && !lanInterface) {
 		throw new Error('[machine-lan-interface-unavailable]')
 	}

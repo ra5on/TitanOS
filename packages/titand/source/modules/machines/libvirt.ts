@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import nodePath from 'node:path'
+import {isIPv4} from 'node:net'
 
 import {execa} from 'execa'
 import fse from 'fs-extra'
@@ -14,6 +15,7 @@ import {
 	machineDiskTarget,
 	type MachineArchitecture,
 	type MachineDefinition,
+	type MachineNetwork,
 	resolveAcceleration,
 } from './domain.js'
 import {
@@ -26,6 +28,9 @@ import {
 	machineDhcpLeases,
 	parseActiveMachineLeaseAddresses,
 	parseMachineDhcpLeases,
+	managedMachineNetwork,
+	machineBridgeSchema,
+	hostOnlyNetworkConflicts,
 } from './machine-network.js'
 import {
 	installCommandOptions,
@@ -46,6 +51,51 @@ const AUDIO_SLOT_COUNT = AUDIO_CARD_COUNT * AUDIO_SUBSTREAMS_PER_CARD
 export const MACHINE_SHORT_CONTROL_TIMEOUT_MS = 30_000
 export const QEMU_GIBIBYTE_BYTES = 1_024 ** 3
 const MOUNTPOINT_NOT_MOUNTED_EXIT_CODE = 32
+
+// Only offer existing Linux bridges connected to a real uplink. Docker/veth
+// bridges and isolated libvirt bridges must not be presented as LAN bridges.
+export async function findMachineBridges(root = '/sys/class/net') {
+	const entries = await fsp.readdir(root).catch(() => [])
+	async function hasPhysicalUplink(name: string, seen = new Set<string>()): Promise<boolean> {
+		if (seen.has(name) || seen.size > 32 || !machineBridgeSchema.safeParse(name).success) return false
+		seen.add(name)
+		if (await fse.pathExists(nodePath.join(root, name, 'device'))) return true
+		const lower = (await fsp.readdir(nodePath.join(root, name)).catch(() => []))
+			.filter((entry) => entry.startsWith('lower_'))
+			.map((entry) => entry.slice(6))
+		for (const uplink of lower) if (await hasPhysicalUplink(uplink, seen)) return true
+		return false
+	}
+	const bridges: string[] = []
+	for (const name of entries.sort()) {
+		if (!machineBridgeSchema.safeParse(name).success || !(await fse.pathExists(nodePath.join(root, name, 'bridge'))))
+			continue
+		const ports = await fsp.readdir(nodePath.join(root, name, 'brif')).catch(() => [])
+		for (const port of ports) {
+			if (await hasPhysicalUplink(port)) {
+				bridges.push(name)
+				break
+			}
+		}
+	}
+	return bridges
+}
+
+export function parseMachineInterfaceAddress(output: string, macAddress: string, observedAddresses?: string[]) {
+	for (const line of output.split('\n')) {
+		const fields = line.trim().split(/\s+/)
+		if (fields[1]?.toLowerCase() !== macAddress.toLowerCase() || fields[2] !== 'ipv4') continue
+		const address = fields[3]?.split('/')[0]
+		if (
+			address &&
+			isIPv4(address) &&
+			!/^(0\.|127\.|169\.254\.)/.test(address) &&
+			(!observedAddresses || observedAddresses.includes(address))
+		)
+			return address
+	}
+	return undefined
+}
 
 export function audioDevicesForSlot(slot: number) {
 	if (!Number.isInteger(slot) || slot < 0 || slot >= AUDIO_SLOT_COUNT) throw new Error('[machine-audio-slot-invalid]')
@@ -219,6 +269,7 @@ export default class Libvirt {
 	#audioQueue = new PQueue({concurrency: 1})
 	#networkQueue = new PQueue({concurrency: 1})
 	#nextFirewallCheckAt = 0
+	#interfaceAddresses = new Map<string, {expiresAt: number; address?: string}>()
 	logger: Titand['logger']
 	available = false
 	kvmAvailable = false
@@ -255,39 +306,89 @@ export default class Libvirt {
 		return `titan-machine-${id}`
 	}
 
+	async bridges() {
+		return findMachineBridges()
+	}
+
+	async validateNetwork(network: MachineNetwork) {
+		if (network.mode === 'bridge' && !(await this.bridges()).includes(network.bridge)) {
+			throw new Error('[machine-bridge-unavailable]')
+		}
+		if (network.mode === 'host-only') {
+			const {stdout} = await execa('ip', ['-json', '-4', 'route', 'show', 'table', 'all'], {timeout: 10_000})
+			if (hostOnlyNetworkConflicts(JSON.parse(stdout))) throw new Error('[machine-host-only-subnet-conflict]')
+		}
+	}
+
+	async interfaceAddress(definition: MachineDefinition) {
+		if (definition.network?.mode !== 'bridge') return undefined
+		const key = `${definition.id}:${definition.network.bridge}:${definition.macAddress}`
+		const cached = this.#interfaceAddresses.get(key)
+		if (cached && cached.expiresAt > Date.now()) return cached.address
+		const observation: {expiresAt: number; address?: string} = {expiresAt: Date.now() + 5_000}
+		this.#interfaceAddresses.set(key, observation)
+		try {
+			const result = await execa(
+				'virsh',
+				['--connect', LIBVIRT_URI, 'domifaddr', this.domainName(definition.id), '--full', '--source', 'arp'],
+				{
+					reject: false,
+					timeout: 1_000,
+				},
+			)
+			const address =
+				result.exitCode === 0 ? parseMachineInterfaceAddress(result.stdout, definition.macAddress) : undefined
+			if (!address) return undefined
+			const neighbours = await execa('ip', ['-json', '-4', 'neigh', 'show', 'dev', definition.network.bridge], {
+				reject: false,
+				timeout: 1_000,
+			})
+			if (neighbours.exitCode !== 0) return undefined
+			const entries = JSON.parse(neighbours.stdout) as Array<{dst?: string; lladdr?: string; state?: string[]}>
+			const observedAddresses = entries
+				.filter(
+					(entry) =>
+						entry.lladdr?.toLowerCase() === definition.macAddress.toLowerCase() &&
+						!entry.state?.some((state) => ['FAILED', 'INCOMPLETE'].includes(state)),
+				)
+				.map((entry) => entry.dst!)
+				.filter(Boolean)
+			observation.address = parseMachineInterfaceAddress(result.stdout, definition.macAddress, observedAddresses)
+			return observation.address
+		} catch {
+			// IP discovery is optional; a missing/slow ARP observation must not
+			// make the machine list or console unavailable.
+			return undefined
+		}
+	}
+
 	runtimeDirectory(id: string) {
 		return nodePath.join(this.#runtimeRoot, id)
 	}
 
-	#networkXmlPath() {
-		return nodePath.join(this.#runtimeRoot, 'network.xml')
+	#networkXmlPath(mode: 'nat' | 'host-only' = 'nat') {
+		return nodePath.join(this.#runtimeRoot, mode === 'nat' ? 'network.xml' : 'host-only-network.xml')
 	}
 
-	async #networkExists() {
-		const result = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-info', MACHINE_NETWORK_NAME], {
+	async #networkExists(name = MACHINE_NETWORK_NAME) {
+		const result = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-info', name], {
 			reject: false,
 			timeout: 10_000,
 		})
 		return result.exitCode === 0
 	}
 
-	async #updateDhcpLease(command: 'add-last' | 'delete', lease: ReturnType<typeof machineDhcpLeases>[number]) {
+	async #updateDhcpLease(
+		command: 'add-last' | 'delete',
+		lease: ReturnType<typeof machineDhcpLeases>[number],
+		name = MACHINE_NETWORK_NAME,
+	) {
 		const path = nodePath.join(this.#runtimeRoot, `.dhcp-${process.pid}-${Date.now()}-${Math.random()}.xml`)
 		try {
 			await fsp.writeFile(path, dhcpHostXml(lease), {encoding: 'utf8', mode: 0o600})
 			await execa(
 				'virsh',
-				[
-					'--connect',
-					LIBVIRT_URI,
-					'net-update',
-					MACHINE_NETWORK_NAME,
-					command,
-					'ip-dhcp-host',
-					'--xml',
-					path,
-					'--live',
-				],
+				['--connect', LIBVIRT_URI, 'net-update', name, command, 'ip-dhcp-host', '--xml', path, '--live'],
 				{timeout: 10_000},
 			)
 		} finally {
@@ -295,39 +396,42 @@ export default class Libvirt {
 		}
 	}
 
-	async #reconcileNetworkUnlocked(definitions: MachineDefinition[]) {
+	async #reconcileNetworkUnlocked(definitions: MachineDefinition[], mode: 'nat' | 'host-only' = 'nat') {
+		const network = managedMachineNetwork(mode)
 		await fse.ensureDir(this.#runtimeRoot)
-		if (!(await this.#networkExists())) {
+		if (!(await this.#networkExists(network.name))) {
+			if (mode === 'host-only') await this.validateNetwork({mode})
 			const resolvConf = await fsp.readFile('/etc/resolv.conf', 'utf8').catch(() => '')
 			const dnsServers = machineDnsServersFromResolvConf(resolvConf)
-			await fsp.writeFile(this.#networkXmlPath(), buildMachineNetworkXml(definitions, dnsServers), {
+			await fsp.writeFile(this.#networkXmlPath(mode), buildMachineNetworkXml(definitions, dnsServers, mode), {
 				encoding: 'utf8',
 				mode: 0o600,
 			})
-			await execa('virsh', ['--connect', LIBVIRT_URI, 'net-create', this.#networkXmlPath()], {timeout: 30_000})
+			await execa('virsh', ['--connect', LIBVIRT_URI, 'net-create', this.#networkXmlPath(mode)], {timeout: 30_000})
 			return
 		}
 
-		const {stdout: xml} = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-dumpxml', MACHINE_NETWORK_NAME], {
+		const {stdout: xml} = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-dumpxml', network.name], {
 			timeout: 10_000,
 		})
 		if (
-			!xml.includes(`<bridge name='${MACHINE_NETWORK_BRIDGE}'`) ||
-			!xml.includes(`address='${MACHINE_GUEST_HOST_ADDRESS}'`)
+			!xml.includes(`<bridge name='${network.bridge}'`) ||
+			!xml.includes(`address='${network.host}'`) ||
+			(mode === 'host-only' && /<forward\b/.test(xml))
 		) {
 			throw new Error('[machine-network-incompatible]')
 		}
 		const current = new Map(parseMachineDhcpLeases(xml).map((lease) => [lease.macAddress, lease]))
-		const desired = new Map(machineDhcpLeases(definitions).map((lease) => [lease.macAddress, lease]))
+		const desired = new Map(machineDhcpLeases(definitions, mode).map((lease) => [lease.macAddress, lease]))
 		for (const [macAddress, lease] of current) {
 			const target = desired.get(macAddress)
 			if (target && target.ipAddress === lease.ipAddress && target.name === lease.name) continue
-			await this.#updateDhcpLease('delete', lease)
+			await this.#updateDhcpLease('delete', lease, network.name)
 		}
 		for (const [macAddress, lease] of desired) {
 			const existing = current.get(macAddress)
 			if (existing && existing.ipAddress === lease.ipAddress && existing.name === lease.name) continue
-			await this.#updateDhcpLease('add-last', lease)
+			await this.#updateDhcpLease('add-last', lease, network.name)
 		}
 	}
 
@@ -338,9 +442,11 @@ export default class Libvirt {
 	}
 
 	async #reconcileFirewallUnlocked(definitions: MachineDefinition[]) {
-		const forwards = definitions.flatMap((definition) =>
-			definition.portForwards.map((forward) => ({...forward, ipAddress: definition.ipAddress!})),
-		)
+		const forwards = definitions
+			.filter((definition) => (definition.network?.mode ?? 'nat') === 'nat')
+			.flatMap((definition) =>
+				definition.portForwards.map((forward) => ({...forward, ipAddress: definition.ipAddress!})),
+			)
 		const needsLan = forwards.length > 0
 		const lanInterface = needsLan ? await this.#lanInterface() : undefined
 		if (needsLan && !lanInterface) throw new Error('[machine-lan-interface-unavailable]')
@@ -413,17 +519,38 @@ export default class Libvirt {
 	async reconcileNetwork(definitions: MachineDefinition[]) {
 		await this.#networkQueue.add(async () => {
 			await this.#reconcileNetworkUnlocked(definitions)
+			if (definitions.some((definition) => definition.network?.mode === 'host-only')) {
+				await this.#reconcileNetworkUnlocked(definitions, 'host-only')
+			} else {
+				// The last host-only guest is stopped before its mode can change.
+				// Remove the owned route/bridge too, including after a failed save.
+				const network = managedMachineNetwork('host-only')
+				if (await this.#networkExists(network.name)) {
+					const {stdout: xml} = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-dumpxml', network.name], {
+						timeout: 10_000,
+					})
+					if (
+						!xml.includes(`<bridge name='${network.bridge}'`) ||
+						!xml.includes(`address='${network.host}'`) ||
+						/<forward\b/.test(xml)
+					)
+						throw new Error('[machine-network-incompatible]')
+					await execa('virsh', ['--connect', LIBVIRT_URI, 'net-destroy', network.name], {timeout: 10_000})
+				}
+				await fse.remove(this.#networkXmlPath('host-only'))
+			}
 			await this.#reconcileFirewallUnlocked(definitions)
 		})
 	}
 
-	async leasedIpAddresses() {
-		if (!this.available || !(await this.#networkExists())) return []
-		const result = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-dhcp-leases', MACHINE_NETWORK_NAME], {
+	async leasedIpAddresses(mode: 'nat' | 'host-only' = 'nat') {
+		const network = managedMachineNetwork(mode)
+		if (!this.available || !(await this.#networkExists(network.name))) return []
+		const result = await execa('virsh', ['--connect', LIBVIRT_URI, 'net-dhcp-leases', network.name], {
 			reject: false,
 			timeout: 10_000,
 		})
-		return result.exitCode === 0 ? parseActiveMachineLeaseAddresses(result.stdout) : []
+		return result.exitCode === 0 ? parseActiveMachineLeaseAddresses(result.stdout, mode) : []
 	}
 
 	async reconcileFirewall(definitions: MachineDefinition[]) {
@@ -470,6 +597,11 @@ export default class Libvirt {
 				timeout: 10_000,
 			})
 			await fse.remove(this.#networkXmlPath())
+			await execa('virsh', ['--connect', LIBVIRT_URI, 'net-destroy', managedMachineNetwork('host-only').name], {
+				reject: false,
+				timeout: 10_000,
+			})
+			await fse.remove(this.#networkXmlPath('host-only'))
 		})
 	}
 
@@ -653,6 +785,7 @@ export default class Libvirt {
 
 	async start(definition: MachineDefinition, machineDirectory: string, diskPath: string) {
 		if (!this.available) throw new Error('[virtualization-unavailable]')
+		await this.validateNetwork(definition.network ?? {mode: 'nat'})
 		if ((await this.state(definition.id)) !== 'stopped') throw new Error('[machine-not-stopped]')
 
 		const runtimeDirectory = this.runtimeDirectory(definition.id)

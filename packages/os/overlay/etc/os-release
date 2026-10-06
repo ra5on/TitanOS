@@ -1,7 +1,7 @@
 NAME="TitanOS"
-PRETTY_NAME="TitanOS 2.0.1"
+PRETTY_NAME="TitanOS 2.0.2"
 ID=titanos
 ID_LIKE=debian
-VERSION="2.0.1"
-VERSION_ID="2.0.1"
+VERSION="2.0.2"
+VERSION_ID="2.0.2"
 HOME_URL="https://github.com/ra5on/TitanOS"
