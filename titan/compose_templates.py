@@ -208,7 +208,7 @@ def translate(doc, label, repository, metadata=None):
             value = '' if value is None else str(value)
             if key == 'TZ' and '$' in value: value = 'Europe/Berlin'
             value = re.sub(r'\$\{[A-Za-z_][A-Za-z0-9_]*:-([^{}]*)\}', r'\1', value)
-            secret = bool(re.search(r'password|secret|token|api.?key|app_key', key, re.I))
+            secret = bool(re.search(r'password|secret|token|api.?key|app_key|(?:^|_)(?:pass|passwd|pwd)(?:_|$)', key, re.I))
             # A shared upstream DB password becomes one generated private value,
             # even when client/server call it DB_PASSWORD and POSTGRES_PASSWORD.
             database_secret=bool(re.fullmatch(r'(?:DB|POSTGRES|MYSQL|MARIADB)_PASSWORD',key))

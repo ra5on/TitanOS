@@ -10,7 +10,7 @@ import tempfile
 import time
 import contextlib
 
-from .catalog import APPS, compose, published_ports, requested_host_ports, validate_options, host_port_minimum, PROTECTED_HOST_PORTS, CATALOG_LOCK
+from .catalog import APPS, compose, published_ports, requested_host_ports, validate_options, host_port_minimum, PROTECTED_HOST_PORTS, CATALOG_LOCK, legacy_cloudflared_definition
 from .core import Error, atomic_json, integer
 from .app_networks import AppNetworkMixin, selection
 
@@ -62,9 +62,34 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         reserved=set(PROTECTED_HOST_PORTS)
         for row in records:
             if row['id']==ignore:continue
-            reserved.update((item['host'],item['protocol']) for item in published_ports(row['id'],row['port'],self._app_options(row['id']),host_mode=selection(row.get('network'))['mode']=='host'))
+            reserved.update((item['host'],item['protocol']) for item in self._app_installed_ports(row))
         if requested & reserved:
             raise Error('Ein Port ist für Titan, SSH, SMB oder eine andere App reserviert. AdGuard und Pi-hole benötigen beide DNS-Port 53; nur einen DNS-Dienst pro NAS-IP verwenden oder einen anderen Port wählen.',409)
+
+    def _app_installed_ports(self, record):
+        app = record['id']
+        options = self._app_options(app)
+        host_mode = selection(record.get('network'))['mode'] == 'host'
+        publications = published_ports(app, record['port'], options, host_mode=host_mode)
+        if APPS[app].get('web_port_option'):
+            # Existing installations retain their exact approved definition.
+            # Reserve the actual legacy listener rather than a suggested port.
+            self.managed_app(app)
+            definition = json.loads((self.directory / 'apps' / app / 'compose.json').read_text())
+            primary = definition['services'][app]
+            if host_mode:
+                listener = integer(primary['environment']['WEBUI_PORT'], 1, 65535)
+                publications[0].update(host=listener, target=listener)
+            else:
+                mapping = next(value for value in primary['ports'] if value.startswith(str(record['port']) + ':') and value.endswith('/tcp'))
+                publications[0]['target'] = int(mapping.split(':')[1].split('/')[0])
+        return publications
+
+    @staticmethod
+    def _app_require_web_password(app, options):
+        key = APPS[app].get('web_password_option')
+        if key and not options.get(key):
+            raise Error('Für die Tunnel-Weboberfläche ein eigenes BASIC_AUTH_PASS festlegen.')
 
     def _app_lifecycle_services(self, app):
         """Known service names, including a verified older installed recipe."""
@@ -312,7 +337,8 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                         binding["bind"]["selinux"] = "Z"
                 normalized.append(binding)
             service["volumes"] = normalized
-            if definition != expected and not (APPS[app].get("titan_package") and record.get("definition_digest") == definition_digest(definition)):
+            legacy = legacy_cloudflared_definition(app, expected, record['port'], self._app_options(app))
+            if definition != expected and definition != legacy and not (APPS[app].get("titan_package") and record.get("definition_digest") == definition_digest(definition)):
                 raise Error("App-Konfiguration weicht von der verwalteten Vorlage ab.", 403)
             data = Path(record["data"])
             if not data.is_absolute() or not data.is_relative_to(self.share_root) or data == self.share_root:
@@ -397,13 +423,18 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
             owner = pwd.getpwnam("titan-files")
             options = self._app_options(app) if options is None else options
             network = selection(record.get("network"))
-            definition = compose(app, str(self.directory / "apps" / app), owner.pw_uid, owner.pw_gid,
-                                 record["port"], record["data"], options, network, record.get("hardware"), config_path=record.get("config_path"))["services"][service_key]
+            expected_definition = compose(app, str(self.directory / "apps" / app), owner.pw_uid, owner.pw_gid,
+                                 record["port"], record["data"], options, network, record.get("hardware"), config_path=record.get("config_path"))
+            definition = expected_definition["services"][service_key]
+            legacy_listener = False
             stored_path = self.directory / "apps" / app / "compose.json"
-            if record.get("definition_digest") and stored_path.is_file():
+            if (record.get("definition_digest") or APPS[app].get('web_port_option')) and stored_path.is_file():
                 stored = json.loads(stored_path.read_text())
-                if record["definition_digest"] == definition_digest(stored):
+                legacy_listener = stored == legacy_cloudflared_definition(app, expected_definition, record['port'], options)
+                if record.get("definition_digest") == definition_digest(stored):
                     definition = stored["services"][service_key]
+                elif legacy_listener:
+                    definition = stored['services'][service_key]
             expected_bindings = {binding["target"]: binding["source"] for binding in definition["volumes"]}
             host = container.get("HostConfig", {})
             from .app_memory import limit_bytes
@@ -412,6 +443,9 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
                 raise Error("Das RAM-Limit des Containers stimmt nicht mit der App-Vorlage überein. App stoppen und die Einstellungen prüfen.", 409)
             expected_ports = {f"{item['target']}/{item['protocol']}": {str(item["host"])}
                               for item in published_ports(app, record["port"], options, host_mode=network["mode"] == "host") if "service" not in item or (app if item["service"] == APPS[app]["stack"]["primary"] else app+"-"+item["service"].lower()) == service_key} if network["mode"] != "host" else {}
+            if legacy_listener and service_key == app and network['mode'] != 'host':
+                expected_ports.pop(f"{record['port']}/tcp", None)
+                expected_ports[f"{APPS[app]['port']}/tcp"] = {str(record['port'])}
             actual_ports = {}
             for target, publications in (host.get("PortBindings") or {}).items():
                 if any(binding.get("HostIp", "") not in ("", "0.0.0.0", "::") for binding in publications or []):
@@ -526,7 +560,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
             self.app_devices_ready(record)
             network, _ = self._app_network_validate(record.get("network"), app, record)
             if network["mode"] == "host" and not (container and container.get("State", {}).get("Status") in ("running", "restarting")):
-                self._host_ports_available(published_ports(app, record["port"], self._app_options(app), host_mode=True))
+                self._host_ports_available(self._app_installed_ports(record))
         path = self.directory / "apps" / app / "compose.json"
         definition = json.loads(path.read_text())
         rows = self._app_container_rows()
@@ -541,7 +575,17 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         if any(isinstance(binding, str) for binding in bindings):
             from .host import pwd
             owner = pwd.getpwnam("titan-files")
-            atomic_json(path, compose(app, str(path.parent), owner.pw_uid, owner.pw_gid, record["port"], record["data"], self._app_options(app), record.get("network"), record.get("hardware"), config_path=record.get("config_path")))
+            proposed = compose(app, str(path.parent), owner.pw_uid, owner.pw_gid, record["port"], record["data"], self._app_options(app), record.get("network"), record.get("hardware"), config_path=record.get("config_path"))
+            if APPS[app].get('web_port_option'):
+                # managed_app validated this definition after normalizing only
+                # bind syntax; retain its old listener during a normal start.
+                for index, binding in enumerate(bindings):
+                    if isinstance(binding, str):
+                        source, target = binding.split(':')
+                        bindings[index] = {'type': 'bind', 'source': source, 'target': target,
+                                          'bind': {'create_host_path': False, **({'selinux': 'Z'} if target == '/config' else {})}}
+                proposed = definition
+            atomic_json(path, proposed)
         def invoke(*options):
             return _run(["docker", "compose", "--project-name", "titan-" + app, "-f", str(path), *options], timeout=timeout)
         try:
@@ -748,6 +792,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
             else: raise Error('Ungültige Docker-Einstellungen.')
             from .app_packages import prepare_options
             values=validate_options(app,prepare_options(app,values,previous))
+            self._app_require_web_password(app, values)
             network=selection(network if network is not None else record.get('network'))
             port=integer(port,host_port_minimum(app,network['mode']=='host'),65535)
             publications=published_ports(app,port,values,host_mode=network['mode']=='host')
@@ -793,7 +838,12 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
             if container and (container.get('State',{}).get('Running') or container.get('State',{}).get('Status') in ('running','paused','restarting')):raise Error('Die App vor dem Ändern der Geräte stoppen.',409)
         from .host import pwd
         owner=pwd.getpwnam('titan-files')
-        proposed=compose(app,str(path.parent),owner.pw_uid,owner.pw_gid,record['port'],record['data'],self._app_options(app),record.get('network'),chosen, config_path=record.get("config_path"))
+        options = self._app_options(app)
+        proposed=compose(app,str(path.parent),owner.pw_uid,owner.pw_gid,record['port'],record['data'],options,record.get('network'),chosen, config_path=record.get("config_path"))
+        if APPS[app].get('web_port_option'):
+            expected = compose(app,str(path.parent),owner.pw_uid,owner.pw_gid,record['port'],record['data'],options,record.get('network'),record.get('hardware'), config_path=record.get('config_path'))
+            if definition == legacy_cloudflared_definition(app, expected, record['port'], options):
+                proposed = legacy_cloudflared_definition(app, proposed, record['port'], options)
         atomic_json(path,proposed);self._app_patch_record(app,{'hardware':chosen, **({'definition_digest':definition_digest(proposed)} if APPS[app].get('titan_package') or APPS[app].get('docker_template') else {})})
         args=['docker','compose','--project-name','titan-'+app,'-f',str(path)]
         try:
@@ -850,6 +900,7 @@ class AppMixin(PackageCenterMixin, AppMetricsMixin, AppDevicesMixin, AppNetworkM
         from .app_packages import prepare_options
         previous = self._app_options(app) if (self.directory / "apps" / app / "options.json").exists() else None
         options = validate_options(app, prepare_options(app, options, previous))
+        self._app_require_web_password(app, options)
         if APPS[app].get('provision') == 'nextcloud-office':
             from .app_package_setup import validate_host
             validate_host(options['nas_host'])

@@ -143,7 +143,13 @@ class StoreMixin:
                     return value
                 for app in valid:
                     previous = previous_recipes.get(prefix + app['id'], {})
-                    if previous:
+                    if app.get('default_network') == 'host':
+                        # Host listeners cannot be remapped by Docker. Keep the
+                        # upstream port even when an older refresh incorrectly
+                        # allocated a free bridge-style suggestion. This changes
+                        # only the catalog; installed recipes remain pinned.
+                        used.add(app['default_port'])
+                    elif previous:
                         app['default_port'] = previous['default_port']
                     elif app['default_port']<1024 and (app['default_port'],'tcp') not in PROTECTED_HOST_PORTS:
                         # DNS/HTTP standard ports must retain their protocol

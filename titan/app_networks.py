@@ -358,10 +358,10 @@ class AppNetworkMixin:
                           "internal": info.get("Internal") is True})
         endpoints = []
         if container.get("State", {}).get("Status") in ("running", "restarting"):
-            from .catalog import APPS
-            target = record["port"] if APPS[record["id"]].get("dynamic_web_port") else APPS[record["id"]]["port"]
+            from .catalog import observed_web_port
+            target = observed_web_port(record['id'], container)
             bindings = actual.get("Ports", {}).get(f"{target}/tcp") or [] if actual.get("Ports") else []
-            if selected == "host":
+            if selected == "host" and target is not None:
                 bindings = [{"HostIp": "", "HostPort": str(target)}]
             for binding in bindings:
                 bind_address = binding.get("HostIp", "")

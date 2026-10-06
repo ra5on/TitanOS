@@ -37,12 +37,9 @@ class DockerEngineMixin:
         cfg=row.get('Config',{});state=row.get('State',{});net=row.get('NetworkSettings',{})
         # Never return environment variables or labels containing passwords.
         labels=cfg.get('Labels') or {}
-        from .catalog import APPS
+        from .catalog import APPS, observed_web_port
         recipe=APPS.get(labels.get('io.titan.app'),{}) if labels.get('io.titan.managed')=='true' else {}
-        web_port=recipe.get('port')
-        if recipe.get('dynamic_web_port'):
-            values=[value.split('=',1)[1] for value in cfg.get('Env') or [] if isinstance(value,str) and value.startswith('WEBUI_PORT=')]
-            web_port=int(values[0]) if len(values)==1 and re.fullmatch(r'[0-9]{1,5}',values[0]) and 1<=int(values[0])<=65535 else None
+        web_port=observed_web_port(labels.get('io.titan.app'),row) if recipe else None
         return {'id':row['Id'],'name':row.get('Name','').lstrip('/'),'image':labels.get('io.titan.original_image') or cfg.get('Image',''),
                 'state':state.get('Status','unknown'),'health':state.get('Health',{}).get('Status'),
                 'created':row.get('Created'),'restart':row.get('HostConfig',{}).get('RestartPolicy',{}).get('Name'),

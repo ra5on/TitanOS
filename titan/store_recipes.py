@@ -1,5 +1,6 @@
 """Validate deployment data shared by bundled and imported stores."""
 import hashlib
+import copy
 import re
 import urllib.parse
 from .core import Error, integer
@@ -144,4 +145,31 @@ def recipes(document, source):
                     result[identifier]['port_bindings'].append({**binding,'service':service_name,
                         'published':result[identifier]['default_port'] if main else field.get('default',field.get('suggested_default')) if field else binding['published'],
                         'optional':bool(field and not field.get('required'))})
+            # This verified image supports changing its actual listener. One
+            # web-port control must drive the environment, mapping and links.
+            # Keep the old option key so installed private configurations remain
+            # readable; never rewrite their secrets or running containers here.
+            if (image.startswith(('wisdomsky/cloudflared-web:', 'ghcr.io/wisdomsky/cloudflared-web:'))
+                    and len(stack['services']) == 1):
+                fields = copy.deepcopy(fields)
+                result[identifier]['install_schema'] = fields
+                reference = stack['services'][primary].get('environment', {}).get('WEBUI_PORT', '')
+                controlled = next((field for field in fields if reference == '@option:' + field['key']), None)
+                if controlled is not None:
+                    result[identifier].update(dynamic_web_port=True, web_port_option=controlled['key'])
+                    controlled.update(controlled_by_web_port=True,
+                                      help='Wird automatisch aus „Port für die Weboberfläche“ übernommen.')
+                password_reference = stack['services'][primary].get('environment', {}).get('BASIC_AUTH_PASS', '')
+                password = next((field for field in fields if password_reference == '@option:' + field['key']), None)
+                if password is not None:
+                    # Also mask fields from previously saved catalog snapshots.
+                    # The existing owner-only options file is left untouched.
+                    legacy_password = password['type'] != 'password'
+                    result[identifier]['web_password_option'] = password['key']
+                    password.update(type='password', default='', required=True,
+                                    min_length=0 if legacy_password else 1,
+                                    help='Dein eigenes Passwort für die Tunnel-Weboberfläche. Ein gespeichertes Passwort bleibt beim Bearbeiten erhalten.')
+                result[identifier]['first_login'] = {
+                    'mode': 'install', 'documentation': documentation,
+                    'instructions': 'Mit dem Benutzernamen aus BASIC_AUTH_USER (Vorauswahl admin) und deinem bei der Installation gewählten BASIC_AUTH_PASS anmelden. Den Tunnel-Token anschließend in der App eintragen.'}
     return name, result
