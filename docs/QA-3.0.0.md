@@ -6,7 +6,7 @@ Ergebnisse älterer Versionen ersetzen keine Prüfung dieses Images.
 | Prüfung | Stand |
 | --- | --- |
 | Python/API/Sicherheitsregressionen | 1.826 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget, USB-Identitätsprüfung, echter Archiv-Wiederherstellung mit Zeitstempeln, abgesicherter Release-Versionsvergabe und frischer Speicher-/USB-/Netzwerk-/RAM-Prüfung vor dem Wiederstart nach App-Sicherungen sowie echter VNC-Readiness, begrenzter Konsolen-Gesamtfrist und dauerhaftem Main-Prozess-RAM-Nachweis mit aktuellen Bootmarkern |
-| JavaScript-Controller und Syntax | 48 UI-Suiten erfolgreich; JavaScript- und Shell-Syntax geprüft |
+| JavaScript-Controller und Syntax | 48 UI-Suiten erfolgreich; JavaScript- und Shell-Syntax geprüft. Nicht verfügbarer Office-Editor wird nicht angeboten; DOCX-/XLSX-Downloads und Textbearbeitung bleiben geprüft |
 | Debian-Anwendungspaket | Lokal gebaut und vollständige neue Laufzeitdateien sowie öffentlicher Schlüssel geprüft; keine Installation auf dem Build-Rechner |
 | Mobile Ansicht | Dateimanager/Docker/Fotos bei 390 Pixeln; Fotos, VM-Details/Netzwerk, Speicher, Systemsteuerung/Updates bei 320 Pixeln ohne Seitenüberlauf geprüft. Desktop-Raster und mobile Widgetüberlagerung korrigiert. Frisch mobil geöffnetes VM-Fenster wächst bei 320 → 768 → 903 Pixeln auf die verfügbare Breite; Browserkonsole ohne Warnungen oder Fehler |
 | Docker-Vorlagen | 374 Konfigurationen normalisiert, durch die Adaptertests und mit Debian Compose 2.26.1-4 config --quiet geprüft; keine pauschale Laufzeitfreigabe aller Apps |

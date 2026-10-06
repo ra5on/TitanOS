@@ -67,6 +67,18 @@ const entry=(name,extra={})=>({name,directory:false,readable:true,mutable:true,s
  edit.instance.select(4);assert(!edit.key('F4').defaultPrevented);assert.equal(edit.actions.length,editCount+1);assert(!edit.inspector.innerHTML.includes('data-action="file-edit"'));
  edit.instance.select(5);assert.match(edit.inspector.innerHTML,/zu groß/);assert(!edit.key('F4').defaultPrevented);assert.equal(edit.actions.length,editCount+1);
  const readOnly=fixture([entry('custom.suffix')],{writable:false});readOnly.instance.select(0);assert(!readOnly.inspector.innerHTML.includes('data-action="file-edit"'));assert(!readOnly.rows[0].querySelector('[data-fb-edit]'));assert(!readOnly.key('F4').defaultPrevented);
+ // Actual document selections retain their download links without advertising an unavailable Office editor.
+ const documents=fixture([entry('Bericht.docx'),entry('Budget.xlsx')],{writable:false});
+ for(const [index,name] of ['Bericht.docx','Budget.xlsx'].entries()){
+  documents.instance.select(index);await documents.turn();
+  const expected='/api/file?share=source&amp;path=folder%2F'+name+'&amp;preview=false';
+  assert(documents.inspector.innerHTML.includes('href="'+expected+'"'));
+  assert.match(documents.inspector.innerHTML,/Herunterladen/);
+  assert(!documents.inspector.innerHTML.includes('file-office'));assert(!documents.inspector.innerHTML.includes('Euro-Office'));
+  documents.rows[index].dispatch('contextmenu');
+  assert(documents.dialogs.at(-1).html.includes('href="'+expected+'"'));
+  assert(!documents.dialogs.at(-1).html.includes('file-office'));assert(!documents.dialogs.at(-1).html.includes('Euro-Office'));
+ }
  const symlinkEdit=fixture([entry('target-link',{symlink:true,mutable:false,editable:true})],{share:'@system'});symlinkEdit.instance.select(0);assert.match(symlinkEdit.inspector.innerHTML,/data-action="file-edit"/);symlinkEdit.key('F4');assert.equal(symlinkEdit.actions.at(-1).share,'@system');assert.equal(symlinkEdit.actions.at(-1).action,'file-edit');
  // Text decoding is based on bytes, preserving UTF-8 and rejecting binary/replacement text.
  assert.deepEqual(await explorer.readTextPreview(textResponse('Grüße 🐧 <unsafe>')),{text:'Grüße 🐧 <unsafe>',truncated:false});

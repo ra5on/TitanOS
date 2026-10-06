@@ -21,8 +21,9 @@ nicht als bestanden. Die automatischen Nachweise stehen in [QA-3.0.0](QA-3.0.0.m
    Lesekonto kann sie öffnen; das ausgeschlossene Konto erhält keinen Zugriff.
    Rechteänderungen werden anschließend tatsächlich wirksam.
 
-3. **Dateimanager.** Erstelle einen Testordner sowie eine Text- und eine
-   Python-Datei über die angebotenen Dateitypen. Bearbeite Text mit Umlauten,
+3. **Dateimanager.** Öffne die zuvor erstellte Testfreigabe und erstelle dort
+   einen Testordner sowie eine Text- und eine Python-Datei über die angebotenen
+   Dateitypen. Bearbeite Text mit Umlauten,
    speichere und öffne ihn erneut. Kopiere, verschiebe und benenne Testdateien um;
    verschiebe eine in den Papierkorb und stelle sie wieder her. **Bestanden:**
    Inhalte bleiben erhalten, Aktionen oben sind auch mobil erreichbar, nur die
