@@ -67,7 +67,7 @@ if [[ "${RUN_IMAGE_SMOKE:-1}" == "1" ]]; then
     # Exercise the real NetworkManager bridge migration on a fresh guest before
     # compression/signing. A failed LAN change must block release publication.
     npm --prefix "${TASK_ROOT}/packages/titand" ci
-    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --maxWorkers=1 source/modules/machines/automatic-bridge.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/bridge-smoke.json"
+    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/automatic-bridge.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/bridge-smoke.json"
     python3 - "${ARTIFACT_DIR}/image-verification.json" "${ARTIFACT_DIR}/bridge-smoke.json" <<'PY'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
