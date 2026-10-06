@@ -114,7 +114,9 @@ export function MachineNetworkField({
 									? t('machines.network-bridge-automatic', {interface: automaticBridge.interface ?? ''})
 									: automaticBridge?.reason === 'wifi'
 										? t('machines.network-bridge-wifi')
-										: t('machines.network-no-bridges')}
+										: automaticBridge?.reason === 'busy'
+											? t('machines-error.machine-bridge-busy')
+											: t('machines.network-no-bridges')}
 							</p>
 						)}
 					</DropdownMenuContent>

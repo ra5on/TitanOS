@@ -11,6 +11,7 @@ import AutomaticMachineBridge, {
 	type BridgeUplink,
 	type NmSettings,
 } from './machine-bridge.js'
+import {hostNetworkChangePending, withHostNetworkChange} from './network-change.js'
 
 const native = vi.hoisted(() => ({invoke: vi.fn(), end: vi.fn(), on: vi.fn()}))
 vi.mock('@homebridge/dbus-native', () => ({
@@ -363,6 +364,62 @@ describe('automatic VM LAN bridge profiles', () => {
 })
 
 describe('automatic VM bridge checkpoint and confirmation', () => {
+	test('an existing host IP/DNS/WiFi operation prevents bridge snapshots and setup until it fully settles', async () => {
+		const {bridge, network} = coordinator()
+		let finishChange!: () => void
+		const change = withHostNetworkChange(
+			() =>
+				new Promise<void>((resolve) => {
+					finishChange = resolve
+				}),
+		)
+		expect(hostNetworkChangePending()).toBe(true)
+		await expect(bridge.availability()).resolves.toEqual({available: false, reason: 'busy'})
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-busy]')
+		expect(network.uplink).not.toHaveBeenCalled()
+		finishChange()
+		await change
+		expect(hostNetworkChangePending()).toBe(false)
+		await expect(bridge.prepare('owner-session')).resolves.toMatchObject({bridge: AUTOMATIC_MACHINE_BRIDGE})
+		expect(network.uplink).toHaveBeenCalledOnce()
+	})
+
+	test('nested cleanup keeps the outer host-network reservation even when the nested operation fails', async () => {
+		const {bridge, network} = coordinator()
+		await withHostNetworkChange(async () => {
+			await expect(
+				withHostNetworkChange(async () => {
+					throw new Error('cleanup failed')
+				}),
+			).rejects.toThrow('cleanup failed')
+			expect(hostNetworkChangePending()).toBe(true)
+			await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-busy]')
+		})
+		expect(hostNetworkChangePending()).toBe(false)
+		expect(network.uplink).not.toHaveBeenCalled()
+	})
+
+	test('failed host-network operations release the bridge reservation only after their asynchronous cleanup', async () => {
+		const {bridge, network} = coordinator()
+		let finishCleanup!: () => void
+		const failure = withHostNetworkChange(async () => {
+			try {
+				throw new Error('IP confirmation expired')
+			} finally {
+				await new Promise<void>((resolve) => {
+					finishCleanup = resolve
+				})
+			}
+		})
+		const rejected = expect(failure).rejects.toThrow('IP confirmation expired')
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-busy]')
+		expect(network.uplink).not.toHaveBeenCalled()
+		finishCleanup()
+		await rejected
+		expect(hostNetworkChangePending()).toBe(false)
+		await expect(bridge.prepare('owner-session')).resolves.toMatchObject({bridge: AUTOMATIC_MACHINE_BRIDGE})
+	})
+
 	test('read-only availability never changes the host network', async () => {
 		const {bridge, network} = coordinator()
 		await expect(bridge.availability()).resolves.toEqual({available: true, interface: 'enp1s0'})

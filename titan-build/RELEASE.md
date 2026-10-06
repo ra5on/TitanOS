@@ -28,6 +28,7 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 - `titan-2.0.3.update`: Vollständiges Systemupdate mit Rugix-Rollback für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
+- `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge. Die Veröffentlichung benötigt alle Prüfungen erfolgreich.
 
 **TitanOS ab 2.0.1** mit der Kennung `titan-rugix-amd64-v2` kann über die
 Systemeinstellungen aktualisiert werden. **Titan 3.x** und ältere Installationen

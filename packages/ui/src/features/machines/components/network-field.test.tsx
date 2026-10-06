@@ -75,6 +75,13 @@ describe('machine network dropdown', () => {
 		expect(bridgeOption().getAttribute('aria-disabled')).toBe('true')
 		expect(document.body.textContent).toContain('machines.network-bridge-wifi')
 	})
+	test('explains that another network change must finish before automatic bridging', async () => {
+		const props = render({automaticBridge: {available: false, reason: 'busy'}})
+		await openMenu()
+		expect(bridgeOption().getAttribute('aria-disabled')).toBe('true')
+		expect(document.body.textContent).toContain('machines-error.machine-bridge-busy')
+		expect(props.onPrepareBridge).not.toHaveBeenCalled()
+	})
 	test('a failed setup keeps the previous VM network selected and displays an error', async () => {
 		const props = render({onPrepareBridge: vi.fn(async () => undefined), bridgeError: 'Connection was restored'})
 		await openMenu()

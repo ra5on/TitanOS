@@ -1,6 +1,7 @@
 import {randomBytes, randomUUID} from 'node:crypto'
 import fse from 'fs-extra'
 import dbus from '@homebridge/dbus-native'
+import {hostNetworkChangePending} from './network-change.js'
 
 // Keep the address-bearing bridge outside getIpAddresses' Docker exclusions.
 export const AUTOMATIC_MACHINE_BRIDGE = 'titan-br0'
@@ -514,7 +515,8 @@ export default class AutomaticMachineBridge {
 	}
 
 	async availability(): Promise<AutomaticBridgeAvailability> {
-		if ((this.#pending && !this.#pending.error) || this.#preparing) return {available: false, reason: 'busy'}
+		if (hostNetworkChangePending() || (this.#pending && !this.#pending.error) || this.#preparing)
+			return {available: false, reason: 'busy'}
 		try {
 			const uplink = await this.#network.uplink()
 			return {available: true, interface: uplink.device}
@@ -537,6 +539,7 @@ export default class AutomaticMachineBridge {
 		if (this.#stopped) throw new Error('[machine-bridge-unavailable]')
 		if (!sessionId) throw new Error('[machine-bridge-confirmation-expired]')
 		if (this.#pending?.error) await this.#rollback(this.#pending)
+		if (hostNetworkChangePending()) throw new Error('[machine-bridge-busy]')
 		if (this.#pending && !this.#pending.error && this.#pending.expiresAt > Date.now()) {
 			if (this.#pending.sessionId !== sessionId) throw new Error('[machine-bridge-busy]')
 			return this.#response(this.#pending)

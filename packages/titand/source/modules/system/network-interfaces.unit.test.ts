@@ -1,22 +1,29 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest'
 import {$} from 'execa'
 import fse from 'fs-extra'
+import pWaitFor from 'p-wait-for'
 
 import type Titand from '../../index.js'
 import {
 	clearStaticIp,
 	connectToWiFiNetwork,
+	confirmStaticIp,
 	getNetworkInterfaces,
 	restoreStaticIp,
 	setStaticIp,
 	syncDns,
 } from './system.js'
-import {machineBridgeChangePending} from './machine-bridge.js'
+import AutomaticMachineBridge, {machineBridgeChangePending, type BridgeNetworkManager} from './machine-bridge.js'
+import {hostNetworkChangePending} from './network-change.js'
 
 vi.mock('execa')
 vi.mock('fs-extra')
 vi.mock('systeminformation')
-vi.mock('./machine-bridge.js', () => ({machineBridgeChangePending: vi.fn(() => false)}))
+vi.mock('p-wait-for')
+vi.mock('./machine-bridge.js', async () => ({
+	...(await vi.importActual<typeof import('./machine-bridge.js')>('./machine-bridge.js')),
+	machineBridgeChangePending: vi.fn(() => false),
+}))
 
 const physicalUuid = '11111111-1111-4111-8111-111111111111'
 const bridgeUuid = '22222222-2222-4222-8222-222222222222'
@@ -215,5 +222,81 @@ describe('physical interfaces backed by a LAN bridge', () => {
 		expect($).not.toHaveBeenCalled()
 		expect(settings[mac]).toEqual(staticConfig)
 		expect(titand.store.getWriteLock).not.toHaveBeenCalled()
+	})
+
+	test('keeps bridge preparation blocked throughout a static IP browser-confirmation operation', async () => {
+		let reachConfirmation!: () => void
+		const waiting = new Promise<void>((resolve) => {
+			reachConfirmation = resolve
+		})
+		let finishConfirmation!: () => void
+		vi.mocked(pWaitFor).mockImplementation(async (condition) => {
+			reachConfirmation()
+			await new Promise<void>((resolve) => {
+				finishConfirmation = resolve
+			})
+			expect(await condition()).toBe(true)
+		})
+		const adapter = {
+			uplink: vi.fn(async () => {
+				throw new Error('[machine-bridge-unsupported]')
+			}),
+			close: vi.fn(),
+		} as unknown as BridgeNetworkManager
+		const bridge = new AutomaticMachineBridge(adapter)
+		const applying = setStaticIp(createTitand(), {mac, ...staticConfig})
+		await waiting
+		expect(hostNetworkChangePending()).toBe(true)
+		await expect(bridge.availability()).resolves.toEqual({available: false, reason: 'busy'})
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-busy]')
+		expect(adapter.uplink).not.toHaveBeenCalled()
+		confirmStaticIp(staticConfig.ip)
+		finishConfirmation()
+		await applying
+		expect(hostNetworkChangePending()).toBe(false)
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-unsupported]')
+		expect(adapter.uplink).toHaveBeenCalledOnce()
+		await bridge.stop()
+	})
+
+	test('static IP timeout restores DHCP inside its own reservation and releases it after cleanup finishes', async () => {
+		settings = {}
+		vi.mocked(pWaitFor).mockRejectedValue(new Error('confirmation timeout'))
+		let reachCleanup!: () => void
+		const cleaning = new Promise<void>((resolve) => {
+			reachCleanup = resolve
+		})
+		let finishCleanup!: () => void
+		const execute = vi.mocked($).getMockImplementation()!
+		vi.mocked($).mockImplementation((async (template: TemplateStringsArray, ...values: unknown[]) => {
+			if (template.join('').includes('ipv4.method auto')) {
+				reachCleanup()
+				await new Promise<void>((resolve) => {
+					finishCleanup = resolve
+				})
+			}
+				return execute(template, ...(values as never[]))
+		}) as never)
+		const adapter = {
+			uplink: vi.fn(async () => {
+				throw new Error('[machine-bridge-unsupported]')
+			}),
+			close: vi.fn(),
+		} as unknown as BridgeNetworkManager
+		const bridge = new AutomaticMachineBridge(adapter)
+		const applying = setStaticIp(createTitand(), {mac, ...staticConfig})
+		const rejected = expect(applying).rejects.toThrow('Static IP change was not confirmed within 30 seconds')
+		await cleaning
+		expect(hostNetworkChangePending()).toBe(true)
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-busy]')
+		expect(adapter.uplink).not.toHaveBeenCalled()
+		finishCleanup()
+		await rejected
+		expect(hostNetworkChangePending()).toBe(false)
+		expect(modifyCalls().map((call) => call[0].join(''))).toEqual(
+			expect.arrayContaining([expect.stringContaining('ipv4.method auto')]),
+		)
+		await expect(bridge.prepare('owner-session')).rejects.toThrow('[machine-bridge-unsupported]')
+		await bridge.stop()
 	})
 })

@@ -16,6 +16,7 @@ import pWaitFor from 'p-wait-for'
 import {getGpuDeviceUsage, type GpuDeviceUsage} from '../hardware/gpu-usage.js'
 import {resolveTitanHostname} from './hostname-policy.js'
 import {machineBridgeChangePending} from './machine-bridge.js'
+import {withHostNetworkChange} from './network-change.js'
 
 function assertNetworkNotChanging() {
 	if (machineBridgeChangePending()) throw new Error('[machine-bridge-busy]')
@@ -656,53 +657,57 @@ export async function getWifiNetworks() {
 
 export async function deleteWifiConnections({inactiveOnly = false}: {inactiveOnly?: boolean}) {
 	assertNetworkNotChanging()
-	const connections = await $`nmcli --terse --fields UUID,TYPE,ACTIVE connection`
-	for (const connection of connections.stdout.split('\n')) {
-		const [uuid, type, active] = connection.split(':')
-		// Type will be something like '802-11-wireless'
-		if (!type?.includes('wireless')) continue
-		if (inactiveOnly && active === 'yes') continue
-		await $`nmcli connection delete ${uuid}`
-	}
+	return withHostNetworkChange(async () => {
+		const connections = await $`nmcli --terse --fields UUID,TYPE,ACTIVE connection`
+		for (const connection of connections.stdout.split('\n')) {
+			const [uuid, type, active] = connection.split(':')
+			// Type will be something like '802-11-wireless'
+			if (!type?.includes('wireless')) continue
+			if (inactiveOnly && active === 'yes') continue
+			await $`nmcli connection delete ${uuid}`
+		}
+	})
 }
 
 export async function connectToWiFiNetwork({ssid, password}: {ssid: string; password?: string}) {
 	assertNetworkNotChanging()
-	let connection
-	if (password !== undefined) {
-		connection = $`nmcli device wifi connect ${ssid} password ${password}`
-	} else {
-		connection = $`nmcli device wifi connect ${ssid}`
-	}
-
-	try {
-		await connection
-
-		// Destroy any inactive WiFi connections incase we just transitioned
-		// from a previous wireless connection. We don't wanna leave that
-		// conneciton in NetworkManager since it will be out of sync with titand.
-		try {
-			await deleteWifiConnections({inactiveOnly: true})
-		} catch (error) {
-			console.log(`Failed to cleanup WiFi connections: ${(error as Error).message}`)
+	return withHostNetworkChange(async () => {
+		let connection
+		if (password !== undefined) {
+			connection = $`nmcli device wifi connect ${ssid} password ${password}`
+		} else {
+			connection = $`nmcli device wifi connect ${ssid}`
 		}
 
-		return true
-	} catch (error) {
-		// We destroy the failed WiFi connection if we fail to connect to the network.
-		// This is so titand retains ownership of the network connection management.
-		// Otherwise if this fails nmcli will remember the connection and try to reconnect
-		// which titand is not aware of.
 		try {
-			await deleteWifiConnections({inactiveOnly: true})
-		} catch (error) {
-			console.log(`Failed to cleanup WiFi connections: ${(error as Error).message}`)
-		}
+			await connection
 
-		if (connection.exitCode === 10) throw new Error('Network not found')
-		if (connection.exitCode === 1 || connection.exitCode === 4) throw new Error('Incorrect password')
-		throw new Error('Connection failed')
-	}
+			// Destroy any inactive WiFi connections incase we just transitioned
+			// from a previous wireless connection. We don't wanna leave that
+			// conneciton in NetworkManager since it will be out of sync with titand.
+			try {
+				await deleteWifiConnections({inactiveOnly: true})
+			} catch (error) {
+				console.log(`Failed to cleanup WiFi connections: ${(error as Error).message}`)
+			}
+
+			return true
+		} catch (error) {
+			// We destroy the failed WiFi connection if we fail to connect to the network.
+			// This is so titand retains ownership of the network connection management.
+			// Otherwise if this fails nmcli will remember the connection and try to reconnect
+			// which titand is not aware of.
+			try {
+				await deleteWifiConnections({inactiveOnly: true})
+			} catch (error) {
+				console.log(`Failed to cleanup WiFi connections: ${(error as Error).message}`)
+			}
+
+			if (connection.exitCode === 10) throw new Error('Network not found')
+			if (connection.exitCode === 1 || connection.exitCode === 4) throw new Error('Incorrect password')
+			throw new Error('Connection failed')
+		}
+	})
 }
 
 export async function restoreWiFi(titand: Titand): Promise<void> {
@@ -1005,83 +1010,89 @@ export async function setStaticIp(
 	config: {mac: string; ip: string; subnetPrefix: number; gateway: string; dns: string[]},
 ) {
 	assertNetworkNotChanging()
-	const {mac, ip, subnetPrefix, gateway, dns} = config
-	const networkInterface = await getInterfaceByMac(mac)
-	if (networkInterface.type === 'wifi') throw new Error('Static IP is not supported for WiFi interfaces')
+	return withHostNetworkChange(async () => {
+		const {mac, ip, subnetPrefix, gateway, dns} = config
+		const networkInterface = await getInterfaceByMac(mac)
+		if (networkInterface.type === 'wifi') throw new Error('Static IP is not supported for WiFi interfaces')
 
-	// Capture previous config for rollback
-	const currentSettings = await titand.store.get('settings.staticIp')
-	const previousConfig = currentSettings?.[mac] ? {mac, ...currentSettings[mac]} : null
+		// Capture previous config for rollback
+		const currentSettings = await titand.store.get('settings.staticIp')
+		const previousConfig = currentSettings?.[mac] ? {mac, ...currentSettings[mac]} : null
 
-	// Apply the new config
-	await applyStaticIp(config)
+		// Apply the new config
+		await applyStaticIp(config)
 
-	// Wait for the client to confirm connectivity by calling confirmStaticIp
-	// with the new IP. If not confirmed within 30 seconds, revert.
-	confirmedStaticIp = ''
-	try {
-		await pWaitFor(() => confirmedStaticIp === ip, {interval: 100, timeout: 30_000})
-	} catch {
-		// Timed out — revert to previous config
-		if (previousConfig) await applyStaticIp(previousConfig).catch(() => {})
-		else await clearStaticIp(titand, {mac}).catch(() => {})
-		throw new Error('Static IP change was not confirmed within 30 seconds, reverted to previous settings')
-	}
+		// Wait for the client to confirm connectivity by calling confirmStaticIp
+		// with the new IP. If not confirmed within 30 seconds, revert.
+		confirmedStaticIp = ''
+		try {
+			await pWaitFor(() => confirmedStaticIp === ip, {interval: 100, timeout: 30_000})
+		} catch {
+			// Timed out — revert to previous config
+			if (previousConfig) await applyStaticIp(previousConfig).catch(() => {})
+			else await clearStaticIp(titand, {mac}).catch(() => {})
+			throw new Error('Static IP change was not confirmed within 30 seconds, reverted to previous settings')
+		}
 
-	// If we haven't thrown by now the new static IP settings are confirmed to be working, so we can persist them.
-	// Persist to store so settings survive reboots
-	await titand.store.getWriteLock(async ({get, set}) => {
-		const settings = (await get('settings.staticIp')) ?? {}
-		settings[mac] = {ip, subnetPrefix, gateway, dns}
-		await set('settings.staticIp', settings)
+		// If we haven't thrown by now the new static IP settings are confirmed to be working, so we can persist them.
+		// Persist to store so settings survive reboots
+		await titand.store.getWriteLock(async ({get, set}) => {
+			const settings = (await get('settings.staticIp')) ?? {}
+			settings[mac] = {ip, subnetPrefix, gateway, dns}
+			await set('settings.staticIp', settings)
+		})
+		await titand.lanIngress.refresh().catch((error) => titand.logger.error('Failed to refresh LAN ingress', error))
 	})
-	await titand.lanIngress.refresh().catch((error) => titand.logger.error('Failed to refresh LAN ingress', error))
 }
 
 // Clear static IP and revert to DHCP
 export async function clearStaticIp(titand: Titand, {mac}: {mac: string}) {
 	assertNetworkNotChanging()
-	const networkInterface = await getInterfaceByMac(mac)
-	const device = networkInterface.id
-	const connection = await getConnectionByDevice(device)
-	if (connection) {
-		await $`nmcli connection modify ${connection} ipv4.method auto ipv4.addresses ${''} ipv4.gateway ${''} ipv4.dns ${''}`
-		// If the interface is disconnected we still want to clear the saved
-		// profile, but there is no live connection to bounce.
-		if (networkInterface.connected) {
-			await $`nmcli connection down ${connection}`
-			await $`nmcli connection up ${connection}`
+	return withHostNetworkChange(async () => {
+		const networkInterface = await getInterfaceByMac(mac)
+		const device = networkInterface.id
+		const connection = await getConnectionByDevice(device)
+		if (connection) {
+			await $`nmcli connection modify ${connection} ipv4.method auto ipv4.addresses ${''} ipv4.gateway ${''} ipv4.dns ${''}`
+			// If the interface is disconnected we still want to clear the saved
+			// profile, but there is no live connection to bounce.
+			if (networkInterface.connected) {
+				await $`nmcli connection down ${connection}`
+				await $`nmcli connection up ${connection}`
+			}
 		}
-	}
 
-	// Remove from store
-	await titand.store.getWriteLock(async ({get, set}) => {
-		const settings = (await get('settings.staticIp')) ?? {}
-		delete settings[mac]
-		await set('settings.staticIp', settings)
+		// Remove from store
+		await titand.store.getWriteLock(async ({get, set}) => {
+			const settings = (await get('settings.staticIp')) ?? {}
+			delete settings[mac]
+			await set('settings.staticIp', settings)
+		})
+		await titand.lanIngress.refresh().catch((error) => titand.logger.error('Failed to refresh LAN ingress', error))
 	})
-	await titand.lanIngress.refresh().catch((error) => titand.logger.error('Failed to refresh LAN ingress', error))
 }
 
 // Restore static IP settings from store on startup
 export async function restoreStaticIp(titand: Titand): Promise<void> {
 	if (machineBridgeChangePending()) return
-	const settings = await titand.store.get('settings.staticIp')
-	if (!settings) return
+	return withHostNetworkChange(async () => {
+		const settings = await titand.store.get('settings.staticIp')
+		if (!settings) return
 
-	for (const [mac, config] of Object.entries(settings)) {
-		try {
-			const networkInterface = await getInterfaceByMac(mac)
-			if (networkInterface.type === 'wifi') {
-				titand.logger.log(`Skipping static IP restore for ${mac}: WiFi interfaces are not supported`)
-				continue
+		for (const [mac, config] of Object.entries(settings)) {
+			try {
+				const networkInterface = await getInterfaceByMac(mac)
+				if (networkInterface.type === 'wifi') {
+					titand.logger.log(`Skipping static IP restore for ${mac}: WiFi interfaces are not supported`)
+					continue
+				}
+				const device = await applyStaticIp({mac, ...config})
+				titand.logger.log(`Restored static IP for ${mac} (${device})`)
+			} catch (error) {
+				titand.logger.error(`Failed to restore static IP for ${mac}`, error)
 			}
-			const device = await applyStaticIp({mac, ...config})
-			titand.logger.log(`Restored static IP for ${mac} (${device})`)
-		} catch (error) {
-			titand.logger.error(`Failed to restore static IP for ${mac}`, error)
 		}
-	}
+	})
 }
 
 const syncDnsQueue = new PQueue({concurrency: 1})
@@ -1090,17 +1101,19 @@ const syncDnsQueue = new PQueue({concurrency: 1})
 export async function syncDns() {
 	return await syncDnsQueue.add(async () => {
 		assertNetworkNotChanging()
-		const {mtimeMs: mtimeBefore} = await fse.promises.stat('/etc/resolv.conf')
-		await $`systemctl restart titan-dns-sync`
-		await setTimeout(1000) // evade restart limits
-		await $`systemctl restart NetworkManager`
-		let retries = 2
-		do {
-			await setTimeout(1000)
-			const {mtimeMs: mtimeAfter} = await fse.promises.stat('/etc/resolv.conf')
-			if (mtimeAfter > mtimeBefore) return true
-		} while (retries--)
-		return false
+		return withHostNetworkChange(async () => {
+			const {mtimeMs: mtimeBefore} = await fse.promises.stat('/etc/resolv.conf')
+			await $`systemctl restart titan-dns-sync`
+			await setTimeout(1000) // evade restart limits
+			await $`systemctl restart NetworkManager`
+			let retries = 2
+			do {
+				await setTimeout(1000)
+				const {mtimeMs: mtimeAfter} = await fse.promises.stat('/etc/resolv.conf')
+				if (mtimeAfter > mtimeBefore) return true
+			} while (retries--)
+			return false
+		})
 	})
 }
 
