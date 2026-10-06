@@ -114,9 +114,9 @@ function fakeNetwork(
 }
 
 const coordinators: AutomaticMachineBridge[] = []
-function coordinator(network = fakeNetwork()) {
+function coordinator(network = fakeNetwork(), log?: (error: unknown) => void) {
 	vi.useFakeTimers()
-	const bridge = new AutomaticMachineBridge(network)
+	const bridge = new AutomaticMachineBridge(network, log)
 	coordinators.push(bridge)
 	return {bridge, network}
 }
@@ -335,7 +335,7 @@ describe('automatic VM LAN bridge profiles', () => {
 		expect(native.invoke.mock.calls[0][0]).toMatchObject({
 			member: 'CheckpointCreate',
 			signature: 'aouu',
-			body: [['/device/1'], 120, 6],
+			body: [['/device/1'], 120, 2],
 		})
 		expect(native.invoke.mock.calls[1][0]).toMatchObject({
 			member: 'CheckpointAdjustRollbackTimeout',
@@ -507,6 +507,21 @@ describe('automatic VM bridge checkpoint and confirmation', () => {
 		await expect(bridge.confirm(prepared.token, 'owner-session')).rejects.toThrow(
 			'[machine-bridge-confirmation-expired]',
 		)
+	})
+
+	test('retains the NetworkManager checkpoint rejection without creating or activating profiles', async () => {
+		const log = vi.fn()
+		const {bridge, network} = coordinator(fakeNetwork(), log)
+		const cause = new Error('org.freedesktop.NetworkManager.InvalidArguments')
+		const error = new Error('[machine-bridge-unavailable]', {cause})
+		vi.mocked(network.checkpoint).mockRejectedValueOnce(error)
+		const prepared = await bridge.prepare('owner-session')
+		await vi.advanceTimersByTimeAsync(750)
+		expect(log).toHaveBeenCalledWith(error)
+		expect(network.add).not.toHaveBeenCalled()
+		expect(network.activate).not.toHaveBeenCalled()
+		await expect(bridge.confirm(prepared.token, 'owner-session')).rejects.toThrow('[machine-bridge-unavailable]')
+		await expect(bridge.availability()).resolves.toMatchObject({available: true})
 	})
 
 	test('rolls back a failed activation and permits a later setup attempt', async () => {

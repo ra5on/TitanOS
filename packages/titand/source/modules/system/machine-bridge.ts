@@ -249,7 +249,9 @@ export class NativeBridgeNetworkManager implements BridgeNetworkManager {
 			await this.#call(NM_PATH, NM, 'CheckpointCreate', 'aouu', [
 				[devicePath],
 				MACHINE_BRIDGE_ROLLBACK_SECONDS,
-				0x02 | 0x04,
+				// DISCONNECT_NEW_DEVICES requires an empty device list (all NICs).
+				// Snapshot only the actual uplink; delete the new profiles on rollback.
+				0x02,
 			])
 		)[0] as string
 	}
@@ -607,6 +609,7 @@ export default class AutomaticMachineBridge {
 			pending.state = 'awaiting-confirmation'
 		} catch (error) {
 			pending.error ??= error instanceof Error ? error : new Error('[machine-bridge-unavailable]')
+			this.#log(pending.error)
 			await this.#rollback(pending)
 		}
 	}
@@ -691,6 +694,7 @@ export default class AutomaticMachineBridge {
 				return {state: 'ready' as const, bridge: AUTOMATIC_MACHINE_BRIDGE}
 			} catch (error) {
 				pending.error ??= error instanceof Error ? error : new Error('[machine-bridge-unavailable]')
+				this.#log(pending.error)
 				await this.#rollback(pending)
 				throw pending.error
 			}
