@@ -9,7 +9,7 @@ from unittest.mock import patch
 import zipfile
 
 from titan.app_packages import prepare_options
-from titan.app_stores import StoreMixin
+from titan.app_stores import StoreMixin, bundled_stores
 from titan.catalog import APPS, catalog, compose, published_ports, requested_host_ports, validate_options
 from titan.compose_templates import translate
 from titan.core import Error
@@ -126,6 +126,109 @@ class DockerTemplateTests(unittest.TestCase):
             self.assertEqual(prepare_options(app, user, options), options)
             with self.assertRaises(Error): compose(app, '/control/app', 991, 992, 18080, '/nas/data', user)
         self.assertNotIn('published-password', json.dumps(template))
+
+    def test_password_abbreviations_are_private_fields_without_matching_other_words(self):
+        source = {'services': {'web': {'image': 'example/web:1', 'ports': ['8080:80'],
+            'environment': {key: 'public-default' for key in
+                ('PASS', 'AUTH_PASS', 'PASSWD', 'DB_PASSWD', 'PWD', 'LOGIN_PWD',
+                 'BYPASS', 'COMPASS', 'PASSAGE', 'PWDOWN')}}}}
+        template = translate(source, 'example', 'owner/store', {'port': '8080'})
+        fields = {field['label'].split(' · ')[0]: field for field in template['stack_fields']}
+        for key in ('PASS', 'AUTH_PASS', 'PASSWD', 'DB_PASSWD', 'PWD', 'LOGIN_PWD'):
+            with self.subTest(key=key):
+                self.assertEqual(fields[key]['type'], 'password')
+                self.assertEqual(fields[key]['default'], '')
+                self.assertEqual(fields[key]['min_length'], 1)
+                self.assertNotIn('generated', fields[key])
+        for key in ('BYPASS', 'COMPASS', 'PASSAGE', 'PWDOWN'):
+            self.assertEqual(fields[key]['type'], 'text')
+            self.assertEqual(fields[key]['default'], 'public-default')
+
+    def test_compose_fallbacks_preserve_literal_quotes_as_compose_does(self):
+        source = {'services': {'web': {'image': 'example/web:1', 'ports': ['8080:80'],
+            'environment': {'EMPTY_DOUBLE': '${VALUE:-""}', 'EMPTY_SINGLE': "${VALUE:-''}",
+                            'EMPTY_PLAIN': '${VALUE:-}', 'TEXT': '${VALUE:-ordinary}',
+                            'LITERAL_QUOTES': '""', 'BASIC_AUTH_PASS': '${BASIC_AUTH_PASS:-""}'}}}}
+        template = translate(source, 'example', 'owner/store', {'port': '8080'})
+        fields = {field['label'].split(' · ')[0]: field for field in template['stack_fields']}
+        self.assertEqual(fields['EMPTY_DOUBLE']['default'], '""')
+        self.assertEqual(fields['EMPTY_SINGLE']['default'], "''")
+        self.assertEqual(fields['EMPTY_PLAIN']['default'], '')
+        self.assertEqual(fields['TEXT']['default'], 'ordinary')
+        self.assertEqual(fields['LITERAL_QUOTES']['default'], '""')
+        self.assertEqual(fields['BASIC_AUTH_PASS']['type'], 'password')
+        self.assertTrue(fields['BASIC_AUTH_PASS']['required'])
+        self.assertNotIn('generated', fields['BASIC_AUTH_PASS'])
+
+    def test_host_listener_port_survives_first_import_and_corrects_old_refresh_suggestion(self):
+        source = {'services': {'web': {'image': 'example/web:1', 'network_mode': 'host'}}}
+        template = translate(source, 'example', 'owner/store', {'port': '14333'})
+        document = {'schema': 1, 'name': 'Example', 'apps': [template]}
+        with patch.dict(APPS, {}, clear=True), patch('titan.app_stores.fetch_document',
+                side_effect=lambda _: (copy.deepcopy(document), [])):
+            first, _ = StoreMixin.store_document(BIGBEAR)
+            self.assertEqual(first['apps'][0]['default_port'], 14333)
+            key, previous = self.parse(first['apps'][0], BIGBEAR)
+            previous['default_port'] = 20168
+            APPS[key] = previous
+            refreshed, _ = StoreMixin.store_document(BIGBEAR)
+            self.assertEqual(refreshed['apps'][0]['default_port'], 14333)
+            self.assertEqual(APPS[key]['default_port'], 20168)
+
+    def test_bundled_cloudflared_requires_a_chosen_password_and_preserves_saved_values(self):
+        apps = [app for store in bundled_stores() for app in store['document']['apps']]
+        host_templates = [app for app in apps if app.get('default_network') == 'host']
+        self.assertEqual(len(host_templates), 8)
+        for template in host_templates:
+            with self.subTest(app=template['id']):
+                self.assertEqual(template['default_port'], template['port'])
+        template = next(app for app in apps if app['id'] == 'cloudflared-web')
+        key, recipe = self.parse(template, BIGBEAR)
+        field = next(field for field in recipe['install_schema'] if field['key'] == 'stack_env_6')
+        self.assertEqual(field['type'], 'password')
+        self.assertEqual(field['default'], '')
+        with patch.dict(APPS, {key: recipe}):
+            values = {field['key']: field.get('default', '') for field in recipe['install_schema']}
+            with self.assertRaises(Error):
+                validate_options(key, values)
+            values['stack_env_6'] = 'my-chosen-private-password'
+            service = compose(key, '/control/app', 991, 992, 14333, '/nas/data', values)['services'][key]
+            self.assertEqual(service['environment']['BASIC_AUTH_PASS'], values['stack_env_6'])
+            # Even the old literal-quote password remains a saved value. The
+            # importer fixes only defaults; changing an installed secret needs
+            # an explicit edit by its owner.
+            values['stack_env_6'] = '""'
+            prepared = prepare_options(key, values, copy.deepcopy(values))
+            self.assertEqual(prepared['stack_env_6'], '""')
+            self.assertEqual(compose(key, '/control/app', 991, 992, 14333, '/nas/data', prepared)
+                             ['services'][key]['environment']['BASIC_AUTH_PASS'], '""')
+
+    def test_host_refresh_pins_installed_recipe_while_fixing_future_installation_defaults(self):
+        source = {'services': {'web': {'image': 'example/web:1', 'network_mode': 'host',
+                                      'environment': {'BASIC_AUTH_PASS': '${BASIC_AUTH_PASS:-""}'}}}}
+        updated = translate(source, 'example', 'owner/store', {'port': '14333'})
+        old = copy.deepcopy(updated)
+        old['default_port'] = 20168
+        old['stack_fields'][0].update(type='text', default='""', min_length=0)
+        old_document = {'schema': 1, 'name': 'Example', 'apps': [old]}
+        updated_document = {**old_document, 'apps': [updated]}
+        host = MemoryHost()
+        url = 'https://github.com/example/host-store'
+        with patch.dict(APPS, {}, clear=True):
+            with patch.object(host, 'store_document', return_value=(old_document, [])):
+                host.op_app_store_add(url, trusted=True)
+            key, original = self.parse(old, url)
+            host.values['apps'] = [{'id': key, 'port': 14333}]
+            store = next(row for row in host.store_records() if row['url'] == url)
+            with patch('titan.app_stores.fetch_document', return_value=(updated_document, [])):
+                host.op_app_store_refresh(store['id'])
+            refreshed = next(row for row in host.store_records() if row['url'] == url)
+            self.assertEqual(refreshed['document']['apps'][0]['default_port'], 14333)
+            self.assertEqual(refreshed['document']['apps'][0]['stack_fields'][0]['type'], 'password')
+            self.assertEqual(refreshed['retained'], [old])
+            self.assertEqual(APPS[key]['default_port'], original['default_port'])
+            self.assertEqual(APPS[key]['install_schema'], original['install_schema'])
+            self.assertEqual(host.values['apps'], [{'id': key, 'port': 14333}])
 
     def test_special_host_access_broken_volumes_and_ambiguous_webports_are_rejected(self):
         for mutate in (

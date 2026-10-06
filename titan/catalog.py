@@ -324,6 +324,39 @@ def host_port_minimum(app_id, host_mode=False):
     return 1 if host_mode or APPS[app_id].get('docker_template') else 1024
 
 
+def observed_web_port(app_id, container):
+    """Use the actual configured listener without exposing container secrets."""
+    recipe = APPS.get(app_id, {})
+    if not recipe.get('dynamic_web_port'):
+        return recipe.get('port')
+    values = [entry.split('=', 1)[1] for entry in container.get('Config', {}).get('Env') or []
+              if isinstance(entry, str) and entry.startswith('WEBUI_PORT=')]
+    if (len(values) != 1 or re.fullmatch(r'[0-9]{1,5}', values[0]) is None
+            or not 1 <= int(values[0]) <= 65535):
+        return None
+    return int(values[0])
+
+
+def legacy_cloudflared_definition(app_id, definition, port, options):
+    """Reconstruct only the former verified Cloudflared listener contract.
+
+    This is an exact comparison candidate, never a digest-based authorization
+    bypass. All image, ownership, storage, limits and device settings stay intact.
+    """
+    recipe = APPS[app_id]
+    key = recipe.get('web_port_option')
+    if not key:
+        return None
+    import copy
+    legacy = copy.deepcopy(definition)
+    primary = legacy['services'][app_id]
+    primary['environment']['WEBUI_PORT'] = str(options[key]).replace('$', '$$')
+    if 'ports' in primary:
+        primary['ports'] = [f"{port}:{recipe['port']}/tcp" if value == f'{port}:{port}/tcp' else value
+                            for value in primary['ports']]
+    return legacy
+
+
 PROTECTED_HOST_PORTS=frozenset({(22,'tcp'),(139,'tcp'),(445,'tcp'),(137,'udp'),(138,'udp'),
                               (5000,'tcp'),(5001,'tcp'),(5101,'tcp')})
 
@@ -435,6 +468,12 @@ def compose(app_id, directory, uid, gid, port, data_path, options=None, network=
         from .compose_templates import build
         from .app_devices import apply
         definition=build(app_id,app,directory,uid,gid,port,data_path,options,config_path=config_path)
+        if app.get('dynamic_web_port'):
+            primary = definition['services'][app_id]
+            primary['environment']['WEBUI_PORT'] = str(port)
+            old_mapping = f"{port}:{app['port']}/tcp"
+            primary['ports'] = [f'{port}:{port}/tcp' if value == old_mapping else value
+                                for value in primary['ports']]
         if len(app["stack"]["services"]) == 1 and selection(network)["mode"] != "default":
             from .app_networks import apply_selection
             definition["services"][app_id].pop("networks",None)
