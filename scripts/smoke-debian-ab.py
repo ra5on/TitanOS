@@ -157,30 +157,78 @@ print('prepared')
 """
 
 
-GUEST_BOOT_MEMORY_OBSERVE=r"""
+GUEST_BOOT_DAEMON_PROOF=r"""
 import json,os,re,stat,subprocess
-fd=os.open('/run/titan-boot-memory.json',os.O_RDONLY|os.O_NOFOLLOW)
-with os.fdopen(fd,'rb') as stream:
-    info=os.fstat(stream.fileno())
-    if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or info.st_size>16384:
-        raise RuntimeError('Invalid boot-memory report')
-    report=json.loads(stream.read(16385))
+expected_starts={
+    'docker.service':('docker','/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock'),
+    'libvirtd.service':('vms','/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS')}
+def fingerprint(info):
+    return (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+def unique(items):
+    value={}
+    for key,item in items:
+        if key in value:raise ValueError('Duplicate evidence key')
+        value[key]=item
+    return value
+def trusted_json(path):
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'rb') as stream:
+        before=os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_mode&0o022 or not 0<before.st_size<=16384:
+            raise ValueError('Invalid bounded evidence file')
+        raw=stream.read(16385);after=os.fstat(stream.fileno())
+        if fingerprint(before)!=fingerprint(after) or fingerprint(after)!=fingerprint(os.lstat(path)) or len(raw)!=before.st_size:
+            raise ValueError('Evidence file changed')
+    value=json.loads(raw,object_pairs_hook=unique,
+        parse_constant=lambda _:(_ for _ in ()).throw(ValueError('Invalid evidence number')))
+    if not isinstance(value,dict):raise ValueError('Invalid evidence object')
+    return value
+def positive_us(value):
+    return int(value) if isinstance(value,str) and re.fullmatch('[0-9]{1,19}',value) and 0<int(value)<2**63 else None
+def daemon_proof(unit,rows):
+    component,expected=expected_starts[unit]
+    command_match=False
+    command=re.fullmatch(r'\s*\{([^{}]*)\}\s*',rows.get('ExecStart',''))
+    if command:
+        try:
+            fields=unique(part.strip().split('=',1) for part in command.group(1).split(';') if '=' in part)
+            command_match=(fields.get('path')=='/usr/bin/python3' and fields.get('argv[]')==expected and fields.get('ignore_errors')=='no')
+        except ValueError:pass
+    configured=(rows.get('LoadState')=='loaded' and command_match and '78' in rows.get('RestartPreventExitStatus','').split())
+    main_exit=(rows.get('ActiveState')=='failed' and rows.get('Result') in ('exit-code','start-limit-hit') and
+               rows.get('ExecMainCode')=='1' and rows.get('ExecMainStatus')=='78')
+    current_marker,lifetime_marker=False,False
+    try:
+        with open('/proc/sys/kernel/random/boot_id',encoding='ascii') as stream:boot=stream.read(128).strip()
+        if not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',boot):raise ValueError('Invalid boot identity')
+        marker=trusted_json('/run/titan-boot-daemon-'+component+'.json')
+        start=positive_us(rows.get('ExecMainStartTimestampMonotonic'))
+        end=positive_us(rows.get('ExecMainExitTimestampMonotonic'))
+        denied=marker.get('denied_monotonic_us')
+        current_marker=(set(marker)=={'format','component','boot_id','reason','denied_monotonic_us'} and
+            marker.get('format')=='titan-boot-daemon-denial-v1' and marker.get('component')==component and
+            marker.get('boot_id')==boot and marker.get('reason')=='insufficient_memory' and
+            type(denied) is int and 0<denied<2**63)
+        lifetime_marker=bool(current_marker and start is not None and end is not None and start<=denied<=end)
+    except (OSError,ValueError,TypeError,UnicodeError,RecursionError):pass
+    return {'configured':configured,'main_exit_78':main_exit,'marker_current_boot':current_marker,
+            'marker_in_main_lifetime':lifetime_marker}
+"""
+
+
+GUEST_BOOT_MEMORY_OBSERVE=GUEST_BOOT_DAEMON_PROOF+r"""
+report=trusted_json('/run/titan-boot-memory.json')
 fields=('ok','reason','total_bytes','reserve_bytes','required_bytes')
 value={'report':{key:report[key] for key in fields},'services':{}}
 for unit in ('docker.service','libvirtd.service'):
-    text=subprocess.check_output(['systemctl','show',unit,'--property=ActiveState,Result,ExecStartPre'],text=True,timeout=15)
-    rows=dict(line.split('=',1) for line in text.splitlines() if '=' in line)
-    pre=rows.get('ExecStartPre','')
-    guard_failed=False
-    if len(pre)<=16384:
-        for entry in re.findall(r'\{([^{}]*)\}',pre):
-            command=dict(part.strip().split('=',1) for part in entry.split(';') if '=' in part)
-            guard_failed=guard_failed or (command.get('path')=='/usr/bin/python3' and
-                command.get('argv[]')=='/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all' and
-                command.get('ignore_errors')=='no' and command.get('code')=='exited' and command.get('status')=='1')
+    text=subprocess.check_output(['systemctl','show',unit,
+        '--property=LoadState,ActiveState,Result,ExecMainCode,ExecMainStatus,ExecStart,RestartPreventExitStatus,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic'],text=True,timeout=15)
+    if len(text)>16384:raise ValueError('Unbounded daemon state')
+    rows=unique(line.split('=',1) for line in text.splitlines() if '=' in line)
+    proof=daemon_proof(unit,rows)
     value['services'][unit]={'active':rows.get('ActiveState')=='active',
         'failed':rows.get('ActiveState')=='failed' and rows.get('Result') in ('exit-code','start-limit-hit'),
-        'guard_failed':guard_failed}
+        'guard_failed':all(proof.values())}
 print(json.dumps(value,separators=(',',':')))
 """
 
@@ -190,49 +238,34 @@ BOOT_MEMORY_FIELDS={'local_test_image_created','stopped_always_container_persist
     'file_manager_usable','physical_ram_restored_verified','daemon_autostarts_recovered','test_container_image_removed'}
 
 
-GUEST_BOOT_DIAGNOSTICS=r"""
-import json,os,re,stat,subprocess
+GUEST_BOOT_DIAGNOSTICS=GUEST_BOOT_DAEMON_PROOF+r"""
 units=('titan-firstboot.service','titan-runtime.service','titan-agent.service',
        'docker.service','libvirtd.service','libvirtd.socket','virtlogd.socket','virtlockd.socket')
 states={'ActiveState':{'active','inactive','failed','activating','deactivating','reloading','maintenance','refreshing'},
         'SubState':{'dead','running','start','start-pre','start-post','auto-restart','auto-restart-queued',
                     'failed','listening','exited','stop','stop-sigterm','stop-post','reload','condition'},
         'Result':{'success','exit-code','signal','timeout','start-limit-hit','watchdog','core-dump',
-                  'resources','protocol','exec-condition','dependency','trigger-limit-hit'}}
+                  'resources','protocol','exec-condition','dependency','trigger-limit-hit','service-start-limit-hit'},
+        'LoadState':{'loaded','not-found','bad-setting','error','masked','stub','merged'}}
 result={'units':{}}
 for unit in units:
     item={}
     try:
         response=subprocess.run(['systemctl','show',unit,
-            '--property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,ExecStartPre'],
+            '--property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,ExecStart,RestartPreventExitStatus,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic'],
             capture_output=True,text=True,timeout=2,check=False)
         if response.returncode or len(response.stdout)>16384:raise ValueError()
-        rows=[line.split('=',1) for line in response.stdout.splitlines() if '=' in line]
-        for key,value in rows:
-            if key in ('ActiveState','SubState','Result'):
+        rows=unique(line.split('=',1) for line in response.stdout.splitlines() if '=' in line)
+        for key,value in rows.items():
+            if key in states:
                 item[key]=value if value in states[key] else 'unknown'
             elif key in ('ExecMainCode','ExecMainStatus'):
                 item[key]=int(value) if re.fullmatch('[0-9]{1,5}',value) else None
-        item['guard_commands']=[]
-        for key,value in rows:
-            if key!='ExecStartPre':continue
-            for entry in re.findall(r'\{([^{}]*)\}',value):
-                command=dict(part.strip().split('=',1) for part in entry.split(';') if '=' in part)
-                expected='/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
-                if command.get('path')=='/usr/bin/python3' and command.get('argv[]')==expected:
-                    code=command.get('code','');status=command.get('status','')
-                    item['guard_commands'].append({'ignore_errors':command.get('ignore_errors')=='yes',
-                        'code':code if code in ('exited','killed','dumped') else 'unknown',
-                        'status':int(status) if re.fullmatch('[0-9]{1,5}',status) else None})
+        if unit in expected_starts:item['guard_proof']=daemon_proof(unit,rows)
     except (OSError,ValueError,subprocess.TimeoutExpired):item={'unavailable':True}
     result['units'][unit]=item
 try:
-    fd=os.open('/run/titan-boot-memory.json',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
-    with os.fdopen(fd,'rb') as stream:
-        info=os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or not 0<info.st_size<=16384:
-            raise ValueError()
-        value=json.loads(stream.read(16385))
+    value=trusted_json('/run/titan-boot-memory.json')
     report={}
     if isinstance(value,dict):
         report['ok']=value.get('ok') if type(value.get('ok')) is bool else None
@@ -241,7 +274,7 @@ try:
         for key in ('total_bytes','reserve_bytes','required_bytes','checked_at'):
             v=value.get(key);report[key]=v if type(v) is int and 0<=v<2**63 else None
     result['report']=report
-except (OSError,ValueError,TypeError):result['report']={'unavailable':True}
+except (OSError,ValueError,TypeError,RecursionError):result['report']={'unavailable':True}
 print(json.dumps(result,separators=(',',':')))
 """
 

@@ -40,6 +40,7 @@ def stage(destination):
     for source, target in (
         ('image/firstboot.py', 'usr/share/titan/firstboot.py'),
         ('image/boot-memory-guard.py', 'usr/share/titan/boot-memory-guard.py'),
+        ('image/boot-daemon-guard.py', 'usr/share/titan/boot-daemon-guard.py'),
         ('image/titan.sysusers', 'usr/lib/sysusers.d/titan.conf'),
         ('image/titan.tmpfiles', 'usr/lib/tmpfiles.d/titan.conf'),
         ('image/titan-firewall.xml', 'usr/lib/firewalld/services/titan.xml'),

@@ -33,6 +33,14 @@ BOOT_OK = Path('/run/titan-system-confirmed')
 LOCK = Path('/run/lock/titan-system-update.lock')
 BOOT_MEMORY_GUARD = Path('/usr/share/titan/boot-memory-guard.py')
 BOOT_MEMORY_REPORT = Path('/run/titan-boot-memory.json')
+BOOT_DAEMON_GUARD = Path('/usr/share/titan/boot-daemon-guard.py')
+BOOT_ID = Path('/proc/sys/kernel/random/boot_id')
+DAEMON_COMMANDS = {
+    'docker.service': ('docker', '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock'),
+    'libvirtd.service': ('vms', '/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS'),
+}
+DAEMON_MARKERS = {unit: Path('/run/titan-boot-daemon-' + component + '.json')
+                  for unit, (component, _) in DAEMON_COMMANDS.items()}
 MAX_BUNDLE = 2 * 1024**3 - 1
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
 
@@ -490,28 +498,117 @@ def reboot(repo, expected_digest, confirmation, database):
             'reboot_schedule': schedule, 'delay_seconds': 60, 'automatic_reboot': False}
 
 
+def _unit_properties(unit, properties):
+    try:
+        text = run(['systemctl', 'show', unit, '--property=' + ','.join(properties)], timeout=15)
+        if len(text) > 16384:
+            return None
+        rows = {}
+        for line in text.splitlines():
+            if '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            if key in rows:
+                return None
+            rows[key] = value
+        return rows
+    except Error:
+        return None
+
+
+def _daemon_denial(unit, start, stop):
+    """A root-owned current-boot marker belongs to this exact main execution."""
+    from .updates import strict_json
+    descriptor = None
+    try:
+        helper = BOOT_DAEMON_GUARD.lstat()
+        if (os.geteuid() != 0 or not stat.S_ISREG(helper.st_mode) or helper.st_uid != 0 or
+                helper.st_mode & 0o022):
+            return False
+        path = DAEMON_MARKERS[unit]
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_mode & 0o022 or
+                not 0 < before.st_size <= 4096):
+            return False
+        with os.fdopen(descriptor, 'rb') as stream:
+            descriptor = None
+            raw = stream.read(4097)
+            after = os.fstat(stream.fileno())
+        current = path.lstat()
+        fingerprint = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current) or len(raw) != before.st_size:
+            return False
+        marker = strict_json(raw)
+        boot = BOOT_ID.read_text().strip()
+        return (isinstance(marker, dict) and set(marker) == {'format', 'component', 'boot_id', 'reason', 'denied_monotonic_us'} and
+                marker['format'] == 'titan-boot-daemon-denial-v1' and
+                marker['component'] == DAEMON_COMMANDS[unit][0] and
+                re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', boot) is not None and
+                marker['boot_id'] == boot and marker['reason'] == 'insufficient_memory' and
+                type(marker['denied_monotonic_us']) is int and
+                0 < start <= marker['denied_monotonic_us'] <= stop)
+    except (OSError, ValueError, TypeError, Error):
+        return False
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _guard_failed_unit(unit):
-    """Only the fixed guard's failed ExecStartPre can excuse a stopped daemon."""
-    if unit not in ('docker.service', 'libvirtd.service'):
+    """Only a marked guard failure of the main process excuses a stopped daemon.
+
+    Main status survives daemon-reload; a native daemon's coincidental exit 78
+    cannot pass because its wrapper first removes the denial marker.
+    """
+    if unit not in DAEMON_COMMANDS:
+        return False
+    rows = _unit_properties(unit, ('LoadState', 'ActiveState', 'Result', 'ExecMainCode', 'ExecMainStatus',
+        'ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic', 'RestartPreventExitStatus', 'ExecStart'))
+    if (not rows or rows.get('LoadState') != 'loaded' or rows.get('ActiveState') != 'failed' or
+            rows.get('Result') not in ('exit-code', 'start-limit-hit') or
+            rows.get('ExecMainCode') != '1' or rows.get('ExecMainStatus') != '78' or
+            '78' not in rows.get('RestartPreventExitStatus', '').split()):
         return False
     try:
-        text = run(['systemctl', 'show', unit, '--property=ActiveState,Result,ExecStartPre'], timeout=15)
-    except Error:
+        start, stop = (int(rows[key]) for key in ('ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic'))
+    except (ValueError, KeyError):
         return False
-    if len(text) > 16384:
+    if not 0 < start <= stop:
         return False
-    rows = dict(line.split('=', 1) for line in text.splitlines() if '=' in line)
-    # Restart=on-failure can exhaust the start limit after repeated failures of
-    # this same pre-start guard. Its recorded command must still prove exit 1.
-    if rows.get('ActiveState') != 'failed' or rows.get('Result') not in ('exit-code', 'start-limit-hit'):
+    entries = re.findall(r'\{([^{}]*)\}', rows.get('ExecStart', ''))
+    if len(entries) != 1:
         return False
-    expected = '/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
-    for entry in re.findall(r'\{([^{}]*)\}', rows.get('ExecStartPre', '')):
-        fields = dict(part.strip().split('=', 1) for part in entry.split(';') if '=' in part)
-        if (fields.get('path') == '/usr/bin/python3' and fields.get('argv[]') == expected and
-                fields.get('ignore_errors') == 'no' and fields.get('code') == 'exited' and fields.get('status') == '1'):
-            return True
-    return False
+    fields = dict(part.strip().split('=', 1) for part in entries[0].split(';') if '=' in part)
+    if (fields.get('path') != '/usr/bin/python3' or fields.get('argv[]') != DAEMON_COMMANDS[unit][1] or
+            fields.get('ignore_errors') != 'no'):
+        return False
+    return _daemon_denial(unit, start, stop)
+
+
+def verified_guard_socket(unit):
+    """A fixed socket may hit its start limit only with its own verified denial.
+
+    This never opens the socket or activates a daemon. Missing/masked sockets,
+    unrelated failures and changed service/listener definitions remain fatal.
+    """
+    expected = {'docker.socket': ('docker.service', '/run/docker.sock (Stream)'),
+                'libvirtd.socket': ('libvirtd.service', '/run/libvirt/libvirt-sock (Stream)')}
+    if unit not in expected:
+        return False
+    properties = ('LoadState', 'ActiveState', 'SubState', 'Result', 'Service', 'Listen')
+    rows = _unit_properties(unit, properties)
+    service, listener = expected[unit]
+    if (not rows or rows.get('LoadState') != 'loaded' or rows.get('Service') != service or
+            rows.get('Listen') != listener):
+        return False
+    if (rows.get('ActiveState') == 'active' and rows.get('SubState') in ('listening', 'running') and
+            rows.get('Result') == 'success'):
+        return True
+    if (rows.get('ActiveState') != 'failed' or
+            rows.get('Result') not in ('service-start-limit-hit', 'trigger-limit-hit')):
+        return False
+    return bool(verified_boot_memory_block((service,))) and rows == _unit_properties(unit, properties)
 
 
 def _fresh_memory_block():
@@ -648,7 +745,7 @@ def confirm_boot():
         run(['mountpoint', '-q', path], timeout=10)
     for unit in ('titan-firstboot.service', 'titan-runtime.service', 'titan-agent.service',
                  'titan-web.service', 'titan-proxy.service',
-                 'smbd.service', 'libvirtd.socket'):
+                 'smbd.service', 'virtlogd.socket', 'virtlockd.socket'):
         # systemctl is-active with multiple units succeeds when ANY is active.
         # Each required service must be checked independently.
         try:
@@ -685,6 +782,15 @@ def confirm_boot():
                 raise Error('Startprüfung: libvirtd.service antwortet nicht.', 503) from None
             memory_block = vm_block
             blocked.append('vms')
+    for component, unit in (('docker', 'docker.socket'), ('vms', 'libvirtd.socket')):
+        if component in blocked:
+            if not verified_guard_socket(unit):
+                raise Error('Startprüfung: ' + unit + ' ist nicht verfügbar.', 503)
+        else:
+            try:
+                run(['systemctl', 'is-active', '--quiet', unit], timeout=30)
+            except Error:
+                raise Error('Startprüfung: ' + unit + ' ist nicht verfügbar.', 503) from None
     if blocked:
         _guard_management_health(memory_block)
     run(['testparm', '-s'], timeout=30)

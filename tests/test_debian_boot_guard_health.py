@@ -15,11 +15,18 @@ from titan.core import Error, atomic_json
 from tests import test_debian_ab_updates as ab_fixture
 
 
-def unit_status(*, state='failed', result='exit-code', status='1', argv=None):
-    argv = argv or '/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
-    return (f'ActiveState={state}\nResult={result}\nExecStartPre={{ path=/usr/bin/python3 ; '
-            f'argv[]={argv} ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; '
-            f'pid=42 ; code=exited ; status={status} }}\n')
+def unit_status(*, unit='docker.service', state='failed', result='exit-code', status='78', argv=None):
+    argv = argv or updates.DAEMON_COMMANDS[unit][1]
+    return (f'LoadState=loaded\nActiveState={state}\nResult={result}\nExecMainCode=1\nExecMainStatus={status}\n'
+            'ExecMainStartTimestampMonotonic=100\nExecMainExitTimestampMonotonic=300\nRestartPreventExitStatus=78\n'
+            f'ExecStart={{ path=/usr/bin/python3 ; argv[]={argv} ; ignore_errors=no ; code=exited ; status={status} }}\n')
+
+
+def socket_status(unit='docker.socket', state='active', result='success'):
+    service, listener = {'docker.socket': ('docker.service', '/run/docker.sock'),
+                         'libvirtd.socket': ('libvirtd.service', '/run/libvirt/libvirt-sock')}[unit]
+    return (f'LoadState=loaded\nActiveState={state}\nSubState=listening\nResult={result}\n'
+            f'Service={service}\nListen={listener} (Stream)\n')
 
 
 class FreshGuardProofTests(unittest.TestCase):
@@ -122,13 +129,17 @@ class FreshGuardProofTests(unittest.TestCase):
 
 
 class GuardUnitProofTests(unittest.TestCase):
+    def setUp(self):
+        p = patch.object(updates, '_daemon_denial', return_value=True)
+        self.denial = p.start(); self.addCleanup(p.stop)
+
     def test_exact_guard_failure_is_required_not_a_substring_or_other_exit(self):
         with patch.object(updates, 'run', return_value=unit_status()):
             self.assertTrue(updates._guard_failed_unit('docker.service'))
         for text in (unit_status(state='active'), unit_status(result='timeout'), unit_status(status='0'),
                      unit_status(argv='/usr/bin/python3 /tmp/boot-memory-guard.py --component all'),
-                     unit_status(argv='/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component docker'),
-                     unit_status(status='0') + '\nUnused=status=1',
+                     unit_status(argv=updates.DAEMON_COMMANDS['libvirtd.service'][1]),
+                     unit_status(status='0') + '\nUnused=status=78',
                      unit_status().replace('ignore_errors=no', 'ignore_errors=yes')):
             with self.subTest(text=text), patch.object(updates, 'run', return_value=text):
                 self.assertFalse(updates._guard_failed_unit('docker.service'))
@@ -145,6 +156,21 @@ class GuardUnitProofTests(unittest.TestCase):
             with self.subTest(text=text), patch.object(updates, 'run', return_value=text):
                 self.assertFalse(updates._guard_failed_unit('docker.service'))
 
+    def test_reloaded_main_status_needs_marker_and_exact_loaded_identity(self):
+        good = unit_status()
+        with patch.object(updates, 'run', return_value=good):
+            self.denial.return_value = False
+            self.assertFalse(updates._guard_failed_unit('docker.service'))
+        self.denial.return_value = True
+        for text in (good.replace('LoadState=loaded', 'LoadState=masked'),
+                     good.replace('ExecMainCode=1', 'ExecMainCode=2'),
+                     good.replace('RestartPreventExitStatus=78', 'RestartPreventExitStatus='),
+                     good.replace('StartTimestampMonotonic=100', 'StartTimestampMonotonic=0'),
+                     good.replace('ExitTimestampMonotonic=300', 'ExitTimestampMonotonic=99'),
+                     good + 'ExecMainStatus=78\n'):
+            with self.subTest(text=text), patch.object(updates, 'run', return_value=text):
+                self.assertFalse(updates._guard_failed_unit('docker.service'))
+
     def test_runtime_shared_proof_checks_both_units_before_and_after_recompute(self):
         capacity = {'total_bytes': 3, 'reserve_bytes': 1, 'required_bytes': 4}
         with patch.object(updates, '_guard_failed_unit', return_value=True) as units, \
@@ -158,8 +184,81 @@ class GuardUnitProofTests(unittest.TestCase):
             self.assertIsNone(updates.verified_boot_memory_block())
 
 
+class DenialMarkerTests(unittest.TestCase):
+    def setUp(self):
+        FreshGuardProofTests.setUp(self)
+        self.marker = self.report.parent / 'marker.json'
+        self.boot = self.report.parent / 'boot-id'
+        self.boot.write_text('01234567-89ab-cdef-0123-456789abcdef\n')
+        self.marker_value = {'format': 'titan-boot-daemon-denial-v1', 'component': 'docker',
+            'boot_id': self.boot.read_text().strip(), 'reason': 'insufficient_memory', 'denied_monotonic_us': 200}
+        for name, value in (('BOOT_DAEMON_GUARD', self.helper), ('BOOT_ID', self.boot),
+                            ('DAEMON_MARKERS', {'docker.service': self.marker})):
+            p = patch.object(updates, name, value); p.start(); self.addCleanup(p.stop)
+        atomic_json(self.marker, self.marker_value)
+
+    def test_marker_must_belong_to_current_boot_and_exact_main_lifetime(self):
+        self.assertTrue(updates._daemon_denial('docker.service', 100, 300))
+        for changes in ({'boot_id': 'ffffffff-ffff-ffff-ffff-ffffffffffff'}, {'component': 'vms'},
+                        {'reason': 'invalid_state'}, {'reason': 'unknown_memory'}, {'denied_monotonic_us': 99},
+                        {'denied_monotonic_us': 301}, {'denied_monotonic_us': True}, {'unexpected': 1}):
+            with self.subTest(changes=changes):
+                atomic_json(self.marker, {**self.marker_value, **changes})
+                self.assertFalse(updates._daemon_denial('docker.service', 100, 300))
+
+    def test_missing_writable_symlink_or_untrusted_wrapper_cannot_excuse_native_exit_78(self):
+        self.marker.unlink()
+        self.assertFalse(updates._daemon_denial('docker.service', 100, 300))
+        atomic_json(self.marker, self.marker_value); self.marker.chmod(0o666)
+        self.assertFalse(updates._daemon_denial('docker.service', 100, 300))
+        self.marker.unlink(); self.marker.symlink_to(self.report)
+        self.assertFalse(updates._daemon_denial('docker.service', 100, 300))
+        self.marker.unlink(); atomic_json(self.marker, self.marker_value); self.helper.chmod(0o666)
+        self.assertFalse(updates._daemon_denial('docker.service', 100, 300))
+
+
+class GuardSocketTests(unittest.TestCase):
+    def test_active_canonical_socket_does_not_activate_daemon(self):
+        with patch.object(updates, 'run', return_value=socket_status()) as command, \
+                patch.object(updates, 'verified_boot_memory_block') as guard:
+            self.assertTrue(updates.verified_guard_socket('docker.socket'))
+        guard.assert_not_called()
+        self.assertEqual(command.call_args.args[0][:3], ['systemctl', 'show', 'docker.socket'])
+
+    def test_failed_socket_requires_own_fresh_guard_and_stable_exact_identity(self):
+        for unit in ('docker.socket', 'libvirtd.socket'):
+            for result in ('service-start-limit-hit', 'trigger-limit-hit'):
+                with self.subTest(unit=unit, result=result), \
+                        patch.object(updates, 'run', return_value=socket_status(unit, 'failed', result)), \
+                        patch.object(updates, 'verified_boot_memory_block', return_value={'total_bytes': 3}) as guard:
+                    self.assertTrue(updates.verified_guard_socket(unit))
+                    guard.assert_called_once_with(('docker.service' if unit == 'docker.socket' else 'libvirtd.service',))
+        good = socket_status('docker.socket', 'failed', 'service-start-limit-hit')
+        with patch.object(updates, 'run', side_effect=[good, good.replace('docker.sock', 'other.sock')]), \
+                patch.object(updates, 'verified_boot_memory_block', return_value={'total_bytes': 3}):
+            self.assertFalse(updates.verified_guard_socket('docker.socket'))
+
+    def test_missing_masked_wrong_service_listener_and_unrelated_failures_are_fatal(self):
+        for text in (socket_status().replace('loaded', 'masked'), socket_status().replace('docker.service', 'other.service'),
+                     socket_status().replace('docker.sock', 'other.sock'), socket_status(state='failed', result='timeout'),
+                     socket_status(state='failed', result='exit-code')):
+            with self.subTest(text=text), patch.object(updates, 'run', return_value=text), \
+                    patch.object(updates, 'verified_boot_memory_block') as guard:
+                self.assertFalse(updates.verified_guard_socket('docker.socket'))
+                guard.assert_not_called()
+        with patch.object(updates, 'run', return_value=socket_status(state='failed', result='service-start-limit-hit')), \
+                patch.object(updates, 'verified_boot_memory_block', return_value=None):
+            self.assertFalse(updates.verified_guard_socket('docker.socket'))
+        with patch.object(updates, 'run') as command:
+            self.assertFalse(updates.verified_guard_socket('virtlogd.socket'))
+            command.assert_not_called()
+
+
 class GuardedBootHealthTests(unittest.TestCase):
-    setUp = ab_fixture.DebianABTests.setUp
+    def setUp(self):
+        ab_fixture.DebianABTests.setUp(self)
+        p = patch.object(updates, '_daemon_denial', return_value=True)
+        p.start(); self.addCleanup(p.stop)
     state = ab_fixture.DebianABTests.state
 
     def blocked_commands(self, args, **kwargs):
@@ -169,7 +268,9 @@ class GuardedBootHealthTests(unittest.TestCase):
         if args == ['systemctl', 'is-active', '--quiet', 'docker.service']:
             raise Error('SECRET arbitrary stderr')
         if args[:2] == ['systemctl', 'show']:
-            return unit_status()
+            if args[2].endswith('.socket'):
+                return socket_status(args[2])
+            return unit_status(unit=args[2])
         if args[0] in ('docker', 'virsh'):
             raise AssertionError('Blocked daemon must not be socket activated')
         return ''
@@ -191,7 +292,7 @@ class GuardedBootHealthTests(unittest.TestCase):
 
     def test_all_core_units_still_required_under_ram_protection(self):
         for unit in ('titan-firstboot.service', 'titan-runtime.service', 'titan-agent.service',
-                     'titan-web.service', 'titan-proxy.service', 'smbd.service', 'libvirtd.socket'):
+                     'titan-web.service', 'titan-proxy.service', 'smbd.service', 'virtlogd.socket', 'virtlockd.socket'):
             with self.subTest(unit=unit):
                 updates.save_state(self.state())
                 self.commands.clear()
@@ -227,7 +328,7 @@ class GuardedBootHealthTests(unittest.TestCase):
         updates.save_state(self.state())
         def execute(args, **kwargs):
             if args[:3] == ['systemctl', 'show', 'libvirtd.service']:
-                return unit_status(status='2')
+                return unit_status(unit='libvirtd.service', status='2')
             if args[0] == 'virsh':
                 raise Error('SECRET daemon broken')
             return self.blocked_commands(args, **kwargs)

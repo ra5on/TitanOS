@@ -299,8 +299,8 @@ class OfflineBootMemoryTests(unittest.TestCase):
             requirements = [line for line in text.splitlines() if line.startswith(('Requires=', 'Requisite=', 'BindsTo='))]
             self.assertFalse(any(any(service in line for service in ('docker', 'libvirt', 'titan-runtime')) for line in requirements))
         configure = (ROOT / 'image/debian/configure-guest.sh').read_text()
-        self.assertIn('for task_service in docker libvirtd;', configure)
-        self.assertIn('ExecStartPre=/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all', configure)
+        self.assertIn('/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --install-dropins', configure)
+        self.assertNotIn('ExecStartPre=/usr/bin/python3 /usr/share/titan/boot-memory-guard.py', configure)
         self.assertNotIn('libvirtd.socket.d/titan-memory.conf', configure)
         self.assertNotIn('docker.socket.d/titan-memory.conf', configure)
 

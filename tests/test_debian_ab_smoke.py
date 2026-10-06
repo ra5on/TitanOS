@@ -152,86 +152,169 @@ class BootMemoryLifecycleTests(unittest.TestCase):
             command.assert_not_called()
 
 
-class BootMemoryUnitObservationTests(unittest.TestCase):
-    def observe(self, result='exit-code', status='1', command=None, state='failed'):
-        report={'ok':False,'reason':'insufficient_memory','total_bytes':3*1024**3,
-                'reserve_bytes':512*1024**2,'required_bytes':4*1024**3+512*1024**2}
-        command=command or '/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all'
-        unit=(f'ActiveState={state}\nResult={result}\nExecStartPre={{ path=/usr/bin/python3 ; '
-              f'argv[]={command} ; ignore_errors=no ; code=exited ; status={status} }}\n')
+BOOT_ID='11111111-2222-3333-4444-555555555555'
+START_COMMANDS={
+    'docker.service':'/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component docker -- /usr/sbin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock',
+    'libvirtd.service':'/usr/bin/python3 -I /usr/share/titan/boot-daemon-guard.py --component vms -- /usr/sbin/libvirtd $LIBVIRTD_ARGS'}
+
+
+class BootEvidenceFixture:
+    def service(self, unit, changes=None):
+        rows={'LoadState':'loaded','ActiveState':'failed','SubState':'failed','Result':'exit-code',
+              'ExecMainCode':'1','ExecMainStatus':'78','RestartPreventExitStatus':'78',
+              'ExecMainStartTimestampMonotonic':'1000','ExecMainExitTimestampMonotonic':'2000',
+              'ExecStart':'{ path=/usr/bin/python3 ; argv[]='+START_COMMANDS[unit]+' ; ignore_errors=no ; code=exited ; status=78 }'}
+        rows.update(changes or {})
+        return ''.join(key+'='+value+'\n' for key,value in rows.items())
+
+    def execute_evidence(self, script, report, units, marker_changes=None, marker_kind='regular', marker_mode=0o600, marker_uid=0, report_kind='regular'):
         with tempfile.TemporaryDirectory() as temporary:
-            path=Path(temporary)/'report.json';path.write_text(json.dumps(report));path.chmod(0o644)
+            root=Path(temporary);path=root/'report.json';path.write_text(json.dumps(report));path.chmod(0o644)
+            if report_kind=='symlink':
+                real=root/'report-target.json';path.rename(real);path.symlink_to(real)
+            elif report_kind=='oversize':path.write_bytes(b'x'*16385)
+            (root/'boot-id').write_text(BOOT_ID+'\n')
+            for component in ('docker','vms'):
+                marker={'format':'titan-boot-daemon-denial-v1','component':component,'boot_id':BOOT_ID,
+                        'reason':'insufficient_memory','denied_monotonic_us':1500}
+                marker.update(marker_changes or {})
+                target=root/('marker-'+component+'.json')
+                if marker_kind=='missing':continue
+                if marker_kind=='fifo':os.mkfifo(target);continue
+                target.write_text(json.dumps(marker));target.chmod(marker_mode)
+                if marker_kind=='symlink':
+                    real=root/(component+'-target.json');target.rename(real);target.symlink_to(real)
+                elif marker_kind=='oversize':target.write_bytes(b'x'*16385)
+                elif marker_kind=='duplicate':target.write_text('{"reason":"insufficient_memory",'+json.dumps(marker)[1:])
             original=os.fstat
             def owned(fd):
                 info=original(fd)
-                return SimpleNamespace(st_mode=info.st_mode,st_uid=0,st_size=info.st_size)
-            script=ab.GUEST_BOOT_MEMORY_OBSERVE.replace('/run/titan-boot-memory.json',str(path))
-            with patch.object(os,'fstat',side_effect=owned),patch.object(subprocess,'check_output',return_value=unit),contextlib.redirect_stdout(io.StringIO()) as output:
+                uid=marker_uid if Path(os.readlink(f'/proc/self/fd/{fd}')).name.startswith('marker-') else 0
+                return SimpleNamespace(st_mode=info.st_mode,st_uid=uid,st_size=info.st_size,
+                    st_dev=info.st_dev,st_ino=info.st_ino,st_mtime_ns=info.st_mtime_ns,st_ctime_ns=info.st_ctime_ns)
+            script=script.replace('/run/titan-boot-memory.json',str(path)).replace('/run/titan-boot-daemon-',str(root/'marker-')).replace('/proc/sys/kernel/random/boot_id',str(root/'boot-id'))
+            commands=[]
+            def state(args,**kwargs):
+                commands.append(args)
+                return units[args[2]]
+            def response(args,**kwargs):
+                return SimpleNamespace(returncode=0,stdout=state(args),stderr='SECRET diagnostic stderr')
+            with patch.object(os,'fstat',side_effect=owned),patch.object(subprocess,'check_output',side_effect=state),patch.object(subprocess,'run',side_effect=response),contextlib.redirect_stdout(io.StringIO()) as output:
                 exec(script,{})
-        return json.loads(output.getvalue())
+        return json.loads(output.getvalue()),commands
+
+
+class BootMemoryUnitObservationTests(BootEvidenceFixture,unittest.TestCase):
+    def observe(self, properties=None, **options):
+        report={'ok':False,'reason':'insufficient_memory','total_bytes':3*1024**3,
+                'reserve_bytes':512*1024**2,'required_bytes':4*1024**3+512*1024**2}
+        units={unit:self.service(unit,properties) for unit in START_COMMANDS}
+        value,commands=self.execute_evidence(ab.GUEST_BOOT_MEMORY_OBSERVE,report,units,**options)
+        self.assertEqual(len(commands),2)
+        self.assertTrue(all('ExecMainStatus' in command[3] and 'ExecStartPre' not in command[3] for command in commands))
+        return value
 
     def test_guard_restart_limit_is_an_observed_block_not_a_daemon_timeout(self):
         for result in ('exit-code','start-limit-hit'):
             with self.subTest(result=result):
-                self.assertIsNotNone(ab.blocked_boot_observation(self.observe(result=result)))
+                self.assertIsNotNone(ab.blocked_boot_observation(self.observe({'Result':result})))
         for result in ('timeout','signal','success','watchdog'):
             with self.subTest(result=result):
-                self.assertIsNone(ab.blocked_boot_observation(self.observe(result=result)))
-        self.assertIsNone(ab.blocked_boot_observation(self.observe(state='activating')))
+                self.assertIsNone(ab.blocked_boot_observation(self.observe({'Result':result})))
+        self.assertIsNone(ab.blocked_boot_observation(self.observe({'ActiveState':'activating'})))
 
     def test_similar_command_or_exit_status_does_not_claim_the_guard_ran(self):
-        for changes in ({'status':'12'},{'status':'0'},
-                        {'command':'/usr/bin/python3 /tmp/boot-memory-guard.py --component all'},
-                        {'command':'/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all --extra'},
-                        {'command':'/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component docker'}):
+        docker='{ path=/usr/bin/python3 ; argv[]='+START_COMMANDS['docker.service']+' ; ignore_errors=no }'
+        for changes in ({'ExecMainStatus':'12'},{'ExecMainStatus':'0'},{'ExecMainCode':'0'},
+                        {'LoadState':'not-found'},{'RestartPreventExitStatus':'178'},
+                        {'ExecStart':docker.replace('/usr/share/titan/','/tmp/')},
+                        {'ExecStart':docker.replace('ignore_errors=no','ignore_errors=yes')},
+                        {'ExecStart':docker.replace(' ; ignore_errors',' --extra ; ignore_errors')},
+                        {'ExecStart':docker+' '+docker}):
             with self.subTest(changes=changes):
-                self.assertIsNone(ab.blocked_boot_observation(self.observe(**changes)))
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(changes)))
+
+    def test_native_daemon_exit_78_without_fresh_wrapper_marker_is_not_a_guard(self):
+        for kind in ('missing','symlink','oversize','duplicate','fifo'):
+            with self.subTest(kind=kind):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(marker_kind=kind)))
+        for options in ({'marker_mode':0o666},{'marker_mode':0o620},{'marker_uid':1}):
+            with self.subTest(options=options):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(**options)))
+
+    def test_other_boot_component_reason_and_invalid_marker_fields_are_denied(self):
+        for changes in ({'format':'other'},{'component':'docker'},
+                        {'boot_id':'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'},
+                        {'reason':'invalid_state'},{'reason':'unknown_memory'},
+                        {'denied_monotonic_us':True},{'denied_monotonic_us':0},
+                        {'denied_monotonic_us':'1500'},{'denied_monotonic_us':2**63},
+                        {'password':'SECRET'}):
+            with self.subTest(changes=changes):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(marker_changes=changes)))
+
+    def test_marker_must_fall_in_this_main_process_lifetime(self):
+        for denied in (999,2001):
+            with self.subTest(denied=denied):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(marker_changes={'denied_monotonic_us':denied})))
+        for properties in ({'ExecMainStartTimestampMonotonic':'0'},
+                           {'ExecMainStartTimestampMonotonic':'3000'},
+                           {'ExecMainExitTimestampMonotonic':''},
+                           {'ExecMainExitTimestampMonotonic':'9223372036854775808'}):
+            with self.subTest(properties=properties):
+                self.assertIsNone(ab.blocked_boot_observation(self.observe(properties)))
+        for denied in (1000,2000):
+            value=self.observe(marker_changes={'denied_monotonic_us':denied})
+            self.assertIsNotNone(ab.blocked_boot_observation(value))
+            self.assertNotIn(BOOT_ID,json.dumps(value));self.assertNotIn('argv',json.dumps(value))
+
+    def test_root_budget_report_still_requires_bounded_nofollow_file(self):
+        for kind in ('symlink','oversize'):
+            with self.subTest(kind=kind),self.assertRaises((ValueError,OSError)):
+                self.observe(report_kind=kind)
 
 
-class BootFailureDiagnosticTests(unittest.TestCase):
-    def diagnostic(self, unit, report, replace_report=False):
-        with tempfile.TemporaryDirectory() as temporary:
-            path=Path(temporary)/'report.json';path.write_text(json.dumps(report));path.chmod(0o644)
-            if replace_report:
-                real=Path(temporary)/'target.json';path.rename(real);path.symlink_to(real)
-            original=os.fstat
-            def owned(fd):
-                info=original(fd)
-                return SimpleNamespace(st_mode=info.st_mode,st_uid=0,st_size=info.st_size)
-            script=ab.GUEST_BOOT_DIAGNOSTICS.replace('/run/titan-boot-memory.json',str(path))
-            response=SimpleNamespace(returncode=0,stdout=unit,stderr='SECRET diagnostic stderr')
-            with patch.object(os,'fstat',side_effect=owned),patch.object(subprocess,'run',return_value=response) as run,contextlib.redirect_stdout(io.StringIO()) as output:
-                exec(script,{})
-            commands=[call.args[0] for call in run.call_args_list]
-        return json.loads(output.getvalue()),commands
+class BootFailureDiagnosticTests(BootEvidenceFixture,unittest.TestCase):
+    def diagnostic(self, properties, report, **options):
+        units={unit:self.service(unit,properties) for unit in START_COMMANDS}
+        units.update({unit:''.join(key+'='+value+'\n' for key,value in properties.items()) for unit in
+                      ('titan-firstboot.service','titan-runtime.service','titan-agent.service',
+                       'libvirtd.socket','virtlogd.socket','virtlockd.socket')})
+        return self.execute_evidence(ab.GUEST_BOOT_DIAGNOSTICS,report,units,**options)
 
     def test_diagnostics_capture_actual_guard_result_without_executing_or_leaking_commands(self):
-        unit=('ActiveState=failed\nSubState=failed\nResult=start-limit-hit\nExecMainCode=0\nExecMainStatus=0\n'
-              'ExecStartPre={ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 /usr/share/titan/boot-memory-guard.py --component all ; ignore_errors=no ; code=exited ; status=1 }\n'
-              'ExecStartPre={ path=/bin/other ; argv[]=/bin/other SECRET ; code=exited ; status=0 }\n')
+        properties={'ActiveState':'failed','SubState':'failed','Result':'start-limit-hit',
+                    'ExecMainCode':'1','ExecMainStatus':'78',
+                    'ExecStartPre':'{ path=/bin/other ; argv[]=/bin/other SECRET ; code=exited ; status=0 }'}
         report={'ok':False,'reason':'insufficient_memory','total_bytes':3*1024**3,
                 'reserve_bytes':512*1024**2,'required_bytes':4*1024**3+512*1024**2,'checked_at':1234,
                 'password':'SECRET'}
-        value,commands=self.diagnostic(unit,report)
-        self.assertEqual(value['units']['libvirtd.service']['guard_commands'],
-                         [{'ignore_errors':False,'code':'exited','status':1}])
+        value,commands=self.diagnostic(properties,report)
+        self.assertEqual(value['units']['libvirtd.service']['guard_proof'],
+            {'configured':True,'main_exit_78':True,'marker_current_boot':True,'marker_in_main_lifetime':True})
         self.assertEqual(value['units']['titan-runtime.service']['Result'],'start-limit-hit')
         self.assertEqual(value['report']['required_bytes'],report['required_bytes'])
-        self.assertNotIn('SECRET',json.dumps(value));self.assertNotIn('argv',json.dumps(value))
+        self.assertNotIn('SECRET',json.dumps(value));self.assertNotIn('argv',json.dumps(value));self.assertNotIn(BOOT_ID,json.dumps(value))
         self.assertEqual(len(commands),8)
         self.assertTrue(all(command[:2]==['systemctl','show'] for command in commands))
         self.assertFalse(ab.blocked_boot_observation(value))
 
     def test_invalid_report_and_unknown_unit_output_do_not_leak_payloads(self):
-        value,_=self.diagnostic('ActiveState=SECRET\nResult=SECRET\nExecMainStatus=SECRET\n',
+        value,_=self.diagnostic({'ActiveState':'SECRET','Result':'SECRET','ExecMainStatus':'SECRET'},
                                {'ok':'SECRET','reason':'SECRET','total_bytes':'SECRET','checked_at':True})
         self.assertEqual(value['units']['docker.service']['ActiveState'],'unknown')
         self.assertIsNone(value['units']['docker.service']['ExecMainStatus'])
         self.assertEqual(value['report']['reason'],'unknown')
         self.assertIsNone(value['report']['checked_at'])
         self.assertNotIn('SECRET',json.dumps(value))
-        value,_=self.diagnostic('ActiveState=failed\n',{},replace_report=True)
+        value,_=self.diagnostic({'ActiveState':'failed'},{},report_kind='symlink')
         self.assertEqual(value['report'],{'unavailable':True})
+
+    def test_diagnostics_expose_socket_start_limit_and_untrusted_marker_as_safe_evidence(self):
+        for result in ('service-start-limit-hit','trigger-limit-hit'):
+            value,_=self.diagnostic({'Result':result},{},marker_kind='missing')
+            self.assertEqual(value['units']['libvirtd.socket']['Result'],result)
+            self.assertFalse(value['units']['libvirtd.service']['guard_proof']['marker_current_boot'])
+            self.assertFalse(value['units']['libvirtd.service']['guard_proof']['main_exit_78'])
 
 
 if __name__ == '__main__':

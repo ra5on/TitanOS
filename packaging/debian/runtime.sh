@@ -42,11 +42,12 @@ runtime_command() {
     /usr/bin/timeout --signal=TERM --kill-after=1s "${task_limit}s" "$@"
 }
 
-runtime_vm_sockets_ready() {
+runtime_vm_support_sockets_ready() {
     local task_socket
     # A multi-unit is-active succeeds when ANY unit is active. Verify every
-    # required listener separately, including after a guarded daemon failure.
-    for task_socket in libvirtd.socket virtlogd.socket virtlockd.socket; do
+    # supporting listener separately, including after a guarded daemon failure.
+    # The primary libvirt socket is separately proved after a daemon denial.
+    for task_socket in virtlogd.socket virtlockd.socket; do
         runtime_command 1 systemctl is-active --quiet "$task_socket" || return 1
     done
 }
@@ -69,18 +70,18 @@ install_vm_components() {
     vm_programs_verified=true
     runtime_command 3 /bin/bash -c 'source /usr/share/titan/component-functions.sh; prepare_vm_runtime' || return 1
     runtime_command 3 systemctl enable libvirtd.socket virtlogd.socket virtlockd.socket || return 1
-    # libvirt's units also have admin/read-only socket companions. A companion
-    # job can fail when the daemon's RAM guard rejects an activation, although
-    # the three required listeners are ready. Only their actual active states
-    # may supersede that batch job result; an enable failure remains fatal.
+    # A blocked main daemon may also close its primary/companion listeners.
+    # Only the fixed main-process guard proof can excuse the primary socket;
+    # virtlogd and virtlockd must remain active. An enable failure stays fatal.
     runtime_command 3 systemctl start libvirtd.socket virtlogd.socket virtlockd.socket || true
-    runtime_vm_sockets_ready || { printf '%s\n' 'Ein erforderlicher VM-Socket ist nicht aktiv.' >&2; return 1; }
+    runtime_vm_support_sockets_ready || { printf '%s\n' 'Ein erforderlicher VM-Socket ist nicht aktiv.' >&2; return 1; }
     # Explicitly attempt the guarded daemon: socket availability alone is not
-    # evidence that ExecStartPre ran or that the VM backend can be used.
+    # evidence that the main-process guard ran or that the backend can be used.
     if ! runtime_command 5 systemctl start libvirtd.service; then
         vm_start_failed=true
         return 1
     fi
+    runtime_command 1 systemctl is-active --quiet libvirtd.socket || return 1
     runtime_command 5 /bin/bash -c 'source /usr/share/titan/component-functions.sh; activate_vm_services'
 }
 
@@ -104,25 +105,27 @@ runtime_memory_blocked() {
     if ! $vm_programs_verified; then
         [[ "$(uname -m)" == x86_64 ]] && verify_vm_programs || return 1
     fi
-    # Docker's Restart=on-failure can briefly be activating/auto-restart after
-    # the guard denied a start. Wait for a real failed end state, bounded by the
-    # shared deadline. Activating, a timeout, or an exhausted deadline is never
-    # proof of a permissible RAM block.
+    # Wait for systemd's real failed end state after the wrapper's main exit.
+    # RestartPreventExitStatus=78 prevents the guard restart loop. Activating,
+    # a timeout or an exhausted shared deadline is never a valid RAM block.
     local task_failed_deadline=$((SECONDS + 6))
     while ! { runtime_command 1 systemctl is-failed --quiet docker.service &&
               runtime_command 1 systemctl is-failed --quiet libvirtd.service; }; do
         (( SECONDS < task_failed_deadline && SECONDS < task_runtime_deadline )) || return 1
         runtime_command 1 sleep 0.25 || return 1
     done
-    runtime_vm_sockets_ready || return 1
+    runtime_vm_support_sockets_ready || return 1
     runtime_command 15 /usr/bin/python3 -I - <<'PY'
 import sys
 sys.path.insert(0, '/usr/lib/titan')
-from titan.debian_updates import verified_boot_memory_block
-# This verifies both exact failed ExecStartPre units, runs the offline guard
-# freshly, and verifies its report and unit identities again. No cached JSON
-# or missing/invalid metadata can authorize this limited management startup.
-sys.exit(0 if verified_boot_memory_block() is not None else 1)
+from titan.debian_updates import verified_boot_memory_block, verified_guard_socket
+# Prove both exact main-process exits and their fresh component denial markers
+# before checking primary listeners. A stopped socket is only valid with its
+# own exact guard evidence, never because another daemon or cached JSON failed.
+if verified_boot_memory_block() is None:
+    sys.exit(1)
+sys.exit(0 if all(verified_guard_socket(unit) for unit in
+                 ('docker.socket', 'libvirtd.socket')) else 1)
 PY
 }
 

@@ -53,7 +53,7 @@ def validate(app_root, environment, build_root=ROOT):
         raise ValueError('Full source commit identities are required')
     if commit(app_root) != expected or commit(build_root) != builder:
         raise ValueError('Checked out source differs from the signed build inputs')
-    payload = ['titan', 'image/firstboot.py', 'image/titan.sysusers', 'image/titan.tmpfiles', 'image/titan-firewall.xml',
+    payload = ['titan', 'image/firstboot.py', 'image/boot-memory-guard.py', 'image/boot-daemon-guard.py', 'image/titan.sysusers', 'image/titan.tmpfiles', 'image/titan-firewall.xml',
                'image/titan-firstboot.service', 'image/titan-runtime.service', 'image/titan-service-containment.service', 'packaging/titan-agent.service',
                'packaging/titan-web.service', 'packaging/titan-proxy.service', 'scripts/component-functions.sh',
                'scripts/diagnose.sh', 'packaging/debian/runtime.sh', 'packaging/release-public.pem',
