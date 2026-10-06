@@ -1,26 +1,44 @@
-# Titan 3.0.0 — Freigabeprüfungen
+# Titan — Systemimage 3.0.1: Freigabeprüfungen
 
-Die Angaben beziehen sich auf den eigenen Titan-Arbeitsstand dieses Commits.
-Ergebnisse älterer Versionen ersetzen keine Prüfung dieses Images.
+Systemimage **3.0.1**, Anwendung **3.0.0**. Der automatische Image-Lauf
+[37418063214](https://github.com/ra5on/TitanOS/actions/runs/37418063214)
+ist am 6. Oktober 2026 erfolgreich abgeschlossen. Das Image gehört zum
+[Quellcommit 2cfd33a](https://github.com/ra5on/TitanOS/commit/2cfd33a3d9c7001ee4c6ef14f49d3fde22f9e3f8).
+Der Download bleibt ein **Release-Entwurf**; Praxistest und Dauerlauf sind offen.
 
-| Prüfung | Stand |
+| Prüfung | Ergebnis |
 | --- | --- |
-| Python/API/Sicherheitsregressionen | 1.826 Tests im letzten Gesamtlauf erfolgreich; ein plattformabhängiger Test übersprungen. Einschließlich Identitätsbereinigung, schreibgeschütztem Systemslot, unterbrochener Persistenz-Erweiterung, verpflichtendem Mount-Nachweis, gemeinsamem Autostart-RAM-Budget, USB-Identitätsprüfung, echter Archiv-Wiederherstellung mit Zeitstempeln, abgesicherter Release-Versionsvergabe und frischer Speicher-/USB-/Netzwerk-/RAM-Prüfung vor dem Wiederstart nach App-Sicherungen sowie echter VNC-Readiness, begrenzter Konsolen-Gesamtfrist und dauerhaftem Main-Prozess-RAM-Nachweis mit aktuellen Bootmarkern |
-| JavaScript-Controller und Syntax | 48 UI-Suiten erfolgreich; JavaScript- und Shell-Syntax geprüft. Nicht verfügbarer Office-Editor wird nicht angeboten; DOCX-/XLSX-Downloads und Textbearbeitung bleiben geprüft |
-| Debian-Anwendungspaket | Lokal gebaut und vollständige neue Laufzeitdateien sowie öffentlicher Schlüssel geprüft; keine Installation auf dem Build-Rechner |
-| Mobile Ansicht | Dateimanager/Docker/Fotos bei 390 Pixeln; Fotos, VM-Details/Netzwerk, Speicher, Systemsteuerung/Updates bei 320 Pixeln ohne Seitenüberlauf geprüft. Desktop-Raster und mobile Widgetüberlagerung korrigiert. Frisch mobil geöffnetes VM-Fenster wächst bei 320 → 768 → 903 Pixeln auf die verfügbare Breite; Browserkonsole ohne Warnungen oder Fehler |
-| Docker-Vorlagen | 374 Konfigurationen normalisiert, durch die Adaptertests und mit Debian Compose 2.26.1-4 config --quiet geprüft; keine pauschale Laufzeitfreigabe aller Apps |
-| Eigene Fotos | Backend-, Berechtigungs-, Metadaten-Sicherungs- und UI-Tests geprüft. Browser: Bibliothek, Einlesen, Vorschau, Favorit, Papierkorb und Wiederherstellung erfolgreich. Browser-Dateiauswahl unterbrochen; echte Upload-/Download-HTTP-Tests bestanden. Im ersten korrigierten Image auch die reale Foto-Laufzeitprüfung erfolgreich |
-| UEFI-Boot, HTTPS, SMB, Docker, Speichergrenze | GitHub-Lauf 37395985165 erfolgreich für echte Ersteinrichtung, HTTPS, Mehrbenutzer-SMB, Docker-Lebenszyklus, eigene Netzwerke, Stacks, native Containerverwaltung, Fotos und VM-Domain-Lebenszyklus einschließlich vollständiger UEFI→BIOS→UEFI-RFB-Konsolenverbindungen. Im Lauf 37400720990 sind diese Laufzeitprüfungen erneut erfolgreich; dessen RAM-Kaltstart fand noch einen Fehler im Runtime-Startpfad. Der nächste Kandidat muss alle Prüfungen erneut bestehen |
-| Schreibgeschütztes Betriebssystem | Im GitHub-Lauf 37381938424 echter PID-1-Nachweis für RO-Systemslot, 17 DATA-Bindziele, slotlokale Paketdatenbanken und begrenztes /tmp erfolgreich; außerdem alle Laufzeit-, Update-, Rollback- und Fallback-Prüfungen erfolgreich. Veröffentlichung dieses Laufs wegen bereits belegter Versionsnummer sicher abgebrochen; Draft-Sichtbarkeit und frühe Kollisionsprüfung korrigiert. Aktueller Kandidat wird erneut geprüft |
-| Signiertes Update, Rollback, fehlgeschlagener Boot | Im GitHub-Lauf 37378699615 echter A→B-Wechsel, B→A-Rollback und automatischer Fallback vom fehlerhaften B-Slot erfolgreich; Nutzerdaten und Rechte erhalten. Neuer Kandidat erfordert denselben Nachweis erneut |
-| VM-Konsole und installiertes Gastbetriebssystem | Echte fragmentierte RFB-Readiness, frische Zielprüfung, begrenzte Sperr-/virsh-/Proxy-Laufzeit und Browser-Wiederverbindung durch Regressionen geprüft. Der vollständige UEFI→BIOS→UEFI-RFB-Roundtrip ist im GitHub-Lauf 37395985165 erfolgreich. Gastbetriebssystem, Tastatureingabe und reale Browser-Wiederverbindung benötigen weiter einen Praxistest |
-| 8-GB-Lasttest, Installation parallel zum Dateimanager | Im GitHub-Lauf 37378699615 echte App-Installation bei 8 GiB mit gleichzeitig erreichbarem Dateimanager erfolgreich; keine Freigabe für jede beliebige App-Kombination |
-| Autostart nach RAM-Verkleinerung | Der Main-Prozess-Guard verhindert automatische Wiederholungen mit Exit 78. Ein rootgeschützter Marker muss zum aktuellen Boot und exakt zur Main-Laufzeit gehören; eine frische vollständige RAM-Neuberechnung bestätigt zusätzlich den Mangel. Nur fest zugeordnete primäre Sockets mit belegtem Guard-Startlimit erhalten die eingeschränkte Ausnahme; alle Kernservices und VM-Hilfssockets bleiben zwingend. Die originalen Debian-13-Dienstdefinitionen wurden anhand der Paketdateien verifiziert: Docker bewahrt den Platzhalter $DOCKER_OPTS, libvirt $LIBVIRTD_ARGS. Lauf 37413113328 hat die normalen Laufzeitprüfungen und den signierten A→B-Wechsel bestanden. Beim echten 3-GiB-Kaltstart wurden beide Main-Prozess-RAM-Sperren korrekt nachgewiesen; die Runtime-Prüfung scheiterte noch an einer nicht vorhandenen Socket-Eigenschaft. systemd 257 liefert die feste Dienstzuordnung über Triggers, nicht Service. Die Korrektur verlangt genau den erwarteten Dienst und unveränderte Listener-/Status-/RAM-Nachweise; fehlende, fremde oder mehrere Triggers werden abgelehnt. Der vollständige echte 8→3→8-GiB-Durchlauf steht für den korrigierten Kandidaten noch aus |
-| USB-Geräte für Container | Geeignete, eindeutig identifizierbare Geräte mit frischer Identitätsprüfung vor Start und Autostart; rohe Speicher-, Hub-, Netzwerk- und unbekannte USB-Geräte nicht auswählbar. Regressionstests erfolgreich; reale USB-Durchreichung auf Zielhardware ausstehend |
-| Vollständige Datenwiederherstellung auf frischem Image | Nicht vollständig implementiert: Übernahme fremder Sicherungs-Namensräume, Rekonstruktion der Hostkonten/Speicher/Appinstallationen und integrierte App-Datenbank-Wiederherstellung fehlen |
-| Speicher voll/offline/ersetzt, Vergrößerung | Unit-Prüfungen verhindern Containerstarts bei Volumeaustausch während create/commit; Laufzeitprüfungen zusammen bewerten |
-| Mehrtägiger Dauerlauf und reale Hardware | Ausstehend |
+| Python/API/Sicherheitsregressionen | 1.826 lokale Tests erfolgreich; ein plattformabhängiger Skip. GitHub bestätigt 1.826 Tests mit 21 Skips wegen dort nicht verfügbarer Laufzeitumgebungen; verpflichtende echte Image-Tests folgen separat |
+| JavaScript und Oberfläche | 48 UI-Suiten und Syntaxprüfungen erfolgreich. Nicht verfügbarer Office-Editor wird nicht angeboten; DOCX-/XLSX-Downloads und Textbearbeitung geprüft |
+| Debian-Anwendungspaket | Lokal gebaut; sieben relevante Dateien einschließlich Guard, Runtime, Bootprüfung, NOTICE und geänderter Oberfläche bytegleich und rootgeschützt im Paket nachgewiesen |
+| Mobile Ansicht | Dateimanager/Docker/Fotos bei 390 Pixeln; Fotos, VM-Details/Netzwerk, Speicher und Systemsteuerung/Updates bei 320 Pixeln ohne Seitenüberlauf geprüft. Mobil geöffnetes VM-Fenster wächst beim Wechsel auf einen größeren Bildschirm; Browserkonsole ohne Warnungen oder Fehler |
+| Docker-Vorlagen | 374 LinuxServer.io-/Big-Bear-Konfigurationen normalisiert und mit Debian Compose 2.26.1-4 geprüft. Die API listet tatsächlich 374 Vorlagen; dies ist keine Laufzeitfreigabe jeder einzelnen App |
+| Echte NAS-Laufzeit | Ersteinrichtung, HTTPS, Anmeldeschutz, Mehrbenutzer-SMB, Container Start/Stop/Entfernen, eigene Netze und statische IPs, mehrteilige Projekte, native Containerverwaltung, Protokolle und Kommandokonsole erfolgreich |
+| Eigene Fotos | Echte PNG-Datei hochgeladen, Hintergrundindex, private Vorschau/Original, Authentifizierung, Favoriten/Album, Papierkorb und Wiederherstellung mit unverändertem Inhalt erfolgreich |
+| Schreibgeschütztes Betriebssystem | Alle zehn echten Nachweise erfolgreich: PID-1-Mounts, RO-Systemslot ohne schreibbaren Alias, slotlokale Paketdatenbanken, 17 persistente DATA-Bindziele sowie begrenztes beschreibbares /tmp |
+| Signiertes Update und Rückkehr | Echter A→B-Wechsel, B→A-Rollback und automatischer Fallback vom fehlerhaften B-Slot erfolgreich; Konten, ACLs und Daten erhalten. Die Bootstrap-Baseline ist gesondert unten erläutert |
+| Autostart nach RAM-Verkleinerung | Alle elf Nachweise des echten 8→3→8-GiB-Kaltstarts erfolgreich: Docker und libvirt bei zu kleinem RAM gesperrt, Verwaltung und Dateimanager erreichbar, Mangel frisch bestätigt, echte RAM-Rückkehr und Daemon-Autostarts nachgewiesen, Testcontainer/-image entfernt. Exakte Main-Prozessmarker und feste Socket-Triggers/Listener sind zwingend |
+| Installation parallel zum Dateimanager | Tatsächliche App-Installation bei 8 GiB: sieben aktive Installationsproben, Dateimanager und Status erreichbar; längste gemessene Anfrage 261 ms. Keine Freigabe für jede beliebige App-Kombination |
+| VM-Lebenszyklus und Konsole | Start, Stop, Löschen, Wiederverwendung des gelöschten Namens, BIOS/UEFI-Wechsel, Bridgekonfiguration, direktes Image-Klonen mit unveränderter Quelle und authentifizierte RFB-Konsole erfolgreich. Ein installiertes Gastbetriebssystem, Tastatureingabe und reales Browser-Canvas benötigen noch einen Praxistest |
+| Speicher und Vergrößerung | Echte DATA-Vergrößerung auf einer erweiterten virtuellen Systemplatte erfolgreich. ext4-/XFS-Werkzeuge und zum Kernel passendes geladenes ZFS-Modul nachgewiesen. Unit-Prüfungen verhindern Starts bei Volumeaustausch; reale Pool-/RAID-Recovery und weitere Offline-Szenarien bleiben offen |
+| USB/GPU | Auswahl/Identität/Speichergrenzen vor Start und Autostart durch Regressionen geprüft. Reale Durchreichung und Beschleunigung auf geeigneter Hardware ausstehend |
+| Vollständige Neu-NAS-Wiederherstellung | Nicht vollständig implementiert: fremde Sicherungs-Namensräume, Rekonstruktion von Hostkonten/Speicher/Appinstallationen und integriertes Rückspielen von App-Datenbanken fehlen |
+| Signierter Download | Manifest und Prüfsummen signiert; Signaturprüfung im CI erfolgreich. Alle 13 Assets vollständig hochgeladen; Hashes der separat geladenen Laufzeit-/A/B-Berichte stimmen mit den Release-Dateien überein. Beide öffentlichen Vertrauensschlüssel stimmen mit den Repository-Schlüsseln überein |
+| Mehrtägiger Dauerlauf, reale Hardware und Clients | Ausstehend; [Praxistest](PRAXISTEST-3.0.0.md) durchführen |
+
+Der [Release-Entwurf](https://github.com/ra5on/TitanOS/releases/tag/untagged-550c33fa993de99ab703)
+enthält `titan-3.0.1-amd64.img.xz` (1.192.493.740 Bytes, eine Datei), das
+RAUC-Update, Manifest, Signaturen, Paketinventar und Prüfberichte.
+Entwürfe sind mit GitHub-Anmeldung für Repository-Verwalter erreichbar.
+Der GitHub-SHA-256-Digest des komprimierten Images lautet:
+
+```text
+687164133cffe0f48b2144da0a5b3942f8001b2808a4d4207c071e392e8ac1f9
+```
+
+Die Laufzeit- und A/B-Berichte wurden zusätzlich als GitHub-Artefakt geladen
+und mit den Release-Digests verglichen. Das komprimierte Image wurde für diesen
+zusätzlichen Abgleich nicht erneut lokal heruntergeladen.
 
 Ein Release-Entwurf kann zum Testen bereitgestellt werden. Ausstehende Prüfungen
 dürfen nicht durch ein Stable-Etikett ersetzt werden. Für die erste Systemfamilie
