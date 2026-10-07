@@ -75,11 +75,11 @@ jobs:
           python3 -m unittest discover -s titan-build/tests -v
           npm --prefix packages/titand ci
           npm --prefix packages/titand run typecheck
-          npm --prefix packages/titand run test -- --pool=forks source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/hostname-policy.unit.test.ts source/modules/auth/auth.unit.test.ts source/modules/auth/cookies.unit.test.ts source/modules/apps/app-lifecycle.unit.test.ts source/modules/apps/app-settings.unit.test.ts source/modules/apps/manifest-compatibility.unit.test.ts source/modules/apps/schema.unit.test.ts source/modules/machines/machine-network.unit.test.ts source/modules/machines/machine-store.unit.test.ts source/modules/machines/machine-install.unit.test.ts source/modules/machines/machines.unit.test.ts source/modules/machines/domain.unit.test.ts source/modules/machines/libvirt.unit.test.ts source/modules/system/machine-bridge.unit.test.ts source/modules/system/network-interfaces.unit.test.ts
+          npm --prefix packages/titand run test -- --pool=forks source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/recovery-routes.unit.test.ts source/modules/user/desktop-appearance.unit.test.ts source/modules/system/hostname-policy.unit.test.ts source/modules/auth/auth.unit.test.ts source/modules/auth/cookies.unit.test.ts source/modules/apps/app-lifecycle.unit.test.ts source/modules/apps/app-settings.unit.test.ts source/modules/apps/manifest-compatibility.unit.test.ts source/modules/apps/schema.unit.test.ts source/modules/machines/machine-network.unit.test.ts source/modules/machines/machine-store.unit.test.ts source/modules/machines/machine-install.unit.test.ts source/modules/machines/machines.unit.test.ts source/modules/machines/domain.unit.test.ts source/modules/machines/libvirt.unit.test.ts source/modules/system/machine-bridge.unit.test.ts source/modules/system/network-interfaces.unit.test.ts
           npm --prefix packages/ui ci
           npm --prefix packages/ui run typecheck
           npm --prefix packages/ui run translations:check-ui
-          npm --prefix packages/ui run test -- src/features/machines/network-settings.test.ts src/features/machines/prepare-bridge.test.ts src/features/machines/components/network-field.test.tsx src/features/machines/settings.test.ts src/features/machines/hooks/use-machine-actions.test.ts src/providers/apps.test.tsx src/modules/desktop/system-menu.test.tsx src/modules/desktop/dock-dimensions.test.ts src/modules/widgets/system-widget-labels.test.tsx src/constants/feature-maturity.test.ts src/components/ui/feature-maturity-badge.test.tsx
+          npm --prefix packages/ui run test -- src/features/machines/network-settings.test.ts src/features/machines/prepare-bridge.test.ts src/features/machines/components/network-field.test.tsx src/features/machines/settings.test.ts src/features/machines/hooks/use-machine-actions.test.ts src/providers/apps.test.tsx src/modules/desktop/system-menu.test.tsx src/providers/desktop-appearance.test.tsx src/features/storage/hooks/use-raid-progress.test.tsx src/providers/prefetch.test.tsx src/providers/confirmation/generic-confirmation-dialog.test.tsx src/routes/settings/_components/software-recovery.test.tsx src/modules/desktop/dock-dimensions.test.ts src/modules/widgets/system-widget-labels.test.tsx src/constants/feature-maturity.test.ts src/components/ui/feature-maturity-badge.test.tsx
           npm --prefix packages/ui run build
   image:
     needs: [source, checks]
@@ -113,7 +113,7 @@ jobs:
           set -euo pipefail
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils python3 openssl dosfstools mtools gdisk
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils python3 openssl dosfstools mtools gdisk e2fsprogs
           if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
           df -h /
       - uses: actions/setup-node@v4
@@ -130,6 +130,7 @@ jobs:
         env:
           RUN_IMAGE_SMOKE: '1'
           TITAN_ARTIFACT_DIR: ${{ github.workspace }}/dist
+          TITAN_SIGNING_KEY: ${{ secrets.TITAN_SIGNING_KEY }}
         run: bash titan-build/build-image.sh
       - name: Sign and verify release checksums
         if: steps.signing.outputs.configured == 'true'
@@ -152,6 +153,7 @@ jobs:
             dist/*.json
             dist/*boot*.log
             dist/*boot*.json
+            dist/*recovery*.log
             packages/os/vm-state/*.log
           if-no-files-found: ignore
           retention-days: 7

@@ -1,4 +1,4 @@
-import React, {useEffect, useId, useState} from 'react'
+import React, {useEffect, useId, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
 
 import {
@@ -30,6 +30,7 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 	const {t} = useTranslation()
 	const [applyToAllChecked, setApplyToAllChecked] = useState(false)
 	const checkboxId = useId()
+	const cancelButton = useRef<HTMLButtonElement>(null)
 
 	// Reset checkbox state when dialog options change (i.e., a new confirmation opens)
 	useEffect(() => {
@@ -44,6 +45,11 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 	}
 
 	const {title, message, actions, icon: IconComponent, showApplyToAll} = options
+	const isYesNo =
+		actions.length === 2 &&
+		actions.some((action) => action.label === t('yes')) &&
+		actions.some((action) => action.label === t('no'))
+	const orderedActions = isYesNo ? [...actions].sort((a) => (a.label === t('yes') ? -1 : 1)) : actions
 
 	// If the action represents a user cancellation (with the value "cancel"),
 	// propagate the promise rejection so callers can distinguish cancellation from
@@ -68,19 +74,33 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 
 	return (
 		<AlertDialog open={isOpen} onOpenChange={handleOpenChange}>
-			<AlertDialogContent>
+			<AlertDialogContent
+				onOpenAutoFocus={(event) => {
+					if (!isYesNo) return
+					event.preventDefault()
+					cancelButton.current?.focus()
+				}}
+			>
 				<AlertDialogHeader icon={IconComponent}>
 					<AlertDialogTitle>{title}</AlertDialogTitle>
 					{message && <AlertDialogDescription>{message}</AlertDialogDescription>}
 				</AlertDialogHeader>
 
 				{/* Action Buttons */}
-				<div className='flex flex-col justify-center gap-y-2 md:flex-row md:gap-x-2 md:gap-y-0'>
-					{actions.map((action, index) => (
+				<div
+					dir={isYesNo ? 'ltr' : undefined}
+					className={
+						isYesNo
+							? 'flex flex-row justify-center gap-2'
+							: 'flex flex-col justify-center gap-y-2 md:flex-row md:gap-x-2 md:gap-y-0'
+					}
+				>
+					{orderedActions.map((action) => (
 						<AlertDialogAction
 							key={action.label}
+							ref={isYesNo && action.label === t('no') ? cancelButton : undefined}
 							variant={action.variant || 'default'}
-							className='px-6'
+							className={isYesNo ? 'min-w-0 flex-1 px-3' : 'px-6'}
 							onClick={() => handleActionClick(action.value)}
 						>
 							{action.label}

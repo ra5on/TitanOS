@@ -437,6 +437,17 @@ export async function createTestVm({
 	} = createTestHelpers(() => httpPort)
 
 	let vmProcessPid: number | undefined
+	let bootConsoleOutput = ''
+	type BootConsoleControl = {
+		waitForText: (text: string, timeout?: number) => Promise<void>
+		sendKey: (key: string) => Promise<void>
+	}
+	type PowerOnOptions = {
+		cdrom?: string
+		bootNvmeSlot?: number
+		waitForShutdown?: boolean
+		onBootConsole?: (console: BootConsoleControl) => Promise<void>
+	}
 
 	// Boots the VM and waits for titand to respond. With `cdrom` an ISO is
 	// attached as the primary boot device (e.g. the USB installer). With
@@ -445,12 +456,9 @@ export async function createTestVm({
 	// for the VM to power itself off, for boots that are expected to complete
 	// and shut down on their own (e.g. the USB installer auto-flashing a
 	// device).
-	async function powerOnOnce({
-		cdrom,
-		bootNvmeSlot,
-		waitForShutdown = false,
-	}: {cdrom?: string; bootNvmeSlot?: number; waitForShutdown?: boolean} = {}) {
+	async function powerOnOnce({cdrom, bootNvmeSlot, waitForShutdown = false, onBootConsole}: PowerOnOptions = {}) {
 		let vmOutput = ''
+		bootConsoleOutput = ''
 		let vmExited = false
 		let vmExitCode: number | null = null
 
@@ -472,8 +480,14 @@ export async function createTestVm({
 		vmProcessPid = vmProcess.pid
 
 		// Capture output and track if process exits
-		vmProcess.stdout?.on('data', (data: Buffer) => (vmOutput += data.toString()))
-		vmProcess.stderr?.on('data', (data: Buffer) => (vmOutput += data.toString()))
+		vmProcess.stdout?.on('data', (data: Buffer) => {
+			vmOutput += data.toString()
+			bootConsoleOutput = vmOutput
+		})
+		vmProcess.stderr?.on('data', (data: Buffer) => {
+			vmOutput += data.toString()
+			bootConsoleOutput = vmOutput
+		})
 		// Observe the process promise rather than only attaching an exit listener:
 		// a port collision can make QEMU exit before listeners are registered.
 		// Waiting for execa to settle also ensures all QEMU output is captured.
@@ -507,6 +521,25 @@ export async function createTestVm({
 			}
 		}
 
+		if (onBootConsole) {
+			await onBootConsole({
+				waitForText: async (text, timeout = 120_000) => {
+					await withVmOutputOnTimeout(
+						pWaitFor(
+							() => {
+								if (vmExited) throw new Error(`VM exited before console text: ${vmOutput}`)
+								return vmOutput.includes(text)
+							},
+							{interval: 25, timeout},
+						),
+					)
+				},
+				sendKey: async (key) => {
+					await $({env})`${vmScript} key ${key}`
+				},
+			})
+		}
+
 		if (waitForShutdown) {
 			await withVmOutputOnTimeout(pWaitFor(() => vmExited, {interval: 1000, timeout: startupTimeout}))
 			vmProcessPid = undefined
@@ -538,7 +571,7 @@ export async function createTestVm({
 		)
 	}
 
-	async function powerOn(options: {cdrom?: string; bootNvmeSlot?: number; waitForShutdown?: boolean} = {}) {
+	async function powerOn(options: PowerOnOptions = {}) {
 		await retryVmPortCollisions({
 			attempt: () => powerOnOnce(options),
 			refreshPorts: refreshDynamicPorts,
@@ -827,6 +860,9 @@ printf '\\n${authFailureMarker}\\n'
 		// Matches --data-directory in the OS image's titan.service
 		dataDirectory: '/home/titan/titan',
 		stateDir,
+		get bootConsoleOutput() {
+			return bootConsoleOutput
+		},
 		get sshPort() {
 			return sshPort
 		},

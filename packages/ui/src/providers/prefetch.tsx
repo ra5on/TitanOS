@@ -23,6 +23,8 @@ export function Prefetcher() {
 	const queryClient = useQueryClient()
 	const [triggered, setTriggered] = useState(false)
 	const isLoggedInQ = trpcReact.user.isLoggedIn.useQuery()
+	const userQ = trpcReact.user.get.useQuery(undefined, {enabled: !!isLoggedInQ.data})
+	const isOwner = userQ.data?.role === 'owner'
 	const isFetching = useIsFetching()
 
 	// We want to prefetch all data used by major UI components like settings, so
@@ -33,57 +35,68 @@ export function Prefetcher() {
 	// anything non-distracting can be skipped in favor of a quicker first load.
 
 	function performPrefetch() {
-		const prefetchQueries = [
-			// Settings header
-			utils.systemNg.device.getIdentity,
-			utils.system.deviceName,
-			utils.system.version,
-			utils.system.getIpAddresses,
-			utils.system.uptime,
-			utils.user.get,
+		// Members only warm account-scoped routes; device settings are owner-only.
+		const prefetchQueries = !isOwner
+			? [
+					utils.user.get,
+					utils.user.is2faEnabled,
+					utils.files.viewPreferences,
+					utils.files.favorites,
+					utils.files.shares,
+					utils.appStore.registry,
+					utils.apps.recentlyOpened,
+				]
+			: [
+					// Settings header
+					utils.systemNg.device.getIdentity,
+					utils.system.deviceName,
+					utils.system.version,
+					utils.system.getIpAddresses,
+					utils.system.uptime,
+					utils.user.get,
 
-			// Settings backups
-			utils.backups.getRepositories,
+					// Settings backups
+					utils.backups.getRepositories,
 
-			// Settings raid
-			utils.hardware.raid.getStatus,
-			utils.hardware.internalStorage.getDevices,
+					// Settings raid
+					utils.hardware.raid.getStatus,
+					utils.hardware.internalStorage.getDevices,
 
-			// Settings device info, and Live Usage's early "is there a GPU" hint
-			// so the GPU card doesn't pop in after the first telemetry sample
-			utils.systemNg.device.getSpecs,
-			utils.hardware.gpu.getInfo,
+					// Settings device info, and Live Usage's early "is there a GPU" hint
+					// so the GPU card doesn't pop in after the first telemetry sample
+					utils.systemNg.device.getSpecs,
+					utils.hardware.gpu.getInfo,
 
-			// Settings sidebar
-			utils.system.systemDiskUsage,
-			utils.system.systemMemoryUsage,
-			utils.system.cpuUsage,
-			utils.system.cpuTemperature,
+					// Settings sidebar
+					utils.system.systemDiskUsage,
+					utils.system.systemMemoryUsage,
+					utils.system.cpuUsage,
+					utils.system.cpuTemperature,
 
-			// Settings switches
-			utils.wifi.supported,
-			utils.wifi.connected,
-			utils.user.is2faEnabled,
-			utils.apps.getTorEnabled,
+					// Settings switches
+					utils.wifi.supported,
+					utils.wifi.connected,
+					utils.user.is2faEnabled,
+					utils.apps.getTorEnabled,
 
-			// Advanced settings switches
-			utils.system.getReleaseChannel,
-			utils.system.isExternalDns,
+					// Advanced settings switches
+					utils.system.getReleaseChannel,
+					utils.system.isExternalDns,
 
-			// Files
-			utils.files.viewPreferences,
-			utils.files.favorites,
-			utils.files.shares,
+					// Files
+					utils.files.viewPreferences,
+					utils.files.favorites,
+					utils.files.shares,
 
-			// App Store
-			utils.appStore.registry,
+					// App Store
+					utils.appStore.registry,
 
-			// Cmd+K frequent apps
-			utils.apps.recentlyOpened,
+					// Cmd+K frequent apps
+					utils.apps.recentlyOpened,
 
-			// Machines OS catalog metadata
-			utils.machines.osImages,
-		]
+					// Machines OS catalog metadata
+					utils.machines.osImages,
+				]
 
 		Promise.allSettled(prefetchQueries.map((q) => q.prefetch(undefined, {gcTime: prefetchGcTime})))
 
@@ -101,7 +114,7 @@ export function Prefetcher() {
 					!lastFilesRoute.startsWith('/files/Trash') &&
 					!lastFilesRoute.startsWith('/files/Cloud') &&
 					lastFilesRoute !== '/files/Apps'
-				const filesListPath = isListablePath ? toFsPath(lastFilesRoute) : '/Home'
+				const filesListPath = isListablePath ? toFsPath(lastFilesRoute) : (user?.homePath ?? '/Home')
 				utils.files.list.prefetch(
 					{
 						path: filesListPath,
@@ -133,7 +146,7 @@ export function Prefetcher() {
 	// - only when the user is logged in
 	// - when there are no more pending queries
 	// - when conditions are stable for a while
-	const conditionsFulfilled = !triggered && !!isLoggedInQ.data && !isFetching
+	const conditionsFulfilled = !triggered && !!isLoggedInQ.data && !!userQ.data && !isFetching
 
 	useEffect(() => {
 		if (!conditionsFulfilled) return
@@ -147,7 +160,7 @@ export function Prefetcher() {
 
 		// If conditions are not stable, cancel and try again
 		return () => clearTimeout(timeout)
-	}, [conditionsFulfilled])
+	}, [conditionsFulfilled, isOwner])
 
 	return null
 }

@@ -1,7 +1,33 @@
-# TitanOS 2.0.3 · Stable
+# TitanOS 2.0.4 · Stable
 
-Virtuelle Maschinen erhalten eine automatische Bridge-Einrichtung im vorhandenen
-Dropdown-Stil. Das Dock zeigt wieder die ursprünglichen Icons des Forks.
+Dock, Widgets und Systemmenü verwenden einen einheitlichen Glaseffekt. Im
+Systemmenü oben links kann jeder Benutzer unter **Darstellung** die Transparenz
+anpassen. Die Vorschau reagiert sofort; gespeichert wird die Einstellung im
+jeweiligen Benutzerkonto. Texte und Symbole bleiben deckend.
+
+Bestätigungsdialoge ordnen **Ja links** und **Nein rechts** an, auch auf kleinen
+Bildschirmen.
+
+## Systemwiederherstellung
+
+Die Software-Update-Einstellungen ergänzen die Rückkehr zum vorherigen
+verfügbaren Systemstand. Die Auswahl wird vor der Ausführung erneut geprüft;
+ein Neustart aktiviert den ausgewählten Stand. Nach einer Neuinstallation wird
+kein nicht vorhandener Wiederherstellungsstand angeboten.
+
+Das Startmenü bietet zusätzlich die Auswahl des aktuellen und, wenn vorhanden,
+des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
+vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
+VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
+kompatiblen älteren Installation wird es nach dem ersten erfolgreich
+bestätigten Start von 2.0.4 eingerichtet.
+
+Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
+VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
+
+## Virtuelle Maschinen
+
+Die Netzwerkauswahl aus 2.0.3 bleibt verfügbar:
 
 - **NAT (Standard):** Internet über das NAS; Dienste erreichst du mit Portweiterleitungen.
 - **Host-only:** Privates Netz zwischen NAS und VM, ohne Internet- oder LAN-Zugang.
@@ -24,11 +50,18 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.3.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.3.update`: Vollständiges Systemupdate mit Rugix-Rollback für kompatible TitanOS-Installationen.
+- `titan-2.0.4.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.4.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
-- `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge. Die Veröffentlichung benötigt alle Prüfungen erfolgreich.
+- `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.
+- `recovery-smoke.json` und `recovery-evidence.json`: Echte VM-Prüfungen für signiertes Update, Versionswechsel, Neustart, Startmenü, manuellen Rollback, Datenerhalt und automatische Rückkehr nach einem beschädigten Teststart. Beide Prüfgruppen müssen für die Veröffentlichung vollständig erfolgreich sein.
+
+Der Wiederherstellungstest verwendet eine private, separat signierte ältere
+Testversion aus demselben Quellcode. Er belegt den Ablauf mit den nativen
+Systembereichen und öffentlichen APIs, aber keine vollständige Migration
+echter 2.0.3-App-Daten. Die [Update-Anleitung](https://github.com/ra5on/TitanOS/blob/main/docs/UPDATES.md)
+beschreibt auch die Vertrauensgrenze bei der Übernahme bestehender Systemslots.
 
 **TitanOS ab 2.0.1** mit der Kennung `titan-rugix-amd64-v2` kann über die
 Systemeinstellungen aktualisiert werden. **Titan 3.x** und ältere Installationen

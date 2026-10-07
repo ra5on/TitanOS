@@ -27,6 +27,7 @@ type PowerAction = {status: PowerActionStatus; phase: 'pending' | 'accepted'}
 const GlobalSystemStateContext = createContext<{
 	shutdown: () => void
 	restart: () => void
+	rollback: (selection: string) => void
 	update: () => void
 	migrate: () => void
 	reset: (password: string) => void
@@ -43,6 +44,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 	const {t} = useTranslation()
 	const [triggered, setTriggered] = useState(false)
 	const [powerAction, setPowerAction] = useState<PowerAction>()
+	const [rollbackInProgress, setRollbackInProgress] = useState(false)
 	const [failure, setFailure] = useState(false)
 	const [restoreFailure, setRestoreFailure] = useState(false)
 	const [shouldReloadOnRunning, setShouldReloadOnRunning] = usePrefixedLocalStorage('should-reload-on-running', false)
@@ -82,6 +84,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 	const onPowerActionError = () => {
 		toast.error(t('something-went-wrong'), {area: 'titanos', description: t('system-menu.action-failed')})
 		setPowerAction(undefined)
+		setRollbackInProgress(false)
 		setTriggered(false)
 		setShouldReloadOnRunning(false)
 	}
@@ -124,6 +127,25 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 		onSuccess: acceptPowerAction('shutting-down'),
 		onError: onPowerActionError,
 	})
+	const rollbackMutation = trpcReact.system.rollback.useMutation({
+		networkMode: 'always',
+		retry: false,
+		onMutate: () => {
+			beginPowerAction('restarting')()
+			setRollbackInProgress(true)
+		},
+		onSuccess: acceptPowerAction('restarting'),
+		onError: onPowerActionError,
+	})
+	const rollback = (selection: string) => rollbackMutation.mutate({selection})
+	const rollbackStatusQ = trpcReact.system.updateStatus.useQuery(undefined, {
+		enabled: rollbackInProgress,
+		retry: false,
+		refetchInterval: 500,
+	})
+	useEffect(() => {
+		if (rollbackInProgress && rollbackStatusQ.data?.error) onPowerActionError()
+	}, [rollbackInProgress, rollbackStatusQ.data?.error])
 	const update = useUpdate({onMutate, onSuccess})
 	const migrate = useMigrate({onMutate, onSuccess})
 	const reset = useReset({onMutate, onError: onResetError})
@@ -297,6 +319,7 @@ export function GlobalSystemStateProvider({children}: {children: ReactNode}) {
 					value={{
 						shutdown,
 						restart,
+						rollback,
 						update,
 						migrate,
 						reset,

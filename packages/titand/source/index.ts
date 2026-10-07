@@ -67,6 +67,7 @@ type StoreSchema = {
 		wallpaper?: string
 		language?: string
 		temperatureUnit?: string
+		desktopTransparency?: number
 	}
 	// Active members and permanent tombstones for deleted member ids. Member ids
 	// are security identities used by sessions, paths, and shares, so they must
@@ -224,9 +225,6 @@ export default class Titand {
 		this.logger.log(`logLevel:      ${this.logLevel}`)
 		this.logger.log()
 
-		// If we've successfully booted then commit to the current OS partition
-		await commitOsPartition(this)
-
 		// Set ondemand cpu governor for Raspberry Pi (non-blocking)
 		setupPiCpuGovernor(this)
 
@@ -343,6 +341,10 @@ export default class Titand {
 		// Start mcp after the other modules because its startup work (file grant
 		// cleanup and the files watcher listener) depends on them being started
 		this.mcp.start().catch((error) => this.logger.error('Failed to start MCP', error))
+		// Confirm a trial slot only after migration, authentication, the writable
+		// data store, ingress and the dashboard are actually ready. A startup
+		// failure above must retain Rugix's previous default as fallback.
+		await commitOsPartition(this)
 	}
 
 	private async setBackupRestoreFirstStartFlag() {

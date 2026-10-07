@@ -15,6 +15,17 @@ case "${BOOT_TYPE}" in
         cp -L /initrd.img "${BOOT_DIR}"
         echo "Installing second stage boot script..."
         cp "${RECIPE_DIR}/files/grub.cfg" "${BOOT_DIR}"
+        install -D -m 644 "${RECIPE_DIR}/files/first.grub.cfg" /etc/titan/first.grub.cfg
+        install -D -m 755 "${RECIPE_DIR}/files/titan-recovery-menu.py" /usr/libexec/titan-recovery-menu.py
+        python3 - "${BOOT_DIR}/titan-version.grubenv" <<'PYTHON'
+import json, pathlib, re, sys
+release = json.loads(pathlib.Path('/usr/share/titan/release.json').read_text())
+version = release['version']
+if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+    raise ValueError('Invalid TitanOS boot version')
+value = ('# GRUB Environment Block\ntitan_slot_version=' + version + '\n').encode('ascii')
+pathlib.Path(sys.argv[1]).write_bytes(value + b'#' * (1024 - len(value)))
+PYTHON
         ;;
     "pi")
         echo "Copying firmware files..."

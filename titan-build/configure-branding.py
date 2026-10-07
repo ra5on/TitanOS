@@ -138,6 +138,9 @@ def apply(root: Path) -> None:
             'TitanOS receives signed stable system updates. Alpha and beta labels apply only to individual features.'
         )
         translations['photos'] = "Foto's"
+        if name in ('de', 'en'):
+            translations['software-update.title'] = ('Software-Update & Wiederherstellung' if name == 'de'
+                                                      else 'Software Update & Recovery')
         path.write_text(json.dumps(translations, ensure_ascii=False, indent=2) + '\n')
 
     # Upgrade already-branded presentation text as well as pristine upstream text.
