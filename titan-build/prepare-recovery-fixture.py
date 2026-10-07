@@ -58,6 +58,19 @@ def patch_baseline(boot, system, release, temporary):
     return baseline
 
 
+def link_or_copy(source, target):
+    try:
+        os.link(source, target)
+    except OSError as error:
+        # Native Bakery artifacts can be root-owned and readable by the runner.
+        # protected_hardlinks then denies linking them even on the same filesystem.
+        # A copy also supports other filesystems and filesystems without hardlinks.
+        if error.errno not in {errno.EXDEV, errno.EPERM, errno.EACCES, errno.EMLINK,
+                               errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP}:
+            raise
+        shutil.copyfile(source, target)
+
+
 def signed_descriptor(directory, release, image, update, verification, commit, key):
     version = release['version']
     target = directory / f'v{version}'
@@ -65,12 +78,7 @@ def signed_descriptor(directory, release, image, update, verification, commit, k
     assets = []
     for source, suffix in ((image, '.img.xz'), (update, '.update')):
         name = f'titan-{version}{suffix}'
-        try:
-            os.link(source, target / name)
-        except OSError as error:
-            if error.errno != errno.EXDEV:
-                raise
-            shutil.copyfile(source, target / name)
+        link_or_copy(source, target / name)
         assets.append({'name': name, 'sizeBytes': source.stat().st_size, 'sha256': digest(source)})
     (target / 'release.json').write_text(json.dumps(release) + '\n')
     manifest = {'schemaVersion': 1, 'releaseVersion': version, 'osVersion': version,
