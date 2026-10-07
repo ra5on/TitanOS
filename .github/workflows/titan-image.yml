@@ -17,7 +17,8 @@ permissions:
 
 concurrency:
   group: titan-image-${{ github.ref }}
-  cancel-in-progress: false
+  # A newer source commit must replace an unfinished build of the same release.
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   source:
