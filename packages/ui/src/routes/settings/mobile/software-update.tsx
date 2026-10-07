@@ -22,7 +22,7 @@ export function SoftwareUpdateDrawer() {
 
 	return (
 		<Drawer {...dialogProps}>
-			<DrawerContent>
+			<DrawerContent fullHeight withScroll>
 				<DrawerHeader>
 					<DrawerTitle>{title}</DrawerTitle>
 					<DrawerDescription>{t('check-for-latest-version')}</DrawerDescription>
