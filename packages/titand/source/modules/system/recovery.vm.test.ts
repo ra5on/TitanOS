@@ -98,7 +98,7 @@ def response(url):
  target='https://10.0.2.2:${serverPort}/'+value.hostname+value.path+('?' + value.query if value.query else '')
  return urllib.request.urlopen(target,context=ssl.create_default_context(cafile='/run/titan-recovery-test-ca.crt'),timeout=60)
 product.response=response
-product.main()
+sys.exit(product.main())
 `
 	await titand.vm
 		.sshAsRoot(`test -f /usr/libexec/titan-system-update.production.py || cp /usr/libexec/titan-system-update.py /usr/libexec/titan-system-update.production.py
