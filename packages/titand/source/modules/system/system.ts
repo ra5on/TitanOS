@@ -529,14 +529,25 @@ export async function reboot(): Promise<boolean> {
 	return true
 }
 
+let bootConfirmationRetry: ReturnType<typeof globalThis.setTimeout> | undefined
+
 export async function commitOsPartition(titand: Titand): Promise<boolean> {
 	try {
 		titand.logger.log('Committing OS partition...')
-		await $`rugix-ctrl system commit`
-		titand.logger.log('Successfully commited to new OS partition.')
+		await $`/usr/bin/python3 /usr/libexec/titan-system-update.py confirm --current-version ${titand.version} --port ${titand.port}`
+		if (bootConfirmationRetry) globalThis.clearTimeout(bootConfirmationRetry)
+		bootConfirmationRetry = undefined
+		titand.logger.log('Successfully confirmed the healthy OS partition.')
 		return true
 	} catch (error) {
-		titand.logger.error(`Failed to commit OS partition`, error)
+		titand.logger.error(`Failed to confirm OS partition; retrying after 30 seconds`, error)
+		if (!bootConfirmationRetry) {
+			bootConfirmationRetry = globalThis.setTimeout(() => {
+				bootConfirmationRetry = undefined
+				void commitOsPartition(titand)
+			}, 30_000)
+			bootConfirmationRetry.unref()
+		}
 		return false
 	}
 }

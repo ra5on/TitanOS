@@ -11,8 +11,9 @@ import {useSoftwareUpdate} from '@/hooks/use-software-update'
 import {useLinkToDialog} from '@/utils/dialog'
 
 import {ListRow} from './list-row'
+import {SoftwareRecovery} from './software-recovery'
 
-export function SoftwareUpdateListRow({isActive, icon}: {isActive: boolean; icon?: IconType}) {
+function SoftwareUpdateStatusRow({isActive, icon}: {isActive: boolean; icon?: IconType}) {
 	const {t} = useTranslation()
 	const {state, currentVersion, latestVersion, checkLatest} = useSoftwareUpdate()
 	const linkToDialog = useLinkToDialog()
@@ -71,5 +72,14 @@ export function SoftwareUpdateListRow({isActive, icon}: {isActive: boolean; icon
 				{state === 'checking' ? t('software-update.checking') : t('software-update.check')}
 			</Button>
 		</ListRow>
+	)
+}
+
+export function SoftwareUpdateListRow(props: {isActive: boolean; icon?: IconType}) {
+	return (
+		<div className='min-w-0'>
+			<SoftwareUpdateStatusRow {...props} />
+			<SoftwareRecovery />
+		</div>
 	)
 }

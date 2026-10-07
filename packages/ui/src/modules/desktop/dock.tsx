@@ -3,14 +3,12 @@ import React from 'react'
 import {useLocation, useNavigate} from 'react-router-dom'
 import {useWindowSize} from 'react-use'
 
-import {Glass} from '@/components/ui/glass'
 import {getLastFilesPath} from '@/features/files/utils/last-files-path'
 import {useAppsWithUpdates} from '@/hooks/use-apps-with-updates'
 import {useIsMobile} from '@/hooks/use-is-mobile'
 import {useSettingsNotificationCount} from '@/hooks/use-settings-notification-count'
 import {cn} from '@/lib/utils'
 import {systemAppsKeyed, useApps} from '@/providers/apps'
-import {useWallpaper} from '@/providers/wallpaper'
 import {trpcReact} from '@/trpc/trpc'
 import {useLinkToDialog} from '@/utils/dialog'
 import {tw} from '@/utils/tw'
@@ -71,7 +69,6 @@ export function Dock() {
 	const {appsWithUpdates} = useAppsWithUpdates()
 	const isMobile = useIsMobile()
 	const {iconSize, iconSizeZoomed, padding, dockHeight} = useDockDimensions()
-	const {wallpaperImgRef} = useWallpaper()
 
 	// Members browse the app store read-only, updates are owner-only
 	const {data: user} = trpcReact.user.get.useQuery()
@@ -100,11 +97,7 @@ export function Dock() {
 			onPointerLeave={() => mouseX.set(Infinity)}
 			className='shrink-0 transform-gpu will-change-transform'
 		>
-			<Glass
-				{...dockGlassProps}
-				// Only on the bare desktop: the WebGL fallback lens sees just the
-				// wallpaper, and on other routes page content scrolls under the dock
-				refractionTarget={pathname === '/' ? wallpaperImgRef : undefined}
+			<div
 				className={cn(dockClass, isMobile && 'gap-2')}
 				style={{
 					height: dockHeight,
@@ -178,7 +171,7 @@ export function Dock() {
 					label={systemAppsKeyed['TITAN_live-usage'].name}
 					mouseX={mouseX}
 				/>
-			</Glass>
+			</div>
 		</motion.div>
 	)
 }
@@ -188,8 +181,7 @@ export function DockPreview() {
 	const {iconSize, iconSizeZoomed, padding, dockHeight} = useDockDimensions({isPreview: true})
 
 	return (
-		<Glass
-			{...dockGlassProps}
+		<div
 			className={dockPreviewClass}
 			style={{
 				height: dockHeight,
@@ -232,7 +224,7 @@ export function DockPreview() {
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
-		</Glass>
+		</div>
 	)
 }
 
@@ -256,8 +248,5 @@ export function DockBottomPositioner({children}: {children: React.ReactNode}) {
 	)
 }
 
-// Clearer glass than the widget defaults: barely any blur or tint, hard refraction
-const dockGlassProps = {blur: 1.5, saturate: 1.4, brightness: 0.9, scale: 70, chroma: 0.24, bevel: 1.0} as const
-
-const dockClass = tw`mx-auto flex items-end gap-2.5 rounded-2xl contrast-more:bg-neutral-700 px-3 shadow-dock-drop shrink-0`
-const dockPreviewClass = tw`mx-auto flex items-end gap-4 rounded-2xl px-3 shadow-dock-drop shrink-0`
+const dockClass = tw`titan-desktop-glass mx-auto flex items-end gap-2.5 rounded-2xl px-3 shrink-0`
+const dockPreviewClass = tw`titan-desktop-glass mx-auto flex items-end gap-4 rounded-2xl px-3 shrink-0`

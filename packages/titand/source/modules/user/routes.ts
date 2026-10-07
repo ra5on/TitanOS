@@ -406,6 +406,7 @@ export default router({
 				wallpaper: resolveWallpaperAppearance(member.wallpaper),
 				language: member.language,
 				temperatureUnit: member.temperatureUnit,
+				desktopTransparency: member.desktopTransparency ?? 75,
 			}
 		}
 
@@ -421,6 +422,7 @@ export default router({
 			wallpaper: resolveWallpaperAppearance(user.wallpaper),
 			language: user.language ?? 'de',
 			temperatureUnit: user.temperatureUnit,
+			desktopTransparency: user.desktopTransparency ?? 75,
 		}
 	}),
 
@@ -432,6 +434,7 @@ export default router({
 					wallpaper: z.string().refine(isWallpaperId, 'Unknown wallpaper').optional(),
 					language: z.string().optional(),
 					temperatureUnit: z.string().optional(),
+					desktopTransparency: z.number().int().min(0).max(100).optional(),
 				})
 				.strict(),
 		)
@@ -441,6 +444,9 @@ export default router({
 			if (input.wallpaper) await ctx.user.setAccountWallpaper(accountId, input.wallpaper)
 			if (input.language) await ctx.user.setAccountLanguage(accountId, input.language)
 			if (input.temperatureUnit) await ctx.user.setAccountTemperatureUnit(accountId, input.temperatureUnit)
+			if (input.desktopTransparency !== undefined) {
+				await ctx.user.setAccountDesktopTransparency(accountId, input.desktopTransparency)
+			}
 			return true
 		}),
 

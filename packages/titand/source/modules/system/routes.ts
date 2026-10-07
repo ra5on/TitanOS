@@ -10,7 +10,7 @@ import stripAnsi from 'strip-ansi'
 import {performReset} from './factory-reset.js'
 import {OWNER_USER_ID} from '../user/constants.js'
 import type Titand from '../../index.js'
-import {getUpdateStatus, performUpdate, getLatestRelease} from './update.js'
+import {getUpdateStatus, performUpdate, getLatestRelease, getRecoveryStatus, performRollback} from './update.js'
 import {
 	getCpuTemperature,
 	getSystemDiskUsage,
@@ -50,12 +50,19 @@ export function setSystemStatus(status: SystemStatus) {
 	systemStatus = status
 }
 
+function assertSystemIdle() {
+	if (systemStatus !== 'running' || getUpdateStatus().running) {
+		throw new TRPCError({code: 'CONFLICT', message: 'Eine Systemaktion läuft bereits. Bitte warten.'})
+	}
+}
+
 function startPowerAction(
 	titand: Titand,
 	response: Parameters<typeof runAfterResponse>[0],
 	status: Extract<SystemStatus, 'restarting' | 'shutting-down'>,
 	action: () => Promise<unknown>,
 ) {
+	assertSystemIdle()
 	systemStatus = status
 	runAfterResponse(response, () => {
 		void (async () => {
@@ -194,20 +201,64 @@ export default router({
 		}
 	}),
 	update: privateProcedure.mutation(async ({ctx}) => {
+		assertSystemIdle()
 		systemStatus = 'updating'
 		let success = false
 		try {
 			success = await performUpdate(ctx.titand)
 			if (success) {
-				await setTimeout(1000)
-				await ctx.titand.stop()
-				await reboot()
+				// The HTTP acknowledgement must leave the server before stop()
+				// closes its own listener. Otherwise this very request can deadlock.
+				runAfterResponse(ctx.response, () => {
+					void (async () => {
+						try {
+							await setTimeout(1000)
+							await ctx.titand.stop()
+							await reboot()
+						} catch (error) {
+							systemStatus = 'running'
+							ctx.titand.logger.error('Failed to reboot after installing the system update', error)
+						}
+					})()
+				})
 			}
 		} finally {
 			if (!success) systemStatus = 'running'
 		}
 		return success
 	}),
+	recoveryStatus: privateProcedure.query(({ctx}) => getRecoveryStatus(ctx.titand)),
+	rollback: privateProcedure
+		.input(z.object({selection: z.string().regex(/^[a-f0-9]{64}$/)}))
+		.mutation(async ({ctx, input}) => {
+			assertSystemIdle()
+			// Reserve before the asynchronous check, so power and update actions
+			// cannot race this selection. The helper rechecks under its OS lock.
+			systemStatus = 'restarting'
+			try {
+				const state = await getRecoveryStatus(ctx.titand)
+				if (!state.previous.some((item) => item.selection === input.selection)) {
+					throw new TRPCError({
+						code: 'CONFLICT',
+						message: 'Dieser Systemstand ist nicht mehr verfügbar. Bitte neu laden.',
+					})
+				}
+				runAfterResponse(ctx.response, () => {
+					void performRollback(ctx.titand, input.selection)
+						.then((success) => {
+							if (!success) systemStatus = 'running'
+						})
+						.catch((error) => {
+							systemStatus = 'running'
+							ctx.titand.logger.error('TitanOS rollback failed', error)
+						})
+				})
+				return true
+			} catch (error) {
+				systemStatus = 'running'
+				throw error
+			}
+		}),
 	hiddenService: privateProcedure.query(async ({ctx}) => {
 		try {
 			return await fse.readFile(`${ctx.titand.dataDirectory}/tor/data/web/hostname`, 'utf-8')
@@ -320,6 +371,7 @@ export default router({
 					throw new TRPCError({code: 'UNAUTHORIZED', message: 'Invalid password'})
 				}
 			}
+			assertSystemIdle()
 			systemStatus = 'resetting'
 			try {
 				// Wait for UI to poll status (polls every 10s) and see we're resetting

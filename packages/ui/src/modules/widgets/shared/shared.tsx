@@ -1,10 +1,8 @@
 import {cva} from 'class-variance-authority'
 import {useContext} from 'react'
 
-import {Glass} from '@/components/ui/glass'
 import {useTilt} from '@/components/ui/tilt'
 import {cn} from '@/lib/utils'
-import {useWallpaper} from '@/providers/wallpaper'
 import {tw} from '@/utils/tw'
 
 import {BackdropBlurVariantContext} from './backdrop-blur-context'
@@ -19,8 +17,8 @@ export const widgetContainerCva = cva(
 	{
 		variants: {
 			variant: {
-				// bg and blur come from <Glass> (tint + backdrop-filter)
-				'with-backdrop-blur': 'contrast-more:bg-neutral-900 shadow-widget-drop',
+				// The same account-specific desktop material is used by the dock and menu.
+				'with-backdrop-blur': 'titan-desktop-glass',
 				default: 'bg-neutral-900/80 shadow-widget',
 			},
 		},
@@ -49,7 +47,6 @@ const widgetButtonClass = tw`ring-white/25 focus:outline-hidden focus-visible:ri
 /** Make the widget a button if we pass an `onClick` */
 export const WidgetContainer: React.FC<WidgetContainerProps> = ({className, ...props}) => {
 	const variant = useContext(BackdropBlurVariantContext)
-	const {staticWallpaperImgRef} = useWallpaper()
 	// tvOS-style hover tilt — handlers spread onto the glass host below (mouse
 	// only, respects reduced motion; drives transform without re-rendering)
 	const tilt = useTilt()
@@ -68,24 +65,9 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({className, ...p
 	}
 
 	const interactive = 'onClick' in props
+	const Host = interactive ? 'button' : 'div'
 	return (
-		<Glass
-			as={interactive ? 'button' : 'div'}
-			// A tight rim (rather than the default dome across the whole surface)
-			// keeps the centre optically flat so content reads crisply, and
-			// concentrates the refraction into a thick-glass edge.
-			bevel='18px'
-			edgeBlur={0}
-			blur={2.0}
-			scale={110}
-			chroma={0.35}
-			saturate={1.8}
-			brightness={0.82}
-			// Top-lit: light pools along the upper rim, the body sinks away from
-			// the wallpaper so text keeps its contrast over bright skies.
-			tint='linear-gradient(to bottom, rgb(255 255 255 / 0.08), rgb(12 14 18 / 0.24))'
-			refractionTarget={staticWallpaperImgRef}
-			forceRefractionTarget
+		<Host
 			className={cn(widgetContainerCva({variant}), interactive && widgetButtonClass, className)}
 			{...(props as React.HTMLAttributes<HTMLElement>)}
 			{...tilt}

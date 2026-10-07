@@ -23,6 +23,7 @@ export type Member = {
 	wallpaper?: string
 	language: string
 	temperatureUnit?: string
+	desktopTransparency?: number
 	viewPreferences?: Partial<ViewPreferences>
 	favorites?: string[]
 	// Enabled desktop widgets. Undefined means the member has never changed
@@ -644,6 +645,12 @@ export default class User {
 	async setAccountTemperatureUnit(userId: string, temperatureUnit: string) {
 		if (userId === OWNER_USER_ID) return this.setTemperatureUnit(temperatureUnit)
 		return this.#updateMember(userId, {temperatureUnit})
+	}
+
+	// Desktop appearance is private to each account and persists across devices.
+	async setAccountDesktopTransparency(userId: string, desktopTransparency: number) {
+		if (userId === OWNER_USER_ID) return this.#store.set('user.desktopTransparency', desktopTransparency)
+		return this.#updateMember(userId, {desktopTransparency})
 	}
 
 	// Get any account's file browser view preferences

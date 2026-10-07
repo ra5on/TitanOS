@@ -27,13 +27,30 @@ vi.mock('@/providers/global-system-state', () => ({
 	}),
 }))
 vi.mock('@/providers/confirmation', () => ({useConfirmation: () => fixtures.confirm}))
+vi.mock('@/providers/desktop-appearance', () => ({
+	useDesktopAppearance: () => ({
+		transparency: 75,
+		setTransparency: vi.fn(),
+		resetTransparency: vi.fn(),
+		isSaving: false,
+		saveFailed: false,
+	}),
+}))
 // Isolate our confirmation/permission logic from Radix's already-tested menu primitive.
 vi.mock('@/components/ui/dropdown-menu', () => ({
 	DropdownMenu: ({children}: {children: ReactNode}) => <div>{children}</div>,
 	DropdownMenuTrigger: ({children}: {children: ReactElement}) => children,
 	DropdownMenuContent: ({children}: {children: ReactNode}) => <div>{children}</div>,
-	DropdownMenuItem: ({children, onSelect}: {children: ReactNode; onSelect: () => void}) => (
-		<button onClick={onSelect}>{children}</button>
+	DropdownMenuItem: ({
+		children,
+		onSelect,
+	}: {
+		children: ReactNode
+		onSelect: (event: {preventDefault: () => void}) => void
+	}) => (
+		<div role='menuitem' onClick={() => onSelect({preventDefault: () => {}})}>
+			{children}
+		</div>
 	),
 	DropdownMenuLabel: ({children}: {children: ReactNode}) => <span>{children}</span>,
 	DropdownMenuSeparator: () => <hr />,
@@ -58,7 +75,9 @@ function render() {
 	act(() => root?.render(<SystemMenu />))
 }
 async function choose(label: string) {
-	const button = [...container.querySelectorAll('button')].find((item) => item.textContent === label)
+	const button = [...container.querySelectorAll<HTMLElement>('[role=menuitem]')].find(
+		(item) => item.textContent === label,
+	)
 	expect(button).toBeDefined()
 	await act(async () => button?.click())
 }
@@ -77,8 +96,8 @@ describe('desktop system menu', () => {
 		expect(fixtures.confirm).toHaveBeenCalledWith(
 			expect.objectContaining({
 				actions: [
-					{label: 'no', value: 'cancel', variant: 'default'},
 					{label: 'yes', value: 'confirm', variant: 'destructive'},
+					{label: 'no', value: 'cancel', variant: 'default'},
 				],
 			}),
 		)
@@ -100,6 +119,8 @@ describe('desktop system menu', () => {
 	it('offers members only logout and suppresses actions while power changes are pending', async () => {
 		fixtures.role = 'member'
 		render()
+		expect(container.textContent).toContain('desktop.appearance.title')
+		expect(container.querySelector('input[type=range]')).not.toBeNull()
 		expect(container.textContent).not.toContain('restart')
 		expect(container.textContent).not.toContain('shut-down')
 		fixtures.pending = true

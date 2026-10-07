@@ -95,6 +95,7 @@ Usage: $0 <command> [options]
 
 Commands:
     boot [image]                   Boot VM from the given image (defaults to native arch image)
+    key <qcode>                    Send a keyboard key to the running VM console
     reflash                        Delete boot disk overlay (simulates reflashing the OS)
     reset                          Delete all VM state (overlay, NVMe disks, HDDs, UEFI vars)
 
@@ -1438,6 +1439,16 @@ shift
 case "$command" in
   help|--help|-h)
     show_help
+    exit 0
+    ;;
+
+  key)
+    if [[ $# -ne 1 || ! "$1" =~ ^[a-z0-9_-]{1,32}$ ]]; then
+      echo "Error: key requires one QEMU key code" >&2
+      exit 1
+    fi
+    init_state
+    qmp_execute "$(jq -nc --arg key "$1" '{execute:"send-key",arguments:{keys:[{type:"qcode",data:$key}],"hold-time":80}}')"
     exit 0
     ;;
 

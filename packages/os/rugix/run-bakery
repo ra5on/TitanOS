@@ -46,6 +46,7 @@ exec $DOCKER run --rm --privileged \
     -v "$(pwd)":/project \
     -v "$(pwd)/${RUGIX_CONTEXT_DIR}":/run/rugix/bakery/context \
     -v /dev:/dev \
+    -v "$(pwd)/recipes/titanos-boot/files/first.grub.cfg":/usr/share/rugix/boot/grub/cfg/first.grub.cfg:ro \
     -e "RUGIX_HOST_PROJECT_DIR=$(pwd)" \
     -e "RUGIX_BAKERY_IMAGE=${RUGIX_BAKERY_IMAGE}" \
     -e "RUGIX_DEV=${RUGIX_DEV}" \

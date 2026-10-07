@@ -15,7 +15,11 @@ describe('signed local Titan update checks', () => {
 	test('concurrent checks share one helper request and cache the verified result', async () => {
 		const {getLatestRelease} = await import('./update.js')
 		let complete!: (value: {stdout: string}) => void
-		execute.mockReturnValue(new Promise((resolve) => { complete = resolve }))
+		execute.mockReturnValue(
+			new Promise((resolve) => {
+				complete = resolve
+			}),
+		)
 		const system = instance() as unknown as Parameters<typeof getLatestRelease>[0]
 		const first = getLatestRelease(system)
 		const second = getLatestRelease(system)
@@ -57,5 +61,46 @@ describe('signed local Titan update checks', () => {
 		expect(await performUpdate(system)).toBe(false)
 		expect(execute).toHaveBeenCalledTimes(1)
 		expect(getUpdateStatus()).toMatchObject({running: false, error: 'Kein neueres Titan-Systemupdate verfügbar'})
+	})
+})
+
+describe('signed local system recovery', () => {
+	const state = {
+		current: {version: '2.0.1', name: 'TitanOS 2.0.1', slot: 'a', confirmed: true},
+		previous: [{version: '2.0.0', name: 'TitanOS 2.0.0', slot: 'b', selection: 'a'.repeat(64)}],
+		reason: '',
+	}
+	test('passes only the updater-validated previous slot to the UI', async () => {
+		const {getRecoveryStatus} = await import('./update.js')
+		execute.mockResolvedValue({stdout: JSON.stringify(state)})
+		expect(await getRecoveryStatus(instance() as never)).toEqual(state)
+		expect(execute.mock.calls[0].slice(-1)).toEqual(['2.0.1'])
+	})
+
+	test.each([
+		{...state, current: {...state.current, version: '8.0.0'}},
+		{...state, previous: [{...state.previous[0], slot: 'a'}]},
+		{...state, previous: [{...state.previous[0], selection: '../evil'}]},
+		{...state, previous: [state.previous[0], state.previous[0]]},
+	])('rejects malformed recovery output', async (value) => {
+		const {getRecoveryStatus} = await import('./update.js')
+		execute.mockResolvedValue({stdout: JSON.stringify(value)})
+		await expect(getRecoveryStatus(instance() as never)).rejects.toThrow('Ungültige Antwort')
+	})
+
+	test('serializes rollback against updates and preserves an operation failure', async () => {
+		const {performRollback, performUpdate, getUpdateStatus} = await import('./update.js')
+		let fail!: (error: Error) => void
+		execute.mockReturnValue(
+			new Promise((_resolve, reject) => {
+				fail = reject
+			}),
+		)
+		const system = instance() as never
+		const pending = performRollback(system, state.previous[0].selection)
+		await expect(performUpdate(system)).rejects.toThrow('läuft bereits')
+		fail(new Error('Native restart failed'))
+		expect(await pending).toBe(false)
+		expect(getUpdateStatus()).toMatchObject({running: false, error: 'Native restart failed'})
 	})
 })

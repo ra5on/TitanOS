@@ -40,6 +40,20 @@ describe('member lifecycle', () => {
 		await directory.destroyRoot()
 	})
 
+	test('persists desktop transparency independently for owner and members across reloads', async () => {
+		const member = await titand.user.createUser('Appearance member', 'passwordpassword')
+		expect((await titand.user.get())?.desktopTransparency).toBeUndefined()
+		expect((await titand.user.getMember(member.userId))?.desktopTransparency).toBeUndefined()
+		await titand.user.setAccountDesktopTransparency('0', 0)
+		await titand.user.setAccountDesktopTransparency(member.userId, 100)
+		const reloaded = new Titand({dataDirectory})
+		expect((await reloaded.user.get())?.desktopTransparency).toBe(0)
+		expect((await reloaded.user.getMember(member.userId))?.desktopTransparency).toBe(100)
+		await titand.user.setAccountDesktopTransparency(member.userId, 75)
+		expect((await titand.user.get())?.desktopTransparency).toBe(0)
+		expect((await titand.user.getMember(member.userId))?.desktopTransparency).toBe(75)
+	})
+
 	test('permanently reserves a deleted member id and retries interrupted cleanup', async () => {
 		const first = await titand.user.createUser('Alice', 'passwordpassword')
 		expect(first.userId).toBe('Alice')

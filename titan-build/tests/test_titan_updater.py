@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import stat
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -170,8 +171,12 @@ class SignedUpdaterTests(unittest.TestCase):
             self.assertEqual(Path(args[-1]).read_bytes(),self.payload)
             self.assertTrue(Path(args[-1]).is_relative_to(self.root))
             calls.append(args)
+        info={'boot':{'bootFlow':boot,'activeGroup':'a','defaultGroup':'a','groups':{'a':{},'b':{}}},'state':{'status':'Active'},
+              'slots':{name:{'active':name.endswith('-a'),'hashes':{'sha256':'a'*64},'size':4096,'updatedAt':'2026-10-07T00:00:00Z'}
+                       for name in ('boot-a','system-a','boot-b','system-b')}}
         with patch.object(updater,'latest',return_value=descriptor), patch.object(updater,'staging_directory',return_value=self.root), \
-                patch.object(updater.subprocess,'check_output',return_value=json.dumps({'boot':{'bootFlow':boot}}).encode()), \
+                patch.object(updater,'remember_current'), patch.object(updater,'sync_menu'), \
+                patch.object(updater.subprocess,'check_output',return_value=json.dumps(info).encode()), \
                 patch.object(updater.subprocess,'run',side_effect=installed), \
                 patch.object(updater,'response',return_value=io.BytesIO(self.payload if payload is None else payload)), \
                 contextlib.redirect_stdout(io.StringIO()):
@@ -204,6 +209,200 @@ class SignedUpdaterTests(unittest.TestCase):
         with patch.object(updater.subprocess,'check_output',return_value=b'{"filesystems":[{"target":"/","fstype":"ext4","options":"rw"}]}'), patch.object(updater,'STAGING',self.root/'missing'):
             with self.assertRaises(updater.UpdateError): updater.staging_directory()
             self.assertFalse((self.root/'missing').exists())
+
+    def descriptor_for(self, version):
+        original={name:getattr(self,name) for name in ('version','release','manifest','name','asset','image_name','image_asset','github')}
+        previous=self.version
+        try:
+            for name,value in original.items():
+                setattr(self,name,json.loads(json.dumps(value).replace(previous,version)))
+            self.sign()
+            return self.verified()
+        finally:
+            for name,value in original.items(): setattr(self,name,value)
+            self.sign()
+
+    @contextlib.contextmanager
+    def recovery_fixture(self, pending=False):
+        current=self.version
+        info={'boot':{'bootFlow':'grub','activeGroup':'a','defaultGroup':'a','groups':{'a':{},'b':{}}},
+              'state':{'status':'Active'},'slots':{}}
+        for group in ('a','b'):
+            for kind in ('boot','system'):
+                info['slots'][f'{kind}-{group}']={'active':group=='a','hashes':{'sha256':group*64},
+                    'size':4096,'updatedAt':'2026-10-07T00:00:00Z'}
+        journal=updater.empty_journal()
+        for group,version in (('a',current),('b',self.current)):
+            descriptor=self.descriptor_for(version)
+            updater.store_evidence(self.root,descriptor)
+            journal['slots'][group]={'version':version,'name':descriptor['name'],'confirmed':True,
+                                    'snapshot':updater.slot_snapshot(info,group)}
+        if pending: journal['pending']={'type':'update','slot':'a','version':current}
+        updater.atomic_json(self.root/'slots.json',journal)
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'installed'), \
+             patch.object(updater,'protected_read',side_effect=lambda path,maximum:Path(path).read_bytes()), \
+             patch.object(updater,'staging_directory',return_value=self.root), \
+             patch.object(updater,'system_info',side_effect=lambda:json.loads(json.dumps(info))):
+            yield current,info,journal
+
+    def test_fresh_or_factory_cloned_slots_do_not_infer_a_previous_version(self):
+        with self.recovery_fixture() as (current,info,journal), patch.object(updater,'fetch_bytes') as fetch:
+            updater.atomic_json(self.root/'slots.json',updater.empty_journal())
+            state=updater.recovery_status(current)
+            self.assertEqual(state['previous'],[])
+            self.assertIn('Noch kein',state['reason'])
+            fetch.assert_not_called()
+
+    def test_confirmed_signed_previous_slot_is_available_offline_and_selection_is_bound(self):
+        with self.recovery_fixture() as (current,info,journal), patch.object(updater,'fetch_bytes') as fetch:
+            state=updater.recovery_status(current)
+            self.assertEqual(state['current']['version'],current)
+            self.assertEqual(state['previous'][0]['version'],self.current)
+            self.assertEqual(state['previous'][0]['slot'],'b')
+            self.assertRegex(state['previous'][0]['selection'],r'^[a-f0-9]{64}$')
+            self.assertEqual((self.root/'slots.json').stat().st_mode & 0o777,0o600)
+            fetch.assert_not_called()
+
+    def test_tampered_signature_unconfirmed_slot_and_changed_native_payload_fail_closed(self):
+        for reason in ('signature','unconfirmed','changed-payload','same-version','pending'):
+            with self.subTest(reason=reason), self.recovery_fixture() as (current,info,journal):
+                if reason=='signature':
+                    path=self.root/f'evidence-{self.current}.json'
+                    value=json.loads(path.read_text()); value['files']['SHA256SUMS.sig']='A'*88
+                    updater.atomic_json(path,value)
+                elif reason=='unconfirmed': journal['slots']['b']['confirmed']=False
+                elif reason=='changed-payload': info['slots']['system-b']['updatedAt']='2026-10-08T00:00:00Z'
+                elif reason=='same-version': journal['slots']['b']['version']=current; journal['slots']['b']['name']='TitanOS '+current
+                else: journal['pending']={'type':'update','slot':'b','version':self.current}
+                updater.atomic_json(self.root/'slots.json',journal)
+                self.assertEqual(updater.recovery_status(current)['previous'],[])
+
+    def test_native_rollback_uses_spare_try_boot_and_stale_selection_never_reboots(self):
+        with self.recovery_fixture() as (current,info,journal):
+            selection=updater.recovery_status(current)['previous'][0]['selection']
+            original_run=subprocess.run
+            native=[]
+            def run(args,**kwargs):
+                if args[0]=='/usr/bin/rugix-ctrl': native.append(args);return Mock(returncode=0)
+                return original_run(args,**kwargs)
+            with patch.object(updater.subprocess,'run',side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(updater.UpdateError): updater.rollback(current,'0'*64)
+                self.assertEqual(native,[])
+                updater.rollback(current,selection)
+                self.assertEqual(native,[['/usr/bin/rugix-ctrl','system','reboot','--spare']])
+                with self.assertRaises(updater.UpdateError): updater.rollback(current,selection)
+            pending=json.loads((self.root/'slots.json').read_text())['pending']
+            self.assertEqual(pending,{'type':'rollback','slot':'b','version':self.current})
+
+    def test_native_reboot_failure_clears_pending_and_keeps_original_default(self):
+        with self.recovery_fixture() as (current,info,journal):
+            selection=updater.recovery_status(current)['previous'][0]['selection']
+            original_run=subprocess.run
+            def run(args,**kwargs):
+                if args[0]=='/usr/bin/rugix-ctrl': raise subprocess.CalledProcessError(1,args)
+                return original_run(args,**kwargs)
+            with patch.object(updater.subprocess,'run',side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(subprocess.CalledProcessError): updater.rollback(current,selection)
+            self.assertNotIn('pending',json.loads((self.root/'slots.json').read_text()))
+            self.assertEqual(info['boot']['defaultGroup'],'a')
+
+    def test_healthy_trial_is_committed_only_after_signed_fingerprint_validation(self):
+        with self.recovery_fixture(pending=True) as (current,info,journal):
+            info['boot']['defaultGroup']='b';journal['slots']['a']['confirmed']=False
+            updater.atomic_json(self.root/'slots.json',journal)
+            original_run=subprocess.run;native=[]
+            def run(args,**kwargs):
+                if args[0]=='/usr/bin/rugix-ctrl':
+                    native.append(args);info['boot']['defaultGroup']='a';return Mock(returncode=0)
+                return original_run(args,**kwargs)
+            with patch.object(updater,'health_check',return_value=info),patch.object(updater,'sync_menu') as menu, \
+                 patch.object(updater.subprocess,'run',side_effect=run):
+                updater.confirm(current,3001)
+            self.assertEqual(native,[['/usr/bin/rugix-ctrl','system','commit']])
+            saved=json.loads((self.root/'slots.json').read_text())
+            self.assertTrue(saved['slots']['a']['confirmed']);self.assertNotIn('pending',saved)
+            menu.assert_called_once()
+
+    def test_failed_health_or_changed_trial_payload_never_commits(self):
+        for failure in ('health','payload'):
+            with self.subTest(failure=failure),self.recovery_fixture(pending=True) as (current,info,journal):
+                info['boot']['defaultGroup']='b';journal['slots']['a']['confirmed']=False
+                updater.atomic_json(self.root/'slots.json',journal)
+                if failure=='payload': info['slots']['system-a']['hashes']={'sha256':'f'*64}
+                with patch.object(updater,'health_check',side_effect=updater.UpdateError('Not healthy') if failure=='health' else None,return_value=info), \
+                     patch.object(updater.subprocess,'run') as native:
+                    with self.assertRaises(updater.UpdateError): updater.confirm(current,3001)
+                    self.assertFalse(any(call.args[0][:2]==['/usr/bin/rugix-ctrl','system'] for call in native.call_args_list))
+
+    def test_native_info_requires_real_active_persistent_state_and_exact_two_groups(self):
+        with self.recovery_fixture() as (current,info,journal):
+            for mutation in ({'state':{'status':'Error'}},{'state':{'status':'Disabled'}},
+                             {'boot':{**info['boot'],'groups':{'a':{}}}},
+                             {'boot':{**info['boot'],'bootFlow':'mender-grub'}}):
+                modified={**info,**mutation}
+                # Call the real parser rather than the recovery fixture's stub.
+                with patch.object(updater.subprocess,'check_output',return_value=json.dumps(modified).encode()):
+                    with self.assertRaises(updater.UpdateError): self.original_system_info()
+
+    def test_real_signed_legacy_trial_imports_only_the_old_native_default(self):
+        with self.recovery_fixture() as (current,info,journal):
+            info['boot']['defaultGroup']='b'
+            updater.atomic_json(self.root/'slots.json',updater.empty_journal())
+            descriptors={version:self.descriptor_for(version) for version in (current,self.current)}
+            responses={}
+            for version,descriptor in descriptors.items():
+                responses.update({updater.asset_url(version,name):__import__('base64').b64decode(value)
+                                  for name,value in descriptor['evidence']['files'].items()})
+                github={**descriptor['evidence']['github'],'tag_name':'v'+version,'draft':False,'prerelease':False}
+                responses[f'https://api.github.com/repos/{updater.REPOSITORY}/releases/tags/v{version}']=json.dumps(github).encode()
+            old_identity={**self.release,'version':self.current,'osVersion':self.current,'versionName':'TitanOS '+self.current}
+            original_run=subprocess.run;native=[]
+            def run(args,**kwargs):
+                if args[0]=='/usr/bin/rugix-ctrl':
+                    native.append(args);info['boot']['defaultGroup']='a';return Mock(returncode=0)
+                return original_run(args,**kwargs)
+            with patch.object(updater,'health_check',return_value=info),patch.object(updater,'read_spare_identity',return_value=old_identity), \
+                 patch.object(updater,'fetch_bytes',side_effect=lambda url,maximum:responses[url]), \
+                 patch.object(updater,'sync_menu'),patch.object(updater.subprocess,'run',side_effect=run):
+                updater.confirm(current,3001)
+            self.assertEqual(native,[['/usr/bin/rugix-ctrl','system','commit']])
+            saved=json.loads((self.root/'slots.json').read_text())
+            self.assertEqual(saved['slots']['b']['version'],self.current)
+            self.assertTrue(saved['slots']['b']['confirmed'])
+            self.assertEqual(updater.recovery_status(current)['previous'][0]['version'],self.current)
+
+    def test_unavailable_legacy_signature_never_promotes_trial_and_can_retry(self):
+        with self.recovery_fixture() as (current,info,journal):
+            info['boot']['defaultGroup']='b'
+            updater.atomic_json(self.root/'slots.json',updater.empty_journal())
+            old_identity={**self.release,'version':self.current,'osVersion':self.current,'versionName':'TitanOS '+self.current}
+            with patch.object(updater,'health_check',return_value=info),patch.object(updater,'read_spare_identity',return_value=old_identity), \
+                 patch.object(updater,'fetch_bytes',side_effect=updater.UpdateError('Offline')),patch.object(updater.subprocess,'run') as native:
+                with self.assertRaisesRegex(updater.UpdateError,'Offline'): updater.confirm(current,3001)
+            native.assert_not_called()
+            self.assertEqual(json.loads((self.root/'slots.json').read_text())['slots'],{})
+            self.assertEqual(info['boot']['defaultGroup'],'b')
+
+    def test_spare_inspection_is_read_only_and_unmounts_even_on_invalid_metadata(self):
+        target=self.root/'readonly-mount';target.mkdir()
+        with patch.object(updater.tempfile,'mkdtemp',return_value=str(target)), \
+             patch.object(updater.subprocess,'check_output',return_value=b'{"device":"/dev/vda5"}'), \
+             patch.object(updater.os,'stat',return_value=Mock(st_mode=stat.S_IFBLK)), \
+             patch.object(updater,'protected_read',side_effect=updater.UpdateError('Bad identity')), \
+             patch.object(updater.subprocess,'run',return_value=Mock(returncode=0)) as native:
+            with self.assertRaisesRegex(updater.UpdateError,'Bad identity'): updater.read_spare_identity('b')
+        self.assertEqual(native.call_args_list[0].args[0],['/usr/bin/mount','-t','ext4','-o','ro,noload,nodev,nosuid,noexec','/dev/vda5',str(target)])
+        self.assertEqual(native.call_args_list[1].args[0],['/usr/bin/umount',str(target)])
+        self.assertFalse(target.exists())
+
+    def test_untrusted_local_journal_and_signing_key_files_are_rejected(self):
+        local=self.root/'unsafe';local.write_bytes(b'{}')
+        # Unit tests run as an unprivileged account: root ownership itself is
+        # required, independent of JSON content or a plausible previousVersion.
+        if local.stat().st_uid != 0:
+            with self.assertRaises(updater.UpdateError): updater.protected_read(local,65536)
+
+    original_system_info=staticmethod(updater.system_info)
 
 
 class ConfigureUpdaterTests(unittest.TestCase):

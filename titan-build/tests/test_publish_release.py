@@ -18,7 +18,7 @@ class StablePublicationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         for name in ('titan-build','.titan','runner','bin'):
             (self.root/name).mkdir()
-        for name in ('sign-artifacts.sh','publish-release.sh','release_identity.py'):
+        for name in ('sign-artifacts.sh','publish-release.sh','release_identity.py','recovery_gate.py'):
             shutil.copyfile(ROOT/name, self.root/'titan-build'/name)
         (self.root/'titan-build/RELEASE.md').write_text('Fixture release notes')
         self.key = self.root/'private.pem'
@@ -61,6 +61,24 @@ class StablePublicationTests(unittest.TestCase):
                   'testResults':[{'status':'passed','name':str(self.root/'packages/titand/source/modules/machines/automatic-bridge.vm.test.ts'),
                                   'assertionResults':[{'status':'passed','fullName':f'Real bridge scenario {index}'} for index in range(12)]}]}
         (directory/'bridge-smoke.json').write_text(json.dumps(report))
+        import sys
+        sys.path.insert(0, str(ROOT))
+        from recovery_gate import CHECKS, validate
+        recovery = {'success':True,'numTotalTests':7,'numPassedTests':7,'numFailedTests':0,
+                    'numPendingTests':0,'numTodoTests':0,'numTotalTestSuites':2,'numPassedTestSuites':2,
+                    'numFailedTestSuites':0,'numPendingTestSuites':0,
+                    'testResults':[{'status':'passed','name':str(self.root/'packages/titand/source/modules/system/recovery.vm.test.ts'),
+                                    'assertionResults':[{'status':'passed','fullName':f'Real recovery scenario {index}'} for index in range(7)]}]}
+        (directory/'recovery-smoke.json').write_text(json.dumps(recovery))
+        requests = [f'/github.com/ra5on/TitanOS/releases/download/v{item}/{asset}'
+                    for item in ('0.0.0',version) for asset in ('SHA256SUMS','SHA256SUMS.sig','release.json','build-manifest.json')]
+        requests.append(f'/github.com/ra5on/TitanOS/releases/download/v{version}/titan-{version}.update')
+        evidence = {'status':'passed','baselineVersion':'0.0.0','candidateVersion':version,'sourceCommit':head,
+                    'privateBaseline':True,'legacyMigrationTested':False,'checks':sorted(CHECKS),'httpsRequests':requests}
+        (directory/'recovery-evidence.json').write_text(json.dumps(evidence))
+        if 'imageVerification' not in (manifest_changes or {}):
+            manifest['imageVerification']['systemRecoverySmoke'] = validate(directory,version,head)
+            (directory/'build-manifest.json').write_text(json.dumps(manifest))
         (directory/'LICENSE.md').write_text('Fixture attribution')
         (directory/'UPSTREAM.md').write_text('Fixture source provenance')
         self.env['TITAN_ARTIFACT_DIR']=str(directory)
@@ -103,6 +121,26 @@ class StablePublicationTests(unittest.TestCase):
         for kwargs in cases:
             with self.subTest(kwargs=kwargs):
                 directory=self.prepare(**kwargs)
+                self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
+                shutil.rmtree(directory)
+
+    def test_signed_missing_skipped_or_different_recovery_evidence_never_publishes(self):
+        mutations = (
+            ('recovery-evidence.json', lambda value: value.update(status='failed')),
+            ('recovery-evidence.json', lambda value: value.update(candidateVersion='9.9.9')),
+            ('recovery-evidence.json', lambda value: value.update(sourceCommit='0'*40)),
+            ('recovery-evidence.json', lambda value: value['checks'].pop()),
+            ('recovery-evidence.json', lambda value: value['httpsRequests'].pop()),
+            ('recovery-evidence.json', lambda value: value.update(legacyMigrationTested=True)),
+            ('recovery-smoke.json', lambda value: value.update(numPendingTests=1)),
+            ('recovery-smoke.json', lambda value: value['testResults'][0].update(name='other.vm.test.ts')),
+            ('build-manifest.json', lambda value: value['imageVerification'].pop('systemRecoverySmoke')),
+        )
+        for filename, mutate in mutations:
+            with self.subTest(filename=filename, mutation=mutate):
+                directory=self.prepare()
+                path=directory/filename; value=json.loads(path.read_text()); mutate(value)
+                path.write_text(json.dumps(value)); self.sign()
                 self.assertNotEqual(self.publish().returncode,0); self.assertEqual(self.gh_calls(),[])
                 shutil.rmtree(directory)
 

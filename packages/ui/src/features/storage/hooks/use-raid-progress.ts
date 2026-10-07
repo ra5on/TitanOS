@@ -45,6 +45,8 @@ export type RaidProgress = {
 export function useRaidProgress(): RaidProgress | null {
 	const {t} = useTranslation()
 	const {setOperationError} = usePendingRaidOperation()
+	// Device-level RAID events are deliberately owner-only on the server.
+	const isOwner = trpcReact.user.get.useQuery().data?.role === 'owner'
 	// Track all RAID operation states
 	const [expansion, setExpansion] = useState<ExpansionStatus | null>(null)
 	const [rebuild, setRebuild] = useState<RebuildStatus | null>(null)
@@ -56,6 +58,7 @@ export function useRaidProgress(): RaidProgress | null {
 	trpcReact.eventBus.listen.useSubscription(
 		{event: 'raid:expansion-progress'},
 		{
+			enabled: isOwner,
 			onData(data) {
 				const status = data as ExpansionStatus
 				// Clear when finished or canceled
@@ -74,6 +77,7 @@ export function useRaidProgress(): RaidProgress | null {
 	trpcReact.eventBus.listen.useSubscription(
 		{event: 'raid:rebuild-progress'},
 		{
+			enabled: isOwner,
 			onData(data) {
 				const status = data as RebuildStatus
 				if (status.state === 'finished' || status.state === 'canceled') {
@@ -90,6 +94,7 @@ export function useRaidProgress(): RaidProgress | null {
 	trpcReact.eventBus.listen.useSubscription(
 		{event: 'raid:replace-progress'},
 		{
+			enabled: isOwner,
 			onData(data) {
 				const status = data as ReplaceStatus
 				if (status.state === 'finished' || status.state === 'canceled') {
@@ -106,6 +111,7 @@ export function useRaidProgress(): RaidProgress | null {
 	trpcReact.eventBus.listen.useSubscription(
 		{event: 'raid:failsafe-transition-progress'},
 		{
+			enabled: isOwner,
 			onData(data) {
 				const status = data as FailsafeTransitionStatus
 				// On error: show toast and clear immediately. The hook is mounted by many
@@ -135,6 +141,7 @@ export function useRaidProgress(): RaidProgress | null {
 	trpcReact.eventBus.listen.useSubscription(
 		{event: 'raid:scrub-progress'},
 		{
+			enabled: isOwner,
 			onData(data) {
 				const status = data as ScrubStatus
 				if (status.state === 'finished' || status.state === 'canceled') {
@@ -147,6 +154,8 @@ export function useRaidProgress(): RaidProgress | null {
 			},
 		},
 	)
+
+	if (!isOwner) return null
 
 	// Determine which operation to display (priority order)
 	// Failsafe transition takes priority as it's a major operation

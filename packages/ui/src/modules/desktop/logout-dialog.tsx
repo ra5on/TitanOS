@@ -1,3 +1,4 @@
+import {useRef} from 'react'
 import {useTranslation} from 'react-i18next'
 import {RiLogoutCircleRLine} from 'react-icons/ri'
 
@@ -18,13 +19,19 @@ import {useDialogOpenProps} from '@/utils/dialog'
 
 export default function LogoutDialog() {
 	const {t} = useTranslation()
+	const cancelButton = useRef<HTMLButtonElement>(null)
 	const dialogProps = useDialogOpenProps('logout')
 	const {logout} = useAuth()
 	const userQ = trpcReact.user.get.useQuery()
 
 	return (
 		<AlertDialog {...dialogProps}>
-			<AlertDialogContent>
+			<AlertDialogContent
+				onOpenAutoFocus={(event) => {
+					event.preventDefault()
+					cancelButton.current?.focus()
+				}}
+			>
 				<AlertDialogHeader icon={userQ.data ? undefined : RiLogoutCircleRLine}>
 					{userQ.data && (
 						<AccountAvatar
@@ -38,11 +45,13 @@ export default function LogoutDialog() {
 					<AlertDialogTitle>{t('logout.confirm.title')}</AlertDialogTitle>
 					<AlertDialogDescription>{t('desktop.power.logout-description')}</AlertDialogDescription>
 				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>{t('no')}</AlertDialogCancel>
-					<AlertDialogAction variant='destructive' className='px-6' onClick={logout}>
+				<AlertDialogFooter className='flex-row justify-center' dir='ltr'>
+					<AlertDialogAction variant='destructive' className='min-w-0 flex-1 px-6' onClick={logout}>
 						{t('yes')}
 					</AlertDialogAction>
+					<AlertDialogCancel ref={cancelButton} className='min-w-0 flex-1'>
+						{t('no')}
+					</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

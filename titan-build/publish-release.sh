@@ -11,6 +11,7 @@ python3 - "${TASK_ARTIFACT_DIR}" "${TASK_ROOT}" <<'PY'
 import hashlib, json, pathlib, re, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(sys.argv[2])/'titan-build'))
 from release_identity import COMPATIBILITY, validate_release
+from recovery_gate import validate as validate_recovery
 d = pathlib.Path(sys.argv[1])
 m = json.loads((d/'build-manifest.json').read_text())
 r = json.loads((d/'release.json').read_text())
@@ -61,6 +62,9 @@ if (not isinstance(assertions, list) or len(assertions) != report['numPassedTest
         or len({item['fullName'] for item in assertions}) != len(assertions)):
     raise ValueError('The bridge smoke report needs all distinct VM test assertions to have passed')
 head = subprocess.check_output(['git', '-C', sys.argv[2], 'rev-parse', 'HEAD'], text=True).strip()
+recovery = validate_recovery(d, version, head)
+if verification.get('systemRecoverySmoke') != recovery:
+    raise ValueError('The signed system recovery summary does not match its real VM evidence')
 if m.get('buildCommit') != head:
     raise ValueError('The release was not built from the checkout being published')
 assets = m.get('assets')

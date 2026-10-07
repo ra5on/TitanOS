@@ -8,6 +8,7 @@ import {FadeInImg} from '@/components/ui/fade-in-img'
 import {LOADING_DASH} from '@/constants'
 import {useSoftwareUpdate} from '@/hooks/use-software-update'
 import {useSettingsDialogProps} from '@/routes/settings/_components/shared'
+import {SoftwareRecovery} from '@/routes/settings/_components/software-recovery'
 import {useLinkToDialog} from '@/utils/dialog'
 import {tw} from '@/utils/tw'
 
@@ -42,6 +43,7 @@ export function SoftwareUpdateDrawer() {
 					</p>
 					{/* Make it look like a button, but non-interactive */}
 				</div>
+				<SoftwareRecovery />
 				<DrawerFooter>
 					{state === 'at-latest' && (
 						<>

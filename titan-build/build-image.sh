@@ -78,9 +78,29 @@ verification = json.loads(path.read_text())
 verification["bridgeNetworkSmoke"] = {"status": "passed", "passedTests": report["numPassedTests"], "report": pathlib.Path(sys.argv[2]).name}
 path.write_text(json.dumps(verification, indent=2) + "\n")
 PY
+    # Build private, separately signed older-version fixtures outside dist.
+    # The signing key is removed from the real VM test process environment.
+    TASK_RECOVERY_ROOT=$(mktemp -d "${RUNNER_TEMP:-/tmp}/titan-recovery.XXXXXX")
+    trap 'rm -rf "${TASK_RECOVERY_ROOT}"' EXIT
+    python3 "${TASK_ROOT}/titan-build/prepare-recovery-fixture.py" --root "${TASK_ROOT}" --artifacts "${ARTIFACT_DIR}" --output "${TASK_RECOVERY_ROOT}/fixture"
+    env -u TITAN_SIGNING_KEY TITAN_RECOVERY_FIXTURE="${TASK_RECOVERY_ROOT}/fixture" TITAN_RECOVERY_EVIDENCE="${ARTIFACT_DIR}/recovery-evidence.json" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/system/recovery.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/recovery-smoke.json"
+    python3 - "${TASK_ROOT}" "${ARTIFACT_DIR}" "${RELEASE_VERSION}" "${BUILD_COMMIT}" <<'PYTHON'
+import json, pathlib, sys
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / 'titan-build'))
+from recovery_gate import validate
+path = pathlib.Path(sys.argv[2]) / 'image-verification.json'
+verification = json.loads(path.read_text())
+verification['systemRecoverySmoke'] = validate(path.parent, sys.argv[3], sys.argv[4])
+path.write_text(json.dumps(verification, indent=2) + '\n')
+PYTHON
+    rm -rf "${TASK_RECOVERY_ROOT}"
+    trap - EXIT
 fi
 # Stream the compact disk template, then verify the compressed download.
-xz --threads=2 --memlimit-compress=2GiB --stdout "${RAW_IMAGE}" > "${RAW_IMAGE}.xz"
+# The recovery fixture already compressed the candidate's exact bytes.
+if [[ ! -f "${RAW_IMAGE}.xz" ]]; then
+    xz --threads=2 --memlimit-compress=2GiB --stdout "${RAW_IMAGE}" > "${RAW_IMAGE}.xz"
+fi
 xz --test "${RAW_IMAGE}.xz"
 rm "${RAW_IMAGE}"
 
@@ -118,7 +138,7 @@ manifest = {
     "updateFormat": "rugix",
     "updateProvider": release["updateProvider"],
     "ownTitanUpdateChannel": True,
-    "releaseEligible": verification["structuralCheck"] == "passed" and verification["uefiHttpSmoke"]["status"] == "passed" and verification.get("bridgeNetworkSmoke", {}).get("status") == "passed",
+    "releaseEligible": verification["structuralCheck"] == "passed" and verification["uefiHttpSmoke"]["status"] == "passed" and verification.get("bridgeNetworkSmoke", {}).get("status") == "passed" and verification.get("systemRecoverySmoke", {}).get("status") == "passed",
     "imageVerification": verification,
     "assets": [{"name": p.name, "sizeBytes": p.stat().st_size, "sha256": digest(p)} for p in assets],
 }

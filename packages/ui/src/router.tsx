@@ -30,6 +30,7 @@ import {GlobalDialogs} from './modules/global-dialogs'
 import {AppsProvider, AppStatePolling} from './providers/apps'
 import {AvailableAppsProvider} from './providers/available-apps'
 import {CloudActivityProvider} from './providers/cloud'
+import {DesktopAppearanceProvider} from './providers/desktop-appearance'
 import {GlobalFilesProvider} from './providers/global-files'
 import {Wallpaper} from './providers/wallpaper'
 import {NotFound} from './routes/not-found'
@@ -62,34 +63,36 @@ export const router = createBrowserRouter([
 			<EnsureNoRaidMountFailure>
 				<EnsureLoggedIn>
 					{/* These providers open authenticated file-operation and cloud-activity subscriptions, so they must not mount on login/onboarding routes. */}
-					<GlobalFilesProvider>
-						<CloudActivityProvider>
-							<Wallpaper />
-							{/* Get any notifications from titand and render them as alert dialogs */}
-							<Notifications />
-							<AvailableAppsProvider>
-								<AppsProvider>
-									<AppStatePolling />
-									<CmdkProvider>
-										<DesktopContextMenu>
-											<Desktop />
-										</DesktopContextMenu>
-										<CmdkMenu />
-										{/* Alt/Option+letter dock shortcuts; inside CmdkProvider so they stand down while the palette is open */}
-										<NavigationShortcuts />
-									</CmdkProvider>
-									<Suspense>
-										<Outlet />
-									</Suspense>
-									<GlobalDialogs />
-									<FloatingIslandContainer />
-									<DockBottomPositioner>
-										<Dock />
-									</DockBottomPositioner>
-								</AppsProvider>
-							</AvailableAppsProvider>
-						</CloudActivityProvider>
-					</GlobalFilesProvider>
+					<DesktopAppearanceProvider>
+						<GlobalFilesProvider>
+							<CloudActivityProvider>
+								<Wallpaper />
+								{/* Get any notifications from titand and render them as alert dialogs */}
+								<Notifications />
+								<AvailableAppsProvider>
+									<AppsProvider>
+										<AppStatePolling />
+										<CmdkProvider>
+											<DesktopContextMenu>
+												<Desktop />
+											</DesktopContextMenu>
+											<CmdkMenu />
+											{/* Alt/Option+letter dock shortcuts; inside CmdkProvider so they stand down while the palette is open */}
+											<NavigationShortcuts />
+										</CmdkProvider>
+										<Suspense>
+											<Outlet />
+										</Suspense>
+										<GlobalDialogs />
+										<FloatingIslandContainer />
+										<DockBottomPositioner>
+											<Dock />
+										</DockBottomPositioner>
+									</AppsProvider>
+								</AvailableAppsProvider>
+							</CloudActivityProvider>
+						</GlobalFilesProvider>
+					</DesktopAppearanceProvider>
 				</EnsureLoggedIn>
 			</EnsureNoRaidMountFailure>
 		),

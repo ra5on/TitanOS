@@ -4,6 +4,11 @@ import type Titand from '../../index.js'
 
 type UpdateStatus = ProgressStatus
 type Release = {version: string; name: string; releaseNotes: string}
+export type RecoveryStatus = {
+	current: {version: string; name: string; slot: 'a' | 'b'; confirmed: boolean}
+	previous: {version: string; name: string; slot: 'a' | 'b'; selection: string}[]
+	reason: string
+}
 const helper = '/usr/libexec/titan-system-update.py'
 const cached = new Map<string, {expires: number; release: Release}>()
 const pending = new Map<string, Promise<Release>>()
@@ -32,7 +37,11 @@ export async function getLatestRelease(titand: Titand): Promise<Release> {
 	const request = (async () => {
 		const {stdout} = await $`/usr/bin/python3 ${helper} check --current-version ${titand.version} --channel ${channel}`
 		const release = JSON.parse(stdout) as Release
-		if (typeof release.version !== 'string' || typeof release.name !== 'string' || typeof release.releaseNotes !== 'string') {
+		if (
+			typeof release.version !== 'string' ||
+			typeof release.name !== 'string' ||
+			typeof release.releaseNotes !== 'string'
+		) {
 			throw new Error('Ungültige Antwort des Titan-Updaters')
 		}
 		// Cache verified checks; concurrent callers share the same request.
@@ -96,4 +105,46 @@ export async function performUpdate(titand: Titand) {
 	}
 	setUpdateStatus({running: false, progress: 100, description: 'Neustart…'})
 	return true
+}
+
+export async function getRecoveryStatus(titand: Titand): Promise<RecoveryStatus> {
+	const {stdout} = await $`/usr/bin/python3 ${helper} status --current-version ${titand.version}`
+	const state = JSON.parse(stdout) as RecoveryStatus
+	if (
+		!state.current ||
+		typeof state.current.name !== 'string' ||
+		state.current.version !== titand.version ||
+		!['a', 'b'].includes(state.current.slot) ||
+		typeof state.current.confirmed !== 'boolean' ||
+		typeof state.reason !== 'string' ||
+		!Array.isArray(state.previous) ||
+		state.previous.length > 1 ||
+		state.previous.some(
+			(item) =>
+				typeof item.version !== 'string' ||
+				typeof item.name !== 'string' ||
+				!['a', 'b'].includes(item.slot) ||
+				item.slot === state.current.slot ||
+				!/^[a-f0-9]{64}$/.test(item.selection),
+		)
+	) {
+		throw new Error('Ungültige Antwort der TitanOS-Wiederherstellung')
+	}
+	return state
+}
+
+export async function performRollback(titand: Titand, selection: string) {
+	if (updateStatus.running) throw new Error('Ein Systemupdate oder eine Wiederherstellung läuft bereits')
+	setUpdateStatus({running: true, progress: 0, description: 'Vorherigen Systemstand prüfen…', error: false})
+	try {
+		await $`/usr/bin/python3 ${helper} rollback --current-version ${titand.version} --selection ${selection}`
+		cached.clear()
+		setUpdateStatus({running: false, progress: 100, description: 'Neustart…'})
+		return true
+	} catch (error) {
+		resetUpdateStatus()
+		setUpdateStatus({error: error instanceof Error ? error.message : 'Wiederherstellung fehlgeschlagen'})
+		titand.logger.error('TitanOS rollback failed', error)
+		return false
+	}
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install signed Titan Rugix releases; never download or execute update scripts."""
 import argparse
+import base64
 import contextlib
 import fcntl
 import hashlib
@@ -146,24 +147,38 @@ def checksum_entries(contents):
     return values
 
 
-def verified_json(version, name, sums):
+def verified_json(version, name, sums, fetch=fetch_bytes):
     if name not in sums:
         raise UpdateError("Die signierte Prüfsummenliste enthält nicht alle Release-Metadaten.")
-    contents = fetch_bytes(asset_url(version, name), 262144)
+    contents = fetch(asset_url(version, name), 262144)
     if hashlib.sha256(contents).hexdigest() != sums[name]:
         raise UpdateError("Die Release-Metadaten wurden verändert.")
     return decode_json(contents)
 
 
-def verify_release(version, channel, github_release):
+def verify_release(version, channel, github_release, evidence=None):
     if channel != "stable":
         raise UpdateError("TitanOS verwendet ausschließlich den Stable-Updatekanal.")
-    sums_bytes = fetch_bytes(asset_url(version, "SHA256SUMS"), 65536)
-    signature = fetch_bytes(asset_url(version, "SHA256SUMS.sig"), 64)
+    files = {} if evidence is None else evidence
+    def fetch(url, maximum):
+        name = urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]
+        if evidence is None:
+            contents = fetch_bytes(url, maximum)
+            files[name] = base64.b64encode(contents).decode("ascii")
+            return contents
+        try:
+            contents = base64.b64decode(files[name], validate=True)
+        except (KeyError, ValueError, TypeError) as error:
+            raise UpdateError("Die gespeicherten Release-Nachweise sind unvollständig.") from error
+        if len(contents) > maximum:
+            raise UpdateError("Die gespeicherten Release-Nachweise sind zu groß.")
+        return contents
+    sums_bytes = fetch(asset_url(version, "SHA256SUMS"), 65536)
+    signature = fetch(asset_url(version, "SHA256SUMS.sig"), 64)
     verify_signature(sums_bytes, signature, PUBLIC_KEY)
     sums = checksum_entries(sums_bytes)
-    manifest = verified_json(version, "build-manifest.json", sums)
-    release = verified_json(version, "release.json", sums)
+    manifest = verified_json(version, "build-manifest.json", sums, fetch)
+    release = verified_json(version, "release.json", sums, fetch)
     if not isinstance(manifest, dict) or not isinstance(release, dict):
         raise UpdateError("Ungültige Titan-Releasebeschreibung.")
     required = {"schemaVersion": 1, "releaseVersion": version, "osVersion": version, "architecture": "amd64",
@@ -212,7 +227,8 @@ def verify_release(version, channel, github_release):
     if label != f"TitanOS {version}":
         raise UpdateError("Ungültiger Titan-Systemname.")
     return {"version": version, "name": label, "releaseNotes": notes,
-            "asset": {**found[0], "url": asset_url(version, name)}, "stage": channel}
+            "asset": {**found[0], "url": asset_url(version, name)}, "stage": channel,
+            "evidence": {"files": files, "github": {"assets": matches}}}
 
 
 def latest(current, channel):
@@ -282,50 +298,376 @@ def download_bundle(asset, target):
         raise UpdateError("Die Prüfsumme des Systemupdates stimmt nicht. Es wird nichts installiert.")
 
 
+def system_info():
+    info = decode_json(subprocess.check_output(["/usr/bin/rugix-ctrl", "system", "info", "--json"], timeout=15))
+    boot = info.get("boot", {})
+    if (boot.get("bootFlow") != "grub" or boot.get("activeGroup") not in ("a", "b")
+            or boot.get("defaultGroup") not in ("a", "b") or set(boot.get("groups", {})) != {"a", "b"}
+            or info.get("state", {}).get("status") != "Active"):
+        raise UpdateError("Der native TitanOS-Systemzustand ist nicht für Updates oder Wiederherstellung bereit.")
+    for group in ("a", "b"):
+        for kind in ("boot", "system"):
+            if not isinstance(info.get("slots", {}).get(f"{kind}-{group}"), dict):
+                raise UpdateError("Der native TitanOS-Systemslot fehlt.")
+    return info
+
+
+def slot_snapshot(info, group):
+    # These fingerprints are Rugix's persistent payload database, not user input.
+    # Invalidate the journal before any install can overwrite the spare slot.
+    return {name: {key: info["slots"][name].get(key) for key in ("hashes", "size", "updatedAt")}
+            for name in (f"boot-{group}", f"system-{group}")}
+
+
+def empty_journal():
+    return {"schemaVersion": 1, "systemCompatibility": COMPATIBILITY, "slots": {}}
+
+
+def read_journal(directory):
+    try:
+        value = decode_json(protected_read(directory / "slots.json", 65536))
+    except FileNotFoundError:
+        return empty_journal()
+    if (not isinstance(value, dict) or type(value.get("schemaVersion")) is not int or value.get("schemaVersion") != 1
+            or value.get("systemCompatibility") != COMPATIBILITY or not isinstance(value.get("slots"), dict)
+            or set(value["slots"]) - {"a", "b"}):
+        raise UpdateError("Die geschützten TitanOS-Slotnachweise sind ungültig.")
+    for record in value["slots"].values():
+        if (not isinstance(record, dict) or type(record.get("confirmed")) is not bool
+                or not isinstance(record.get("snapshot"), dict) or not isinstance(record.get("name"), str)):
+            raise UpdateError("Die geschützten TitanOS-Slotnachweise sind unvollständig.")
+        version_key(record.get("version"))
+    if "pending" in value:
+        pending = value["pending"]
+        if (not isinstance(pending, dict) or pending.get("type") not in ("update", "rollback")
+                or pending.get("slot") not in ("a", "b")):
+            raise UpdateError("Die vorgemerkte Systemumschaltung ist ungültig.")
+        version_key(pending.get("version"))
+    return value
+
+
+def atomic_json(path, value):
+    fd, temporary = tempfile.mkstemp(prefix=".state-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(value, stream, ensure_ascii=False)
+            stream.write("\n"); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(temporary)
+
+
+def store_evidence(directory, descriptor):
+    version_key(descriptor["version"])
+    path = directory / f'evidence-{descriptor["version"]}.json'
+    atomic_json(path, descriptor["evidence"])
+
+
+def verified_evidence(directory, version):
+    version_key(version)
+    value = decode_json(protected_read(directory / f"evidence-{version}.json", 1024 ** 2))
+    if not isinstance(value, dict) or not isinstance(value.get("files"), dict) or not isinstance(value.get("github"), dict):
+        raise UpdateError("Der signierte Nachweis dieses Systemstands fehlt.")
+    return verify_release(version, "stable", value["github"], value["files"])
+
+
+def valid_record(directory, info, group, record):
+    if (not isinstance(record, dict) or record.get("confirmed") is not True
+            or record.get("snapshot") != slot_snapshot(info, group)):
+        raise UpdateError("Dieser Systemslot wurde nicht bestätigt oder inzwischen verändert.")
+    descriptor = verified_evidence(directory, record.get("version"))
+    if record.get("name") != descriptor["name"]:
+        raise UpdateError("Die gespeicherte Systemversion stimmt nicht mit dem signierten Nachweis überein.")
+    return descriptor
+
+
+def selection_token(group, record):
+    return hashlib.sha256(json.dumps({"group": group, "record": record}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def recovery_status(current, directory=None, info=None, journal=None):
+    installed(current)
+    directory = staging_directory() if directory is None else directory
+    info = system_info() if info is None else info
+    journal = read_journal(directory) if journal is None else journal
+    active = info["boot"]["activeGroup"]
+    result = {"current": {"version": current, "name": f"TitanOS {current}", "slot": active,
+                           "confirmed": active == info["boot"]["defaultGroup"]},
+              "previous": [], "reason": "Noch kein vorheriger bestätigter Systemstand vorhanden."}
+    if active != info["boot"]["defaultGroup"] or journal.get("pending"):
+        result["reason"] = "Der aktuelle Systemstart wurde noch nicht bestätigt."
+        return result
+    # Never infer a previous version from the application store's previousVersion
+    # or a factory-created clone: only a signed, recorded install is selectable.
+    try:
+        now = valid_record(directory, info, active, journal["slots"].get(active))
+        if now["version"] != current:
+            raise UpdateError("Der aktive Versionsnachweis passt nicht zum gestarteten System.")
+        group = "b" if active == "a" else "a"
+        record = journal["slots"].get(group)
+        previous = valid_record(directory, info, group, record)
+        if previous["version"] == current:
+            return result
+        result["previous"] = [{"version": previous["version"], "name": previous["name"], "slot": group,
+                                "selection": selection_token(group, record)}]
+        result["reason"] = ""
+    except (UpdateError, OSError, ValueError):
+        pass
+    return result
+
+
+def sync_menu(current, directory=None, info=None, journal=None):
+    state = recovery_status(current, directory, info, journal)
+    versions = {state["current"]["slot"]: current}
+    for item in state["previous"]:
+        versions[item["slot"]] = item["version"]
+    # This helper changes only Titan's additional menu metadata; Rugix owns its
+    # checksummed default/try-boot environments and native rollback operation.
+    previous = state["previous"][0] if state["previous"] else None
+    metadata = {"versions": versions, "previous": {"slot": previous["slot"], "version": previous["version"]} if previous else None}
+    subprocess.run(["/usr/bin/python3", "/usr/libexec/titan-recovery-menu.py", "--metadata", json.dumps(metadata)],
+                   check=True, timeout=30)
+
+
+def remember_current(directory, info, journal, current):
+    active = info["boot"]["activeGroup"]
+    record = journal["slots"].get(active)
+    if record is not None:
+        descriptor = valid_record(directory, info, active, record)
+        if descriptor["version"] != current:
+            raise UpdateError("Der aktive Systemnachweis gehört nicht zur installierten Version.")
+        return
+    # Seed only the actually running, committed system, after validating its
+    # published signature. A dormant old slot is never guessed or imported.
+    descriptor = signed_published_release(current)
+    store_evidence(directory, descriptor)
+    journal["slots"][active] = {"version": current, "name": descriptor["name"], "confirmed": True,
+                                "snapshot": slot_snapshot(info, active)}
+
+
 def install(current, channel, expected):
     if version_key(expected) <= version_key(current):
         raise UpdateError("Systemupdates dürfen keine ältere oder bereits installierte Version einspielen.")
     descriptor = latest(current, channel)
     if descriptor["version"] != expected or "asset" not in descriptor:
         raise UpdateError("Das ausgewählte Update ist nicht mehr verfügbar oder nicht neuer als das installierte System.")
-    info = decode_json(subprocess.check_output(["/usr/bin/rugix-ctrl", "system", "info"], timeout=15))
-    if info.get("boot", {}).get("bootFlow") != "grub":
-        raise UpdateError("Dieses Update unterstützt nur native AMD64-Rugix-Images mit GRUB, keine Mender- oder Raspberry-Pi-Layouts.")
+    info = system_info()
+    if info["boot"]["activeGroup"] != info["boot"]["defaultGroup"]:
+        raise UpdateError("Der aktuelle Systemstart muss vor einem Update bestätigt sein.")
     staging = staging_directory()
+    journal = read_journal(staging)
+    if journal.get("pending"):
+        raise UpdateError("Eine Systemumschaltung wartet bereits auf den Neustart.")
     with tempfile.TemporaryDirectory(prefix="release-", dir=staging) as temporary:
         bundle = Path(temporary) / "verified.update"
         download_bundle(descriptor["asset"], bundle)
+        remember_current(staging, info, journal, current)
+        store_evidence(staging, descriptor)
+        target = "b" if info["boot"]["activeGroup"] == "a" else "a"
+        journal["slots"].pop(target, None)
+        atomic_json(staging / "slots.json", journal)
+        sync_menu(current, staging, info, journal)
         status(description="Geprüftes Systemupdate installieren…", progress=40)
-        # The outer Ed25519 signature authenticates every byte before the native
-        # Rugix 1.x installer is allowed to write the inactive system slot.
         subprocess.run(["/usr/bin/rugix-ctrl", "update", "install", "--reboot", "set",
                         "--insecure-skip-bundle-verification", str(bundle)], check=True)
+        updated = system_info()
+        journal["slots"][target] = {"version": expected, "name": descriptor["name"], "confirmed": False,
+                                    "snapshot": slot_snapshot(updated, target)}
+        journal["pending"] = {"type": "update", "slot": target, "version": expected}
+        atomic_json(staging / "slots.json", journal)
+
+
+def rollback(current, selection):
+    directory = staging_directory()
+    info = system_info()
+    journal = read_journal(directory)
+    available = recovery_status(current, directory, info, journal)["previous"]
+    if len(available) != 1 or available[0]["selection"] != selection:
+        raise UpdateError("Der ausgewählte Systemstand ist nicht mehr für die Wiederherstellung verfügbar.")
+    previous = available[0]
+    journal["pending"] = {"type": "rollback", "slot": previous["slot"], "version": previous["version"]}
+    atomic_json(directory / "slots.json", journal)
+    status(description=f'{previous["name"]} starten…', progress=90)
+    try:
+        # Rugix 1.2.1-dev.1 supports this native try-boot operation; it keeps the
+        # current default as the automatic fallback until healthy confirmation.
+        subprocess.run(["/usr/bin/rugix-ctrl", "system", "reboot", "--spare"], check=True)
+    except (OSError, subprocess.SubprocessError):
+        journal.pop("pending", None)
+        atomic_json(directory / "slots.json", journal)
+        raise
+
+
+def health_check(current, port):
+    info = system_info()
+    for name in ("system.online", "system.version"):
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/trpc/{name}", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            value = decode_json(response.read(65537))
+        result = value.get("result", {}).get("data")
+        if (name == "system.online" and result is not True
+                or name == "system.version" and (not isinstance(result, dict) or result.get("version") != current)):
+            raise UpdateError("Die TitanOS-Verwaltung hat den neuen Systemstart noch nicht erfolgreich bestätigt.")
+    return info
+
+
+def signed_published_release(version):
+    release = decode_json(fetch_bytes(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}", 2 * 1024 ** 2))
+    if (not isinstance(release, dict) or release.get("draft") is not False
+            or release.get("prerelease") is not False or release.get("tag_name") != f"v{version}"):
+        raise UpdateError("Der Systemstand ist nicht als signiertes Stable-Release veröffentlicht.")
+    return verify_release(version, "stable", release)
+
+
+def read_spare_identity(group):
+    partition = 4 if group == "a" else 5
+    resolved = decode_json(subprocess.check_output(["/usr/bin/rugix-ctrl", "utils", "resolve-partition", str(partition)], timeout=15))
+    device = resolved.get("device")
+    if (not isinstance(device, str) or not re.fullmatch(r"/dev/[A-Za-z0-9/_-]+", device)
+            or not stat.S_ISBLK(os.stat(device).st_mode)):
+        raise UpdateError("Der vorherige Systemslot konnte nicht sicher ermittelt werden.")
+    target = Path(tempfile.mkdtemp(prefix="titan-previous-", dir="/run"))
+    mounted = False
+    try:
+        subprocess.run(["/usr/bin/mount", "-t", "ext4", "-o", "ro,noload,nodev,nosuid,noexec", device, str(target)], check=True, timeout=30)
+        mounted = True
+        identity = decode_json(protected_read(target / "usr/share/titan/release.json", 65536))
+        key = protected_read(target / "usr/share/titan/release-public.pem", 4096)
+    finally:
+        if mounted:
+            try:
+                subprocess.run(["/usr/bin/umount", str(target)], check=True, timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                subprocess.run(["/usr/bin/umount", "--lazy", str(target)], check=True, timeout=30)
+        # Never recursively remove a still-mounted system filesystem.
+        target.rmdir()
+    if key != protected_read(PUBLIC_KEY, 4096):
+        raise UpdateError("Der vorherige Systemstand verwendet eine andere Vertrauensbasis.")
+    return identity
+
+
+def import_legacy_transition(current, directory, info, journal):
+    # Existing 2.0.3 installations did not write Titan's journal. Only during an
+    # actual native trial boot may we recover their old committed default. A
+    # freshly cloned spare, arbitrary /data files or store.previousVersion do
+    # not qualify. Both immutable identities must match signed public releases.
+    active, previous = info["boot"]["activeGroup"], info["boot"]["defaultGroup"]
+    if active == previous:
+        return
+    if journal["slots"]:
+        pending = journal.get("pending", {})
+        # A rollback to the pre-journal updater can subsequently install another
+        # signed update. Its old code does not clear our pending marker; re-attest
+        # only that real native transition from the unchanged recorded default.
+        if pending.get("type") != "rollback" or pending.get("slot") != previous:
+            return
+        previous_release = valid_record(directory, info, previous, journal["slots"].get(previous))
+        if pending.get("version") != previous_release["version"]:
+            raise UpdateError("Die vorherige Umschaltung passt nicht zum nativen Standard-Systemslot.")
+    identity = read_spare_identity(previous)
+    old = identity.get("version")
+    if (identity.get("systemCompatibility") != COMPATIBILITY or identity.get("architecture") != "amd64"
+            or identity.get("stage") != "stable" or identity.get("osVersion") != old
+            or version_key(old) >= version_key(current)):
+        return
+    for group, version in ((previous, old), (active, current)):
+        descriptor = signed_published_release(version)
+        if group == previous and identity.get("versionName") != descriptor["name"]:
+            raise UpdateError("Der vorherige Systemname widerspricht dem signierten Release.")
+        store_evidence(directory, descriptor)
+        journal["slots"][group] = {"version": version, "name": descriptor["name"],
+                                    "confirmed": group == previous, "snapshot": slot_snapshot(info, group)}
+    journal["pending"] = {"type": "update", "slot": active, "version": current}
+    atomic_json(directory / "slots.json", journal)
+
+
+def confirm(current, port):
+    installed(current)
+    directory = staging_directory()
+    info = health_check(current, port)
+    journal = read_journal(directory)
+    active = info["boot"]["activeGroup"]
+    import_legacy_transition(current, directory, info, journal)
+    record = journal["slots"].get(active)
+    pending = journal.get("pending")
+    if pending and pending.get("slot") == active:
+        if pending.get("version") != current or not isinstance(record, dict) or record.get("version") != current:
+            raise UpdateError("Der gestartete Systemstand gehört nicht zur vorgemerkten Umschaltung.")
+        # The installed update is still unconfirmed. Check its exact recorded
+        # payload fingerprint and signed release before promoting it.
+        valid_record(directory, info, active, {**record, "confirmed": True})
+    elif active != info["boot"]["defaultGroup"]:
+        if record is None:
+            # Upgrade from pre-journal releases may boot this image without a
+            # journal. Healthy native commit is allowed, but exposes no rollback.
+            if journal["slots"]:
+                raise UpdateError("Für diesen ausgewählten Systemslot fehlt ein bestätigter Nachweis.")
+        else:
+            descriptor = valid_record(directory, info, active, record)
+            if descriptor["version"] != current:
+                raise UpdateError("Die Bootmenüauswahl gehört nicht zur gestarteten Version.")
+    # Prove durable data writes before making this slot the boot default.
+    atomic_json(directory / "slots.json", journal)
+    subprocess.run(["/usr/bin/rugix-ctrl", "system", "commit"], check=True, timeout=30)
+    if record is not None and record.get("version") == current:
+        record["confirmed"] = True
+    # A failed trial returned to the old default. Discard the failed/unconfirmed
+    # target instead of accidentally offering it for another rollback.
+    if pending and pending.get("slot") != active:
+        failed = pending.get("slot")
+        if failed in journal["slots"] and journal["slots"][failed].get("confirmed") is not True:
+            journal["slots"].pop(failed)
+    journal.pop("pending", None)
+    atomic_json(directory / "slots.json", journal)
+    sync_menu(current, directory, system_info(), journal)
+
+
+@contextlib.contextmanager
+def operation_lock():
+    fd = os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+            raise UpdateError("Die Update-Sperre ist nicht geschützt.")
+        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError: raise UpdateError("Ein Systemupdate oder eine Wiederherstellung läuft bereits.") from None
+        yield
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("check", "install"))
+    parser.add_argument("action", choices=("check", "install", "status", "rollback", "confirm"))
     parser.add_argument("--current-version", required=True)
     parser.add_argument("--channel", choices=("stable",), default="stable")
     parser.add_argument("--version")
+    parser.add_argument("--selection")
+    parser.add_argument("--port", type=int, default=3001)
     args = parser.parse_args()
     try:
         if args.action == "check":
             print(json.dumps(latest(args.current_version, args.channel), ensure_ascii=False))
         else:
-            if os.geteuid() != 0 or not args.version:
-                raise UpdateError("Systemupdates benötigen den geschützten Systemdienst.")
-            fd = os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(fd, "w") as lock:
-                info = os.fstat(lock.fileno())
-                if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
-                    raise UpdateError("Die Update-Sperre ist nicht geschützt.")
-                try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError: raise UpdateError("Ein Systemupdate läuft bereits.") from None
-                install(args.current_version, args.channel, args.version)
+            if os.geteuid() != 0:
+                raise UpdateError("Systemaktionen benötigen den geschützten Systemdienst.")
+            with operation_lock():
+                if args.action == "install":
+                    if not args.version: raise UpdateError("Die ausgewählte Update-Version fehlt.")
+                    install(args.current_version, args.channel, args.version)
+                elif args.action == "status":
+                    print(json.dumps(recovery_status(args.current_version), ensure_ascii=False))
+                elif args.action == "rollback":
+                    if not args.selection or not re.fullmatch(r"[a-f0-9]{64}", args.selection):
+                        raise UpdateError("Ungültige Auswahl des vorherigen Systemstands.")
+                    rollback(args.current_version, args.selection)
+                elif args.action == "confirm":
+                    if not 1 <= args.port <= 65535: raise UpdateError("Ungültiger Verwaltungsport.")
+                    confirm(args.current_version, args.port)
         return 0
     except (UpdateError, OSError, ValueError, subprocess.SubprocessError) as error:
-        if args.action == "install": status(error=str(error))
+        if args.action in ("install", "rollback"): status(error=str(error))
         else: print(str(error), file=sys.stderr)
         return 1
 
