@@ -101,9 +101,30 @@ if gh release view "$task_tag" --repo ra5on/TitanOS --json isDraft --jq .isDraft
     echo 'An already published release is immutable; increment .titan/release.json.' >&2
     exit 1
   fi
+  gh release edit "$task_tag" --repo ra5on/TitanOS --draft=true --target "$task_source" \
+    --title "TitanOS ${task_version}" --notes-file titan-build/RELEASE.md
 else
   gh release create "$task_tag" --repo ra5on/TitanOS --draft --prerelease=false --target "$task_source" \
     --title "TitanOS ${task_version}" --notes-file titan-build/RELEASE.md
 fi
-gh release upload "$task_tag" --repo ra5on/TitanOS "${TASK_ARTIFACT_DIR}"/* --clobber
+# Upload individually: a transient error on one large payload must not cancel
+# concurrent uploads or require resending files that already succeeded.
+for task_asset in "${TASK_ARTIFACT_DIR}"/*; do
+  task_uploaded=false
+  for task_attempt in 1 2 3 4 5; do
+    if gh release upload "$task_tag" --repo ra5on/TitanOS "$task_asset" --clobber; then
+      task_uploaded=true
+      break
+    fi
+    if (( task_attempt < 5 )); then
+      task_delay=$((5 * (2 ** (task_attempt - 1))))
+      echo "Upload failed for $(basename "$task_asset"); retry ${task_attempt}/4 in ${task_delay}s." >&2
+      sleep "$task_delay"
+    fi
+  done
+  if [[ "$task_uploaded" != true ]]; then
+    echo "Upload failed after five attempts; release remains a draft." >&2
+    exit 1
+  fi
+done
 gh release edit "$task_tag" --repo ra5on/TitanOS --draft=false --prerelease=false --latest=true
