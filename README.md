@@ -19,7 +19,7 @@ Boot- und Wiederherstellungsprüfungen veröffentlicht.
 TitanOS verbindet eine deutsche Oberfläche mit einem übersichtlichen Desktop.
 Im Dock erreichst du Dateien, Foto's, den App-Store, virtuelle Maschinen und
 Einstellungen. Oben links findest du das Systemmenü: Abmelden, Neustarten und
-Herunterfahren werden jeweils mit **Ja / Nein** bestätigt: Ja links, Nein rechts.
+Herunterfahren werden jeweils mit **Ja / Nein** bestätigt.
 Unter **Darstellung** stellst du die Transparenz von Dock, Widgets und Systemmenü
 ein. Die Einstellung wird für jedes Benutzerkonto getrennt gespeichert.
 
