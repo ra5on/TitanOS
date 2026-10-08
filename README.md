@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/images/titanos-banner.svg" alt="TitanOS" width="920">
-</p>
-
 <h1 align="center">TitanOS 2.0.4 · Stable</h1>
 
 <p align="center">
