@@ -27,8 +27,23 @@ class StablePublicationTests(unittest.TestCase):
         subprocess.run(['git','init',str(self.root)],check=True,capture_output=True)
         subprocess.run(['git','-C',str(self.root),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-m','Fixture'],check=True,capture_output=True)
         stub = self.root/'bin/gh'
-        stub.write_text('#!/usr/bin/env python3\nimport json,os,sys\nwith open(os.environ["GH_CALLS"], "a") as stream: stream.write(json.dumps(sys.argv[1:])+"\\n")\nif sys.argv[1:3] == ["release","view"]:\n if os.environ.get("GH_PUBLIC") == "1": print("false"); sys.exit(0)\n sys.exit(1)\n')
+        stub.write_text('''#!/usr/bin/env python3
+import json,os,sys
+from pathlib import Path
+with open(os.environ["GH_CALLS"], "a") as stream: stream.write(json.dumps(sys.argv[1:])+"\\n")
+if sys.argv[1:3] == ["release","view"]:
+ if os.environ.get("GH_PUBLIC") == "1": print("false"); sys.exit(0)
+ if os.environ.get("GH_DRAFT") == "1": print("true"); sys.exit(0)
+ sys.exit(1)
+if sys.argv[1:3] == ["release","upload"] and os.environ.get("GH_FAIL_ASSET") in sys.argv:
+ state=Path(os.environ["GH_CALLS"]+".attempts")
+ count=int(state.read_text())+1 if state.exists() else 1
+ state.write_text(str(count))
+ if count <= int(os.environ.get("GH_FAILURES","0")): print("HTTP 500",file=sys.stderr); sys.exit(1)
+''')
         stub.chmod(0o755)
+        sleep = self.root/'bin/sleep'
+        sleep.write_text('#!/bin/sh\nexit 0\n'); sleep.chmod(0o755)
         self.calls = self.root/'calls.jsonl'
         self.env = {**os.environ,'PATH':str(self.root/'bin')+os.pathsep+os.environ['PATH'],
                     'GH_CALLS':str(self.calls),'GITHUB_ACTIONS':'true','RUNNER_TEMP':str(self.root/'runner'),
@@ -99,11 +114,38 @@ class StablePublicationTests(unittest.TestCase):
         directory=self.prepare(); result=self.publish(); self.assertEqual(result.returncode,0,result.stderr)
         calls=self.gh_calls(); create=next(c for c in calls if c[:2]==['release','create'])
         self.assertIn('--prerelease=false',create); self.assertEqual(create[2],'v2.0.1')
-        upload=next(c for c in calls if c[:2]==['release','upload'])
-        self.assertIn(str(directory/'titan-2.0.1.img.xz'),upload)
+        uploads=[c for c in calls if c[:2]==['release','upload']]
+        self.assertEqual(len(uploads),len(list(directory.iterdir())))
+        self.assertTrue(any(str(directory/'titan-2.0.1.img.xz') in call for call in uploads))
         self.assertIn('--latest=true',calls[-1])
         self.assertEqual(create[create.index('--title')+1],'TitanOS 2.0.1')
         for call in calls: self.assertEqual(call[call.index('--repo')+1],'ra5on/TitanOS')
+
+    def test_transient_large_upload_retries_only_that_asset_before_publishing(self):
+        directory=self.prepare(); asset=str(directory/'titan-2.0.1.update')
+        self.env.update(GH_FAIL_ASSET=asset,GH_FAILURES='2')
+        result=self.publish(); self.assertEqual(result.returncode,0,result.stderr)
+        uploads=[c for c in self.gh_calls() if c[:2]==['release','upload']]
+        self.assertEqual(sum(asset in c for c in uploads),3)
+        self.assertEqual(sum(str(directory/'titan-2.0.1.img.xz') in c for c in uploads),1)
+        self.assertIn('--draft=false',self.gh_calls()[-1])
+
+    def test_permanent_upload_failure_keeps_release_unpublished(self):
+        directory=self.prepare(); asset=str(directory/'titan-2.0.1.update')
+        self.env.update(GH_FAIL_ASSET=asset,GH_FAILURES='99')
+        self.assertNotEqual(self.publish().returncode,0)
+        calls=self.gh_calls()
+        self.assertEqual(sum(c[:2]==['release','upload'] and asset in c for c in calls),5)
+        self.assertFalse(any('--draft=false' in c for c in calls))
+
+    def test_existing_draft_targets_the_exact_rebuilt_commit(self):
+        self.prepare(); self.env['GH_DRAFT']='1'
+        result=self.publish(); self.assertEqual(result.returncode,0,result.stderr)
+        calls=self.gh_calls(); self.assertFalse(any(c[:2]==['release','create'] for c in calls))
+        draft=next(c for c in calls if '--draft=true' in c)
+        head=subprocess.check_output(['git','-C',str(self.root),'rev-parse','HEAD'],text=True).strip()
+        self.assertEqual(draft[draft.index('--target')+1],head)
+        self.assertIn('--draft=false',calls[-1])
 
     def test_signed_experimental_legacy_or_foreign_layout_is_rejected_before_github(self):
         for changes in ({'version':'2.0.0-titan.3','osVersion':'2.0.0-titan.3'}, {'stage':'alpha'},
