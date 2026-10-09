@@ -4,7 +4,12 @@ const execute = vi.hoisted(() => vi.fn())
 vi.mock('execa', () => ({$: execute}))
 
 const release = {version: '2.0.2', name: 'TitanOS 2.0.2', releaseNotes: 'Signiertes Systemupdate'}
-const instance = () => ({version: '2.0.1', store: {get: vi.fn().mockResolvedValue('stable')}, logger: {error: vi.fn()}})
+const instance = () => ({
+	version: '2.0.1',
+	systemBootConfirmed: true,
+	store: {get: vi.fn().mockResolvedValue('stable')},
+	logger: {error: vi.fn(), log: vi.fn()},
+})
 
 beforeEach(() => {
 	vi.resetModules()
@@ -62,6 +67,31 @@ describe('signed local Titan update checks', () => {
 		expect(execute).toHaveBeenCalledTimes(1)
 		expect(getUpdateStatus()).toMatchObject({running: false, error: 'Kein neueres Titan-Systemupdate verfügbar'})
 	})
+	test('an early boot update never races the health confirmation helper', async () => {
+		const {performUpdate, getUpdateStatus} = await import('./update.js')
+		const system = {...instance(), systemBootConfirmed: false} as never
+		expect(await performUpdate(system)).toBe(false)
+		expect(execute).not.toHaveBeenCalled()
+		expect(getUpdateStatus()).toMatchObject({
+			running: false,
+			error: 'Der Systemstart wird noch bestätigt. Bitte kurz warten.',
+		})
+	})
+	test('healthy boot is exposed only after confirmation has finished', async () => {
+		const {commitOsPartition} = await import('./system.js')
+		let finish!: () => void
+		execute.mockReturnValue(
+			new Promise<void>((resolve) => {
+				finish = resolve
+			}),
+		)
+		const system = {...instance(), systemBootConfirmed: false, port: 3001}
+		const confirming = commitOsPartition(system as never)
+		expect(system.systemBootConfirmed).toBe(false)
+		finish()
+		expect(await confirming).toBe(true)
+		expect(system.systemBootConfirmed).toBe(true)
+	})
 })
 
 describe('signed local system recovery', () => {
@@ -75,6 +105,15 @@ describe('signed local system recovery', () => {
 		execute.mockResolvedValue({stdout: JSON.stringify(state)})
 		expect(await getRecoveryStatus(instance() as never)).toEqual(state)
 		expect(execute.mock.calls[0].slice(-1)).toEqual(['2.0.1'])
+	})
+	test('a native default slot is not advertised as ready before this daemon confirms startup', async () => {
+		const {getRecoveryStatus, performRollback} = await import('./update.js')
+		execute.mockResolvedValue({stdout: JSON.stringify(state)})
+		const system = {...instance(), systemBootConfirmed: false} as never
+		expect(await getRecoveryStatus(system)).toMatchObject({current: {...state.current, confirmed: false}, previous: []})
+		execute.mockClear()
+		expect(await performRollback(system, state.previous[0].selection)).toBe(false)
+		expect(execute).not.toHaveBeenCalled()
 	})
 
 	test.each([

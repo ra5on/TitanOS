@@ -535,6 +535,7 @@ export async function commitOsPartition(titand: Titand): Promise<boolean> {
 	try {
 		titand.logger.log('Committing OS partition...')
 		await $`/usr/bin/python3 /usr/libexec/titan-system-update.py confirm --current-version ${titand.version} --port ${titand.port}`
+		titand.systemBootConfirmed = true
 		if (bootConfirmationRetry) globalThis.clearTimeout(bootConfirmationRetry)
 		bootConfirmationRetry = undefined
 		titand.logger.log('Successfully confirmed the healthy OS partition.')

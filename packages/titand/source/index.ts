@@ -182,6 +182,8 @@ export default class Titand {
 	mcp: Mcp
 	photos: Photos
 	isBackupRestoreFirstStart = false
+	// Only set after the health confirmation helper exits and releases its lock.
+	systemBootConfirmed = false
 
 	constructor({
 		dataDirectory,
@@ -218,6 +220,7 @@ export default class Titand {
 	}
 
 	async start() {
+		this.systemBootConfirmed = false
 		this.logger.log(`☂️  Starting Titan v${this.version}`)
 		this.logger.log()
 		this.logger.log(`dataDirectory: ${this.dataDirectory}`)
