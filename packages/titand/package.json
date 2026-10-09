@@ -1,8 +1,8 @@
 {
 	"name": "titand",
 	"type": "module",
-	"version": "2.0.6",
-	"versionName": "TitanOS 2.0.6",
+	"version": "2.0.7",
+	"versionName": "TitanOS 2.0.7",
 	"main": "./source/index.ts",
 	"bin": "./titand",
 	"license": "PolyForm Noncommercial License 1.0.0",

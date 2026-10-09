@@ -1,4 +1,20 @@
-# TitanOS 2.0.6 · Stable
+# TitanOS 2.0.7 · Stable
+
+## Neu in 2.0.7
+
+- **Deutsche Ordnernamen:** Jeder persönliche Ordner enthält jetzt
+  **Dokumente**, **Downloads**, **Fotos** und **Videos** – auch bei neuen
+  Benutzern. Bestehende Ordner `Documents` und `Photos` werden beim ersten Start
+  einmalig umbenannt; ihr Inhalt bleibt erhalten. Favoriten, Freigaben,
+  App-Ordnerzugriffe und die Quellen der Fotos-App zeigen danach auf die neuen
+  Namen. Enthält ein Ordner `Dokumente` oder `Fotos` bereits Dateien, bleibt der
+  alte Ordner unverändert daneben bestehen.
+- **Transparenz:** Alle Konten starten nach dem Update einmalig mit der
+  Standardtransparenz von 75 %. Über den Regler unter **Darstellung** lässt sie
+  sich weiterhin individuell anpassen.
+- **Startbildschirm:** Über der Begrüßung steht nur noch der Titan-Schriftzug,
+  ohne das Symbol davor.
+- **Build:** Die Veröffentlichung nutzt GitHub-Actions mit Node.js 24.
 
 ## Neu in 2.0.6: Zuverlässiger QCOW2-Import
 
@@ -33,7 +49,7 @@ des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
 vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
 VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
 kompatiblen älteren Installation wird es nach dem ersten erfolgreich
-bestätigten Start von 2.0.6 eingerichtet.
+bestätigten Start von 2.0.7 eingerichtet.
 
 Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
 VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
@@ -63,8 +79,8 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.6.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.6.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
+- `titan-2.0.7.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.7.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 - `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.
