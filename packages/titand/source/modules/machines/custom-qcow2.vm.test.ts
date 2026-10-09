@@ -11,10 +11,17 @@ describe('Custom QCOW2 imports on the released OS', () => {
 	let titand: Awaited<ReturnType<typeof createTestVm>>
 	let id: string
 	let imported = false
+	const waitForVirtualization = () =>
+		pRetry(async () => expect((await titand.client.machines.capabilities.query()).libvirtAvailable).toBe(true), {
+			retries: 90,
+			minTimeout: 1000,
+			maxTimeout: 1000,
+		})
 	beforeAll(async () => {
 		titand = await createTestVm({device: 'titan-home', image, memory: 4096, cores: 2})
 		await titand.vm.powerOn()
 		await titand.registerAndLogin()
+		await waitForVirtualization()
 	})
 	afterAll(async () => await titand?.cleanup())
 	afterEach(async ({task}) => {
@@ -65,6 +72,7 @@ describe('Custom QCOW2 imports on the released OS', () => {
 		await titand.vm.powerOff()
 		await titand.vm.powerOn()
 		await titand.login()
+		await waitForVirtualization()
 		expect((await titand.client.machines.list.query()).some((m) => m.id === id)).toBe(true)
 		await titand.client.machines.start.mutate({id})
 		await pRetry(
