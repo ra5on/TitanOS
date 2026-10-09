@@ -39,14 +39,16 @@ describe('Custom QCOW2 import security', () => {
 		expect(() => validateQcow2Header(header())).not.toThrow()
 	})
 	test('sandbox exposes only immutable runtime files, its private source and output; no network or host data', () => {
-		const args = qcow2SandboxArguments('/private/source', '/private/output')
+		const args = qcow2SandboxArguments(true)
 		expect(args).toContain('--unshare-all')
 		expect(args).toContain('--clearenv')
 		expect(args).toContain('--new-session')
 		expect(args).not.toContain('/etc')
 		expect(args).not.toContain('/home')
 		expect(args).not.toContain('/run')
-		expect(args.filter((arg) => arg === '--bind')).toHaveLength(1)
+		expect(args).not.toContain('--bind')
+		expect(args.filter((arg) => arg === '--bind-fd')).toHaveLength(1)
+		expect(qcow2SandboxArguments()).not.toContain('--bind-fd')
 	})
 	test('converts a real standalone disk and preserves its bytes without backing links', async () => {
 		const {directory, source, destination} = await fixture()
@@ -100,8 +102,29 @@ describe('Custom QCOW2 import security', () => {
 			await execa('/usr/bin/qemu-img', ['create', '-f', 'qcow2', source, '1M'])
 			await fsp.chown(directory, 65534, 65534)
 			await fsp.chmod(directory, 0o700)
+			// Path-based binds cannot traverse this home inside the user namespace
 			await expect(
-				execa('/usr/bin/bwrap', [...qcow2SandboxArguments(source), 'info', '-f', 'qcow2', '/work/source']),
+				execa('/usr/bin/bwrap', [
+					'--unshare-all',
+					'--ro-bind',
+					'/usr',
+					'/usr',
+					'--symlink',
+					'usr/lib',
+					'/lib',
+					'--symlink',
+					'usr/lib64',
+					'/lib64',
+					'--ro-bind',
+					source,
+					'/source',
+					'--',
+					'/usr/bin/qemu-img',
+					'info',
+					'-f',
+					'qcow2',
+					'/source',
+				]),
 			).rejects.toThrow('Permission denied')
 			await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
 			const stat = await fsp.stat(directory)
@@ -112,6 +135,23 @@ describe('Custom QCOW2 import security', () => {
 			).toBe(1024 ** 3)
 		},
 	)
+	test('reports an image qemu-img cannot read as a coded import failure', async () => {
+		const {directory, source, destination} = await fixture()
+		await execa('qemu-img', ['create', '-f', 'qcow2', source, '1M'])
+		// A valid header with a broken L1 table offset fails inside qemu-img
+		const handle = await fsp.open(source, 'r+')
+		try {
+			const offset = Buffer.alloc(8)
+			offset.writeBigUInt64BE(0x7fff_ffff_fe00n)
+			await handle.write(offset, 0, 8, 40)
+		} finally {
+			await handle.close()
+		}
+		await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).rejects.toThrow(
+			/^\[machine-image-import-failed\]/,
+		)
+		expect(await fsp.readdir(directory)).toEqual(['source.qcow2'])
+	})
 	test('rejects a real backing chain and leaves no output or private copy', async () => {
 		const {directory, source, destination} = await fixture()
 		const backing = nodePath.join(directory, 'secret.img')

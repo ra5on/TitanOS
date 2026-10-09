@@ -2842,6 +2842,7 @@
   "machines-error.machine-image-download-failed": "Das Betriebssystemabbild konnte nicht heruntergeladen werden.",
   "machines-error.machine-image-download-http-error": "Der Downloadserver hat das Abbild nicht bereitgestellt. Versuche es später erneut.",
   "machines-error.machine-image-format-unsupported": "Dieses Abbildformat wird nicht unterstützt.",
+  "machines-error.machine-image-import-failed": "Das QCOW2-Abbild konnte nicht gelesen oder umgewandelt werden. Prüfe, ob die Datei vollständig ist, und versuche es erneut.",
   "machines-error.machine-image-invalid": "Das Abbild ist ungültig. Unterstützt werden ISO, IMG und eigenständige QCOW2-Abbilder.",
   "machines-error.machine-image-redirect-invalid": "Die Weiterleitung des Downloadservers ist ungültig.",
   "machines-error.machine-image-too-large": "Das ausgewählte Abbild ist zu groß.",

@@ -2842,6 +2842,7 @@
   "machines-error.machine-image-download-failed": "The operating system image could not be downloaded.",
   "machines-error.machine-image-download-http-error": "The download server did not provide the image. Try again later.",
   "machines-error.machine-image-format-unsupported": "This image format is unsupported.",
+  "machines-error.machine-image-import-failed": "The QCOW2 image could not be read or converted. Check that the file is complete and try again.",
   "machines-error.machine-image-invalid": "Invalid image. Supported formats are ISO, IMG and standalone QCOW2 images.",
   "machines-error.machine-image-redirect-invalid": "The download server returned an invalid redirect.",
   "machines-error.machine-image-too-large": "The selected image is too large.",

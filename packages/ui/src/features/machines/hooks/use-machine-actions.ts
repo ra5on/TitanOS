@@ -111,6 +111,8 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-image-download-failed')
 		case 'machine-image-download-http-error':
 			return t('machines-error.machine-image-download-http-error')
+		case 'machine-image-import-failed':
+			return t('machines-error.machine-image-import-failed')
 		case 'machine-image-format-unsupported':
 			return t('machines-error.machine-image-format-unsupported')
 		case 'machine-image-invalid':
