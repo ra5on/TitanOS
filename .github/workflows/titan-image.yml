@@ -161,3 +161,11 @@ jobs:
             packages/os/vm-state/*.log
           if-no-files-found: ignore
           retention-days: 7
+      - name: Retain README screenshots
+        if: always() && steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: titan-readme-screenshots-${{ github.run_id }}
+          path: ${{ runner.temp }}/titan-readme-screenshots/*.jpg
+          if-no-files-found: warn
+          retention-days: 30

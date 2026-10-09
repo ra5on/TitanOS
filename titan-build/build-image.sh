@@ -107,6 +107,11 @@ path.write_text(json.dumps(verification, indent=2) + '\n')
 PYTHON
     rm -rf "${TASK_RECOVERY_ROOT}"
     trap - EXIT
+    # README screenshots of the image being published. They document the
+    # release in a separate artifact (not in dist) and never gate publication.
+    TITAN_SCREENSHOT_DIR="${TITAN_SCREENSHOT_DIR:-${RUNNER_TEMP:-/tmp}/titan-readme-screenshots}"
+    TITAN_VM_IMAGE="${RAW_IMAGE}" TITAN_SCREENSHOT_DIR="${TITAN_SCREENSHOT_DIR}" TITAN_SCREENSHOT_VERSION="${RELEASE_VERSION}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/test-utilities/readme-screenshots.vm.test.ts \
+        || echo '::warning::README screenshots could not be captured'
 fi
 # Stream the compact disk template, then verify the compressed download.
 # The recovery fixture already compressed the candidate's exact bytes.
