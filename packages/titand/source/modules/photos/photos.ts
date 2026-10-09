@@ -10,6 +10,7 @@ import type Titand from '../../index.js'
 import type {Principal} from '../auth/auth.js'
 import {Blake3Hasher} from '../files/blake3.js'
 import {OWNER_USER_ID} from '../user/constants.js'
+import {PHOTOS_FOLDER} from '../files/home-folders.js'
 
 import type {PhotoFilter, PhotoScopeMode} from './types.js'
 import {hashFileRevision, type PublishedFileRevision} from '../files/file-index-enrichment.js'
@@ -362,7 +363,7 @@ export default class Photos {
 	backupSourceVirtualDirectory(source: Pick<PhotoBackupSource, 'accountId' | 'directoryName'>) {
 		const accountId = validateAccountId(source.accountId)
 		const directoryName = validateBackupDirectoryName(source.directoryName)
-		const root = accountId === OWNER_USER_ID ? '/Home/Photos' : `/Users/${accountId}/Photos`
+		const root = accountId === OWNER_USER_ID ? `/Home/${PHOTOS_FOLDER}` : `/Users/${accountId}/${PHOTOS_FOLDER}`
 		return nodePath.posix.join(root, directoryName)
 	}
 
@@ -674,7 +675,7 @@ export default class Photos {
 				.map((source) => source.directoryName)
 				.filter(Boolean),
 		)
-		const root = accountId === OWNER_USER_ID ? '/Home/Photos' : `/Users/${accountId}/Photos`
+		const root = accountId === OWNER_USER_ID ? `/Home/${PHOTOS_FOLDER}` : `/Users/${accountId}/${PHOTOS_FOLDER}`
 		for (let index = 1; index <= 1000; index++) {
 			const candidate = index === 1 ? baseName : `${baseName} (${index})`
 			if (usedNames.has(candidate)) continue

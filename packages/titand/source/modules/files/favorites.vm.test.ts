@@ -34,7 +34,7 @@ describe('favorites()', () => {
 
 	test('returns default favorites on first start', async () => {
 		const favorites = await titand.client.files.favorites.query()
-		expect(favorites).toStrictEqual(['/Home/Downloads', '/Home/Documents', '/Home/Photos', '/Home/Videos'])
+		expect(favorites).toStrictEqual(['/Home/Downloads', '/Home/Dokumente', '/Home/Fotos', '/Home/Videos'])
 	})
 
 	test('only returns existing directories', async () => {

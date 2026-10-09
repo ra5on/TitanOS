@@ -11,7 +11,7 @@ export function Header({userName}: {userName: string}) {
 	return (
 		<div className={cn('relative z-10', name ? '' : 'invisible')}>
 			<div className='flex flex-col items-center gap-3 px-4 md:gap-4'>
-				<TitanLogo className='w-[180px] md:w-[240px]' />
+				<TitanLogo lettering className='w-[124px] md:w-[165px]' />
 				<h1 className='text-center text-19 font-bold md:text-5xl'>{greetingMessage(name, t)}</h1>
 			</div>
 		</div>

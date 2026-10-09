@@ -73,6 +73,13 @@ type StoreSchema = {
 	// are security identities used by sessions, paths, and shares, so they must
 	// never be assigned to a different account after deletion.
 	members?: MemberRecord[]
+	// One-time startup migrations that already ran
+	migrations?: {
+		// Documents/Photos renamed to Dokumente/Fotos (2.0.7)
+		germanHomeFolders?: boolean
+		// Every account reset to the default desktop transparency (2.0.7)
+		desktopTransparencyReset?: boolean
+	}
 	settings: {
 		releaseChannel: 'stable'
 		wifi?: {

@@ -31,7 +31,7 @@ jobs:
       commit: ${{ steps.source.outputs.commit }}
       release_needed: ${{ steps.release.outputs.release_needed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -61,10 +61,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install image validation tools
@@ -76,7 +76,7 @@ jobs:
           python3 -m unittest discover -s titan-build/tests -v
           npm --prefix packages/titand ci
           npm --prefix packages/titand run typecheck
-          npm --prefix packages/titand run test -- --pool=forks source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/recovery-routes.unit.test.ts source/modules/user/desktop-appearance.unit.test.ts source/modules/system/hostname-policy.unit.test.ts source/modules/auth/auth.unit.test.ts source/modules/auth/cookies.unit.test.ts source/modules/apps/app-lifecycle.unit.test.ts source/modules/apps/app-settings.unit.test.ts source/modules/apps/manifest-compatibility.unit.test.ts source/modules/apps/schema.unit.test.ts source/modules/machines/machine-network.unit.test.ts source/modules/machines/machine-store.unit.test.ts source/modules/machines/machine-install.unit.test.ts source/modules/machines/machines.unit.test.ts source/modules/machines/domain.unit.test.ts source/modules/machines/libvirt.unit.test.ts source/modules/system/machine-bridge.unit.test.ts source/modules/system/network-interfaces.unit.test.ts
+          npm --prefix packages/titand run test -- --pool=forks source/modules/files/cloud-auth.unit.test.ts source/modules/system/update.unit.test.ts source/modules/system/recovery-routes.unit.test.ts source/modules/user/desktop-appearance.unit.test.ts source/modules/system/hostname-policy.unit.test.ts source/modules/auth/auth.unit.test.ts source/modules/auth/cookies.unit.test.ts source/modules/apps/app-lifecycle.unit.test.ts source/modules/apps/app-settings.unit.test.ts source/modules/apps/manifest-compatibility.unit.test.ts source/modules/apps/schema.unit.test.ts source/modules/startup-migrations/migrations-2-0-7.unit.test.ts source/modules/machines/machine-network.unit.test.ts source/modules/machines/machine-store.unit.test.ts source/modules/machines/machine-install.unit.test.ts source/modules/machines/machines.unit.test.ts source/modules/machines/domain.unit.test.ts source/modules/machines/libvirt.unit.test.ts source/modules/system/machine-bridge.unit.test.ts source/modules/system/network-interfaces.unit.test.ts
           # The NAS daemon runs as root. Ubuntu restricts unprivileged namespace networking.
           # Exercise the same sandbox as root on this disposable CI runner, without changing host security policy.
           sudo env "PATH=$PATH" npm --prefix packages/titand run test -- --pool=forks source/modules/machines/custom-qcow2.unit.test.ts
@@ -93,7 +93,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
           ref: ${{ needs.source.outputs.commit }}
@@ -120,15 +120,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils python3 openssl dosfstools mtools gdisk e2fsprogs
           if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
           df -h /
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.signing.outputs.configured == 'true'
         with:
           node-version: '22'
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: steps.signing.outputs.configured == 'true'
       - name: Expose GitHub runtime for the original Docker cache importer
         if: steps.signing.outputs.configured == 'true'
-        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
       - name: Build compact TitanOS image and verify real UEFI boot
         if: steps.signing.outputs.configured == 'true'
         env:
@@ -150,7 +150,7 @@ jobs:
         run: bash titan-build/publish-release.sh
       - name: Retain diagnostic reports
         if: always() && steps.signing.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: titan-image-diagnostics-${{ github.run_id }}
           path: |

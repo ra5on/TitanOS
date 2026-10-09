@@ -70,7 +70,7 @@ test('renames only the display name and retains it across reconnects and restart
 	)
 	await expect(restarted.photos.prepareBackupResourcePath(renamed, key, 'heic')).resolves.toBe(path)
 	await expect(fse.readFile(systemPath, 'utf8')).resolves.toBe('photo')
-	await expect(fse.pathExists(nodePath.join(dataDirectory, 'home', 'Photos', 'Holiday phone'))).resolves.toBe(false)
+	await expect(fse.pathExists(nodePath.join(dataDirectory, 'home', 'Fotos', 'Holiday phone'))).resolves.toBe(false)
 })
 
 test('cannot rename another account’s source or the built-in Titan source', async () => {

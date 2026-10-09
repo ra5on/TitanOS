@@ -62,7 +62,7 @@ export const filesWidgets: RegistryWidget<'files-list' | 'files-grid'>[] = [
 		id: 'titan:files-favorites',
 		type: 'files-grid',
 		example: {
-			paths: ['/Home/Downloads', '/Home/Photos', '/Home/Videos', '/Home/Documents'],
+			paths: ['/Home/Downloads', '/Home/Fotos', '/Home/Videos', '/Home/Dokumente'],
 			noItemsText: t('files-widgets.favorites.no-items-text'),
 		},
 	},

@@ -312,14 +312,14 @@ const FolderIcon = ({
 			<FolderComponent className={className} overlayIcon={DownloadsIcon} />
 		)
 	}
-	if (path === `${homeRoot}/Documents`) {
+	if (path === `${homeRoot}/Dokumente`) {
 		return useAnimatedIcon ? (
 			<FolderComponent className={className} overlayIcon={DocumentsIcon} isHovered={isHovered} />
 		) : (
 			<FolderComponent className={className} overlayIcon={DocumentsIcon} />
 		)
 	}
-	if (path === `${homeRoot}/Photos`) {
+	if (path === `${homeRoot}/Fotos`) {
 		return useAnimatedIcon ? (
 			<FolderComponent className={className} overlayIcon={PhotosIcon} isHovered={isHovered} />
 		) : (

@@ -57,8 +57,8 @@ describe('Photos backup storage', () => {
 		expect(source).toMatchObject({id: SOURCE_ID, accountId: '0', name: 'Pixel 9', directoryName: 'Pixel 9'})
 		expect(source.createdAt).toBeTypeOf('number')
 		expect(await titand.store.get('photos.backupSources')).toEqual([source])
-		expect(titand.photos.backupSourceVirtualDirectory(source)).toBe('/Home/Photos/Pixel 9')
-		await expect(fse.pathExists(`${dataDirectory}/home/Photos/Pixel 9`)).resolves.toBe(true)
+		expect(titand.photos.backupSourceVirtualDirectory(source)).toBe('/Home/Fotos/Pixel 9')
+		await expect(fse.pathExists(`${dataDirectory}/home/Fotos/Pixel 9`)).resolves.toBe(true)
 		expect(titand.files.fileIndex.photosUpsertBackupSource).toHaveBeenCalledWith(
 			'0',
 			expect.stringMatching(/^iphone:/),
@@ -67,9 +67,9 @@ describe('Photos backup storage', () => {
 		)
 		const resourceKey = 'ab'.repeat(32)
 		await expect(titand.photos.prepareBackupResourcePath(source, resourceKey, 'HEIC')).resolves.toBe(
-			`/Home/Photos/Pixel 9/ab/${resourceKey}.heic`,
+			`/Home/Fotos/Pixel 9/ab/${resourceKey}.heic`,
 		)
-		expect((await fse.stat(`${dataDirectory}/home/Photos/Pixel 9/ab`)).mode & 0o777).toBe(0o755)
+		expect((await fse.stat(`${dataDirectory}/home/Fotos/Pixel 9/ab`)).mode & 0o777).toBe(0o755)
 	})
 
 	test('announces a new backup source, but not a re-registration', async () => {
@@ -151,7 +151,7 @@ describe('Photos backup storage', () => {
 		])
 		const register = vi.spyOn(titand.files.fileIndex, 'photosRegisterBackupResource').mockResolvedValue({
 			resourceKey,
-			path: `/Home/Photos/Luke's iPhone/${resourceKey.slice(0, 2)}/${fileName}`,
+			path: `/Home/Fotos/Luke's iPhone/${resourceKey.slice(0, 2)}/${fileName}`,
 			bytes: 9,
 		})
 
@@ -170,7 +170,7 @@ describe('Photos backup storage', () => {
 		const targetPath = nodePath.join(
 			dataDirectory,
 			'home',
-			'Photos',
+			'Fotos',
 			"Luke's iPhone",
 			resourceKey.slice(0, 2),
 			fileName,
@@ -193,7 +193,7 @@ describe('Photos backup storage', () => {
 	test('migrates the previous flat Home layout into resource-key shards', async () => {
 		const resourceKey = 'de'.repeat(32)
 		const fileName = `${resourceKey}.heic`
-		const flatPath = nodePath.join(dataDirectory, 'home', 'Photos', 'Phone', fileName)
+		const flatPath = nodePath.join(dataDirectory, 'home', 'Fotos', 'Phone', fileName)
 		await fse.outputFile(flatPath, 'photo')
 		await titand.store.set('photos.backupSources', [
 			{
@@ -206,7 +206,7 @@ describe('Photos backup storage', () => {
 				storageVersion: 2,
 			},
 		])
-		const shardedVirtualPath = `/Home/Photos/Phone/${resourceKey.slice(0, 2)}/${fileName}`
+		const shardedVirtualPath = `/Home/Fotos/Phone/${resourceKey.slice(0, 2)}/${fileName}`
 		vi.spyOn(titand.files.fileIndex, 'photosRegisterBackupResource').mockResolvedValue({
 			resourceKey,
 			path: shardedVirtualPath,
@@ -239,7 +239,7 @@ describe('Photos backup storage', () => {
 		})
 
 		expect(member).toMatchObject({id: SOURCE_ID, accountId: 'Alice', name: 'Alice phone'})
-		expect(titand.photos.backupSourceVirtualDirectory(member)).toBe('/Users/Alice/Photos/Alice phone')
+		expect(titand.photos.backupSourceVirtualDirectory(member)).toBe('/Users/Alice/Fotos/Alice phone')
 		expect(titand.photos.backupSourceVirtualDirectory(member)).not.toBe(
 			titand.photos.backupSourceVirtualDirectory(owner),
 		)
@@ -392,7 +392,7 @@ describe('Photos backup storage', () => {
 			suggestedName: 'Owner phone',
 		})
 		const resourceKey = 'e'.repeat(64)
-		const virtualPath = '/Home/Photos/Owner phone/stale.heic'
+		const virtualPath = '/Home/Fotos/Owner phone/stale.heic'
 		const systemPath = titand.files.virtualToSystemPathUnsafe(virtualPath)
 		await fse.outputFile(systemPath, 'photo')
 		const revision = await indexedRevision(systemPath)
@@ -502,7 +502,7 @@ describe('Photos backup storage', () => {
 		}
 		const removalFiles = vi
 			.spyOn(titand.files.fileIndex, 'photosSourceRemovalFiles')
-			.mockResolvedValue([{id: 'a'.repeat(64), path: '/Home/Photos/Phone/aa/photo.heic', revision}])
+			.mockResolvedValue([{id: 'a'.repeat(64), path: '/Home/Fotos/Phone/aa/photo.heic', revision}])
 		const trash = vi.spyOn(titand.files, 'trash').mockResolvedValue('/Trash/photo.heic')
 		const failedRemove = vi
 			.spyOn(titand.files.fileIndex, 'photosRemoveSource')
@@ -510,7 +510,7 @@ describe('Photos backup storage', () => {
 
 		await expect(titand.photos.removeSource('0', librarySourceId, false)).rejects.toThrow('database unavailable')
 		expect(removalFiles).toHaveBeenCalledWith('0', librarySourceId)
-		expect(trash).toHaveBeenCalledWith('/Home/Photos/Phone/aa/photo.heic', '0', revision)
+		expect(trash).toHaveBeenCalledWith('/Home/Fotos/Phone/aa/photo.heic', '0', revision)
 		expect(trash.mock.invocationCallOrder[0]).toBeLessThan(failedRemove.mock.invocationCallOrder[0]!)
 		await expect(titand.store.get('photos.backupSources')).resolves.toHaveLength(1)
 		await expect(titand.store.get('photos.backupSourceRemovals')).resolves.toEqual([
@@ -590,7 +590,7 @@ describe('Photos backup storage', () => {
 
 	test('rejects a Photos directory symlink that escapes the account Home', async () => {
 		const outside = await directory.create()
-		const photosDirectory = nodePath.join(dataDirectory, 'home', 'Photos')
+		const photosDirectory = nodePath.join(dataDirectory, 'home', 'Fotos')
 		await fse.remove(photosDirectory)
 		await fse.symlink(outside, photosDirectory, 'dir')
 

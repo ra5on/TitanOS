@@ -2,6 +2,7 @@ import type Titand from '../../index.js'
 
 import type {FileChangeEvent} from './watcher.js'
 import {OWNER_USER_ID} from '../user/constants.js'
+import {HOME_FOLDERS} from './home-folders.js'
 import AsyncBurstCache from '../utilities/async-burst-cache.js'
 import AppDirectoryMonitor from './app-directory-monitor.js'
 
@@ -134,7 +135,7 @@ export default class Favorites {
 
 	#defaultFavorites(userId: string) {
 		const home = userId === OWNER_USER_ID ? '/Home' : `/Users/${userId}`
-		return ['Downloads', 'Documents', 'Photos', 'Videos'].map((folder) => `${home}/${folder}`)
+		return HOME_FOLDERS.map((folder) => `${home}/${folder}`)
 	}
 
 	#normalizeFavorites(favorites: string[]) {

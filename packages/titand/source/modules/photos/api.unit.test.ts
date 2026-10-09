@@ -65,8 +65,8 @@ describe('Photos HTTP account boundaries', () => {
 						return nodePath.join(directory, 'member.mov')
 					if (accountId === 'member' && path === '/Users/member/member.insv')
 						return nodePath.join(directory, 'member.insv')
-					if (accountId === 'member' && path.startsWith('/Users/member/Photos/')) {
-						return nodePath.join(directory, 'member-home', 'Photos', nodePath.basename(path))
+					if (accountId === 'member' && path.startsWith('/Users/member/Fotos/')) {
+						return nodePath.join(directory, 'member-home', 'Fotos', nodePath.basename(path))
 					}
 					throw new Error('unauthorized path')
 				},
@@ -83,7 +83,7 @@ describe('Photos HTTP account boundaries', () => {
 				},
 				authorizeWritableDestinationSystemPath: async (path: string) => path,
 				getUniqueName: async (path: string) => path.replace(/(\.[^.]+)$/, ' (2)$1'),
-				systemToVirtualPath: (path: string) => `/Users/member/Photos/${nodePath.basename(path)}`,
+				systemToVirtualPath: (path: string) => `/Users/member/Fotos/${nodePath.basename(path)}`,
 				isInternalStorageVirtualPath: () => false,
 				chownSystemPath: async () => {},
 				fileIndex: {movePath: async () => {}},
@@ -205,7 +205,7 @@ describe('Photos HTTP account boundaries', () => {
 		expect(JSON.parse(response.body)).toStrictEqual({status: 'duplicate'})
 		expect(prepareUpload).toHaveBeenCalledWith('member', expect.objectContaining({length: 32}), 'album')
 		expect(registerUpload).not.toHaveBeenCalled()
-		await expect(stat(nodePath.join(directory, 'member-home', 'Photos', 'upload.jpg'))).rejects.toThrow()
+		await expect(stat(nodePath.join(directory, 'member-home', 'Fotos', 'upload.jpg'))).rejects.toThrow()
 	})
 
 	test('publishes and registers a non-duplicate upload', async () => {
@@ -218,7 +218,7 @@ describe('Photos HTTP account boundaries', () => {
 		expect(JSON.parse(response.body)).toStrictEqual({status: 'imported'})
 		expect(registerUpload).toHaveBeenCalledWith(
 			'member',
-			nodePath.join(directory, 'member-home', 'Photos', 'import.jpg'),
+			nodePath.join(directory, 'member-home', 'Fotos', 'import.jpg'),
 			expect.objectContaining({length: 32}),
 			expect.objectContaining({
 				inode: expect.any(String),
@@ -250,7 +250,7 @@ describe('Photos HTTP account boundaries', () => {
 			throwHttpErrors: false,
 		})
 		expect(response.statusCode).toBe(500)
-		await expect(stat(nodePath.join(directory, 'member-home', 'Photos', 'rollback.jpg'))).resolves.toMatchObject({
+		await expect(stat(nodePath.join(directory, 'member-home', 'Fotos', 'rollback.jpg'))).resolves.toMatchObject({
 			size: 14,
 		})
 	})

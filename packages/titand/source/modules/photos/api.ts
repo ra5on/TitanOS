@@ -18,6 +18,7 @@ import type {Principal} from '../auth/auth.js'
 import {authorizeDashboardRequest, authorizeHttpRequest, authorizePhotoBackupRequest} from '../auth/http-request.js'
 import {receiveUpload} from '../files/api.js'
 import {lookupMimeType} from '../files/mime.js'
+import {PHOTOS_FOLDER} from '../files/home-folders.js'
 import type UploadDiskPreflight from '../server/upload-disk-preflight.js'
 import {PRIVATE_IMMUTABLE_CACHE_CONTROL} from '../server/cache-control.js'
 import type {ThumbnailVariant} from '../files/thumbnail-support.js'
@@ -200,7 +201,7 @@ function accountId(response: express.Response) {
 }
 
 function uploadDirectoryForAccount(id: string) {
-	return id === OWNER_USER_ID ? '/Home/Photos' : `/Users/${id}/Photos`
+	return id === OWNER_USER_ID ? `/Home/${PHOTOS_FOLDER}` : `/Users/${id}/${PHOTOS_FOLDER}`
 }
 
 function requestedByteRange(header: string | undefined, size: number) {

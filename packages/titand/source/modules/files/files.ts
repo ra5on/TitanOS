@@ -54,6 +54,7 @@ import {lookupMimeType} from './mime.js'
 
 import type Titand from '../../index.js'
 import {OWNER_USER_ID} from '../user/constants.js'
+import {HOME_FOLDERS} from './home-folders.js'
 
 const ALL_OPERATIONS = [
 	'copy',
@@ -285,7 +286,7 @@ export default class Files {
 		if (!isFavoritesInitialized) return
 
 		// Initialize default favorites
-		const defaultFavourites = ['/Home/Downloads', '/Home/Documents', '/Home/Photos', '/Home/Videos']
+		const defaultFavourites = HOME_FOLDERS.map((folder) => `/Home/${folder}`)
 		for (const favorite of defaultFavourites) {
 			await this.createDirectory(favorite).catch((error) =>
 				this.logger.error(`Failed to ensure directory '${favorite}' exists`, error),
@@ -329,7 +330,7 @@ export default class Files {
 		const home = this.#memberHomeDirectory(slug)
 		const trash = this.#memberTrashDirectory(slug)
 		const trashMeta = this.trashMetaDirectoryForUser(slug)
-		const skeleton = ['Downloads', 'Documents', 'Photos', 'Videos'].map((folder) => nodePath.join(home, folder))
+		const skeleton = HOME_FOLDERS.map((folder) => nodePath.join(home, folder))
 		for (const directory of [home, trash, trashMeta, ...skeleton]) {
 			await fse.ensureDir(directory)
 			await this.chownSystemPath(directory).catch(() => {})

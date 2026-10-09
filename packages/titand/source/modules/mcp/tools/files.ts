@@ -96,7 +96,7 @@ export default function registerFileTools(server: McpServer, context: McpToolCon
 			description:
 				'List a granted directory. The synthetic / root lists only effective file grants and granted app-data roots.',
 			inputSchema: z.object({
-				path: z.string().default('/').describe('An titanOS virtual path, such as /Home/Documents.'),
+				path: z.string().default('/').describe('An titanOS virtual path, such as /Home/Dokumente.'),
 				lastFile: z
 					.string()
 					.optional()

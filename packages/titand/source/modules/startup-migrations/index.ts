@@ -1,3 +1,5 @@
+import nodePath from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import fse from 'fs-extra'
 import {z} from 'zod'
 import yaml from 'js-yaml'
@@ -7,6 +9,7 @@ import type Titand from '../../index.js'
 
 import {detectDevice} from '../system/system.js'
 import {findExternalTitanInstall, runPreMigrationChecks, migrateData} from '../migration/migration.js'
+import {LEGACY_HOME_FOLDERS, renamePathsDeep, type PathRename} from '../files/home-folders.js'
 
 async function readYaml(path: string) {
 	return yaml.load(await fse.readFile(path, 'utf8'))
@@ -150,6 +153,95 @@ class Migration {
 		this.logger.log('Downloads directory migrated')
 	}
 
+	// TitanOS 2.0.7 names the default home folders in German. Rename existing
+	// Documents/Photos folders once and repoint stored paths (favorites, shares,
+	// app folder access, Photos scopes). File index entries are rebuilt by the
+	// startup reconcile; Photos albums are keyed by content hash.
+	async migrateGermanHomeFolders() {
+		if (await this.titand.store.get('migrations.germanHomeFolders')) return
+		const homes = [{virtualRoot: '/Home', systemRoot: this.titand.files.getBaseDirectory('/Home')}]
+		const membersDirectory = `${this.titand.dataDirectory}/members`
+		if (await fse.pathExists(membersDirectory)) {
+			for (const slug of await fse.readdir(membersDirectory)) {
+				const systemRoot = nodePath.join(membersDirectory, slug, 'home')
+				if (await fse.pathExists(systemRoot)) homes.push({virtualRoot: `/Users/${slug}`, systemRoot})
+			}
+		}
+
+		const renames: PathRename[] = []
+		for (const {virtualRoot, systemRoot} of homes) {
+			for (const [legacyName, name] of Object.entries(LEGACY_HOME_FOLDERS)) {
+				const legacy = nodePath.join(systemRoot, legacyName)
+				const target = nodePath.join(systemRoot, name)
+				const rename = [
+					{from: `${virtualRoot}/${legacyName}`, to: `${virtualRoot}/${name}`},
+					{from: legacy, to: target},
+				]
+				const legacyStats = await fse.lstat(legacy).catch(() => undefined)
+				if (!legacyStats?.isDirectory()) {
+					// Renamed by an interrupted earlier run: still repoint stored paths
+					if (await fse.pathExists(target)) renames.push(...rename)
+					continue
+				}
+				if (await fse.pathExists(target)) {
+					// Only replace a target the user has not filled yet
+					if ((await fse.readdir(target)).length > 0) {
+						this.logger.log(`Keeping '${legacy}': '${target}' already contains files`)
+						continue
+					}
+					await fse.rmdir(target)
+				}
+				await fse.rename(legacy, target)
+				renames.push(...rename)
+				this.logger.log(`Renamed '${legacy}' to '${target}'`)
+			}
+		}
+		if (renames.length > 0) await this.#repointRenamedHomeFolders(renames)
+		await this.titand.store.set('migrations.germanHomeFolders', true)
+	}
+
+	async #repointRenamedHomeFolders(renames: PathRename[]) {
+		await this.titand.store.update((store) => {
+			const renamed = renamePathsDeep(store, renames) as typeof store
+			for (const key of Object.keys(store)) delete (store as Record<string, unknown>)[key]
+			Object.assign(store, renamed)
+		})
+
+		const titanDatabasePath = `${this.titand.dataDirectory}/titan.db`
+		if (!(await fse.pathExists(titanDatabasePath))) return
+		const database = new BetterSqlite3(titanDatabasePath, {timeout: 5000})
+		try {
+			const table = database
+				.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'photos_sources'")
+				.get()
+			if (!table) return
+			const sources = database
+				.prepare('SELECT id, scope_paths FROM photos_sources WHERE scope_paths IS NOT NULL')
+				.all() as {id: string; scope_paths: string}[]
+			const update = database.prepare('UPDATE photos_sources SET scope_paths = ? WHERE id = ?')
+			database.transaction(() => {
+				for (const source of sources) {
+					const paths = JSON.parse(source.scope_paths) as unknown
+					const renamed = JSON.stringify(renamePathsDeep(paths, renames))
+					if (renamed !== source.scope_paths) update.run(renamed, source.id)
+				}
+			})()
+		} finally {
+			database.close()
+		}
+	}
+
+	// TitanOS 2.0.7 starts every account at the default desktop transparency
+	// (75 %) once. Accounts can change it again afterwards.
+	async resetDesktopTransparency() {
+		await this.titand.store.update((store) => {
+			if (store.migrations?.desktopTransparencyReset) return
+			if (store.user) delete store.user.desktopTransparency
+			for (const member of store.members ?? []) if (!('deleted' in member)) delete member.desktopTransparency
+			store.migrations = {...store.migrations, desktopTransparencyReset: true}
+		})
+	}
+
 	async start() {
 		this.logger.log('Checking if any migrations are needed...')
 
@@ -189,6 +281,20 @@ class Migration {
 			await this.migrateDownloadsDirectory()
 		} catch (error) {
 			this.logger.error(`Failed to migrate Downloads directory`, error)
+		}
+
+		// Rename the default home folders to their German names
+		try {
+			await this.migrateGermanHomeFolders()
+		} catch (error) {
+			this.logger.error(`Failed to migrate home folder names`, error)
+		}
+
+		// Start every account at the default desktop transparency once
+		try {
+			await this.resetDesktopTransparency()
+		} catch (error) {
+			this.logger.error(`Failed to reset desktop transparency`, error)
 		}
 
 		// Write the current version to signal what version we've migrated up to.
