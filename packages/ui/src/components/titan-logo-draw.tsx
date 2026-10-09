@@ -25,8 +25,8 @@ export function TitanLogoDraw({
 	return (
 		<motion.svg
 			xmlns='http://www.w3.org/2000/svg'
-			width={96}
-			viewBox='0 0 96 47'
+			width={220}
+			viewBox='0 0 2060 520'
 			fill='none'
 			aria-hidden
 			className={cn('overflow-visible', className)}
@@ -35,7 +35,12 @@ export function TitanLogoDraw({
 			transition={{duration: reducedMotion ? 0 : 0.7 / Math.max(0.1, speed), delay: reducedMotion ? 0 : delay}}
 			onAnimationComplete={reducedMotion ? undefined : onComplete}
 		>
-			<path fill='currentColor' d='M8 7H88V18H55V42H41V18H8Z' />
+			<image
+				href='/assets/titan-wordmark.svg'
+				width={2060}
+				height={520}
+				style={{filter: 'drop-shadow(0 1px 2px rgba(255,255,255,.45))'}}
+			/>
 		</motion.svg>
 	)
 }

@@ -369,6 +369,7 @@ RUN apt-get install --yes --no-install-recommends \
     qemu-system-arm \
     qemu-system-modules-opengl \
     qemu-utils \
+    bubblewrap \
     libegl1 \
     ovmf \
     qemu-efi-aarch64 \

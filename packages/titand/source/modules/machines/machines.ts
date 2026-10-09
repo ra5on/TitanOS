@@ -864,11 +864,9 @@ const storedImageSchema = z.object({
 	fixedMemoryMb: z.number().int().min(128).max(1_048_576).optional(),
 })
 
-// Custom disks are intentionally limited to raw images. Supporting structured
-// formats is straightforward with qemu-img, but user-controlled images must be
-// converted in a sandbox that cannot follow backing files, data files, extents,
-// parent locators, or other references into the host filesystem.
-const CUSTOM_IMAGE_EXTENSIONS = /\.(iso|img)$/i
+// Custom QCOW2 images are copied and converted in a filesystem/network sandbox.
+// Other structured formats remain unavailable for user-provided images.
+const CUSTOM_IMAGE_EXTENSIONS = /\.(iso|img|qcow2)$/i
 const CATALOG_IMAGE_EXTENSIONS = /\.(iso|qcow2|img|vmdk|vdi|vhdx|vhd)$/i
 const MACHINES_PORT_MIN = 40_000
 const MACHINES_PORT_MAX = 49_999
@@ -2072,6 +2070,7 @@ export default class Machines {
 							this.logger.error('Failed emitting machine clone progress', error),
 						)
 					},
+					!sourceImage,
 				)
 			}
 			if (signal.aborted) throw signal.reason
