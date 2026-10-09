@@ -82,6 +82,24 @@ def replace_guarded(path: Path, before: str, after: str) -> None:
         raise RuntimeError(f'Pinned branding source did not match: {path} ({before!r})')
 
 
+def in_titan_mark(x: float, y: float) -> bool:
+    polygons = (
+        ((9, 12), (46, 21), (39, 29), (14, 22)),
+        ((87, 12), (50, 21), (57, 29), (82, 22)),
+        ((18, 29), (37, 34), (37, 53), (29, 44)),
+        ((78, 29), (59, 34), (59, 53), (67, 44)),
+        ((41, 32), (48, 24), (55, 32), (55, 73), (48, 84), (41, 73)),
+    )
+    for points in polygons:
+        inside = False
+        for (ax, ay), (bx, by) in zip(points, (*points[1:], points[0])):
+            if (ay > y) != (by > y) and x < (bx - ax) * (y - ay) / (by - ay) + ax:
+                inside = not inside
+        if inside:
+            return True
+    return False
+
+
 def make_icon(size: int, notification: bool = False) -> bytes:
     """Render the original T mark to PNG using only the Python standard library."""
     pixels = bytearray()
@@ -97,8 +115,8 @@ def make_icon(size: int, notification: bool = False) -> bytes:
                     corner_y = max(22 - py, 0, py - 74)
                     if corner_x * corner_x + corner_y * corner_y > 22 * 22:
                         color = (0, 0, 0, 0)
-                    elif (18 <= px <= 78 and 21 <= py <= 34) or (41 <= px <= 55 and 34 <= py <= 80):
-                        color = (93, 217, 251, 255)
+                    elif in_titan_mark(px, py):
+                        color = (225, 231, 240, 255)
                     else:
                         color = (19, 35, 61, 255)
                     if notification and (px - 76) ** 2 + (py - 20) ** 2 <= 12 ** 2:
@@ -166,6 +184,7 @@ def apply(root: Path) -> None:
     for source, destination in (
         ('titan-logo.tsx', 'src/components/titan-logo.tsx'),
         ('titan-logo-draw.tsx', 'src/components/titan-logo-draw.tsx'),
+        ('titan-wordmark.svg', 'public/assets/titan-wordmark.svg'),
         ('titan-mark.svg', 'public/assets/titan-app.svg'),
         ('titan-mark.svg', 'public/favicon/titan.svg'),
     ):

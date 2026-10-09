@@ -99,6 +99,8 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-force-stop-failed')
 		case 'machine-id-attempt-invalid':
 			return t('machines-error.machine-id-attempt-invalid')
+		case 'machine-image-external-data-not-supported':
+			return t('machines-error.machine-image-external-data-not-supported')
 		case 'machine-image-backing-chain-not-supported':
 			return t('machines-error.machine-image-backing-chain-not-supported')
 		case 'machine-image-checksum-mismatch':

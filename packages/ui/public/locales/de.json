@@ -1387,7 +1387,7 @@
   "machines.all-machines": "Meine Maschinen",
   "machines.architecture": "Architektur",
   "machines.browse-iso-select": "Abbild auswählen",
-  "machines.browse-iso-title": "Installationsmedium oder Festplattenabbild auswählen",
+  "machines.browse-iso-title": "ISO-, IMG- oder QCOW2-Abbild auswählen",
   "machines.cancel-install": "Installation abbrechen",
   "machines.catalog-more": "Mehr",
   "machines.catalog-popular": "Beliebt",
@@ -1525,7 +1525,7 @@
   "machines.uninstall-confirm-title": "{{name}} deinstallieren?",
   "machines.unpin-from-homescreen": "Vom Startbildschirm entfernen",
   "machines.upload-complete-keep-both": "Upload abgeschlossen. Die Datei wurde umbenannt, um einen Konflikt mit einer anderen Datei zu vermeiden. Verwende „In Dateien durchsuchen“, um sie auszuwählen.",
-  "machines.upload-iso-description": "OS-Installationsmedium oder Abbild hochladen",
+  "machines.upload-iso-description": "ISO-, IMG- oder QCOW2-Abbild hochladen",
   "machines.username": "Benutzername",
   "machines.variant-cli": "Nur Befehlszeile",
   "machines.variant-gui": "Grafische Benutzeroberfläche",
@@ -2842,7 +2842,7 @@
   "machines-error.machine-image-download-failed": "Das Betriebssystemabbild konnte nicht heruntergeladen werden.",
   "machines-error.machine-image-download-http-error": "Der Downloadserver hat das Abbild nicht bereitgestellt. Versuche es später erneut.",
   "machines-error.machine-image-format-unsupported": "Dieses Abbildformat wird nicht unterstützt.",
-  "machines-error.machine-image-invalid": "Das ausgewählte Betriebssystemabbild ist ungültig oder beschädigt.",
+  "machines-error.machine-image-invalid": "Das Abbild ist ungültig. Unterstützt werden ISO, IMG und eigenständige QCOW2-Abbilder.",
   "machines-error.machine-image-redirect-invalid": "Die Weiterleitung des Downloadservers ist ungültig.",
   "machines-error.machine-image-too-large": "Das ausgewählte Abbild ist zu groß.",
   "machines-error.machine-image-too-many-redirects": "Der Downloadserver hat zu viele Weiterleitungen gesendet.",
@@ -2931,5 +2931,6 @@
   "desktop.appearance.reset": "Standard wiederherstellen",
   "desktop.appearance.personal": "Nur für dein Benutzerkonto.",
   "desktop.appearance.saving": "Wird gespeichert …",
-  "desktop.appearance.save-failed": "Speichern fehlgeschlagen. Ändere den Wert erneut oder stelle den Standard wieder her."
+  "desktop.appearance.save-failed": "Speichern fehlgeschlagen. Ändere den Wert erneut oder stelle den Standard wieder her.",
+  "machines-error.machine-image-external-data-not-supported": "Dieses QCOW2-Abbild verwendet eine externe Datendatei. Verwende ein eigenständiges Abbild."
 }

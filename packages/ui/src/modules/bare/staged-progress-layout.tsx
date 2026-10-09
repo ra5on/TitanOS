@@ -36,7 +36,7 @@ export function StagedProgressLayout({
 				transition={{duration: 2.6, repeat: Infinity, ease: 'easeInOut'}}
 				style={{filter: 'drop-shadow(0 0 24px rgba(255,255,255,0.35))'}}
 			>
-				<TitanLogo className='w-[88px]' />
+				<TitanLogo className='w-[200px] max-w-full' />
 			</motion.div>
 
 			<div className='mt-10 h-6'>

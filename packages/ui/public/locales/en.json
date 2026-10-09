@@ -1387,7 +1387,7 @@
   "machines.all-machines": "My machines",
   "machines.architecture": "Architecture",
   "machines.browse-iso-select": "Select image",
-  "machines.browse-iso-title": "Select an installer or disk image",
+  "machines.browse-iso-title": "Select an ISO, IMG or QCOW2 image",
   "machines.cancel-install": "Cancel install",
   "machines.catalog-more": "More",
   "machines.catalog-popular": "Popular",
@@ -1525,7 +1525,7 @@
   "machines.uninstall-confirm-title": "Uninstall {{name}}?",
   "machines.unpin-from-homescreen": "Remove from homescreen",
   "machines.upload-complete-keep-both": "Upload complete. It was renamed to avoid a conflict with another file. Use Browse in Files to select it.",
-  "machines.upload-iso-description": "Upload an OS installer or image",
+  "machines.upload-iso-description": "Upload an ISO, IMG or QCOW2 image",
   "machines.username": "Username",
   "machines.variant-cli": "Command line only",
   "machines.variant-gui": "Graphical desktop",
@@ -2842,7 +2842,7 @@
   "machines-error.machine-image-download-failed": "The operating system image could not be downloaded.",
   "machines-error.machine-image-download-http-error": "The download server did not provide the image. Try again later.",
   "machines-error.machine-image-format-unsupported": "This image format is unsupported.",
-  "machines-error.machine-image-invalid": "The selected operating system image is invalid or damaged.",
+  "machines-error.machine-image-invalid": "Invalid image. Supported formats are ISO, IMG and standalone QCOW2 images.",
   "machines-error.machine-image-redirect-invalid": "The download server returned an invalid redirect.",
   "machines-error.machine-image-too-large": "The selected image is too large.",
   "machines-error.machine-image-too-many-redirects": "The download server returned too many redirects.",
@@ -2931,5 +2931,6 @@
   "desktop.appearance.reset": "Restore default",
   "desktop.appearance.personal": "Applies only to your account.",
   "desktop.appearance.saving": "Saving …",
-  "desktop.appearance.save-failed": "Could not save. Change the value again or restore the default."
+  "desktop.appearance.save-failed": "Could not save. Change the value again or restore the default.",
+  "machines-error.machine-image-external-data-not-supported": "This QCOW2 image uses an external data file. Use a standalone image."
 }

@@ -6,7 +6,7 @@ import {cn} from '@/lib/utils'
 import {tw} from '@/utils/tw'
 
 export const TitanLogoLarge = () => (
-	<TitanLogo className='w-[100px] opacity-85' style={{viewTransitionName: 'titan-logo'}} />
+	<TitanLogo className='w-[220px] max-w-full opacity-85' style={{viewTransitionName: 'titan-logo'}} />
 )
 
 export function Title({children, className}: {children: React.ReactNode; className?: string}) {

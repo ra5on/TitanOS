@@ -28,8 +28,8 @@ const MiniBrowser = lazy(() =>
 
 // Custom disks are restricted to raw images until structured formats can be
 // converted in a sandbox that cannot follow references into the host filesystem.
-const DISK_IMAGE_ACCEPT = '.iso,.img'
-const isDiskImagePath = (path: string) => /\.(iso|img)$/i.test(path)
+const DISK_IMAGE_ACCEPT = '.iso,.img,.qcow2'
+const isDiskImagePath = (path: string) => /\.(iso|img|qcow2)$/i.test(path)
 
 type CatalogImage = OsImage
 

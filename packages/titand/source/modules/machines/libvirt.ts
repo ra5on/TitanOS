@@ -9,6 +9,7 @@ import pRetry from 'p-retry'
 import pWaitFor from 'p-wait-for'
 
 import type Titand from '../../index.js'
+import {convertCustomQcow2} from './custom-qcow2.js'
 import {
 	buildDomainXml,
 	MACHINE_NETWORK_NAME,
@@ -1007,7 +1008,12 @@ export default class Libvirt {
 		inputFormat: QemuImageFormat,
 		signal: AbortSignal,
 		onProgress?: (percent: number) => void,
+		customImage = false,
 	) {
+		if (customImage && inputFormat === 'qcow2') {
+			await convertCustomQcow2(source, destination, sizeGb, signal, onProgress)
+			return
+		}
 		// Never let qemu-img probe an untrusted image. An explicit input driver is
 		// the security boundary against a raw-looking image being interpreted as a
 		// more powerful format that can reference host files or external resources.

@@ -207,7 +207,7 @@ export default function Login() {
 				<div className='relative z-10 flex w-full flex-1 animate-in flex-col items-center justify-center gap-5 duration-300 fade-in'>
 					{/* A lone account's avatar says nothing the greeting doesn't —
 					    show the Titan logo instead, like the multi-user picker */}
-					<TitanLogo className='mb-4 w-32 shrink-0' />
+					<TitanLogo className='mb-4 w-[220px] max-w-full shrink-0' />
 					<LoginForm
 						account={account}
 						password={password}
@@ -272,7 +272,7 @@ export default function Login() {
 							exit={{opacity: 0, y: -28, height: 0, marginBottom: 0}}
 							transition={{duration: 0.2}}
 						>
-							<TitanLogo className='w-32 shrink-0' />
+							<TitanLogo className='w-[220px] max-w-full shrink-0' />
 						</motion.div>
 					)}
 				</AnimatePresence>

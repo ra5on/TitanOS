@@ -1,4 +1,6 @@
-<h1 align="center">TitanOS 2.0.4 · Stable</h1>
+<p align="center"><img src="packages/ui/public/assets/titan-wordmark.svg" alt="Titan" width="420"></p>
+
+<h1 align="center">TitanOS 2.0.5 · Stable</h1>
 
 <p align="center">
   Ein Zuhause für deine Dateien, Apps und virtuellen Maschinen.<br>
@@ -6,8 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ra5on/TitanOS/releases/download/v2.0.4/titan-2.0.4.img.xz"><strong>IMG herunterladen</strong></a>
-  · <a href="https://github.com/ra5on/TitanOS/releases/tag/v2.0.4">Release &amp; Prüfsummen</a>
+  <a href="https://github.com/ra5on/TitanOS/releases/download/v2.0.5/titan-2.0.5.img.xz"><strong>IMG herunterladen</strong></a>
+  · <a href="https://github.com/ra5on/TitanOS/releases/tag/v2.0.5">Release &amp; Prüfsummen</a>
   · <a href="https://github.com/ra5on/TitanOS/issues">Support</a>
 </p>
 
@@ -45,7 +47,7 @@ Stand 2.0.1. Alle Aufnahmen entstanden mit dem echten Backend in einer isolierte
 Testumgebung.
 [Details zu den Aufnahmen](docs/images/README.md).
 
-![TitanOS 2.0.4 mit persönlichem Transparenzregler](docs/images/titanos-desktop-2.0.4.jpg)
+![TitanOS 2.0.5 mit persönlichem Transparenzregler](docs/images/titanos-desktop-2.0.4.jpg)
 
 | Dateien | Einstellungen |
 | --- | --- |
@@ -56,7 +58,7 @@ Testumgebung.
 Für einen x86-64-Rechner empfehlen wir **8 GB RAM**, eine **SSD ab 64 GB** und
 **UEFI mit deaktiviertem Secure Boot**.
 
-1. Lade [titan-2.0.4.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.4/titan-2.0.4.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.4); die [Download-Prüfung](docs/DOWNLOADS.md) erklärt die Schritte.
+1. Lade [titan-2.0.5.img.xz](https://github.com/ra5on/TitanOS/releases/download/v2.0.5/titan-2.0.5.img.xz) herunter. Prüfsummen und Signatur findest du im [Release](https://github.com/ra5on/TitanOS/releases/tag/v2.0.5); die [Download-Prüfung](docs/DOWNLOADS.md) erklärt die Schritte.
 2. Entpacke das Image und schreibe es mit einem geeigneten Image-Werkzeug auf die Ziel-SSD. **Dabei wird der Inhalt dieses Laufwerks überschrieben.**
 3. Starte den Rechner von dieser SSD und verbinde ihn mit deinem Netzwerk.
 4. Öffne `http://titan.local/` im Browser. Falls dein Netzwerk lokale Namen nicht auflöst, verwende die IP-Adresse aus deinem Router.
@@ -92,7 +94,7 @@ Details findest du in der [Update-Anleitung](docs/UPDATES.md).
 
 ## Gut zu wissen
 
-Release 2.0.4 enthält einen signierten Prüfbericht. Er dokumentiert den echten
+Release 2.0.5 enthält einen signierten Prüfbericht. Er dokumentiert den echten
 UEFI-Start, die VM-Netzwerktests sowie Update, Neustart, manuellen Rollback und
 automatische Rückkehr nach einem fehlgeschlagenen Systemstart. Der
 Wiederherstellungstest verwendet einen privaten älteren Teststand aus demselben

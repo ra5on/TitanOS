@@ -948,12 +948,12 @@ describe('background machine installation', () => {
 		})
 	})
 
-	test('accepts ISOs and raw disk images but rejects structured custom images', async () => {
+	test('accepts ISOs, raw and QCOW2 disk images but rejects other structured custom images', async () => {
 		const {machines, filesRoot} = await createMachines()
 		const imports = nodePath.join(filesRoot, 'External', 'imports')
 		await fse.ensureDir(imports)
 
-		for (const extension of ['iso', 'img']) {
+		for (const extension of ['iso', 'img', 'qcow2']) {
 			const imagePath = `/External/imports/source.${extension}`
 			await fsp.writeFile(nodePath.join(imports, `source.${extension}`), extension)
 			const machine = await machines.create({
@@ -972,7 +972,7 @@ describe('background machine installation', () => {
 			})
 		}
 
-		for (const extension of ['qcow2', 'vmdk', 'vdi', 'vhdx', 'vhd', 'ova']) {
+		for (const extension of ['vmdk', 'vdi', 'vhdx', 'vhd', 'ova']) {
 			await expect(
 				machines.create({
 					name: `Rejected ${extension}`,
