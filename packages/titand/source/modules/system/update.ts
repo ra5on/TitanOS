@@ -62,6 +62,7 @@ export async function performUpdate(titand: Titand) {
 	setUpdateStatus({running: true, progress: 0, description: 'Titan-Update prüfen…', error: false})
 	try {
 		const channel = 'stable'
+		if (!titand.systemBootConfirmed) throw new Error('Der Systemstart wird noch bestätigt. Bitte kurz warten.')
 		const release = await getLatestRelease(titand)
 		if (release.version === titand.version) throw new Error('Kein neueres Titan-Systemupdate verfügbar')
 		const process = $`/usr/bin/python3 ${helper} install --current-version ${titand.version} --channel ${channel} --version ${release.version}`
@@ -130,6 +131,14 @@ export async function getRecoveryStatus(titand: Titand): Promise<RecoveryStatus>
 	) {
 		throw new Error('Ungültige Antwort der TitanOS-Wiederherstellung')
 	}
+	if (!titand.systemBootConfirmed) {
+		return {
+			...state,
+			current: {...state.current, confirmed: false},
+			previous: [],
+			reason: 'Der Systemstart wird noch bestätigt. Bitte kurz warten.',
+		}
+	}
 	return state
 }
 
@@ -137,6 +146,7 @@ export async function performRollback(titand: Titand, selection: string) {
 	if (updateStatus.running) throw new Error('Ein Systemupdate oder eine Wiederherstellung läuft bereits')
 	setUpdateStatus({running: true, progress: 0, description: 'Vorherigen Systemstand prüfen…', error: false})
 	try {
+		if (!titand.systemBootConfirmed) throw new Error('Der Systemstart wird noch bestätigt. Bitte kurz warten.')
 		await $`/usr/bin/python3 ${helper} rollback --current-version ${titand.version} --selection ${selection}`
 		cached.clear()
 		setUpdateStatus({running: false, progress: 100, description: 'Neustart…'})
