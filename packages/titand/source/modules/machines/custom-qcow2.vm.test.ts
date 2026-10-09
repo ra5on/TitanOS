@@ -1,6 +1,6 @@
 import {access} from 'node:fs/promises'
-import {afterAll, beforeAll, describe, expect, test} from 'vitest'
-import pRetry from 'p-retry'
+import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest'
+import pRetry, {AbortError} from 'p-retry'
 import {createTestVm} from '../test-utilities/create-test-titand.js'
 
 const image = process.env.TITAN_VM_IMAGE
@@ -10,12 +10,19 @@ await access(image)
 describe('Custom QCOW2 imports on the released OS', () => {
 	let titand: Awaited<ReturnType<typeof createTestVm>>
 	let id: string
+	let imported = false
 	beforeAll(async () => {
 		titand = await createTestVm({device: 'titan-home', image, memory: 4096, cores: 2})
 		await titand.vm.powerOn()
 		await titand.registerAndLogin()
 	})
 	afterAll(async () => await titand?.cleanup())
+	afterEach(async ({task}) => {
+		if (task.result?.state === 'fail') {
+			console.error(await titand.client.machines.list.query().catch(String))
+			console.error(await titand.vm.sshAsRoot('journalctl -u titan -u libvirtd --no-pager -n 160').catch(String))
+		}
+	})
 	test('imports an uploaded bootable disk through the authenticated product API', async () => {
 		// A tiny BIOS boot sector halts indefinitely. It needs no OS download and
 		// verifies the source bytes really reach the virtual disk, not only a mock.
@@ -38,7 +45,10 @@ describe('Custom QCOW2 imports on the released OS', () => {
 		id = machine.id
 		await pRetry(
 			async () => {
-				expect((await titand.client.machines.list.query()).find((m) => m.id === id)?.state).toBe('running')
+				const current = (await titand.client.machines.list.query()).find((m) => m.id === id)
+				if (current?.state === 'error')
+					throw new AbortError(current.errorMessage ?? 'Import failed without a daemon message')
+				expect(current?.state).toBe('running')
 			},
 			{retries: 90, minTimeout: 1000, maxTimeout: 1000},
 		)
@@ -47,8 +57,10 @@ describe('Custom QCOW2 imports on the released OS', () => {
 		)
 		expect(JSON.parse(output)['backing-filename']).toBeUndefined()
 		expect(JSON.parse(output)['virtual-size']).toBe(1024 ** 3)
+		imported = true
 	})
-	test('retains the imported source and independent VM disk after host restart', async () => {
+	test('retains the imported source and independent VM disk after host restart', async ({skip}) => {
+		if (!imported) skip()
 		await titand.client.machines.forceStop.mutate({id})
 		await titand.vm.powerOff()
 		await titand.vm.powerOn()
@@ -57,7 +69,10 @@ describe('Custom QCOW2 imports on the released OS', () => {
 		await titand.client.machines.start.mutate({id})
 		await pRetry(
 			async () => {
-				expect((await titand.client.machines.list.query()).find((m) => m.id === id)?.state).toBe('running')
+				const current = (await titand.client.machines.list.query()).find((m) => m.id === id)
+				if (current?.state === 'error')
+					throw new AbortError(current.errorMessage ?? 'Import failed without a daemon message')
+				expect(current?.state).toBe('running')
 			},
 			{retries: 90, minTimeout: 1000, maxTimeout: 1000},
 		)
