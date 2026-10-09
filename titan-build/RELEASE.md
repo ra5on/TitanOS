@@ -14,9 +14,12 @@
   sich weiterhin individuell anpassen.
 - **Startbildschirm:** Über der Begrüßung steht nur noch der Titan-Schriftzug,
   ohne das Symbol davor.
+- **Systemupdates:** Ein Update startet erst, wenn der laufende Systemstart
+  bestätigt ist. Zuvor konnte ein sehr früh gestartetes Update nach dem Neustart
+  unbestätigt bleiben.
 - **Build:** Die Veröffentlichung nutzt GitHub-Actions mit Node.js 24.
 
-## Neu in 2.0.6: Zuverlässiger QCOW2-Import
+## Zuverlässiger QCOW2-Import
 
 Eigene QCOW2-Festplattenabbilder lassen sich jetzt auch dann importieren, wenn
 der Import bisher mit „Die Aktion konnte nicht ausgeführt werden“ abbrach. Die

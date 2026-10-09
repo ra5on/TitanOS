@@ -428,4 +428,15 @@ class ConfigureUpdaterTests(unittest.TestCase):
             self.assertTrue((root/'packages/os/overlay/usr/libexec/titan-system-update.py').exists())
 
 
+    def test_build_copies_match_the_daemon_sources(self):
+        # configure() overwrites these daemon files at build time. A stale copy
+        # silently drops fixes made in the daemon (e.g. the boot confirmation gate).
+        repository=ROOT.parent
+        for build,source in (('update.ts','packages/titand/source/modules/system/update.ts'),
+                             ('update.unit.test.ts','packages/titand/source/modules/system/update.unit.test.ts'),
+                             ('titan-system-update.py','packages/os/overlay/usr/libexec/titan-system-update.py')):
+            with self.subTest(build=build):
+                self.assertEqual((ROOT/'updater'/build).read_bytes(),(repository/source).read_bytes())
+
+
 if __name__=='__main__': unittest.main()
