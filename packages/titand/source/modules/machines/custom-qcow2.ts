@@ -3,16 +3,9 @@ import nodePath from 'node:path'
 import {execa} from 'execa'
 import {installCommandOptions, MACHINE_INSTALL_SHORT_COMMAND_TIMEOUT_MS} from './install-command.js'
 
-// The private copy and output reach Bubblewrap as inherited descriptors
-const SOURCE_FD = 3
-const DESTINATION_FD = 4
-
 // Only the private copy and output are exposed. No host /etc, /home, /run,
 // network, credentials, host devices or other machine directories are mounted.
-// Binding descriptors instead of paths means sandbox setup never traverses host
-// directories: a user namespace maps only the calling UID, so host root cannot
-// pass through a NAS home or data directory owned by another UID there.
-export function qcow2SandboxArguments(withDestination = false) {
+export function qcow2SandboxArguments(source: string, destination?: string) {
 	return [
 		'--unshare-all',
 		'--die-with-parent',
@@ -37,10 +30,10 @@ export function qcow2SandboxArguments(withDestination = false) {
 		'/tmp',
 		'--dir',
 		'/work',
-		'--ro-bind-fd',
-		String(SOURCE_FD),
+		'--ro-bind',
+		source,
 		'/work/source',
-		...(withDestination ? ['--bind-fd', String(DESTINATION_FD), '/work/destination'] : []),
+		...(destination ? ['--bind', destination, '/work/destination'] : []),
 		'--chdir',
 		'/work',
 		'--',
@@ -58,21 +51,44 @@ export function validateQcow2Header(header: Buffer) {
 		throw new Error('[machine-image-external-data-not-supported]')
 }
 
-// Runs the sandboxed qemu-img with the private files bound by descriptor. A
-// tool failure becomes a coded import error; the raw output stays in the log.
+// A user namespace maps only the calling UID, so host root's DAC override does
+// not let sandbox setup traverse a NAS home or data directory owned by another
+// UID. Bind the private scratch directory under root-owned /run instead: the
+// data stays on the destination filesystem and NAS rights stay untouched.
+// Without mount rights (unprivileged development runs) use the path directly.
+async function sandboxView(scratch: string) {
+	let view: string
+	try {
+		view = await fsp.mkdtemp('/run/titan-qcow2-import-')
+	} catch {
+		return {path: scratch, release: async () => {}}
+	}
+	try {
+		await execa('/usr/bin/mount', ['--bind', scratch, view])
+	} catch {
+		await fsp.rmdir(view).catch(() => {})
+		return {path: scratch, release: async () => {}}
+	}
+	// Keep the temporary view out of other mount namespaces
+	await execa('/usr/bin/mount', ['--make-private', view]).catch(() => {})
+	return {
+		path: view,
+		release: async () => {
+			await execa('/usr/bin/umount', [view])
+			await fsp.rmdir(view)
+		},
+	}
+}
+
+// A qemu-img failure without a Titan error code is an import failure. The raw
+// tool output stays in the daemon log.
 async function sandboxedQemuImg(
-	files: {source: string; destination?: string},
 	args: string[],
 	options: ReturnType<typeof installCommandOptions>,
 	onOutput?: (data: Buffer) => void,
 ) {
-	const source = await fsp.open(files.source, 'r')
-	const destination = files.destination ? await fsp.open(files.destination, 'r+') : undefined
 	try {
-		const command = execa('/usr/bin/bwrap', [...qcow2SandboxArguments(!!destination), ...args], {
-			...options,
-			stdio: ['ignore', 'pipe', 'pipe', source.fd, ...(destination ? [destination.fd] : [])],
-		})
+		const command = execa('/usr/bin/bwrap', args, options)
 		if (onOutput) {
 			// qemu-img prints progress on stdout; older builds used stderr
 			command.stdout?.on('data', onOutput)
@@ -82,8 +98,6 @@ async function sandboxedQemuImg(
 	} catch (error) {
 		if (options.signal.aborted) throw options.signal.reason
 		throw new Error(`[machine-image-import-failed] ${error instanceof Error ? error.message : String(error)}`)
-	} finally {
-		await Promise.all([source.close(), destination?.close()])
 	}
 }
 
@@ -100,6 +114,7 @@ export async function convertCustomQcow2(
 	const scratch = await fsp.mkdtemp(nodePath.join(nodePath.dirname(destination), '.qcow2-import-'))
 	const snapshot = nodePath.join(scratch, 'source')
 	const privateOutput = nodePath.join(scratch, 'disk.qcow2')
+	let view: Awaited<ReturnType<typeof sandboxView>> | undefined
 	let outputCreated = false
 	try {
 		await fsp.copyFile(source, snapshot)
@@ -113,9 +128,11 @@ export async function convertCustomQcow2(
 		} finally {
 			await handle.close()
 		}
+		view = await sandboxView(scratch)
+		const sandboxSource = nodePath.join(view.path, 'source')
+		const sandboxOutput = nodePath.join(view.path, 'disk.qcow2')
 		const info = await sandboxedQemuImg(
-			{source: snapshot},
-			['info', '-f', 'qcow2', '--output=json', '/work/source'],
+			[...qcow2SandboxArguments(sandboxSource), 'info', '-f', 'qcow2', '--output=json', '/work/source'],
 			installCommandOptions(signal, MACHINE_INSTALL_SHORT_COMMAND_TIMEOUT_MS),
 		)
 		const details = JSON.parse(info.stdout) as {'virtual-size': number; 'backing-filename'?: string}
@@ -127,8 +144,17 @@ export async function convertCustomQcow2(
 		outputCreated = true
 		await fsp.writeFile(privateOutput, '', {flag: 'wx', mode: 0o600})
 		await sandboxedQemuImg(
-			{source: snapshot, destination: privateOutput},
-			['convert', '-p', '-f', 'qcow2', '-O', 'qcow2', '/work/source', '/work/destination'],
+			[
+				...qcow2SandboxArguments(sandboxSource, sandboxOutput),
+				'convert',
+				'-p',
+				'-f',
+				'qcow2',
+				'-O',
+				'qcow2',
+				'/work/source',
+				'/work/destination',
+			],
 			installCommandOptions(signal),
 			(data) => {
 				for (const match of data.toString().matchAll(/\((\d+(?:\.\d+)?)\/100%\)/g)) onProgress?.(Number(match[1]))
@@ -146,6 +172,10 @@ export async function convertCustomQcow2(
 		if (outputCreated) await fsp.rm(destination, {force: true})
 		throw error
 	} finally {
-		await fsp.rm(scratch, {recursive: true, force: true})
+		try {
+			await view?.release()
+		} finally {
+			await fsp.rm(scratch, {recursive: true, force: true})
+		}
 	}
 }

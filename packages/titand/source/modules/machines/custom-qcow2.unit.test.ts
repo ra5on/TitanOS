@@ -39,16 +39,14 @@ describe('Custom QCOW2 import security', () => {
 		expect(() => validateQcow2Header(header())).not.toThrow()
 	})
 	test('sandbox exposes only immutable runtime files, its private source and output; no network or host data', () => {
-		const args = qcow2SandboxArguments(true)
+		const args = qcow2SandboxArguments('/private/source', '/private/output')
 		expect(args).toContain('--unshare-all')
 		expect(args).toContain('--clearenv')
 		expect(args).toContain('--new-session')
 		expect(args).not.toContain('/etc')
 		expect(args).not.toContain('/home')
 		expect(args).not.toContain('/run')
-		expect(args).not.toContain('--bind')
-		expect(args.filter((arg) => arg === '--bind-fd')).toHaveLength(1)
-		expect(qcow2SandboxArguments()).not.toContain('--bind-fd')
+		expect(args.filter((arg) => arg === '--bind')).toHaveLength(1)
 	})
 	test('converts a real standalone disk and preserves its bytes without backing links', async () => {
 		const {directory, source, destination} = await fixture()
@@ -102,31 +100,12 @@ describe('Custom QCOW2 import security', () => {
 			await execa('/usr/bin/qemu-img', ['create', '-f', 'qcow2', source, '1M'])
 			await fsp.chown(directory, 65534, 65534)
 			await fsp.chmod(directory, 0o700)
-			// Path-based binds cannot traverse this home inside the user namespace
 			await expect(
-				execa('/usr/bin/bwrap', [
-					'--unshare-all',
-					'--ro-bind',
-					'/usr',
-					'/usr',
-					'--symlink',
-					'usr/lib',
-					'/lib',
-					'--symlink',
-					'usr/lib64',
-					'/lib64',
-					'--ro-bind',
-					source,
-					'/source',
-					'--',
-					'/usr/bin/qemu-img',
-					'info',
-					'-f',
-					'qcow2',
-					'/source',
-				]),
+				execa('/usr/bin/bwrap', [...qcow2SandboxArguments(source), 'info', '-f', 'qcow2', '/work/source']),
 			).rejects.toThrow('Permission denied')
 			await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
+			expect((await fsp.readdir('/run')).some((name) => name.startsWith('titan-qcow2-import-'))).toBe(false)
+			expect(await fsp.readFile('/proc/self/mountinfo', 'utf8')).not.toContain('titan-qcow2-import-')
 			const stat = await fsp.stat(directory)
 			expect(stat.uid).toBe(65534)
 			expect(stat.mode & 0o777).toBe(0o700)
