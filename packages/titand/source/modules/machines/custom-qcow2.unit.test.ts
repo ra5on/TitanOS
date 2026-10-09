@@ -72,6 +72,22 @@ describe('Custom QCOW2 import security', () => {
 		expect((await fsp.readFile(source)).equals(original)).toBe(true)
 		expect((await fsp.readdir(directory)).some((name) => name.startsWith('.qcow2-import-'))).toBe(false)
 	})
+	test('uses Debian tools even when PATH contains another bwrap or qemu-img', async () => {
+		const {directory, source, destination} = await fixture()
+		await execa('qemu-img', ['create', '-f', 'qcow2', source, '1M'])
+		const bin = nodePath.join(directory, 'bin')
+		await fsp.mkdir(bin)
+		for (const name of ['bwrap', 'qemu-img']) {
+			await fsp.writeFile(nodePath.join(bin, name), '#!/bin/sh\nexit 99\n', {mode: 0o755})
+		}
+		const previous = process.env.PATH
+		process.env.PATH = `${bin}:${previous ?? ''}`
+		try {
+			await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
+		} finally {
+			process.env.PATH = previous
+		}
+	})
 	test('accepts an image exactly as large as the selected QEMU target size', async () => {
 		const {source, destination} = await fixture()
 		await execa('qemu-img', ['create', '-f', 'qcow2', source, '1G'])

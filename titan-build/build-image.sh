@@ -68,8 +68,8 @@ if [[ "${RUN_IMAGE_SMOKE:-1}" == "1" ]]; then
     # compression/signing. A failed LAN change must block release publication.
     npm --prefix "${TASK_ROOT}/packages/titand" ci
     # Custom QCOW2 must pass the real product API on the OS being published.
-    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/custom-qcow2.vm.test.ts --reporter=verbose --reporter=json --outputFile="${RUNNER_TEMP:-/tmp}/titan-qcow2-smoke.json"
-    python3 - "${ARTIFACT_DIR}/image-verification.json" "${RUNNER_TEMP:-/tmp}/titan-qcow2-smoke.json" <<'PYQCOW'
+    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/custom-qcow2.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/qcow2-smoke.json"
+    python3 - "${ARTIFACT_DIR}/image-verification.json" "${ARTIFACT_DIR}/qcow2-smoke.json" <<'PYQCOW'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 report = json.loads(pathlib.Path(sys.argv[2]).read_text())

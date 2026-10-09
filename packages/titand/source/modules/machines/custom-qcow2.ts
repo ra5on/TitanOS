@@ -77,7 +77,7 @@ export async function convertCustomQcow2(
 			await handle.close()
 		}
 		const info = await execa(
-			'bwrap',
+			'/usr/bin/bwrap',
 			[...qcow2SandboxArguments(snapshot), 'info', '-f', 'qcow2', '--output=json', '/work/source'],
 			installCommandOptions(signal, MACHINE_INSTALL_SHORT_COMMAND_TIMEOUT_MS),
 		)
@@ -89,7 +89,7 @@ export async function convertCustomQcow2(
 		await fsp.writeFile(destination, '', {flag: 'wx', mode: 0o600})
 		outputCreated = true
 		const conversion = execa(
-			'bwrap',
+			'/usr/bin/bwrap',
 			[
 				...qcow2SandboxArguments(snapshot, destination),
 				'convert',
@@ -108,7 +108,7 @@ export async function convertCustomQcow2(
 		})
 		await conversion
 		await execa(
-			'qemu-img',
+			'/usr/bin/qemu-img',
 			['resize', '-f', 'qcow2', destination, `${sizeGb}G`],
 			installCommandOptions(signal, MACHINE_INSTALL_SHORT_COMMAND_TIMEOUT_MS),
 		)
