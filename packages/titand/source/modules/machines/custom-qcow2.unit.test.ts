@@ -93,6 +93,25 @@ describe('Custom QCOW2 import security', () => {
 		await execa('qemu-img', ['create', '-f', 'qcow2', source, '1G'])
 		await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
 	})
+	test.runIf(process.getuid?.() === 0)(
+		'imports through a private home owned by a different host UID without relaxing its permissions',
+		async () => {
+			const {directory, source, destination} = await fixture()
+			await execa('/usr/bin/qemu-img', ['create', '-f', 'qcow2', source, '1M'])
+			await fsp.chown(directory, 65534, 65534)
+			await fsp.chmod(directory, 0o700)
+			await expect(
+				execa('/usr/bin/bwrap', [...qcow2SandboxArguments(source), 'info', '-f', 'qcow2', '/work/source']),
+			).rejects.toThrow('Permission denied')
+			await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
+			const stat = await fsp.stat(directory)
+			expect(stat.uid).toBe(65534)
+			expect(stat.mode & 0o777).toBe(0o700)
+			expect(
+				JSON.parse((await execa('/usr/bin/qemu-img', ['info', '--output=json', destination])).stdout)['virtual-size'],
+			).toBe(1024 ** 3)
+		},
+	)
 	test('rejects a real backing chain and leaves no output or private copy', async () => {
 		const {directory, source, destination} = await fixture()
 		const backing = nodePath.join(directory, 'secret.img')
