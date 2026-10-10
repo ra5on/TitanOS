@@ -118,6 +118,9 @@ export async function convertCustomQcow2(
 	let outputCreated = false
 	try {
 		await fsp.copyFile(source, snapshot)
+		// As root, copyFile also copies the owner. An uploaded image belongs to the
+		// file owner, whom root inside the user namespace cannot read for.
+		if (process.getuid && process.getgid) await fsp.chown(snapshot, process.getuid(), process.getgid())
 		await fsp.chmod(snapshot, 0o400)
 		if (signal.aborted) throw signal.reason
 		const handle = await fsp.open(snapshot, 'r')

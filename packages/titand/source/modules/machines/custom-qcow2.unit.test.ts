@@ -94,6 +94,20 @@ describe('Custom QCOW2 import security', () => {
 		await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
 	})
 	test.runIf(process.getuid?.() === 0)(
+		'imports an uploaded image owned by the file owner without changing the source',
+		async () => {
+			const {source, destination} = await fixture()
+			await execa('/usr/bin/qemu-img', ['create', '-f', 'qcow2', source, '1M'])
+			// Uploads belong to the file owner and are private to that account
+			await fsp.chown(source, 65534, 65534)
+			await fsp.chmod(source, 0o600)
+			await expect(convertCustomQcow2(source, destination, 1, new AbortController().signal)).resolves.toBeUndefined()
+			const stat = await fsp.stat(source)
+			expect(stat.uid).toBe(65534)
+			expect(stat.mode & 0o777).toBe(0o600)
+		},
+	)
+	test.runIf(process.getuid?.() === 0)(
 		'imports through a private home owned by a different host UID without relaxing its permissions',
 		async () => {
 			const {directory, source, destination} = await fixture()

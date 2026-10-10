@@ -38,7 +38,8 @@ describe('Custom QCOW2 imports on the released OS', () => {
 		disk.set([0x55, 0xaa], 510)
 		await titand.api.post('files/upload?path=/Home/qcow-import.img', {body: disk})
 		await titand.vm.sshAsRoot(
-			'qemu-img convert -f raw -O qcow2 /home/titan/titan/home/qcow-import.img /home/titan/titan/home/qcow-import.qcow2',
+			// Owned by the file owner, like every image uploaded through the UI
+			'qemu-img convert -f raw -O qcow2 /home/titan/titan/home/qcow-import.img /home/titan/titan/home/qcow-import.qcow2 && chown --reference=/home/titan/titan/home/qcow-import.img /home/titan/titan/home/qcow-import.qcow2 && chmod 600 /home/titan/titan/home/qcow-import.qcow2',
 		)
 		const machine = await titand.client.machines.create.mutate({
 			name: 'QCOW import',
