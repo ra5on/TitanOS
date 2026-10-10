@@ -71,6 +71,17 @@ const toUsbDevice = ({vendorId, productId, serial, name}: UsbDevice): UsbDevice 
 	name,
 })
 
+const usbKindLabel = (kind: 'input' | 'wireless' | 'serial' | 'audio' | 'video' | 'printer' | 'smartcard') =>
+	({
+		input: t('machines.usb-kind-input'),
+		wireless: t('machines.usb-kind-wireless'),
+		serial: t('machines.usb-kind-serial'),
+		audio: t('machines.usb-kind-audio'),
+		video: t('machines.usb-kind-video'),
+		printer: t('machines.usb-kind-printer'),
+		smartcard: t('machines.usb-kind-smartcard'),
+	})[kind]
+
 const segmentButtonClass = (active: boolean) =>
 	cn(
 		'h-9 rounded-full border px-4 text-11 font-semibold uppercase transition-colors disabled:opacity-35',
@@ -160,7 +171,13 @@ export default function MachineSettings() {
 		})),
 		...usbDevices
 			.filter((assigned) => !hostUsbDevices.some((usbDevice) => usbKey(usbDevice) === usbKey(assigned)))
-			.map((usbDevice) => ({...usbDevice, machineId: machine.id, present: false, assigned: true})),
+			.map((usbDevice) => ({
+				...usbDevice,
+				kind: 'other' as const,
+				machineId: machine.id,
+				present: false,
+				assigned: true,
+			})),
 	]
 	const portForwards = forwardsChoice ?? machine.portForwards
 	const network = networkChoice ?? machine.network
@@ -525,6 +542,7 @@ export default function MachineSettings() {
 												<span className='flex min-w-0 flex-col'>
 													<span className='truncate text-13 -tracking-2 text-white'>{row.name}</span>
 													<span className='truncate text-11 -tracking-1 text-white/35 tabular-nums'>
+														{row.kind !== 'other' ? `${usbKindLabel(row.kind)} · ` : ''}
 														{row.vendorId}:{row.productId}
 														{status ? ` · ${status}` : ''}
 													</span>

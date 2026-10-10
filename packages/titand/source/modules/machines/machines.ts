@@ -57,6 +57,7 @@ import {
 } from './machine-devices.js'
 import {
 	listHostUsbDevices,
+	parseLsusbNames,
 	machineUsbDeviceSchema,
 	MAX_MACHINE_USB_DEVICES,
 	sameUsbDevice,
@@ -1705,7 +1706,11 @@ export default class Machines {
 
 	// USB devices plugged into the host, with the machine each one is assigned to
 	async usbDevices() {
-		const [present, definitions] = await Promise.all([listHostUsbDevices(), this.#store.list()])
+		const [lsusb, definitions] = await Promise.all([
+			execa('lsusb', [], {reject: false, timeout: 10_000}).catch(() => undefined),
+			this.#store.list(),
+		])
+		const present = await listHostUsbDevices(undefined, parseLsusbNames(lsusb?.stdout ?? ''))
 		return present.map(({bus, device, ...usbDevice}) => ({
 			...usbDevice,
 			machineId: definitions.find((definition) =>

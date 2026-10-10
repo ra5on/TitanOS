@@ -14,7 +14,8 @@ export const machineUsbDeviceSchema = z.object({
 export type MachineUsbDevice = z.infer<typeof machineUsbDeviceSchema>
 export const MAX_MACHINE_USB_DEVICES = 8
 
-export type HostUsbDevice = MachineUsbDevice & {bus: number; device: number}
+export type UsbDeviceKind = 'input' | 'wireless' | 'serial' | 'audio' | 'video' | 'printer' | 'smartcard' | 'other'
+export type HostUsbDevice = MachineUsbDevice & {bus: number; device: number; kind: UsbDeviceKind}
 export type UsbAddress = {bus: number; device: number}
 
 const USB_SYSFS_ROOT = '/sys/bus/usb/devices'
@@ -28,10 +29,45 @@ async function attribute(directory: string, name: string) {
 		.catch(() => '')
 }
 
+// What a device is, from its own class or the classes of its interfaces
+function usbKind(classes: string[]): UsbDeviceKind {
+	const kinds: [string, UsbDeviceKind][] = [
+		['e0', 'wireless'],
+		['03', 'input'],
+		['0e', 'video'],
+		['01', 'audio'],
+		['02', 'serial'],
+		['0a', 'serial'],
+		['07', 'printer'],
+		['0b', 'smartcard'],
+	]
+	return kinds.find(([usbClass]) => classes.includes(usbClass))?.[1] ?? 'other'
+}
+
+// Many products repeat their manufacturer: 'QEMU' + 'QEMU USB Tablet'
+export function usbDisplayName(manufacturer: string, product: string) {
+	if (product.toLowerCase().startsWith(manufacturer.toLowerCase())) return product
+	return [manufacturer, product].filter(Boolean).join(' ')
+}
+
+// `lsusb` prints: Bus 001 Device 004: ID 10c4:ea60 Silicon Labs CP210x UART Bridge
+export function parseLsusbNames(output: string) {
+	const names = new Map<string, string>()
+	for (const line of output.split('\n')) {
+		const match = /\bID ([0-9a-f]{4}:[0-9a-f]{4})\s+(\S.*)$/.exec(line.trim())
+		if (match) names.set(match[1], match[2].trim())
+	}
+	return names
+}
+
 // USB devices currently plugged into the host that a machine may take over.
 // Hubs stay with the host, and so do storage devices: Files manages those as
-// external drives.
-export async function listHostUsbDevices(root = USB_SYSFS_ROOT): Promise<HostUsbDevice[]> {
+// external drives. `names` (vendor:product from the USB ID database) names
+// devices that carry no description of their own.
+export async function listHostUsbDevices(
+	root = USB_SYSFS_ROOT,
+	names = new Map<string, string>(),
+): Promise<HostUsbDevice[]> {
 	const entries = await fsp.readdir(root).catch(() => [] as string[])
 	const devices: HostUsbDevice[] = []
 	for (const entry of entries) {
@@ -52,7 +88,7 @@ export async function listHostUsbDevices(root = USB_SYSFS_ROOT): Promise<HostUsb
 		const [manufacturer, product, serial] = await Promise.all(
 			['manufacturer', 'product', 'serial'].map((name) => attribute(directory, name)),
 		)
-		const name = [manufacturer, product].filter(Boolean).join(' ').slice(0, 200)
+		const name = (usbDisplayName(manufacturer, product) || names.get(`${vendorId}:${productId}`) || '').slice(0, 200)
 		devices.push({
 			vendorId,
 			productId,
@@ -60,6 +96,7 @@ export async function listHostUsbDevices(root = USB_SYSFS_ROOT): Promise<HostUsb
 			name: name || `USB ${vendorId}:${productId}`,
 			bus: Number(bus),
 			device: Number(device),
+			kind: usbKind([deviceClass, ...interfaceClasses]),
 		})
 	}
 	return devices.sort((a, b) => a.bus - b.bus || a.device - b.device)

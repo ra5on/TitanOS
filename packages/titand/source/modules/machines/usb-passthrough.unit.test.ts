@@ -5,6 +5,8 @@ import {afterEach, describe, expect, test} from 'vitest'
 
 import {
 	listHostUsbDevices,
+	parseLsusbNames,
+	usbDisplayName,
 	parseAttachedUsbAddresses,
 	resolveUsbAddresses,
 	usbHostdevXml,
@@ -50,18 +52,35 @@ describe('USB passthrough', () => {
 				name: 'Silicon Labs Sonoff Zigbee 3.0 USB Dongle Plus',
 				bus: 1,
 				device: 4,
+				kind: 'other',
 			},
-			{vendorId: '8087', productId: '0029', name: 'USB 8087:0029', bus: 2, device: 3},
+			{vendorId: '8087', productId: '0029', name: 'USB 8087:0029', bus: 2, device: 3, kind: 'wireless'},
+		])
+		// Devices without a description of their own are named from the USB ID database
+		const names = parseLsusbNames(
+			'Bus 002 Device 003: ID 8087:0029 Intel Corp. AX200 Bluetooth\nBus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n',
+		)
+		expect((await listHostUsbDevices(root, names)).map((device) => device.name)).toEqual([
+			'Silicon Labs Sonoff Zigbee 3.0 USB Dongle Plus',
+			'Intel Corp. AX200 Bluetooth',
 		])
 		expect(await listHostUsbDevices(nodePath.join(root, 'missing'))).toEqual([])
 	})
 
+	test('does not repeat a manufacturer the product name already starts with', () => {
+		expect(usbDisplayName('QEMU', 'QEMU USB Tablet')).toBe('QEMU USB Tablet')
+		expect(usbDisplayName('Silicon Labs', 'CP2102N USB to UART Bridge')).toBe('Silicon Labs CP2102N USB to UART Bridge')
+		expect(usbDisplayName('', 'Dongle')).toBe('Dongle')
+		expect(usbDisplayName('Vendor', '')).toBe('Vendor')
+		expect(usbDisplayName('', '')).toBe('')
+	})
+
 	test('resolves assigned devices to their current host address', () => {
 		const present: HostUsbDevice[] = [
-			{vendorId: '10c4', productId: 'ea60', serial: 'one', name: 'Stick', bus: 1, device: 4},
-			{vendorId: '10c4', productId: 'ea60', serial: 'two', name: 'Stick', bus: 1, device: 7},
-			{vendorId: '0a12', productId: '0001', name: 'Bluetooth', bus: 3, device: 2},
-			{vendorId: '0a12', productId: '0001', name: 'Bluetooth', bus: 3, device: 5},
+			{vendorId: '10c4', productId: 'ea60', serial: 'one', name: 'Stick', bus: 1, device: 4, kind: 'other'},
+			{vendorId: '10c4', productId: 'ea60', serial: 'two', name: 'Stick', bus: 1, device: 7, kind: 'other'},
+			{vendorId: '0a12', productId: '0001', name: 'Bluetooth', bus: 3, device: 2, kind: 'wireless'},
+			{vendorId: '0a12', productId: '0001', name: 'Bluetooth', bus: 3, device: 5, kind: 'wireless'},
 		]
 		// The serial tells identical sticks apart; unplugged devices are skipped
 		expect(
