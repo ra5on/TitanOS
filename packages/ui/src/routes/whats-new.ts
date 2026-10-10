@@ -1,7 +1,7 @@
 import semver from 'semver'
 
 const WHATS_NEW_PREVIOUS_VERSION_SEMVER_CUTOFF = '2.0.0'
-export const WHATS_NEW_VERSION_NAME = 'TitanOS 2.0.8'
+export const WHATS_NEW_VERSION_NAME = 'TitanOS 2.0.9'
 
 export function shouldShowWhatsNew(previousVersion?: string) {
 	if (!previousVersion) return false

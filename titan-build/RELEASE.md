@@ -1,6 +1,21 @@
-# TitanOS 2.0.8 · Stable
+# TitanOS 2.0.9 · Stable
 
-## Neu in 2.0.8: QCOW2-Import hochgeladener Abbilder
+## Neu in 2.0.9
+
+- **USB-Geräte durchreichen:** In den Einstellungen einer virtuellen Maschine
+  lassen sich am Titan angeschlossene USB-Geräte per Schalter durchreichen, zum
+  Beispiel Zigbee- oder Bluetooth-Sticks für Home Assistant. Das wirkt sofort,
+  auch bei laufender Maschine, und das Gerät wird nach Neustart oder erneutem
+  Einstecken wieder verbunden. USB-Speicher und Hubs bleiben beim Titan.
+  [Anleitung](https://github.com/ra5on/TitanOS/blob/main/docs/MACHINES-USB.md)
+- **Bildschirmausgabe für importierte Systeme:** Bleibt die Konsole einer
+  eigenen Maschine leer („Display output is not active“), lässt sich in ihren
+  Einstellungen von VirtIO auf VGA umstellen.
+
+Das Durchreichen wurde mit automatischen Tests der Geräteerkennung und der
+VM-Definition geprüft, nicht mit echter USB-Hardware im Release-Test.
+
+## Aus 2.0.8: QCOW2-Import hochgeladener Abbilder
 
 Über die Oberfläche hochgeladene QCOW2-Abbilder (zum Beispiel Home Assistant
 OS) lassen sich jetzt importieren. Bisher brach der Import mit „Das
@@ -62,7 +77,7 @@ des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
 vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
 VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
 kompatiblen älteren Installation wird es nach dem ersten erfolgreich
-bestätigten Start von 2.0.8 eingerichtet.
+bestätigten Start von 2.0.9 eingerichtet.
 
 Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
 VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
@@ -92,8 +107,8 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.8.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.8.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
+- `titan-2.0.9.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.9.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 - `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.

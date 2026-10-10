@@ -35,7 +35,7 @@ formatted_addresses=$(echo "${addresses}" | sed 's/^/  http:\/\//')
 echo -e "\033c" > /dev/tty1
 
 # Write TTY message
-echo -n "TitanOS 2.0.8 ist jetzt erreichbar unter:
+echo -n "TitanOS 2.0.9 ist jetzt erreichbar unter:
 ${formatted_addresses}
 
 titan login: " > /dev/tty1
