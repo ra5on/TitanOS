@@ -1386,6 +1386,8 @@
   "machines.agents.start-machine": "Diese Maschine muss laufen, bevor ein Agent sie nutzen kann.",
   "machines.all-machines": "Meine Maschinen",
   "machines.architecture": "Architektur",
+  "machines.autostart": "Mit TitanOS starten",
+  "machines.autostart-description": "Startet diese Maschine automatisch, sobald TitanOS hochgefahren ist.",
   "machines.browse-iso-select": "Abbild auswählen",
   "machines.browse-iso-title": "ISO-, IMG- oder QCOW2-Abbild auswählen",
   "machines.cancel-install": "Installation abbrechen",

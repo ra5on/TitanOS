@@ -1116,7 +1116,7 @@ describe('background machine installation', () => {
 		expect((await machines.list()).find(({id}) => id === machine.id)?.state).toBe('stopped')
 	})
 
-	test('remembers explicit lifecycle state for autostart', async () => {
+	test('keeps the chosen autostart setting across starts and stops', async () => {
 		const {machines, filesRoot} = await createMachines()
 		const imports = nodePath.join(filesRoot, 'External', 'imports')
 		await fse.ensureDir(imports)
@@ -1130,19 +1130,23 @@ describe('background machine installation', () => {
 		})
 		await pWaitFor(async () => (await machines.list()).some(({id, state}) => id === machine.id && state === 'running'))
 
-		expect((await machines.list()).find(({id}) => id === machine.id)?.autostart).toBe(true)
+		const autostart = async () => (await machines.list()).find(({id}) => id === machine.id)?.autostart
+
+		// New machines start with titanOS until the owner switches that off
+		expect(await autostart()).toBe(true)
 		await machines.updateSettings(machine.id, {autostart: false})
 		await machines.restartMachine(machine.id)
-		expect((await machines.list()).find(({id}) => id === machine.id)?.autostart).toBe(true)
-
+		expect(await autostart()).toBe(false)
 		await machines.stopMachine(machine.id)
-		expect((await machines.list()).find(({id}) => id === machine.id)?.autostart).toBe(false)
-
 		await machines.startMachine(machine.id)
-		expect((await machines.list()).find(({id}) => id === machine.id)?.autostart).toBe(true)
+		expect(await autostart()).toBe(false)
 
+		await machines.updateSettings(machine.id, {autostart: true})
+		await machines.stopMachine(machine.id)
+		expect(await autostart()).toBe(true)
+		await machines.startMachine(machine.id)
 		await machines.forceStopMachine(machine.id)
-		expect((await machines.list()).find(({id}) => id === machine.id)?.autostart).toBe(false)
+		expect(await autostart()).toBe(true)
 	})
 
 	test('serializes uninstall behind an in-flight start', async () => {

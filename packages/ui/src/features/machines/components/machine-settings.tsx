@@ -112,6 +112,7 @@ export default function MachineSettings() {
 	const [firmwareChoice, setFirmwareChoice] = useState<'uefi' | 'bios' | null>(null)
 	const [diskBusChoice, setDiskBusChoice] = useState<'virtio' | 'sata' | null>(null)
 	const [videoChoice, setVideoChoice] = useState<'virtio' | 'vga' | null>(null)
+	const [autostartChoice, setAutostartChoice] = useState<boolean | null>(null)
 	const [usbChoice, setUsbChoice] = useState<UsbDevice[] | null>(null)
 	const [pciChoice, setPciChoice] = useState<PciDevice[] | null>(null)
 	const [foldersChoice, setFoldersChoice] = useState<SharedFolder[] | null>(null)
@@ -140,6 +141,7 @@ export default function MachineSettings() {
 	const firmware = firmwareChoice ?? machine.firmware
 	const diskBus = diskBusChoice ?? machine.diskBus ?? 'virtio'
 	const videoModel = videoChoice ?? machine.videoModel ?? 'virtio'
+	const autostart = autostartChoice ?? machine.autostart
 	const usbDevices = usbChoice ?? machine.usbDevices ?? []
 	const usbChanged =
 		JSON.stringify(usbDevices.map(usbKey).sort()) !== JSON.stringify((machine.usbDevices ?? []).map(usbKey).sort())
@@ -241,6 +243,7 @@ export default function MachineSettings() {
 		cores !== machine.cores ||
 		memoryGb !== machine.memoryGb ||
 		diskValue !== machine.diskSizeGb ||
+		autostart !== machine.autostart ||
 		(machine.osId === 'custom' &&
 			(firmware !== machine.firmware ||
 				diskBus !== (machine.diskBus ?? 'virtio') ||
@@ -277,6 +280,7 @@ export default function MachineSettings() {
 				cores,
 				...(!hasFixedMemory && {memoryGb}),
 				diskSizeGb: Math.round(diskValue),
+				autostart,
 				...(machine.osId === 'custom' ? {firmware, diskBus, videoModel} : {}),
 				...(usbChanged ? {usbDevices: usbDevices.map(toUsbDevice)} : {}),
 				...(pciChanged ? {pciDevices} : {}),
@@ -458,6 +462,14 @@ export default function MachineSettings() {
 									</span>
 								)}
 							</div>
+						</SpecRow>
+						<SpecRow label={t('machines.autostart')} note={t('machines.autostart-description')}>
+							<Switch
+								checked={autostart}
+								disabled={disabled}
+								onCheckedChange={setAutostartChoice}
+								aria-label={t('machines.autostart')}
+							/>
 						</SpecRow>
 						{machine.osId === 'custom' && (
 							<>
