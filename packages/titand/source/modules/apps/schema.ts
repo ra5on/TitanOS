@@ -227,6 +227,8 @@ export const AppSettingsSchema = z.object({
 	dependencies: z.record(z.string()).optional(),
 	backupIgnore: z.boolean().optional(),
 	autoStart: z.boolean().optional(),
+	// The owner handed the GPU to an app whose manifest does not ask for it
+	gpuAccess: z.boolean().optional(),
 	appProxyAuthEnabled: z.boolean().optional(),
 	dataRootLocation: AppDataRootLocationSchema.optional(),
 	dataRootMove: AppDataRootMoveSchema.optional(),

@@ -100,9 +100,14 @@ export const apps = router({
 					// App settings are owner-only: storage sources reveal filesystem
 					// layout, environment values can hold secrets the owner set, and
 					// members can't open app settings anyway.
-					const [appProxyAuth, storage, environment] = isMemberRequest
+					const [appProxyAuth, storage, environment, gpu] = isMemberRequest
 						? []
-						: await Promise.all([app.getAppProxyAuth(), app.getStorageSettings(), app.getEnvironmentSettings()])
+						: await Promise.all([
+								app.getAppProxyAuth(),
+								app.getStorageSettings(),
+								app.getEnvironmentSettings(),
+								app.getGpuAccess(),
+							])
 					if (deterministicPassword) {
 						defaultPassword = await app.deriveDeterministicPassword()
 					}
@@ -132,6 +137,7 @@ export const apps = router({
 						appProxyAuth,
 						storage,
 						environment,
+						gpu,
 						implements: implements_,
 						torOnly,
 						requiresHttps: requiresHttps === true,
@@ -345,6 +351,7 @@ export const apps = router({
 			z.object({
 				appId: z.string(),
 				appProxyAuthEnabled: z.boolean().nullable().optional(),
+				gpuAccess: z.boolean().optional(),
 				hideCredentialsBeforeOpen: z.boolean().optional(),
 				customMounts: z.array(AppCustomMountSchema).optional(),
 				folderAccess: z.array(AppFolderAccessSelectionSchema).optional(),

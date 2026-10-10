@@ -1,5 +1,7 @@
 import nodePath from 'node:path'
 
+import type {MachineSnapshot} from './machine-snapshots.js'
+
 export type MachineArchitecture = 'amd64' | 'arm64'
 export type PlatformProfile = 'modern-x86' | 'windows-7-x86' | 'legacy-x86' | 'windows-98-x86' | 'modern-arm64'
 export type PortForwardProtocol = 'tcp' | 'udp'
@@ -70,6 +72,8 @@ export type MachineDefinition = {
 	memoryMb: number
 	username?: string
 	autostart: boolean
+	// Seconds to wait after titanOS is ready before an autostart machine boots
+	autostartDelaySeconds?: number
 	pinned: boolean
 	createdAt: number
 	firstBootSetup?: FirstBootSetup
@@ -94,6 +98,8 @@ export type MachineDefinition = {
 	// Custom images can swap the paravirtual display for standard VGA when the
 	// guest has no virtio GPU driver and its console would stay blank.
 	videoModel?: 'virtio' | 'vga'
+	// Saved states of the system disk, oldest first
+	snapshots?: MachineSnapshot[]
 }
 
 export function machineDiskBus(definition: MachineDefinition) {

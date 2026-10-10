@@ -91,6 +91,29 @@ describe('app settings', () => {
 		})
 	})
 
+	test('hands the graphics card to an app on request and restarts it only when that changes', async () => {
+		const {app, addApp, restart} = await createApp()
+		await expect(app.getGpuAccess()).resolves.toEqual({requested: false, enabled: false})
+
+		await expect(app.setSettings({gpuAccess: true})).resolves.toBe(true)
+		await expect(app.store.get('gpuAccess')).resolves.toBe(true)
+		await expect(app.getGpuAccess()).resolves.toEqual({requested: false, enabled: true})
+		expect(restart).toHaveBeenCalledTimes(1)
+
+		// Saving the same choice again changes nothing
+		await expect(app.setSettings({gpuAccess: true})).resolves.toBe(true)
+		expect(restart).toHaveBeenCalledTimes(1)
+
+		await expect(app.setSettings({gpuAccess: false})).resolves.toBe(true)
+		await expect(app.store.get('gpuAccess')).resolves.toBeUndefined()
+		await expect(app.getGpuAccess()).resolves.toEqual({requested: false, enabled: false})
+		expect(restart).toHaveBeenCalledTimes(2)
+
+		// An app that asks for the GPU itself has it without any setting
+		const declared = await addApp('gpu-app', {permissions: ['GPU']})
+		await expect(declared.getGpuAccess()).resolves.toEqual({requested: true, enabled: true})
+	})
+
 	test('auth and credential preferences remain editable when a saved folder is unavailable', async () => {
 		const {app, restart} = await createApp()
 		const mount = {serviceName: 'server', sourcePath: '/External/Offline/Media', targetPath: '/media', readOnly: true}

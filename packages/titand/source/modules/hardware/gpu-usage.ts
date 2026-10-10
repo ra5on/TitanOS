@@ -28,6 +28,8 @@ export type GpuDeviceUsage = {
 	totalUsed: number | null
 	dedicatedMemory: MemoryUsage | null
 	sharedMemory: Omit<MemoryUsage, 'total'> | null
+	// Degrees Celsius, present only when the driver reports it
+	temperature?: number
 	processes: GpuProcessUsage[]
 }
 
@@ -109,6 +111,28 @@ async function readNumber(filePath: string): Promise<number | null> {
 	return Number.isFinite(value) && value >= 0 ? value : null
 }
 
+// A plausible GPU temperature in whole degrees Celsius
+export function parseGpuTemperature(value: number | null): number | undefined {
+	return value !== null && Number.isFinite(value) && value > 0 && value < 150 ? Math.round(value) : undefined
+}
+
+// amdgpu and newer Intel drivers expose the chip temperature through hwmon,
+// in thousandths of a degree.
+async function readHwmonTemperature(devicePath: string): Promise<number | undefined> {
+	let sensors: string[] = []
+	try {
+		sensors = await fse.readdir(path.join(devicePath, 'hwmon'))
+	} catch {
+		return undefined
+	}
+	for (const sensor of sensors.filter((entry) => /^hwmon\d+$/.test(entry)).sort()) {
+		const millidegrees = await readNumber(path.join(devicePath, 'hwmon', sensor, 'temp1_input'))
+		const temperature = parseGpuTemperature(millidegrees === null ? null : millidegrees / 1000)
+		if (temperature !== undefined) return temperature
+	}
+	return undefined
+}
+
 const vendorName = (id: string | undefined) => {
 	if (id === '0x1002') return 'Advanced Micro Devices, Inc. [AMD/ATI]'
 	if (id === '0x10de') return 'NVIDIA Corporation'
@@ -141,12 +165,13 @@ async function getDrmDevices(controllers: PciController[]): Promise<DrmDevice[]>
 					// A card without a bound driver cannot provide usage telemetry.
 				}
 
-				const [vendorId, totalUsed, dedicatedTotal, dedicatedUsed, sharedUsed] = await Promise.all([
+				const [vendorId, totalUsed, dedicatedTotal, dedicatedUsed, sharedUsed, temperature] = await Promise.all([
 					readText(path.join(devicePath, 'vendor')),
 					readNumber(path.join(devicePath, 'gpu_busy_percent')),
 					readNumber(path.join(devicePath, 'mem_info_vram_total')),
 					readNumber(path.join(devicePath, 'mem_info_vram_used')),
 					readNumber(path.join(devicePath, 'mem_info_gtt_used')),
+					readHwmonTemperature(devicePath),
 				])
 				const controller = controllerById.get(deviceId)
 
@@ -161,6 +186,7 @@ async function getDrmDevices(controllers: PciController[]): Promise<DrmDevice[]>
 							? {total: dedicatedTotal, used: clampBytes(dedicatedUsed ?? 0)}
 							: null,
 					sharedMemory: sharedUsed === null ? null : {used: clampBytes(sharedUsed)},
+					...(temperature !== undefined ? {temperature} : {}),
 				}
 			}),
 	)
@@ -436,7 +462,8 @@ export function parseNvidiaGpuCsv(output: string): NvidiaDevice[] {
 		if (!line.trim()) return []
 		const fields = line.split(',').map((field) => field.trim())
 		if (fields.length < 7) return []
-		const [index, uuid, pciAddress, model, utilization, totalMemory, usedMemory] = fields
+		const [index, uuid, pciAddress, model, utilization, totalMemory, usedMemory, rawTemperature] = fields
+		const temperature = parseGpuTemperature(rawTemperature === undefined ? null : Number(rawTemperature))
 		const parsedIndex = Number(index)
 		const total = Number(totalMemory)
 		const used = Number(usedMemory)
@@ -454,6 +481,7 @@ export function parseNvidiaGpuCsv(output: string): NvidiaDevice[] {
 						? {total: clampBytes(total * 1024 ** 2), used: clampBytes(used * 1024 ** 2)}
 						: null,
 				sharedMemory: null,
+				...(temperature !== undefined ? {temperature} : {}),
 				processes: [],
 			},
 		]
@@ -502,7 +530,7 @@ async function sampleNvidiaDevices(): Promise<GpuDeviceUsage[]> {
 		execa(
 			'nvidia-smi',
 			[
-				'--query-gpu=index,uuid,pci.bus_id,name,utilization.gpu,memory.total,memory.used',
+				'--query-gpu=index,uuid,pci.bus_id,name,utilization.gpu,memory.total,memory.used,temperature.gpu',
 				'--format=csv,noheader,nounits',
 			],
 			{timeout: COMMAND_TIMEOUT_MS},

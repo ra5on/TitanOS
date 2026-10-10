@@ -11,6 +11,7 @@ import pWaitFor from 'p-wait-for'
 import type Titand from '../../index.js'
 import {convertCustomQcow2} from './custom-qcow2.js'
 import {isDataDiskTarget, listHostPciDevices, resolvePciDevices} from './machine-devices.js'
+import {parseSnapshotTags, qcow2ImageOptions} from './machine-snapshots.js'
 import {
 	listHostUsbDevices,
 	parseAttachedUsbAddresses,
@@ -59,6 +60,8 @@ const AUDIO_CARD_COUNT = 8
 const AUDIO_SUBSTREAMS_PER_CARD = 8
 const AUDIO_SLOT_COUNT = AUDIO_CARD_COUNT * AUDIO_SUBSTREAMS_PER_CARD
 export const MACHINE_SHORT_CONTROL_TIMEOUT_MS = 30_000
+// Rewriting the reference counts of a large disk can take a while
+const MACHINE_SNAPSHOT_TIMEOUT_MS = 10 * 60_000
 export const QEMU_GIBIBYTE_BYTES = 1_024 ** 3
 const MOUNTPOINT_NOT_MOUNTED_EXIT_CODE = 32
 
@@ -1218,6 +1221,34 @@ export default class Libvirt {
 
 	async resizeDataDisk(path: string, sizeGb: number) {
 		await execa('qemu-img', ['resize', '-f', 'qcow2', path, `${sizeGb}G`], {timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS})
+	}
+
+	// Internal qcow2 snapshots of a disk no running machine has open
+	async #diskSnapshot(action: '-c' | '-a' | '-d', disk: string, tag: string) {
+		await execa('qemu-img', ['snapshot', '--image-opts', action, tag, qcow2ImageOptions(disk)], {
+			timeout: MACHINE_SNAPSHOT_TIMEOUT_MS,
+		})
+	}
+
+	async createDiskSnapshot(disk: string, tag: string) {
+		await this.#diskSnapshot('-c', disk, tag)
+	}
+
+	async applyDiskSnapshot(disk: string, tag: string) {
+		await this.#diskSnapshot('-a', disk, tag)
+	}
+
+	async deleteDiskSnapshot(disk: string, tag: string) {
+		await this.#diskSnapshot('-d', disk, tag)
+	}
+
+	async diskSnapshotTags(disk: string) {
+		const result = await execa('qemu-img', ['info', '-f', 'qcow2', '--force-share', '--output=json', disk], {
+			reject: false,
+			timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS,
+		})
+		if (result.exitCode !== 0) throw new Error('[machine-disk-size-unavailable]')
+		return parseSnapshotTags(result.stdout)
 	}
 
 	async pivotToBackupOverlay(definition: MachineDefinition, overlay: string) {

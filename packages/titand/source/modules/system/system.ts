@@ -352,6 +352,7 @@ export async function getGpuUsage(titand: Titand): Promise<{
 		totalUsed: number | null
 		dedicatedMemory: {total: number | null; used: number} | null
 		sharedMemory: {used: number} | null
+		temperature?: number
 	}>
 }> {
 	// Sampling happens only when this endpoint is requested. Avoid the Docker and

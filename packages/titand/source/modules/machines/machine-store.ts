@@ -17,6 +17,7 @@ import {
 	MAX_MACHINE_SHARED_FOLDERS,
 } from './machine-devices.js'
 import {machineUsbDeviceSchema, MAX_MACHINE_USB_DEVICES} from './usb-passthrough.js'
+import {MAX_AUTOSTART_DELAY_SECONDS, MAX_MACHINE_SNAPSHOTS, machineSnapshotSchema} from './machine-snapshots.js'
 
 const portForwardSchema = z.object({
 	id: z.string().min(1),
@@ -66,6 +67,7 @@ const machineDefinitionSchema = z
 		memoryGb: z.number().int().min(1).max(1_024).optional(),
 		username: z.string().optional(),
 		autostart: z.boolean(),
+		autostartDelaySeconds: z.number().int().min(0).max(MAX_AUTOSTART_DELAY_SECONDS).optional(),
 		pinned: z.boolean(),
 		createdAt: z.number().int(),
 		firstBootSetup: z
@@ -92,6 +94,7 @@ const machineDefinitionSchema = z
 		sharedFolders: z.array(machineSharedFolderSchema).max(MAX_MACHINE_SHARED_FOLDERS).optional(),
 		dataDisks: z.array(machineDataDiskSchema).max(MAX_MACHINE_DATA_DISKS).optional(),
 		videoModel: z.enum(['virtio', 'vga']).optional(),
+		snapshots: z.array(machineSnapshotSchema).max(MAX_MACHINE_SNAPSHOTS).optional(),
 	})
 	.refine((definition) => definition.memoryMb !== undefined || definition.memoryGb !== undefined, {
 		message: 'Machine memory is required',

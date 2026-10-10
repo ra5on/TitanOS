@@ -13,6 +13,7 @@ import {
 	MAX_MACHINE_SHARED_FOLDERS,
 } from './machine-devices.js'
 import {machineUsbDeviceSchema, MAX_MACHINE_USB_DEVICES} from './usb-passthrough.js'
+import {MAX_AUTOSTART_DELAY_SECONDS, machineSnapshotSchema} from './machine-snapshots.js'
 
 const windowsLicenseKey = z.string().regex(/^[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}$/i)
 const screenshotCoordinate = z.tuple([z.number().int().min(0), z.number().int().min(0)])
@@ -107,6 +108,7 @@ export default router({
 				// Grow-only: shrinking below the current size is rejected
 				diskSizeGb: z.number().int().min(1).max(10_000).optional(),
 				autostart: z.boolean().optional(),
+				autostartDelaySeconds: z.number().int().min(0).max(MAX_AUTOSTART_DELAY_SECONDS).optional(),
 				videoModel: z.enum(['virtio', 'vga']).optional(),
 				usbDevices: z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).optional(),
 				pciDevices: z.array(machinePciDeviceSchema).max(MAX_MACHINE_PCI_DEVICES).optional(),
@@ -129,6 +131,19 @@ export default router({
 			const {id, ...settings} = input
 			return ctx.titand.machines.updateSettings(id, settings)
 		}),
+
+	// Snapshots save and bring back the system disk of a machine that is shut down
+	createSnapshot: privateProcedure
+		.input(z.object({id: machineIdSchema, name: machineSnapshotSchema.shape.name}))
+		.mutation(async ({ctx, input}) => ctx.titand.machines.createSnapshot(input.id, input.name)),
+
+	revertSnapshot: privateProcedure
+		.input(z.object({id: machineIdSchema, snapshotId: machineSnapshotSchema.shape.id}))
+		.mutation(async ({ctx, input}) => ctx.titand.machines.revertSnapshot(input.id, input.snapshotId)),
+
+	deleteSnapshot: privateProcedure
+		.input(z.object({id: machineIdSchema, snapshotId: machineSnapshotSchema.shape.id}))
+		.mutation(async ({ctx, input}) => ctx.titand.machines.deleteSnapshot(input.id, input.snapshotId)),
 
 	setPinned: privateProcedure
 		.input(z.object({id: machineIdSchema, pinned: z.boolean()}))

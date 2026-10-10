@@ -25,6 +25,7 @@ import {
 	dataDiskSizeValid,
 	PciDevicesSection,
 	SharedFoldersSection,
+	SnapshotsSection,
 	sharedFolderTagValid,
 	type DataDisk,
 	type PciDevice,
@@ -82,6 +83,15 @@ const usbKindLabel = (kind: 'input' | 'wireless' | 'serial' | 'audio' | 'video' 
 		smartcard: t('machines.usb-kind-smartcard'),
 	})[kind]
 
+// How long an autostart machine waits after TitanOS is ready
+const AUTOSTART_DELAYS = [0, 15, 30, 60, 120, 300, 600]
+const autostartDelayLabel = (seconds: number) =>
+	seconds === 0
+		? t('machines.autostart-delay-none')
+		: seconds % 60 === 0
+			? t('machines.autostart-delay-minutes', {count: seconds / 60})
+			: t('machines.autostart-delay-seconds', {count: seconds})
+
 const segmentButtonClass = (active: boolean) =>
 	cn(
 		'h-9 rounded-full border px-4 text-11 font-semibold uppercase transition-colors disabled:opacity-35',
@@ -113,6 +123,7 @@ export default function MachineSettings() {
 	const [diskBusChoice, setDiskBusChoice] = useState<'virtio' | 'sata' | null>(null)
 	const [videoChoice, setVideoChoice] = useState<'virtio' | 'vga' | null>(null)
 	const [autostartChoice, setAutostartChoice] = useState<boolean | null>(null)
+	const [autostartDelayChoice, setAutostartDelayChoice] = useState<number | null>(null)
 	const [usbChoice, setUsbChoice] = useState<UsbDevice[] | null>(null)
 	const [pciChoice, setPciChoice] = useState<PciDevice[] | null>(null)
 	const [foldersChoice, setFoldersChoice] = useState<SharedFolder[] | null>(null)
@@ -142,6 +153,13 @@ export default function MachineSettings() {
 	const diskBus = diskBusChoice ?? machine.diskBus ?? 'virtio'
 	const videoModel = videoChoice ?? machine.videoModel ?? 'virtio'
 	const autostart = autostartChoice ?? machine.autostart
+	const savedAutostartDelay = machine.autostartDelaySeconds ?? 0
+	const autostartDelay = autostartDelayChoice ?? savedAutostartDelay
+	// A delay set elsewhere may lie between the steps offered here
+	const autostartDelayStep = (direction: 1 | -1) =>
+		direction === 1
+			? AUTOSTART_DELAYS.find((seconds) => seconds > autostartDelay)
+			: AUTOSTART_DELAYS.findLast((seconds) => seconds < autostartDelay)
 	const usbDevices = usbChoice ?? machine.usbDevices ?? []
 	const usbChanged =
 		JSON.stringify(usbDevices.map(usbKey).sort()) !== JSON.stringify((machine.usbDevices ?? []).map(usbKey).sort())
@@ -244,6 +262,7 @@ export default function MachineSettings() {
 		memoryGb !== machine.memoryGb ||
 		diskValue !== machine.diskSizeGb ||
 		autostart !== machine.autostart ||
+		autostartDelay !== savedAutostartDelay ||
 		(machine.osId === 'custom' &&
 			(firmware !== machine.firmware ||
 				diskBus !== (machine.diskBus ?? 'virtio') ||
@@ -281,6 +300,7 @@ export default function MachineSettings() {
 				...(!hasFixedMemory && {memoryGb}),
 				diskSizeGb: Math.round(diskValue),
 				autostart,
+				autostartDelaySeconds: autostartDelay,
 				...(machine.osId === 'custom' ? {firmware, diskBus, videoModel} : {}),
 				...(usbChanged ? {usbDevices: usbDevices.map(toUsbDevice)} : {}),
 				...(pciChanged ? {pciDevices} : {}),
@@ -471,6 +491,19 @@ export default function MachineSettings() {
 								aria-label={t('machines.autostart')}
 							/>
 						</SpecRow>
+						{autostart && (
+							<SpecRow label={t('machines.autostart-delay')} note={t('machines.autostart-delay-description')}>
+								<Stepper
+									display={autostartDelayLabel(autostartDelay)}
+									onStep={(direction) => setAutostartDelayChoice(autostartDelayStep(direction) ?? autostartDelay)}
+									canDecrement={autostartDelayStep(-1) !== undefined}
+									canIncrement={autostartDelayStep(1) !== undefined}
+									decrementLabel={t('machines.decrease-value', {label: t('machines.autostart-delay')})}
+									incrementLabel={t('machines.increase-value', {label: t('machines.autostart-delay')})}
+									disabled={disabled}
+								/>
+							</SpecRow>
+						)}
 						{machine.osId === 'custom' && (
 							<>
 								<SpecRow label={t('machines.firmware')}>
@@ -603,6 +636,7 @@ export default function MachineSettings() {
 							onChange={setPciChoice}
 							disabled={disabled || !devicesEditable}
 						/>
+						<SnapshotsSection machine={machine} disabled={disabled || machine.installPending} />
 
 						{/* Port forwards: the last row of the spec sheet, full-width. The
 						    copy leads with the why (machines live on a private network),

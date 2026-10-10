@@ -34,6 +34,10 @@ class UpdateError(Exception):
     pass
 
 
+class RateLimited(UpdateError):
+    """GitHub's API refused the request because this address used up its budget."""
+
+
 def version_key(value):
     if not isinstance(value, str) or len(value) > 100 or not VERSION.fullmatch(value):
         raise UpdateError("Ungültige Titan-Systemversion.")
@@ -91,6 +95,12 @@ def response(url):
     request = urllib.request.Request(url, headers={"User-Agent": "TitanOS-updater", "Accept": "application/vnd.github+json"})
     try:
         return urllib.request.build_opener(GitHubRedirect()).open(request, timeout=60)
+    except urllib.error.HTTPError as error:
+        # The API allows an address 60 anonymous requests per hour, shared by
+        # every device behind it, and answers 403 or 429 once they are used up.
+        if value.hostname == "api.github.com" and error.code in (403, 429):
+            raise RateLimited("Der Titan-Updatekanal auf GitHub ist gerade nicht erreichbar.") from error
+        raise UpdateError("Der Titan-Updatekanal auf GitHub ist gerade nicht erreichbar.") from error
     except (urllib.error.URLError, OSError) as error:
         raise UpdateError("Der Titan-Updatekanal auf GitHub ist gerade nicht erreichbar.") from error
 
@@ -104,6 +114,14 @@ def fetch_bytes(url, maximum):
         if len(value) > maximum:
             raise UpdateError("Update-Metadaten sind zu groß.")
         return value
+
+
+def served_size(url):
+    with response(url) as stream:
+        length = stream.headers.get("Content-Length")
+    if length is None or not length.isdigit() or not 0 < int(length) <= MAX_BUNDLE:
+        raise UpdateError("GitHub-Datei und signiertes Update-Bundle stimmen nicht überein.")
+    return int(length)
 
 
 def asset_url(version, name):
@@ -231,11 +249,35 @@ def verify_release(version, channel, github_release, evidence=None):
             "evidence": {"files": files, "github": {"assets": matches}}}
 
 
+def download_listing(version):
+    # What the API reports about a release's update bundle, taken from the public
+    # download instead. Drafts have no public download, so they never qualify.
+    name = update_asset_name(version)
+    return {"assets": [{"name": name, "browser_download_url": asset_url(version, name),
+                        "size": served_size(asset_url(version, name))}]}
+
+
+def newest_published_version():
+    # github.com/<repository>/releases/latest/download/<file> redirects to the
+    # newest stable release and is not counted against the API budget. The file
+    # only names a version here; that release is then verified like any other.
+    pointer = decode_json(fetch_bytes(f"https://github.com/{REPOSITORY}/releases/latest/download/release.json", 262144))
+    version = pointer.get("version") if isinstance(pointer, dict) else None
+    version_key(version)
+    return version
+
+
 def latest(current, channel):
     local = installed(current)
     if channel != "stable":
         raise UpdateError("TitanOS verwendet ausschließlich den Stable-Updatekanal.")
-    releases = decode_json(fetch_bytes(f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100", 2 * 1024 ** 2))
+    try:
+        releases = decode_json(fetch_bytes(f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100", 2 * 1024 ** 2))
+    except RateLimited:
+        version = newest_published_version()
+        if version_key(version) <= version_key(current):
+            return {"version": current, "name": local.get("versionName", f"TitanOS {current}"), "releaseNotes": ""}
+        return verify_release(version, channel, download_listing(version))
     if not isinstance(releases, list) or len(releases) > 100:
         raise UpdateError("Ungültige Antwort des Titan-Updatekanals.")
     candidates = []
@@ -515,7 +557,10 @@ def health_check(current, port):
 
 
 def signed_published_release(version):
-    release = decode_json(fetch_bytes(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}", 2 * 1024 ** 2))
+    try:
+        release = decode_json(fetch_bytes(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}", 2 * 1024 ** 2))
+    except RateLimited:
+        return verify_release(version, "stable", download_listing(version))
     if (not isinstance(release, dict) or release.get("draft") is not False
             or release.get("prerelease") is not False or release.get("tag_name") != f"v{version}"):
         raise UpdateError("Der Systemstand ist nicht als signiertes Stable-Release veröffentlicht.")

@@ -35,6 +35,8 @@ const libvirtControls = vi.hoisted(() => ({
 	suspendedIds: new Set<string>(),
 	resizeCalls: [] as Array<{id: string; disk: string; sizeGb: number}>,
 	diskVirtualSizes: new Map<string, number>(),
+	diskSnapshots: new Map<string, Map<string, number>>(),
+	snapshotFailures: 0,
 	ejectCalls: [] as string[],
 	ejectFailures: new Set<string>(),
 	startBarrier: undefined as Promise<void> | undefined,
@@ -298,6 +300,26 @@ vi.mock('./libvirt.js', async () => {
 				}
 			}
 
+			// An internal snapshot remembers the size the disk had
+			async createDiskSnapshot(disk: string, tag: string) {
+				if (libvirtControls.snapshotFailures > 0) {
+					libvirtControls.snapshotFailures--
+					throw new Error('simulated qemu-img failure')
+				}
+				const snapshots = libvirtControls.diskSnapshots.get(disk) ?? new Map<string, number>()
+				snapshots.set(tag, await this.diskVirtualSizeBytes(disk))
+				libvirtControls.diskSnapshots.set(disk, snapshots)
+			}
+			async applyDiskSnapshot(disk: string, tag: string) {
+				libvirtControls.diskVirtualSizes.set(disk, libvirtControls.diskSnapshots.get(disk)!.get(tag)!)
+			}
+			async deleteDiskSnapshot(disk: string, tag: string) {
+				libvirtControls.diskSnapshots.get(disk)?.delete(tag)
+			}
+			async diskSnapshotTags(disk: string) {
+				return [...(libvirtControls.diskSnapshots.get(disk)?.keys() ?? [])]
+			}
+
 			async cleanupRuntime() {}
 			async pause() {}
 			async resume() {}
@@ -334,6 +356,8 @@ afterEach(async () => {
 	libvirtControls.suspendedIds.clear()
 	libvirtControls.resizeCalls.splice(0)
 	libvirtControls.diskVirtualSizes.clear()
+	libvirtControls.diskSnapshots.clear()
+	libvirtControls.snapshotFailures = 0
 	libvirtControls.ejectCalls.splice(0)
 	libvirtControls.ejectFailures.clear()
 	libvirtControls.startBarrier = undefined
@@ -1141,12 +1165,88 @@ describe('background machine installation', () => {
 		await machines.startMachine(machine.id)
 		expect(await autostart()).toBe(false)
 
-		await machines.updateSettings(machine.id, {autostart: true})
+		await machines.updateSettings(machine.id, {autostart: true, autostartDelaySeconds: 30})
+		expect((await machines.list()).find(({id}) => id === machine.id)?.autostartDelaySeconds).toBe(30)
+		await machines.updateSettings(machine.id, {autostartDelaySeconds: 0})
+		expect((await machines.list()).find(({id}) => id === machine.id)?.autostartDelaySeconds).toBeUndefined()
 		await machines.stopMachine(machine.id)
 		expect(await autostart()).toBe(true)
 		await machines.startMachine(machine.id)
 		await machines.forceStopMachine(machine.id)
 		expect(await autostart()).toBe(true)
+	})
+
+	test('saves, restores and removes snapshots of a machine that is shut down', async () => {
+		const {machines, root, filesRoot} = await createMachines()
+		const imports = nodePath.join(filesRoot, 'External', 'imports')
+		await fse.ensureDir(imports)
+		await fsp.writeFile(nodePath.join(imports, 'source.img'), 'source')
+		const machine = await machines.create({
+			name: 'Snapshot machine',
+			imagePath: '/External/imports/source.img',
+			diskSizeGb: 1,
+			cores: 1,
+			memoryGb: 1,
+		})
+		await pWaitFor(async () => (await machines.list()).some(({id, state}) => id === machine.id && state === 'running'))
+		const view = async () => (await machines.list()).find(({id}) => id === machine.id)!
+		const directory = nodePath.join(root, 'machines', machine.id)
+		const nvram = nodePath.join(directory, 'nvram.fd')
+
+		// The disk is open while the machine runs
+		await expect(machines.createSnapshot(machine.id, 'Too early')).rejects.toThrow('[machine-snapshot-requires-stopped]')
+		await machines.stopMachine(machine.id)
+
+		await fsp.writeFile(nvram, 'boot entries before the update')
+		const snapshot = await machines.createSnapshot(machine.id, '  Before the update ')
+		expect(snapshot).toMatchObject({name: 'Before the update', diskSizeGb: 1})
+		expect((await view()).snapshots).toEqual([snapshot])
+		const savedNvram = nodePath.join(directory, 'snapshots', `${snapshot.id}.nvram.fd`)
+		await expect(fsp.readFile(savedNvram, 'utf8')).resolves.toBe('boot entries before the update')
+
+		// Grow the disk and change the firmware state, then go back
+		await machines.updateSettings(machine.id, {diskSizeGb: 3})
+		await fsp.writeFile(nvram, 'boot entries after the update')
+		expect((await view()).diskSizeGb).toBe(3)
+		await expect(machines.revertSnapshot(machine.id, snapshot.id)).resolves.toBe(true)
+		expect((await view()).diskSizeGb).toBe(1)
+		await expect(fsp.readFile(nvram, 'utf8')).resolves.toBe('boot entries before the update')
+		await expect(fse.pathExists(`${nvram}.snapshot.tmp`)).resolves.toBe(false)
+
+		await expect(machines.revertSnapshot(machine.id, 'ffffffffffff')).rejects.toThrow('[machine-snapshot-not-found]')
+
+		// A failed qemu-img run leaves neither a record nor a stray firmware copy
+		libvirtControls.snapshotFailures = 1
+		await expect(machines.createSnapshot(machine.id, 'Broken')).rejects.toThrow('[machine-snapshot-failed]')
+		expect((await view()).snapshots).toEqual([snapshot])
+		await expect(fsp.readdir(nodePath.join(directory, 'snapshots'))).resolves.toEqual([`${snapshot.id}.nvram.fd`])
+
+		await machines.startMachine(machine.id)
+		await expect(machines.deleteSnapshot(machine.id, snapshot.id)).rejects.toThrow('[machine-snapshot-requires-stopped]')
+		await machines.stopMachine(machine.id)
+		await expect(machines.deleteSnapshot(machine.id, snapshot.id)).resolves.toBe(true)
+		expect((await view()).snapshots).toBeUndefined()
+		await expect(fse.pathExists(savedNvram)).resolves.toBe(false)
+		expect([...libvirtControls.diskSnapshots.values()].every((snapshots) => snapshots.size === 0)).toBe(true)
+	})
+
+	test('keeps at most ten snapshots per machine', async () => {
+		const {machines, filesRoot} = await createMachines()
+		const imports = nodePath.join(filesRoot, 'External', 'imports')
+		await fse.ensureDir(imports)
+		await fsp.writeFile(nodePath.join(imports, 'source.img'), 'source')
+		const machine = await machines.create({
+			name: 'Snapshot limit',
+			imagePath: '/External/imports/source.img',
+			diskSizeGb: 1,
+			cores: 1,
+			memoryGb: 1,
+		})
+		await pWaitFor(async () => (await machines.list()).some(({id, state}) => id === machine.id && state === 'running'))
+		await machines.stopMachine(machine.id)
+		for (let index = 0; index < 10; index++) await machines.createSnapshot(machine.id, `Snapshot ${index}`)
+		await expect(machines.createSnapshot(machine.id, 'One too many')).rejects.toThrow('[machine-snapshot-limit]')
+		expect((await machines.list()).find(({id}) => id === machine.id)?.snapshots).toHaveLength(10)
 	})
 
 	test('serializes uninstall behind an in-flight start', async () => {

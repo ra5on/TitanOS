@@ -80,3 +80,37 @@ Was du wissen solltest:
 
 Dieser Bereich ist als **Beta** gekennzeichnet: Er wird im Release mit
 automatischen Tests der Geräteerkennung geprüft, nicht mit echter Hardware.
+
+## Snapshots
+
+Ein Snapshot hält den Stand der Systemfestplatte einer Maschine fest, zum
+Beispiel vor einem Update von Home Assistant. Später lässt sich die Maschine
+auf diesen Stand zurücksetzen.
+
+1. Fahre die Maschine herunter.
+2. Öffne ihre Einstellungen und gib unter **Snapshots** einen Namen ein, etwa
+   „Vor dem Update“. **Snapshot erstellen** legt ihn sofort an.
+3. Starte die Maschine wieder.
+
+Zum Zurücksetzen fährst du die Maschine herunter und wählst beim Snapshot
+**Wiederherstellen**. Alle Änderungen seit dem Snapshot gehen dabei verloren.
+Willst du den aktuellen Stand behalten, erstelle vorher einen weiteren Snapshot.
+
+- Enthalten sind die Systemfestplatte und die UEFI-Einstellungen. Nicht
+  enthalten sind Ordnerfreigaben, Datenfestplatten und ein virtuelles TPM.
+- Snapshots liegen in der Festplattendatei der Maschine. Sie belegen dort so
+  viel Platz, wie sich seit dem Snapshot geändert hat, und sind Teil der
+  Maschinen-Sicherung.
+- Pro Maschine sind bis zu 10 Snapshots möglich.
+- Wurde die Festplatte nach dem Snapshot vergrößert, hat sie nach dem
+  Zurücksetzen wieder die frühere Größe.
+- Ein Snapshot ersetzt keine Sicherung: Geht die Festplattendatei verloren,
+  sind auch ihre Snapshots weg.
+
+## Autostart und Startverzögerung
+
+**Mit TitanOS starten** legt fest, ob eine Maschine nach dem Hochfahren von
+TitanOS von selbst startet. Mit der **Startverzögerung** wartet sie danach noch
+15 Sekunden bis 10 Minuten. Maschinen ohne Verzögerung starten zuerst, die
+anderen in der Reihenfolge ihrer Wartezeit. So ist zum Beispiel ein Router oder
+DNS-Server oben, bevor die übrigen Maschinen starten.

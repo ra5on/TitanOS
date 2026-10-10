@@ -1,5 +1,5 @@
 import RFB from '@novnc/novnc'
-import {VolumeX} from 'lucide-react'
+import {VolumeX, X} from 'lucide-react'
 import {useEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
 
@@ -9,7 +9,7 @@ import {useMachineAgentControls} from '@/features/machines/hooks/use-machines'
 import {createMachineAudioSink, type MachineAudioSink} from '@/features/machines/machine-audio'
 import {createBrowserUuid} from '@/features/machines/utils'
 import {cn} from '@/lib/utils'
-import {trpcClient} from '@/trpc/trpc'
+import {trpcClient, trpcReact} from '@/trpc/trpc'
 
 import {setConsoleAgentOwnership} from './console-agent-ownership'
 
@@ -41,6 +41,12 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 		},
 	})[machineId]
 	const [takenOver, setTakenOver] = useState(false)
+	// A guest with a real graphics card draws on that card's monitor output.
+	// The virtual screen shown here then stops at the last frame of its boot.
+	const hasPassedThroughDisplay = (
+		trpcReact.machines.pciDevices.useQuery(undefined, {staleTime: 30_000}).data?.devices ?? []
+	).some((device) => device.machineId === machineId && device.kind === 'gpu')
+	const [displayHintDismissed, setDisplayHintDismissed] = useState(false)
 	const agentOwned = !!agentControl && !takenOver
 	const rfbRef = useRef<RFB | undefined>(undefined)
 	const agentOwnedRef = useRef(agentOwned)
@@ -254,6 +260,21 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 			{!muted && audioBlocked && (
 				<div className='pointer-events-none absolute top-3 right-3 z-10 grid size-7 place-items-center rounded-full bg-black/55 text-white/55 backdrop-blur'>
 					<VolumeX className='size-3.5' />
+				</div>
+			)}
+			{hasPassedThroughDisplay && !displayHintDismissed && connectionState !== 'superseded' && (
+				<div className='absolute inset-x-0 top-3 z-10 flex justify-center px-3' data-display-hint>
+					<div className='flex max-w-xl items-start gap-2 rounded-12 bg-black/75 py-2 pr-2 pl-3.5 text-12 leading-snug text-white/75 backdrop-blur'>
+						<span>{t('machines.console-passthrough-display')}</span>
+						<button
+							type='button'
+							className='grid size-6 shrink-0 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white'
+							onClick={() => setDisplayHintDismissed(true)}
+							aria-label={t('machines.console-passthrough-display-dismiss')}
+						>
+							<X className='size-3.5' />
+						</button>
+					</div>
 				</div>
 			)}
 			{connectionState === 'disconnected' && (

@@ -69,6 +69,77 @@ class SignedUpdaterTests(unittest.TestCase):
         self.assertEqual(offered['version'],self.version)
         self.assertIn('/ra5on/TitanOS/',offered['asset']['url'])
 
+    def rate_limited(self, url, maximum):
+        if url.startswith('https://api.github.com/'): raise updater.RateLimited('Anonymous API budget used up')
+        if url not in self.responses: raise updater.UpdateError('Not published')
+        return self.responses[url]
+
+    def test_used_up_api_budget_still_finds_and_verifies_the_newest_release(self):
+        self.responses[f'https://github.com/{updater.REPOSITORY}/releases/latest/download/release.json']=json.dumps(self.release).encode()
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'installed',return_value={**self.release,'version':self.current}), \
+             patch.object(updater,'fetch_bytes',side_effect=self.rate_limited), patch.object(updater,'served_size',return_value=len(self.payload)) as size:
+            offered=updater.latest(self.current,'stable')
+        self.assertEqual(offered['version'],self.version)
+        self.assertEqual(offered['asset']['sha256'],hashlib.sha256(self.payload).hexdigest())
+        size.assert_called_once_with(updater.asset_url(self.version,self.name))
+        # The stored evidence verifies again later without any network access
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'fetch_bytes') as fetch:
+            again=updater.verify_release(self.version,'stable',offered['evidence']['github'],offered['evidence']['files'])
+            fetch.assert_not_called()
+        self.assertEqual(again['asset'],offered['asset'])
+
+    def test_used_up_api_budget_offers_nothing_for_the_installed_or_an_older_release(self):
+        for published in (self.current,'2.0.0'):
+            with self.subTest(published=published):
+                self.responses[f'https://github.com/{updater.REPOSITORY}/releases/latest/download/release.json']=json.dumps({**self.release,'version':published}).encode()
+                with patch.object(updater,'installed',return_value={**self.release,'version':self.current}), \
+                     patch.object(updater,'fetch_bytes',side_effect=self.rate_limited), patch.object(updater,'verify_release') as verify, \
+                     patch.object(updater,'served_size') as size:
+                    self.assertEqual(updater.latest(self.current,'stable'),{'version':self.current,'name':'TitanOS 2.0.2','releaseNotes':''})
+                    verify.assert_not_called(); size.assert_not_called()
+
+    def test_used_up_api_budget_never_trusts_the_unsigned_version_pointer(self):
+        pointer=f'https://github.com/{updater.REPOSITORY}/releases/latest/download/release.json'
+        local={**self.release,'version':self.current}
+        # A download of a different size than the signed bundle
+        self.responses[pointer]=json.dumps(self.release).encode()
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'installed',return_value=local), \
+             patch.object(updater,'fetch_bytes',side_effect=self.rate_limited), patch.object(updater,'served_size',return_value=len(self.payload)+1):
+            with self.assertRaises(updater.UpdateError): updater.latest(self.current,'stable')
+        # A pointer to a version whose release carries no valid signature
+        self.responses[pointer]=json.dumps({**self.release,'version':'9.9.9'}).encode()
+        with patch.object(updater,'PUBLIC_KEY',self.public), patch.object(updater,'installed',return_value=local), \
+             patch.object(updater,'fetch_bytes',side_effect=self.rate_limited), patch.object(updater,'served_size',return_value=len(self.payload)):
+            with self.assertRaises(updater.UpdateError): updater.latest(self.current,'stable')
+        for invalid in ('not json',json.dumps([]),json.dumps({'version':'../2.0.2'}),json.dumps({'version':7})):
+            with self.subTest(invalid=invalid):
+                self.responses[pointer]=invalid.encode()
+                with patch.object(updater,'installed',return_value=local), patch.object(updater,'fetch_bytes',side_effect=self.rate_limited), \
+                     patch.object(updater,'verify_release') as verify:
+                    with self.assertRaises(updater.UpdateError): updater.latest(self.current,'stable')
+                    verify.assert_not_called()
+
+    def test_only_a_refused_api_request_counts_as_a_used_up_budget(self):
+        def refuse(code):
+            opener=Mock(); opener.open.side_effect=updater.urllib.error.HTTPError('https://example.invalid',code,'refused',{},None)
+            return opener
+        api=f'https://api.github.com/repos/{updater.REPOSITORY}/releases?per_page=100'
+        for code in (403,429):
+            with self.subTest(code=code), patch.object(updater.urllib.request,'build_opener',return_value=refuse(code)):
+                with self.assertRaises(updater.RateLimited): updater.response(api)
+        for url,code in ((api,500),(api,404),(updater.asset_url(self.version,self.name),403)):
+            with self.subTest(url=url,code=code), patch.object(updater.urllib.request,'build_opener',return_value=refuse(code)):
+                with self.assertRaises(updater.UpdateError) as raised: updater.response(url)
+                self.assertNotIsInstance(raised.exception,updater.RateLimited)
+
+    def test_served_size_requires_a_plausible_content_length(self):
+        def served(length):
+            return contextlib.nullcontext(Mock(headers={} if length is None else {'Content-Length':length}))
+        with patch.object(updater,'response',return_value=served('4096')): self.assertEqual(updater.served_size(updater.asset_url(self.version,self.name)),4096)
+        for length in (None,'','-1','0','12 bytes',str(updater.MAX_BUNDLE+1)):
+            with self.subTest(length=length), patch.object(updater,'response',return_value=served(length)):
+                with self.assertRaises(updater.UpdateError): updater.served_size(updater.asset_url(self.version,self.name))
+
     def test_numeric_version_order_and_downgrades_are_checked_before_install(self):
         order = ['1.9.9', '2.0.0', '2.0.1', '2.0.2', '2.1.0', '2.10.0']
         self.assertEqual(sorted(reversed(order), key=updater.version_key), order)

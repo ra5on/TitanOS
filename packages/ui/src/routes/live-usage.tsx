@@ -437,11 +437,14 @@ function GpuRing({fraction, className}: {fraction: number; className?: string}) 
 	)
 }
 
+const gpuTemperatureLabel = (temperature: number) => `${temperature} °C`
+
 // Single-GPU identity whisper in the summary card's title row
 function GpuModelWhisper({device}: {device: GpuDevice}) {
 	return (
 		<span className='min-w-0 animate-in truncate text-13 font-normal -tracking-2 text-white/30 duration-300 fade-in'>
 			{cleanGpuName(device.model)}
+			{device.temperature !== undefined && ` · ${gpuTemperatureLabel(device.temperature)}`}
 		</span>
 	)
 }
@@ -521,6 +524,11 @@ function GpuDeviceDetail({device}: {device: GpuDevice}) {
 			<div className='flex min-w-0 items-center gap-2'>
 				<span className='truncate text-15 font-semibold -tracking-2 text-white/80'>{cleanGpuName(device.model)}</span>
 				<GpuVendorBadge vendor={device.vendor} />
+				{device.temperature !== undefined && (
+					<span className='shrink-0 text-13 -tracking-2 text-white/45 tabular-nums' data-gpu-temperature>
+						{gpuTemperatureLabel(device.temperature)}
+					</span>
+				)}
 			</div>
 			<div className='mt-4 grid gap-5 sm:grid-cols-2'>
 				<div className='relative overflow-hidden rounded-12'>

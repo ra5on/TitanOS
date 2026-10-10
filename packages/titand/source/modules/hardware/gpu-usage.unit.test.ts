@@ -5,6 +5,7 @@ import {
 	mergeGpuDeviceUsage,
 	normalizePciAddress,
 	parseDrmFdinfo,
+	parseGpuTemperature,
 	parseNvidiaGpuCsv,
 	parseNvidiaPmon,
 	parsePciControllers,
@@ -152,5 +153,30 @@ describe('NVIDIA usage parsing', () => {
 		expect(mergeGpuDeviceUsage([device('drm', [drmProcess])], [device('RTX 3060', [])])[0].processes).toStrictEqual([
 			drmProcess,
 		])
+	})
+})
+
+describe('GPU temperature', () => {
+	test('reads the temperature nvidia-smi reports next to utilization and memory', () => {
+		const [device] = parseNvidiaGpuCsv(
+			'0, GPU-7b97c340, 00000000:01:00.0, NVIDIA GeForce RTX 5060 Ti, 12, 16311, 512, 54',
+		)
+		expect(device).toMatchObject({model: 'NVIDIA GeForce RTX 5060 Ti', totalUsed: 12, temperature: 54})
+	})
+
+	test('leaves the temperature out when the driver does not report one', () => {
+		const [unsupported] = parseNvidiaGpuCsv('0, GPU-7b97c340, 00000000:01:00.0, NVIDIA Tesla, 12, 16311, 512, N/A')
+		expect(unsupported).not.toHaveProperty('temperature')
+		const [older] = parseNvidiaGpuCsv('0, GPU-7b97c340, 00000000:01:00.0, NVIDIA Tesla, 12, 16311, 512')
+		expect(older).not.toHaveProperty('temperature')
+	})
+
+	test('accepts only plausible readings', () => {
+		expect(parseGpuTemperature(54.4)).toBe(54)
+		expect(parseGpuTemperature(0)).toBeUndefined()
+		expect(parseGpuTemperature(-3)).toBeUndefined()
+		expect(parseGpuTemperature(4000)).toBeUndefined()
+		expect(parseGpuTemperature(Number.NaN)).toBeUndefined()
+		expect(parseGpuTemperature(null)).toBeUndefined()
 	})
 })

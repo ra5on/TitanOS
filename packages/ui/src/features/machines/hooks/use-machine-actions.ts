@@ -123,6 +123,14 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-shared-folder-invalid')
 		case 'machine-data-disk-invalid':
 			return t('machines-error.machine-data-disk-invalid')
+		case 'machine-snapshot-requires-stopped':
+			return t('machines-error.machine-snapshot-requires-stopped')
+		case 'machine-snapshot-limit':
+			return t('machines-error.machine-snapshot-limit')
+		case 'machine-snapshot-not-found':
+			return t('machines-error.machine-snapshot-not-found')
+		case 'machine-snapshot-failed':
+			return t('machines-error.machine-snapshot-failed')
 		case 'machine-usb-device-in-use':
 			return t('machines-error.machine-usb-device-in-use')
 		case 'machine-usb-device-invalid':
@@ -237,6 +245,18 @@ export function useMachineActions() {
 		onSettled: invalidateMachines,
 	}).mutateAsync
 	const setPinned = trpcReact.machines.setPinned.useMutation({onError, onSettled: invalidateMachines}).mutate
+	const createSnapshot = trpcReact.machines.createSnapshot.useMutation({
+		onError,
+		onSettled: invalidateMachines,
+	}).mutateAsync
+	const revertSnapshot = trpcReact.machines.revertSnapshot.useMutation({
+		onError,
+		onSettled: invalidateMachines,
+	}).mutateAsync
+	const deleteSnapshot = trpcReact.machines.deleteSnapshot.useMutation({
+		onError,
+		onSettled: invalidateMachines,
+	}).mutateAsync
 
 	return {
 		create,
@@ -249,5 +269,8 @@ export function useMachineActions() {
 		uninstall,
 		updateSettings,
 		setPinned,
+		createSnapshot,
+		revertSnapshot,
+		deleteSnapshot,
 	}
 }

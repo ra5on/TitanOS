@@ -1,11 +1,23 @@
-import {PlusCircle, Trash2} from 'lucide-react'
+import {History, PlusCircle, Trash2} from 'lucide-react'
 import {lazy, Suspense, useState} from 'react'
+import {useTranslation} from 'react-i18next'
 
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {Button} from '@/components/ui/button'
 import {MaturityBadge} from '@/components/ui/feature-maturity-badge'
 import {Input} from '@/components/ui/input'
 import {Switch} from '@/components/ui/switch'
 import {MAX_DISK_SIZE_GB} from '@/features/machines/constants'
+import {useMachineActions} from '@/features/machines/hooks/use-machine-actions'
 import type {Machine} from '@/features/machines/types'
 import {trpcReact} from '@/trpc/trpc'
 import {t} from '@/utils/i18n'
@@ -424,6 +436,143 @@ export function DataDisksSection({
 				title={t('machines.data-disk-select')}
 				onSelect={(directory) => onChange([...value, {id: newDataDiskId(), directory, sizeGb: DEFAULT_DATA_DISK_GB}])}
 			/>
+		</Section>
+	)
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots
+// ---------------------------------------------------------------------------
+
+type Snapshot = NonNullable<Machine['snapshots']>[number]
+const MAX_SNAPSHOTS = 10
+const SNAPSHOT_NAME_MAX_LENGTH = 60
+
+// Saved states of the system disk. Unlike the sections above these act at
+// once: a snapshot is taken or brought back now, not staged for "Save".
+export function SnapshotsSection({machine, disabled}: {machine: Machine; disabled: boolean}) {
+	const {i18n} = useTranslation()
+	const {createSnapshot, revertSnapshot, deleteSnapshot} = useMachineActions()
+	const [name, setName] = useState('')
+	const [busy, setBusy] = useState(false)
+	const [pending, setPending] = useState<{action: 'revert' | 'delete'; snapshot: Snapshot} | null>(null)
+	const snapshots = machine.snapshots ?? []
+	const stopped = machine.state === 'stopped'
+	const locked = disabled || busy || !stopped
+	const full = snapshots.length >= MAX_SNAPSHOTS
+	const formatDate = (timestamp: number) =>
+		new Intl.DateTimeFormat(i18n.language, {dateStyle: 'medium', timeStyle: 'short'}).format(timestamp)
+
+	const run = async (action: () => Promise<unknown>) => {
+		setBusy(true)
+		try {
+			await action()
+		} catch {
+			// Error toast is handled by the mutation
+		} finally {
+			setBusy(false)
+		}
+	}
+	const create = () =>
+		run(async () => {
+			const fallback = t('machines.snapshot-default-name', {date: formatDate(Date.now())})
+			await createSnapshot({id: machine.id, name: (name.trim() || fallback).slice(0, SNAPSHOT_NAME_MAX_LENGTH)})
+			setName('')
+		})
+	const confirm = () => {
+		if (!pending) return
+		const {action, snapshot} = pending
+		setPending(null)
+		void run(() =>
+			action === 'revert'
+				? revertSnapshot({id: machine.id, snapshotId: snapshot.id})
+				: deleteSnapshot({id: machine.id, snapshotId: snapshot.id}),
+		)
+	}
+
+	return (
+		<Section title={t('machines.snapshots')} description={t('machines.snapshots-description')}>
+			{!stopped && <EmptyNote>{t('machines.snapshots-stop-note')}</EmptyNote>}
+			<div className='flex items-center gap-2'>
+				<Input
+					type='text'
+					value={name}
+					onValueChange={setName}
+					onKeyDown={(event) => event.key === 'Enter' && !locked && !full && void create()}
+					placeholder={t('machines.snapshot-name-placeholder')}
+					maxLength={SNAPSHOT_NAME_MAX_LENGTH}
+					disabled={locked || full}
+					sizeVariant='short'
+					aria-label={t('machines.snapshot-name-placeholder')}
+					className='min-w-0 flex-1 text-white'
+				/>
+				<Button size='sm' className='shrink-0' onClick={() => void create()} disabled={locked || full}>
+					{t('machines.snapshot-create')}
+					<PlusCircle className='h-3 w-3' />
+				</Button>
+			</div>
+			{full && <p className='text-12 -tracking-2 text-white/40'>{t('machines.snapshots-full')}</p>}
+			{snapshots.length === 0 ? (
+				<EmptyNote>{t('machines.snapshots-empty')}</EmptyNote>
+			) : (
+				<div className='flex flex-col gap-2'>
+					{/* Newest first: the one to go back to is usually the latest */}
+					{[...snapshots].reverse().map((snapshot) => (
+						<div key={snapshot.id} className='flex items-center gap-2' data-snapshot={snapshot.id}>
+							<div className={`${rowClass} min-w-0 flex-1`}>
+								<span className='flex min-w-0 flex-1 flex-col'>
+									<span className='truncate text-13 -tracking-2 text-white'>{snapshot.name}</span>
+									<span className='truncate text-11 -tracking-1 text-white/35 tabular-nums'>
+										{formatDate(snapshot.createdAt)} · {t('machines.gb', {value: snapshot.diskSizeGb})}
+									</span>
+								</span>
+								<Button
+									size='sm'
+									className='shrink-0'
+									disabled={locked}
+									onClick={() => setPending({action: 'revert', snapshot})}
+								>
+									{t('machines.snapshot-revert')}
+								</Button>
+							</div>
+							<button
+								type='button'
+								disabled={locked}
+								className={removeButtonClass}
+								onClick={() => setPending({action: 'delete', snapshot})}
+								aria-label={t('machines.snapshot-delete-label', {name: snapshot.name})}
+							>
+								<Trash2 className='size-3.5' />
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+			<AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+				<AlertDialogContent>
+					<AlertDialogHeader icon={pending?.action === 'delete' ? Trash2 : History}>
+						<AlertDialogTitle>
+							{pending?.action === 'delete'
+								? t('machines.snapshot-delete-title')
+								: t('machines.snapshot-revert-title')}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{pending?.action === 'delete'
+								? t('machines.snapshot-delete-description', {name: pending.snapshot.name})
+								: t('machines.snapshot-revert-description', {
+										name: pending?.snapshot.name ?? '',
+										machineName: machine.name,
+									})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogAction variant='destructive' onClick={confirm}>
+							{pending?.action === 'delete' ? t('machines.snapshot-delete-confirm') : t('machines.snapshot-revert')}
+						</AlertDialogAction>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</Section>
 	)
 }

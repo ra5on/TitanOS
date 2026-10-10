@@ -84,7 +84,48 @@ describe('Shared folders and data disks on the released OS', () => {
 		expect(xml).toContain("<target dev='vdj' bus='virtio'/>")
 		expect(await titand.vm.sshAsRoot('pgrep -c virtiofsd')).not.toBe('0')
 
+		// Snapshots are internal to the qcow2 system disk: real qemu-img has to
+		// create one, bring the old contents back and remove it again.
+		const systemDisk = `/home/titan/titan/machines/${id}/disk.qcow2`
+		// A read that does not find the pattern reports it and exits non-zero
+		const pattern = (action: 'read' | 'write') =>
+			titand.vm.sshAsRoot(`qemu-io -f qcow2 -c '${action} -P 0x5a 512k 4k' ${systemDisk} 2>&1 || true`)
+		const snapshotNames = async () =>
+			(
+				JSON.parse(await titand.vm.sshAsRoot(`qemu-img info -f qcow2 --output=json ${systemDisk}`)) as {
+					snapshots?: {name: string}[]
+				}
+			).snapshots?.map(({name}) => name) ?? []
+		await expect(titand.client.machines.createSnapshot.mutate({id, name: 'Zu früh'})).rejects.toThrow(
+			'machine-snapshot-requires-stopped',
+		)
+		await titand.client.machines.forceStop.mutate({id})
+		await waitForState('stopped')
+		const snapshot = await titand.client.machines.createSnapshot.mutate({id, name: 'Vor dem Update'})
+		expect(await snapshotNames()).toEqual([`titan-${snapshot.id}`])
+		expect((await titand.client.machines.list.query()).find((machine) => machine.id === id)?.snapshots).toEqual([
+			snapshot,
+		])
+
+		expect(await pattern('read')).toContain('Pattern verification failed')
+		await pattern('write')
+		expect(await pattern('read')).not.toContain('Pattern verification failed')
+		await titand.client.machines.revertSnapshot.mutate({id, snapshotId: snapshot.id})
+		expect(await pattern('read')).toContain('Pattern verification failed')
+
+		// The machine still boots from the reverted disk
+		await titand.client.machines.start.mutate({id})
+		await waitForState('running')
+		await titand.client.machines.forceStop.mutate({id})
+		await waitForState('stopped')
+		await titand.client.machines.deleteSnapshot.mutate({id, snapshotId: snapshot.id})
+		expect(await snapshotNames()).toEqual([])
+		expect(
+			(await titand.client.machines.list.query()).find((machine) => machine.id === id)?.snapshots,
+		).toBeUndefined()
+
 		await titand.client.machines.uninstall.mutate({id})
+		expect(await titand.vm.sshAsRoot(`test -e ${systemDisk} && echo present || echo removed`)).toBe('removed')
 		expect(await titand.vm.sshAsRoot(`test -e ${diskImage} && echo present || echo removed`)).toBe('removed')
 		// The shared folder is user data and stays
 		expect(await titand.vm.sshAsRoot('test -d /home/titan/titan/home/Freigabe && echo kept')).toBe('kept')

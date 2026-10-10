@@ -63,6 +63,14 @@ import {
 	sameUsbDevice,
 	type MachineUsbDevice,
 } from './usb-passthrough.js'
+import {
+	autostartSchedule,
+	MAX_MACHINE_SNAPSHOTS,
+	machineSnapshotSchema,
+	snapshotNvramFileName,
+	snapshotTag,
+	type MachineSnapshot,
+} from './machine-snapshots.js'
 import {safeDownload} from './safe-download.js'
 import {prepareWindowsInstallMedia, type WindowsInstaller} from './windows-image.js'
 import {prepareOmarchySeed, probeOmarchySetup, removeOmarchySetupCredentials} from './omarchy-install.js'
@@ -157,6 +165,8 @@ export type Machine = {
 	performanceWarning?: string
 	portForwards: PortForward[]
 	autostart: boolean
+	autostartDelaySeconds?: number
+	snapshots?: MachineSnapshot[]
 	pinned: boolean
 	createdAt: number
 	firstBootSetup: boolean
@@ -991,6 +1001,7 @@ export default class Machines {
 	#lastBridgeAddresses = new Map<string, string | undefined>()
 	#lastFirstBootSetupStates = new Map<string, boolean>()
 	#pollTimer?: NodeJS.Timeout
+	#autostartTimers = new Set<NodeJS.Timeout>()
 	#polling = false
 	#nextUsbSyncAt = 0
 	#omarchySetupProbes = new Map<string, Promise<void>>()
@@ -1072,11 +1083,17 @@ export default class Machines {
 				await this.#reconcileCurrentNetwork()
 				await this.#guestApi.start()
 				this.#libvirtActivated = true
-				for (const definition of await this.#store.list()) {
-					if (!definition.autostart) continue
-					void this.startMachine(definition.id).catch((error) =>
-						this.logger.error(`Failed to autostart machine ${definition.id}`, error),
-					)
+				this.#clearAutostartTimers()
+				for (const {id, delayMs} of autostartSchedule(await this.#store.list())) {
+					if (delayMs === 0) {
+						void this.startMachine(id).catch((error) => this.logger.error(`Failed to autostart machine ${id}`, error))
+						continue
+					}
+					const timer = setTimeout(() => {
+						this.#autostartTimers.delete(timer)
+						void this.#delayedAutostart(id)
+					}, delayMs)
+					this.#autostartTimers.add(timer)
 				}
 			} catch (error) {
 				// libvirt and the LAN route can become ready after titand. Keep the
@@ -1095,10 +1112,28 @@ export default class Machines {
 		}
 	}
 
+	#clearAutostartTimers() {
+		for (const timer of this.#autostartTimers) clearTimeout(timer)
+		this.#autostartTimers.clear()
+	}
+
+	// The owner may have switched autostart off, started the machine by hand or
+	// removed it while its delay was running.
+	async #delayedAutostart(id: string) {
+		try {
+			const definition = await this.#store.read(id).catch(() => undefined)
+			if (!definition?.autostart || (await this.#libvirt.state(id)) !== 'stopped') return
+			await this.startMachine(id)
+		} catch (error) {
+			this.logger.error(`Failed to autostart machine ${id}`, error)
+		}
+	}
+
 	async stop() {
 		await this.#automaticBridge.stop()
 		if (this.#pollTimer) clearInterval(this.#pollTimer)
 		this.#pollTimer = undefined
+		this.#clearAutostartTimers()
 		await Promise.allSettled(this.#omarchySetupProbes.values())
 		for (const job of this.#installJobs.values()) job.controller.abort(new Error('[machine-install-cancelled]'))
 		await Promise.allSettled([...this.#installJobs.values()].map(({promise}) => promise))
@@ -2712,6 +2747,7 @@ export default class Machines {
 			diskBus?: 'virtio' | 'sata'
 			diskSizeGb?: number
 			autostart?: boolean
+			autostartDelaySeconds?: number
 			network?: MachineNetwork
 			portForwards?: PortForward[]
 			videoModel?: 'virtio' | 'vga'
@@ -2886,6 +2922,10 @@ export default class Machines {
 					if (diskResize) await this.#libvirt.resizeDisk(definition, diskResize.path, diskResize.sizeGb)
 					if (settings.diskSizeGb !== undefined) definition.diskSizeGb = settings.diskSizeGb
 					if (settings.autostart !== undefined) definition.autostart = settings.autostart
+					if (settings.autostartDelaySeconds !== undefined) {
+						if (settings.autostartDelaySeconds > 0) definition.autostartDelaySeconds = settings.autostartDelaySeconds
+						else delete definition.autostartDelaySeconds
+					}
 					if (settings.videoModel !== undefined) definition.videoModel = settings.videoModel
 					if (settings.pciDevices !== undefined) {
 						if (settings.pciDevices.length) definition.pciDevices = settings.pciDevices
@@ -2941,6 +2981,123 @@ export default class Machines {
 			})
 			await this.#emitMachines()
 			return this.#view(definition)
+		})
+	}
+
+	// Snapshots live inside the qcow2 system disk, which qemu-img can only
+	// change while no machine has it open.
+	async #snapshotTarget(id: string) {
+		this.#assertBackupIdle(id)
+		const definition = await this.#definition(id)
+		if (definition.installSource) throw new Error('[machine-install-not-complete]')
+		if (this.#operations.has(id) || (await this.#libvirt.state(id)) !== 'stopped') {
+			throw new Error('[machine-snapshot-requires-stopped]')
+		}
+		this.#assertExternalStorageNotBlocked(definition)
+		if (!(await this.#externalDiskAvailable(definition))) throw new Error('[machine-external-disk-unavailable]')
+		return {
+			definition,
+			disk: await this.#diskSystemPath(definition),
+			nvram: nodePath.join(this.#store.directory(id), 'nvram.fd'),
+			directory: nodePath.join(this.#store.directory(id), 'snapshots'),
+		}
+	}
+
+	async createSnapshot(id: string, name: string) {
+		return this.#withMachineLock(id, async () => {
+			const {definition, disk, nvram, directory} = await this.#snapshotTarget(id)
+			const snapshots = definition.snapshots ?? []
+			if (snapshots.length >= MAX_MACHINE_SNAPSHOTS) throw new Error('[machine-snapshot-limit]')
+			const snapshot = machineSnapshotSchema.parse({
+				id: randomBytes(6).toString('hex'),
+				name: name.trim(),
+				createdAt: Date.now(),
+				diskSizeGb: definition.diskSizeGb,
+			})
+			const savedNvram = nodePath.join(directory, snapshotNvramFileName(snapshot.id))
+			try {
+				// The UEFI variables belong to the disk state: boot entries written by
+				// a later system update would otherwise point at files that are gone.
+				if (await fse.pathExists(nvram)) {
+					await fse.ensureDir(directory)
+					await fsp.copyFile(nvram, savedNvram)
+				}
+				await this.#libvirt.createDiskSnapshot(disk, snapshotTag(snapshot.id))
+			} catch (error) {
+				await fse.remove(savedNvram).catch(() => undefined)
+				this.logger.error(`Failed creating a snapshot of machine ${id}`, error)
+				throw new Error('[machine-snapshot-failed]')
+			}
+			definition.snapshots = [...snapshots, snapshot]
+			await this.#store.write(definition)
+			await this.#emitMachines()
+			return snapshot
+		})
+	}
+
+	async revertSnapshot(id: string, snapshotId: string) {
+		return this.#withMachineLock(id, async () => {
+			const {definition, disk, nvram, directory} = await this.#snapshotTarget(id)
+			const snapshot = (definition.snapshots ?? []).find((candidate) => candidate.id === snapshotId)
+			if (!snapshot) throw new Error('[machine-snapshot-not-found]')
+			try {
+				// A disk that was replaced or restored without its snapshots
+				if (!(await this.#libvirt.diskSnapshotTags(disk)).includes(snapshotTag(snapshot.id))) {
+					throw new Error('[machine-snapshot-not-found]')
+				}
+				await this.#libvirt.applyDiskSnapshot(disk, snapshotTag(snapshot.id))
+				const savedNvram = nodePath.join(directory, snapshotNvramFileName(snapshot.id))
+				if (await fse.pathExists(savedNvram)) {
+					// Replace atomically and keep the owner QEMU opens the file as
+					const current = await fsp.stat(nvram).catch(() => undefined)
+					const temporary = `${nvram}.snapshot.tmp`
+					await fsp.copyFile(savedNvram, temporary)
+					if (current) {
+						await fsp.chown(temporary, current.uid, current.gid)
+						await fsp.chmod(temporary, current.mode & 0o7777)
+					}
+					await fsp.rename(temporary, nvram)
+				}
+				// The disk is as large again as it was when the snapshot was taken
+				const sizeGb = Math.round((await this.#libvirt.diskVirtualSizeBytes(disk)) / QEMU_GIBIBYTE_BYTES)
+				if (sizeGb >= 1 && sizeGb !== definition.diskSizeGb) {
+					definition.diskSizeGb = sizeGb
+					await this.#store.write(definition)
+				}
+			} catch (error) {
+				if (error instanceof Error && error.message === '[machine-snapshot-not-found]') throw error
+				this.logger.error(`Failed reverting machine ${id} to a snapshot`, error)
+				throw new Error('[machine-snapshot-failed]')
+			}
+			this.#errors.delete(id)
+			await this.#emitMachines()
+			return true
+		})
+	}
+
+	async deleteSnapshot(id: string, snapshotId: string) {
+		return this.#withMachineLock(id, async () => {
+			const {definition, disk, directory} = await this.#snapshotTarget(id)
+			const snapshots = definition.snapshots ?? []
+			const snapshot = snapshots.find((candidate) => candidate.id === snapshotId)
+			if (!snapshot) throw new Error('[machine-snapshot-not-found]')
+			try {
+				if ((await this.#libvirt.diskSnapshotTags(disk)).includes(snapshotTag(snapshot.id))) {
+					await this.#libvirt.deleteDiskSnapshot(disk, snapshotTag(snapshot.id))
+				}
+			} catch (error) {
+				this.logger.error(`Failed deleting a snapshot of machine ${id}`, error)
+				throw new Error('[machine-snapshot-failed]')
+			}
+			const remaining = snapshots.filter((candidate) => candidate.id !== snapshotId)
+			if (remaining.length) definition.snapshots = remaining
+			else delete definition.snapshots
+			await this.#store.write(definition)
+			await fse
+				.remove(nodePath.join(directory, snapshotNvramFileName(snapshot.id)))
+				.catch((error) => this.logger.error(`Failed removing saved firmware state of machine ${id}`, error))
+			await this.#emitMachines()
+			return true
 		})
 	}
 

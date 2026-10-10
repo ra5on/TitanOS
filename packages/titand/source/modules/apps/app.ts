@@ -118,6 +118,7 @@ type ResolvedFolderAccess = AppFolderAccessSelection & {
 // the auth override so the app follows its default
 export type AppSettingsUpdate = {
 	appProxyAuthEnabled?: boolean | null
+	gpuAccess?: boolean
 	hideCredentialsBeforeOpen?: boolean
 	customMounts?: AppCustomMount[]
 	folderAccess?: AppFolderAccessSelection[]
@@ -1271,7 +1272,7 @@ export default class App {
 	async patchComposeFile() {
 		const manifest = await this.readManifest()
 		const hasMovableDataRoot = manifest.storage?.dataRoot === 'data'
-		const appRequestsGpuAccess = manifest.permissions?.includes('GPU')
+		const appRequestsGpuAccess = manifest.permissions?.includes('GPU') || (await this.store.get('gpuAccess')) === true
 		const gpuAcceleration = appRequestsGpuAccess ? await getGpuAcceleration() : undefined
 
 		type ComposeWithGpuPatch = Compose & {
@@ -1333,6 +1334,14 @@ export default class App {
 	async hasAppProxy() {
 		const compose = await this.readCompose()
 		return Boolean(compose.services?.app_proxy)
+	}
+
+	// Apps that declare the GPU permission always get the host's acceleration.
+	// For every other app the owner decides.
+	async getGpuAccess() {
+		const [manifest, override] = await Promise.all([this.readManifest(), this.store.get('gpuAccess')])
+		const requested = manifest.permissions?.includes('GPU') ?? false
+		return {requested, enabled: requested || override === true}
 	}
 
 	async getAppProxyAuthOverride() {
@@ -2078,6 +2087,7 @@ export default class App {
 
 	async #setSettings({
 		appProxyAuthEnabled,
+		gpuAccess,
 		hideCredentialsBeforeOpen,
 		customMounts,
 		folderAccess,
@@ -2124,6 +2134,7 @@ export default class App {
 				this.getCustomEnvironmentVariables(),
 				this.store.get('dependencies'),
 			])
+			const previousGpuAccess = (await this.store.get('gpuAccess')) === true
 			const resolvedDependencies =
 				dependencies !== undefined ? fillSelectedDependencies(manifest.dependencies, dependencies) : undefined
 			if (dependencies !== undefined) {
@@ -2256,6 +2267,10 @@ export default class App {
 					if (appProxyAuthEnabled === null) delete settings.appProxyAuthEnabled
 					else settings.appProxyAuthEnabled = appProxyAuthEnabled
 				}
+				if (gpuAccess !== undefined) {
+					if (gpuAccess) settings.gpuAccess = true
+					else delete settings.gpuAccess
+				}
 				if (storageProvided) {
 					if (normalizedCustomMounts.length > 0) settings.customMounts = normalizedCustomMounts
 					else delete settings.customMounts
@@ -2308,7 +2323,9 @@ export default class App {
 				resolvedDependencies !== undefined &&
 				JSON.stringify(fillSelectedDependencies(manifest.dependencies, previousDependencies)) !==
 					JSON.stringify(resolvedDependencies)
-			if (storageChanged || environmentChanged || dependenciesChanged) {
+			// The devices are written into the compose file when the app starts
+			const gpuChanged = gpuAccess !== undefined && gpuAccess !== previousGpuAccess
+			if (storageChanged || environmentChanged || dependenciesChanged || gpuChanged) {
 				await this.applySettingsChange()
 			} else if (authChanged) {
 				// The app gateway reads the auth override when routes are rebuilt,

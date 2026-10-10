@@ -1,6 +1,51 @@
-# TitanOS 2.0.11 · Stable
+# TitanOS 2.0.12 · Stable
 
-## Neu in 2.0.11
+## Neu in 2.0.12
+
+Virtuelle Maschinen:
+
+- **Autostart-Schalter:** In den Einstellungen einer Maschine legt **Mit TitanOS
+  starten** fest, ob sie nach dem Hochfahren von TitanOS von selbst startet.
+  Starten und Herunterfahren ändern diese Einstellung nicht mehr. Bestehende
+  Maschinen behalten ihren bisherigen Wert: Eine Maschine, die beim Update
+  ausgeschaltet ist, steht auf „Aus“.
+- **Startverzögerung:** Eine Maschine mit Autostart kann 15 Sekunden bis
+  10 Minuten nach dem Hochfahren warten. Maschinen ohne Verzögerung starten
+  zuerst, die anderen in der Reihenfolge ihrer Wartezeit.
+- **Snapshots:** Ein Snapshot sichert den Stand der Systemfestplatte und der
+  UEFI-Einstellungen, zum Beispiel vor einem Update, und lässt sich später
+  wiederherstellen. Snapshots gibt es in den Einstellungen der Maschine; sie
+  lassen sich nur bei ausgeschalteter Maschine erstellen, wiederherstellen und
+  löschen. Pro Maschine sind bis zu 10 möglich. Ordnerfreigaben,
+  Datenfestplatten und ein virtuelles TPM sind nicht enthalten.
+  [Anleitung](https://github.com/ra5on/TitanOS/blob/main/docs/MACHINES-DEVICES.md#snapshots)
+- **Hinweis bei durchgereichter Grafikkarte:** Nutzt eine Maschine eine
+  durchgereichte Grafikkarte, erklärt die Konsole, dass das Bild am
+  Monitoranschluss dieser Karte erscheint und die Anzeige im Browser deshalb
+  stehen bleiben kann.
+
+System und Apps:
+
+- **Update-Prüfung ohne GitHub-Limit:** GitHub erlaubt pro Internetanschluss
+  nur 60 anonyme API-Anfragen pro Stunde. War dieses Kontingent verbraucht,
+  wurde bisher kein Update gefunden. TitanOS ermittelt die neueste Version dann
+  über den Download-Pfad des Releases. Signatur und Prüfsummen werden wie
+  bisher vollständig geprüft.
+- **Grafikkarte für jede App:** Apps, die eine Grafikkarte anfordern, bekommen
+  sie wie bisher automatisch. Für alle anderen gibt es in den App-Einstellungen
+  den Schalter **Grafikkarte verwenden**. Er erscheint, wenn TitanOS eine
+  Grafikkarte erkennt; die App wird beim Umschalten neu gestartet.
+- **GPU-Temperatur:** Die Live-Auslastung zeigt neben Auslastung und
+  Grafikspeicher die Temperatur der Grafikkarte, wenn der Treiber sie meldet
+  (NVIDIA, AMD).
+
+Snapshots werden vor der Veröffentlichung mit einer echten Maschine auf dem
+Image geprüft: anlegen, Festplatte ändern, zurücksetzen, starten, löschen. Die
+Update-Prüfung ohne API wurde mit signierten Testdaten und gegen das echte
+Repository geprüft. Startverzögerung, Grafikkarten-Schalter und Temperatur
+wurden mit automatischen Tests geprüft, nicht mit echter Hardware.
+
+## Aus 2.0.11
 
 - **Dock bearbeiten:** Ein Rechtsklick auf das Dock (auf Touch-Geräten lange
   drücken) öffnet **Dock bearbeiten**. Im Bearbeitungsmodus lassen sich Symbole

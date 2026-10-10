@@ -5,6 +5,7 @@ import {useTranslation} from 'react-i18next'
 import {
 	TbAdjustmentsHorizontal,
 	TbAlertTriangle,
+	TbCpu,
 	TbDatabase,
 	TbInfoCircle,
 	TbKey,
@@ -285,6 +286,12 @@ function AppSettingsDialogForApp({
 		onSuccess: invalidateApp,
 		onError: onMutationError,
 	})
+	const setGpuMut = trpcReact.apps.setSettings.useMutation({
+		onSuccess: invalidateApp,
+		onError: onMutationError,
+	})
+	const hostHasGpu =
+		(trpcReact.hardware.gpu.getInfo.useQuery(undefined, {retry: false, staleTime: Infinity}).data?.gpus.length ?? 0) > 0
 
 	// A backend settings event updates the persisted storage snapshot. Reconcile
 	// only the storage draft; environment, dependency, and auth edits, and the
@@ -421,6 +428,12 @@ function AppSettingsDialogForApp({
 		else setAuthEnabled(true)
 	}
 
+	// Apps that ask for the graphics card get it on their own. Any other app
+	// can be handed it here; it restarts to pick the devices up.
+	const gpuRequested = app.gpu?.requested === true
+	const pendingGpuValue = setGpuMut.isPending ? setGpuMut.variables?.gpuAccess : undefined
+	const gpuEnabled = pendingGpuValue ?? app.gpu?.enabled === true
+
 	// Home rows explain what each section contains. Actionable states replace
 	// that description so problems remain visible before opening the section.
 	const storageSupported = Boolean(
@@ -482,6 +495,22 @@ function AppSettingsDialogForApp({
 						) : undefined
 					}
 				/>
+				{hostHasGpu || gpuEnabled ? (
+					<SettingsControlRow
+						title={t('app-settings.gpu.row-title')}
+						description={gpuRequested ? t('app-settings.gpu.requested') : t('app-settings.gpu.description')}
+						icon={TbCpu}
+						tone={2}
+						control={
+							<Switch
+								checked={gpuEnabled}
+								disabled={gpuRequested || setGpuMut.isPending}
+								onCheckedChange={(enabled) => setGpuMut.mutate({appId: app.id, gpuAccess: enabled})}
+								aria-label={t('app-settings.gpu.row-title')}
+							/>
+						}
+					/>
+				) : null}
 				<SettingsNavigationRow
 					title={t('app-settings.storage.title')}
 					description={storageDescription}
