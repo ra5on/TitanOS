@@ -8,6 +8,7 @@ import type {ViewPreferences} from '../files/files.js'
 import * as totp from '../utilities/totp.js'
 import {removeAccountAvatarDirectory} from './avatar.js'
 import {OWNER_USER_ID} from './constants.js'
+import type {DockConfig} from './dock.js'
 
 export type Member = {
 	id: string
@@ -24,6 +25,7 @@ export type Member = {
 	language: string
 	temperatureUnit?: string
 	desktopTransparency?: number
+	dock?: DockConfig
 	viewPreferences?: Partial<ViewPreferences>
 	favorites?: string[]
 	// Enabled desktop widgets. Undefined means the member has never changed
@@ -651,6 +653,12 @@ export default class User {
 	async setAccountDesktopTransparency(userId: string, desktopTransparency: number) {
 		if (userId === OWNER_USER_ID) return this.#store.set('user.desktopTransparency', desktopTransparency)
 		return this.#updateMember(userId, {desktopTransparency})
+	}
+
+	// Each account arranges its own dock
+	async setAccountDock(userId: string, dock: DockConfig) {
+		if (userId === OWNER_USER_ID) return this.#store.set('user.dock', dock)
+		return this.#updateMember(userId, {dock})
 	}
 
 	// Get any account's file browser view preferences

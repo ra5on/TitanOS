@@ -22,6 +22,8 @@ type DockItemProps = {
 	label?: string
 	feature?: TitanFeature
 	bg?: string
+	// Rendered instead of a background image, e.g. a machine or shortcut icon
+	icon?: React.ReactNode
 	open?: boolean
 	mouseX: MotionValue<number>
 	to?: LinkProps['to']
@@ -38,6 +40,7 @@ const BOUNCE_DURATION = 0.4
 
 export function DockItem({
 	bg,
+	icon,
 	label,
 	feature,
 	mouseX,
@@ -104,14 +107,16 @@ export function DockItem({
 				)}
 			</AnimatePresence>
 			{/* icon glow */}
-			<div
-				className='absolute hidden h-full w-full bg-cover opacity-30 md:block'
-				style={{
-					backgroundImage: `url(${bg})`,
-					filter: 'blur(16px)',
-					transform: 'translateY(4px)',
-				}}
-			/>
+			{!icon && (
+				<div
+					className='absolute hidden h-full w-full bg-cover opacity-30 md:block'
+					style={{
+						backgroundImage: `url(${bg})`,
+						filter: 'blur(16px)',
+						transform: 'translateY(4px)',
+					}}
+				/>
+			)}
 			{/* icon */}
 			<motion.div
 				className={cn(
@@ -124,15 +129,18 @@ export function DockItem({
 				style={{
 					width: iconSize,
 					height: iconSize,
-					backgroundImage: bg
-						? `url(${bg})`
-						: // TODO: use a better default
-							`linear-gradient(to bottom right, white, black)`,
+					backgroundImage: icon
+						? undefined
+						: bg
+							? `url(${bg})`
+							: // TODO: use a better default
+								`linear-gradient(to bottom right, white, black)`,
 					scale: transform,
 					...style,
 				}}
 				{...props}
 			>
+				{icon && <div className='pointer-events-none absolute inset-0'>{icon}</div>}
 				<Link
 					to={to || '/'}
 					aria-label={label}

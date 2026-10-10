@@ -82,6 +82,9 @@ PYQCOW
     # Shared folders (virtiofs) and data disks must work with the real libvirt
     # and virtiofsd of the OS being published.
     TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/machine-storage.vm.test.ts --reporter=verbose
+    # The dock edit mode in a real browser against the OS being published. Its
+    # screenshot joins the README screenshots artifact.
+    TITAN_VM_IMAGE="${RAW_IMAGE}" TITAN_SCREENSHOT_DIR="${TITAN_SCREENSHOT_DIR:-${RUNNER_TEMP:-/tmp}/titan-readme-screenshots}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/test-utilities/dock-edit.vm.test.ts --reporter=verbose
     TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/automatic-bridge.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/bridge-smoke.json"
     python3 - "${ARTIFACT_DIR}/image-verification.json" "${ARTIFACT_DIR}/bridge-smoke.json" <<'PY'
 import json, pathlib, sys

@@ -19,6 +19,7 @@ import type {Context} from '../server/trpc/context.js'
 import {privateProcedure, privateProcedureWithMembers, publicProcedure, router} from '../server/trpc/trpc.js'
 import {accountAvatarUrl, serializeAccountAvatar} from './avatar-api.js'
 import {OWNER_USER_ID} from './constants.js'
+import {dockConfigSchema} from './dock.js'
 import type {AccountLoginValidation} from './user.js'
 import {isWallpaperId, resolveWallpaperAppearance} from './wallpapers.js'
 
@@ -407,6 +408,7 @@ export default router({
 				language: member.language,
 				temperatureUnit: member.temperatureUnit,
 				desktopTransparency: member.desktopTransparency ?? 75,
+				dock: member.dock,
 			}
 		}
 
@@ -423,6 +425,7 @@ export default router({
 			language: user.language ?? 'de',
 			temperatureUnit: user.temperatureUnit,
 			desktopTransparency: user.desktopTransparency ?? 75,
+			dock: user.dock,
 		}
 	}),
 
@@ -435,6 +438,7 @@ export default router({
 					language: z.string().optional(),
 					temperatureUnit: z.string().optional(),
 					desktopTransparency: z.number().int().min(0).max(100).optional(),
+					dock: dockConfigSchema.optional(),
 				})
 				.strict(),
 		)
@@ -447,6 +451,7 @@ export default router({
 			if (input.desktopTransparency !== undefined) {
 				await ctx.user.setAccountDesktopTransparency(accountId, input.desktopTransparency)
 			}
+			if (input.dock !== undefined) await ctx.user.setAccountDock(accountId, input.dock)
 			return true
 		}),
 

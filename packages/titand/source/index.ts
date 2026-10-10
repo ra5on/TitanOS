@@ -25,6 +25,7 @@ import LanIngress from './modules/lan-ingress/lan-ingress.js'
 import Auth from './modules/auth/auth.js'
 import Mcp, {type McpStoreSettings} from './modules/mcp/mcp.js'
 import Photos, {type PhotoBackupSource, type PhotoBackupSourceRemoval} from './modules/photos/photos.js'
+import type {DockConfig} from './modules/user/dock.js'
 
 import type {CloudStore} from './modules/files/cloud-types.js'
 
@@ -68,6 +69,7 @@ type StoreSchema = {
 		language?: string
 		temperatureUnit?: string
 		desktopTransparency?: number
+		dock?: DockConfig
 	}
 	// Active members and permanent tombstones for deleted member ids. Member ids
 	// are security identities used by sessions, paths, and shares, so they must
