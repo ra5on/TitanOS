@@ -384,4 +384,27 @@ describe('libvirt domain XML', () => {
 		expect(xml.match(/<hostdev mode='subsystem' type='usb' managed='yes'>/g)).toHaveLength(2)
 		expect(xml).toContain("<video><model type='vga' primary='yes'>")
 	})
+	test('adds PCI devices, data disks and virtiofs folders with shared guest memory', () => {
+		const options = {
+			machineDirectory: '/data/machines/test',
+			runtimeDirectory: '/run/titan-machines/test',
+			acceleration: 'kvm' as const,
+			firmwareCode: '/usr/share/OVMF/OVMF_CODE_4M.fd',
+		}
+		const plain = buildDomainXml({...options, definition: definition()})
+		expect(plain).not.toContain('<memoryBacking>')
+		expect(plain).not.toContain('<filesystem')
+		const xml = buildDomainXml({
+			...options,
+			definition: definition(),
+			pciDevices: [{address: '0000:01:00.0'}, {address: '0000:01:00.1'}],
+			dataDisks: [{path: '/run/titan-machines/test/data-disk-abcd1234.qcow2', index: 2}],
+			sharedFolders: [{systemPath: '/home/titan/titan/home/Dokumente', tag: 'dokumente', readOnly: true}],
+		})
+		expect(xml).toContain("<memoryBacking><source type='memfd'/><access mode='shared'/></memoryBacking>")
+		expect(xml).toContain("<address domain='0x0000' bus='0x01' slot='0x00' function='0x1'/>")
+		expect(xml.match(/<hostdev mode='subsystem' type='pci' managed='yes'>/g)).toHaveLength(2)
+		expect(xml).toContain("<target dev='vdl' bus='virtio'/>")
+		expect(xml).toContain("<source dir='/home/titan/titan/home/Dokumente'/><target dir='dokumente'/><readonly/>")
+	})
 })

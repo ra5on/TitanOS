@@ -4,6 +4,14 @@ import {router, privateProcedure} from '../server/trpc/trpc.js'
 import {MACHINE_INPUT_ACTIONS, MAX_SCROLL_AMOUNT, MAX_TYPE_TEXT_LENGTH, MAX_WAIT_SECONDS} from './machine-control.js'
 import {machineIdSchema} from './machine-id.js'
 import {machineNetworkSchema} from './machine-network.js'
+import {
+	machineDataDiskSchema,
+	machinePciDeviceSchema,
+	machineSharedFolderSchema,
+	MAX_MACHINE_DATA_DISKS,
+	MAX_MACHINE_PCI_DEVICES,
+	MAX_MACHINE_SHARED_FOLDERS,
+} from './machine-devices.js'
 import {machineUsbDeviceSchema, MAX_MACHINE_USB_DEVICES} from './usb-passthrough.js'
 
 const windowsLicenseKey = z.string().regex(/^[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}$/i)
@@ -13,6 +21,7 @@ export default router({
 	capabilities: privateProcedure.query(async ({ctx}) => ctx.titand.machines.capabilities()),
 	networks: privateProcedure.query(async ({ctx}) => ctx.titand.machines.networks()),
 	usbDevices: privateProcedure.query(async ({ctx}) => ctx.titand.machines.usbDevices()),
+	pciDevices: privateProcedure.query(async ({ctx}) => ctx.titand.machines.pciDevices()),
 	prepareBridge: privateProcedure.mutation(async ({ctx}) =>
 		ctx.titand.machines.prepareBridge(ctx.principal!.sessionId),
 	),
@@ -100,6 +109,9 @@ export default router({
 				autostart: z.boolean().optional(),
 				videoModel: z.enum(['virtio', 'vga']).optional(),
 				usbDevices: z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).optional(),
+				pciDevices: z.array(machinePciDeviceSchema).max(MAX_MACHINE_PCI_DEVICES).optional(),
+				sharedFolders: z.array(machineSharedFolderSchema).max(MAX_MACHINE_SHARED_FOLDERS).optional(),
+				dataDisks: z.array(machineDataDiskSchema).max(MAX_MACHINE_DATA_DISKS).optional(),
 				network: machineNetworkSchema.optional(),
 				portForwards: z
 					.array(

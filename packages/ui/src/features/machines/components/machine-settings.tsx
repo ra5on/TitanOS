@@ -20,6 +20,16 @@ import {Input} from '@/components/ui/input'
 import {Spinner} from '@/components/ui/loading'
 import {Switch} from '@/components/ui/switch'
 import {toast} from '@/components/ui/toast'
+import {
+	DataDisksSection,
+	dataDiskSizeValid,
+	PciDevicesSection,
+	SharedFoldersSection,
+	sharedFolderTagValid,
+	type DataDisk,
+	type PciDevice,
+	type SharedFolder,
+} from '@/features/machines/components/machine-device-settings'
 import {MachineNetworkField} from '@/features/machines/components/network-field'
 import {OsIcon} from '@/features/machines/components/os-icon'
 import {SpecRow, Stepper} from '@/features/machines/components/spec-form'
@@ -92,6 +102,9 @@ export default function MachineSettings() {
 	const [diskBusChoice, setDiskBusChoice] = useState<'virtio' | 'sata' | null>(null)
 	const [videoChoice, setVideoChoice] = useState<'virtio' | 'vga' | null>(null)
 	const [usbChoice, setUsbChoice] = useState<UsbDevice[] | null>(null)
+	const [pciChoice, setPciChoice] = useState<PciDevice[] | null>(null)
+	const [foldersChoice, setFoldersChoice] = useState<SharedFolder[] | null>(null)
+	const [disksChoice, setDisksChoice] = useState<DataDisk[] | null>(null)
 	const [networkChoice, setNetworkChoice] = useState<MachineNetwork | null>(null)
 	const [forwardsChoice, setForwardsChoice] = useState<Machine['portForwards'] | null>(null)
 	const [isSaving, setIsSaving] = useState(false)
@@ -119,6 +132,25 @@ export default function MachineSettings() {
 	const usbDevices = usbChoice ?? machine.usbDevices ?? []
 	const usbChanged =
 		JSON.stringify(usbDevices.map(usbKey).sort()) !== JSON.stringify((machine.usbDevices ?? []).map(usbKey).sort())
+	// PCI devices, shared folders and data disks are fixed while the machine runs
+	const savedPciDevices = machine.pciDevices ?? []
+	const savedSharedFolders = machine.sharedFolders ?? []
+	const savedDataDisks = machine.dataDisks ?? []
+	const pciDevices = pciChoice ?? savedPciDevices
+	const sharedFolders = foldersChoice ?? savedSharedFolders
+	const dataDisks = disksChoice ?? savedDataDisks
+	const pciChanged =
+		JSON.stringify(pciDevices.map((device) => device.address).sort()) !==
+		JSON.stringify(savedPciDevices.map((device) => device.address).sort())
+	const foldersChanged = JSON.stringify(sharedFolders) !== JSON.stringify(savedSharedFolders)
+	const disksChanged = JSON.stringify(dataDisks) !== JSON.stringify(savedDataDisks)
+	const devicesValid =
+		sharedFolders.every(
+			(folder) =>
+				sharedFolderTagValid(folder.tag) && sharedFolders.filter((other) => other.tag === folder.tag).length === 1,
+		) && dataDisks.every((disk) => dataDiskSizeValid(disk, savedDataDisks))
+	const devicesEditable = machine.state === 'stopped'
+	const supportsStorageDevices = !['legacy-x86', 'windows-7-x86', 'windows-98-x86'].includes(machine.platformProfile)
 	// Every plugged-in device, plus assigned ones that are currently unplugged
 	const usbRows = [
 		...hostUsbDevices.map((usbDevice) => ({
@@ -197,10 +229,14 @@ export default function MachineSettings() {
 				diskBus !== (machine.diskBus ?? 'virtio') ||
 				videoModel !== (machine.videoModel ?? 'virtio'))) ||
 		usbChanged ||
+		pciChanged ||
+		foldersChanged ||
+		disksChanged ||
 		JSON.stringify(portForwards) !== JSON.stringify(machine.portForwards) ||
 		networkChanged
 
-	const canSave = dirty && !disabled && !nameEmpty && !nameTaken && diskValid && forwardsValid && networkValid
+	const canSave =
+		dirty && !disabled && !nameEmpty && !nameTaken && diskValid && forwardsValid && networkValid && devicesValid
 
 	const handleDiskChange = (raw: string) => {
 		const digits = raw.replace(/[^0-9]/g, '')
@@ -226,6 +262,9 @@ export default function MachineSettings() {
 				diskSizeGb: Math.round(diskValue),
 				...(machine.osId === 'custom' ? {firmware, diskBus, videoModel} : {}),
 				...(usbChanged ? {usbDevices: usbDevices.map(toUsbDevice)} : {}),
+				...(pciChanged ? {pciDevices} : {}),
+				...(foldersChanged ? {sharedFolders} : {}),
+				...(disksChanged ? {dataDisks} : {}),
 				portForwards,
 				...(networkChanged ? {network} : {}),
 			})
@@ -508,6 +547,32 @@ export default function MachineSettings() {
 								</div>
 							)}
 						</div>
+
+						{!devicesEditable && (
+							<p className='pt-5 text-12 leading-snug -tracking-2 text-white/40'>{t('machines.devices-stop-note')}</p>
+						)}
+						{supportsStorageDevices && (
+							<>
+								<SharedFoldersSection
+									value={sharedFolders}
+									onChange={setFoldersChoice}
+									disabled={disabled || !devicesEditable}
+								/>
+								<DataDisksSection
+									value={dataDisks}
+									saved={savedDataDisks}
+									onChange={setDisksChoice}
+									disabled={disabled || !devicesEditable}
+								/>
+							</>
+						)}
+						<PciDevicesSection
+							machine={machine}
+							machines={machines}
+							value={pciDevices}
+							onChange={setPciChoice}
+							disabled={disabled || !devicesEditable}
+						/>
 
 						{/* Port forwards: the last row of the spec sheet, full-width. The
 						    copy leads with the why (machines live on a private network),

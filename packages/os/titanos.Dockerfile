@@ -370,6 +370,8 @@ RUN apt-get install --yes --no-install-recommends \
     qemu-system-modules-opengl \
     qemu-utils \
     bubblewrap \
+    virtiofsd \
+    pciutils \
     libegl1 \
     ovmf \
     qemu-efi-aarch64 \

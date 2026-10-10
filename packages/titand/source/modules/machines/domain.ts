@@ -24,7 +24,23 @@ export type FirstBootSetup = {
 
 export type MachineInstallSource = {osId: string; imagePath?: never} | {osId?: never; imagePath: string}
 
+import {
+	dataDiskXml,
+	pciHostdevXml,
+	SHARED_FOLDER_MEMORY_BACKING,
+	sharedFolderXml,
+	type MachineDataDisk,
+	type MachinePciDevice,
+	type MachineSharedFolder,
+} from './machine-devices.js'
 import {usbHostdevXml, type MachineUsbDevice, type UsbAddress} from './usb-passthrough.js'
+
+// Devices resolved to host runtime paths for one start of a machine
+export type MachineRuntimeStorage = {
+	sharedFolders: {systemPath: string; tag: string; readOnly?: boolean}[]
+	// index is the disk's position in the definition and fixes its guest target
+	dataDisks: {id: string; systemPath: string; index: number}[]
+}
 
 export type MachineDefinition = {
 	version: 1
@@ -69,6 +85,12 @@ export type MachineDefinition = {
 	portForwards: PortForward[]
 	// Host USB devices handed to this machine while they are plugged in
 	usbDevices?: MachineUsbDevice[]
+	// Host PCI devices (GPU, NPU, ...) owned by this machine while it runs
+	pciDevices?: MachinePciDevice[]
+	// Folders from Files mounted live inside the guest
+	sharedFolders?: MachineSharedFolder[]
+	// Additional virtual disks stored in folders chosen in Files
+	dataDisks?: MachineDataDisk[]
 	// Custom images can swap the paravirtual display for standard VGA when the
 	// guest has no virtio GPU driver and its console would stay blank.
 	videoModel?: 'virtio' | 'vga'
@@ -145,6 +167,9 @@ export function buildDomainXml({
 	graphicsRenderNode,
 	audioPlaybackDevice,
 	usbAddresses = [],
+	pciDevices = [],
+	sharedFolders = [],
+	dataDisks = [],
 }: {
 	definition: MachineDefinition
 	machineDirectory: string
@@ -155,6 +180,10 @@ export function buildDomainXml({
 	graphicsRenderNode?: string
 	audioPlaybackDevice?: string
 	usbAddresses?: UsbAddress[]
+	pciDevices?: Pick<MachinePciDevice, 'address'>[]
+	sharedFolders?: MachineRuntimeStorage['sharedFolders']
+	// Runtime image path and definition index of every attached data disk
+	dataDisks?: {path: string; index: number}[]
 }) {
 	const network = definition.network ?? {mode: 'nat'}
 	if (network.mode !== 'bridge' && !definition.ipAddress) throw new Error('[machine-ip-address-invalid]')
@@ -252,6 +281,7 @@ export function buildDomainXml({
   <name>titan-machine-${escapeXml(definition.id)}</name>
   <uuid>${escapeXml(definition.uuid)}</uuid>
   <memory unit='MiB'>${definition.memoryMb}</memory>
+  ${sharedFolders.length ? SHARED_FOLDER_MEMORY_BACKING : ''}
   <currentMemory unit='MiB'>${definition.memoryMb}</currentMemory>
   <vcpu placement='static'>${definition.cores}</vcpu>
   <os>
@@ -293,6 +323,9 @@ export function buildDomainXml({
     <memballoon model='virtio' freePageReporting='on'/>
     ${tpm}
     ${usbAddresses.map(usbHostdevXml).join('')}
+    ${pciDevices.map(pciHostdevXml).join('')}
+    ${dataDisks.map(({path, index}) => dataDiskXml(path, index)).join('')}
+    ${sharedFolders.map((folder) => sharedFolderXml(folder.systemPath, folder)).join('')}
   </devices>
   ${qemuCommandline}
 </domain>

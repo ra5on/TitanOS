@@ -79,6 +79,9 @@ data = json.loads(path.read_text())
 data['customQcow2Smoke'] = {'status': 'passed', 'passedTests': 3, 'checks': ['authenticated import and independent disk', 'host reboot and source preservation', 'host backing file rejection']}
 path.write_text(json.dumps(data, indent=2) + '\n')
 PYQCOW
+    # Shared folders (virtiofs) and data disks must work with the real libvirt
+    # and virtiofsd of the OS being published.
+    TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/machine-storage.vm.test.ts --reporter=verbose
     TITAN_VM_IMAGE="${RAW_IMAGE}" npm --prefix "${TASK_ROOT}/packages/titand" run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/automatic-bridge.vm.test.ts --reporter=verbose --reporter=json --outputFile="${ARTIFACT_DIR}/bridge-smoke.json"
     python3 - "${ARTIFACT_DIR}/image-verification.json" "${ARTIFACT_DIR}/bridge-smoke.json" <<'PY'
 import json, pathlib, sys

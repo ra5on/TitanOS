@@ -111,6 +111,18 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-image-download-failed')
 		case 'machine-image-download-http-error':
 			return t('machines-error.machine-image-download-http-error')
+		case 'machine-devices-require-stopped':
+			return t('machines-error.machine-devices-require-stopped')
+		case 'machine-pci-device-invalid':
+			return t('machines-error.machine-pci-device-invalid')
+		case 'machine-pci-device-in-use':
+			return t('machines-error.machine-pci-device-in-use')
+		case 'machine-pci-device-unavailable':
+			return t('machines-error.machine-pci-device-unavailable')
+		case 'machine-shared-folder-invalid':
+			return t('machines-error.machine-shared-folder-invalid')
+		case 'machine-data-disk-invalid':
+			return t('machines-error.machine-data-disk-invalid')
 		case 'machine-usb-device-in-use':
 			return t('machines-error.machine-usb-device-in-use')
 		case 'machine-usb-device-invalid':

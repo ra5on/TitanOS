@@ -27,6 +27,7 @@ import {
 	type MachineArchitecture,
 	type MachineDefinition,
 	type MachineNetwork,
+	type MachineRuntimeStorage,
 	type PlatformProfile,
 	type PortForward,
 } from './domain.js'
@@ -39,6 +40,21 @@ import {
 	nextMachineIpAddress,
 } from './machine-network.js'
 import MachineStore from './machine-store.js'
+import {
+	dataDiskFileName,
+	listHostPciDevices,
+	machineDataDiskSchema,
+	machinePciDeviceSchema,
+	machineSharedFolderSchema,
+	MAX_MACHINE_DATA_DISKS,
+	MAX_MACHINE_PCI_DEVICES,
+	MAX_MACHINE_SHARED_FOLDERS,
+	parseLspciNames,
+	resolvePciDevices,
+	type MachineDataDisk,
+	type MachinePciDevice,
+	type MachineSharedFolder,
+} from './machine-devices.js'
 import {
 	listHostUsbDevices,
 	machineUsbDeviceSchema,
@@ -132,6 +148,9 @@ export type Machine = {
 	diskBus?: 'virtio' | 'sata'
 	videoModel?: 'virtio' | 'vga'
 	usbDevices?: MachineUsbDevice[]
+	pciDevices?: MachinePciDevice[]
+	sharedFolders?: MachineSharedFolder[]
+	dataDisks?: MachineDataDisk[]
 	diskPath?: string
 	acceleration: 'kvm' | 'tcg'
 	performanceWarning?: string
@@ -1626,6 +1645,64 @@ export default class Machines {
 			.catch(() => false)
 	}
 
+	async #storageDirectoryExists(virtualPath: string) {
+		try {
+			const systemPath = await this.#titand.files.virtualToSystemPath(virtualPath, OWNER_USER_ID)
+			return (await fse.stat(systemPath)).isDirectory()
+		} catch {
+			return false
+		}
+	}
+
+	async #dataDiskSystemPath(id: string, disk: Pick<MachineDataDisk, 'id' | 'directory'>) {
+		const directory = await this.#titand.files.virtualToSystemPath(disk.directory, OWNER_USER_ID)
+		return nodePath.join(directory, dataDiskFileName(id, disk))
+	}
+
+	// Shared folders and data disks as host paths for one start. A folder or
+	// disk on a drive that is currently unplugged is left out so the machine
+	// still boots; it is back on the next start.
+	async #runtimeStorage(definition: MachineDefinition): Promise<MachineRuntimeStorage> {
+		const storage: MachineRuntimeStorage = {sharedFolders: [], dataDisks: []}
+		for (const folder of definition.sharedFolders ?? []) {
+			if (!(await this.#storageDirectoryExists(folder.path))) {
+				this.logger.error(`Shared folder '${folder.path}' of ${definition.id} is unavailable; starting without it`)
+				continue
+			}
+			const systemPath = await this.#titand.files.virtualToSystemPath(folder.path, OWNER_USER_ID)
+			storage.sharedFolders.push({systemPath, tag: folder.tag, readOnly: folder.readOnly})
+		}
+		for (const [index, disk] of (definition.dataDisks ?? []).entries()) {
+			const systemPath = await this.#dataDiskSystemPath(definition.id, disk).catch(() => undefined)
+			if (!systemPath || !(await fse.pathExists(systemPath))) {
+				this.logger.error(`Data disk ${disk.id} of ${definition.id} is unavailable; starting without it`)
+				continue
+			}
+			storage.dataDisks.push({id: disk.id, systemPath, index})
+		}
+		return storage
+	}
+
+	// PCI devices of the host with the machine each one is assigned to
+	async pciDevices() {
+		const [lspci, definitions] = await Promise.all([
+			execa('lspci', ['-D', '-mm', '-nn'], {reject: false, timeout: 10_000}),
+			this.#store.list(),
+		])
+		const present = await listHostPciDevices({names: parseLspciNames(lspci.stdout ?? '')})
+		return {
+			// Without an IOMMU (VT-d / AMD-Vi enabled in the firmware) nothing can be passed through
+			iommuAvailable: present.some((pciDevice) => pciDevice.iommuGroup !== undefined),
+			supported: this.#libvirt.kvmAvailable,
+			devices: present.map((pciDevice) => ({
+				...pciDevice,
+				machineId: definitions.find((definition) =>
+					(definition.pciDevices ?? []).some((assigned) => assigned.address === pciDevice.address),
+				)?.id,
+			})),
+		}
+	}
+
 	// USB devices plugged into the host, with the machine each one is assigned to
 	async usbDevices() {
 		const [present, definitions] = await Promise.all([listHostUsbDevices(), this.#store.list()])
@@ -2471,7 +2548,12 @@ export default class Machines {
 				// daemons can forget it while the last VM is stopped, so reconstruct it
 				// before every manual start instead of assuming startup state survived.
 				await this.#reconcileCurrentNetwork()
-				await this.#libvirt.start(definition, this.#store.directory(id), await this.#diskSystemPath(definition))
+				await this.#libvirt.start(
+					definition,
+					this.#store.directory(id),
+					await this.#diskSystemPath(definition),
+					await this.#runtimeStorage(definition),
+				)
 				definition.autostart = true
 				await this.#store.write(definition)
 			} catch (error) {
@@ -2562,6 +2644,9 @@ export default class Machines {
 			const externalDisk = definition.diskPath
 				? await this.#diskSystemPath(definition).catch(() => undefined)
 				: undefined
+			const dataDisks = await Promise.all(
+				(definition.dataDisks ?? []).map((disk) => this.#dataDiskSystemPath(id, disk).catch(() => undefined)),
+			)
 			if ((await this.#libvirt.state(id)) !== 'stopped') await this.#libvirt.stop(id, {force: true})
 			this.#operations.delete(id)
 			this.#errors.delete(id)
@@ -2575,6 +2660,7 @@ export default class Machines {
 				.removeMachineGrant(id)
 				.catch((error) => this.logger.error(`Failed to remove MCP grant for machine ${id}`, error))
 			if (externalDisk) await fse.remove(externalDisk)
+			for (const dataDisk of dataDisks) if (dataDisk) await fse.remove(dataDisk)
 			await this.#libvirt.cleanupRuntime(id)
 			await this.#reconcileCurrentNetwork()
 			await this.#emitMachines()
@@ -2633,6 +2719,9 @@ export default class Machines {
 			portForwards?: PortForward[]
 			videoModel?: 'virtio' | 'vga'
 			usbDevices?: MachineUsbDevice[]
+			pciDevices?: MachinePciDevice[]
+			sharedFolders?: MachineSharedFolder[]
+			dataDisks?: MachineDataDisk[]
 		},
 	) {
 		return this.#withMachineLock(id, async () => {
@@ -2657,6 +2746,74 @@ export default class Machines {
 				if (settings.network.mode !== 'nat') await this.#validateNetwork(settings.network)
 			}
 			if (settings.name !== undefined) await this.#assertUniqueName(settings.name, id)
+			if (
+				(settings.pciDevices !== undefined || settings.sharedFolders !== undefined || settings.dataDisks !== undefined) &&
+				(this.#operations.has(id) || (await this.#libvirt.state(id)) !== 'stopped')
+			) {
+				throw new Error('[machine-devices-require-stopped]')
+			}
+			if (settings.pciDevices !== undefined) {
+				const pciDevices = z.array(machinePciDeviceSchema).max(MAX_MACHINE_PCI_DEVICES).safeParse(settings.pciDevices)
+				if (!pciDevices.success) throw new Error('[machine-pci-device-invalid]')
+				if (pciDevices.data.length > 0) {
+					// VFIO hands the real device to a KVM guest of the host's architecture
+					if (definition.arch !== hostArchitecture() || !this.#libvirt.kvmAvailable) {
+						throw new Error('[machine-pci-device-unavailable]')
+					}
+					if ('error' in resolvePciDevices(pciDevices.data, await listHostPciDevices())) {
+						throw new Error('[machine-pci-device-invalid]')
+					}
+					const others = (await this.#store.list()).filter((machine) => machine.id !== id)
+					if (
+						pciDevices.data.some((pciDevice) =>
+							others.some((machine) => (machine.pciDevices ?? []).some((assigned) => assigned.address === pciDevice.address)),
+						)
+					) {
+						throw new Error('[machine-pci-device-in-use]')
+					}
+				}
+				settings.pciDevices = pciDevices.data
+			}
+			if (settings.sharedFolders !== undefined) {
+				const sharedFolders = z
+					.array(machineSharedFolderSchema)
+					.max(MAX_MACHINE_SHARED_FOLDERS)
+					.safeParse(settings.sharedFolders)
+				if (
+					!sharedFolders.success ||
+					sharedFolders.data.some((folder, index) => sharedFolders.data.findIndex((other) => other.tag === folder.tag) !== index) ||
+					(sharedFolders.data.length > 0 && isLegacyPlatformProfile(definition.platformProfile))
+				) {
+					throw new Error('[machine-shared-folder-invalid]')
+				}
+				for (const folder of sharedFolders.data) {
+					if (!(await this.#storageDirectoryExists(folder.path))) throw new Error('[machine-shared-folder-invalid]')
+				}
+				settings.sharedFolders = sharedFolders.data
+			}
+			if (settings.dataDisks !== undefined) {
+				const dataDisks = z.array(machineDataDiskSchema).max(MAX_MACHINE_DATA_DISKS).safeParse(settings.dataDisks)
+				if (
+					!dataDisks.success ||
+					dataDisks.data.some((disk, index) => dataDisks.data.findIndex((other) => other.id === disk.id) !== index) ||
+					(dataDisks.data.length > 0 && isLegacyPlatformProfile(definition.platformProfile))
+				) {
+					throw new Error('[machine-data-disk-invalid]')
+				}
+				for (const disk of dataDisks.data) {
+					const existing = (definition.dataDisks ?? []).find((other) => other.id === disk.id)
+					if (existing) {
+						if (existing.directory !== disk.directory) throw new Error('[machine-data-disk-invalid]')
+						if (disk.sizeGb < existing.sizeGb) throw new Error('[machine-disk-shrink-not-allowed]')
+					} else if (
+						!(await this.#storageDirectoryExists(disk.directory)) ||
+						(await fse.pathExists(await this.#dataDiskSystemPath(id, disk)))
+					) {
+						throw new Error('[machine-data-disk-invalid]')
+					}
+				}
+				settings.dataDisks = dataDisks.data
+			}
 			if (settings.usbDevices !== undefined) {
 				const usbDevices = z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).safeParse(settings.usbDevices)
 				if (
@@ -2733,6 +2890,34 @@ export default class Machines {
 					if (settings.diskSizeGb !== undefined) definition.diskSizeGb = settings.diskSizeGb
 					if (settings.autostart !== undefined) definition.autostart = settings.autostart
 					if (settings.videoModel !== undefined) definition.videoModel = settings.videoModel
+					if (settings.pciDevices !== undefined) {
+						if (settings.pciDevices.length) definition.pciDevices = settings.pciDevices
+						else delete definition.pciDevices
+					}
+					if (settings.sharedFolders !== undefined) {
+						if (settings.sharedFolders.length) definition.sharedFolders = settings.sharedFolders
+						else delete definition.sharedFolders
+					}
+					if (settings.dataDisks !== undefined) {
+						const previous = definition.dataDisks ?? []
+						for (const disk of settings.dataDisks) {
+							const existing = previous.find((other) => other.id === disk.id)
+							const path = await this.#dataDiskSystemPath(id, disk)
+							if (!existing) await this.#libvirt.createDataDisk(path, disk.sizeGb)
+							else if (disk.sizeGb > existing.sizeGb) await this.#libvirt.resizeDataDisk(path, disk.sizeGb)
+						}
+						if (settings.dataDisks.length) definition.dataDisks = settings.dataDisks
+						else delete definition.dataDisks
+						await this.#store.write(definition)
+						// Removing a data disk deletes its image. Only after the definition
+						// no longer references it, so a failure never leaves a dangling disk.
+						for (const disk of previous) {
+							if (settings.dataDisks.some((other) => other.id === disk.id)) continue
+							await fse
+								.remove(await this.#dataDiskSystemPath(id, disk))
+								.catch((error) => this.logger.error(`Failed removing data disk ${disk.id} of ${id}`, error))
+						}
+					}
 					if (settings.usbDevices !== undefined) {
 						if (settings.usbDevices.length) definition.usbDevices = settings.usbDevices
 						else delete definition.usbDevices

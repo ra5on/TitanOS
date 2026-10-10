@@ -10,6 +10,7 @@ import pWaitFor from 'p-wait-for'
 
 import type Titand from '../../index.js'
 import {convertCustomQcow2} from './custom-qcow2.js'
+import {isDataDiskTarget, listHostPciDevices, resolvePciDevices} from './machine-devices.js'
 import {
 	listHostUsbDevices,
 	parseAttachedUsbAddresses,
@@ -24,6 +25,7 @@ import {
 	type MachineArchitecture,
 	type MachineDefinition,
 	type MachineNetwork,
+	type MachineRuntimeStorage,
 	resolveAcceleration,
 } from './domain.js'
 import {
@@ -718,6 +720,17 @@ export default class Libvirt {
 		await this.#unmount(this.#externalDiskMount(id))
 	}
 
+	#dataDiskMount(id: string, diskId: string) {
+		return nodePath.join(this.runtimeDirectory(id), `data-disk-${diskId}.qcow2`)
+	}
+
+	async #unmountDataDisks(id: string) {
+		const entries = await fsp.readdir(this.runtimeDirectory(id)).catch(() => [] as string[])
+		for (const entry of entries) {
+			if (/^data-disk-[a-z0-9]{8}\.qcow2$/.test(entry)) await this.#unmount(nodePath.join(this.runtimeDirectory(id), entry))
+		}
+	}
+
 	#tpmMountMarker(id: string) {
 		return nodePath.join(this.runtimeDirectory(id), 'tpm-uuid')
 	}
@@ -742,6 +755,7 @@ export default class Libvirt {
 		await this.#releaseAudio(id)
 		await this.#unmountTpm(id)
 		await this.#unmountExternalDisk(id)
+		await this.#unmountDataDisks(id)
 		await this.#unmountStorage(id)
 		await fse.remove(this.runtimeDirectory(id))
 	}
@@ -792,7 +806,12 @@ export default class Libvirt {
 		await execa('mount', ['--bind', persistent, runtime])
 	}
 
-	async start(definition: MachineDefinition, machineDirectory: string, diskPath: string) {
+	async start(
+		definition: MachineDefinition,
+		machineDirectory: string,
+		diskPath: string,
+		storage: MachineRuntimeStorage = {sharedFolders: [], dataDisks: []},
+	) {
 		if (!this.available) throw new Error('[virtualization-unavailable]')
 		await this.validateNetwork(definition.network ?? {mode: 'nat'})
 		if ((await this.state(definition.id)) !== 'stopped') throw new Error('[machine-not-stopped]')
@@ -817,6 +836,17 @@ export default class Libvirt {
 			await execa('chmod', ['0660', diskPath], {reject: false})
 			await execa('mount', ['--bind', diskPath, runtimeDiskPath])
 		}
+		// Data disks live in folders chosen in Files. Like an external system disk
+		// they reach QEMU through a bind mount owned by the runtime directory.
+		const dataDisks: {path: string; index: number}[] = []
+		for (const disk of storage.dataDisks) {
+			const path = this.#dataDiskMount(definition.id, disk.id)
+			await fsp.writeFile(path, '', {mode: 0o660})
+			await execa('chown', ['libvirt-qemu:libvirt-qemu', disk.systemPath], {reject: false})
+			await execa('chmod', ['0660', disk.systemPath], {reject: false})
+			await execa('mount', ['--bind', disk.systemPath, path])
+			dataDisks.push({path, index: disk.index})
+		}
 
 		try {
 			if (definition.tpm) await this.#mountTpm(definition, machineDirectory)
@@ -824,6 +854,13 @@ export default class Libvirt {
 			const acceleration = resolveAcceleration(definition.arch, this.kvmAvailable)
 			// Bus and device numbers are host runtime state: look them up for every start
 			let usbAddresses = resolveUsbAddresses(definition.usbDevices ?? [], await listHostUsbDevices())
+			// A machine built around a GPU must not silently boot without it
+			const pciDevices = definition.pciDevices?.length
+				? resolvePciDevices(definition.pciDevices, await listHostPciDevices())
+				: {devices: []}
+			if ('error' in pciDevices || (pciDevices.devices.length > 0 && acceleration !== 'kvm')) {
+				throw new Error('[machine-pci-device-unavailable]')
+			}
 			// Render nodes are host runtime state, not part of the portable machine
 			// definition. Discover one for every start so a restored machine can move
 			// freely between GPU-equipped and headless Titan hardware.
@@ -842,6 +879,9 @@ export default class Libvirt {
 					graphicsRenderNode: renderNode,
 					audioPlaybackDevice: audio?.playback,
 					usbAddresses,
+					pciDevices: pciDevices.devices,
+					sharedFolders: storage.sharedFolders,
+					dataDisks,
 				})
 				await fsp.writeFile(xmlPath, xml, {encoding: 'utf8', mode: 0o600})
 				// A rapid destroy/create can briefly race systemd removing libvirt's old
@@ -877,8 +917,10 @@ export default class Libvirt {
 			await fsp.writeFile(nodePath.join(runtimeDirectory, 'start-error.log'), message)
 			await this.#unmountTpm(definition.id)
 			await this.#unmountExternalDisk(definition.id)
+			await this.#unmountDataDisks(definition.id)
 			await this.#unmountStorage(definition.id)
 			await this.#releaseAudio(definition.id)
+			if (message.startsWith('[machine-pci-device-unavailable]')) throw new Error(message)
 			throw new Error(`[machine-start-failed] ${message}`)
 		}
 	}
@@ -1156,6 +1198,28 @@ export default class Libvirt {
 		})
 	}
 
+	// Data disks hold user data outside the machine directory and are not part
+	// of a machine backup: without an explicit opt-out libvirt would snapshot
+	// every disk of the domain.
+	async #attachedDataDiskTargets(id: string) {
+		const result = await execa('virsh', ['--connect', LIBVIRT_URI, 'domblklist', this.domainName(id)], {
+			reject: false,
+			timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS,
+		})
+		return result.stdout
+			.split('\n')
+			.map((line) => line.trim().split(/\s+/)[0])
+			.filter(isDataDiskTarget)
+	}
+
+	async createDataDisk(path: string, sizeGb: number) {
+		await execa('qemu-img', ['create', '-f', 'qcow2', path, `${sizeGb}G`], {timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS})
+	}
+
+	async resizeDataDisk(path: string, sizeGb: number) {
+		await execa('qemu-img', ['resize', '-f', 'qcow2', path, `${sizeGb}G`], {timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS})
+	}
+
 	async pivotToBackupOverlay(definition: MachineDefinition, overlay: string) {
 		const target = machineDiskTarget(definition)
 		const runtimeOverlay = nodePath.join(this.storageDirectory(definition.id), 'operations', nodePath.basename(overlay))
@@ -1172,6 +1236,10 @@ export default class Libvirt {
 				'--atomic',
 				'--diskspec',
 				`${target},snapshot=external,file=${runtimeOverlay},driver=qcow2`,
+				...(await this.#attachedDataDiskTargets(definition.id)).flatMap((dataDisk) => [
+					'--diskspec',
+					`${dataDisk},snapshot=no`,
+				]),
 			],
 			{timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS},
 		)
