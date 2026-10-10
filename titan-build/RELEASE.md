@@ -1,6 +1,16 @@
-# TitanOS 2.0.7 · Stable
+# TitanOS 2.0.8 · Stable
 
-## Neu in 2.0.7
+## Neu in 2.0.8: QCOW2-Import hochgeladener Abbilder
+
+Über die Oberfläche hochgeladene QCOW2-Abbilder (zum Beispiel Home Assistant
+OS) lassen sich jetzt importieren. Bisher brach der Import mit „Das
+QCOW2-Abbild konnte nicht gelesen oder umgewandelt werden“ ab: Die private
+Arbeitskopie übernahm den Besitzer der hochgeladenen Datei und war für die
+abgeschottete Umwandlung nicht lesbar. Die Quelldatei und ihre Rechte bleiben
+unverändert. Die Prüfung vor jeder Veröffentlichung importiert nun ein Abbild,
+das wie ein echter Upload dem Dateibesitzer gehört.
+
+## Aus 2.0.7
 
 - **Deutsche Ordnernamen:** Jeder persönliche Ordner enthält jetzt
   **Dokumente**, **Downloads**, **Fotos** und **Videos** – auch bei neuen
@@ -52,7 +62,7 @@ des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
 vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
 VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
 kompatiblen älteren Installation wird es nach dem ersten erfolgreich
-bestätigten Start von 2.0.7 eingerichtet.
+bestätigten Start von 2.0.8 eingerichtet.
 
 Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
 VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
@@ -82,8 +92,8 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.7.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.7.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
+- `titan-2.0.8.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.8.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 - `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.
