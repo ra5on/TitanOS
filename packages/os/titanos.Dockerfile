@@ -144,7 +144,8 @@ RUN set -e; \
 #
 # The driver comes from NVIDIA's signed Debian 13 repository, pinned to one
 # release: its key is checked against a known hash, every package of that
-# release outranks Debian's 550, and the repository is removed again so later
+# release is pinned by name (apt rejects a version pin for "*") and outranks
+# Debian's 550, and the repository is removed again so later
 # steps and the installed system only see the Debian snapshot. NVIDIA keeps
 # nvidia-smi in nvidia-driver-cuda and the nouveau blacklist in
 # nvidia-kernel-support.
@@ -156,9 +157,16 @@ RUN set -e; \
         echo "${NVIDIA_REPOSITORY_KEY_SHA256}  /usr/share/keyrings/nvidia-cuda.asc" | sha256sum -c -; \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-cuda.asc] ${nvidia_repository}/ /" \
             > /etc/apt/sources.list.d/nvidia-cuda.list; \
-        printf 'Package: *\nPin: version %s\nPin-Priority: 1001\n\nPackage: *\nPin: origin developer.download.nvidia.com\nPin-Priority: 600\n' \
-            "${NVIDIA_DRIVER_VERSION}" > /etc/apt/preferences.d/nvidia-cuda; \
         apt-get update; \
+        /usr/lib/apt/apt-helper cat-file /var/lib/apt/lists/developer.download.nvidia.com_*Packages* \
+            | awk -v version="${NVIDIA_DRIVER_VERSION}" '/^Package: /{name=$2} /^Version: /{if ($2 == version) print name}' \
+            | sort -u \
+            | while read -r package; do \
+                printf 'Package: %s\nPin: version %s\nPin-Priority: 1001\n\n' "${package}" "${NVIDIA_DRIVER_VERSION}"; \
+            done > /etc/apt/preferences.d/nvidia-cuda; \
+        grep -q '^Package: nvidia-kernel-open-dkms$' /etc/apt/preferences.d/nvidia-cuda; \
+        printf 'Package: *\nPin: origin developer.download.nvidia.com\nPin-Priority: 600\n' \
+            >> /etc/apt/preferences.d/nvidia-cuda; \
         apt-get install --yes --no-install-recommends \
             nvidia-kernel-open-dkms \
             nvidia-kernel-support \
