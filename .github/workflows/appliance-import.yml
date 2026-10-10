@@ -1,0 +1,70 @@
+name: Appliance QCOW2 import
+
+# Reproduces a real-world QCOW2 import (Home Assistant OS) on a published
+# TitanOS image in a disposable VM and prints the daemon log on failure.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published TitanOS version (default is .titan/release.json)
+        required: false
+      haos:
+        description: Home Assistant OS release to import
+        required: false
+        default: '18.3'
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    if: github.repository == 'ra5on/TitanOS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install VM tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils openssl
+          if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
+      - name: Download and verify the published image
+        env:
+          TASK_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          task_version="${TASK_VERSION:-$(jq -r .version .titan/release.json)}"
+          [[ "$task_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          task_base="https://github.com/ra5on/TitanOS/releases/download/v${task_version}"
+          mkdir -p "$RUNNER_TEMP/titan-image"
+          cd "$RUNNER_TEMP/titan-image"
+          curl --fail --silent --show-error --location --remote-name-all \
+            "$task_base/titan-${task_version}.img.xz" "$task_base/SHA256SUMS" "$task_base/SHA256SUMS.sig"
+          openssl pkeyutl -verify -rawin -pubin -inkey "$GITHUB_WORKSPACE/.titan/release-public.pem" \
+            -in SHA256SUMS -sigfile SHA256SUMS.sig
+          grep "  titan-${task_version}\.img\.xz\$" SHA256SUMS | sha256sum --check
+          xz --decompress "titan-${task_version}.img.xz"
+          echo "TITAN_VM_IMAGE=$PWD/titan-${task_version}.img" >> "$GITHUB_ENV"
+      - name: Download the appliance disk
+        env:
+          TASK_HAOS: ${{ inputs.haos }}
+        run: |
+          set -euo pipefail
+          [[ "$TASK_HAOS" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --output appliance.qcow2.xz \
+            "https://github.com/home-assistant/operating-system/releases/download/${TASK_HAOS}/haos_ova-${TASK_HAOS}.qcow2.xz"
+          xz --decompress appliance.qcow2.xz
+          qemu-img info appliance.qcow2
+          echo "TITAN_QCOW2_SAMPLE=$RUNNER_TEMP/appliance.qcow2" >> "$GITHUB_ENV"
+      - name: Import through the product API
+        run: |
+          set -euo pipefail
+          npm --prefix packages/titand ci
+          npm --prefix packages/titand run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/machines/custom-qcow2-appliance.vm.test.ts
