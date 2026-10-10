@@ -1,0 +1,66 @@
+name: README screenshots
+
+# Photographs a published TitanOS image: the real UI on the real backend in a
+# disposable VM. The JPEGs are kept as an artifact for docs/images.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published TitanOS version (default is .titan/release.json)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    if: github.repository == 'ra5on/TitanOS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install VM tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf jq xz-utils openssl
+          if test -c /dev/kvm; then sudo chown "$(id -u):$(id -g)" /dev/kvm; fi
+      - name: Download and verify the published image
+        env:
+          TASK_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          task_version="${TASK_VERSION:-$(jq -r .version .titan/release.json)}"
+          [[ "$task_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          task_base="https://github.com/ra5on/TitanOS/releases/download/v${task_version}"
+          mkdir -p "$RUNNER_TEMP/titan-image"
+          cd "$RUNNER_TEMP/titan-image"
+          curl --fail --silent --show-error --location --remote-name-all \
+            "$task_base/titan-${task_version}.img.xz" "$task_base/SHA256SUMS" "$task_base/SHA256SUMS.sig"
+          openssl pkeyutl -verify -rawin -pubin -inkey "$GITHUB_WORKSPACE/.titan/release-public.pem" \
+            -in SHA256SUMS -sigfile SHA256SUMS.sig
+          grep "  titan-${task_version}\.img\.xz\$" SHA256SUMS | sha256sum --check
+          xz --decompress "titan-${task_version}.img.xz"
+          {
+            echo "TITAN_VM_IMAGE=$PWD/titan-${task_version}.img"
+            echo "TITAN_SCREENSHOT_VERSION=${task_version}"
+            echo "TITAN_SCREENSHOT_DIR=$RUNNER_TEMP/titan-readme-screenshots"
+          } >> "$GITHUB_ENV"
+      - name: Capture desktop, Files and Settings
+        run: |
+          set -euo pipefail
+          npm --prefix packages/titand ci
+          npm --prefix packages/titand run test -- --pool=forks --minWorkers=1 --maxWorkers=1 source/modules/test-utilities/readme-screenshots.vm.test.ts
+      - name: Retain README screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: titan-readme-screenshots-${{ github.run_id }}
+          path: ${{ runner.temp }}/titan-readme-screenshots/*.jpg
+          if-no-files-found: error
+          retention-days: 30

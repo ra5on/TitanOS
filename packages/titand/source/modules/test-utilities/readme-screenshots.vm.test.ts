@@ -38,7 +38,8 @@ describe('README screenshots', () => {
 		await titand.vm.powerOn()
 		await titand.waitForStartup()
 		await titand.unauthenticatedClient.user.register.mutate(account)
-		titand.setAuthToken(await titand.unauthenticatedClient.user.login.mutate(account))
+		// The cookie-keeping client: uploads need the browser session cookie too
+		titand.setAuthToken(await titand.client.user.login.mutate(account))
 		for (const [path, contents] of Object.entries(sampleFiles)) {
 			await titand.api.post(`files/upload?path=${encodeURIComponent(path)}`, {body: Buffer.from(contents)})
 		}
