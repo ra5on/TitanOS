@@ -1,6 +1,31 @@
-# TitanOS 2.0.9 · Stable
+# TitanOS 2.0.10 · Stable
 
-## Neu in 2.0.9
+## Neu in 2.0.10
+
+In den Einstellungen einer virtuellen Maschine gibt es drei neue Bereiche. Sie
+lassen sich bei ausgeschalteter Maschine ändern.
+[Anleitung](https://github.com/ra5on/TitanOS/blob/main/docs/MACHINES-DEVICES.md)
+
+- **Ordnerfreigaben:** Ordner aus Dateien werden live in die Maschine
+  eingebunden (virtiofs), auf Wunsch nur lesend. Titan und die Maschine sehen
+  dieselben Dateien.
+- **Datenfestplatten:** Zusätzliche virtuelle Festplatten, deren Abbild in einem
+  Ordner deiner Wahl liegt, zum Beispiel auf einem externen Laufwerk. Sie
+  lassen sich vergrößern, werden mit der Maschine gelöscht und sind nicht Teil
+  der Maschinen-Sicherung.
+- **PCI-Geräte durchreichen (Beta):** Grafikkarten, NPUs und andere PCI-Geräte
+  gehören der Maschine, solange sie läuft. Geräte einer IOMMU-Gruppe wechseln
+  gemeinsam; Titan behält Controller mit Laufwerken und die aktive
+  Netzwerkkarte. Voraussetzung ist VT-d bzw. AMD-Vi im BIOS.
+
+Titan startet jetzt mit aktivierter Intel-IOMMU (`intel_iommu=on iommu=pt`).
+
+Ordnerfreigaben und Datenfestplatten werden vor der Veröffentlichung mit einer
+echten Maschine auf dem Image geprüft. Das Durchreichen von PCI-Geräten ist
+**Beta**: Es wurde mit automatischen Tests der Geräteerkennung geprüft, nicht
+mit echter Hardware.
+
+## Aus 2.0.9
 
 - **USB-Geräte durchreichen:** In den Einstellungen einer virtuellen Maschine
   lassen sich am Titan angeschlossene USB-Geräte per Schalter durchreichen, zum
@@ -77,7 +102,7 @@ des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
 vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
 VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
 kompatiblen älteren Installation wird es nach dem ersten erfolgreich
-bestätigten Start von 2.0.9 eingerichtet.
+bestätigten Start von 2.0.10 eingerichtet.
 
 Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
 VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
@@ -107,8 +132,8 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.9.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.9.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
+- `titan-2.0.10.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.10.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 - `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.
