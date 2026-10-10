@@ -9,6 +9,10 @@ ARG DOCKER_VERSION=28.5.0
 ARG DOCKER_INSTALL_SCRIPT_COMMIT=5c8855edd778525564500337f5ac4ad65a0c168e
 
 ARG NVIDIA_CUDA_SUPPORT=true
+# Debian 13 ships driver 550, which predates the RTX 50 series. NVIDIA's own
+# Debian 13 repository carries newer branches in the same package layout.
+ARG NVIDIA_DRIVER_VERSION=595.91.07-1
+ARG NVIDIA_REPOSITORY_KEY_SHA256=09edb5196bca272c091633d4e04dd6c8f3a07278834868220aa669c895f6cfd7
 ARG NVIDIA_CONTAINER_TOOLKIT_VERSION=1.19.1-1
 ARG LIBNVIDIA_CONTAINER1_SHA256_amd64=d73bb582af893135198ef81cb22135c790a75d2ad72910446477c6c4430f3e6b
 ARG LIBNVIDIA_CONTAINER_TOOLS_SHA256_amd64=5642763d51961a2295dff09990048a5dcee81edbea2a8c5084e47b09ccf17268
@@ -100,6 +104,8 @@ FROM debian:${DEBIAN_VERSION}-${DEBIAN_IMAGE_SNAPSHOT_DATE} AS titanos-base
 ARG APT_SNAPSHOT_DATE
 ARG TARGETARCH
 ARG NVIDIA_CUDA_SUPPORT
+ARG NVIDIA_DRIVER_VERSION
+ARG NVIDIA_REPOSITORY_KEY_SHA256
 
 COPY packages/os/build-steps /build-steps
 
@@ -135,16 +141,42 @@ RUN set -e; \
 # containers. Use Debian's driver-library and Vulkan ICD package contracts so
 # all private compute, video, GLX, EGL, and Vulkan dependencies stay
 # version-matched.
+#
+# The driver comes from NVIDIA's signed Debian 13 repository, pinned to one
+# release: its key is checked against a known hash, every package of that
+# release outranks Debian's 550, and the repository is removed again so later
+# steps and the installed system only see the Debian snapshot. NVIDIA keeps
+# nvidia-smi in nvidia-driver-cuda and the nouveau blacklist in
+# nvidia-kernel-support.
 RUN set -e; \
     if [ "${TARGETARCH}" = "amd64" ] && [ "${NVIDIA_CUDA_SUPPORT}" = "true" ]; then \
+        apt-get install --yes --no-install-recommends ca-certificates curl; \
+        nvidia_repository="https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64"; \
+        curl -fsSL "${nvidia_repository}/8793F200.pub" -o /usr/share/keyrings/nvidia-cuda.asc; \
+        echo "${NVIDIA_REPOSITORY_KEY_SHA256}  /usr/share/keyrings/nvidia-cuda.asc" | sha256sum -c -; \
+        echo "deb [signed-by=/usr/share/keyrings/nvidia-cuda.asc] ${nvidia_repository}/ /" \
+            > /etc/apt/sources.list.d/nvidia-cuda.list; \
+        printf 'Package: *\nPin: version %s\nPin-Priority: 1001\n\nPackage: *\nPin: origin developer.download.nvidia.com\nPin-Priority: 600\n' \
+            "${NVIDIA_DRIVER_VERSION}" > /etc/apt/preferences.d/nvidia-cuda; \
+        apt-get update; \
         apt-get install --yes --no-install-recommends \
-            nvidia-open-kernel-dkms \
+            nvidia-kernel-open-dkms \
+            nvidia-kernel-support \
             nvidia-driver-libs \
+            nvidia-driver-cuda \
             libcuda1 \
             libnvcuvid1 \
             libnvidia-encode1 \
-            nvidia-smi \
+            libnvidia-ml1 \
             nvidia-vulkan-icd; \
+        for package in nvidia-kernel-open-dkms nvidia-driver-libs nvidia-driver-cuda libcuda1 nvidia-vulkan-icd; do \
+            test "$(dpkg-query --show --showformat='${Version}' "${package}")" = "${NVIDIA_DRIVER_VERSION}"; \
+        done; \
+        test -x /usr/bin/nvidia-smi; \
+        ls /lib/modules/*/updates/dkms/nvidia.ko* /lib/modules/*/updates/dkms/nvidia-uvm.ko* > /dev/null; \
+        grep -q '^blacklist nouveau' /etc/modprobe.d/nvidia.conf; \
+        rm -f /etc/apt/sources.list.d/nvidia-cuda.list /etc/apt/preferences.d/nvidia-cuda /usr/share/keyrings/nvidia-cuda.asc; \
+        apt-get update; \
         install --directory /etc/vulkan/icd.d; \
         cp /usr/share/vulkan/icd.d/nvidia_icd.json \
             /etc/vulkan/icd.d/nvidia_icd.json; \

@@ -11,6 +11,12 @@
   Jedes Benutzerkonto hat sein eigenes Dock. Die Einstellungen bleiben immer im
   Dock; sind mehr Symbole vorhanden, als auf den Bildschirm passen, werden sie
   verkleinert.
+- **Neuer NVIDIA-Treiber:** Das Image enthält jetzt den NVIDIA-Treiber 595.91.07
+  (bisher 550) aus dem Debian-13-Repository von NVIDIA. Damit werden auch
+  Grafikkarten der RTX-50-Serie für CUDA, Videokodierung und Apps wie Ollama oder
+  Jellyfin erkannt. Unterstützt werden weiterhin Karten ab GTX 16xx/RTX 20xx.
+  Der Treiber wurde beim Bau des Images geprüft, nicht mit einer echten
+  Grafikkarte.
 - **USB-Geräte klarer benannt:** In den Einstellungen einer virtuellen Maschine
   wird ein Herstellername nicht mehr doppelt angezeigt, Geräte ohne eigene
   Beschreibung erhalten ihren Namen aus der USB-Datenbank, und die Art des
