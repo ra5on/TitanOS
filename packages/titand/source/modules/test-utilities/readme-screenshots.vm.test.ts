@@ -34,7 +34,8 @@ describe('README screenshots', () => {
 
 	beforeAll(async () => {
 		await mkdir(outputDirectory, {recursive: true})
-		titand = await createTestVm({device: 'titan-home', image, memory: 4096, cores: 2})
+		// A generic PC rather than an emulated appliance board, booting like the image smoke test
+		titand = await createTestVm({device: 'nas', bootDisk: 'nvme', image, memory: 4096, cores: 2})
 		await titand.vm.powerOn()
 		await titand.waitForStartup()
 		await titand.unauthenticatedClient.user.register.mutate(account)
