@@ -1,27 +1,25 @@
 # TitanOS-Aufnahmen
 
-`titanos-desktop-2.0.4.jpg` zeigt die echte Desktopoberfläche des Quellstands
-**TitanOS 2.0.4** mit geöffnetem Systemmenü und persönlichem Transparenzregler.
-Kontospeicherung, Kontowechsel, Rücksetzen und mobile Ja/Nein-Anordnung wurden
-am echten Backend geprüft. Das Backend lief mit temporären Testkonten, ohne
-Hostdienste für Docker, VMs, Samba oder Systemänderungen zu starten. Angezeigte
-Ressourcen gehören zum Testrechner. Die Aufnahme enthält keine persönlichen
-Dateien oder Zugangsdaten und wurde nicht nachbearbeitet.
+Die drei JPEG-Aufnahmen zeigen das **veröffentlichte Image von TitanOS 2.0.7**:
+die echte Oberfläche mit dem echten Titan-Backend, gestartet in einer
+Wegwerf-VM. Es wurden keine UI-Mocks und keine nachträglichen Bildänderungen
+verwendet.
 
-Die drei JPEG-Aufnahmen zeigen die gebaute Oberfläche des Quellstands
-**TitanOS 2.0.1** mit dem echten Titan-Backend in einer isolierten lokalen
-Testumgebung. Sie wurden getrennt vom Boot-Test des Release-Images aufgenommen.
-Es wurden keine UI-Mocks oder nachträglichen Bildänderungen verwendet.
-
-- **Desktop:** Startseite mit eigenen, an iOS angelehnten Dock-Icons.
-- **Dateien:** Echter Dateimanager mit eigens angelegten Beispieldateien.
+- **Startbildschirm:** Begrüßung mit Titan-Schriftzug, Widgets und Dock.
+- **Dateien:** Persönlicher Ordner mit den Standardordnern Dokumente, Downloads,
+  Fotos und Videos sowie einer Beispieldatei.
 - **Einstellungen:** Übersicht derselben Testumgebung.
 
-„Titan“ ist ein frei gewähltes Testkonto. Die angezeigten Ressourcen gehören
-zum Testrechner. Nur temporäre Beispieldaten wurden verwendet; Dienste für
-Docker, VMs, Samba und Systemänderungen wurden hier nicht gestartet. Der
-vollständige Image-Start wird getrennt im Release-Build geprüft.
+## So entstehen die Aufnahmen
 
-Keine Aufnahme enthält ein Passwort, einen Sitzungsschlüssel oder persönliche
-NAS-Dateien. Die JPEGs enthalten keine EXIF-Daten. Das SVG-Banner verwendet
-das Titan-Logo aus diesem Repository.
+Der Workflow **README screenshots** (`.github/workflows/readme-screenshots.yml`)
+lädt das veröffentlichte Image, prüft die signierte Prüfsumme, startet es in
+einer VM mit generischer PC-Hardware und führt
+`packages/titand/source/modules/test-utilities/readme-screenshots.vm.test.ts`
+aus. Der Test legt das Testkonto „Titan“ mit einem zufälligen Passwort an, lädt
+wenige Beispieldateien hoch, meldet sich über die echte Anmeldeseite an und
+fotografiert die drei Ansichten in 1280 × 800.
+
+Angezeigte Ressourcen, IP-Adresse und Gerätename gehören zur Test-VM. Keine
+Aufnahme enthält ein Passwort, einen Sitzungsschlüssel oder persönliche
+NAS-Dateien. Das SVG-Banner verwendet das Titan-Logo aus diesem Repository.

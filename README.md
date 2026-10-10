@@ -41,17 +41,17 @@ Das Dock verwendet wieder die ursprünglichen Icons des Forks.
 
 ## Ein Blick auf TitanOS
 
-Die Desktopaufnahme zeigt TitanOS 2.0.4 mit den ursprünglichen Dock-Icons und
-dem neuen Transparenzregler. Dateien und Einstellungen zeigen den dokumentierten
-Stand 2.0.1. Alle Aufnahmen entstanden mit dem echten Backend in einer isolierten
-Testumgebung.
+Die Aufnahmen zeigen das veröffentlichte Image von TitanOS 2.0.7: Startbildschirm
+mit Titan-Schriftzug, Dateien mit den deutschen Standardordnern und die
+Einstellungen. Sie entstanden automatisch mit dem echten Backend in einer
+Wegwerf-VM.
 [Details zu den Aufnahmen](docs/images/README.md).
 
-![TitanOS 2.0.7 mit persönlichem Transparenzregler](docs/images/titanos-desktop-2.0.4.jpg)
+![TitanOS-Startbildschirm](docs/images/titanos-desktop-2.0.7.jpg)
 
 | Dateien | Einstellungen |
 | --- | --- |
-| ![TitanOS-Dateimanager](docs/images/titanos-files.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings.jpg) |
+| ![TitanOS-Dateimanager](docs/images/titanos-files-2.0.7.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings-2.0.7.jpg) |
 
 ## Installieren
 
