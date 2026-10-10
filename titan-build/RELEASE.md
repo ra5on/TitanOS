@@ -1,6 +1,22 @@
-# TitanOS 2.0.10 · Stable
+# TitanOS 2.0.11 · Stable
 
-## Neu in 2.0.10
+## Neu in 2.0.11
+
+- **Dock bearbeiten:** Ein Rechtsklick auf das Dock (auf Touch-Geräten lange
+  drücken) öffnet **Dock bearbeiten**. Im Bearbeitungsmodus lassen sich Symbole
+  per Ziehen verschieben, über das × entfernen und über **Hinzufügen** ergänzen:
+  Systemfunktionen, installierte Apps, virtuelle Maschinen und Verknüpfungen
+  vom Startbildschirm. Ein Regler stellt die Größe ein, **Standard** stellt das
+  ursprüngliche Dock wieder her, **Fertig** oder Escape beendet den Modus.
+  Jedes Benutzerkonto hat sein eigenes Dock. Die Einstellungen bleiben immer im
+  Dock; sind mehr Symbole vorhanden, als auf den Bildschirm passen, werden sie
+  verkleinert.
+- **USB-Geräte klarer benannt:** In den Einstellungen einer virtuellen Maschine
+  wird ein Herstellername nicht mehr doppelt angezeigt, Geräte ohne eigene
+  Beschreibung erhalten ihren Namen aus der USB-Datenbank, und die Art des
+  Geräts (Eingabegerät, Bluetooth/Funk, serielle Schnittstelle, …) steht dabei.
+
+## Aus 2.0.10
 
 In den Einstellungen einer virtuellen Maschine gibt es drei neue Bereiche. Sie
 lassen sich bei ausgeschalteter Maschine ändern.
@@ -102,7 +118,7 @@ des vorherigen Systemstands. Ohne Auswahl startet nach fünf Sekunden der
 vorgesehene Systemstand. Das Menü ist am angeschlossenen Bildschirm oder in der
 VM-Konsole erreichbar und benötigt keine laufende Weboberfläche. Bei einer
 kompatiblen älteren Installation wird es nach dem ersten erfolgreich
-bestätigten Start von 2.0.10 eingerichtet.
+bestätigten Start von 2.0.11 eingerichtet.
 
 Ein Systemrollback setzt persönliche Dateien, Container-Datenbanken und
 VM-Laufwerke nicht zurück. Diese gemeinsamen Daten benötigen eigene Sicherungen.
@@ -132,8 +148,8 @@ Netzwerkanschlüsse bleiben erhalten; WLAN wird nicht automatisch umgebaut.
 
 ## Download und Aktualisierung
 
-- `titan-2.0.10.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
-- `titan-2.0.10.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
+- `titan-2.0.11.img.xz`: Kompaktes AMD64-Image für eine Neuinstallation mit UEFI.
+- `titan-2.0.11.update`: Vollständiges Systemupdate für kompatible TitanOS-Installationen.
 - `SHA256SUMS` und `SHA256SUMS.sig`: Prüfsummen und Ed25519-Signatur aller Release-Dateien.
 - `image-verification.json`: Bericht zur Image-Struktur, zum realen UEFI-Boot und zur geprüften Versionskennung.
 - `bridge-smoke.json`: Zwölf echte VM-Prüfungen für DHCP, statische IP, automatische Rücknahme und Neustart mit der Bridge.
