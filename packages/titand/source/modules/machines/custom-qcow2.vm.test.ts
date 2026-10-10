@@ -70,11 +70,15 @@ describe('Custom QCOW2 imports on the released OS', () => {
 	test('retains the imported source and independent VM disk after host restart', async ({skip}) => {
 		if (!imported) skip()
 		await titand.client.machines.forceStop.mutate({id})
+		// Stopping a machine no longer keeps it from starting with the OS: that
+		// is what the autostart switch is for.
+		await titand.client.machines.updateSettings.mutate({id, autostart: false})
 		await titand.vm.powerOff()
 		await titand.vm.powerOn()
 		await titand.login()
 		await waitForVirtualization()
-		expect((await titand.client.machines.list.query()).some((m) => m.id === id)).toBe(true)
+		const restored = (await titand.client.machines.list.query()).find((m) => m.id === id)
+		expect(restored).toMatchObject({autostart: false, state: 'stopped'})
 		await titand.client.machines.start.mutate({id})
 		await pRetry(
 			async () => {
