@@ -18,6 +18,7 @@ import {CopyButton} from '@/components/ui/copy-button'
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu'
 import {Input} from '@/components/ui/input'
 import {Spinner} from '@/components/ui/loading'
+import {Switch} from '@/components/ui/switch'
 import {toast} from '@/components/ui/toast'
 import {MachineNetworkField} from '@/features/machines/components/network-field'
 import {OsIcon} from '@/features/machines/components/os-icon'
@@ -47,7 +48,18 @@ import {createBrowserUuid} from '@/features/machines/utils'
 import {useCpu} from '@/hooks/use-cpu'
 import {useMemory} from '@/hooks/use-memory'
 import {cn} from '@/lib/utils'
+import {trpcReact} from '@/trpc/trpc'
 import {t} from '@/utils/i18n'
+
+type UsbDevice = NonNullable<Machine['usbDevices']>[number]
+const MAX_USB_DEVICES = 8
+const usbKey = (usbDevice: UsbDevice) => `${usbDevice.vendorId}:${usbDevice.productId}:${usbDevice.serial ?? ''}`
+const toUsbDevice = ({vendorId, productId, serial, name}: UsbDevice): UsbDevice => ({
+	vendorId,
+	productId,
+	...(serial ? {serial} : {}),
+	name,
+})
 
 const segmentButtonClass = (active: boolean) =>
 	cn(
@@ -67,6 +79,8 @@ export default function MachineSettings() {
 	const {updateSettings, stop} = useMachineActions()
 	const {threads} = useCpu()
 	const {data: memory} = useMemory()
+	// Plugging a device in or out should show up while the page is open
+	const hostUsbDevices = trpcReact.machines.usbDevices.useQuery(undefined, {refetchInterval: 5_000}).data ?? []
 
 	const [nameInput, setNameInput] = useState<string | null>(null)
 	const [editingName, setEditingName] = useState(false)
@@ -76,6 +90,8 @@ export default function MachineSettings() {
 	const [diskChoice, setDiskChoice] = useState<string | null>(null)
 	const [firmwareChoice, setFirmwareChoice] = useState<'uefi' | 'bios' | null>(null)
 	const [diskBusChoice, setDiskBusChoice] = useState<'virtio' | 'sata' | null>(null)
+	const [videoChoice, setVideoChoice] = useState<'virtio' | 'vga' | null>(null)
+	const [usbChoice, setUsbChoice] = useState<UsbDevice[] | null>(null)
 	const [networkChoice, setNetworkChoice] = useState<MachineNetwork | null>(null)
 	const [forwardsChoice, setForwardsChoice] = useState<Machine['portForwards'] | null>(null)
 	const [isSaving, setIsSaving] = useState(false)
@@ -99,6 +115,21 @@ export default function MachineSettings() {
 	const diskInput = diskChoice ?? String(machine.diskSizeGb)
 	const firmware = firmwareChoice ?? machine.firmware
 	const diskBus = diskBusChoice ?? machine.diskBus ?? 'virtio'
+	const videoModel = videoChoice ?? machine.videoModel ?? 'virtio'
+	const usbDevices = usbChoice ?? machine.usbDevices ?? []
+	const usbChanged =
+		JSON.stringify(usbDevices.map(usbKey).sort()) !== JSON.stringify((machine.usbDevices ?? []).map(usbKey).sort())
+	// Every plugged-in device, plus assigned ones that are currently unplugged
+	const usbRows = [
+		...hostUsbDevices.map((usbDevice) => ({
+			...usbDevice,
+			present: true,
+			assigned: usbDevices.some((assigned) => usbKey(assigned) === usbKey(usbDevice)),
+		})),
+		...usbDevices
+			.filter((assigned) => !hostUsbDevices.some((usbDevice) => usbKey(usbDevice) === usbKey(assigned)))
+			.map((usbDevice) => ({...usbDevice, machineId: machine.id, present: false, assigned: true})),
+	]
 	const portForwards = forwardsChoice ?? machine.portForwards
 	const network = networkChoice ?? machine.network
 	const networkChanged = !sameMachineNetwork(machine.network, network)
@@ -150,6 +181,7 @@ export default function MachineSettings() {
 			diskSizeGb: Math.round(diskValue),
 			firmware: machine.osId === 'custom' ? firmware : machine.firmware,
 			diskBus: machine.osId === 'custom' ? diskBus : machine.diskBus,
+			videoModel: machine.osId === 'custom' ? videoModel : machine.videoModel,
 			network,
 		})
 
@@ -160,7 +192,11 @@ export default function MachineSettings() {
 		cores !== machine.cores ||
 		memoryGb !== machine.memoryGb ||
 		diskValue !== machine.diskSizeGb ||
-		(machine.osId === 'custom' && (firmware !== machine.firmware || diskBus !== (machine.diskBus ?? 'virtio'))) ||
+		(machine.osId === 'custom' &&
+			(firmware !== machine.firmware ||
+				diskBus !== (machine.diskBus ?? 'virtio') ||
+				videoModel !== (machine.videoModel ?? 'virtio'))) ||
+		usbChanged ||
 		JSON.stringify(portForwards) !== JSON.stringify(machine.portForwards) ||
 		networkChanged
 
@@ -188,7 +224,8 @@ export default function MachineSettings() {
 				cores,
 				...(!hasFixedMemory && {memoryGb}),
 				diskSizeGb: Math.round(diskValue),
-				...(machine.osId === 'custom' ? {firmware, diskBus} : {}),
+				...(machine.osId === 'custom' ? {firmware, diskBus, videoModel} : {}),
+				...(usbChanged ? {usbDevices: usbDevices.map(toUsbDevice)} : {}),
 				portForwards,
 				...(networkChanged ? {network} : {}),
 			})
@@ -398,8 +435,79 @@ export default function MachineSettings() {
 										))}
 									</div>
 								</SpecRow>
+								<SpecRow label={t('machines.display-adapter')} note={t('machines.display-adapter-description')}>
+									<div className='flex gap-2'>
+										{(['virtio', 'vga'] as const).map((option) => (
+											<button
+												key={option}
+												type='button'
+												disabled={disabled}
+												onClick={() => setVideoChoice(option)}
+												className={segmentButtonClass(videoModel === option)}
+											>
+												{option}
+											</button>
+										))}
+									</div>
+								</SpecRow>
 							</>
 						)}
+
+						{/* USB passthrough: host devices follow the switch immediately, even
+						    while the machine runs. Assigned devices that are unplugged stay
+						    listed so they can be released. */}
+						<div className='flex flex-col gap-3 py-5'>
+							<div className='flex flex-col gap-1'>
+								<span className='text-15 font-medium -tracking-2 text-white'>{t('machines.usb-devices')}</span>
+								<p className='max-w-[460px] text-12 leading-snug -tracking-2 text-white/40'>
+									{t('machines.usb-devices-description')}
+								</p>
+							</div>
+							{usbRows.length === 0 ? (
+								<p className='rounded-8 bg-white/4 px-3 py-2.5 text-12 leading-snug -tracking-2 text-white/35'>
+									{t('machines.usb-devices-empty')}
+								</p>
+							) : (
+								<div className='flex flex-col gap-2'>
+									{usbRows.map((row) => {
+										const otherMachine = row.machineId && row.machineId !== machine.id ? row.machineId : undefined
+										const status = otherMachine
+											? t('machines.usb-device-in-use', {
+													machineName: machines.find((other) => other.id === otherMachine)?.name ?? otherMachine,
+												})
+											: row.present
+												? undefined
+												: t('machines.usb-device-unplugged')
+										return (
+											<label
+												key={usbKey(row)}
+												className='flex items-center justify-between gap-4 rounded-12 border-hpx border-white/10 bg-white/6 px-3.5 py-2.5'
+											>
+												<span className='flex min-w-0 flex-col'>
+													<span className='truncate text-13 -tracking-2 text-white'>{row.name}</span>
+													<span className='truncate text-11 -tracking-1 text-white/35 tabular-nums'>
+														{row.vendorId}:{row.productId}
+														{status ? ` · ${status}` : ''}
+													</span>
+												</span>
+												<Switch
+													checked={row.assigned}
+													disabled={disabled || !!otherMachine || (!row.assigned && usbDevices.length >= MAX_USB_DEVICES)}
+													onCheckedChange={(checked) =>
+														setUsbChoice(
+															checked
+																? [...usbDevices, toUsbDevice(row)]
+																: usbDevices.filter((usbDevice) => usbKey(usbDevice) !== usbKey(row)),
+														)
+													}
+													aria-label={row.name}
+												/>
+											</label>
+										)
+									})}
+								</div>
+							)}
+						</div>
 
 						{/* Port forwards: the last row of the spec sheet, full-width. The
 						    copy leads with the why (machines live on a private network),

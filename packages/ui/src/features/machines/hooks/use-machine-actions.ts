@@ -111,6 +111,10 @@ export function getMachinesErrorMessage(message: string) {
 			return t('machines-error.machine-image-download-failed')
 		case 'machine-image-download-http-error':
 			return t('machines-error.machine-image-download-http-error')
+		case 'machine-usb-device-in-use':
+			return t('machines-error.machine-usb-device-in-use')
+		case 'machine-usb-device-invalid':
+			return t('machines-error.machine-usb-device-invalid')
 		case 'machine-image-import-failed':
 			return t('machines-error.machine-image-import-failed')
 		case 'machine-image-format-unsupported':

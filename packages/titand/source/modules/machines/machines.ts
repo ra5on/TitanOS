@@ -39,6 +39,13 @@ import {
 	nextMachineIpAddress,
 } from './machine-network.js'
 import MachineStore from './machine-store.js'
+import {
+	listHostUsbDevices,
+	machineUsbDeviceSchema,
+	MAX_MACHINE_USB_DEVICES,
+	sameUsbDevice,
+	type MachineUsbDevice,
+} from './usb-passthrough.js'
 import {safeDownload} from './safe-download.js'
 import {prepareWindowsInstallMedia, type WindowsInstaller} from './windows-image.js'
 import {prepareOmarchySeed, probeOmarchySetup, removeOmarchySetupCredentials} from './omarchy-install.js'
@@ -123,6 +130,8 @@ export type Machine = {
 	platformProfile: PlatformProfile
 	firmware: 'uefi' | 'bios'
 	diskBus?: 'virtio' | 'sata'
+	videoModel?: 'virtio' | 'vga'
+	usbDevices?: MachineUsbDevice[]
 	diskPath?: string
 	acceleration: 'kvm' | 'tcg'
 	performanceWarning?: string
@@ -963,6 +972,7 @@ export default class Machines {
 	#lastFirstBootSetupStates = new Map<string, boolean>()
 	#pollTimer?: NodeJS.Timeout
 	#polling = false
+	#nextUsbSyncAt = 0
 	#omarchySetupProbes = new Map<string, Promise<void>>()
 	#libvirtActivated = false
 	#libvirtActivation?: Promise<void>
@@ -1118,6 +1128,17 @@ export default class Machines {
 		try {
 			if (!this.#libvirtActivated && Date.now() >= this.#nextLibvirtProbeAt) await this.#activateLibvirt()
 			const definitions = await this.#store.list()
+			if (this.#libvirtActivated && Date.now() >= this.#nextUsbSyncAt) {
+				// Replugged devices get new host addresses; follow them while machines run
+				this.#nextUsbSyncAt = Date.now() + 10_000
+				for (const definition of definitions) {
+					if (!definition.usbDevices?.length || this.#operations.has(definition.id)) continue
+					if ((await this.#libvirt.state(definition.id)) !== 'running') continue
+					await this.#libvirt
+						.syncUsbDevices(definition)
+						.catch((error) => this.logger.error(`Failed syncing USB devices for ${definition.id}`, error))
+				}
+			}
 			if (this.#libvirtActivated)
 				await this.#createQueue.add(async () => this.#libvirt.ensureFirewall(await this.#store.list()))
 			const states = await Promise.all(
@@ -1603,6 +1624,17 @@ export default class Machines {
 			.read(id)
 			.then(() => true)
 			.catch(() => false)
+	}
+
+	// USB devices plugged into the host, with the machine each one is assigned to
+	async usbDevices() {
+		const [present, definitions] = await Promise.all([listHostUsbDevices(), this.#store.list()])
+		return present.map(({bus, device, ...usbDevice}) => ({
+			...usbDevice,
+			machineId: definitions.find((definition) =>
+				(definition.usbDevices ?? []).some((assigned) => sameUsbDevice(assigned, usbDevice)),
+			)?.id,
+		}))
 	}
 
 	async networks() {
@@ -2599,6 +2631,8 @@ export default class Machines {
 			autostart?: boolean
 			network?: MachineNetwork
 			portForwards?: PortForward[]
+			videoModel?: 'virtio' | 'vga'
+			usbDevices?: MachineUsbDevice[]
 		},
 	) {
 		return this.#withMachineLock(id, async () => {
@@ -2623,7 +2657,25 @@ export default class Machines {
 				if (settings.network.mode !== 'nat') await this.#validateNetwork(settings.network)
 			}
 			if (settings.name !== undefined) await this.#assertUniqueName(settings.name, id)
-			if (settings.firmware !== undefined || settings.diskBus !== undefined) {
+			if (settings.usbDevices !== undefined) {
+				const usbDevices = z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).safeParse(settings.usbDevices)
+				if (
+					!usbDevices.success ||
+					usbDevices.data.some((usbDevice, index) => usbDevices.data.findIndex((other) => sameUsbDevice(other, usbDevice)) !== index)
+				) {
+					throw new Error('[machine-usb-device-invalid]')
+				}
+				const others = (await this.#store.list()).filter((machine) => machine.id !== id)
+				if (
+					usbDevices.data.some((usbDevice) =>
+						others.some((machine) => (machine.usbDevices ?? []).some((assigned) => sameUsbDevice(assigned, usbDevice))),
+					)
+				) {
+					throw new Error('[machine-usb-device-in-use]')
+				}
+				settings.usbDevices = usbDevices.data
+			}
+			if (settings.firmware !== undefined || settings.diskBus !== undefined || settings.videoModel !== undefined) {
 				if (definition.osId !== 'custom') throw new Error('[machine-custom-setting-catalog-image]')
 				if (definition.arch === 'arm64' && (settings.firmware === 'bios' || settings.diskBus === 'sata')) {
 					throw new Error('[machine-custom-setting-unsupported-on-arm]')
@@ -2680,7 +2732,18 @@ export default class Machines {
 					if (diskResize) await this.#libvirt.resizeDisk(definition, diskResize.path, diskResize.sizeGb)
 					if (settings.diskSizeGb !== undefined) definition.diskSizeGb = settings.diskSizeGb
 					if (settings.autostart !== undefined) definition.autostart = settings.autostart
+					if (settings.videoModel !== undefined) definition.videoModel = settings.videoModel
+					if (settings.usbDevices !== undefined) {
+						if (settings.usbDevices.length) definition.usbDevices = settings.usbDevices
+						else delete definition.usbDevices
+					}
 					await this.#store.write(definition)
+					// USB devices follow the setting immediately; no restart needed
+					if (settings.usbDevices !== undefined && (await this.#libvirt.state(id)) === 'running') {
+						await this.#libvirt
+							.syncUsbDevices(definition)
+							.catch((error) => this.logger.error(`Failed syncing USB devices for ${id}`, error))
+					}
 					if (settings.network === undefined && settings.portForwards !== undefined)
 						await this.#libvirt.reconcileFirewall(await this.#store.list())
 				} catch (error) {

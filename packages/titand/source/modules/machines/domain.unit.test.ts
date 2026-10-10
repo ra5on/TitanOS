@@ -361,4 +361,27 @@ describe('libvirt domain XML', () => {
 		expect(xml).toContain("source file='/data/machines/windows-98/media/install.iso' startupPolicy='optional'")
 		expect(xml).not.toContain('<acpi/>')
 	})
+	test('passes assigned USB devices through and honours the standard VGA choice', () => {
+		const options = {
+			machineDirectory: '/data/machines/test',
+			runtimeDirectory: '/run/titan-machines/test',
+			acceleration: 'kvm' as const,
+			firmwareCode: '/usr/share/OVMF/OVMF_CODE_4M.fd',
+		}
+		const plain = buildDomainXml({...options, definition: definition()})
+		expect(plain).not.toContain('<hostdev')
+		expect(plain).toContain("<video><model type='virtio' primary='yes'>")
+		const xml = buildDomainXml({
+			...options,
+			definition: definition({videoModel: 'vga'}),
+			usbAddresses: [
+				{bus: 1, device: 4},
+				{bus: 3, device: 12},
+			],
+		})
+		expect(xml).toContain("<source><address bus='1' device='4'/></source>")
+		expect(xml).toContain("<source><address bus='3' device='12'/></source>")
+		expect(xml.match(/<hostdev mode='subsystem' type='usb' managed='yes'>/g)).toHaveLength(2)
+		expect(xml).toContain("<video><model type='vga' primary='yes'>")
+	})
 })

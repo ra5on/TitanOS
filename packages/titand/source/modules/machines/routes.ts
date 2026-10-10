@@ -4,6 +4,7 @@ import {router, privateProcedure} from '../server/trpc/trpc.js'
 import {MACHINE_INPUT_ACTIONS, MAX_SCROLL_AMOUNT, MAX_TYPE_TEXT_LENGTH, MAX_WAIT_SECONDS} from './machine-control.js'
 import {machineIdSchema} from './machine-id.js'
 import {machineNetworkSchema} from './machine-network.js'
+import {machineUsbDeviceSchema, MAX_MACHINE_USB_DEVICES} from './usb-passthrough.js'
 
 const windowsLicenseKey = z.string().regex(/^[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}$/i)
 const screenshotCoordinate = z.tuple([z.number().int().min(0), z.number().int().min(0)])
@@ -11,6 +12,7 @@ const screenshotCoordinate = z.tuple([z.number().int().min(0), z.number().int().
 export default router({
 	capabilities: privateProcedure.query(async ({ctx}) => ctx.titand.machines.capabilities()),
 	networks: privateProcedure.query(async ({ctx}) => ctx.titand.machines.networks()),
+	usbDevices: privateProcedure.query(async ({ctx}) => ctx.titand.machines.usbDevices()),
 	prepareBridge: privateProcedure.mutation(async ({ctx}) =>
 		ctx.titand.machines.prepareBridge(ctx.principal!.sessionId),
 	),
@@ -96,6 +98,8 @@ export default router({
 				// Grow-only: shrinking below the current size is rejected
 				diskSizeGb: z.number().int().min(1).max(10_000).optional(),
 				autostart: z.boolean().optional(),
+				videoModel: z.enum(['virtio', 'vga']).optional(),
+				usbDevices: z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).optional(),
 				network: machineNetworkSchema.optional(),
 				portForwards: z
 					.array(

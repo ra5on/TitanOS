@@ -8,6 +8,7 @@ import {z} from 'zod'
 import type {MachineDefinition} from './domain.js'
 import {machineIdSchema} from './machine-id.js'
 import {machineNetworkSchema} from './machine-network.js'
+import {machineUsbDeviceSchema, MAX_MACHINE_USB_DEVICES} from './usb-passthrough.js'
 
 const portForwardSchema = z.object({
 	id: z.string().min(1),
@@ -78,6 +79,8 @@ const machineDefinitionSchema = z
 		seedMedia: z.literal('media/seed.iso').optional(),
 		bootMedia: z.literal('media/boot.img').optional(),
 		portForwards: z.array(portForwardSchema),
+		usbDevices: z.array(machineUsbDeviceSchema).max(MAX_MACHINE_USB_DEVICES).optional(),
+		videoModel: z.enum(['virtio', 'vga']).optional(),
 	})
 	.refine((definition) => definition.memoryMb !== undefined || definition.memoryGb !== undefined, {
 		message: 'Machine memory is required',

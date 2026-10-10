@@ -11,6 +11,13 @@ import pWaitFor from 'p-wait-for'
 import type Titand from '../../index.js'
 import {convertCustomQcow2} from './custom-qcow2.js'
 import {
+	listHostUsbDevices,
+	parseAttachedUsbAddresses,
+	resolveUsbAddresses,
+	usbHostdevXml,
+	type UsbAddress,
+} from './usb-passthrough.js'
+import {
 	buildDomainXml,
 	MACHINE_NETWORK_NAME,
 	machineDiskTarget,
@@ -270,6 +277,7 @@ export default class Libvirt {
 	#audioQueue = new PQueue({concurrency: 1})
 	#networkQueue = new PQueue({concurrency: 1})
 	#nextFirewallCheckAt = 0
+	#reportedUsbFailures = new Set<string>()
 	#interfaceAddresses = new Map<string, {expiresAt: number; address?: string}>()
 	logger: Titand['logger']
 	available = false
@@ -814,6 +822,8 @@ export default class Libvirt {
 			if (definition.tpm) await this.#mountTpm(definition, machineDirectory)
 			const audio = await this.#allocateAudio(definition.id)
 			const acceleration = resolveAcceleration(definition.arch, this.kvmAvailable)
+			// Bus and device numbers are host runtime state: look them up for every start
+			let usbAddresses = resolveUsbAddresses(definition.usbDevices ?? [], await listHostUsbDevices())
 			// Render nodes are host runtime state, not part of the portable machine
 			// definition. Discover one for every start so a restored machine can move
 			// freely between GPU-equipped and headless Titan hardware.
@@ -831,6 +841,7 @@ export default class Libvirt {
 					firmwareCode,
 					graphicsRenderNode: renderNode,
 					audioPlaybackDevice: audio?.playback,
+					usbAddresses,
 				})
 				await fsp.writeFile(xmlPath, xml, {encoding: 'utf8', mode: 0o600})
 				// A rapid destroy/create can briefly race systemd removing libvirt's old
@@ -843,12 +854,23 @@ export default class Libvirt {
 				})
 			}
 
-			await createWithGraphicsFallback(graphicsRenderNode, create, (error) => {
-				const message = error instanceof Error ? error.message : String(error)
-				this.logger.log(
-					`GPU acceleration failed for ${definition.id} using ${graphicsRenderNode}; retrying with software graphics: ${message}`,
-				)
-			})
+			const createMachine = () =>
+				createWithGraphicsFallback(graphicsRenderNode, create, (error) => {
+					const message = error instanceof Error ? error.message : String(error)
+					this.logger.log(
+						`GPU acceleration failed for ${definition.id} using ${graphicsRenderNode}; retrying with software graphics: ${message}`,
+					)
+				})
+			try {
+				await createMachine()
+			} catch (error) {
+				if (usbAddresses.length === 0) throw error
+				// A busy or vanished USB device must not keep the machine from booting.
+				// The periodic sync attaches it once it is available.
+				this.logger.error(`Failed starting ${definition.id} with its USB devices; starting without them`, error)
+				usbAddresses = []
+				await createMachine()
+			}
 			return {acceleration}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
@@ -858,6 +880,38 @@ export default class Libvirt {
 			await this.#unmountStorage(definition.id)
 			await this.#releaseAudio(definition.id)
 			throw new Error(`[machine-start-failed] ${message}`)
+		}
+	}
+
+	// Attach the assigned USB devices that are plugged in to a running machine
+	// and detach everything else, e.g. after a replug or a settings change.
+	async syncUsbDevices(definition: MachineDefinition) {
+		const domain = this.domainName(definition.id)
+		const dump = await execa('virsh', ['--connect', LIBVIRT_URI, 'dumpxml', domain], {reject: false, timeout: 10_000})
+		if (dump.exitCode !== 0) return
+		const attached = parseAttachedUsbAddresses(dump.stdout)
+		const wanted = resolveUsbAddresses(definition.usbDevices ?? [], await listHostUsbDevices())
+		const same = (a: UsbAddress, b: UsbAddress) => a.bus === b.bus && a.device === b.device
+		const changes: ['attach-device' | 'detach-device', UsbAddress[]][] = [
+			['detach-device', attached.filter((address) => !wanted.some((other) => same(address, other)))],
+			['attach-device', wanted.filter((address) => !attached.some((other) => same(address, other)))],
+		]
+		const xmlPath = nodePath.join(this.runtimeDirectory(definition.id), 'usb-device.xml')
+		for (const [action, addresses] of changes) {
+			for (const address of addresses) {
+				await fsp.writeFile(xmlPath, usbHostdevXml(address), {encoding: 'utf8', mode: 0o600})
+				const result = await execa('virsh', ['--connect', LIBVIRT_URI, action, domain, xmlPath, '--live'], {
+					reject: false,
+					timeout: 15_000,
+				})
+				// The sync runs periodically: report a persistent failure only once
+				const failure = `${definition.id}:${action}:${address.bus}:${address.device}`
+				if (result.exitCode === 0) this.#reportedUsbFailures.delete(failure)
+				else if (!this.#reportedUsbFailures.has(failure)) {
+					this.#reportedUsbFailures.add(failure)
+					this.logger.error(`USB ${action} failed for ${definition.id}: ${result.stderr || result.stdout}`)
+				}
+			}
 		}
 	}
 

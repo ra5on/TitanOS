@@ -24,6 +24,8 @@ export type FirstBootSetup = {
 
 export type MachineInstallSource = {osId: string; imagePath?: never} | {osId?: never; imagePath: string}
 
+import {usbHostdevXml, type MachineUsbDevice, type UsbAddress} from './usb-passthrough.js'
+
 export type MachineDefinition = {
 	version: 1
 	id: string
@@ -65,6 +67,11 @@ export type MachineDefinition = {
 	seedMedia?: string
 	bootMedia?: string
 	portForwards: PortForward[]
+	// Host USB devices handed to this machine while they are plugged in
+	usbDevices?: MachineUsbDevice[]
+	// Custom images can swap the paravirtual display for standard VGA when the
+	// guest has no virtio GPU driver and its console would stay blank.
+	videoModel?: 'virtio' | 'vga'
 }
 
 export function machineDiskBus(definition: MachineDefinition) {
@@ -137,6 +144,7 @@ export function buildDomainXml({
 	diskPath,
 	graphicsRenderNode,
 	audioPlaybackDevice,
+	usbAddresses = [],
 }: {
 	definition: MachineDefinition
 	machineDirectory: string
@@ -146,6 +154,7 @@ export function buildDomainXml({
 	diskPath?: string
 	graphicsRenderNode?: string
 	audioPlaybackDevice?: string
+	usbAddresses?: UsbAddress[]
 }) {
 	const network = definition.network ?? {mode: 'nat'}
 	if (network.mode !== 'bridge' && !definition.ipAddress) throw new Error('[machine-ip-address-invalid]')
@@ -196,7 +205,9 @@ export function buildDomainXml({
 	const tpm = definition.tpm
 		? `<tpm model='${arm ? 'tpm-tis' : 'tpm-crb'}'><backend type='emulator' version='2.0' persistent_state='yes'/></tpm>`
 		: ''
-	const videoModel = windows7 || windows98 ? 'vga' : definition.platformProfile === 'legacy-x86' ? 'cirrus' : 'virtio'
+	const videoModel =
+		definition.videoModel ??
+		(windows7 || windows98 ? 'vga' : definition.platformProfile === 'legacy-x86' ? 'cirrus' : 'virtio')
 	const acceleratedGraphics = graphicsRenderNode
 		? `<graphics type='egl-headless'><gl rendernode='${escapeXml(graphicsRenderNode)}'/></graphics>`
 		: ''
@@ -281,6 +292,7 @@ export function buildDomainXml({
     <console type='file'><source path='${escapeXml(qemuLog)}'/><target type='serial' port='0'/></console>
     <memballoon model='virtio' freePageReporting='on'/>
     ${tpm}
+    ${usbAddresses.map(usbHostdevXml).join('')}
   </devices>
   ${qemuCommandline}
 </domain>
