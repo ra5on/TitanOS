@@ -608,17 +608,29 @@ describe('backup control command timeouts', () => {
 
 		await libvirt.pause(machine.id)
 		await libvirt.resume(machine.id)
+		// The domain's disks: its system disk, install media and one data disk
+		execaMock.mockImplementation(async (_command, args) => ({
+			stdout: args?.includes('domblklist')
+				? ' Target   Source\n----------------\n vda      /run/disk.qcow2\n sda      -\n vdj      /run/data-disk-abcd1234.qcow2\n'
+				: '',
+			stderr: '',
+			exitCode: 0,
+		}))
 		await libvirt.pivotToBackupOverlay(machine, '/data/machines/backup-timeout/operations/overlay.qcow2')
 		const calls = execaMock.mock.calls as unknown as Array<[string, string[], Record<string, unknown>]>
 
 		expect(calls.map(([, , options]) => options)).toEqual([
 			{timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS},
 			{reject: false, timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS},
+			{reject: false, timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS},
 			{timeout: MACHINE_SHORT_CONTROL_TIMEOUT_MS},
 		])
-		expect(calls[2][1]).toEqual(
+		expect(calls[2][1]).toContain('domblklist')
+		expect(calls[3][1]).toEqual(
 			expect.arrayContaining(['snapshot-create-as', 'titan-machine-backup-timeout', '--atomic']),
 		)
+		// Data disks are user data outside the machine backup: only the system disk is snapshotted
+		expect(calls[3][1].filter((argument) => argument.endsWith('snapshot=no'))).toEqual(['vdj,snapshot=no'])
 	})
 })
 
