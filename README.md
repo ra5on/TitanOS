@@ -41,17 +41,17 @@ Das Dock verwendet wieder die ursprünglichen Icons des Forks.
 
 ## Ein Blick auf TitanOS
 
-Die Aufnahmen zeigen das veröffentlichte Image von TitanOS 2.0.7: Startbildschirm
-mit Titan-Schriftzug, Dateien mit den deutschen Standardordnern und die
-Einstellungen. Sie entstanden automatisch mit dem echten Backend in einer
-Wegwerf-VM.
+Die Aufnahmen zeigen das veröffentlichte Image von TitanOS 2.0.11: Startbildschirm
+mit Titan-Schriftzug, den Bearbeitungsmodus des Docks, Dateien mit den deutschen
+Standardordnern und die Einstellungen. Sie entstanden automatisch mit dem echten
+Backend in einer Wegwerf-VM.
 [Details zu den Aufnahmen](docs/images/README.md).
 
-![TitanOS-Startbildschirm](docs/images/titanos-desktop-2.0.7.jpg)
+![TitanOS-Startbildschirm](docs/images/titanos-desktop-2.0.11.jpg)
 
-| Dateien | Einstellungen |
-| --- | --- |
-| ![TitanOS-Dateimanager](docs/images/titanos-files-2.0.7.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings-2.0.7.jpg) |
+| Dock bearbeiten | Dateien | Einstellungen |
+| --- | --- | --- |
+| ![Bearbeitungsmodus des Docks](docs/images/titanos-dock-edit-2.0.11.jpg) | ![TitanOS-Dateimanager](docs/images/titanos-files-2.0.11.jpg) | ![TitanOS-Einstellungen](docs/images/titanos-settings-2.0.11.jpg) |
 
 ## Installieren
 
