@@ -49,6 +49,10 @@
 			<span class="name">{t('netcfg.title')}</span>
 			<span class="muted">{t('netcfg.settingsDesc')}</span>
 		</a>
+		<a class="tile" href="/settings/notifications">
+			<span class="name">{t('notify.settingsTitle')}</span>
+			<span class="muted">{t('notify.settingsDesc')}</span>
+		</a>
 		<a class="tile" href="/settings/hardware">
 			<span class="name">{t('hardware.title')}</span>
 			<span class="muted">{t('hardware.settingsDesc')}</span>

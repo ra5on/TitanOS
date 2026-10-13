@@ -87,6 +87,8 @@ export type SystemInfo = {
 	} | null;
 	/** Seconds a network change on trial has left to be confirmed; 0 if there is none. */
 	networkPendingSeconds: number;
+	/** Number of the newest message; 0 if there is none or the account may not see them. */
+	notificationsLatest: number;
 };
 
 export type Preferences = {
