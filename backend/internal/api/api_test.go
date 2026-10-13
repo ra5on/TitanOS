@@ -14,6 +14,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -51,7 +52,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -335,7 +336,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -535,5 +536,31 @@ func TestShareAccessInTheAPI(t *testing.T) {
 	}
 	if res, body := ts.do(guest, "GET", "/api/v1/shares", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
 		t.Errorf("user listing shares: %d %s", res.StatusCode, body)
+	}
+}
+
+// Without shares there is nowhere to go: every root is refused the same way.
+func TestFilesNeedARoot(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Errorf("roots: %d %s", res.StatusCode, body)
+	}
+	for _, target := range []string{
+		"/api/v1/files/list?root=share/fotos",
+		"/api/v1/files/list?root=volume/data",
+		"/api/v1/files/list?root=../../etc",
+		"/api/v1/files/download?root=share/x&path=/etc/passwd",
+		"/api/v1/files/zip?root=share/x&path=a",
+	} {
+		if res, body := ts.request("GET", target, nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "file_not_found" {
+			t.Errorf("%s: %d %s", target, res.StatusCode, body)
+		}
+	}
+	if res, _ := ts.request("POST", "/api/v1/files/uploads", map[string]any{"root": "share/x", "name": "a", "size": 1}); res.StatusCode != http.StatusNotFound {
+		t.Errorf("upload without a root: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(ts.newClient(), "GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("roots without login: %d", res.StatusCode)
 	}
 }

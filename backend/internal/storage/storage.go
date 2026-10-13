@@ -417,3 +417,8 @@ func (m *Manager) Mounted() []string {
 	}
 	return names
 }
+
+// MountPoint returns where a volume is mounted.
+func (m *Manager) MountPoint(volume string) string {
+	return m.mountRoot + "/" + volume
+}
