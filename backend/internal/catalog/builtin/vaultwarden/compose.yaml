@@ -1,0 +1,45 @@
+x-titanos:
+  name: Vaultwarden
+  category: security
+  description:
+    de: Passwortmanager, kompatibel mit den Bitwarden-Apps.
+    en: Password manager that works with the Bitwarden apps.
+  variables:
+    DOMAIN:
+      label: { de: Öffentliche Adresse, en: Public address }
+      help:
+        de: Die Apps brauchen HTTPS, zum Beispiel über einen Reverse-Proxy. Trage hier die Adresse ein, unter der Vaultwarden erreichbar ist.
+        en: The apps need HTTPS, for example through a reverse proxy. Enter the address Vaultwarden is reachable at.
+      placeholder: https://vault.example.org
+    ADMIN_TOKEN:
+      label: { de: Admin-Token, en: Admin token }
+      help:
+        de: Passwort für die Verwaltungsseite unter /admin.
+        en: Password for the admin page at /admin.
+      secret: generate
+    SIGNUPS_ALLOWED:
+      label: { de: Registrierung offen, en: Sign-ups allowed }
+      help:
+        de: Nach dem Anlegen deines Kontos am besten auf false stellen.
+        en: Best set to false once your account exists.
+  paths:
+    /data:
+      label: { de: Daten, en: Data }
+  ports:
+    "80":
+      label: WebUI
+      webui: true
+
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    restart: unless-stopped
+    environment:
+      DOMAIN: ""
+      ADMIN_TOKEN: ""
+      SIGNUPS_ALLOWED: "true"
+      TZ: ""
+    volumes:
+      - "./data:/data"
+    ports:
+      - "8222:80"

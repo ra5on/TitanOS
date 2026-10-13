@@ -1,0 +1,73 @@
+x-titanos:
+  name: Paperless-ngx
+  category: productivity
+  description:
+    de: Dokumente scannen, per Texterkennung durchsuchbar machen und ordnen.
+    en: Scan documents, make them searchable with OCR and keep them in order.
+  variables:
+    PAPERLESS_SECRET_KEY:
+      label: { de: Geheimer Schlüssel, en: Secret key }
+      secret: generate
+    PAPERLESS_TIME_ZONE:
+      label: { de: Zeitzone, en: Time zone }
+      fill: timezone
+    PAPERLESS_OCR_LANGUAGE:
+      label: { de: Sprache der Texterkennung, en: OCR language }
+      help:
+        de: Dreibuchstabige Kürzel, mehrere mit + verbunden, zum Beispiel deu+eng.
+        en: Three-letter codes, several joined with +, for example deu+eng.
+    PAPERLESS_URL:
+      label: { de: Öffentliche Adresse, en: Public address }
+      help:
+        de: Nur nötig, wenn Paperless über eine eigene Adresse erreichbar ist.
+        en: Only needed if Paperless is reachable at an address of its own.
+      placeholder: https://paperless.example.org
+    USERMAP_UID:
+      label: { de: Benutzer-ID für die Dateien, en: User ID for the files }
+      fill: uid
+    USERMAP_GID:
+      label: { de: Gruppen-ID für die Dateien, en: Group ID for the files }
+      fill: gid
+  paths:
+    /usr/src/paperless/data:
+      label: { de: Datenbank und Index, en: Database and index }
+    /usr/src/paperless/media:
+      label: { de: Dokumente, en: Documents }
+    /usr/src/paperless/export:
+      label: Export
+    /usr/src/paperless/consume:
+      label: { de: Eingang (hier abgelegte Dateien werden eingelesen), en: Inbox (files put here are imported) }
+      suggest: share
+    /data:
+      label: { de: Zwischenspeicher (Redis), en: Cache (Redis) }
+  ports:
+    "8000":
+      label: WebUI
+      webui: true
+
+services:
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - broker
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_SECRET_KEY: ""
+      PAPERLESS_TIME_ZONE: ""
+      PAPERLESS_OCR_LANGUAGE: deu+eng
+      PAPERLESS_URL: ""
+      USERMAP_UID: ""
+      USERMAP_GID: ""
+    volumes:
+      - "./data:/usr/src/paperless/data"
+      - "./media:/usr/src/paperless/media"
+      - "./export:/usr/src/paperless/export"
+      - "./consume:/usr/src/paperless/consume"
+    ports:
+      - "8000:8000"
+  broker:
+    image: docker.io/library/redis:8
+    restart: unless-stopped
+    volumes:
+      - "./redis:/data"

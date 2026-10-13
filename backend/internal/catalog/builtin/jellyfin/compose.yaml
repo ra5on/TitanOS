@@ -1,0 +1,31 @@
+x-titanos:
+  name: Jellyfin
+  category: media
+  description:
+    de: Filme, Serien und Musik auf Fernseher, Handy und Browser streamen.
+    en: Stream films, series and music to your TV, phone and browser.
+  paths:
+    /config:
+      label: { de: Konfiguration, en: Configuration }
+    /cache:
+      label: { de: Zwischenspeicher, en: Cache }
+    /media:
+      label: { de: Medien, en: Media }
+      suggest: media
+  ports:
+    "8096":
+      label: WebUI
+      webui: true
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    restart: unless-stopped
+    environment:
+      TZ: ""
+    volumes:
+      - "./config:/config"
+      - "./cache:/cache"
+      - "./media:/media:ro"
+    ports:
+      - "8096:8096"

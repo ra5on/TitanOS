@@ -13,7 +13,9 @@ import (
 	"testing/fstest"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -52,12 +54,27 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
 	ts.client = ts.newClient()
 	return ts
+}
+
+// disabledDocker returns a Docker manager that never touches the system.
+func disabledDocker(store *config.Store) *docker.Manager {
+	m := docker.NewManager(store, "")
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// loadedCatalog returns a catalog that only knows the built-in apps.
+func loadedCatalog(store *config.Store) *catalog.Manager {
+	m := catalog.NewManager(store)
+	m.Load()
+	return m
 }
 
 // loadedShares returns a share manager that never touches the system.
@@ -336,7 +353,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -562,5 +579,121 @@ func TestFilesNeedARoot(t *testing.T) {
 	}
 	if res, _ := ts.do(ts.newClient(), "GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("roots without login: %d", res.StatusCode)
+	}
+}
+
+func TestDockerIsForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/docker", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"running":false`) {
+		t.Errorf("docker status: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{
+		{"GET", "/api/v1/docker"},
+		{"POST", "/api/v1/docker/containers/aaaaaaaaaaaa/start"},
+		{"POST", "/api/v1/docker/apps"},
+		{"GET", "/api/v1/docker/containers/aaaaaaaaaaaa/logs"},
+	} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestAppStore(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/apps", nil)
+	var store struct {
+		Sources []struct {
+			ID      string
+			Builtin bool
+			Count   int
+		}
+		Apps []struct{ ID, Source, Name string }
+	}
+	if err := json.Unmarshal(body, &store); err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("apps: %d %s", res.StatusCode, body)
+	}
+	if len(store.Sources) != 1 || !store.Sources[0].Builtin || len(store.Apps) == 0 || store.Sources[0].Count != len(store.Apps) {
+		t.Fatalf("store = %+v", store)
+	}
+	// The compose file of a template never shows up in the list.
+	if strings.Contains(string(body), "services:") {
+		t.Error("the list carries compose files")
+	}
+
+	app := store.Apps[0]
+	res, body = ts.request("GET", "/api/v1/apps/sources/"+app.Source+"/apps/"+app.ID, nil)
+	var tpl struct {
+		Compose, Timezone, Appdata string
+		UID, GID                   int
+		MissingDevices             []string
+	}
+	if err := json.Unmarshal(body, &tpl); err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("template: %d %s", res.StatusCode, body)
+	}
+	if !strings.Contains(tpl.Compose, "services:") || tpl.Timezone == "" || tpl.UID < 2000 || tpl.GID != 100 || tpl.MissingDevices == nil {
+		t.Errorf("template = %+v", tpl)
+	}
+	if res, body := ts.request("GET", "/api/v1/apps/sources/titanos/apps/nope", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "source_not_found" {
+		t.Errorf("unknown template: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/apps/sources", map[string]string{"url": "file:///etc/passwd"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_source_url" {
+		t.Errorf("source that is no web address: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("DELETE", "/api/v1/apps/sources/titanos", nil); res.StatusCode != http.StatusNotFound {
+		t.Errorf("removing the built-in catalog: %d", res.StatusCode)
+	}
+
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{
+		{"GET", "/api/v1/apps"},
+		{"POST", "/api/v1/apps/refresh"},
+		{"POST", "/api/v1/apps/sources"},
+		{"GET", "/api/v1/apps/sources/titanos/apps/" + app.ID},
+	} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestConsoleNeedsThePasswordAgain(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+
+	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
+		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)
+	}
+	if _, body := ts.request("GET", "/api/v1/session/confirmed", nil); !strings.Contains(string(body), "false") {
+		t.Errorf("confirmed = %s", body)
+	}
+	if res, body := ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": "not the password"}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "wrong_password" {
+		t.Errorf("wrong password: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": testPassword}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("confirm: %d", res.StatusCode)
+	}
+	if _, body := ts.request("GET", "/api/v1/session/confirmed", nil); !strings.Contains(string(body), "true") {
+		t.Errorf("confirmed = %s", body)
+	}
+	// Confirmed now, but this plain request is no WebSocket: it gets past
+	// the check and is refused by the upgrade instead.
+	if res, body := ts.request("GET", console, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("console after confirmation: %d %s", res.StatusCode, body)
+	}
+	// The confirmation belongs to this session only.
+	other := ts.newClient()
+	ts.do(other, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword})
+	if res, body := ts.do(other, "GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
+		t.Errorf("another session of the same account: %d %s", res.StatusCode, body)
 	}
 }

@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes, Freigaben und der Dateimanager funktionieren; Docker und VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
+> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes, Freigaben, der Dateimanager, Docker-Container und der App-Store funktionieren; VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -23,7 +23,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 ## Was schon funktioniert
 
-- **Start vom Stick, Betrieb im RAM.** Das Systemabbild (187 MB) wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Nach dem Start belegt das Grundsystem rund 0,6 GB RAM.
+- **Start vom Stick, Betrieb im RAM.** Das Systemabbild (275 MB) wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Nach dem Start belegt das Grundsystem rund 0,6 GB RAM.
 - **Konfiguration auf dem Stick.** Alles Dauerhafte liegt im Ordner `config` auf dem Stick. Der Stick wird nur bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt – ein Stromausfall trifft ihn so fast nie im eingebundenen Zustand.
 - **Ersteinrichtung und Anmeldung.** Beim ersten Start legst du das Besitzerkonto mit frei gewähltem Namen an. Es gibt kein festes „admin“ und keinen Login als root. Wiederholte Fehlversuche werden ausgebremst.
 - **HTTPS von Anfang an.** Die Weboberfläche läuft über HTTPS mit einem selbstsignierten Zertifikat, das über Neustarts gleich bleibt.
@@ -32,6 +32,8 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
 - **Freigaben.** SMB mit Rechten pro Konto, Gastzugriff nur lesend, Papierkorb und Time-Machine-Ziel; NFS für ausgewählte Rechner. Dazu fertige Adressen zum Verbinden.
 - **Dateimanager im Browser.** Dateien und ganze Ordner hochladen, auch per Drag-and-drop; große Uploads lassen sich pausieren und nach einer Unterbrechung fortsetzen. Dazu herunterladen (auch als Zip), umbenennen und löschen in den Papierkorb.
+- **Docker.** Die Engine speichert alles auf einem Volume deiner Wahl. Die Übersicht zeigt Container und Stacks mit CPU, RAM, Ports und Update-Hinweisen, dazu Start, Stopp, Logs und eine Konsole im Browser. Jede App lässt sich als Formular oder als Compose-Datei bearbeiten.
+- **App-Store.** Ein kleiner eingebauter Katalog und eigene Quellen (Repository, Archiv oder Compose-Datei), darunter CasaOS-kompatible Stores mit mehreren hundert Apps. Beim Installieren füllt TitanOS Zeitzone, Pfade, freie Ports und Geheimnisse selbst aus und zeigt bei jedem Feld, woher der Wert kommt.
 - **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
 - **Deutsch und Englisch.**
 
@@ -58,6 +60,22 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 </table>
 
 <p align="center">
+  <img src="docs/screenshots/docker.png" alt="Docker: ein Compose-Stack mit zwei Diensten und ein einzelner Container als Karte, beide mit Update-Hinweis" width="900"><br>
+  Docker
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/apps.png" alt="Apps: Katalog mit Kategorien und das Installationspanel einer App"></td>
+    <td width="50%"><img src="docs/screenshots/container-bearbeiten.png" alt="Container bearbeiten: Formular mit Image, Netzwerk, Ports und Variablen"></td>
+  </tr>
+  <tr>
+    <td align="center">App-Store</td>
+    <td align="center">Container bearbeiten</td>
+  </tr>
+</table>
+
+<p align="center">
   <img src="docs/screenshots/dateien.png" alt="Dateien: Freigaben links, Dateiliste und abgeschlossene Uploads" width="900"><br>
   Dateimanager
 </p>
@@ -70,7 +88,6 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 ## Was geplant ist
 
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
-- **Docker mit App-Store.** Eigene App-Quellen; Vorlagen füllen Variablen, Pfade und Ports von selbst aus. Jeder Container lässt sich als Formular oder als Compose-Datei bearbeiten.
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI, Durchreichen von GPU und iGPU, NAS-Ordner in der VM per virtiofs, Konsole im Browser.
 - **Hardware im Blick.** Erkennt Intel-iGPU, Intel-NPU und NVIDIA-GPUs und lässt dich festlegen, ob Container oder eine VM sie nutzen. NVIDIA-Treiber als Plugin.
 - **Sichere Updates.** Signierte Updates aus den GitHub-Releases in einen zweiten System-Slot auf dem Stick, mit automatischer Rückkehr zur alten Version, falls die neue nicht startet.

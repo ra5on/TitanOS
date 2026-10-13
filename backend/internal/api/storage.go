@@ -84,6 +84,10 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if docker := s.opts.Docker.Current(); docker.Enabled && docker.Volume == name {
+		writeError(w, http.StatusConflict, "volume_has_docker", "Docker keeps its data on this volume")
+		return
+	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Delete(r.Context(), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)
