@@ -17,6 +17,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -49,9 +50,11 @@ type Options struct {
 	Plugins  *plugins.Manager
 	Network  *network.Manager
 	Notify   *notify.Manager
-	Settings *system.Settings
-	Power    system.Power
-	Version  string
+	// ConfigBackup saves /config to a volume and restores it on a new stick.
+	ConfigBackup *configbackup.Manager
+	Settings     *system.Settings
+	Power        system.Power
+	Version      string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -81,6 +84,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
 	mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
+	// A new stick may take the configuration from a backup instead.
+	mux.HandleFunc("GET /api/v1/setup/backups", s.handleSetupBackups)
+	mux.HandleFunc("POST /api/v1/setup/restore", s.handleSetupRestore)
+	mux.HandleFunc("POST /api/v1/setup/restore/upload", s.handleSetupRestoreUpload)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
 
@@ -180,6 +187,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
 	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
 	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
+	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
+	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
+	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
+	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 

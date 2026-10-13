@@ -6,6 +6,7 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session, setupOwner } from '#lib/session.svelte.ts';
 	import AuthCard from './AuthCard.svelte';
+	import Restore from './Restore.svelte';
 
 	// Same rules as the backend (internal/auth); it checks again.
 	const MIN_PASSWORD_LENGTH = 10;
@@ -47,6 +48,7 @@
 
 <AuthCard title={t('auth.setupTitle')} hostname={session.data?.hostname}>
 	<p class="intro">{t('auth.setupIntro')}</p>
+	<Restore />
 	<form onsubmit={submit}>
 		<label>
 			<span>{t('auth.name')}</span>

@@ -15,6 +15,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -60,7 +61,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -71,6 +72,14 @@ func newTestServer(t *testing.T) *testServer {
 // disabledDocker returns a Docker manager that never touches the system.
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledBackup returns a backup manager that never touches the system.
+func disabledBackup(store *config.Store) *configbackup.Manager {
+	m := configbackup.NewManager(store, "1.2.3")
 	m.Disabled = true
 	m.Load()
 	return m
@@ -406,7 +415,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -842,6 +851,44 @@ func TestNotificationsKeepTheirSecrets(t *testing.T) {
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
 	for _, tc := range [][2]string{{"GET", "/api/v1/notifications"}, {"GET", "/api/v1/notifications/settings"}, {"PUT", "/api/v1/notifications/settings"}, {"POST", "/api/v1/notifications/test"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestRestoreOnlyOnANewStick(t *testing.T) {
+	ts := newTestServer(t)
+	// Before the owner exists the disks may be searched for backups.
+	if res, body := ts.request("GET", "/api/v1/setup/backups", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"backups":[]`) {
+		t.Errorf("backups on a new stick: %d %s", res.StatusCode, body)
+	}
+	ts.setup()
+	for _, tc := range [][2]string{{"GET", "/api/v1/setup/backups"}, {"POST", "/api/v1/setup/restore"}, {"POST", "/api/v1/setup/restore/upload"}} {
+		if res, body := ts.request(tc[0], tc[1], map[string]string{"device": "md127", "name": "x"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "setup_done" {
+			t.Errorf("%s %s after the setup: %d %s", tc[0], tc[1], res.StatusCode, body)
+		}
+	}
+
+	res, body := ts.request("GET", "/api/v1/config-backup", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"enabled":true`) || !strings.Contains(string(body), `"keep":14`) {
+		t.Errorf("state: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/config-backup", map[string]any{"enabled": true, "volume": "nowhere", "keep": 14}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_backup_settings" {
+		t.Errorf("unknown volume: %d %s", res.StatusCode, body)
+	}
+	// A backup holds every secret: not without the password once more.
+	if res, body := ts.request("GET", "/api/v1/config-backup/download?volume=data&name=config-20261013T120000Z-000000000000.tar.gz", nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
+		t.Errorf("download without confirmation: %d %s", res.StatusCode, body)
+	}
+	ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": testPassword})
+	if res, body := ts.request("GET", "/api/v1/config-backup/download?volume=data&name=config-20261013T120000Z-000000000000.tar.gz", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "backup_not_found" {
+		t.Errorf("download of a backup that is not there: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/config-backup"}, {"PUT", "/api/v1/config-backup"}, {"POST", "/api/v1/config-backup/run"}, {"GET", "/api/v1/config-backup/download"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
