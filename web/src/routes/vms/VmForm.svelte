@@ -49,6 +49,7 @@
 	let folders = $state((initial?.folders ?? []).map((folder) => ({ ...folder })));
 	let pci = $state<string[]>(initial?.pci ?? []);
 	let usb = $state<string[]>(initial?.usb ?? []);
+	let net = $state<'user' | 'bridge'>(initial?.network ?? 'user');
 	let grow = $state<Record<number, number>>({});
 	let busy = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -208,7 +209,8 @@
 		iso: iso.trim(),
 		folders: folders.map((folder) => ({ path: folder.path.trim().replace(/\/+$/, ''), tag: folder.tag, readOnly: folder.readOnly })),
 		pci,
-		usb
+		usb,
+		network: net
 	});
 
 	async function create(start: boolean) {
@@ -341,7 +343,6 @@
 					<span class="chip">UEFI (OVMF)</span>
 					<span class="chip">{t('vms.new.machine')}</span>
 					<span class="chip">{t('vms.new.cpuMode')}</span>
-					<span class="chip">{t('vms.new.network')}</span>
 					{#if secure}<span class="chip">{t('vms.form.secureChip')}</span>{/if}
 				</div>
 			</fieldset>
@@ -488,6 +489,13 @@
 				{/each}
 				{#if hardware && hardware.hardware.pci.length === 0 && hardware.hardware.usb.length === 0}<p class="muted note">{t('vms.form.noDevices')}</p>{/if}
 				{#if pci.length > 0}<small>{t('vms.form.passNote')}</small>{/if}
+				<label class="netsel"><span>{t('vms.form.network')}</span>
+					<select class="field" bind:value={net}>
+						<option value="user">{t('vms.form.netUser')}</option>
+						<option value="bridge" disabled={!status?.bridge}>{t('vms.form.netBridge')}</option>
+					</select>
+					{#if !status?.bridge}<small>{t('vms.form.netNoBridge')} <a href="/settings/network">{t('netcfg.title')}</a></small>{/if}
+				</label>
 			</fieldset>
 		</section>
 
@@ -912,6 +920,9 @@
 	}
 	.wide-note {
 		flex: 1 1 100%;
+	}
+	.netsel {
+		max-width: 26rem;
 	}
 	.small-link {
 		font-size: 0.8125rem;

@@ -85,6 +85,8 @@ export type SystemInfo = {
 		rxBytesPerSecond: number;
 		txBytesPerSecond: number;
 	} | null;
+	/** Seconds a network change on trial has left to be confirmed; 0 if there is none. */
+	networkPendingSeconds: number;
 };
 
 export type Preferences = {
@@ -253,6 +255,8 @@ export type VM = {
 	secureBoot: boolean;
 	pci: string[] | null;
 	usb: string[] | null;
+	/** "bridge" for an address of its own in the network, otherwise "user". */
+	network: 'user' | 'bridge';
 	/** Set while disks are copied, or if that failed. */
 	job: { state: 'running' | 'failed'; text: string } | null;
 	state: 'running' | 'stopped';
@@ -268,6 +272,8 @@ export type VM = {
 export type VMStatus = {
 	/** Whether the machine has hardware virtualization. */
 	kvm: boolean;
+	/** Whether the bridge is set up that gives VMs an address of their own. */
+	bridge: boolean;
 	host: { cpus: number; memoryBytes: number; usedMemoryBytes: number; cpuModel: string };
 	vms: VM[];
 };

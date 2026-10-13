@@ -42,7 +42,7 @@ Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit d
 
 1. **Backup des Sticks:** automatisches Backup von `/config` auf ein Volume (optional extern) und geführter Ablauf „Stick ersetzen“ (neuen Stick flashen, Konfiguration zurückspielen).
 2. **Ersteinrichtung:** Assistent beim ersten Start – Sprache, Kontoname und Passwort (Besitzer), Hostname, Netzwerk, Zeitzone, erstes Volume.
-3. **Netzwerk:** feste IP, Bridge `br0` (für VMs/Container mit eigener IP), VLANs, Bonding, DNS. Änderungen mit Sicherheitsfrist: ohne Bestätigung innerhalb von 2 Minuten automatisch zurück.
+3. **Netzwerk:** feste IP, Bridge `br0` (für VMs/Container mit eigener IP), VLANs, Bonding, DNS. Änderungen mit Sicherheitsfrist: ohne Bestätigung innerhalb von 2 Minuten automatisch zurück. Umgesetzt, siehe Web-UI › Netzwerk.
 4. **Shares und Nutzer:** Seiten für SMB/NFS-Freigaben, Rechte, Papierkorb, Time-Machine-Unterstützung; Kontoverwaltung mit Rollen. Konzept für Shares abgestimmt, siehe Web-UI › Shares.
 5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest).
 6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern.
@@ -191,6 +191,15 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
 
+**Netzwerk** (Einstellungen › Netzwerk; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Konfiguration in `/config/network/network.json`: Name des NAS, Anschlüsse (keiner gewählt = jeder Anschluss per DHCP, wie ab Werk; mehrere = Bond mit wählbarer Art), VLAN-Nummer, Bridge `br0`, DHCP oder feste Adresse mit Gateway, Nameserver. Daraus schreibt das Paket `network` bei jedem Start und jeder Änderung die Dateien für systemd-networkd (`/etc/systemd/network/10-titanos-*`); Schichtung: Anschlüsse → Bond → VLAN → Bridge → Adresse.
+- Die Bridge übernimmt die Hardware-Adresse des ersten Anschlusses, damit der Router über Neustarts dieselbe Adresse vergibt.
+- Jede Änderung gilt 2 Minuten auf Probe und wird erst mit der Bestätigung auf den Stick geschrieben. Die Bestätigung kommt über die Weboberfläche – also über die neue Verbindung – per Leiste oben auf jeder Seite. Ohne sie stellt titand den vorigen Zustand wieder her. Ändert sich die Adresse, muss man sich unter der neuen anmelden und dort bestätigen.
+- Zeitzone unter „Einstellungen“ (`/config/system/settings.json`), wird bei jedem Start gesetzt und neuen Apps mitgegeben.
+- VMs wählen „nur ausgehend“ oder „eigene Adresse im Heimnetz“ (Karte an `br0`); Letzteres nur, wenn die Bridge eingerichtet ist.
+- Getestet in QEMU: Bridge mit DHCP und fester Adresse, Zurücksetzen nach unbestätigter Änderung, VM an der Bridge, Neustart des NAS. Nicht getestet (nur die erzeugten Dateien): Bonding und VLAN – dafür fehlen in der Testumgebung zweite Anschlüsse und ein VLAN-fähiges Netz.
+- Noch offen: IPv6-Einstellungen, mehrere Netze, Container mit eigener Adresse im LAN (macvlan/ipvlan an `br0`), Wake-on-LAN.
+
 **Shares** (Reiter „Shares“, Konzept abgestimmt, noch keine Entwurfsseite)
 - Liste: Name, Volume und Pfad, Protokolle (SMB, NFS), wer Zugriff hat, belegter Platz, Status.
 - Anlegen und Bearbeiten in einem Seitenpanel:
@@ -297,7 +306,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - QEMU läuft als `libvirt-qemu`, nicht als root. Es erreicht Platten und ISO-Dateien in Freigaben über die Gruppe `users`; `dynamic_ownership = 0`, damit libvirt die Besitzer dieser Dateien nicht ändert.
 - Der Bildschirm einer VM ist nur über einen Unix-Socket in `/run/titanos-vms/` erreichbar (Gruppe `kvm`), den titand als WebSocket hinter der Anmeldung weiterreicht. Kein VNC-Port im Netz.
 - Beim Herunterfahren des NAS fährt `libvirt-guests` die VMs herunter (bis zu 2 Minuten).
-- Netzwerk: vorerst nur ausgehend (QEMU-Usermode-Netz). Eigene IP im Heimnetz braucht die Bridge `br0` und damit die Netzwerk-Seite (Pflichtpunkt 3).
+- Netzwerk einer VM: nur ausgehend (QEMU-Usermode-Netz) oder eigene Adresse im Heimnetz über die Bridge `br0`.
 - Umgesetzt: Kerne festlegen (`cpuPin`, ein vCPU je gewählter CPU, Threads eines Kerns gemeinsam, Emulator-Threads auf die übrigen Kerne) mit P-/E-Kern-Kennzeichnung aus `/sys/devices/cpu_core|cpu_atom/cpus`; „exklusiv reservieren“ setzt `AllowedCPUs` per `systemctl set-property --runtime` für `system.slice`, `user.slice` und `init.scope` und nimmt es zurück, sobald keine solche VM mehr läuft.
 - Umgesetzt: Datenträger auf vier Wegen – neue Platte, Kopie eines vorhandenen Abbilds (qcow2, img/raw, vmdk, vhdx, vdi; `qemu-img convert` im Hintergrund, danach ggf. vergrößern), Abbild direkt verwenden (nur qcow2/raw), ganze Festplatte per `/dev/disk/by-id` (nur Platten, die in keinem Volume stecken; bei jedem Start erneut geprüft). Platten lassen sich bei ausgeschalteter VM vergrößern, nie verkleinern. Das Format eines Abbilds wird aus der Dateiendung bestimmt und QEMU ausdrücklich mitgegeben; Abbilder, die auf einer anderen Datei aufbauen, werden abgelehnt.
 - Umgesetzt: TPM 2.0 (swtpm) und Secure Boot (OVMF mit Microsoft-Schlüsseln) als Option der Windows-Vorlage, fest ab dem Anlegen. Der Zustand des TPM liegt in `/mnt/<volume>/vms/<name>/tpm` (`<source type='dir'>`, `persistent_state='yes'`); swtpm läuft als `libvirt-qemu`.

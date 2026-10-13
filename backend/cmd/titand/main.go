@@ -23,6 +23,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -73,6 +74,18 @@ func run(opts options) error {
 		// Not fatal: the web UI says that /config is missing and titand
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", opts.configDir, "err", err)
+	}
+
+	// Time zone and network first: everything after it relies on them.
+	settings := system.NewSettings(store)
+	settings.Disabled = opts.dev
+	if err := settings.Load(); err != nil {
+		slog.Warn("system settings not put in place", "err", err)
+	}
+	connection := network.NewManager(store)
+	connection.Disabled = opts.dev
+	if err := connection.Load(ctx); err != nil {
+		slog.Warn("network configuration not put in place", "err", err)
 	}
 
 	volumes := storage.NewManager(store)
@@ -165,6 +178,8 @@ func run(opts options) error {
 		VMs:           machines,
 		Hardware:      hardware.NewManager(),
 		Plugins:       extensions,
+		Network:       connection,
+		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,

@@ -18,6 +18,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -58,7 +59,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -72,6 +73,22 @@ func disabledDocker(store *config.Store) *docker.Manager {
 	m.Disabled = true
 	m.Load()
 	return m
+}
+
+// disabledNetwork returns a network manager that never touches the system.
+func disabledNetwork(store *config.Store) *network.Manager {
+	m := network.NewManager(store)
+	m.Disabled = true
+	m.Load(context.Background())
+	return m
+}
+
+// disabledSettings returns system settings that never touch the system.
+func disabledSettings(store *config.Store) *system.Settings {
+	s := system.NewSettings(store)
+	s.Disabled = true
+	s.Load()
+	return s
 }
 
 // disabledPlugins returns a plugin manager that never touches the system.
@@ -381,7 +398,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -674,6 +691,35 @@ func TestVMsAreForAdministrators(t *testing.T) {
 		{"DELETE", "/api/v1/vms/x"},
 		{"GET", "/api/v1/vms/x/screen"},
 	} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestNetworkIsForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/network", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"dhcp":true`) || !strings.Contains(string(body), `"pending":null`) || !strings.Contains(string(body), `"bondModes":[`) {
+		t.Errorf("network: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/network", map[string]any{"hostname": "nas", "dhcp": true}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("change in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/network/confirm", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "network_not_pending" {
+		t.Errorf("confirm without a change: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/system/timezone", map[string]string{"timezone": "Europe/Atlantis"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_timezone" {
+		t.Errorf("unknown time zone: %d %s", res.StatusCode, body)
+	}
+	if _, body := ts.request("GET", "/api/v1/system", nil); !strings.Contains(string(body), `"networkPendingSeconds":0`) {
+		t.Errorf("system info: %s", body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/network"}, {"PUT", "/api/v1/network"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/network/revert"}, {"PUT", "/api/v1/system/timezone"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
