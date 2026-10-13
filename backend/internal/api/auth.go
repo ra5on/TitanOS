@@ -132,6 +132,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the account could not be saved to /config")
 	default:
 		slog.Info("owner account created", "user", user.Name, "ip", remoteIP(r))
+		s.opts.Shares.Kick()
 		if s.startSession(w, r, user) {
 			writeJSON(w, http.StatusCreated, userResponse{Name: user.Name, Role: user.Role})
 		}
@@ -168,6 +169,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.limiter.Reset(userKey)
 	slog.Info("login", "user", user.Name, "ip", ip)
+	// Accounts from before shares existed get their SMB password now, the
+	// only moment the password is known.
+	if _, stored := s.opts.Users.RememberSMBHash(user.Name, req.Password); stored {
+		s.opts.Shares.Kick()
+	}
 	if s.startSession(w, r, user) {
 		writeJSON(w, http.StatusOK, userResponse{Name: user.Name, Role: user.Role})
 	}

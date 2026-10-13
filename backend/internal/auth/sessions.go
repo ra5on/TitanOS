@@ -96,3 +96,17 @@ func (s *Sessions) prune(now time.Time) {
 		}
 	}
 }
+
+// DeleteUser ends all sessions of an account, except the one with the
+// given token (pass "" to end all). Used when the password changes or the
+// account is removed.
+func (s *Sessions) DeleteUser(user, exceptToken string) {
+	keep := sha256.Sum256([]byte(exceptToken))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, session := range s.sessions {
+		if session.User == user && (exceptToken == "" || key != keep) {
+			delete(s.sessions, key)
+		}
+	}
+}

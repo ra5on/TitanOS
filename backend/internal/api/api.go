@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
@@ -28,6 +29,7 @@ type Options struct {
 	Users   *auth.Users
 	Monitor *system.Monitor
 	Storage *storage.Manager
+	Shares  *shares.Manager
 	Power   system.Power
 	Version string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -79,6 +81,18 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireAdmin(s.handleAddVolumeDisk))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireAdmin(s.handleRemoveVolumeDisk))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireAdmin(s.handleCheckVolume))
+
+	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
+	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
+	mux.HandleFunc("PUT /api/v1/users/{name}", s.requireAdmin(s.handleUpdateUser))
+	mux.HandleFunc("DELETE /api/v1/users/{name}", s.requireAdmin(s.handleDeleteUser))
+	// Everyone may change their own password.
+	mux.HandleFunc("POST /api/v1/users/{name}/password", s.requireUser(s.handleSetPassword))
+
+	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
+	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
+	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
+	mux.HandleFunc("DELETE /api/v1/shares/{name}", s.requireAdmin(s.handleDeleteShare))
 
 	mux.HandleFunc("/api/", handleAPINotFound)
 	mux.Handle("/", uiHandler(opts.UI))
