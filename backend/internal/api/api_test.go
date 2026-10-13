@@ -28,6 +28,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -63,7 +64,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -74,6 +75,14 @@ func newTestServer(t *testing.T) *testServer {
 // disabledDocker returns a Docker manager that never touches the system.
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledUpdate returns an updater that never touches a stick.
+func disabledUpdate(store *config.Store) *update.Manager {
+	m := update.NewManager(store, "1.2.3", "")
 	m.Disabled = true
 	m.Load()
 	return m
@@ -425,7 +434,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -972,6 +981,39 @@ func TestSSHKeysAndAccess(t *testing.T) {
 	// A plain user may keep keys, but is told that they open nothing.
 	if res, body := ts.do(guest, "GET", "/api/v1/account/ssh-keys", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"mayLogin":false`) {
 		t.Errorf("keys of a plain user: %d %s", res.StatusCode, body)
+	}
+}
+
+func TestUpdatesAreForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/update", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"version":"1.2.3"`) || !strings.Contains(string(body), `"channel":"stable"`) || !strings.Contains(string(body), `"canVerify":false`) {
+		t.Errorf("status: %d %s", res.StatusCode, body)
+	}
+	// This build holds no key: nothing can be checked, so nothing is installed.
+	if res, body := ts.request("POST", "/api/v1/update/check", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "update_no_key" {
+		t.Errorf("check without a key: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/update/install", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("install in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "nightly", "installTime": "03:30"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_update_settings" {
+		t.Errorf("unknown channel: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"beta"`) || strings.Contains(string(body), "evil") {
+		t.Errorf("settings: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/health", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"ready":`) {
+		t.Errorf("health: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/update"}, {"PUT", "/api/v1/update/settings"}, {"POST", "/api/v1/update/check"}, {"POST", "/api/v1/update/install"}, {"POST", "/api/v1/update/rollback"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
 	}
 }
 

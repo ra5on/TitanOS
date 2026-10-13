@@ -1,0 +1,21 @@
+[Unit]
+Description=TitanOS came up after an update
+Documentation=https://github.com/ra5on/TitanOS
+After=titand.service
+# After an update the boot loader starts the new system on trial: its boot
+# entry carries a counter, and every start costs one try. This check takes
+# the counter away once titand is ready. A system that does not get there
+# is restarted; after the third try the loader goes back to the system of
+# before. Without a counter on the entry the check does nothing.
+FailureAction=reboot
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Waits up to five minutes for titand to have its configuration and the
+# volumes that were mounted before the update.
+ExecStart=/usr/bin/titand -check-boot
+TimeoutStartSec=6min
+
+[Install]
+WantedBy=multi-user.target

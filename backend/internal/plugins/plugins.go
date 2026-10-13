@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/minisign"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
@@ -213,7 +214,7 @@ func readManifest(path string) (Manifest, error) {
 // official reports whether the manifest at path carries a valid signature
 // of a trusted key in <path>.minisig.
 func (m *Manager) official(path string) bool {
-	keys := loadKeys(m.keyDir)
+	keys := minisign.LoadKeys(m.keyDir)
 	if len(keys) == 0 {
 		return false
 	}
@@ -222,7 +223,7 @@ func (m *Manager) official(path string) bool {
 		return false
 	}
 	signature, err := os.ReadFile(path + ".minisig")
-	return err == nil && verify(keys, manifest, string(signature)) == nil
+	return err == nil && minisign.Verify(keys, manifest, string(signature)) == nil
 }
 
 // installed returns the plugins in the plugin folder of the volume.
