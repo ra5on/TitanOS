@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.mitem:hover{background:#262E37}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<button type="button" aria-label="Meldungen (3 neu)" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #C9D1D9; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+<span aria-hidden="true" style="position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: #F0B54A"></span>
+</button>
+<a href="Terminal.dc.html" aria-label="Terminal" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid #2A323A; border-radius: 10px; color: #C9D1D9; box-sizing: border-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg></a>
+<div style="position: relative">
+<button type="button" aria-haspopup="menu" aria-expanded="{{menuExpanded}}" onClick="{{toggleMenu}}" style="height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 6px; background: {{menuBtnBg}}; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">
+<span aria-hidden="true" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: {{accent}}; color: #0B1622; font-size: 13px; font-weight: 700">{{initial}}</span>
+<span>{{user}}</span>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{menuOpen}}" hint-placeholder-val="{{ false }}">
+<div role="menu" aria-label="Konto" style="position: absolute; right: 0; top: 52px; z-index: 30; width: 300px; padding: 6px; background: #1C2229; border: 1px solid #323B45; border-radius: 12px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 10px 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: {{accent}}; color: #0B1622; font-size: 16px; font-weight: 700">{{initial}}</span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">{{user}}</span><span style="font-size: 12px; color: #9AA3AD">Besitzer · volle Rechte auf diesem NAS</span></span>
+</div>
+<div aria-hidden="true" style="height: 1px; margin: 2px 4px 6px; background: #2A323A"></div>
+<a href="#" role="menuitem" class="mitem" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-radius: 8px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>Mein Konto<span style="margin-left: auto; font-size: 12px; color: #9AA3AD">Passwort, 2FA, SSH</span></a>
+<a href="Appearance.dc.html" role="menuitem" class="mitem" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-radius: 8px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 0 0 16Z" fill="currentColor"></path></svg>Darstellung</a>
+<a href="#" role="menuitem" class="mitem" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-radius: 8px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path></svg>Angemeldete Geräte<span style="margin-left: auto; font-size: 12px; color: #9AA3AD">2 aktiv</span></a>
+<div aria-hidden="true" style="height: 1px; margin: 6px 4px; background: #2A323A"></div>
+<button type="button" role="menuitem" class="mitem" onClick="{{askRestart}}" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"></path></svg>NAS neu starten …</button>
+<button type="button" role="menuitem" class="mitem" onClick="{{askShutdown}}" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"></path><path d="M6.3 6.3a8 8 0 1 0 11.4 0"></path></svg>NAS herunterfahren …</button>
+<div aria-hidden="true" style="height: 1px; margin: 6px 4px; background: #2A323A"></div>
+<button type="button" role="menuitem" class="mitem" onClick="{{closeMenu}}" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 16l-4-4 4-4M6 12h10"></path></svg>Abmelden</button>
+</div>
+</sc-if>
+</div>
+</div>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 36px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Dashboard</h1>
+<p style="margin: 0; font-size: 14px; color: #9AA3AD">Läuft seit 12 Tagen · TitanOS 0.1.0 · System-Slot A</p>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #2A2312; border: 1px solid #5A4720; border-radius: 10px; font-size: 14px; color: #F6D79A">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #F0B54A"></span>
+Wiederaufbau von „data“ läuft · 63 %
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+
+<section style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">System</h2>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">8 Kerne · 42 °C</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span>CPU</span><span style="font-family: 'IBM Plex Mono', monospace">18 %</span></div>
+<div style="height: 6px; background: #232A31; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 18%; background: {{accent}}; border-radius: 3px"></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span>Arbeitsspeicher</span><span style="font-family: 'IBM Plex Mono', monospace">3,1 / 16 GB</span></div>
+<div style="height: 6px; background: #232A31; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 19%; background: {{accent}}; border-radius: 3px"></div></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 4px; border-top: 1px solid #20262C">
+<div style="display: flex; flex-direction: column; gap: 2px; padding-top: 10px"><span style="font-size: 12px; color: #9AA3AD">TitanOS im RAM</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">0,52 GB</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; padding-top: 10px"><span style="font-size: 12px; color: #9AA3AD">Overlay</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">38 / 512 MB</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #9AA3AD">Laufzeit</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">12 T 4 Std</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #9AA3AD">Boot-Stick</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">TITANOS · OK</span></div>
+</div>
+</section>
+
+<section style="flex: 2 1 560px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Volumes</h2>
+<a href="Storage.dc.html" style="font-size: 14px; text-decoration: none">Speicher öffnen</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 500">data</span>
+<span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">RAID 5</span>
+<span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #2A2312; border: 1px solid #5A4720; color: #F6D79A">Wiederaufbau 63 %</span>
+<span style="margin-left: auto; font-size: 13px; color: #9AA3AD">3 × 8 TB · XFS</span>
+</div>
+<div style="height: 8px; background: #232A31; border-radius: 4px; overflow: hidden"><div style="height: 100%; width: 59%; background: {{accent}}; border-radius: 4px"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #9AA3AD"><span>9,4 TB von 16 TB belegt</span><span style="font-family: 'IBM Plex Mono', monospace">59 %</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid #20262C">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 500">fast</span>
+<span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">RAID 1</span>
+<span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #12281E; border: 1px solid #245A40; color: #9BE3BE">Synchron</span>
+<span style="margin-left: auto; font-size: 13px; color: #9AA3AD">2 × 1 TB NVMe · Btrfs</span>
+</div>
+<div style="height: 8px; background: #232A31; border-radius: 4px; overflow: hidden"><div style="height: 100%; width: 41%; background: {{accent}}; border-radius: 4px"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #9AA3AD"><span>412 GB von 1 TB belegt</span><span style="font-family: 'IBM Plex Mono', monospace">41 %</span></div>
+</div>
+</section>
+
+<section style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Netzwerk</h2>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">eth0 · 1 GbE</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px; background: #12161A; border-radius: 10px"><span style="font-size: 12px; color: #9AA3AD">Empfangen</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500">42,1</span><span style="font-size: 12px; color: #9AA3AD">MB/s</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px; background: #12161A; border-radius: 10px"><span style="font-size: 12px; color: #9AA3AD">Gesendet</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500">3,4</span><span style="font-size: 12px; color: #9AA3AD">MB/s</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA3AD">IPv4</span><span style="font-family: 'IBM Plex Mono', monospace">192.168.1.20/24</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA3AD">Gateway</span><span style="font-family: 'IBM Plex Mono', monospace">192.168.1.1</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA3AD">Fernzugriff</span><span>nicht eingerichtet</span></div>
+</div>
+</section>
+
+<section style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Platten</h2>
+<span style="font-size: 12px; color: #9AA3AD">6 erkannt</span>
+</div>
+<sc-for list="{{disks}}" as="d" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #20262C; font-size: 14px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; flex: none; background: {{d.dot}}"></span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; width: 76px; flex: none">{{d.dev}}</span>
+<span style="flex: 1 1 auto; min-width: 0; color: #9AA3AD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{d.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #C9D1D9">{{d.temp}}</span>
+</div>
+</sc-for>
+</section>
+
+<section style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Docker</h2>
+<span style="font-size: 12px; color: #9AA3AD">6 von 8 laufen</span>
+</div>
+<sc-for list="{{containers}}" as="c" hint-placeholder-count="8">
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #20262C; font-size: 14px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; flex: none; background: {{c.dot}}"></span>
+<span style="flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.name}}</span>
+<span style="font-size: 12px; color: #9AA3AD">{{c.state}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #C9D1D9; width: 48px; text-align: right">{{c.cpu}}</span>
+</div>
+</sc-for>
+</section>
+
+<section style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Virtuelle Maschinen</h2>
+<span style="font-size: 12px; color: #9AA3AD">1 von 2 läuft</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #20262C; font-size: 14px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; flex: none; background: #4CC38A"></span>
+<span style="flex: 1 1 auto">home-assistant</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">2 vCPU · 4 GB</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #20262C; font-size: 14px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; flex: none; background: #6B7580"></span>
+<span style="flex: 1 1 auto; color: #9AA3AD">windows-11 · gestoppt</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">4 vCPU · 8 GB</span>
+</div>
+</div>
+<div style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Shares</h2>
+<span style="font-size: 12px; color: #9AA3AD">5</span>
+</div>
+<sc-for list="{{shares}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #20262C; font-size: 14px">
+<span style="font-family: 'IBM Plex Mono', monospace; flex: 1 1 auto">{{s.name}}</span>
+<span style="font-size: 12px; color: #9AA3AD">{{s.vol}}</span>
+<span style="font-size: 12px; font-weight: 500; padding: 1px 7px; border-radius: 5px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">{{s.proto}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Meldungen</h2>
+<a href="#" style="font-size: 14px; text-decoration: none">Alle anzeigen</a>
+</div>
+<sc-for list="{{events}}" as="e" hint-placeholder-count="4">
+<div style="display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid #20262C">
+<span aria-hidden="true" style="width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; flex: none; background: {{e.dot}}"></span>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 14px">{{e.text}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{e.time}}</span>
+</div>
+</div>
+</sc-for>
+</section>
+
+</div>
+</main>
+
+<footer style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 24px; padding: 10px 32px; background: #12161A; border-top: 1px solid #232A31; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">
+<span>data: Wiederaufbau 63 % · noch ca. 2 Std 14 Min · fast: synchron · 6 Platten</span>
+<span>TitanOS 0.1.0 · Slot A · 14:32</span>
+</footer>
+
+<sc-if value="{{confirmOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(5, 7, 9, 0.7)">
+<div role="dialog" aria-modal="true" aria-labelledby="dlg-h" style="width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #161A1F; border: 1px solid #2E363F; border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6)">
+<h2 id="dlg-h" style="margin: 0; font-size: 19px; font-weight: 600">{{dlg.title}}</h2>
+<div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5">
+<span style="display: flex; gap: 10px"><span aria-hidden="true" style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 50%; background: #6B7580"></span>6 laufende Container und die VM home-assistant werden sauber beendet{{dlg.after}}</span>
+<span style="display: flex; gap: 10px; color: #F6D79A"><span aria-hidden="true" style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 50%; background: #F0B54A"></span>Der Wiederaufbau von „data“ (63 %) wird unterbrochen und {{dlg.rebuild}}</span>
+<span style="display: flex; gap: 10px; color: #9AA3AD"><span aria-hidden="true" style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 50%; background: #6B7580"></span>{{dlg.note}}</span>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 14px"><input type="checkbox" style="width: 18px; height: 18px; accent-color: {{accent}}">Erst nach Abschluss des Wiederaufbaus ausführen</label>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px">
+<button type="button" onClick="{{closeDlg}}" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Abbrechen</button>
+<button type="button" onClick="{{closeDlg}}" style="height: 44px; padding: 0 18px; background: #F0B54A; border: 0; border-radius: 10px; color: #1A1406; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{dlg.action}}</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#F28C6B"]},"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { menu: false, dlg: null };
+  }
+  renderVals() {
+    const ok = '#4CC38A', warn = '#F0B54A', idle = '#6B7580';
+    const s = this.state;
+    const user = 'alex';
+    const DLG = {
+      restart: { title: 'NAS neu starten?', action: 'Neu starten', after: ' und danach wieder gestartet.', rebuild: 'nach dem Start automatisch fortgesetzt.', note: 'Dauert etwa 1–2 Minuten. Die Weboberfläche verbindet sich danach von selbst neu.' },
+      shutdown: { title: 'NAS herunterfahren?', action: 'Herunterfahren', after: '.', rebuild: 'beim nächsten Start fortgesetzt.', note: 'Zum Einschalten: Taste am Gerät oder Wake-on-LAN (aktiv).' }
+    };
+    return {
+      user, initial: user.charAt(0).toUpperCase(),
+      menuOpen: s.menu, menuExpanded: s.menu ? 'true' : 'false', menuBtnBg: s.menu ? '#1E252C' : 'transparent',
+      toggleMenu: () => this.setState({ menu: !s.menu }),
+      closeMenu: () => this.setState({ menu: false }),
+      askRestart: () => this.setState({ menu: false, dlg: 'restart' }),
+      askShutdown: () => this.setState({ menu: false, dlg: 'shutdown' }),
+      confirmOpen: !!s.dlg, dlg: DLG[s.dlg || 'restart'],
+      closeDlg: () => this.setState({ dlg: null }),
+      accent: this.props.accent ?? '#6CB6FF',
+      disks: [
+        { dev: 'sda', label: '8 TB HDD · data', temp: '34 °C', dot: ok },
+        { dev: 'sdb', label: '8 TB HDD · data', temp: '35 °C', dot: ok },
+        { dev: 'sdd', label: '8 TB HDD · data · wird aufgebaut', temp: '33 °C', dot: warn },
+        { dev: 'nvme0n1', label: '1 TB NVMe · fast', temp: '41 °C', dot: ok },
+        { dev: 'nvme1n1', label: '1 TB NVMe · fast', temp: '43 °C', dot: ok },
+        { dev: 'sde', label: '4 TB HDD · nicht zugewiesen', temp: '31 °C', dot: idle }
+      ],
+      containers: [
+        { name: 'jellyfin', state: 'läuft', cpu: '4,2 %', dot: ok },
+        { name: 'immich-server', state: 'läuft', cpu: '1,8 %', dot: ok },
+        { name: 'immich-ml', state: 'läuft', cpu: '0,6 %', dot: ok },
+        { name: 'immich-db', state: 'läuft', cpu: '0,3 %', dot: ok },
+        { name: 'adguard-home', state: 'läuft', cpu: '0,2 %', dot: ok },
+        { name: 'paperless', state: 'läuft', cpu: '0,4 %', dot: ok },
+        { name: 'nextcloud', state: 'gestoppt', cpu: '–', dot: idle },
+        { name: 'uptime-kuma', state: 'gestoppt', cpu: '–', dot: idle }
+      ],
+      shares: [
+        { name: 'media', vol: 'data', proto: 'SMB · NFS' },
+        { name: 'fotos', vol: 'data', proto: 'SMB' },
+        { name: 'backup', vol: 'data', proto: 'SMB' },
+        { name: 'isos', vol: 'fast', proto: 'SMB' },
+        { name: 'appdata', vol: 'fast', proto: 'intern' }
+      ],
+      events: [
+        { text: 'Wiederaufbau von data mit sdd gestartet', time: 'Heute 14:05', dot: warn },
+        { text: 'Neue Platte sdd erkannt (8 TB)', time: 'Heute 13:48', dot: ok },
+        { text: 'sdc aus data entfernt: zu viele Lesefehler', time: 'Gestern 22:10', dot: '#F06A6A' },
+        { text: 'Prüfung von fast abgeschlossen, 0 Fehler', time: '12.10. 03:00', dot: ok }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

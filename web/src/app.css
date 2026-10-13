@@ -1,0 +1,286 @@
+/*
+ * Theme variables and the few shared building blocks (tile, button, field).
+ * Components use only variables – no hardcoded colors or radii.
+ *
+ * The values below are the defaults (Graphit, blue, glass) so that the very
+ * first paint is styled. lib/theme sets the real values on <html> from the
+ * account's settings, and on the preview in Settings › Appearance.
+ */
+:root {
+	color-scheme: dark;
+
+	--bg: #0e1114;
+	--surface: #161a1f;
+	--header: #12161a;
+	--border: #232a31;
+	--text: #e6e9ed;
+	--muted: #9aa3ad;
+	--track: #232a31;
+	--chip: #1e252c;
+	--accent: #6cb6ff;
+	--on-accent: #0b1622;
+
+	--surface-alpha: 0.55;
+	--glass-blur: 18px;
+	--glass-shine: 0.2;
+	--radius-tile: 14px;
+	--radius-ctl: 10px;
+	--font-scale: 1;
+
+	--glass-surface: rgba(22, 26, 31, 0.55);
+	--glass-menu: rgba(22, 26, 31, 0.7);
+	--glass-border: rgba(255, 255, 255, 0.12);
+	--glass-shine-color: rgba(255, 255, 255, 0.1);
+	--glass-shadow: rgba(0, 0, 0, 0.3);
+	--outline-border: #3d444a;
+	--overlay: rgba(14, 17, 20, 0.7);
+	--bg-dim: 0.3;
+
+	/* Status colors are the same in every theme. Never use them without text. */
+	--status-ok: #4cc38a;
+	--status-warn: #f0b54a;
+	--status-error: #f28c6b;
+	--status-inactive: #6b7580;
+	--on-warn: #1a1406;
+
+	/* The two fixed colors of the "shapes" background; the third is the accent. */
+	--shape-2: #7048e8;
+	--shape-3: #0c8599;
+
+	--font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* Text and frame of notices on the theme's own background. */
+[data-mode='dark'] {
+	color-scheme: dark;
+	--warn-bg: #2a2312;
+	--warn-border: #5a4720;
+	--warn-text: #f6d79a;
+	--error-text: #f6b8a4;
+	--shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+[data-mode='light'] {
+	color-scheme: light;
+	--warn-bg: #fff4d6;
+	--warn-border: #e2c46c;
+	--warn-text: #6b4e00;
+	--error-text: #a3351a;
+	--shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.18);
+}
+
+[data-density='normal'] {
+	--gap: 16px;
+	--tile-pad: 20px;
+	--row-pad: 9px;
+}
+[data-density='compact'] {
+	--gap: 10px;
+	--tile-pad: 12px;
+	--row-pad: 5px;
+}
+
+/* Style of surfaces. Each style sets every panel variable, so that a preview
+   with another style does not inherit leftovers from the page around it. */
+[data-surface='flat'] {
+	--panel-bg: var(--surface);
+	--panel-border: var(--border);
+	--panel-backdrop: none;
+	--panel-shadow: none;
+	--menu-bg: var(--surface);
+}
+[data-surface='glass'] {
+	--panel-bg: var(--glass-surface);
+	--panel-border: var(--glass-border);
+	--panel-backdrop: blur(var(--glass-blur)) saturate(160%);
+	--panel-shadow: inset 0 1px 0 var(--glass-shine-color), 0 8px 24px var(--glass-shadow);
+	--menu-bg: var(--glass-menu);
+}
+[data-surface='outline'] {
+	--panel-bg: transparent;
+	--panel-border: var(--outline-border);
+	--panel-backdrop: none;
+	--panel-shadow: none;
+	--menu-bg: var(--bg);
+}
+
+/* Without backdrop-filter, or if the user asked for less transparency, glass
+   would be see-through but not blurred: fall back to solid surfaces. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	[data-surface='glass'] {
+		--panel-bg: var(--surface);
+		--panel-border: var(--border);
+		--panel-backdrop: none;
+		--menu-bg: var(--surface);
+	}
+}
+@media (prefers-reduced-transparency: reduce) {
+	[data-surface='glass'] {
+		--panel-bg: var(--surface);
+		--panel-border: var(--border);
+		--panel-backdrop: none;
+		--menu-bg: var(--surface);
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	font-size: calc(16px * var(--font-scale));
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-sans);
+	line-height: 1.5;
+}
+
+h1,
+h2,
+p {
+	margin: 0;
+}
+
+a {
+	color: var(--accent);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+input[type='range'],
+input[type='checkbox'] {
+	accent-color: var(--accent);
+}
+
+.mono {
+	font-family: var(--font-mono);
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.tile {
+	background: var(--panel-bg);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-tile);
+	-webkit-backdrop-filter: var(--panel-backdrop);
+	backdrop-filter: var(--panel-backdrop);
+	box-shadow: var(--panel-shadow);
+}
+
+.tile-title {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+.btn {
+	height: 2.75rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 0 0.875rem;
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-ctl);
+	color: var(--text);
+	font: inherit;
+	font-size: 0.875rem;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+	background: var(--chip);
+}
+.btn:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+.btn-primary {
+	background: var(--accent);
+	border-color: transparent;
+	color: var(--on-accent);
+	font-weight: 600;
+}
+.btn-warn {
+	background: var(--status-warn);
+	border-color: transparent;
+	color: var(--on-warn);
+	font-weight: 600;
+}
+.btn-primary:hover:not(:disabled),
+.btn-warn:hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+.btn-primary:hover:not(:disabled) {
+	background: var(--accent);
+}
+.btn-warn:hover:not(:disabled) {
+	background: var(--status-warn);
+}
+
+.field {
+	width: 100%;
+	height: 2.75rem;
+	padding: 0 0.75rem;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-ctl);
+	color: var(--text);
+	font: inherit;
+	font-size: 0.9375rem;
+}
+
+.bar {
+	height: 6px;
+	background: var(--track);
+	border-radius: 3px;
+	overflow: hidden;
+}
+.bar > span {
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	border-radius: 3px;
+}
+
+.dot {
+	width: 8px;
+	height: 8px;
+	flex: none;
+	border-radius: 50%;
+	background: var(--status-inactive);
+}
+.dot.ok {
+	background: var(--status-ok);
+}
+.dot.warn {
+	background: var(--status-warn);
+}
+.dot.error {
+	background: var(--status-error);
+}
+
+.notice-warn {
+	padding: 10px 14px;
+	background: var(--warn-bg);
+	border: 1px solid var(--warn-border);
+	border-radius: var(--radius-ctl);
+	color: var(--warn-text);
+	font-size: 0.875rem;
+}

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Container bearbeiten</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+.row:hover{background:#1A1F25}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>Terminal</a>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 24px 32px 36px; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; flex-direction: column; gap: 4px">
+<p style="margin: 0; font-size: 13px; color: #9AA3AD"><a href="DockerList.dc.html" style="text-decoration: none">Docker</a> › jellyfin</p>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: #7048E8; border-radius: 12px; color: #FFFFFF; font-size: 15px; font-weight: 600">Jf</span>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">jellyfin</h1>
+<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #9AA3AD"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span>Läuft seit 3 Tagen · CPU 4,2 % · RAM 612 MB · Vorlage aus dem TitanOS-Katalog</span>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<a href="#" style="height: 44px; display: flex; align-items: center; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none">WebUI öffnen</a>
+<button type="button" style="height: 44px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Logs</button>
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none">Konsole</a>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<div role="group" aria-label="Ansicht" style="display: flex; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<button type="button" aria-pressed="{{formPressed}}" onClick="{{showForm}}" style="height: 40px; padding: 0 18px; background: {{formBg}}; border: 0; border-radius: 8px; color: {{formColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">Formular</button>
+<button type="button" aria-pressed="{{yamlPressed}}" onClick="{{showYaml}}" style="height: 40px; padding: 0 18px; background: {{yamlBg}}; border: 0; border-radius: 8px; color: {{yamlColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">Compose (YAML)</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 12px; color: #9AA3AD">
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="padding: 1px 7px; border-radius: 5px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">Vorlage</span>aus der App-Vorlage</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="padding: 1px 7px; border-radius: 5px; background: #102A2A; border: 1px solid #1F5656; color: #9FE3E0">Eigene</span>von dir hinzugefügt</span>
+<span>Gespeichert in <span style="font-family: 'IBM Plex Mono', monospace; color: #E6E9ED">/config/apps/jellyfin/compose.yaml</span></span>
+</div>
+</div>
+
+<sc-if value="{{isForm}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 16px">
+
+<section aria-labelledby="path-h" style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="path-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Pfade <span style="font-weight: 400; color: #9AA3AD">{{paths.length}}</span></h2>
+<button type="button" onClick="{{addPath}}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigenen Pfad hinzufügen</button>
+</div>
+<sc-for list="{{paths}}" as="p" hint-placeholder-count="3">
+<div class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #20262C">
+<input type="text" aria-label="Bezeichnung" value="{{p.label}}" placeholder="Bezeichnung" onInput="{{p.onLabel}}" style="flex: 0 0 150px; box-sizing: border-box; height: 40px; padding: 0 10px; background: transparent; border: 1px solid {{p.labelBorder}}; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px">
+<div style="flex: 1 1 240px; display: flex; min-width: 0">
+<input type="text" aria-label="Pfad auf dem NAS" value="{{p.host}}" placeholder="/mnt/…" onInput="{{p.onHost}}" style="flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-right: 0; border-radius: 8px 0 0 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Ordner auswählen" style="width: 44px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: #1E252C; border: 1px solid #2A323A; border-radius: 0 8px 8px 0; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"></path></svg></button>
+</div>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7580" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+<input type="text" aria-label="Pfad im Container" value="{{p.cont}}" placeholder="/im/container" onInput="{{p.onCont}}" style="flex: 1 1 170px; min-width: 0; box-sizing: border-box; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" onClick="{{p.toggleRo}}" style="flex: 0 0 150px; height: 40px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">{{p.mode}}</button>
+<span style="flex: 0 0 64px; text-align: center; font-size: 11px; padding: 2px 0; border-radius: 5px; background: {{p.oBg}}; border: 1px solid {{p.oBorder}}; color: {{p.oColor}}">{{p.oText}}</span>
+<button type="button" aria-label="Pfad entfernen" onClick="{{p.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+</sc-for>
+</section>
+
+<section aria-labelledby="port-h" style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="port-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Ports <span style="font-weight: 400; color: #9AA3AD">{{ports.length}}</span></h2>
+<button type="button" onClick="{{addPort}}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigenen Port hinzufügen</button>
+</div>
+<sc-for list="{{ports}}" as="pt" hint-placeholder-count="3">
+<div class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #20262C">
+<input type="text" aria-label="Bezeichnung" value="{{pt.label}}" placeholder="Bezeichnung" onInput="{{pt.onLabel}}" style="flex: 0 0 150px; box-sizing: border-box; height: 40px; padding: 0 10px; background: transparent; border: 1px solid {{pt.labelBorder}}; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px">
+<input type="text" inputmode="numeric" aria-label="Port auf dem NAS" value="{{pt.host}}" placeholder="NAS" onInput="{{pt.onHost}}" style="flex: 0 0 110px; box-sizing: border-box; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid {{pt.hostBorder}}; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7580" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+<input type="text" inputmode="numeric" aria-label="Port im Container" value="{{pt.cont}}" placeholder="Container" onInput="{{pt.onCont}}" style="flex: 0 0 110px; box-sizing: border-box; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Protokoll wechseln" onClick="{{pt.toggleProto}}" style="flex: 0 0 64px; height: 40px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px; cursor: pointer">{{pt.proto}}</button>
+<span role="status" style="flex: 1 1 150px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: {{pt.stColor}}"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: {{pt.stDot}}"></span>{{pt.status}}</span>
+<span style="flex: 0 0 64px; text-align: center; font-size: 11px; padding: 2px 0; border-radius: 5px; background: {{pt.oBg}}; border: 1px solid {{pt.oBorder}}; color: {{pt.oColor}}">{{pt.oText}}</span>
+<button type="button" aria-label="Port entfernen" onClick="{{pt.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+</sc-for>
+</section>
+
+<section aria-labelledby="var-h" style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="var-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Variablen <span style="font-weight: 400; color: #9AA3AD">{{vars.length}}</span></h2>
+<button type="button" onClick="{{addVar}}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigene Variable hinzufügen</button>
+</div>
+<sc-for list="{{vars}}" as="v" hint-placeholder-count="4">
+<div class="row" style="display: flex; flex-direction: column; gap: 6px; padding: 10px 18px; border-bottom: 1px solid #20262C">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<input type="text" aria-label="Name der Variable" value="{{v.key}}" placeholder="NAME" onInput="{{v.onKey}}" style="flex: 0 1 260px; min-width: 0; box-sizing: border-box; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid {{v.keyBorder}}; border-radius: 8px; color: #C9D1D9; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span aria-hidden="true" style="font-family: 'IBM Plex Mono', monospace; color: #6B7580">=</span>
+<input type="{{v.inputType}}" aria-label="Wert von {{v.key}}" value="{{v.value}}" placeholder="Wert" onInput="{{v.onVal}}" style="flex: 1 1 240px; min-width: 0; box-sizing: border-box; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" role="switch" aria-checked="{{v.secretChecked}}" onClick="{{v.toggleSecret}}" style="height: 40px; padding: 0 12px; background: {{v.secretBg}}; border: 1px solid {{v.secretBorder}}; border-radius: 8px; color: {{v.secretColor}}; font: inherit; font-size: 13px; cursor: pointer">Geheim</button>
+<span style="flex: 0 0 64px; text-align: center; font-size: 11px; padding: 2px 0; border-radius: 5px; background: {{v.oBg}}; border: 1px solid {{v.oBorder}}; color: {{v.oColor}}">{{v.oText}}</span>
+<button type="button" aria-label="Variable entfernen" onClick="{{v.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+<sc-if value="{{v.hasHint}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: {{v.hintColor}}">{{v.hint}}</span></sc-if>
+</div>
+</sc-for>
+<p style="margin: 0; padding: 12px 18px; font-size: 13px; color: #9AA3AD">Als <strong style="color: #E6E9ED; font-weight: 600">Geheim</strong> markierte Werte landen in <span style="font-family: 'IBM Plex Mono', monospace">/config/apps/jellyfin/.env</span>, werden verdeckt und nie in Logs oder Exporten gezeigt.</p>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<section aria-labelledby="dev-h" style="flex: 1 1 520px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="dev-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Geräte <span style="font-weight: 400; color: #9AA3AD">1</span></h2>
+<button type="button" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Gerät hinzufügen</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 18px">
+<label for="dev1" style="flex: 0 0 150px; font-size: 14px">Grafik</label>
+<select id="dev1" style="flex: 1 1 260px; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px"><option>Intel Graphics (iGPU) · /dev/dri</option><option>Intel AI Boost (NPU) · /dev/accel</option><option>NVIDIA RTX 5060 Ti · nur mit Plugin und Modus „Container“</option></select>
+<span style="flex: 0 0 64px; text-align: center; font-size: 11px; padding: 2px 0; border-radius: 5px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">Vorlage</span>
+</div>
+</section>
+<section aria-labelledby="lab-h" style="flex: 1 1 420px; min-width: 0; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="lab-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Labels <span style="font-weight: 400; color: #9AA3AD">{{labels.length}}</span></h2>
+<button type="button" onClick="{{addLabel}}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Label hinzufügen</button>
+</div>
+<sc-for list="{{labels}}" as="lb" hint-placeholder-count="1">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 18px; border-bottom: 1px solid #20262C">
+<input type="text" aria-label="Label-Name" value="{{lb.key}}" placeholder="z. B. traefik.enable" onInput="{{lb.onKey}}" style="flex: 1 1 160px; min-width: 0; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<input type="text" aria-label="Label-Wert" value="{{lb.value}}" placeholder="Wert" onInput="{{lb.onVal}}" style="flex: 1 1 120px; min-width: 0; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Label entfernen" onClick="{{lb.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+</sc-for>
+<sc-if value="{{noLabels}}" hint-placeholder-val="{{ true }}"><p style="margin: 0; padding: 18px; font-size: 14px; color: #9AA3AD">Keine Labels. Nützlich z. B. für einen Reverse-Proxy.</p></sc-if>
+</section>
+</div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{isYaml}}" hint-placeholder-val="{{ false }}">
+<section aria-label="Compose-Datei" style="background: #161A1F; border: 1px solid #232A31; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #C9D1D9">compose.yaml</span>
+<span style="font-size: 13px; color: #9AA3AD">Wird live aus dem Formular erzeugt – auch deine eigenen Einträge</span>
+</div>
+<pre style="margin: 0; padding: 18px; overflow-x: auto; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.7; color: #C9D1D9; background: #0E1114; white-space: pre">{{yaml}}</pre>
+</section>
+</sc-if>
+
+</main>
+
+<div style="position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 32px; background: #12161A; border-top: 1px solid #232A31">
+<span style="font-size: 13px; color: {{changeColor}}">{{changeText}}</span>
+<div style="display: flex; gap: 8px">
+<button type="button" onClick="{{reset}}" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Verwerfen</button>
+<button type="button" style="height: 44px; padding: 0 18px; background: {{accent}}; border: 1px solid transparent; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Übernehmen</button>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.initial = () => ({
+      view: 'form', nid: 100,
+      paths: [
+        { id: 1, o: 'vorlage', label: 'Medien', host: '/mnt/data/media', cont: '/media', ro: true },
+        { id: 2, o: 'vorlage', label: 'Konfiguration', host: '/mnt/fast/appdata/jellyfin', cont: '/config', ro: false },
+        { id: 3, o: 'eigene', label: 'Hörspiele', host: '/mnt/data/media/hoerspiele', cont: '/hoerspiele', ro: true }
+      ],
+      ports: [
+        { id: 11, o: 'vorlage', label: 'WebUI', host: '8096', cont: '8096', proto: 'TCP' },
+        { id: 12, o: 'vorlage', label: 'Erkennung im LAN', host: '7359', cont: '7359', proto: 'UDP' }
+      ],
+      vars: [
+        { id: 21, o: 'titan', key: 'TZ', value: 'Europe/Berlin', secret: false },
+        { id: 22, o: 'vorlage', key: 'JELLYFIN_PublishedServerUrl', value: 'http://nas:8096', secret: false },
+        { id: 23, o: 'eigene', key: 'NOTIFY_API_KEY', value: 'k7Qe29xPmW4s', secret: true }
+      ],
+      labels: []
+    });
+    this.state = this.initial();
+  }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const ORIGIN = {
+      vorlage: { oText: 'Vorlage', oBg: '#1F262D', oBorder: '#2A323A', oColor: '#C9D1D9' },
+      titan: { oText: 'TitanOS', oBg: '#14243A', oBorder: '#2B4A70', oColor: '#BFDCFF' },
+      eigene: { oText: 'Eigene', oBg: '#102A2A', oBorder: '#1F5656', oColor: '#9FE3E0' }
+    };
+    const USED = { '8080': 'nextcloud', '3000': 'adguard-home', '53': 'adguard-home', '8000': 'paperless', '2283': 'immich-server', '3001': 'uptime-kuma', '443': 'TitanOS (Web)', '80': 'TitanOS (Web)', '445': 'TitanOS (SMB)', '22': 'TitanOS (SSH)' };
+    const upd = (list, id, patch) => this.setState({ [list]: s[list].map((x) => x.id === id ? Object.assign({}, x, patch) : x) });
+    const del = (list, id) => () => this.setState({ [list]: s[list].filter((x) => x.id !== id) });
+    const inp = (list, id, field) => (e) => upd(list, id, { [field]: e.target.value });
+    const add = (list, row) => () => this.setState({ [list]: s[list].concat([Object.assign({ id: s.nid }, row)]), nid: s.nid + 1 });
+
+    const paths = s.paths.map((p) => Object.assign({}, ORIGIN[p.o], {
+      label: p.label, host: p.host, cont: p.cont, mode: p.ro ? 'Nur lesen' : 'Lesen und schreiben',
+      labelBorder: p.o === 'eigene' ? '#2A323A' : 'transparent',
+      onLabel: inp('paths', p.id, 'label'), onHost: inp('paths', p.id, 'host'), onCont: inp('paths', p.id, 'cont'),
+      toggleRo: () => upd('paths', p.id, { ro: !p.ro }), remove: del('paths', p.id)
+    }));
+
+    const counts = {};
+    s.ports.forEach((p) => { const k = p.host + '/' + p.proto; if (p.host) counts[k] = (counts[k] || 0) + 1; });
+    const ports = s.ports.map((p) => {
+      let status = 'frei auf dem NAS', stDot = '#4CC38A', stColor = '#9AA3AD', bad = false;
+      if (!p.host) { status = 'NAS-Port eingeben'; stDot = '#6B7580'; }
+      else if (!/^\d{1,5}$/.test(p.host) || Number(p.host) > 65535) { status = 'keine gültige Portnummer'; stDot = '#F06A6A'; stColor = '#F59A9A'; bad = true; }
+      else if (USED[p.host]) { status = 'belegt durch ' + USED[p.host]; stDot = '#F0B54A'; stColor = '#F6D79A'; bad = true; }
+      else if (counts[p.host + '/' + p.proto] > 1) { status = 'doppelt in diesem Container'; stDot = '#F0B54A'; stColor = '#F6D79A'; bad = true; }
+      return Object.assign({}, ORIGIN[p.o], {
+        label: p.label, host: p.host, cont: p.cont, proto: p.proto, status, stDot, stColor,
+        hostBorder: bad ? '#8A6D2C' : '#2A323A', labelBorder: p.o === 'eigene' ? '#2A323A' : 'transparent',
+        onLabel: inp('ports', p.id, 'label'), onHost: inp('ports', p.id, 'host'), onCont: inp('ports', p.id, 'cont'),
+        toggleProto: () => upd('ports', p.id, { proto: p.proto === 'TCP' ? 'UDP' : 'TCP' }), remove: del('ports', p.id)
+      });
+    });
+
+    const keyCount = {};
+    s.vars.forEach((v) => { if (v.key) keyCount[v.key] = (keyCount[v.key] || 0) + 1; });
+    const vars = s.vars.map((v) => {
+      let hint = '', hintColor = '#9AA3AD', bad = false;
+      if (!v.key) hint = 'Name eingeben, z. B. LOG_LEVEL';
+      else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.key)) { hint = 'Nur Buchstaben, Ziffern und _ – nicht mit einer Ziffer beginnen'; hintColor = '#F59A9A'; bad = true; }
+      else if (keyCount[v.key] > 1) { hint = 'Diese Variable gibt es schon – der untere Wert würde den oberen überschreiben'; hintColor = '#F6D79A'; bad = true; }
+      else if (v.o === 'titan') hint = 'Von TitanOS ergänzt (Zeitzone des NAS)';
+      return Object.assign({}, ORIGIN[v.o], {
+        key: v.key, value: v.value, inputType: v.secret ? 'password' : 'text',
+        secretChecked: v.secret ? 'true' : 'false', secretBg: v.secret ? '#221C33' : 'transparent', secretBorder: v.secret ? '#3D3361' : '#2A323A', secretColor: v.secret ? '#D6CBFF' : '#9AA3AD',
+        keyBorder: bad ? '#8A6D2C' : '#2A323A', hasHint: !!hint, hint, hintColor,
+        onKey: inp('vars', v.id, 'key'), onVal: inp('vars', v.id, 'value'),
+        toggleSecret: () => upd('vars', v.id, { secret: !v.secret }), remove: del('vars', v.id)
+      });
+    });
+
+    const labels = s.labels.map((l) => ({ key: l.key, value: l.value, onKey: inp('labels', l.id, 'key'), onVal: inp('labels', l.id, 'value'), remove: del('labels', l.id) }));
+
+    const y = [];
+    y.push('services:', '  jellyfin:', '    image: jellyfin/jellyfin:latest', '    container_name: jellyfin', '    restart: unless-stopped', '    network_mode: bridge');
+    const pOk = s.ports.filter((p) => p.host && p.cont);
+    if (pOk.length) { y.push('    ports:'); pOk.forEach((p) => y.push('      - "' + p.host + ':' + p.cont + '/' + p.proto.toLowerCase() + '"' + (p.label ? '   # ' + p.label : ''))); }
+    const vOk = s.paths.filter((p) => p.host && p.cont);
+    if (vOk.length) { y.push('    volumes:'); vOk.forEach((p) => y.push('      - ' + p.host + ':' + p.cont + (p.ro ? ':ro' : '') + (p.label ? '   # ' + p.label : ''))); }
+    const envPlain = s.vars.filter((v) => v.key && !v.secret);
+    const envSecret = s.vars.filter((v) => v.key && v.secret);
+    if (envPlain.length) { y.push('    environment:'); envPlain.forEach((v) => y.push('      ' + v.key + ': ' + (v.value === '' ? '""' : v.value))); }
+    if (envSecret.length) y.push('    env_file: .env   # ' + envSecret.map((v) => v.key).join(', '));
+    y.push('    devices:', '      - /dev/dri:/dev/dri');
+    y.push('    labels:', '      titanos.webui: http://nas:8096');
+    s.labels.filter((l) => l.key).forEach((l) => y.push('      ' + l.key + ': "' + l.value + '"'));
+
+    const own = s.paths.concat(s.ports, s.vars).filter((x) => x.o === 'eigene').length + s.labels.length;
+    const isForm = s.view === 'form';
+    return {
+      accent, paths, ports, vars, labels, yaml: y.join('\n'),
+      noLabels: labels.length === 0,
+      isForm, isYaml: !isForm,
+      formPressed: isForm ? 'true' : 'false', yamlPressed: isForm ? 'false' : 'true',
+      formBg: isForm ? accent : 'transparent', formColor: isForm ? '#0B1622' : '#E6E9ED',
+      yamlBg: isForm ? 'transparent' : accent, yamlColor: isForm ? '#E6E9ED' : '#0B1622',
+      showForm: () => this.setState({ view: 'form' }), showYaml: () => this.setState({ view: 'yaml' }),
+      addPath: add('paths', { o: 'eigene', label: '', host: '', cont: '', ro: false }),
+      addPort: add('ports', { o: 'eigene', label: '', host: '', cont: '', proto: 'TCP' }),
+      addVar: add('vars', { o: 'eigene', key: '', value: '', secret: false }),
+      addLabel: add('labels', { key: '', value: '' }),
+      reset: () => this.setState(this.initial()),
+      changeText: own + ' eigene Einträge · Beim Übernehmen wird der Container neu erstellt, Daten in den Pfaden bleiben erhalten. Bei einem Update der Vorlage bleiben eigene Einträge erhalten.',
+      changeColor: '#9AA3AD'
+    };
+  }
+}
+</script>
+</body>
+</html>

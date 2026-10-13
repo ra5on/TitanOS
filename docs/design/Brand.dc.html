@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Marke</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif">
+<main style="max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 40px 32px 56px; display: flex; flex-direction: column; gap: 28px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 26px; font-weight: 600">TitanOS – Logo und Schriftzug</h1>
+<p style="margin: 0; max-width: 760px; font-size: 14px; line-height: 1.55; color: #9AA3AD">Eigene Buchstabenformen, aus Rechtecken und Schrägen gebaut – keine Schriftart, daher keine Lizenzfrage. Das „T“ im Sechseck bleibt das Symbol. Rahmen und „OS“ folgen immer der Akzentfarbe, die der Nutzer gewählt hat.</p>
+</div>
+<div role="radiogroup" aria-label="Akzentfarbe" style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{swatches}}" as="sw" hint-placeholder-count="6">
+<button type="button" role="radio" aria-checked="{{sw.checked}}" aria-label="{{sw.name}}" onClick="{{sw.pick}}" style="width: 40px; height: 40px; border-radius: 50%; background: {{sw.hex}}; border: 3px solid {{sw.ring}}; cursor: pointer"></button>
+</sc-for>
+</div>
+</div>
+
+<section aria-label="Logo groß" style="display: flex; flex-wrap: wrap; gap: 16px">
+<div style="flex: 2 1 640px; min-height: 300px; display: flex; align-items: center; justify-content: center; gap: 28px; padding: 40px; box-sizing: border-box; background: #000000; border: 1px solid #232A31; border-radius: 16px">
+<svg width="120" height="120" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="1.6" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#FFFFFF"></path></svg>
+<svg width="460" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#FFFFFF"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+</div>
+<div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 12px; padding: 24px; box-sizing: border-box; background: #161A1F; border: 1px solid #232A31; border-radius: 16px; font-size: 14px; line-height: 1.55; color: #C9D1D9">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Aufbau</h2>
+<span>Großbuchstaben, gleiche Strichstärke (22 % der Höhe), harte Ecken.</span>
+<span>Das „T“ hat eine Fuge zwischen Balken und Stamm – der Schriftzug wirkt dadurch wie gefräst.</span>
+<span>Das „A“ ist ohne Querstrich, wie eine Bergspitze.</span>
+<span>„TITAN“ in Textfarbe, „OS“ in Akzentfarbe. Im Symbol wiederholt sich die Fuge im „T“.</span>
+</div>
+</section>
+
+<section aria-labelledby="var-h" style="display: flex; flex-direction: column; gap: 12px">
+<h2 id="var-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Varianten</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 140px; display: flex; align-items: center; justify-content: center; gap: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 14px">
+<svg width="44" height="44" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg width="180" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+</div>
+<span style="font-size: 13px; color: #9AA3AD">Kopfzeile, dunkle Themes</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 140px; display: flex; align-items: center; justify-content: center; gap: 14px; background: #F3F4F6; border: 1px solid #DCE0E5; border-radius: 14px">
+<svg width="44" height="44" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accentDark}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#14181D"></path></svg>
+<svg width="180" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#14181D"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accentDark}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+</div>
+<span style="font-size: 13px; color: #9AA3AD">Helles Theme – Akzent automatisch abgedunkelt für Kontrast</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 140px; display: flex; align-items: center; justify-content: center; gap: 22px; background: #12161A; border: 1px solid #232A31; border-radius: 14px">
+<svg width="64" height="64" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg width="32" height="32" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2.4" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<span aria-hidden="true" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: {{accent}}; border-radius: 7px"><svg width="22" height="22" viewBox="0 0 28 28"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="#0B1622" stroke-width="2.6" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#0B1622"></path></svg></span>
+<span aria-hidden="true" style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: {{accent}}; border-radius: 4px"><svg width="12" height="12" viewBox="0 0 28 28"><path d="M8.6 7.3h10.8v3.3H8.6zM12.35 12h3.3v9h-3.3z" fill="#0B1622"></path></svg></span>
+</div>
+<span style="font-size: 13px; color: #9AA3AD">Symbol, App-Symbol, Favicon (unter 24 px nur das „T“)</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #000000; border: 1px solid #232A31; border-radius: 14px">
+<svg width="56" height="56" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#FFFFFF"></path></svg>
+<svg width="140" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#FFFFFF"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+</div>
+<span style="font-size: 13px; color: #9AA3AD">Gestapelt – Anmeldeseite, Bootbildschirm, README</span>
+</div>
+
+</div>
+</section>
+
+<section aria-labelledby="rules-h" style="display: flex; flex-direction: column; gap: 12px">
+<h2 id="rules-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Regeln</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px">
+<div style="padding: 16px; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; font-size: 13px; line-height: 1.55; color: #C9D1D9"><strong style="display: block; margin-bottom: 4px; color: #E6E9ED">Farben</strong>Rahmen und „OS“ = <span style="font-family: 'IBM Plex Mono', monospace">--accent</span>. Buchstaben = <span style="font-family: 'IBM Plex Mono', monospace">--text</span>. Im hellen Theme wird der Akzent automatisch abgedunkelt, bis der Kontrast mindestens 3:1 erreicht.</div>
+<div style="padding: 16px; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; font-size: 13px; line-height: 1.55; color: #C9D1D9"><strong style="display: block; margin-bottom: 4px; color: #E6E9ED">Schutzraum</strong>Um das Logo mindestens die Höhe eines Buchstabenstrichs frei lassen. Mindesthöhe des Schriftzugs: 12 px.</div>
+<div style="padding: 16px; background: #161A1F; border: 1px solid #232A31; border-radius: 12px; font-size: 13px; line-height: 1.55; color: #C9D1D9"><strong style="display: block; margin-bottom: 4px; color: #E6E9ED">Dateien</strong>Als SVG im Repo unter <span style="font-family: 'IBM Plex Mono', monospace">docs/brand/</span>. Im Produkt als Svelte-Komponente mit CSS-Variablen, nicht als Bild.</div>
+</div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { acc: 'blau' };
+  }
+  renderVals() {
+    const A = [
+      { id: 'blau', name: 'Blau', hex: '#6CB6FF', dark: '#1F6FC4' },
+      { id: 'gruen', name: 'Grün', hex: '#4CC38A', dark: '#1E7A4E' },
+      { id: 'tuerkis', name: 'Türkis', hex: '#3FCFC7', dark: '#127A75' },
+      { id: 'violett', name: 'Violett', hex: '#B49CFF', dark: '#6247C9' },
+      { id: 'kupfer', name: 'Kupfer', hex: '#E0895A', dark: '#A8521F' },
+      { id: 'rose', name: 'Rosé', hex: '#F28CB0', dark: '#B33A68' }
+    ];
+    const cur = A.find((a) => a.id === this.state.acc) || A[0];
+    return {
+      accent: cur.hex, accentDark: cur.dark,
+      swatches: A.map((a) => ({ name: a.name, hex: a.hex, checked: a.id === cur.id ? 'true' : 'false', ring: a.id === cur.id ? '#FFFFFF' : 'transparent', pick: () => this.setState({ acc: a.id }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

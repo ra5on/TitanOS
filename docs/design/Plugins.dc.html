@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Plugins</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+.pcard{transition:border-color .15s ease}
+.pcard:hover{border-color:#36414D}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>Terminal</a>
+</div>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Plugins</h1>
+<p style="margin: 0; font-size: 14px; color: #9AA3AD">Treiber und Systemfunktionen, die nicht im Grundsystem stecken. Jedes Plugin zeigt vorher, was es darf. Apps (Docker) findest du unter <a href="AppStore.dc.html" style="text-decoration: none">Apps</a>.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{plugins}}" as="p" hint-placeholder-count="5">
+<button type="button" class="pcard" aria-pressed="{{p.pressed}}" onClick="{{p.pick}}" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; text-align: left; background: #161A1F; border: 2px solid {{p.ring}}; border-radius: 14px; color: #E6E9ED; font: inherit; cursor: pointer">
+<span aria-hidden="true" style="width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {{p.color}}; color: #FFFFFF; font-size: 13px; font-weight: 600; opacity: {{p.iconOpacity}}">{{p.mono}}</span>
+<span style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span style="font-size: 15px; font-weight: 600">{{p.name}}</span><span style="font-size: 11px; padding: 1px 7px; border-radius: 5px; background: {{p.srcBg}}; border: 1px solid {{p.srcBorder}}; color: {{p.srcColor}}">{{p.src}}</span></span>
+<span style="font-size: 13px; color: #9AA3AD">{{p.desc}}</span>
+<span style="font-size: 12px; color: {{p.hwColor}}">{{p.hw}}</span>
+</span>
+<span style="font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: {{p.badgeBg}}; border: 1px solid {{p.badgeBorder}}; color: {{p.badgeColor}}; white-space: nowrap">{{p.badge}}</span>
+</button>
+</sc-for>
+<p style="margin: 4px 0 0; font-size: 13px; color: #9AA3AD">Plugins liegen auf dem Volume „fast“ und werden nach dem Start der Volumes geladen. Sie belegen keinen RAM wie das Grundsystem und werden mit jedem TitanOS-Update passend zum Kernel aktualisiert.</p>
+</div>
+
+<aside aria-labelledby="pd-h" style="flex: 1 1 560px; min-width: 0; background: #161A1F; border: 1px solid #2E363F; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+
+<div style="display: flex; align-items: flex-start; gap: 14px; padding: 20px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<span aria-hidden="true" style="width: 56px; height: 56px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 15px; background: {{sel.color}}; color: #FFFFFF; font-size: 15px; font-weight: 600">{{sel.mono}}</span>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<h2 id="pd-h" style="margin: 0; font-size: 18px; font-weight: 600">{{sel.name}}</h2>
+<span style="font-size: 13px; color: #9AA3AD">{{sel.long}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{sel.meta}}</span>
+</div>
+</div>
+
+<sc-if value="{{isNvidia}}" hint-placeholder-val="{{ true }}">
+<div role="tablist" aria-label="Plugin-Ansicht" style="display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid #232A31">
+<button type="button" role="tab" aria-selected="{{tabOvSel}}" onClick="{{showOverview}}" style="height: 40px; padding: 0 14px; background: transparent; border: 0; border-bottom: 2px solid {{tabOvLine}}; color: {{tabOvColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">Übersicht</button>
+<button type="button" role="tab" aria-selected="{{tabSetSel}}" aria-disabled="{{tabSetDisabled}}" onClick="{{showSettings}}" style="height: 40px; padding: 0 14px; background: transparent; border: 0; border-bottom: 2px solid {{tabSetLine}}; color: {{tabSetColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: {{tabSetCursor}}">Einstellungen</button>
+</div>
+
+<sc-if value="{{showOv}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Enthält</h3>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<span style="padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; font-size: 13px">Offene Kernelmodule</span>
+<span style="padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; font-size: 13px">CUDA-, NVENC-, NVDEC-Bibliotheken</span>
+<span style="padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; font-size: 13px">Docker-Laufzeit für GPUs</span>
+<span style="padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; font-size: 13px">Energiesparen und Leistungslimit</span>
+</div>
+</div>
+
+<sc-if value="{{phaseIdle}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; background: #14243A; border: 1px solid #2B4A70; border-radius: 12px">
+<span style="font-size: 13px; color: #BFDCFF">Passende Hardware erkannt: RTX 5060 Ti · ca. 400 MB · kein Neustart nötig</span>
+<button type="button" onClick="{{askInstall}}" style="height: 44px; padding: 0 20px; background: {{accent}}; border: 0; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Installieren</button>
+</div>
+</sc-if>
+
+<sc-if value="{{phaseConfirm}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #12161A; border: 1px solid #2E363F; border-radius: 12px">
+<span style="font-size: 15px; font-weight: 600">Dieses Plugin bekommt folgende Rechte</span>
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<div style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: #9BE3BE">Darf</span>
+<sc-for list="{{allow}}" as="al" hint-placeholder-count="4"><span style="display: flex; gap: 8px; font-size: 13px; line-height: 1.45"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4CC38A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><path d="m5 12 5 5 9-10"></path></svg>{{al}}</span></sc-for>
+</div>
+<div style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: #F59A9A">Darf nicht</span>
+<sc-for list="{{deny}}" as="dn" hint-placeholder-count="3"><span style="display: flex; gap: 8px; font-size: 13px; line-height: 1.45"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F06A6A" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 3px"><path d="M6 6l12 12M18 6 6 18"></path></svg>{{dn}}</span></sc-for>
+</div>
+</div>
+<span style="font-size: 12px; color: #9AA3AD">Signiert von TitanOS-Plugins · Quelle: github.com/titanos/plugins · Lizenzbedingungen von NVIDIA gelten für die Bibliotheken</span>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px">
+<button type="button" onClick="{{cancelInstall}}" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Abbrechen</button>
+<button type="button" onClick="{{startInstall}}" style="height: 44px; padding: 0 20px; background: {{accent}}; border: 0; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Erlauben und installieren</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{phaseRun}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: #12161A; border: 1px solid #2E363F; border-radius: 12px">
+<sc-for list="{{steps}}" as="st" hint-placeholder-count="7">
+<div style="display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 14px; color: {{st.color}}">
+<span aria-hidden="true" style="width: 20px; height: 20px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid {{st.ring}}; background: {{st.fill}}; color: #0B1622; font-size: 11px; font-weight: 700">{{st.mark}}</span>
+<span style="flex: 1 1 auto">{{st.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{st.detail}}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{phaseDone}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: #12281E; border: 1px solid #245A40; border-radius: 12px">
+<span style="font-size: 14px; font-weight: 600; color: #9BE3BE">NVIDIA-Treiber installiert</span>
+<span style="font-size: 13px; color: #C9EBD8">Die RTX 5060 Ti ist gerade noch exklusiv für windows-11 reserviert. Stelle sie unter Hardware auf „Container und System“ oder „Automatisch wechseln“, damit Container sie nutzen können.</span>
+<a href="Hardware.dc.html" style="align-self: flex-start; height: 38px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid #245A40; border-radius: 9px; color: #9BE3BE; font-size: 13px; text-decoration: none">Zu Hardware</a>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+<sc-if value="{{showSet}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 12px; background: #12161A; border-radius: 10px"><span style="font-size: 12px; color: #9AA3AD">Zustand</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">{{live.state}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 12px; background: #12161A; border-radius: 10px"><span style="font-size: 12px; color: #9AA3AD">Verbrauch</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">{{live.watt}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 12px; background: #12161A; border-radius: 10px"><span style="font-size: 12px; color: #9AA3AD">Temperatur</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">{{live.temp}}</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Energie</h3>
+
+<div style="display: flex; align-items: flex-start; gap: 14px; padding: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px"><span id="sw1-l" style="font-size: 14px; font-weight: 500">Energiesparen im Leerlauf</span><span style="font-size: 12px; line-height: 1.5; color: #9AA3AD">Hält den Treiber dauerhaft geladen, damit die Karte ohne Last in den sparsamsten Zustand fällt.</span></div>
+<button type="button" role="switch" aria-labelledby="sw1-l" aria-checked="{{idleChecked}}" onClick="{{toggleIdle}}" style="width: 48px; height: 28px; flex: none; position: relative; background: {{idleTrack}}; border: 0; border-radius: 14px; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; left: {{idleKnob}}; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF"></span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px"><label for="pl" style="font-size: 14px; font-weight: 500">Leistungslimit</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">{{limitText}}</span></div>
+<input id="pl" type="range" min="60" max="100" step="5" value="{{limit}}" onInput="{{onLimit}}" style="width: 100%; accent-color: {{accent}}">
+<span style="font-size: 12px; line-height: 1.5; color: #9AA3AD">Begrenzt die Höchstleistung unter Last. Für Transkodierung und KI reichen oft 70–80 % mit kaum spürbarem Tempoverlust.</span>
+</div>
+
+<div style="display: flex; align-items: flex-start; gap: 14px; padding: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px"><span id="sw2-l" style="font-size: 14px; font-weight: 500">Automatisch zwischen VM und Containern wechseln</span><span style="font-size: 12px; line-height: 1.5; color: #9AA3AD">Solange windows-11 aus ist, nutzen Container die Karte und sie spart Strom. Beim Start der VM wird sie übergeben; laufende GPU-Container werden vorher angehalten.</span></div>
+<button type="button" role="switch" aria-labelledby="sw2-l" aria-checked="{{autoChecked}}" onClick="{{toggleAuto}}" style="width: 48px; height: 28px; flex: none; position: relative; background: {{autoTrack}}; border: 0; border-radius: 14px; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; left: {{autoKnob}}; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF"></span></button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Container</h3>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<label for="gsel" style="flex: 1 1 200px; font-size: 14px">Standard für neue Container</label>
+<select id="gsel" style="height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px"><option>Nur auf Anfrage der Vorlage</option><option>Allen Containern anbieten</option></select>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding-top: 6px; border-top: 1px solid #232A31">
+<button type="button" onClick="{{uninstall}}" style="margin-top: 10px; height: 40px; padding: 0 14px; background: transparent; border: 1px solid #5A2A2A; border-radius: 10px; color: #F59A9A; font: inherit; font-size: 14px; cursor: pointer">Plugin entfernen</button>
+<button type="button" style="margin-top: 10px; height: 40px; padding: 0 18px; background: {{accent}}; border: 0; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Speichern</button>
+</div>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{isOther}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<span style="font-size: 14px; line-height: 1.55; color: #C9D1D9">{{sel.otherText}}</span>
+<button type="button" style="align-self: flex-start; height: 44px; padding: 0 20px; background: {{sel.btnBg}}; border: 1px solid {{sel.btnBorder}}; border-radius: 10px; color: {{sel.btnColor}}; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{sel.btnLabel}}</button>
+</div>
+</sc-if>
+
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'nvidia', phase: 'idle', step: 0, tab: 'overview', idle: true, auto: true, limit: 80 };
+    this.timer = null;
+  }
+  componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const STEPS = [
+      { label: 'Signatur prüfen', detail: 'TitanOS-Plugins' },
+      { label: 'Kompatibilität prüfen', detail: 'TitanOS 0.1.0 · Kernel 6.12' },
+      { label: 'Herunterladen', detail: 'ca. 400 MB' },
+      { label: 'Systemerweiterung einbinden', detail: '/usr (sysext)' },
+      { label: 'Kernelmodule laden', detail: 'nvidia, nvidia_uvm, nvidia_drm' },
+      { label: 'Docker-Laufzeit einrichten', detail: 'runtime: nvidia' },
+      { label: 'Grafikkarte prüfen', detail: 'nvidia-smi' }
+    ];
+    const nvInstalled = s.phase === 'done';
+    const PL = [
+      { id: 'nvidia', mono: 'NV', color: '#2F9E44', name: 'NVIDIA-Treiber', desc: 'Treiber, CUDA und GPU-Zugriff für Container', src: 'Offiziell', hw: 'Passende Hardware erkannt: RTX 5060 Ti', hwOk: true, installed: nvInstalled,
+        long: 'Macht NVIDIA-Grafikkarten für TitanOS und Docker nutzbar, inklusive Energiesparen.', meta: 'Production-Zweig · offene Kernelmodule · ca. 400 MB' },
+      { id: 'igt', mono: 'IG', color: '#1971C2', name: 'Intel GPU-Werkzeuge', desc: 'Auslastung von iGPU und Video-Engine messen', src: 'Offiziell', hw: 'Passende Hardware erkannt: Intel Graphics', hwOk: true, installed: true,
+        long: 'Liefert Messwerte für das Dashboard und zeigt, welche Container die iGPU nutzen.', meta: 'intel_gpu_top · vainfo · 6 MB', otherText: 'Installiert und aktiv. Die Werte erscheinen auf der Hardware-Seite und auf dem Dashboard.', btnLabel: 'Entfernen', installedBtn: true },
+      { id: 'zfs', mono: 'ZFS', color: '#5F3DC4', name: 'ZFS', desc: 'ZFS-Pools zusätzlich zu mdadm-RAID', src: 'Offiziell', hw: 'Keine Hardware nötig', hwOk: true, installed: false,
+        long: 'Ermöglicht ZFS-Pools mit Prüfsummen und Snapshots. Braucht mehr RAM als mdadm.', meta: 'OpenZFS · ca. 35 MB', otherText: 'ZFS nutzt zusätzlichen Arbeitsspeicher als Cache. Rechne mit mindestens 1 GB plus etwa 1 GB je 1 TB Poolgröße für gute Leistung.', btnLabel: 'Installieren' },
+      { id: 'coral', mono: 'TPU', color: '#E67700', name: 'Coral Edge TPU', desc: 'Treiber für Googles KI-Beschleuniger (PCIe/M.2)', src: 'Offiziell', hw: 'Keine passende Hardware erkannt', hwOk: false, installed: false,
+        long: 'Treiber für die PCIe- und M.2-Variante der Coral TPU, z. B. für Frigate.', meta: 'gasket/apex · 2 MB', otherText: 'Keine Coral TPU erkannt. Du kannst das Plugin trotzdem installieren, es bleibt aber ohne Funktion, bis eine Karte steckt.', btnLabel: 'Trotzdem installieren' },
+      { id: 'fan', mono: 'FAN', color: '#495057', name: 'Lüftersteuerung', desc: 'Lüfterkurven für gängige Mainboard-Chips', src: 'Community', hw: 'Chip erkannt: Nuvoton NCT6799', hwOk: true, installed: false, community: true,
+        long: 'Steuert Gehäuselüfter abhängig von Platten- und CPU-Temperatur.', meta: 'nct6775 · fancontrol · Community-Plugin', otherText: 'Community-Plugin: nicht von TitanOS geprüft. Vor der Installation werden die Rechte angezeigt; Hardware-Zugriff auf Lüfter und Sensoren ist nötig.', btnLabel: 'Installieren' }
+    ];
+    const plugins = PL.map((p) => {
+      const on = s.sel === p.id;
+      return Object.assign({}, p, {
+        ring: on ? accent : '#232A31', pressed: on ? 'true' : 'false',
+        iconOpacity: p.hwOk ? '1' : '0.5',
+        hwColor: p.hwOk ? '#9BE3BE' : '#9AA3AD',
+        srcBg: p.community ? '#2A2312' : '#1F262D', srcBorder: p.community ? '#5A4720' : '#2A323A', srcColor: p.community ? '#F6D79A' : '#C9D1D9',
+        badge: p.installed ? 'Installiert' : 'Verfügbar',
+        badgeBg: p.installed ? '#12281E' : '#1F262D', badgeBorder: p.installed ? '#245A40' : '#2A323A', badgeColor: p.installed ? '#9BE3BE' : '#E6E9ED',
+        pick: () => this.setState({ sel: p.id })
+      });
+    });
+    const raw = PL.find((p) => p.id === s.sel) || PL[0];
+    const sel = Object.assign({}, raw, {
+      btnBg: raw.installedBtn ? 'transparent' : accent,
+      btnBorder: raw.installedBtn ? '#5A2A2A' : 'transparent',
+      btnColor: raw.installedBtn ? '#F59A9A' : '#0B1622'
+    });
+    const steps = STEPS.map((st, i) => {
+      const done = i < s.step, now = i === s.step;
+      return { label: st.label, detail: st.detail, mark: done ? '✓' : '', ring: done ? '#4CC38A' : (now ? accent : '#3A434D'), fill: done ? '#4CC38A' : 'transparent', color: done || now ? '#E6E9ED' : '#6B7580' };
+    });
+    const startInstall = () => {
+      if (this.timer) clearInterval(this.timer);
+      this.setState({ phase: 'run', step: 0 });
+      this.timer = setInterval(() => {
+        const cur = this.state.step;
+        if (cur >= STEPS.length - 1) {
+          clearInterval(this.timer); this.timer = null;
+          this.setState({ phase: 'done', step: STEPS.length });
+        } else {
+          this.setState({ step: cur + 1 });
+        }
+      }, 800);
+    };
+    const isNvidia = s.sel === 'nvidia';
+    const showSet = isNvidia && nvInstalled && s.tab === 'settings';
+    const watt = s.idle ? '9 W' : '17 W';
+    return {
+      accent, plugins, sel, steps,
+      isNvidia, isOther: !isNvidia,
+      showOv: isNvidia && !showSet, showSet,
+      phaseIdle: s.phase === 'idle', phaseConfirm: s.phase === 'confirm', phaseRun: s.phase === 'run', phaseDone: s.phase === 'done',
+      askInstall: () => this.setState({ phase: 'confirm' }),
+      cancelInstall: () => this.setState({ phase: 'idle' }),
+      startInstall,
+      uninstall: () => this.setState({ phase: 'idle', tab: 'overview', step: 0 }),
+      allow: [ 'Kernelmodule nvidia, nvidia_uvm, nvidia_drm, nvidia_modeset laden', 'Gerätedateien /dev/nvidia* bereitstellen', 'Docker-Laufzeit „nvidia“ registrieren', 'Dienst für Energiesparen (Persistenz) starten' ],
+      deny: [ 'Netzwerkdienste öffnen', 'Dateien in deinen Shares lesen', 'Konfiguration außerhalb von /config/plugins/nvidia ändern' ],
+      tabOvSel: s.tab === 'overview' || !nvInstalled ? 'true' : 'false',
+      tabSetSel: showSet ? 'true' : 'false',
+      tabOvLine: showSet ? 'transparent' : accent, tabOvColor: showSet ? '#9AA3AD' : '#E6E9ED',
+      tabSetLine: showSet ? accent : 'transparent', tabSetColor: nvInstalled ? (showSet ? '#E6E9ED' : '#9AA3AD') : '#5A636D',
+      tabSetCursor: nvInstalled ? 'pointer' : 'not-allowed', tabSetDisabled: nvInstalled ? 'false' : 'true',
+      showOverview: () => this.setState({ tab: 'overview' }),
+      showSettings: () => { if (nvInstalled) this.setState({ tab: 'settings' }); },
+      live: { state: s.idle ? 'Leerlauf (P8)' : 'Bereit (P0)', watt, temp: '33 °C' },
+      idleChecked: s.idle ? 'true' : 'false', idleTrack: s.idle ? accent : '#3A434D', idleKnob: s.idle ? '23px' : '3px',
+      toggleIdle: () => this.setState({ idle: !s.idle }),
+      autoChecked: s.auto ? 'true' : 'false', autoTrack: s.auto ? accent : '#3A434D', autoKnob: s.auto ? '23px' : '3px',
+      toggleAuto: () => this.setState({ auto: !s.auto }),
+      limit: s.limit, limitText: s.limit === 100 ? '100 % (Standard)' : s.limit + ' %',
+      onLimit: (e) => this.setState({ limit: Number(e.target.value) })
+    };
+  }
+}
+</script>
+</body>
+</html>

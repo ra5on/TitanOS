@@ -1,0 +1,127 @@
+<script lang="ts">
+	import { page } from '$app/state';
+	import type { Role } from '#lib/api.ts';
+	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { session } from '#lib/session.svelte.ts';
+	import { system } from '#lib/system.svelte.ts';
+	import AccountMenu from './AccountMenu.svelte';
+	import Logo from './Logo.svelte';
+
+	// A plain user only works with their own shares and files.
+	const NAV: { href: string; label: MessageKey; roles?: Role[] }[] = [
+		{ href: '/', label: 'nav.dashboard' },
+		{ href: '/storage', label: 'nav.storage', roles: ['owner', 'admin'] },
+		{ href: '/shares', label: 'nav.shares', roles: ['owner', 'admin'] },
+		{ href: '/files', label: 'nav.files' },
+		{ href: '/users', label: 'nav.users', roles: ['owner', 'admin'] },
+		{ href: '/docker', label: 'nav.docker', roles: ['owner', 'admin'] },
+		{ href: '/vms', label: 'nav.vms', roles: ['owner', 'admin'] },
+		{ href: '/apps', label: 'nav.apps', roles: ['owner', 'admin'] },
+		{ href: '/plugins', label: 'nav.plugins', roles: ['owner', 'admin'] },
+		{ href: '/settings', label: 'nav.settings' },
+		{ href: '/tools', label: 'nav.tools', roles: ['owner', 'admin'] }
+	];
+
+	const role = $derived(session.data?.user?.role ?? 'user');
+	const items = $derived(NAV.filter((item) => !item.roles || item.roles.includes(role)));
+
+	const host = $derived.by(() => {
+		const name = system.info?.hostname ?? session.data?.hostname ?? '';
+		const ip = system.info?.network?.ipv4.split('/')[0];
+		return ip ? `${name} · ${ip}` : name;
+	});
+
+	let nav = $state<HTMLElement>();
+
+	// The navigation scrolls sideways when it does not fit; keep the current tab in view.
+	$effect(() => {
+		page.url.pathname;
+		nav?.querySelector('[aria-current]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+	});
+
+	function isCurrent(href: string): boolean {
+		const path = page.url.pathname;
+		return href === '/' ? path === '/' : path === href || path.startsWith(href + '/');
+	}
+</script>
+
+<header>
+	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
+	{#if host}<span class="host mono">{host}</span>{/if}
+	<nav bind:this={nav} aria-label={t('nav.label')}>
+		{#each items as item (item.href)}
+			<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a>
+		{/each}
+	</nav>
+	<AccountMenu />
+</header>
+
+<style>
+	header {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		height: 60px;
+		display: flex;
+		flex-wrap: nowrap;
+		align-items: center;
+		gap: 16px;
+		padding: 8px 24px;
+		background: var(--header);
+		border-bottom: 1px solid var(--border);
+	}
+	header > :global(*) {
+		flex: none;
+	}
+	.brand {
+		display: flex;
+	}
+	.host {
+		padding: 3px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		font-size: 0.75rem;
+		color: var(--muted);
+		white-space: nowrap;
+	}
+	nav {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 4px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	nav a {
+		flex: none;
+		padding: 10px 14px;
+		border-radius: var(--radius-ctl);
+		font-size: 0.875rem;
+		text-decoration: none;
+		white-space: nowrap;
+		color: var(--muted);
+	}
+	nav a:hover {
+		color: var(--text);
+	}
+	nav a[aria-current='page'] {
+		background: var(--chip);
+		color: var(--text);
+		font-weight: 500;
+	}
+	@media (max-width: 1100px) {
+		.host {
+			display: none;
+		}
+	}
+	@media (max-width: 760px) {
+		header {
+			gap: 10px;
+			padding: 8px 12px;
+		}
+		.brand :global(svg:last-child) {
+			display: none;
+		}
+	}
+</style>

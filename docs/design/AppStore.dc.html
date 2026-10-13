@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Apps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+.acard{transition:border-color .15s ease, transform .15s ease}
+.acard:hover{border-color:#36414D;transform:translateY(-1px)}
+@media (prefers-reduced-motion: reduce){.acard{transition:none}.acard:hover{transform:none}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<button type="button" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+admin
+</button>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Apps</h1>
+<p style="margin: 0; font-size: 14px; color: #9AA3AD">{{appTotal}} Apps aus {{sourceCount}} Quellen · Variablen, Pfade und Ports werden beim Installieren aus der Vorlage übernommen</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" aria-expanded="{{sourcesExpanded}}" onClick="{{toggleSources}}" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6c0-1.1 3.6-2 8-2s8 .9 8 2-3.6 2-8 2-8-.9-8-2Z"></path><path d="M4 6v6c0 1.1 3.6 2 8 2s8-.9 8-2V6M4 12v6c0 1.1 3.6 2 8 2s8-.9 8-2v-6"></path></svg>App-Quellen</button>
+<button type="button" style="height: 44px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Compose-Datei importieren</button>
+</div>
+</div>
+
+<sc-if value="{{sourcesOpen}}" hint-placeholder-val="{{ true }}">
+<section aria-labelledby="src-h" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="src-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">App-Quellen</h2>
+<span style="font-size: 13px; color: #9AA3AD">Werden täglich auf neue Apps und Updates geprüft</span>
+</div>
+<sc-for list="{{sources}}" as="src" hint-placeholder-count="3">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 12px 18px; border-bottom: 1px solid #20262C">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span>
+<div style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500">{{src.name}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{src.url}}</span>
+</div>
+<span style="font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">{{src.format}}</span>
+<span style="width: 84px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right">{{src.count}} Apps</span>
+<span style="width: 130px; font-size: 12px; color: #9AA3AD">{{src.updated}}</span>
+<button type="button" aria-label="{{src.name}} jetzt aktualisieren" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"></path></svg></button>
+</div>
+</sc-for>
+<form style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 16px 18px; background: #12161A">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 6px">
+<label for="src-url" style="font-size: 13px; color: #9AA3AD">Neue Quelle (Git-Repository oder URL)</label>
+<input id="src-url" type="url" placeholder="https://github.com/benutzer/meine-apps" style="height: 44px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+</div>
+<div style="flex: 0 1 240px; display: flex; flex-direction: column; gap: 6px">
+<label for="src-format" style="font-size: 13px; color: #9AA3AD">Format</label>
+<select id="src-format" style="height: 44px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px"><option>Automatisch erkennen</option><option>TitanOS-Katalog</option><option>Ordner mit Compose-Dateien</option><option>CasaOS-kompatibler Store</option></select>
+</div>
+<button type="button" style="height: 44px; padding: 0 18px; background: {{accent}}; border: 1px solid transparent; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Quelle hinzufügen</button>
+</form>
+</section>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 1 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<div style="flex: 1 1 260px; max-width: 380px; position: relative">
+<label for="a-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Apps suchen</label>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 14px; top: 14px"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input id="a-search" type="search" placeholder="Apps suchen …" onInput="{{onSearch}}" style="width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px 0 40px; background: #161A1F; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px">
+</div>
+</div>
+<div role="group" aria-label="Kategorien" style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{cats}}" as="ct" hint-placeholder-count="7">
+<button type="button" aria-pressed="{{ct.pressed}}" onClick="{{ct.pick}}" style="height: 36px; padding: 0 14px; background: {{ct.bg}}; border: 1px solid {{ct.border}}; border-radius: 999px; color: {{ct.color}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{ct.name}}</button>
+</sc-for>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px">
+<sc-for list="{{apps}}" as="ap" hint-placeholder-count="9">
+<button type="button" class="acard" aria-pressed="{{ap.pressed}}" onClick="{{ap.pick}}" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; text-align: left; background: #161A1F; border: 2px solid {{ap.ring}}; border-radius: 14px; color: #E6E9ED; font: inherit; cursor: pointer">
+<span style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 13px; background: {{ap.color}}; color: #FFFFFF; font-size: 17px; font-weight: 600">{{ap.mono}}</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 15px; font-weight: 600">{{ap.name}}</span>
+<span style="font-size: 12px; color: #9AA3AD">{{ap.cat}}</span>
+</span>
+</span>
+<span style="font-size: 13px; line-height: 1.45; color: #C9D1D9; min-height: 38px">{{ap.desc}}</span>
+<span style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<span style="font-size: 12px; color: #9AA3AD">{{ap.source}}</span>
+<span style="font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: {{ap.badgeBg}}; border: 1px solid {{ap.badgeBorder}}; color: {{ap.badgeColor}}">{{ap.badge}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{noApps}}" hint-placeholder-val="{{ false }}">
+<p style="margin: 0; padding: 32px; text-align: center; font-size: 14px; color: #9AA3AD; background: #161A1F; border: 1px dashed #2F3740; border-radius: 14px">Keine App gefunden. Fehlt eine? Füge eine eigene Quelle hinzu oder importiere eine Compose-Datei.</p>
+</sc-if>
+</div>
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+<aside aria-labelledby="inst-h" style="flex: 0 1 480px; min-width: 0; background: #161A1F; border: 1px solid #2E363F; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4)">
+<div style="display: flex; align-items: flex-start; gap: 14px; padding: 20px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<span aria-hidden="true" style="width: 56px; height: 56px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 15px; background: {{sel.color}}; color: #FFFFFF; font-size: 20px; font-weight: 600">{{sel.mono}}</span>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<h2 id="inst-h" style="margin: 0; font-size: 18px; font-weight: 600">{{sel.name}} installieren</h2>
+<span style="font-size: 13px; color: #9AA3AD">{{sel.desc}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{sel.image}} · Quelle: {{sel.source}}</span>
+</div>
+<button type="button" aria-label="Schließen" onClick="{{closeSel}}" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4CC38A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>
+<span>{{sel.summary}}</span>
+</div>
+<sc-if value="{{sel.needsInput}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #F6D79A">
+<span aria-hidden="true" style="width: 18px; display: flex; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: #F0B54A"></span></span>
+<span>{{sel.inputText}}</span>
+</div>
+</sc-if>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px">
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">aus Vorlage</span>
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #14243A; border: 1px solid #2B4A70; color: #BFDCFF">von TitanOS ergänzt</span>
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #221C33; border: 1px solid #3D3361; color: #D6CBFF">automatisch erzeugt</span>
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #2A2312; border: 1px solid #5A4720; color: #F6D79A">bitte ausfüllen</span>
+</div>
+</div>
+
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Variablen</h3>
+<sc-for list="{{sel.vars}}" as="v" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<label for="{{v.id}}" style="font-size: 13px">{{v.label}} <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{v.key}}</span></label>
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: {{v.bBg}}; border: 1px solid {{v.bBorder}}; color: {{v.bColor}}; white-space: nowrap">{{v.badge}}</span>
+</div>
+<input id="{{v.id}}" type="{{v.inputType}}" value="{{v.value}}" placeholder="{{v.placeholder}}" style="height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid {{v.inputBorder}}; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<sc-if value="{{v.hasNote}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #9AA3AD">{{v.note}}</span></sc-if>
+</div>
+</sc-for>
+<sc-for list="{{cVars}}" as="cv" hint-placeholder-count="0">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 13px">Eigene Variable</span><span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #102A2A; border: 1px solid #1F5656; color: #9FE3E0">eigene</span></div>
+<div style="display: flex; gap: 6px">
+<input type="text" aria-label="Name der Variable" value="{{cv.key}}" placeholder="NAME" onInput="{{cv.onKey}}" style="flex: 0 1 45%; min-width: 0; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid {{cv.keyBorder}}; border-radius: 8px; color: #C9D1D9; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<input type="text" aria-label="Wert" value="{{cv.value}}" placeholder="Wert" onInput="{{cv.onVal}}" style="flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Eigene Variable entfernen" onClick="{{cv.remove}}" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+<sc-if value="{{cv.hasHint}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: {{cv.hintColor}}">{{cv.hint}}</span></sc-if>
+</div>
+</sc-for>
+<button type="button" onClick="{{addVar}}" style="align-self: flex-start; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px dashed #36414D; border-radius: 8px; color: #C9D1D9; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigene Variable</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Pfade</h3>
+<sc-for list="{{sel.paths}}" as="p" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<span style="font-size: 13px">{{p.label}} <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">→ {{p.cont}}</span></span>
+<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: {{p.bBg}}; border: 1px solid {{p.bBorder}}; color: {{p.bColor}}; white-space: nowrap">{{p.badge}}</span>
+</div>
+<div style="display: flex">
+<input type="text" aria-label="{{p.label}}: Pfad auf dem NAS" value="{{p.host}}" style="flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-right: 0; border-radius: 8px 0 0 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Ordner auswählen" style="width: 44px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: #1E252C; border: 1px solid #2A323A; border-radius: 0 8px 8px 0; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"></path></svg></button>
+</div>
+<span style="font-size: 12px; color: #9AA3AD">{{p.note}}</span>
+</div>
+</sc-for>
+<sc-for list="{{cPaths}}" as="cp" hint-placeholder-count="0">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; background: #12161A; border: 1px solid #1F5656; border-radius: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 13px">Eigener Pfad</span><span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #102A2A; border: 1px solid #1F5656; color: #9FE3E0">eigene</span></div>
+<div style="display: flex; gap: 6px; align-items: center">
+<input type="text" aria-label="Pfad auf dem NAS" value="{{cp.host}}" placeholder="/mnt/…" onInput="{{cp.onHost}}" style="flex: 1 1 55%; min-width: 0; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span aria-hidden="true" style="color: #6B7580">→</span>
+<input type="text" aria-label="Pfad im Container" value="{{cp.cont}}" placeholder="/im/container" onInput="{{cp.onCont}}" style="flex: 1 1 45%; min-width: 0; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Eigenen Pfad entfernen" onClick="{{cp.remove}}" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+</div>
+</sc-for>
+<button type="button" onClick="{{addPath}}" style="align-self: flex-start; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px dashed #36414D; border-radius: 8px; color: #C9D1D9; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigener Pfad</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Ports</h3>
+<sc-for list="{{sel.ports}}" as="pt" hint-placeholder-count="1">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<span style="flex: 1 1 100px; font-size: 13px">{{pt.label}}</span>
+<input type="text" inputmode="numeric" aria-label="{{pt.label}}: Port auf dem NAS" value="{{pt.host}}" style="width: 90px; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">→ {{pt.cont}}</span>
+<span style="flex: 1 1 100%; display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{pt.noteColor}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 50%; background: {{pt.dot}}"></span>{{pt.note}}</span>
+</div>
+</sc-for>
+<sc-for list="{{cPorts}}" as="cpt" hint-placeholder-count="0">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; background: #12161A; border: 1px solid #1F5656; border-radius: 10px">
+<span style="flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 13px">Eigener Port</span><span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #102A2A; border: 1px solid #1F5656; color: #9FE3E0">eigene</span></span>
+<input type="text" inputmode="numeric" aria-label="Port auf dem NAS" value="{{cpt.host}}" placeholder="NAS" onInput="{{cpt.onHost}}" style="width: 90px; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid {{cpt.hostBorder}}; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span aria-hidden="true" style="color: #6B7580">→</span>
+<input type="text" inputmode="numeric" aria-label="Port im Container" value="{{cpt.cont}}" placeholder="Container" onInput="{{cpt.onCont}}" style="width: 90px; height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Protokoll wechseln" onClick="{{cpt.toggleProto}}" style="height: 40px; padding: 0 10px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px; cursor: pointer">{{cpt.proto}}</button>
+<button type="button" aria-label="Eigenen Port entfernen" onClick="{{cpt.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+<span role="status" style="flex: 1 1 100%; display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{cpt.stColor}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 50%; background: {{cpt.stDot}}"></span>{{cpt.status}}</span>
+</div>
+</sc-for>
+<button type="button" onClick="{{addPort}}" style="align-self: flex-start; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px dashed #36414D; border-radius: 8px; color: #C9D1D9; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Eigener Port</button>
+</div>
+
+</div>
+
+<div style="margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; background: #1A1F25; border-top: 1px solid #232A31">
+<a href="DockerEdit.dc.html" style="font-size: 14px; text-decoration: none">Als Compose bearbeiten</a>
+<button type="button" style="height: 44px; padding: 0 22px; background: {{accent}}; border: 1px solid transparent; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{sel.installLabel}}</button>
+</div>
+</aside>
+</sc-if>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1360}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cat: 'Alle', sel: 'vaultwarden', query: '', sourcesOpen: true, custom: {}, nid: 1 };
+  }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const BADGE = {
+      vorlage: { badge: 'aus Vorlage', bBg: '#1F262D', bBorder: '#2A323A', bColor: '#C9D1D9' },
+      titan: { badge: 'von TitanOS ergänzt', bBg: '#14243A', bBorder: '#2B4A70', bColor: '#BFDCFF' },
+      geheim: { badge: 'automatisch erzeugt', bBg: '#221C33', bBorder: '#3D3361', bColor: '#D6CBFF' },
+      pflicht: { badge: 'bitte ausfüllen', bBg: '#2A2312', bBorder: '#5A4720', bColor: '#F6D79A' }
+    };
+    const sources = [
+      { name: 'TitanOS-Katalog', url: 'github.com/titanos/apps', format: 'TitanOS-Katalog', count: 142, updated: 'vor 2 Std geprüft' },
+      { name: 'Community-Store', url: 'github.com/beispiel/community-appstore', format: 'CasaOS-kompatibel', count: 231, updated: 'vor 2 Std geprüft' },
+      { name: 'Meine Apps', url: 'git.example.org/ich/titan-apps', format: 'Compose-Ordner', count: 6, updated: 'heute 09:12 geprüft' }
+    ];
+    const APPS = [
+      { id: 'vaultwarden', name: 'Vaultwarden', mono: 'Vw', color: '#C2255C', cat: 'Sicherheit', desc: 'Passwortmanager, kompatibel mit den Bitwarden-Apps.', source: 'TitanOS-Katalog', image: 'vaultwarden/server:1.32', installed: false,
+        vars: [
+          { key: 'DOMAIN', label: 'Öffentliche Adresse', value: '', placeholder: 'https://vault.meine-domain.de', o: 'pflicht', note: 'Nötig für Anhänge und die Browser-Erweiterung.' },
+          { key: 'ADMIN_TOKEN', label: 'Admin-Token', value: 'x8Kq2vRb7NwPz4LmT9sY', inputType: 'password', o: 'geheim', note: 'Zufällig erzeugt, wird in der .env gespeichert.' },
+          { key: 'SIGNUPS_ALLOWED', label: 'Registrierung offen', value: 'false', o: 'vorlage' },
+          { key: 'TZ', label: 'Zeitzone', value: 'Europe/Berlin', o: 'titan', note: 'Von der NAS-Zeitzone übernommen.' }
+        ],
+        paths: [ { label: 'Daten', cont: '/data', host: '/mnt/fast/appdata/vaultwarden', o: 'titan', note: 'Auf deinem SSD-Volume „fast“, weil die App eine Datenbank nutzt.' } ],
+        ports: [ { label: 'WebUI', cont: '80', host: '8222', clash: true, note: '8080 aus der Vorlage ist belegt (nextcloud) → 8222 vorgeschlagen' } ] },
+      { id: 'audiobookshelf', name: 'Audiobookshelf', mono: 'Ab', color: '#E67700', cat: 'Medien', desc: 'Hörbücher und Podcasts streamen, mit Fortschritt pro Gerät.', source: 'TitanOS-Katalog', image: 'advplyr/audiobookshelf:2.17', installed: false,
+        vars: [ { key: 'TZ', label: 'Zeitzone', value: 'Europe/Berlin', o: 'titan', note: 'Von der NAS-Zeitzone übernommen.' } ],
+        paths: [
+          { label: 'Hörbücher', cont: '/audiobooks', host: '/mnt/data/media/hoerbuecher', o: 'titan', note: 'Ordner im Share „media“ erkannt.' },
+          { label: 'Podcasts', cont: '/podcasts', host: '/mnt/data/media/podcasts', o: 'titan', note: 'Wird angelegt, falls er fehlt.' },
+          { label: 'Konfiguration', cont: '/config', host: '/mnt/fast/appdata/audiobookshelf', o: 'titan', note: 'Auf deinem SSD-Volume „fast“.' }
+        ],
+        ports: [ { label: 'WebUI', cont: '80', host: '13378', clash: false, note: 'Port 13378 aus der Vorlage ist frei' } ] },
+      { id: 'syncthing', name: 'Syncthing', mono: 'St', color: '#1C7ED6', cat: 'Backup', desc: 'Ordner zwischen Geräten synchronisieren, ohne Cloud.', source: 'TitanOS-Katalog', image: 'syncthing/syncthing:1.28', installed: false },
+      { id: 'navidrome', name: 'Navidrome', mono: 'Nd', color: '#2B8A3E', cat: 'Medien', desc: 'Eigener Musik-Streaming-Server für deine Sammlung.', source: 'Community-Store', image: 'deluan/navidrome:0.53', installed: false },
+      { id: 'mealie', name: 'Mealie', mono: 'Me', color: '#D9480F', cat: 'Produktivität', desc: 'Rezepte sammeln, Wochenplan und Einkaufsliste.', source: 'Community-Store', image: 'mealie-recipes/mealie:v2', installed: false },
+      { id: 'gitea', name: 'Gitea', mono: 'Gt', color: '#5F3DC4', cat: 'Entwicklung', desc: 'Schlanker Git-Server mit Weboberfläche.', source: 'Community-Store', image: 'gitea/gitea:1.22', installed: false },
+      { id: 'jellyfin', name: 'Jellyfin', mono: 'Jf', color: '#7048E8', cat: 'Medien', desc: 'Filme, Serien und Musik streamen.', source: 'TitanOS-Katalog', image: 'jellyfin/jellyfin:10.10', installed: true },
+      { id: 'immich', name: 'Immich', mono: 'Im', color: '#3B5BDB', cat: 'Fotos', desc: 'Fotos und Videos vom Handy sichern und durchsuchen.', source: 'TitanOS-Katalog', image: 'immich-app/immich-server:v1.120', installed: true },
+      { id: 'homebox', name: 'Homebox', mono: 'Hb', color: '#0B7285', cat: 'Produktivität', desc: 'Inventar für Haushalt und Werkstatt.', source: 'Meine Apps', image: 'hay-kot/homebox:0.10', installed: false }
+    ];
+    const cats = ['Alle', 'Medien', 'Fotos', 'Backup', 'Sicherheit', 'Produktivität', 'Entwicklung'].map((c) => {
+      const on = s.cat === c;
+      return { name: c, pressed: on ? 'true' : 'false', bg: on ? accent : '#161A1F', border: on ? accent : '#2A323A', color: on ? '#0B1622' : '#C9D1D9', pick: () => this.setState({ cat: c }) };
+    });
+    const q = s.query.trim().toLowerCase();
+    const apps = APPS.filter((a) => (s.cat === 'Alle' || a.cat === s.cat) && (!q || a.name.toLowerCase().indexOf(q) !== -1 || a.desc.toLowerCase().indexOf(q) !== -1)).map((a) => {
+      const on = s.sel === a.id;
+      return Object.assign({}, a, {
+        ring: on ? accent : '#232A31', pressed: on ? 'true' : 'false',
+        badge: a.installed ? 'Installiert' : 'Installieren',
+        badgeBg: a.installed ? '#12281E' : '#1F262D', badgeBorder: a.installed ? '#245A40' : '#2A323A', badgeColor: a.installed ? '#9BE3BE' : '#E6E9ED',
+        pick: () => this.setState({ sel: a.id })
+      });
+    });
+    const raw = APPS.find((a) => a.id === s.sel);
+    let sel = null;
+    if (raw) {
+      const slug = raw.id;
+      const vars = (raw.vars || [ { key: 'TZ', label: 'Zeitzone', value: 'Europe/Berlin', o: 'titan', note: 'Von der NAS-Zeitzone übernommen.' } ]).map((v, i) => Object.assign({}, v, BADGE[v.o], {
+        id: 'v-' + slug + '-' + i, inputType: v.inputType || 'text', placeholder: v.placeholder || '',
+        inputBorder: v.o === 'pflicht' ? '#8A6D2C' : '#2A323A', hasNote: !!v.note, note: v.note || ''
+      }));
+      const paths = (raw.paths || [ { label: 'Konfiguration', cont: '/config', host: '/mnt/fast/appdata/' + slug, o: 'titan', note: 'Auf deinem SSD-Volume „fast“.' } ]).map((p) => Object.assign({}, p, BADGE[p.o]));
+      const ports = (raw.ports || [ { label: 'WebUI', cont: '8080', host: '8084', clash: true, note: '8080 aus der Vorlage ist belegt (nextcloud) → 8084 vorgeschlagen' } ]).map((p) => Object.assign({}, p, {
+        dot: p.clash ? '#F0B54A' : '#4CC38A', noteColor: p.clash ? '#F6D79A' : '#9AA3AD'
+      }));
+      const need = vars.filter((v) => v.o === 'pflicht').length;
+      sel = Object.assign({}, raw, {
+        vars, paths, ports,
+        summary: 'Übernommen: ' + vars.length + (vars.length === 1 ? ' Variable · ' : ' Variablen · ') + paths.length + (paths.length === 1 ? ' Pfad · ' : ' Pfade · ') + ports.length + (ports.length === 1 ? ' Port' : ' Ports'),
+        needsInput: need > 0,
+        inputText: need === 1 ? '1 Feld braucht noch deine Eingabe' : need + ' Felder brauchen noch deine Eingabe',
+        installLabel: raw.installed ? 'Neu installieren' : 'Installieren'
+      });
+    }
+    const USED = { '8080': 'nextcloud', '3000': 'adguard-home', '53': 'adguard-home', '8096': 'jellyfin', '7359': 'jellyfin', '8000': 'paperless', '2283': 'immich-server', '3001': 'uptime-kuma', '443': 'TitanOS (Web)', '80': 'TitanOS (Web)', '445': 'TitanOS (SMB)' };
+    const appId = s.sel || '_';
+    const cur = s.custom[appId] || { vars: [], paths: [], ports: [] };
+    const setCur = (patch) => this.setState({ custom: Object.assign({}, s.custom, { [appId]: Object.assign({}, cur, patch) }) });
+    const updRow = (list, id, patch) => setCur({ [list]: cur[list].map((x) => x.id === id ? Object.assign({}, x, patch) : x) });
+    const onRow = (list, id, field) => (e) => updRow(list, id, { [field]: e.target.value });
+    const delRow = (list, id) => () => setCur({ [list]: cur[list].filter((x) => x.id !== id) });
+    const addRow = (list, row) => () => { this.setState({ nid: s.nid + 1 }); setCur({ [list]: cur[list].concat([Object.assign({ id: s.nid }, row)]) }); };
+    const selVarKeys = sel ? sel.vars.map((v) => v.key) : [];
+    const selPorts = sel ? sel.ports.map((p) => String(p.host)) : [];
+    const cVars = cur.vars.map((v) => {
+      let hint = '', hintColor = '#9AA3AD', bad = false;
+      if (!v.key) hint = 'Name eingeben, z. B. LOG_LEVEL';
+      else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.key)) { hint = 'Nur Buchstaben, Ziffern und _'; hintColor = '#F59A9A'; bad = true; }
+      else if (selVarKeys.indexOf(v.key) !== -1) { hint = 'Gibt es schon aus der Vorlage – dein Wert ersetzt ihn'; hintColor = '#F6D79A'; }
+      return { key: v.key, value: v.value, hasHint: !!hint, hint, hintColor, keyBorder: bad ? '#8A6D2C' : '#2A323A', onKey: onRow('vars', v.id, 'key'), onVal: onRow('vars', v.id, 'value'), remove: delRow('vars', v.id) };
+    });
+    const cPaths = cur.paths.map((p) => ({ host: p.host, cont: p.cont, onHost: onRow('paths', p.id, 'host'), onCont: onRow('paths', p.id, 'cont'), remove: delRow('paths', p.id) }));
+    const cPorts = cur.ports.map((p) => {
+      let status = 'frei auf dem NAS', stDot = '#4CC38A', stColor = '#9AA3AD', bad = false;
+      if (!p.host) { status = 'NAS-Port eingeben'; stDot = '#6B7580'; }
+      else if (!/^\d{1,5}$/.test(p.host) || Number(p.host) > 65535) { status = 'keine gültige Portnummer'; stDot = '#F06A6A'; stColor = '#F59A9A'; bad = true; }
+      else if (USED[p.host]) { status = 'belegt durch ' + USED[p.host]; stDot = '#F0B54A'; stColor = '#F6D79A'; bad = true; }
+      else if (selPorts.indexOf(p.host) !== -1) { status = 'schon von dieser App belegt'; stDot = '#F0B54A'; stColor = '#F6D79A'; bad = true; }
+      return { host: p.host, cont: p.cont, proto: p.proto, status, stDot, stColor, hostBorder: bad ? '#8A6D2C' : '#2A323A',
+        onHost: onRow('ports', p.id, 'host'), onCont: onRow('ports', p.id, 'cont'), toggleProto: () => updRow('ports', p.id, { proto: p.proto === 'TCP' ? 'UDP' : 'TCP' }), remove: delRow('ports', p.id) };
+    });
+    return {
+      cVars, cPaths, cPorts,
+      addVar: addRow('vars', { key: '', value: '' }),
+      addPath: addRow('paths', { host: '/mnt/data/', cont: '' }),
+      addPort: addRow('ports', { host: '', cont: '', proto: 'TCP' }),
+      accent, cats, apps, sources,
+      appTotal: sources.reduce((a, x) => a + x.count, 0),
+      sourceCount: sources.length,
+      sourcesOpen: s.sourcesOpen, sourcesExpanded: s.sourcesOpen ? 'true' : 'false',
+      toggleSources: () => this.setState({ sourcesOpen: !s.sourcesOpen }),
+      noApps: apps.length === 0,
+      hasSel: !!sel, sel: sel || { vars: [], paths: [], ports: [] },
+      closeSel: () => this.setState({ sel: null }),
+      onSearch: (e) => this.setState({ query: e.target.value })
+    };
+  }
+}
+</script>
+</body>
+</html>

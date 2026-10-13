@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Docker</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+.ccard{transition:border-color .15s ease, transform .15s ease}
+.ccard:hover{border-color:#36414D;transform:translateY(-1px)}
+.mitem:hover{background:#262E37}
+@media (prefers-reduced-motion: reduce){.ccard{transition:none}.ccard:hover{transform:none}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<button type="button" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+admin
+</button>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Docker</h1>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span><span style="font-family: 'IBM Plex Mono', monospace">{{runCount}}</span> laufen</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #6B7580"></span><span style="font-family: 'IBM Plex Mono', monospace">{{stopCount}}</span> gestoppt</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg><span style="font-family: 'IBM Plex Mono', monospace">2</span> Updates</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px; color: #9AA3AD">CPU <span style="font-family: 'IBM Plex Mono', monospace; color: #E6E9ED">{{cpuTotal}}</span> · RAM <span style="font-family: 'IBM Plex Mono', monospace; color: #E6E9ED">{{ramTotal}}</span></span>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="height: 44px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Compose importieren</button>
+<button type="button" style="height: 44px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Alle aktualisieren</button>
+<a href="AppStore.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 18px; background: {{accent}}; border-radius: 10px; color: #0B1622; font-size: 14px; font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>App installieren</a>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<div style="flex: 1 1 280px; max-width: 420px; position: relative">
+<label for="c-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Container suchen</label>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 14px; top: 14px"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input id="c-search" type="search" placeholder="Container suchen …" onInput="{{onSearch}}" style="width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px 0 40px; background: #161A1F; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px">
+</div>
+<div role="group" aria-label="Filter" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{f.pressed}}" onClick="{{f.pick}}" style="height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: {{f.bg}}; border: 0; border-radius: 8px; color: {{f.color}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">{{f.name}}<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; opacity: 0.8">{{f.count}}</span></button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{showStack}}" hint-placeholder-val="{{ true }}">
+<section aria-label="Compose-Stack immich" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<button type="button" aria-expanded="{{stackExpanded}}" onClick="{{toggleStack}}" style="width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px 18px; background: #191E24; border: 0; color: #E6E9ED; font: inherit; text-align: left; cursor: pointer">
+<span aria-hidden="true" style="width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #3B5BDB; color: #FFFFFF; font-size: 17px; font-weight: 600">Im</span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 240px; min-width: 0">
+<span style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600">immich <span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">Compose-Stack</span></span>
+<span style="font-size: 13px; color: #9AA3AD">{{stackSummary}}</span>
+</span>
+<span style="display: flex; align-items: center; gap: 16px">
+<a href="#" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: #12161A; border: 1px solid #2A323A; border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-decoration: none">2283 · WebUI</a>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: {{stackChevron}}"><path d="m6 9 6 6 6-6"></path></svg>
+</span>
+</button>
+<sc-if value="{{stackOpen}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{stackMembers}}" as="m" hint-placeholder-count="3">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 12px 18px 12px 80px; border-top: 1px solid #20262C">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: {{m.dot}}"></span>
+<span style="flex: 1 1 180px; display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 14px; font-weight: 500">{{m.name}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{m.image}}</span></span>
+<svg width="110" height="26" viewBox="0 0 110 26" aria-hidden="true"><polyline points="{{m.spark}}" fill="none" stroke="{{m.sparkColor}}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>
+<span style="width: 64px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right">{{m.cpuText}}</span>
+<span style="width: 80px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; color: #C9D1D9">{{m.ramText}}</span>
+<button type="button" onClick="{{m.toggleRun}}" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">{{m.runLabel}}</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px">
+<sc-for list="{{singles}}" as="c" hint-placeholder-count="5">
+<article class="ccard" style="position: relative; background: #161A1F; border: 1px solid #232A31; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px">
+
+<div style="display: flex; align-items: flex-start; gap: 14px">
+<button type="button" aria-label="Aktionen für {{c.name}}" aria-expanded="{{c.menuExpanded}}" onClick="{{c.toggleMenu}}" style="width: 52px; height: 52px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: {{c.color}}; border: 0; color: #FFFFFF; font: inherit; font-size: 18px; font-weight: 600; cursor: pointer; opacity: {{c.iconOpacity}}">{{c.mono}}</button>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span style="font-size: 16px; font-weight: 600">{{c.name}}</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: {{c.statusBg}}; border: 1px solid {{c.statusBorder}}; color: {{c.statusColor}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 50%; background: {{c.dot}}"></span>{{c.statusText}}</span>
+<sc-if value="{{c.hasUpdate}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: #14243A; border: 1px solid #2B4A70; color: #BFDCFF">Update</span></sc-if>
+</div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.image}}</span>
+</div>
+<button type="button" aria-label="Weitere Aktionen für {{c.name}}" aria-expanded="{{c.menuExpanded}}" onClick="{{c.toggleMenu}}" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: #12161A; border-radius: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px; width: 62px"><span style="font-size: 11px; color: #9AA3AD; text-transform: uppercase; letter-spacing: 0.05em">CPU</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">{{c.cpuText}}</span></div>
+<svg width="110" height="30" viewBox="0 0 110 26" aria-hidden="true" style="flex: 1 1 auto"><polyline points="{{c.spark}}" fill="none" stroke="{{c.sparkColor}}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; width: 74px; text-align: right"><span style="font-size: 11px; color: #9AA3AD; text-transform: uppercase; letter-spacing: 0.05em">RAM</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">{{c.ramText}}</span></div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px">
+<sc-for list="{{c.ports}}" as="p" hint-placeholder-count="2">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #12161A; border: 1px solid #2A323A; border-radius: 8px; font-size: 12px"><span style="font-family: 'IBM Plex Mono', monospace">{{p.port}}</span><span style="color: #9AA3AD">{{p.label}}</span></span>
+</sc-for>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid #20262C">
+<span style="flex: 1 1 auto; font-size: 12px; color: #9AA3AD; padding-top: 10px">{{c.upText}}</span>
+<sc-if value="{{c.hasWeb}}" hint-placeholder-val="{{ true }}">
+<a href="#" style="margin-top: 10px; height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-size: 13px; text-decoration: none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg>WebUI</a>
+</sc-if>
+<button type="button" onClick="{{c.toggleRun}}" style="margin-top: 10px; height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; background: {{c.runBg}}; border: 1px solid {{c.runBorder}}; border-radius: 8px; color: {{c.runColor}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">
+<sc-if value="{{c.run}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg></sc-if>
+<sc-if value="{{c.stopped}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5Z"></path></svg></sc-if>
+{{c.runLabel}}
+</button>
+</div>
+
+<sc-if value="{{c.menuOpen}}" hint-placeholder-val="{{ false }}">
+<div role="menu" aria-label="Aktionen für {{c.name}}" style="position: absolute; top: 74px; left: 18px; z-index: 5; width: 240px; padding: 6px; background: #1C2229; border: 1px solid #323B45; border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column">
+<button type="button" role="menuitem" class="mitem" onClick="{{c.closeMenu}}" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Logs</button>
+<a href="Terminal.dc.html" role="menuitem" class="mitem" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 8px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 4 4-4 4M12 16h7"></path></svg>Konsole</a>
+<a href="DockerEdit.dc.html" role="menuitem" class="mitem" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 8px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Bearbeiten</a>
+<button type="button" role="menuitem" class="mitem" onClick="{{c.closeMenu}}" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"></path></svg>Neustarten</button>
+<sc-if value="{{c.hasUpdate}}" hint-placeholder-val="{{ false }}">
+<button type="button" role="menuitem" class="mitem" onClick="{{c.closeMenu}}" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #BFDCFF; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>Aktualisieren</button>
+</sc-if>
+<div aria-hidden="true" style="height: 1px; margin: 6px 4px; background: #2A323A"></div>
+<button type="button" role="menuitem" class="mitem" onClick="{{c.closeMenu}}" style="height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #F59A9A; font: inherit; font-size: 14px; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg>Entfernen …</button>
+</div>
+</sc-if>
+
+</article>
+</sc-for>
+</div>
+
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+<p style="margin: 0; padding: 40px; text-align: center; font-size: 14px; color: #9AA3AD; background: #161A1F; border: 1px dashed #2F3740; border-radius: 14px">Keine Container passen zu diesem Filter.</p>
+</sc-if>
+
+<p style="margin: 0; font-size: 13px; color: #9AA3AD">Tipp: Ein Klick auf das App-Symbol öffnet die Schnellaktionen.</p>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      filter: 'alle', query: '', menu: null, stackOpen: true,
+      running: { jellyfin: true, adguard: true, paperless: true, nextcloud: false, uptime: false, iserver: true, iml: true, idb: true }
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const ok = '#4CC38A', idle = '#6B7580';
+    const pts = (vals) => vals.map((v, i) => (i * 10) + ',' + (24 - v)).join(' ');
+    const flat = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const singlesBase = [
+      { id: 'jellyfin', name: 'jellyfin', mono: 'Jf', color: '#7048E8', image: 'jellyfin/jellyfin:10.10', cpu: 4.2, ram: 612, up: 'Läuft seit 3 Tagen', update: false, web: true, ports: [{ port: '8096', label: 'WebUI' }, { port: '7359/udp', label: 'LAN' }], hist: [6, 9, 7, 14, 18, 12, 9, 15, 20, 13, 10, 12] },
+      { id: 'adguard', name: 'adguard-home', mono: 'Ag', color: '#2F9E44', image: 'adguard/adguardhome:v0.107', cpu: 0.2, ram: 84, up: 'Läuft seit 12 Tagen', update: true, web: true, ports: [{ port: '3000', label: 'WebUI' }, { port: '53', label: 'DNS' }], hist: [3, 3, 4, 3, 5, 4, 3, 3, 4, 6, 4, 3] },
+      { id: 'paperless', name: 'paperless', mono: 'Pa', color: '#0C8599', image: 'paperless-ngx/paperless-ngx:2.13', cpu: 0.4, ram: 410, up: 'Läuft seit 12 Tagen', update: false, web: true, ports: [{ port: '8000', label: 'WebUI' }], hist: [4, 5, 4, 4, 6, 12, 8, 5, 4, 4, 5, 4] },
+      { id: 'nextcloud', name: 'nextcloud', mono: 'Nc', color: '#1971C2', image: 'nextcloud:30-apache', cpu: 0, ram: 0, up: 'Gestoppt seit 2 Tagen', update: true, web: true, ports: [{ port: '8080', label: 'WebUI' }], hist: flat },
+      { id: 'uptime', name: 'uptime-kuma', mono: 'Uk', color: '#5C940D', image: 'louislam/uptime-kuma:1', cpu: 0, ram: 0, up: 'Gestoppt seit 5 Tagen', update: false, web: true, ports: [{ port: '3001', label: 'WebUI' }], hist: flat }
+    ];
+    const stackBase = [
+      { id: 'iserver', name: 'immich-server', image: 'immich-app/immich-server:v1.120', cpu: 1.8, ram: 540, hist: [5, 6, 9, 7, 8, 12, 10, 7, 6, 8, 9, 7] },
+      { id: 'iml', name: 'immich-ml', image: 'immich-app/immich-machine-learning:v1.120', cpu: 0.6, ram: 1210, hist: [2, 2, 3, 2, 14, 18, 6, 3, 2, 2, 3, 2] },
+      { id: 'idb', name: 'immich-db', image: 'tensorchord/pgvecto-rs:pg16', cpu: 0.3, ram: 220, hist: [3, 3, 4, 3, 3, 5, 4, 3, 3, 3, 4, 3] }
+    ];
+    const fmt = (n) => n.toFixed(1).replace('.', ',') + ' %';
+    const isRun = (c) => !!s.running[c.id];
+    const q = s.query.trim().toLowerCase();
+    const match = (c) => {
+      if (q && c.name.indexOf(q) === -1) return false;
+      if (s.filter === 'laeuft') return isRun(c);
+      if (s.filter === 'gestoppt') return !isRun(c);
+      if (s.filter === 'updates') return !!c.update;
+      return true;
+    };
+    const toggleRun = (c) => () => this.setState({ running: Object.assign({}, s.running, { [c.id]: !isRun(c) }), menu: null });
+    const singles = singlesBase.filter(match).map((c) => {
+      const run = isRun(c);
+      return Object.assign({}, c, {
+        run, stopped: !run, hasUpdate: !!c.update, hasWeb: run && c.web,
+        statusText: run ? 'läuft' : 'gestoppt',
+        statusBg: run ? '#12281E' : '#1F262D', statusBorder: run ? '#245A40' : '#2A323A', statusColor: run ? '#9BE3BE' : '#9AA3AD',
+        dot: run ? ok : idle, iconOpacity: run ? '1' : '0.45',
+        cpuText: run ? fmt(c.cpu) : '–', ramText: run ? c.ram + ' MB' : '–',
+        upText: run ? c.up : c.up,
+        spark: pts(run ? c.hist : flat), sparkColor: run ? accent : '#3A434D',
+        runLabel: run ? 'Stoppen' : 'Starten',
+        runBg: run ? 'transparent' : accent, runBorder: run ? '#2A323A' : 'transparent', runColor: run ? '#E6E9ED' : '#0B1622',
+        menuOpen: s.menu === c.id, menuExpanded: s.menu === c.id ? 'true' : 'false',
+        toggleMenu: () => this.setState({ menu: s.menu === c.id ? null : c.id }),
+        closeMenu: () => this.setState({ menu: null }),
+        toggleRun: toggleRun(c)
+      });
+    });
+    const stackMembers = stackBase.filter(match).map((m) => {
+      const run = isRun(m);
+      return Object.assign({}, m, {
+        dot: run ? ok : idle, cpuText: run ? fmt(m.cpu) : '–', ramText: run ? m.ram + ' MB' : '–',
+        spark: pts(run ? m.hist : flat), sparkColor: run ? accent : '#3A434D',
+        runLabel: run ? 'Stoppen' : 'Starten', toggleRun: toggleRun(m)
+      });
+    });
+    const all = singlesBase.concat(stackBase);
+    const runCount = all.filter(isRun).length;
+    const stackRun = stackBase.filter(isRun).length;
+    const counts = { alle: all.length, laeuft: runCount, gestoppt: all.length - runCount, updates: all.filter((c) => c.update).length };
+    const filters = [
+      { id: 'alle', name: 'Alle' }, { id: 'laeuft', name: 'Laufen' }, { id: 'gestoppt', name: 'Gestoppt' }, { id: 'updates', name: 'Updates' }
+    ].map((f) => {
+      const on = s.filter === f.id;
+      return { name: f.name, count: counts[f.id], pressed: on ? 'true' : 'false', bg: on ? '#2A323A' : 'transparent', color: on ? '#E6E9ED' : '#9AA3AD', pick: () => this.setState({ filter: f.id, menu: null }) };
+    });
+    const runningAll = all.filter(isRun);
+    const cpuSum = runningAll.reduce((a, c) => a + c.cpu, 0);
+    const ramSum = runningAll.reduce((a, c) => a + c.ram, 0);
+    return {
+      accent, filters, singles, stackMembers,
+      runCount, stopCount: all.length - runCount,
+      cpuTotal: fmt(cpuSum), ramTotal: (ramSum / 1024).toFixed(1).replace('.', ',') + ' GB',
+      showStack: stackMembers.length > 0,
+      stackOpen: s.stackOpen,
+      stackExpanded: s.stackOpen ? 'true' : 'false',
+      stackChevron: s.stackOpen ? 'rotate(180deg)' : 'none',
+      stackSummary: stackBase.length + ' Container · ' + (stackRun === stackBase.length ? 'alle laufen' : stackRun + ' laufen'),
+      toggleStack: () => this.setState({ stackOpen: !s.stackOpen }),
+      empty: singles.length === 0 && stackMembers.length === 0,
+      onSearch: (e) => this.setState({ query: e.target.value, menu: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

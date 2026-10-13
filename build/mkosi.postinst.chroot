@@ -1,0 +1,38 @@
+#!/bin/sh
+# Runs inside the image after the packages and mkosi.extra are in place.
+set -eu
+
+version=${IMAGE_VERSION:-dev}
+
+# Identity. "Based on Debian", but not Debian: tools that need to know get ID_LIKE.
+rm -f /etc/os-release
+cat > /usr/lib/os-release <<OSRELEASE
+NAME="TitanOS"
+PRETTY_NAME="TitanOS $version${TITANOS_DEV:+ (development build)}"
+ID=titanos
+ID_LIKE=debian
+VERSION="$version"
+VERSION_ID="$version"
+VERSION_CODENAME=trixie
+${TITANOS_DEV:+VARIANT_ID=dev}
+HOME_URL="https://github.com/ra5on/TitanOS"
+BUG_REPORT_URL="https://github.com/ra5on/TitanOS/issues"
+OSRELEASE
+sed -i '/^$/d' /usr/lib/os-release
+ln -s ../usr/lib/os-release /etc/os-release
+
+cat > /etc/issue <<'ISSUE'
+\S{PRETTY_NAME} – \n (\l)
+Web UI: https://\4
+
+ISSUE
+
+# The stick is mounted on /efi on demand (see /etc/fstab). /config is a link
+# into it, not a directory: if the stick is missing, writing configuration
+# fails loudly instead of landing in RAM and being gone after the next boot.
+mkdir -p /efi
+ln -s efi/config /config
+
+# The root filesystem is fresh on every boot, so every boot looks like the
+# first one to systemd. Do not let it ask setup questions on the console.
+ln -sf /dev/null /etc/systemd/system/systemd-firstboot.service

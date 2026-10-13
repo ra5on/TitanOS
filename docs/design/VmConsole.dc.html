@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS VM-Konsole</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+.tbtn:hover{background:#1E252C}
+.fsbar:hover{opacity:1}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>Terminal</a>
+<button type="button" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+admin
+</button>
+</div>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: {{mainMax}}; margin: 0 auto; box-sizing: border-box; padding: 24px 32px 36px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+<sc-if value="{{sidebar}}" hint-placeholder-val="{{ true }}">
+<aside aria-labelledby="vml-h" style="flex: 1 1 250px; max-width: 290px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h2 id="vml-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA3AD">Virtuelle Maschinen</h2>
+<a href="VmCreate.dc.html" aria-label="Neue VM" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; box-sizing: border-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+</div>
+<sc-for list="{{vms}}" as="vm" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{vm.pressed}}" onClick="{{vm.pick}}" style="display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left; background: #161A1F; border: 2px solid {{vm.ring}}; border-radius: 12px; color: #E6E9ED; font: inherit; cursor: pointer">
+<span aria-hidden="true" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #1E252C; color: {{vm.iconColor}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 14px; font-weight: 600">{{vm.name}}</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9AA3AD"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{vm.dot}}"></span>{{vm.status}} · {{vm.specs}}</span>
+</span>
+</button>
+</sc-for>
+</aside>
+</sc-if>
+
+<section aria-labelledby="vm-h" style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<h1 id="vm-h" style="margin: 0; font-size: 22px; font-weight: 600">{{cur.name}}</h1>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px; background: {{cur.pillBg}}; border: 1px solid {{cur.pillBorder}}; color: {{cur.pillColor}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 50%; background: {{cur.dot}}"></span>{{cur.status}}</span>
+</div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{cur.detail}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-if value="{{cur.running}}" hint-placeholder-val="{{ true }}">
+<button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Neustarten</button>
+<button type="button" onClick="{{cur.toggle}}" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Herunterfahren</button>
+<button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #5A2A2A; border-radius: 10px; color: #F59A9A; font: inherit; font-size: 14px; cursor: pointer">Ausschalten erzwingen</button>
+</sc-if>
+<sc-if value="{{cur.stopped}}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{cur.toggle}}" style="height: 40px; padding: 0 18px; background: {{accent}}; border: 1px solid transparent; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Starten</button>
+</sc-if>
+<a href="#" style="height: 40px; display: flex; align-items: center; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none">Bearbeiten</a>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<div role="tablist" aria-label="Ansicht" style="display: flex; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<button type="button" role="tab" aria-selected="{{vncSelected}}" onClick="{{showVnc}}" style="height: 36px; padding: 0 16px; background: {{vncBg}}; border: 0; border-radius: 8px; color: {{vncColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">Bildschirm (VNC)</button>
+<button type="button" role="tab" aria-selected="{{serSelected}}" onClick="{{showSerial}}" style="height: 36px; padding: 0 16px; background: {{serBg}}; border: 0; border-radius: 8px; color: {{serColor}}; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer">Serielle Konsole</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<sc-if value="{{vnc}}" hint-placeholder-val="{{ true }}">
+<button type="button" class="tbtn" style="height: 36px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Strg+Alt+Entf</button>
+<button type="button" class="tbtn" style="height: 36px; padding: 0 12px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Zwischenablage</button>
+<span aria-hidden="true" style="width: 1px; height: 20px; background: #2A323A; margin: 0 2px"></span>
+<span id="scale-l" style="font-size: 12px; color: #9AA3AD; padding: 0 4px 0 6px">Anzeige</span>
+<sc-for list="{{scales}}" as="sc" hint-placeholder-count="3">
+<button type="button" class="tbtn" aria-pressed="{{sc.pressed}}" title="{{sc.hint}}" onClick="{{sc.pick}}" style="height: 36px; padding: 0 12px; background: {{sc.bg}}; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">{{sc.name}}</button>
+</sc-for>
+<span aria-hidden="true" style="width: 1px; height: 20px; background: #2A323A; margin: 0 2px"></span>
+<button type="button" class="tbtn" aria-label="Screenshot speichern" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a1 1 0 0 1 1-1h3l2-2h4l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></button>
+</sc-if>
+<button type="button" class="tbtn" aria-label="Seitenleiste ein- oder ausblenden" aria-pressed="{{sidebarPressed}}" onClick="{{toggleSidebar}}" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: {{sidebarBg}}; border: 0; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg></button>
+<button type="button" class="tbtn" aria-label="In eigenem Fenster öffnen" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></button>
+<button type="button" onClick="{{enterFs}}" style="height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: {{accent}}; border: 0; border-radius: 8px; color: #0B1622; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>Vollbild</button>
+</div>
+</div>
+
+<div style="position: {{wrap.pos}}; inset: {{wrap.inset}}; z-index: {{wrap.z}}; width: {{wrap.w}}; height: {{wrap.h}}; max-width: {{wrap.maxW}}; min-width: 420px; min-height: 240px; box-sizing: border-box; resize: {{wrap.resize}}; overflow: {{wrap.overflow}}; background: #050607; border: {{wrap.border}}; border-radius: {{wrap.radius}}; container-type: size; display: flex; align-items: {{wrap.align}}; justify-content: {{wrap.align}}">
+
+<div ref="{{screenRef}}" style="position: relative; flex: none; width: {{scr.w}}; height: {{scr.h}}; aspect-ratio: {{scr.ar}}; overflow: hidden; background: #000000; container-type: inline-size">
+
+<sc-if value="{{showDesktop}}" hint-placeholder-val="{{ true }}">
+<div aria-label="Bildschirm von linux-desktop" role="img" style="position: absolute; inset: 0; background: #1E3446">
+<svg viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M0 640 260 470 470 590 760 380 1040 560 1290 430 1600 600V900H0Z" fill="#244259"></path><path d="M0 760 330 620 620 730 930 590 1240 700 1600 640V900H0Z" fill="#2B4E68"></path></svg>
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 2.2cqw; display: flex; align-items: center; justify-content: space-between; padding: 0 1.2cqw; background: #0F1215; color: #E6E9ED; font-size: 0.85cqw">
+<span style="font-weight: 600">Aktivitäten</span><span>Di 13. Okt 14:32</span><span style="display: flex; gap: 0.5cqw"><span style="width: 0.8cqw; height: 0.8cqw; border: 1px solid #E6E9ED; border-radius: 50%"></span><span style="width: 0.8cqw; height: 0.8cqw; border: 1px solid #E6E9ED; border-radius: 2px"></span></span>
+</div>
+<div style="position: absolute; left: 1cqw; top: 30%; width: 3.2cqw; display: flex; flex-direction: column; gap: 0.6cqw; padding: 0.5cqw; background: rgba(15, 18, 21, 0.75); border-radius: 0.7cqw">
+<span style="aspect-ratio: 1; border-radius: 0.5cqw; background: #3B82C4"></span><span style="aspect-ratio: 1; border-radius: 0.5cqw; background: #D97706"></span><span style="aspect-ratio: 1; border-radius: 0.5cqw; background: #2F9E44"></span><span style="aspect-ratio: 1; border-radius: 0.5cqw; background: #7048E8"></span>
+</div>
+<div style="position: absolute; left: 20%; top: 13%; width: 58%; height: 64%; display: flex; flex-direction: column; background: #1A1D22; border-radius: 0.6cqw; overflow: hidden; box-shadow: 0 1.2cqw 3cqw rgba(0, 0, 0, 0.5); font-size: 0.95cqw; color: #E6E9ED">
+<div style="height: 2.6cqw; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 1cqw; background: #2B2F36"><span style="font-weight: 600">Dateien</span><span style="display: flex; gap: 0.5cqw"><span style="width: 0.8cqw; height: 0.8cqw; border-radius: 50%; background: #4A5059"></span><span style="width: 0.8cqw; height: 0.8cqw; border-radius: 50%; background: #4A5059"></span><span style="width: 0.8cqw; height: 0.8cqw; border-radius: 50%; background: #C0504D"></span></span></div>
+<div style="flex: 1 1 auto; display: flex; min-height: 0">
+<div style="width: 26%; padding: 1.2cqw 1cqw; background: #22262C; display: flex; flex-direction: column; gap: 0.9cqw; color: #C9D1D9"><span>Persönlicher Ordner</span><span>Dokumente</span><span>Downloads</span><span>Bilder</span><span style="color: #9CCBFF">nas (SMB)</span></div>
+<div style="flex: 1 1 auto; padding: 1.6cqw; display: grid; grid-template-columns: repeat(auto-fill, minmax(7cqw, 1fr)); gap: 1.6cqw; align-content: start">
+<sc-for list="{{folders}}" as="fd" hint-placeholder-count="8">
+<span style="display: flex; flex-direction: column; align-items: center; gap: 0.4cqw"><svg viewBox="0 0 48 40" style="width: 4.4cqw"><path d="M2 6a3 3 0 0 1 3-3h13l4 5h21a3 3 0 0 1 3 3v24a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3Z" fill="#7FA7CC"></path><path d="M2 13h44v22a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3Z" fill="#9CC0E0"></path></svg><span>{{fd}}</span></span>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showTextScreen}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; padding: 2cqw 2.4cqw; box-sizing: border-box; font-family: 'IBM Plex Mono', monospace; font-size: {{textSize}}; line-height: 1.6; color: #C8CDD2; background: #000000; overflow: hidden">
+<sc-for list="{{textScreen}}" as="tl" hint-placeholder-count="10"><div style="white-space: pre-wrap; min-height: 1.6em; color: {{tl.c}}">{{tl.t}}</div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{showOff}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: #0B0D10">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6B7580" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"></path><path d="M6.3 6.3a8 8 0 1 0 11.4 0"></path></svg>
+<span style="font-size: 18px; font-weight: 600">{{cur.name}} ist ausgeschaltet</span>
+<span style="max-width: 520px; font-size: 14px; color: #9AA3AD">Die Grafikkarte (PCI 01:00.0) wird beim Start an die VM durchgereicht. Das Bild erscheint dann am Monitor, der an der Grafikkarte hängt. Die VNC-Ansicht bleibt für eine zusätzliche virtuelle Anzeige verfügbar.</span>
+<button type="button" onClick="{{cur.toggle}}" style="height: 44px; padding: 0 20px; background: {{accent}}; border: 1px solid transparent; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">VM starten</button>
+</div>
+</sc-if>
+
+</div>
+
+<sc-if value="{{showResChip}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; right: 14px; bottom: 14px; padding: 6px 10px; background: rgba(12, 15, 18, 0.85); border: 1px solid #2E363F; border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E6E9ED; pointer-events: none">{{resChip}}</span>
+</sc-if>
+
+<sc-if value="{{fs}}" hint-placeholder-val="{{ false }}">
+<div class="fsbar" style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; background: rgba(18, 22, 26, 0.92); border: 1px solid #2E363F; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); opacity: 0.92">
+<span style="display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; font-weight: 600"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: {{cur.dot}}"></span>{{cur.name}}</span>
+<span aria-hidden="true" style="width: 1px; height: 20px; background: #2A323A"></span>
+<button type="button" class="tbtn" style="height: 34px; padding: 0 10px; background: transparent; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Strg+Alt+Entf</button>
+<sc-for list="{{scales}}" as="sc" hint-placeholder-count="3">
+<button type="button" class="tbtn" aria-pressed="{{sc.pressed}}" onClick="{{sc.pick}}" style="height: 34px; padding: 0 10px; background: {{sc.bg}}; border: 0; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">{{sc.name}}</button>
+</sc-for>
+<button type="button" onClick="{{exitFs}}" style="height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: {{accent}}; border: 0; border-radius: 8px; color: #0B1622; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"></path></svg>Vollbild beenden (Esc)</button>
+</div>
+</sc-if>
+
+</div>
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; padding: 10px 14px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">
+<span>{{infoLeft}}</span>
+<span>Fenster an der Ecke unten rechts ziehen, um die Ansicht zu vergrößern</span>
+</div>
+
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'desktop', view: 'vnc', scale: 'fit', fs: false, sidebar: true, dims: '', on: { ha: true, desktop: true, win: false } };
+    this.ro = null;
+    this.screenRef = (el) => {
+      if (this.ro) { this.ro.disconnect(); this.ro = null; }
+      if (el && typeof ResizeObserver !== 'undefined') {
+        this.ro = new ResizeObserver((entries) => {
+          const r = entries[0].contentRect;
+          const d = Math.round(r.width) + ' × ' + Math.round(r.height);
+          if (d !== this.state.dims) this.setState({ dims: d });
+        });
+        this.ro.observe(el);
+      }
+    };
+  }
+  componentWillUnmount() { if (this.ro) this.ro.disconnect(); }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const ok = '#4CC38A', idle = '#6B7580';
+    const W = '#C8CDD2', M = '#7D8792', Gn = '#7EE0A8';
+    const VMS = [
+      { id: 'ha', name: 'home-assistant', specs: '2 vCPU · 4 GB', detail: '2 vCPU · 4 GB RAM · 32 GB auf fast · br0 192.168.1.40 · UEFI', kind: 'text' },
+      { id: 'desktop', name: 'linux-desktop', specs: '4 vCPU · 8 GB', detail: '4 vCPU · 8 GB RAM · 64 GB auf fast · br0 192.168.1.41 · UEFI · virtio-gpu', kind: 'desktop' },
+      { id: 'win', name: 'windows-11', specs: '4 vCPU · 8 GB', detail: '4 vCPU · 8 GB RAM · 128 GB auf fast · GPU-Passthrough · TPM 2.0', kind: 'gpu' }
+    ];
+    const isOn = (id) => !!s.on[id];
+    const toggle = (id) => () => this.setState({ on: Object.assign({}, s.on, { [id]: !isOn(id) }) });
+    const vms = VMS.map((v) => {
+      const on = s.sel === v.id, run = isOn(v.id);
+      return { name: v.name, specs: v.specs, status: run ? 'läuft' : 'aus', dot: run ? ok : idle, iconColor: run ? accent : '#6B7580', ring: on ? accent : '#232A31', pressed: on ? 'true' : 'false', pick: () => this.setState({ sel: v.id }) };
+    });
+    const v = VMS.find((x) => x.id === s.sel) || VMS[0];
+    const run = isOn(v.id);
+    const cur = {
+      name: v.name, detail: v.detail, running: run, stopped: !run,
+      status: run ? 'läuft' : 'ausgeschaltet',
+      pillBg: run ? '#12281E' : '#1F262D', pillBorder: run ? '#245A40' : '#2A323A', pillColor: run ? '#9BE3BE' : '#9AA3AD', dot: run ? ok : idle,
+      toggle: toggle(v.id)
+    };
+    const vnc = s.view === 'vnc';
+    let textScreen = [];
+    if (!vnc && run) {
+      textScreen = (v.id === 'ha' ? [
+        { t: '[  OK  ] Started Network Manager.', c: W }, { t: '[  OK  ] Reached target Multi-User System.', c: W }, { t: '', c: W },
+        { t: 'Linux 6.6.54-haos (homeassistant) (ttyS0)', c: M }, { t: '', c: W }, { t: 'homeassistant login: ', c: W }
+      ] : v.id === 'desktop' ? [
+        { t: '[  OK  ] Started gdm.service - GNOME Display Manager.', c: W }, { t: '[  OK  ] Reached target graphical.target.', c: W }, { t: '', c: W },
+        { t: 'Debian GNU/Linux 13 linux-desktop ttyS0', c: M }, { t: '', c: W }, { t: 'linux-desktop login: ', c: W }
+      ] : [
+        { t: 'Windows bietet keine serielle Konsole.', c: M }, { t: 'Nutze die VNC-Ansicht oder den Monitor an der Grafikkarte.', c: M }
+      ]);
+    } else if (vnc && run && v.kind === 'text') {
+      textScreen = [
+        { t: 'Linux 6.6.54-haos (homeassistant) (tty1)', c: M }, { t: '', c: W },
+        { t: 'System information', c: Gn },
+        { t: '  IPv4 addresses for enp0s3:  192.168.1.40/24', c: W },
+        { t: '  OS Version:                 Home Assistant OS 13.2', c: W }, { t: '', c: W },
+        { t: '  Home Assistant URL:         http://homeassistant.local:8123', c: W }, { t: '', c: W },
+        { t: 'homeassistant login: ', c: W }
+      ];
+    } else if (vnc && run && v.kind === 'gpu') {
+      textScreen = [
+        { t: 'Bild läuft über die durchgereichte Grafikkarte.', c: M },
+        { t: 'Für die VNC-Ansicht in den VM-Einstellungen eine zusätzliche virtuelle Anzeige aktivieren.', c: M }
+      ];
+    } else if (!vnc && !run) {
+      textScreen = [ { t: 'VM ist ausgeschaltet – keine Konsole verfügbar.', c: M } ];
+    }
+    const showDesktop = vnc && run && v.kind === 'desktop';
+    const showOff = vnc && !run;
+    const showTextScreen = !showDesktop && !showOff;
+
+    const SC = [
+      { id: 'fit', name: 'Skalieren', hint: 'Bild ins Fenster einpassen, Seitenverhältnis bleibt' },
+      { id: 'resize', name: 'Auflösung anpassen', hint: 'VM übernimmt die Fenstergröße als Auflösung' },
+      { id: 'native', name: '100 %', hint: 'Pixelgenau 1:1, bei Bedarf scrollen' }
+    ];
+    const scales = SC.map((x) => ({ name: x.name, hint: x.hint, pressed: s.scale === x.id ? 'true' : 'false', bg: s.scale === x.id ? '#2A323A' : 'transparent', pick: () => this.setState({ scale: x.id }) }));
+
+    const wrap = s.fs
+      ? { pos: 'fixed', inset: '0', z: '50', w: '100vw', h: '100vh', maxW: '100vw', resize: 'none', border: '0', radius: '0', overflow: s.scale === 'native' ? 'auto' : 'hidden', align: s.scale === 'native' ? 'flex-start' : 'center' }
+      : { pos: 'relative', inset: 'auto', z: 'auto', w: '100%', h: '620px', maxW: 'none', resize: 'both', border: '1px solid #2E363F', radius: '12px', overflow: s.scale === 'native' ? 'auto' : 'hidden', align: s.scale === 'native' ? 'flex-start' : 'center' };
+    const scr = s.scale === 'fit'
+      ? { w: 'min(100cqw, 177.78cqh)', h: 'auto', ar: '16 / 9' }
+      : s.scale === 'resize'
+        ? { w: '100%', h: '100%', ar: 'auto' }
+        : { w: '1920px', h: '1080px', ar: 'auto' };
+    const resChip = s.scale === 'fit'
+      ? 'Gast 1920 × 1080 · angezeigt ' + (s.dims || '…')
+      : s.scale === 'resize'
+        ? 'Auflösung folgt dem Fenster · ' + (s.dims || '…')
+        : 'Gast 1920 × 1080 · 1:1';
+    return {
+      accent, vms, cur, scales, wrap, scr, resChip, vnc,
+      folders: ['Dokumente', 'Downloads', 'Bilder', 'Musik', 'Videos', 'Projekte', 'Vorlagen', 'Öffentlich'],
+      textScreen, showDesktop, showOff, showTextScreen,
+      textSize: s.scale === 'native' ? '15px' : '1.25cqw',
+      showResChip: vnc && run && v.kind === 'desktop',
+      screenRef: this.screenRef,
+      fs: s.fs,
+      enterFs: () => this.setState({ fs: true }),
+      exitFs: () => this.setState({ fs: false }),
+      sidebar: s.sidebar, sidebarPressed: s.sidebar ? 'true' : 'false', sidebarBg: s.sidebar ? '#2A323A' : 'transparent',
+      toggleSidebar: () => this.setState({ sidebar: !s.sidebar }),
+      mainMax: s.sidebar ? '1440px' : '100%',
+      vncSelected: vnc ? 'true' : 'false', serSelected: vnc ? 'false' : 'true',
+      vncBg: vnc ? '#2A323A' : 'transparent', vncColor: vnc ? '#E6E9ED' : '#9AA3AD',
+      serBg: vnc ? 'transparent' : '#2A323A', serColor: vnc ? '#9AA3AD' : '#E6E9ED',
+      showVnc: () => this.setState({ view: 'vnc' }), showSerial: () => this.setState({ view: 'serial' }),
+      infoLeft: vnc ? (run ? 'noVNC · Latenz 8 ms · verschlüsselt über HTTPS · Tastatur als Scancodes (Layout des Gasts gilt)' : 'Keine Verbindung – VM ist aus') : (run ? 'Serielle Konsole (ttyS0) über libvirt · 115200 Baud' : 'Keine Verbindung – VM ist aus')
+    };
+  }
+}
+</script>
+</body>
+</html>

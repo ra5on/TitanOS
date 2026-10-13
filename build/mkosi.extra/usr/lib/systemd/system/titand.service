@@ -1,0 +1,13 @@
+[Unit]
+Description=TitanOS daemon (web UI and API)
+Documentation=https://github.com/ra5on/TitanOS
+After=network.target
+
+[Service]
+# HTTPS on 443 with a self-signed certificate kept in /config; port 80 redirects.
+ExecStart=/usr/bin/titand
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

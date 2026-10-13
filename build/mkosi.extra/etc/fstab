@@ -1,0 +1,7 @@
+# The USB stick (FAT32, label TITANOS) holds the boot files, the system slots
+# and /config. FAT has no permissions, so everything on it is root-only.
+#
+# The stick is only mounted while something uses it and is unmounted again
+# after 30 seconds without access. FAT has no journal: this way a power cut
+# or a pulled stick almost never hits a mounted filesystem.
+LABEL=TITANOS  /efi  vfat  rw,umask=0077,flush,noauto,x-systemd.automount,x-systemd.idle-timeout=30s,x-systemd.device-timeout=10s  0  0

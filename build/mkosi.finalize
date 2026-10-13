@@ -1,0 +1,28 @@
+#!/bin/sh
+# Runs on the build host once the image tree ($BUILDROOT) is complete.
+# Produces the files of one system slot on the stick in $OUTPUTDIR.
+set -eu
+
+set -- "$BUILDROOT"/boot/vmlinuz-*
+if [ $# -ne 1 ] || [ ! -e "$1" ]; then
+    echo "expected exactly one kernel in /boot, found: $*" >&2
+    exit 1
+fi
+kernel=${1##*/vmlinuz-}
+
+if [ ! -s "$BUILDROOT/boot/initrd.img-$kernel" ]; then
+    echo "no initrd for kernel $kernel in /boot" >&2
+    exit 1
+fi
+
+cp "$BUILDROOT/boot/vmlinuz-$kernel" "$OUTPUTDIR/vmlinuz"
+cp "$BUILDROOT/boot/initrd.img-$kernel" "$OUTPUTDIR/initrd.img"
+cp "$BUILDROOT/usr/lib/systemd/boot/efi/systemd-bootx64.efi" "$OUTPUTDIR/BOOTX64.EFI"
+printf '%s\n' "$kernel" > "$OUTPUTDIR/kernel-version"
+
+# Kernel and initrd are loaded from the stick by the boot loader. Keeping a
+# second copy inside the system image would only cost RAM.
+rm -f "$BUILDROOT"/boot/vmlinuz-* "$BUILDROOT"/boot/initrd.img-* "$BUILDROOT"/boot/System.map-*
+
+mksquashfs "$BUILDROOT" "$OUTPUTDIR/filesystem.squashfs" \
+    -comp zstd -Xcompression-level 19 -b 1M -noappend -no-progress -quiet

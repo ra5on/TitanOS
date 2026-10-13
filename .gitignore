@@ -1,0 +1,43 @@
+# Build output
+/dist/
+/out/
+mkosi.output/
+mkosi.cache/
+mkosi.pkgcache/
+mkosi.builddir/
+*.zip
+*.img
+*.img.xz
+*.squashfs
+*.qcow2
+*.iso
+
+# Go
+/backend/bin/
+*.test
+*.out
+
+# Web
+/web/node_modules/
+/web/dist/
+/backend/internal/webui/dist/
+/web/.svelte-kit/
+
+# Test VMs and stick folders
+/test/stick/
+/test/disks/
+/test/OVMF_VARS.fd
+/test/config/
+
+# Secrets – never commit
+.env
+*.key
+*.minisign.key
+minisign.key
+
+# Editors / OS
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

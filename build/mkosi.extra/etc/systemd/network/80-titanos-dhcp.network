@@ -1,0 +1,13 @@
+# Default until a network configuration exists in /config: DHCP on every
+# physical Ethernet port.
+[Match]
+Type=ether
+Kind=!*
+
+[Network]
+DHCP=yes
+
+[DHCPv4]
+# The machine ID changes on every boot. Identify by MAC address so that the
+# router hands out the same address each time.
+ClientIdentifier=mac

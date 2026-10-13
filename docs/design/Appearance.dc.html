@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Darstellung</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: {{t.bg}}; color: {{t.text}}; font-family: 'IBM Plex Sans', sans-serif; font-size: {{fontPct}}; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: {{t.header}}; border-bottom: 1px solid {{t.border}}">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="{{t.text}}"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="{{t.text}}"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">Speicher</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; text-decoration: none; color: {{t.muted}}">Plugins</a>
+<a href="Appearance.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: {{rCtl}}; font-size: 14px; font-weight: 500; text-decoration: none; color: {{t.text}}; background: {{t.chip}}">Einstellungen</a>
+</nav>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<p style="margin: 0; font-size: 13px; color: {{t.muted}}">Einstellungen › Darstellung</p>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Darstellung</h1>
+<p style="margin: 0; font-size: 14px; color: {{t.muted}}">Wird für dein Konto gespeichert. Alle Änderungen siehst du sofort in der Vorschau.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid {{t.border}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; font-size: 14px; cursor: pointer">Theme exportieren</button>
+<button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid {{t.border}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; font-size: 14px; cursor: pointer">Theme importieren</button>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 1 1 500px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section aria-labelledby="h-theme" style="background: {{t.surface}}; border: 1px solid {{t.border}}; border-radius: {{rTile}}; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="h-theme" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Theme</h2>
+<div role="radiogroup" aria-label="Theme" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px">
+<sc-for list="{{themes}}" as="th" hint-placeholder-count="6">
+<button type="button" role="radio" aria-checked="{{th.checked}}" onClick="{{th.pick}}" style="display: flex; flex-direction: column; gap: 8px; padding: 8px; text-align: left; background: {{t.bg}}; border: 2px solid {{th.ring}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; cursor: pointer">
+<span aria-hidden="true" style="display: flex; gap: 4px; height: 44px; padding: 6px; box-sizing: border-box; background: {{th.bg}}; border: 1px solid {{th.border}}; border-radius: 6px"><span style="flex: 1 1 0; background: {{th.surface}}; border-radius: 3px; display: flex; align-items: flex-end; padding: 3px"><span style="display: block; height: 3px; width: 70%; background: {{accent}}; border-radius: 2px"></span></span><span style="flex: 1 1 0; background: {{th.surface}}; border-radius: 3px"></span></span>
+<span style="font-size: 13px; font-weight: 600">{{th.name}}</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{isCustom}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding-top: 6px">
+<sc-for list="{{customFields}}" as="cf" hint-placeholder-count="5">
+<label style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: {{t.bg}}; border: 1px solid {{t.border}}; border-radius: {{rCtl}}; font-size: 13px; cursor: pointer">
+<input type="color" value="{{cf.value}}" onInput="{{cf.onInput}}" style="width: 32px; height: 32px; padding: 0; border: 0; background: transparent; cursor: pointer">
+<span style="display: flex; flex-direction: column"><span>{{cf.label}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{t.muted}}">{{cf.value}}</span></span>
+</label>
+</sc-for>
+</div>
+<sc-if value="{{contrastBad}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #F6D79A">Text auf Flächen hat nur {{contrastText}} Kontrast – mindestens 4,5:1 ist gut lesbar.</span></sc-if>
+</sc-if>
+</section>
+
+<section aria-labelledby="h-acc" style="background: {{t.surface}}; border: 1px solid {{t.border}}; border-radius: {{rTile}}; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="h-acc" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Akzentfarbe</h2>
+<div role="radiogroup" aria-label="Akzentfarbe" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start">
+<sc-for list="{{accents}}" as="ac" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 58px">
+<button type="button" role="radio" aria-label="{{ac.name}}" aria-checked="{{ac.checked}}" onClick="{{ac.pick}}" style="width: 44px; height: 44px; border-radius: 50%; background: {{ac.hex}}; border: 3px solid {{ac.ring}}; cursor: pointer"></button>
+<span style="font-size: 12px; color: {{ac.label}}">{{ac.name}}</span>
+</div>
+</sc-for>
+<label style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 58px; cursor: pointer">
+<input type="color" aria-label="Eigene Akzentfarbe" value="{{customAccent}}" onInput="{{onCustomAccent}}" style="width: 44px; height: 44px; padding: 0; border: 3px solid {{customRing}}; border-radius: 50%; background: transparent; cursor: pointer">
+<span style="font-size: 12px; color: {{customLabel}}">Eigene</span>
+</label>
+</div>
+<span style="font-size: 12px; color: {{t.muted}}">Gilt auch für den Rahmen im Logo und „OS“ im Schriftzug.</span>
+</section>
+
+<section aria-labelledby="h-style" style="background: {{t.surface}}; border: 1px solid {{t.border}}; border-radius: {{rTile}}; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<h2 id="h-style" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Stil der Flächen</h2>
+<div role="radiogroup" aria-label="Stil" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{styles}}" as="st" hint-placeholder-count="3">
+<button type="button" role="radio" aria-checked="{{st.checked}}" onClick="{{st.pick}}" style="display: flex; flex-direction: column; gap: 4px; padding: 12px; text-align: left; background: {{t.bg}}; border: 2px solid {{st.ring}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; cursor: pointer"><span style="font-size: 14px; font-weight: 600">{{st.name}}</span><span style="font-size: 12px; color: {{t.muted}}">{{st.desc}}</span></button>
+</sc-for>
+</div>
+<sc-if value="{{isGlass}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="gl" style="font-size: 14px">Transparenz</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{glass}} %</span></div><input id="gl" type="range" min="0" max="90" step="5" value="{{glass}}" onInput="{{onGlass}}" style="width: 100%; accent-color: {{accent}}"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="bl" style="font-size: 14px">Unschärfe</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{blur}} px</span></div><input id="bl" type="range" min="0" max="40" step="2" value="{{blur}}" onInput="{{onBlur}}" style="width: 100%; accent-color: {{accent}}"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="sh" style="font-size: 14px">Glanzkante</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{shine}} %</span></div><input id="sh" type="range" min="0" max="60" step="5" value="{{shine}}" onInput="{{onShine}}" style="width: 100%; accent-color: {{accent}}"></div>
+<span style="font-size: 12px; line-height: 1.5; color: {{t.muted}}">Glas wirkt erst mit einem Hintergrund dahinter. Texte bleiben immer auf einer ausreichend deckenden Fläche – zu viel Transparenz wird automatisch begrenzt, wenn der Kontrast sonst unter 4,5:1 fällt.</span>
+</div>
+</sc-if>
+</section>
+
+<section aria-labelledby="h-shape" style="background: {{t.surface}}; border: 1px solid {{t.border}}; border-radius: {{rTile}}; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="h-shape" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Ecken und Größen</h2>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="rt" style="font-size: 14px">Ecken von Kacheln und Fenstern</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{rTileNum}} px</span></div><input id="rt" type="range" min="0" max="32" step="2" value="{{rTileNum}}" onInput="{{onRTile}}" style="width: 100%; accent-color: {{accent}}"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="rc" style="font-size: 14px">Ecken von Knöpfen, Feldern und Menüs</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{rCtlNum}} px</span></div><input id="rc" type="range" min="0" max="22" step="1" value="{{rCtlNum}}" onInput="{{onRCtl}}" style="width: 100%; accent-color: {{accent}}"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="fs" style="font-size: 14px">Schriftgröße</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{fontNum}} %</span></div><input id="fs" type="range" min="90" max="120" step="5" value="{{fontNum}}" onInput="{{onFont}}" style="width: 100%; accent-color: {{accent}}"></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px"><span style="font-size: 14px; flex: 1 1 auto">Dichte</span>
+<div role="radiogroup" aria-label="Dichte" style="display: flex; gap: 4px; padding: 3px; background: {{t.bg}}; border: 1px solid {{t.border}}; border-radius: {{rCtl}}">
+<sc-for list="{{densities}}" as="dn" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{dn.checked}}" onClick="{{dn.pick}}" style="height: 34px; padding: 0 14px; background: {{dn.bg}}; border: 0; border-radius: {{rCtl}}; color: {{dn.color}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{dn.name}}</button></sc-for>
+</div></div>
+</section>
+
+<section aria-labelledby="h-bg" style="background: {{t.surface}}; border: 1px solid {{t.border}}; border-radius: {{rTile}}; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="h-bg" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Hintergrund</h2>
+<div role="radiogroup" aria-label="Hintergrund" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{bgs}}" as="bg" hint-placeholder-count="3">
+<button type="button" role="radio" aria-checked="{{bg.checked}}" onClick="{{bg.pick}}" style="height: 44px; background: {{bg.fill}}; border: 2px solid {{bg.ring}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{bg.name}}</button>
+</sc-for>
+</div>
+<sc-if value="{{bgImage}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; background: {{t.bg}}; border: 1px dashed {{t.border}}; border-radius: {{rCtl}}; font-size: 13px; color: {{t.muted}}">
+<span style="flex: 1 1 200px">Beispielbild – eigenes Bild hochladen (JPG, PNG, WebP, bis 10 MB). Wird in /config gespeichert.</span>
+<button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid {{t.border}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; font-size: 13px; cursor: pointer">Bild wählen</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="dim" style="font-size: 14px">Abdunkeln</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{dim}} %</span></div><input id="dim" type="range" min="0" max="80" step="5" value="{{dim}}" onInput="{{onDim}}" style="width: 100%; accent-color: {{accent}}"></div>
+</sc-if>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button type="button" style="height: 44px; padding: 0 18px; background: {{accent}}; border: 0; border-radius: {{rCtl}}; color: {{onAccent}}; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Übernehmen</button>
+<button type="button" onClick="{{reset}}" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid {{t.border}}; border-radius: {{rCtl}}; color: {{t.text}}; font: inherit; font-size: 14px; cursor: pointer">Standard wiederherstellen</button>
+</div>
+
+</div>
+
+<section aria-labelledby="prev-h" style="flex: 1 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px"><h2 id="prev-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Vorschau</h2><span style="font-size: 13px; color: {{t.muted}}">{{previewLabel}}</span></div>
+
+<div style="position: relative; overflow: hidden; border-radius: {{rTile}}; border: 1px solid {{t.border}}; background: {{t.bg}}; min-height: 760px">
+<sc-if value="{{bgShapes}}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position: absolute; inset: 0; overflow: hidden">
+<span style="position: absolute; left: -60px; top: 60px; width: 340px; height: 340px; border-radius: 50%; background: {{accent}}; opacity: 0.55; filter: blur(50px)"></span>
+<span style="position: absolute; right: -40px; top: 280px; width: 300px; height: 300px; border-radius: 50%; background: #7048E8; opacity: 0.45; filter: blur(60px)"></span>
+<span style="position: absolute; left: 30%; bottom: -80px; width: 360px; height: 260px; border-radius: 50%; background: #0C8599; opacity: 0.45; filter: blur(60px)"></span>
+</div>
+</sc-if>
+<sc-if value="{{bgImage}}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position: absolute; inset: 0">
+<svg viewBox="0 0 800 760" preserveAspectRatio="xMidYMid slice" style="position: absolute; inset: 0; width: 100%; height: 100%"><rect width="800" height="760" fill="#2B4A6B"></rect><circle cx="600" cy="190" r="70" fill="#F2C66D"></circle><path d="M0 470 160 330 300 430 470 260 640 420 800 330V760H0Z" fill="#1F3550"></path><path d="M0 580 220 470 420 560 620 470 800 540V760H0Z" fill="#152538"></path><path d="M0 680 300 610 560 670 800 620V760H0Z" fill="#0D1724"></path></svg>
+<span style="position: absolute; inset: 0; background: #000000; opacity: {{dimOpacity}}"></span>
+</div>
+</sc-if>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: {{gap}}; padding: {{gap}}">
+
+<div style="display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: {{panel.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rTile}}; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}; box-shadow: {{panel.shadow}}">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2.2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="{{t.text}}"></path></svg>
+<svg height="13" viewBox="0 0 576 100" aria-hidden="true"><g fill="{{t.text}}"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="flex: 1 1 auto"></span>
+<span style="font-size: 13px; padding: 6px 12px; border-radius: {{rCtl}}; background: {{t.chip}}">Dashboard</span>
+<span style="font-size: 13px; color: {{t.muted}}">Docker</span>
+<span style="font-size: 13px; color: {{t.muted}}">VMs</span>
+<span style="font-size: 13px; padding: 6px 10px; border: 1px solid {{panel.border}}; border-radius: {{rCtl}}">alex ▾</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: {{gap}}">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: {{tilePad}}; background: {{panel.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rTile}}; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}; box-shadow: {{panel.shadow}}">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">System</span>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span>CPU</span><span style="font-family: 'IBM Plex Mono', monospace">18 %</span></div>
+<div style="height: 6px; background: {{t.track}}; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 18%; background: {{accent}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span>RAM</span><span style="font-family: 'IBM Plex Mono', monospace">3,1 / 16 GB</span></div>
+<div style="height: 6px; background: {{t.track}}; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 19%; background: {{accent}}"></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: {{tilePad}}; background: {{panel.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rTile}}; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}; box-shadow: {{panel.shadow}}">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Volumes</span>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-family: 'IBM Plex Mono', monospace">data · RAID 5</span><span style="color: {{t.muted}}">59 %</span></div>
+<div style="height: 6px; background: {{t.track}}; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 59%; background: {{accent}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-family: 'IBM Plex Mono', monospace">fast · RAID 1</span><span style="color: {{t.muted}}">41 %</span></div>
+<div style="height: 6px; background: {{t.track}}; border-radius: 3px; overflow: hidden"><div style="height: 100%; width: 41%; background: {{accent}}"></div></div>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: {{gap}}; align-items: flex-start">
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; padding: {{tilePad}}; background: {{panel.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rTile}}; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}; box-shadow: {{panel.shadow}}">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}; padding-bottom: 6px">Docker</span>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 10px; padding: {{rowPad}} 0; border-top: 1px solid {{panel.border}}; font-size: 13px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: {{r.dot}}"></span>
+<span style="flex: 1 1 auto">{{r.name}}</span>
+<span style="font-size: 12px; color: {{t.muted}}">{{r.state}}</span>
+</div>
+</sc-for>
+</div>
+<div role="menu" aria-label="Beispielmenü" style="flex: 0 1 230px; display: flex; flex-direction: column; padding: 6px; background: {{menu.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rCtl}}; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35)">
+<span style="padding: 8px 10px; font-size: 12px; color: {{t.muted}}">Angemeldet als alex · Besitzer</span>
+<span style="padding: 9px 10px; font-size: 13px; border-radius: {{rCtl}}">Mein Konto</span>
+<span style="padding: 9px 10px; font-size: 13px; border-radius: {{rCtl}}; background: {{t.chip}}">Darstellung</span>
+<span style="padding: 9px 10px; font-size: 13px; border-radius: {{rCtl}}">Neustarten …</span>
+<span style="padding: 9px 10px; font-size: 13px; border-radius: {{rCtl}}">Abmelden</span>
+</div>
+</div>
+
+<div style="display: flex; gap: 8px">
+<span style="height: 40px; display: flex; align-items: center; padding: 0 16px; background: {{accent}}; color: {{onAccent}}; border-radius: {{rCtl}}; font-size: 13px; font-weight: 600">Übernehmen</span>
+<span style="height: 40px; display: flex; align-items: center; padding: 0 16px; background: {{panel.bg}}; border: 1px solid {{panel.border}}; border-radius: {{rCtl}}; font-size: 13px; backdrop-filter: {{panel.blur}}; -webkit-backdrop-filter: {{panel.blur}}">Abbrechen</span>
+</div>
+
+</div>
+</div>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.defaults = () => ({ theme: 'graphit', accent: 'blau', customAccent: '#E5B92E', style: 'glass', glass: 45, blur: 18, shine: 20, rTile: 14, rCtl: 10, font: 100, density: 'normal', bg: 'shapes', dim: 30,
+      custom: { bg: '#101418', surface: '#1A2027', header: '#13181D', text: '#ECEFF3', border: '#2A333D' } });
+    this.state = this.defaults();
+  }
+  renderVals() {
+    const s = this.state;
+    const T = {
+      graphit: { name: 'Graphit', bg: '#0E1114', surface: '#161A1F', header: '#12161A', border: '#232A31', text: '#E6E9ED', muted: '#9AA3AD', track: '#232A31', chip: '#1E252C', dark: true },
+      schwarz: { name: 'Schwarz', bg: '#000000', surface: '#0E0E0F', header: '#080808', border: '#242426', text: '#EDEDED', muted: '#A3A3A9', track: '#1F1F22', chip: '#1A1A1C', dark: true },
+      mitternacht: { name: 'Mitternacht', bg: '#0A0F1E', surface: '#111933', header: '#0D1428', border: '#232D4D', text: '#E6EAF5', muted: '#9DA7C6', track: '#232D4D', chip: '#1A2442', dark: true },
+      hell: { name: 'Hell', bg: '#F3F4F6', surface: '#FFFFFF', header: '#FFFFFF', border: '#DCE0E5', text: '#14181D', muted: '#56606B', track: '#E3E7EC', chip: '#EAEDF1', dark: false },
+      auto: { name: 'Automatisch' },
+      eigen: { name: 'Eigenes' }
+    };
+    const hex2rgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const lum = (h) => { const c = hex2rgb(h).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const mix = (h, k) => { const [r, g, b] = hex2rgb(h); const f = (v) => Math.round(v + (k > 0 ? (255 - v) * k : v * k)).toString(16).padStart(2, '0'); return '#' + f(r) + f(g) + f(b); };
+    let t;
+    if (s.theme === 'eigen') {
+      const c = s.custom, dark = lum(c.bg) < 0.4;
+      t = { bg: c.bg, surface: c.surface, header: c.header, border: c.border, text: c.text, muted: dark ? mix(c.text, -0.32) : mix(c.text, 0.38), track: c.border, chip: dark ? mix(c.surface, 0.06) : mix(c.surface, -0.06), dark };
+    } else t = T[s.theme === 'auto' ? 'graphit' : s.theme];
+    const A = [
+      { id: 'blau', name: 'Blau', hex: '#6CB6FF' }, { id: 'gruen', name: 'Grün', hex: '#4CC38A' }, { id: 'tuerkis', name: 'Türkis', hex: '#3FCFC7' },
+      { id: 'violett', name: 'Violett', hex: '#B49CFF' }, { id: 'kupfer', name: 'Kupfer', hex: '#E0895A' }, { id: 'rose', name: 'Rosé', hex: '#F28CB0' }
+    ];
+    const accent = s.accent === 'custom' ? s.customAccent : (A.find((a) => a.id === s.accent) || A[0]).hex;
+    const onAccent = contrast(accent, '#0B1622') >= 4.5 ? '#0B1622' : '#FFFFFF';
+
+    const themes = ['graphit', 'schwarz', 'mitternacht', 'hell', 'auto', 'eigen'].map((id) => {
+      const look = id === 'eigen' ? { bg: s.custom.bg, surface: s.custom.surface, border: s.custom.border } : T[id === 'auto' ? 'graphit' : id];
+      return { name: T[id].name, bg: look.bg, surface: look.surface, border: look.border, checked: s.theme === id ? 'true' : 'false', ring: s.theme === id ? accent : t.border, pick: () => this.setState({ theme: id }) };
+    });
+    const accents = A.map((a) => ({ name: a.name, hex: a.hex, checked: s.accent === a.id ? 'true' : 'false', ring: s.accent === a.id ? t.text : 'transparent', label: s.accent === a.id ? t.text : t.muted, pick: () => this.setState({ accent: a.id }) }));
+    const setCustom = (k) => (e) => this.setState({ custom: Object.assign({}, s.custom, { [k]: e.target.value }) });
+    const customFields = [ { k: 'bg', label: 'Hintergrund' }, { k: 'surface', label: 'Flächen' }, { k: 'header', label: 'Kopfzeile' }, { k: 'text', label: 'Text' }, { k: 'border', label: 'Linien' } ]
+      .map((f) => ({ label: f.label, value: s.custom[f.k], onInput: setCustom(f.k) }));
+    const cr = contrast(t.text, t.surface);
+
+    const styles = [ { id: 'flat', name: 'Flach', desc: 'Deckende Flächen' }, { id: 'glass', name: 'Glas', desc: 'Durchscheinend, weichgezeichnet' }, { id: 'outline', name: 'Kontur', desc: 'Nur Linien, sehr ruhig' } ]
+      .map((x) => ({ name: x.name, desc: x.desc, checked: s.style === x.id ? 'true' : 'false', ring: s.style === x.id ? accent : t.border, pick: () => this.setState({ style: x.id }) }));
+    const [sr, sg, sb] = hex2rgb(t.surface);
+    let alpha = 1 - s.glass / 100;
+    const minAlpha = t.dark ? 0.35 : 0.5;
+    if (s.style === 'glass') alpha = Math.max(alpha, minAlpha * (s.bg === 'solid' ? 0 : 1));
+    const shineCol = t.dark ? 'rgba(255, 255, 255, ' + (s.shine / 100 * 0.5).toFixed(2) + ')' : 'rgba(255, 255, 255, ' + (0.4 + s.shine / 100 * 0.5).toFixed(2) + ')';
+    const panel = s.style === 'glass'
+      ? { bg: 'rgba(' + sr + ', ' + sg + ', ' + sb + ', ' + alpha.toFixed(2) + ')', border: t.dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)', blur: 'blur(' + s.blur + 'px) saturate(160%)', shadow: 'inset 0 1px 0 ' + shineCol + ', 0 8px 24px rgba(0, 0, 0, ' + (t.dark ? 0.3 : 0.08) + ')' }
+      : s.style === 'outline'
+        ? { bg: 'transparent', border: t.dark ? mix(t.border, 0.12) : mix(t.border, -0.15), blur: 'none', shadow: 'none' }
+        : { bg: t.surface, border: t.border, blur: 'none', shadow: 'none' };
+    const menu = { bg: s.style === 'glass' ? 'rgba(' + sr + ', ' + sg + ', ' + sb + ', ' + Math.max(alpha, 0.7).toFixed(2) + ')' : (s.style === 'outline' ? t.bg : t.surface) };
+    const compact = s.density === 'kompakt';
+    const bgs = [ { id: 'solid', name: 'Einfarbig' }, { id: 'shapes', name: 'Formen' }, { id: 'image', name: 'Bild' } ]
+      .map((b) => ({ name: b.name, checked: s.bg === b.id ? 'true' : 'false', ring: s.bg === b.id ? accent : t.border, fill: t.bg, pick: () => this.setState({ bg: b.id }) }));
+    const num = (e) => Number(e.target.value);
+    return {
+      t, accent, onAccent, themes, accents, customFields, styles, bgs, panel, menu,
+      isCustom: s.theme === 'eigen', contrastBad: cr < 4.5, contrastText: cr.toFixed(1).replace('.', ',') + ':1',
+      customAccent: s.customAccent, customRing: s.accent === 'custom' ? t.text : 'transparent', customLabel: s.accent === 'custom' ? t.text : t.muted,
+      onCustomAccent: (e) => this.setState({ accent: 'custom', customAccent: e.target.value }),
+      isGlass: s.style === 'glass', glass: s.glass, blur: s.blur, shine: s.shine,
+      onGlass: (e) => this.setState({ glass: num(e) }), onBlur: (e) => this.setState({ blur: num(e) }), onShine: (e) => this.setState({ shine: num(e) }),
+      rTile: s.rTile + 'px', rCtl: s.rCtl + 'px', rTileNum: s.rTile, rCtlNum: s.rCtl,
+      onRTile: (e) => this.setState({ rTile: num(e) }), onRCtl: (e) => this.setState({ rCtl: num(e) }),
+      fontNum: s.font, fontPct: s.font + '%', onFont: (e) => this.setState({ font: num(e) }),
+      densities: [ { id: 'normal', name: 'Normal' }, { id: 'kompakt', name: 'Kompakt' } ].map((d) => ({ name: d.name, checked: s.density === d.id ? 'true' : 'false', bg: s.density === d.id ? accent : 'transparent', color: s.density === d.id ? onAccent : t.text, pick: () => this.setState({ density: d.id }) })),
+      gap: compact ? '10px' : '16px', tilePad: compact ? '12px' : '18px', rowPad: compact ? '5px' : '9px',
+      bgShapes: s.bg === 'shapes', bgImage: s.bg === 'image', dim: s.dim, dimOpacity: (s.dim / 100).toFixed(2), onDim: (e) => this.setState({ dim: num(e) }),
+      previewLabel: s.theme === 'auto' ? 'System gerade dunkel → Graphit' : (s.style === 'glass' && s.bg === 'solid' ? 'Tipp: Glas braucht einen Hintergrund' : 'So sieht TitanOS für dich aus'),
+      rows: [ { name: 'jellyfin', state: 'läuft', dot: '#4CC38A' }, { name: 'immich', state: 'läuft', dot: '#4CC38A' }, { name: 'paperless', state: 'läuft', dot: '#4CC38A' }, { name: 'nextcloud', state: 'gestoppt', dot: '#6B7580' } ],
+      reset: () => this.setState(this.defaults())
+    };
+  }
+}
+</script>
+</body>
+</html>

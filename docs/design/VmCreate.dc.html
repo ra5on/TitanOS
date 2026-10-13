@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS VM erstellen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>Terminal</a>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-direction: column; gap: 4px">
+<p style="margin: 0; font-size: 13px; color: #9AA3AD"><a href="VmConsole.dc.html" style="text-decoration: none">VMs</a> › Neue VM</p>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">VM erstellen</h1>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section aria-labelledby="s1" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31"><span aria-hidden="true" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{accent}}; color: #0B1622; font-size: 12px; font-weight: 700">1</span><h2 id="s1" style="margin: 0; font-size: 14px; font-weight: 600">Vorlage und Name</h2></div>
+<div style="padding: 18px; display: flex; flex-direction: column; gap: 16px">
+<div role="radiogroup" aria-label="Vorlage" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px">
+<sc-for list="{{tpls}}" as="t" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{t.checked}}" onClick="{{t.pick}}" style="display: flex; flex-direction: column; gap: 4px; padding: 14px; text-align: left; background: #12161A; border: 2px solid {{t.ring}}; border-radius: 12px; color: #E6E9ED; font: inherit; cursor: pointer"><span style="font-size: 14px; font-weight: 600">{{t.name}}</span><span style="font-size: 12px; line-height: 1.45; color: #9AA3AD">{{t.desc}}</span></button>
+</sc-for>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><label for="vm-name" style="font-size: 13px; color: #9AA3AD">Name</label><input id="vm-name" type="text" value="{{vmName}}" onInput="{{onName}}" style="height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 14px"></div>
+<div style="flex: 2 1 320px; display: flex; flex-direction: column; gap: 6px"><label for="vm-desc" style="font-size: 13px; color: #9AA3AD">Beschreibung (optional)</label><input id="vm-desc" type="text" placeholder="z. B. Gaming-PC im Keller" style="height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px"></div>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="s2" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31"><span aria-hidden="true" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{accent}}; color: #0B1622; font-size: 12px; font-weight: 700">2</span><h2 id="s2" style="margin: 0; font-size: 14px; font-weight: 600">Prozessor und Arbeitsspeicher</h2></div>
+<div style="padding: 18px; display: flex; flex-wrap: wrap; gap: 20px">
+<div style="flex: 1 1 100%; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<span style="font-size: 13px; color: #9AA3AD">Prozessorkerne · Intel Core Ultra 5 225 · 6 P-Kerne (schnell) + 4 E-Kerne (sparsam)</span>
+<div role="radiogroup" aria-label="Kernzuteilung" style="display: flex; gap: 4px; padding: 3px; background: #12161A; border: 1px solid #232A31; border-radius: 9px">
+<sc-for list="{{cpuModes}}" as="cm" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{cm.checked}}" onClick="{{cm.pick}}" style="height: 34px; padding: 0 12px; background: {{cm.bg}}; border: 0; border-radius: 7px; color: {{cm.color}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{cm.name}}</button></sc-for>
+</div>
+</div>
+<sc-if value="{{cpuAuto}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between"><label for="vcpu" style="font-size: 13px; color: #9AA3AD">Anzahl vCPUs</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">{{vcpu}} von 10</span></div>
+<input id="vcpu" type="range" min="1" max="10" step="1" value="{{vcpu}}" onInput="{{onCpu}}" style="width: 100%; accent-color: {{accent}}">
+<span style="font-size: 12px; color: #9AA3AD">Linux verteilt die vCPUs frei auf alle Kerne. Gut für Server-VMs; für Spiele oder gleichmäßige Leistung besser Kerne festlegen.</span>
+</div>
+</sc-if>
+<sc-if value="{{cpuPin}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{cpuPresets}}" as="cp" hint-placeholder-count="3"><button type="button" onClick="{{cp.pick}}" style="height: 32px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 999px; color: #E6E9ED; font: inherit; font-size: 12px; cursor: pointer">{{cp.name}}</button></sc-for>
+</div>
+<div role="group" aria-label="Kerne auswählen" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px">
+<sc-for list="{{cores}}" as="c" hint-placeholder-count="10">
+<button type="button" aria-pressed="{{c.pressed}}" onClick="{{c.toggle}}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; text-align: left; background: {{c.bg}}; border: 2px solid {{c.ring}}; border-radius: 10px; color: #E6E9ED; font: inherit; cursor: pointer">
+<span style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 6px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600">{{c.label}}</span><span style="font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: {{c.typeBg}}; border: 1px solid {{c.typeBorder}}; color: {{c.typeColor}}">{{c.type}}</span></span>
+<span style="font-size: 11px; color: {{c.noteColor}}">{{c.note}}</span>
+</button>
+</sc-for>
+</div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #C9D1D9">{{cpuSummary}}</span>
+<span style="font-size: 12px; line-height: 1.5; color: #9AA3AD">Festlegen heißt: Die VM läuft nur auf diesen Kernen. TitanOS, Docker und andere VMs nutzen weiterhin alle Kerne.</span>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<label style="display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer"><input type="checkbox" style="width: 18px; height: 18px; accent-color: {{accent}}">Diese Kerne exklusiv reservieren, solange die VM läuft</label>
+<span style="padding-left: 28px; font-size: 12px; line-height: 1.5; color: #9AA3AD">TitanOS, Docker und andere VMs weichen dann auf die übrigen Kerne aus und bekommen sie zurück, sobald die VM aus ist. Nur für Spiele-VMs mit gleichmäßigen Bildraten sinnvoll.</span>
+</div>
+<sc-for list="{{cpuWarns}}" as="w" hint-placeholder-count="1"><span style="font-size: 12px; line-height: 1.5; color: {{w.c}}">{{w.t}}</span></sc-for>
+</div>
+</sc-if>
+<span style="font-size: 12px; color: #9AA3AD">CPU-Modus „host-passthrough“: die VM sieht die echte CPU.</span>
+</div>
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between"><label for="ram" style="font-size: 13px; color: #9AA3AD">Arbeitsspeicher</label><span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">{{ram}} GB · frei: 11 GB</span></div>
+<input id="ram" type="range" min="1" max="16" step="1" value="{{ram}}" onInput="{{onRam}}" style="width: 100%; accent-color: {{accent}}">
+<span style="font-size: 12px; color: {{ramNoteColor}}">{{ramNote}}</span>
+</div>
+<div style="flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px">
+<span style="font-size: 12px; padding: 4px 10px; border-radius: 8px; background: #12161A; border: 1px solid #2A323A">UEFI (OVMF)</span>
+<span style="font-size: 12px; padding: 4px 10px; border-radius: 8px; background: #12161A; border: 1px solid #2A323A">Maschine q35</span>
+<sc-if value="{{isWin}}" hint-placeholder-val="{{ true }}"><span style="font-size: 12px; padding: 4px 10px; border-radius: 8px; background: #14243A; border: 1px solid #2B4A70; color: #BFDCFF">TPM 2.0 und Secure Boot (für Windows 11 nötig)</span></sc-if>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="s3" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31"><span aria-hidden="true" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{accent}}; color: #0B1622; font-size: 12px; font-weight: 700">3</span><h2 id="s3" style="margin: 0; font-size: 14px; font-weight: 600">Datenträger</h2></div>
+<div style="padding: 18px; display: flex; flex-direction: column; gap: 16px">
+<div role="radiogroup" aria-label="Datenträger" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px; align-self: flex-start">
+<sc-for list="{{diskModes}}" as="dm" hint-placeholder-count="3">
+<button type="button" role="radio" aria-checked="{{dm.checked}}" onClick="{{dm.pick}}" style="height: 38px; padding: 0 14px; background: {{dm.bg}}; border: 0; border-radius: 8px; color: {{dm.color}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{dm.name}}</button>
+</sc-for>
+</div>
+
+<sc-if value="{{modeNew}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #9AA3AD"><strong style="color: #E6E9ED; font-weight: 600">qcow2</strong> belegt nur den genutzten Platz und kann Snapshots. <strong style="color: #E6E9ED; font-weight: 600">img (raw)</strong> belegt sofort die volle Größe und ist etwas schneller.</p>
+<sc-for list="{{disks}}" as="dk" hint-placeholder-count="1">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">{{dk.file}}</span>
+<span style="font-size: 12px; color: #9AA3AD">{{dk.role}}</span>
+<span style="flex: 1 1 auto"></span>
+<div role="radiogroup" aria-label="Format von {{dk.file}}" style="display: flex; gap: 4px; padding: 3px; background: #0E1114; border: 1px solid #232A31; border-radius: 9px">
+<button type="button" role="radio" aria-checked="{{dk.qChecked}}" onClick="{{dk.pickQ}}" style="height: 32px; padding: 0 12px; background: {{dk.qBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer">qcow2</button>
+<button type="button" role="radio" aria-checked="{{dk.rChecked}}" onClick="{{dk.pickR}}" style="height: 32px; padding: 0 12px; background: {{dk.rBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer">img (raw)</button>
+</div>
+<sc-if value="{{dk.removable}}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="{{dk.file}} entfernen" onClick="{{dk.remove}}" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button></sc-if>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<label for="{{dk.sizeId}}" style="font-size: 13px; color: #9AA3AD; width: 52px">Größe</label>
+<input type="range" aria-label="Größe von {{dk.file}}" min="8" max="2048" step="8" value="{{dk.size}}" onInput="{{dk.onSize}}" style="flex: 1 1 220px; accent-color: {{accent}}">
+<div style="display: flex"><input id="{{dk.sizeId}}" type="text" inputmode="numeric" value="{{dk.size}}" onInput="{{dk.onSize}}" style="width: 80px; height: 38px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-right: 0; border-radius: 8px 0 0 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right"><span style="height: 38px; display: flex; align-items: center; padding: 0 10px; background: #1E252C; border: 1px solid #2A323A; border-radius: 0 8px 8px 0; font-size: 13px; color: #9AA3AD">GB</span></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{dk.presets}}" as="ps" hint-placeholder-count="6">
+<button type="button" aria-pressed="{{ps.pressed}}" onClick="{{ps.pick}}" style="height: 30px; padding: 0 10px; background: {{ps.bg}}; border: 1px solid {{ps.border}}; border-radius: 999px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer">{{ps.label}}</button>
+</sc-for>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<span style="font-size: 13px; color: #9AA3AD; width: 52px">Ort</span>
+<div role="radiogroup" aria-label="Speicherort" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #0E1114; border: 1px solid #232A31; border-radius: 9px">
+<button type="button" role="radio" aria-checked="{{dk.fastChecked}}" onClick="{{dk.pickFast}}" style="height: 32px; padding: 0 12px; background: {{dk.fastBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font: inherit; font-size: 12px; cursor: pointer">fast · NVMe · 588 GB frei</button>
+<button type="button" role="radio" aria-checked="{{dk.dataChecked}}" onClick="{{dk.pickData}}" style="height: 32px; padding: 0 12px; background: {{dk.dataBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font: inherit; font-size: 12px; cursor: pointer">data · HDD · 6,6 TB frei</button>
+</div>
+</div>
+<span style="font-size: 12px; line-height: 1.5; color: {{dk.infoColor}}">{{dk.info}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">→ {{dk.path}}</span>
+</div>
+</sc-for>
+<button type="button" onClick="{{addDisk}}" style="align-self: flex-start; height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 14px; background: transparent; border: 1px dashed #36414D; border-radius: 9px; color: #C9D1D9; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Weitere Platte hinzufügen</button>
+</div>
+</sc-if>
+
+<sc-if value="{{modeImport}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px">
+<span style="font-size: 13px; color: #9AA3AD">Auf dem NAS gefunden (qcow2, img, vmdk, vhdx, vdi in Shares und VM-Ordnern)</span>
+<div style="display: flex; gap: 6px">
+<button type="button" style="height: 34px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Hochladen</button>
+<button type="button" style="height: 34px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Von URL laden</button>
+</div>
+</div>
+<div role="radiogroup" aria-label="Abbild wählen" style="display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{images}}" as="im" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{im.checked}}" onClick="{{im.pick}}" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #12161A; border: 2px solid {{im.ring}}; border-radius: 12px; color: #E6E9ED; font: inherit; cursor: pointer">
+<span aria-hidden="true" style="width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid {{im.dotRing}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{im.dotFill}}"></span></span>
+<span style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 500">{{im.name}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{im.dir}}</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9">{{im.fmt}}</span>
+<span style="width: 190px; font-size: 12px; color: #9AA3AD; text-align: right">{{im.sizes}}</span>
+</button>
+</sc-for>
+</div>
+
+<sc-if value="{{hasImg}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span style="font-size: 13px; color: #9AA3AD; width: 110px">Verwendung</span>
+<div role="radiogroup" aria-label="Verwendung" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #0E1114; border: 1px solid #232A31; border-radius: 9px">
+<button type="button" role="radio" aria-checked="{{useCopyChecked}}" onClick="{{pickCopy}}" style="height: 32px; padding: 0 12px; background: {{useCopyBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font: inherit; font-size: 12px; cursor: pointer">Kopie anlegen (Original bleibt)</button>
+<button type="button" role="radio" aria-checked="{{useDirectChecked}}" aria-disabled="{{directDisabled}}" onClick="{{pickDirect}}" style="height: 32px; padding: 0 12px; background: {{useDirectBg}}; border: 0; border-radius: 7px; color: {{useDirectColor}}; font: inherit; font-size: 12px; cursor: {{useDirectCursor}}">Datei direkt verwenden</button>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span style="font-size: 13px; color: #9AA3AD; width: 110px">Format</span>
+<div role="radiogroup" aria-label="Format" style="display: flex; gap: 4px; padding: 3px; background: #0E1114; border: 1px solid #232A31; border-radius: 9px">
+<button type="button" role="radio" aria-checked="{{iqChecked}}" onClick="{{pickIQ}}" style="height: 32px; padding: 0 12px; background: {{iqBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer">qcow2</button>
+<button type="button" role="radio" aria-checked="{{irChecked}}" onClick="{{pickIR}}" style="height: 32px; padding: 0 12px; background: {{irBg}}; border: 0; border-radius: 7px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer">img (raw)</button>
+</div>
+<span style="font-size: 12px; color: #9AA3AD">{{fmtNote}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<label for="isize" style="font-size: 13px; color: #9AA3AD; width: 110px">Größe</label>
+<input type="range" aria-label="Neue Größe" min="{{imgMin}}" max="1024" step="1" value="{{imgSize}}" onInput="{{onImgSize}}" style="flex: 1 1 220px; accent-color: {{accent}}">
+<div style="display: flex"><input id="isize" type="text" inputmode="numeric" value="{{imgSize}}" onInput="{{onImgSize}}" style="width: 80px; height: 38px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-right: 0; border-radius: 8px 0 0 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right"><span style="height: 38px; display: flex; align-items: center; padding: 0 10px; background: #1E252C; border: 1px solid #2A323A; border-radius: 0 8px 8px 0; font-size: 13px; color: #9AA3AD">GB</span></div>
+</div>
+<span style="font-size: 12px; line-height: 1.5; color: {{imgSizeColor}}">{{imgSizeNote}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">→ {{imgTarget}}</span>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{modeDisk}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #6B7580"></span>
+<span style="flex: 1 1 260px; font-size: 14px"><span style="font-family: 'IBM Plex Mono', monospace">sde</span> · 4 TB HDD · nicht zugewiesen</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">/dev/disk/by-id/ata-…-WX12</span>
+</div>
+<span style="font-size: 12px; line-height: 1.5; color: #F6D79A">Die ganze Platte gehört dann der VM. TitanOS bietet nur Platten an, die in keinem Volume stecken.</span>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid #20262C">
+<span style="font-size: 13px; color: #9AA3AD">Installationsmedium</span>
+<sc-for list="{{isos}}" as="iso" hint-placeholder-count="2">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="2.5"></circle></svg>
+<span style="flex: 1 1 220px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">{{iso.file}}</span>
+<span style="font-size: 12px; color: #9AA3AD">{{iso.note}}</span>
+</div>
+</sc-for>
+<sc-if value="{{noIso}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; color: #9AA3AD">Kein Installationsmedium nötig – das Abbild ist bereits installiert.</span></sc-if>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="s4" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31"><span aria-hidden="true" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{accent}}; color: #0B1622; font-size: 12px; font-weight: 700">4</span><h2 id="s4" style="margin: 0; font-size: 14px; font-weight: 600">Grafik und Geräte durchreichen</h2></div>
+<div style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{gpus}}" as="g" hint-placeholder-count="3">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 14px; background: #12161A; border: 1px solid {{g.border}}; border-radius: 12px; opacity: {{g.opacity}}">
+<button type="button" role="checkbox" aria-checked="{{g.checked}}" aria-disabled="{{g.disabledAria}}" aria-label="{{g.name}} durchreichen" onClick="{{g.toggle}}" style="width: 24px; height: 24px; flex: none; margin-top: 2px; display: flex; align-items: center; justify-content: center; background: {{g.boxBg}}; border: 2px solid {{g.boxBorder}}; border-radius: 6px; color: #0B1622; cursor: {{g.cursor}}"><sc-if value="{{g.on}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if></button>
+<div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 14px; font-weight: 600">{{g.name}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{g.ids}}</span>
+<span style="font-size: 12px; line-height: 1.5; color: {{g.noteColor}}">{{g.note}}</span>
+</div>
+</div>
+</sc-for>
+<div style="display: flex; flex-wrap: wrap; gap: 16px; padding-top: 6px">
+<label style="display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px"><input type="checkbox" checked="checked" style="width: 18px; height: 18px; accent-color: {{accent}}">Zusätzliche virtuelle Anzeige für die VNC-Konsole</label>
+<a href="Hardware.dc.html" style="display: flex; align-items: center; font-size: 13px; text-decoration: none">USB-Geräte unter Hardware zuordnen</a>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><label for="net" style="font-size: 13px; color: #9AA3AD">Netzwerk</label><select id="net" style="height: 40px; padding: 0 10px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 14px"><option>br0 – eigene IP im Heimnetz</option><option>NAT – nur ausgehend</option></select></div>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="s5" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px 8px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px"><span aria-hidden="true" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{accent}}; color: #0B1622; font-size: 12px; font-weight: 700">5</span><h2 id="s5" style="margin: 0; font-size: 14px; font-weight: 600">Ordner vom NAS freigeben</h2></div>
+<button type="button" onClick="{{addFolder}}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Ordner hinzufügen</button>
+</div>
+<div style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{folders}}" as="fo" hint-placeholder-count="2">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; background: #12161A; border: 1px solid #232A31; border-radius: 12px">
+<div style="flex: 1 1 260px; display: flex; min-width: 0">
+<input type="text" aria-label="Ordner auf dem NAS" value="{{fo.path}}" onInput="{{fo.onPath}}" style="flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-right: 0; border-radius: 8px 0 0 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" aria-label="Ordner auswählen" style="width: 44px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; background: #1E252C; border: 1px solid #2A323A; border-radius: 0 8px 8px 0; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"></path></svg></button>
+</div>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7580" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+<input type="text" aria-label="Name in der VM" value="{{fo.tag}}" onInput="{{fo.onTag}}" style="flex: 0 1 180px; height: 40px; padding: 0 12px; background: #0E1114; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<button type="button" role="switch" aria-checked="{{fo.roChecked}}" onClick="{{fo.toggleRo}}" style="height: 40px; padding: 0 12px; background: {{fo.roBg}}; border: 1px solid {{fo.roBorder}}; border-radius: 8px; color: {{fo.roColor}}; font: inherit; font-size: 13px; cursor: pointer">{{fo.roLabel}}</button>
+<button type="button" aria-label="Freigabe entfernen" onClick="{{fo.remove}}" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #C9D1D9; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+</sc-for>
+<sc-if value="{{noFolders}}" hint-placeholder-val="{{ false }}"><p style="margin: 0; font-size: 13px; color: #9AA3AD">Keine Ordner freigegeben.</p></sc-if>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: #14243A; border: 1px solid #2B4A70; border-radius: 10px; font-size: 13px; line-height: 1.5; color: #BFDCFF">
+<span>{{shareHint}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9CC8F5">{{shareCmd}}</span>
+</div>
+</div>
+</section>
+
+</div>
+
+<aside aria-labelledby="sum-h" style="flex: 1 1 320px; min-width: 0; background: #161A1F; border: 1px solid #2E363F; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+<div style="padding: 16px 18px; background: #1A1F25; border-bottom: 1px solid #232A31"><h2 id="sum-h" style="margin: 0; font-size: 15px; font-weight: 600">Zusammenfassung</h2></div>
+<dl style="margin: 0; padding: 8px 18px; display: flex; flex-direction: column">
+<sc-for list="{{summary}}" as="sm" hint-placeholder-count="7">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid #20262C">
+<dt style="font-size: 12px; color: #9AA3AD">{{sm.k}}</dt>
+<dd style="margin: 0; font-size: 13px; line-height: 1.45; white-space: pre-line; font-family: {{sm.font}}">{{sm.v}}</dd>
+</div>
+</sc-for>
+</dl>
+<div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; margin-top: auto">
+<button type="button" style="height: 44px; background: {{accent}}; border: 0; border-radius: 10px; color: #0B1622; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Erstellen und starten</button>
+<button type="button" style="height: 44px; background: transparent; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font: inherit; font-size: 14px; cursor: pointer">Nur erstellen</button>
+<a href="#" style="align-self: center; padding: 6px; font-size: 13px; text-decoration: none">Konfiguration als XML ansehen</a>
+</div>
+</aside>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.IMAGES = [
+      { id: 'haos', name: 'haos_ova-13.2.qcow2', dir: '/mnt/data/isos/', fmt: 'qcow2', vsize: 32, used: 1.1 },
+      { id: 'ubuntu', name: 'ubuntu-server.qcow2', dir: '/mnt/fast/vms/alt/', fmt: 'qcow2', vsize: 40, used: 12.4 },
+      { id: 'win10', name: 'windows10.img', dir: '/mnt/data/backup/vm/', fmt: 'img', vsize: 120, used: 120 },
+      { id: 'appl', name: 'appliance.vmdk', dir: '/mnt/data/isos/', fmt: 'vmdk', vsize: 20, used: 3.2 }
+    ];
+    this.TPL = {
+      windows: { name: 'Windows 11', desc: 'TPM, Secure Boot und Treiber-ISO werden automatisch eingerichtet', vm: 'windows-gaming', cpu: 5, ram: 12, cpuMode: 'pin', pins: [1, 2, 3, 4, 5], mode: 'new', disks: [ { fmt: 'qcow2', size: 256, loc: 'fast' } ], gpu: { nvidia: true, igpu: false }, img: 'win10' },
+      linux: { name: 'Linux', desc: 'Debian, Ubuntu, Fedora … mit virtio für beste Leistung', vm: 'linux-server', cpu: 4, ram: 8, mode: 'new', disks: [ { fmt: 'qcow2', size: 64, loc: 'fast' } ], gpu: { nvidia: false, igpu: false }, img: 'ubuntu' },
+      haos: { name: 'Fertiges Abbild', desc: 'Vorhandenes qcow2/img auf dem NAS nutzen, z. B. Home Assistant OS', vm: 'home-assistant-2', cpu: 2, ram: 4, mode: 'import', disks: [ { fmt: 'qcow2', size: 32, loc: 'fast' } ], gpu: { nvidia: false, igpu: false }, img: 'haos' },
+      other: { name: 'Andere', desc: 'Alles selbst festlegen', vm: 'neue-vm', cpu: 2, ram: 4, mode: 'new', disks: [ { fmt: 'raw', size: 32, loc: 'fast' } ], gpu: { nvidia: false, igpu: false }, img: 'haos' }
+    };
+    this.state = Object.assign(this.fromTpl('windows'), {
+      folders: [ { id: 1, path: '/mnt/data/media', tag: 'media', ro: true }, { id: 2, path: '/mnt/data/backup/windows', tag: 'backup', ro: false } ], nid: 100
+    });
+  }
+  fromTpl(id) {
+    const t = this.TPL[id];
+    const im = this.IMAGES.find((x) => x.id === t.img);
+    return { tpl: id, vmName: t.vm, cpu: t.cpu, ram: t.ram, mode: t.mode, cpuMode: t.cpuMode || 'auto', pins: (t.pins || []).slice(), gpu: Object.assign({}, t.gpu),
+      disks: t.disks.map((d, i) => Object.assign({ id: i + 1 }, d)),
+      imgSel: t.img, imgUse: 'copy', imgFmt: im.fmt === 'img' ? 'raw' : 'qcow2', imgSize: im.vsize };
+  }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const isWin = s.tpl === 'windows';
+    const FREE = { fast: 588, data: 6758 };
+    const num = (v, min, max) => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return isNaN(n) ? min : Math.max(min, Math.min(max, n)); };
+    const tpls = ['windows', 'linux', 'haos', 'other'].map((id) => {
+      const t = this.TPL[id];
+      return { name: t.name, desc: t.desc, checked: s.tpl === id ? 'true' : 'false', ring: s.tpl === id ? accent : '#232A31', pick: () => this.setState(this.fromTpl(id)) };
+    });
+    const seg = (on) => ({ bg: on ? '#2A323A' : 'transparent', color: on ? '#E6E9ED' : '#9AA3AD', checked: on ? 'true' : 'false' });
+    const diskModes = [ { id: 'new', name: 'Neue virtuelle Platte' }, { id: 'import', name: 'Vorhandenes Abbild' }, { id: 'disk', name: 'Ganze Festplatte' } ]
+      .map((d) => Object.assign({ name: d.name, pick: () => this.setState({ mode: d.id }) }, seg(s.mode === d.id)));
+
+    const updDisk = (id, patch) => this.setState({ disks: s.disks.map((d) => d.id === id ? Object.assign({}, d, patch) : d) });
+    const rawByLoc = { fast: 0, data: 0 };
+    s.disks.forEach((d) => { if (d.fmt === 'raw') rawByLoc[d.loc] += d.size; });
+    const fmtGB = (g) => g >= 1024 ? (g / 1024).toFixed(1).replace('.', ',') + ' TB' : g + ' GB';
+    const disks = s.disks.map((d, i) => {
+      const ext = d.fmt === 'qcow2' ? 'qcow2' : 'img';
+      let info, infoColor = '#9AA3AD';
+      if (d.fmt === 'qcow2') {
+        info = 'Belegt anfangs nur wenige MB und wächst bis höchstens ' + fmtGB(d.size) + '.';
+        if (d.size > FREE[d.loc]) { info += ' Größer als der freie Platz – die Platte kann später volllaufen.'; infoColor = '#F6D79A'; }
+      } else {
+        info = 'Belegt sofort ' + fmtGB(d.size) + ' auf „' + d.loc + '“.';
+        if (rawByLoc[d.loc] > FREE[d.loc]) { info = 'Nicht genug Platz: Alle img-Platten auf „' + d.loc + '“ brauchen zusammen ' + fmtGB(rawByLoc[d.loc]) + ', frei sind ' + fmtGB(FREE[d.loc]) + '.'; infoColor = '#F59A9A'; }
+      }
+      return {
+        file: 'vdisk' + (i + 1) + '.' + ext, role: i === 0 ? 'Systemplatte' : 'zusätzliche Platte', size: d.size, sizeId: 'dsize-' + d.id,
+        removable: i > 0, remove: () => this.setState({ disks: s.disks.filter((x) => x.id !== d.id) }),
+        qChecked: d.fmt === 'qcow2' ? 'true' : 'false', rChecked: d.fmt === 'raw' ? 'true' : 'false',
+        qBg: d.fmt === 'qcow2' ? '#2A323A' : 'transparent', rBg: d.fmt === 'raw' ? '#2A323A' : 'transparent',
+        pickQ: () => updDisk(d.id, { fmt: 'qcow2' }), pickR: () => updDisk(d.id, { fmt: 'raw' }),
+        onSize: (e) => updDisk(d.id, { size: num(e.target.value, 1, 16384) }),
+        presets: [32, 64, 128, 256, 512, 1024].map((p) => ({ label: fmtGB(p), pressed: d.size === p ? 'true' : 'false', bg: d.size === p ? '#2A323A' : 'transparent', border: d.size === p ? '#4A545F' : '#2A323A', pick: () => updDisk(d.id, { size: p }) })),
+        fastChecked: d.loc === 'fast' ? 'true' : 'false', dataChecked: d.loc === 'data' ? 'true' : 'false',
+        fastBg: d.loc === 'fast' ? '#2A323A' : 'transparent', dataBg: d.loc === 'data' ? '#2A323A' : 'transparent',
+        pickFast: () => updDisk(d.id, { loc: 'fast' }), pickData: () => updDisk(d.id, { loc: 'data' }),
+        info, infoColor, path: '/mnt/' + d.loc + '/vms/' + s.vmName + '/vdisk' + (i + 1) + '.' + ext
+      };
+    });
+
+    const im = this.IMAGES.find((x) => x.id === s.imgSel) || this.IMAGES[0];
+    const images = this.IMAGES.map((x) => {
+      const on = x.id === s.imgSel;
+      return { name: x.name, dir: x.dir, fmt: x.fmt === 'img' ? 'img (raw)' : x.fmt,
+        sizes: 'virtuell ' + fmtGB(x.vsize) + ' · belegt ' + String(x.used).replace('.', ',') + ' GB',
+        checked: on ? 'true' : 'false', ring: on ? accent : '#232A31', dotRing: on ? accent : '#4A545F', dotFill: on ? accent : 'transparent',
+        pick: () => this.setState({ imgSel: x.id, imgSize: x.vsize, imgFmt: x.fmt === 'img' ? 'raw' : 'qcow2', imgUse: x.fmt === 'vmdk' ? 'copy' : s.imgUse }) };
+    });
+    const needsConvert = im.fmt === 'vmdk' || (im.fmt === 'qcow2' && s.imgFmt === 'raw') || (im.fmt === 'img' && s.imgFmt === 'qcow2');
+    const canDirect = !needsConvert;
+    const useDirect = s.imgUse === 'direct' && canDirect;
+    const imgSize = Math.max(im.vsize, s.imgSize);
+    const grows = imgSize > im.vsize;
+    const imgExt = s.imgFmt === 'qcow2' ? 'qcow2' : 'img';
+    const imgTarget = useDirect ? im.dir + im.name + '  (Original wird direkt benutzt)' : '/mnt/fast/vms/' + s.vmName + '/vdisk1.' + imgExt;
+    let imgSizeNote = grows ? 'Wird von ' + fmtGB(im.vsize) + ' auf ' + fmtGB(imgSize) + ' vergrößert. Danach die Partition in der VM erweitern – Home Assistant OS und viele Cloud-Abbilder machen das beim Start selbst.' : 'Größe bleibt bei ' + fmtGB(im.vsize) + '. Verkleinern ist nicht möglich.';
+    let imgSizeColor = '#9AA3AD';
+    if (s.imgFmt === 'raw' && imgSize > FREE.fast && !useDirect) { imgSizeNote = 'Nicht genug Platz auf „fast“ für ein img mit ' + fmtGB(imgSize) + '.'; imgSizeColor = '#F59A9A'; }
+
+    const isos = s.mode !== 'new' ? [] : (isWin
+      ? [ { file: 'Win11_24H2_German_x64.iso', note: 'aus Share „isos“' }, { file: 'virtio-win.iso', note: 'Treiber für Platte, Netzwerk und Ordnerfreigabe – automatisch' } ]
+      : (s.tpl === 'linux' ? [ { file: 'debian-13-amd64-netinst.iso', note: 'aus Share „isos“' } ] : [ { file: '— ISO wählen —', note: 'aus Share „isos“ oder hochladen' } ]));
+    const GPUS = [
+      { id: 'nvidia', name: 'NVIDIA GeForce RTX 5060 Ti', ids: 'PCI 01:00.0 + 01:00.1 (Audio, wird automatisch mitgegeben)', allowed: true,
+        noteOn: 'Gehört beim Start dieser VM ganz ihr. Auch windows-11 ist ihr zugewiesen – es kann immer nur eine dieser VMs laufen.', noteOff: 'Im Modus „Exklusiv für eine VM“ bzw. „Automatisch wechseln“ verfügbar.' },
+      { id: 'igpu', name: 'Intel Graphics (integriert)', ids: 'PCI 00:02.0', allowed: true,
+        noteOn: 'Achtung: Container (jellyfin, frigate, immich-ml) verlieren dann die iGPU. Bei aktuellen Intel-CPUs oft unzuverlässig.', noteOff: 'Möglich, aber nicht empfohlen – die iGPU wird von Containern genutzt.' },
+      { id: 'npu', name: 'Intel AI Boost (NPU)', ids: 'PCI 00:0b.0', allowed: false, noteOn: '', noteOff: 'Lässt sich nicht an VMs durchreichen.' }
+    ];
+    const gpus = GPUS.map((g) => {
+      const on = !!s.gpu[g.id];
+      return { name: g.name, ids: g.ids, on, checked: on ? 'true' : 'false', disabledAria: g.allowed ? 'false' : 'true',
+        boxBg: on ? accent : 'transparent', boxBorder: on ? accent : (g.allowed ? '#4A545F' : '#2A323A'), cursor: g.allowed ? 'pointer' : 'not-allowed',
+        border: on ? (g.id === 'igpu' ? '#5A4720' : '#2B4A70') : '#232A31', opacity: g.allowed ? '1' : '0.55',
+        note: on ? g.noteOn : g.noteOff, noteColor: on && g.id === 'igpu' ? '#F6D79A' : '#9AA3AD',
+        toggle: g.allowed ? () => this.setState({ gpu: Object.assign({}, s.gpu, { [g.id]: !on }) }) : () => {} };
+    });
+    const updFolder = (id, patch) => this.setState({ folders: s.folders.map((x) => x.id === id ? Object.assign({}, x, patch) : x) });
+    const folders = s.folders.map((f) => ({
+      path: f.path, tag: f.tag, roChecked: f.ro ? 'true' : 'false', roLabel: f.ro ? 'Nur lesen' : 'Lesen und schreiben',
+      roBg: f.ro ? 'transparent' : '#12281E', roBorder: f.ro ? '#2A323A' : '#245A40', roColor: f.ro ? '#E6E9ED' : '#9BE3BE',
+      onPath: (e) => updFolder(f.id, { path: e.target.value }), onTag: (e) => updFolder(f.id, { tag: e.target.value }),
+      toggleRo: () => updFolder(f.id, { ro: !f.ro }),
+      remove: () => this.setState({ folders: s.folders.filter((x) => x.id !== f.id) })
+    }));
+    const gpuText = GPUS.filter((g) => s.gpu[g.id]).map((g) => g.name).join(', ') || 'keine';
+    let diskText;
+    if (s.mode === 'new') diskText = s.disks.map((d, i) => 'vdisk' + (i + 1) + ' · ' + (d.fmt === 'qcow2' ? 'qcow2' : 'img') + ' · ' + fmtGB(d.size) + ' auf ' + d.loc).join('\n');
+    else if (s.mode === 'import') diskText = im.name + (needsConvert ? ' → umgewandelt in ' + imgExt : '') + (useDirect ? ' (direkt)' : ' (Kopie)') + ' · ' + fmtGB(imgSize);
+    else diskText = 'ganze Platte sde (4 TB)';
+    const USEDC = { 8: 'home-assistant', 9: 'home-assistant' };
+    const pinned = s.cpuMode === 'pin';
+    const pins = s.pins || [];
+    const togglePin = (i) => () => this.setState({ pins: pins.indexOf(i) !== -1 ? pins.filter((x) => x !== i) : pins.concat([i]).sort((a, b) => a - b) });
+    const cores = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => {
+      const on = pins.indexOf(i) !== -1, isP = i < 6;
+      let note = 'frei', noteColor = '#9AA3AD';
+      if (i === 0) { note = 'nicht fest an VMs vergeben'; noteColor = '#F6D79A'; }
+      else if (USEDC[i]) { note = 'auch von ' + USEDC[i]; noteColor = '#D6CBFF'; }
+      return { label: 'CPU ' + i, type: isP ? 'P-Kern' : 'E-Kern', typeBg: isP ? '#14243A' : '#221C33', typeBorder: isP ? '#2B4A70' : '#3D3361', typeColor: isP ? '#BFDCFF' : '#D6CBFF',
+        pressed: on ? 'true' : 'false', ring: on ? accent : '#2A323A', bg: on ? '#16202B' : '#12161A', note, noteColor, toggle: togglePin(i) };
+    });
+    const cpuPresets = [ { name: 'Alle P-Kerne außer CPU 0', arr: [1, 2, 3, 4, 5] }, { name: 'Freie E-Kerne', arr: [6, 7] }, { name: 'Auswahl leeren', arr: [] } ]
+      .map((p) => ({ name: p.name, pick: () => this.setState({ pins: p.arr.slice() }) }));
+    const nP = pins.filter((i) => i < 6).length, nE = pins.length - nP;
+    const cpuWarns = [];
+    if (pinned && pins.length === 0) cpuWarns.push({ t: 'Mindestens einen Kern auswählen.', c: '#F59A9A' });
+    if (pinned && nP && nE) cpuWarns.push({ t: 'P- und E-Kerne gemischt: Die VM erkennt die Kernarten nicht und verteilt Arbeit gleichmäßig – schwere Aufgaben landen dann teils auf den langsameren E-Kernen. Für Spiele und Windows besser nur P-Kerne.', c: '#F6D79A' });
+    if (pinned && pins.indexOf(0) !== -1) cpuWarns.push({ t: 'Auf CPU 0 landen viele Hardware-Unterbrechungen (Netzwerk, Platten). Sitzt die VM fest darauf, bremsen sich NAS und VM unter Last gegenseitig.', c: '#F6D79A' });
+    const shared = pins.filter((i) => USEDC[i]);
+    if (pinned && shared.length) cpuWarns.push({ t: 'CPU ' + shared.join(', ') + ' teilt sich diese VM mit home-assistant. Das ist erlaubt, unter Last bremsen sich beide aber gegenseitig.', c: '#D6CBFF' });
+    const cpuText = pinned ? (pins.length + ' Kerne fest: CPU ' + (pins.join(', ') || '–') + ' (' + nP + ' P, ' + nE + ' E)') : (s.cpu + ' vCPU, frei verteilt');
+    const cpuModes = [ { id: 'auto', name: 'Automatisch' }, { id: 'pin', name: 'Kerne festlegen' } ]
+      .map((m) => ({ name: m.name, checked: s.cpuMode === m.id ? 'true' : 'false', bg: s.cpuMode === m.id ? '#2A323A' : 'transparent', color: s.cpuMode === m.id ? '#E6E9ED' : '#9AA3AD', pick: () => this.setState({ cpuMode: m.id }) }));
+    this._cpu = { cores, cpuPresets, cpuWarns, cpuModes, cpuSummary: cpuText, cpuPin: pinned, cpuAuto: !pinned };
+    const summary = [
+      { k: 'Name', v: s.vmName, font: "'IBM Plex Mono', monospace" },
+      { k: 'Vorlage', v: this.TPL[s.tpl].name, font: 'inherit' },
+      { k: 'Prozessor und RAM', v: cpuText + '\n' + s.ram + ' GB RAM · UEFI' + (isWin ? ' · TPM 2.0' : ''), font: 'inherit' },
+      { k: 'Datenträger', v: diskText, font: 'inherit' },
+      { k: 'Durchgereicht', v: gpuText, font: 'inherit' },
+      { k: 'NAS-Ordner', v: s.folders.length ? s.folders.map((f) => f.tag + (f.ro ? ' (lesen)' : ' (lesen/schreiben)')).join(', ') : 'keine', font: 'inherit' },
+      { k: 'Netzwerk', v: 'br0 · eigene IP im Heimnetz', font: 'inherit' }
+    ];
+    return {
+      cores: this._cpu.cores, cpuPresets: this._cpu.cpuPresets, cpuWarns: this._cpu.cpuWarns, cpuModes: this._cpu.cpuModes,
+      cpuSummary: this._cpu.cpuSummary, cpuPin: this._cpu.cpuPin, cpuAuto: this._cpu.cpuAuto,
+      accent, tpls, diskModes, disks, images, isos, gpus, folders, summary, isWin,
+      vmName: s.vmName, vcpu: s.cpu, ram: s.ram,
+      onName: (e) => this.setState({ vmName: e.target.value }),
+      ramNote: s.ram > 11 ? 'Mehr als aktuell frei – andere VMs oder Container müssen dafür Platz machen.' : 'Wird beim Start fest reserviert (nötig für Ordnerfreigabe und GPU).',
+      ramNoteColor: s.ram > 11 ? '#F6D79A' : '#9AA3AD',
+      onCpu: (e) => this.setState({ cpu: Number(e.target.value) }),
+      onRam: (e) => this.setState({ ram: Number(e.target.value) }),
+      modeNew: s.mode === 'new', modeImport: s.mode === 'import', modeDisk: s.mode === 'disk',
+      addDisk: () => this.setState({ disks: s.disks.concat([{ id: s.nid, fmt: 'qcow2', size: 128, loc: 'data' }]), nid: s.nid + 1 }),
+      hasImg: !!im,
+      useCopyChecked: useDirect ? 'false' : 'true', useDirectChecked: useDirect ? 'true' : 'false',
+      useCopyBg: useDirect ? 'transparent' : '#2A323A', useDirectBg: useDirect ? '#2A323A' : 'transparent',
+      useDirectColor: canDirect ? '#E6E9ED' : '#5A636D', useDirectCursor: canDirect ? 'pointer' : 'not-allowed', directDisabled: canDirect ? 'false' : 'true',
+      pickCopy: () => this.setState({ imgUse: 'copy' }), pickDirect: () => { if (canDirect) this.setState({ imgUse: 'direct' }); },
+      iqChecked: s.imgFmt === 'qcow2' ? 'true' : 'false', irChecked: s.imgFmt === 'raw' ? 'true' : 'false',
+      iqBg: s.imgFmt === 'qcow2' ? '#2A323A' : 'transparent', irBg: s.imgFmt === 'raw' ? '#2A323A' : 'transparent',
+      pickIQ: () => this.setState({ imgFmt: 'qcow2' }), pickIR: () => this.setState({ imgFmt: 'raw' }),
+      fmtNote: im.fmt === 'vmdk' ? 'vmdk wird beim Import umgewandelt' : (needsConvert ? 'wird beim Import umgewandelt – nur als Kopie möglich' : 'Format bleibt wie auf dem NAS'),
+      imgMin: im.vsize, imgSize, onImgSize: (e) => this.setState({ imgSize: num(e.target.value, im.vsize, 16384) }),
+      imgSizeNote, imgSizeColor, imgTarget,
+      noIso: isos.length === 0,
+      noFolders: s.folders.length === 0,
+      addFolder: () => this.setState({ folders: s.folders.concat([{ id: s.nid, path: '/mnt/data/', tag: 'ordner' + s.nid, ro: true }]), nid: s.nid + 1 }),
+      shareHint: isWin
+        ? 'Windows: Ordner erscheinen als Laufwerk, sobald der VirtIO-FS-Dienst aus virtio-win.iso und WinFsp installiert sind. TitanOS legt beides auf das Treiber-Medium.'
+        : 'Linux: Ordner werden per virtiofs direkt eingebunden – schneller als SMB, ohne Netzwerk. Einmal in der VM einbinden:',
+      shareCmd: isWin ? 'Alternative ohne Treiber: \\\\192.168.1.20\\media (SMB)' : 'mount -t virtiofs media /mnt/media'
+    };
+  }
+}
+</script>
+</body>
+</html>

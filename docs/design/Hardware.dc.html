@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>TitanOS Hardware</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1114}
+a{color:#9CCBFF}a:hover{color:#C8E2FF}
+.topbar>*{flex:none}.topbar>.topnav{flex:1 1 auto;min-width:0}.topnav a{white-space:nowrap;flex:none}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E1114; color: #E6E9ED; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<header class="topbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 20px; padding: 8px 24px; height: 60px; box-sizing: border-box; background: #12161A; border-bottom: 1px solid #232A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linejoin="round"></path><path d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" fill="#E6E9ED"></path></svg>
+<svg height="16" viewBox="0 0 576 100" role="img" aria-label="TitanOS"><g fill="#E6E9ED"><path d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"></path></g><g fill="{{accent}}"><path fill-rule="evenodd" d="M404 0h80v100h-80zM426 22v56h36V22z"></path><path d="M496 0h80v22h-58v17h58v61h-80V78h58V61h-58z"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD; padding: 3px 8px; border: 1px solid #2A323A; border-radius: 6px">nas · 192.168.1.20</span>
+</div>
+<nav class="topnav" aria-label="Hauptnavigation" style="display: flex; flex-wrap: nowrap; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto">
+<a href="Main.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Dashboard</a>
+<a href="Storage.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Speicher</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Shares</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Nutzer</a>
+<a href="DockerList.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Docker</a>
+<a href="VmConsole.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">VMs</a>
+<a href="AppStore.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Apps</a>
+<a href="Plugins.dc.html" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Plugins</a>
+<a href="Appearance.dc.html" aria-current="page" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; color: #E6E9ED; background: #1E252C">Einstellungen</a>
+<a href="#" style="padding: 10px 14px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #9AA3AD">Werkzeuge</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<a href="Terminal.dc.html" style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #2A323A; border-radius: 10px; color: #E6E9ED; font-size: 14px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>Terminal</a>
+</div>
+</header>
+
+<main style="flex: 1 1 auto; width: 100%; max-width: 1440px; margin: 0 auto; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<p style="margin: 0; font-size: 13px; color: #9AA3AD"><a href="Appearance.dc.html" style="text-decoration: none">Einstellungen</a> › Hardware</p>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Hardware und Durchreichung</h1>
+<p style="margin: 0; font-size: 14px; color: #9AA3AD">TitanOS erkennt Grafikkarten und Beschleuniger und zeigt nur an, was wirklich vorhanden ist. Pro Gerät legst du fest, wer es nutzen darf.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px">Intel Core Ultra 5 225 · 10 Kerne</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #161A1F; border: 1px solid #232A31; border-radius: 999px; font-size: 13px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span>IOMMU (VT-d) aktiv</span>
+</div>
+</div>
+
+<sc-if value="{{pending}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: #2A2312; border: 1px solid #5A4720; border-radius: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 14px; font-weight: 600; color: #F6D79A">Neustart nötig, damit die Zuordnung greift</span>
+<span style="font-size: 13px; color: #E4CB98">{{pendingText}}</span>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" onClick="{{revert}}" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #5A4720; border-radius: 10px; color: #F6D79A; font: inherit; font-size: 14px; cursor: pointer">Verwerfen</button>
+<button type="button" style="height: 40px; padding: 0 16px; background: #F0B54A; border: 0; border-radius: 10px; color: #1A1406; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Speichern und neu starten</button>
+</div>
+</div>
+</sc-if>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px">
+
+<sc-for list="{{devices}}" as="d" hint-placeholder-count="3">
+<article style="background: #161A1F; border: 1px solid {{d.cardBorder}}; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+
+<div style="display: flex; align-items: flex-start; gap: 14px">
+<span aria-hidden="true" style="width: 52px; height: 52px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: {{d.iconBg}}; color: #FFFFFF; font-size: 13px; font-weight: 600">{{d.mono}}</span>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 600">{{d.name}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA3AD">{{d.ids}}</span>
+</div>
+<span style="font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px; background: #1F262D; border: 1px solid #2A323A; color: #C9D1D9; white-space: nowrap">{{d.type}}</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: #12161A; border-radius: 10px">
+<sc-for list="{{d.checks}}" as="ck" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; flex: none; background: {{ck.dot}}"></span>
+<span style="flex: 1 1 auto; color: #9AA3AD">{{ck.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; color: {{ck.color}}">{{ck.value}}</span>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{d.needsDriver}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: #14243A; border: 1px solid #2B4A70; border-radius: 10px">
+<span style="font-size: 13px; color: #BFDCFF">Für Container brauchst du das NVIDIA-Plugin. Für die VM ist kein Treiber auf dem NAS nötig.</span>
+<a href="Plugins.dc.html" style="height: 38px; display: inline-flex; align-items: center; padding: 0 14px; background: {{accent}}; border-radius: 9px; color: #0B1622; font-size: 13px; font-weight: 600; text-decoration: none">Treiber installieren</a>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span id="{{d.modeId}}" style="font-size: 12px; color: #9AA3AD">Verwendung</span>
+<div role="radiogroup" aria-labelledby="{{d.modeId}}" style="display: flex; gap: 4px; padding: 4px; background: #12161A; border: 1px solid #232A31; border-radius: 10px">
+<button type="button" role="radio" aria-checked="{{d.hostChecked}}" onClick="{{d.pickHost}}" style="flex: 1 1 0; height: 40px; padding: 0 10px; background: {{d.hostBg}}; border: 0; border-radius: 8px; color: {{d.hostColor}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">Container und System</button>
+<button type="button" role="radio" aria-checked="{{d.vmChecked}}" aria-disabled="{{d.vmDisabledAria}}" onClick="{{d.pickVm}}" style="flex: 1 1 0; height: 40px; padding: 0 10px; background: {{d.vmBg}}; border: 0; border-radius: 8px; color: {{d.vmColor}}; font: inherit; font-size: 13px; font-weight: 500; cursor: {{d.vmCursor}}">Exklusiv für eine VM</button>
+</div>
+<span style="font-size: 12px; line-height: 1.5; color: {{d.modeNoteColor}}">{{d.modeNote}}</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: #9AA3AD">{{d.usedTitle}}</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{d.users}}" as="u" hint-placeholder-count="2">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: #12161A; border: 1px solid #2A323A; border-radius: 8px; font-size: 12px"><span style="font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: {{u.kindBg}}; color: {{u.kindColor}}">{{u.kind}}</span><span style="font-family: 'IBM Plex Mono', monospace">{{u.name}}</span><span style="color: #9AA3AD">{{u.what}}</span></span>
+</sc-for>
+<sc-if value="{{d.noUsers}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; color: #9AA3AD">Noch von niemandem genutzt</span></sc-if>
+</div>
+</div>
+
+</article>
+</sc-for>
+
+</div>
+
+<section aria-labelledby="usb-h" style="background: #161A1F; border: 1px solid #232A31; border-radius: 14px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 18px; background: #1A1F25; border-bottom: 1px solid #232A31">
+<h2 id="usb-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #C9D1D9">Weitere Geräte</h2>
+<span style="font-size: 13px; color: #9AA3AD">USB-Geräte werden einzeln an Container oder VMs weitergegeben</span>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px">
+<thead><tr style="text-align: left; font-size: 12px; color: #9AA3AD">
+<th scope="col" style="padding: 12px 18px; font-weight: 500; border-bottom: 1px solid #232A31">Gerät</th>
+<th scope="col" style="padding: 12px 18px; font-weight: 500; border-bottom: 1px solid #232A31">Anschluss</th>
+<th scope="col" style="padding: 12px 18px; font-weight: 500; border-bottom: 1px solid #232A31">Zugeordnet an</th>
+<th scope="col" style="padding: 12px 18px; font-weight: 500; border-bottom: 1px solid #232A31"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Aktion</span></th>
+</tr></thead>
+<tbody>
+<tr>
+<td style="padding: 12px 18px; border-bottom: 1px solid #20262C">Zigbee-USB-Stick</td>
+<td style="padding: 12px 18px; border-bottom: 1px solid #20262C; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #9AA3AD">USB 1-4 · 10c4:ea60</td>
+<td style="padding: 12px 18px; border-bottom: 1px solid #20262C"><span style="font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: #221C33; color: #D6CBFF">VM</span> <span style="font-family: 'IBM Plex Mono', monospace">home-assistant</span></td>
+<td style="padding: 8px 18px; border-bottom: 1px solid #20262C; text-align: right"><button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Ändern</button></td>
+</tr>
+<tr>
+<td style="padding: 12px 18px">USV (USB-HID)</td>
+<td style="padding: 12px 18px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #9AA3AD">USB 1-6 · 051d:0002</td>
+<td style="padding: 12px 18px"><span style="font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: #14243A; color: #BFDCFF">NAS</span> <span>Stromausfall-Schutz</span></td>
+<td style="padding: 8px 18px; text-align: right"><button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #2A323A; border-radius: 8px; color: #E6E9ED; font: inherit; font-size: 13px; cursor: pointer">Ändern</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6CB6FF","options":["#6CB6FF","#4CC38A","#B49CFF","#E0895A"]},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.initial = { igpu: 'host', npu: 'host', nvidia: 'vm' };
+    this.state = { modes: Object.assign({}, this.initial) };
+  }
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#6CB6FF';
+    const ok = '#4CC38A', warn = '#F0B54A';
+    const CT = { kind: 'CT', kindBg: '#12281E', kindColor: '#9BE3BE' };
+    const VM = { kind: 'VM', kindBg: '#221C33', kindColor: '#D6CBFF' };
+    const setMode = (id, m) => () => this.setState({ modes: Object.assign({}, s.modes, { [id]: m }) });
+    const DEV = [
+      { id: 'igpu', mono: 'iGPU', iconBg: '#1971C2', name: 'Intel Graphics (integriert)', ids: 'PCI 00:02.0 · /dev/dri/renderD128 · IOMMU-Gruppe 0', type: 'Grafik',
+        checks: [ { label: 'Treiber', value: 'xe · im Kernel', ok: true }, { label: 'Firmware (GuC/HuC)', value: 'geladen', ok: true }, { label: 'Video-Engine jetzt', value: '12 %', ok: true } ],
+        vmAllowed: true, hostUsers: [ Object.assign({ name: 'jellyfin', what: 'Transkodierung' }, CT), Object.assign({ name: 'frigate', what: 'Video-Dekodierung' }, CT), Object.assign({ name: 'immich-ml', what: 'Bildanalyse' }, CT) ],
+        hostNote: 'Mehrere Container können die iGPU gleichzeitig nutzen.',
+        vmNote: 'Die iGPU wäre dann exklusiv für eine VM und für Container und Transkodierung weg. Bei aktuellen Intel-CPUs ist das oft unzuverlässig – empfohlen bleibt Container und System.' },
+      { id: 'npu', mono: 'NPU', iconBg: '#0C8599', name: 'Intel AI Boost (NPU)', ids: 'PCI 00:0b.0 · /dev/accel/accel0', type: 'KI-Beschleuniger',
+        checks: [ { label: 'Treiber', value: 'intel_vpu · im Kernel', ok: true }, { label: 'Firmware', value: 'geladen', ok: true }, { label: 'Auslastung jetzt', value: '31 %', ok: true } ],
+        vmAllowed: false, hostUsers: [ Object.assign({ name: 'frigate', what: 'Objekterkennung (OpenVINO)' }, CT) ],
+        hostNote: 'Container bringen die NPU-Bibliotheken selbst mit, TitanOS stellt Treiber und Gerät bereit.',
+        vmNote: '' },
+      { id: 'nvidia', mono: 'NV', iconBg: '#2F9E44', name: 'NVIDIA GeForce RTX 5060 Ti', ids: 'PCI 01:00.0 + 01:00.1 (Audio) · IOMMU-Gruppe 14 – allein', type: 'Grafik',
+        vmAllowed: true, vmUsers: [ Object.assign({ name: 'windows-11', what: 'Grafikkarte' }, VM) ],
+        hostNote: 'Container wie jellyfin, immich-ml oder Ollama können die Karte gemeinsam nutzen (NVENC, CUDA).',
+        vmNote: 'Die Karte wird beim Start an vfio-pci gebunden und gehört komplett der VM. Container und NAS sehen sie dann nicht.' }
+    ];
+    const devices = DEV.map((d) => {
+      const mode = s.modes[d.id];
+      const host = mode === 'host';
+      let checks = d.checks;
+      let needsDriver = false;
+      if (d.id === 'nvidia') {
+        checks = host
+          ? [ { label: 'Treiber', value: 'nicht installiert', ok: false }, { label: 'Container-Laufzeit', value: 'fehlt', ok: false }, { label: 'Gebunden an', value: 'kein Treiber', ok: false } ]
+          : [ { label: 'Gebunden an', value: 'vfio-pci', ok: true }, { label: 'IOMMU-Gruppe', value: 'nur diese Karte', ok: true }, { label: 'NAS-Treiber', value: 'nicht nötig', ok: true } ];
+        needsDriver = host;
+      }
+      const users = host ? (d.hostUsers || []) : (d.vmUsers || []);
+      const vmOn = !host;
+      return {
+        name: d.name, ids: d.ids, type: d.type, mono: d.mono, iconBg: d.iconBg,
+        modeId: 'mode-' + d.id,
+        cardBorder: needsDriver ? '#2B4A70' : '#232A31',
+        checks: checks.map((c) => ({ label: c.label, value: c.value, dot: c.ok ? ok : warn, color: c.ok ? '#E6E9ED' : '#F6D79A' })),
+        needsDriver,
+        hostChecked: host ? 'true' : 'false', vmChecked: vmOn ? 'true' : 'false',
+        hostBg: host ? '#2A323A' : 'transparent', hostColor: host ? '#E6E9ED' : '#9AA3AD',
+        vmBg: vmOn ? '#2A323A' : 'transparent', vmColor: !d.vmAllowed ? '#5A636D' : (vmOn ? '#E6E9ED' : '#9AA3AD'),
+        vmCursor: d.vmAllowed ? 'pointer' : 'not-allowed', vmDisabledAria: d.vmAllowed ? 'false' : 'true',
+        pickHost: setMode(d.id, 'host'),
+        pickVm: d.vmAllowed ? setMode(d.id, 'vm') : () => {},
+        modeNote: !d.vmAllowed ? 'Die NPU lässt sich nicht an VMs durchreichen. ' + d.hostNote : (host ? d.hostNote : d.vmNote),
+        modeNoteColor: (!host && d.id === 'igpu') ? '#F6D79A' : '#9AA3AD',
+        usedTitle: host ? 'Genutzt von' : 'Reserviert für',
+        users, noUsers: users.length === 0
+      };
+    });
+    const changed = Object.keys(this.initial).filter((k) => s.modes[k] !== this.initial[k]);
+    const names = { igpu: 'iGPU', npu: 'NPU', nvidia: 'RTX 5060 Ti' };
+    let pendingText = '';
+    if (changed.length) {
+      pendingText = changed.map((k) => names[k] + ' → ' + (s.modes[k] === 'host' ? 'Container und System' : 'exklusiv für eine VM')).join(' · ');
+      if (changed.indexOf('nvidia') !== -1 && s.modes.nvidia === 'host') pendingText += ' · windows-11 startet danach ohne Grafikkarte';
+      if (changed.indexOf('igpu') !== -1 && s.modes.igpu === 'vm') pendingText += ' · jellyfin, frigate und immich-ml verlieren die iGPU';
+    }
+    return {
+      accent, devices,
+      pending: changed.length > 0, pendingText,
+      revert: () => this.setState({ modes: Object.assign({}, this.initial) })
+    };
+  }
+}
+</script>
+</body>
+</html>
