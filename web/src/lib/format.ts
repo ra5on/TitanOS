@@ -47,9 +47,24 @@ export function formatDuration(seconds: number): string {
 	const minutes = Math.floor((seconds % 3600) / 60);
 	if (days > 0) return t('duration.daysHours', { days, hours });
 	if (hours > 0) return t('duration.hoursMinutes', { hours, minutes });
+	if (seconds < 60) return t('duration.underMinute');
 	return t('duration.minutes', { minutes });
 }
 
 export function formatTime(date: Date): string {
 	return new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+/**
+ * Sizes of disks and volumes in decimal units (1 TB = 1000 GB), the way
+ * disks are sold and labelled: 8001563222016 → "8 TB".
+ */
+export function formatDiskBytes(bytes: number): string {
+	let value = bytes;
+	let unit = 0;
+	while (value >= 1000 && unit < UNITS.length - 1) {
+		value /= 1000;
+		unit++;
+	}
+	return `${number(value, unit === 0 || value >= 100 ? 0 : 1)} ${UNITS[unit]}`;
 }

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Waits for the boot stick before live-boot starts looking for it.
+#
+# live-boot is told where the stick is (live-media=…). If that device is not
+# there yet, it falls back to trying every block device in the machine and
+# mounts their filesystems read-only to look inside. USB sticks often show
+# up a moment after the disks, so give the stick time to appear first.
+
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+    prereqs) prereqs; exit 0 ;;
+esac
+
+. /scripts/functions
+
+stick=/dev/disk/by-label/TITANOS
+waited=0
+while [ ! -b "$stick" ] && [ "$waited" -lt 30 ]; do
+    sleep 1
+    waited=$((waited + 1))
+done
+if [ ! -b "$stick" ]; then
+    log_warning_msg "TitanOS: no stick with the label TITANOS found after 30 s"
+fi

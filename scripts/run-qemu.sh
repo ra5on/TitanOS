@@ -5,7 +5,8 @@
 # Usage: scripts/run-qemu.sh [extra qemu arguments]
 #
 #   MEM=4G        RAM of the VM
-#   DISKS=0       number of empty 8 GB data disks (test/disks/), for RAID tests
+#   DISKS=0       number of empty data disks (test/disks/), for RAID tests
+#   DISK_SIZE=8G  size of each new data disk
 #   HTTPS_PORT=8443  host port forwarded to the web UI: https://127.0.0.1:8443
 #   FRESH=1       recreate the stick image, discarding /config
 #   GRAPHIC=1     open a window instead of using the terminal as serial console
@@ -17,6 +18,7 @@ cd "$(dirname "$0")/.."
 
 MEM=${MEM:-4G}
 DISKS=${DISKS:-0}
+DISK_SIZE=${DISK_SIZE:-8G}
 HTTPS_PORT=${HTTPS_PORT:-8443}
 
 stick=out/stick
@@ -72,7 +74,7 @@ set --  "$@"
 i=1
 while [ "$i" -le "$DISKS" ]; do
     disk=test/disks/disk$i.qcow2
-    [ -f "$disk" ] || qemu-img create -q -f qcow2 "$disk" 8G
+    [ -f "$disk" ] || qemu-img create -q -f qcow2 "$disk" "$DISK_SIZE"
     set -- "$@" \
         -drive "if=none,id=disk$i,format=qcow2,file=$disk" \
         -device "scsi-hd,drive=disk$i,serial=TITANTEST$i"

@@ -1,5 +1,5 @@
 // The tiles of the dashboard and their layout in the 12-column grid.
-// More tiles (disks, Docker, VMs, shares, messages) come with their areas.
+// More tiles (Docker, VMs, shares, messages) come with their areas.
 
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 
@@ -8,7 +8,7 @@ export const COLUMNS = 12;
 export const ROW_HEIGHT = 72;
 export const GAP = 16;
 
-export const TILE_IDS = ['system', 'volumes', 'network'] as const;
+export const TILE_IDS = ['system', 'volumes', 'network', 'disks'] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
 export type TileSpec = { title: MessageKey; minW: number; minH: number };
@@ -16,7 +16,8 @@ export type TileSpec = { title: MessageKey; minW: number; minH: number };
 export const TILES: Record<TileId, TileSpec> = {
 	system: { title: 'tile.system', minW: 3, minH: 4 },
 	volumes: { title: 'tile.volumes', minW: 4, minH: 2 },
-	network: { title: 'tile.network', minW: 3, minH: 3 }
+	network: { title: 'tile.network', minW: 3, minH: 3 },
+	disks: { title: 'tile.disks', minW: 3, minH: 2 }
 };
 
 /** Position and size of a tile in grid cells. Without x/y it goes to the first free place. */
@@ -26,7 +27,8 @@ export function defaultLayout(): TilePlacement[] {
 	return [
 		{ id: 'system', x: 0, y: 0, w: 4, h: 4 },
 		{ id: 'volumes', x: 4, y: 0, w: 8, h: 4 },
-		{ id: 'network', x: 0, y: 4, w: 4, h: 4 }
+		{ id: 'network', x: 0, y: 4, w: 4, h: 4 },
+		{ id: 'disks', x: 4, y: 4, w: 4, h: 4 }
 	];
 }
 
