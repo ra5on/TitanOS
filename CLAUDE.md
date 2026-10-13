@@ -225,6 +225,26 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Noch offen aus dem Konzept: Verschieben und Kopieren mit Ordnerauswahl, Suchen, Ansicht des Papierkorbs, die gemeinsame Ordnerauswahl-Komponente. Teildateien eines Uploads, der nie fortgesetzt wird, räumt titand nach 24 Stunden weg – aber nicht nach einem Neustart von titand.
 - Später: Vorschau (Bilder, Text, PDF, Video), Freigabe-Links mit Ablaufdatum.
 
+**Docker: Stand der Umsetzung**
+- Umgesetzt: Docker-Engine (Debian-Pakete `docker.io`, `docker-cli`, `docker-compose`) mit allen Daten auf einem gewählten Volume (`/mnt/<volume>/.titanos/docker`); die Engine läuft nur, solange dieses Volume eingebunden ist. Einstellung in `/config/docker/settings.json`.
+- Umgesetzt: Übersicht mit Karten, Compose-Stacks, Suche, Filter, Start/Stopp/Neustart, Logs, Entfernen sowie „Compose importieren“. Eine importierte App liegt in `/config/apps/<name>/compose.yaml`; relative Pfade der Compose-Datei zeigen auf `/mnt/<volume>/appdata/<name>` (`--project-directory`), nie auf den Stick.
+- titand spricht die Docker-API direkt über den Unix-Socket (nur Standardbibliothek) und ruft für Apps `docker compose` auf.
+- Umgesetzt: Update-Hinweise (Digest des Tags in der Registry gegen das lokale Image, alle 12 Stunden und per Knopf), „Alle aktualisieren“, WebUI-Link über das Label `titanos.webui` (Port, Port/Pfad oder URL), Ports als Links auch in Stack-Zeilen.
+- Umgesetzt: Container-Konsole (xterm.js, WebSocket ↔ `docker exec`), nur für Administratoren nach erneuter Passwort-Eingabe (gilt 15 Minuten), Ende nach 15 Minuten ohne Eingabe, im Protokoll vermerkt.
+- Umgesetzt: Container-Editor unter `/docker/apps/<name>` (Formular ↔ Compose auf demselben YAML-Text, Kommentare bleiben erhalten): Image, Autostart/Neustart-Richtlinie, Netzwerk, WebUI, Privilegiert, Pfade, Ports, Variablen, Labels mit Live-Prüfungen.
+- Umgesetzt: App-Store unter `/apps` (Backend-Paket `catalog`): eingebauter Startkatalog (`backend/internal/catalog/builtin/<app>/compose.yaml`, per `go:embed`) plus eigene Quellen in `/config/docker/sources.json`. Eine Quelle ist ein Repository (Archiv-Download `/archive/HEAD.tar.gz` bzw. GitLab `/-/archive/…`, kein Git im Abbild), ein Archiv oder eine einzelne Compose-Datei; Vorlagen liegen nur im RAM und werden nach dem Start und täglich neu geladen. Installationspanel mit Herkunft pro Feld; TitanOS ergänzt Zeitzone, PUID/PGID (Konto des Installierenden, Gruppe `users`), Appdata-Pfade, Freigaben für `suggest: media|share` und freie Ports. Geheimnisse (`secret: generate`) stehen in `/config/apps/<name>/.env`, die Compose-Datei verweist per `${NAME}` darauf.
+- `x-titanos`-Schema: `name`, `category`, `description` (Text oder `{de, en}`); `variables.<NAME>`: `label`, `help`, `placeholder`, `required`, `secret: generate`, `fill: timezone|uid|gid`; `paths.<Containerpfad>`: `label`, `suggest`; `ports.<Containerport[/udp]>`: `label`, `webui`.
+- Umgesetzt: CasaOS-Stores als Quelle (geprüft an `IceWhaleTech/CasaOS-AppStore` und `bigbeartechworld/big-bear-casaos`, zusammen 668 Vorlagen, alle für amd64). Format: `Apps/<Name>/docker-compose.yml` mit `x-casaos` oben (Titel, Tagline, Kategorie, `main`, `port_map`, `scheme`, `index`, `tips.before_install`, `architectures`) und je Dienst (Beschreibungen zu Variablen, Pfaden, Ports). Das Backend liest daraus nur die Angaben für die Liste; übersetzt wird beim Installieren im Browser (`web/src/lib/compose/casaos.ts`):
+  - `/DATA/AppData/$AppID/…` → Datenordner der App (`./…`), andere Ordner unter `/DATA` → Vorschlag einer Freigabe (`suggest: media|share`), sonst ebenfalls im Datenordner. Nichts landet unter `/DATA` im RAM.
+  - `$AppID`, `$PUID`, `$PGID`, `$TZ` und Platzhalter wie `[CASAOS_IP]` werden ersetzt; offene Platzhalter (`[EUFY_USERNAME]`) werden zu Pflichtfeldern.
+  - `port_map`/`scheme`/`index` → Label `titanos.webui`; Hinweise des Autors werden im Panel angezeigt.
+  - App-Symbole der Stores (fremde Logos von fremden Servern) werden nicht geladen; es bleibt beim Monogramm.
+- Die beiden Stores stehen in der Quellenliste als Vorschlag mit „Hinzufügen“. Sie werden nie von selbst eingetragen: Ihre Apps sind von TitanOS nicht geprüft, und der offizielle Store lädt beim ersten Abruf rund 240 MB.
+- Für alle Vorlagen gilt: Das Panel nennt erweiterte Rechte (privilegiert, Host-Netzwerk, Docker-Socket, Wurzelverzeichnis, Capabilities) und warnt bei Pfaden außerhalb der Volumes. Geräte, die es auf dem NAS nicht gibt (z. B. `/dev/dri` ohne GPU, Raspberry-Pi-Geräte), werden weggelassen – mit ihnen startet der Container nicht.
+- Große Quellen: tar.gz-Archive werden beim Laden durchgereicht und nur die YAML-Dateien behalten (der offizielle CasaOS-Store ist wegen der Screenshots rund 240 MB groß). Beim täglichen Abgleich schickt titand das ETag mit; ein unverändertes Archiv wird nicht erneut geladen.
+- Das Formular schreibt nur zurück, was geändert wurde (`web/src/lib/compose/service.ts`): unberührte Einträge behalten Schreibweise, Kommentare und YAML-Anker.
+- Noch offen: eigener Katalog als Repo `ra5on/TitanOS-apps`, App-Symbole, Update-Hinweise aus der Quelle, Herkunft/Geheim-Schalter/Geräte im Editor, `x-titanos.hardware`, Ordnerauswahl, globales Terminal-Panel. CasaOS-Vorlagen enthalten oft feste Standardpasswörter und feste Containernamen (zweite Installation derselben App scheitert daran).
+
 **Docker: Container bearbeiten** (wichtigste Seite neben dem Speicher)
 - Formular mit klickbaren, einzeln editierbaren Zeilen in Abschnitten mit Kopfleiste und „… hinzufügen“-Knopf:
   - Allgemein: Name, Image, Netzwerk (bridge, host, eigene IP im LAN, none), Neustart-Richtlinie, WebUI-Adresse, Autostart, Privilegiert (mit Warnung).
@@ -250,7 +270,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - App-Quellen frei hinterlegbar (Git-Repository oder URL), täglich und per Knopf aktualisiert. Unterstützte Formate:
   1. TitanOS-Katalog: pro App eine `compose.yaml` mit Metadaten-Block `x-titanos`.
   2. Ordner mit einfachen Compose-Dateien (ohne Metadaten, Felder werden aus der Compose-Datei abgeleitet).
-  3. CasaOS-kompatible Stores (Compose mit eigenen Metadaten) – Format vor der Umsetzung genau prüfen.
+  3. CasaOS-kompatible Stores (Compose mit eigenen Metadaten `x-casaos`).
 - `x-titanos` beschreibt pro App: Name, Symbol, Kategorie, Beschreibung; pro Variable Bezeichnung, Hilfetext, Standardwert, `required`, `secret: generate`; pro Pfad Bezeichnung und Vorschlag (`appdata`, `media`, …); pro Port Bezeichnung und `webui: true`.
 - Installation in einem Seitenpanel, alles vorausgefüllt. Jedes Feld zeigt seine Herkunft: „aus Vorlage“, „von TitanOS ergänzt“, „automatisch erzeugt“, „bitte ausfüllen“. Zusätzlich direkt im Panel „Eigene Variable / Eigener Pfad / Eigener Port“ (Herkunft „eigene“, gleiche Prüfungen wie im Container-Editor; eine eigene Variable mit gleichem Namen ersetzt den Vorlagenwert mit Hinweis).
 - TitanOS ergänzt selbstständig: Zeitzone vom System, PUID/PGID, Appdata-Pfade auf dem schnellsten Volume, Medienpfade aus passenden Shares, freie Ports (bei Konflikt nächster freier Port mit Hinweis), Geheimnisse zufällig erzeugt in `.env`.

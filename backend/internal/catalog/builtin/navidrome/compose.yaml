@@ -1,0 +1,28 @@
+x-titanos:
+  name: Navidrome
+  category: media
+  description:
+    de: Eigener Musik-Streaming-Server für deine Sammlung.
+    en: Your own music streaming server for your collection.
+  paths:
+    /data:
+      label: { de: Daten, en: Data }
+    /music:
+      label: { de: Musik, en: Music }
+      suggest: media
+  ports:
+    "4533":
+      label: WebUI
+      webui: true
+
+services:
+  navidrome:
+    image: deluan/navidrome:latest
+    restart: unless-stopped
+    environment:
+      TZ: ""
+    volumes:
+      - "./data:/data"
+      - "./music:/music:ro"
+    ports:
+      - "4533:4533"

@@ -41,6 +41,11 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
 	);
 }
 
+/** The text for a key that is put together at run time, or `fallback` if there is none. */
+export function tOr(key: string, fallback: string): string {
+	return key in de ? t(key as MessageKey) : fallback;
+}
+
 /** The text for an error code from the API, or a general one if the code is unknown. */
 export function errorText(code: string): string {
 	const key = `error.${code}`;

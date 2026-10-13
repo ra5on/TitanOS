@@ -1,0 +1,290 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/coder/websocket"
+
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+)
+
+var dockerErrors = []struct {
+	err    error
+	status int
+	code   string
+}{
+	{docker.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable"},
+	{docker.ErrUnknownVolume, http.StatusBadRequest, "unknown_volume"},
+	{docker.ErrNotRunning, http.StatusConflict, "docker_not_running"},
+	{docker.ErrInvalidName, http.StatusBadRequest, "invalid_app_name"},
+	{docker.ErrInvalidEnv, http.StatusBadRequest, "invalid_env"},
+	{docker.ErrExists, http.StatusConflict, "app_exists"},
+	{docker.ErrNotFound, http.StatusNotFound, "docker_not_found"},
+	{docker.ErrBusy, http.StatusConflict, "app_busy"},
+	{docker.ErrDisabled, http.StatusConflict, "read_only"},
+}
+
+func writeDockerError(w http.ResponseWriter, err error) {
+	var invalid *docker.InvalidComposeError
+	if errors.As(err, &invalid) {
+		// What Docker said about the file is the useful part.
+		writeError(w, http.StatusBadRequest, "invalid_compose", invalid.Detail)
+		return
+	}
+	if errors.Is(err, docker.ErrInvalid) {
+		writeError(w, http.StatusBadRequest, "invalid_compose", "")
+		return
+	}
+	for _, known := range dockerErrors {
+		if errors.Is(err, known.err) {
+			writeError(w, known.status, known.code, known.err.Error())
+			return
+		}
+	}
+	slog.Error("docker action failed", "err", err)
+	writeError(w, http.StatusInternalServerError, "docker_failed", err.Error())
+}
+
+func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.opts.Docker.Status(r.Context()))
+}
+
+func (s *Server) handleDockerSettings(w http.ResponseWriter, r *http.Request) {
+	var settings docker.Settings
+	if !readJSON(w, r, &settings) {
+		return
+	}
+	if err := s.opts.Docker.SetSettings(settings, s.opts.Storage.Names()); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("docker settings changed", "enabled", settings.Enabled, "volume", settings.Volume, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {
+	id, action := r.PathValue("id"), r.PathValue("action")
+	if err := s.opts.Docker.Action(r.Context(), id, action); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("container "+action, "container", id, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleContainerRemove(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.opts.Docker.Remove(r.Context(), id); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("container removed", "container", id, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
+	tail, _ := strconv.Atoi(r.URL.Query().Get("tail"))
+	if tail == 0 {
+		tail = 300
+	}
+	logs, err := s.opts.Docker.Logs(r.Context(), r.PathValue("id"), tail)
+	if err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"logs": logs})
+}
+
+func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name, Compose string
+		// Env holds secrets; they are stored apart from the compose file.
+		Env map[string]string
+	}
+	// A compose file may be larger than the usual request.
+	r.Body = http.MaxBytesReader(w, r.Body, 512*1024)
+	if !readJSONBody(w, r, &req) {
+		return
+	}
+	if err := s.opts.Docker.CreateApp(r.Context(), req.Name, req.Compose, req.Env); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("app created from a compose file", "app", req.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) handleAppCompose(w http.ResponseWriter, r *http.Request) {
+	compose, err := s.opts.Docker.Compose(r.PathValue("name"))
+	if err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"compose": compose})
+}
+
+func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.opts.Docker.RemoveApp(r.Context(), name); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("app removed (data kept)", "app", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAppSetCompose(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Compose string }
+	r.Body = http.MaxBytesReader(w, r.Body, 512*1024)
+	if !readJSONBody(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.opts.Docker.SetCompose(r.Context(), name, req.Compose); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("app changed", "app", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.opts.Docker.UpdateApp(r.Context(), name); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("app update started", "app", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// handleUpdatesCheck asks the registries now instead of waiting for the next round.
+func (s *Server) handleUpdatesCheck(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Docker.CheckUpdates(r.Context()); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	s.handleDocker(w, r)
+}
+
+// handleUpdatesApply updates every app that has a newer image available.
+func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
+	apps := s.opts.Docker.AppsWithUpdates(r.Context())
+	for _, app := range apps {
+		if err := s.opts.Docker.UpdateApp(r.Context(), app); err != nil && !errors.Is(err, docker.ErrBusy) {
+			writeDockerError(w, err)
+			return
+		}
+	}
+	slog.Info("update of all apps started", "apps", apps, "by", currentUser(r).Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusAccepted, map[string][]string{"apps": apps})
+}
+
+// consoleIdle ends a console nobody typed into for this long.
+const consoleIdle = 15 * time.Minute
+
+// handleContainerConsole connects a WebSocket to a shell inside a
+// container. Binary messages carry the terminal data in both directions; a
+// text message {"cols":80,"rows":24} tells the size of the terminal.
+//
+// A shell in a container is a way into the system. It needs an
+// administrator who entered the password again within the last minutes.
+func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) {
+	user, id := currentUser(r), r.PathValue("id")
+	cookie, err := r.Cookie(s.cookieName())
+	if err != nil || !s.sessions.Confirmed(cookie.Value) {
+		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
+		return
+	}
+	// Accept checks that the page asking is this site, not another one.
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.CloseNow()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	stream, resize, err := s.opts.Docker.Console(ctx, id)
+	if err != nil {
+		conn.Close(websocket.StatusInternalError, "console could not be opened")
+		return
+	}
+	defer stream.Close()
+	slog.Info("console opened", "container", id, "user", user.Name, "ip", remoteIP(r))
+	defer slog.Info("console closed", "container", id, "user", user.Name, "ip", remoteIP(r))
+
+	idle := time.AfterFunc(consoleIdle, cancel)
+	defer idle.Stop()
+
+	go func() {
+		defer cancel()
+		buf := make([]byte, 32*1024)
+		for {
+			n, err := stream.Read(buf)
+			if n > 0 {
+				if conn.Write(ctx, websocket.MessageBinary, buf[:n]) != nil {
+					return
+				}
+			}
+			if err != nil {
+				// The shell ended.
+				conn.Close(websocket.StatusNormalClosure, "")
+				return
+			}
+		}
+	}()
+
+	for {
+		kind, data, err := conn.Read(ctx)
+		if err != nil {
+			return
+		}
+		idle.Reset(consoleIdle)
+		if kind == websocket.MessageText {
+			var size struct{ Cols, Rows int }
+			if json.Unmarshal(data, &size) == nil {
+				resize(size.Cols, size.Rows)
+			}
+			continue
+		}
+		if _, err := stream.Write(data); err != nil {
+			return
+		}
+	}
+}
+
+// handleConfirm marks the session as confirmed after the password was
+// entered again. Consoles ask for this.
+func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Password string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	key := "user:" + user.Name
+	if wait := s.limiter.RetryAfter(key); wait > 0 {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return
+	}
+	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
+		return
+	}
+	if cookie, err := r.Cookie(s.cookieName()); err == nil {
+		s.sessions.Confirm(cookie.Value)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleConfirmed(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(s.cookieName())
+	writeJSON(w, http.StatusOK, map[string]bool{"confirmed": err == nil && s.sessions.Confirmed(cookie.Value)})
+}
