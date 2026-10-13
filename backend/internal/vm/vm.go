@@ -33,6 +33,8 @@ import (
 )
 
 const (
+	// bridge is the bridge of the NAS that VMs join for an address of their own.
+	bridge    = "br0"
 	configDir = "vms"
 	maxDisks  = 8
 	gib       = 1 << 30
@@ -55,6 +57,7 @@ var (
 	ErrNotRunning    = errors.New("vm: the VM is not running")
 	ErrNotConfirmed  = errors.New("vm: deleting the disks was not confirmed")
 	ErrPreparing     = errors.New("vm: the disks of the VM are still being prepared")
+	ErrNoBridge      = errors.New("vm: the network bridge is not set up")
 	ErrBadFolder     = errors.New("vm: the folder is not a folder on a volume")
 	ErrBadImage      = errors.New("vm: not a disk image on a volume or a free disk")
 )
@@ -132,6 +135,10 @@ type VM struct {
 	// the firmware's settings depend on it.
 	TPM        bool `json:"tpm"`
 	SecureBoot bool `json:"secureBoot"`
+	// Network is "bridge" for a VM with an address of its own in the
+	// network of the NAS, which needs the bridge br0. Anything else is
+	// "user": outgoing connections through the NAS only.
+	Network string `json:"network"`
 	// PCI devices (0000:01:00.0) and USB devices (046d:c52b) handed to the guest.
 	PCI []string `json:"pci"`
 	USB []string `json:"usb"`
@@ -516,6 +523,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	} else {
 		vm.Exclusive = false
 	}
+	if vm.Network != "bridge" {
+		vm.Network = "user"
+	}
 	if err := m.checkFolders(vm.Folders); err != nil {
 		return err
 	}
@@ -717,6 +727,7 @@ type Change struct {
 	Folders     []Folder `json:"folders"`
 	PCI         []string `json:"pci"`
 	USB         []string `json:"usb"`
+	Network     string   `json:"network"`
 }
 
 // Update changes a VM. Everything but the description and the autostart
@@ -733,6 +744,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	changed.Description, changed.Autostart = change.Description, change.Autostart
 	changed.MemoryMiB, changed.VCPUs, changed.ISO = change.MemoryMiB, change.VCPUs, change.ISO
 	changed.CPUPin, changed.Exclusive, changed.Folders, changed.PCI, changed.USB = change.CPUPin, change.Exclusive, change.Folders, change.PCI, change.USB
+	changed.Network = change.Network
 	if err := m.prepare(ctx, &changed, mounted); err != nil {
 		return err
 	}
@@ -799,6 +811,11 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	m.mu.Unlock()
 	if job != nil {
 		return ErrPreparing
+	}
+	if vm.Network == "bridge" {
+		if _, err := os.Stat(filepath.Join(m.sysDir, "class/net", bridge)); err != nil {
+			return ErrNoBridge
+		}
 	}
 	if vm.ISO != "" {
 		if _, err := m.checkISO(vm.ISO); err != nil {

@@ -103,10 +103,15 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		devices = devices.with(share)
 	}
 	socket, serial := m.VNCSocket(vm.Name), m.SerialSocket(vm.Name)
+	// Outgoing connections through the NAS, without an address of its own
+	// in the network; or a port on the bridge of the NAS, where the VM is
+	// a machine like any other in the network.
+	card := el("interface", "type", "user").with(el("mac", "address", vm.MAC), el("model", "type", nic))
+	if vm.Network == "bridge" {
+		card = el("interface", "type", "bridge").with(el("source", "bridge", bridge), el("mac", "address", vm.MAC), el("model", "type", nic))
+	}
 	devices = devices.with(
-		// Outgoing connections through the NAS; the VM has no address of
-		// its own in the network.
-		el("interface", "type", "user").with(el("mac", "address", vm.MAC), el("model", "type", nic)),
+		card,
 		// The screen is reachable through a socket only titand can open,
 		// never through a port in the network.
 		el("graphics", "type", "vnc", "socket", socket).with(el("listen", "type", "socket", "socket", socket)),
