@@ -11,6 +11,9 @@ NAME="TitanOS"
 PRETTY_NAME="TitanOS $version${TITANOS_DEV:+ (development build)}"
 ID=titanos
 ID_LIKE=debian
+# Plugins (systemd-sysext images) are built for this level; systemd lays
+# only those over the system that name it.
+SYSEXT_LEVEL=1
 VERSION="$version"
 VERSION_ID="$version"
 VERSION_CODENAME=trixie
@@ -40,6 +43,25 @@ ln -sf /dev/null /etc/systemd/system/systemd-firstboot.service
 # mdadm's own monitor only sends mail and fails without an address. titand
 # watches the arrays itself.
 ln -sf /dev/null /etc/systemd/system/mdmonitor.service
+
+# Virtual machines: QEMU runs as its own user, not as root. It reaches the
+# disks of the VMs and installation media in shares through the group all
+# accounts are in. libvirt must not change the owner of those files, which
+# it would do for every start and stop of a VM.
+usermod -aG users libvirt-qemu
+cat >> /etc/libvirt/qemu.conf <<'CONF'
+
+# TitanOS: files of VMs keep their owner.
+dynamic_ownership = 0
+security_driver = "none"
+# The emulated TPM runs as the same user as QEMU; its state lies in the
+# VM's folder on a volume, where only that user gets in.
+swtpm_user = "libvirt-qemu"
+swtpm_group = "kvm"
+CONF
+# A new TPM gets a certificate from a local authority, which the emulator
+# keeps here and has to be able to write.
+chown -R libvirt-qemu /var/lib/swtpm-localca
 
 # No RAID tools in the initramfs. The system boots from the stick, never from
 # an array. Without mdadm the arrays stay untouched until the real system is

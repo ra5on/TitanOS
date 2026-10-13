@@ -88,6 +88,23 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "volume_has_docker", "Docker keeps its data on this volume")
 		return
 	}
+	// Disks of VMs and installed plugins would go with the volume.
+	for _, machine := range s.opts.VMs.List(nil) {
+		for _, disk := range machine.Disks {
+			if machine.Volume == name || disk.Volume == name {
+				writeError(w, http.StatusConflict, "volume_has_vms", "the volume holds the VM "+machine.Name)
+				return
+			}
+		}
+		if machine.Volume == name {
+			writeError(w, http.StatusConflict, "volume_has_vms", "the volume holds the VM "+machine.Name)
+			return
+		}
+	}
+	if s.opts.Plugins.Volume() == name {
+		writeError(w, http.StatusConflict, "volume_has_plugins", "the plugins are installed on this volume")
+		return
+	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Delete(r.Context(), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)

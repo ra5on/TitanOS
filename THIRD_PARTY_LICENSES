@@ -27,6 +27,9 @@ Docker CLI, Compose       Apache-2.0              Debian source packages
 containerd, runc          Apache-2.0              Debian source packages
 QEMU                      GPL-2.0 and others      Debian source packages
 libvirt                   LGPL-2.1-or-later       Debian source packages
+OVMF (EDK II)             BSD-2-Clause-Patent     Debian source packages
+swtpm, libtpms            BSD-3-Clause            Debian source packages
+virtiofsd                 Apache-2.0, BSD-3       Debian source packages
 Svelte / SvelteKit        MIT                     https://github.com/sveltejs
 Go standard library       BSD-3-Clause            https://go.dev
 golang.org/x/crypto, sys  BSD-3-Clause            https://pkg.go.dev/golang.org/x/crypto
