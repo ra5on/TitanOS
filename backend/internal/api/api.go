@@ -26,9 +26,11 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -55,9 +57,13 @@ type Options struct {
 	ConfigBackup *configbackup.Manager
 	// Diagnose reads the logs and packs bundles for bug reports.
 	Diagnose *diagnose.Manager
-	Settings *system.Settings
-	Power    system.Power
-	Version  string
+	// SSH switches the SSH access; Certificate holds the certificate of
+	// the web UI and is nil in development mode, where there is no TLS.
+	SSH         *sshd.Manager
+	Certificate *tlscert.Manager
+	Settings    *system.Settings
+	Power       system.Power
+	Version     string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -128,6 +134,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/account/2fa/begin", s.requireUser(s.handleTwoFactorBegin))
 	mux.HandleFunc("POST /api/v1/account/2fa/enable", s.requireUser(s.handleTwoFactorEnable))
 	mux.HandleFunc("POST /api/v1/account/2fa/disable", s.requireUser(s.handleTwoFactorDisable))
+	mux.HandleFunc("GET /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeys))
+	mux.HandleFunc("POST /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeyAdd))
+	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", s.requireUser(s.handleAccountKeyRemove))
 
 	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
@@ -199,6 +208,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
+	mux.HandleFunc("GET /api/v1/system/ssh", s.requireAdmin(s.handleSSH))
+	mux.HandleFunc("PUT /api/v1/system/ssh", s.requireAdmin(s.handleSSHChange))
+	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
+	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
+	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 

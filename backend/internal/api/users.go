@@ -85,6 +85,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
+	s.opts.SSH.Kick()
 	writeJSON(w, http.StatusCreated, accountOf(user))
 }
 
@@ -123,6 +124,8 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("account role changed", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
+	// SSH is for owners and administrators only.
+	s.opts.SSH.Kick()
 	writeJSON(w, http.StatusOK, accountOf(user))
 }
 
@@ -176,6 +179,7 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	s.sessions.DeleteUser(target.Name, keep)
 	slog.Info("password changed", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
+	s.opts.SSH.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -205,5 +209,6 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("account deleted", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
+	s.opts.SSH.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }
