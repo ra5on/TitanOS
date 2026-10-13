@@ -19,6 +19,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/network"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -59,7 +60,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -71,6 +72,13 @@ func newTestServer(t *testing.T) *testServer {
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
 	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// loadedNotify returns a notifier without any channel.
+func loadedNotify(store *config.Store) *notify.Manager {
+	m := notify.NewManager(store)
 	m.Load()
 	return m
 }
@@ -398,7 +406,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -805,6 +813,35 @@ func TestNetworkIsForAdministrators(t *testing.T) {
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
 	for _, tc := range [][2]string{{"GET", "/api/v1/network"}, {"PUT", "/api/v1/network"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/network/revert"}, {"PUT", "/api/v1/system/timezone"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestNotificationsKeepTheirSecrets(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	settings := map[string]any{"language": "de", "minSeverity": "warning",
+		"ntfy": map[string]any{"enabled": true, "url": "http://127.0.0.1:1/topic", "token": "tk_secret"}}
+	res, body := ts.request("PUT", "/api/v1/notifications/settings", settings)
+	if res.StatusCode != http.StatusOK || strings.Contains(string(body), "tk_secret") || !strings.Contains(string(body), `"ntfy":true`) {
+		t.Errorf("settings: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/notifications/settings", map[string]any{"language": "xx", "minSeverity": "warning"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_notify_settings" {
+		t.Errorf("unknown language: %d %s", res.StatusCode, body)
+	}
+	// Nothing listens there: the test says so instead of claiming success.
+	if res, body := ts.request("POST", "/api/v1/notifications/test", map[string]string{"channel": "ntfy"}); res.StatusCode != http.StatusBadGateway || errorCode(t, body) != "notify_test_failed" {
+		t.Errorf("test without a server: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/notifications", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"messages":[]`) {
+		t.Errorf("messages: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/notifications"}, {"GET", "/api/v1/notifications/settings"}, {"PUT", "/api/v1/notifications/settings"}, {"POST", "/api/v1/notifications/test"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
