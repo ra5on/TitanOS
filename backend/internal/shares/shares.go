@@ -30,9 +30,9 @@ import (
 
 const (
 	configFile = "shares/shares.json"
-	// usersGID is the group "users" of Debian. All accounts are in it, and
+	// UsersGID is the group "users" of Debian. All accounts are in it, and
 	// everything in a share belongs to it.
-	usersGID = 100
+	UsersGID = 100
 	// recycleDir is where Samba moves deleted files, per user.
 	recycleDir = ".recycle"
 )
@@ -126,7 +126,7 @@ type Manager struct {
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
-		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: usersGID,
+		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: UsersGID,
 		sambaConf: "/etc/samba/smb.conf", exports: "/etc/exports", nfsRoot: "/srv/nfs", runDir: "/run/titanos",
 		kick: make(chan struct{}, 1),
 	}
@@ -652,7 +652,7 @@ func renderExports(shares []Share, root string) string {
 		for _, client := range share.NFS.Clients {
 			// Every NFS client writes as nobody:users, so that files fit the
 			// share's group whatever user numbers the client has.
-			fmt.Fprintf(&b, " %s(rw,nohide,sync,no_subtree_check,all_squash,anonuid=65534,anongid=%d)", client, usersGID)
+			fmt.Fprintf(&b, " %s(rw,nohide,sync,no_subtree_check,all_squash,anonuid=65534,anongid=%d)", client, UsersGID)
 		}
 		b.WriteString("\n")
 	}

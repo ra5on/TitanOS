@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes und Freigaben funktionieren; Dateimanager, Docker und VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
+> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes, Freigaben und der Dateimanager funktionieren; Docker und VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -31,6 +31,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Darstellung nach Wunsch.** Themes, Akzentfarben, Glas-Effekt, Eckenradius, Schriftgröße, Dichte und Hintergrund, mit Vorschau und Export als Datei.
 - **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
 - **Freigaben.** SMB mit Rechten pro Konto, Gastzugriff nur lesend, Papierkorb und Time-Machine-Ziel; NFS für ausgewählte Rechner. Dazu fertige Adressen zum Verbinden.
+- **Dateimanager im Browser.** Dateien und ganze Ordner hochladen, auch per Drag-and-drop; große Uploads lassen sich pausieren und nach einer Unterbrechung fortsetzen. Dazu herunterladen (auch als Zip), umbenennen und löschen in den Papierkorb.
 - **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
 - **Deutsch und Englisch.**
 
@@ -57,13 +58,17 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 </table>
 
 <p align="center">
+  <img src="docs/screenshots/dateien.png" alt="Dateien: Freigaben links, Dateiliste und abgeschlossene Uploads" width="900"><br>
+  Dateimanager
+</p>
+
+<p align="center">
   <img src="docs/screenshots/einrichtung.png" alt="Ersteinrichtung: Besitzerkonto anlegen" width="600"><br>
   Ersteinrichtung beim ersten Start
 </p>
 
 ## Was geplant ist
 
-- **Dateimanager.** Dateien im Browser hochladen (auch per Drag-and-drop), herunterladen, umbenennen und löschen.
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
 - **Docker mit App-Store.** Eigene App-Quellen; Vorlagen füllen Variablen, Pfade und Ports von selbst aus. Jeder Container lässt sich als Formular oder als Compose-Datei bearbeiten.
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI, Durchreichen von GPU und iGPU, NAS-Ordner in der VM per virtiofs, Konsole im Browser.

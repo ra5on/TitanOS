@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -30,6 +31,7 @@ type Options struct {
 	Monitor *system.Monitor
 	Storage *storage.Manager
 	Shares  *shares.Manager
+	Files   *files.Manager
 	Power   system.Power
 	Version string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -93,6 +95,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
 	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
 	mux.HandleFunc("DELETE /api/v1/shares/{name}", s.requireAdmin(s.handleDeleteShare))
+
+	// The file manager. Every request names a root the account has access to.
+	mux.HandleFunc("GET /api/v1/files/roots", s.requireUser(s.handleFileRoots))
+	mux.HandleFunc("GET /api/v1/files/list", s.requireUser(s.handleFileList))
+	mux.HandleFunc("GET /api/v1/files/download", s.requireUser(s.handleFileDownload))
+	mux.HandleFunc("GET /api/v1/files/zip", s.requireUser(s.handleFileZip))
+	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
+	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
+	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
+	mux.HandleFunc("GET /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadStatus))
+	mux.HandleFunc("PATCH /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadChunk))
+	mux.HandleFunc("POST /api/v1/files/uploads/{id}/finish", s.requireUser(s.handleUploadFinish))
+	mux.HandleFunc("DELETE /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadAbort))
 
 	mux.HandleFunc("/api/", handleAPINotFound)
 	mux.Handle("/", uiHandler(opts.UI))
