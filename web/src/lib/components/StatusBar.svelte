@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { formatTime } from '#lib/format.ts';
+	import { formatPercent, formatTime } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type Props = { note?: string };
@@ -11,6 +12,20 @@
 	$effect(() => {
 		const timer = setInterval(() => (now = new Date()), 10000);
 		return () => clearInterval(timer);
+	});
+
+	const left = $derived.by(() => {
+		if (!system.reachable) return t('status.unreachable');
+		const volumes = storage.status?.volumes ?? [];
+		if (volumes.length === 0) return t('status.noVolumes');
+		return volumes
+			.map((volume) => {
+				const state = t(`state.${volume.state}`);
+				return volume.sync
+					? t('status.volumeSync', { name: volume.name, state, percent: formatPercent(volume.sync.percent) })
+					: t('status.volume', { name: volume.name, state });
+			})
+			.join(' · ');
 	});
 
 	const right = $derived.by(() => {
@@ -25,7 +40,7 @@
 </script>
 
 <footer class="mono">
-	<span>{note || (system.reachable ? t('status.noVolumes') : t('status.unreachable'))}</span>
+	<span>{note || left}</span>
 	<span>{right}</span>
 </footer>
 

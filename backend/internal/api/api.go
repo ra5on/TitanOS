@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
@@ -26,6 +27,7 @@ type Options struct {
 	Store   *config.Store
 	Users   *auth.Users
 	Monitor *system.Monitor
+	Storage *storage.Manager
 	Power   system.Power
 	Version string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -68,6 +70,15 @@ func New(opts Options) *Server {
 
 	mux.HandleFunc("GET /api/v1/system", s.requireUser(s.handleSystem))
 	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
+
+	// Everyone may see the volumes; only administrators may change disks.
+	mux.HandleFunc("GET /api/v1/storage", s.requireUser(s.handleStorage))
+	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
+	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireAdmin(s.handleCreateVolume))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireAdmin(s.handleDeleteVolume))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireAdmin(s.handleAddVolumeDisk))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireAdmin(s.handleRemoveVolumeDisk))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireAdmin(s.handleCheckVolume))
 
 	mux.HandleFunc("/api/", handleAPINotFound)
 	mux.Handle("/", uiHandler(opts.UI))

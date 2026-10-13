@@ -15,7 +15,7 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 | Nach dem Boot | Stick wird nur noch für Konfigurationsänderungen und Updates beschrieben |
 | Updates | zwei Systemdateien (A/B) auf dem Stick, Rollback = alte Datei booten |
 | Auslieferung | Zip zum Kopieren auf einen FAT32-Stick. Kein Pflicht-`.img` (optional später im CI) |
-| Speicher | klassisches RAID per **mdadm** (0, 1, 5, 6, 10) mit ext4/XFS; Btrfs optional für Mirror-Pools mit Snapshots; ZFS ggf. später |
+| Speicher | klassisches RAID per **mdadm** (0, 1, 5, 6, 10) mit ext4/XFS (umgesetzt); Btrfs optional für Mirror-Pools mit Snapshots (noch offen); ZFS ggf. später |
 | Backend | **Go**, ein einzelnes statisches Binary (`titand`) |
 | Frontend | **Svelte + TypeScript**, als statische Dateien per `go:embed` ins Binary eingebettet |
 | Veröffentlichung | GitHub: https://github.com/ra5on/TitanOS (öffentlich), Releases per GitHub Actions |
@@ -34,7 +34,7 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 ## Offene Punkte
 
 - **CLA:** Entwurf liegt in `CLA.md` (Lizenzeinräumung ohne Übertragung des Urheberrechts, Recht zur Unterlizenzierung inkl. kommerziell und Apache-2.0, Patentlizenz) – vor Nutzung prüfen lassen. Bot: gehosteter CLA Assistant (cla-assistant.io) mit dem CLA-Text als GitHub Gist. Die „Lite“-GitHub-Action (contributor-assistant/github-action) ist seit März 2026 archiviert – nicht verwenden.
-- Initramfs: Debian `live-boot` ist im Einsatz und in QEMU getestet (`toram=filesystem.squashfs`, `live-media-path=` pro A/B-Eintrag, `overlay-size=512M`). Offen: Findet live-boot den Stick nicht sofort, durchsucht es auch andere Platten und bindet deren Dateisysteme lesend ein – vor Phase 3 (Datenplatten) prüfen, ggf. eigenes initramfs-Skript.
+- Initramfs: Debian `live-boot` ist im Einsatz und in QEMU getestet (`toram=filesystem.squashfs`, `live-media-path=` pro A/B-Eintrag, `overlay-size=512M`). Ein initramfs-Skript wartet bis zu 30 Sekunden auf den Stick, damit live-boot ihn beim ersten Versuch findet und nicht alle anderen Platten durchsucht. Nur wenn der Stick gar nicht auftaucht, sucht live-boot weiter und bindet dabei fremde Dateisysteme lesend ein.
 
 ## Noch nicht entworfen, aber Pflicht vor dem ersten Release
 
@@ -74,6 +74,10 @@ Grundsätze:
 - Schreibzugriffe auf `/config` erfolgen atomar (temp-Datei + rename) und selten.
 - Der Stick wird nur bei Bedarf eingebunden (systemd-Automount auf `/efi`, `/config` ist ein Link auf `/efi/config`) und nach 30 Sekunden ohne Zugriff wieder ausgehängt. titand liest `/config` deshalb beim Start und hält es im Speicher; kein Zugriff auf `/config` in zyklischen Abfragen, keine offenen Dateien oder Verzeichnisse dort.
 - Schwere Daten (Docker, VM-Images, große Logs) liegen nie im Overlay, sondern auf einem Volume.
+- Volumes: ein mdadm-Array mit einem Dateisystem (ext4 oder XFS), eingebunden unter `/mnt/<name>`. Der Name hat höchstens 12 Zeichen (`[a-z][a-z0-9-]*`), weil er auch Array-Name und Dateisystem-Label ist. Welche Arrays TitanOS gehören, steht in `/config/storage/volumes.json` (Array-UUID, Dateisystem-UUID); Gerätenamen wie `sda` ändern sich zwischen Neustarts und werden nie gespeichert.
+- Jede Mitgliedsplatte bekommt eine GPT mit einer RAID-Partition, die 128 MiB der Platte frei lässt, damit eine etwas kleinere Ersatzplatte noch passt.
+- Arrays werden nach dem Start von udev zusammengesetzt, nicht im initramfs: mdadm ist dort bewusst nicht enthalten. titand bindet die Volumes ein, sobald ihr Array läuft, auch mit fehlender Platte.
+- Im Entwicklungsmodus (`titand -dev`) verändert titand keine Platten.
 - journald im RAM mit Größenbegrenzung.
 - Firmware ausdünnen: nur gängige NICs, HBAs und GPUs – Intel-GPU-Firmware (GuC/HuC) und Intel-NPU-Firmware müssen drin bleiben.
 - RAM-Ziel: komprimiertes Systemabbild ca. 0,5–0,8 GB; Grundsystem mit allen Diensten (Kernel, titand, Samba/NFS, Docker-Engine, libvirt) ca. 1,0–1,5 GB, ohne Container und VMs. Plugins liegen auf einem Volume und belegen keinen festen RAM.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
@@ -49,12 +50,21 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
 	ts.client = ts.newClient()
 	return ts
+}
+
+func loadedStorage(t *testing.T, store *config.Store) *storage.Manager {
+	t.Helper()
+	m := storage.NewManager(store)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	return m
 }
 
 // newClient returns a client with its own cookies: a separate browser.
@@ -371,5 +381,45 @@ func TestUI(t *testing.T) {
 	}
 	if res, _ := ts.request("POST", "/", nil); res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST /: %d, want 405", res.StatusCode)
+	}
+}
+
+// These requests are refused before any disk is looked at, so the test is
+// safe on any machine.
+func TestStorageRefusals(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+
+	for _, tc := range []struct {
+		method, path string
+		body         any
+		status       int
+		code         string
+	}{
+		{"POST", "/api/v1/storage/volumes", map[string]any{"name": "Bad Name", "level": "raid1", "filesystem": "ext4"}, http.StatusBadRequest, "invalid_volume_name"},
+		{"POST", "/api/v1/storage/volumes", map[string]any{"name": "data", "level": "raid9", "filesystem": "ext4"}, http.StatusBadRequest, "invalid_level"},
+		{"POST", "/api/v1/storage/volumes", map[string]any{"name": "data", "level": "raid1", "filesystem": "ext4", "disks": []string{"sdx", "sdy"}}, http.StatusBadRequest, "not_confirmed"},
+		{"DELETE", "/api/v1/storage/volumes/data", map[string]any{"confirm": "data"}, http.StatusNotFound, "volume_not_found"},
+		{"POST", "/api/v1/storage/volumes/data/disks", map[string]any{"disk": "sdx", "erase": true}, http.StatusNotFound, "volume_not_found"},
+		{"POST", "/api/v1/storage/volumes/data/check", map[string]any{"action": "format"}, http.StatusBadRequest, "bad_request"},
+	} {
+		res, body := ts.request(tc.method, tc.path, tc.body)
+		if res.StatusCode != tc.status || errorCode(t, body) != tc.code {
+			t.Errorf("%s %s: %d %s, want %d %s", tc.method, tc.path, res.StatusCode, body, tc.status, tc.code)
+		}
+	}
+
+	// A plain user may look but not touch.
+	if _, err := ts.users.Create("gast", testPassword, auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	res, body := ts.do(guest, "POST", "/api/v1/storage/volumes", map[string]any{"name": "data"})
+	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "forbidden" {
+		t.Errorf("user creating a volume: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(ts.newClient(), "GET", "/api/v1/storage", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("storage without login: %d", res.StatusCode)
 	}
 }

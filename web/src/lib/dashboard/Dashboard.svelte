@@ -11,11 +11,12 @@
 	import { shell } from '#lib/shell.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { COLUMNS, defaultLayout, defaultPlacement, GAP, ROW_HEIGHT, sanitizeLayout, TILE_IDS, TILES, type TileId, type TilePlacement } from './tiles.ts';
+	import DisksTile from './tiles/DisksTile.svelte';
 	import NetworkTile from './tiles/NetworkTile.svelte';
 	import SystemTile from './tiles/SystemTile.svelte';
 	import VolumesTile from './tiles/VolumesTile.svelte';
 
-	const CONTENT: Record<TileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile };
+	const CONTENT: Record<TileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile, disks: DisksTile };
 
 	/** Below this width the tiles are stacked and cannot be arranged. */
 	const STACK_BELOW = 760;
