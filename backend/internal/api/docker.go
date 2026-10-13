@@ -321,7 +321,7 @@ func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) 
 // handleConfirm marks the session as confirmed after the password was
 // entered again. Consoles ask for this.
 func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password string }
+	var req struct{ Password, Code string }
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -334,6 +334,12 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
+		return
+	}
+	// With two-factor login the confirmation takes both factors as well.
+	if user.TwoFactor() && !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return
 	}
 	if cookie, err := r.Cookie(s.cookieName()); err == nil {

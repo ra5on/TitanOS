@@ -1,6 +1,7 @@
 <script lang="ts">
-	// First start: create the owner account. The other steps of the setup
-	// assistant (hostname, network, first volume) are not designed yet.
+	// First start: create the owner account. The assistant at /welcome
+	// takes over from there (name of the NAS, time zone, what to do next).
+	import { goto } from '$app/navigation';
 	import { ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session, setupOwner } from '#lib/session.svelte.ts';
@@ -35,6 +36,7 @@
 		busy = true;
 		try {
 			await setupOwner(wanted, password);
+			await goto('/welcome');
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		} finally {

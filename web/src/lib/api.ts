@@ -58,7 +58,7 @@ export const api = {
 
 export type Role = 'owner' | 'admin' | 'user';
 
-export type User = { name: string; role: Role };
+export type User = { name: string; role: Role; twoFactor: boolean };
 
 export type Session = {
 	configAvailable: boolean;
@@ -139,7 +139,7 @@ export type Volume = {
 
 export type StorageStatus = { disks: Disk[]; volumes: Volume[] };
 
-export type Account = { name: string; role: Role; created: string; smbReady: boolean };
+export type Account = { name: string; role: Role; created: string; smbReady: boolean; twoFactor: boolean };
 
 export type AccessLevel = 'ro' | 'rw';
 
