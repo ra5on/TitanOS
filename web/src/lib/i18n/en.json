@@ -1454,5 +1454,18 @@
 	"error.update_too_old": "This version cannot go to the new release directly:",
 	"error.update_no_space": "There is not enough room on the stick for a second system:",
 	"error.update_unconfirmed": "The running system is still on trial. Try again in a few minutes.",
-	"error.update_failed": "That did not work:"
+	"error.update_failed": "That did not work:",
+	"about.title": "About TitanOS",
+	"about.settingsDesc": "Version, license and the software TitanOS builds on.",
+	"about.version": "Version",
+	"about.slot": "System slot",
+	"about.kernel": "Kernel",
+	"about.base": "Base",
+	"about.baseText": "based on Debian 13",
+	"about.license": "License",
+	"about.licenseText": "TitanOS is Fair Source. Its own code is under the Functional Source License (FSL-1.1-ALv2): you may use, read, change and pass it on – only not to make a competing commercial product or a competing service out of it.",
+	"about.licenseLater": "Every version is put under the Apache License 2.0 two years after it came out. The date is on the page of each release.",
+	"about.licenseFull": "Show the license text",
+	"about.thirdParty": "Software by others",
+	"about.thirdPartyText": "The system image is a collection. The Linux kernel, the Debian packages and the libraries in use keep their own licenses; the sources of the GPL parts are linked with every release."
 }

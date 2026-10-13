@@ -1017,6 +1017,17 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	}
 }
 
+func TestAbout(t *testing.T) {
+	ts := newTestServer(t)
+	if res, _ := ts.request("GET", "/api/v1/about", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("without a login: %d", res.StatusCode)
+	}
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/about", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"version":"1.2.3"`) || !strings.Contains(string(body), `"thirdParty":`) {
+		t.Errorf("about: %d %s", res.StatusCode, body)
+	}
+}
+
 func TestPluginsAreForAdministrators(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
