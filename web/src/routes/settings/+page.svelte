@@ -53,6 +53,10 @@
 			<span class="name">{t('notify.settingsTitle')}</span>
 			<span class="muted">{t('notify.settingsDesc')}</span>
 		</a>
+		<a class="tile" href="/settings/stick">
+			<span class="name">{t('stick.title')}</span>
+			<span class="muted">{t('stick.settingsDesc')}</span>
+		</a>
 		<a class="tile" href="/settings/hardware">
 			<span class="name">{t('hardware.title')}</span>
 			<span class="muted">{t('hardware.settingsDesc')}</span>

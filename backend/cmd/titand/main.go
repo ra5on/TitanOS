@@ -20,6 +20,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -169,6 +170,23 @@ func run(opts options) error {
 	}
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
 
+	// Copies of /config on a volume: the stick is the only place where
+	// the configuration lives, and sticks wear out.
+	stickBackup := configbackup.NewManager(store, version.Version)
+	stickBackup.Disabled = opts.dev
+	if err := stickBackup.Load(); err != nil {
+		slog.Warn("backup settings not readable from /config", "err", err)
+	}
+	// A failure is reported once, and again only after a backup worked.
+	backupFailed := false
+	stickBackup.OnResult = func(volume string, err error) {
+		if err != nil && !backupFailed {
+			notifier.Notify(notify.Warning, "config_backup_failed", volume)
+		}
+		backupFailed = err != nil
+	}
+	go stickBackup.Run(ctx, volumes.Mounted)
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -189,6 +207,7 @@ func run(opts options) error {
 		Plugins:       extensions,
 		Network:       connection,
 		Notify:        notifier,
+		ConfigBackup:  stickBackup,
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
