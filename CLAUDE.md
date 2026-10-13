@@ -220,6 +220,9 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Löschen geht in den Papierkorb des Shares, wenn er aktiv ist; sonst endgültig mit Bestätigung. Verschieben und Kopieren großer Mengen als Hintergrundauftrag mit Fortschritt.
 - Rechte: Jede Aktion läuft mit den Rechten des angemeldeten Kontos und nur unterhalb von `/mnt`; symbolische Links dürfen nicht aus dem Share hinausführen. Hochgeladene Dateien gehören dem Konto, wie bei einem Upload per SMB.
 - Die Ordnerauswahl ist eine gemeinsame Komponente: auch im Container-Editor („Im Dateimanager öffnen“), bei virtiofs und bei der ISO-Auswahl für VMs.
+- Umsetzung: Jede Anfrage nennt eine Wurzel (`share/<name>` oder, für Administratoren, `volume/<name>`), auf die das Konto Zugriff hat. Alle Dateizugriffe laufen über `os.Root` und können die Wurzel nicht verlassen, auch nicht über symbolische Links. Ein Upload wird in Stücken von 8 MiB in eine versteckte Teildatei `.<name>.<id>.titanos-part` im Zielordner geschrieben; der Client fragt nach einer Unterbrechung den Stand ab und setzt dort fort.
+- Umgesetzt: Auflisten, Hochladen von Dateien und Ordnern (Knopf und Drag-and-drop) mit Pausieren, Fortsetzen, Abbrechen und Abfrage bei gleichem Namen, Herunterladen (Datei oder Zip), Neuer Ordner, Umbenennen, Löschen (Papierkorb bzw. endgültig mit Bestätigung).
+- Noch offen aus dem Konzept: Verschieben und Kopieren mit Ordnerauswahl, Suchen, Ansicht des Papierkorbs, die gemeinsame Ordnerauswahl-Komponente. Teildateien eines Uploads, der nie fortgesetzt wird, räumt titand nach 24 Stunden weg – aber nicht nach einem Neustart von titand.
 - Später: Vorschau (Bilder, Text, PDF, Video), Freigabe-Links mit Ablaufdatum.
 
 **Docker: Container bearbeiten** (wichtigste Seite neben dem Speicher)
