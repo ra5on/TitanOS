@@ -3,11 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -21,6 +24,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -66,7 +70,33 @@ func main() {
 	}
 }
 
+// journalWriter marks each log line with its level the way journald reads
+// it from a service's output ("<3>" is an error), so that the log view
+// can tell errors and warnings of titand from the rest.
+type journalWriter struct{ out io.Writer }
+
+func (w journalWriter) Write(line []byte) (int, error) {
+	prefix := "<6>"
+	switch {
+	case bytes.HasPrefix(line, []byte("ERROR")):
+		prefix = "<3>"
+	case bytes.HasPrefix(line, []byte("WARN")):
+		prefix = "<4>"
+	case bytes.HasPrefix(line, []byte("DEBUG")):
+		prefix = "<7>"
+	}
+	if _, err := w.out.Write(append([]byte(prefix), line...)); err != nil {
+		return 0, err
+	}
+	return len(line), nil
+}
+
 func run(opts options) error {
+	if !opts.dev {
+		// The journal keeps the time itself.
+		log.SetFlags(0)
+		log.SetOutput(journalWriter{os.Stderr})
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -208,6 +238,7 @@ func run(opts options) error {
 		Network:       connection,
 		Notify:        notifier,
 		ConfigBackup:  stickBackup,
+		Diagnose:      diagnose.NewManager(store, version.Version),
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,

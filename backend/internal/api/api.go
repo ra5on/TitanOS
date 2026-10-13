@@ -18,6 +18,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -52,9 +53,11 @@ type Options struct {
 	Notify   *notify.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
 	ConfigBackup *configbackup.Manager
-	Settings     *system.Settings
-	Power        system.Power
-	Version      string
+	// Diagnose reads the logs and packs bundles for bug reports.
+	Diagnose *diagnose.Manager
+	Settings *system.Settings
+	Power    system.Power
+	Version  string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -191,6 +194,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
 	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
+	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
+	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 
