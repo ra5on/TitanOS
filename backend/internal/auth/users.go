@@ -41,7 +41,15 @@ type User struct {
 	// weak, unsalted hash by today's standards, but the SMB protocol works
 	// with nothing else.
 	SMBHash string `json:"smbHash,omitempty"`
+	// TOTPSecret is the secret shared with the authenticator app; empty
+	// while two-factor login is off. RecoveryCodes are the hashes of the
+	// one-time codes for a lost phone.
+	TOTPSecret    string   `json:"totpSecret,omitempty"`
+	RecoveryCodes []string `json:"recoveryCodes,omitempty"`
 }
+
+// TwoFactor reports whether the account logs in with a second factor.
+func (u User) TwoFactor() bool { return u.TOTPSecret != "" }
 
 // firstUID is the lowest number given to an account's Linux user. It stays
 // clear of the system users and of the usual first user (1000) on other
@@ -103,11 +111,15 @@ type Users struct {
 	mu     sync.RWMutex
 	users  map[string]User
 	loaded bool
+	// pendingTOTP holds secrets that were handed out but not confirmed
+	// yet; usedStep the last time step a code was accepted for.
+	pendingTOTP map[string]string
+	usedStep    map[string]uint64
 }
 
 // NewUsers returns the accounts in store. Call Load before using them.
 func NewUsers(store *config.Store) *Users {
-	return &Users{store: store, users: map[string]User{}}
+	return &Users{store: store, users: map[string]User{}, pendingTOTP: map[string]string{}, usedStep: map[string]uint64{}}
 }
 
 func accountFile(name string) string {

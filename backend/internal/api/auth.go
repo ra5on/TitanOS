@@ -69,6 +69,12 @@ func (s *Server) ensureUsersLoaded() bool {
 type userResponse struct {
 	Name string    `json:"name"`
 	Role auth.Role `json:"role"`
+	// TwoFactor says whether the account logs in with a second factor.
+	TwoFactor bool `json:"twoFactor"`
+}
+
+func userOf(user auth.User) userResponse {
+	return userResponse{Name: user.Name, Role: user.Role, TwoFactor: user.TwoFactor()}
 }
 
 type sessionResponse struct {
@@ -88,7 +94,8 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	res.ConfigAvailable = s.ensureUsersLoaded()
 	res.SetupRequired = res.ConfigAvailable && s.opts.Users.Count() == 0
 	if user, ok := s.authenticate(r); ok {
-		res.User = &userResponse{Name: user.Name, Role: user.Role}
+		answer := userOf(user)
+		res.User = &answer
 		res.Version = s.opts.Version
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -97,6 +104,8 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 type credentials struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
+	// Code is the one-time code of an account with two-factor login.
+	Code string `json:"code"`
 }
 
 func (c *credentials) normalize() {
@@ -134,7 +143,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		slog.Info("owner account created", "user", user.Name, "ip", remoteIP(r))
 		s.opts.Shares.Kick()
 		if s.startSession(w, r, user) {
-			writeJSON(w, http.StatusCreated, userResponse{Name: user.Name, Role: user.Role})
+			writeJSON(w, http.StatusCreated, userOf(user))
 		}
 	}
 }
@@ -167,6 +176,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "wrong name or password")
 		return
 	}
+	if user.TwoFactor() {
+		// The password was right; say so by asking for the code, which
+		// an attacker without the password never gets to see.
+		if req.Code == "" {
+			writeError(w, http.StatusUnauthorized, "second_factor_required", "enter the code from your authenticator app")
+			return
+		}
+		if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+			s.limiter.Fail(userKey, ipKey)
+			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
+			writeError(w, http.StatusUnauthorized, "invalid_code", "the code is wrong or was used already")
+			return
+		}
+	}
 	s.limiter.Reset(userKey)
 	slog.Info("login", "user", user.Name, "ip", ip)
 	// Accounts from before shares existed get their SMB password now, the
@@ -175,7 +198,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.opts.Shares.Kick()
 	}
 	if s.startSession(w, r, user) {
-		writeJSON(w, http.StatusOK, userResponse{Name: user.Name, Role: user.Role})
+		writeJSON(w, http.StatusOK, userOf(user))
 	}
 }
 

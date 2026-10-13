@@ -4,7 +4,6 @@
 	import { logout, session } from '#lib/session.svelte.ts';
 	import Icon from './Icon.svelte';
 	import LanguageSwitch from './LanguageSwitch.svelte';
-	import PasswordDialog from './PasswordDialog.svelte';
 	import PowerDialog from './PowerDialog.svelte';
 
 	const user = $derived(session.data?.user);
@@ -13,7 +12,6 @@
 
 	let open = $state(false);
 	let power = $state<'restart' | 'shutdown' | null>(null);
-	let changingPassword = $state(false);
 	let root = $state<HTMLElement>();
 
 	function onWindowClick(event: MouseEvent) {
@@ -55,7 +53,7 @@
 					</span>
 				</div>
 				<hr />
-				<button type="button" role="menuitem" onclick={() => ((open = false), (changingPassword = true))}><Icon name="key" />{t('menu.password')}</button>
+				<a role="menuitem" href="/account" onclick={() => (open = false)}><Icon name="key" />{t('menu.account')}</a>
 				<button type="button" role="menuitem" onclick={openAppearance}><Icon name="palette" />{t('menu.appearance')}</button>
 				<div class="language"><Icon name="globe" /><span>{t('lang.label')}</span><LanguageSwitch /></div>
 				{#if canAdminister}
@@ -70,9 +68,7 @@
 	</div>
 {/if}
 
-{#if changingPassword && user}
-	<PasswordDialog name={user.name} self onclose={() => (changingPassword = false)} />
-{/if}
+
 
 {#if power}
 	<PowerDialog action={power} onclose={() => (power = null)} />

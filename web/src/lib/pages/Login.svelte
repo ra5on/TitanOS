@@ -8,15 +8,29 @@
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');
+	// Set once the password was right and the account asks for a second factor.
+	let needsCode = $state(false);
+	let code = $state('');
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		busy = true;
 		error = '';
 		try {
-			await login(name, password);
+			await login(name, password, code);
 		} catch (err) {
+			if (err instanceof ApiError && err.code === 'second_factor_required') {
+				needsCode = true;
+				return;
+			}
+			if (err instanceof ApiError && err.code === 'invalid_code') {
+				code = '';
+				error = errorText(err.code);
+				return;
+			}
 			password = '';
+			code = '';
+			needsCode = false;
 			if (err instanceof ApiError && err.code === 'rate_limited') {
 				error = t('auth.rateLimited', { seconds: err.retryAfter });
 			} else {
@@ -30,6 +44,14 @@
 
 <AuthCard title={t('auth.loginTitle')} hostname={session.data?.hostname}>
 	<form onsubmit={submit}>
+		{#if needsCode}
+			<p class="hint">{t('auth.codeHint')}</p>
+			<label>
+				<span>{t('auth.code')}</span>
+				<!-- svelte-ignore a11y_autofocus -->
+				<input class="field mono" type="text" bind:value={code} inputmode="numeric" autocomplete="one-time-code" spellcheck="false" required autofocus />
+			</label>
+		{:else}
 		<label>
 			<span>{t('auth.name')}</span>
 			<!-- svelte-ignore a11y_autofocus -->
@@ -39,6 +61,7 @@
 			<span>{t('auth.password')}</span>
 			<input class="field" type="password" bind:value={password} autocomplete="current-password" required />
 		</label>
+		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<button class="btn btn-primary" type="submit" disabled={busy}>{t('auth.login')}</button>
 	</form>
@@ -49,6 +72,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
+	}
+	.hint {
+		font-size: 0.875rem;
 	}
 	label {
 		display: flex;

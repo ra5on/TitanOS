@@ -32,8 +32,8 @@ export async function refreshSession() {
 	}
 }
 
-export async function login(name: string, password: string) {
-	await api.post<User>('/login', { name, password });
+export async function login(name: string, password: string, code = '') {
+	await api.post<User>('/login', { name, password, code });
 	await refreshSession();
 }
 

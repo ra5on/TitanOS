@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"sort"
 	"sync"
 	"time"
 )
@@ -133,4 +134,53 @@ func (s *Sessions) Confirmed(token string) bool {
 	defer s.mu.Unlock()
 	session, ok := s.sessions[sha256.Sum256([]byte(token))]
 	return ok && !session.Confirmed.IsZero() && s.now().Sub(session.Confirmed) < ConfirmFor
+}
+
+// SessionInfo is a session as its owner sees it in the list of devices.
+type SessionInfo struct {
+	// ID names the session without giving away its token.
+	ID        string    `json:"id"`
+	Created   time.Time `json:"created"`
+	LastSeen  time.Time `json:"lastSeen"`
+	RemoteIP  string    `json:"remoteIP"`
+	UserAgent string    `json:"userAgent"`
+	// Current marks the session the request came with.
+	Current bool `json:"current"`
+}
+
+func sessionID(key [sha256.Size]byte) string {
+	// A hash of the hash: the ID is shown in the browser and must not
+	// help anyone who sees it.
+	sum := sha256.Sum256(key[:])
+	return base64.RawURLEncoding.EncodeToString(sum[:12])
+}
+
+// List returns the sessions of an account, the newest first.
+func (s *Sessions) List(user, currentToken string) []SessionInfo {
+	current := sha256.Sum256([]byte(currentToken))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	s.prune(now)
+	list := []SessionInfo{}
+	for key, session := range s.sessions {
+		if session.User == user {
+			list = append(list, SessionInfo{ID: sessionID(key), Created: session.Created, LastSeen: session.LastSeen, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Current: key == current})
+		}
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].LastSeen.After(list[j].LastSeen) })
+	return list
+}
+
+// DeleteByID ends one session of an account and reports whether there was one.
+func (s *Sessions) DeleteByID(user, id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, session := range s.sessions {
+		if session.User == user && sessionID(key) == id {
+			delete(s.sessions, key)
+			return true
+		}
+	}
+	return false
 }

@@ -403,6 +403,35 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 	return nil
 }
 
+// SetHostname gives the NAS a new name. Unlike everything else here, a
+// name cannot cut the connection, so it applies and is stored at once.
+func (m *Manager) SetHostname(ctx context.Context, hostname string) error {
+	if m.Disabled {
+		return ErrDisabled
+	}
+	if !hostnameRE.MatchString(hostname) {
+		return fmt.Errorf("%w: hostname", ErrInvalid)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	if m.pending != nil {
+		return ErrPending
+	}
+	cfg := m.active
+	cfg.Hostname = hostname
+	if err := m.apply(ctx, cfg); err != nil {
+		return err
+	}
+	if err := m.store.WriteJSON(configFile, cfg); err != nil {
+		return err
+	}
+	m.active = cfg
+	return nil
+}
+
 // rollback brings the previous configuration back. The caller holds the lock.
 func (m *Manager) rollback(ctx context.Context) error {
 	if m.timer != nil {
