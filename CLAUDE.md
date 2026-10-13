@@ -48,7 +48,7 @@ Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit d
 6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern. Umgesetzt für Volumes und Platten, siehe Web-UI › Benachrichtigungen. Offen: Meldungen zu Updates und Backups (kommen mit diesen Funktionen).
 7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen, siehe Web-UI › Konten und Rechte. Offen: Zertifikate, SSH.
 8. **Sprachen:** Deutsch und Englisch von Anfang an, alle Texte über Übersetzungsdateien.
-9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues.
+9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues. Umgesetzt, siehe Web-UI › Werkzeuge.
 10. **Dateimanager:** Dateien im Browser auf Shares hochladen (auch ganze Ordner, per Drag-and-drop, große Dateien fortsetzbar), herunterladen, verschieben, umbenennen, löschen; mit den Rechten des angemeldeten Kontos. Konzept abgestimmt, siehe Web-UI › Dateimanager.
 
 Später: Verlaufsgrafiken (CPU, Temperaturen, Netzwerk, Platten), Volume-Verschlüsselung (LUKS), eingebauter Fernzugriff (WireGuard/Tailscale/Cloudflare Tunnel), Energie (Plattenschlaf, Zeitplan, Wake-on-LAN), Befehlspalette (Strg+K), dokumentierte API und CLI.
@@ -193,6 +193,15 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Technisch: alle Werte als CSS-Variablen (`--bg`, `--surface`, `--header`, `--border`, `--text`, `--muted`, `--track`, `--chip`, `--accent`, `--on-accent`, `--surface-alpha`, `--glass-blur`, `--glass-shine`, `--radius-tile`, `--radius-ctl`, `--font-scale`), Theme als `data-theme`, Stil als `data-surface="flat|glass|outline"` auf `<html>`. Kein hart codierter Farbwert oder Radius in Komponenten.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
+
+**Werkzeuge** (Reiter „Werkzeuge“, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `diagnose`.
+- **Protokoll:** Zeilen aus dem Journal (`journalctl -o json`), wählbar nach Quelle (alles, titand, Kernel, Platten und RAID, Freigaben, Docker, VMs, Netzwerk), Stufe und Suchtext; „Mitlaufen“ holt alle drei Sekunden nach, was seit dem letzten Stand dazukam (Cursor des Journals). Das Journal liegt im RAM (32 MB) und beginnt mit jedem Start neu.
+- titand schreibt seine Zeilen mit der Stufe, wie journald sie liest (`<3>` Fehler, `<4>` Warnung), damit die Auswahl „Nur Fehler“ auch für titand stimmt.
+- **Diagnosepaket:** Zip mit `README.txt`, `system.txt`, `journal.txt`, `kernel.txt`, `storage.txt`, `network.txt`, `hardware.txt` (aus `/sys` gelesen; `lspci` und `lsusb` sind nicht im Abbild), `docker.txt`, `vms.txt` und `config/` mit den Einstellungen von Volumes, Freigaben, Netzwerk, Docker, System, Plugins und VMs. Es entsteht beim Klick, wird direkt heruntergeladen und nirgends hingeschickt.
+- Ersetzt werden (`redact.go`): IPv4- und IPv6-Adressen, MAC-Adressen, E-Mail-Adressen, der Name des NAS (außer dem Namen ab Werk), Kontonamen, `schlüssel=wert` mit Passwort/Token/Secret/Key im Namen, Anmeldedaten in Adressen, Bearer-Tokens, PEM-Blöcke, SSH-Schlüssel, lange Hex-Ketten. Dieselbe Adresse bekommt im ganzen Paket denselben Platzhalter (`<ip-1>`), damit die Protokolle lesbar bleiben.
+- Nie im Paket: `users/`, `apps/` (nur die Liste der App-Namen), `tls/`, `notify/` (dort sind die Adressen selbst das Geheimnis), Dateien der Nutzer. Namen von Freigaben, Containern und VMs bleiben; die Seite weist darauf hin, das Paket vor dem Anhängen durchzusehen.
+- Noch offen unter „Werkzeuge“: Platten vorbereiten (Belastungstest), SMART-Werte je Platte im Paket.
 
 **Sicherung des Sticks** (Einstellungen › Sicherung des Sticks und die Ersteinrichtungsseite; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `configbackup`. Eine Sicherung ist eine Datei `config-<Zeit>-<Prüfsumme>.tar.gz` in `/mnt/<volume>/.titanos/backups` (Ordner nur für root) mit allem aus `/config`, also auch Passwort-Hashes, 2FA-Geheimnissen und den `.env`-Dateien der Apps. Die erste Datei im Archiv, `titanos-backup.json`, nennt Format, Zeit, Name des NAS und Version.
