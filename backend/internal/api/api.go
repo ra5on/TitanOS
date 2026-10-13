@@ -21,6 +21,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/network"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -47,6 +48,7 @@ type Options struct {
 	Hardware *hardware.Manager
 	Plugins  *plugins.Manager
 	Network  *network.Manager
+	Notify   *notify.Manager
 	Settings *system.Settings
 	Power    system.Power
 	Version  string
@@ -174,6 +176,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
+	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))
+	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
+	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
+	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 

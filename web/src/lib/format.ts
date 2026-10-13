@@ -55,6 +55,10 @@ export function formatTime(date: Date): string {
 	return new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+export function formatDateTime(date: Date): string {
+	return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
 /**
  * Sizes of disks and volumes in decimal units (1 TB = 1000 GB), the way
  * disks are sold and labelled: 8001563222016 → "8 TB".

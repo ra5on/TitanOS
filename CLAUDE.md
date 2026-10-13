@@ -45,7 +45,7 @@ Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit d
 3. **Netzwerk:** feste IP, Bridge `br0` (für VMs/Container mit eigener IP), VLANs, Bonding, DNS. Änderungen mit Sicherheitsfrist: ohne Bestätigung innerhalb von 2 Minuten automatisch zurück. Umgesetzt, siehe Web-UI › Netzwerk.
 4. **Shares und Nutzer:** Seiten für SMB/NFS-Freigaben, Rechte, Papierkorb, Time-Machine-Unterstützung; Kontoverwaltung mit Rollen. Konzept für Shares abgestimmt, siehe Web-UI › Shares.
 5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest).
-6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern.
+6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern. Umgesetzt für Volumes und Platten, siehe Web-UI › Benachrichtigungen. Offen: Meldungen zu Updates und Backups (kommen mit diesen Funktionen).
 7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen, siehe Web-UI › Konten und Rechte. Offen: Zertifikate, SSH.
 8. **Sprachen:** Deutsch und Englisch von Anfang an, alle Texte über Übersetzungsdateien.
 9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues.
@@ -193,6 +193,14 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Technisch: alle Werte als CSS-Variablen (`--bg`, `--surface`, `--header`, `--border`, `--text`, `--muted`, `--track`, `--chip`, `--accent`, `--on-accent`, `--surface-alpha`, `--glass-blur`, `--glass-shine`, `--radius-tile`, `--radius-ctl`, `--font-scale`), Theme als `data-theme`, Stil als `data-surface="flat|glass|outline"` auf `<html>`. Kein hart codierter Farbwert oder Radius in Komponenten.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
+
+**Benachrichtigungen** (Glocke „Meldungen“ in der Kopfzeile und Einstellungen › Benachrichtigungen; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `notify`. Jede Meldung hat eine Art (`volume_degraded`, `disk_unhealthy`, …), einen Betreff (Volume oder Platte) und eine Stufe (Hinweis, Warnung, Fehler). titand behält die letzten 100 Meldungen im Speicher; nach einem Neustart ist die Liste leer. Sichtbar für Besitzer und Administratoren.
+- Ein Beobachter sieht alle 30 Sekunden auf den Speicher und meldet Änderungen, nicht Zustände: Volume ohne Redundanz, ausgefallen, nicht gefunden, Wiederaufbau, wieder in Ordnung, Prüfung mit Abweichungen, Volume über 90 % voll (erneut erst nach unter 85 %), Platte mit SMART-Fehler, Platte über 55 °C (erneut erst nach unter 50 °C). Ein Problem wird erst gemeldet, wenn zwei Blicke hintereinander es sehen – beim Start brauchen die Arrays einen Moment.
+- Wege nach draußen: E-Mail (SMTP mit STARTTLS oder TLS; ohne Verschlüsselung wird kein Passwort übertragen), ntfy, Telegram, Discord. Je Weg drei Versuche. „Verschicken ab“ legt die Stufe fest (Standard: Warnungen und Fehler); die Glocke zeigt immer alles. Die Sprache der verschickten Texte ist eine Einstellung (`texts.go`), die Glocke übersetzt selbst in die Sprache des Betrachters (`notify.kind.*`).
+- Einstellungen in `/config/notify/settings.json`. Passwörter, Tokens und die Webhook-Adresse verlassen das NAS nie über die API (nur „ist gesetzt“); ein leeres Feld behält den gespeicherten Wert, Entfernen ist ausdrücklich (`clearSecrets`). „Testnachricht senden“ speichert erst und zeigt die Antwort der Gegenseite.
+- Neue Meldungen aus anderen Paketen: `notify.Manager.Notify(stufe, art, betreff)` aufrufen und die Texte in `texts.go` sowie `notify.kind.<art>.title/.text` in beiden Sprachdateien ergänzen.
+- Gelesen/ungelesen merkt sich der Browser, nicht das NAS.
 
 **Netzwerk** (Einstellungen › Netzwerk; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Konfiguration in `/config/network/network.json`: Name des NAS, Anschlüsse (keiner gewählt = jeder Anschluss per DHCP, wie ab Werk; mehrere = Bond mit wählbarer Art), VLAN-Nummer, Bridge `br0`, DHCP oder feste Adresse mit Gateway, Nameserver. Daraus schreibt das Paket `network` bei jedem Start und jeder Änderung die Dateien für systemd-networkd (`/etc/systemd/network/10-titanos-*`); Schichtung: Anschlüsse → Bond → VLAN → Bridge → Adresse.

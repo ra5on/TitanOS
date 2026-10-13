@@ -14,10 +14,17 @@ type systemResponse struct {
 	// NetworkPendingSeconds is how long a network change on trial has
 	// left to be confirmed; 0 if there is none. Every page shows it.
 	NetworkPendingSeconds int `json:"networkPendingSeconds"`
+	// NotificationsLatest is the number of the newest message, for owners
+	// and administrators; the web UI fetches the list when it changes.
+	NotificationsLatest int `json:"notificationsLatest"`
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, systemResponse{Info: s.opts.Monitor.Info(), Version: s.opts.Version, NetworkPendingSeconds: s.opts.Network.PendingSeconds()})
+	res := systemResponse{Info: s.opts.Monitor.Info(), Version: s.opts.Version, NetworkPendingSeconds: s.opts.Network.PendingSeconds()}
+	if currentUser(r).Role.CanAdminister() {
+		res.NotificationsLatest = s.opts.Notify.Latest()
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {

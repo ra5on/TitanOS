@@ -7,6 +7,7 @@
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
+	import Notifications from './Notifications.svelte';
 
 	// A plain user only works with their own shares and files.
 	const NAV: { href: string; label: MessageKey; roles?: Role[] }[] = [
@@ -59,6 +60,7 @@
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
 			<span>{t('terminal.title')}</span>
 		</button>
+		<Notifications />
 	{/if}
 	<AccountMenu />
 </header>
