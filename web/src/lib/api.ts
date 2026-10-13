@@ -53,7 +53,7 @@ export const api = {
 	get: <T>(path: string) => request<T>('GET', path),
 	post: <T>(path: string, body?: Body) => request<T>('POST', path, body),
 	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
-	delete: <T>(path: string) => request<T>('DELETE', path)
+	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body)
 };
 
 export type Role = 'owner' | 'admin' | 'user';
@@ -221,3 +221,76 @@ export type CatalogApp = {
 };
 
 export type AppStore = { sources: AppSource[]; apps: CatalogApp[] };
+
+export type VMDisk = {
+	file: string;
+	format: 'qcow2' | 'raw';
+	sizeBytes: number;
+	volume: string;
+	/** Set for an existing image used as it is, or a whole disk (/dev/disk/by-id/…). */
+	path?: string;
+	/** The image this disk is being copied from. */
+	source?: string;
+};
+
+export type VMFolder = { path: string; tag: string; readOnly: boolean };
+
+export type VM = {
+	name: string;
+	description: string;
+	template: 'linux' | 'windows' | 'other';
+	memoryMiB: number;
+	vcpus: number;
+	volume: string;
+	disks: VMDisk[];
+	iso: string;
+	autostart: boolean;
+	/** Logical CPUs the vCPUs are tied to; empty lets Linux decide. */
+	cpuPin: number[] | null;
+	exclusive: boolean;
+	folders: VMFolder[] | null;
+	tpm: boolean;
+	secureBoot: boolean;
+	pci: string[] | null;
+	usb: string[] | null;
+	/** Set while disks are copied, or if that failed. */
+	job: { state: 'running' | 'failed'; text: string } | null;
+	state: 'running' | 'stopped';
+	/** False while a volume of the VM is not mounted. */
+	available: boolean;
+	/** Load in percent of the VM's own vCPUs. */
+	cpuPercent: number;
+	/** RAM of the NAS the VM occupies right now. */
+	memoryBytes: number;
+	since: string;
+};
+
+export type VMStatus = {
+	/** Whether the machine has hardware virtualization. */
+	kvm: boolean;
+	host: { cpus: number; memoryBytes: number; usedMemoryBytes: number; cpuModel: string };
+	vms: VM[];
+};
+
+export type HostCPU = { id: number; kind: '' | 'p' | 'e'; siblings: number[]; usedBy: string[] };
+export type DiskImage = { path: string; format: string; virtualBytes: number; actualBytes: number; usedBy: string };
+export type WholeDisk = { path: string; device: string; usedBy: string };
+export type VMHost = { cpus: HostCPU[]; images: DiskImage[]; disks: WholeDisk[] };
+
+export type PCIDevice = {
+	address: string;
+	vendor: string;
+	device: string;
+	vendorName: string;
+	kind: 'igpu' | 'gpu' | 'npu';
+	driver: string;
+	iommuGroup: number;
+	/** The display the firmware used: the console of the NAS. */
+	primary: boolean;
+	companions: string[];
+	passable: boolean;
+	/** Why it cannot be handed to a VM: no_iommu, shared_group, npu. */
+	reason: string;
+};
+export type USBDevice = { id: string; name: string; port: string; stick: boolean; duplicate: boolean };
+export type Hardware = { hardware: { iommu: boolean; pci: PCIDevice[]; usb: USBDevice[] }; usedBy: Record<string, string[]> };

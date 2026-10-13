@@ -1,0 +1,7 @@
+# What happens to running VMs when the NAS shuts down or restarts: they are
+# asked to shut down, several at once, and get two minutes for it.
+# Starting VMs after a boot is titand's job, once the volumes are there.
+ON_BOOT=ignore
+ON_SHUTDOWN=shutdown
+PARALLEL_SHUTDOWN=4
+SHUTDOWN_TIMEOUT=120

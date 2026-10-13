@@ -105,7 +105,7 @@ titanos/
 │       ├── storage/        # Plattenerkennung, mdadm, Dateisysteme, Mounts, SMART
 │       ├── shares/         # Samba, NFS, Nutzer
 │       ├── docker/         # Container, Compose, Vorlagen
-│       ├── vm/             # libvirt (go-libvirt, ohne cgo)
+│       ├── vm/             # libvirt über virsh, QEMU-Abbilder über qemu-img
 │       └── system/         # Updates A/B, Netzwerk, Dienste
 ├── web/                    # Svelte + TypeScript
 ├── scripts/
@@ -286,6 +286,27 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Werkzeuge: Suchen im Verlauf, Kopieren, Einfügen, Schriftgröße. Farben folgen dem Theme. Sitzungen laufen weiter, wenn das Panel minimiert oder die Seite gewechselt wird.
 - Technik: xterm.js im Browser, WebSocket zu titand, PTY (z. B. creack/pty) bzw. Docker-Exec-API.
 - Sicherheit: nur Administratoren; Passwort (und 2FA) beim ersten Öffnen erneut bestätigen; Abbruch nach 15 Min Inaktivität; jede Sitzung im Protokoll (wer, wann, welches Ziel); in den Einstellungen komplett abschaltbar.
+- Umgesetzt: Panel am unteren Rand (Knopf in der Kopfzeile, Strg+`), Höhe ziehbar, Tabs für NAS-Shell und Container-Konsolen, „+“-Menü, Shell-Auswahl (automatisch/bash/sh) für Container, Suchen, Kopieren, Einfügen, Schriftgröße, eigener Browser-Tab (`/terminal`). Sitzungen laufen weiter, wenn das Panel minimiert oder die Seite gewechselt wird – nicht aber über ein Neuladen der Seite hinweg. Abschalten unter „Einstellungen“ (`/config/system/terminal.json`) beendet offene Sitzungen sofort.
+- Die NAS-Shell ist `bash --login` als root hinter einem Pseudo-Terminal (`backend/internal/terminal`, nur `golang.org/x/sys`, kein creack/pty). Im Entwicklungsmodus gibt es sie nicht – es wäre eine Shell auf dem Rechner des Entwicklers.
+- Noch offen: Benutzerwahl für Container-Konsolen, 2FA bei der Bestätigung.
+
+**VMs: Stand der Umsetzung**
+- Umgesetzt: QEMU/KVM hinter libvirt (Debian-Pakete `qemu-system-x86`, `qemu-utils`, `ovmf`, `libvirt-daemon-system`, `libvirt-clients`; das Abbild wächst dadurch um rund 40 MB). VMs anlegen (Vorlagen Linux, Windows, Andere; vCPUs, RAM, neue Platten qcow2/raw auf wählbarem Volume, Installationsmedium), starten, herunterfahren, neu starten, Ausschalten erzwingen, bearbeiten, entfernen (Platten nur auf Wunsch und mit Eingabe des Namens), Autostart, Bildschirm per noVNC mit drei Anzeigemodi, Vollbild, Strg+Alt+Entf, Text einfügen, Screenshot.
+- Was eine VM ausmacht, steht in `/config/vms/<name>.json`. libvirt kennt eine VM nur, solange sie läuft (`virsh create`, flüchtige Domain): seine eigene Konfiguration läge im RAM. Platten und die Einstellungen der Firmware (`nvram.fd`) liegen in `/mnt/<volume>/vms/<name>/`.
+- titand ruft `virsh` und `qemu-img` auf, statt per go-libvirt mit libvirt zu sprechen – wie bei mdadm und `docker compose`, mit einem ersetzbaren Runner für Tests. libvirt startet erst mit der ersten VM (Socket-Aktivierung) und beendet sich zwei Minuten nach der letzten. Welche VMs laufen und was sie verbrauchen, liest titand aus `/run/libvirt/qemu/<name>.pid` und `/proc`, ohne libvirt zu wecken.
+- QEMU läuft als `libvirt-qemu`, nicht als root. Es erreicht Platten und ISO-Dateien in Freigaben über die Gruppe `users`; `dynamic_ownership = 0`, damit libvirt die Besitzer dieser Dateien nicht ändert.
+- Der Bildschirm einer VM ist nur über einen Unix-Socket in `/run/titanos-vms/` erreichbar (Gruppe `kvm`), den titand als WebSocket hinter der Anmeldung weiterreicht. Kein VNC-Port im Netz.
+- Beim Herunterfahren des NAS fährt `libvirt-guests` die VMs herunter (bis zu 2 Minuten).
+- Netzwerk: vorerst nur ausgehend (QEMU-Usermode-Netz). Eigene IP im Heimnetz braucht die Bridge `br0` und damit die Netzwerk-Seite (Pflichtpunkt 3).
+- Umgesetzt: Kerne festlegen (`cpuPin`, ein vCPU je gewählter CPU, Threads eines Kerns gemeinsam, Emulator-Threads auf die übrigen Kerne) mit P-/E-Kern-Kennzeichnung aus `/sys/devices/cpu_core|cpu_atom/cpus`; „exklusiv reservieren“ setzt `AllowedCPUs` per `systemctl set-property --runtime` für `system.slice`, `user.slice` und `init.scope` und nimmt es zurück, sobald keine solche VM mehr läuft.
+- Umgesetzt: Datenträger auf vier Wegen – neue Platte, Kopie eines vorhandenen Abbilds (qcow2, img/raw, vmdk, vhdx, vdi; `qemu-img convert` im Hintergrund, danach ggf. vergrößern), Abbild direkt verwenden (nur qcow2/raw), ganze Festplatte per `/dev/disk/by-id` (nur Platten, die in keinem Volume stecken; bei jedem Start erneut geprüft). Platten lassen sich bei ausgeschalteter VM vergrößern, nie verkleinern. Das Format eines Abbilds wird aus der Dateiendung bestimmt und QEMU ausdrücklich mitgegeben; Abbilder, die auf einer anderen Datei aufbauen, werden abgelehnt.
+- Umgesetzt: TPM 2.0 (swtpm) und Secure Boot (OVMF mit Microsoft-Schlüsseln) als Option der Windows-Vorlage, fest ab dem Anlegen. Der Zustand des TPM liegt in `/mnt/<volume>/vms/<name>/tpm` (`<source type='dir'>`, `persistent_state='yes'`); swtpm läuft als `libvirt-qemu`.
+- Umgesetzt: NAS-Ordner per virtiofs (`memfd`-Speicher, `virtiofsd`), serielle Konsole (Unix-Socket, als Tab im Terminal-Panel), Konsole in eigenem Fenster (`/vms/screen?vm=`).
+- Umgesetzt: Durchreichen von PCI-Geräten (Grafikkarten, mit allen Funktionen derselben Karte) und USB-Geräten, dazu „Einstellungen › Hardware“ (Paket `hardware`): IOMMU-Gruppe, Treiber, Zuordnung. libvirt nimmt ein PCI-Gerät beim Start der VM vom Treiber des NAS und gibt es beim Stopp zurück (`managed='yes'`); es braucht dafür keinen Neustart und keine „Modi“ – ein Gerät gehört der VM, der es zugeordnet ist, solange sie läuft. Das weicht vom Konzept unter „Hardware und Durchreichung“ ab (dort: Verwendung pro Gerät, Neustart-Banner). NPUs werden nicht angeboten, der Stick, von dem TitanOS läuft, auch nicht.
+- Weil `dynamic_ownership = 0` gilt, öffnet titand selbst, was QEMU braucht, und nur für die Laufzeit der VM: Gerätedateien ganzer Platten und zugeordneter USB-Geräte bekommen die Gruppe `kvm`; für `/dev/vfio/*` sorgt eine udev-Regel.
+- IOMMU ist im Debian-Kernel ohne Kernel-Parameter aktiv, sobald das BIOS es anbietet.
+- Noch offen: Windows 11 selbst (nur der Start der VM mit TPM und Secure Boot ist geprüft, nicht die Installation), virtio-win-ISO automatisch, Abbilder in .xz/.gz/.zip, Hochladen/„von URL laden“ im Formular, Live-Auslastung und Firmware-Status auf der Hardware-Seite, Geräte für Container (`x-titanos.hardware`), „automatisch wechseln“ für NVIDIA, Plugins.
+- Getestet in QEMU mit verschachtelter Virtualisierung und emuliertem IOMMU: Als Gast lief eine Kopie des TitanOS-Sticks; im Gast geprüft wurden Kernzahl, TPM, durchgereichtes PCI- und USB-Gerät (beide von QEMU emuliert), ganze Platte und virtiofs. Echte Grafikkarten, ein Gast mit Desktop, Windows und eine deutsche Tastatur im Gast sind nicht geprüft.
 
 **VMs: Erstellen** (Seite „VM erstellen“, aus der VM-Liste per „+“)
 - Vorlagen: Windows 11 (TPM 2.0, Secure Boot, virtio-win-ISO automatisch), Linux, Fertiges Abbild, Andere. Name, RAM (mit Hinweis auf freien Speicher), UEFI/OVMF, q35, CPU host-passthrough.
@@ -343,6 +364,12 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
   - Automatisch zwischen VM und Containern wechseln (siehe Hardware).
   - Live: P-State, Verbrauch, Temperatur.
   - Lizenz der NVIDIA-Bibliotheken für die Weitergabe vor dem ersten Release prüfen.
+- Umgesetzt (Paket `plugins`, Seite „Plugins“): Ein Plugin ist ein sysext-Abbild `<name>.raw` mit Manifest `<name>.plugin.json` (Titel, Beschreibung, Version, SHA-256 und Größe des Abbilds, optional `kernel`, `modules`, `services`). TitanOS findet Plugins, die in einer Freigabe liegen, kopiert sie beim Installieren nach `/mnt/<volume>/.titanos/plugins` (Prüfsumme vor und nach dem Kopieren) und legt die eingeschalteten per Link in `/run/extensions` und `systemd-sysext refresh` über das System, sobald das Volume eingebunden ist. Welche eingeschaltet sind, steht in `/config/plugins/settings.json`.
+- „Offiziell“ ist ein Plugin, wenn sein Manifest eine minisign-Signatur (`.minisig`) eines Schlüssels aus `/usr/share/titanos/plugin-keys/*.pub` trägt; das Manifest nennt die Prüfsumme des Abbilds, die Signatur deckt also beides. **Im Abbild liegt noch kein Schlüssel** – den legt der Projektinhaber mit der Release-Pipeline an. Bis dahin ist jedes Plugin „Community (nicht geprüft)“ und braucht die Eingabe seines Namens. Die Prüfung ist gegen das echte `minisign` getestet (beide Signaturformen).
+- Ein Plugin wird Teil des Systems und hat volle Rechte; die Seite sagt das statt einer „Darf / Darf nicht“-Liste, die TitanOS nicht durchsetzen könnte. Plugins für einen anderen Kernel (`kernel` im Manifest) werden nicht geladen.
+- Mit einem aktiven Plugin ist `/usr` schreibgeschützt (sysext legt ein Overlay darüber). Das Abbild meldet `SYSEXT_LEVEL=1`; Plugins tragen `ID=titanos` und denselben Level.
+- `scripts/make-plugin.sh <name> <version> <ordner>` packt einen Ordner (`usr/…`) zu Abbild und Manifest.
+- Noch offen: das NVIDIA-Plugin selbst (braucht für jeden Kernel gebaute Module aus der CI, die Lizenzprüfung und echte Hardware zum Testen), offizielle Plugins als Teil der Updates, Plugin-Einstellungen in `/config/plugins/<name>/`, Hinweis auf passende Hardware, Fortschritt in Schritten.
 
 ## Phasen
 
