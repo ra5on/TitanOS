@@ -289,6 +289,19 @@ func TestPinningFoldersAndFirmware(t *testing.T) {
 	if vm.VCPUs != 1 {
 		t.Errorf("the number of vCPUs does not follow the pinned CPUs: %d", vm.VCPUs)
 	}
+	// On the bridge only once there is one.
+	change := Change{Description: "", MemoryMiB: 4096, VCPUs: 1, CPUPin: []int{0}, Exclusive: true, Folders: vm.Folders, PCI: vm.PCI, USB: vm.USB, Network: "bridge"}
+	if err := m.Update(ctx, "win", change, mounted); err != nil {
+		t.Fatal(err)
+	}
+	m.sysDir = t.TempDir()
+	if err := m.Start(ctx, "win", mounted); !errors.Is(err, ErrNoBridge) {
+		t.Errorf("start on a bridge that is not there: %v", err)
+	}
+	os.MkdirAll(filepath.Join(m.sysDir, "class/net/br0"), 0o755)
+	if bridged, _ := m.XML("win"); !strings.Contains(bridged, `<interface type="bridge">`) || !strings.Contains(bridged, `<source bridge="br0">`) {
+		t.Errorf("no card on the bridge:\n%s", bridged)
+	}
 	xml, _ := m.XML("win")
 	for _, want := range []string{
 		`<vcpupin vcpu="0" cpuset="0">`, `<memoryBacking>`, `<access mode="shared">`,

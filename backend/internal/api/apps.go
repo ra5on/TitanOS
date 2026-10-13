@@ -83,7 +83,7 @@ func (s *Server) handleAppTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"compose":  compose,
-		"timezone": system.Timezone(),
+		"timezone": s.opts.Settings.CurrentTimezone(),
 		// Files the app writes into shares belong to whoever installs it,
 		// and to the group all accounts are in.
 		"uid":       currentUser(r).UID,

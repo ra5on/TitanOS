@@ -11,10 +11,13 @@ import (
 type systemResponse struct {
 	system.Info
 	Version string `json:"version"`
+	// NetworkPendingSeconds is how long a network change on trial has
+	// left to be confirmed; 0 if there is none. Every page shows it.
+	NetworkPendingSeconds int `json:"networkPendingSeconds"`
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, systemResponse{Info: s.opts.Monitor.Info(), Version: s.opts.Version})
+	writeJSON(w, http.StatusOK, systemResponse{Info: s.opts.Monitor.Info(), Version: s.opts.Version, NetworkPendingSeconds: s.opts.Network.PendingSeconds()})
 }
 
 func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {

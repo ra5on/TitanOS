@@ -20,6 +20,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -45,6 +46,8 @@ type Options struct {
 	VMs      *vm.Manager
 	Hardware *hardware.Manager
 	Plugins  *plugins.Manager
+	Network  *network.Manager
+	Settings *system.Settings
 	Power    system.Power
 	Version  string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -158,6 +161,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/{name}/xml", s.requireAdmin(s.handleVMXML))
 	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
 	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
+
+	// How the NAS is connected. Changes are on trial until confirmed.
+	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
+	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
+	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
+	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
+	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
