@@ -168,3 +168,56 @@ export type FileRoot = {
 export type FileEntry = { name: string; dir: boolean; size: number; modified: string };
 
 export type UploadStatus = { id: string; offset: number; size: number; name: string };
+
+export type DockerContainer = {
+	id: string;
+	name: string;
+	image: string;
+	state: 'running' | 'exited' | 'created' | 'restarting' | 'paused' | 'dead';
+	since: string;
+	ports: { host: number; container: number; protocol: string }[];
+	app: string;
+	service: string;
+	managed: boolean;
+	cpuPercent: number;
+	memoryBytes: number;
+	cpuHistory: number[];
+	/** Value of the label titanos.webui: a host port, a port with a path or a URL. */
+	webui: string;
+	updateAvailable: boolean;
+};
+
+export type DockerStatus = {
+	settings: { enabled: boolean; volume: string };
+	running: boolean;
+	version: string;
+	containers: DockerContainer[];
+	apps: string[];
+	jobs: Record<string, { state: 'running' | 'done' | 'failed'; output: string }>;
+	updatesChecked: string;
+};
+
+export type AppSource = {
+	id: string;
+	name: string;
+	url: string;
+	builtin: boolean;
+	format: 'titanos' | 'casaos' | 'compose' | '';
+	count: number;
+	updated: string;
+	/** Why the last fetch failed: unreachable, empty. */
+	error: string;
+};
+
+export type CatalogApp = {
+	id: string;
+	source: string;
+	name: string;
+	category: string;
+	/** Language to text; a template with a single text uses the key "". */
+	description: Record<string, string>;
+	image: string;
+	services: number;
+};
+
+export type AppStore = { sources: AppSource[]; apps: CatalogApp[] };

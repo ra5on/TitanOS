@@ -43,6 +43,9 @@
 	--status-inactive: #6b7580;
 	--on-warn: #1a1406;
 
+	/* Text on an app's monogram, whose color is derived from the app's name. */
+	--on-monogram: #fff;
+
 	/* The two fixed colors of the "shapes" background; the third is the accent. */
 	--shape-2: #7048e8;
 	--shape-3: #0c8599;
@@ -330,6 +333,11 @@ input[type='checkbox'] {
 	border-color: var(--error-border);
 	color: var(--error-text);
 }
+/* Something TitanOS did by itself; neither good nor bad. */
+.chip.info {
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
 
 .btn-danger {
 	background: var(--status-error);
@@ -340,4 +348,13 @@ input[type='checkbox'] {
 .btn-danger:hover:not(:disabled) {
 	background: var(--status-error);
 	filter: brightness(1.08);
+}
+
+.notice-ok {
+	padding: 10px 14px;
+	background: var(--ok-bg);
+	border: 1px solid var(--ok-border);
+	border-radius: var(--radius-ctl);
+	color: var(--ok-text);
+	font-size: 0.875rem;
 }
