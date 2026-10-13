@@ -46,6 +46,9 @@ type User struct {
 	// one-time codes for a lost phone.
 	TOTPSecret    string   `json:"totpSecret,omitempty"`
 	RecoveryCodes []string `json:"recoveryCodes,omitempty"`
+	// SSHKeys are the public keys the account may log in with over SSH,
+	// one line each as in an authorized_keys file.
+	SSHKeys []string `json:"sshKeys,omitempty"`
 }
 
 // TwoFactor reports whether the account logs in with a second factor.

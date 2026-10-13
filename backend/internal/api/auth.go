@@ -142,6 +142,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	default:
 		slog.Info("owner account created", "user", user.Name, "ip", remoteIP(r))
 		s.opts.Shares.Kick()
+		s.opts.SSH.Kick()
 		if s.startSession(w, r, user) {
 			writeJSON(w, http.StatusCreated, userOf(user))
 		}
@@ -196,6 +197,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// only moment the password is known.
 	if _, stored := s.opts.Users.RememberSMBHash(user.Name, req.Password); stored {
 		s.opts.Shares.Kick()
+		s.opts.SSH.Kick()
 	}
 	if s.startSession(w, r, user) {
 		writeJSON(w, http.StatusOK, userOf(user))

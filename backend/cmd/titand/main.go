@@ -32,6 +32,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
@@ -233,6 +234,29 @@ func run(opts options) error {
 	}
 	go stickBackup.Run(ctx, volumes.Mounted)
 
+	// SSH is off unless switched on; then for administrators with a key.
+	access := sshd.NewManager(store, shares.UsersGID)
+	access.Disabled = opts.dev
+	if err := access.Load(); err != nil {
+		slog.Warn("SSH settings not readable from /config", "err", err)
+	}
+	go access.Run(ctx, users.List)
+
+	// The certificate of the web UI: the administrator's own or one made here.
+	var certs *tlscert.Manager
+	if !opts.dev {
+		hostname, _ := os.Hostname()
+		var err error
+		certs, err = tlscert.NewManager(store, hostname)
+		if certs == nil {
+			return fmt.Errorf("TLS certificate: %w", err)
+		}
+		if err != nil {
+			slog.Warn("using a temporary TLS certificate", "err", err)
+		}
+		go watchCertificate(ctx, certs, notifier)
+	}
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -255,6 +279,8 @@ func run(opts options) error {
 		Notify:        notifier,
 		ConfigBackup:  stickBackup,
 		Diagnose:      diagnose.NewManager(store, version.Version),
+		SSH:           access,
+		Certificate:   certs,
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
@@ -278,16 +304,8 @@ func run(opts options) error {
 		serve(newServer(opts.devAddr, handler), false)
 		slog.Info("titand started in development mode", "version", version.Version, "listen", opts.devAddr, "config", opts.configDir, "webui", webui.Embedded)
 	} else {
-		hostname, _ := os.Hostname()
-		cert, err := tlscert.LoadOrCreate(store, hostname)
-		if len(cert.Certificate) == 0 {
-			return fmt.Errorf("TLS certificate: %w", err)
-		}
-		if err != nil {
-			slog.Warn("using a temporary TLS certificate", "err", err)
-		}
 		https := newServer(opts.httpsAddr, handler)
-		https.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		https.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
 			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
@@ -313,6 +331,26 @@ func run(opts options) error {
 		err = nil
 	}
 	return err
+}
+
+// watchCertificate warns once when an own certificate is about to run
+// out: unlike the one TitanOS makes, nobody renews it by itself.
+func watchCertificate(ctx context.Context, certs *tlscert.Manager, notifier *notify.Manager) {
+	ticker := time.NewTicker(12 * time.Hour)
+	defer ticker.Stop()
+	warned := ""
+	for {
+		info := certs.Info()
+		if info.Kind == tlscert.KindCustom && time.Until(info.NotAfter) < 14*24*time.Hour && warned != info.Fingerprint {
+			warned = info.Fingerprint
+			notifier.Notify(notify.Warning, "certificate_expiring", info.NotAfter.Format(time.DateOnly))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func newServer(addr string, handler http.Handler) *http.Server {

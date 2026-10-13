@@ -46,7 +46,7 @@ Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit d
 4. **Shares und Nutzer:** Seiten für SMB/NFS-Freigaben, Rechte, Papierkorb, Time-Machine-Unterstützung; Kontoverwaltung mit Rollen. Konzept für Shares abgestimmt, siehe Web-UI › Shares.
 5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest). Umgesetzt, siehe Web-UI › Werkzeuge.
 6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern. Umgesetzt für Volumes und Platten, siehe Web-UI › Benachrichtigungen. Offen: Meldungen zu Updates und Backups (kommen mit diesen Funktionen).
-7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen, siehe Web-UI › Konten und Rechte. Offen: Zertifikate, SSH.
+7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen (siehe Web-UI › Konten und Rechte), SSH und eigenes Zertifikat (siehe Web-UI › Zugang). Offen: Let's Encrypt.
 8. **Sprachen:** Deutsch und Englisch von Anfang an, alle Texte über Übersetzungsdateien.
 9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues. Umgesetzt, siehe Web-UI › Werkzeuge.
 10. **Dateimanager:** Dateien im Browser auf Shares hochladen (auch ganze Ordner, per Drag-and-drop, große Dateien fortsetzbar), herunterladen, verschieben, umbenennen, löschen; mit den Rechten des angemeldeten Kontos. Konzept abgestimmt, siehe Web-UI › Dateimanager.
@@ -173,7 +173,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Konten, Passwort-Hashes (argon2id) und 2FA-Geheimnisse in `/config/users/`. Anmeldeschutz gegen Durchprobieren.
 - Umgesetzt: Zwei-Faktor-Anmeldung mit TOTP (RFC 6238, sechs Stellen, 30 Sekunden, ±1 Schritt, jeder Code nur einmal) und acht Wiederherstellungscodes, von denen nur Hashes gespeichert werden. Das Geheimnis gilt erst, wenn ein Code daraus geprüft wurde. Der Code wird beim Anmelden nach dem richtigen Passwort verlangt, außerdem bei der erneuten Bestätigung vor Konsolen und zum Ausschalten. Administratoren können den zweiten Faktor eines anderen Kontos zurücksetzen (alle seine Anmeldungen enden dabei).
 - Umgesetzt: Seite „Mein Konto“ (`/account`) mit Passwort, Zwei-Faktor-Anmeldung und „Angemeldete Geräte“ (Anmeldungen liegen nur im Speicher von titand; einzelne lassen sich beenden).
-- Noch offen: SSH-Schlüssel und SSH-Zugang überhaupt, eigenes bzw. Let's-Encrypt-Zertifikat.
+- Umgesetzt: SSH-Schlüssel je Konto unter „Mein Konto“ (`sshKeys` in `account.json`, eine Zeile je Schlüssel, Optionen vor dem Schlüssel werden abgelehnt), SSH-Zugang und eigenes Zertifikat, siehe „Zugang“.
 
 **Dashboard mit frei anpassbaren Kacheln**
 - Raster aus 12 Spalten mit festen Zeilenhöhen. Kacheln rasten auf Spalten/Zeilen ein, keine freien Pixelgrößen.
@@ -193,6 +193,17 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Technisch: alle Werte als CSS-Variablen (`--bg`, `--surface`, `--header`, `--border`, `--text`, `--muted`, `--track`, `--chip`, `--accent`, `--on-accent`, `--surface-alpha`, `--glass-blur`, `--glass-shine`, `--radius-tile`, `--radius-ctl`, `--font-scale`), Theme als `data-theme`, Stil als `data-surface="flat|glass|outline"` auf `<html>`. Kein hart codierter Farbwert oder Radius in Komponenten.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
+
+**Zugang** (Einstellungen › Zugang; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- **SSH** (Paket `sshd`, Debian-Pakete `openssh-server` und `sudo`): ab Werk aus, der Dienst ist im Abbild abgeschaltet. Einstellung in `/config/system/ssh.json`; titand startet und stoppt `ssh.service` selbst.
+  - Anmelden können sich nur Besitzer und Administratoren, die unter „Mein Konto“ einen Schlüssel hinterlegt haben – unter ihrem eigenen Namen, nie mit Passwort, nie als root (`sshd_config.d/10-titanos.conf`: `AllowGroups titanos-ssh`, `PasswordAuthentication no`, `PermitRootLogin no`).
+  - titand schreibt die Schlüssel nach `/etc/ssh/authorized_keys/<konto>` (gehört root: ein Konto kann sich nicht selbst weitere Schlüssel geben), setzt für diese Konten Shell und Heimatverzeichnis (`/home/<konto>`, im RAM) und nimmt sie in die Gruppe `titanos-ssh` auf. Die Gruppe darf `sudo` ohne Passwort – die Konten haben kein Linux-Passwort, nach dem sudo fragen könnte.
+  - Verliert ein Konto Rolle oder Schlüssel oder wird SSH ausgeschaltet, endet auch eine offene Sitzung (`loginctl terminate-user`).
+  - Der Schlüssel des NAS selbst liegt in `/config/ssh/host_ed25519` und wird beim ersten Einschalten erzeugt. Die beim Bau des Abbilds erzeugten Host-Schlüssel werden gelöscht – sie wären sonst auf jedem TitanOS dieselben.
+  - Wer einen Schlüssel hat, kommt ohne zweiten Faktor hinein und hat volle Rechte. Die Seite sagt das.
+- **Zertifikat** (`tlscert.Manager`): TitanOS erstellt ab Werk ein selbst signiertes. Ein eigenes Zertifikat samt Kette und Schlüssel (PEM) lässt sich hinterlegen; es wird geprüft (Schlüssel passt, gültig, nennt Hostnamen, ist kein CA-Zertifikat), in `/config/tls/custom-*.pem` gespeichert und sofort verwendet, ohne Neustart. Der Schlüssel wird nie wieder herausgegeben. Ist das eigene Zertifikat abgelaufen, greift beim nächsten Start wieder das selbst signierte; 14 Tage vorher gibt es eine Meldung.
+- Im Abbild sind `/etc` und die Dateien aus `mkosi.extra` nicht mehr für die Gruppe schreibbar (`chmod -R go-w` im Postinst). Vorher trugen sie die Rechte des Arbeitsverzeichnisses, aus dem gebaut wurde; sshd verweigert unter einem solchen `/etc` die Arbeit.
+- Noch offen: Let's Encrypt per DNS-Challenge, Fingerabdrücke der Schlüssel im Protokoll einer Anmeldung, SSH nur aus bestimmten Netzen.
 
 **Werkzeuge** (Reiter „Werkzeuge“, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `diagnose`.
