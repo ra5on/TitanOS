@@ -169,12 +169,16 @@ func run(opts options) error {
 		}
 		var free []string
 		for _, disk := range status.Disks {
-			if disk.Role == "free" {
+			// A disk a guest has put a file system on is still one the
+			// NAS does not use.
+			if (disk.Role == storage.RoleFree || disk.Role == storage.RoleUsed) && !disk.Mounted && !disk.Testing {
 				free = append(free, disk.Name)
 			}
 		}
 		return free
 	}
+	// And a disk a VM uses is never overwritten by a disk test.
+	volumes.Claimed = machines.ClaimedDisks
 	go machines.Run(ctx, volumes.Mounted)
 
 	// System extensions on a volume, laid over the system once it is mounted.
@@ -199,6 +203,18 @@ func run(opts options) error {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
+	volumes.OnTestDone = func(test storage.DiskTest) {
+		disk := test.Disk
+		if test.Serial != "" {
+			disk += " (" + test.Model + ", " + test.Serial + ")"
+		}
+		switch test.Result {
+		case storage.TestPassed:
+			notifier.Notify(notify.Info, "disk_test_passed", disk)
+		case storage.TestFailed:
+			notifier.Notify(notify.Error, "disk_test_failed", disk)
+		}
+	}
 
 	// Copies of /config on a volume: the stick is the only place where
 	// the configuration lives, and sticks wear out.

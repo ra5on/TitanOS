@@ -11,6 +11,7 @@ export function diskType(disk: Disk): string {
 
 /** The status column: what the disk is doing right now. */
 export function diskStatus(disk: Disk): { text: string; dot: '' | 'ok' | 'warn' | 'error' } {
+	if (disk.testing) return { text: t('disk.testing'), dot: 'warn' };
 	switch (disk.role) {
 		case 'stick':
 			return { text: t('disk.stick'), dot: 'ok' };
@@ -52,7 +53,7 @@ export function stateTone(volume: Volume): 'ok' | 'warn' | 'error' {
 	}
 }
 
-/** Disks a volume may take: not the stick, not in a volume, nothing mounted. */
+/** Disks a volume may take: not the stick, not in a volume, nothing mounted, not being tested. */
 export function isUsable(disk: Disk): boolean {
-	return (disk.role === 'free' || disk.role === 'used') && !disk.mounted;
+	return (disk.role === 'free' || disk.role === 'used') && !disk.mounted && !disk.testing;
 }

@@ -14,7 +14,7 @@
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 	const disks = $derived(storage.status?.disks ?? []);
 	const volumes = $derived(storage.status?.volumes ?? []);
-	const free = $derived(disks.filter((disk) => disk.role === 'free'));
+	const free = $derived(disks.filter((disk) => disk.role === 'free' && !disk.testing));
 
 	let dialog = $state<{ kind: 'create' } | { kind: 'add' | 'delete'; volume: string } | { kind: 'remove'; volume: string; disk: string } | null>(null);
 	let busy = $state(false);
