@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import DiskTests from './DiskTests.svelte';
 
 	type Entry = { time: string; priority: number; source: string; message: string };
 	type Logs = { entries: Entry[]; cursor: string };
@@ -102,6 +103,8 @@
 </script>
 
 <h1>{t('nav.tools')}</h1>
+
+<DiskTests />
 
 <section class="tile" aria-labelledby="tools-bundle">
 	<h2 class="tile-title" id="tools-bundle">{t('tools.bundle')}</h2>

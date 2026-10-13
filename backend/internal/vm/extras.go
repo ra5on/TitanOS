@@ -171,6 +171,25 @@ func (m *Manager) blockDevice(path string) (string, error) {
 	return device, nil
 }
 
+// ClaimedDisks returns the whole disks that VMs use, by the kernel's name
+// (sdb), with the VM. Nothing else may write to such a disk.
+func (m *Manager) ClaimedDisks() map[string]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	claimed := map[string]string{}
+	for _, vm := range m.vms {
+		for _, disk := range vm.Disks {
+			if !m.isBlock(disk) {
+				continue
+			}
+			if real, err := filepath.EvalSymlinks(disk.Path); err == nil {
+				claimed[filepath.Base(real)] = "VM " + vm.Name
+			}
+		}
+	}
+	return claimed
+}
+
 // WholeDisk is a disk of the NAS that can be handed to a VM.
 type WholeDisk struct {
 	// Path is the stable name, /dev/disk/by-id/….

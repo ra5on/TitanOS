@@ -38,6 +38,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Netzwerk.** Feste Adresse, Bonding, VLAN und eine Bridge, über die VMs eine eigene Adresse im Heimnetz bekommen. Jede Änderung gilt erst auf Probe: Ohne Bestätigung innerhalb von zwei Minuten kehrt das NAS zur alten Einstellung zurück.
 - **Benachrichtigungen.** Fällt eine Platte aus, läuft ein Wiederaufbau oder wird ein Volume voll, steht das in der Weboberfläche und kommt auf Wunsch per E-Mail, ntfy, Telegram oder Discord.
 - **Sicherung des Sticks.** Die Konfiguration liegt nur auf dem Stick, deshalb legt TitanOS nach jeder Änderung eine Kopie auf ein Volume. Geht der Stick kaputt, findet ein neuer Stick die Kopie auf den Platten und spielt sie zurück.
+- **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
 - **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und entfernt vorher Adressen, Namen und alles, was nach Passwort oder Schlüssel aussieht.
 - **Plugins.** Systemerweiterungen für Treiber und Werkzeuge, die auf einem Volume liegen und sich ein- und ausschalten lassen. Das Grundgerüst steht; fertige Plugins wie der NVIDIA-Treiber fehlen noch.
 - **Terminal.** Eine Shell auf dem NAS und Konsolen in Containern als Tabs am unteren Rand jeder Seite – nur für Administratoren und erst nach erneuter Passwort-Eingabe.
