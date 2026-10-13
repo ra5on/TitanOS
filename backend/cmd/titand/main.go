@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,6 +38,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
@@ -58,7 +60,25 @@ func main() {
 	flag.BoolVar(&opts.dev, "dev", false, "development mode: plain HTTP on -dev-listen, no reboot or poweroff")
 	flag.StringVar(&opts.devAddr, "dev-listen", "127.0.0.1:8080", "address in development mode")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
 	flag.Parse()
+
+	if *checkBoot {
+		// Only a system the boot loader started on trial has to prove itself.
+		trial := update.NewManager(config.Open(opts.configDir), version.Version, system.BootSlot())
+		if !trial.OnTrial() {
+			return
+		}
+		if err := waitReady(opts.httpsAddr, 5*time.Minute); err != nil {
+			fmt.Fprintln(os.Stderr, "titand is not ready, this system stays on trial:", err)
+			os.Exit(1)
+		}
+		if err := trial.Bless(); err != nil {
+			fmt.Fprintln(os.Stderr, "could not mark this system good:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *showVersion {
 		fmt.Println(version.Version)
@@ -261,6 +281,25 @@ func run(opts options) error {
 	if opts.dev {
 		power = system.NoPower{}
 	}
+
+	// New versions go into the other slot of the stick and start on trial.
+	slot := system.BootSlot()
+	updates := update.NewManager(store, version.Version, slot)
+	updates.Disabled = opts.dev || slot == ""
+	updates.Mounted = volumes.Mounted
+	updates.Reboot = power.Reboot
+	updates.OnEvent = func(kind, subject string) {
+		severity := notify.Info
+		if kind == "update_failed" {
+			severity = notify.Error
+		}
+		notifier.Notify(severity, kind, subject)
+	}
+	if err := updates.Load(); err != nil {
+		slog.Warn("update settings not readable from /config", "err", err)
+	}
+	updates.Confirm()
+	go updates.Run(ctx)
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -280,6 +319,7 @@ func run(opts options) error {
 		ConfigBackup:  stickBackup,
 		Diagnose:      diagnose.NewManager(store, version.Version),
 		SSH:           access,
+		Update:        updates,
 		Certificate:   certs,
 		Settings:      settings,
 		Power:         power,
@@ -331,6 +371,36 @@ func run(opts options) error {
 		err = nil
 	}
 	return err
+}
+
+// waitReady asks the running titand until it says it is ready. A system
+// that was just updated is only marked good after that.
+func waitReady(httpsAddr string, patience time.Duration) error {
+	_, port, err := net.SplitHostPort(httpsAddr)
+	if err != nil {
+		return err
+	}
+	// The certificate is the NAS's own, and this never leaves the machine.
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	deadline := time.Now().Add(patience)
+	last := errors.New("no answer")
+	for time.Now().Before(deadline) {
+		res, err := client.Get("https://" + net.JoinHostPort("127.0.0.1", port) + "/api/v1/health")
+		if err == nil {
+			var health struct{ Ready bool }
+			err = json.NewDecoder(res.Body).Decode(&health)
+			res.Body.Close()
+			if err == nil && health.Ready {
+				return nil
+			}
+			if err == nil {
+				err = errors.New("the configuration or a volume of before is not there yet")
+			}
+		}
+		last = err
+		time.Sleep(3 * time.Second)
+	}
+	return last
 }
 
 // watchCertificate warns once when an own certificate is about to run

@@ -57,6 +57,8 @@ cp boot/loader.conf "$stick/loader/loader.conf"
 sed -e "s|@VERSION@|$version|g" -e "s|@SLOT@|$slot|g" boot/entry.conf.in \
     > "$stick/loader/entries/titanos-$slot.conf"
 cp "$image/vmlinuz" "$image/initrd.img" "$image/filesystem.squashfs" "$stick/titanos/$slot/"
+# The updater reads from this file which version lies in a slot.
+echo "$version" > "$stick/titanos/$slot/version"
 
 rm -f "out/$name.zip"
 (cd "$stick" && zip -q -r -0 "../$name.zip" .)

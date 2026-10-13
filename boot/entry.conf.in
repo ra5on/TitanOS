@@ -1,6 +1,6 @@
 title    TitanOS
 version  @VERSION@
-sort-key titanos-@SLOT@
+sort-key titanos-1
 linux    /titanos/@SLOT@/vmlinuz
 initrd   /titanos/@SLOT@/initrd.img
 options  boot=live live-media=/dev/disk/by-label/TITANOS live-media-path=/titanos/@SLOT@ toram=filesystem.squashfs overlay-size=512M

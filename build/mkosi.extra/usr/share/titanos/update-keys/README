@@ -1,0 +1,11 @@
+Public keys (minisign, *.pub) that releases of TitanOS must be signed with.
+
+An update is installed only if the manifest of the release carries a valid
+signature of one of the keys in this directory. An image without a key
+installs no updates at all.
+
+Two keys may lie here at the same time: that is how a key is replaced. A
+release that adds the new key is signed with the old one; the next ones
+are signed with the new one.
+
+See docs/RELEASING.md in the repository.

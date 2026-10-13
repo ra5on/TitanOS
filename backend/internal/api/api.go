@@ -31,6 +31,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -61,9 +62,11 @@ type Options struct {
 	// the web UI and is nil in development mode, where there is no TLS.
 	SSH         *sshd.Manager
 	Certificate *tlscert.Manager
-	Settings    *system.Settings
-	Power       system.Power
-	Version     string
+	// Update installs new versions into the other slot of the stick.
+	Update   *update.Manager
+	Settings *system.Settings
+	Power    system.Power
+	Version  string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -208,6 +211,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
+	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
+	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
+	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
 	mux.HandleFunc("GET /api/v1/system/ssh", s.requireAdmin(s.handleSSH))
 	mux.HandleFunc("PUT /api/v1/system/ssh", s.requireAdmin(s.handleSSHChange))
 	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
@@ -358,6 +364,10 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+// handleHealth says that titand answers and, as "ready", that it has its
+// configuration and volumes. After an update the boot check waits for
+// that before the new system is marked good.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	ready := s.opts.Users.Loaded() && s.opts.Storage.Settled() && (s.opts.Update == nil || s.opts.Update.Healthy())
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "ready": ready})
 }

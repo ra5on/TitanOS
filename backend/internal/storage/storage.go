@@ -165,9 +165,12 @@ type Manager struct {
 	testMu sync.Mutex
 	tests  map[string]*DiskTest
 
-	mu        sync.RWMutex
-	volumes   []VolumeConfig
-	loaded    bool
+	mu      sync.RWMutex
+	volumes []VolumeConfig
+	loaded  bool
+	// settled is set once the volumes were read from /config and a first
+	// attempt to mount them was made.
+	settled   bool
 	smart     map[string]*Smart // by disk path
 	smartTime time.Time
 }
@@ -399,6 +402,11 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 		}
 		m.mountAll(ctx)
+		if loaded {
+			m.mu.Lock()
+			m.settled = true
+			m.mu.Unlock()
+		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge
 		m.mu.RUnlock()
@@ -411,6 +419,13 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// Settled reports whether the volumes are known and were looked after once.
+func (m *Manager) Settled() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.settled
 }
 
 // Names returns the names of the configured volumes.
