@@ -14,6 +14,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
@@ -50,12 +51,23 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
 	ts.client = ts.newClient()
 	return ts
+}
+
+// loadedShares returns a share manager that never touches the system.
+func loadedShares(t *testing.T, store *config.Store) *shares.Manager {
+	t.Helper()
+	m := shares.NewManager(store)
+	m.Disabled = true
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	return m
 }
 
 func loadedStorage(t *testing.T, store *config.Store) *storage.Manager {
@@ -323,7 +335,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -421,5 +433,107 @@ func TestStorageRefusals(t *testing.T) {
 	}
 	if res, _ := ts.do(ts.newClient(), "GET", "/api/v1/storage", nil); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("storage without login: %d", res.StatusCode)
+	}
+}
+
+func TestUserManagement(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup() // owner "alex"
+
+	create := func(client *http.Client, name string, role auth.Role) (*http.Response, []byte) {
+		return ts.do(client, "POST", "/api/v1/users", map[string]any{"name": name, "password": testPassword, "role": role})
+	}
+	if res, body := create(ts.client, "bea", auth.RoleAdmin); res.StatusCode != http.StatusCreated {
+		t.Fatalf("create admin: %d %s", res.StatusCode, body)
+	}
+	if res, body := create(ts.client, "bea", auth.RoleUser); res.StatusCode != http.StatusConflict || errorCode(t, body) != "user_exists" {
+		t.Errorf("duplicate: %d %s", res.StatusCode, body)
+	}
+	if res, _ := create(ts.client, "gast", auth.RoleUser); res.StatusCode != http.StatusCreated {
+		t.Fatal("create user")
+	}
+
+	admin, guest := ts.newClient(), ts.newClient()
+	ts.do(admin, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword})
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+
+	// An administrator manages users, but not owners.
+	if res, body := create(admin, "chef", auth.RoleOwner); res.StatusCode != http.StatusForbidden {
+		t.Errorf("admin creating an owner: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(admin, "PUT", "/api/v1/users/alex", map[string]any{"role": "user"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("admin demoting the owner: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(admin, "POST", "/api/v1/users/alex/password", map[string]any{"password": "a new password for alex"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("admin resetting the owner's password: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(admin, "DELETE", "/api/v1/users/alex", nil); res.StatusCode != http.StatusForbidden {
+		t.Errorf("admin deleting the owner: %d", res.StatusCode)
+	}
+	// A plain user manages nobody and cannot list accounts.
+	if res, _ := ts.do(guest, "GET", "/api/v1/users", nil); res.StatusCode != http.StatusForbidden {
+		t.Errorf("user listing accounts: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(guest, "POST", "/api/v1/users/bea/password", map[string]any{"password": "hijacked password"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("user resetting another password: %d", res.StatusCode)
+	}
+
+	// Own password: needs the current one.
+	if res, body := ts.do(guest, "POST", "/api/v1/users/gast/password", map[string]any{"password": "my new password!", "current": "wrong guess here"}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "wrong_password" {
+		t.Errorf("own password with wrong current: %d %s", res.StatusCode, body)
+	}
+	other := ts.newClient() // gast on a second device
+	ts.do(other, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	if res, body := ts.do(guest, "POST", "/api/v1/users/gast/password", map[string]any{"password": "my new password!", "current": testPassword}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("own password: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(guest, "GET", "/api/v1/system", nil); res.StatusCode != http.StatusOK {
+		t.Errorf("the device that changed the password was logged out: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(other, "GET", "/api/v1/system", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the other device is still logged in with the old password: %d", res.StatusCode)
+	}
+
+	// The owner cannot delete themselves or stop being the last owner.
+	if res, body := ts.request("DELETE", "/api/v1/users/alex", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "cannot_delete_self" {
+		t.Errorf("deleting oneself: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/users/alex", map[string]any{"role": "admin"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "last_owner" {
+		t.Errorf("last owner demoting themselves: %d %s", res.StatusCode, body)
+	}
+
+	// Deleting an account ends its sessions.
+	if res, _ := ts.request("DELETE", "/api/v1/users/gast", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatal("delete user")
+	}
+	if res, _ := ts.do(guest, "GET", "/api/v1/system", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("deleted account is still logged in: %d", res.StatusCode)
+	}
+	_, body := ts.request("GET", "/api/v1/users", nil)
+	if !strings.Contains(string(body), `"name":"bea"`) || strings.Contains(string(body), "gast") || strings.Contains(string(body), "argon2") || strings.Contains(string(body), "smbHash") {
+		t.Errorf("account list: %s", body)
+	}
+}
+
+func TestShareAccessInTheAPI(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	// No volume exists on the test machine: creating a share is refused …
+	res, body := ts.request("POST", "/api/v1/shares", map[string]any{"name": "fotos", "volume": "data", "smb": true})
+	if res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "unknown_volume" {
+		t.Errorf("share on a missing volume: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/shares", map[string]any{"name": "Fotos!", "volume": "data"}); errorCode(t, body) != "invalid_share_name" {
+		t.Errorf("bad name: %d %s", res.StatusCode, body)
+	}
+	// … and a plain user cannot create one at all.
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	if res, _ := ts.do(guest, "POST", "/api/v1/shares", map[string]any{"name": "fotos", "volume": "data"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("user creating a share: %d", res.StatusCode)
+	}
+	if res, body := ts.do(guest, "GET", "/api/v1/shares", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Errorf("user listing shares: %d %s", res.StatusCode, body)
 	}
 }

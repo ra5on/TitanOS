@@ -78,6 +78,12 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
+	for _, share := range s.opts.Shares.List() {
+		if share.Volume == name {
+			writeError(w, http.StatusConflict, "volume_has_shares", "the volume still holds the share "+share.Name)
+			return
+		}
+	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Delete(r.Context(), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)

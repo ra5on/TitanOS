@@ -136,3 +136,21 @@ export type Volume = {
 };
 
 export type StorageStatus = { disks: Disk[]; volumes: Volume[] };
+
+export type Account = { name: string; role: Role; created: string; smbReady: boolean };
+
+export type AccessLevel = 'ro' | 'rw';
+
+export type Share = {
+	name: string;
+	volume: string;
+	smb: boolean;
+	nfs: { enabled: boolean; clients: string[] | null };
+	access: Record<string, AccessLevel>;
+	guest: boolean;
+	browseable: boolean;
+	recycle: { enabled: boolean; days: number };
+	timeMachine: { enabled: boolean; sizeGB: number };
+	path: string;
+	available: boolean;
+};

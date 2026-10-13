@@ -33,7 +33,20 @@ type User struct {
 	Role         Role      `json:"role"`
 	PasswordHash string    `json:"passwordHash"`
 	Created      time.Time `json:"created"`
+	// UID is the number of the Linux user with the same name. The system is
+	// rebuilt on every boot, so the number has to be kept here for files to
+	// keep their owner.
+	UID int `json:"uid"`
+	// SMBHash is the NT hash Samba needs to check the password. It is a
+	// weak, unsalted hash by today's standards, but the SMB protocol works
+	// with nothing else.
+	SMBHash string `json:"smbHash,omitempty"`
 }
+
+// firstUID is the lowest number given to an account's Linux user. It stays
+// clear of the system users and of the usual first user (1000) on other
+// systems, whose files might be copied onto the NAS.
+const firstUID = 2000
 
 var (
 	ErrInvalidName      = errors.New("auth: invalid account name")
@@ -43,6 +56,9 @@ var (
 	ErrExists           = errors.New("auth: account exists")
 	ErrSetupDone        = errors.New("auth: an owner account already exists")
 	ErrNotLoaded        = errors.New("auth: accounts could not be read from /config")
+	ErrNotFound         = errors.New("auth: no such account")
+	ErrInvalidRole      = errors.New("auth: unknown role")
+	ErrLastOwner        = errors.New("auth: the last owner cannot be removed or demoted")
 )
 
 // Account names double as Linux and SMB user names.
@@ -119,11 +135,34 @@ func (u *Users) Load() error {
 		users[name] = user
 	}
 
+	// Accounts from before Linux users existed get their number now.
+	for name, user := range users {
+		if user.UID == 0 {
+			user.UID = nextUID(users)
+			if err := u.store.WriteJSON(accountFile(name), user); err != nil {
+				return fmt.Errorf("account %s: %w", name, err)
+			}
+			users[name] = user
+		}
+	}
+
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.users = users
 	u.loaded = true
 	return nil
+}
+
+func nextUID(users map[string]User) int {
+	uid := firstUID
+	for _, user := range users {
+		uid = max(uid, user.UID+1)
+	}
+	return uid
+}
+
+func validRole(role Role) bool {
+	return role == RoleOwner || role == RoleAdmin || role == RoleUser
 }
 
 // Loaded reports whether the accounts were read successfully. While they
@@ -176,6 +215,9 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 	if err := ValidateName(name); err != nil {
 		return User{}, err
 	}
+	if !validRole(role) {
+		return User{}, ErrInvalidRole
+	}
 	if err := ValidatePassword(password); err != nil {
 		return User{}, err
 	}
@@ -196,7 +238,10 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 		return User{}, ErrExists
 	}
 
-	user := User{Name: name, Role: role, PasswordHash: hash, Created: time.Now().UTC().Truncate(time.Second)}
+	user := User{
+		Name: name, Role: role, PasswordHash: hash, Created: time.Now().UTC().Truncate(time.Second),
+		UID: nextUID(u.users), SMBHash: ntHash(password),
+	}
 	if err := u.store.WriteJSON(accountFile(name), user); err != nil {
 		return User{}, err
 	}
@@ -229,4 +274,95 @@ func (u *Users) Authenticate(name, password string) (User, bool) {
 		return User{}, false
 	}
 	return user, true
+}
+
+// update changes one account and writes it to the store.
+func (u *Users) update(name string, change func(user *User) error) (User, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	user, ok := u.users[name]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	if err := change(&user); err != nil {
+		return User{}, err
+	}
+	if err := u.store.WriteJSON(accountFile(name), user); err != nil {
+		return User{}, err
+	}
+	u.users[name] = user
+	return user, nil
+}
+
+// owners counts the accounts with the owner role. The caller holds the lock.
+func (u *Users) owners() int {
+	count := 0
+	for _, user := range u.users {
+		if user.Role == RoleOwner {
+			count++
+		}
+	}
+	return count
+}
+
+// SetPassword gives an account a new password.
+func (u *Users) SetPassword(name, password string) (User, error) {
+	if err := ValidatePassword(password); err != nil {
+		return User{}, err
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return User{}, err
+	}
+	return u.update(name, func(user *User) error {
+		user.PasswordHash = hash
+		user.SMBHash = ntHash(password)
+		return nil
+	})
+}
+
+// RememberSMBHash stores the hash Samba needs for an account that does not
+// have one yet (created before shares existed). It is called at login, the
+// only moment the password is known.
+func (u *Users) RememberSMBHash(name, password string) (User, bool) {
+	if user, ok := u.Get(name); !ok || user.SMBHash != "" {
+		return user, false
+	}
+	user, err := u.update(name, func(user *User) error {
+		user.SMBHash = ntHash(password)
+		return nil
+	})
+	return user, err == nil
+}
+
+// SetRole changes what an account may do. One owner always remains.
+func (u *Users) SetRole(name string, role Role) (User, error) {
+	if !validRole(role) {
+		return User{}, ErrInvalidRole
+	}
+	return u.update(name, func(user *User) error {
+		if user.Role == RoleOwner && role != RoleOwner && u.owners() == 1 {
+			return ErrLastOwner
+		}
+		user.Role = role
+		return nil
+	})
+}
+
+// Delete removes an account and its settings. One owner always remains.
+func (u *Users) Delete(name string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	user, ok := u.users[name]
+	if !ok {
+		return ErrNotFound
+	}
+	if user.Role == RoleOwner && u.owners() == 1 {
+		return ErrLastOwner
+	}
+	if err := u.store.RemoveAll("users/" + name); err != nil {
+		return err
+	}
+	delete(u.users, name)
+	return nil
 }
