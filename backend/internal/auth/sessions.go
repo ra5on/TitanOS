@@ -22,7 +22,14 @@ type Session struct {
 	LastSeen  time.Time
 	RemoteIP  string
 	UserAgent string
+	// Confirmed is when the password was last entered again in this
+	// session, as required before opening a console.
+	Confirmed time.Time
 }
+
+// ConfirmFor is how long entering the password again opens the door to
+// consoles and other sensitive actions.
+const ConfirmFor = 15 * time.Minute
 
 // Sessions keeps the logins in memory. They end with a restart of titand;
 // nothing about them is written to the stick.
@@ -109,4 +116,21 @@ func (s *Sessions) DeleteUser(user, exceptToken string) {
 			delete(s.sessions, key)
 		}
 	}
+}
+
+// Confirm notes that the password was just entered again in this session.
+func (s *Sessions) Confirm(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if session, ok := s.sessions[sha256.Sum256([]byte(token))]; ok {
+		session.Confirmed = s.now()
+	}
+}
+
+// Confirmed reports whether the password was entered again recently.
+func (s *Sessions) Confirmed(token string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sha256.Sum256([]byte(token))]
+	return ok && !session.Confirmed.IsZero() && s.now().Sub(session.Confirmed) < ConfirmFor
 }

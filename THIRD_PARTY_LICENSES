@@ -23,11 +23,16 @@ nfs-utils                 GPL-2.0-or-later        Debian source packages
 Avahi                     LGPL-2.1-or-later       Debian source packages
 wsdd2                     GPL-3.0-or-later        Debian source packages
 Docker Engine (Moby)      Apache-2.0              Debian source packages / upstream
+Docker CLI, Compose       Apache-2.0              Debian source packages
+containerd, runc          Apache-2.0              Debian source packages
 QEMU                      GPL-2.0 and others      Debian source packages
 libvirt                   LGPL-2.1-or-later       Debian source packages
 Svelte / SvelteKit        MIT                     https://github.com/sveltejs
 Go standard library       BSD-3-Clause            https://go.dev
 golang.org/x/crypto, sys  BSD-3-Clause            https://pkg.go.dev/golang.org/x/crypto
+coder/websocket           ISC                     https://github.com/coder/websocket
+go.yaml.in/yaml           MIT and Apache-2.0      https://github.com/yaml/go-yaml
+yaml (JavaScript)         ISC                     https://github.com/eemeli/yaml
 noVNC                     MPL-2.0                 https://github.com/novnc/noVNC
 xterm.js                  MIT                     https://github.com/xtermjs/xterm.js
 gridstack.js              MIT                     https://github.com/gridstack/gridstack.js

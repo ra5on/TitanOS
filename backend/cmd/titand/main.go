@@ -18,7 +18,9 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -88,6 +90,22 @@ func run(opts options) error {
 		return shares.State{Users: users.List(), Mounted: volumes.Mounted()}
 	})
 
+	// Runs the Docker engine while its volume is mounted.
+	containers := docker.NewManager(store, opts.configDir)
+	containers.Disabled = opts.dev
+	if err := containers.Load(); err != nil {
+		slog.Warn("docker settings not readable from /config", "err", err)
+	}
+	go containers.Run(ctx, volumes.Mounted)
+
+	// Knows the apps that can be installed, from the built-in catalog and
+	// from sources on the network.
+	appCatalog := catalog.NewManager(store)
+	if err := appCatalog.Load(); err != nil {
+		slog.Warn("app sources not readable from /config", "err", err)
+	}
+	go appCatalog.Run(ctx)
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -100,6 +118,8 @@ func run(opts options) error {
 		Storage:       volumes,
 		Shares:        folders,
 		Files:         files.NewManager(shares.UsersGID),
+		Docker:        containers,
+		Catalog:       appCatalog,
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,
