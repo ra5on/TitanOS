@@ -68,7 +68,8 @@ chown -R libvirt-qemu /var/lib/swtpm-localca
 # among the units is meant to be; sshd even refuses to work below such a
 # directory.
 chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
-    /usr/lib/systemd/system-preset /usr/lib/udev/rules.d
+    /usr/lib/systemd/system/titanos-boot-check.service \
+    /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos
 
 # SSH is off: titand starts it when an administrator switches it on. The
 # keys made while the package was installed would be the same on every
