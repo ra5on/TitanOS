@@ -206,6 +206,21 @@ func TestChangeOnTrial(t *testing.T) {
 		t.Errorf("after a restart: %v", got)
 	}
 
+	// A new name applies at once and is kept, with everything else as it was.
+	if err := m.SetHostname(ctx, "Kein Name"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("odd hostname: %v", err)
+	}
+	if err := m.SetHostname(ctx, "keller"); err != nil {
+		t.Fatal(err)
+	}
+	var stored Config
+	if err := m.store.ReadJSON(configFile, &stored); err != nil || stored.Hostname != "keller" || !stored.Bridge || m.PendingSeconds() != 0 {
+		t.Errorf("after renaming: %+v, %v", stored, err)
+	}
+	if !slices.Contains(runner.commands, "hostnamectl hostname keller") {
+		t.Errorf("the name was not set: %v", runner.commands)
+	}
+
 	// Given up by hand; and a change that cannot be applied leaves things as they were.
 	fixed := Config{Hostname: "nas", Ports: []string{"enp1s0"}, Address: "192.168.1.20/24", Gateway: "192.168.1.1"}
 	if err := m.Change(ctx, fixed); err != nil {

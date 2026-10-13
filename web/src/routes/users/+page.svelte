@@ -47,6 +47,17 @@
 		await load();
 	}
 
+	/** For someone who lost the phone and the recovery codes. */
+	async function resetTwoFactor(account: Account) {
+		error = '';
+		try {
+			await api.put(`/users/${account.name}`, { role: account.role, resetTwoFactor: true });
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+		await load();
+	}
+
 	function openCreate() {
 		draft = { name: '', role: 'user', password: '', repeat: '' };
 		dialogError = '';
@@ -113,6 +124,7 @@
 							<span>
 								<span class="mono name">{account.name}</span>{#if account.name === me?.name}<span class="chip you">{t('users.you')}</span>{/if}
 								{#if !account.smbReady}<span class="sub">{t('users.smbPending')}</span>{/if}
+								{#if account.twoFactor}<span class="chip">{t('users.twoFactor')}</span>{/if}
 							</span>
 						</span>
 					</td>
@@ -129,6 +141,9 @@
 					<td class="actions">
 						{#if manageable || account.name === me?.name}
 							<button type="button" class="btn" onclick={() => (dialog = { kind: 'password', name: account.name })}>{t('users.changePassword')}</button>
+							{#if account.twoFactor && manageable && account.name !== me?.name}
+								<button type="button" class="btn" onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button>
+							{/if}
 						{/if}
 						{#if manageable && account.name !== me?.name}
 							<button type="button" class="btn" onclick={() => (dialog = { kind: 'delete', name: account.name })}>{t('users.delete')}</button>

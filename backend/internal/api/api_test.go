@@ -697,6 +697,91 @@ func TestVMsAreForAdministrators(t *testing.T) {
 	}
 }
 
+func TestTwoFactorLogin(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("POST", "/api/v1/account/2fa/begin", nil)
+	var begun struct{ Secret, URI string }
+	if json.Unmarshal(body, &begun) != nil || res.StatusCode != http.StatusOK || begun.Secret == "" {
+		t.Fatalf("begin: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/account/2fa/enable", map[string]string{"code": "000000"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_code" {
+		t.Errorf("enable with a wrong code: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("POST", "/api/v1/account/2fa/enable", map[string]string{"code": auth.CodeForTest(begun.Secret, 0)})
+	var enabled struct{ RecoveryCodes []string }
+	if json.Unmarshal(body, &enabled) != nil || res.StatusCode != http.StatusOK || len(enabled.RecoveryCodes) != 8 {
+		t.Fatalf("enable: %d %s", res.StatusCode, body)
+	}
+	if _, body := ts.request("GET", "/api/v1/session", nil); !strings.Contains(string(body), `"twoFactor":true`) {
+		t.Errorf("session: %s", body)
+	}
+
+	// A new login: the password alone is not enough any more.
+	other := ts.newClient()
+	login := func(code string) (*http.Response, []byte) {
+		return ts.do(other, "POST", "/api/v1/login", map[string]string{"name": "alex", "password": testPassword, "code": code})
+	}
+	if res, body := login(""); res.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "second_factor_required" {
+		t.Errorf("login without a code: %d %s", res.StatusCode, body)
+	}
+	if res, body := login("000000"); res.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "invalid_code" {
+		t.Errorf("login with a wrong code: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(other, "GET", "/api/v1/system", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("a session exists without the second factor: %d", res.StatusCode)
+	}
+	// With a wrong password nothing tells that a second factor exists.
+	if res, body := ts.do(other, "POST", "/api/v1/login", map[string]string{"name": "alex", "password": "wrong password"}); errorCode(t, body) != "invalid_credentials" {
+		t.Errorf("wrong password: %d %s", res.StatusCode, body)
+	}
+	if res, body := login(auth.CodeForTest(begun.Secret, 1)); res.StatusCode != http.StatusOK {
+		t.Fatalf("login with a code: %d %s", res.StatusCode, body)
+	}
+	if res, body := login(enabled.RecoveryCodes[0]); res.StatusCode != http.StatusOK {
+		t.Errorf("login with a recovery code: %d %s", res.StatusCode, body)
+	}
+	if res, body := login(enabled.RecoveryCodes[0]); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("a recovery code worked twice: %d %s", res.StatusCode, body)
+	}
+
+	// The list of devices, and ending one of them.
+	res, body = ts.request("GET", "/api/v1/account/sessions", nil)
+	var devices struct {
+		Sessions []struct {
+			ID      string
+			Current bool
+		}
+	}
+	if json.Unmarshal(body, &devices) != nil || len(devices.Sessions) != 3 {
+		t.Fatalf("sessions: %d %s", res.StatusCode, body)
+	}
+	for _, device := range devices.Sessions {
+		if !device.Current {
+			if res, _ := ts.request("DELETE", "/api/v1/account/sessions/"+device.ID, nil); res.StatusCode != http.StatusOK {
+				t.Errorf("end a session: %d", res.StatusCode)
+			}
+		}
+	}
+	if res, _ := ts.do(other, "GET", "/api/v1/system", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the ended device is still logged in: %d", res.StatusCode)
+	}
+
+	// Sensitive confirmations take the code as well; switching it off takes both.
+	if res, body := ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": testPassword}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "invalid_code" {
+		t.Errorf("confirm without a code: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/account/2fa/disable", map[string]string{"password": testPassword, "code": "000000"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("switch off with a wrong code: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/account/2fa/disable", map[string]string{"password": testPassword, "code": enabled.RecoveryCodes[1]}); res.StatusCode != http.StatusNoContent {
+		t.Errorf("switch off: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(ts.newClient(), "POST", "/api/v1/login", map[string]string{"name": "alex", "password": testPassword}); res.StatusCode != http.StatusOK {
+		t.Errorf("login after switching it off: %d", res.StatusCode)
+	}
+}
+
 func TestNetworkIsForAdministrators(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()

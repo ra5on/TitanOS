@@ -11,6 +11,7 @@
 	let info = $state<{ enabled: boolean; nasShell: boolean } | null>(null);
 	let confirmed = $state<boolean | null>(null);
 	let password = $state('');
+	let code = $state('');
 	let error = $state('');
 	let menu = $state(false);
 	let containers = $state<{ id: string; name: string }[]>([]);
@@ -56,8 +57,9 @@
 		event.preventDefault();
 		error = '';
 		try {
-			await api.post('/session/confirm', { password });
+			await api.post('/session/confirm', { password, code });
 			password = '';
+			code = '';
 			confirmed = true;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
@@ -205,6 +207,11 @@
 					<!-- svelte-ignore a11y_autofocus -->
 					<input class="field" type="password" bind:value={password} autocomplete="current-password" required autofocus />
 				</label>
+				{#if account.data?.user?.twoFactor}
+					<label><span class="muted">{t('auth.code')}</span>
+						<input class="field mono" type="text" bind:value={code} inputmode="numeric" autocomplete="one-time-code" spellcheck="false" required />
+					</label>
+				{/if}
 				{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 				<button type="submit" class="btn btn-primary">{t('docker.consoleOpen')}</button>
 			</form>
