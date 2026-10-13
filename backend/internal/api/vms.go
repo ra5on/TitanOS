@@ -35,6 +35,7 @@ var vmErrors = []struct {
 	{vm.ErrNotRunning, http.StatusConflict, "vm_not_running"},
 	{vm.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{vm.ErrPreparing, http.StatusConflict, "vm_preparing"},
+	{vm.ErrNoBridge, http.StatusConflict, "no_bridge"},
 	{vm.ErrBadFolder, http.StatusBadRequest, "invalid_folder"},
 	{vm.ErrBadImage, http.StatusBadRequest, "invalid_image"},
 	{hardware.ErrUnknown, http.StatusBadRequest, "device_unavailable"},
@@ -68,7 +69,9 @@ func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
 			"usedMemoryBytes": memory.UsedBytes,
 			"cpuModel":        s.opts.Monitor.Info().CPU.Model,
 		},
-		"vms": s.opts.VMs.List(s.opts.Storage.Mounted()),
+		// With the bridge, VMs can have an address of their own in the network.
+		"bridge": s.opts.Network.HasBridge(),
+		"vms":    s.opts.VMs.List(s.opts.Storage.Mounted()),
 	})
 }
 
