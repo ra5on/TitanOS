@@ -39,6 +39,7 @@ yaml (JavaScript)         ISC                     https://github.com/eemeli/yaml
 noVNC                     MPL-2.0                 https://github.com/novnc/noVNC
 xterm.js                  MIT                     https://github.com/xtermjs/xterm.js
 gridstack.js              MIT                     https://github.com/gridstack/gridstack.js
+qrcode-generator          MIT                     https://github.com/kazuhikoarase/qrcode-generator
 IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 
 Optional plugins (separate downloads) keep their own licenses, e.g. the

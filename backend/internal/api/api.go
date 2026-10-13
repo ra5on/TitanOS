@@ -107,6 +107,13 @@ func New(opts Options) *Server {
 	// Everyone may change their own password.
 	mux.HandleFunc("POST /api/v1/users/{name}/password", s.requireUser(s.handleSetPassword))
 
+	// One's own account.
+	mux.HandleFunc("GET /api/v1/account/sessions", s.requireUser(s.handleAccountSessions))
+	mux.HandleFunc("DELETE /api/v1/account/sessions/{id}", s.requireUser(s.handleAccountSessionEnd))
+	mux.HandleFunc("POST /api/v1/account/2fa/begin", s.requireUser(s.handleTwoFactorBegin))
+	mux.HandleFunc("POST /api/v1/account/2fa/enable", s.requireUser(s.handleTwoFactorEnable))
+	mux.HandleFunc("POST /api/v1/account/2fa/disable", s.requireUser(s.handleTwoFactorDisable))
+
 	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
 	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
@@ -168,6 +175,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
+	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))

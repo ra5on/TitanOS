@@ -69,6 +69,19 @@ func (s *Server) handleNetworkRevert(w http.ResponseWriter, r *http.Request) {
 	s.handleNetwork(w, r)
 }
 
+func (s *Server) handleHostname(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Hostname string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Network.SetHostname(r.Context(), req.Hostname); err != nil {
+		writeNetworkError(w, err)
+		return
+	}
+	slog.Info("hostname changed", "hostname", req.Hostname, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleTimezone(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Timezone string }
 	if !readJSON(w, r, &req) {

@@ -16,10 +16,12 @@ type accountResponse struct {
 	// SMBReady is false for accounts from before shares existed: they can
 	// use SMB after their next login to the web UI.
 	SMBReady bool `json:"smbReady"`
+	// TwoFactor says whether the account logs in with a second factor.
+	TwoFactor bool `json:"twoFactor"`
 }
 
 func accountOf(user auth.User) accountResponse {
-	return accountResponse{Name: user.Name, Role: user.Role, Created: user.Created, SMBReady: user.SMBHash != ""}
+	return accountResponse{Name: user.Name, Role: user.Role, Created: user.Created, SMBReady: user.SMBHash != "", TwoFactor: user.TwoFactor()}
 }
 
 // mayManage reports whether actor may change target or give out role.
@@ -89,6 +91,9 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Role auth.Role `json:"role"`
+		// ResetTwoFactor switches the second factor of the account off,
+		// for someone who lost the phone and the recovery codes.
+		ResetTwoFactor bool `json:"resetTwoFactor"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -102,6 +107,15 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !mayManage(actor, target.Role) || !mayManage(actor, req.Role) {
 		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
 		return
+	}
+	if req.ResetTwoFactor {
+		if err := s.opts.Users.DisableTwoFactor(target.Name); err != nil {
+			writeAccountError(w, err)
+			return
+		}
+		// Whoever had the lost phone is logged out as well.
+		s.sessions.DeleteUser(target.Name, "")
+		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	}
 	user, err := s.opts.Users.SetRole(target.Name, req.Role)
 	if err != nil {

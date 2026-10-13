@@ -41,12 +41,12 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit dem Projektinhaber abstimmen und einen Entwurf vorschlagen.
 
 1. **Backup des Sticks:** automatisches Backup von `/config` auf ein Volume (optional extern) und geführter Ablauf „Stick ersetzen“ (neuen Stick flashen, Konfiguration zurückspielen).
-2. **Ersteinrichtung:** Assistent beim ersten Start – Sprache, Kontoname und Passwort (Besitzer), Hostname, Netzwerk, Zeitzone, erstes Volume.
+2. **Ersteinrichtung:** Assistent beim ersten Start – Sprache, Kontoname und Passwort (Besitzer), Hostname, Netzwerk, Zeitzone, erstes Volume. Umgesetzt als `/welcome` nach dem Anlegen des Besitzerkontos: Sprache, Name des NAS, Zeitzone (Vorschlag aus dem Browser), Blick aufs Netzwerk mit Verweis auf die Einstellungen, danach eine Liste der nächsten Schritte (Volume, Freigabe, Zwei-Faktor, Apps). Das erste Volume wird nicht im Assistenten selbst angelegt, sondern über die Speicher-Seite.
 3. **Netzwerk:** feste IP, Bridge `br0` (für VMs/Container mit eigener IP), VLANs, Bonding, DNS. Änderungen mit Sicherheitsfrist: ohne Bestätigung innerhalb von 2 Minuten automatisch zurück. Umgesetzt, siehe Web-UI › Netzwerk.
 4. **Shares und Nutzer:** Seiten für SMB/NFS-Freigaben, Rechte, Papierkorb, Time-Machine-Unterstützung; Kontoverwaltung mit Rollen. Konzept für Shares abgestimmt, siehe Web-UI › Shares.
 5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest).
 6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern.
-7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus.
+7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen, siehe Web-UI › Konten und Rechte. Offen: Zertifikate, SSH.
 8. **Sprachen:** Deutsch und Englisch von Anfang an, alle Texte über Übersetzungsdateien.
 9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues.
 10. **Dateimanager:** Dateien im Browser auf Shares hochladen (auch ganze Ordner, per Drag-and-drop, große Dateien fortsetzbar), herunterladen, verschieben, umbenennen, löschen; mit den Rechten des angemeldeten Kontos. Konzept abgestimmt, siehe Web-UI › Dateimanager.
@@ -171,6 +171,9 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - titand läuft als Systemdienst mit den nötigen Rechten und führt Aktionen im Namen des angemeldeten Kontos aus. Die NAS-Shell im Terminal ist eine root-Shell, erst nach erneuter Passwort-/2FA-Bestätigung.
 - Rollen: **Besitzer** (alles, mindestens einer muss existieren), **Administrator** (alles außer Besitzer verwalten), **Benutzer** (nur eigene Shares/Dateien, kein Docker/VMs/System). Kontoname wird auch als SMB-Benutzer angelegt.
 - Konten, Passwort-Hashes (argon2id) und 2FA-Geheimnisse in `/config/users/`. Anmeldeschutz gegen Durchprobieren.
+- Umgesetzt: Zwei-Faktor-Anmeldung mit TOTP (RFC 6238, sechs Stellen, 30 Sekunden, ±1 Schritt, jeder Code nur einmal) und acht Wiederherstellungscodes, von denen nur Hashes gespeichert werden. Das Geheimnis gilt erst, wenn ein Code daraus geprüft wurde. Der Code wird beim Anmelden nach dem richtigen Passwort verlangt, außerdem bei der erneuten Bestätigung vor Konsolen und zum Ausschalten. Administratoren können den zweiten Faktor eines anderen Kontos zurücksetzen (alle seine Anmeldungen enden dabei).
+- Umgesetzt: Seite „Mein Konto“ (`/account`) mit Passwort, Zwei-Faktor-Anmeldung und „Angemeldete Geräte“ (Anmeldungen liegen nur im Speicher von titand; einzelne lassen sich beenden).
+- Noch offen: SSH-Schlüssel und SSH-Zugang überhaupt, eigenes bzw. Let's-Encrypt-Zertifikat.
 
 **Dashboard mit frei anpassbaren Kacheln**
 - Raster aus 12 Spalten mit festen Zeilenhöhen. Kacheln rasten auf Spalten/Zeilen ein, keine freien Pixelgrößen.
