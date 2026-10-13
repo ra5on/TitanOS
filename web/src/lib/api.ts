@@ -154,3 +154,17 @@ export type Share = {
 	path: string;
 	available: boolean;
 };
+
+export type FileRoot = {
+	id: string;
+	name: string;
+	kind: 'share' | 'volume';
+	writable: boolean;
+	recycle: boolean;
+	totalBytes: number;
+	freeBytes: number;
+};
+
+export type FileEntry = { name: string; dir: boolean; size: number; modified: string };
+
+export type UploadStatus = { id: string; offset: number; size: number; name: string };

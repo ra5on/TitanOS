@@ -14,7 +14,14 @@
 		resize: 'M20 12v8h-8M20 20 10 10',
 		check: 'm5 12 5 5 9-10',
 		key: 'M15 7a4 4 0 1 1-3.9 4.9L4 19v-3l2-1v-2l2.200-.9A4 4 0 0 1 15 7ZM16 10h.01',
-		copy: 'M9 9h10v10H9zM5 15V5h10'
+		copy: 'M9 9h10v10H9zM5 15V5h10',
+		folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z',
+		file: 'M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM14 3v5h5',
+		upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+		download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
+		pause: 'M9 5v14M15 5v14',
+		play: 'M7 5v14l11-7Z',
+		disk: 'M4 6a8 3 0 0 0 16 0A8 3 0 0 0 4 6v12a8 3 0 0 0 16 0V6M4 12a8 3 0 0 0 16 0'
 	} as const;
 
 	type Props = { name: keyof typeof PATHS; size?: number };

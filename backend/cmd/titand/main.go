@@ -19,6 +19,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -98,6 +99,7 @@ func run(opts options) error {
 		Monitor:       system.NewMonitor(ctx),
 		Storage:       volumes,
 		Shares:        folders,
+		Files:         files.NewManager(shares.UsersGID),
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,
