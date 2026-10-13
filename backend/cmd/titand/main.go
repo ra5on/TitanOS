@@ -19,6 +19,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
@@ -75,6 +76,17 @@ func run(opts options) error {
 	// Mounts the volumes as their arrays come up and reads the disks' health.
 	go volumes.Run(ctx)
 
+	// Keeps Linux and Samba accounts, smb.conf, the NFS exports and the
+	// services in line with accounts, shares and mounted volumes.
+	folders := shares.NewManager(store)
+	folders.Disabled = opts.dev
+	if err := folders.Load(); err != nil {
+		slog.Warn("shares not readable from /config", "err", err)
+	}
+	go folders.Run(ctx, func() shares.State {
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted()}
+	})
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -85,6 +97,7 @@ func run(opts options) error {
 		Users:         users,
 		Monitor:       system.NewMonitor(ctx),
 		Storage:       volumes,
+		Shares:        folders,
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,

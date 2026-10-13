@@ -12,7 +12,9 @@
 		plus: 'M12 5v14M5 12h14',
 		edit: 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4',
 		resize: 'M20 12v8h-8M20 20 10 10',
-		check: 'm5 12 5 5 9-10'
+		check: 'm5 12 5 5 9-10',
+		key: 'M15 7a4 4 0 1 1-3.9 4.9L4 19v-3l2-1v-2l2.200-.9A4 4 0 0 1 15 7ZM16 10h.01',
+		copy: 'M9 9h10v10H9zM5 15V5h10'
 	} as const;
 
 	type Props = { name: keyof typeof PATHS; size?: number };

@@ -203,7 +203,12 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - NFS pro Share optional, mit erlaubten Netzen oder Hosts.
 - Löschen entfernt nur die Freigabe, die Daten bleiben. Das Löschen der Daten ist ein eigener Schritt mit ausdrücklicher Bestätigung.
 - Verbindungshilfe: fertige Adressen zum Kopieren für Windows, macOS und Linux.
-- Konfiguration in `/config`, daraus werden `smb.conf` und die NFS-Exports beim Start und bei jeder Änderung erzeugt.
+- Konfiguration in `/config/shares/shares.json`, daraus werden `smb.conf` und die NFS-Exports beim Start und bei jeder Änderung erzeugt. Freigaben, deren Volume nicht eingebunden ist, werden nicht angeboten (ihr Ordner läge sonst im RAM).
+- Umsetzung der Rechte: Der Zugriff wird im Dienst geregelt, nicht über Dateirechte. Samba prüft Konto und Recht (`valid users`, `write list`; Gäste nur lesend). Alle Dateien gehören der Gruppe `users` (Ordner mit setgid, Modus 2770). NFS kennt keine Konten: Wer auf einem erlaubten Rechner sitzt, schreibt als `nobody:users`.
+- Linux- und Samba-Konten entstehen bei jedem Start neu aus `/config/users/` (UID und NT-Hash stehen in `account.json`). Der NT-Hash ist schwach, aber SMB kennt nichts anderes; er entsteht beim Anlegen, beim Passwortwechsel oder bei der nächsten Anmeldung.
+- NFS: Jede NFS-Freigabe wird nach `/srv/nfs/<name>` eingebunden (bind mount), `/srv/nfs` ist die Wurzel des NFSv4-Baums. Clients verbinden sich mit `nas:/<name>` (NFSv4) bzw. `nas:/srv/nfs/<name>` (NFSv3). Ganze Volumes werden nie exportiert.
+- Der Papierkorb liegt in `.recycle/<konto>` der Freigabe; titand räumt stündlich weg, was älter als die Aufbewahrungsdauer ist.
+- Noch nicht geprüft: Time Machine mit einem echten Mac und die Sichtbarkeit in der Netzwerkumgebung (wsdd2, avahi).
 
 **Dateimanager** (Reiter „Dateien“ direkt nach „Shares“, Konzept abgestimmt, noch keine Entwurfsseite)
 - Aufbau: links die Shares, auf die das Konto Zugriff hat, darunter freier Platz des gewählten Shares; „Volumes“ und Papierkorb nur für Administratoren. Rechts Pfad als Brotkrumen, Werkzeugleiste (Hochladen, Neuer Ordner, Suchen), Dateiliste (Name, Größe, Geändert), bei Auswahl eine Aktionsleiste (Herunterladen, Verschieben, Umbenennen, Löschen).

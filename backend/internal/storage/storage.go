@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
 const (
@@ -131,36 +131,10 @@ type Status struct {
 }
 
 // Runner runs a system command. Tests replace it.
-type Runner interface {
-	Run(ctx context.Context, stdin string, name string, args ...string) (string, error)
-}
-
-type execRunner struct{}
-
-func (execRunner) Run(ctx context.Context, stdin string, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), &CommandError{Command: name + " " + strings.Join(args, " "), Output: strings.TrimSpace(string(output)), Err: err}
-	}
-	return string(output), nil
-}
+type Runner = run.Runner
 
 // CommandError is a failed system command, with what it printed.
-type CommandError struct {
-	Command string
-	Output  string
-	Err     error
-}
-
-func (e *CommandError) Error() string {
-	return e.Command + ": " + e.Err.Error() + ": " + e.Output
-}
-
-func (e *CommandError) Unwrap() error { return e.Err }
+type CommandError = run.CommandError
 
 // Manager knows the configured volumes and carries out all storage actions.
 type Manager struct {
@@ -186,7 +160,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, runner: execRunner{}, mountRoot: "/mnt", sysBlock: "/sys/block", smart: map[string]*Smart{}}
+	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", sysBlock: "/sys/block", smart: map[string]*Smart{}}
 }
 
 // Load reads the configured volumes from /config.
@@ -421,4 +395,25 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// Names returns the names of the configured volumes.
+func (m *Manager) Names() []string {
+	var names []string
+	for _, volume := range m.configured() {
+		names = append(names, volume.Name)
+	}
+	return names
+}
+
+// Mounted returns the configured volumes that are mounted right now.
+func (m *Manager) Mounted() []string {
+	mounts := readMounts()
+	var names []string
+	for _, volume := range m.configured() {
+		if mounts[m.mountRoot+"/"+volume.Name] {
+			names = append(names, volume.Name)
+		}
+	}
+	return names
 }

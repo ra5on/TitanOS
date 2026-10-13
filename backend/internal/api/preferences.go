@@ -72,6 +72,15 @@ func (p *preferences) set(user, kind string, value json.RawMessage) error {
 	return nil
 }
 
+// forget drops what is cached for a deleted account.
+func (p *preferences) forget(user string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, kind := range preferenceKinds {
+		delete(p.cache, user+"/"+kind)
+	}
+}
+
 func isJSONObject(data []byte) bool {
 	var object map[string]json.RawMessage
 	return json.Unmarshal(data, &object) == nil && object != nil

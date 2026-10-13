@@ -111,6 +111,19 @@ func (s *Store) Remove(name string) error {
 	return syncDir(filepath.Dir(p))
 }
 
+// RemoveAll deletes a directory with everything in it. A missing directory
+// is not an error.
+func (s *Store) RemoveAll(name string) error {
+	p, err := s.path(name)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(p); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(p))
+}
+
 // List returns the names of the entries in a directory. A missing directory
 // is empty. It fails if the store itself is not there (stick missing).
 func (s *Store) List(name string) ([]string, error) {

@@ -8,6 +8,7 @@
 #   DISKS=0       number of empty data disks (test/disks/), for RAID tests
 #   DISK_SIZE=8G  size of each new data disk
 #   HTTPS_PORT=8443  host port forwarded to the web UI: https://127.0.0.1:8443
+#   SMB_PORT=8445    host port forwarded to SMB: smbclient -p 8445 //127.0.0.1/<share>
 #   FRESH=1       recreate the stick image, discarding /config
 #   GRAPHIC=1     open a window instead of using the terminal as serial console
 #
@@ -20,6 +21,7 @@ MEM=${MEM:-4G}
 DISKS=${DISKS:-0}
 DISK_SIZE=${DISK_SIZE:-8G}
 HTTPS_PORT=${HTTPS_PORT:-8443}
+SMB_PORT=${SMB_PORT:-8445}
 
 stick=out/stick
 image=test/stick.img
@@ -92,7 +94,7 @@ exec qemu-system-x86_64 \
     -drive "if=none,id=stick,format=raw,file=$image" \
     -device usb-storage,drive=stick,removable=on,bootindex=0 \
     -device virtio-scsi-pci \
-    -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$HTTPS_PORT-:443" \
+    -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$HTTPS_PORT-:443,hostfwd=tcp:127.0.0.1:$SMB_PORT-:445" \
     -device virtio-net-pci,netdev=net0 \
     -smbios "type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200" \
     $display \

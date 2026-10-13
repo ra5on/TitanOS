@@ -181,3 +181,98 @@ func TestLimiter(t *testing.T) {
 		t.Error("blocked after reset")
 	}
 }
+
+func TestNTHash(t *testing.T) {
+	// Known values of the NT hash.
+	for password, want := range map[string]string{
+		"password": "8846F7EAEE8FB117AD06BDD830B7586C",
+		"":         "31D6CFE0D16AE931B73C59D7E0C089C0",
+		"Pässword": ntHash("Pässword"),
+	} {
+		if got := ntHash(password); got != want || len(got) != 32 {
+			t.Errorf("ntHash(%q) = %s, want %s", password, got, want)
+		}
+	}
+}
+
+func TestManageUsers(t *testing.T) {
+	store := config.Open(t.TempDir())
+	users := NewUsers(store)
+	if err := users.Load(); err != nil {
+		t.Fatal(err)
+	}
+	owner, _ := users.CreateOwner("alex", "long enough password")
+	guest, err := users.Create("gast", "long enough password", RoleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.UID != firstUID || guest.UID != firstUID+1 || guest.SMBHash == "" {
+		t.Errorf("uids %d %d, smb hash %q", owner.UID, guest.UID, guest.SMBHash)
+	}
+	if _, err := users.Create("x", "long enough password", "superuser"); !errors.Is(err, ErrInvalidRole) {
+		t.Errorf("unknown role: %v", err)
+	}
+
+	// The only owner can neither be demoted nor deleted.
+	if _, err := users.SetRole("alex", RoleAdmin); !errors.Is(err, ErrLastOwner) {
+		t.Errorf("demote last owner: %v", err)
+	}
+	if err := users.Delete("alex"); !errors.Is(err, ErrLastOwner) {
+		t.Errorf("delete last owner: %v", err)
+	}
+	if _, err := users.SetRole("gast", RoleOwner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.SetRole("alex", RoleAdmin); err != nil {
+		t.Errorf("demote with a second owner: %v", err)
+	}
+
+	if _, err := users.SetPassword("gast", "short"); !errors.Is(err, ErrPasswordTooShort) {
+		t.Errorf("short password: %v", err)
+	}
+	if _, err := users.SetPassword("gast", "a completely new password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := users.Authenticate("gast", "long enough password"); ok {
+		t.Error("old password still works")
+	}
+	if user, ok := users.Authenticate("gast", "a completely new password"); !ok || user.SMBHash != ntHash("a completely new password") {
+		t.Error("new password does not work or the SMB hash was not updated")
+	}
+
+	store.Write("users/alex/appearance.json", []byte("{}"))
+	if err := users.Delete("alex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Read("users/alex/appearance.json"); err == nil {
+		t.Error("settings of a deleted account are still on the stick")
+	}
+	if err := users.Delete("alex"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("delete twice: %v", err)
+	}
+
+	// A new account never reuses the number of an existing one.
+	next, _ := users.Create("neu", "long enough password", RoleUser)
+	if next.UID <= guest.UID {
+		t.Errorf("uid %d reused", next.UID)
+	}
+}
+
+func TestAccountsWithoutUIDGetOne(t *testing.T) {
+	store := config.Open(t.TempDir())
+	store.WriteJSON("users/alt/account.json", User{Name: "alt", Role: RoleOwner, PasswordHash: "x"})
+	users := NewUsers(store)
+	if err := users.Load(); err != nil {
+		t.Fatal(err)
+	}
+	user, _ := users.Get("alt")
+	if user.UID != firstUID {
+		t.Errorf("uid = %d, want %d", user.UID, firstUID)
+	}
+	if _, ok := users.RememberSMBHash("alt", "the password at login"); !ok {
+		t.Error("SMB hash not stored")
+	}
+	if _, ok := users.RememberSMBHash("alt", "another password"); ok {
+		t.Error("an existing SMB hash was replaced")
+	}
+}

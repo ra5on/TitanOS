@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft; Speicher, Freigaben, Docker und VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
+> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes und Freigaben funktionieren; Dateimanager, Docker und VMs folgen. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -23,12 +23,15 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 ## Was schon funktioniert
 
-- **Start vom Stick, Betrieb im RAM.** Das Systemabbild (146 MB) wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Nach dem Start belegt das Grundsystem rund 0,5 GB RAM.
+- **Start vom Stick, Betrieb im RAM.** Das Systemabbild (187 MB) wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Nach dem Start belegt das Grundsystem rund 0,6 GB RAM.
 - **Konfiguration auf dem Stick.** Alles Dauerhafte liegt im Ordner `config` auf dem Stick. Der Stick wird nur bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt – ein Stromausfall trifft ihn so fast nie im eingebundenen Zustand.
 - **Ersteinrichtung und Anmeldung.** Beim ersten Start legst du das Besitzerkonto mit frei gewähltem Namen an. Es gibt kein festes „admin“ und keinen Login als root. Wiederholte Fehlversuche werden ausgebremst.
 - **HTTPS von Anfang an.** Die Weboberfläche läuft über HTTPS mit einem selbstsignierten Zertifikat, das über Neustarts gleich bleibt.
 - **Dashboard mit frei anordenbaren Kacheln.** Kacheln rasten in einem Raster aus 12 Spalten ein, lassen sich verschieben, in der Größe ändern und ausblenden. Das Layout wird pro Konto gespeichert.
 - **Darstellung nach Wunsch.** Themes, Akzentfarben, Glas-Effekt, Eckenradius, Schriftgröße, Dichte und Hintergrund, mit Vorschau und Export als Datei.
+- **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
+- **Freigaben.** SMB mit Rechten pro Konto, Gastzugriff nur lesend, Papierkorb und Time-Machine-Ziel; NFS für ausgewählte Rechner. Dazu fertige Adressen zum Verbinden.
+- **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
 - **Deutsch und Englisch.**
 
 <table>
@@ -42,6 +45,17 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/speicher.png" alt="Speicher: zwei Volumes mit Mitgliedern und Belegung, darunter die Plattentabelle"></td>
+    <td width="50%"><img src="docs/screenshots/shares.png" alt="Shares: eine Freigabe mit Rechten und Adressen zum Verbinden"></td>
+  </tr>
+  <tr>
+    <td align="center">Speicher</td>
+    <td align="center">Shares</td>
+  </tr>
+</table>
+
 <p align="center">
   <img src="docs/screenshots/einrichtung.png" alt="Ersteinrichtung: Besitzerkonto anlegen" width="600"><br>
   Ersteinrichtung beim ersten Start
@@ -49,8 +63,8 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 ## Was geplant ist
 
-- **Klassisches RAID.** RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS; optional Btrfs-Spiegel mit Snapshots.
-- **Freigaben und Dateien.** SMB- und NFS-Freigaben mit Rechten pro Konto, Papierkorb und Time-Machine-Ziel; dazu ein Dateimanager im Browser mit Hochladen per Drag-and-drop.
+- **Dateimanager.** Dateien im Browser hochladen (auch per Drag-and-drop), herunterladen, umbenennen und löschen.
+- **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
 - **Docker mit App-Store.** Eigene App-Quellen; Vorlagen füllen Variablen, Pfade und Ports von selbst aus. Jeder Container lässt sich als Formular oder als Compose-Datei bearbeiten.
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI, Durchreichen von GPU und iGPU, NAS-Ordner in der VM per virtiofs, Konsole im Browser.
 - **Hardware im Blick.** Erkennt Intel-iGPU, Intel-NPU und NVIDIA-GPUs und lässt dich festlegen, ob Container oder eine VM sie nutzen. NVIDIA-Treiber als Plugin.
@@ -74,7 +88,7 @@ Für das Systemabbild zusätzlich (Debian 13): `mkosi squashfs-tools mtools zip 
 | `make dev` | Startet `titand` im Entwicklungsmodus auf `127.0.0.1:8080` (ohne HTTPS, Konfiguration in `test/config/`) und den Vite-Server mit automatischem Neuladen |
 | `make zip` | Baut das Systemabbild und packt den Stick-Inhalt: `out/stick/` und `out/titanos-<version>.zip` |
 | `make zip-dev` | Dasselbe als Entwicklungsvariante, bei der root an der Konsole automatisch angemeldet ist |
-| `make qemu` | Startet `out/stick/` in QEMU (UEFI) von einem emulierten USB-Stick; Weboberfläche unter `https://127.0.0.1:8443` |
+| `make qemu` | Startet `out/stick/` in QEMU (UEFI) von einem emulierten USB-Stick; Weboberfläche unter `https://127.0.0.1:8443`. Mit `DISKS=4 make qemu` kommen vier leere Testplatten dazu. |
 
 Das Backend (`backend/`, Go) und die Weboberfläche (`web/`, Svelte + TypeScript) liegen in diesem Repository. Ein einfaches `go build` oder `go test` funktioniert ohne Node.js und enthält statt der Weboberfläche eine Platzhalterseite.
 
