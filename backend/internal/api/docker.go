@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -189,14 +190,39 @@ func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 // consoleIdle ends a console nobody typed into for this long.
 const consoleIdle = 15 * time.Minute
 
-// handleContainerConsole connects a WebSocket to a shell inside a
-// container. Binary messages carry the terminal data in both directions; a
-// text message {"cols":80,"rows":24} tells the size of the terminal.
-//
-// A shell in a container is a way into the system. It needs an
-// administrator who entered the password again within the last minutes.
+// handleContainerConsole connects a WebSocket to a shell inside a container.
 func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) {
-	user, id := currentUser(r), r.PathValue("id")
+	id, shell := r.PathValue("id"), r.URL.Query().Get("shell")
+	// The short form of the ID, as Docker's own tools show it.
+	s.serveConsole(w, r, "container "+id[:min(len(id), 12)], func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		return s.opts.Docker.Console(ctx, id, shell)
+	})
+}
+
+// handleShell connects a WebSocket to a root shell on the NAS.
+func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
+	s.serveConsole(w, r, "nas", func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		session, err := s.opts.Terminal.Shell(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		return session, session.Resize, nil
+	})
+}
+
+// serveConsole connects a WebSocket to a shell. Binary messages carry the
+// terminal data in both directions; a text message {"cols":80,"rows":24}
+// tells the size of the terminal.
+//
+// A shell is a way into the system. It needs an administrator who entered
+// the password again within the last minutes, and terminals must not be
+// switched off in the settings.
+func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
+	user := currentUser(r)
+	if !s.opts.Terminal.Enabled() {
+		writeError(w, http.StatusForbidden, "terminal_off", "terminals are switched off in the settings")
+		return
+	}
 	cookie, err := r.Cookie(s.cookieName())
 	if err != nil || !s.sessions.Confirmed(cookie.Value) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
@@ -211,17 +237,27 @@ func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	stream, resize, err := s.opts.Docker.Console(ctx, id)
+	stream, resize, err := open(ctx)
 	if err != nil {
 		conn.Close(websocket.StatusInternalError, "console could not be opened")
 		return
 	}
 	defer stream.Close()
-	slog.Info("console opened", "container", id, "user", user.Name, "ip", remoteIP(r))
-	defer slog.Info("console closed", "container", id, "user", user.Name, "ip", remoteIP(r))
+	slog.Info("console opened", "target", target, "user", user.Name, "ip", remoteIP(r))
+	defer slog.Info("console closed", "target", target, "user", user.Name, "ip", remoteIP(r))
 
 	idle := time.AfterFunc(consoleIdle, cancel)
 	defer idle.Stop()
+	// Switching terminals off ends the ones that are open.
+	off := s.opts.Terminal.Off()
+	go func() {
+		select {
+		case <-off:
+			conn.Close(websocket.StatusPolicyViolation, "terminals were switched off")
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 
 	go func() {
 		defer cancel()
@@ -258,6 +294,28 @@ func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+}
+
+// handleTerminal tells the web UI whether terminals are allowed.
+func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"enabled": s.opts.Terminal.Enabled(),
+		// Without a shell on the NAS there are container consoles only.
+		"nasShell": !s.opts.Terminal.Disabled,
+	})
+}
+
+func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Enabled bool }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Terminal.SetEnabled(req.Enabled); err != nil {
+		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+		return
+	}
+	slog.Info("terminals switched", "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleTerminal(w, r)
 }
 
 // handleConfirm marks the session as confirmed after the password was

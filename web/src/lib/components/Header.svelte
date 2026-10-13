@@ -4,6 +4,7 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
+	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
 
@@ -53,6 +54,12 @@
 			<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a>
 		{/each}
 	</nav>
+	{#if role !== 'user'}
+		<button type="button" class="terminal" aria-pressed={terminal.open} title={t('terminal.shortcut')} onclick={toggleTerminal}>
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
+			<span>{t('terminal.title')}</span>
+		</button>
+	{/if}
 	<AccountMenu />
 </header>
 
@@ -75,6 +82,30 @@
 	}
 	.brand {
 		display: flex;
+	}
+	.terminal {
+		height: 2.75rem;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 14px;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		color: var(--text);
+		font: inherit;
+		font-size: 0.875rem;
+		cursor: pointer;
+	}
+	.terminal[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+		font-weight: 500;
+	}
+	@media (max-width: 1100px) {
+		.terminal span {
+			display: none;
+		}
 	}
 	.host {
 		padding: 3px 8px;

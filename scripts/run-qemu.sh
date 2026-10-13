@@ -5,6 +5,8 @@
 # Usage: scripts/run-qemu.sh [extra qemu arguments]
 #
 #   MEM=4G        RAM of the VM
+#   QEMU_EXTRA=   more options for QEMU, e.g. devices to hand on to nested VMs
+#   CMDLINE=      more kernel parameters
 #   DISKS=0       number of empty data disks (test/disks/), for RAID tests
 #   DISK_SIZE=8G  size of each new data disk
 #   HTTPS_PORT=8443  host port forwarded to the web UI: https://127.0.0.1:8443
@@ -96,6 +98,7 @@ exec qemu-system-x86_64 \
     -device virtio-scsi-pci \
     -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$HTTPS_PORT-:443,hostfwd=tcp:127.0.0.1:$SMB_PORT-:445" \
     -device virtio-net-pci,netdev=net0 \
-    -smbios "type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200" \
+    -smbios "type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200${CMDLINE:+ $CMDLINE}" \
+    ${QEMU_EXTRA:-} \
     $display \
     "$@"

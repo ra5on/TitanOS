@@ -19,9 +19,13 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // Options are the parts the API works with.
@@ -36,8 +40,13 @@ type Options struct {
 	Files   *files.Manager
 	Docker  *docker.Manager
 	Catalog *catalog.Manager
-	Power   system.Power
-	Version string
+	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
+	Terminal *terminal.Manager
+	VMs      *vm.Manager
+	Hardware *hardware.Manager
+	Plugins  *plugins.Manager
+	Power    system.Power
+	Version  string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -136,6 +145,30 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/apps/sources/{id}", s.requireAdmin(s.handleSourceRemove))
 	mux.HandleFunc("GET /api/v1/apps/sources/{source}/apps/{app}", s.requireAdmin(s.handleAppTemplate))
 
+	// Virtual machines. Like containers: administrators only.
+	mux.HandleFunc("GET /api/v1/vms", s.requireAdmin(s.handleVMs))
+	mux.HandleFunc("POST /api/v1/vms", s.requireAdmin(s.handleVMCreate))
+	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
+	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
+	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireAdmin(s.handleVMGrow))
+	mux.HandleFunc("GET /api/v1/vms/{name}/serial", s.requireAdmin(s.handleVMSerial))
+	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAdmin(s.handleVMUpdate))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}", s.requireAdmin(s.handleVMDelete))
+	mux.HandleFunc("GET /api/v1/vms/{name}/xml", s.requireAdmin(s.handleVMXML))
+	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
+	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
+
+	// Plugins become part of the system: administrators only.
+	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
+	mux.HandleFunc("POST /api/v1/plugins", s.requireAdmin(s.handlePluginInstall))
+	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))
+	mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.requireAdmin(s.handlePluginRemove))
+
+	// Shells on the NAS and in containers.
+	mux.HandleFunc("GET /api/v1/terminal", s.requireAdmin(s.handleTerminal))
+	mux.HandleFunc("PUT /api/v1/terminal", s.requireAdmin(s.handleTerminalSettings))
+	mux.HandleFunc("GET /api/v1/terminal/shell", s.requireAdmin(s.handleShell))
 	mux.HandleFunc("POST /api/v1/session/confirm", s.requireUser(s.handleConfirm))
 	mux.HandleFunc("GET /api/v1/session/confirmed", s.requireUser(s.handleConfirmed))
 
