@@ -1,5 +1,24 @@
 <script lang="ts">
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { api, ApiError } from '#lib/api.ts';
+	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { session } from '#lib/session.svelte.ts';
+
+	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
+	let terminals = $state<{ enabled: boolean } | null>(null);
+	let error = $state('');
+
+	$effect(() => {
+		if (admin) api.get<{ enabled: boolean }>('/terminal').then((res) => (terminals = res), () => {});
+	});
+
+	async function setTerminals(enabled: boolean) {
+		error = '';
+		try {
+			terminals = await api.put<{ enabled: boolean }>('/terminal', { enabled });
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
 </script>
 
 <h1>{t('settings.title')}</h1>
@@ -9,9 +28,43 @@
 		<span class="name">{t('menu.appearance')}</span>
 		<span class="muted">{t('settings.appearanceDesc')}</span>
 	</a>
+	{#if admin}
+		<a class="tile" href="/settings/hardware">
+			<span class="name">{t('hardware.title')}</span>
+			<span class="muted">{t('hardware.settingsDesc')}</span>
+		</a>
+	{/if}
 </div>
 
+{#if admin && terminals}
+	<section class="tile option">
+		<label class="check">
+			<input type="checkbox" checked={terminals.enabled} onchange={(event) => setTerminals(event.currentTarget.checked)} />
+			<span class="name">{t('settings.terminal')}</span>
+		</label>
+		<p class="muted">{t('settings.terminalDesc')}</p>
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	</section>
+{/if}
+
 <style>
+	.option {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: var(--tile-pad);
+		font-size: 0.875rem;
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.check input {
+		width: 18px;
+		height: 18px;
+		margin: 0;
+	}
 	h1 {
 		font-size: 1.5rem;
 		font-weight: 600;

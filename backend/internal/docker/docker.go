@@ -505,17 +505,25 @@ func (m *Manager) CheckUpdates(ctx context.Context) error {
 	return nil
 }
 
-// Console opens a shell inside a running container. The returned function
-// tells the shell the size of the terminal.
-func (m *Manager) Console(ctx context.Context, id string) (io.ReadWriteCloser, func(cols, rows int), error) {
+// Console opens a shell inside a running container: "bash", "sh" or, with
+// an empty name, bash where the image has it and sh everywhere else. The
+// returned function tells the shell the size of the terminal.
+func (m *Manager) Console(ctx context.Context, id, shell string) (io.ReadWriteCloser, func(cols, rows int), error) {
 	if m.Disabled {
 		return nil, nil, ErrDisabled
 	}
 	if !containerIDRE.MatchString(id) {
 		return nil, nil, ErrNotFound
 	}
-	// bash where the image has it, sh everywhere else.
-	exec, err := m.api.execCreate(ctx, id, []string{"/bin/sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"})
+	command := []string{"/bin/sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"}
+	switch shell {
+	case "":
+	case "bash", "sh":
+		command = []string{shell}
+	default:
+		return nil, nil, ErrNotFound
+	}
+	exec, err := m.api.execCreate(ctx, id, command)
 	if err != nil {
 		return nil, nil, mapAPIError(err)
 	}

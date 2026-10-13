@@ -17,9 +17,13 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 var testUI = fstest.MapFS{
@@ -54,7 +58,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -65,6 +69,30 @@ func newTestServer(t *testing.T) *testServer {
 // disabledDocker returns a Docker manager that never touches the system.
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledPlugins returns a plugin manager that never touches the system.
+func disabledPlugins(store *config.Store) *plugins.Manager {
+	m := plugins.NewManager(store)
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledVMs returns a VM manager that never touches the system.
+func disabledVMs(store *config.Store) *vm.Manager {
+	m := vm.NewManager(store, 0)
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// noShell returns a terminal manager that never starts a shell.
+func noShell(store *config.Store) *terminal.Manager {
+	m := terminal.NewManager(store)
 	m.Disabled = true
 	m.Load()
 	return m
@@ -353,7 +381,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -604,6 +632,76 @@ func TestDockerIsForAdministrators(t *testing.T) {
 	}
 }
 
+func TestVMsAreForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/vms", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"vms":[]`) || !strings.Contains(string(body), `"cpus":`) {
+		t.Errorf("VM list: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/vms/nope/start", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("start in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/vms/nope/screen", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "vm_not_running" {
+		t.Errorf("screen of a VM that does not run: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/vms/nope/xml", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "vm_not_found" {
+		t.Errorf("description of an unknown VM: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/vms/host", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"cpus":[{"id":0`) || !strings.Contains(string(body), `"images":[]`) {
+		t.Errorf("host: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/hardware", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"usedBy":{}`) {
+		t.Errorf("hardware: %d %s", res.StatusCode, body)
+	}
+	// A device that is not there cannot be given to a VM.
+	spec := map[string]any{"name": "x", "template": "linux", "memoryMiB": 1024, "vcpus": 1, "pci": []string{"0000:ff:1f.7"}}
+	if res, body := ts.request("POST", "/api/v1/vms", spec); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "device_unavailable" {
+		t.Errorf("VM with a device that does not exist: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{
+		{"GET", "/api/v1/vms"},
+		{"GET", "/api/v1/vms/host"},
+		{"GET", "/api/v1/hardware"},
+		{"GET", "/api/v1/vms/x/serial"},
+		{"POST", "/api/v1/vms/x/grow"},
+		{"POST", "/api/v1/vms"},
+		{"GET", "/api/v1/vms/media"},
+		{"POST", "/api/v1/vms/x/start"},
+		{"DELETE", "/api/v1/vms/x"},
+		{"GET", "/api/v1/vms/x/screen"},
+	} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestPluginsAreForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/plugins", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"plugins":[]`) {
+		t.Errorf("plugins: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/plugins", map[string]string{"path": "/mnt/x/y.plugin.json"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("install in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("POST", "/api/v1/plugins/x/explode", nil); res.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown action: %d", res.StatusCode)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
 func TestAppStore(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
@@ -690,6 +788,23 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	if res, body := ts.request("GET", console, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
 		t.Errorf("console after confirmation: %d %s", res.StatusCode, body)
 	}
+	// The shell on the NAS is behind the same check.
+	if res, body := ts.do(ts.newClient(), "GET", "/api/v1/terminal/shell", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("shell without login: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/terminal/shell", nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("shell after confirmation: %d %s", res.StatusCode, body)
+	}
+	// Switched off in the settings, not even a confirmed session gets one.
+	if res, body := ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": false}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
+		t.Errorf("switching terminals off: %d %s", res.StatusCode, body)
+	}
+	for _, path := range []string{console, "/api/v1/terminal/shell"} {
+		if res, body := ts.request("GET", path, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "terminal_off" {
+			t.Errorf("%s while terminals are off: %d %s", path, res.StatusCode, body)
+		}
+	}
+	ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": true})
 	// The confirmation belongs to this session only.
 	other := ts.newClient()
 	ts.do(other, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword})

@@ -1,0 +1,3 @@
+# A PCI device handed to a VM shows up here once it is taken from its
+# driver. QEMU does not run as root; it gets at the device through its group.
+SUBSYSTEM=="vfio", GROUP="kvm", MODE="0660"

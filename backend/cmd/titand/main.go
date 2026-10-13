@@ -22,11 +22,15 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/version"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
 )
 
@@ -106,6 +110,43 @@ func run(opts options) error {
 	}
 	go appCatalog.Run(ctx)
 
+	// Virtual machines; starts those marked for autostart once their volumes are there.
+	machines := vm.NewManager(store, shares.UsersGID)
+	machines.Disabled = opts.dev
+	if err := machines.Load(); err != nil {
+		slog.Warn("VMs not readable from /config", "err", err)
+	}
+	// Only disks that are in no volume may be handed to a VM as a whole.
+	machines.FreeDisks = func() []string {
+		status, err := volumes.Status(ctx)
+		if err != nil {
+			return nil
+		}
+		var free []string
+		for _, disk := range status.Disks {
+			if disk.Role == "free" {
+				free = append(free, disk.Name)
+			}
+		}
+		return free
+	}
+	go machines.Run(ctx, volumes.Mounted)
+
+	// System extensions on a volume, laid over the system once it is mounted.
+	extensions := plugins.NewManager(store)
+	extensions.Disabled = opts.dev
+	if err := extensions.Load(); err != nil {
+		slog.Warn("plugin settings not readable from /config", "err", err)
+	}
+	go extensions.Run(ctx, volumes.Mounted)
+
+	// The root shell of the terminal panel.
+	shells := terminal.NewManager(store)
+	shells.Disabled = opts.dev
+	if err := shells.Load(); err != nil {
+		slog.Warn("terminal settings not readable from /config", "err", err)
+	}
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -120,6 +161,10 @@ func run(opts options) error {
 		Files:         files.NewManager(shares.UsersGID),
 		Docker:        containers,
 		Catalog:       appCatalog,
+		Terminal:      shells,
+		VMs:           machines,
+		Hardware:      hardware.NewManager(),
+		Plugins:       extensions,
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,

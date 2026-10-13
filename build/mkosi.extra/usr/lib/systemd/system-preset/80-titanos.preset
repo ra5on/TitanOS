@@ -2,3 +2,10 @@ enable titand.service
 enable systemd-networkd.service
 enable systemd-resolved.service
 enable systemd-timesyncd.service
+
+# Virtual machines. libvirt starts when the first VM does and stops again
+# two minutes after the last one is off. Its guests service shuts the VMs
+# down when the NAS does.
+enable libvirtd.socket
+enable virtlogd.socket
+enable libvirt-guests.service

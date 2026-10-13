@@ -5,7 +5,7 @@
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
-	import ConsoleDialog from './ConsoleDialog.svelte';
+	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import ContainerCard from './ContainerCard.svelte';
 
 	const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
@@ -19,7 +19,7 @@
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
-		| { kind: 'remove' | 'console'; container: DockerContainer }
+		| { kind: 'remove'; container: DockerContainer }
 		| null
 	>(null);
 	let draft = $state({ name: '', compose: '', enabled: true, volume: '' });
@@ -223,7 +223,7 @@
 			</button>
 			{#if openStack}
 				{#each stack.members as container (container.id)}
-					<ContainerCard {container} {host} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => (dialog = { kind: 'console', container })} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+					<ContainerCard {container} {host} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 				{/each}
 			{/if}
 		</section>
@@ -231,7 +231,7 @@
 
 	<div class="cards">
 		{#each singles as container (container.id)}
-			<ContainerCard {container} {host} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => (dialog = { kind: 'console', container })} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+			<ContainerCard {container} {host} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 		{/each}
 	</div>
 	{#if containers.length === 0 && jobs.length === 0}
@@ -250,8 +250,6 @@
 			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}>{t('common.done')}</button>
 		</div>
 	</Dialog>
-{:else if dialog?.kind === 'console'}
-	<ConsoleDialog container={dialog.container} onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
 	<Dialog title={t('docker.removeTitle', { name: container.managed ? container.app : container.name })} onclose={() => (dialog = null)}>
