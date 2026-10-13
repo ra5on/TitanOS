@@ -24,6 +24,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/network"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -160,6 +161,14 @@ func run(opts options) error {
 		slog.Warn("terminal settings not readable from /config", "err", err)
 	}
 
+	// Tells in the web UI, by mail and by push message when a volume or a
+	// disk needs attention.
+	notifier := notify.NewManager(store)
+	if err := notifier.Load(); err != nil {
+		slog.Warn("notification settings not readable from /config", "err", err)
+	}
+	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -179,6 +188,7 @@ func run(opts options) error {
 		Hardware:      hardware.NewManager(),
 		Plugins:       extensions,
 		Network:       connection,
+		Notify:        notifier,
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
