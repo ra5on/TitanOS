@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -32,6 +34,8 @@ type Options struct {
 	Storage *storage.Manager
 	Shares  *shares.Manager
 	Files   *files.Manager
+	Docker  *docker.Manager
+	Catalog *catalog.Manager
 	Power   system.Power
 	Version string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -110,6 +114,31 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/finish", s.requireUser(s.handleUploadFinish))
 	mux.HandleFunc("DELETE /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadAbort))
 
+	// Docker. Whoever controls containers controls the machine: administrators only.
+	mux.HandleFunc("GET /api/v1/docker", s.requireAdmin(s.handleDocker))
+	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAdmin(s.handleDockerSettings))
+	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAdmin(s.handleContainerAction))
+	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAdmin(s.handleContainerRemove))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", s.requireAdmin(s.handleContainerLogs))
+	mux.HandleFunc("POST /api/v1/docker/apps", s.requireAdmin(s.handleAppCreate))
+	mux.HandleFunc("GET /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppCompose))
+	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppRemove))
+	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppSetCompose))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireAdmin(s.handleAppUpdate))
+	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
+	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireAdmin(s.handleUpdatesApply))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
+
+	// The app store: templates to install as Docker apps.
+	mux.HandleFunc("GET /api/v1/apps", s.requireAdmin(s.handleApps))
+	mux.HandleFunc("POST /api/v1/apps/refresh", s.requireAdmin(s.handleAppsRefresh))
+	mux.HandleFunc("POST /api/v1/apps/sources", s.requireAdmin(s.handleSourceAdd))
+	mux.HandleFunc("DELETE /api/v1/apps/sources/{id}", s.requireAdmin(s.handleSourceRemove))
+	mux.HandleFunc("GET /api/v1/apps/sources/{source}/apps/{app}", s.requireAdmin(s.handleAppTemplate))
+
+	mux.HandleFunc("POST /api/v1/session/confirm", s.requireUser(s.handleConfirm))
+	mux.HandleFunc("GET /api/v1/session/confirmed", s.requireUser(s.handleConfirmed))
+
 	mux.HandleFunc("/api/", handleAPINotFound)
 	mux.Handle("/", uiHandler(opts.UI))
 
@@ -165,7 +194,13 @@ const maxJSONBody = 64 * 1024
 // readJSON decodes the request body into v and answers the request itself
 // if that fails.
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
+	return readJSONBody(w, r, v)
+}
+
+// readJSONBody is readJSON for callers that set their own size limit.
+func readJSONBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {

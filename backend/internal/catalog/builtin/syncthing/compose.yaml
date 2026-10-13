@@ -1,0 +1,39 @@
+x-titanos:
+  name: Syncthing
+  category: backup
+  description:
+    de: Ordner zwischen Geräten synchronisieren, ohne Cloud.
+    en: Keep folders in sync between devices, without a cloud.
+  paths:
+    /var/syncthing:
+      label: { de: Konfiguration, en: Configuration }
+    /data:
+      label: { de: Synchronisierte Ordner, en: Synced folders }
+      suggest: share
+  ports:
+    "8384":
+      label: WebUI
+      webui: true
+    "22000":
+      label: { de: Synchronisation, en: Sync }
+    "22000/udp":
+      label: { de: Synchronisation (QUIC), en: Sync (QUIC) }
+    "21027/udp":
+      label: { de: Geräte im Netz finden, en: Local discovery }
+
+services:
+  syncthing:
+    image: syncthing/syncthing:latest
+    restart: unless-stopped
+    environment:
+      PUID: ""
+      PGID: ""
+      TZ: ""
+    volumes:
+      - "./config:/var/syncthing"
+      - "./data:/data"
+    ports:
+      - "8384:8384"
+      - "22000:22000"
+      - "22000:22000/udp"
+      - "21027:21027/udp"

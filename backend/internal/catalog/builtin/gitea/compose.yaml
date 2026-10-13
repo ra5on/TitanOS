@@ -1,0 +1,36 @@
+x-titanos:
+  name: Gitea
+  category: development
+  description:
+    de: Schlanker Git-Server mit Weboberfläche.
+    en: Lightweight Git server with a web interface.
+  variables:
+    USER_UID:
+      label: { de: Benutzer-ID für die Daten, en: User ID for the data }
+      fill: uid
+    USER_GID:
+      label: { de: Gruppen-ID für die Daten, en: Group ID for the data }
+      fill: gid
+  paths:
+    /data:
+      label: { de: Daten und Repositories, en: Data and repositories }
+  ports:
+    "3000":
+      label: WebUI
+      webui: true
+    "22":
+      label: SSH
+
+services:
+  gitea:
+    image: gitea/gitea:latest
+    restart: unless-stopped
+    environment:
+      USER_UID: ""
+      USER_GID: ""
+      TZ: ""
+    volumes:
+      - "./data:/data"
+    ports:
+      - "3000:3000"
+      - "2222:22"
