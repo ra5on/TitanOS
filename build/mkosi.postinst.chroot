@@ -36,3 +36,16 @@ ln -s efi/config /config
 # The root filesystem is fresh on every boot, so every boot looks like the
 # first one to systemd. Do not let it ask setup questions on the console.
 ln -sf /dev/null /etc/systemd/system/systemd-firstboot.service
+
+# mdadm's own monitor only sends mail and fails without an address. titand
+# watches the arrays itself.
+ln -sf /dev/null /etc/systemd/system/mdmonitor.service
+
+# No RAID tools in the initramfs. The system boots from the stick, never from
+# an array. Without mdadm the arrays stay untouched until the real system is
+# up, and live-boot, which may look for the stick among all block devices,
+# cannot mount a volume by mistake. udev assembles the arrays afterwards.
+rm -f /usr/share/initramfs-tools/hooks/mdadm \
+    /usr/share/initramfs-tools/scripts/local-block/mdadm \
+    /usr/share/initramfs-tools/scripts/local-bottom/mdadm
+update-initramfs -u -k all

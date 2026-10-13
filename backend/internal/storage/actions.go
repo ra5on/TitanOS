@@ -1,0 +1,507 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+)
+
+// Errors a request can be answered with. The API turns them into codes.
+var (
+	ErrNotLoaded       = errors.New("storage: configuration could not be read from /config")
+	ErrInvalidName     = errors.New("storage: invalid volume name")
+	ErrExists          = errors.New("storage: a volume with this name exists")
+	ErrNotFound        = errors.New("storage: no such volume")
+	ErrInvalidLevel    = errors.New("storage: unknown RAID level")
+	ErrInvalidFS       = errors.New("storage: unknown filesystem")
+	ErrTooFewDisks     = errors.New("storage: not enough disks for this RAID level")
+	ErrDiskUnavailable = errors.New("storage: disk cannot be used")
+	ErrDiskTooSmall    = errors.New("storage: disk is too small")
+	ErrNotConfirmed    = errors.New("storage: erasing was not confirmed")
+	ErrBusy            = errors.New("storage: volume is busy")
+	ErrNotPossible     = errors.New("storage: not possible in the current state")
+	ErrReadOnly        = errors.New("storage: disks are not changed in development mode")
+)
+
+// The name is also the mount point, the array name and the filesystem label
+// (XFS allows 12 characters).
+var volumeNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
+
+// minDisks is the smallest number of disks per RAID level.
+var minDisks = map[string]int{"raid0": 2, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
+
+var filesystems = []string{"ext4", "xfs"}
+
+const (
+	mebibyte = 1 << 20
+	// The partition leaves this much of the disk unused, so that a
+	// replacement disk that is a little smaller still fits.
+	reserveBytes = 128 * mebibyte
+	minDiskBytes = 1 << 30
+	// GPT type "Linux RAID".
+	raidPartitionType = "A19D880F-05FC-4D3B-A006-743F0F84911E"
+)
+
+// CreateRequest describes a new volume.
+type CreateRequest struct {
+	Name       string   `json:"name"`
+	Level      string   `json:"level"`
+	Filesystem string   `json:"filesystem"`
+	Disks      []string `json:"disks"` // names like "sda"
+	// Erase repeats the disks to be wiped. Creating a volume destroys
+	// everything on them, so the caller has to say so explicitly.
+	Erase []string `json:"erase"`
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(x, y) && len(slices.Compact(x)) == len(a)
+}
+
+// usable returns the disk with the given name if a volume may take it:
+// it exists, is not the stick, not in a volume and nothing on it is mounted.
+func usable(status Status, name string) (Disk, error) {
+	for _, disk := range status.Disks {
+		if disk.Name != name {
+			continue
+		}
+		if disk.Role == RoleStick || disk.Role == RoleMember || disk.Mounted {
+			return Disk{}, fmt.Errorf("%w: %s is in use", ErrDiskUnavailable, name)
+		}
+		if disk.SizeBytes < minDiskBytes {
+			return Disk{}, fmt.Errorf("%w: %s", ErrDiskTooSmall, name)
+		}
+		return disk, nil
+	}
+	return Disk{}, fmt.Errorf("%w: %s not found", ErrDiskUnavailable, name)
+}
+
+// memberSizeMiB is the size of the RAID partition on a disk of the given size.
+func memberSizeMiB(diskBytes uint64) uint64 {
+	return (diskBytes - mebibyte - reserveBytes) / mebibyte
+}
+
+// prepareDisk wipes a disk and creates the one RAID partition on it.
+func (m *Manager) prepareDisk(ctx context.Context, device blockDevice, volume string, sizeMiB uint64) (string, error) {
+	// Remove every signature, innermost first, so that nothing on the disk
+	// is recognized as an old filesystem or array afterwards.
+	var nodes []blockDevice
+	device.walk(func(node blockDevice) {
+		if !isArray(node) {
+			nodes = append(nodes, node)
+		}
+	})
+	slices.Reverse(nodes)
+	for _, node := range nodes {
+		if node.FSType == "linux_raid_member" {
+			if _, err := m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", node.Name); err != nil {
+				return "", err
+			}
+		}
+		if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", node.Name); err != nil {
+			return "", err
+		}
+	}
+
+	table := fmt.Sprintf("label: gpt\nstart=1MiB, size=%dMiB, type=%s, name=titanos-%s\n", sizeMiB, raidPartitionType, volume)
+	if _, err := m.runner.Run(ctx, table, "sfdisk", "--quiet", "--wipe", "always", "--wipe-partitions", "always", device.Name); err != nil {
+		return "", err
+	}
+	if _, err := m.runner.Run(ctx, "", "udevadm", "settle"); err != nil {
+		return "", err
+	}
+	return partitionPath(device.Name), nil
+}
+
+func findDevice(devices []blockDevice, name string) (blockDevice, bool) {
+	for _, device := range devices {
+		if device.Name == "/dev/"+name {
+			return device, true
+		}
+	}
+	return blockDevice{}, false
+}
+
+// Create builds a new volume: partitions the disks, creates the array and
+// the filesystem, mounts it and records it in /config.
+// Everything on the disks is destroyed.
+func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.ReadOnly {
+		return ErrReadOnly
+	}
+
+	m.mu.RLock()
+	loaded := m.loaded
+	m.mu.RUnlock()
+	if !loaded {
+		return ErrNotLoaded
+	}
+	if !volumeNameRE.MatchString(req.Name) {
+		return ErrInvalidName
+	}
+	if _, exists := m.find(req.Name); exists {
+		return ErrExists
+	}
+	need, ok := minDisks[req.Level]
+	if !ok {
+		return ErrInvalidLevel
+	}
+	if !slices.Contains(filesystems, req.Filesystem) {
+		return ErrInvalidFS
+	}
+	if len(req.Disks) < need || (req.Level == "raid10" && len(req.Disks)%2 != 0) {
+		return ErrTooFewDisks
+	}
+	if !sameSet(req.Disks, req.Erase) {
+		return ErrNotConfirmed
+	}
+	if _, err := os.Stat(filepath.Join(m.mountRoot, req.Name)); err == nil && readMounts()[filepath.Join(m.mountRoot, req.Name)] {
+		return ErrExists
+	}
+
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return err
+	}
+	status := m.status(devices, m.arrays(ctx))
+	smallest := ^uint64(0)
+	for _, name := range req.Disks {
+		disk, err := usable(status, name)
+		if err != nil {
+			return err
+		}
+		smallest = min(smallest, disk.SizeBytes)
+	}
+	sizeMiB := memberSizeMiB(smallest)
+
+	slog.Info("creating volume", "name", req.Name, "level", req.Level, "filesystem", req.Filesystem, "disks", req.Disks)
+	var parts []string
+	for _, name := range req.Disks {
+		device, _ := findDevice(devices, name)
+		part, err := m.prepareDisk(ctx, device, req.Name, sizeMiB)
+		if err != nil {
+			return err
+		}
+		parts = append(parts, part)
+	}
+
+	arrayPath := "/dev/md/" + req.Name
+	args := []string{"--create", arrayPath, "--run", "--quiet", "--metadata=1.2", "--homehost=any",
+		"--name=" + req.Name, "--level=" + strings.TrimPrefix(req.Level, "raid"),
+		fmt.Sprintf("--raid-devices=%d", len(parts))}
+	if req.Level != "raid0" {
+		// The bitmap lets a disk that dropped out briefly catch up quickly
+		// instead of being rebuilt from scratch.
+		args = append(args, "--bitmap=internal")
+	}
+	if _, err := m.runner.Run(ctx, "", "mdadm", append(args, parts...)...); err != nil {
+		return err
+	}
+	if _, err := m.runner.Run(ctx, "", "udevadm", "settle"); err != nil {
+		return err
+	}
+
+	detail, err := m.runner.Run(ctx, "", "mdadm", "--detail", "--export", arrayPath)
+	if err != nil {
+		return err
+	}
+	arrayUUID := parseMdadmExport(detail)["MD_UUID"]
+	if arrayUUID == "" {
+		return errors.New("storage: new array has no UUID")
+	}
+
+	mkfs := []string{"-F", "-q", "-L", req.Name, "-m", "0", arrayPath}
+	if req.Filesystem == "xfs" {
+		mkfs = []string{"-f", "-q", "-L", req.Name, arrayPath}
+	}
+	if _, err := m.runner.Run(ctx, "", "mkfs."+req.Filesystem, mkfs...); err != nil {
+		return err
+	}
+	fsUUID, err := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", arrayPath)
+	if err != nil {
+		return err
+	}
+
+	volume := VolumeConfig{
+		Name: req.Name, Level: req.Level, Filesystem: req.Filesystem,
+		ArrayUUID: arrayUUID, FilesystemUUID: strings.TrimSpace(fsUUID),
+		Created: time.Now().UTC().Truncate(time.Second),
+	}
+	// Record the volume before mounting: if the stick cannot be written,
+	// the array exists but is not lost – it shows up as a foreign RAID.
+	if err := m.saveVolumes(append(m.configured(), volume)); err != nil {
+		return fmt.Errorf("volume created but not saved to /config: %w", err)
+	}
+	return m.mount(ctx, volume)
+}
+
+// arrayOf returns the live array of a volume.
+func (m *Manager) arrayOf(ctx context.Context, volume VolumeConfig) (array, bool) {
+	for _, a := range m.arrays(ctx) {
+		if a.uuid == normalizeUUID(volume.ArrayUUID) {
+			return a, true
+		}
+	}
+	return array{}, false
+}
+
+func (m *Manager) mount(ctx context.Context, volume VolumeConfig) error {
+	mountPoint := filepath.Join(m.mountRoot, volume.Name)
+	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
+		return err
+	}
+	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", "noatime", "UUID="+volume.FilesystemUUID, mountPoint)
+	return err
+}
+
+// mountAll mounts every configured volume whose array is running and that
+// is not mounted yet. Arrays can appear late (slow disks, degraded start).
+func (m *Manager) mountAll(ctx context.Context) {
+	if m.ReadOnly {
+		return
+	}
+	if !m.actions.TryLock() {
+		return // an action is rearranging things; next round
+	}
+	defer m.actions.Unlock()
+
+	configured := m.configured()
+	if len(configured) == 0 {
+		return
+	}
+	mounts := readMounts()
+	var arrays []array
+	for _, volume := range configured {
+		if mounts[filepath.Join(m.mountRoot, volume.Name)] {
+			continue
+		}
+		if arrays == nil {
+			arrays = m.arrays(ctx)
+		}
+		for _, a := range arrays {
+			if a.uuid != normalizeUUID(volume.ArrayUUID) || a.state == "inactive" || a.state == "clear" {
+				continue
+			}
+			if err := m.mount(ctx, volume); err != nil {
+				slog.Warn("mount volume", "name", volume.Name, "err", err)
+			} else {
+				slog.Info("volume mounted", "name", volume.Name)
+			}
+		}
+	}
+}
+
+// Delete removes a volume and wipes its disks. All data on it is destroyed.
+// confirm must repeat the name.
+func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.ReadOnly {
+		return ErrReadOnly
+	}
+
+	volume, ok := m.find(name)
+	if !ok {
+		return ErrNotFound
+	}
+	if confirm != name {
+		return ErrNotConfirmed
+	}
+
+	slog.Info("deleting volume", "name", name)
+	mountPoint := filepath.Join(m.mountRoot, name)
+	if readMounts()[mountPoint] {
+		if _, err := m.runner.Run(ctx, "", "umount", mountPoint); err != nil {
+			return fmt.Errorf("%w: %v", ErrBusy, err)
+		}
+	}
+
+	if a, running := m.arrayOf(ctx, volume); running {
+		if _, err := m.runner.Run(ctx, "", "mdadm", "--stop", "/dev/"+a.device); err != nil {
+			return err
+		}
+		for _, member := range a.members {
+			part := "/dev/" + member.device
+			// A disk that has already failed may not answer any more.
+			if _, err := m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part); err != nil {
+				slog.Warn("clear array member", "device", part, "err", err)
+			}
+			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", part); err != nil {
+				slog.Warn("wipe array member", "device", part, "err", err)
+			}
+		}
+		m.wipePartitionTables(ctx, a)
+	}
+
+	remaining := slices.DeleteFunc(m.configured(), func(v VolumeConfig) bool { return v.Name == name })
+	if err := m.saveVolumes(remaining); err != nil {
+		return err
+	}
+	os.Remove(mountPoint)
+	return nil
+}
+
+// wipePartitionTables turns the former members of an array back into empty disks.
+func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
+	m.runner.Run(ctx, "", "udevadm", "settle")
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return
+	}
+	for _, device := range devices {
+		for _, part := range device.partitions() {
+			if !slices.ContainsFunc(a.members, func(member arrayMember) bool { return "/dev/"+member.device == part.KName }) {
+				continue
+			}
+			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name); err != nil {
+				slog.Warn("wipe disk", "device", device.Name, "err", err)
+			}
+		}
+	}
+	m.runner.Run(ctx, "", "udevadm", "settle")
+}
+
+// AddDisk adds a disk to a volume. If a disk is missing the new one takes
+// its place and is rebuilt; otherwise it waits as a spare that steps in
+// automatically when a disk fails. Everything on the disk is destroyed.
+func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.ReadOnly {
+		return ErrReadOnly
+	}
+
+	volume, ok := m.find(name)
+	if !ok {
+		return ErrNotFound
+	}
+	if !erase {
+		return ErrNotConfirmed
+	}
+	if volume.Level == "raid0" {
+		return fmt.Errorf("%w: RAID 0 has no redundancy to rebuild from", ErrNotPossible)
+	}
+	a, running := m.arrayOf(ctx, volume)
+	if !running {
+		return fmt.Errorf("%w: the volume is not running", ErrNotPossible)
+	}
+
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return err
+	}
+	disk, err := usable(m.status(devices, []array{a}), diskName)
+	if err != nil {
+		return err
+	}
+	// The new partition must be at least as large as the existing ones.
+	var memberSectors uint64
+	for _, member := range a.members {
+		memberSectors = max(memberSectors, readSysfsUint(filepath.Join("/sys/class/block", member.device, "size")))
+	}
+	sizeMiB := (memberSectors*512 + mebibyte - 1) / mebibyte
+	if sizeMiB == 0 || disk.SizeBytes < (sizeMiB+1)*mebibyte+mebibyte {
+		return fmt.Errorf("%w: %s", ErrDiskTooSmall, diskName)
+	}
+
+	slog.Info("adding disk to volume", "name", name, "disk", diskName)
+	device, _ := findDevice(devices, diskName)
+	part, err := m.prepareDisk(ctx, device, name, sizeMiB)
+	if err != nil {
+		return err
+	}
+	_, err = m.runner.Run(ctx, "", "mdadm", "--manage", "/dev/"+a.device, "--add", part)
+	return err
+}
+
+// RemoveDisk takes a failed or spare disk out of a volume and wipes it.
+// A disk that is still doing its job cannot be removed this way.
+func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.ReadOnly {
+		return ErrReadOnly
+	}
+
+	volume, ok := m.find(name)
+	if !ok {
+		return ErrNotFound
+	}
+	a, running := m.arrayOf(ctx, volume)
+	if !running {
+		return fmt.Errorf("%w: the volume is not running", ErrNotPossible)
+	}
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return err
+	}
+	device, found := findDevice(devices, diskName)
+	if !found {
+		return fmt.Errorf("%w: %s not found", ErrDiskUnavailable, diskName)
+	}
+	for _, member := range a.members {
+		part := "/dev/" + member.device
+		if !slices.ContainsFunc(device.partitions(), func(p blockDevice) bool { return p.KName == part }) {
+			continue
+		}
+		if state := memberState(member); state != MemberFaulty && state != MemberSpare {
+			return fmt.Errorf("%w: %s is an active part of the volume", ErrNotPossible, diskName)
+		}
+		slog.Info("removing disk from volume", "name", name, "disk", diskName)
+		if _, err := m.runner.Run(ctx, "", "mdadm", "--manage", "/dev/"+a.device, "--remove", part); err != nil {
+			return err
+		}
+		m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part)
+		m.runner.Run(ctx, "", "wipefs", "--all", "--force", part)
+		m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)
+		m.runner.Run(ctx, "", "udevadm", "settle")
+		return nil
+	}
+	return fmt.Errorf("%w: %s is not part of %s", ErrDiskUnavailable, diskName, name)
+}
+
+// Check starts or stops a consistency check: all copies and parity are read
+// and compared. Not possible while the volume is degraded or rebuilding.
+func (m *Manager) Check(ctx context.Context, name string, start bool) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.ReadOnly {
+		return ErrReadOnly
+	}
+
+	volume, ok := m.find(name)
+	if !ok {
+		return ErrNotFound
+	}
+	a, running := m.arrayOf(ctx, volume)
+	if !running || volume.Level == "raid0" {
+		return fmt.Errorf("%w: nothing to check", ErrNotPossible)
+	}
+	action := "idle"
+	if start {
+		if a.degraded > 0 {
+			return fmt.Errorf("%w: a disk is missing", ErrNotPossible)
+		}
+		if a.syncAction != "idle" {
+			return fmt.Errorf("%w: the volume is busy (%s)", ErrNotPossible, a.syncAction)
+		}
+		action = "check"
+	} else if a.syncAction != "check" {
+		return fmt.Errorf("%w: no check is running", ErrNotPossible)
+	}
+	return os.WriteFile(filepath.Join(m.sysBlock, a.device, "md", "sync_action"), []byte(action), 0o644)
+}

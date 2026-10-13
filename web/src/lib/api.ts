@@ -44,8 +44,9 @@ async function request<T>(method: string, path: string, body?: Body): Promise<T>
 		}
 		throw new ApiError(res.status, code, message, retryAfter);
 	}
-	if (res.status === 204 || res.status === 202) return undefined as T;
-	return res.json();
+	// Many actions answer without a body (201, 202, 204).
+	const text = await res.text();
+	return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const api = {
@@ -90,3 +91,48 @@ export type Preferences = {
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
 };
+
+export type DiskRole = 'stick' | 'member' | 'free' | 'used';
+export type MemberState = 'active' | 'rebuilding' | 'faulty' | 'spare';
+export type VolumeState = 'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
+export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
+export type Filesystem = 'ext4' | 'xfs';
+
+export type Disk = {
+	name: string;
+	path: string;
+	model: string;
+	serial: string;
+	sizeBytes: number;
+	kind: 'hdd' | 'ssd' | 'nvme' | 'usb';
+	role: DiskRole;
+	volume?: string;
+	memberState?: MemberState;
+	contents?: string[];
+	mounted?: boolean;
+	smart: {
+		healthy: boolean;
+		temperatureC: number;
+		powerOnHours: number;
+		errors: number;
+		rotationRate: number;
+		wearPercent: number;
+	} | null;
+};
+
+export type Volume = {
+	name: string;
+	level: RaidLevel;
+	filesystem: Filesystem;
+	mountPoint: string;
+	mounted: boolean;
+	state: VolumeState;
+	sizeBytes: number;
+	usedBytes: number;
+	raidDisks: number;
+	members: { disk: string; state: MemberState }[];
+	sync: { percent: number; speedBytesPerSecond: number; remainingSeconds: number } | null;
+	mismatches: number;
+};
+
+export type StorageStatus = { disks: Disk[]; volumes: Volume[] };

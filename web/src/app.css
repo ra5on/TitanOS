@@ -57,7 +57,12 @@
 	--warn-bg: #2a2312;
 	--warn-border: #5a4720;
 	--warn-text: #f6d79a;
+	--error-bg: #2a1512;
+	--error-border: #5a2a20;
 	--error-text: #f6b8a4;
+	--ok-bg: #12281e;
+	--ok-border: #245a40;
+	--ok-text: #9be3be;
 	--shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.55);
 }
 [data-mode='light'] {
@@ -65,7 +70,12 @@
 	--warn-bg: #fff4d6;
 	--warn-border: #e2c46c;
 	--warn-text: #6b4e00;
-	--error-text: #a3351a;
+	--error-bg: #fde8e2;
+	--error-border: #e8a898;
+	--error-text: #8c2a12;
+	--ok-bg: #e3f6ec;
+	--ok-border: #9ad4b4;
+	--ok-text: #17603c;
 	--shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.18);
 }
 
@@ -283,4 +293,51 @@ input[type='checkbox'] {
 	border-radius: var(--radius-ctl);
 	color: var(--warn-text);
 	font-size: 0.875rem;
+}
+
+.notice-error {
+	padding: 10px 14px;
+	background: var(--error-bg);
+	border: 1px solid var(--error-border);
+	border-radius: var(--radius-ctl);
+	color: var(--error-text);
+	font-size: 0.875rem;
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	background: var(--chip);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	white-space: nowrap;
+}
+.chip.ok {
+	background: var(--ok-bg);
+	border-color: var(--ok-border);
+	color: var(--ok-text);
+}
+.chip.warn {
+	background: var(--warn-bg);
+	border-color: var(--warn-border);
+	color: var(--warn-text);
+}
+.chip.error {
+	background: var(--error-bg);
+	border-color: var(--error-border);
+	color: var(--error-text);
+}
+
+.btn-danger {
+	background: var(--status-error);
+	border-color: transparent;
+	color: var(--on-warn);
+	font-weight: 600;
+}
+.btn-danger:hover:not(:disabled) {
+	background: var(--status-error);
+	filter: brightness(1.08);
 }

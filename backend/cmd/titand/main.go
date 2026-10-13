@@ -19,6 +19,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/version"
@@ -66,6 +67,14 @@ func run(opts options) error {
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", opts.configDir, "err", err)
 	}
 
+	volumes := storage.NewManager(store)
+	volumes.ReadOnly = opts.dev
+	if err := volumes.Load(); err != nil {
+		slog.Warn("volumes not readable from /config", "err", err)
+	}
+	// Mounts the volumes as their arrays come up and reads the disks' health.
+	go volumes.Run(ctx)
+
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
@@ -75,6 +84,7 @@ func run(opts options) error {
 		Store:         store,
 		Users:         users,
 		Monitor:       system.NewMonitor(ctx),
+		Storage:       volumes,
 		Power:         power,
 		Version:       version.Version,
 		SecureCookies: !opts.dev,

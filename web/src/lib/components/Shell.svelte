@@ -2,6 +2,7 @@
 	// The frame around every page once someone is logged in.
 	import type { Snippet } from 'svelte';
 	import { shell } from '#lib/shell.svelte.ts';
+	import { watchStorage } from '#lib/storage.svelte.ts';
 	import { watchSystem } from '#lib/system.svelte.ts';
 	import Header from './Header.svelte';
 	import StatusBar from './StatusBar.svelte';
@@ -9,6 +10,7 @@
 	let { children }: { children: Snippet } = $props();
 
 	$effect(() => watchSystem());
+	$effect(() => watchStorage());
 </script>
 
 <div class="shell">

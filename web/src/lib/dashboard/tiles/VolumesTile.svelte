@@ -1,14 +1,71 @@
 <script lang="ts">
-	// Volumes arrive with the storage area; until then the tile says so.
+	import { formatDiskBytes, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { storage } from '#lib/storage.svelte.ts';
+
+	const volumes = $derived(storage.status?.volumes ?? []);
+
+	function tone(state: string): string {
+		return state === 'ok' ? 'ok' : state === 'degraded' || state === 'failed' || state === 'missing' ? 'error' : 'warn';
+	}
 </script>
 
-<div class="empty">
-	<p>{t('volumes.empty')}</p>
-	<p class="muted">{t('volumes.emptyHint')}</p>
-</div>
+{#each volumes as volume (volume.name)}
+	{@const percent = volume.sizeBytes > 0 ? (100 * volume.usedBytes) / volume.sizeBytes : 0}
+	<div class="volume">
+		<div class="line">
+			<span class="mono name">{volume.name}</span>
+			<span class="chip">{t(`level.${volume.level}`)}</span>
+			<span class="chip {tone(volume.state)}">{t(`state.${volume.state}`)}{volume.sync ? ` ${formatPercent(volume.sync.percent)}` : ''}</span>
+			<span class="muted detail">{volume.members.length} × · {t(`fs.${volume.filesystem}`)}</span>
+		</div>
+		<div class="bar"><span style:width="{percent}%"></span></div>
+		<div class="line small muted">
+			<span>{volume.mounted ? t('storage.usedOf', { used: formatDiskBytes(volume.usedBytes), total: formatDiskBytes(volume.sizeBytes) }) : t('storage.notMounted')}</span>
+			<span class="mono">{volume.mounted ? formatPercent(percent) : ''}</span>
+		</div>
+	</div>
+{:else}
+	{#if storage.status}
+		<div class="empty">
+			<p>{t('volumes.empty')}</p>
+			<p class="muted"><a href="/storage">{t('nav.storage')}</a></p>
+		</div>
+	{/if}
+{/each}
 
 <style>
+	.volume {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.volume + .volume {
+		padding-top: 14px;
+		border-top: 1px solid var(--panel-border);
+	}
+	.line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 10px;
+	}
+	.name {
+		font-size: 1rem;
+		font-weight: 500;
+	}
+	.detail {
+		margin-left: auto;
+		font-size: 0.8125rem;
+	}
+	.small {
+		justify-content: space-between;
+		font-size: 0.8125rem;
+	}
+	.bar {
+		height: 8px;
+		border-radius: 4px;
+	}
 	.empty {
 		flex: 1 1 auto;
 		display: flex;
