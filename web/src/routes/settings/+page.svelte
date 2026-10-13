@@ -70,6 +70,10 @@
 			<span class="muted">{t('hardware.settingsDesc')}</span>
 		</a>
 	{/if}
+	<a class="tile" href="/settings/about">
+		<span class="name">{t('about.title')}</span>
+		<span class="muted">{t('about.settingsDesc')}</span>
+	</a>
 </div>
 
 {#if admin && timezone}

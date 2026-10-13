@@ -164,6 +164,7 @@
 		{/if}
 	</section>
 
+	{#if status.slots.length > 0}
 	<section class="tile" aria-labelledby="upd-slots">
 		<h2 class="tile-title" id="upd-slots">{t('update.slots')}</h2>
 		<p class="muted">{t('update.slotsText')}</p>
@@ -180,6 +181,7 @@
 			<div><button type="button" class="btn" disabled={busy !== '' || working} onclick={() => (asking = 'rollback')}>{t('update.rollback', { version: other.version || '?' })}</button></div>
 		{/if}
 	</section>
+	{/if}
 
 	<form class="tile" onsubmit={save}>
 		<h2 class="tile-title">{t('update.settings')}</h2>

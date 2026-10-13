@@ -32,6 +32,9 @@ fi
 extra=$(mktemp -d)
 trap 'rm -rf "$extra"' EXIT
 install -D -m 0755 backend/bin/titand "$extra/usr/bin/titand"
+# The licenses are shown under Settings > About.
+install -D -m 0644 LICENSE.md "$extra/usr/share/titanos/LICENSE.md"
+install -D -m 0644 THIRD_PARTY_LICENSES "$extra/usr/share/titanos/THIRD_PARTY_LICENSES"
 
 # Without root, mkosi would map everything to a single user and every file in
 # the image would end up owned by root. A user namespace with the full subuid

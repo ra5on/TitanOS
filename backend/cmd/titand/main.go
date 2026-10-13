@@ -300,6 +300,11 @@ func run(opts options) error {
 	}
 	updates.Confirm()
 	go updates.Run(ctx)
+	// The license texts lie in the image; in development mode in the repository.
+	shareDir := "/usr/share/titanos"
+	if opts.dev {
+		shareDir = "."
+	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -324,6 +329,7 @@ func run(opts options) error {
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
+		ShareDir:      shareDir,
 		SecureCookies: !opts.dev,
 	})
 

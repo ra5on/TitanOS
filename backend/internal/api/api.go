@@ -67,6 +67,8 @@ type Options struct {
 	Settings *system.Settings
 	Power    system.Power
 	Version  string
+	// ShareDir holds the texts of the licenses.
+	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
 }
@@ -211,6 +213,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
+	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
 	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
 	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
