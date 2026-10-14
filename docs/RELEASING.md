@@ -20,10 +20,12 @@ Secrets `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` eingerichtet:
 | `titanos-recovery-1.pub` | `E58A91B20B598ABB` | Reserve; privater Teil wird nicht bei GitHub hinterlegt |
 
 Beide Schlüssel wurden lokal erzeugt und durch Signaturprüfung getestet.
-Die Übernahme in dauerhafte, getrennte Backups durch den Projektinhaber steht
-noch aus. Der Reserve-Schlüssel wurde auf dem Entwicklungsrechner erzeugt;
-erst nach der Sicherung und Entfernung seiner lokalen privaten Kopie gilt
-er als offline verwahrt. GitHub-Secrets ersetzen keine eigene Sicherung.
+Der Projektinhaber hat am 14. Oktober 2026 die externe Sicherung der Schlüssel
+und der Passphrasen bestätigt und die Veröffentlichung der ersten Beta
+beauftragt. Eine Offline-Verwahrung des Reserve-Schlüssels ist damit noch
+nicht bestätigt: Eine Cloud-Kopie ist kein Offline-Medium. Der Reserve-Schlüssel
+wurde auf dem Entwicklungsrechner erzeugt; seine lokale private Kopie besteht
+noch. GitHub-Secrets ersetzen keine eigene Sicherung.
 
 Die folgenden Schritte dokumentieren die Einrichtung; vorhandene Schlüssel
 nicht neu erzeugen oder überschreiben. Bei einem Wechsel neue Dateinamen
@@ -163,6 +165,9 @@ Signatur zeigt nur Übertragungsfehler, nicht die Herkunft.
 - Echter FAT32-Stick: Kaltstart, Netzwerk, Besitzerkonto, Neustart und
   Persistenz. Mit separaten Testplatten RAID, Freigaben, Sicherung und
   Wiederherstellung prüfen. Diesen Hardwaretest übernimmt der Projektinhaber.
+  Für `v0.1.0-beta.1` ist er noch offen; die erste öffentliche Testversion
+  wird auf ausdrücklichen Wunsch des Projektinhabers mit diesem Hinweis
+  veröffentlicht. Daraus folgt keine Freigabe für produktive Daten.
 - Nach Veröffentlichung den Download über das echte GitHub-Pre-Release im
   Beta-Kanal sowie Update und Rollback prüfen. Der lokale Release-Server
   und der ZIP-Boot-Test ersetzen diesen GitHub-Test nicht. Für die erste
