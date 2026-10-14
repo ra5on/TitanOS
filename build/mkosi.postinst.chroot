@@ -44,6 +44,10 @@ ln -sf /dev/null /etc/systemd/system/systemd-firstboot.service
 # watches the arrays itself.
 ln -sf /dev/null /etc/systemd/system/mdmonitor.service
 
+# titand alone decides which HDD may sleep, after checking tests and arrays.
+# Never start hd-idle's independent daemon with its default ten-minute timer.
+ln -sf /dev/null /etc/systemd/system/hd-idle.service
+
 # Virtual machines: QEMU runs as its own user, not as root. It reaches the
 # disks of the VMs and installation media in shares through the group all
 # accounts are in. libvirt must not change the owner of those files, which

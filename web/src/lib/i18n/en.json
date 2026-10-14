@@ -1612,5 +1612,17 @@
 	"notify.kind.ups_shutdown.text": "The NAS ran {subject} minutes on battery and shuts down now, as set.",
 	"notify.kind.ups_lost.title": "No connection to the UPS",
 	"notify.kind.ups_lost.text": "The UPS does not answer any more. In a power failure the NAS cannot shut down in time like this.",
-	"error.invalid_ups_settings": "These entries do not fit:"
+	"error.invalid_ups_settings": "These entries do not fit:",
+	"storage.sleepTitle": "Hard disk sleep",
+	"storage.sleepHint": "One idle timeout for all HDDs. Each disk sleeps after its own period without reads or writes and wakes on the next access.",
+	"storage.sleepAfter": "When idle for",
+	"storage.sleepOff": "Off",
+	"storage.sleepMinutes": "{count} minutes",
+	"storage.sleepHour": "1 hour",
+	"storage.sleepHours": "{count} hours",
+	"storage.sleepDetails": "SSDs, NVMe, the boot stick and disks passed through to VMs are excluded. Disk tests and RAID checks/rebuilds pause the timer. Apps and shares may keep disks awake. The first access after sleep can take a few seconds. Off disables automatic sleep by TitanOS; sleeping disks wake on their next access.",
+	"storage.sleepUnavailable": "The setting could not be read from the boot stick. Automatic disk sleep remains disabled.",
+	"storage.sleepFailed": "Sleep could not be enabled for the following disks. Some drives or USB enclosures do not support the command.",
+	"error.invalid_disk_idle_time": "Please select one of the available idle timeouts.",
+	"common.save": "Save"
 }
