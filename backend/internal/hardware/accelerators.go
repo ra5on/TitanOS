@@ -128,7 +128,7 @@ func metric(path string, scale float64) *float64 {
 
 func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 	devices := []Accelerator{}
-	needNVIDIA := false
+	nvidiaDevices := []string{}
 	previous := m.Snapshot()
 	seconds := now.Sub(m.last).Seconds()
 	pciDevices := m.hardware.Status().PCI
@@ -158,7 +158,7 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 				d.State = "suspended"
 			}
 			if pci.Vendor == "10de" && d.State != "suspended" {
-				needNVIDIA = true
+				nvidiaDevices = append(nvidiaDevices, pci.Address)
 			}
 			if d.State == "suspended" {
 				break
@@ -211,13 +211,20 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 		}
 		devices = append(devices, d)
 	}
-	if needNVIDIA {
+	if len(nvidiaDevices) > 0 {
 		queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		output, err := m.runner.Run(queryCtx, "", "nvidia-smi", "--query-gpu=pci.bus_id,name,utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total,pstate,clocks.current.graphics,utilization.encoder,utilization.decoder", "--format=csv,noheader,nounits")
-		cancel()
-		if err == nil {
-			applyNVIDIA(devices, output)
+		for _, address := range nvidiaDevices {
+			if queryCtx.Err() != nil {
+				break
+			}
+			// An unrestricted query would also inspect suspended GPUs when
+			// another card is active. Select each eligible device explicitly.
+			output, err := m.runner.Run(queryCtx, "", "nvidia-smi", "--id="+address, "--query-gpu=pci.bus_id,name,utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total,pstate,clocks.current.graphics,utilization.encoder,utilization.decoder", "--format=csv,noheader,nounits")
+			if err == nil {
+				applyNVIDIA(devices, output)
+			}
 		}
+		cancel()
 	}
 	for i := range devices {
 		for _, old := range previous {
@@ -261,7 +268,7 @@ func applyNVIDIA(devices []Accelerator, output string) {
 		}
 		for i := range devices {
 			d := &devices[i]
-			if d.Address != address || d.Driver != "nvidia" {
+			if d.Address != address || d.Driver != "nvidia" || d.State != "ready" {
 				continue
 			}
 			d.Name = strings.TrimSpace(row[1])

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNVIDIAMeasurements(t *testing.T) {
-	devices := []Accelerator{{Address: "0000:01:00.0", Driver: "nvidia"}, {Address: "0000:02:00.0", Driver: "vfio-pci"}}
+	devices := []Accelerator{{Address: "0000:01:00.0", Driver: "nvidia", State: "ready"}, {Address: "0000:02:00.0", Driver: "vfio-pci", State: "vm"}}
 	applyNVIDIA(devices, "00000000:01:00.0, Test GPU, 37, 51, 18.5, 512, 8192, P8, 210, 12, 4\n00000000:02:00.0, Reserved, 90, 60, 50, 1024, 8192, P0, 1800, 10, 20\n")
 	d := devices[0]
 	if d.Name != "Test GPU" || *d.UsagePercent != 37 || *d.PowerWatts != 18.5 || *d.MemoryUsedBytes != 512*1024*1024 || len(d.Engines) != 2 {
@@ -82,13 +82,40 @@ func TestIncompleteScanCannotBecomeUsageBaseline(t *testing.T) {
 
 type acceleratorRunner struct {
 	calls  int
+	args   [][]string
 	output string
 	err    error
 }
 
 func (r *acceleratorRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
 	r.calls++
+	r.args = append(r.args, append([]string{name}, args...))
 	return r.output, r.err
+}
+
+func TestMixedNVIDIAPowerStatesQueryOnlyActiveGPU(t *testing.T) {
+	sys := t.TempDir()
+	for _, address := range []string{"0000:01:00.0", "0000:02:00.0"} {
+		device(t, sys, address, "030000", "10de", -1, nil)
+		root := filepath.Join(sys, "bus/pci/devices", address)
+		os.Symlink("/drivers/nvidia", filepath.Join(root, "driver"))
+		os.MkdirAll(filepath.Join(root, "power"), 0o755)
+		state := "active"
+		if address == "0000:02:00.0" {
+			state = "suspended"
+		}
+		os.WriteFile(filepath.Join(root, "power/runtime_status"), []byte(state), 0o600)
+	}
+	runner := &acceleratorRunner{output: "00000000:01:00.0, Active, 37, 51, 18.5, 512, 8192, P8, 210, 12, 4\n00000000:02:00.0, Suspended, 90, 60, 50, 1024, 8192, P0, 1800, 10, 20\n"}
+	m := &AcceleratorMonitor{hardware: &Manager{sys: sys}, runner: runner, proc: t.TempDir()}
+	m.sample(context.Background(), time.Now())
+	if runner.calls != 1 || len(runner.args[0]) < 2 || runner.args[0][1] != "--id=0000:01:00.0" {
+		t.Fatalf("query included an ineligible GPU: %v", runner.args)
+	}
+	devices := m.Snapshot()
+	if devices[0].UsagePercent == nil || *devices[0].UsagePercent != 37 || devices[1].State != "suspended" || devices[1].UsagePercent != nil {
+		t.Fatalf("mixed power states: %+v", devices)
+	}
 }
 
 func TestAcceleratorSamplingAndHistory(t *testing.T) {
