@@ -143,6 +143,8 @@ Downloads für `v0.1.0-beta.2` stehen auf der [Release-Seite](https://github.com
 
 Weitere Betas werden unter „Einstellungen › Updates“ im Kanal **Beta** angeboten. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
 
+Während ein neues Release noch gebaut wird, kann dessen Tag bereits im GitHub-Feed stehen. Die Beta-Update-Suche kann dann vorübergehend einen Abruffehler melden, weil das signierte Manifest noch fehlt. Nach der vollständigen Veröffentlichung erneut nach Updates suchen.
+
 ## Entwicklung
 
 Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`.
