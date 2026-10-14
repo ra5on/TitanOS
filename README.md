@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** frühe Entwicklung – es gibt noch nichts zum Installieren. Das System bootet, die Weboberfläche läuft, RAID-Volumes, Freigaben, der Dateimanager, Docker-Container, der App-Store und virtuelle Maschinen funktionieren. Wer mitlesen will, beobachtet das Repository bis zum ersten Release.
+> **Stand:** `v0.1.0-beta.1` wird vorbereitet. Die erste Beta richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Maßgeblich für verfügbare Downloads sind die [Releases](https://github.com/ra5on/TitanOS/releases); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -19,14 +19,14 @@
 
 TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
 
-Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian.
+Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
 ## Was schon funktioniert
 
-- **Start vom Stick, Betrieb im RAM.** Das Systemabbild (275 MB) wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Nach dem Start belegt das Grundsystem rund 0,6 GB RAM.
-- **Konfiguration auf dem Stick.** Alles Dauerhafte liegt im Ordner `config` auf dem Stick. Der Stick wird nur bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt – ein Stromausfall trifft ihn so fast nie im eingebundenen Zustand.
+- **Start vom Stick, Betrieb im RAM.** Das komprimierte Systemabbild wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Container, VM-Abbilder und Nutzdaten liegen auf Daten-Volumes. Größe und RAM-Bedarf hängen vom Release und den laufenden Diensten ab.
+- **Konfiguration auf dem Stick.** Systemeinstellungen, Konten und Schlüssel liegen im Ordner `config` auf dem Stick. Der Stick wird bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt. Das reduziert Schreibzugriffe; eine Sicherung der Konfiguration bleibt nötig.
 - **Ersteinrichtung und Anmeldung.** Beim ersten Start legst du das Besitzerkonto mit frei gewähltem Namen an; ein kurzer Assistent fragt danach Name und Zeitzone ab. Es gibt kein festes „admin“ und keinen Login als root. Wiederholte Fehlversuche werden ausgebremst, und jedes Konto lässt sich mit einem zweiten Faktor (Code aus einer Authenticator-App) schützen.
-- **HTTPS von Anfang an.** Die Weboberfläche läuft über HTTPS mit einem selbstsignierten Zertifikat, das über Neustarts gleich bleibt.
+- **HTTPS von Anfang an.** Die Weboberfläche läuft über HTTPS mit einem selbst signierten Zertifikat, das über Neustarts gleich bleibt. Ein eigenes Zertifikat mit Schlüssel und Zertifikatskette lässt sich als PEM importieren und ohne Neustart verwenden.
 - **Dashboard mit frei anordenbaren Kacheln.** Kacheln rasten in einem Raster aus 12 Spalten ein, lassen sich verschieben, in der Größe ändern und ausblenden. Das Layout wird pro Konto gespeichert.
 - **Darstellung nach Wunsch.** Themes, Akzentfarben, Glas-Effekt, Eckenradius, Schriftgröße, Dichte und Hintergrund, mit Vorschau und Export als Datei.
 - **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
@@ -37,14 +37,14 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI: VMs anlegen, starten und stoppen, mit dem Bildschirm der VM direkt im Browser. Kerne festlegen, vorhandene Abbilder und ganze Platten nutzen, Grafikkarten und USB-Geräte durchreichen, NAS-Ordner in der VM einbinden, TPM 2.0 und Secure Boot.
 - **Netzwerk.** Feste Adresse, Bonding, VLAN und eine Bridge, über die VMs eine eigene Adresse im Heimnetz bekommen. Jede Änderung gilt erst auf Probe: Ohne Bestätigung innerhalb von zwei Minuten kehrt das NAS zur alten Einstellung zurück.
 - **Benachrichtigungen.** Fällt eine Platte aus, läuft ein Wiederaufbau oder wird ein Volume voll, steht das in der Weboberfläche und kommt auf Wunsch per E-Mail, ntfy, Telegram oder Discord.
-- **Backups.** Freigaben verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP) oder S3-Speicher sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Wiederherstellen in einen eigenen Ordner.
+- **Backups.** Freigaben mit restic verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP), S3-Speicher oder einen restic-REST-Server sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Wiederherstellen in einen eigenen Ordner. S3 und REST sind noch nicht gegen echte Dienste geprüft.
 - **USV.** Per USB oder über das Netzwerk; bei Stromausfall fährt das NAS sauber herunter, bevor die Batterie leer ist, und kann den Zustand der USV an andere Geräte weitergeben.
 - **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
-- **Sicherung des Sticks.** Die Konfiguration liegt nur auf dem Stick, deshalb legt TitanOS nach jeder Änderung eine Kopie auf ein Volume. Geht der Stick kaputt, findet ein neuer Stick die Kopie auf den Platten und spielt sie zurück.
+- **Sicherung des Sticks.** Automatische Sicherung der Konfiguration auf ein verfügbares Volume, gebündelt nach Änderungen; zusätzlich Download und Wiederherstellung. Beim Ersatz eines Sticks lässt sich eine gefundene Sicherung in der Ersteinrichtung auswählen und zurückspielen.
 - **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
-- **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und entfernt vorher Adressen, Namen und alles, was nach Passwort oder Schlüssel aussieht.
+- **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und filtert bekannte Adress-, Namens- und Geheimnisfelder. Das Paket vor dem Weitergeben prüfen; die Filter können unbekannte Formate übersehen.
 - **Plugins.** Systemerweiterungen für Treiber und Werkzeuge, die auf einem Volume liegen und sich ein- und ausschalten lassen. Das Grundgerüst steht; fertige Plugins wie der NVIDIA-Treiber fehlen noch.
-- **Terminal.** Eine Shell auf dem NAS und Konsolen in Containern als Tabs am unteren Rand jeder Seite – nur für Administratoren und erst nach erneuter Passwort-Eingabe.
+- **Terminal.** Eine Shell auf dem NAS und Konsolen in Containern als Tabs am unteren Rand jeder Seite – nur für Besitzer und Administratoren, nach erneuter Passwort- und gegebenenfalls 2FA-Bestätigung.
 - **SSH und eigenes Zertifikat.** SSH ist ab Werk aus; eingeschaltet melden sich Administratoren mit Schlüssel unter ihrem eigenen Namen an, nie als root. Die Weboberfläche nimmt ein eigenes Zertifikat an.
 - **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
 - **Deutsch und Englisch.**
@@ -113,27 +113,42 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
 - **Fertige Plugins.** Zuerst der NVIDIA-Treiber; dazu Grafikkarten und Beschleuniger für Container.
 
-## Installation (geplant)
+## Voraussetzungen und Grenzen der ersten Beta
 
-1. USB-Stick (8–32 GB) als FAT32 mit dem Namen `TITANOS` formatieren.
-2. Das neueste `titanos-x.y.z.zip` aus den [Releases](https://github.com/ra5on/TitanOS/releases) laden, Prüfsumme vergleichen und auf den Stick entpacken.
-3. Das NAS vom Stick starten (UEFI, Secure Boot aus) und im Browser `https://<nas-ip>` öffnen. Das Zertifikat ist selbstsigniert, der Browser fragt deshalb einmal nach einer Bestätigung.
+- PC mit x86-64-Prozessor und UEFI; Secure Boot für das NAS ausgeschaltet. Legacy-BIOS und ARM werden nicht unterstützt. Secure Boot innerhalb einer VM ist davon unabhängig.
+- Für erste Tests 4 GB RAM einplanen, zusätzlich RAM für Container und VMs. Das ist eine Testempfehlung, keine auf echter Hardware geprüfte Mindestanforderung.
+- USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
+- Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
+- Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
+- Noch keine fertigen offiziellen Plugins, keine automatische Plugin-Mitnahme beim Systemupdate, keine Bootloader-Updates und kein Systemupdate aus einer hochgeladenen Datei. Btrfs, Volume-Verschlüsselung und eingebauter Fernzugriff sind noch nicht umgesetzt. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+
+## Installation der Beta
+
+Sobald `v0.1.0-beta.1` unter [Releases](https://github.com/ra5on/TitanOS/releases) veröffentlicht ist:
+
+1. `titanos-0.1.0-beta.1.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
+3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
+4. Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
+
+Weitere Betas werden unter „Einstellungen › Updates“ im Kanal **Beta** angeboten. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
 
 ## Entwicklung
 
-Voraussetzungen: Go 1.27+, Node.js 24+ und `make`.
-Für das Systemabbild zusätzlich (Debian 13): `mkosi squashfs-tools mtools zip systemd-boot-efi systemd-container`, zum Testen `qemu-system-x86 ovmf`. Root-Rechte sind nicht nötig.
+Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`.
+Für das Systemabbild zusätzlich (Debian 13): mkosi **25.3**, `debian-archive-keyring squashfs-tools zstd zip systemd-container`. Für Release-Tests außerdem `minisign`; für den QEMU-Test `qemu-system-x86 ovmf mtools fdisk`. Unprivilegierte Builds benötigen funktionierende Benutzer-Namespaces, `newuidmap`/`newgidmap` und Einträge in `/etc/subuid` und `/etc/subgid`. Alternativ baut `MKOSI_SUDO=1 make zip` das Abbild mit sudo; Weboberfläche und Backend werden weiterhin als normaler Benutzer gebaut.
 
 | Befehl | Was er tut |
 |---|---|
 | `make build` | Baut die Weboberfläche und `backend/bin/titand` mit eingebetteter Oberfläche |
 | `make test` | Führt die Go-Tests und die Typprüfung der Weboberfläche aus |
+| `make test-release` | Prüft Verpackung, Lizenzinventar und Manipulationserkennung mit kleinen echten squashfs-Abbildern und Minisign-Schlüsseln |
 | `make dev` | Startet `titand` im Entwicklungsmodus auf `127.0.0.1:8080` (ohne HTTPS, Konfiguration in `test/config/`) und den Vite-Server mit automatischem Neuladen |
 | `make zip` | Baut das Systemabbild und packt den Stick-Inhalt: `out/stick/` und `out/titanos-<version>.zip` |
 | `make zip-dev` | Dasselbe als Entwicklungsvariante, bei der root an der Konsole automatisch angemeldet ist |
 | `make qemu` | Startet `out/stick/` in QEMU (UEFI) von einem emulierten USB-Stick; Weboberfläche unter `https://127.0.0.1:8443`. Mit `DISKS=4 make qemu` kommen vier leere Testplatten dazu. |
 
-Das Backend (`backend/`, Go) und die Weboberfläche (`web/`, Svelte + TypeScript) liegen in diesem Repository. Ein einfaches `go build` oder `go test` funktioniert ohne Node.js und enthält statt der Weboberfläche eine Platzhalterseite.
+Das Backend (`backend/`, Go) und die Weboberfläche (`web/`, Svelte + TypeScript) liegen in diesem Repository. In `backend/` funktionieren `go build ./cmd/titand` und `go test ./...` ohne Node.js; ohne das Build-Tag `embedui` wird eine Platzhalterseite statt der Weboberfläche ausgeliefert. Release-Bau und Signierung sind in [RELEASING.md](docs/RELEASING.md) beschrieben.
 
 ## Lizenz
 
