@@ -1,6 +1,6 @@
 # Hardware für Container und zusätzliche Plugins
 
-Die folgenden Ergänzungen gehören zum Entwicklungsstand nach `v0.1.0-beta.2`.
+Die folgenden Ergänzungen sind ab `v0.1.0-beta.3` enthalten.
 Für die veröffentlichte beta.2 gilt weiterhin die [NVIDIA-Anleitung](NVIDIA.md).
 
 ## Installation der zusätzlichen Plugins
@@ -12,12 +12,41 @@ Der Release-Workflow baut neben NVIDIA zwei weitere optionale Erweiterungen:
 | `intel-gpu-tools` | Debian Intel GPU Tools, unter anderem `intel_gpu_top`, zusätzliche Bibliotheken und deren Lizenz-/Quellverzeichnis | Intel-GPU mit funktionierendem Kernel-Treiber; einzelne Tools benötigen bestimmte Generationen |
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
 
-Aus dem **gleichen Release** `<name>.raw`, `<name>.plugin.json` und
-`<name>.plugin.json.minisig` herunterladen und gemeinsam in eine NAS-Freigabe
-legen. Unter **Plugins** erscheinen sie zur Installation auf einem Volume.
-Ein offizieller Download muss dort als **Offiziell** erkannt werden. Die
-Erweiterungen liegen auf dem Volume, nicht im RAM-Systemabbild; ein aktives
-Plugin wird beim Boot nach Einbindung des Volumes wieder geladen.
+Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Releases.
+TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
+bevor es die Einträge anzeigt. Welche Plugins angeboten werden, hängt vom
+Release ab; ein neueres oder „latest“-Release wird nicht ersatzweise verwendet.
+
+1. Ein Daten-Volume unter **Speicher** anlegen bzw. einbinden. Eine Freigabe ist
+   für den direkten Download nicht erforderlich.
+2. Unter **Plugins** die gewünschte Erweiterung auswählen und **Herunterladen
+   und installieren** anklicken.
+3. Den Lizenzlink und den Hinweis zu Systemrechten lesen, das Ziel-Volume
+   auswählen und die Installation bestätigen.
+
+Erst dann lädt TitanOS das Abbild von GitHub direkt auf das Daten-Volume.
+Signaturen, Zielversion, Kernel-Kompatibilität, Größe und SHA-256 werden vor
+der Aktivierung geprüft. Der Download wird nicht auf dem Bootstick oder im
+RAM-Systemabbild zwischengespeichert. Bei einem fehlgeschlagenen Download
+werden die temporären Dateien entfernt; die Installation kann erneut gestartet
+werden. Ein aktives Plugin wird beim Boot nach Einbindung des Volumes wieder
+geladen. Eine erfolgreiche Installation ersetzt nicht die Prüfung auf passender
+echter Hardware.
+
+Beim Öffnen der Seite wird der Katalog abgerufen und für zehn Minuten im RAM
+zwischengespeichert. **Katalog aktualisieren** erzwingt einen neuen Versuch;
+die regelmäßige Statusanzeige ruft GitHub nicht ab. Bei Verbindungsproblemen
+bleiben installierte Plugins, lokale Dateien und bereits geprüfte Katalogeinträge
+sichtbar. Vor einer direkten Installation wird die Herkunft erneut online
+geprüft. Eine identische signierte Kopie in einer Freigabe hat Vorrang vor dem
+Download und lässt sich auch bei zwischengespeichertem Katalog offline installieren.
+Entwicklungs-Builds ohne Release-Version sowie fehlende oder noch
+unvollständige Releases erhalten einen erklärenden Hinweis.
+
+**Manuelle Installation:** Alternativ aus dem **gleichen Release** `<name>.raw`,
+`<name>.plugin.json` und `<name>.plugin.json.minisig` herunterladen und gemeinsam
+in eine NAS-Freigabe legen. Unter **Plugins** erscheinen sie auch ohne Verbindung
+zu GitHub. Ein offizieller Download muss dort als **Offiziell** erkannt werden.
 
 Die Intel-Werkzeuge lassen sich im bestätigten NAS-Terminal verwenden.
 `intel_gpu_top` benötigt eine passende Intel-GPU; das Plugin erzeugt keine
@@ -115,3 +144,8 @@ signiert jedes Plugin-Manifest und die vollständige Prüfsummenliste.
 `scripts/smoke-storage.py <zip> --plugins out/plugins` prüft Installation,
 Bibliotheken und Aktivierung der Werkzeuge über Neustarts in QEMU. Tests mit
 echter Intel-GPU, Coral TPU und NVIDIA fehlen weiterhin.
+
+Die Go-Tests in `backend/internal/plugins/catalog_test.go` prüfen den Katalog
+und Downloads mit einem lokalen HTTP-Server und echten minisign-Signaturen:
+Abruf erst bei Bedarf, Versions-/Kernelbindung, Manipulationen, Abbrüche,
+Bereinigung und die Sperre bei einem beginnenden Systemupdate.

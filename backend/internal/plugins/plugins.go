@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -100,6 +101,9 @@ type Plugin struct {
 	Path string `json:"path"`
 	// Official means the manifest is signed with a key TitanOS trusts.
 	Official bool `json:"official"`
+	// Download means this signed plugin is available in the matching GitHub release.
+	Download   bool   `json:"download"`
+	LicenseURL string `json:"licenseUrl,omitempty"`
 	// Problem is kernel, activation, integrity, or busy after refused removal.
 	Problem string `json:"problem"`
 }
@@ -108,8 +112,9 @@ type Plugin struct {
 type Status struct {
 	Volume string `json:"volume"`
 	// Kernel is the release of the running kernel.
-	Kernel  string   `json:"kernel"`
-	Plugins []Plugin `json:"plugins"`
+	Kernel  string        `json:"kernel"`
+	Plugins []Plugin      `json:"plugins"`
+	Catalog CatalogStatus `json:"catalog"`
 }
 
 // Manager installs plugins and keeps the system in line with the settings.
@@ -137,6 +142,13 @@ type Manager struct {
 	mu       sync.Mutex
 	loaded   bool
 	settings Settings
+	// The release catalog is kept in memory; polling Status never contacts GitHub.
+	client         *http.Client
+	releaseSource  string
+	catalog        CatalogStatus
+	catalogPlugins []Plugin
+	catalogAttempt time.Time
+	catalogLoading bool
 	// applied is what was last handed to systemd, to notice changes.
 	applied string
 }
@@ -144,7 +156,7 @@ type Manager struct {
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
-	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}}
+	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS"}
 }
 
 // Load reads the settings from /config.
@@ -210,19 +222,26 @@ func (m *Manager) dir(volume string) string {
 
 // readManifest reads and checks a manifest file.
 func readManifest(path string) (Manifest, error) {
-	var manifest Manifest
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return manifest, err
+		return Manifest{}, err
 	}
+	return parseManifest(data, filepath.Base(path))
+}
+
+func parseManifest(data []byte, filename string) (Manifest, error) {
+	var manifest Manifest
 	if len(data) > 64*1024 || json.Unmarshal(data, &manifest) != nil {
 		return manifest, fmt.Errorf("%w: the manifest is not readable", ErrInvalid)
 	}
-	if !nameRE.MatchString(manifest.Name) || filepath.Base(path) != manifest.Name+manifestSuffix {
+	if !nameRE.MatchString(manifest.Name) || filename != manifest.Name+manifestSuffix {
 		return manifest, fmt.Errorf("%w: the name of the plugin and of its files do not match", ErrInvalid)
 	}
 	if len(manifest.SHA256) != 64 || manifest.Size <= 0 || manifest.Size > maxImageBytes {
 		return manifest, fmt.Errorf("%w: the manifest does not describe its image", ErrInvalid)
+	}
+	if _, err := hex.DecodeString(manifest.SHA256); err != nil {
+		return manifest, fmt.Errorf("%w: invalid image checksum", ErrInvalid)
 	}
 	for _, unit := range append(slices.Clone(manifest.Modules), manifest.Services...) {
 		// These end up as arguments of modprobe and systemctl.
@@ -290,6 +309,18 @@ func (m *Manager) Status(mounted []string) Status {
 			status.Plugins = append(status.Plugins, plugin)
 		}
 	}
+	// Verified release downloads take precedence over unrelated loose files.
+	// An identical signed local copy can still be installed without a network.
+	catalog, available := m.catalogSnapshot()
+	status.Catalog = catalog
+	downloads := map[string]int{}
+	for _, plugin := range available {
+		if !names[plugin.Name] {
+			names[plugin.Name] = true
+			downloads[plugin.Name] = len(status.Plugins)
+			status.Plugins = append(status.Plugins, plugin)
+		}
+	}
 	// Plugins someone put into a share or onto a volume, ready to install.
 	visited := 0
 	for _, volume := range mounted {
@@ -309,9 +340,17 @@ func (m *Manager) Status(mounted []string) Status {
 			if !strings.HasSuffix(entry.Name(), manifestSuffix) {
 				return nil
 			}
-			if manifest, err := readManifest(path); err == nil && !names[manifest.Name] {
-				names[manifest.Name] = true
-				status.Plugins = append(status.Plugins, Plugin{Manifest: manifest, Path: path, Official: m.official(path)})
+			if manifest, err := readManifest(path); err == nil {
+				if !names[manifest.Name] {
+					names[manifest.Name] = true
+					status.Plugins = append(status.Plugins, Plugin{Manifest: manifest, Path: path, Official: m.official(path)})
+				} else if index, ok := downloads[manifest.Name]; ok && reflect.DeepEqual(status.Plugins[index].Manifest, manifest) && m.official(path) {
+					image, err := os.Stat(filepath.Join(filepath.Dir(path), manifest.Name+".raw"))
+					if err == nil && image.Mode().IsRegular() && image.Size() == manifest.Size {
+						status.Plugins[index].Download, status.Plugins[index].Path = false, path
+						delete(downloads, manifest.Name)
+					}
+				}
 			}
 			return nil
 		})
@@ -342,6 +381,11 @@ func hashFile(path string, limit int64) (string, int64, error) {
 func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	return m.install(ctx, manifestPath, volume, confirm, mounted)
+}
+
+// install is shared by local files and verified downloads. Caller holds actions.
+func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
 		return ErrBusy
 	}

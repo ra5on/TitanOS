@@ -30,6 +30,12 @@ nicht vor dem NVIDIA-Plugin belegt. Die UEFI-Textkonsole bleibt verfügbar.
 
 ## Installation
 
+Ab **beta.3** kann das Plugin unter **Plugins → NVIDIA →
+Herunterladen und installieren** direkt aus dem passenden GitHub-Release geladen
+werden. Dafür genügt ein eingebundenes Daten-Volume; eine Freigabe ist nicht nötig.
+Siehe [Plugin-Installation](PLUGINS.md#installation-der-zusätzlichen-plugins).
+Die folgenden Schritte gelten für beta.2 und die manuelle Installation.
+
 1. TitanOS auf das gewünschte Release aktualisieren und neu starten. Ein
    Daten-Volume mit einer Freigabe muss vorhanden sein.
 2. Von **demselben [GitHub-Release](https://github.com/ra5on/TitanOS/releases)**
