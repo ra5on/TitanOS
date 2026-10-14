@@ -1,108 +1,170 @@
 # Eine Version veröffentlichen
 
-TitanOS aktualisiert sich aus den GitHub-Releases dieses Projekts. Ein NAS
-installiert ein Update nur, wenn das Manifest des Releases mit einem
-Schlüssel signiert ist, dessen öffentlicher Teil in seinem Abbild steckt.
-Der private Schlüssel ist damit das Wertvollste, was das Projekt hat: Wer
-ihn hat, kann jedem TitanOS ein Abbild unterschieben.
+TitanOS installiert nur Updates, deren Manifest von einem Schlüssel aus
+seinem Abbild signiert ist. Die Release-Pipeline signiert zusätzlich das
+Installations-ZIP und `SHA256SUMS` für sämtliche Release-Dateien.
 
-## Einmalig: den Schlüssel anlegen
+## Einmalig: Schlüssel und GitHub einrichten
 
-1. Auf einem Rechner, dem du traust, mit [minisign](https://jedisct1.github.io/minisign/):
+Das GitHub-Environment `release` verlangt eine Freigabe von `ra5on` und
+akzeptiert nur Tags `v*`. Private Sicherheitsmeldungen sind aktiviert.
+Diese Einstellungen gehören zum Repository und werden nicht durch die
+Workflow-Datei allein eingerichtet.
+
+Noch benötigt werden die Schlüssel und die beiden Environment-Secrets:
+
+1. Auf einem vertrauenswürdigen Rechner **außerhalb dieses Repositorys**
+   ein Verzeichnis mit Modus `0700` anlegen. Dort mit
+   [minisign](https://jedisct1.github.io/minisign/) ausführen:
 
    ```bash
+   umask 077
    minisign -G -p titanos-release-1.pub -s titanos-release-1.key
    ```
 
-   Vergib ein Passwort. Bewahre `titanos-release-1.key` und das Passwort an
-   zwei getrennten Orten auf (Passwort-Manager und ein Ausdruck oder
-   USB-Stick im Schrank). Die Datei gehört nie ins Repository.
+   Ein starkes Passwort vergeben. Private Datei und Passwort getrennt und
+   dauerhaft sichern. Niemals in Git, Chat, Issues oder Build-Artefakten ablegen.
 
-2. Lege den öffentlichen Schlüssel ins Abbild und committe ihn:
+2. Einen zweiten Schlüssel als Reserve erzeugen, möglichst auf einem
+   Offline-Rechner:
 
+   ```bash
+   umask 077
+   minisign -G -p titanos-recovery-1.pub -s titanos-recovery-1.key
    ```
-   build/mkosi.extra/usr/share/titanos/update-keys/titanos-release-1.pub
+
+   Dieser private Schlüssel bleibt offline und wird **nicht** bei GitHub
+   hinterlegt. Auch seine Passphrase separat sichern.
+
+3. Nur beide `.pub`-Dateien nach
+   `build/mkosi.extra/usr/share/titanos/update-keys/` kopieren und committen.
+   Keine Testschlüssel übernehmen. Plugin-Schlüssel sind davon unabhängig;
+   offizielle Plugins werden mit dieser Beta noch nicht ausgeliefert.
+
+4. Im Environment `release` die Secrets setzen. Mit GitHub CLI, aus dem
+   Verzeichnis mit dem privaten **Release**-Schlüssel:
+
+   ```bash
+   gh secret set MINISIGN_SECRET_KEY --repo ra5on/TitanOS --env release < titanos-release-1.key
+   gh secret set MINISIGN_PASSWORD --repo ra5on/TitanOS --env release
    ```
 
-   Offizielle Plugins werden genauso geprüft; ihr Schlüssel liegt unter
-   `build/mkosi.extra/usr/share/titanos/plugin-keys/`. Es kann derselbe sein.
+   Beim zweiten Befehl die Minisign-Passphrase interaktiv eingeben. Sie
+   nicht als Kommandozeilenargument setzen. Der Projektinhaber muss selbst
+   bestätigen, dass beide Schlüssel und Passphrasen sicher verwahrt sind.
 
-3. In den Einstellungen des Repositorys ein Environment `release` anlegen:
-   - „Required reviewers“: du selbst. Jede Veröffentlichung wartet dann auf
-     deine Freigabe.
-   - „Deployment branches and tags“: nur Tags `v*`.
-   - Secrets `MINISIGN_SECRET_KEY` (der ganze Inhalt der `.key`-Datei) und
-     `MINISIGN_PASSWORD`.
+## Probelauf ohne Veröffentlichung
 
-   Wer ganz ohne Schlüssel bei GitHub auskommen will, lässt die Secrets weg,
-   lädt die Dateien aus dem Build-Job herunter, signiert `manifest.json`
-   am eigenen Rechner und legt das Release von Hand an.
+Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den
+Image-Probelauf aus. Zusätzlich lässt er sich unter Actions › Release mit
+„Run workflow“ und einer Version starten. Solche Läufe veröffentlichen
+nichts und haben keinen Zugriff auf die Signiergeheimnisse.
 
-## Eine Version herausgeben
+Der Probelauf baut mit einem kurzlebigen Testschlüssel, prüft Signaturen,
+packt alle Lizenznachweise und startet das tatsächliche ZIP zweimal in
+einer frischen UEFI-QEMU-VM. Geprüft werden Ersteinrichtung, Besitzerkonto,
+Versionsangabe, Weboberfläche, Lizenzübersicht, SSH aus, HTTPS-Zertifikat und
+Persistenz über einen Neustart. Er verwendet ausschließlich neu angelegte
+virtuelle Medien. Das Artifact `release-rehearsal` ist **kein Release** und
+darf nicht verteilt oder auf einem produktiven NAS installiert werden.
+
+Lokal:
 
 ```bash
-git tag -a v1.2.0 -m "Was sich geändert hat – dieser Text wird zum Changelog."
-git push origin v1.2.0
+make test test-release
+make zip VERSION=0.1.0-beta.1
+scripts/make-release.sh 0.1.0-beta.1 beta docs/releases/v0.1.0-beta.1.md
+python3 scripts/smoke-release.py out/release/titanos-0.1.0-beta.1.zip
 ```
 
-- `v1.2.0` wird ein Release im Kanal „Stable“, `v1.2.0-beta.1` ein
-  Pre-Release im Kanal „Beta“.
-- Der Workflow `release.yml` baut das Abbild, packt die Dateien
-  (`scripts/make-release.sh`), wartet auf die Freigabe im Environment
-  `release`, signiert `manifest.json` und legt das Release an.
-- Er bricht ab, wenn kein öffentlicher Schlüssel im Abbild liegt oder die
-  Signatur zu keinem davon passt – ein solches Release könnte kein NAS
-  installieren.
+Für lokale Signaturtests einen separaten Wegwerf-Schlüssel verwenden.
+`scripts/sign-release.sh out/release /pfad/zum/test.key` signiert die Dateien;
+`python3 scripts/verify-release.py out/release /pfad/zu/test-public-keys`
+prüft sie. Private Testschlüssel ebenfalls nie committen. Ein publizierter
+Tag darf keinen `rehearsal.pub` enthalten und benötigt die beiden echten
+öffentlichen Schlüssel.
 
-Ein Release enthält:
+## v0.1.0-beta.1 veröffentlichen
+
+Erst nach grünem Probelauf, eingebauten öffentlichen Schlüsseln und Prüfung
+des konkreten Release-Commits:
+
+```bash
+git tag -a v0.1.0-beta.1 -F docs/releases/v0.1.0-beta.1.md
+git push origin v0.1.0-beta.1
+```
+
+Der Tag löst einen neuen vollständigen Build samt QEMU-Test aus. Danach
+wartet der Job `publish` auf die Freigabe im Environment `release`.
+Erst dieser Job erhält den privaten Release-Schlüssel. Er signiert Manifest,
+ZIP und Prüfsummenliste, verifiziert die Signaturen und alle Dateiinhalte und
+legt das GitHub-Pre-Release an. Ein normaler Tag ohne Vorabkennung wird im
+Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
+(tatsächliches Veröffentlichungsdatum plus zwei Jahre).
 
 | Datei | Wofür |
 |---|---|
-| `titanos-<version>.zip` (+ `.sha256`) | neuer Stick |
-| `titanos-<version>-vmlinuz`, `-initrd.img`, `-filesystem.squashfs` | Updates: ein NAS lädt diese drei direkt in den freien Slot |
-| `manifest.json`, `manifest.json.minisig` | was ein Update ist, signiert |
-| `titanos-<version>-sources.txt` | Quellen der Debian-Pakete (GPL) |
+| `titanos-<version>.zip`, `.zip.sha256`, `.zip.minisig` | neuer Stick, Prüfsumme und Herkunftsnachweis |
+| `titanos-<version>-vmlinuz`, `-initrd.img`, `-filesystem.squashfs` | Dateien für den inaktiven System-Slot |
+| `manifest.json`, `manifest.json.minisig` | signierte Update-Beschreibung mit Größe und SHA-256 jeder Slot-Datei |
+| `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
+| `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
+| `titanos-<version>-licenses.tar.gz` | Original-Lizenzhinweise und maschinenlesbares Komponentenverzeichnis |
 
-Die Release-Seite nennt das Datum, ab dem die Version unter Apache-2.0
-steht (Erscheinungsdatum plus zwei Jahre).
+Das Lizenzarchiv enthält auch Build-Abhängigkeiten des Frontends und
+Schriftlizenzen. Bei zwei npm-Paketen (`is-reference` und `locate-character`)
+liefert Upstream nur die MIT-Erklärung in README und Paketmetadaten; diese
+werden unverändert beigelegt. Firmware-Pakete können ausschließlich
+Binärdateien enthalten; der Debian-Quellpaketlink macht daraus keinen
+verfügbaren Firmware-Quellcode. Der Hinweistext in „Über TitanOS“ wird aus
+diesen tatsächlichen Komponenten erzeugt; die Repo-Datei ist die Übersicht.
 
-## Lokal ausprobieren
+Wer ohne privaten Schlüssel bei GitHub arbeiten möchte, lässt die Secrets
+weg, lädt das Artifact `release` aus dem **Tag-Build** herunter und signiert
+lokal mit `scripts/sign-release.sh`. Vor manuellem Upload immer
+`scripts/verify-release.py` mit den eingebauten öffentlichen Schlüsseln
+ausführen und das Apache-2.0-Datum in den Release-Text aufnehmen.
+
+## Downloads prüfen
+
+Den öffentlichen Release-Schlüssel aus einer bereits vertrauenswürdigen
+Kopie beziehen (beispielsweise dem vorherigen TitanOS-Abbild oder dem
+geprüften Projekt-Repository). In einem Ordner mit ZIP und Signatur:
 
 ```bash
-make zip VERSION=1.2.0
-scripts/make-release.sh 1.2.0 stable
-minisign -S -s titanos-release-1.key -m out/release/manifest.json
+minisign -V -p /pfad/titanos-release-1.pub -m titanos-0.1.0-beta.1.zip
+sha256sum -c titanos-0.1.0-beta.1.zip.sha256
 ```
 
-Ein NAS lässt sich auf eine andere Adresse als GitHub zeigen, indem man in
-`/config/system/update.json` das Feld `source` setzt (zum Beispiel auf einen
-Webserver, der `out/release` unter `/releases/latest/download/` und
-`/releases/download/v1.2.0/` ausliefert). Die Signatur wird trotzdem geprüft.
+Für sämtliche Dateien zusätzlich `SHA256SUMS.minisig` prüfen und danach
+`sha256sum -c SHA256SUMS` ausführen. Eine Prüfsumme ohne vertrauenswürdige
+Signatur zeigt nur Übertragungsfehler, nicht die Herkunft.
 
-## Den Schlüssel wechseln
+## Abnahme vor der Freigabe
 
-Im Abbild dürfen mehrere öffentliche Schlüssel liegen.
+- Probelauf und reguläre Tests für den Release-Commit grün.
+- Release- und Reserve-Schlüssel im Abbild, Geheimnisse sicher verwahrt.
+- Echter FAT32-Stick: Kaltstart, Netzwerk, Besitzerkonto, Neustart und
+  Persistenz. Mit separaten Testplatten RAID, Freigaben, Sicherung und
+  Wiederherstellung prüfen. Diesen Hardwaretest übernimmt der Projektinhaber.
+- Nach Veröffentlichung den Download über das echte GitHub-Pre-Release im
+  Beta-Kanal sowie Update und Rollback prüfen. Der lokale Release-Server
+  und der ZIP-Boot-Test ersetzen diesen GitHub-Test nicht. Für die erste
+  Beta steht der noch aus, solange kein Release öffentlich verfügbar ist.
+- CLA-Entwurf prüfen lassen und CLA Assistant vor Annahme externer Beiträge
+  aktivieren; das ist getrennt von der technischen Release-Freigabe.
 
-1. Neuen Schlüssel anlegen, seinen öffentlichen Teil zusätzlich ins Abbild
-   legen, eine Version herausgeben – signiert noch mit dem **alten**.
-2. Das Secret im Environment auf den neuen Schlüssel umstellen. Alle
-   weiteren Versionen sind mit dem neuen signiert; jedes NAS, das den
-   Schritt 1 mitgemacht hat, nimmt sie an.
-3. Einige Versionen später den alten öffentlichen Schlüssel aus dem Abbild
-   entfernen. Die Version aus Schritt 1 als `MIN_VERSION` setzen, damit
-   ältere Installationen erst dorthin aktualisieren.
+## Schlüsselwechsel und Verlust
 
-## Wenn der Schlüssel verloren oder gestohlen ist
+Einen neuen öffentlichen Schlüssel zuerst per Update verteilen, noch mit
+dem alten Schlüssel signiert. Erst danach das GitHub-Secret wechseln.
+Den alten Schlüssel erst in einer späteren Version entfernen und mit
+`MIN_VERSION` sicherstellen, dass ältere Installationen den Zwischenschritt
+einhalten.
 
-- **Verloren:** Es gibt keinen Weg, bestehende Installationen zu
-  aktualisieren. Nutzer müssen einen neuen Stick mit einer Version
-  bespielen, die den neuen Schlüssel enthält, und ihre Konfiguration
-  zurückspielen (Einstellungen › Sicherung des Sticks).
-- **Gestohlen:** Sofort mit dem alten Schlüssel eine Version herausgeben,
-  die nur noch den neuen enthält, und öffentlich dazu aufrufen, sie zu
-  installieren. Bis dahin kann der Dieb signierte Updates ausliefern, wenn
-  er zusätzlich die Releases des Projekts oder die Verbindung eines NAS
-  dorthin kontrolliert.
-
-Deshalb gehört von Anfang an ein zweiter, offline aufbewahrter Schlüssel
-ins Abbild: Mit ihm lässt sich der erste jederzeit ablösen.
+Bei Verlust oder Diebstahl des normalen Schlüssels kann der bereits im
+Abbild enthaltene Offline-Reserve-Schlüssel ein Ersatz-Update signieren,
+das den kompromittierten Schlüssel entfernt. GitHub-Secrets und
+Repository-Zugriff ebenfalls prüfen. Ohne irgendeinen verbliebenen
+vertrauenswürdigen privaten Schlüssel müssen Nutzer einen neuen Stick
+erstellen und ihre Konfiguration wiederherstellen.
