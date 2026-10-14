@@ -143,6 +143,35 @@ func TestRender(t *testing.T) {
 	}
 }
 
+func TestBridgeForwardingBeforeNetworkChange(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	cfg := Config{Hostname: "nas", Ports: []string{"enp1s0"}, DHCP: true}
+	if err := m.apply(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	before := files(t, m)
+	runner.commands = nil
+	runner.fail = "titanos-bridge-forwarding"
+	cfg.Bridge = true
+	if err := m.apply(ctx, cfg); err == nil {
+		t.Fatal("bridge must not be configured when forwarding setup fails")
+	}
+	if got := files(t, m); len(got) != len(before) || got["10-titanos-enp1s0.network"] != before["10-titanos-enp1s0.network"] {
+		t.Fatalf("failed preparation changed networkd files: %v", got)
+	}
+	if len(runner.commands) != 1 || !strings.Contains(runner.commands[0], "titanos-bridge-forwarding") {
+		t.Fatalf("networkd touched despite failed preparation: %v", runner.commands)
+	}
+	runner.commands, runner.fail = nil, ""
+	if err := m.apply(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(runner.commands[0], "titanos-bridge-forwarding") || !strings.Contains(files(t, m)["10-titanos-enp1s0.network"], "Bridge=br0") {
+		t.Fatalf("forwarding must be ready before br0 is created: %v", runner.commands)
+	}
+}
+
 func TestChangeOnTrial(t *testing.T) {
 	m, runner := newTestManager(t)
 	ctx := context.Background()

@@ -37,6 +37,8 @@
 	"unreachable.title": "NAS nicht erreichbar",
 	"unreachable.text": "Die Weboberfläche bekommt keine Antwort vom NAS. Läuft es und ist es im Netzwerk?",
 	"nav.label": "Hauptnavigation",
+	"nav.scrollLeft": "Navigation nach links scrollen",
+	"nav.scrollRight": "Navigation nach rechts scrollen",
 	"nav.dashboard": "Dashboard",
 	"nav.storage": "Speicher",
 	"nav.shares": "Shares",

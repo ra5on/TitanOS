@@ -167,12 +167,12 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 **Entwürfe:** `docs/design/` enthält die Quelltexte aller Entwurfsseiten (`*.dc.html`, Übersicht in `docs/design/README.md`). Vor der Arbeit an einer Seite die passende Datei lesen und Aufbau, Abstände, Farben (siehe `Appearance.dc.html` für alle Theme-Werte) und Verhalten übernehmen – nicht den Code, der nutzt ein Entwurfsformat mit eigener Laufzeit. Beispieldaten darin nie ins Produkt übernehmen. Screenshots, falls vorhanden, in `docs/design/screenshots/`.
 
 **Grundaufbau**
-- Kopfzeile: Logo (Symbol + Schriftzug, siehe „Marke“), Hostname/IP, Reiter-Navigation (Dashboard, Speicher, Shares, Dateien, Nutzer, Docker, VMs, Apps, Plugins, Einstellungen, Werkzeuge), Terminal, Meldungen, Konto-Menü.
+- Kopfzeile: Logo (Symbol + Schriftzug, siehe „Marke“), Reiter-Navigation (Dashboard, Speicher, Shares, Dateien, Nutzer, Docker, VMs, Apps, Plugins, Einstellungen, Werkzeuge), Terminal, Meldungen, Konto-Menü. Kein Hostname/IP-Badge neben dem Logo.
 - **Konto-Menü** (Klick auf den eigenen Namen oben rechts, mit Initiale in Akzentfarbe): Name und Rolle, Mein Konto (Passwort, 2FA, SSH-Schlüssel), Darstellung, Angemeldete Geräte, NAS neu starten …, NAS herunterfahren …, Abmelden. Neustart/Herunterfahren nur für Besitzer/Administratoren und immer mit Bestätigungsdialog, der zeigt, was passiert: laufende Container/VMs werden sauber beendet, laufender Rebuild/Prüfung wird unterbrochen und fortgesetzt, Option „erst nach Abschluss des Wiederaufbaus“, Hinweis auf Wake-on-LAN beim Herunterfahren.
-- Kopfzeile immer einzeilig mit fester Höhe (ca. 60 px). Reicht die Breite nicht, scrollt die Navigation seitlich – nie umbrechen.
+- Kopfzeile immer einzeilig mit fester Höhe (ca. 60 px). Reicht die Breite nicht, scrollt die Navigation seitlich mit sichtbarer Scrollleiste, Links-/Rechtspfeilen und Ziehen mit gedrückter Maustaste. Normale Link-Klicks, Tastatur und Touch bleiben bedienbar.
 - Statusleiste unten: Volume-Zustand, laufende Rebuilds/Prüfungen, Version und System-Slot.
 - Schrift: IBM Plex Sans für Text, IBM Plex Mono für Werte, Pfade, Gerätenamen (lokal ausliefern, keine Google-Fonts-Abhängigkeit im Produkt).
-- Mobil: Navigation umbrechen, Kacheln stapeln, breite Tabellen horizontal scrollbar.
+- Mobil: Navigation seitlich scrollen, Kacheln stapeln, breite Tabellen horizontal scrollbar.
 
 **Marke** (Entwurf `Brand.dc.html`, Dateien in `docs/brand/`)
 - Symbol: Sechseck-Rahmen mit „T“ (mit Fuge zwischen Balken und Stamm). Schriftzug „TITANOS“ aus eigenen geometrischen Formen (keine Schriftart, keine Lizenzfrage): gleiche Strichstärke, „A“ ohne Querstrich, „T“ mit Fuge.
@@ -283,6 +283,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 **Netzwerk** (Einstellungen › Netzwerk; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Konfiguration in `/config/network/network.json`: Name des NAS, Anschlüsse (keiner gewählt = jeder Anschluss per DHCP, wie ab Werk; mehrere = Bond mit wählbarer Art), VLAN-Nummer, Bridge `br0`, DHCP oder feste Adresse mit Gateway, Nameserver. Daraus schreibt das Paket `network` bei jedem Start und jeder Änderung die Dateien für systemd-networkd (`/etc/systemd/network/10-titanos-*`); Schichtung: Anschlüsse → Bond → VLAN → Bridge → Adresse.
 - Die Bridge übernimmt die Hardware-Adresse des ersten Anschlusses, damit der Router über Neustarts dieselbe Adresse vergibt.
+- VM-Verkehr auf `br0` erhält eine auf Layer 2 begrenzte IPv4-/IPv6-Ausnahme in `DOCKER-USER`, bevor die Bridge eingerichtet wird und nach jedem Docker-Start. Keine globale Freigabe von Routing oder Docker-Bridges. Reproduktion und Netzwerktest: `docs/NETWORKING.md`, `scripts/test-bridge-forwarding.py`.
 - Jede Änderung gilt 2 Minuten auf Probe und wird erst mit der Bestätigung auf den Stick geschrieben. Die Bestätigung kommt über die Weboberfläche – also über die neue Verbindung – per Leiste oben auf jeder Seite. Ohne sie stellt titand den vorigen Zustand wieder her. Ändert sich die Adresse, muss man sich unter der neuen anmelden und dort bestätigen.
 - Zeitzone unter „Einstellungen“ (`/config/system/settings.json`), wird bei jedem Start gesetzt und neuen Apps mitgegeben.
 - VMs wählen „nur ausgehend“ oder „eigene Adresse im Heimnetz“ (Karte an `br0`); Letzteres nur, wenn die Bridge eingerichtet ist.
