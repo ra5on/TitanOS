@@ -109,14 +109,25 @@ manifest = {
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
 # Kernel plugins are separate downloads; they must match this exact system.
-plugin = json.loads(Path("out/plugins/nvidia.plugin.json").read_text())
-if plugin["name"] != "nvidia" or plugin["kernel"] != manifest["kernel"] or not plugin["version"].endswith("-titanos-" + version):
-    raise ValueError("NVIDIA plugin does not match this release")
-if sha256("out/plugins/nvidia.raw") != plugin["sha256"] or Path("out/plugins/nvidia.raw").stat().st_size != plugin["size"]:
-    raise ValueError("NVIDIA plugin checksum/size mismatch")
-for name in ["nvidia.raw", "nvidia.plugin.json", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
-    shutil.copy2(Path("out/plugins") / name, Path(release) / name)
-manifest["plugins"] = [{"name": "nvidia", "asset": "nvidia.plugin.json"}]
+manifest["plugins"] = []
+for path in sorted(Path("out/plugins").glob("*.plugin.json")):
+    plugin = json.loads(path.read_text())
+    name = plugin["name"]
+    if name not in {"nvidia", "intel-gpu-tools", "coral-usb"} or path.name != name + ".plugin.json":
+        raise ValueError("unrecognized official plugin")
+    if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
+        raise ValueError("plugin kernel mismatch: " + name)
+    expected = plugin["version"].endswith("-titanos-" + version) if name == "nvidia" else plugin["version"] == version
+    if not expected or sha256(Path("out/plugins") / (name + ".raw")) != plugin["sha256"] or (Path("out/plugins") / (name + ".raw")).stat().st_size != plugin["size"]:
+        raise ValueError("plugin version/checksum mismatch: " + name)
+    assets = [name + ".raw", path.name, name + "-licenses.tar.gz"]
+    if name == "nvidia":
+        assets.append("nvidia-kernel-sources.tar.gz")
+    for asset in assets:
+        shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
+    manifest["plugins"].append({"name": name, "asset": path.name})
+if not any(p["name"] == "nvidia" for p in manifest["plugins"]):
+    raise ValueError("NVIDIA plugin missing")
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")

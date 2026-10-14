@@ -215,13 +215,21 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 			}
 		}
 	}
+	busyBtrfs := map[string]bool{}
+	m.mu.RLock()
+	for _, volume := range m.volumes {
+		if state := m.btrfsProgress[volume.Name]; state.State == VolumeChecking || state.State == VolumeRebuilding {
+			busyBtrfs[volume.FilesystemUUID] = true
+		}
+	}
+	m.mu.RUnlock()
 	next := map[string]sleepSample{}
 	var problems []DiskSleepError
 	for _, device := range devices {
 		name := filepath.Base(device.Name)
 		args := standbyArgs(device)
 		device.walk(func(part blockDevice) {
-			if busyParts[filepath.Base(part.KName)] {
+			if busyParts[filepath.Base(part.KName)] || part.FSType == "btrfs" && busyBtrfs[part.UUID] {
 				busy[name] = true
 			}
 		})

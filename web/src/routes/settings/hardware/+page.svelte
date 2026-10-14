@@ -1,4 +1,5 @@
 <script lang="ts">
+	import NvidiaPower from './NvidiaPower.svelte';
 	import { api, ApiError, type Hardware } from '#lib/api.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 
@@ -41,6 +42,7 @@
 					{#if device.primary}<span class="chip">{t('hardware.primary')}</span>{/if}
 				</div>
 				<div class="use">
+					{#if device.vendor === '10de' && device.driver === 'nvidia'}<NvidiaPower address={device.address} />{/if}
 					{#if users(device.address).length > 0}
 						<span>{t('hardware.assigned', { vms: users(device.address).join(', ') })}</span>
 					{:else if device.passable}

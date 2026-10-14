@@ -144,6 +144,22 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inventory"):
             verify.verify(self.release, self.keys)
 
+    def test_multiple_plugins_signed_and_verified(self):
+        plugins = self.repo / "out/plugins"
+        for name in ["intel-gpu-tools", "coral-usb"]:
+            data = name.encode()
+            (plugins / (name + ".raw")).write_bytes(data)
+            (plugins / (name + ".plugin.json")).write_text(json.dumps(dict(
+                name=name, version="0.1.0-beta.1", sha256=hashlib.sha256(data).hexdigest(), size=len(data))))
+            (plugins / (name + "-licenses.tar.gz")).write_bytes(b"notices")
+        self.pack()
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        self.assertEqual(len(json.loads((self.release / "manifest.json").read_text())["plugins"]), 3)
+        (self.release / "intel-gpu-tools.plugin.json.minisig").unlink()
+        with self.assertRaisesRegex(ValueError, "trusted key"):
+            verify.verify(self.release, self.keys)
+
     def test_wrong_key_rejected(self):
         self.pack()
         self.sign()
@@ -159,7 +175,7 @@ class ReleaseTest(unittest.TestCase):
         plugin["kernel"] = "other-kernel"
         path.write_text(json.dumps(plugin))
         output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
-        self.assertIn("plugin does not match", output)
+        self.assertIn("plugin kernel mismatch", output)
 
     def test_missing_plugin_signature_rejected(self):
         self.pack()

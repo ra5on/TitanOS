@@ -124,6 +124,10 @@ type Manifest struct {
 	// for the slot.
 	Cmdline string `json:"cmdline"`
 	Files   []File `json:"files"`
+	Plugins []struct {
+		Name  string `json:"name"`
+		Asset string `json:"asset"`
+	} `json:"plugins,omitempty"`
 }
 
 // Size returns how much the release takes on the stick.
@@ -221,7 +225,9 @@ type Manager struct {
 	// Reboot restarts the NAS after a scheduled installation.
 	Reboot func() error
 	// Mounted returns the volumes that are mounted right now.
-	Mounted func() []string
+	Mounted        func() []string
+	PreparePlugins func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
+	PluginsHealthy func() bool
 
 	// work serializes everything that writes to the stick.
 	work sync.Mutex
@@ -345,6 +351,9 @@ func (m *Manager) Healthy() bool {
 	m.mu.Unlock()
 	if pending == nil || pending.Slot != m.slot || pending.BootID == m.bootID || m.Mounted == nil {
 		return true
+	}
+	if m.PluginsHealthy != nil && !m.PluginsHealthy() {
+		return false
 	}
 	mounted := m.Mounted()
 	for _, volume := range pending.Volumes {
@@ -702,6 +711,13 @@ func parseManifest(data []byte) (Manifest, error) {
 	if len(names) != len(slotFiles) {
 		return bad("files")
 	}
+	plugins := map[string]bool{}
+	for _, plugin := range manifest.Plugins {
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`).MatchString(plugin.Name) || plugin.Asset != plugin.Name+".plugin.json" || plugins[plugin.Name] {
+			return bad("plugins")
+		}
+		plugins[plugin.Name] = true
+	}
 	return manifest, nil
 }
 
@@ -839,6 +855,21 @@ func (m *Manager) Install(ctx context.Context) error {
 
 func (m *Manager) install(ctx context.Context, manifest Manifest, target string) error {
 	slog.Info("installing update", "version", manifest.Version, "slot", target)
+	base := m.source() + "/releases/download/" + manifest.Tag + "/"
+	if m.PreparePlugins != nil {
+		assets := map[string]string{}
+		for _, plugin := range manifest.Plugins {
+			assets[plugin.Name] = plugin.Asset
+		}
+		if err := m.PreparePlugins(ctx, manifest.Version, manifest.Kernel, base, assets, m.fetch,
+			func(ctx context.Context, url, dest, sum string, size int64) error {
+				return m.download(ctx, url, dest, File{SHA256: sum, Size: size}, func(done int64, speed uint64) {
+					m.setProgress(func(p *Progress) { p.File = filepath.Base(dest); p.SpeedBytesPerSecond = speed })
+				})
+			}); err != nil {
+			return fmt.Errorf("prepare plugins: %w", err)
+		}
+	}
 	dir := filepath.Join(m.bootDir, "titanos", target)
 	// What is in the slot can no longer be started while it is replaced.
 	m.removeEntry(target)
@@ -848,7 +879,6 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	base := m.source() + "/releases/download/" + manifest.Tag + "/"
 	total, done := manifest.Size(), int64(0)
 	for _, file := range manifest.Files {
 		before := done

@@ -260,6 +260,8 @@ func (m *Manager) Images(ctx context.Context, mounted []string) []Image {
 
 // copyDisks makes the disks of a new VM that are copies of existing images.
 func (m *Manager) copyDisks(ctx context.Context, vm VM) {
+	// Background preparation must not mutate the slice published to readers.
+	vm.Disks = slices.Clone(vm.Disks)
 	fail := func(err error) {
 		slog.Error("disk of a VM not prepared", "vm", vm.Name, "err", err)
 		m.mu.Lock()

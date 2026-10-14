@@ -18,7 +18,7 @@
 		{ id: 'raid10', min: 4 },
 		{ id: 'raid0', min: 2 }
 	];
-	const FILESYSTEMS: Filesystem[] = ['ext4', 'xfs'];
+	const FILESYSTEMS: Filesystem[] = ['ext4', 'xfs', 'btrfs'];
 
 	let name = $state('');
 	let level = $state<RaidLevel>('raid1');
@@ -35,6 +35,7 @@
 	/** What the volume will hold; the same for every disk as the smallest one. */
 	const capacity = $derived.by(() => {
 		const n = chosen.length;
+		if (filesystem === 'btrfs' && (n !== 2 || level !== 'raid1')) return { text: t('snapshot.mirrorOnly'), ok: false };
 		if (n < min) return { text: t('create.capacityNeeds', { count: min }), ok: false };
 		if (level === 'raid10' && n % 2 !== 0) return { text: t('create.capacityEven'), ok: false };
 		const smallest = Math.min(...chosen.map((disk) => disk.sizeBytes));

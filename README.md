@@ -118,10 +118,17 @@ Unter **Dashboard bearbeiten › Kachel hinzufügen** stehen drei grafische Kach
   Ersteinrichtung beim ersten Start
 </p>
 
-## Was geplant ist
+## Neu im Entwicklungsstand (noch nicht in beta.2)
 
-- **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
-- **Weitere Plugins und Geräteauswahl für Container.** Automatische Plugin-Mitnahme bei Systemupdates, NVIDIA-Leistungslimit und automatischer Wechsel zwischen VM und Containern stehen noch aus.
+- **Btrfs-Spiegel:** native RAID1-Spiegel aus genau zwei Platten, schreibgeschützte Snapshots, Wiederherstellung in einen neuen Ordner, Scrub und Ersatz eines fehlenden Mitglieds. [Btrfs-Anleitung](docs/BTRFS.md).
+- **Geräteauswahl für Container:** iGPU/GPU, NPU, NVIDIA und Coral USB im App-Installationsdialog und Container-Editor; gespeichert werden stabile Gerätekennungen. [Hardware und Plugins](docs/PLUGINS.md).
+- **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird noch nicht unterstützt.
+- **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
+- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus diesem Entwicklungsstand oder einer späteren Version gestartet werden; der Updater in beta.2 kann das noch nicht.
+
+## Noch geplant
+
+Volume-Verschlüsselung, eingebauter Fernzugriff, Energiezeitpläne/Wake-on-LAN, Befehlspalette sowie dokumentierte API und CLI. Bootloader-Updates und Systemupdates aus einer hochgeladenen Datei stehen ebenfalls noch aus.
 
 ## Voraussetzungen und Grenzen der ersten Beta
 
@@ -130,7 +137,7 @@ Unter **Dashboard bearbeiten › Kachel hinzufügen** stehen drei grafische Kach
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Noch keine automatische Plugin-Mitnahme beim Systemupdate, keine Bootloader-Updates und kein Systemupdate aus einer hochgeladenen Datei. Btrfs, Volume-Verschlüsselung und eingebauter Fernzugriff sind noch nicht umgesetzt. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- In der veröffentlichten beta.2 fehlen Btrfs und automatische Plugin-Mitnahme noch; im Entwicklungsstand sind sie umgesetzt. Volume-Verschlüsselung, eingebauter Fernzugriff, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 

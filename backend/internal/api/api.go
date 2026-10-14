@@ -53,6 +53,7 @@ type Options struct {
 	Terminal     *terminal.Manager
 	VMs          *vm.Manager
 	Hardware     *hardware.Manager
+	Nvidia       *hardware.NvidiaControl
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
 	Network      *network.Manager
@@ -131,6 +132,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireAdmin(s.handleAddVolumeDisk))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireAdmin(s.handleRemoveVolumeDisk))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireAdmin(s.handleCheckVolume))
+	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshots))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshotAction))
 	mux.HandleFunc("GET /api/v1/storage/tests", s.requireAdmin(s.handleDiskTests))
 	mux.HandleFunc("POST /api/v1/storage/tests", s.requireAdmin(s.handleDiskTestStart))
 	mux.HandleFunc("DELETE /api/v1/storage/tests/{disk}", s.requireAdmin(s.handleDiskTestStop))
@@ -199,6 +202,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
+	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
+	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
 	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireAdmin(s.handleVMGrow))
 	mux.HandleFunc("GET /api/v1/vms/{name}/serial", s.requireAdmin(s.handleVMSerial))
 	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAdmin(s.handleVMUpdate))

@@ -12,6 +12,7 @@ export type ServiceForm = {
 	restart: string;
 	network: string;
 	privileged: boolean;
+	hardware: string[];
 	webui: string;
 	paths: PathRow[];
 	ports: PortRow[];
@@ -65,6 +66,7 @@ export function readService(doc: Document, service: string): ServiceForm {
 		restart: text('restart', 'no'),
 		network: text('network_mode', 'bridge'),
 		privileged: at('privileged') === true,
+		hardware: list(at('x-titanos-hardware')).filter((entry): entry is string => typeof entry === 'string'),
 		webui: labels.find((label) => label.name === WEBUI_LABEL)?.value ?? '',
 		labels: labels.filter((label) => label.name !== WEBUI_LABEL),
 		env: pairs(at('environment')),
@@ -141,6 +143,7 @@ export function writeService(doc: Document, service: string, form: ServiceForm) 
 		else doc.setIn(path('network_mode'), form.network);
 		if (!publishes) doc.deleteIn(path('ports'));
 	}
+	if (!same('hardware')) doc.setIn(path('x-titanos-hardware'), form.hardware);
 	if (!same('privileged')) set('privileged', form.privileged ? true : undefined);
 	if (!same('paths')) {
 		set(
