@@ -68,7 +68,16 @@ export type Session = {
 	version?: string;
 };
 
+export type Accelerator = {
+	address: string; name: string; vendor: string; kind: string; driver: string;
+	state: 'ready' | 'driver_missing' | 'vm' | 'suspended';
+	usagePercent: number | null; temperatureC: number | null; powerWatts: number | null;
+	memoryUsedBytes: number | null; memoryTotalBytes: number | null; frequencyMHz: number | null;
+	pState: string; engines: { name: string; usagePercent: number }[]; history: (number | null)[];
+};
+
 export type SystemInfo = {
+	accelerators: Accelerator[];
 	hostname: string;
 	version: string;
 	kernel: string;

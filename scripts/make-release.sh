@@ -72,7 +72,7 @@ done
 
 VERSION=$version CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} python3 - <<'PY'
-import datetime, hashlib, json, os, tarfile
+import datetime, hashlib, json, os, tarfile, shutil
 from pathlib import Path
 
 version, release, image = os.environ["VERSION"], os.environ["RELEASE"], os.environ["IMAGE"]
@@ -108,6 +108,15 @@ manifest = {
 }
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
+# Kernel plugins are separate downloads; they must match this exact system.
+plugin = json.loads(Path("out/plugins/nvidia.plugin.json").read_text())
+if plugin["name"] != "nvidia" or plugin["kernel"] != manifest["kernel"] or not plugin["version"].endswith("-titanos-" + version):
+    raise ValueError("NVIDIA plugin does not match this release")
+if sha256("out/plugins/nvidia.raw") != plugin["sha256"] or Path("out/plugins/nvidia.raw").stat().st_size != plugin["size"]:
+    raise ValueError("NVIDIA plugin checksum/size mismatch")
+for name in ["nvidia.raw", "nvidia.plugin.json", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
+    shutil.copy2(Path("out/plugins") / name, Path(release) / name)
+manifest["plugins"] = [{"name": "nvidia", "asset": "nvidia.plugin.json"}]
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")

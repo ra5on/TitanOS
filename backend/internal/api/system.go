@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
 type systemResponse struct {
 	system.Info
-	Version string `json:"version"`
+	Version      string                 `json:"version"`
+	Accelerators []hardware.Accelerator `json:"accelerators"`
 	// NetworkPendingSeconds is how long a network change on trial has
 	// left to be confirmed; 0 if there is none. Every page shows it.
 	NetworkPendingSeconds int `json:"networkPendingSeconds"`
@@ -21,6 +23,10 @@ type systemResponse struct {
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	res := systemResponse{Info: s.opts.Monitor.Info(), Version: s.opts.Version, NetworkPendingSeconds: s.opts.Network.PendingSeconds()}
+	res.Accelerators = []hardware.Accelerator{}
+	if s.opts.Accelerators != nil {
+		res.Accelerators = s.opts.Accelerators.Snapshot()
+	}
 	if currentUser(r).Role.CanAdminister() {
 		res.NotificationsLatest = s.opts.Notify.Latest()
 	}

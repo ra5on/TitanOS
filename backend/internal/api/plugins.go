@@ -21,6 +21,7 @@ var pluginErrors = []struct {
 	{plugins.ErrExists, http.StatusConflict, "plugin_exists"},
 	{plugins.ErrInvalid, http.StatusBadRequest, "invalid_plugin"},
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
+	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
 }
 
 func writePluginError(w http.ResponseWriter, err error) {

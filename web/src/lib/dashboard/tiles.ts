@@ -8,7 +8,7 @@ export const COLUMNS = 12;
 export const ROW_HEIGHT = 72;
 export const GAP = 16;
 
-export const TILE_IDS = ['system', 'volumes', 'network', 'disks'] as const;
+export const TILE_IDS = ['system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia'] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
 export type TileSpec = { title: MessageKey; minW: number; minH: number };
@@ -17,7 +17,10 @@ export const TILES: Record<TileId, TileSpec> = {
 	system: { title: 'tile.system', minW: 3, minH: 4 },
 	volumes: { title: 'tile.volumes', minW: 4, minH: 2 },
 	network: { title: 'tile.network', minW: 3, minH: 3 },
-	disks: { title: 'tile.disks', minW: 3, minH: 2 }
+	disks: { title: 'tile.disks', minW: 3, minH: 2 },
+	igpu: { title: 'tile.igpu', minW: 3, minH: 4 },
+	npu: { title: 'tile.npu', minW: 3, minH: 4 },
+	nvidia: { title: 'tile.nvidia', minW: 3, minH: 4 }
 };
 
 /** Position and size of a tile in grid cells. Without x/y it goes to the first free place. */
@@ -34,7 +37,7 @@ export function defaultLayout(): TilePlacement[] {
 
 /** Size a tile gets when it is shown again. */
 export function defaultPlacement(id: TileId): TilePlacement {
-	const { w, h } = defaultLayout().find((tile) => tile.id === id)!;
+	const { w, h } = defaultLayout().find((tile) => tile.id === id) ?? { w: 4, h: 6 };
 	return { id, w, h };
 }
 

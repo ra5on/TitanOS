@@ -78,6 +78,7 @@
 			problem(err);
 		}
 		busy = false;
+		await load();
 	}
 
 	function ask() {
@@ -155,6 +156,12 @@
 
 				{#if current.problem === 'kernel'}
 					<p class="notice-warn" role="status">{t('plugins.kernelMismatch', { built: current.kernel, running: status.kernel })}</p>
+				{:else if current.problem === 'activation'}
+					<p class="notice-warn" role="status">{t('plugins.activationFailed')}</p>
+				{:else if current.problem === 'integrity'}
+					<p class="notice-warn" role="status">{t('plugins.integrityFailed')}</p>
+				{:else if current.problem === 'busy'}
+					<p class="notice-warn" role="status">{t('plugins.busy')}</p>
 				{/if}
 
 				{#if !current.installed && !asking}
@@ -187,6 +194,7 @@
 						<button type="button" class="btn" onclick={() => (removing = true)} disabled={busy}>{t('plugins.remove')}</button>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
+					{#if current.enabled && current.problem === 'activation'}<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}>{t('plugins.retry')}</button>{/if}
 				{/if}
 			</div>
 		</aside>

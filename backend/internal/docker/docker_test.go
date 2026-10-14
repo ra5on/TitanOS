@@ -162,6 +162,9 @@ func TestEngineFollowsSettingsAndVolume(t *testing.T) {
 		t.Errorf("last command = %q", last)
 	}
 	daemon, _ := os.ReadFile(m.daemonConfig)
+	if !strings.Contains(string(daemon), `"cdi": true`) {
+		t.Error("GPU plugins cannot provide native CDI devices")
+	}
 	if !strings.Contains(string(daemon), `"data-root": "`+filepath.Join(m.mountRoot, "data/.titanos/docker")+`"`) || !strings.Contains(string(daemon), `"max-size": "10m"`) {
 		t.Errorf("daemon.json:\n%s", daemon)
 	}
