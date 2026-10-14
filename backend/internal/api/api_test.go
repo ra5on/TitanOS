@@ -1115,13 +1115,22 @@ func TestPluginsAreForAdministrators(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/plugins", map[string]string{"path": "/mnt/x/y.plugin.json"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
 		t.Errorf("install in development mode: %d %s", res.StatusCode, body)
 	}
+	if res, body := ts.request("POST", "/api/v1/plugins/catalog", map[string]bool{}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"state":"development"`) {
+		t.Errorf("catalog in development build: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/plugins", map[string]string{"name": "nvidia", "volume": "data"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("download in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/plugins", map[string]string{"name": "nvidia", "path": "/mnt/x/y.plugin.json"}); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("ambiguous install: %d %s", res.StatusCode, body)
+	}
 	if res, _ := ts.request("POST", "/api/v1/plugins/x/explode", nil); res.StatusCode != http.StatusNotFound {
 		t.Errorf("unknown action: %d", res.StatusCode)
 	}
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

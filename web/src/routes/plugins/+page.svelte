@@ -20,9 +20,11 @@
 		active: boolean;
 		path: string;
 		official: boolean;
+		download: boolean;
+		licenseUrl?: string;
 		problem: string;
 	};
-	type Status = { volume: string; kernel: string; plugins: Plugin[] };
+	type Status = { volume: string; kernel: string; plugins: Plugin[]; catalog: { release: string; state: string; error?: string } };
 
 	let status = $state<Status | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -31,6 +33,7 @@
 	let confirm = $state('');
 	let volume = $state('');
 	let busy = $state(false);
+	let refreshing = $state(false);
 	let removing = $state(false);
 
 	const plugins = $derived(status?.plugins ?? []);
@@ -42,6 +45,7 @@
 	const hue = (plugin: Plugin) => [...plugin.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
 
 	function badge(plugin: Plugin): { text: string; kind: string } {
+		if (!plugin.installed && plugin.problem === 'kernel') return { text: t('plugins.incompatible'), kind: 'warn' };
 		if (!plugin.installed) return { text: t('plugins.available'), kind: '' };
 		if (plugin.problem) return { text: t('plugins.notLoaded'), kind: 'warn' };
 		if (plugin.active) return { text: t('plugins.active'), kind: 'ok' };
@@ -50,7 +54,7 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: (code === 'plugin_failed' || code === 'invalid_plugin') && err instanceof ApiError ? err.message : '' };
+		error = { text: errorText(code), detail: (code === 'plugin_failed' || code === 'invalid_plugin' || code === 'plugin_download_failed') && err instanceof ApiError ? err.message : '' };
 	}
 
 	async function load() {
@@ -61,8 +65,20 @@
 			if (!status) problem(err);
 		}
 	}
+	async function refreshCatalog(force = false) {
+		if (busy || refreshing) return;
+		refreshing = true;
+		try {
+			const updated = await api.post<Status>('/plugins/catalog', { force });
+			if (!busy) status = updated;
+		} catch (err) {
+			problem(err);
+		} finally {
+			refreshing = false;
+		}
+	}
 	$effect(() => {
-		load();
+		void load().then(() => refreshCatalog());
 		const timer = setInterval(load, 5000);
 		return () => clearInterval(timer);
 	});
@@ -89,6 +105,7 @@
 	}
 
 	function pick(name: string) {
+		if (busy) return;
 		picked = name;
 		asking = false;
 		error = null;
@@ -96,9 +113,24 @@
 </script>
 
 <div class="title">
-	<h1>{t('plugins.title')}</h1>
+	<div class="row">
+		<h1>{t('plugins.title')}</h1>
+		<button type="button" class="btn" disabled={busy || refreshing} onclick={() => refreshCatalog(true)}>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button>
+	</div>
 	<p class="muted intro">{t('plugins.intro')} <a href="/apps">{t('nav.apps')}</a></p>
+	<p class="muted intro">{t('plugins.catalogIntro')}</p>
 </div>
+
+{#if status?.catalog.state === 'development'}
+	<p class="notice-warn" role="status">{t('plugins.catalogDevelopment')}</p>
+{:else if status?.catalog.state === 'unavailable'}
+	<p class="notice-warn" role="status">{t('plugins.catalogUnavailable', { version: status.catalog.release })}</p>
+{:else if status?.catalog.state === 'error'}
+	<div class="notice-warn" role="status">
+		{t('plugins.catalogError')}
+		{#if status.catalog.error}<details><summary>{t('plugins.errorDetails')}</summary><pre>{status.catalog.error}</pre></details>{/if}
+	</div>
+{/if}
 
 {#if error && !asking}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
@@ -106,9 +138,11 @@
 
 {#if status && plugins.length === 0}
 	<section class="tile empty">
-		<h2>{t('plugins.emptyTitle')}</h2>
-		<p class="muted">{t('plugins.emptyText')}</p>
-		<p class="muted">{t('plugins.emptyOfficial')}</p>
+		<h2>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.emptyTitle')}</h2>
+		{#if !refreshing}
+			<p class="muted">{t('plugins.emptyText')}</p>
+			<p class="muted">{t('plugins.emptyOfficial')}</p>
+		{/if}
 	</section>
 {:else if status && current}
 	<div class="layout">
@@ -166,12 +200,15 @@
 
 				{#if !current.installed && !asking}
 					<div class="row">
-						<span class="muted mono path">{current.path}</span>
-						<button type="button" class="btn btn-primary" onclick={ask}>{t('plugins.install')}</button>
+						<span class="muted path">{current.download ? t('plugins.githubSource', { version: status.catalog.release }) : current.path}</span>
+						<button type="button" class="btn btn-primary" disabled={busy || refreshing || !volumes.length || current.problem === 'kernel'} onclick={ask}>{t(current.download ? 'plugins.downloadInstall' : 'plugins.install')}</button>
 					</div>
+					{#if !volumes.length}<p class="muted">{t('plugins.needVolume')} <a href="/storage">{t('nav.storage')}</a></p>{/if}
 				{:else if !current.installed}
-					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', { path: current.path, volume, confirm })))}>
+					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume } : { path: current.path, volume, confirm })))}>
 						<p class="notice-warn">{t(current.official ? 'plugins.trustOfficial' : 'plugins.trustCommunity')}</p>
+						{#if current.download}<p class="muted">{t('plugins.downloadNote', { size: formatBytes(current.size) })}</p>{/if}
+						{#if current.licenseUrl}<a href={current.licenseUrl}>{t('plugins.licenses')}</a>{/if}
 						{#if !status.volume}
 							<label><span>{t('plugins.volume')}</span>
 								<select class="field" bind:value={volume}>{#each volumes as entry (entry)}<option value={entry}>{entry}</option>{/each}</select>
@@ -184,8 +221,8 @@
 						{/if}
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 						<div class="row">
-							<button type="button" class="btn" onclick={() => (asking = false)}>{t('common.cancel')}</button>
-							<button type="submit" class="btn btn-primary" disabled={busy || !volume || (!current.official && confirm !== current.name)}>{t(busy ? 'plugins.installing' : 'plugins.allow')}</button>
+							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
+							<button type="submit" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel' || (!current.official && confirm !== current.name)}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
 						</div>
 					</form>
 				{:else}

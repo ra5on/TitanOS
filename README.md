@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** `v0.1.0-beta.2` erweitert die öffentliche Testversion um HDD-Ruhemodus, NVIDIA-Plugin und GPU-/NPU-Kacheln. Sie richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Downloads und Anleitung stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.2); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
+> **Stand:** `v0.1.0-beta.3` ergänzt direkte Plugin-Downloads, Btrfs-Spiegel und zusätzliche Hardware-Funktionen. Sie richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Downloads und Anleitung stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.3); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -118,13 +118,14 @@ Unter **Dashboard bearbeiten › Kachel hinzufügen** stehen drei grafische Kach
   Ersteinrichtung beim ersten Start
 </p>
 
-## Neu im Entwicklungsstand (noch nicht in beta.2)
+## Neu in v0.1.0-beta.3
 
 - **Btrfs-Spiegel:** native RAID1-Spiegel aus genau zwei Platten, schreibgeschützte Snapshots, Wiederherstellung in einen neuen Ordner, Scrub und Ersatz eines fehlenden Mitglieds. [Btrfs-Anleitung](docs/BTRFS.md).
 - **Geräteauswahl für Container:** iGPU/GPU, NPU, NVIDIA und Coral USB im App-Installationsdialog und Container-Editor; gespeichert werden stabile Gerätekennungen. [Hardware und Plugins](docs/PLUGINS.md).
 - **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird noch nicht unterstützt.
+- **Plugins direkt von GitHub:** Die Plugin-Seite zeigt den signierten Katalog des laufenden Releases. Pakete werden erst beim Installieren auf das Daten-Volume geladen und vor der Aktivierung geprüft. Die manuelle Installation aus einer Freigabe bleibt möglich. [Plugin-Installation](docs/PLUGINS.md#installation-der-zusätzlichen-plugins).
 - **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
-- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus diesem Entwicklungsstand oder einer späteren Version gestartet werden; der Updater in beta.2 kann das noch nicht.
+- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus beta.3 oder einer späteren Version gestartet werden; der Updater in beta.2 kann das noch nicht.
 
 ## Noch geplant
 
@@ -137,13 +138,13 @@ Volume-Verschlüsselung, eingebauter Fernzugriff, Energiezeitpläne/Wake-on-LAN,
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- In der veröffentlichten beta.2 fehlen Btrfs und automatische Plugin-Mitnahme noch; im Entwicklungsstand sind sie umgesetzt. Volume-Verschlüsselung, eingebauter Fernzugriff, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Btrfs und automatische Plugin-Mitnahme sind ab beta.3 enthalten. Beim ersten Update aus beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, eingebauter Fernzugriff, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 
-Downloads für `v0.1.0-beta.2` stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.2). Für einen neuen Stick:
+Downloads für `v0.1.0-beta.3` stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.3). Für einen neuen Stick:
 
-1. `titanos-0.1.0-beta.2.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.1.0-beta.3.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
