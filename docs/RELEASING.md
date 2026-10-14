@@ -174,6 +174,12 @@ Signatur zeigt nur Übertragungsfehler, nicht die Herkunft.
 
 ## Abnahme vor der Freigabe
 
+GitHubs `releases.atom` enthält auch Tags, deren Release-Dateien noch nicht
+veröffentlicht sind. Die derzeitige Beta-Suche nimmt den ersten Tag und meldet
+bei fehlendem Manifest einen Abruffehler. Deshalb den öffentlichen Update-Test
+erst nach dem erfolgreichen Publish-Job starten. Ein Überspringen noch nicht
+vollständig veröffentlichter Tags ist noch offen.
+
 - Probelauf und reguläre Tests für den Release-Commit grün.
 - Release- und Reserve-Schlüssel im Abbild, Geheimnisse sicher verwahrt.
 - Echter FAT32-Stick: Kaltstart, Netzwerk, Besitzerkonto, Neustart und
@@ -187,6 +193,25 @@ Signatur zeigt nur Übertragungsfehler, nicht die Herkunft.
   und der ZIP-Boot-Test ersetzen diesen GitHub-Test nicht. Dieser Test muss für das jeweilige veröffentlichte Release erfolgen.
 - CLA-Entwurf prüfen lassen und CLA Assistant vor Annahme externer Beiträge
   aktivieren; das ist getrennt von der technischen Release-Freigabe.
+
+## Abnahme von v0.1.0-beta.2 am 14. Oktober 2026
+
+Der [signierte Probelauf](https://github.com/ra5on/TitanOS/actions/runs/38564875559)
+und der [offizielle Release-Lauf](https://github.com/ra5on/TitanOS/actions/runs/38567360790)
+sind erfolgreich. Beide starteten das Installations-ZIP zweimal mit UEFI in
+QEMU und prüften den Plugin-Lebenszyklus. Lokale Tests liefen zusätzlich mit
+KVM und mit reiner CPU-Emulation.
+
+Nach der Veröffentlichung wurden alle 17 öffentlichen Downloads erneut mit
+`verify-release.py` geprüft. Eine frische lokale QEMU-VM startete aus dem
+signaturgeprüften öffentlichen Beta-1-ZIP, fand Beta 2 über den normalen
+GitHub-Beta-Kanal, lud die signierten Slot-Dateien und bestätigte den Start
+aus Slot B. Anschließend wurde über die API auf Beta 1 in Slot A
+zurückgewechselt und auch dieser Start bestätigt. Besitzerkonto und
+HTTPS-Zertifikat blieben bei beiden Wechseln erhalten. Ein Spiegel oder
+lokaler Release-Server wurde dabei nicht verwendet.
+
+Die oben genannten Tests mit echtem Stick, HDDs und GPUs/NPUs stehen weiterhin aus.
 
 ## Schlüsselwechsel und Verlust
 
