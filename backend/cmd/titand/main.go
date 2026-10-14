@@ -203,6 +203,7 @@ func run(opts options) error {
 	}
 	// And a disk a VM uses is never overwritten by a disk test.
 	volumes.Claimed = machines.ClaimedDisks
+	go volumes.RunDiskSleep(ctx)
 	go machines.Run(ctx, volumes.Mounted)
 
 	// System extensions on a volume, laid over the system once it is mounted.

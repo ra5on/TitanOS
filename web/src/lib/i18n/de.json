@@ -1612,5 +1612,17 @@
 	"notify.kind.ups_shutdown.text": "Das NAS lief {subject} Minuten auf Batterie und fährt jetzt herunter, wie eingestellt.",
 	"notify.kind.ups_lost.title": "Keine Verbindung zur USV",
 	"notify.kind.ups_lost.text": "Die USV antwortet nicht mehr. Bei einem Stromausfall kann das NAS so nicht rechtzeitig herunterfahren.",
-	"error.invalid_ups_settings": "Diese Angaben passen nicht:"
+	"error.invalid_ups_settings": "Diese Angaben passen nicht:",
+	"storage.sleepTitle": "Ruhemodus für Festplatten",
+	"storage.sleepHint": "Eine gemeinsame Ruhezeit für alle HDDs. Jede Platte schläft nach ihrer eigenen Zeit ohne Lese- oder Schreibzugriff ein und wacht beim nächsten Zugriff wieder auf.",
+	"storage.sleepAfter": "Bei Inaktivität nach",
+	"storage.sleepOff": "Aus",
+	"storage.sleepMinutes": "{count} Minuten",
+	"storage.sleepHour": "1 Stunde",
+	"storage.sleepHours": "{count} Stunden",
+	"storage.sleepDetails": "SSDs, NVMe, der Bootstick und an VMs durchgereichte Platten sind ausgenommen. Plattentests und RAID-Prüfung/Wiederaufbau pausieren den Timer. Apps und Freigaben können Platten wach halten. Der erste Zugriff nach dem Einschlafen kann einige Sekunden dauern. Aus beendet den automatischen Ruhemodus von TitanOS; bereits schlafende Platten wachen erst beim nächsten Zugriff auf.",
+	"storage.sleepUnavailable": "Die Einstellung konnte nicht vom Stick gelesen werden. Der automatische Ruhemodus bleibt ausgeschaltet.",
+	"storage.sleepFailed": "Der Ruhemodus konnte für folgende Platten nicht aktiviert werden. Manche Laufwerke oder USB-Gehäuse unterstützen den Befehl nicht.",
+	"error.invalid_disk_idle_time": "Bitte eine angebotene Ruhezeit auswählen.",
+	"common.save": "Speichern"
 }

@@ -209,7 +209,7 @@ var sections = []section{
 // apps (their compose files hold what the user typed in), certificates and
 // the notification settings (the addresses themselves are secrets) stay out.
 var configFiles = []string{
-	"storage/volumes.json", "shares/shares.json", "network/network.json", "docker/settings.json", "docker/sources.json",
+	"storage/volumes.json", "storage/disk-sleep.json", "shares/shares.json", "network/network.json", "docker/settings.json", "docker/sources.json",
 	"system/settings.json", "system/terminal.json", "system/backup.json", "plugins/settings.json",
 }
 

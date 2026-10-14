@@ -122,6 +122,8 @@ func New(opts Options) *Server {
 
 	// Everyone may see the volumes; only administrators may change disks.
 	mux.HandleFunc("GET /api/v1/storage", s.requireUser(s.handleStorage))
+	mux.HandleFunc("GET /api/v1/storage/disk-sleep", s.requireAdmin(s.handleDiskSleep))
+	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
 	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
 	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireAdmin(s.handleCreateVolume))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireAdmin(s.handleDeleteVolume))

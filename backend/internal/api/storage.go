@@ -20,6 +20,7 @@ var storageErrors = []struct {
 	{storage.ErrNotFound, http.StatusNotFound, "volume_not_found"},
 	{storage.ErrInvalidLevel, http.StatusBadRequest, "invalid_level"},
 	{storage.ErrInvalidFS, http.StatusBadRequest, "invalid_filesystem"},
+	{storage.ErrInvalidIdleTime, http.StatusBadRequest, "invalid_disk_idle_time"},
 	{storage.ErrTooFewDisks, http.StatusBadRequest, "too_few_disks"},
 	{storage.ErrDiskUnavailable, http.StatusConflict, "disk_unavailable"},
 	{storage.ErrTestRunning, http.StatusConflict, "disk_test_running"},
@@ -51,6 +52,29 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleDiskSleep(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.opts.Storage.DiskSleep())
+}
+
+func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IdleMinutes *int `json:"idleMinutes"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.IdleMinutes == nil {
+		writeError(w, http.StatusBadRequest, "invalid_disk_idle_time", "idleMinutes is required")
+		return
+	}
+	if err := s.opts.Storage.SetDiskSleep(storage.DiskSleepSettings{IdleMinutes: *req.IdleMinutes}); err != nil {
+		writeStorageError(w, r, "set disk sleep", err)
+		return
+	}
+	slog.Info("disk sleep changed", "idleMinutes", *req.IdleMinutes, "user", currentUser(r).Name)
+	s.handleDiskSleep(w, r)
 }
 
 // handleStorageRescan reads the SMART values again and returns the fresh state.

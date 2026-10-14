@@ -128,8 +128,9 @@ type Sync struct {
 
 // Status is everything the storage page shows.
 type Status struct {
-	Disks   []Disk   `json:"disks"`
-	Volumes []Volume `json:"volumes"`
+	Disks     []Disk          `json:"disks"`
+	Volumes   []Volume        `json:"volumes"`
+	DiskSleep DiskSleepStatus `json:"diskSleep"`
 }
 
 // Runner runs a system command. Tests replace it.
@@ -170,9 +171,14 @@ type Manager struct {
 	loaded  bool
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
-	settled   bool
-	smart     map[string]*Smart // by disk path
-	smartTime time.Time
+	settled         bool
+	smart           map[string]*Smart // by disk path
+	smartTime       time.Time
+	diskSleep       DiskSleepSettings
+	diskSleepLoaded bool
+	diskSleepErrors []DiskSleepError
+	// sleepSamples is protected by actions, never persisted on the stick.
+	sleepSamples map[string]sleepSample
 }
 
 // NewManager returns a manager working on the real system.
@@ -188,10 +194,10 @@ func (m *Manager) Load() error {
 		return err
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.volumes = volumes
 	m.loaded = true
-	return nil
+	m.mu.Unlock()
+	return m.loadDiskSleep()
 }
 
 func (m *Manager) configured() []VolumeConfig {
@@ -259,7 +265,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		volumeByArray[normalizeUUID(volume.ArrayUUID)] = volume.Name
 	}
 
-	status := Status{Disks: []Disk{}, Volumes: []Volume{}}
+	status := Status{Disks: []Disk{}, Volumes: []Volume{}, DiskSleep: m.DiskSleep()}
 	testing := m.testing()
 	diskOfPart := map[string]string{} // sda1 → sda
 	for _, device := range devices {
