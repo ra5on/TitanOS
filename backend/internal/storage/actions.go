@@ -35,7 +35,7 @@ var (
 var volumeNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
 
 // minDisks is the smallest number of disks per RAID level.
-var minDisks = map[string]int{"raid0": 2, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
+var minDisks = map[string]int{"raid0": 1, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
 
 var filesystems = []string{"ext4", "xfs", "btrfs"}
 
@@ -226,8 +226,12 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 
 	arrayPath := "/dev/md/" + req.Name
 	args := []string{"--create", arrayPath, "--run", "--quiet", "--metadata=1.2", "--homehost=any",
-		"--name=" + req.Name, "--level=" + strings.TrimPrefix(req.Level, "raid"),
-		fmt.Sprintf("--raid-devices=%d", len(parts))}
+		"--name=" + req.Name, "--level=" + strings.TrimPrefix(req.Level, "raid")}
+	if req.Level == "raid0" && len(parts) == 1 {
+		// mdadm requires --force before --raid-devices=1 for a single-disk array.
+		args = append(args, "--force")
+	}
+	args = append(args, fmt.Sprintf("--raid-devices=%d", len(parts)))
 	if req.Level != "raid0" {
 		// The bitmap lets a disk that dropped out briefly catch up quickly
 		// instead of being rebuilt from scratch.
