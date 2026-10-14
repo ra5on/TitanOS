@@ -11,7 +11,23 @@ akzeptiert nur Tags `v*`. Private Sicherheitsmeldungen sind aktiviert.
 Diese Einstellungen gehören zum Repository und werden nicht durch die
 Workflow-Datei allein eingerichtet.
 
-Noch benötigt werden die Schlüssel und die beiden Environment-Secrets:
+Seit dem 14. Oktober 2026 sind beide öffentlichen Schlüssel eingebaut und die
+Secrets `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` eingerichtet:
+
+| Schlüssel | Minisign-Key-ID | Verwendung |
+|---|---|---|
+| `titanos-release-1.pub` | `8EAABC2A42904C1D` | reguläre Releases, privater Teil verschlüsselt im Environment `release` |
+| `titanos-recovery-1.pub` | `E58A91B20B598ABB` | Reserve; privater Teil wird nicht bei GitHub hinterlegt |
+
+Beide Schlüssel wurden lokal erzeugt und durch Signaturprüfung getestet.
+Die Übernahme in dauerhafte, getrennte Backups durch den Projektinhaber steht
+noch aus. Der Reserve-Schlüssel wurde auf dem Entwicklungsrechner erzeugt;
+erst nach der Sicherung und Entfernung seiner lokalen privaten Kopie gilt
+er als offline verwahrt. GitHub-Secrets ersetzen keine eigene Sicherung.
+
+Die folgenden Schritte dokumentieren die Einrichtung; vorhandene Schlüssel
+nicht neu erzeugen oder überschreiben. Bei einem Wechsel neue Dateinamen
+verwenden und den Ablauf unter „Schlüsselwechsel und Verlust“ beachten.
 
 1. Auf einem vertrauenswürdigen Rechner **außerhalb dieses Repositorys**
    ein Verzeichnis mit Modus `0700` anlegen. Dort mit

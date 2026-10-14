@@ -12,4 +12,12 @@ new key is signed with an existing trusted key before switching signers.
 
 rehearsal.pub is a disposable test key, ignored by Git. Tag builds reject it.
 
+Configured public keys (2026-10-14):
+  titanos-release-1.pub   Minisign key ID 8EAABC2A42904C1D
+  titanos-recovery-1.pub  Minisign key ID E58A91B20B598ABB
+
+Both key pairs have been verified locally. The release secret is configured
+in GitHub's protected release environment. Offline custody of the recovery
+secret and independent backups must still be completed by the project owner.
+
 See docs/RELEASING.md in the repository.
