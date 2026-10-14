@@ -28,6 +28,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
@@ -140,8 +142,9 @@ type VM struct {
 	// "user": outgoing connections through the NAS only.
 	Network string `json:"network"`
 	// PCI devices (0000:01:00.0) and USB devices (046d:c52b) handed to the guest.
-	PCI []string `json:"pci"`
-	USB []string `json:"usb"`
+	PCI     []string `json:"pci"`
+	AutoGPU bool     `json:"autoGPU"`
+	USB     []string `json:"usb"`
 }
 
 // Job is the preparation of a VM's disks, which can take a while.
@@ -176,6 +179,10 @@ type sample struct {
 
 // Manager keeps the VMs and talks to libvirt.
 type Manager struct {
+	AutoReady   func() bool
+	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
+	AfterPoll   func(context.Context, map[string]bool) error
+
 	store  *config.Store
 	runner run.Runner
 	// Disabled leaves the system alone. Set in development mode.
@@ -334,6 +341,11 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		} else if !m.Disabled {
 			m.autostart(ctx, mounted())
 			m.sample()
+			if m.AfterPoll != nil {
+				if err := m.AfterPoll(ctx, m.RunningNames()); err != nil {
+					slog.Warn("return VM hardware", "err", err)
+				}
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -344,6 +356,9 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 }
 
 func (m *Manager) autostart(ctx context.Context, mounted []string) {
+	if m.AutoReady != nil && !m.AutoReady() {
+		return
+	}
 	m.mu.Lock()
 	var due []string
 	for name, vm := range m.vms {
@@ -608,6 +623,19 @@ func (m *Manager) makeDir(volume, name string) (string, error) {
 		if err := os.Mkdir(path, 0o770); err != nil && !errors.Is(err, fs.ErrExist) {
 			return "", err
 		}
+		var fsInfo unix.Statfs_t
+		if err := unix.Statfs(path, &fsInfo); err != nil {
+			return "", err
+		}
+		if fsInfo.Type == unix.BTRFS_SUPER_MAGIC {
+			// New disk files inherit NOCOW; existing files are not rewritten.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, err := m.runner.Run(ctx, "", "chattr", "+C", path)
+			cancel()
+			if err != nil {
+				return "", err
+			}
+		}
 		if err := m.share(path, 0o770); err != nil {
 			return "", err
 		}
@@ -726,6 +754,7 @@ type Change struct {
 	Exclusive   bool     `json:"exclusive"`
 	Folders     []Folder `json:"folders"`
 	PCI         []string `json:"pci"`
+	AutoGPU     bool     `json:"autoGPU"`
 	USB         []string `json:"usb"`
 	Network     string   `json:"network"`
 }
@@ -745,6 +774,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	changed.MemoryMiB, changed.VCPUs, changed.ISO = change.MemoryMiB, change.VCPUs, change.ISO
 	changed.CPUPin, changed.Exclusive, changed.Folders, changed.PCI, changed.USB = change.CPUPin, change.Exclusive, change.Folders, change.PCI, change.USB
 	changed.Network = change.Network
+	changed.AutoGPU = change.AutoGPU
 	if err := m.prepare(ctx, &changed, mounted); err != nil {
 		return err
 	}
@@ -870,6 +900,14 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 		delete(m.starting, name)
 		m.mu.Unlock()
 	}()
+	started := false
+	if m.BeforeStart != nil {
+		finish, err := m.BeforeStart(ctx, vm.Name, vm.PCI, vm.USB, vm.AutoGPU)
+		if err != nil {
+			return err
+		}
+		defer func() { finish(started) }()
+	}
 	if err := m.lend(vm); err != nil {
 		return err
 	}
@@ -894,6 +932,7 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 		m.mu.Unlock()
 		return err
 	}
+	started = true
 	slog.Info("VM started", "vm", name)
 	m.reserve(ctx)
 	return nil
@@ -1047,4 +1086,16 @@ func (m *Manager) Media(mounted []string) []Medium {
 	}
 	sort.Slice(media, func(i, j int) bool { return media[i].Path < media[j].Path })
 	return media
+}
+
+func (m *Manager) RunningNames() map[string]bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := map[string]bool{}
+	for name := range m.vms {
+		if m.starting[name] || m.pid(name) != 0 {
+			result[name] = true
+		}
+	}
+	return result
 }

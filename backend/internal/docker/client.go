@@ -99,7 +99,25 @@ type apiContainer struct {
 
 // apiInspect is the part of GET /containers/{id}/json that is used.
 type apiInspect struct {
+	Mounts []struct{ Source string }
+	Config struct {
+		Env    []string
+		Labels map[string]string
+	}
+	HostConfig struct {
+		Privileged     bool
+		Runtime        string
+		Devices        []struct{ PathOnHost string }
+		DeviceRequests []struct {
+			Driver       string
+			Count        int
+			DeviceIDs    []string
+			Capabilities [][]string
+		}
+	}
+
 	State struct {
+		Running    bool      `json:"Running"`
 		StartedAt  time.Time `json:"StartedAt"`
 		FinishedAt time.Time `json:"FinishedAt"`
 	} `json:"State"`

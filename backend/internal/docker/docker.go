@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
@@ -126,6 +127,13 @@ type sample struct {
 
 // Manager keeps the engine in line with the settings and answers the UI.
 type Manager struct {
+	Ready           func() bool // drivers must be active before Docker autostarts containers
+	HardwareDevices func(context.Context) []hardware.ContainerDevice
+	RefreshCDI      func(context.Context) error
+	hardwareMu      sync.Mutex
+	hardwareRunDir  string
+	gpuLeases       map[string]gpuLease
+
 	store  *config.Store
 	runner run.Runner
 	api    *client
@@ -152,7 +160,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store, configDir string) *Manager {
-	return &Manager{
+	return &Manager{hardwareRunDir: "/run/titanos-hardware", gpuLeases: map[string]gpuLease{},
 		store: store, runner: run.Exec{}, api: newClient(socketPath), configDir: configDir, mountRoot: "/mnt", daemonConfig: daemonConfig,
 		samples: map[string]*sample{}, jobs: map[string]*Job{}, remote: map[string]string{}, local: map[string][]string{},
 	}
@@ -245,6 +253,8 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 // reconcile makes the engine run exactly when Docker is enabled and its
 // volume is mounted.
 func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
+	m.hardwareMu.Lock()
+	defer m.hardwareMu.Unlock()
 	settings := m.current()
 	want := ""
 	if settings.Enabled && slices.Contains(mounted, settings.Volume) {
@@ -257,6 +267,12 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 		return nil
 	}
 
+	if want != "" && m.Ready != nil && !m.Ready() {
+		return nil
+	}
+	if want != "" && len(m.gpuLeases) > 0 {
+		return fmt.Errorf("%w: return VM GPUs before restarting Docker", ErrInvalid)
+	}
 	// Stop first: the engine must never run with a data root that is gone,
 	// and a changed data root needs a restart anyway.
 	if _, err := m.runner.Run(ctx, "", "systemctl", "stop", "docker.socket", "docker.service"); err != nil {
@@ -427,6 +443,13 @@ func (m *Manager) Action(ctx context.Context, id, action string) error {
 	}
 	if !containerIDRE.MatchString(id) || !slices.Contains([]string{"start", "stop", "restart"}, action) {
 		return ErrNotFound
+	}
+	m.hardwareMu.Lock()
+	defer m.hardwareMu.Unlock()
+	if action != "stop" {
+		if err := m.canStartContainer(ctx, id); err != nil {
+			return err
+		}
 	}
 	return mapAPIError(m.api.post(ctx, "/containers/"+id+"/"+action, nil))
 }

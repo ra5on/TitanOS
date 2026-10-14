@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
 	import { api, ApiError, type DockerStatus } from '#lib/api.ts';
@@ -151,6 +152,7 @@
 		{#if form.privileged}<p class="notice-warn" role="alert">{t('editor.privilegedWarning')}</p>{/if}
 	</section>
 
+	<section class="tile"><HardwarePicker bind:selected={form.hardware} onchange={commit} /></section>
 	<section class="tile" aria-labelledby="h-paths">
 		<div class="section-head"><h2 class="tile-title" id="h-paths">{t('editor.paths')}</h2><button type="button" class="btn small" onclick={() => (form!.paths.push({ host: './data', container: '/data', readOnly: false }), commit())}>{t('editor.addPath')}</button></div>
 		{#each form.paths as row, index (index)}

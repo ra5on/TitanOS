@@ -37,7 +37,7 @@ var volumeNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
 // minDisks is the smallest number of disks per RAID level.
 var minDisks = map[string]int{"raid0": 2, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
 
-var filesystems = []string{"ext4", "xfs"}
+var filesystems = []string{"ext4", "xfs", "btrfs"}
 
 const (
 	mebibyte = 1 << 20
@@ -129,7 +129,12 @@ func (m *Manager) prepareDisk(ctx context.Context, device blockDevice, volume st
 		}
 	}
 
-	table := fmt.Sprintf("label: gpt\nstart=1MiB, size=%dMiB, type=%s, name=titanos-%s\n", sizeMiB, raidPartitionType, volume)
+	partitionType := raidPartitionType
+	if strings.HasPrefix(volume, "btrfs:") {
+		partitionType = "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+		volume = strings.TrimPrefix(volume, "btrfs:")
+	}
+	table := fmt.Sprintf("label: gpt\nstart=1MiB, size=%dMiB, type=%s, name=titanos-%s\n", sizeMiB, partitionType, volume)
 	if _, err := m.runner.Run(ctx, table, "sfdisk", "--quiet", "--wipe", "always", "--wipe-partitions", "always", device.Name); err != nil {
 		return "", err
 	}
@@ -177,13 +182,16 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if !slices.Contains(filesystems, req.Filesystem) {
 		return ErrInvalidFS
 	}
+	if req.Filesystem == "btrfs" && (req.Level != "raid1" || len(req.Disks) != 2) {
+		return fmt.Errorf("%w: Btrfs mirrors require exactly two disks and RAID 1", ErrInvalidLevel)
+	}
 	if len(req.Disks) < need || (req.Level == "raid10" && len(req.Disks)%2 != 0) {
 		return ErrTooFewDisks
 	}
 	if !sameSet(req.Disks, req.Erase) {
 		return ErrNotConfirmed
 	}
-	if _, err := os.Stat(filepath.Join(m.mountRoot, req.Name)); err == nil && readMounts()[filepath.Join(m.mountRoot, req.Name)] {
+	if _, err := os.Stat(filepath.Join(m.mountRoot, req.Name)); err == nil && m.readMounts()[filepath.Join(m.mountRoot, req.Name)] {
 		return ErrExists
 	}
 
@@ -203,6 +211,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	sizeMiB := memberSizeMiB(smallest)
 
 	slog.Info("creating volume", "name", req.Name, "level", req.Level, "filesystem", req.Filesystem, "disks", req.Disks)
+	if req.Filesystem == "btrfs" {
+		return m.createBtrfs(ctx, req, devices, sizeMiB)
+	}
 	var parts []string
 	for _, name := range req.Disks {
 		device, _ := findDevice(devices, name)
@@ -278,7 +289,11 @@ func (m *Manager) mount(ctx context.Context, volume VolumeConfig) error {
 	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 		return err
 	}
-	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", "noatime", "UUID="+volume.FilesystemUUID, mountPoint)
+	options := "noatime"
+	if volume.Filesystem == "btrfs" {
+		options += ",subvolid=5,degraded"
+	}
+	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
 	return err
 }
 
@@ -297,10 +312,19 @@ func (m *Manager) mountAll(ctx context.Context) {
 	if len(configured) == 0 {
 		return
 	}
-	mounts := readMounts()
+	mounts := m.readMounts()
 	var arrays []array
 	for _, volume := range configured {
 		if mounts[filepath.Join(m.mountRoot, volume.Name)] {
+			continue
+		}
+		if volume.Filesystem == "btrfs" {
+			devices, err := m.blockDevices(ctx)
+			if err == nil && len(btrfsParts(devices, volume.FilesystemUUID)) > 0 {
+				if err := m.mount(ctx, volume); err != nil {
+					slog.Warn("mount Btrfs mirror", "name", volume.Name, "err", err)
+				}
+			}
 			continue
 		}
 		if arrays == nil {
@@ -336,9 +360,12 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 		return ErrNotConfirmed
 	}
 
+	if volume.Filesystem == "btrfs" {
+		return m.deleteBtrfs(ctx, volume)
+	}
 	slog.Info("deleting volume", "name", name)
 	mountPoint := filepath.Join(m.mountRoot, name)
-	if readMounts()[mountPoint] {
+	if m.readMounts()[mountPoint] {
 		if _, err := m.runner.Run(ctx, "", "umount", mountPoint); err != nil {
 			return fmt.Errorf("%w: %v", ErrBusy, err)
 		}
@@ -405,6 +432,9 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 	}
 	if !erase {
 		return ErrNotConfirmed
+	}
+	if volume.Filesystem == "btrfs" {
+		return m.replaceMissingBtrfs(ctx, volume, diskName)
 	}
 	if volume.Level == "raid0" {
 		return fmt.Errorf("%w: RAID 0 has no redundancy to rebuild from", ErrNotPossible)
@@ -500,6 +530,9 @@ func (m *Manager) Check(ctx context.Context, name string, start bool) error {
 	volume, ok := m.find(name)
 	if !ok {
 		return ErrNotFound
+	}
+	if volume.Filesystem == "btrfs" {
+		return m.checkBtrfs(ctx, volume, start)
 	}
 	a, running := m.arrayOf(ctx, volume)
 	if !running || volume.Level == "raid0" {

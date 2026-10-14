@@ -2,7 +2,7 @@
 
 TitanOS installiert nur Updates, deren Manifest von einem Schlüssel aus
 seinem Abbild signiert ist. Die Release-Pipeline signiert zusätzlich das
-Installations-ZIP, das NVIDIA-Plugin-Manifest und `SHA256SUMS` für sämtliche Release-Dateien.
+Installations-ZIP, alle Plugin-Manifeste und `SHA256SUMS` für sämtliche Release-Dateien.
 
 ## Einmalig: Schlüssel und GitHub einrichten
 
@@ -127,7 +127,7 @@ oder das Manifest zu ändern.
 Der Tag löst einen neuen vollständigen Build samt QEMU-Test aus. Danach
 wartet der Job `publish` auf die Freigabe im Environment `release`.
 Erst dieser Job erhält den privaten Release-Schlüssel. Er signiert Manifest,
-ZIP, Plugin-Manifest und Prüfsummenliste, verifiziert die Signaturen und alle Dateiinhalte und
+ZIP, Plugin-Manifeste und Prüfsummenliste, verifiziert die Signaturen und alle Dateiinhalte und
 legt das GitHub-Pre-Release an. Ein normaler Tag ohne Vorabkennung wird im
 Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 (tatsächliches Veröffentlichungsdatum plus zwei Jahre).
@@ -138,6 +138,8 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `titanos-<version>-vmlinuz`, `-initrd.img`, `-filesystem.squashfs` | Dateien für den inaktiven System-Slot |
 | `manifest.json`, `manifest.json.minisig` | signierte Update-Beschreibung mit Größe und SHA-256 jeder Slot-Datei |
 | `nvidia.raw`, `nvidia.plugin.json`, `nvidia.plugin.json.minisig` | optionales NVIDIA-Plugin und signiertes Manifest für genau diesen Kernel |
+| `intel-gpu-tools.raw`, `intel-gpu-tools.plugin.json`, `.minisig`, `intel-gpu-tools-licenses.tar.gz` | optionale Intel-Werkzeuge, Signatur, Originalhinweise und Debian-Quellpaketlinks |
+| `coral-usb.raw`, `coral-usb.plugin.json`, `.minisig`, `coral-usb-licenses.tar.gz` | Coral-USB-Diagnose und Container-Zuordnung; ohne Google-Runtime |
 | `nvidia-kernel-sources.tar.gz`, `nvidia-licenses.tar.gz` | passende offene Kernelquellen und originale NVIDIA-/Toolkit-Lizenztexte samt Paket-/Quellverzeichnis |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
@@ -227,3 +229,20 @@ das den kompromittierten Schlüssel entfernt. GitHub-Secrets und
 Repository-Zugriff ebenfalls prüfen. Ohne irgendeinen verbliebenen
 vertrauenswürdigen privaten Schlüssel müssen Nutzer einen neuen Stick
 erstellen und ihre Konfiguration wiederherstellen.
+
+## Neue Regressionen im Entwicklungsstand
+
+`scripts/smoke-storage.py <installations.zip> --plugins <plugin-ordner>` bootet
+viermal mit ausschließlich neu erzeugten virtuellen Platten. Der Test erstellt
+einen nativen Btrfs-Spiegel, prüft Daten/Metadaten im RAID1-Profil, einen
+schreibgeschützten Snapshot und die Wiederherstellung ohne Änderung der
+aktuellen Daten. Er bootet normal und mit einem fehlenden Mitglied, ersetzt es
+über die API und prüft beim nächsten Start beide Mitglieder und die Daten.
+Intel GPU Tools und Coral USB werden dabei installiert und über Neustarts
+geprüft. Der Release-Workflow führt diesen Test zusätzlich zum bestehenden
+ZIP-/NVIDIA-Test aus. Alle Testmedien und SSH-Schlüssel sind Wegwerf-Daten.
+
+Die Go-Tests prüfen die signierte Plugin-Mitnahme, falsche Signaturen/Kernel/
+Versionen, unveränderte Rückfall-Dateien bei Fehlern, getrennte Einstellungen
+pro Release, GPU-Reservierungen und Wiederanlauf nach einem titand-Neustart.
+Echte GPU-/TPU- und PCIe-Reset-Tests sind weiterhin nötig.

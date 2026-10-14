@@ -212,3 +212,28 @@ func (s *Server) handleDiskTestStop(w http.ResponseWriter, r *http.Request) {
 	}
 	s.handleDiskTests(w, r)
 }
+
+func (s *Server) handleSnapshots(w http.ResponseWriter, r *http.Request) {
+	snapshots, err := s.opts.Storage.Snapshots(r.PathValue("name"))
+	if err != nil {
+		writeStorageError(w, r, "list snapshots", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshots)
+}
+func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string `json:"name"`
+		Action  string `json:"action"`
+		Confirm string `json:"confirm"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Storage.SnapshotAction(r.Context(), r.PathValue("name"), req.Name, req.Action, req.Confirm); err != nil {
+		writeStorageError(w, r, "snapshot", err)
+		return
+	}
+	slog.Info("Btrfs snapshot action", "volume", r.PathValue("name"), "snapshot", req.Name, "action", req.Action, "user", currentUser(r).Name)
+	w.WriteHeader(http.StatusNoContent)
+}

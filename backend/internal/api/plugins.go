@@ -45,6 +45,9 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
 	var req struct{ Path, Volume, Confirm string }
 	if !readJSON(w, r, &req) {
 		return
@@ -58,6 +61,9 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePluginAction(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
 	name, action := r.PathValue("name"), r.PathValue("action")
 	if action != "enable" && action != "disable" {
 		writeError(w, http.StatusNotFound, "not_found", "no such action")
@@ -72,6 +78,9 @@ func (s *Server) handlePluginAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
 	name := r.PathValue("name")
 	if err := s.opts.Plugins.Remove(r.Context(), name, s.opts.Storage.Mounted()); err != nil {
 		writePluginError(w, err)
@@ -79,4 +88,16 @@ func (s *Server) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("plugin removed", "plugin", name, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handlePlugins(w, r)
+}
+
+func (s *Server) pluginsEditable(w http.ResponseWriter) bool {
+	if s.opts.Update == nil {
+		return true
+	}
+	status := s.opts.Update.Status()
+	if status.Pending != nil || status.Progress.Phase == "download" || status.Progress.Phase == "switch" {
+		writeError(w, http.StatusConflict, "plugin_busy", "Finish or cancel the system update before changing plugins")
+		return false
+	}
+	return true
 }

@@ -89,11 +89,15 @@ func classify(d blockDevice, volumeByArray map[string]string) Disk {
 		switch {
 		case node.FSType == "vfat" && node.Label == stickLabel:
 			stick = true
-		case node.FSType == "linux_raid_member":
+		case node.FSType == "linux_raid_member" || node.FSType == "btrfs":
 			if volume, ok := volumeByArray[normalizeUUID(node.UUID)]; ok {
 				disk.Volume = volume
 			} else {
-				disk.Contents = appendUnique(disk.Contents, "RAID")
+				kind := "RAID"
+				if node.FSType == "btrfs" {
+					kind = "btrfs"
+				}
+				disk.Contents = appendUnique(disk.Contents, kind)
 			}
 		case node.FSType != "":
 			disk.Contents = appendUnique(disk.Contents, node.FSType)

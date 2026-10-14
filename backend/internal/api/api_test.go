@@ -1238,3 +1238,16 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 		t.Errorf("another session of the same account: %d %s", res.StatusCode, body)
 	}
 }
+
+func TestSnapshotsAndHardwareControlsRequireAdministrator(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, route := range [][2]string{{"GET", "/api/v1/storage/volumes/data/snapshots"}, {"POST", "/api/v1/storage/volumes/data/snapshots"}, {"GET", "/api/v1/hardware/container-devices"}, {"GET", "/api/v1/hardware/nvidia"}, {"PUT", "/api/v1/hardware/nvidia/0000:01:00.0"}} {
+		if res, _ := ts.do(guest, route[0], route[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%v: %d", route, res.StatusCode)
+		}
+	}
+}

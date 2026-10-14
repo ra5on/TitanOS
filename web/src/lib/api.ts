@@ -109,7 +109,7 @@ export type DiskRole = 'stick' | 'member' | 'free' | 'used';
 export type MemberState = 'active' | 'rebuilding' | 'faulty' | 'spare';
 export type VolumeState = 'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
 export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
-export type Filesystem = 'ext4' | 'xfs';
+export type Filesystem = 'ext4' | 'xfs' | 'btrfs';
 
 export type Disk = {
 	name: string;
@@ -268,6 +268,7 @@ export type VM = {
 	tpm: boolean;
 	secureBoot: boolean;
 	pci: string[] | null;
+	autoGPU?: boolean;
 	usb: string[] | null;
 	/** "bridge" for an address of its own in the network, otherwise "user". */
 	network: 'user' | 'bridge';

@@ -47,6 +47,7 @@
 	let iso = $state(initial?.iso ?? '');
 	let autostart = $state(initial?.autostart ?? false);
 	let folders = $state((initial?.folders ?? []).map((folder) => ({ ...folder })));
+	let autoGPU = $state(initial?.autoGPU ?? false);
 	let pci = $state<string[]>(initial?.pci ?? []);
 	let usb = $state<string[]>(initial?.usb ?? []);
 	let net = $state<'user' | 'bridge'>(initial?.network ?? 'user');
@@ -209,6 +210,7 @@
 		iso: iso.trim(),
 		folders: folders.map((folder) => ({ path: folder.path.trim().replace(/\/+$/, ''), tag: folder.tag, readOnly: folder.readOnly })),
 		pci,
+		autoGPU,
 		usb,
 		network: net
 	});
@@ -488,6 +490,8 @@
 					</div>
 				{/each}
 				{#if hardware && hardware.hardware.pci.length === 0 && hardware.hardware.usb.length === 0}<p class="muted note">{t('vms.form.noDevices')}</p>{/if}
+				<label class="check"><input type="checkbox" bind:checked={autoGPU} /><span>{t('hardware.autoGPU')}</span></label>
+				<p class="muted note">{t('hardware.autoGPUHint')}</p>
 				{#if pci.length > 0}<small>{t('vms.form.passNote')}</small>{/if}
 				<label class="netsel"><span>{t('vms.form.network')}</span>
 					<select class="field" bind:value={net}>

@@ -69,7 +69,7 @@ var (
 	ErrTooLarge = errors.New("configbackup: too large for a backup of the configuration")
 
 	backupName = regexp.MustCompile(`^config-(\d{8}T\d{6}Z)-([0-9a-f]{12})\.tar\.gz$`)
-	deviceName = regexp.MustCompile(`^md[0-9]+$`)
+	deviceName = regexp.MustCompile(`^(?:md[0-9]+|sd[a-z]+[0-9]+|vd[a-z]+[0-9]+|nvme[0-9]+n[0-9]+p[0-9]+)$`)
 )
 
 const timeLayout = "20060102T150405Z"
@@ -644,7 +644,7 @@ func (m *Manager) arrays() []string {
 	entries, _ := os.ReadDir(m.sysBlock)
 	var names []string
 	for _, entry := range entries {
-		if deviceName.MatchString(entry.Name()) {
+		if strings.HasPrefix(entry.Name(), "md") && deviceName.MatchString(entry.Name()) {
 			names = append(names, entry.Name())
 		}
 	}
@@ -674,6 +674,8 @@ func (m *Manager) look(ctx context.Context, device string, fn func(dir, label st
 		options += ",noload"
 	case "xfs":
 		options += ",norecovery"
+	case "btrfs":
+		options += ",nologreplay,subvolid=5,degraded"
 	default:
 		return fmt.Errorf("configbackup: %s holds no file system of a volume", device)
 	}
@@ -701,7 +703,7 @@ func (m *Manager) Find(ctx context.Context) []Backup {
 	m.work.Lock()
 	defer m.work.Unlock()
 	list := []Backup{}
-	for _, device := range m.arrays() {
+	for _, device := range m.candidates(ctx) {
 		err := m.look(ctx, device, func(dir, label string) error {
 			for _, backup := range readFolder(dir) {
 				backup.Device, backup.Label = device, label
@@ -722,7 +724,7 @@ func (m *Manager) RestoreFound(ctx context.Context, device, name string) (Manife
 	if m.Disabled {
 		return Manifest{}, ErrDisabled
 	}
-	if !deviceName.MatchString(device) || !backupName.MatchString(name) || !slices.Contains(m.arrays(), device) {
+	if !deviceName.MatchString(device) || !backupName.MatchString(name) || !slices.Contains(m.candidates(ctx), device) {
 		return Manifest{}, ErrNotFound
 	}
 	m.work.Lock()
@@ -744,4 +746,27 @@ func (m *Manager) RestoreFound(ctx context.Context, device, name string) (Manife
 		return err
 	})
 	return manifest, err
+}
+
+// Discover native Btrfs mirrors by filesystem UUID, scanning each mirror once.
+func (m *Manager) candidates(ctx context.Context) []string {
+	names := m.arrays()
+	output, err := m.runner.Run(ctx, "", "blkid", "-t", "TYPE=btrfs", "-o", "export")
+	if err != nil {
+		return names
+	}
+	seen := map[string]bool{}
+	for _, block := range strings.Split(output, "\n\n") {
+		values := map[string]string{}
+		for _, line := range strings.Split(block, "\n") {
+			key, value, _ := strings.Cut(line, "=")
+			values[key] = value
+		}
+		device := strings.TrimPrefix(values["DEVNAME"], "/dev/")
+		if uuid := values["UUID"]; uuid != "" && !seen[uuid] && values["TYPE"] == "btrfs" && deviceName.MatchString(device) {
+			names = append(names, device)
+			seen[uuid] = true
+		}
+	}
+	return names
 }
