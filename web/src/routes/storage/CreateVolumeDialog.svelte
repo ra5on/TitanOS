@@ -16,7 +16,7 @@
 		{ id: 'raid5', min: 3 },
 		{ id: 'raid6', min: 4 },
 		{ id: 'raid10', min: 4 },
-		{ id: 'raid0', min: 2 }
+		{ id: 'raid0', min: 1 }
 	];
 	const FILESYSTEMS: Filesystem[] = ['ext4', 'xfs', 'btrfs'];
 
