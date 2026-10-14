@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -64,7 +65,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -76,6 +77,15 @@ func newTestServer(t *testing.T) *testServer {
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
 	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledBackups returns a backup manager that runs nothing.
+func disabledBackups(store *config.Store) *backup.Manager {
+	m := backup.NewManager(store)
+	m.Disabled = true
+	m.Sources = func() []backup.Source { return []backup.Source{{Name: "media", Volume: "tank"}} }
 	m.Load()
 	return m
 }
@@ -434,7 +444,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -1025,6 +1035,46 @@ func TestAbout(t *testing.T) {
 	ts.setup()
 	if res, body := ts.request("GET", "/api/v1/about", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"version":"1.2.3"`) || !strings.Contains(string(body), `"thirdParty":`) {
 		t.Errorf("about: %d %s", res.StatusCode, body)
+	}
+}
+
+func TestBackupsKeepTheirSecrets(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	job := map[string]any{"id": "cloud", "sources": []string{"media"}, "enabled": true, "every": "daily", "time": "02:30",
+		"destination": map[string]any{"type": "s3", "endpoint": "https://s3.example.com", "bucket": "nas-backup", "accessKey": "AKIA1", "secretKey": "s3-secret-value"}}
+	res, body := ts.request("POST", "/api/v1/backups", job)
+	if res.StatusCode != http.StatusOK || strings.Contains(string(body), "s3-secret-value") || !strings.Contains(string(body), `"secretKey":true`) || strings.Contains(string(body), `"password":"`) {
+		t.Fatalf("create: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/backups", job); res.StatusCode != http.StatusConflict || errorCode(t, body) != "backup_job_exists" {
+		t.Errorf("twice: %d %s", res.StatusCode, body)
+	}
+	job["sources"] = []string{"gone"}
+	if res, body := ts.request("PUT", "/api/v1/backups/cloud", job); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_backup_job" {
+		t.Errorf("unknown share: %d %s", res.StatusCode, body)
+	}
+	// The password of the backup only after the account's password.
+	if res, body := ts.request("GET", "/api/v1/backups/cloud/password", nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
+		t.Errorf("password without confirmation: %d %s", res.StatusCode, body)
+	}
+	ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": testPassword})
+	if res, body := ts.request("GET", "/api/v1/backups/cloud/password", nil); res.StatusCode != http.StatusOK || len(body) < 40 {
+		t.Errorf("password: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/backups/cloud/run", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("run in development mode: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/backups/cloud", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"jobs":[]`) {
+		t.Errorf("delete: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
 	}
 }
 

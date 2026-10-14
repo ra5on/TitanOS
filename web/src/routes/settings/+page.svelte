@@ -61,6 +61,10 @@
 			<span class="name">{t('access.title')}</span>
 			<span class="muted">{t('access.settingsDesc')}</span>
 		</a>
+		<a class="tile" href="/settings/backups">
+			<span class="name">{t('backup.title')}</span>
+			<span class="muted">{t('backup.settingsDesc')}</span>
+		</a>
 		<a class="tile" href="/settings/stick">
 			<span class="name">{t('stick.title')}</span>
 			<span class="muted">{t('stick.settingsDesc')}</span>

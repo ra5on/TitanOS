@@ -17,11 +17,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -300,6 +302,29 @@ func run(opts options) error {
 	}
 	updates.Confirm()
 	go updates.Run(ctx)
+	// Backups of shares to another volume, another server or the cloud.
+	backups := backup.NewManager(store)
+	backups.Disabled = opts.dev
+	backups.Sources = func() []backup.Source {
+		mounted := volumes.Mounted()
+		sources := []backup.Source{}
+		for _, share := range folders.List() {
+			if slices.Contains(mounted, share.Volume) {
+				sources = append(sources, backup.Source{Name: share.Name, Volume: share.Volume, Path: folders.Path(share)})
+			}
+		}
+		return sources
+	}
+	backups.OnResult = func(job string, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "backup_failed", job)
+		}
+	}
+	if err := backups.Load(); err != nil {
+		slog.Warn("backup jobs not readable from /config", "err", err)
+	}
+	go backups.Run(ctx)
+
 	// The license texts lie in the image; in development mode in the repository.
 	shareDir := "/usr/share/titanos"
 	if opts.dev {
@@ -325,6 +350,7 @@ func run(opts options) error {
 		Diagnose:      diagnose.NewManager(store, version.Version),
 		SSH:           access,
 		Update:        updates,
+		Backup:        backups,
 		Certificate:   certs,
 		Settings:      settings,
 		Power:         power,

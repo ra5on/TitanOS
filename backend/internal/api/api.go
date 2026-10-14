@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -63,7 +64,9 @@ type Options struct {
 	SSH         *sshd.Manager
 	Certificate *tlscert.Manager
 	// Update installs new versions into the other slot of the stick.
-	Update   *update.Manager
+	Update *update.Manager
+	// Backup copies shares to another volume, server or the cloud.
+	Backup   *backup.Manager
 	Settings *system.Settings
 	Power    system.Power
 	Version  string
@@ -214,6 +217,17 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
 	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
+
+	// Backups of shares. They hold everyone's files: administrators only.
+	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
+	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
+	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
+	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))
+	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireAdmin(s.handleBackupDelete))
+	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots", s.requireAdmin(s.handleBackupSnapshots))
+	mux.HandleFunc("GET /api/v1/backups/{id}/password", s.requireAdmin(s.handleBackupPassword))
+	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireAdmin(s.handleBackupRestore))
+	mux.HandleFunc("POST /api/v1/backups/{id}/{action}", s.requireAdmin(s.handleBackupAction))
 	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
 	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
