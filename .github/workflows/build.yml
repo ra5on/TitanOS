@@ -26,7 +26,12 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Release regression test tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools minisign zip
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools minisign zip iptables iproute2 kmod
+
+      - name: VM bridge forwarding with Docker firewall policies
+        run: |
+          sudo modprobe br_netfilter
+          sudo unshare --net python3 scripts/test-bridge-forwarding.py
 
       - name: Test
         run: make test test-release

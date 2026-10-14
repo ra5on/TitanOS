@@ -327,6 +327,13 @@ func (m *Manager) render(cfg Config) map[string]string {
 
 // apply puts a configuration in place. The caller holds the lock.
 func (m *Manager) apply(ctx context.Context, cfg Config) error {
+	if cfg.Bridge {
+		// Install before networkd creates br0, and on every boot. Docker's
+		// FORWARD policy must not block LAN traffic to bridged VM guests.
+		if _, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-bridge-forwarding"); err != nil {
+			return fmt.Errorf("prepare VM bridge forwarding: %w", err)
+		}
+	}
 	files := m.render(cfg)
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
 		return err
