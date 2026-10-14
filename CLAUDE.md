@@ -51,7 +51,7 @@ Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit d
 9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues. Umgesetzt, siehe Web-UI › Werkzeuge.
 10. **Dateimanager:** Dateien im Browser auf Shares hochladen (auch ganze Ordner, per Drag-and-drop, große Dateien fortsetzbar), herunterladen, verschieben, umbenennen, löschen; mit den Rechten des angemeldeten Kontos. Konzept abgestimmt, siehe Web-UI › Dateimanager.
 
-Später: Verlaufsgrafiken (CPU, Temperaturen, Netzwerk, Platten), Volume-Verschlüsselung (LUKS), eingebauter Fernzugriff (WireGuard/Tailscale/Cloudflare Tunnel), Energie (Plattenschlaf, Zeitplan, Wake-on-LAN), Befehlspalette (Strg+K), dokumentierte API und CLI.
+Später: Verlaufsgrafiken (CPU, Temperaturen, Netzwerk, Platten), Volume-Verschlüsselung (LUKS), eingebauter Fernzugriff (WireGuard/Tailscale/Cloudflare Tunnel), Energie (Zeitplan, Wake-on-LAN), Befehlspalette (Strg+K), dokumentierte API und CLI.
 
 ## Stick-Layout
 
@@ -207,6 +207,14 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Technisch: alle Werte als CSS-Variablen (`--bg`, `--surface`, `--header`, `--border`, `--text`, `--muted`, `--track`, `--chip`, `--accent`, `--on-accent`, `--surface-alpha`, `--glass-blur`, `--glass-shine`, `--radius-tile`, `--radius-ctl`, `--font-scale`), Theme als `data-theme`, Stil als `data-surface="flat|glass|outline"` auf `<html>`. Kein hart codierter Farbwert oder Radius in Komponenten.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
+
+**Festplatten-Ruhemodus** (Speicher › Ruhemodus für Festplatten, nur Besitzer und Administratoren; Entwicklungsstand nach `v0.1.0-beta.1`)
+- Eine gemeinsame Leerlaufzeit für alle unterstützten HDDs: Aus (Standard), 5, 10, 15 oder 30 Minuten sowie 1, 2 oder 3 Stunden. Jede Platte wird getrennt beobachtet und wacht beim nächsten Zugriff wieder auf. Aus beendet die automatische Steuerung, weckt bereits schlafende Platten aber nicht auf.
+- Einstellung in `/config/storage/disk-sleep.json`; nur die Dauer wird gespeichert, niemals Gerätenamen. Der Zustand und die Zeitmessung liegen im RAM. Änderungen werden atomar gespeichert; nach Neustart, geänderter Einstellung oder einer Beobachtungslücke beginnt eine volle neue Ruhezeit.
+- `storage.RunDiskSleep` liest alle zehn Sekunden die I/O-Zähler aus `/sys/block/*/stat`. Lese-, Schreib-, Discard- und Flush-Vorgänge sowie laufende I/O setzen die Zeit zurück. Keine zyklischen Zugriffe auf `/config`, keine Plattendaten-Abfragen zur Zeitmessung. Die vorhandenen SMART-Abfragen nutzen `--nocheck=standby`.
+- Unterstützt sind als nicht wechselbar gemeldete SATA-/SAS-/SCSI-HDDs und USB-HDDs mit passendem Adapter. SSDs, NVMe, Bootstick, virtuelle oder netzgebundene Platten, an VMs vergebene Platten sowie Platten mit laufendem Test oder RAID-Wartung bleiben ausgenommen. Apps, Freigaben und andere Zugriffe können das Einschlafen verhindern.
+- Das Debian-Paket `hd-idle` erhält ausschließlich einzelne Standby-Aufrufe (ATA bei SATA, SCSI bei SAS/USB; SAS mit Power Condition 3 zum automatischen Aufwachen). `hd-idle.service` ist maskiert. Firmware-Timer werden nicht verändert. Ein fehlgeschlagener Aufruf erscheint auf der Speicher-Seite und wird erst nach neuer Aktivität oder einer Einstellung erneut versucht. Im Entwicklungsmodus werden keine Standby-Befehle ausgeführt.
+- Regressionstests prüfen alle Zeiten, Aktivität, Gerätetausch, Ausschlüsse, fehlerhafte Konfiguration/I/O-Zähler und API-Rechte. Der Release-Smoke-Test prüft Standard Aus und Speicherung über zwei UEFI-Starts. Einschlafen und Aufwachen auf echter Hardware einschließlich USB-Adaptern müssen noch getestet werden.
 
 **Backups** (Einstellungen › Backups, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `backup`, Werkzeug restic (Debian-Paket, rund 24 MB). Ein Auftrag sichert Freigaben an ein Ziel: anderes Volume dieses NAS (nie dasselbe wie das der Freigaben), S3-kompatibler Speicher, ein Server über SFTP oder ein restic-REST-Server. Aufträge in `/config/backup/jobs.json`.

@@ -2,7 +2,8 @@
 """Boot an installation ZIP twice using isolated, disposable UEFI/USB media.
 
 Checks first setup, HTTPS, the real version, persistent accounts/certificate,
-locked-down SSH and About notices. Never attaches host or existing test disks.
+locked-down SSH, HDD idle settings and About notices. Never attaches host or
+existing test disks.
 """
 import argparse
 import http.cookiejar
@@ -58,9 +59,9 @@ def smoke(archive, timeout, log):
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
                                             urllib.request.HTTPSHandler(context=context))
 
-        def request(path, data=None):
+        def request(path, data=None, method=None):
             req = urllib.request.Request(url + path, data=json.dumps(data).encode() if data is not None else None,
-                                         headers={"Content-Type": "application/json", "Origin": url})
+                                         headers={"Content-Type": "application/json", "Origin": url}, method=method)
             with opener.open(req, timeout=15) as response:
                 body = response.read()
                 return json.loads(body) if body else None
@@ -111,12 +112,22 @@ def smoke(archive, timeout, log):
                     about = request("/api/v1/about")
                     if "Debian:" not in json.dumps(about) or "Go:" not in json.dumps(about):
                         raise AssertionError("generated third-party notices missing from About")
+                    if "hd-idle" not in json.dumps(about):
+                        raise AssertionError("HDD standby package missing from third-party inventory")
                     if request("/api/v1/system/ssh")["enabled"]:
                         raise AssertionError("SSH must be disabled on a fresh installation")
+                    sleep_settings = request("/api/v1/storage/disk-sleep")
+                    if not sleep_settings["available"] or sleep_settings["idleMinutes"] != (0 if boot == 1 else 5):
+                        raise AssertionError("HDD idle setting did not default to off or survive reboot")
+                    if boot == 1:
+                        # This VM only has the excluded boot stick, never host/data disks.
+                        changed = request("/api/v1/storage/disk-sleep", {"idleMinutes": 5}, method="PUT")
+                        if changed["idleMinutes"] != 5:
+                            raise AssertionError("HDD idle setting was not saved")
                     with opener.open(url + "/", timeout=15) as response:
                         if b"<html" not in response.read():
                             raise AssertionError("embedded web UI missing")
-                    print(f"Boot {boot}: HTTPS, health, owner, version, UI and notices passed", flush=True)
+                    print(f"Boot {boot}: HTTPS, health, owner, version, UI, notices and HDD idle settings passed", flush=True)
                     # Flush configuration before stopping this disposable VM. A real reboot
                     # is requested through the API and QEMU exits because of -no-reboot.
                     request("/api/v1/system/power", {"action": "reboot"})

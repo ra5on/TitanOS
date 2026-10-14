@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, ApiError, type StorageStatus, type Volume } from '#lib/api.ts';
+	import { api, ApiError, type DiskSleepStatus, type StorageStatus, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -19,6 +19,9 @@
 	let dialog = $state<{ kind: 'create' } | { kind: 'add' | 'delete'; volume: string } | { kind: 'remove'; volume: string; disk: string } | null>(null);
 	let busy = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
+	let sleepChoice = $state<number | null>(null);
+	const diskSleep = $derived(storage.status?.diskSleep);
+	const idleMinutes = [0, 5, 10, 15, 30, 60, 120, 180];
 
 	// Dialogs work on the live volume, so that they follow its state.
 	const dialogVolume = $derived.by(() => {
@@ -54,6 +57,12 @@
 
 	const rescan = () => run(async () => (storage.status = await api.post<StorageStatus>('/storage/rescan')));
 	const check = (volume: Volume, start: boolean) => run(() => api.post(`/storage/volumes/${volume.name}/check`, { action: start ? 'start' : 'stop' }));
+	const saveDiskSleep = () => run(async () => {
+		if (sleepChoice === null) return;
+		const updated = await api.put<DiskSleepStatus>('/storage/disk-sleep', { idleMinutes: sleepChoice });
+		if (storage.status) storage.status.diskSleep = updated;
+		sleepChoice = null;
+	});
 
 	function removeDisk() {
 		if (dialog?.kind !== 'remove') return;
@@ -108,6 +117,32 @@
 		{/each}
 	</div>
 </section>
+
+{#if canAdminister}
+	<section class="tile disk-sleep" aria-labelledby="disk-sleep-title">
+		<div class="sleep-copy">
+			<h2 class="tile-title" id="disk-sleep-title">{t('storage.sleepTitle')}</h2>
+			<p class="muted">{t('storage.sleepHint')}</p>
+		</div>
+		<div class="sleep-controls">
+			<label for="disk-sleep-time">{t('storage.sleepAfter')}</label>
+			<select class="field" id="disk-sleep-time" value={sleepChoice ?? diskSleep?.idleMinutes ?? 0} onchange={(event) => (sleepChoice = Number(event.currentTarget.value))} disabled={busy || !diskSleep?.available}>
+				{#each idleMinutes as minutes}
+					<option value={minutes}>{minutes === 0 ? t('storage.sleepOff') : minutes < 60 ? t('storage.sleepMinutes', { count: minutes }) : minutes === 60 ? t('storage.sleepHour') : t('storage.sleepHours', { count: minutes / 60 })}</option>
+				{/each}
+			</select>
+			<button type="button" class="btn btn-primary" onclick={saveDiskSleep} disabled={busy || !diskSleep?.available || sleepChoice === null || sleepChoice === diskSleep.idleMinutes}>{t('common.save')}</button>
+		</div>
+		<p class="muted sleep-detail">{t('storage.sleepDetails')}</p>
+		{#if diskSleep && !diskSleep.available}<p class="notice-error" role="alert">{t('storage.sleepUnavailable')}</p>{/if}
+		{#if diskSleep?.errors.length}
+			<div class="notice-error" role="alert">
+				<p>{t('storage.sleepFailed')}</p>
+				{#each diskSleep.errors as problem}<p><strong class="mono">{problem.disk}</strong>: {problem.message}</p>{/each}
+			</div>
+		{/if}
+	</section>
+{/if}
 
 <section aria-labelledby="disks-title">
 	<h2 class="tile-title" id="disks-title">{t('storage.disks')}</h2>
@@ -298,6 +333,11 @@
 		padding: 18px 20px;
 		border-style: dashed;
 	}
+	.disk-sleep { padding: 18px 20px; }
+	.sleep-copy { display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
+	.sleep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 0.875rem; }
+	.sleep-controls select { width: auto; min-width: 150px; }
+	.sleep-detail { font-size: 0.8125rem; }
 	.free-text {
 		flex: 1 1 360px;
 		min-width: 0;

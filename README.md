@@ -21,6 +21,12 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
+## Neu im Entwicklungsstand nach v0.1.0-beta.1
+
+Unter **Speicher › Ruhemodus für Festplatten** lässt sich eine gemeinsame Leerlaufzeit für alle unterstützten HDDs wählen: **Aus**, **5, 10, 15, 30 Minuten** oder **1, 2, 3 Stunden**. Standard ist Aus. Jede Platte schläft nach ihrer eigenen Zeit ohne Zugriff ein; der nächste Zugriff weckt sie wieder auf und kann einige Sekunden dauern. SSDs, NVMe, Bootstick und an VMs vergebene Platten sind ausgenommen. Plattentests und RAID-Wartung pausieren die Zeitmessung; Apps und Freigaben können Platten wach halten.
+
+Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als Wechselmedium gemeldete SATA-/SAS-/SCSI-HDDs sowie USB-HDDs mit geeignetem Adapter. Der tatsächliche Schlaf- und Aufweckvorgang muss noch auf echter Hardware geprüft werden. Diese Funktion ist noch **nicht im Download von v0.1.0-beta.1** enthalten.
+
 ## Was schon funktioniert
 
 - **Start vom Stick, Betrieb im RAM.** Das komprimierte Systemabbild wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Container, VM-Abbilder und Nutzdaten liegen auf Daten-Volumes. Größe und RAM-Bedarf hängen vom Release und den laufenden Diensten ab.

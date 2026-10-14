@@ -21,6 +21,7 @@ systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
 mdadm                     GPL-2.0-or-later        Debian source packages
 e2fsprogs, xfsprogs       GPL-2.0, LGPL-2.1       Debian source packages
 smartmontools             GPL-2.0-or-later        Debian source packages
+hd-idle                   GPL-3.0-or-later        Debian source packages
 Samba                     GPL-3.0-or-later        Debian source packages
 nfs-utils                 GPL-2.0-or-later        Debian source packages
 Avahi                     LGPL-2.1-or-later       Debian source packages
