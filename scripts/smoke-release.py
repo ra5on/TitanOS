@@ -33,7 +33,7 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def smoke(archive, timeout, log, plugins=None):
+def smoke(archive, timeout, log, plugins=None, force_tcg=False):
     os.environ["PATH"] += ":/usr/sbin:/sbin"
     context = ssl._create_unverified_context()  # expected self-signed NAS certificate
     with tempfile.TemporaryDirectory(prefix="titanos-release-") as tmp:
@@ -64,7 +64,11 @@ def smoke(archive, timeout, log, plugins=None):
         def request(path, data=None, method=None):
             req = urllib.request.Request(url + path, data=json.dumps(data).encode() if data is not None else None,
                                          headers={"Content-Type": "application/json", "Origin": url}, method=method)
-            with opener.open(req, timeout=15) as response:
+            # Plugin installation hashes and copies a large image before
+            # activating sysext. CI uses CPU emulation without KVM, where
+            # this legitimately takes longer than an ordinary API request.
+            request_timeout = 180 if path.startswith("/api/v1/plugins") else 15
+            with opener.open(req, timeout=request_timeout) as response:
                 try:
                     body = response.read()
                 except http.client.IncompleteRead as error:
@@ -73,7 +77,7 @@ def smoke(archive, timeout, log, plugins=None):
                     raise
                 return json.loads(body) if body else None
 
-        accel = ["-accel", "kvm", "-cpu", "host"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
+        accel = ["-accel", "kvm", "-cpu", "host"] if not force_tcg and os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
         args = ["qemu-system-x86_64", "-machine", "q35", *accel, "-smp", "2", "-m", "4G",
                 "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
                 "-drive", f"if=pflash,format=raw,file={directory}/OVMF_VARS.fd",
@@ -223,6 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=int, default=420)
     parser.add_argument("--log", type=Path, default=Path("out/release-smoke.log"))
     parser.add_argument("--plugins", type=Path, help="test NVIDIA plugin installation and removal using disposable VM disks")
+    parser.add_argument("--tcg", action="store_true", help="force CPU emulation to reproduce CI without KVM")
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.timeout, args.log, args.plugins.resolve() if args.plugins else None)
+    smoke(args.zip.resolve(), args.timeout, args.log, args.plugins.resolve() if args.plugins else None, args.tcg)
