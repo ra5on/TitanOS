@@ -45,11 +45,16 @@
     <button class="btn btn-warn" disabled={busy || confirm !== removing} onclick={() => act('delete', removing)}>{t('files.delete')}</button>
    {/if}
   </div>
+  <div class="dialog-actions">
+   <button type="button" class="btn" disabled={busy} onclick={() => open = false}>{t('common.done')}</button>
+  </div>
  </Dialog>
 {/if}
 <style>
  .snapshots { display: flex; flex-direction: column; gap: 16px; }
- form, .row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
- .row .mono { flex: 1; overflow-wrap: anywhere; }
+ form, .row { display: flex; flex-wrap: wrap; gap: 8px; }
+ form { align-items: flex-end; }
+ .row { align-items: center; }
+ .row .mono { flex-basis: 100%; overflow-wrap: anywhere; }
  label { display: flex; flex-direction: column; gap: 6px; }
 </style>

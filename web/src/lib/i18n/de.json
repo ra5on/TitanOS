@@ -935,7 +935,7 @@
 	"terminal.statusVm": "VM {name} (seriell) · Sitzung läuft seit {time}",
 	"hardware.title": "Hardware",
 	"hardware.settingsDesc": "Grafikkarten, Beschleuniger und USB-Geräte, und welche VM sie bekommt.",
-	"hardware.intro": "Was sich an eine VM durchreichen lässt. Zugeordnet wird ein Gerät beim Anlegen oder Bearbeiten der VM; es gehört ihr, solange sie läuft, und geht danach an das NAS zurück.",
+	"hardware.intro": "Geräte für VMs und NVIDIA-Leistungslimits. Einer VM zugeordnete Geräte gehören ihr, solange sie läuft, und gehen danach an das NAS zurück. Geräte für Container wählst du beim Installieren einer App oder beim Bearbeiten eines Compose-Dienstes aus.",
 	"hardware.noIommu": "Dieser Rechner isoliert Geräte nicht (kein IOMMU). Schalte im BIOS/UEFI Intel VT-d bzw. AMD-Vi ein; ohne das lassen sich Karten nicht an VMs durchreichen. USB-Geräte gehen trotzdem.",
 	"hardware.pci": "Grafikkarten und Beschleuniger",
 	"hardware.usb": "USB-Geräte",

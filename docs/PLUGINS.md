@@ -32,7 +32,7 @@ USB-Zustand vor als auch nach dem Laden der Firmware.
 ## Geräte auswählen
 
 Im App-Installationsdialog und beim Bearbeiten eines Compose-Dienstes gibt es
-**Hardware für Container**. Intel-/AMD-Grafik, NPU und NVIDIA werden nur angeboten,
+**Geräte für diesen Container**. Intel-/AMD-Grafik, NPU und NVIDIA werden nur angeboten,
 wenn ein nutzbarer Treiber bzw. Geräteknoten vorhanden ist. Eine an eine VM
 vergebene GPU wird gesperrt angezeigt. Jeder Dienst wählt seine Geräte selbst.
 
@@ -51,8 +51,8 @@ automatischen Wechsel.
 
 ## NVIDIA zwischen VM und Containern
 
-In den VM-Einstellungen kann **GPU-Container automatisch anhalten und danach
-fortsetzen** aktiviert werden. Beim Start reserviert TitanOS die ausgewählte
+In den VM-Einstellungen kann **NVIDIA automatisch zwischen dieser VM und
+Containern wechseln** aktiviert werden. Beim Start reserviert TitanOS die ausgewählte
 NVIDIA-Karte, beendet ihre laufenden Container mit einer Frist von 30 Sekunden
 und startet danach die VM. Ohne diese Option wird der VM-Start bei belegter
 Karte abgelehnt. Pausierte Container werden nicht automatisch übernommen.
@@ -74,7 +74,7 @@ gestoppt; die Ursache steht im Protokoll. Direkte Docker-/virsh-Befehle außerha
 von TitanOS umgehen dessen Koordination.
 
 Unter **Einstellungen → Hardware** lässt sich außerdem das NVIDIA-Leistungslimit
-als Anteil des Standardlimits oder auf **Standard** setzen. TitanOS prüft zuerst
+als Anteil des Standardlimits oder auf **Werkseinstellung** setzen. TitanOS prüft zuerst
 die von der Karte gemeldeten Watt-Grenzen; nicht unterstützte Werte werden
 abgelehnt. Nach einem Treiberwechsel wird die gespeicherte Einstellung erneut
 angewendet. Eine der VM übergebene GPU wird nicht verändert.

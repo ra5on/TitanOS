@@ -935,7 +935,7 @@
 	"terminal.statusVm": "VM {name} (serial) · session running for {time}",
 	"hardware.title": "Hardware",
 	"hardware.settingsDesc": "Graphics cards, accelerators and USB devices, and which VM gets them.",
-	"hardware.intro": "What can be passed through to a VM. A device is assigned when a VM is created or edited; it belongs to the VM while it runs and goes back to the NAS afterwards.",
+	"hardware.intro": "Devices for VMs and NVIDIA power limits. Devices assigned to a VM belong to it while it runs and return to the NAS afterwards. Select container devices when installing an app or editing a Compose service.",
 	"hardware.noIommu": "This machine does not isolate devices (no IOMMU). Switch Intel VT-d or AMD-Vi on in the BIOS/UEFI; without it cards cannot be passed through to VMs. USB devices still work.",
 	"hardware.pci": "Graphics cards and accelerators",
 	"hardware.usb": "USB devices",
