@@ -269,6 +269,9 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 		daemon, _ := json.MarshalIndent(map[string]any{
 			"data-root":  want,
 			"log-driver": "json-file",
+			// Optional GPU plugins publish CDI descriptions in /run/cdi. Docker
+			// reads them at container start; enabling a plugin needs no restart.
+			"features": map[string]bool{"cdi": true},
 			// Logs live on the volume too; keep them from growing without end.
 			"log-opts": map[string]string{"max-size": "10m", "max-file": "3"},
 		}, "", "  ")

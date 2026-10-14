@@ -52,5 +52,9 @@ IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 
 Optional plugins (separate downloads) keep their own licenses, e.g. the
 NVIDIA driver plugin (NVIDIA license terms for the user-space libraries).
-These plugins are not included in v0.1.0-beta.1. Firmware may be binary-only;
+From v0.1.0-beta.2 the separate NVIDIA plugin includes open kernel modules
+(MIT/GPL-2.0), NVIDIA-licensed user-space libraries/GSP firmware and NVIDIA
+Container Toolkit (Apache-2.0). Its release assets include matching kernel
+sources and a separate original-license archive with pinned package URLs.
+See docs/NVIDIA.md. Firmware may be binary-only;
 a Debian source-package link does not imply availability of firmware source code.

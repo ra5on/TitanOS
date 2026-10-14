@@ -9,13 +9,13 @@ on:
   push:
     tags: ['v*']
   pull_request:
-    paths: ['build/**', 'boot/**', 'scripts/**', '.github/workflows/release.yml']
+    paths: ['build/**', 'boot/**', 'plugins/**', 'scripts/**', '.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       version:
         description: 'Version for a build/sign/boot rehearsal (never publishes)'
         required: true
-        default: '0.1.0-beta.1'
+        default: '0.1.0-beta.2'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -28,7 +28,7 @@ jobs:
   build:
     name: Release image
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -41,7 +41,7 @@ jobs:
       - name: Version and channel
         id: version
         env:
-          REHEARSAL_VERSION: ${{ inputs.version || '0.1.0-beta.1' }}
+          REHEARSAL_VERSION: ${{ inputs.version || '0.1.0-beta.2' }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             version=${GITHUB_REF_NAME#v}
@@ -72,7 +72,7 @@ jobs:
       - name: Tools for building the image
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 ovmf mtools fdisk
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 ovmf mtools fdisk kmod openssh-client
           # The version the image is developed with.
           python3 -m venv "$RUNNER_TEMP/mkosi"
           "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
@@ -102,6 +102,11 @@ jobs:
           VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
 
+      - name: Build the matching NVIDIA plugin
+        run: |
+          sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
       - name: Pack the release
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
@@ -113,13 +118,13 @@ jobs:
           rm "$RUNNER_TEMP/rehearsal.key"
 
       - name: Boot the actual installation ZIP in UEFI QEMU
-        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip --timeout 420
+        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip --plugins out/release --timeout 420
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: release-boot-log
-          path: out/release-smoke.log
+          path: out/release-smoke*.log
           if-no-files-found: ignore
           retention-days: 7
 

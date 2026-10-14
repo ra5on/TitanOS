@@ -19,6 +19,10 @@ def verify(release, keys):
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?", version):
         raise ValueError("invalid release version")
     signed = ["manifest.json", f"titanos-{version}.zip", "SHA256SUMS"]
+    if manifest.get("plugins"):
+        if manifest["plugins"] != [{"name": "nvidia", "asset": "nvidia.plugin.json"}]:
+            raise ValueError("invalid plugin inventory")
+        signed.append("nvidia.plugin.json")
     # Every signature must verify using the same trusted key.
     for key in sorted(keys.glob("*.pub")):
         if all(subprocess.run(["minisign", "-V", "-q", "-p", str(key), "-m", str(release / name)],
@@ -46,6 +50,14 @@ def verify(release, keys):
         asset = f"titanos-{version}-{file['name']}"
         if file["asset"] != asset or checksums[asset] != file["sha256"] or (release / asset).stat().st_size != file["size"]:
             raise ValueError(f"manifest mismatch: {asset}")
+    if manifest.get("plugins"):
+        plugin = json.loads((release / "nvidia.plugin.json").read_text())
+        if plugin["name"] != "nvidia" or plugin["kernel"] != manifest["kernel"] or not plugin["version"].endswith("-titanos-" + version):
+            raise ValueError("NVIDIA plugin kernel/version mismatch")
+        if checksums["nvidia.raw"] != plugin["sha256"] or (release / "nvidia.raw").stat().st_size != plugin["size"]:
+            raise ValueError("NVIDIA plugin image mismatch")
+        if not {"nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"} <= checksums.keys():
+            raise ValueError("NVIDIA source/license archive missing")
     return version
 
 

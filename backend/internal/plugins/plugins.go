@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -53,6 +54,7 @@ var (
 	// ErrInvalid means the manifest or the image is not what it should be.
 	ErrInvalid      = errors.New("plugins: not a valid plugin")
 	ErrNotConfirmed = errors.New("plugins: the installation was not confirmed")
+	ErrBusy         = errors.New("plugins: a service or kernel module is still in use")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -98,7 +100,7 @@ type Plugin struct {
 	Path string `json:"path"`
 	// Official means the manifest is signed with a key TitanOS trusts.
 	Official bool `json:"official"`
-	// Problem says why an enabled plugin is not active: kernel.
+	// Problem is kernel, activation, integrity, or busy after refused removal.
 	Problem string `json:"problem"`
 }
 
@@ -122,7 +124,13 @@ type Manager struct {
 	extDir string
 	kernel string
 	// keyDir holds the public keys plugins may be signed with.
-	keyDir string
+	keyDir       string
+	moduleRoot   string
+	moduleSource string
+	actions      sync.Mutex
+	active       map[string]Manifest
+	resident     map[string]Manifest
+	problems     map[string]string
 
 	mu       sync.Mutex
 	loaded   bool
@@ -134,7 +142,7 @@ type Manager struct {
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
-	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), applied: "-"}
+	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}}
 }
 
 // Load reads the settings from /config.
@@ -247,6 +255,8 @@ func (m *Manager) installed(volume string) map[string]Manifest {
 
 // Status lists the installed plugins and those found on the volumes.
 func (m *Manager) Status(mounted []string) Status {
+	m.actions.Lock()
+	defer m.actions.Unlock()
 	settings := m.current()
 	status := Status{Volume: settings.Volume, Kernel: m.kernel, Plugins: []Plugin{}}
 	names := map[string]bool{}
@@ -254,9 +264,8 @@ func (m *Manager) Status(mounted []string) Status {
 		for name, manifest := range m.installed(settings.Volume) {
 			plugin := Plugin{Manifest: manifest, Installed: true, Enabled: slices.Contains(settings.Enabled, name)}
 			plugin.Official = m.official(filepath.Join(m.dir(settings.Volume), name+manifestSuffix))
-			if _, err := os.Lstat(filepath.Join(m.extDir, name+".raw")); err == nil {
-				plugin.Active = true
-			}
+			_, plugin.Active = m.active[name]
+			plugin.Problem = m.problems[name]
 			if plugin.Enabled && !m.compatible(manifest) {
 				plugin.Problem = "kernel"
 			}
@@ -314,6 +323,8 @@ func hashFile(path string, limit int64) (string, int64, error) {
 // switches it on. confirm has to be the name of the plugin: nothing has
 // checked what is in it.
 func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -372,13 +383,23 @@ func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm str
 	if err := copyFile(real, filepath.Join(dir, manifest.Name+manifestSuffix), 0o600); err != nil {
 		return err
 	}
+	// Recheck the copied metadata too: a writable share may have changed
+	// after the original signature/image checks.
+	copiedPath := filepath.Join(dir, manifest.Name+manifestSuffix)
+	copied, err := readManifest(copiedPath)
+	if err != nil || !reflect.DeepEqual(copied, manifest) || (signed && !m.official(copiedPath)) {
+		os.Remove(copiedPath)
+		os.Remove(copiedPath + ".minisig")
+		os.Remove(target)
+		return fmt.Errorf("%w: plugin metadata changed while being copied", ErrInvalid)
+	}
 	if !slices.Contains(settings.Enabled, manifest.Name) {
 		settings.Enabled = append(settings.Enabled, manifest.Name)
 	}
 	if err := m.save(settings); err != nil {
 		return err
 	}
-	return m.Apply(ctx, mounted)
+	return m.apply(ctx, mounted)
 }
 
 func copyFile(from, to string, mode os.FileMode) error {
@@ -404,6 +425,12 @@ func copyFile(from, to string, mode os.FileMode) error {
 
 // SetEnabled switches an installed plugin on or off.
 func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool, mounted []string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	return m.setEnabled(ctx, name, enabled, mounted)
+}
+
+func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mounted []string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -414,19 +441,30 @@ func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool, mou
 	if _, exists := m.installed(settings.Volume)[name]; !exists {
 		return ErrNotFound
 	}
+	if !enabled {
+		if err := m.deactivate(ctx, name); err != nil {
+			return err
+		}
+	}
 	settings.Enabled = slices.DeleteFunc(settings.Enabled, func(other string) bool { return other == name })
 	if enabled {
 		settings.Enabled = append(settings.Enabled, name)
 	}
 	if err := m.save(settings); err != nil {
-		return err
+		m.applied = "-"
+		// Disabling stopped the driver before persisting. Restore the previous
+		// enabled state if the stick could not store the change.
+		return errors.Join(err, m.apply(ctx, mounted))
 	}
-	return m.Apply(ctx, mounted)
+	m.applied = "-" // an explicit action also retries a failed activation
+	return m.apply(ctx, mounted)
 }
 
 // Remove switches a plugin off and deletes it from the volume.
 func (m *Manager) Remove(ctx context.Context, name string, mounted []string) error {
-	if err := m.SetEnabled(ctx, name, false, mounted); err != nil {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if err := m.setEnabled(ctx, name, false, mounted); err != nil {
 		return err
 	}
 	dir := m.dir(m.current().Volume)
@@ -462,6 +500,15 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 // Apply makes the system carry exactly the plugins that are switched on,
 // installed and fit the kernel.
 func (m *Manager) Apply(ctx context.Context, mounted []string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	return m.apply(ctx, mounted)
+}
+
+func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
+	if m.Disabled {
+		return nil
+	}
 	settings := m.current()
 	wanted := map[string]Manifest{}
 	if slices.Contains(mounted, settings.Volume) {
@@ -476,76 +523,178 @@ func (m *Manager) Apply(ctx context.Context, mounted []string) error {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	key := settings.Volume + ":" + strings.Join(names, ",")
-	m.mu.Lock()
-	unchanged := key == m.applied
-	m.mu.Unlock()
-	if unchanged {
+	key := settings.Volume + ":"
+	for _, name := range names {
+		key += name + "=" + wanted[name].SHA256 + ";"
+	}
+	if key == m.applied {
 		return nil
 	}
-
+	defer func() {
+		if err == nil {
+			return
+		}
+		for name := range wanted {
+			if _, active := m.active[name]; !active && m.problems[name] == "" {
+				m.problems[name] = "activation"
+			}
+		}
+		m.applied = key
+	}()
 	if err := os.MkdirAll(m.extDir, 0o755); err != nil {
 		return err
 	}
-	links, _ := os.ReadDir(m.extDir)
-	var added []string
-	all := map[string]Manifest{}
-	if slices.Contains(mounted, settings.Volume) {
-		all = m.installed(settings.Volume)
+	links, err := os.ReadDir(m.extDir)
+	if err != nil {
+		return err
 	}
 	for _, link := range links {
+		if !strings.HasSuffix(link.Name(), ".raw") {
+			continue
+		}
 		name := strings.TrimSuffix(link.Name(), ".raw")
 		if wanted[name].Name != "" {
 			continue
 		}
-		// What the plugin started ends before its files go.
-		for _, service := range all[name].Services {
-			if _, err := m.runner.Run(ctx, "", "systemctl", "stop", service); err != nil {
-				slog.Warn("plugin service not stopped", "plugin", name, "service", service, "err", err)
-			}
-		}
-		os.Remove(filepath.Join(m.extDir, link.Name()))
-	}
-	for _, name := range names {
-		link := filepath.Join(m.extDir, name+".raw")
-		if _, err := os.Lstat(link); err == nil {
-			continue
-		}
-		if err := os.Symlink(filepath.Join(m.dir(settings.Volume), name+".raw"), link); err != nil {
+		if err := m.deactivate(ctx, name); err != nil {
 			return err
 		}
-		added = append(added, name)
+		if err := os.Remove(filepath.Join(m.extDir, link.Name())); err != nil {
+			return err
+		}
+		delete(m.resident, name)
+		delete(m.problems, name)
 	}
-	// One call puts all extensions in place and takes away what is gone.
+	for _, name := range names {
+		manifest := wanted[name]
+		if _, exists := m.resident[name]; !exists {
+			image := filepath.Join(m.dir(settings.Volume), name+".raw")
+			if sum, size, err := hashFile(image, maxImageBytes); err != nil || sum != strings.ToLower(manifest.SHA256) || size != manifest.Size {
+				m.problems[name] = "integrity"
+				return fmt.Errorf("%w: installed image %s changed", ErrInvalid, name)
+			}
+		}
+		link := filepath.Join(m.extDir, name+".raw")
+		if _, err := os.Lstat(link); errors.Is(err, fs.ErrNotExist) {
+			if err := os.Symlink(filepath.Join(m.dir(settings.Volume), name+".raw"), link); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
 	if _, err := m.runner.Run(ctx, "", "systemd-sysext", "refresh"); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	m.applied = key
-	m.mu.Unlock()
-	slog.Info("plugins in place", "plugins", names)
-
-	for _, name := range added {
-		manifest := wanted[name]
-		if len(manifest.Modules) > 0 {
-			// The modules are new to the system; tell it where they are.
-			if _, err := m.runner.Run(ctx, "", "depmod", "-a"); err != nil {
-				slog.Warn("plugin modules not indexed", "plugin", name, "err", err)
-			}
-		}
-		for _, module := range manifest.Modules {
-			if _, err := m.runner.Run(ctx, "", "modprobe", module); err != nil {
-				slog.Warn("plugin module not loaded", "plugin", name, "module", module, "err", err)
-			}
-		}
-		if len(manifest.Services) > 0 {
-			m.runner.Run(ctx, "", "systemctl", "daemon-reload")
-		}
-		for _, service := range manifest.Services {
-			if _, err := m.runner.Run(ctx, "", "systemctl", "start", service); err != nil {
-				slog.Warn("plugin service not started", "plugin", name, "service", service, "err", err)
-			}
+	if _, err := m.runner.Run(ctx, "", "ldconfig", "-X"); err != nil {
+		return err
+	}
+	if _, err := m.runner.Run(ctx, "", "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	needsModules := false
+	for _, manifest := range wanted {
+		needsModules = needsModules || len(manifest.Modules) > 0
+	}
+	if needsModules {
+		if err := m.prepareModules(ctx); err != nil {
+			return err
 		}
 	}
+	var activationErrors []error
+	for _, name := range names {
+		manifest := wanted[name]
+		m.resident[name] = manifest
+		if _, active := m.active[name]; active {
+			continue
+		}
+		var failure error
+		for _, module := range manifest.Modules {
+			if _, failure = m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module); failure != nil {
+				break
+			}
+		}
+		if failure == nil {
+			for _, service := range manifest.Services {
+				if _, failure = m.runner.Run(ctx, "", "systemctl", "start", service); failure != nil {
+					break
+				}
+			}
+		}
+		if failure != nil {
+			m.problems[name] = "activation"
+			activationErrors = append(activationErrors, fmt.Errorf("%s: %w", name, failure))
+		} else {
+			m.active[name] = manifest
+			delete(m.problems, name)
+		}
+	}
+	// Failed activation remains visible; an explicit Enable retries it. Do not
+	// keep probing absent GPUs or restarting failed services every five seconds.
+	m.applied = key
+	return errors.Join(activationErrors...)
+}
+
+func (m *Manager) deactivate(ctx context.Context, name string) (err error) {
+	manifest, exists := m.resident[name]
+	if !exists {
+		return nil
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		m.problems[name] = "busy"
+		// Keep a running consumer usable if a later module refuses unloading.
+		for _, module := range manifest.Modules {
+			m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module)
+		}
+		for _, service := range manifest.Services {
+			m.runner.Run(ctx, "", "systemctl", "start", service)
+		}
+	}()
+	for i := len(manifest.Services) - 1; i >= 0; i-- {
+		if _, failure := m.runner.Run(ctx, "", "systemctl", "stop", manifest.Services[i]); failure != nil {
+			return fmt.Errorf("%w: %v", ErrBusy, failure)
+		}
+	}
+	for i := len(manifest.Modules) - 1; i >= 0; i-- {
+		if _, failure := m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, "-r", manifest.Modules[i]); failure != nil {
+			return fmt.Errorf("%w: %v", ErrBusy, failure)
+		}
+	}
+	delete(m.active, name)
+	delete(m.resident, name)
 	return nil
+}
+
+// sysext makes /usr read-only. Build the module index in RAM with links to
+// the merged base/plugin modules, rather than running depmod against /usr.
+func (m *Manager) prepareModules(ctx context.Context) error {
+	source := filepath.Join(m.moduleSource, m.kernel)
+	target := filepath.Join(m.moduleRoot, "lib/modules", m.kernel)
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	if err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		destination := filepath.Join(target, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(destination, 0o755)
+		}
+		if rel == "build" || rel == "source" || (strings.HasPrefix(rel, "modules.") && !strings.HasPrefix(rel, "modules.builtin")) {
+			return nil
+		}
+		return os.Symlink(path, destination)
+	}); err != nil {
+		return err
+	}
+	_, err := m.runner.Run(ctx, "", "depmod", "-b", m.moduleRoot, m.kernel)
+	return err
 }

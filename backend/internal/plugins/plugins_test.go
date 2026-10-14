@@ -16,10 +16,16 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
-type fakeRunner struct{ commands []string }
+type fakeRunner struct {
+	commands []string
+	fail     string
+}
 
 func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
 	r.commands = append(r.commands, name+" "+strings.Join(args, " "))
+	if r.fail != "" && strings.Contains(name+" "+strings.Join(args, " "), r.fail) {
+		return "", errors.New("injected failure")
+	}
 	return "", nil
 }
 
@@ -28,6 +34,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	root := t.TempDir()
 	m := NewManager(config.Open(filepath.Join(root, "config")))
 	m.mountRoot, m.extDir, m.keyDir, m.kernel = filepath.Join(root, "mnt"), filepath.Join(root, "extensions"), filepath.Join(root, "keys"), "6.12.0-test"
+	m.moduleRoot, m.moduleSource = filepath.Join(root, "module-index"), filepath.Join(root, "modules")
+	os.MkdirAll(filepath.Join(m.moduleSource, m.kernel), 0o755)
 	runner := &fakeRunner{}
 	m.runner = runner
 	os.MkdirAll(filepath.Join(m.mountRoot, "data", "media"), 0o755)
@@ -35,6 +43,129 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 		t.Fatal(err)
 	}
 	return m, runner
+}
+
+func TestFailedActivationCanBeRetried(t *testing.T) {
+	for _, failure := range []string{"modprobe ", "systemctl start"} {
+		t.Run(failure, func(t *testing.T) {
+			m, r := newTestManager(t)
+			path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", func(p *Manifest) {
+				p.Modules = []string{"nvidia", "nvidia_uvm"}
+				p.Services = []string{"titanos-nvidia.service"}
+			})
+			r.fail = failure
+			if err := m.Install(context.Background(), path, "data", "gpu", []string{"data"}); err == nil {
+				t.Fatal("failed activation was ignored")
+			}
+			status := m.Status([]string{"data"}).Plugins[0]
+			if !status.Installed || !status.Enabled || status.Active || status.Problem != "activation" {
+				t.Fatalf("false active state: %+v", status)
+			}
+			count := len(r.commands)
+			m.Apply(context.Background(), []string{"data"})
+			if len(r.commands) != count {
+				t.Fatal("failed hardware probed repeatedly")
+			}
+			r.fail = ""
+			if err := m.SetEnabled(context.Background(), "gpu", true, []string{"data"}); err != nil {
+				t.Fatal(err)
+			}
+			if status = m.Status([]string{"data"}).Plugins[0]; !status.Active || status.Problem != "" {
+				t.Fatalf("retry: %+v", status)
+			}
+		})
+	}
+}
+
+func TestBusyDriverCannotBeUnmountedOrRemoved(t *testing.T) {
+	m, r := newTestManager(t)
+	ctx := context.Background()
+	mounted := []string{"data"}
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", func(p *Manifest) { p.Modules = []string{"nvidia", "nvidia_uvm"}; p.Services = []string{"gpu.service"} })
+	if err := m.Install(ctx, path, "data", "gpu", mounted); err != nil {
+		t.Fatal(err)
+	}
+	r.fail = "-r nvidia"
+	r.commands = nil
+	if err := m.Remove(ctx, "gpu", mounted); !errors.Is(err, ErrBusy) {
+		t.Fatalf("busy removal: %v", err)
+	}
+	if d := m.Status(mounted).Plugins[0]; !d.Installed || !d.Enabled || !d.Active || d.Problem != "busy" {
+		t.Fatalf("busy state: %+v", d)
+	}
+	if _, err := os.Lstat(filepath.Join(m.extDir, "gpu.raw")); err != nil {
+		t.Fatal("unlinked live driver", err)
+	}
+	if slices.Contains(r.commands, "systemd-sysext refresh") {
+		t.Fatal("refreshed sysext while driver was busy")
+	}
+	if !slices.Contains(r.commands, "systemctl start gpu.service") {
+		t.Fatal("did not restore service after refused unload")
+	}
+	r.fail = ""
+	if err := m.Remove(ctx, "gpu", mounted); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestModuleIndexLivesInRAM(t *testing.T) {
+	m, r := newTestManager(t)
+	source := filepath.Join(m.moduleSource, m.kernel)
+	os.MkdirAll(filepath.Join(source, "updates"), 0o755)
+	for path, value := range map[string]string{"updates/nvidia.ko": "module", "modules.dep": "original", "modules.builtin": "builtins"} {
+		os.WriteFile(filepath.Join(source, path), []byte(value), 0o644)
+	}
+	if err := m.prepareModules(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	index := filepath.Join(m.moduleRoot, "lib/modules", m.kernel)
+	if path, err := os.Readlink(filepath.Join(index, "updates/nvidia.ko")); err != nil || path != filepath.Join(source, "updates/nvidia.ko") {
+		t.Fatalf("module link: %q %v", path, err)
+	}
+	if _, err := os.Lstat(filepath.Join(index, "modules.dep")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("index points into read-only /usr")
+	}
+	if data, _ := os.ReadFile(filepath.Join(source, "modules.dep")); string(data) != "original" {
+		t.Fatal("modified original index")
+	}
+	if !slices.Equal(r.commands, []string{"depmod -b " + m.moduleRoot + " " + m.kernel}) {
+		t.Fatalf("depmod: %v", r.commands)
+	}
+}
+
+func TestChangedInstalledImageRejectedAfterRestart(t *testing.T) {
+	m, r := newTestManager(t)
+	ctx := context.Background()
+	mounted := []string{"data"}
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", nil)
+	if err := m.Install(ctx, path, "data", "gpu", mounted); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(m.dir("data"), "gpu.raw"), []byte("changed"), 0o600)
+	m.active = map[string]Manifest{}
+	m.resident = map[string]Manifest{}
+	m.applied = ""
+	r.commands = nil
+	if err := m.Apply(ctx, mounted); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("changed image: %v", err)
+	}
+	if d := m.Status(mounted).Plugins[0]; d.Active || d.Problem != "integrity" {
+		t.Fatalf("changed image status: %+v", d)
+	}
+	if len(r.commands) != 0 {
+		t.Fatal("activated changed image")
+	}
+}
+
+func TestDevModeDoesNotActivatePlugins(t *testing.T) {
+	m, r := newTestManager(t)
+	m.Disabled = true
+	if err := m.Apply(context.Background(), []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.commands) != 0 {
+		t.Fatal("dev mode ran system commands")
+	}
 }
 
 // plugin puts a plugin into a folder, as someone would upload it.
@@ -104,7 +235,7 @@ func TestInstallEnableRemove(t *testing.T) {
 	if target, err := os.Readlink(link); err != nil || target != filepath.Join(m.mountRoot, "data/.titanos/plugins/werkzeug.raw") {
 		t.Fatalf("extension link: %q, %v", target, err)
 	}
-	want := []string{"systemd-sysext refresh", "depmod -a", "modprobe i915", "systemctl daemon-reload", "systemctl start werkzeug.service"}
+	want := []string{"systemd-sysext refresh", "ldconfig -X", "systemctl daemon-reload", "depmod -b " + m.moduleRoot + " " + m.kernel, "modprobe -d " + m.moduleRoot + " i915", "systemctl start werkzeug.service"}
 	if !slices.Equal(runner.commands, want) {
 		t.Errorf("commands = %v", runner.commands)
 	}
@@ -138,6 +269,7 @@ func TestInstallEnableRemove(t *testing.T) {
 	}
 	again := NewManager(m.store)
 	again.mountRoot, again.extDir, again.keyDir, again.kernel, again.runner = m.mountRoot, m.extDir, m.keyDir, m.kernel, runner
+	again.moduleRoot, again.moduleSource = m.moduleRoot, m.moduleSource
 	again.Load()
 	if err := again.Apply(ctx, mounted); err != nil {
 		t.Fatal(err)
@@ -153,9 +285,12 @@ func TestInstallEnableRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Its service is stopped before its files go.
-	if n := len(runner.commands); runner.commands[n-2] != "systemctl stop werkzeug.service" || runner.commands[n-1] != "systemd-sysext refresh" {
-		t.Errorf("switching off: %v", runner.commands[n-2:])
+	stop := slices.Index(runner.commands, "systemctl stop werkzeug.service")
+	unload := slices.Index(runner.commands, "modprobe -d "+m.moduleRoot+" -r i915")
+	if stop < 0 || unload <= stop {
+		t.Errorf("service was not stopped before unloading: %v", runner.commands)
 	}
+
 	if _, err := os.Lstat(link); !errors.Is(err, os.ErrNotExist) {
 		t.Error("a plugin that was switched off is still linked")
 	}
