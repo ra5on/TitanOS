@@ -33,6 +33,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
+	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -66,7 +67,9 @@ type Options struct {
 	// Update installs new versions into the other slot of the stick.
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
-	Backup   *backup.Manager
+	Backup *backup.Manager
+	// UPS watches the uninterruptible power supply.
+	UPS      *ups.Manager
 	Settings *system.Settings
 	Power    system.Power
 	Version  string
@@ -228,6 +231,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/backups/{id}/password", s.requireAdmin(s.handleBackupPassword))
 	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireAdmin(s.handleBackupRestore))
 	mux.HandleFunc("POST /api/v1/backups/{id}/{action}", s.requireAdmin(s.handleBackupAction))
+	mux.HandleFunc("GET /api/v1/ups", s.requireAdmin(s.handleUPS))
+	mux.HandleFunc("PUT /api/v1/ups", s.requireAdmin(s.handleUPSChange))
+	mux.HandleFunc("POST /api/v1/ups/scan", s.requireAdmin(s.handleUPSScan))
 	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
 	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))

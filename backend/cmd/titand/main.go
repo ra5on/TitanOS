@@ -41,6 +41,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
+	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
@@ -325,6 +326,25 @@ func run(opts options) error {
 	}
 	go backups.Run(ctx)
 
+	// The UPS: on battery the NAS shuts down cleanly before it is empty.
+	supply := ups.NewManager(store)
+	supply.Disabled = opts.dev
+	supply.Poweroff = power.Poweroff
+	supply.OnEvent = func(kind, subject string) {
+		severity := notify.Warning
+		switch kind {
+		case "ups_online":
+			severity = notify.Info
+		case "ups_low_battery", "ups_shutdown":
+			severity = notify.Error
+		}
+		notifier.Notify(severity, kind, subject)
+	}
+	if err := supply.Load(); err != nil {
+		slog.Warn("UPS settings not readable from /config", "err", err)
+	}
+	go supply.Run(ctx)
+
 	// The license texts lie in the image; in development mode in the repository.
 	shareDir := "/usr/share/titanos"
 	if opts.dev {
@@ -351,6 +371,7 @@ func run(opts options) error {
 		SSH:           access,
 		Update:        updates,
 		Backup:        backups,
+		UPS:           supply,
 		Certificate:   certs,
 		Settings:      settings,
 		Power:         power,
