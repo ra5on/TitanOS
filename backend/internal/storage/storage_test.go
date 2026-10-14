@@ -225,13 +225,18 @@ func TestCreateValidation(t *testing.T) {
 		{"name taken", CreateRequest{Name: "data", Level: "raid1", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrExists},
 		{"unknown level", CreateRequest{Name: "new", Level: "raid7", Filesystem: "ext4", Disks: three, Erase: three}, ErrInvalidLevel},
 		{"unknown filesystem", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ntfs", Disks: three[:2], Erase: three[:2]}, ErrInvalidFS},
+		{"RAID 0 without disks", CreateRequest{Name: "new", Level: "raid0", Filesystem: "ext4"}, ErrTooFewDisks},
+		{"RAID 1 with one disk", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: three[:1], Erase: three[:1]}, ErrTooFewDisks},
 		{"RAID 5 with two disks", CreateRequest{Name: "new", Level: "raid5", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrTooFewDisks},
 		{"RAID 6 with three disks", CreateRequest{Name: "new", Level: "raid6", Filesystem: "ext4", Disks: three, Erase: three}, ErrTooFewDisks},
+		{"RAID 10 with two disks", CreateRequest{Name: "new", Level: "raid10", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrTooFewDisks},
+		{"single-disk RAID 0 erase not confirmed", CreateRequest{Name: "new", Level: "raid0", Filesystem: "ext4", Disks: three[:1]}, ErrNotConfirmed},
 		{"erase not confirmed", CreateRequest{Name: "new", Level: "raid5", Filesystem: "ext4", Disks: three}, ErrNotConfirmed},
 		{"erase confirms other disks", CreateRequest{Name: "new", Level: "raid5", Filesystem: "ext4", Disks: three, Erase: []string{"sdd", "sde", "sdf"}}, ErrNotConfirmed},
 		{"same disk twice", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: []string{"sde", "sde"}, Erase: []string{"sde", "sde"}}, ErrNotConfirmed},
 		{"disk of another volume", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: []string{"sda", "sde"}, Erase: []string{"sda", "sde"}}, ErrDiskUnavailable},
 		{"the boot stick", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: []string{"sdz", "sde"}, Erase: []string{"sdz", "sde"}}, ErrDiskUnavailable},
+		{"single-disk RAID 0 on the boot stick", CreateRequest{Name: "new", Level: "raid0", Filesystem: "ext4", Disks: []string{"sdz"}, Erase: []string{"sdz"}}, ErrDiskUnavailable},
 		{"unknown disk", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: []string{"sdq", "sde"}, Erase: []string{"sdq", "sde"}}, ErrDiskUnavailable},
 	}
 	for _, tt := range tests {
@@ -303,6 +308,47 @@ func TestCreateRaid0HasNoBitmapAndExt4Options(t *testing.T) {
 	}
 	if !strings.Contains(all, "mkfs.ext4 -F -q -L scratch -m 0 /dev/md/scratch") {
 		t.Errorf("mkfs.ext4 call missing:\n%s", all)
+	}
+	for _, command := range runner.commands {
+		if strings.HasPrefix(command, "mdadm --create ") && strings.Contains(command, "--force") {
+			t.Errorf("multi-disk RAID 0 must not force creation: %s", command)
+		}
+	}
+}
+
+func TestCreateSingleDiskRaid0(t *testing.T) {
+	for _, tt := range []struct {
+		filesystem string
+		disk       string
+		partition  string
+		mkfs       string
+	}{
+		{"ext4", "nvme0n1", "nvme0n1p1", "mkfs.ext4 -F -q -L scratch -m 0 /dev/md/scratch"},
+		{"xfs", "sde", "sde1", "mkfs.xfs -f -q -L scratch /dev/md/scratch"},
+	} {
+		t.Run(tt.filesystem, func(t *testing.T) {
+			m, runner, store := newTestManager(t)
+			req := CreateRequest{Name: "scratch", Level: "raid0", Filesystem: tt.filesystem, Disks: []string{tt.disk}, Erase: []string{tt.disk}}
+			if err := m.Create(context.Background(), req); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				"mdadm --create /dev/md/scratch --run --quiet --metadata=1.2 --homehost=any --name=scratch --level=0 --force --raid-devices=1 /dev/" + tt.partition,
+				tt.mkfs,
+				"mount -t " + tt.filesystem + " -o noatime UUID=0f0f0f0f-aaaa-bbbb-cccc-121212121212 " + m.mountRoot + "/scratch",
+			} {
+				if !slices.Contains(runner.commands, want) {
+					t.Errorf("missing command %q in:\n%s", want, strings.Join(runner.commands, "\n"))
+				}
+			}
+			var saved []VolumeConfig
+			if err := store.ReadJSON(configFile, &saved); err != nil {
+				t.Fatal(err)
+			}
+			if len(saved) != 1 || saved[0].Level != "raid0" || saved[0].Filesystem != tt.filesystem || saved[0].ArrayUUID == "" || saved[0].FilesystemUUID == "" {
+				t.Errorf("single-disk volume must persist for reassembly and mounting: %+v", saved)
+			}
+		})
 	}
 }
 
