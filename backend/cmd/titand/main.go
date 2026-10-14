@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -164,12 +166,22 @@ func run(opts options) error {
 	})
 
 	// Runs the Docker engine while its volume is mounted.
+	devices := hardware.NewManager()
 	containers := docker.NewManager(store, opts.configDir)
+	containers.HardwareDevices = devices.ContainerDevices
+	containers.RefreshCDI = func(ctx context.Context) error {
+		_, err := (command.Exec{}).Run(ctx, "", "systemctl", "restart", "titanos-nvidia.service")
+		return err
+	}
+	if !opts.dev {
+		if err := containers.LoadHardwareLeases(); err != nil {
+			return fmt.Errorf("load GPU leases: %w", err)
+		}
+	}
 	containers.Disabled = opts.dev
 	if err := containers.Load(); err != nil {
 		slog.Warn("docker settings not readable from /config", "err", err)
 	}
-	go containers.Run(ctx, volumes.Mounted)
 
 	// Knows the apps that can be installed, from the built-in catalog and
 	// from sources on the network.
@@ -181,6 +193,8 @@ func run(opts options) error {
 
 	// Virtual machines; starts those marked for autostart once their volumes are there.
 	machines := vm.NewManager(store, shares.UsersGID)
+	machines.BeforeStart = containers.BeginVM
+	machines.AfterPoll = containers.ReturnVMHardware
 	machines.Disabled = opts.dev
 	if err := machines.Load(); err != nil {
 		slog.Warn("VMs not readable from /config", "err", err)
@@ -204,15 +218,16 @@ func run(opts options) error {
 	// And a disk a VM uses is never overwritten by a disk test.
 	volumes.Claimed = machines.ClaimedDisks
 	go volumes.RunDiskSleep(ctx)
-	go machines.Run(ctx, volumes.Mounted)
 
 	// System extensions on a volume, laid over the system once it is mounted.
 	extensions := plugins.NewManager(store)
+	extensions.Release = strings.TrimPrefix(version.Version, "v")
 	extensions.Disabled = opts.dev
 	if err := extensions.Load(); err != nil {
 		slog.Warn("plugin settings not readable from /config", "err", err)
 	}
-	go extensions.Run(ctx, volumes.Mounted)
+	containers.Ready = extensions.Healthy
+	machines.AutoReady = func() bool { return extensions.Healthy() && containers.StartupReady() }
 
 	// The root shell of the terminal panel.
 	shells := terminal.NewManager(store)
@@ -291,6 +306,10 @@ func run(opts options) error {
 	updates := update.NewManager(store, version.Version, slot)
 	updates.Disabled = opts.dev || slot == ""
 	updates.Mounted = volumes.Mounted
+	updates.PluginsHealthy = extensions.Healthy
+	updates.PreparePlugins = func(ctx context.Context, version, kernel, base string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
+		return extensions.PrepareUpdate(ctx, version, kernel, base, assets, volumes.Mounted(), fetch, download)
+	}
 	updates.Reboot = power.Reboot
 	updates.OnEvent = func(kind, subject string) {
 		severity := notify.Info
@@ -303,6 +322,13 @@ func run(opts options) error {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}
 	updates.Confirm()
+	extensions.ChangeAllowed = func() bool {
+		status := updates.Status()
+		return status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
+	}
+	go extensions.Run(ctx, volumes.Mounted)
+	go containers.Run(ctx, volumes.Mounted)
+	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
 	// Backups of shares to another volume, another server or the cloud.
 	backups := backup.NewManager(store)
@@ -351,7 +377,11 @@ func run(opts options) error {
 	if opts.dev {
 		shareDir = "."
 	}
-	devices := hardware.NewManager()
+	nvidia := hardware.NewNvidiaControl(store, devices, opts.dev)
+	if err := nvidia.Load(); err != nil {
+		slog.Warn("NVIDIA settings unavailable", "err", err)
+	}
+	go nvidia.Run(ctx)
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -365,6 +395,7 @@ func run(opts options) error {
 		Terminal:      shells,
 		VMs:           machines,
 		Hardware:      devices,
+		Nvidia:        nvidia,
 		Accelerators:  hardware.NewAcceleratorMonitor(ctx, devices),
 		Plugins:       extensions,
 		Network:       connection,

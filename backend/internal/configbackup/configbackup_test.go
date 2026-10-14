@@ -321,3 +321,33 @@ func TestDevelopmentModeTouchesNothing(t *testing.T) {
 		t.Errorf("looked at the arrays: %v", e.system.calls)
 	}
 }
+
+type btrfsScanRunner struct{ calls []string }
+
+func (r *btrfsScanRunner) Run(_ context.Context, _ string, name string, args ...string) (string, error) {
+	line := name + " " + strings.Join(args, " ")
+	r.calls = append(r.calls, line)
+	if name == "blkid" && len(args) > 0 && args[0] == "-t" {
+		return "DEVNAME=/dev/vda1\nUUID=mirror\nTYPE=btrfs\n\nDEVNAME=/dev/vdb1\nUUID=mirror\nTYPE=btrfs\n\nDEVNAME=/dev/../../escape\nUUID=other\nTYPE=btrfs\n", nil
+	}
+	if name == "blkid" {
+		return "TYPE=btrfs\nLABEL=mirror\n", nil
+	}
+	return "", nil
+}
+func TestBtrfsRecoveryScansMirrorOnceWithoutLogReplay(t *testing.T) {
+	e := newEnv(t)
+	r := &btrfsScanRunner{}
+	e.m.runner = r
+	devices := e.m.candidates(context.Background())
+	if len(devices) != 1 || devices[0] != "vda1" {
+		t.Fatal(devices)
+	}
+	if err := e.m.look(context.Background(), devices[0], func(string, string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	commands := strings.Join(r.calls, "\n")
+	if !strings.Contains(commands, "ro,nodev,nosuid,noexec,nologreplay,subvolid=5,degraded /dev/vda1") {
+		t.Fatal(commands)
+	}
+}

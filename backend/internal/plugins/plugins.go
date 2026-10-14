@@ -114,9 +114,11 @@ type Status struct {
 
 // Manager installs plugins and keeps the system in line with the settings.
 type Manager struct {
-	store  *config.Store
-	runner run.Runner
+	ChangeAllowed func() bool // checked under actions, serializes with update staging
+	store         *config.Store
+	runner        run.Runner
 	// Disabled leaves the system alone. Set in development mode.
+	Release   string // running TitanOS version; set before Load
 	Disabled  bool
 	mountRoot string
 	// extDir is where systemd looks for extensions that are not part of
@@ -148,7 +150,16 @@ func NewManager(store *config.Store) *Manager {
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
 	var settings Settings
-	err := m.store.ReadJSON(settingsFile, &settings)
+	path := m.settingsPath()
+	err := m.store.ReadJSON(path, &settings)
+	if errors.Is(err, fs.ErrNotExist) && path != settingsFile {
+		if err = m.store.ReadJSON(settingsFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if err = m.store.WriteJSON(path, settings); err != nil {
+			return err
+		}
+	}
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -180,7 +191,7 @@ func (m *Manager) save(settings Settings) error {
 		return ErrNotLoaded
 	}
 	sort.Strings(settings.Enabled)
-	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+	if err := m.store.WriteJSON(m.settingsPath(), settings); err != nil {
 		return err
 	}
 	m.settings = settings
@@ -188,7 +199,13 @@ func (m *Manager) save(settings Settings) error {
 }
 
 func (m *Manager) dir(volume string) string {
-	return filepath.Join(m.mountRoot, volume, ".titanos", "plugins")
+	if releaseVersion.MatchString(m.Release) {
+		dir := m.releaseDir(volume, m.Release)
+		if _, err := os.Stat(filepath.Join(dir, ".ready")); err == nil {
+			return dir
+		}
+	}
+	return m.baseDir(volume)
 }
 
 // readManifest reads and checks a manifest file.
@@ -325,6 +342,9 @@ func hashFile(path string, limit int64) (string, int64, error) {
 func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrBusy
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -356,6 +376,9 @@ func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm str
 		return fmt.Errorf("%w: the image is not the one the manifest describes", ErrInvalid)
 	}
 
+	if err := m.ensureReleaseSet(settings.Volume); err != nil {
+		return err
+	}
 	dir := m.dir(settings.Volume)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -427,6 +450,9 @@ func copyFile(from, to string, mode os.FileMode) error {
 func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrBusy
+	}
 	return m.setEnabled(ctx, name, enabled, mounted)
 }
 
@@ -440,6 +466,9 @@ func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mou
 	}
 	if _, exists := m.installed(settings.Volume)[name]; !exists {
 		return ErrNotFound
+	}
+	if err := m.ensureReleaseSet(settings.Volume); err != nil {
+		return err
 	}
 	if !enabled {
 		if err := m.deactivate(ctx, name); err != nil {
@@ -464,6 +493,9 @@ func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mou
 func (m *Manager) Remove(ctx context.Context, name string, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrBusy
+	}
 	if err := m.setEnabled(ctx, name, false, mounted); err != nil {
 		return err
 	}

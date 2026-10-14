@@ -548,3 +548,28 @@ func TestDevelopmentModeTouchesNothing(t *testing.T) {
 		t.Errorf("entries: %s", got)
 	}
 }
+
+func TestPluginPreparationFailurePreservesFallbackSlot(t *testing.T) {
+	e := newEnv(t)
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	oldEntry := filepath.Join(e.boot, "loader/entries/titanos-b.conf")
+	oldKernel := filepath.Join(e.boot, "titanos/b/vmlinuz")
+	os.MkdirAll(filepath.Dir(oldKernel), 0o755)
+	os.WriteFile(oldEntry, []byte("fallback entry"), 0o644)
+	os.WriteFile(oldKernel, []byte("fallback kernel"), 0o644)
+	called := false
+	e.m.PreparePlugins = func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error {
+		called = true
+		return errors.New("bad plugin signature")
+	}
+	e.install(t)
+	if !called || e.m.Status().Progress.Phase != "failed" || e.m.Status().Pending != nil {
+		t.Fatal(e.m.Status())
+	}
+	for path, want := range map[string]string{oldEntry: "fallback entry", oldKernel: "fallback kernel"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatal("plugin failure overwrote rollback", path, err)
+		}
+	}
+}

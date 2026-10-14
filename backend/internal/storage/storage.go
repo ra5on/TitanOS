@@ -90,7 +90,7 @@ type Smart struct {
 type VolumeConfig struct {
 	Name           string    `json:"name"`
 	Level          string    `json:"level"`      // raid0, raid1, raid5, raid6, raid10
-	Filesystem     string    `json:"filesystem"` // ext4, xfs
+	Filesystem     string    `json:"filesystem"` // ext4, xfs, btrfs
 	ArrayUUID      string    `json:"arrayUUID"`
 	FilesystemUUID string    `json:"filesystemUUID"`
 	Created        time.Time `json:"created"`
@@ -144,6 +144,7 @@ type Manager struct {
 	store  *config.Store
 	runner Runner
 	// Where volumes are mounted and where the kernel shows block devices.
+	mounts    func() map[string]bool
 	mountRoot string
 	sysBlock  string
 
@@ -178,7 +179,8 @@ type Manager struct {
 	diskSleepLoaded bool
 	diskSleepErrors []DiskSleepError
 	// sleepSamples is protected by actions, never persisted on the stick.
-	sleepSamples map[string]sleepSample
+	sleepSamples  map[string]sleepSample
+	btrfsProgress map[string]btrfsProgress
 }
 
 // NewManager returns a manager working on the real system.
@@ -262,7 +264,11 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 	configured := m.configured()
 	volumeByArray := map[string]string{}
 	for _, volume := range configured {
-		volumeByArray[normalizeUUID(volume.ArrayUUID)] = volume.Name
+		uuid := volume.ArrayUUID
+		if volume.Filesystem == "btrfs" {
+			uuid = volume.FilesystemUUID
+		}
+		volumeByArray[normalizeUUID(uuid)] = volume.Name
 	}
 
 	status := Status{Disks: []Disk{}, Volumes: []Volume{}, DiskSleep: m.DiskSleep()}
@@ -283,7 +289,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		})
 	}
 
-	mounts := readMounts()
+	mounts := m.readMounts()
 	for _, cfg := range configured {
 		volume := Volume{
 			Name: cfg.Name, Level: cfg.Level, Filesystem: cfg.Filesystem,
@@ -310,6 +316,9 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 				}
 			}
 			sort.Slice(volume.Members, func(i, j int) bool { return volume.Members[i].Disk < volume.Members[j].Disk })
+		}
+		if cfg.Filesystem == "btrfs" {
+			m.btrfsStatus(&volume, &status, devices, cfg)
 		}
 		if mounts[volume.MountPoint] {
 			volume.Mounted = true
@@ -408,6 +417,7 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 		}
 		m.mountAll(ctx)
+		m.refreshBtrfs(ctx)
 		if loaded {
 			m.mu.Lock()
 			m.settled = true
@@ -445,7 +455,7 @@ func (m *Manager) Names() []string {
 
 // Mounted returns the configured volumes that are mounted right now.
 func (m *Manager) Mounted() []string {
-	mounts := readMounts()
+	mounts := m.readMounts()
 	var names []string
 	for _, volume := range m.configured() {
 		if mounts[m.mountRoot+"/"+volume.Name] {
@@ -458,4 +468,11 @@ func (m *Manager) Mounted() []string {
 // MountPoint returns where a volume is mounted.
 func (m *Manager) MountPoint(volume string) string {
 	return m.mountRoot + "/" + volume
+}
+
+func (m *Manager) readMounts() map[string]bool {
+	if m.mounts != nil {
+		return m.mounts()
+	}
+	return readMounts()
 }

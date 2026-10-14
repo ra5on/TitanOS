@@ -161,9 +161,18 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 			out, err = m.runner.Run(ctx, "", "docker", m.compose(volume, name, "pull", "--quiet")...)
 		}
 		if err == nil {
-			var up string
-			up, err = m.runner.Run(ctx, "", "docker", m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")...)
-			out += up
+			m.hardwareMu.Lock()
+			path, cleanup, prepareErr := m.hardwareCompose(ctx, name)
+			err = prepareErr
+			if err == nil {
+				args := m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")
+				args[4] = path
+				var up string
+				up, err = m.runner.Run(ctx, "", "docker", args...)
+				cleanup()
+				out += up
+			}
+			m.hardwareMu.Unlock()
 		}
 		if pull && err == nil {
 			// The hints are stale now; ask again what is current.
@@ -174,6 +183,9 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		job.Output = tail(out, 4000)
 		if err != nil {
 			job.State = "failed"
+			if job.Output == "" {
+				job.Output = err.Error()
+			}
 			slog.Error("app setup failed", "app", name, "err", err)
 		} else {
 			job.State = "done"

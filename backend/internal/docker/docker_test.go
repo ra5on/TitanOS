@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,12 +19,15 @@ import (
 )
 
 type fakeRunner struct {
+	mu       sync.Mutex
 	commands []string
 	stdin    []string
 	fail     string
 }
 
 func (r *fakeRunner) Run(_ context.Context, stdin string, name string, args ...string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	command := name + " " + strings.Join(args, " ")
 	r.commands = append(r.commands, command)
 	r.stdin = append(r.stdin, stdin)

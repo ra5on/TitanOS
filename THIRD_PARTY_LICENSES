@@ -19,6 +19,7 @@ Debian 13 base system     various (GPL, LGPL,     Exact Debian source packages l
 Device firmware           vendor-specific         Debian firmware-nonfree source package and copyright
 systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
 mdadm                     GPL-2.0-or-later        Debian source packages
+btrfs-progs               GPL-2.0-only and others Debian source packages
 e2fsprogs, xfsprogs       GPL-2.0, LGPL-2.1       Debian source packages
 smartmontools             GPL-2.0-or-later        Debian source packages
 hd-idle                   GPL-3.0-or-later        Debian source packages
@@ -58,3 +59,10 @@ Container Toolkit (Apache-2.0). Its release assets include matching kernel
 sources and a separate original-license archive with pinned package URLs.
 See docs/NVIDIA.md. Firmware may be binary-only;
 a Debian source-package link does not imply availability of firmware source code.
+
+Development builds also provide Intel GPU Tools as a separate Debian-based
+plugin (mainly MIT, plus licenses of included libraries). Its licenses archive
+includes original Debian copyright notices and exact source-package URLs in
+usr/share/titanos/intel-gpu-tools/SOURCES.txt. The Coral USB helper is TitanOS
+code under FSL-1.1-ALv2. No Google libedgetpu binary or firmware is bundled;
+a container application must supply its own appropriately licensed runtime.

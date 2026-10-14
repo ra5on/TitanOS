@@ -15,7 +15,7 @@ on:
       version:
         description: 'Version for a build/sign/boot rehearsal (never publishes)'
         required: true
-        default: '0.1.0-beta.2'
+        default: '0.1.0-beta.3'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -41,7 +41,7 @@ jobs:
       - name: Version and channel
         id: version
         env:
-          REHEARSAL_VERSION: ${{ inputs.version || '0.1.0-beta.2' }}
+          REHEARSAL_VERSION: ${{ inputs.version || '0.1.0-beta.3' }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             version=${GITHUB_REF_NAME#v}
@@ -107,6 +107,11 @@ jobs:
           sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
+      - name: Build Intel GPU Tools and Coral USB plugins
+        run: |
+          sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
       - name: Pack the release
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
@@ -120,11 +125,16 @@ jobs:
       - name: Boot the actual installation ZIP in UEFI QEMU
         run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip --plugins out/release --timeout 420
 
+      - name: Btrfs snapshots, degraded boot, replacement and optional tools
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip --plugins out/release --timeout 420
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: release-boot-log
-          path: out/release-smoke*.log
+          path: |
+            out/release-smoke*.log
+            out/storage-smoke*.log
           if-no-files-found: ignore
           retention-days: 7
 

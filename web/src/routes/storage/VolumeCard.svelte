@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Volume } from '#lib/api.ts';
+	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDiskBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -38,7 +39,7 @@
 		volume.state === 'degraded' ? t('storage.degradedNote') : volume.state === 'failed' ? t('storage.failedNote') : volume.state === 'missing' ? t('storage.missingNote') : ''
 	);
 	const canCheck = $derived(volume.level !== 'raid0' && (volume.state === 'ok' || volume.state === 'checking'));
-	const canAdd = $derived(volume.level !== 'raid0' && volume.state !== 'failed' && volume.state !== 'missing');
+	const canAdd = $derived((volume.filesystem !== 'btrfs' || volume.state === 'degraded') && volume.level !== 'raid0' && volume.state !== 'failed' && volume.state !== 'missing');
 </script>
 
 <article class="tile" class:warn={tone === 'warn'} class:error={tone === 'error'} aria-label={volume.name}>
@@ -105,6 +106,7 @@
 			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}>{t('storage.delete')}</button>
 		</div>
 	{/if}
+	{#if canAdminister && volume.mounted && volume.filesystem === 'btrfs'}<Snapshots volume={volume.name} />{/if}
 </article>
 
 <style>

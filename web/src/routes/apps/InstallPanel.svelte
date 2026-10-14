@@ -1,6 +1,8 @@
 <script lang="ts">
 	// Installs an app from a template: everything is filled in, and every
 	// field says where its value comes from.
+	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
+	import { hardwareSelections, withHardware } from '#lib/compose/hardware.ts';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type CatalogApp, type DockerStatus, type Share } from '#lib/api.ts';
@@ -26,6 +28,7 @@
 	let loadError = $state<{ text: string; detail: string } | null>(null);
 	let view = $state<'form' | 'compose'>('form');
 	let text = $state('');
+	let selectedHardware = $state<Record<string, string[]>>({});
 	let shown = $state<string[]>([]);
 	let installing = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -59,6 +62,7 @@
 						res.compose = fromCasaOS(res.compose, app.id, { timezone: res.timezone, uid: res.uid, gid: res.gid, host: system.info?.network?.ipv4.split('/')[0] || location.hostname });
 					}
 					tpl = res;
+					selectedHardware = hardwareSelections(res.compose);
 					form = readTemplate(res, name, shares.filter((share) => share.available).map((share) => ({ name: share.name, path: share.path })), used);
 				} catch (err) {
 					loadError = { text: t('apps.templateBroken'), detail: err instanceof Error ? err.message : '' };
@@ -115,7 +119,7 @@
 	const pathProblem = (problem: string) => (problem === 'invalid' ? t('apps.pathInvalid') : problem === 'volatile' ? t('apps.pathVolatile') : '');
 
 	function show(next: 'form' | 'compose') {
-		if (next === 'compose' && tpl && form) text = build(tpl, $state.snapshot(form)).compose;
+		if (next === 'compose' && tpl && form) text = withHardware(build(tpl, $state.snapshot(form)).compose, selectedHardware);
 		view = next;
 	}
 
@@ -125,7 +129,7 @@
 		error = null;
 		const result = build(tpl, $state.snapshot(form));
 		try {
-			await api.post('/docker/apps', { name: form.name, compose: view === 'compose' ? text : result.compose, env: result.env });
+			await api.post('/docker/apps', { name: form.name, compose: view === 'compose' ? text : withHardware(result.compose, selectedHardware), env: result.env });
 			// Images are pulled in the background; the Docker page shows the progress.
 			await goto('/docker');
 		} catch (err) {
@@ -299,6 +303,13 @@
 			</div>
 		{/if}
 
+ {#if form && view === 'form'}
+  <section class="section">
+   {#each Object.keys(selectedHardware) as serviceName (serviceName)}
+    <p class="mono">{serviceName}</p><HardwarePicker bind:selected={selectedHardware[serviceName]} />
+   {/each}
+  </section>
+ {/if}
 		{#if error}
 			<div class="body"><div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div></div>
 		{/if}
@@ -307,6 +318,8 @@
 			<button type="button" class="btn btn-primary" onclick={install} disabled={installing || !ready || problems.blocking}>{t(installing ? 'apps.installing' : 'apps.install')}</button>
 		</div>
 	{/if}
+
+
 </aside>
 
 <style>

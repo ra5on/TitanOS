@@ -84,22 +84,24 @@ services:
 sich ein einzelnes Gerät auswählen. Die CDI-Datei wird nach jedem Start im
 RAM erzeugt. Eine Änderung der Docker-Laufzeit oder ein Docker-Neustart ist
 dafür nicht nötig. Die grafische Geräteauswahl im Container-Editor steht
-noch aus; dafür aktuell den Compose-Editor verwenden.
+in beta.2 noch aus; dort den Compose-Editor verwenden. Der Entwicklungsstand enthält eine Geräteauswahl, siehe [Hardware und Plugins](PLUGINS.md).
 
 ## Abschalten, VMs und Systemupdates
 
 GPU-Container und andere GPU-Aufträge zuerst beenden, dann das Plugin unter
 **Plugins** ausschalten oder entfernen. Ein noch belegtes Kernelmodul
 verhindert das Aushängen. Bei einem Fehler bleibt die Erweiterung verfügbar.
-Das automatische Umschalten zwischen VM und Containern ist noch nicht
+In beta.2 ist das automatische Umschalten zwischen VM und Containern noch nicht
 umgesetzt; eine an `vfio-pci` gebundene GPU steht dem Plugin nicht zur Verfügung.
 
-Plugin-Updates werden noch **nicht automatisch mit einem Systemupdate**
+In beta.2 werden Plugin-Updates **nicht automatisch mit einem Systemupdate**
 installiert. Bei einem anderen Kernel bleibt das bisherige Plugin inaktiv.
 Nach dem Systemupdate das alte Plugin entfernen und die drei Plugin-Dateien
 des neuen Releases installieren. Vorherige Plugin-Dateien für einen möglichen
 System-Rollback aufbewahren; danach wieder die dazu passende Version installieren.
-Leistungslimit und Einstellungen für den NVIDIA-Persistenzmodus folgen später.
+Der Entwicklungsstand ergänzt Plugin-Mitnahme, Leistungslimit und VM-Wechsel;
+Einrichtung und der Übergang von beta.2 stehen in [PLUGINS.md](PLUGINS.md).
+Ein einstellbarer NVIDIA-Persistenzmodus ist nicht enthalten.
 
 ## Dashboard
 
