@@ -219,6 +219,14 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Getestet in QEMU: Backup auf ein zweites Volume, zweiter Lauf, Wiederherstellen (Prüfsumme gleich, Freigabe unberührt), das Passwort öffnet das Repository auch von Hand, SFTP zum NAS selbst mit dessen Schlüssel, unerreichbarer Server. Nicht getestet: S3 und REST-Server gegen echte Dienste (nur Adresse und Umgebung im Unit-Test).
 - Noch offen: einzelne Dateien statt ganzer Stände wiederherstellen, Backups von Docker-Appdata und VMs (geht über Freigaben, aber nicht ausdrücklich angeboten), Prüfen eines Repositorys (`restic check`), Bandbreite begrenzen.
 
+**USV** (Einstellungen › USV; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `ups`, Debian-Pakete `nut-server` und `nut-client` (NUT 2.8). Drei Arten: keine USV, USV am Kabel dieses NAS (Treiber `usbhid-ups` für die meisten USB-Geräte, dazu `nutdrv_qx`, `blazer_usb`, `blazer_ser`, `apcsmart`; „Nach USV am USB suchen“ mit `nut-scanner`), oder eine USV, die ein anderes Gerät per NUT im Netz teilt. Einstellungen in `/config/system/ups.json`.
+- titand schreibt `/etc/nut/*` bei jedem Start und jeder Änderung (Modus 0640, Gruppe `nut`) und startet die Dienste selbst; ab Werk laufen sie nicht. Das Konto, mit dem upsmon auf diesem NAS liest, bekommt bei jedem Start ein neues Passwort.
+- Herunterfahren: Meldet die USV „Batterie fast leer“, fährt upsmon das NAS herunter (`systemctl poweroff`: VMs, Container, Freigaben und Volumes werden sauber beendet). Wahlweise schon nach N Minuten auf Batterie; dann löst titand das aus (`upsmon -c fsd`, damit auch Geräte herunterfahren, die diese USV über das NAS beobachten).
+- „Anderen Geräten im Netzwerk mitteilen“: upsd lauscht dann im Netz, mit dem Konto `monitor` und einem festen Passwort, das die Seite für die Einrichtung der anderen Geräte zeigt. Sonst nur auf 127.0.0.1.
+- Meldungen: auf Batterie, Strom wieder da, Batterie fast leer, fährt herunter, keine Verbindung zur USV. titand fragt alle zehn Sekunden mit `upsc`.
+- Getestet in QEMU mit dem Treiber `dummy-ups` (spielt eine USV aus einer Datei): Zustand und Werte auf der Seite, Anmeldung eines anderen Geräts, Herunterfahren nach einer Minute auf Batterie und durch NUT bei fast leerer Batterie. Nicht getestet: eine echte USV, der Modus „über das Netzwerk“ gegen einen fremden NUT-Server.
+
 **Zugang** (Einstellungen › Zugang; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - **SSH** (Paket `sshd`, Debian-Pakete `openssh-server` und `sudo`): ab Werk aus, der Dienst ist im Abbild abgeschaltet. Einstellung in `/config/system/ssh.json`; titand startet und stoppt `ssh.service` selbst.
   - Anmelden können sich nur Besitzer und Administratoren, die unter „Mein Konto“ einen Schlüssel hinterlegt haben – unter ihrem eigenen Namen, nie mit Passwort, nie als root (`sshd_config.d/10-titanos.conf`: `AllowGroups titanos-ssh`, `PasswordAuthentication no`, `PermitRootLogin no`).
@@ -461,7 +469,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 4. **Shares:** Samba, NFS, Nutzer und Rechte; danach der Dateimanager (braucht Shares und Rechte).
 5. **Docker:** Engine, Container-Liste, Container-Editor (Formular ↔ Compose), Vorlagen und App-Katalog.
 6. **VMs und Hardware:** libvirt/QEMU, OVMF, VFIO-Passthrough, noVNC, Hardware-Seite (iGPU/NPU/NVIDIA), Plugin-System (sysext) mit NVIDIA-Plugin.
-7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT). Umgesetzt: Updates, Backups (restic), Benachrichtigungen, SMART-Überwachung (Meldungen bei Fehlern und Hitze, Plattentest). Offen: USV.
+7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT). Umgesetzt: Updates, Backups (restic), Benachrichtigungen, SMART-Überwachung (Meldungen bei Fehlern und Hitze, Plattentest), USV (NUT).
 
 ## Regeln
 

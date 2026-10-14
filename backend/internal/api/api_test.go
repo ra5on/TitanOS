@@ -30,6 +30,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/update"
+	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -65,7 +66,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -76,6 +77,14 @@ func newTestServer(t *testing.T) *testServer {
 // disabledDocker returns a Docker manager that never touches the system.
 func disabledDocker(store *config.Store) *docker.Manager {
 	m := docker.NewManager(store, "")
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+// disabledUPS returns a UPS manager that never touches the system.
+func disabledUPS(store *config.Store) *ups.Manager {
+	m := ups.NewManager(store)
 	m.Disabled = true
 	m.Load()
 	return m
@@ -444,7 +453,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -1072,6 +1081,25 @@ func TestBackupsKeepTheirSecrets(t *testing.T) {
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
 	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
+		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
+		}
+	}
+}
+
+func TestUPSIsForAdministrators(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/ups", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"mode":"off"`) || !strings.Contains(string(body), `"usbhid-ups"`) {
+		t.Errorf("status: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/ups", map[string]any{"mode": "local"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("change in development mode: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, tc := range [][2]string{{"GET", "/api/v1/ups"}, {"PUT", "/api/v1/ups"}, {"POST", "/api/v1/ups/scan"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
