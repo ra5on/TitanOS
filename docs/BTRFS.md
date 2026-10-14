@@ -1,6 +1,6 @@
 # Btrfs-Spiegel und Snapshots
 
-Diese Funktionen gehören zum Entwicklungsstand nach `v0.1.0-beta.2`.
+Diese Funktionen sind ab `v0.1.0-beta.3` enthalten.
 
 Unter **Speicher → Volume anlegen** `RAID 1`, `btrfs` und genau zwei freie
 Platten wählen. Die Bestätigung löscht beide ausgewählten Platten. Daten und

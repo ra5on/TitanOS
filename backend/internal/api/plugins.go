@@ -22,6 +22,8 @@ var pluginErrors = []struct {
 	{plugins.ErrInvalid, http.StatusBadRequest, "invalid_plugin"},
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
+	{plugins.ErrDownload, http.StatusBadGateway, "plugin_download_failed"},
+	{plugins.ErrRelease, http.StatusNotFound, "plugin_release_unavailable"},
 }
 
 func writePluginError(w http.ResponseWriter, err error) {
@@ -44,19 +46,41 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Plugins.Status(s.opts.Storage.Mounted()))
 }
 
+func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Force bool }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Plugins.RefreshCatalog(r.Context(), req.Force); err != nil {
+		slog.Warn("plugin catalog unavailable", "err", err)
+	}
+	// An unavailable catalog must not hide installed or locally uploaded plugins.
+	s.handlePlugins(w, r)
+}
+
 func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	if !s.pluginsEditable(w) {
 		return
 	}
-	var req struct{ Path, Volume, Confirm string }
+	var req struct{ Name, Path, Volume, Confirm string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Plugins.Install(r.Context(), req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if req.Name != "" && req.Path != "" {
+		writeError(w, http.StatusBadRequest, "invalid_plugin", "choose a release plugin or a local file")
+		return
+	}
+	var err error
+	if req.Name != "" {
+		err = s.opts.Plugins.InstallOfficial(r.Context(), req.Name, req.Volume, s.opts.Storage.Mounted())
+	} else {
+		err = s.opts.Plugins.Install(r.Context(), req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted())
+	}
+	if err != nil {
 		writePluginError(w, err)
 		return
 	}
-	slog.Info("plugin installed", "from", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
+	slog.Info("plugin installed", "name", req.Name, "from", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handlePlugins(w, r)
 }
 

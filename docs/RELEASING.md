@@ -95,10 +95,10 @@ Lokal:
 
 ```bash
 make test test-release
-make zip VERSION=0.1.0-beta.2
-sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh 0.1.0-beta.2
-scripts/make-release.sh 0.1.0-beta.2 beta docs/releases/v0.1.0-beta.2.md
-python3 scripts/smoke-release.py out/release/titanos-0.1.0-beta.2.zip --plugins out/release
+make zip VERSION=0.1.0-beta.3
+sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh 0.1.0-beta.3
+scripts/make-release.sh 0.1.0-beta.3 beta docs/releases/v0.1.0-beta.3.md
+python3 scripts/smoke-release.py out/release/titanos-0.1.0-beta.3.zip --plugins out/release
 ```
 
 Für lokale Signaturtests einen separaten Wegwerf-Schlüssel verwenden.
@@ -108,14 +108,14 @@ prüft sie. Private Testschlüssel ebenfalls nie committen. Ein publizierter
 Tag darf keinen `rehearsal.pub` enthalten und benötigt die beiden echten
 öffentlichen Schlüssel.
 
-## v0.1.0-beta.2 veröffentlichen
+## v0.1.0-beta.3 veröffentlichen
 
 Erst nach grünem Probelauf, eingebauten öffentlichen Schlüsseln und Prüfung
 des konkreten Release-Commits:
 
 ```bash
-git tag --cleanup=verbatim -a v0.1.0-beta.2 -F docs/releases/v0.1.0-beta.2.md
-git push origin v0.1.0-beta.2
+git tag --cleanup=verbatim -a v0.1.0-beta.3 -F docs/releases/v0.1.0-beta.3.md
+git push origin v0.1.0-beta.3
 ```
 
 `--cleanup=verbatim` erhält Markdown-Überschriften im Tag-Text; ohne diese
