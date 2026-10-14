@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** `v0.1.0-beta.1` wird vorbereitet. Die erste Beta richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Maßgeblich für verfügbare Downloads sind die [Releases](https://github.com/ra5on/TitanOS/releases); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
+> **Stand:** `v0.1.0-beta.1` ist die erste öffentliche Testversion. Sie richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Downloads und Anleitung stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.1); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -124,7 +124,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 ## Installation der Beta
 
-Sobald `v0.1.0-beta.1` unter [Releases](https://github.com/ra5on/TitanOS/releases) veröffentlicht ist:
+Downloads für `v0.1.0-beta.1` stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.1). Für einen neuen Stick:
 
 1. `titanos-0.1.0-beta.1.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
