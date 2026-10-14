@@ -108,9 +108,15 @@ Erst nach grünem Probelauf, eingebauten öffentlichen Schlüsseln und Prüfung
 des konkreten Release-Commits:
 
 ```bash
-git tag -a v0.1.0-beta.1 -F docs/releases/v0.1.0-beta.1.md
+git tag --cleanup=verbatim -a v0.1.0-beta.1 -F docs/releases/v0.1.0-beta.1.md
 git push origin v0.1.0-beta.1
 ```
+
+`--cleanup=verbatim` erhält Markdown-Überschriften im Tag-Text; ohne diese
+Option entfernt Git Zeilen, die mit `#` beginnen, als Kommentare. Bereits
+veröffentlichte Tags nicht ersetzen. Eine reine Darstellungskorrektur der
+Release-Seite kann über „Edit release“ erfolgen, ohne die signierten Assets
+oder das Manifest zu ändern.
 
 Der Tag löst einen neuen vollständigen Build samt QEMU-Test aus. Danach
 wartet der Job `publish` auf die Freigabe im Environment `release`.
