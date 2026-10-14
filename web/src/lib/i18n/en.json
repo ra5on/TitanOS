@@ -37,6 +37,8 @@
 	"unreachable.title": "NAS not reachable",
 	"unreachable.text": "The web UI gets no answer from the NAS. Is it running and on the network?",
 	"nav.label": "Main navigation",
+	"nav.scrollLeft": "Scroll navigation left",
+	"nav.scrollRight": "Scroll navigation right",
 	"nav.dashboard": "Dashboard",
 	"nav.storage": "Storage",
 	"nav.shares": "Shares",

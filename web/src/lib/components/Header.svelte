@@ -3,7 +3,7 @@
 	import type { Role } from '#lib/api.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { system } from '#lib/system.svelte.ts';
+	import { horizontalNav } from '#lib/horizontal-nav.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
@@ -27,13 +27,14 @@
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const items = $derived(NAV.filter((item) => !item.roles || item.roles.includes(role)));
 
-	const host = $derived.by(() => {
-		const name = system.info?.hostname ?? session.data?.hostname ?? '';
-		const ip = system.info?.network?.ipv4.split('/')[0];
-		return ip ? `${name} · ${ip}` : name;
-	});
-
 	let nav = $state<HTMLElement>();
+	let overflow = $state(false);
+	let canScrollLeft = $state(false);
+	let canScrollRight = $state(false);
+
+	function scrollNav(direction: number) {
+		nav?.scrollBy({ left: direction * nav.clientWidth * 0.8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+	}
 
 	// The navigation scrolls sideways when it does not fit; keep the current tab in view.
 	$effect(() => {
@@ -49,12 +50,21 @@
 
 <header>
 	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
-	{#if host}<span class="host mono">{host}</span>{/if}
-	<nav bind:this={nav} aria-label={t('nav.label')}>
-		{#each items as item (item.href)}
-			<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a>
-		{/each}
-	</nav>
+	<div class="nav-shell" use:horizontalNav={(state) => { overflow = state.overflow; canScrollLeft = state.left; canScrollRight = state.right; }}>
+		<button class="nav-arrow" type="button" hidden={!overflow} disabled={!canScrollLeft} aria-label={t('nav.scrollLeft')} onclick={() => scrollNav(-1)}>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+		</button>
+		<nav bind:this={nav} aria-label={t('nav.label')}>
+			<div class="nav-items">
+				{#each items as item (item.href)}
+					<a href={item.href} draggable="false" aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a>
+				{/each}
+			</div>
+		</nav>
+		<button class="nav-arrow" type="button" hidden={!overflow} disabled={!canScrollRight} aria-label={t('nav.scrollRight')} onclick={() => scrollNav(1)}>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+		</button>
+	</div>
 	{#if role !== 'user'}
 		<button type="button" class="terminal" aria-pressed={terminal.open} title={t('terminal.shortcut')} onclick={toggleTerminal}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
@@ -109,23 +119,45 @@
 			display: none;
 		}
 	}
-	.host {
-		padding: 3px 8px;
+	header > .nav-shell {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.nav-arrow {
+		flex: none;
+		width: 28px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
 		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 0.75rem;
-		color: var(--muted);
-		white-space: nowrap;
+		border-radius: var(--radius-ctl);
+		background: transparent;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.nav-arrow[hidden] { display: none; }
+	.nav-arrow:disabled { opacity: 0.35; cursor: default; }
+	.nav-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+	.nav-items {
+		display: flex;
+		width: max-content;
+		gap: 4px;
 	}
 	nav {
 		flex: 1 1 auto;
 		min-width: 0;
-		display: flex;
-		flex-wrap: nowrap;
-		gap: 4px;
 		overflow-x: auto;
-		scrollbar-width: none;
+		scrollbar-width: thin;
+		scrollbar-color: var(--muted) var(--header);
+		overscroll-behavior-x: contain;
+		user-select: none;
 	}
+	nav:global(.dragging), nav:global(.dragging) a { cursor: grabbing; }
 	nav a {
 		flex: none;
 		padding: 10px 14px;
@@ -143,11 +175,6 @@
 		color: var(--text);
 		font-weight: 500;
 	}
-	@media (max-width: 1100px) {
-		.host {
-			display: none;
-		}
-	}
 	@media (max-width: 760px) {
 		header {
 			gap: 10px;
@@ -156,5 +183,12 @@
 		.brand :global(svg:last-child) {
 			display: none;
 		}
+	}
+	@media (max-width: 480px) {
+		header { gap: 4px; padding: 8px; }
+		.terminal { padding: 0 8px; }
+		.nav-arrow { width: 24px; }
+		.nav-shell, .nav-items { gap: 2px; }
+		nav a { padding-inline: 10px; }
 	}
 </style>
