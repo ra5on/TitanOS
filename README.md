@@ -37,6 +37,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI: VMs anlegen, starten und stoppen, mit dem Bildschirm der VM direkt im Browser. Kerne festlegen, vorhandene Abbilder und ganze Platten nutzen, Grafikkarten und USB-Geräte durchreichen, NAS-Ordner in der VM einbinden, TPM 2.0 und Secure Boot.
 - **Netzwerk.** Feste Adresse, Bonding, VLAN und eine Bridge, über die VMs eine eigene Adresse im Heimnetz bekommen. Jede Änderung gilt erst auf Probe: Ohne Bestätigung innerhalb von zwei Minuten kehrt das NAS zur alten Einstellung zurück.
 - **Benachrichtigungen.** Fällt eine Platte aus, läuft ein Wiederaufbau oder wird ein Volume voll, steht das in der Weboberfläche und kommt auf Wunsch per E-Mail, ntfy, Telegram oder Discord.
+- **Backups.** Freigaben verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP) oder S3-Speicher sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Wiederherstellen in einen eigenen Ordner.
 - **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
 - **Sicherung des Sticks.** Die Konfiguration liegt nur auf dem Stick, deshalb legt TitanOS nach jeder Änderung eine Kopie auf ein Volume. Geht der Stick kaputt, findet ein neuer Stick die Kopie auf den Platten und spielt sie zurück.
 - **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
@@ -110,7 +111,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
 - **Fertige Plugins.** Zuerst der NVIDIA-Treiber; dazu Grafikkarten und Beschleuniger für Container.
-- **Backups der Daten** auf einen anderen Rechner oder in die Cloud, und eine USV-Anbindung.
+- **USV-Anbindung**, damit das NAS bei Stromausfall sauber herunterfährt.
 - **Zertifikate von Let's Encrypt** für die Weboberfläche.
 
 ## Installation (geplant)

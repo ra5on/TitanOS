@@ -208,6 +208,17 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
 
+**Backups** (Einstellungen › Backups, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `backup`, Werkzeug restic (Debian-Paket, rund 24 MB). Ein Auftrag sichert Freigaben an ein Ziel: anderes Volume dieses NAS (nie dasselbe wie das der Freigaben), S3-kompatibler Speicher, ein Server über SFTP oder ein restic-REST-Server. Aufträge in `/config/backup/jobs.json`.
+- Jeder Auftrag bekommt beim Anlegen ein zufälliges Passwort, mit dem restic verschlüsselt. Die Seite zeigt es direkt danach und später nach erneuter Passwort-Eingabe – ohne dieses Passwort ist ein Backup wertlos, wenn das NAS verloren geht. Geheimnisse des Ziels (Secret Key, Passwort des REST-Servers) gibt die API nie heraus; sie stehen nur in der Umgebung von restic, nie auf einer Kommandozeile.
+- SFTP: Das NAS hat einen eigenen Schlüssel (`/config/backup/ssh/id_ed25519`), den die Seite zum Eintragen auf dem Server zeigt. Der Server wird beim ersten Verbinden gemerkt (`known_hosts`); meldet sich später ein anderer unter dem Namen, bricht das Backup ab. Während eines Laufs liegen Schlüssel und `known_hosts` in `/run/titanos-backup`.
+- Zeitplan täglich oder wöchentlich zu einer Uhrzeit; ein verpasster Termin wird nach dem Start nachgeholt, das erste Backup beginnt gleich nach dem Anlegen. Aufbewahren: je der neueste von N Tagen, Wochen, Monaten (`restic forget --prune`). Ein Auftrag nach dem anderen.
+- Ausgelassen werden `.recycle` und halbe Uploads (`*.titanos-part`). Der Cache von restic und was ein Auftrag über seine Läufe weiß, liegen auf dem Volume der ersten Freigabe (`.titanos/backup/`), nicht im RAM und nicht auf dem Stick.
+- Wiederherstellen: ein Stand in einen neuen Ordner `/mnt/<volume>/restored/<auftrag>-<zeit>/`, nie über die Freigabe. Was man braucht, holt man sich von dort.
+- Abbrechen beendet restic samt ssh (eigene Prozessgruppe). Fehlgeschlagene Läufe ergeben eine Meldung (`backup_failed`); konnte restic einzelne Dateien nicht lesen, gilt das Backup mit Warnung.
+- Getestet in QEMU: Backup auf ein zweites Volume, zweiter Lauf, Wiederherstellen (Prüfsumme gleich, Freigabe unberührt), das Passwort öffnet das Repository auch von Hand, SFTP zum NAS selbst mit dessen Schlüssel, unerreichbarer Server. Nicht getestet: S3 und REST-Server gegen echte Dienste (nur Adresse und Umgebung im Unit-Test).
+- Noch offen: einzelne Dateien statt ganzer Stände wiederherstellen, Backups von Docker-Appdata und VMs (geht über Freigaben, aber nicht ausdrücklich angeboten), Prüfen eines Repositorys (`restic check`), Bandbreite begrenzen.
+
 **Zugang** (Einstellungen › Zugang; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - **SSH** (Paket `sshd`, Debian-Pakete `openssh-server` und `sudo`): ab Werk aus, der Dienst ist im Abbild abgeschaltet. Einstellung in `/config/system/ssh.json`; titand startet und stoppt `ssh.service` selbst.
   - Anmelden können sich nur Besitzer und Administratoren, die unter „Mein Konto“ einen Schlüssel hinterlegt haben – unter ihrem eigenen Namen, nie mit Passwort, nie als root (`sshd_config.d/10-titanos.conf`: `AllowGroups titanos-ssh`, `PasswordAuthentication no`, `PermitRootLogin no`).
@@ -450,7 +461,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 4. **Shares:** Samba, NFS, Nutzer und Rechte; danach der Dateimanager (braucht Shares und Rechte).
 5. **Docker:** Engine, Container-Liste, Container-Editor (Formular ↔ Compose), Vorlagen und App-Katalog.
 6. **VMs und Hardware:** libvirt/QEMU, OVMF, VFIO-Passthrough, noVNC, Hardware-Seite (iGPU/NPU/NVIDIA), Plugin-System (sysext) mit NVIDIA-Plugin.
-7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT).
+7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT). Umgesetzt: Updates, Backups (restic), Benachrichtigungen, SMART-Überwachung (Meldungen bei Fehlern und Hitze, Plattentest). Offen: USV.
 
 ## Regeln
 
