@@ -37,7 +37,7 @@ export function defaultLayout(): TilePlacement[] {
 
 /** Size a tile gets when it is shown again. */
 export function defaultPlacement(id: TileId): TilePlacement {
-	const { w, h } = defaultLayout().find((tile) => tile.id === id) ?? { w: 4, h: 5 };
+	const { w, h } = defaultLayout().find((tile) => tile.id === id) ?? { w: 4, h: 6 };
 	return { id, w, h };
 }
 

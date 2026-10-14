@@ -46,16 +46,16 @@
 				<div><dt>{t('accelerator.clock')}</dt><dd class="mono">{value(device.frequencyMHz, 'MHz')}</dd></div>
 			</dl>
 			{#each device.engines as engine (engine.name)}
-				<div class="engine"><div><span>{engine.name}</span><span class="mono">{formatPercent(engine.usagePercent)}</span></div><div class="bar"><span style:width="{engine.usagePercent}%"></span></div></div>
+				<div class="engine"><div><span>{engine.name === 'encode' ? t('accelerator.encode') : engine.name === 'decode' ? t('accelerator.decode') : engine.name}</span><span class="mono">{formatPercent(engine.usagePercent)}</span></div><div class="bar"><span style:width="{engine.usagePercent}%"></span></div></div>
 			{/each}
 			{#if device.state === 'driver_missing' && kind === 'nvidia'}<a href="/plugins">{t('accelerator.installNvidia')}</a>{/if}
-			<p class="muted caption">{t('accelerator.unavailable')}</p>
+			{#if [device.usagePercent, device.temperatureC, device.powerWatts, device.memoryUsedBytes, device.frequencyMHz].some((metric) => metric === null)}<p class="muted caption">{t('accelerator.unavailable')}</p>{/if}
 		</section>
 	{/each}
 {/if}
 
 <style>
-	.accelerator { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+	.accelerator { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 	.accelerator + .accelerator { border-top: 1px solid var(--panel-border); padding-top: 16px; }
 	.device-heading { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 	.device-heading strong { font-weight: 500; }

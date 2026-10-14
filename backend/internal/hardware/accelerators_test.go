@@ -68,6 +68,18 @@ func TestXeCycleCounters(t *testing.T) {
 	}
 }
 
+func TestIncompleteScanCannotBecomeUsageBaseline(t *testing.T) {
+	sys := t.TempDir()
+	address := "0000:00:02.0"
+	device(t, sys, address, "030000", "8086", -1, nil)
+	os.Symlink("/drivers/i915", filepath.Join(sys, "bus/pci/devices", address, "driver"))
+	m := &AcceleratorMonitor{hardware: &Manager{sys: sys}, proc: filepath.Join(t.TempDir(), "missing"), runner: &acceleratorRunner{}, previous: map[string]drmClient{"old": {address: address}}}
+	m.sample(context.Background(), time.Now())
+	if len(m.previous) != 0 || m.Snapshot()[0].UsagePercent != nil {
+		t.Fatal("incomplete scan retained a baseline")
+	}
+}
+
 type acceleratorRunner struct {
 	calls  int
 	output string

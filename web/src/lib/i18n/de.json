@@ -1628,6 +1628,8 @@
 	"tile.igpu": "iGPU / GPU · Intel & AMD",
 	"tile.npu": "NPU",
 	"tile.nvidia": "NVIDIA",
+	"accelerator.encode": "Video kodieren",
+	"accelerator.decode": "Video dekodieren",
 	"accelerator.loading": "Geräte werden gelesen …",
 	"accelerator.none": "Kein passendes Gerät erkannt",
 	"accelerator.igpuHint": "Integrierte und zusätzliche Intel- und AMD-Grafik.",

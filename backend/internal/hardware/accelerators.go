@@ -231,6 +231,9 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 			devices[i].History = devices[i].History[len(devices[i].History)-36:]
 		}
 	}
+	if !complete {
+		clients = nil
+	} // an incomplete scan cannot be the next baseline
 	m.previous, m.busy, m.last = clients, nextBusy, now
 	m.mu.Lock()
 	m.devices = devices

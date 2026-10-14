@@ -102,9 +102,39 @@ func TestBusyDriverCannotBeUnmountedOrRemoved(t *testing.T) {
 	if !slices.Contains(r.commands, "systemctl start gpu.service") {
 		t.Fatal("did not restore service after refused unload")
 	}
+	r.fail = "nvidia" // unload and the attempted restoration both fail
+	if err := m.SetEnabled(ctx, "gpu", false, mounted); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	if m.Status(mounted).Plugins[0].Active {
+		t.Fatal("failed restoration reported an active driver")
+	}
 	r.fail = ""
 	if err := m.Remove(ctx, "gpu", mounted); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFailedConfigWriteRestoresDisabledPlugin(t *testing.T) {
+	m, r := newTestManager(t)
+	ctx := context.Background()
+	mounted := []string{"data"}
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", func(p *Manifest) { p.Services = []string{"gpu.service"} })
+	if err := m.Install(ctx, path, "data", "gpu", mounted); err != nil {
+		t.Fatal(err)
+	}
+	broken := filepath.Join(t.TempDir(), "not-a-directory")
+	os.WriteFile(broken, nil, 0o600)
+	m.store = config.Open(broken)
+	r.commands = nil
+	if err := m.SetEnabled(ctx, "gpu", false, mounted); err == nil {
+		t.Fatal("configuration write unexpectedly succeeded")
+	}
+	if d := m.Status(mounted).Plugins[0]; !d.Enabled || !d.Active {
+		t.Fatalf("failed save changed live state: %+v", d)
+	}
+	if !slices.Contains(r.commands, "systemctl start gpu.service") {
+		t.Fatal("service was not restored")
 	}
 }
 

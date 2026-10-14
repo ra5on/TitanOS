@@ -647,10 +647,16 @@ func (m *Manager) deactivate(ctx context.Context, name string) (err error) {
 		m.problems[name] = "busy"
 		// Keep a running consumer usable if a later module refuses unloading.
 		for _, module := range manifest.Modules {
-			m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module)
+			if _, restoreErr := m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module); restoreErr != nil {
+				delete(m.active, name)
+				err = errors.Join(err, restoreErr)
+			}
 		}
 		for _, service := range manifest.Services {
-			m.runner.Run(ctx, "", "systemctl", "start", service)
+			if _, restoreErr := m.runner.Run(ctx, "", "systemctl", "start", service); restoreErr != nil {
+				delete(m.active, name)
+				err = errors.Join(err, restoreErr)
+			}
 		}
 	}()
 	for i := len(manifest.Services) - 1; i >= 0; i-- {
