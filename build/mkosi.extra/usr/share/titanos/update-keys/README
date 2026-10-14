@@ -17,7 +17,8 @@ Configured public keys (2026-10-14):
   titanos-recovery-1.pub  Minisign key ID E58A91B20B598ABB
 
 Both key pairs have been verified locally. The release secret is configured
-in GitHub's protected release environment. Offline custody of the recovery
-secret and independent backups must still be completed by the project owner.
+in GitHub's protected release environment. The project owner confirmed an
+external backup of the keys and passphrases on 2026-10-14. Offline custody
+of the recovery secret is still unconfirmed; a cloud copy is not offline.
 
 See docs/RELEASING.md in the repository.
