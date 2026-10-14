@@ -70,7 +70,9 @@ type Disk struct {
 	// Contents names what was found on a used disk (ext4, ntfs, RAID …).
 	Contents []string `json:"contents,omitempty"`
 	Mounted  bool     `json:"mounted,omitempty"`
-	Smart    *Smart   `json:"smart"`
+	// Testing is set while a test of the disk runs; nothing else may use it.
+	Testing bool   `json:"testing,omitempty"`
+	Smart   *Smart `json:"smart"`
 }
 
 // Smart is the health a disk reports about itself. Nil if it reports none.
@@ -151,9 +153,24 @@ type Manager struct {
 	// actions serializes everything that changes disks or the configuration.
 	actions sync.Mutex
 
-	mu        sync.RWMutex
-	volumes   []VolumeConfig
-	loaded    bool
+	// Claimed returns the disks that something outside this package
+	// uses as a whole (a VM), with who it is. Such a disk is never tested.
+	Claimed func() map[string]string
+	// OnTestDone is told about every disk test that ends.
+	OnTestDone func(DiskTest)
+	// openDisk and smartPoll are replaced in tests.
+	openDisk  func(path string, write bool) (blockFile, error)
+	smartPoll time.Duration
+
+	testMu sync.Mutex
+	tests  map[string]*DiskTest
+
+	mu      sync.RWMutex
+	volumes []VolumeConfig
+	loaded  bool
+	// settled is set once the volumes were read from /config and a first
+	// attempt to mount them was made.
+	settled   bool
 	smart     map[string]*Smart // by disk path
 	smartTime time.Time
 }
@@ -243,6 +260,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 	}
 
 	status := Status{Disks: []Disk{}, Volumes: []Volume{}}
+	testing := m.testing()
 	diskOfPart := map[string]string{} // sda1 → sda
 	for _, device := range devices {
 		if !isDisk(device) {
@@ -252,6 +270,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		m.mu.RLock()
 		disk.Smart = m.smart[disk.Path]
 		m.mu.RUnlock()
+		disk.Testing = testing[disk.Name]
 		status.Disks = append(status.Disks, disk)
 		device.walk(func(node blockDevice) {
 			diskOfPart[strings.TrimPrefix(node.KName, "/dev/")] = disk.Name
@@ -383,6 +402,11 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 		}
 		m.mountAll(ctx)
+		if loaded {
+			m.mu.Lock()
+			m.settled = true
+			m.mu.Unlock()
+		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge
 		m.mu.RUnlock()
@@ -395,6 +419,13 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// Settled reports whether the volumes are known and were looked after once.
+func (m *Manager) Settled() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.settled
 }
 
 // Names returns the names of the configured volumes.

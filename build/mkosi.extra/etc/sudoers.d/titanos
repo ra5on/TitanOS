@@ -1,0 +1,3 @@
+# Owners and administrators who came in over SSH with their key. Their
+# accounts have no Linux password that sudo could ask for.
+%titanos-ssh ALL=(ALL:ALL) NOPASSWD: ALL

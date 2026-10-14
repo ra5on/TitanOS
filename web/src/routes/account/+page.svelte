@@ -6,6 +6,7 @@
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
+	import SshKeys from './SshKeys.svelte';
 
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
 
@@ -149,6 +150,8 @@
 			</form>
 		{/if}
 	</section>
+
+	<SshKeys />
 
 	<section class="tile" aria-labelledby="acc-devices">
 		<h2 class="tile-title" id="acc-devices">{t('account.devices')}</h2>

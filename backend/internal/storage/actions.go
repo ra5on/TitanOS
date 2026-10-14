@@ -70,6 +70,17 @@ func sameSet(a, b []string) bool {
 	return slices.Equal(x, y) && len(slices.Compact(x)) == len(a)
 }
 
+// usable is the check of the same name plus what only the manager knows:
+// a disk that a VM uses as a whole is not for a volume.
+func (m *Manager) usable(status Status, name string) (Disk, error) {
+	if m.Claimed != nil {
+		if by := m.Claimed()[name]; by != "" {
+			return Disk{}, fmt.Errorf("%w: %s belongs to %s", ErrDiskUnavailable, name, by)
+		}
+	}
+	return usable(status, name)
+}
+
 // usable returns the disk with the given name if a volume may take it:
 // it exists, is not the stick, not in a volume and nothing on it is mounted.
 func usable(status Status, name string) (Disk, error) {
@@ -79,6 +90,9 @@ func usable(status Status, name string) (Disk, error) {
 		}
 		if disk.Role == RoleStick || disk.Role == RoleMember || disk.Mounted {
 			return Disk{}, fmt.Errorf("%w: %s is in use", ErrDiskUnavailable, name)
+		}
+		if disk.Testing {
+			return Disk{}, fmt.Errorf("%w: %s is being tested", ErrDiskUnavailable, name)
 		}
 		if disk.SizeBytes < minDiskBytes {
 			return Disk{}, fmt.Errorf("%w: %s", ErrDiskTooSmall, name)
@@ -180,7 +194,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	status := m.status(devices, m.arrays(ctx))
 	smallest := ^uint64(0)
 	for _, name := range req.Disks {
-		disk, err := usable(status, name)
+		disk, err := m.usable(status, name)
 		if err != nil {
 			return err
 		}
@@ -404,7 +418,7 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 	if err != nil {
 		return err
 	}
-	disk, err := usable(m.status(devices, []array{a}), diskName)
+	disk, err := m.usable(m.status(devices, []array{a}), diskName)
 	if err != nil {
 		return err
 	}

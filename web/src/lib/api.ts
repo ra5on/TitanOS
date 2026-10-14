@@ -114,6 +114,8 @@ export type Disk = {
 	memberState?: MemberState;
 	contents?: string[];
 	mounted?: boolean;
+	/** A test of the disk is running; nothing else may use it meanwhile. */
+	testing?: boolean;
 	smart: {
 		healthy: boolean;
 		temperatureC: number;

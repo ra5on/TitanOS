@@ -1,4 +1,6 @@
-package plugins
+// Package minisign checks signatures made with minisign (Ed25519), which
+// TitanOS uses for updates and official plugins.
+package minisign
 
 import (
 	"bytes"
@@ -12,19 +14,19 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-// errBadSignature covers everything that keeps a signature from counting.
-var errBadSignature = errors.New("plugins: no valid signature")
+// ErrBadSignature covers everything that keeps a signature from counting.
+var ErrBadSignature = errors.New("minisign: no valid signature")
 
-// publicKey is a minisign public key.
-type publicKey struct {
+// PublicKey is a minisign public key.
+type PublicKey struct {
 	id  [8]byte
 	key ed25519.PublicKey
 }
 
-// parsePublicKey reads a minisign public key file: a comment line and a
+// ParsePublicKey reads a minisign public key file: a comment line and a
 // line with the key.
-func parsePublicKey(text string) (publicKey, error) {
-	var key publicKey
+func ParsePublicKey(text string) (PublicKey, error) {
+	var key PublicKey
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "untrusted comment:") {
@@ -32,31 +34,31 @@ func parsePublicKey(text string) (publicKey, error) {
 		}
 		raw, err := base64.StdEncoding.DecodeString(line)
 		if err != nil || len(raw) != 42 || string(raw[:2]) != "Ed" {
-			return key, errBadSignature
+			return key, ErrBadSignature
 		}
 		copy(key.id[:], raw[2:10])
 		key.key = ed25519.PublicKey(raw[10:])
 		return key, nil
 	}
-	return key, errBadSignature
+	return key, ErrBadSignature
 }
 
-// verify checks a minisign signature of a message against a set of keys.
+// Verify checks a minisign signature of a message against a set of keys.
 //
 // The signature file holds the signature of the message and a second one
 // over the first plus a comment, which keeps both from being swapped.
-func verify(keys []publicKey, message []byte, signature string) error {
+func Verify(keys []PublicKey, message []byte, signature string) error {
 	lines := strings.Split(strings.ReplaceAll(signature, "\r", ""), "\n")
 	if len(lines) < 4 || !strings.HasPrefix(lines[2], "trusted comment: ") {
-		return errBadSignature
+		return ErrBadSignature
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(lines[1]))
 	if err != nil || len(raw) != 74 {
-		return errBadSignature
+		return ErrBadSignature
 	}
 	global, err := base64.StdEncoding.DecodeString(strings.TrimSpace(lines[3]))
 	if err != nil || len(global) != ed25519.SignatureSize {
-		return errBadSignature
+		return ErrBadSignature
 	}
 	switch string(raw[:2]) {
 	case "ED":
@@ -65,7 +67,7 @@ func verify(keys []publicKey, message []byte, signature string) error {
 		message = hash[:]
 	case "Ed":
 	default:
-		return errBadSignature
+		return ErrBadSignature
 	}
 	comment := strings.TrimPrefix(lines[2], "trusted comment: ")
 	for _, key := range keys {
@@ -76,12 +78,12 @@ func verify(keys []publicKey, message []byte, signature string) error {
 			return nil
 		}
 	}
-	return errBadSignature
+	return ErrBadSignature
 }
 
-// loadKeys reads the public keys TitanOS trusts for plugins.
-func loadKeys(dir string) []publicKey {
-	var keys []publicKey
+// LoadKeys reads the public keys (*.pub) in a directory.
+func LoadKeys(dir string) []PublicKey {
+	var keys []PublicKey
 	entries, _ := os.ReadDir(dir)
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".pub") {
@@ -91,7 +93,7 @@ func loadKeys(dir string) []publicKey {
 		if err != nil {
 			continue
 		}
-		if key, err := parsePublicKey(string(data)); err == nil {
+		if key, err := ParsePublicKey(string(data)); err == nil {
 			keys = append(keys, key)
 		}
 	}
