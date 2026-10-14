@@ -48,7 +48,9 @@ elif [ "$(id -u)" -ne 0 ]; then
     userns="unshare --user --map-auto --map-root-user"
 fi
 
-$userns mkosi --directory build \
+# sudo may resolve commands through its secure_path even with PATH preserved.
+mkosi_bin=$(command -v mkosi)
+$userns "$mkosi_bin" --directory build \
     --image-version "$version" \
     ${profile:+--profile "$profile"} \
     --extra-tree "$extra" \

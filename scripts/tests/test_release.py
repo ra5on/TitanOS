@@ -139,6 +139,19 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)
 
+    def test_encrypted_key_and_ci_password_input(self):
+        self.pack()
+        key = self.repo / "encrypted.key"
+        password = "disposable regression test passphrase"
+        generated = subprocess.run(["minisign", "-G", "-s", str(key), "-p", str(self.keys / "encrypted.pub")],
+                                   input=f"{password}\n{password}\n", text=True, capture_output=True)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        env = dict(os.environ, MINISIGN_PASSWORD=password)
+        signed = subprocess.run([str(self.repo / "scripts/sign-release.sh"), str(self.release), str(key)],
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(signed.returncode, 0, signed.stderr)
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+
     def test_release_requires_distinct_recovery_key(self):
         with self.assertRaisesRegex(ValueError, "distinct"):
             release_keys.check(self.keys)
