@@ -351,6 +351,7 @@ func run(opts options) error {
 	if opts.dev {
 		shareDir = "."
 	}
+	devices := hardware.NewManager()
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -363,7 +364,8 @@ func run(opts options) error {
 		Catalog:       appCatalog,
 		Terminal:      shells,
 		VMs:           machines,
-		Hardware:      hardware.NewManager(),
+		Hardware:      devices,
+		Accelerators:  hardware.NewAcceleratorMonitor(ctx, devices),
 		Plugins:       extensions,
 		Network:       connection,
 		Notify:        notifier,

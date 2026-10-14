@@ -7,6 +7,7 @@ existing test disks.
 """
 import argparse
 import http.cookiejar
+import http.client
 import json
 import os
 import secrets
@@ -32,7 +33,7 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def smoke(archive, timeout, log):
+def smoke(archive, timeout, log, plugins=None, force_tcg=False):
     os.environ["PATH"] += ":/usr/sbin:/sbin"
     context = ssl._create_unverified_context()  # expected self-signed NAS certificate
     with tempfile.TemporaryDirectory(prefix="titanos-release-") as tmp:
@@ -55,6 +56,7 @@ def smoke(archive, timeout, log):
         command("mcopy", "-i", partition, "-s", *map(str, stick.iterdir()), "::")
         shutil.copyfile("/usr/share/OVMF/OVMF_VARS_4M.fd", directory / "OVMF_VARS.fd")
         port = free_port()
+        ssh_port = free_port()
         url = f"https://127.0.0.1:{port}"
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
                                             urllib.request.HTTPSHandler(context=context))
@@ -62,19 +64,82 @@ def smoke(archive, timeout, log):
         def request(path, data=None, method=None):
             req = urllib.request.Request(url + path, data=json.dumps(data).encode() if data is not None else None,
                                          headers={"Content-Type": "application/json", "Origin": url}, method=method)
-            with opener.open(req, timeout=15) as response:
-                body = response.read()
+            # Plugin installation hashes and copies a large image before
+            # activating sysext. CI uses CPU emulation without KVM, where
+            # this legitimately takes longer than an ordinary API request.
+            request_timeout = 180 if path.startswith("/api/v1/plugins") else 15
+            with opener.open(req, timeout=request_timeout) as response:
+                try:
+                    body = response.read()
+                except http.client.IncompleteRead as error:
+                    if path.startswith("/api/v1/plugins"):
+                        print("Incomplete plugin response", dict(response.headers), repr(error.partial), flush=True)
+                    raise
                 return json.loads(body) if body else None
 
-        accel = ["-accel", "kvm", "-cpu", "host"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
+        accel = ["-accel", "kvm", "-cpu", "host"] if not force_tcg and os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
         args = ["qemu-system-x86_64", "-machine", "q35", *accel, "-smp", "2", "-m", "4G",
                 "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
                 "-drive", f"if=pflash,format=raw,file={directory}/OVMF_VARS.fd",
                 "-device", "qemu-xhci", "-drive", f"if=none,id=stick,format=raw,file={disk}",
                 "-device", "usb-storage,drive=stick,removable=on,bootindex=0",
-                "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443", "-device", "virtio-net-pci,netdev=net0",
+                "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443,hostfwd=tcp:127.0.0.1:{ssh_port}-:22", "-device", "virtio-net-pci,netdev=net0",
                 "-smbios", "type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200",
                 "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot"]
+        if plugins:
+            for index in (1, 2):
+                data_disk = directory / f"data{index}.qcow2"
+                command("qemu-img", "create", "-q", "-f", "qcow2", str(data_disk), "2G")
+                args += ["-drive", f"if=none,id=data{index},format=qcow2,file={data_disk}",
+                         "-device", f"virtio-blk-pci,drive=data{index},serial=SMOKE{index}"]
+            command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(directory / "ssh-key"))
+
+        def plugin_test(boot):
+            # Only the fresh VM receives this disposable key and test storage.
+            if boot == 1:
+                request("/api/v1/account/ssh-keys", {"key": (directory / "ssh-key.pub").read_text().strip()})
+                request("/api/v1/storage/volumes", {"name": "smoketest", "level": "raid0", "filesystem": "ext4", "disks": ["vda", "vdb"], "erase": ["vda", "vdb"]})
+            request("/api/v1/system/ssh", {"enabled": True}, method="PUT")
+            ssh_options = ["-i", str(directory / "ssh-key"), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                           "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={directory}/known_hosts", "-o", "ConnectTimeout=3"]
+            ssh = ["ssh", *ssh_options, "-p", str(ssh_port), "betatester@127.0.0.1"]
+            deadline = time.monotonic() + 45
+            while subprocess.run([*ssh, "true"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                if time.monotonic() > deadline:
+                    raise TimeoutError("SSH test access did not start")
+                time.sleep(1)
+            if boot == 1:
+                command(*ssh, "sudo mkdir -p /mnt/smoketest/plugins && sudo chown betatester /mnt/smoketest/plugins")
+                files = [plugins / "nvidia.raw", plugins / "nvidia.plugin.json"]
+                signed = (plugins / "nvidia.plugin.json.minisig").is_file()
+                if signed:
+                    files.append(plugins / "nvidia.plugin.json.minisig")
+                command("scp", *ssh_options, "-P", str(ssh_port), *map(str, files), "betatester@127.0.0.1:/mnt/smoketest/plugins/")
+                try:
+                    request("/api/v1/plugins", {"path": "/mnt/smoketest/plugins/nvidia.plugin.json", "volume": "smoketest", "confirm": "" if signed else "nvidia"})
+                except urllib.error.HTTPError as error:
+                    if error.code != 500 or json.loads(error.read()).get("error", {}).get("code") != "plugin_failed":
+                        raise
+                else:
+                    raise AssertionError("NVIDIA activation unexpectedly succeeded without a GPU")
+            deadline = time.monotonic() + 30
+            while True:
+                entries = request("/api/v1/plugins")["plugins"]
+                gpu = next((p for p in entries if p["name"] == "nvidia" and p["installed"]), None)
+                if gpu and gpu["problem"] == "activation":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError(f"missing failed activation state: {entries}")
+                time.sleep(1)
+            if gpu["active"] or not gpu["enabled"] or gpu["official"] != (plugins / "nvidia.plugin.json.minisig").is_file():
+                raise AssertionError(f"wrong plugin state: {gpu}")
+            command(*ssh, "sudo sh -ec 'test -x /usr/bin/nvidia-smi; test -x /usr/bin/nvidia-ctk; test -f /run/titanos-plugin-modules/lib/modules/$(uname -r)/modules.dep.bin; modprobe -d /run/titanos-plugin-modules --show-depends nvidia_uvm; for tool in /usr/bin/nvidia-smi /usr/bin/nvidia-container-cli; do if ldd $tool | grep -q \"not found\"; then exit 1; fi; done; findmnt -n -o OPTIONS /usr | grep -w ro'")
+            if boot == 2:
+                request("/api/v1/plugins/nvidia/disable", {})
+                request("/api/v1/plugins/nvidia", method="DELETE")
+                command(*ssh, "test ! -e /run/extensions/nvidia.raw && test ! -e /usr/bin/nvidia-smi && test -f /mnt/smoketest/plugins/nvidia.raw")
+            request("/api/v1/system/ssh", {"enabled": False}, method="PUT")
+            print(f"Boot {boot}: plugin trust, sysext, RAM module index, missing-GPU handling and lifecycle passed", flush=True)
         password = secrets.token_urlsafe(24)
         certificate = None
         with log.open("wb") as serial:
@@ -116,6 +181,19 @@ def smoke(archive, timeout, log):
                         raise AssertionError("HDD standby package missing from third-party inventory")
                     if request("/api/v1/system/ssh")["enabled"]:
                         raise AssertionError("SSH must be disabled on a fresh installation")
+                    if request("/api/v1/system")["accelerators"] != []:
+                        raise AssertionError("virtual display must not appear as a physical accelerator")
+                    if plugins:
+                        try:
+                            plugin_test(boot)
+                        except Exception:
+                            with log.with_suffix(".services.log").open("wb") as diagnostic:
+                                subprocess.run(["ssh", "-i", str(directory / "ssh-key"), "-p", str(ssh_port),
+                                                "-o", "BatchMode=yes", "-o", f"UserKnownHostsFile={directory}/known_hosts",
+                                                "-o", "ConnectTimeout=3", "betatester@127.0.0.1",
+                                                "sudo journalctl -b -u titand.service -u titanos-nvidia.service --no-pager -n 80"],
+                                               stdout=diagnostic, stderr=subprocess.STDOUT, timeout=15)
+                            raise
                     sleep_settings = request("/api/v1/storage/disk-sleep")
                     if not sleep_settings["available"] or sleep_settings["idleMinutes"] != (0 if boot == 1 else 5):
                         raise AssertionError("HDD idle setting did not default to off or survive reboot")
@@ -148,6 +226,8 @@ if __name__ == "__main__":
     parser.add_argument("zip", type=Path)
     parser.add_argument("--timeout", type=int, default=420)
     parser.add_argument("--log", type=Path, default=Path("out/release-smoke.log"))
+    parser.add_argument("--plugins", type=Path, help="test NVIDIA plugin installation and removal using disposable VM disks")
+    parser.add_argument("--tcg", action="store_true", help="force CPU emulation to reproduce CI without KVM")
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.timeout, args.log)
+    smoke(args.zip.resolve(), args.timeout, args.log, args.plugins.resolve() if args.plugins else None, args.tcg)

@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** `v0.1.0-beta.1` ist die erste öffentliche Testversion. Sie richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Downloads und Anleitung stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.1); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
+> **Stand:** `v0.1.0-beta.2` erweitert die öffentliche Testversion um HDD-Ruhemodus, NVIDIA-Plugin und GPU-/NPU-Kacheln. Sie richtet sich an Tester mit separaten Testplatten und gesicherten Daten. Downloads und Anleitung stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.2); ein Entwicklungs-Build ist kein veröffentlichtes Release. Die bisherigen Systemtests liefen überwiegend in QEMU, die Prüfung auf echter NAS-Hardware steht noch aus.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -21,11 +21,15 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Neu im Entwicklungsstand nach v0.1.0-beta.1
+## Neu in v0.1.0-beta.2
 
 Unter **Speicher › Ruhemodus für Festplatten** lässt sich eine gemeinsame Leerlaufzeit für alle unterstützten HDDs wählen: **Aus**, **5, 10, 15, 30 Minuten** oder **1, 2, 3 Stunden**. Standard ist Aus. Jede Platte schläft nach ihrer eigenen Zeit ohne Zugriff ein; der nächste Zugriff weckt sie wieder auf und kann einige Sekunden dauern. SSDs, NVMe, Bootstick und an VMs vergebene Platten sind ausgenommen. Plattentests und RAID-Wartung pausieren die Zeitmessung; Apps und Freigaben können Platten wach halten.
 
-Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als Wechselmedium gemeldete SATA-/SAS-/SCSI-HDDs sowie USB-HDDs mit geeignetem Adapter. Der tatsächliche Schlaf- und Aufweckvorgang muss noch auf echter Hardware geprüft werden. Diese Funktion ist noch **nicht im Download von v0.1.0-beta.1** enthalten.
+Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als Wechselmedium gemeldete SATA-/SAS-/SCSI-HDDs sowie USB-HDDs mit geeignetem Adapter. Der tatsächliche Schlaf- und Aufweckvorgang muss noch auf echter Hardware geprüft werden.
+
+Das optionale **NVIDIA-Plugin** enthält offene Kernelmodule für Turing und neuer sowie CUDA-, NVENC-/NVDEC-Bibliotheken und das NVIDIA Container Toolkit. Es liegt auf einem Daten-Volume und wird passend zum Kernel als separate Release-Datei ausgeliefert. Installation, Signaturprüfung und ein Compose-Beispiel stehen in der [NVIDIA-Anleitung](docs/NVIDIA.md). Echte GPU-Tests stehen noch aus.
+
+Unter **Dashboard bearbeiten › Kachel hinzufügen** stehen drei grafische Kacheln für **iGPU/GPU (Intel und AMD)**, **NPU** und **NVIDIA** bereit. Sie zeigen Lastverlauf, Temperatur, Leistungsaufnahme, Gerätespeicher und Takt, soweit der Treiber diese Werte liefert. Ein fehlender Wert erscheint als „–“, Geräte ohne Treiber oder mit VM-Zuweisung bekommen einen eigenen Status. Das bestehende Dashboard-Layout bleibt erhalten.
 
 ## Was schon funktioniert
 
@@ -49,7 +53,7 @@ Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als W
 - **Sicherung des Sticks.** Automatische Sicherung der Konfiguration auf ein verfügbares Volume, gebündelt nach Änderungen; zusätzlich Download und Wiederherstellung. Beim Ersatz eines Sticks lässt sich eine gefundene Sicherung in der Ersteinrichtung auswählen und zurückspielen.
 - **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
 - **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und filtert bekannte Adress-, Namens- und Geheimnisfelder. Das Paket vor dem Weitergeben prüfen; die Filter können unbekannte Formate übersehen.
-- **Plugins.** Systemerweiterungen für Treiber und Werkzeuge, die auf einem Volume liegen und sich ein- und ausschalten lassen. Das Grundgerüst steht; fertige Plugins wie der NVIDIA-Treiber fehlen noch.
+- **Plugins.** Systemerweiterungen für Treiber und Werkzeuge, die auf einem Volume liegen und sich ein- und ausschalten lassen. Das NVIDIA-Plugin wird separat mit passendem Kernel und signiertem Manifest ausgeliefert; siehe [Anleitung](docs/NVIDIA.md).
 - **Terminal.** Eine Shell auf dem NAS und Konsolen in Containern als Tabs am unteren Rand jeder Seite – nur für Besitzer und Administratoren, nach erneuter Passwort- und gegebenenfalls 2FA-Bestätigung.
 - **SSH und eigenes Zertifikat.** SSH ist ab Werk aus; eingeschaltet melden sich Administratoren mit Schlüssel unter ihrem eigenen Namen an, nie als root. Die Weboberfläche nimmt ein eigenes Zertifikat an.
 - **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
@@ -117,7 +121,7 @@ Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als W
 ## Was geplant ist
 
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
-- **Fertige Plugins.** Zuerst der NVIDIA-Treiber; dazu Grafikkarten und Beschleuniger für Container.
+- **Weitere Plugins und Geräteauswahl für Container.** Automatische Plugin-Mitnahme bei Systemupdates, NVIDIA-Leistungslimit und automatischer Wechsel zwischen VM und Containern stehen noch aus.
 
 ## Voraussetzungen und Grenzen der ersten Beta
 
@@ -126,13 +130,13 @@ Die Einstellung bleibt über Neustarts erhalten. Unterstützt werden nicht als W
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Noch keine fertigen offiziellen Plugins, keine automatische Plugin-Mitnahme beim Systemupdate, keine Bootloader-Updates und kein Systemupdate aus einer hochgeladenen Datei. Btrfs, Volume-Verschlüsselung und eingebauter Fernzugriff sind noch nicht umgesetzt. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Noch keine automatische Plugin-Mitnahme beim Systemupdate, keine Bootloader-Updates und kein Systemupdate aus einer hochgeladenen Datei. Btrfs, Volume-Verschlüsselung und eingebauter Fernzugriff sind noch nicht umgesetzt. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 
-Downloads für `v0.1.0-beta.1` stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.1). Für einen neuen Stick:
+Downloads für `v0.1.0-beta.2` stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.1.0-beta.2). Für einen neuen Stick:
 
-1. `titanos-0.1.0-beta.1.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.1.0-beta.2.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
@@ -142,7 +146,7 @@ Weitere Betas werden unter „Einstellungen › Updates“ im Kanal **Beta** ang
 ## Entwicklung
 
 Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`.
-Für das Systemabbild zusätzlich (Debian 13): mkosi **25.3**, `debian-archive-keyring squashfs-tools zstd zip systemd-container`. Für Release-Tests außerdem `minisign`; für den QEMU-Test `qemu-system-x86 ovmf mtools fdisk`. Unprivilegierte Builds benötigen funktionierende Benutzer-Namespaces, `newuidmap`/`newgidmap` und Einträge in `/etc/subuid` und `/etc/subgid`. Alternativ baut `MKOSI_SUDO=1 make zip` das Abbild mit sudo; Weboberfläche und Backend werden weiterhin als normaler Benutzer gebaut.
+Für das Systemabbild zusätzlich (Debian 13): mkosi **25.3**, `debian-archive-keyring squashfs-tools zstd zip systemd-container`. Für Release-Tests außerdem `minisign`; für den NVIDIA-Plugin-Bau `kmod`, Netzwerkzugang und einen isolierten Debian-Build als root bzw. in einem Benutzer-Namespace; für den QEMU-Test `qemu-system-x86 ovmf mtools fdisk`. Unprivilegierte Builds benötigen funktionierende Benutzer-Namespaces, `newuidmap`/`newgidmap` und Einträge in `/etc/subuid` und `/etc/subgid`. Alternativ baut `MKOSI_SUDO=1 make zip` das Abbild mit sudo; Weboberfläche und Backend werden weiterhin als normaler Benutzer gebaut.
 
 | Befehl | Was er tut |
 |---|---|

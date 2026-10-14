@@ -14,6 +14,7 @@ titand:
 
 test: web/node_modules
 	cd backend && go vet ./... && go test ./...
+	cd web && npm test
 	cd web && npm run check
 
 # Real miniature images/signatures exercise release packaging and tamper rejection.

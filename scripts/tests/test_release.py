@@ -1,5 +1,6 @@
 """Release regressions use tiny real squashfs images and real minisign signatures."""
 import importlib.util
+import hashlib
 import json
 import os
 import shutil
@@ -91,6 +92,14 @@ class ReleaseTest(unittest.TestCase):
         (self.slot / "version").write_text("0.1.0-beta.1\n")
         for name in ["vmlinuz", "initrd.img"]:
             (self.slot / name).write_bytes(b"test\n")
+        plugins = self.repo / "out/plugins"
+        plugins.mkdir()
+        (plugins / "nvidia.raw").write_bytes(b"plugin image")
+        (plugins / "nvidia.plugin.json").write_text(json.dumps(dict(
+            name="nvidia", version="615.71.09-titanos-0.1.0-beta.1", kernel="6.12-test",
+            sha256=hashlib.sha256(b"plugin image").hexdigest(), size=len(b"plugin image"))))
+        for name in ["nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
+            (plugins / name).write_bytes(b"archive fixture")
         self.release = self.repo / "out/release"
         self.keys = self.repo / "keys"
         self.keys.mkdir()
@@ -119,11 +128,15 @@ class ReleaseTest(unittest.TestCase):
         self.sign()
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz",
-                     "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt"]:
+                     "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt",
+                     "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
                 path = self.release / name
                 original = path.read_bytes()
-                path.write_bytes(original + b" ")
+                if name.endswith(".minisig"):
+                    lines = original.splitlines(); lines[1] = b"invalid signature"; path.write_bytes(b"\n".join(lines))
+                else:
+                    path.write_bytes(original + b" ")
                 with self.assertRaises(ValueError):
                     verify.verify(self.release, self.keys)
                 path.write_bytes(original)
@@ -136,6 +149,22 @@ class ReleaseTest(unittest.TestCase):
         self.sign()
         (self.keys / "test.pub").unlink()
         self.command("minisign", "-G", "-W", "-s", str(self.repo / "wrong.key"), "-p", str(self.keys / "wrong.pub"))
+        with self.assertRaisesRegex(ValueError, "trusted key"):
+            verify.verify(self.release, self.keys)
+
+    def test_plugin_for_wrong_kernel_cannot_be_packed(self):
+        self.pack()
+        path = self.repo / "out/plugins/nvidia.plugin.json"
+        plugin = json.loads(path.read_text())
+        plugin["kernel"] = "other-kernel"
+        path.write_text(json.dumps(plugin))
+        output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("plugin does not match", output)
+
+    def test_missing_plugin_signature_rejected(self):
+        self.pack()
+        self.sign()
+        (self.release / "nvidia.plugin.json.minisig").unlink()
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)
 

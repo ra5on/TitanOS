@@ -50,12 +50,13 @@ type Options struct {
 	Docker  *docker.Manager
 	Catalog *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
-	Terminal *terminal.Manager
-	VMs      *vm.Manager
-	Hardware *hardware.Manager
-	Plugins  *plugins.Manager
-	Network  *network.Manager
-	Notify   *notify.Manager
+	Terminal     *terminal.Manager
+	VMs          *vm.Manager
+	Hardware     *hardware.Manager
+	Accelerators *hardware.AcceleratorMonitor
+	Plugins      *plugins.Manager
+	Network      *network.Manager
+	Notify       *notify.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
 	ConfigBackup *configbackup.Manager
 	// Diagnose reads the logs and packs bundles for bug reports.
