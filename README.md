@@ -112,7 +112,6 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 - **Btrfs-Spiegel mit Snapshots** als Alternative zum klassischen RAID.
 - **Fertige Plugins.** Zuerst der NVIDIA-Treiber; dazu Grafikkarten und Beschleuniger für Container.
-- **Zertifikate von Let's Encrypt** für die Weboberfläche.
 
 ## Installation (geplant)
 
