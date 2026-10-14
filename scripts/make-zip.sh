@@ -34,17 +34,23 @@ trap 'rm -rf "$extra"' EXIT
 install -D -m 0755 backend/bin/titand "$extra/usr/bin/titand"
 # The licenses are shown under Settings > About.
 install -D -m 0644 LICENSE.md "$extra/usr/share/titanos/LICENSE.md"
-install -D -m 0644 THIRD_PARTY_LICENSES "$extra/usr/share/titanos/THIRD_PARTY_LICENSES"
+python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"
+# The finalize hook runs in mkosi's host sandbox, with no access to this checkout.
+install -m 0644 scripts/third-party-licenses.py "$extra/usr/share/titanos/build-licenses.py"
 
 # Without root, mkosi would map everything to a single user and every file in
 # the image would end up owned by root. A user namespace with the full subuid
 # range (/etc/subuid) keeps the real owners.
 userns=
-if [ "$(id -u)" -ne 0 ]; then
+if [ "${MKOSI_SUDO:-}" = 1 ]; then
+    userns="sudo --preserve-env=PATH"
+elif [ "$(id -u)" -ne 0 ]; then
     userns="unshare --user --map-auto --map-root-user"
 fi
 
-$userns mkosi --directory build \
+# sudo may resolve commands through its secure_path even with PATH preserved.
+mkosi_bin=$(command -v mkosi)
+$userns "$mkosi_bin" --directory build \
     --image-version "$version" \
     ${profile:+--profile "$profile"} \
     --extra-tree "$extra" \

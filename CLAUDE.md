@@ -27,7 +27,7 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 - Bezeichnung: „Fair Source“. Nicht „Open Source“ nennen, solange eine Version noch nicht zu Apache-2.0 gewechselt ist. Lizenzhinweis in README und unter „Einstellungen › Über“.
 - Jede Release-Seite nennt das Datum, ab dem diese Version unter Apache-2.0 steht (Erscheinungsdatum + 2 Jahre).
 - Fremdkomponenten behalten ihre Lizenz (Linux-Kernel, Debian-Pakete: GPL u. a.; noVNC: MPL-2.0; xterm.js, gridstack: MIT). Das Abbild ist eine Zusammenstellung; GPL-Teile bleiben GPL, ihre Quellen werden jedem Release beigelegt bzw. verlinkt (CI). Eigener Code, der GPL-Code ableitet (z. B. Kernelmodule), muss GPL sein.
-- `THIRD_PARTY_LICENSES` im Repo und im Abbild (unter „Einstellungen › Über“ anzeigen). Umgesetzt: „Einstellungen › Über TitanOS“ zeigt Version, Kernel, den Lizenzhinweis (Fair Source, FSL-1.1-ALv2, Apache-2.0 nach zwei Jahren), den Lizenztext und `THIRD_PARTY_LICENSES`; beide Dateien liegen im Abbild unter `/usr/share/titanos/`. Die Liste in `THIRD_PARTY_LICENSES` ist noch von Hand gepflegt, nicht aus den Paketdaten erzeugt.
+- `THIRD_PARTY_LICENSES` im Repo und im Abbild (unter „Einstellungen › Über“ anzeigen). Umgesetzt: „Einstellungen › Über TitanOS“ zeigt Version, Kernel, den Lizenzhinweis (Fair Source, FSL-1.1-ALv2, Apache-2.0 nach zwei Jahren), den Lizenztext und `THIRD_PARTY_LICENSES`; beide Dateien liegen im Abbild unter `/usr/share/titanos/`. Die Repo-Datei `THIRD_PARTY_LICENSES` ist eine Übersicht. Für jedes Abbild erzeugt `scripts/third-party-licenses.py` ein Versionsinventar aus Debian-Paketdaten, den Go-Modulen des gebauten Binarys und dem npm-Paketbaum einschließlich Fonts und Build-Werkzeugen. Originalhinweise liegen unter `/usr/share/titanos/licenses/`; das Release enthält ein Lizenzarchiv und genaue Quellpaketlinks.
 - Beiträge nur mit Contributor License Agreement (z. B. per CLA-Bot), damit kommerzielle Lizenzen später möglich bleiben. `CONTRIBUTING.md` erklärt das.
 - Name: „basiert auf Debian“ ist okay, „Debian“ nicht im Produktnamen.
 
@@ -79,7 +79,7 @@ Grundsätze:
 - Arrays werden nach dem Start von udev zusammengesetzt, nicht im initramfs: mdadm ist dort bewusst nicht enthalten. titand bindet die Volumes ein, sobald ihr Array läuft, auch mit fehlender Platte.
 - Im Entwicklungsmodus (`titand -dev`) verändert titand keine Platten.
 - journald im RAM mit Größenbegrenzung.
-- Firmware ausdünnen: nur gängige NICs, HBAs und GPUs – Intel-GPU-Firmware (GuC/HuC) und Intel-NPU-Firmware müssen drin bleiben.
+- Firmware: gezielte Debian-Pakete aus `non-free-firmware` für Realtek/Broadcom-Netzwerk, QLogic und weitere Adapter sowie Intel-/AMD-Grafik; kein Sammel-Metapaket. Intel-GPU-Firmware (GuC/HuC) und Intel-NPU-Firmware sind Pflicht und werden vor dem Packen geprüft. Geräteunterstützung zusätzlich auf echter Hardware testen.
 - RAM-Ziel: komprimiertes Systemabbild ca. 0,5–0,8 GB; Grundsystem mit allen Diensten (Kernel, titand, Samba/NFS, Docker-Engine, libvirt) ca. 1,0–1,5 GB, ohne Container und VMs. Plugins liegen auf einem Volume und belegen keinen festen RAM.
 
 ## Repo-Struktur (Vorschlag)
@@ -151,7 +151,7 @@ GitHub Actions baut bei jedem Tag und lädt das Zip als Release hoch.
 - **Zurück auf die vorherige Version:** tauscht die `sort-key` der beiden Einträge; auch das läuft auf Probe. Vor dem Neustart lässt sich jeder Wechsel zurücknehmen („Doch nicht“).
 - Einstellungen in `/config/system/update.json`: Kanal, „von selbst installieren“ mit Uhrzeit. TitanOS sucht einmal am Tag. Das Feld `source` (nicht in der Oberfläche) zeigt auf eine andere Adresse als GitHub, für Spiegel und Tests; die Signatur wird trotzdem geprüft.
 - Getestet in QEMU mit einem nachgebauten Release-Server und einem Wegwerf-Schlüssel: Update 1.0.0 → 1.1.0 mit abgebrochenem und fortgesetztem Download, Start aus Slot B, Bestätigung nach rund 20 Sekunden, zurück auf 1.0.0; ein Release mit fremder Signatur wird abgelehnt; ein Release, dessen System nie hochkommt, wird nach drei Fehlstarts aufgegeben, das NAS startet wieder das alte System und meldet den Fehlschlag; ein Release, in dem nur titand nicht startet, startet sich dreimal selbst neu und ist nach 17 Minuten ohne jedes Zutun wieder beim alten System.
-- Nicht getestet: der Workflow `release.yml` selbst (er läuft erst mit einem Tag und dem Schlüssel des Projektinhabers), Updates von echtem GitHub, ein echter Stick.
+- Release-Vorbereitung `v0.1.0-beta.1`: PRs mit Änderungen an Build-/Release-Dateien und manuelle Workflow-Läufe bauen mit einem Wegwerf-Schlüssel, prüfen Signaturen und booten das tatsächliche ZIP zweimal in einer isolierten QEMU-VM. Tag-Builds verlangen zwei verschiedene echte öffentliche Schlüssel (Release und Offline-Reserve); erst der geschützte Publish-Job erhält das Release-Secret. ZIP, Manifest und vollständige Prüfsummenliste werden signiert. Noch nötig: echte Schlüssel und Secrets vom Projektinhaber, veröffentlichter GitHub-Update-Test und echter Stick. Testschlüssel werden nie veröffentlicht.
 - Noch offen: Der Boot-Loader selbst (`EFI/BOOT/BOOTX64.EFI`) wird von Updates nicht ersetzt. Plugins werden mit einem Update noch nicht mitgeladen. Ein Update aus einer Datei von Hand gibt es nicht.
 
 ## Testen

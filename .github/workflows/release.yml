@@ -8,13 +8,27 @@ name: Release
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths: ['build/**', 'boot/**', 'scripts/**', '.github/workflows/release.yml']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for a build/sign/boot rehearsal (never publishes)'
+        required: true
+        default: '0.1.0-beta.1'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Release image
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -24,10 +38,18 @@ jobs:
           # The message of the tag is the changelog.
           fetch-depth: 0
 
-      - name: Version and channel from the tag
+      - name: Version and channel
         id: version
+        env:
+          REHEARSAL_VERSION: ${{ inputs.version || '0.1.0-beta.1' }}
         run: |
-          version=${GITHUB_REF_NAME#v}
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            version=${GITHUB_REF_NAME#v}
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > changelog.txt
+          else
+            version=$REHEARSAL_VERSION
+            printf '%s\n' 'Release rehearsal. Disposable signing key. Not for distribution.' > changelog.txt
+          fi
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$'; then
             echo "the tag must look like v1.2.3 or v1.2.3-beta.1" >&2
             exit 1
@@ -35,14 +57,6 @@ jobs:
           case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > changelog.txt
-
-      - name: A release needs a key in the image
-        run: |
-          if ! ls build/mkosi.extra/usr/share/titanos/update-keys/*.pub > /dev/null 2>&1; then
-            echo "no public key in build/mkosi.extra/usr/share/titanos/update-keys: this image could never be updated" >&2
-            exit 1
-          fi
 
       - uses: actions/setup-node@v7
         with:
@@ -58,12 +72,24 @@ jobs:
       - name: Tools for building the image
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container pipx
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 ovmf mtools fdisk
           # The version the image is developed with.
-          sudo pipx install --global "git+https://github.com/systemd/mkosi.git@v25.3"
+          python3 -m venv "$RUNNER_TEMP/mkosi"
+          "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
+          echo "$RUNNER_TEMP/mkosi/bin" >> "$GITHUB_PATH"
+
+      - name: Signing keys for the image
+        run: |
+          keys=build/mkosi.extra/usr/share/titanos/update-keys
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/check-release-keys.py "$keys"
+          else
+            # No production secrets are available in this job, including on PRs.
+            minisign -G -W -p "$keys/rehearsal.pub" -s "$RUNNER_TEMP/rehearsal.key"
+          fi
 
       - name: Test
-        run: make test
+        run: make test test-release
 
       - name: Build titand with the web UI
         run: make build VERSION=${{ steps.version.outputs.version }}
@@ -71,22 +97,44 @@ jobs:
       - name: Build the image
         # As root mkosi needs no user namespace, which the runner restricts.
         run: |
-          sudo env "PATH=$PATH" VERSION=${{ steps.version.outputs.version }} scripts/make-zip.sh
+          # Generate app notices as the build user: Go's module cache is there.
+          # The prepared tree is passed to the privileged mkosi invocation.
+          VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
 
       - name: Pack the release
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
+      - name: Exercise signing and verification with a disposable key
+        if: github.event_name != 'push'
+        run: |
+          scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
+          python3 scripts/verify-release.py out/release build/mkosi.extra/usr/share/titanos/update-keys
+          rm "$RUNNER_TEMP/rehearsal.key"
+
+      - name: Boot the actual installation ZIP in UEFI QEMU
+        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip --timeout 420
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-boot-log
+          path: out/release-smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - uses: actions/upload-artifact@v7
         with:
-          name: release
+          name: ${{ github.event_name == 'push' && 'release' || 'release-rehearsal' }}
           path: out/release/
           if-no-files-found: error
           retention-days: 7
 
   publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     # The environment asks for an approval and holds the signing key.
     environment: release
     permissions:
@@ -100,7 +148,7 @@ jobs:
           name: release
           path: release
 
-      - name: Sign the manifest
+      - name: Sign manifest, installation ZIP and checksums
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
@@ -114,18 +162,10 @@ jobs:
           key=$(mktemp)
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
-          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -m release/manifest.json \
-            -t "TitanOS ${{ needs.build.outputs.version }}"
+          scripts/sign-release.sh release "$key"
 
       - name: The signature must be one that the image accepts
-        run: |
-          for key in build/mkosi.extra/usr/share/titanos/update-keys/*.pub; do
-            if minisign -V -p "$key" -m release/manifest.json; then
-              exit 0
-            fi
-          done
-          echo "the manifest is not signed by a key that ships in the image" >&2
-          exit 1
+        run: python3 scripts/verify-release.py release build/mkosi.extra/usr/share/titanos/update-keys
 
       - name: Publish
         env:
@@ -139,11 +179,11 @@ jobs:
             echo
             echo "---"
             echo
-            echo "**Installing:** unpack \`titanos-$VERSION.zip\` onto a FAT32 stick named \`TITANOS\`. A running TitanOS finds this release under Settings › Updates."
+            echo "**Installing:** verify \`titanos-$VERSION.zip.minisig\`, then unpack \`titanos-$VERSION.zip\` onto a FAT32 stick named \`TITANOS\`. See the README for prerequisites. For a pre-release, select the Beta channel under Settings › Updates."
             echo
             echo "**License:** Fair Source (FSL-1.1-ALv2). This version is available under Apache-2.0 from $apache."
             echo
-            echo "**Sources:** the image is built from Debian packages, many under the GPL. \`titanos-$VERSION-sources.txt\` links the exact source of each."
+            echo "**Third-party components:** \`titanos-$VERSION-sources.txt\` links the exact packages; \`titanos-$VERSION-licenses.tar.gz\` contains the original notices and version inventory. This includes Debian, firmware, Go, frontend libraries and fonts."
           } > notes.md
           prerelease=
           if [ "$CHANNEL" = beta ]; then prerelease=--prerelease; fi
