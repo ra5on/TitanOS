@@ -337,6 +337,12 @@ func readImage() *Image {
 	return image
 }
 
+// BootSlot returns the slot of the stick this system was started from, or
+// "" if it does not run from a stick (development).
+func BootSlot() string {
+	return parseSlot(readString("/proc/cmdline"))
+}
+
 // parseSlot returns the system slot ("a" or "b") the kernel command line
 // booted from: live-media-path=/titanos/<slot>.
 func parseSlot(cmdline string) string {

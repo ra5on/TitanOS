@@ -13,18 +13,29 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 )
 
 // Store is a directory holding the configuration. All names are slash
 // separated paths relative to that directory.
 type Store struct {
 	dir string
+	// changes counts the writes since titand started.
+	changes atomic.Uint64
 }
 
 // Open returns the store in dir. It does not access the directory.
 func Open(dir string) *Store {
 	return &Store{dir: dir}
 }
+
+// Dir returns the directory of the store.
+func (s *Store) Dir() string { return s.dir }
+
+// Changes returns a number that grows with every change made through the
+// store. The backup of the stick uses it to tell, without waking the
+// stick, whether there is something new to save.
+func (s *Store) Changes() uint64 { return s.changes.Load() }
 
 func (s *Store) path(name string) (string, error) {
 	if !fs.ValidPath(name) || name == "." {
@@ -87,6 +98,7 @@ func (s *Store) Write(name string, data []byte) error {
 	if err := os.Rename(tmp.Name(), p); err != nil {
 		return err
 	}
+	s.changes.Add(1)
 	return syncDir(dir)
 }
 
@@ -108,6 +120,7 @@ func (s *Store) Remove(name string) error {
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	s.changes.Add(1)
 	return syncDir(filepath.Dir(p))
 }
 
@@ -121,6 +134,7 @@ func (s *Store) RemoveAll(name string) error {
 	if err := os.RemoveAll(p); err != nil {
 		return err
 	}
+	s.changes.Add(1)
 	return syncDir(filepath.Dir(p))
 }
 

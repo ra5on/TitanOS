@@ -27,7 +27,7 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 - Bezeichnung: „Fair Source“. Nicht „Open Source“ nennen, solange eine Version noch nicht zu Apache-2.0 gewechselt ist. Lizenzhinweis in README und unter „Einstellungen › Über“.
 - Jede Release-Seite nennt das Datum, ab dem diese Version unter Apache-2.0 steht (Erscheinungsdatum + 2 Jahre).
 - Fremdkomponenten behalten ihre Lizenz (Linux-Kernel, Debian-Pakete: GPL u. a.; noVNC: MPL-2.0; xterm.js, gridstack: MIT). Das Abbild ist eine Zusammenstellung; GPL-Teile bleiben GPL, ihre Quellen werden jedem Release beigelegt bzw. verlinkt (CI). Eigener Code, der GPL-Code ableitet (z. B. Kernelmodule), muss GPL sein.
-- `THIRD_PARTY_LICENSES` im Repo und im Abbild (unter „Einstellungen › Über“ anzeigen).
+- `THIRD_PARTY_LICENSES` im Repo und im Abbild (unter „Einstellungen › Über“ anzeigen). Umgesetzt: „Einstellungen › Über TitanOS“ zeigt Version, Kernel, den Lizenzhinweis (Fair Source, FSL-1.1-ALv2, Apache-2.0 nach zwei Jahren), den Lizenztext und `THIRD_PARTY_LICENSES`; beide Dateien liegen im Abbild unter `/usr/share/titanos/`. Die Liste in `THIRD_PARTY_LICENSES` ist noch von Hand gepflegt, nicht aus den Paketdaten erzeugt.
 - Beiträge nur mit Contributor License Agreement (z. B. per CLA-Bot), damit kommerzielle Lizenzen später möglich bleiben. `CONTRIBUTING.md` erklärt das.
 - Name: „basiert auf Debian“ ist okay, „Debian“ nicht im Produktnamen.
 
@@ -40,15 +40,15 @@ Neues, eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen a
 
 Für diese Punkte gibt es noch keine Entwurfsseite. Vor der Umsetzung kurz mit dem Projektinhaber abstimmen und einen Entwurf vorschlagen.
 
-1. **Backup des Sticks:** automatisches Backup von `/config` auf ein Volume (optional extern) und geführter Ablauf „Stick ersetzen“ (neuen Stick flashen, Konfiguration zurückspielen).
+1. **Backup des Sticks:** automatisches Backup von `/config` auf ein Volume (optional extern) und geführter Ablauf „Stick ersetzen“ (neuen Stick flashen, Konfiguration zurückspielen). Umgesetzt, siehe Web-UI › Sicherung des Sticks.
 2. **Ersteinrichtung:** Assistent beim ersten Start – Sprache, Kontoname und Passwort (Besitzer), Hostname, Netzwerk, Zeitzone, erstes Volume. Umgesetzt als `/welcome` nach dem Anlegen des Besitzerkontos: Sprache, Name des NAS, Zeitzone (Vorschlag aus dem Browser), Blick aufs Netzwerk mit Verweis auf die Einstellungen, danach eine Liste der nächsten Schritte (Volume, Freigabe, Zwei-Faktor, Apps). Das erste Volume wird nicht im Assistenten selbst angelegt, sondern über die Speicher-Seite.
 3. **Netzwerk:** feste IP, Bridge `br0` (für VMs/Container mit eigener IP), VLANs, Bonding, DNS. Änderungen mit Sicherheitsfrist: ohne Bestätigung innerhalb von 2 Minuten automatisch zurück. Umgesetzt, siehe Web-UI › Netzwerk.
 4. **Shares und Nutzer:** Seiten für SMB/NFS-Freigaben, Rechte, Papierkorb, Time-Machine-Unterstützung; Kontoverwaltung mit Rollen. Konzept für Shares abgestimmt, siehe Web-UI › Shares.
-5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest).
+5. **Platten vorbereiten:** Belastungstest neuer Platten vor dem Einbau ins RAID (SMART-Langtest + Schreib-/Lesetest). Umgesetzt, siehe Web-UI › Werkzeuge.
 6. **Benachrichtigungen:** E-Mail und Push (z. B. ntfy, Telegram, Discord) bei Plattenfehlern, Rebuild, vollen Volumes, Updates, Backup-Fehlern. Umgesetzt für Volumes und Platten, siehe Web-UI › Benachrichtigungen. Offen: Meldungen zu Updates und Backups (kommen mit diesen Funktionen).
-7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, Let's-Encrypt-Zertifikat (DNS-Challenge) oder eigenes Zertifikat, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen, siehe Web-UI › Konten und Rechte. Offen: Zertifikate, SSH.
+7. **Sicherheit:** 2FA (TOTP), Sperre nach Fehlversuchen, selbst signiertes Zertifikat oder Import eines eigenen Zertifikats, SSH standardmäßig aus. Umgesetzt: 2FA und die Sperre nach Fehlversuchen (siehe Web-UI › Konten und Rechte), SSH, selbst signiertes Zertifikat und Zertifikatsimport (siehe Web-UI › Zugang). Let's Encrypt ist vorerst zurückgestellt.
 8. **Sprachen:** Deutsch und Englisch von Anfang an, alle Texte über Übersetzungsdateien.
-9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues.
+9. **Diagnose:** Log-Ansicht und „Diagnosepaket erstellen“ (Passwörter, Schlüssel und IPs entfernt) für GitHub-Issues. Umgesetzt, siehe Web-UI › Werkzeuge.
 10. **Dateimanager:** Dateien im Browser auf Shares hochladen (auch ganze Ordner, per Drag-and-drop, große Dateien fortsetzbar), herunterladen, verschieben, umbenennen, löschen; mit den Rechten des angemeldeten Kontos. Konzept abgestimmt, siehe Web-UI › Dateimanager.
 
 Später: Verlaufsgrafiken (CPU, Temperaturen, Netzwerk, Platten), Volume-Verschlüsselung (LUKS), eingebauter Fernzugriff (WireGuard/Tailscale/Cloudflare Tunnel), Energie (Plattenschlaf, Zeitplan, Wake-on-LAN), Befehlspalette (Strg+K), dokumentierte API und CLI.
@@ -62,9 +62,9 @@ TITANOS (FAT32)
 │   ├── loader.conf
 │   └── entries/
 │       ├── titanos-a.conf
-│       └── titanos-b.conf         # erst nach dem ersten Update
+│       └── titanos-b.conf         # erst nach dem ersten Update; auf Probe: titanos-b+3.conf
 ├── titanos/
-│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs
+│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version
 │   └── b/  (Update-Ziel)
 └── config/                        # einzige persistente Daten: Volumes, Shares, Nutzer, Apps, Netzwerk
 ```
@@ -140,6 +140,20 @@ GitHub Actions baut bei jedem Tag und lädt das Zip als Release hoch.
 - UI: Kanal Stable/Beta, Changelog vor dem Update, „Jetzt aktualisieren“ oder Zeitplan, Anzeige des aktiven und des Rückfall-Slots, „Auf vorherige Version zurück“.
 - Signierschlüssel: privater Schlüssel nur als Secret in einem geschützten GitHub-Environment mit manueller Freigabe (oder offline signieren). Verlust oder Diebstahl des Schlüssels ist der schwerste Sicherheitsfall des Projekts; Schlüsselwechsel muss per Update vorbereitet sein (zweiter öffentlicher Schlüssel im Abbild).
 
+### Stand der Umsetzung (Paket `update`, Seite Einstellungen › Updates)
+
+- **Release-Dateien** (`scripts/make-release.sh`, Workflow `release.yml`, Anleitung `docs/RELEASING.md`): das Zip für einen neuen Stick, die drei Dateien eines Slots einzeln (`titanos-<version>-vmlinuz`, `-initrd.img`, `-filesystem.squashfs`), `manifest.json` mit Signatur und eine Liste der Debian-Quellpakete mit Links auf snapshot.debian.org. Ein NAS lädt die drei Slot-Dateien direkt in den freien Slot auf dem Stick – ohne Zwischenablage im RAM oder auf einem Volume, mit Prüfung von Größe und SHA-256 und Wiederaufnahme nach einem Abbruch (HTTP-Range).
+- **Manifest:** `version`, `tag`, `channel` (stable/beta), `kernel`, `released`, `minVersion`, `changelog`, `cmdline` (Kernel-Kommandozeile des Boot-Eintrags mit `@SLOT@`) und `files`. Es wird nur angenommen, wenn es von einem Schlüssel aus `/usr/share/titanos/update-keys/*.pub` signiert ist (Paket `minisign`, gemeinsam mit den Plugins). **Im Abbild liegt noch kein Schlüssel** – den legt der Projektinhaber an. Bis dahin installiert TitanOS keine Updates und sagt das auf der Seite. Ein Installieren ohne Signatur gibt es nicht, auch nicht von Hand.
+- Stable: `releases/latest/download/manifest.json`. Beta: neuester Eintrag aus `releases.atom`, dann dessen Manifest – ohne die GitHub-API.
+- **Boot-Einträge:** `loader/loader.conf` hat kein `default` mehr. systemd-boot startet den ersten Eintrag in seiner Reihenfolge, der noch Versuche hat; mit festem `default` würde er einen Eintrag auch dann starten, wenn er ihn aufgegeben hat. Die Reihenfolge bestimmt der `sort-key`: `titanos-1` für den Slot, der starten soll, `titanos-2` für den Rückfall. Ein neuer Slot bekommt den Eintrag `titanos-<slot>+3.conf` (drei Versuche).
+- **Bestätigung:** Die Einheit `titanos-boot-check.service` ruft `titand -check-boot` auf. Das tut nichts, wenn der Eintrag des laufenden Slots keinen Zähler trägt. Sonst wartet es bis zu fünf Minuten darauf, dass titand „bereit“ meldet (`/api/v1/health`: Konfiguration gelesen, Volumes versorgt und – nach einem Update – jedes Volume wieder eingebunden, das vor dem Update eingebunden war), und benennt den Eintrag dann in `titanos-<slot>.conf` um. Schlägt es fehl, startet die Einheit das NAS neu (`FailureAction=reboot`); nach dem dritten Versuch startet der Loader wieder den alten Slot. TitanOS macht das selbst und braucht `systemd-bless-boot` nicht (das Debian-Paket dazu brächte Dienste mit, die bei jedem Start auf den Stick schreiben).
+- Was mit dem nächsten Neustart ansteht, steht in `/config/system/update-pending.json` (mit der Boot-ID, damit ein Neustart von titand nichts entscheidet). Nach dem Neustart meldet titand „installiert“, „fehlgeschlagen“ oder „zurückgewechselt“.
+- **Zurück auf die vorherige Version:** tauscht die `sort-key` der beiden Einträge; auch das läuft auf Probe. Vor dem Neustart lässt sich jeder Wechsel zurücknehmen („Doch nicht“).
+- Einstellungen in `/config/system/update.json`: Kanal, „von selbst installieren“ mit Uhrzeit. TitanOS sucht einmal am Tag. Das Feld `source` (nicht in der Oberfläche) zeigt auf eine andere Adresse als GitHub, für Spiegel und Tests; die Signatur wird trotzdem geprüft.
+- Getestet in QEMU mit einem nachgebauten Release-Server und einem Wegwerf-Schlüssel: Update 1.0.0 → 1.1.0 mit abgebrochenem und fortgesetztem Download, Start aus Slot B, Bestätigung nach rund 20 Sekunden, zurück auf 1.0.0; ein Release mit fremder Signatur wird abgelehnt; ein Release, dessen System nie hochkommt, wird nach drei Fehlstarts aufgegeben, das NAS startet wieder das alte System und meldet den Fehlschlag; ein Release, in dem nur titand nicht startet, startet sich dreimal selbst neu und ist nach 17 Minuten ohne jedes Zutun wieder beim alten System.
+- Nicht getestet: der Workflow `release.yml` selbst (er läuft erst mit einem Tag und dem Schlüssel des Projektinhabers), Updates von echtem GitHub, ein echter Stick.
+- Noch offen: Der Boot-Loader selbst (`EFI/BOOT/BOOTX64.EFI`) wird von Updates nicht ersetzt. Plugins werden mit einem Update noch nicht mitgeladen. Ein Update aus einer Datei von Hand gibt es nicht.
+
 ## Testen
 
 - QEMU mit OVMF (UEFI). Stick-Inhalt als FAT-Laufwerk: entweder `-drive file=fat:rw:<ordner>` (vvfat, Schreibzugriff experimentell) oder ein per mtools erzeugtes FAT-Image.
@@ -173,7 +187,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Konten, Passwort-Hashes (argon2id) und 2FA-Geheimnisse in `/config/users/`. Anmeldeschutz gegen Durchprobieren.
 - Umgesetzt: Zwei-Faktor-Anmeldung mit TOTP (RFC 6238, sechs Stellen, 30 Sekunden, ±1 Schritt, jeder Code nur einmal) und acht Wiederherstellungscodes, von denen nur Hashes gespeichert werden. Das Geheimnis gilt erst, wenn ein Code daraus geprüft wurde. Der Code wird beim Anmelden nach dem richtigen Passwort verlangt, außerdem bei der erneuten Bestätigung vor Konsolen und zum Ausschalten. Administratoren können den zweiten Faktor eines anderen Kontos zurücksetzen (alle seine Anmeldungen enden dabei).
 - Umgesetzt: Seite „Mein Konto“ (`/account`) mit Passwort, Zwei-Faktor-Anmeldung und „Angemeldete Geräte“ (Anmeldungen liegen nur im Speicher von titand; einzelne lassen sich beenden).
-- Noch offen: SSH-Schlüssel und SSH-Zugang überhaupt, eigenes bzw. Let's-Encrypt-Zertifikat.
+- Umgesetzt: SSH-Schlüssel je Konto unter „Mein Konto“ (`sshKeys` in `account.json`, eine Zeile je Schlüssel, Optionen vor dem Schlüssel werden abgelehnt), SSH-Zugang und eigenes Zertifikat, siehe „Zugang“.
 
 **Dashboard mit frei anpassbaren Kacheln**
 - Raster aus 12 Spalten mit festen Zeilenhöhen. Kacheln rasten auf Spalten/Zeilen ein, keine freien Pixelgrößen.
@@ -193,6 +207,62 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Technisch: alle Werte als CSS-Variablen (`--bg`, `--surface`, `--header`, `--border`, `--text`, `--muted`, `--track`, `--chip`, `--accent`, `--on-accent`, `--surface-alpha`, `--glass-blur`, `--glass-shine`, `--radius-tile`, `--radius-ctl`, `--font-scale`), Theme als `data-theme`, Stil als `data-surface="flat|glass|outline"` auf `<html>`. Kein hart codierter Farbwert oder Radius in Komponenten.
 - Statusfarben sind in allen Themes gleich: OK grün, Warnung gelb, Fehler rot, inaktiv grau. Status nie nur über Farbe, immer mit Text.
 - Kontrast mindestens 4,5:1 für Text in jedem Theme.
+
+**Backups** (Einstellungen › Backups, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `backup`, Werkzeug restic (Debian-Paket, rund 24 MB). Ein Auftrag sichert Freigaben an ein Ziel: anderes Volume dieses NAS (nie dasselbe wie das der Freigaben), S3-kompatibler Speicher, ein Server über SFTP oder ein restic-REST-Server. Aufträge in `/config/backup/jobs.json`.
+- Jeder Auftrag bekommt beim Anlegen ein zufälliges Passwort, mit dem restic verschlüsselt. Die Seite zeigt es direkt danach und später nach erneuter Passwort-Eingabe – ohne dieses Passwort ist ein Backup wertlos, wenn das NAS verloren geht. Geheimnisse des Ziels (Secret Key, Passwort des REST-Servers) gibt die API nie heraus; sie stehen nur in der Umgebung von restic, nie auf einer Kommandozeile.
+- SFTP: Das NAS hat einen eigenen Schlüssel (`/config/backup/ssh/id_ed25519`), den die Seite zum Eintragen auf dem Server zeigt. Der Server wird beim ersten Verbinden gemerkt (`known_hosts`); meldet sich später ein anderer unter dem Namen, bricht das Backup ab. Während eines Laufs liegen Schlüssel und `known_hosts` in `/run/titanos-backup`.
+- Zeitplan täglich oder wöchentlich zu einer Uhrzeit; ein verpasster Termin wird nach dem Start nachgeholt, das erste Backup beginnt gleich nach dem Anlegen. Aufbewahren: je der neueste von N Tagen, Wochen, Monaten (`restic forget --prune`). Ein Auftrag nach dem anderen.
+- Ausgelassen werden `.recycle` und halbe Uploads (`*.titanos-part`). Der Cache von restic und was ein Auftrag über seine Läufe weiß, liegen auf dem Volume der ersten Freigabe (`.titanos/backup/`), nicht im RAM und nicht auf dem Stick.
+- Wiederherstellen: ein Stand in einen neuen Ordner `/mnt/<volume>/restored/<auftrag>-<zeit>/`, nie über die Freigabe. Was man braucht, holt man sich von dort.
+- Abbrechen beendet restic samt ssh (eigene Prozessgruppe). Fehlgeschlagene Läufe ergeben eine Meldung (`backup_failed`); konnte restic einzelne Dateien nicht lesen, gilt das Backup mit Warnung.
+- Getestet in QEMU: Backup auf ein zweites Volume, zweiter Lauf, Wiederherstellen (Prüfsumme gleich, Freigabe unberührt), das Passwort öffnet das Repository auch von Hand, SFTP zum NAS selbst mit dessen Schlüssel, unerreichbarer Server. Nicht getestet: S3 und REST-Server gegen echte Dienste (nur Adresse und Umgebung im Unit-Test).
+- Noch offen: einzelne Dateien statt ganzer Stände wiederherstellen, Backups von Docker-Appdata und VMs (geht über Freigaben, aber nicht ausdrücklich angeboten), Prüfen eines Repositorys (`restic check`), Bandbreite begrenzen.
+
+**USV** (Einstellungen › USV; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `ups`, Debian-Pakete `nut-server` und `nut-client` (NUT 2.8). Drei Arten: keine USV, USV am Kabel dieses NAS (Treiber `usbhid-ups` für die meisten USB-Geräte, dazu `nutdrv_qx`, `blazer_usb`, `blazer_ser`, `apcsmart`; „Nach USV am USB suchen“ mit `nut-scanner`), oder eine USV, die ein anderes Gerät per NUT im Netz teilt. Einstellungen in `/config/system/ups.json`.
+- titand schreibt `/etc/nut/*` bei jedem Start und jeder Änderung (Modus 0640, Gruppe `nut`) und startet die Dienste selbst; ab Werk laufen sie nicht. Das Konto, mit dem upsmon auf diesem NAS liest, bekommt bei jedem Start ein neues Passwort.
+- Herunterfahren: Meldet die USV „Batterie fast leer“, fährt upsmon das NAS herunter (`systemctl poweroff`: VMs, Container, Freigaben und Volumes werden sauber beendet). Wahlweise schon nach N Minuten auf Batterie; dann löst titand das aus (`upsmon -c fsd`, damit auch Geräte herunterfahren, die diese USV über das NAS beobachten).
+- „Anderen Geräten im Netzwerk mitteilen“: upsd lauscht dann im Netz, mit dem Konto `monitor` und einem festen Passwort, das die Seite für die Einrichtung der anderen Geräte zeigt. Sonst nur auf 127.0.0.1.
+- Meldungen: auf Batterie, Strom wieder da, Batterie fast leer, fährt herunter, keine Verbindung zur USV. titand fragt alle zehn Sekunden mit `upsc`.
+- Getestet in QEMU mit dem Treiber `dummy-ups` (spielt eine USV aus einer Datei): Zustand und Werte auf der Seite, Anmeldung eines anderen Geräts, Herunterfahren nach einer Minute auf Batterie und durch NUT bei fast leerer Batterie. Nicht getestet: eine echte USV, der Modus „über das Netzwerk“ gegen einen fremden NUT-Server.
+
+**Zugang** (Einstellungen › Zugang; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- **SSH** (Paket `sshd`, Debian-Pakete `openssh-server` und `sudo`): ab Werk aus, der Dienst ist im Abbild abgeschaltet. Einstellung in `/config/system/ssh.json`; titand startet und stoppt `ssh.service` selbst.
+  - Anmelden können sich nur Besitzer und Administratoren, die unter „Mein Konto“ einen Schlüssel hinterlegt haben – unter ihrem eigenen Namen, nie mit Passwort, nie als root (`sshd_config.d/10-titanos.conf`: `AllowGroups titanos-ssh`, `PasswordAuthentication no`, `PermitRootLogin no`).
+  - titand schreibt die Schlüssel nach `/etc/ssh/authorized_keys/<konto>` (gehört root: ein Konto kann sich nicht selbst weitere Schlüssel geben), setzt für diese Konten Shell und Heimatverzeichnis (`/home/<konto>`, im RAM) und nimmt sie in die Gruppe `titanos-ssh` auf. Die Gruppe darf `sudo` ohne Passwort – die Konten haben kein Linux-Passwort, nach dem sudo fragen könnte.
+  - Verliert ein Konto Rolle oder Schlüssel oder wird SSH ausgeschaltet, endet auch eine offene Sitzung (`loginctl terminate-user`).
+  - Der Schlüssel des NAS selbst liegt in `/config/ssh/host_ed25519` und wird beim ersten Einschalten erzeugt. Die beim Bau des Abbilds erzeugten Host-Schlüssel werden gelöscht – sie wären sonst auf jedem TitanOS dieselben.
+  - Wer einen Schlüssel hat, kommt ohne zweiten Faktor hinein und hat volle Rechte. Die Seite sagt das.
+- **Zertifikat** (`tlscert.Manager`): TitanOS erstellt ab Werk ein selbst signiertes. Ein eigenes Zertifikat samt Kette und Schlüssel (PEM) lässt sich hinterlegen; es wird geprüft (Schlüssel passt, gültig, nennt Hostnamen, ist kein CA-Zertifikat), in `/config/tls/custom-*.pem` gespeichert und sofort verwendet, ohne Neustart. Der Schlüssel wird nie wieder herausgegeben. Ist das eigene Zertifikat abgelaufen, greift beim nächsten Start wieder das selbst signierte; 14 Tage vorher gibt es eine Meldung.
+- Im Abbild sind `/etc` und die Dateien aus `mkosi.extra` nicht mehr für die Gruppe schreibbar (`chmod -R go-w` im Postinst). Vorher trugen sie die Rechte des Arbeitsverzeichnisses, aus dem gebaut wurde; sshd verweigert unter einem solchen `/etc` die Arbeit.
+- Let's Encrypt per DNS-Challenge ist vorerst zurückgestellt; selbst signiertes Zertifikat und Import eigener Zertifikate reichen für den aktuellen Umfang.
+- Noch offen: Fingerabdrücke der Schlüssel im Protokoll einer Anmeldung, SSH nur aus bestimmten Netzen.
+
+**Werkzeuge** (Reiter „Werkzeuge“, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `diagnose`.
+- **Protokoll:** Zeilen aus dem Journal (`journalctl -o json`), wählbar nach Quelle (alles, titand, Kernel, Platten und RAID, Freigaben, Docker, VMs, Netzwerk), Stufe und Suchtext; „Mitlaufen“ holt alle drei Sekunden nach, was seit dem letzten Stand dazukam (Cursor des Journals). Das Journal liegt im RAM (32 MB) und beginnt mit jedem Start neu.
+- titand schreibt seine Zeilen mit der Stufe, wie journald sie liest (`<3>` Fehler, `<4>` Warnung), damit die Auswahl „Nur Fehler“ auch für titand stimmt.
+- **Diagnosepaket:** Zip mit `README.txt`, `system.txt`, `journal.txt`, `kernel.txt`, `storage.txt`, `network.txt`, `hardware.txt` (aus `/sys` gelesen; `lspci` und `lsusb` sind nicht im Abbild), `docker.txt`, `vms.txt` und `config/` mit den Einstellungen von Volumes, Freigaben, Netzwerk, Docker, System, Plugins und VMs. Es entsteht beim Klick, wird direkt heruntergeladen und nirgends hingeschickt.
+- Ersetzt werden (`redact.go`): IPv4- und IPv6-Adressen, MAC-Adressen, E-Mail-Adressen, der Name des NAS (außer dem Namen ab Werk), Kontonamen, `schlüssel=wert` mit Passwort/Token/Secret/Key im Namen, Anmeldedaten in Adressen, Bearer-Tokens, PEM-Blöcke, SSH-Schlüssel, lange Hex-Ketten. Dieselbe Adresse bekommt im ganzen Paket denselben Platzhalter (`<ip-1>`), damit die Protokolle lesbar bleiben.
+- Nie im Paket: `users/`, `apps/` (nur die Liste der App-Namen), `tls/`, `notify/` (dort sind die Adressen selbst das Geheimnis), Dateien der Nutzer. Namen von Freigaben, Containern und VMs bleiben; die Seite weist darauf hin, das Paket vor dem Anhängen durchzusehen.
+- **Platten vorbereiten** (`storage/disktest.go`): prüft Platten, die in keinem Volume stecken, nicht eingebunden sind und keiner VM gehören. Zwei Arten: „Nur lesen“ (Daten bleiben) und „Überschreiben und zurücklesen“ (löscht alles, verlangt den Namen der Platte als Bestätigung). Danach lässt TitanOS die Platte ihren langen SMART-Selbsttest machen und vergleicht die Fehlerzähler vorher und nachher.
+  - Geschrieben und gelesen wird am Seitencache vorbei (`O_DIRECT`) und exklusiv (`O_EXCL`: der Kernel verweigert das Öffnen, wenn etwas anderes die Platte hält), in Stücken von 4 MiB. Jeder 4-KiB-Block trägt seine eigene Position, damit auch Daten auffallen, die an der falschen Stelle landen. Nach 64 fehlerhaften Stellen bricht die Prüfung ab.
+  - Nach dem Überschreiben (auch nach einem Abbruch) werden Anfang und Ende der Platte geleert, damit nichts wie eine Partitionstabelle aussieht.
+  - Durchgefallen ist eine Platte bei Schreib-, Lese- oder Vergleichsfehlern, bei fehlgeschlagenem Selbsttest, wenn sie sich selbst als fehlerhaft meldet oder wenn defekte bzw. schwebende Sektoren dazugekommen sind. Ohne SMART (virtuelle Platte, mancher USB-Adapter) wird der Selbsttest übersprungen und das vermerkt.
+  - Eine Platte in Prüfung ist für alles andere gesperrt (Volume anlegen, Platte hinzufügen, VM); am Ende gibt es eine Meldung. Prüfungen liegen im Speicher von titand und überstehen keinen Neustart.
+  - Getestet in QEMU, auch mit einer Platte, die an einer Stelle Lesefehler liefert (blkdebug). Der SMART-Teil ist nur mit aufgezeichneten Antworten im Unit-Test geprüft: Virtuelle Platten kennen kein SMART.
+- Platten, die einer VM als Ganzes gehören, nimmt TitanOS weder in ein Volume noch in eine Prüfung. Umgekehrt bleibt eine solche Platte für die VM nutzbar, nachdem der Gast sie formatiert hat (vorher galt sie dann als „belegt“ und die VM startete nicht mehr).
+- Noch offen unter „Werkzeuge“: SMART-Werte je Platte im Diagnosepaket, eine Prüfung über einen Neustart hinweg fortsetzen.
+
+**Sicherung des Sticks** (Einstellungen › Sicherung des Sticks und die Ersteinrichtungsseite; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
+- Paket `configbackup`. Eine Sicherung ist eine Datei `config-<Zeit>-<Prüfsumme>.tar.gz` in `/mnt/<volume>/.titanos/backups` (Ordner nur für root) mit allem aus `/config`, also auch Passwort-Hashes, 2FA-Geheimnissen und den `.env`-Dateien der Apps. Die erste Datei im Archiv, `titanos-backup.json`, nennt Format, Zeit, Name des NAS und Version.
+- Ab Werk eingeschaltet, Ziel ist das erste eingebundene Volume (oder ein gewähltes), 14 Kopien bleiben. Einstellungen in `/config/system/backup.json`.
+- Gesichert wird einmal nach jedem Start und fünf Minuten nach der letzten Änderung. Ob sich etwas geändert hat, sagt ein Zähler im `config.Store` (jeder Schreibzugriff zählt hoch) – der Stick wird dafür nicht geweckt. Eine neue Datei entsteht nur, wenn sich der Inhalt von der neuesten Kopie unterscheidet. Ist das Ziel-Volume nicht eingebunden, wird nichts geschrieben (der Ordner läge sonst im RAM).
+- Herunterladen einer Kopie („optional extern“) nur für Besitzer und Administratoren und erst nach erneuter Passwort-Eingabe, wie bei Konsolen. Schlägt eine Sicherung fehl, gibt es eine Meldung (`config_backup_failed`).
+- **Stick ersetzen:** neuen Stick mit dem Zip bespielen und starten. Solange es kein Konto gibt, bietet die Ersteinrichtungsseite „Konfiguration wiederherstellen“ an. TitanOS kennt auf einem neuen Stick seine Volumes nicht; es sieht deshalb in alle laufenden md-Arrays mit ext4 oder XFS hinein – nur lesend und ohne das Journal nachzuspielen (`ro,noload` bzw. `ro,norecovery`), unter `/run/titanos-restore`, und hängt sie sofort wieder aus. Alternativ lässt sich eine heruntergeladene Kopie hochladen. Danach startet das NAS neu.
+- Das Wiederherstellen braucht keine Anmeldung (es gibt noch kein Konto) und ist nur möglich, solange keines existiert. Es verschafft niemandem Zugang: Es bringt die Konten der Sicherung zurück. Eine Sicherung wird vollständig geprüft, bevor etwas geschrieben wird (nur gewöhnliche Dateien mit Pfaden innerhalb von `/config`, mindestens ein Konto, Obergrenzen für Größe und Anzahl); die Konten werden zuletzt geschrieben, damit ein abgebrochener Vorgang wiederholt werden kann.
+- Nicht umgesetzt: Zurückspielen eines älteren Stands auf ein laufendes, eingerichtetes NAS; Sicherung auf ein Ziel außerhalb des NAS ohne Zutun (kommt mit den Backups in Phase 7); ein Hinweis, wenn der Stick selbst Lesefehler zeigt.
 
 **Benachrichtigungen** (Glocke „Meldungen“ in der Kopfzeile und Einstellungen › Benachrichtigungen; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `notify`. Jede Meldung hat eine Art (`volume_degraded`, `disk_unhealthy`, …), einen Betreff (Volume oder Platte) und eine Stufe (Hinweis, Warnung, Fehler). titand behält die letzten 100 Meldungen im Speicher; nach einem Neustart ist die Liste leer. Sichtbar für Besitzer und Administratoren.
@@ -400,7 +470,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 4. **Shares:** Samba, NFS, Nutzer und Rechte; danach der Dateimanager (braucht Shares und Rechte).
 5. **Docker:** Engine, Container-Liste, Container-Editor (Formular ↔ Compose), Vorlagen und App-Katalog.
 6. **VMs und Hardware:** libvirt/QEMU, OVMF, VFIO-Passthrough, noVNC, Hardware-Seite (iGPU/NPU/NVIDIA), Plugin-System (sysext) mit NVIDIA-Plugin.
-7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT).
+7. **Betrieb:** A/B-Updates aus der UI, Backups (restic/kopia → S3/Cloud/anderer Server), Benachrichtigungen, SMART-Überwachung, USV (NUT). Umgesetzt: Updates, Backups (restic), Benachrichtigungen, SMART-Überwachung (Meldungen bei Fehlern und Hitze, Plattentest), USV (NUT).
 
 ## Regeln
 

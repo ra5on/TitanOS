@@ -63,6 +63,24 @@ CONF
 # keeps here and has to be able to write.
 chown -R libvirt-qemu /var/lib/swtpm-localca
 
+# What mkosi.extra brought in carries the permissions of the checkout it
+# was built from, which may be writable for the group. Nothing in /etc or
+# among the units is meant to be; sshd even refuses to work below such a
+# directory.
+chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
+    /usr/lib/systemd/system/titanos-boot-check.service \
+    /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos
+
+# SSH is off: titand starts it when an administrator switches it on. The
+# keys made while the package was installed would be the same on every
+# TitanOS; each NAS gets its own from /config instead. Whoever may log in
+# is in the group titanos-ssh (see sshd_config.d and sudoers.d).
+systemctl disable ssh.service ssh.socket 2>/dev/null || true
+rm -f /etc/ssh/ssh_host_*
+groupadd --system titanos-ssh
+install -d -m 0755 /etc/ssh/authorized_keys
+chmod 0440 /etc/sudoers.d/titanos
+
 # No RAID tools in the initramfs. The system boots from the stick, never from
 # an array. Without mdadm the arrays stay untouched until the real system is
 # up, and live-boot, which may look for the stick among all block devices,

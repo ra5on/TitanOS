@@ -3,23 +3,31 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -27,10 +35,13 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/update"
+	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
@@ -52,7 +63,25 @@ func main() {
 	flag.BoolVar(&opts.dev, "dev", false, "development mode: plain HTTP on -dev-listen, no reboot or poweroff")
 	flag.StringVar(&opts.devAddr, "dev-listen", "127.0.0.1:8080", "address in development mode")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
 	flag.Parse()
+
+	if *checkBoot {
+		// Only a system the boot loader started on trial has to prove itself.
+		trial := update.NewManager(config.Open(opts.configDir), version.Version, system.BootSlot())
+		if !trial.OnTrial() {
+			return
+		}
+		if err := waitReady(opts.httpsAddr, 5*time.Minute); err != nil {
+			fmt.Fprintln(os.Stderr, "titand is not ready, this system stays on trial:", err)
+			os.Exit(1)
+		}
+		if err := trial.Bless(); err != nil {
+			fmt.Fprintln(os.Stderr, "could not mark this system good:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *showVersion {
 		fmt.Println(version.Version)
@@ -65,7 +94,33 @@ func main() {
 	}
 }
 
+// journalWriter marks each log line with its level the way journald reads
+// it from a service's output ("<3>" is an error), so that the log view
+// can tell errors and warnings of titand from the rest.
+type journalWriter struct{ out io.Writer }
+
+func (w journalWriter) Write(line []byte) (int, error) {
+	prefix := "<6>"
+	switch {
+	case bytes.HasPrefix(line, []byte("ERROR")):
+		prefix = "<3>"
+	case bytes.HasPrefix(line, []byte("WARN")):
+		prefix = "<4>"
+	case bytes.HasPrefix(line, []byte("DEBUG")):
+		prefix = "<7>"
+	}
+	if _, err := w.out.Write(append([]byte(prefix), line...)); err != nil {
+		return 0, err
+	}
+	return len(line), nil
+}
+
 func run(opts options) error {
+	if !opts.dev {
+		// The journal keeps the time itself.
+		log.SetFlags(0)
+		log.SetOutput(journalWriter{os.Stderr})
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -138,12 +193,16 @@ func run(opts options) error {
 		}
 		var free []string
 		for _, disk := range status.Disks {
-			if disk.Role == "free" {
+			// A disk a guest has put a file system on is still one the
+			// NAS does not use.
+			if (disk.Role == storage.RoleFree || disk.Role == storage.RoleUsed) && !disk.Mounted && !disk.Testing {
 				free = append(free, disk.Name)
 			}
 		}
 		return free
 	}
+	// And a disk a VM uses is never overwritten by a disk test.
+	volumes.Claimed = machines.ClaimedDisks
 	go machines.Run(ctx, volumes.Mounted)
 
 	// System extensions on a volume, laid over the system once it is mounted.
@@ -168,10 +227,128 @@ func run(opts options) error {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
+	volumes.OnTestDone = func(test storage.DiskTest) {
+		disk := test.Disk
+		if test.Serial != "" {
+			disk += " (" + test.Model + ", " + test.Serial + ")"
+		}
+		switch test.Result {
+		case storage.TestPassed:
+			notifier.Notify(notify.Info, "disk_test_passed", disk)
+		case storage.TestFailed:
+			notifier.Notify(notify.Error, "disk_test_failed", disk)
+		}
+	}
+
+	// Copies of /config on a volume: the stick is the only place where
+	// the configuration lives, and sticks wear out.
+	stickBackup := configbackup.NewManager(store, version.Version)
+	stickBackup.Disabled = opts.dev
+	if err := stickBackup.Load(); err != nil {
+		slog.Warn("backup settings not readable from /config", "err", err)
+	}
+	// A failure is reported once, and again only after a backup worked.
+	backupFailed := false
+	stickBackup.OnResult = func(volume string, err error) {
+		if err != nil && !backupFailed {
+			notifier.Notify(notify.Warning, "config_backup_failed", volume)
+		}
+		backupFailed = err != nil
+	}
+	go stickBackup.Run(ctx, volumes.Mounted)
+
+	// SSH is off unless switched on; then for administrators with a key.
+	access := sshd.NewManager(store, shares.UsersGID)
+	access.Disabled = opts.dev
+	if err := access.Load(); err != nil {
+		slog.Warn("SSH settings not readable from /config", "err", err)
+	}
+	go access.Run(ctx, users.List)
+
+	// The certificate of the web UI: the administrator's own or one made here.
+	var certs *tlscert.Manager
+	if !opts.dev {
+		hostname, _ := os.Hostname()
+		var err error
+		certs, err = tlscert.NewManager(store, hostname)
+		if certs == nil {
+			return fmt.Errorf("TLS certificate: %w", err)
+		}
+		if err != nil {
+			slog.Warn("using a temporary TLS certificate", "err", err)
+		}
+		go watchCertificate(ctx, certs, notifier)
+	}
 
 	var power system.Power = system.SystemdPower{}
 	if opts.dev {
 		power = system.NoPower{}
+	}
+
+	// New versions go into the other slot of the stick and start on trial.
+	slot := system.BootSlot()
+	updates := update.NewManager(store, version.Version, slot)
+	updates.Disabled = opts.dev || slot == ""
+	updates.Mounted = volumes.Mounted
+	updates.Reboot = power.Reboot
+	updates.OnEvent = func(kind, subject string) {
+		severity := notify.Info
+		if kind == "update_failed" {
+			severity = notify.Error
+		}
+		notifier.Notify(severity, kind, subject)
+	}
+	if err := updates.Load(); err != nil {
+		slog.Warn("update settings not readable from /config", "err", err)
+	}
+	updates.Confirm()
+	go updates.Run(ctx)
+	// Backups of shares to another volume, another server or the cloud.
+	backups := backup.NewManager(store)
+	backups.Disabled = opts.dev
+	backups.Sources = func() []backup.Source {
+		mounted := volumes.Mounted()
+		sources := []backup.Source{}
+		for _, share := range folders.List() {
+			if slices.Contains(mounted, share.Volume) {
+				sources = append(sources, backup.Source{Name: share.Name, Volume: share.Volume, Path: folders.Path(share)})
+			}
+		}
+		return sources
+	}
+	backups.OnResult = func(job string, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "backup_failed", job)
+		}
+	}
+	if err := backups.Load(); err != nil {
+		slog.Warn("backup jobs not readable from /config", "err", err)
+	}
+	go backups.Run(ctx)
+
+	// The UPS: on battery the NAS shuts down cleanly before it is empty.
+	supply := ups.NewManager(store)
+	supply.Disabled = opts.dev
+	supply.Poweroff = power.Poweroff
+	supply.OnEvent = func(kind, subject string) {
+		severity := notify.Warning
+		switch kind {
+		case "ups_online":
+			severity = notify.Info
+		case "ups_low_battery", "ups_shutdown":
+			severity = notify.Error
+		}
+		notifier.Notify(severity, kind, subject)
+	}
+	if err := supply.Load(); err != nil {
+		slog.Warn("UPS settings not readable from /config", "err", err)
+	}
+	go supply.Run(ctx)
+
+	// The license texts lie in the image; in development mode in the repository.
+	shareDir := "/usr/share/titanos"
+	if opts.dev {
+		shareDir = "."
 	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
@@ -189,9 +366,17 @@ func run(opts options) error {
 		Plugins:       extensions,
 		Network:       connection,
 		Notify:        notifier,
+		ConfigBackup:  stickBackup,
+		Diagnose:      diagnose.NewManager(store, version.Version),
+		SSH:           access,
+		Update:        updates,
+		Backup:        backups,
+		UPS:           supply,
+		Certificate:   certs,
 		Settings:      settings,
 		Power:         power,
 		Version:       version.Version,
+		ShareDir:      shareDir,
 		SecureCookies: !opts.dev,
 	})
 
@@ -212,16 +397,8 @@ func run(opts options) error {
 		serve(newServer(opts.devAddr, handler), false)
 		slog.Info("titand started in development mode", "version", version.Version, "listen", opts.devAddr, "config", opts.configDir, "webui", webui.Embedded)
 	} else {
-		hostname, _ := os.Hostname()
-		cert, err := tlscert.LoadOrCreate(store, hostname)
-		if len(cert.Certificate) == 0 {
-			return fmt.Errorf("TLS certificate: %w", err)
-		}
-		if err != nil {
-			slog.Warn("using a temporary TLS certificate", "err", err)
-		}
 		https := newServer(opts.httpsAddr, handler)
-		https.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		https.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
 			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
@@ -247,6 +424,56 @@ func run(opts options) error {
 		err = nil
 	}
 	return err
+}
+
+// waitReady asks the running titand until it says it is ready. A system
+// that was just updated is only marked good after that.
+func waitReady(httpsAddr string, patience time.Duration) error {
+	_, port, err := net.SplitHostPort(httpsAddr)
+	if err != nil {
+		return err
+	}
+	// The certificate is the NAS's own, and this never leaves the machine.
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	deadline := time.Now().Add(patience)
+	last := errors.New("no answer")
+	for time.Now().Before(deadline) {
+		res, err := client.Get("https://" + net.JoinHostPort("127.0.0.1", port) + "/api/v1/health")
+		if err == nil {
+			var health struct{ Ready bool }
+			err = json.NewDecoder(res.Body).Decode(&health)
+			res.Body.Close()
+			if err == nil && health.Ready {
+				return nil
+			}
+			if err == nil {
+				err = errors.New("the configuration or a volume of before is not there yet")
+			}
+		}
+		last = err
+		time.Sleep(3 * time.Second)
+	}
+	return last
+}
+
+// watchCertificate warns once when an own certificate is about to run
+// out: unlike the one TitanOS makes, nobody renews it by itself.
+func watchCertificate(ctx context.Context, certs *tlscert.Manager, notifier *notify.Manager) {
+	ticker := time.NewTicker(12 * time.Hour)
+	defer ticker.Stop()
+	warned := ""
+	for {
+		info := certs.Info()
+		if info.Kind == tlscert.KindCustom && time.Until(info.NotAfter) < 14*24*time.Hour && warned != info.Fingerprint {
+			warned = info.Fingerprint
+			notifier.Notify(notify.Warning, "certificate_expiring", info.NotAfter.Format(time.DateOnly))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func newServer(addr string, handler http.Handler) *http.Server {

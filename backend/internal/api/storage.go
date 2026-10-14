@@ -22,6 +22,8 @@ var storageErrors = []struct {
 	{storage.ErrInvalidFS, http.StatusBadRequest, "invalid_filesystem"},
 	{storage.ErrTooFewDisks, http.StatusBadRequest, "too_few_disks"},
 	{storage.ErrDiskUnavailable, http.StatusConflict, "disk_unavailable"},
+	{storage.ErrTestRunning, http.StatusConflict, "disk_test_running"},
+	{storage.ErrNoTest, http.StatusNotFound, "disk_test_not_found"},
 	{storage.ErrDiskTooSmall, http.StatusBadRequest, "disk_too_small"},
 	{storage.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
@@ -156,4 +158,33 @@ func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDiskTests lists the tests of disks that run or have finished.
+func (s *Server) handleDiskTests(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"tests": s.opts.Storage.Tests()})
+}
+
+// handleDiskTestStart begins the test of a disk. Overwriting it needs its
+// name once more.
+func (s *Server) handleDiskTestStart(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Disk, Mode, Confirm string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Storage.StartTest(r.Context(), req.Disk, req.Mode, req.Confirm); err != nil {
+		writeStorageError(w, r, "test disk", err)
+		return
+	}
+	slog.Info("disk test requested", "disk", req.Disk, "mode", req.Mode, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleDiskTests(w, r)
+}
+
+// handleDiskTestStop cancels a running test or dismisses a finished one.
+func (s *Server) handleDiskTestStop(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Storage.StopTest(r.PathValue("disk")); err != nil {
+		writeStorageError(w, r, "stop disk test", err)
+		return
+	}
+	s.handleDiskTests(w, r)
 }
