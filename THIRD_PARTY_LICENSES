@@ -14,7 +14,7 @@ the release's sources.txt links the exact upstream package versions.
 Component                 License (main)          Source
 ------------------------  ----------------------  ---------------------------------------------
 Linux kernel              GPL-2.0-only            Exact Debian source packages linked in each release
-Debian 13 base system     various (GPL, LGPL,     Debian source packages attached to each release
+Debian 13 base system     various (GPL, LGPL,     Exact Debian source packages linked in each release
                           MIT, BSD, …)
 Device firmware           vendor-specific         Debian firmware-nonfree source package and copyright
 systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
