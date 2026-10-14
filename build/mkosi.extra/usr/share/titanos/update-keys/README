@@ -4,8 +4,12 @@ An update is installed only if the manifest of the release carries a valid
 signature of one of the keys in this directory. An image without a key
 installs no updates at all.
 
-Two keys may lie here at the same time: that is how a key is replaced. A
-release that adds the new key is signed with the old one; the next ones
-are signed with the new one.
+The first published image must contain distinct release and offline recovery
+public keys. Neither private key belongs in this repository. Keep the recovery
+secret offline; only the release secret goes into the protected release
+environment. More keys may be added during rotation: an update that adds the
+new key is signed with an existing trusted key before switching signers.
+
+rehearsal.pub is a disposable test key, ignored by Git. Tag builds reject it.
 
 See docs/RELEASING.md in the repository.

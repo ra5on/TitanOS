@@ -34,6 +34,9 @@ mkosi.builddir/
 *.key
 *.minisign.key
 minisign.key
+# Disposable CI/local rehearsal key; release jobs explicitly reject it.
+/build/mkosi.extra/usr/share/titanos/update-keys/rehearsal.pub
+__pycache__/
 
 # Editors / OS
 .claude/

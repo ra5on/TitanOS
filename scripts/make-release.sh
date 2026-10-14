@@ -8,8 +8,7 @@
 #   out/release/titanos-<version>-sources.txt       where the sources of the Debian packages are
 #   out/release/manifest.json                       what an update consists of
 #
-# manifest.json is what gets signed (minisign -S -m manifest.json): a NAS
-# installs an update only if that signature is from a key in its image.
+# sign-release.sh signs the manifest, installation ZIP and complete checksums.
 #
 # Usage: scripts/make-release.sh <version> <stable|beta> [changelog file]
 #   MIN_VERSION=x.y.z   oldest version that may update to this one directly
@@ -31,6 +30,10 @@ if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$';
     echo "the version must look like 1.2.3 or 1.2.3-beta.1, not '$version'" >&2
     exit 2
 fi
+case "$version" in *-*) expected=beta ;; *) expected=stable ;; esac
+if [ "$channel" != "$expected" ]; then
+    echo "version and release channel disagree" >&2; exit 2
+fi
 
 stick=out/stick
 slot=$stick/titanos/a
@@ -41,9 +44,20 @@ if [ "$(cat "$slot/version" 2>/dev/null)" != "$version" ]; then
 fi
 # A stick for testing logs root in on the console. It must never be released
 # (ALLOW_DEV=1 is for trying updates out in a VM).
-if [ -z "${ALLOW_DEV:-}" ] && unsquashfs -l "$slot/filesystem.squashfs" 2>/dev/null | grep -q 'getty@.*\.service\.d/autologin\.conf'; then
+listing=$(mktemp)
+trap 'rm -f "$listing"' EXIT
+# Do not turn a corrupt image (unsquashfs failure) into a successful dev check.
+unsquashfs -l "$slot/filesystem.squashfs" > "$listing"
+if [ "${ALLOW_DEV:-}" != 1 ] && grep -q 'getty@.*\.service\.d/autologin\.conf' "$listing"; then
     echo "$stick is a development build (root autologin); build with 'make zip'" >&2
     exit 1
+fi
+if [ -n "$(find "$stick/config" -mindepth 1 -print -quit)" ]; then
+    echo "refusing to publish a stick containing user configuration" >&2; exit 1
+fi
+identity=$(unsquashfs -cat "$slot/filesystem.squashfs" usr/lib/os-release)
+if [ "${ALLOW_DEV:-}" != 1 ] && printf '%s\n' "$identity" | grep -q '^VARIANT_ID=dev$'; then
+    echo "refusing to publish a development image" >&2; exit 1
 fi
 
 release=out/release
@@ -58,7 +72,8 @@ done
 
 VERSION=$version CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} python3 - <<'PY'
-import datetime, hashlib, json, os, re
+import datetime, hashlib, json, os, tarfile
+from pathlib import Path
 
 version, release, image = os.environ["VERSION"], os.environ["RELEASE"], os.environ["IMAGE"]
 
@@ -97,31 +112,29 @@ with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-# The image is a collection of Debian packages, many of them under the GPL.
-# Their exact sources stay available at snapshot.debian.org.
-sources = set()
-status = os.path.join(image, "rootfs/var/lib/dpkg/status")
-for block in open(status, encoding="utf-8", errors="replace").read().split("\n\n"):
-    fields = dict(re.findall(r"^(Package|Version|Source|Status): (.*)$", block, re.M))
-    if "Package" not in fields or "installed" not in fields.get("Status", ""):
-        continue
-    source, source_version = fields.get("Source", fields["Package"]), fields["Version"]
-    # "Source: name (version)" when the source has another version than the package.
-    match = re.match(r"^(\S+) \((.+)\)$", source)
-    if match:
-        source, source_version = match.groups()
-    # A "+b1" marks a rebuild of the same source.
-    sources.add((source, re.sub(r"\+b\d+$", "", source_version)))
+# Use the inventory generated for this actual image, including Go, npm and fonts.
+notices = Path(image) / "rootfs/usr/share/titanos"
+components = json.loads((notices / "components.json").read_text())
+if not any(c["ecosystem"] == "Debian" for c in components):
+    raise SystemExit("missing Debian license inventory")
 with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding="utf-8") as f:
-    f.write(f"TitanOS {version} is built from these Debian source packages.\n")
-    f.write("Each link leads to the exact source that was used.\n\n")
-    for source, source_version in sorted(sources):
-        f.write(f"{source} {source_version}\n  https://snapshot.debian.org/package/{source}/{source_version.replace(':', '%3A')}/\n")
-print(f"{len(sources)} source packages listed")
+    f.write(f"TitanOS {version}: exact third-party package sources.\n")
+    f.write("Includes browser/build dependencies; firmware may contain binary-only blobs.\n\n")
+    for c in components:
+        f.write(f"{c['ecosystem']}: {c['name']} {c['version']}\n  {c['source']}\n")
+with tarfile.open(os.path.join(release, f"titanos-{version}-licenses.tar.gz"), "w:gz") as archive:
+    for name in ["LICENSE.md", "THIRD_PARTY_LICENSES", "components.json", "licenses"]:
+        archive.add(notices / name, arcname=name)
+with open(os.path.join(release, "SHA256SUMS"), "w", encoding="utf-8") as f:
+    for path in sorted(Path(release).iterdir()):
+        if path.name != "SHA256SUMS":
+            f.write(f"{sha256(path)}  {path.name}\n")
+print(f"{len(components)} components listed, original license texts included")
 PY
 
 echo
 echo "Release $version ($channel) in $release:"
 ls -l "$release" | awk 'NR > 1 { printf "  %10d  %s\n", $5, $9 }'
 echo
-echo "Sign the manifest before publishing:  minisign -S -m $release/manifest.json"
+echo "Sign before publishing: scripts/sign-release.sh $release <secret-key>"
+echo "Verify: python3 scripts/verify-release.py $release build/mkosi.extra/usr/share/titanos/update-keys"

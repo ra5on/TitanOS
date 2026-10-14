@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)
 LDFLAGS := -s -w -X github.com/ra5on/TitanOS/backend/internal/version.Version=$(VERSION)
 
-.PHONY: build web titand test dev dev-backend dev-web zip zip-dev qemu clean
+.PHONY: build web titand test test-release dev dev-backend dev-web zip zip-dev qemu clean
 
 # titand with the web UI embedded: backend/bin/titand
 build: web titand
@@ -15,6 +15,11 @@ titand:
 test: web/node_modules
 	cd backend && go vet ./... && go test ./...
 	cd web && npm run check
+
+# Real miniature images/signatures exercise release packaging and tamper rejection.
+test-release:
+	@command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null && command -v minisign >/dev/null && command -v zip >/dev/null
+	python3 -m unittest discover -s scripts/tests -v
 
 # Backend on :8080 and the Vite dev server (with /api proxied to the backend) side by side.
 dev:
