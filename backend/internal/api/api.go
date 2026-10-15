@@ -30,6 +30,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
@@ -56,6 +57,7 @@ type Options struct {
 	Nvidia       *hardware.NvidiaControl
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
+	Tailscale    *tailscale.Manager
 	Network      *network.Manager
 	Notify       *notify.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -71,11 +73,12 @@ type Options struct {
 	// Backup copies shares to another volume, server or the cloud.
 	Backup *backup.Manager
 	// UPS watches the uninterruptible power supply.
-	UPS      *ups.Manager
-	Settings *system.Settings
-	Energy   *system.EnergyManager
-	Power    system.Power
-	Version  string
+	UPS         *ups.Manager
+	Settings    *system.Settings
+	Energy      *system.EnergyManager
+	PowerButton *system.PowerButtonManager
+	Power       system.Power
+	Version     string
 	// ShareDir holds the texts of the licenses.
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -203,6 +206,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("GET /api/v1/system/power-button", s.requireAdmin(s.handlePowerButton))
+	mux.HandleFunc("PUT /api/v1/system/power-button", s.requireAdmin(s.handlePowerButtonChange))
 	mux.HandleFunc("GET /api/v1/system/energy", s.requireAdmin(s.handleEnergy))
 	mux.HandleFunc("PUT /api/v1/system/energy", s.requireAdmin(s.handleEnergyChange))
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
@@ -259,6 +264,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 
 	// Plugins become part of the system: administrators only.
+	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))
+	mux.HandleFunc("PUT /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscaleSettings))
+	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", s.requireAdmin(s.handleTailscaleAction))
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))

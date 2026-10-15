@@ -40,6 +40,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
@@ -225,7 +226,15 @@ func run(opts options) error {
 	go volumes.RunDiskSleep(ctx)
 
 	// System extensions on a volume, laid over the system once it is mounted.
+	tailnet := tailscale.NewManager(store)
+	tailnet.Disabled = opts.dev
+	if err := tailnet.Load(); err != nil {
+		slog.Warn("Tailscale settings not readable from /config", "err", err)
+	}
 	extensions := plugins.NewManager(store)
+	extensions.PrepareRuntime = tailnet.Prepare
+	extensions.ActivateRuntime = tailnet.Activate
+	extensions.LocalBuilds = true
 	extensions.Release = strings.TrimPrefix(version.Version, "v")
 	extensions.Disabled = opts.dev
 	if err := extensions.Load(); err != nil {
@@ -329,8 +338,9 @@ func run(opts options) error {
 	updates.Confirm()
 	extensions.ChangeAllowed = func() bool {
 		status := updates.Status()
-		return status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
+		return !tailnet.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
 	}
+	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
 	go machines.Run(ctx, volumes.Mounted)
@@ -387,6 +397,11 @@ func run(opts options) error {
 		slog.Warn("NVIDIA settings unavailable", "err", err)
 	}
 	go nvidia.Run(ctx)
+	powerButton := system.NewPowerButtonManager(store)
+	powerButton.Disabled = opts.dev
+	if err := powerButton.Load(); err != nil {
+		slog.Warn("power button settings unavailable", "err", err)
+	}
 	energy := system.NewEnergyManager(store)
 	energy.Disabled = opts.dev
 	if err := energy.Load(); err != nil {
@@ -408,6 +423,7 @@ func run(opts options) error {
 		Nvidia:        nvidia,
 		Accelerators:  hardware.NewAcceleratorMonitor(ctx, devices),
 		Plugins:       extensions,
+		Tailscale:     tailnet,
 		Network:       connection,
 		Notify:        notifier,
 		ConfigBackup:  stickBackup,
@@ -419,6 +435,7 @@ func run(opts options) error {
 		Certificate:   certs,
 		Settings:      settings,
 		Energy:        energy,
+		PowerButton:   powerButton,
 		Power:         power,
 		Version:       version.Version,
 		ShareDir:      shareDir,

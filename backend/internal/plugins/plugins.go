@@ -70,6 +70,7 @@ type Manifest struct {
 	Description map[string]string `json:"description"`
 	Version     string            `json:"version"`
 	TitanOS     string            `json:"titanos,omitempty"`
+	LocalBuild  bool              `json:"localBuild,omitempty"`
 	Revision    uint64            `json:"revision,omitempty"`
 	// SHA256 and Size are those of the image <name>.raw.
 	SHA256 string `json:"sha256"`
@@ -108,6 +109,7 @@ type Plugin struct {
 	Path string `json:"path"`
 	// Official means the manifest is signed with a key TitanOS trusts.
 	Official bool `json:"official"`
+	Local    bool `json:"local"`
 	// Download means this signed plugin is available in the matching GitHub release.
 	Download   bool   `json:"download"`
 	LicenseURL string `json:"licenseUrl,omitempty"`
@@ -127,13 +129,18 @@ type Status struct {
 
 // Manager installs plugins and keeps the system in line with the settings.
 type Manager struct {
-	ChangeAllowed func() bool // checked under actions, serializes with update staging
-	store         *config.Store
-	runner        run.Runner
+	PrepareRuntime  func(name, volume string) error // optional plugin-specific volatile configuration
+	ActivateRuntime func(name string) error         // reapplies saved configuration even if the service was already running
+	ChangeAllowed   func() bool                     // checked under actions, serializes with update staging
+	UpdateAllowed   func() bool                     // plugin-specific pending trials, independent of updater phase
+	store           *config.Store
+	runner          run.Runner
 	// Disabled leaves the system alone. Set in development mode.
-	Release   string // running TitanOS version; set before Load
-	Disabled  bool
-	mountRoot string
+	LocalBuilds bool // build updated open modules on the NAS, only on request
+	buildKey    []byte
+	Release     string // running TitanOS version; set before Load
+	Disabled    bool
+	mountRoot   string
 	// extDir is where systemd looks for extensions that are not part of
 	// the image: links to the plugins on the volume.
 	extDir string
@@ -167,6 +174,26 @@ type Manager struct {
 	bootID         string
 }
 
+// RuntimeAction keeps configuration changes from racing sysext removal or an
+// OS update. A pending access trial is resolved directly by its manager.
+func (m *Manager) RuntimeAction(name string, action func() error) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.Disabled {
+		return ErrDisabled
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrUpdatePending
+	}
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
+	if _, active := m.active[name]; !active {
+		return ErrNotFound
+	}
+	return action()
+}
+
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
@@ -176,6 +203,9 @@ func NewManager(store *config.Store) *Manager {
 
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
+	if err := m.loadBuildKey(); err != nil {
+		return err
+	}
 	var settings Settings
 	path := m.settingsPath()
 	err := m.store.ReadJSON(path, &settings)
@@ -329,6 +359,10 @@ func (m *Manager) Status(mounted []string) Status {
 		for name, manifest := range m.installed(settings.Volume) {
 			plugin := Plugin{Manifest: manifest, Installed: true, Enabled: slices.Contains(settings.Enabled, name)}
 			plugin.Official = m.official(filepath.Join(m.dir(settings.Volume), name+manifestSuffix))
+			if name == "nvidia" {
+				_, err := m.localDriver(m.dir(settings.Volume))
+				plugin.Local = err == nil
+			}
 			_, plugin.Active = m.active[name]
 			plugin.Problem = m.problems[name]
 			if plugin.Enabled && !m.compatible(manifest) {
@@ -600,6 +634,9 @@ func (m *Manager) Remove(ctx context.Context, name string, mounted []string) err
 	dir := m.dir(m.current().Volume)
 	os.Remove(filepath.Join(dir, name+manifestSuffix))
 	os.Remove(filepath.Join(dir, name+manifestSuffix+".minisig"))
+	if name == "nvidia" {
+		os.Remove(filepath.Join(dir, localReceipt))
+	}
 	return os.Remove(filepath.Join(dir, name+".raw"))
 }
 
@@ -702,6 +739,12 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 	for _, name := range names {
 		manifest := wanted[name]
 		if _, exists := m.resident[name]; !exists {
+			if manifest.LocalBuild {
+				if _, err := m.localDriver(m.dir(settings.Volume)); err != nil {
+					m.problems[name] = "integrity"
+					return fmt.Errorf("%w: local driver receipt", ErrInvalid)
+				}
+			}
 			image := filepath.Join(m.dir(settings.Volume), name+".raw")
 			if sum, size, err := hashFile(image, maxImageBytes); err != nil || sum != strings.ToLower(manifest.SHA256) || size != manifest.Size {
 				m.problems[name] = "integrity"
@@ -743,7 +786,13 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			continue
 		}
 		var failure error
+		if m.PrepareRuntime != nil {
+			failure = m.PrepareRuntime(name, settings.Volume)
+		}
 		for _, module := range manifest.Modules {
+			if failure != nil {
+				break
+			}
 			if _, failure = m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module); failure != nil {
 				break
 			}
@@ -754,6 +803,9 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 					break
 				}
 			}
+		}
+		if failure == nil && m.ActivateRuntime != nil {
+			failure = m.ActivateRuntime(name)
 		}
 		if failure != nil {
 			m.problems[name] = "activation"

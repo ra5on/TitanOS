@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -21,6 +22,7 @@
 		active: boolean;
 		path: string;
 		official: boolean;
+		local: boolean;
 		download: boolean;
 		licenseUrl?: string;
 		problem: string;
@@ -37,8 +39,9 @@
 	let busy = $state(false);
 	let refreshing = $state(false);
 	let removing = $state(false);
+	let tailnetPending = $state(false);
 
-	const locked = $derived(busy || !!status?.driverUpdate?.pending);
+	const locked = $derived(busy || tailnetPending || !!status?.driverUpdate?.pending);
 	const plugins = $derived(status?.plugins ?? []);
 	const current = $derived(plugins.find((plugin) => plugin.name === picked) ?? plugins[0]);
 	const volumes = $derived((storage.status?.volumes ?? []).filter((entry) => entry.mounted).map((entry) => entry.name));
@@ -156,7 +159,7 @@
 				<button type="button" class="tile card" aria-pressed={plugin.name === current.name} onclick={() => pick(plugin.name)}>
 					<span class="monogram" style:background="hsl({hue(plugin)} 45% 42%)" aria-hidden="true">{monogram(plugin)}</span>
 					<span class="about">
-						<span class="name-row"><span class="name">{plugin.title}</span><span class="muted source">{t(plugin.official ? 'plugins.official' : 'plugins.community')}</span></span>
+						<span class="name-row"><span class="name">{plugin.title}</span><span class="muted source">{t(plugin.local ? 'plugins.driverLocal' : plugin.official ? 'plugins.official' : 'plugins.community')}</span></span>
 						<span class="description">{text(plugin.description)}</span>
 					</span>
 					<span class="chip {state.kind}">{state.text}</span>
@@ -171,7 +174,7 @@
 				<div class="about">
 					<h2 id="plugin-title">{current.title}</h2>
 					<span class="description">{text(current.description)}</span>
-					<span class="muted mono meta">{current.name} · {current.version || '–'} · {formatBytes(current.size)} · {t(current.official ? 'plugins.official' : 'plugins.community')}</span>
+					<span class="muted mono meta">{current.name} · {current.version || '–'} · {formatBytes(current.size)} · {t(current.local ? 'plugins.driverLocal' : current.official ? 'plugins.official' : 'plugins.community')}</span>
 				</div>
 			</div>
 
@@ -237,7 +240,8 @@
 						<button type="button" class="btn" onclick={() => (removing = true)} disabled={locked}>{t('plugins.remove')}</button>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
-					{#if current.name === 'nvidia' && current.official && status.driverUpdate}<DriverUpdates status={status.driverUpdate} {busy} action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))} />{/if}
+					{#if current.name === 'tailscale'}<TailscaleSettings onpending={(value) => tailnetPending = value} />{/if}
+					{#if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate}<DriverUpdates status={status.driverUpdate} {busy} action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))} />{/if}
 					{#if current.enabled && current.problem === 'activation'}<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}>{t('plugins.retry')}</button>{/if}
 				{/if}
 			</div>

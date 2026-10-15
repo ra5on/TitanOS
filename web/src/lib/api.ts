@@ -76,6 +76,12 @@ export type Accelerator = {
 	pState: string; engines: { name: string; usagePercent: number }[]; history: (number | null)[];
 };
 
+export type DashboardNetwork = {
+ interface: string; ipv4: string; ipv4Addresses: string[]; ipv6Addresses: string[];
+ gateway: string; gateway6: string; speedMbps: number; mac: string; mtu: number; state: string;
+ rxBytesPerSecond: number; txBytesPerSecond: number;
+};
+
 export type SystemInfo = {
 	accelerators: Accelerator[];
 	hostname: string;
@@ -87,14 +93,8 @@ export type SystemInfo = {
 	temperatures: Temperature[];
 	image: { slot: string; sizeBytes: number; overlayUsedBytes: number; overlayTotalBytes: number } | null;
 	stick: { label: string; present: boolean };
-	network: {
-		interface: string;
-		ipv4: string;
-		gateway: string;
-		speedMbps: number;
-		rxBytesPerSecond: number;
-		txBytesPerSecond: number;
-	} | null;
+	network: DashboardNetwork | null;
+	networks: DashboardNetwork[];
 	/** Seconds a network change on trial has left to be confirmed; 0 if there is none. */
 	networkPendingSeconds: number;
 	/** Number of the newest message; 0 if there is none or the account may not see them. */

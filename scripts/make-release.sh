@@ -113,7 +113,7 @@ manifest["plugins"] = []
 for path in sorted(Path("out/plugins").glob("*.plugin.json")):
     plugin = json.loads(path.read_text())
     name = plugin["name"]
-    if name not in {"nvidia", "intel-gpu-tools", "coral-usb"} or path.name != name + ".plugin.json":
+    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale"} or path.name != name + ".plugin.json":
         raise ValueError("unrecognized official plugin")
     if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
         raise ValueError("plugin kernel mismatch: " + name)
@@ -128,6 +128,14 @@ for path in sorted(Path("out/plugins").glob("*.plugin.json")):
     manifest["plugins"].append({"name": name, "asset": path.name})
 if not any(p["name"] == "nvidia" for p in manifest["plugins"]):
     raise ValueError("NVIDIA plugin missing")
+sdk = json.loads(Path("out/plugins/nvidia-build-sdk.json").read_text())
+if sdk["version"] != version or sdk["kernel"] != manifest["kernel"] or sdk["asset"] != "nvidia-build-sdk.tar.zst":
+    raise ValueError("NVIDIA SDK target mismatch")
+if sha256(Path("out/plugins") / sdk["asset"]) != sdk["sha256"] or (Path("out/plugins") / sdk["asset"]).stat().st_size != sdk["size"]:
+    raise ValueError("NVIDIA SDK integrity mismatch")
+manifest["nvidiaBuildSDK"] = sdk
+for asset in [sdk["asset"], "nvidia-build-sdk-sources.txt"]:
+    shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")

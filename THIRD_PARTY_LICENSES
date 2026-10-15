@@ -66,3 +66,11 @@ includes original Debian copyright notices and exact source-package URLs in
 usr/share/titanos/intel-gpu-tools/SOURCES.txt. The Coral USB helper is TitanOS
 code under FSL-1.1-ALv2. No Google libedgetpu binary or firmware is bundled;
 a container application must supply its own appropriately licensed runtime.
+
+Tailscale plugin: Tailscale 1.104.1, BSD-3-Clause, plus third-party components
+under their original licenses. The plugin and tailscale-licenses.tar.gz include
+the upstream license and dependency notices from https://tailscale.com/licenses/tailscale.
+Source: https://github.com/tailscale/tailscale/tree/v1.104.1
+NVIDIA build SDK: Debian build tools and exact kernel headers retain their original
+licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lists
+the corresponding Debian source packages. The SDK is separate from the NAS RAM image.

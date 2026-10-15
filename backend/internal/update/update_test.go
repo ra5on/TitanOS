@@ -185,13 +185,16 @@ func (e *env) install(t *testing.T) {
 	if err := e.m.Install(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for range 400 {
+	// Installation flushes the filesystem. A shared CI runner can spend several
+	// seconds in sync while another image build is writing on the same host.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
 		if phase := e.m.Status().Progress.Phase; phase == "done" || phase == "failed" {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("the installation did not finish")
+	t.Fatalf("the installation did not finish: %+v", e.m.Status().Progress)
 }
 
 func (e *env) event(t *testing.T) string {

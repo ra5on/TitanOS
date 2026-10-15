@@ -8,21 +8,23 @@ export const COLUMNS = 12;
 export const ROW_HEIGHT = 72;
 export const GAP = 16;
 
-export const TILE_IDS = ['system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia', 'temperatures'] as const;
+export const TILE_IDS = ['cpu', 'memory', 'system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia', 'temperatures'] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type TileId = StaticTileId | `vm:${string}` | `container:${string}`;
 
 export type TileSpec = { title: MessageKey; minW: number; minH: number };
 
 export const TILES: Record<StaticTileId, TileSpec> = {
-	system: { title: 'tile.system', minW: 3, minH: 4 },
-	volumes: { title: 'tile.volumes', minW: 4, minH: 2 },
-	network: { title: 'tile.network', minW: 3, minH: 3 },
+	cpu: { title: 'system.cpu', minW: 2, minH: 2 },
+ memory: { title: 'system.memory', minW: 2, minH: 2 },
+ system: { title: 'tile.system', minW: 2, minH: 2 },
+	volumes: { title: 'tile.volumes', minW: 2, minH: 2 },
+	network: { title: 'tile.network', minW: 2, minH: 2 },
 	disks: { title: 'tile.disks', minW: 3, minH: 2 },
-	temperatures: { title: 'temperatures.title', minW: 3, minH: 3 },
-	igpu: { title: 'tile.igpu', minW: 3, minH: 4 },
-	npu: { title: 'tile.npu', minW: 3, minH: 4 },
-	nvidia: { title: 'tile.nvidia', minW: 3, minH: 4 }
+	temperatures: { title: 'temperatures.title', minW: 2, minH: 2 },
+	igpu: { title: 'tile.igpu', minW: 2, minH: 2 },
+	npu: { title: 'tile.npu', minW: 2, minH: 2 },
+	nvidia: { title: 'tile.nvidia', minW: 2, minH: 2 }
 };
 
 export function workload(id: TileId): { kind: 'vm' | 'container'; name: string } | undefined {
@@ -32,7 +34,7 @@ export function workload(id: TileId): { kind: 'vm' | 'container'; name: string }
 
 export function tileSpec(id: TileId): TileSpec {
 	const target = workload(id);
-	return target ? { title: target.kind === 'vm' ? 'tile.vm' : 'tile.container', minW: 3, minH: 3 } : TILES[id as StaticTileId];
+	return target ? { title: target.kind === 'vm' ? 'tile.vm' : 'tile.container', minW: 2, minH: 2 } : TILES[id as StaticTileId];
 }
 
 /** Position and size of a tile in grid cells. Without x/y it goes to the first free place. */
@@ -40,16 +42,18 @@ export type TilePlacement = { id: TileId; x?: number; y?: number; w: number; h: 
 
 export function defaultLayout(): TilePlacement[] {
 	return [
-		{ id: 'system', x: 0, y: 0, w: 4, h: 4 },
-		{ id: 'volumes', x: 4, y: 0, w: 8, h: 4 },
-		{ id: 'network', x: 0, y: 4, w: 4, h: 4 },
-		{ id: 'disks', x: 4, y: 4, w: 4, h: 4 }
+		{ id: 'cpu', x: 0, y: 0, w: 4, h: 2 },
+ { id: 'memory', x: 4, y: 0, w: 4, h: 2 },
+ { id: 'system', x: 8, y: 0, w: 4, h: 2 },
+		{ id: 'volumes', x: 0, y: 2, w: 8, h: 4 },
+		{ id: 'network', x: 8, y: 2, w: 4, h: 4 },
+		{ id: 'disks', x: 0, y: 6, w: 4, h: 4 }
 	];
 }
 
 /** Size a tile gets when it is shown again. */
 export function defaultPlacement(id: TileId): TilePlacement {
-	const { w, h } = defaultLayout().find((tile) => tile.id === id) ?? { w: 4, h: workload(id) ? 4 : 6 };
+	const { w, h } = defaultLayout().find((tile) => tile.id === id) ?? { w: 4, h: workload(id) ? 2 : 4 };
 	return { id, w, h };
 }
 

@@ -130,3 +130,25 @@ func TestReleaseSettingsAndFirstMutationPreserveLegacyRollback(t *testing.T) {
 		t.Fatal("mutation raced update", err)
 	}
 }
+
+func TestRuntimeSettingsSerializeWithPluginLifecycle(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.active["tailscale"] = Manifest{Name: "tailscale"}
+	if err := m.RuntimeAction("tailscale", func() error {
+		if m.actions.TryLock() {
+			m.actions.Unlock()
+			t.Fatal("runtime settings were not serialized")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.ChangeAllowed = func() bool { return false }
+	if err := m.RuntimeAction("tailscale", func() error { t.Fatal("changed during pending update"); return nil }); !errors.Is(err, ErrUpdatePending) {
+		t.Fatal(err)
+	}
+	m.UpdateAllowed = func() bool { return false }
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", nil, nil, nil, nil); !errors.Is(err, ErrBusy) {
+		t.Fatal("update ignored routing trial", err)
+	}
+}
