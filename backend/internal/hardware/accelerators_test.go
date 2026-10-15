@@ -192,3 +192,63 @@ func TestSuspendedAndReservedGPUNotQueried(t *testing.T) {
 		})
 	}
 }
+
+func TestNPUBusyCounterAcrossRuntimeSuspend(t *testing.T) {
+	sys := t.TempDir()
+	address := "0000:00:0b.0"
+	device(t, sys, address, "120000", "8086", -1, nil)
+	root := filepath.Join(sys, "bus/pci/devices", address)
+	os.Symlink("/drivers/intel_vpu", filepath.Join(root, "driver"))
+	os.MkdirAll(filepath.Join(root, "power"), 0o755)
+	os.WriteFile(filepath.Join(root, "power/runtime_status"), []byte("suspended"), 0o600)
+	os.WriteFile(filepath.Join(root, "npu_busy_time_us"), []byte("0"), 0o600)
+	m := &AcceleratorMonitor{hardware: &Manager{sys: sys}, proc: t.TempDir()}
+	now := time.Now()
+	m.sample(context.Background(), now)
+	if m.Snapshot()[0].UsagePercent != nil {
+		t.Fatal("first sample must remain unknown")
+	}
+	m.sample(context.Background(), now.Add(5*time.Second))
+	d := m.Snapshot()[0]
+	if d.State != "suspended" || d.UsagePercent == nil || *d.UsagePercent != 0 || d.FrequencyMHz != nil {
+		t.Fatalf("sleeping NPU: %+v", d)
+	}
+	os.WriteFile(filepath.Join(root, "power/runtime_status"), []byte("active"), 0o600)
+	os.WriteFile(filepath.Join(root, "npu_busy_time_us"), []byte("2500000"), 0o600)
+	m.sample(context.Background(), now.Add(10*time.Second))
+	if d := m.Snapshot()[0]; d.UsagePercent == nil || *d.UsagePercent != 50 {
+		t.Fatalf("lost work at wakeup: %+v", d)
+	}
+	os.Remove(filepath.Join(root, "driver"))
+	os.Symlink("/drivers/vfio-pci", filepath.Join(root, "driver"))
+	m.sample(context.Background(), now.Add(15*time.Second))
+	if m.Snapshot()[0].UsagePercent != nil || len(m.busy) != 0 {
+		t.Fatal("reserved NPU was measured")
+	}
+}
+
+func TestIntelActualFrequencyPaths(t *testing.T) {
+	for _, tc := range []struct{ driver, path string }{
+		{"i915", "drm/card0/gt_act_freq_mhz"},
+		{"i915", "drm/card2/gt/gt0/rps_act_freq_mhz"},
+		{"xe", "tile0/gt0/freq0/act_freq"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, tc.path)
+			os.MkdirAll(filepath.Dir(path), 0o755)
+			os.WriteFile(path, []byte("0"), 0o600)
+			if got := intelFrequency(root, tc.driver); got == nil || *got != 0 {
+				t.Fatal("valid zero clock missing")
+			}
+			os.WriteFile(path, []byte("650"), 0o600)
+			if got := intelFrequency(root, tc.driver); got == nil || *got != 650 {
+				t.Fatal("actual clock missing")
+			}
+			os.Remove(path)
+			if intelFrequency(root, tc.driver) != nil {
+				t.Fatal("invented missing frequency")
+			}
+		})
+	}
+}

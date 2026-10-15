@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { vmLabel } from '#lib/vm-name.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
@@ -144,7 +145,7 @@
 				</div>
 				{#each vms as vm (vm.name)}
 					<a class="vm" href="/vms?vm={vm.name}" aria-current={vm.name === current.name ? 'true' : undefined}>
-						<span class="vm-name">{vm.name}</span>
+						<span class="vm-name">{vmLabel(vm)}</span>
 						<span class="muted vm-state"><span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"></span>{t(`vms.state.${vm.state}`)} · {specs(vm)}</span>
 					</a>
 				{/each}
@@ -155,7 +156,7 @@
 			<div class="head">
 				<div class="title">
 					<div class="name-row">
-						<h1 id="vm-title">{current.name}</h1>
+						<h1 id="vm-title">{vmLabel(current)}</h1>
 						<span class="chip" class:ok={current.state === 'running'}>{t(`vms.state.${current.state}`)}</span>
 						{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
 					</div>
@@ -198,7 +199,7 @@
 				{/if}
 				<button type="button" aria-pressed={sidebar} onclick={() => (sidebar = !sidebar)}>{t('vms.sidebar')}</button>
 				{#if current.state === 'running'}
-					<button type="button" onclick={() => addVmConsole(current.name)}>{t('vms.serial')}</button>
+					<button type="button" onclick={() => addVmConsole(current.name, vmLabel(current))}>{t('vms.serial')}</button>
 					<a class="tool" href="/vms/screen?vm={current.name}" target="_blank" rel="noopener" onclick={(event) => { event.preventDefault(); window.open(`/vms/screen?vm=${current.name}`, `vm-${current.name}`, 'popup,width=1296,height=860'); }}>{t('vms.ownWindow')}</a>
 					<button type="button" class="strong" onclick={() => frame?.requestFullscreen()}>{t('vms.fullscreen')}</button>
 				{/if}
@@ -211,7 +212,7 @@
 					{/key}
 					{#if fullscreen}
 						<div class="fsbar">
-							<span class="mono">{current.name}</span>
+							<span class="mono">{vmLabel(current)}</span>
 							<button type="button" onclick={() => screen?.ctrlAltDel()}>{t('vms.ctrlAltDel')}</button>
 							{#each MODES as entry (entry)}
 								<button type="button" aria-pressed={mode === entry} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
@@ -221,7 +222,7 @@
 					{/if}
 				{:else}
 					<div class="off">
-						<span>{t('vms.off', { name: current.name })}</span>
+						<span>{t('vms.off', { name: vmLabel(current) })}</span>
 						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !current.available || !status.kvm || !!current.job}>{t('vms.startVm')}</button>
 					</div>
 				{/if}
@@ -238,14 +239,14 @@
 	</Dialog>
 {:else if dialog && current}
 	{@const kind = dialog.kind}
-	<Dialog title={t(`vms.dialog.${kind}`, { name: current.name })} onclose={() => (dialog = null)}>
+	<Dialog title={t(`vms.dialog.${kind}`, { name: vmLabel(current) })} onclose={() => (dialog = null)}>
 		<form onsubmit={submit}>
 			{#if kind === 'remove'}
 				<p class="text">{t('vms.removeText')}</p>
 				<label class="check"><input type="checkbox" bind:checked={draft.deleteDisks} /><span>{t('vms.deleteDisks')}</span></label>
 				{#if draft.deleteDisks}
 					<p class="notice-error">{t('vms.deleteDisksWarning', { disks: current.disks.filter((disk) => !disk.path).map((disk) => disk.file).join(', ') || '–' })}</p>
-					<label><span>{t('vms.confirmName', { name: current.name })}</span><input class="field mono" type="text" bind:value={draft.confirm} autocapitalize="none" spellcheck="false" /></label>
+					<label><span>{t('vms.confirmName', { name: vmLabel(current) })}</span><input class="field mono" type="text" bind:value={draft.confirm} autocapitalize="none" spellcheck="false" /></label>
 				{/if}
 			{:else if kind === 'poweroff'}
 				<p class="text">{t('vms.poweroffText')}</p>
@@ -259,7 +260,7 @@
 			{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-				<button type="submit" class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}" disabled={kind === 'remove' && draft.deleteDisks && draft.confirm !== current.name}>{t(`vms.submit.${kind}`)}</button>
+				<button type="submit" class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}" disabled={kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(current)}>{t(`vms.submit.${kind}`)}</button>
 			</div>
 		</form>
 	</Dialog>

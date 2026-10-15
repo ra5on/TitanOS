@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { vmLabel } from '#lib/vm-name.ts';
 	// The screen of a VM in a window of its own: nothing but the picture.
 	import { page } from '$app/state';
 	import { api, type VMStatus } from '#lib/api.ts';
@@ -7,23 +8,24 @@
 
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
 	let running = $state<boolean | null>(null);
+	let displayName = $state('');
 	let mode = $state<ScaleMode>('scale');
 	let screen = $state<VncScreen>();
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 
 	$effect(() => {
-		const check = () => api.get<VMStatus>('/vms').then((res) => (running = res.vms.some((vm) => vm.name === name && vm.state === 'running')), () => {});
+		const check = () => api.get<VMStatus>('/vms').then((res) => { const vm = res.vms.find((vm) => vm.name === name); running = vm?.state === 'running'; displayName = vm ? vmLabel(vm) : name; }, () => {});
 		check();
 		const timer = setInterval(check, 3000);
 		return () => clearInterval(timer);
 	});
 </script>
 
-<svelte:head><title>{name} · TitanOS</title></svelte:head>
+<svelte:head><title>{displayName || name} · TitanOS</title></svelte:head>
 
 <div class="window">
 	<div class="bar">
-		<span class="mono">{name}</span>
+		<span class="mono">{displayName || name}</span>
 		<span class="grow"></span>
 		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}>{t('vms.ctrlAltDel')}</button>
 		{#each MODES as entry (entry)}
@@ -34,7 +36,7 @@
 		{#if running}
 			{#key name}<VncScreen bind:this={screen} vm={name} {mode} />{/key}
 		{:else if running === false}
-			<p class="muted off">{t('vms.off', { name })}</p>
+			<p class="muted off">{t('vms.off', { name: displayName || name })}</p>
 		{/if}
 	</div>
 </div>

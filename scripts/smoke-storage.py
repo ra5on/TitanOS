@@ -122,9 +122,16 @@ def smoke(archive, plugins, log, timeout):
                         members = [disks['BTRFS1'], disks['BTRFS2']]
                         request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members})
                         assert volume()['mounted'], volume()
+                        remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
                         profiles = remote('btrfs filesystem usage /mnt/mirror')
                         assert 'Data,RAID1' in profiles and 'Metadata,RAID1' in profiles, profiles
-                        request('/vms', {'name': 'disk-test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})
+                        request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})
+                        created = next(vm for vm in request('/vms')['vms'] if vm['name'] == 'disk-test')
+                        assert created['displayName'] == 'Home Assistant Test', created
+                        request('/vms/disk-test', {'displayName': 'Home Assistant NAS', 'memoryMiB': 512, 'vcpus': 1, 'network': created['network']}, 'PUT')
+                        memory = request('/system')['memory']
+                        assert memory['usedBytes'] + memory['freeBytes'] == memory['totalBytes'], memory
+                        assert 0 <= memory['availableBytes'] <= memory['totalBytes'], memory
                         assert 'C' in remote('lsattr -d /mnt/mirror/vms/disk-test').split()[0]
                         assert 'C' in remote('lsattr /mnt/mirror/vms/disk-test/vdisk1.qcow2').split()[0]
                         remote('mkdir /mnt/mirror/documents; printf before > /mnt/mirror/documents/file')
@@ -145,6 +152,9 @@ def smoke(archive, plugins, log, timeout):
                                 request('/plugins', {'path': '/mnt/mirror/plugin-input/' + name + '.plugin.json', 'volume': 'mirror', 'confirm': '' if signed else name})
                     else:
                         assert volume()['mounted'], volume()
+                        remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
+                        renamed = next(vm for vm in request('/vms')['vms'] if vm['name'] == 'disk-test')
+                        assert renamed['displayName'] == 'Home Assistant NAS', renamed
                         assert remote('cat /mnt/mirror/restored/before/documents/file') == 'before'
                         assert remote('cat /mnt/mirror/documents/file') == 'after'
                         assert request('/storage/volumes/mirror/snapshots') == [{'name': 'before'}]

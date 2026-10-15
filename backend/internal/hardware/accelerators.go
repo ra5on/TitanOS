@@ -53,11 +53,14 @@ type AcceleratorMonitor struct {
 	previous map[string]drmClient
 	busy     map[string]uint64
 	last     time.Time
+	pmu      *i915PMU
 }
 
 func NewAcceleratorMonitor(ctx context.Context, hardware *Manager) *AcceleratorMonitor {
 	m := &AcceleratorMonitor{hardware: hardware, proc: "/proc", runner: run.Exec{}, names: readPCINames("/usr/share/misc/pci.ids")}
+	m.pmu = &i915PMU{sys: hardware.sys, open: openPerfCounter}
 	go func() {
+		defer m.pmu.retain(nil)
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -137,6 +140,7 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 		clients, complete = readDRMClients(m.proc)
 	}
 	nextBusy := map[string]uint64{}
+	activePMUs := map[string]bool{}
 	for _, pci := range pciDevices {
 		if !slices.Contains([]string{"8086", "1002", "1022", "10de"}, pci.Vendor) {
 			continue
@@ -160,12 +164,9 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 			if pci.Vendor == "10de" && d.State != "suspended" {
 				nvidiaDevices = append(nvidiaDevices, pci.Address)
 			}
-			if d.State == "suspended" {
-				break
-			}
-			d.UsagePercent = metric(filepath.Join(root, "gpu_busy_percent"), 1)
-			d.MemoryUsedBytes = metric(filepath.Join(root, "mem_info_vram_used"), 1)
-			d.MemoryTotalBytes = metric(filepath.Join(root, "mem_info_vram_total"), 1)
+			// Intel's NPU busy counter is maintained in software and remains
+			// readable during runtime suspend. Keep its baseline across sleep
+			// so an idle NPU reports measured 0% and wakeups retain their work.
 			if pci.Kind == "npu" {
 				data, err := os.ReadFile(filepath.Join(root, "npu_busy_time_us"))
 				if busy, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && parseErr == nil {
@@ -175,6 +176,16 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 						d.UsagePercent = &usage
 					}
 				}
+			}
+			if d.State == "suspended" {
+				break
+			}
+			if d.UsagePercent == nil {
+				d.UsagePercent = metric(filepath.Join(root, "gpu_busy_percent"), 1)
+			}
+			d.MemoryUsedBytes = metric(filepath.Join(root, "mem_info_vram_used"), 1)
+			d.MemoryTotalBytes = metric(filepath.Join(root, "mem_info_vram_total"), 1)
+			if pci.Kind == "npu" {
 				d.MemoryUsedBytes = metric(filepath.Join(root, "npu_memory_utilization"), 1)
 				for _, path := range []string{"freq/current_freq", "npu_current_frequency_mhz"} {
 					if d.FrequencyMHz == nil {
@@ -182,15 +193,22 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 					}
 				}
 			}
-			if complete && seconds > 0 && seconds <= 15 {
+			if pci.Driver == "i915" {
+				activePMUs[pci.Address] = true
+				d.Engines = m.pmu.sample(pci.Address)
+			}
+			if len(d.Engines) == 0 && complete && seconds > 0 && seconds <= 15 {
 				d.Engines = drmUsage(pci.Address, clients, m.previous, seconds)
-				if d.UsagePercent == nil && len(d.Engines) > 0 {
-					usage := 0.0
-					for _, e := range d.Engines {
-						usage = max(usage, e.UsagePercent)
-					}
-					d.UsagePercent = &usage
+			}
+			if d.UsagePercent == nil && len(d.Engines) > 0 {
+				usage := 0.0
+				for _, e := range d.Engines {
+					usage = max(usage, e.UsagePercent)
 				}
+				d.UsagePercent = &usage
+			}
+			if pci.Driver == "i915" || pci.Driver == "xe" {
+				d.FrequencyMHz = intelFrequency(root, pci.Driver)
 			}
 			// hwmon files belong to this PCI device, never a CPU/package sensor.
 			hwmons, _ := filepath.Glob(filepath.Join(root, "hwmon/hwmon*"))
@@ -209,8 +227,12 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 				*d.UsagePercent = min(100, *d.UsagePercent)
 			}
 		}
+		if d.Engines == nil {
+			d.Engines = []Engine{}
+		}
 		devices = append(devices, d)
 	}
+	m.pmu.retain(activePMUs)
 	if len(nvidiaDevices) > 0 {
 		queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		for _, address := range nvidiaDevices {
@@ -245,6 +267,27 @@ func (m *AcceleratorMonitor) sample(ctx context.Context, now time.Time) {
 	m.mu.Lock()
 	m.devices = devices
 	m.mu.Unlock()
+}
+
+// Return the highest measured GT clock, never the requested/maximum clock.
+func intelFrequency(root, driver string) *float64 {
+	patterns := []string{"drm/card[0-9]*/gt/gt*/rps_act_freq_mhz", "drm/card[0-9]*/gt_act_freq_mhz"}
+	if driver == "xe" {
+		patterns = []string{"tile*/gt*/freq0/act_freq"}
+	}
+	for _, pattern := range patterns {
+		var result *float64
+		paths, _ := filepath.Glob(filepath.Join(root, pattern))
+		for _, path := range paths {
+			if value := metric(path, 1); value != nil && (result == nil || *value > *result) {
+				result = value
+			}
+		}
+		if result != nil {
+			return result
+		}
+	}
+	return nil
 }
 
 func applyNVIDIA(devices []Accelerator, output string) {

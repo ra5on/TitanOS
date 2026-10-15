@@ -7,11 +7,24 @@ import (
 
 func TestParseMeminfo(t *testing.T) {
 	got := parseMeminfo("MemTotal:        4009804 kB\nMemFree:         3626296 kB\nMemAvailable:    3556764 kB\nBuffers:               0 kB\n")
-	if got.TotalBytes != 4009804*1024 || got.UsedBytes != (4009804-3556764)*1024 {
+	if got.TotalBytes != 4009804*1024 || got.UsedBytes != (4009804-3626296)*1024 || got.FreeBytes != 3626296*1024 || got.AvailableBytes != 3556764*1024 {
 		t.Errorf("parseMeminfo = %+v", got)
 	}
 	if empty := parseMeminfo(""); empty.TotalBytes != 0 || empty.UsedBytes != 0 {
 		t.Errorf("empty meminfo = %+v", empty)
+	}
+}
+
+func TestMemoryIncludesCacheAndRAMImageExactlyOnce(t *testing.T) {
+	got := parseMeminfo("MemTotal: 16000 kB\nMemFree: 2000 kB\nMemAvailable: 8000 kB\nCached: 7000 kB\nShmem: 1000 kB\nBuffers: 500 kB\n")
+	if got.UsedBytes != 14000*1024 || got.AvailableBytes != 8000*1024 || got.UsedBytes+got.FreeBytes != got.TotalBytes {
+		t.Fatalf("occupied RAM must include caches and shmem once: %+v", got)
+	}
+	for _, input := range []string{"MemFree: 100 kB", "MemTotal: 10 kB\nMemFree: 20 kB\nMemAvailable: 30 kB", "MemTotal: -1 kB", "MemTotal: 18446744073709551615 kB"} {
+		got := parseMeminfo(input)
+		if got.UsedBytes > got.TotalBytes || got.AvailableBytes > got.TotalBytes || got.FreeBytes > got.TotalBytes {
+			t.Fatalf("invalid memory values: %+v", got)
+		}
 	}
 }
 

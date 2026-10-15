@@ -94,6 +94,9 @@ type VolumeConfig struct {
 	ArrayUUID      string    `json:"arrayUUID"`
 	FilesystemUUID string    `json:"filesystemUUID"`
 	Created        time.Time `json:"created"`
+	// Set only for a newly created first volume; cleared after its folders
+	// are durable. Existing/imported volumes are never populated implicitly.
+	InitializeFolders bool `json:"initializeFolders,omitempty"`
 }
 
 // Volume is a configured volume with its live state.

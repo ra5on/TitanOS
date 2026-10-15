@@ -38,6 +38,7 @@ type fakeRunner struct {
 	commands []string
 	stdin    []string
 	fail     string // a command starting with this fails
+	mounted  map[string]bool
 }
 
 func (r *fakeRunner) Run(_ context.Context, stdin string, name string, args ...string) (string, error) {
@@ -55,15 +56,22 @@ func (r *fakeRunner) Run(_ context.Context, stdin string, name string, args ...s
 	}
 	r.commands = append(r.commands, command)
 	r.stdin = append(r.stdin, stdin)
+	if r.mounted != nil && name == "mount" {
+		r.mounted[args[len(args)-1]] = true
+	}
+	if r.mounted != nil && name == "umount" {
+		delete(r.mounted, args[len(args)-1])
+	}
 	return "", nil
 }
 
 func newTestManager(t *testing.T) (*Manager, *fakeRunner, *config.Store) {
 	t.Helper()
 	store := config.Open(t.TempDir())
-	runner := &fakeRunner{}
+	runner := &fakeRunner{mounted: map[string]bool{}}
 	m := NewManager(store)
 	m.runner = runner
+	m.mounts = func() map[string]bool { return runner.mounted }
 	m.mountRoot = t.TempDir()
 	m.sysBlock = t.TempDir() // no arrays
 	if err := m.Load(); err != nil {

@@ -15,6 +15,7 @@
 		{ href: 'ups', label: 'ups.title', admin: true },
 		{ href: 'hardware', label: 'hardware.title', admin: true },
 		{ href: 'energy', label: 'energy.title', admin: true },
+		{ href: 'temperatures', label: 'temperatures.title' },
 		{ href: 'about', label: 'about.title' }
 	];
 	const sortedAreas = $derived(areas.filter((area) => !area.admin || admin).toSorted((a, b) => t(a.label).localeCompare(t(b.label), i18n.locale)));

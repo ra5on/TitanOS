@@ -45,12 +45,13 @@ const (
 )
 
 var (
-	ErrDisabled    = errors.New("vm: not available in development mode")
-	ErrNoKVM       = errors.New("vm: this machine has no hardware virtualization (KVM)")
-	ErrInvalidName = errors.New("vm: invalid name")
-	ErrExists      = errors.New("vm: a VM with this name exists")
-	ErrNotFound    = errors.New("vm: not found")
-	ErrInvalid     = errors.New("vm: invalid settings")
+	ErrDisabled           = errors.New("vm: not available in development mode")
+	ErrNoKVM              = errors.New("vm: this machine has no hardware virtualization (KVM)")
+	ErrInvalidName        = errors.New("vm: invalid name")
+	ErrInvalidDisplayName = errors.New("vm: invalid display name")
+	ErrExists             = errors.New("vm: a VM with this name exists")
+	ErrNotFound           = errors.New("vm: not found")
+	ErrInvalid            = errors.New("vm: invalid settings")
 	// ErrUnknownVolume means a volume is not known or not mounted.
 	ErrUnknownVolume = errors.New("vm: the volume is not available")
 	ErrNoSpace       = errors.New("vm: not enough free space on the volume")
@@ -107,6 +108,7 @@ type Folder struct {
 // VM is a virtual machine as stored in /config.
 type VM struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
 	Description string `json:"description"`
 	// Template decides which virtual hardware the guest gets: linux,
 	// windows or other.
@@ -506,6 +508,24 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	if !nameRE.MatchString(vm.Name) {
 		return ErrInvalidName
 	}
+	if vm.DisplayName != "" {
+		vm.DisplayName = strings.TrimSpace(vm.DisplayName)
+		if !validDisplayName(vm.DisplayName) {
+			return ErrInvalidDisplayName
+		}
+	}
+	m.mu.Lock()
+	duplicateLabel := false
+	for _, other := range m.vms {
+		if other.Name != vm.Name && strings.EqualFold(other.Label(), vm.Label()) {
+			duplicateLabel = true
+			break
+		}
+	}
+	m.mu.Unlock()
+	if duplicateLabel {
+		return ErrExists
+	}
 	if !slices.Contains([]string{"linux", "windows", "other"}, vm.Template) {
 		return fmt.Errorf("%w: unknown template", ErrInvalid)
 	}
@@ -745,6 +765,7 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 
 // Change is what can be changed on a VM that exists.
 type Change struct {
+	DisplayName *string  `json:"displayName"`
 	Description string   `json:"description"`
 	MemoryMiB   int      `json:"memoryMiB"`
 	VCPUs       int      `json:"vcpus"`
@@ -759,7 +780,7 @@ type Change struct {
 	Network     string   `json:"network"`
 }
 
-// Update changes a VM. Everything but the description and the autostart
+// Update changes a VM. Everything but the display name, description and autostart
 // belongs to the virtual hardware and only changes while the VM is off.
 func (m *Manager) Update(ctx context.Context, name string, change Change, mounted []string) error {
 	if m.Disabled {
@@ -770,6 +791,12 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 		return err
 	}
 	changed := vm
+	if change.DisplayName != nil {
+		changed.DisplayName = strings.TrimSpace(*change.DisplayName)
+		if !validDisplayName(changed.DisplayName) {
+			return ErrInvalidDisplayName
+		}
+	}
 	changed.Description, changed.Autostart = change.Description, change.Autostart
 	changed.MemoryMiB, changed.VCPUs, changed.ISO = change.MemoryMiB, change.VCPUs, change.ISO
 	changed.CPUPin, changed.Exclusive, changed.Folders, changed.PCI, changed.USB = change.CPUPin, change.Exclusive, change.Folders, change.PCI, change.USB
@@ -779,6 +806,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 		return err
 	}
 	before, after := vm, changed
+	before.DisplayName, after.DisplayName = "", ""
 	before.Description, before.Autostart, after.Description, after.Autostart = "", false, "", false
 	if !reflect.DeepEqual(normal(before), normal(after)) && m.pid(name) != 0 {
 		return ErrRunning
@@ -1018,7 +1046,7 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 	if job != nil && job.State == "running" {
 		return ErrPreparing
 	}
-	if deleteDisks && confirm != name {
+	if deleteDisks && confirm != name && confirm != vm.Label() {
 		return ErrNotConfirmed
 	}
 	if err := m.store.Remove(configDir + "/" + name + ".json"); err != nil {
