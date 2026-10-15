@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { api, ApiError, type FileEntry, type FileRoot } from '#lib/api.ts';
+	import { api, ApiError, type FileEntry, type FileRoot, type UploadStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDiskBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { enqueue, uploads } from '#lib/uploads.svelte.ts';
+	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
 	import UploadPanel from './UploadPanel.svelte';
 
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
@@ -24,6 +24,25 @@
 	let dialogError = $state('');
 	let fileInput = $state<HTMLInputElement>();
 	let folderInput = $state<HTMLInputElement>();
+    let pending = $state<UploadStatus[]>([]);
+    let recoveryInput = $state<HTMLInputElement>();
+    let recovery = $state<{ status: UploadStatus; root: FileRoot; dir: string } | null>(null);
+    let recovering = $state(false);
+    const unfinished = $derived(pending.filter(part => !uploads.items.some(item => item.id === part.id)));
+    async function recoverPicked(input: HTMLInputElement) {
+        const file = input.files?.[0], selected = recovery;
+        input.value = '';
+        if (!file || !selected) return;
+        recovering = true;
+        try { await recover(file, selected.root, selected.dir, selected.status); await load(); }
+        catch (err) { error = fail(err); }
+        finally { recovering = false; recovery = null; }
+    }
+    async function removePending(part: UploadStatus) {
+        try { await api.delete(`/files/uploads/${part.id}`); await load(); }
+        catch (err) { error = fail(err); }
+    }
+
 
 	const root = $derived(roots?.find((candidate) => candidate.id === rootId));
 	const crumbs = $derived(dir ? dir.split('/') : []);
@@ -43,9 +62,16 @@
 	}
 
 	async function load() {
-		if (!rootId) return void (entries = null);
+		if (!rootId) { entries = null; pending = []; return; }
+        const requestedRoot = rootId, requestedDir = dir;
 		try {
-			entries = await api.get<FileEntry[]>(`/files/list?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(dir)}`);
+			const query = `root=${encodeURIComponent(requestedRoot)}&path=${encodeURIComponent(requestedDir)}`;
+            const [listing, parts] = await Promise.all([
+                api.get<FileEntry[]>(`/files/list?${query}`),
+                root?.writable ? api.get<UploadStatus[]>(`/files/uploads?${query}`) : Promise.resolve([])
+            ]);
+            if (rootId !== requestedRoot || dir !== requestedDir) return;
+            entries = listing; pending = parts;
 			selected = selected.filter((name) => entries!.some((entry) => entry.name === name));
 			error = '';
 		} catch (err) {
@@ -58,7 +84,7 @@
 		rootId = id;
 		dir = path;
 		selected = [];
-		entries = null;
+		entries = null; pending = [];
 		load();
 	}
 
@@ -241,7 +267,21 @@
 				{/if}
 			</div>
 
-			<div class="row header">
+			{#if unfinished.length > 0}
+                <section class="unfinished" aria-label={t('uploads.unfinished')}>
+                    <strong>{t('uploads.unfinished')}</strong>
+                    <p class="muted">{recovering ? t('uploads.verifying') : t('uploads.recoverHint')}</p>
+                    <input bind:this={recoveryInput} type="file" hidden onchange={event => recoverPicked(event.currentTarget)} />
+                    {#each unfinished as part (part.id)}
+                        <div class="unfinished-row">
+                            <span>{part.name} · <span class="mono">{formatBytes(part.offset)} / {formatBytes(part.size)}</span></span>
+                            <button class="btn" disabled={recovering || part.busy} onclick={() => { if (root) { recovery = { status: part, root, dir }; recoveryInput?.click(); } }}>{t('uploads.resume')}</button>
+                            <button class="btn" disabled={recovering || part.busy} onclick={() => removePending(part)}>{t('uploads.removePartial')}</button>
+                        </div>
+                    {/each}
+                </section>
+            {/if}
+            <div class="row header">
 				<input type="checkbox" aria-label={t('files.selectAll')} checked={allSelected} onchange={(event) => (selected = event.currentTarget.checked ? (entries ?? []).map((entry) => entry.name) : [])} />
 				<span>{t('files.name')}</span>
 				<span class="num">{t('files.size')}</span>
@@ -323,6 +363,9 @@
 {/if}
 
 <style>
+ .unfinished { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+ .unfinished-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+ .unfinished-row > span { flex: 1; overflow-wrap: anywhere; }
 	h1 {
 		font-size: 1.5rem;
 		font-weight: 600;

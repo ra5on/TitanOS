@@ -521,3 +521,29 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Bildschirmbefehle unterhalb des VNC-Fensters, auch im separaten Tab; VM-Power-Aktionen bleiben oben. Vollbildleiste unten.
 - Einstellungen › Ein-/Ausschalter: kurzer physischer Tastendruck ignorieren/neustarten/herunterfahren, logind per Reload, persistente Wahl in `/config/system/power-button.json`; langer hardwareseitiger Ausschaltimpuls unverändert. Siehe `docs/POWER-BUTTON.md`.
 - Tailscale als signiertes Plugin mit eigener Detail-/Einstellungsansicht, Subnet-Routing, NAS als Exit Node oder Nutzung eines anderen Exit Nodes, LAN-Zugang bleibt erhalten. Einstellungen mit zweiminütiger Sicherheitsfrist; private Geräteschlüssel auf dem Daten-Volume. Scoped Tailscale-Firewall-Hooks vor der allgemeinen Freigabe erhalten. Siehe `docs/TAILSCALE.md`; echtes Tailnet weiter prüfen.
+
+
+## Entwicklungsstand Beta 0.2.0
+
+- RAM-/Writeback-Budget: `/config/system/memory.json`, Standard 20 % von
+  `MemAvailable` nach Systemreserve, 10–90 % in Zehnerschritten. Kein globales
+  Cache-Leeren und kein behauptetes hartes Linux-Pagecache-Limit. Details:
+  `docs/MEMORY.md`. Sysctl-Änderungen nur im NAS bzw. in Wegwerf-VMs testen.
+- Browser-Uploads: begrenzte gemeinsame Schreibfenster, fsync vor Bestätigung,
+  gezielte Seitenfreigabe, persistente Teildateien/Metadaten auf dem Volume.
+  Wiederaufnahme nach Originaldateivergleich, aktuelle Rechte und Volume-/
+  Dateiidentität prüfen; keine RAM-/Overlay-Ausweichablage.
+- Neue Volumes: fremde ungemountete md-Arrays vor dem Löschen nur freigeben,
+  wenn alle vorhandenen Mitglieder ausgewählt sind. Alle Platten vorher prüfen,
+  Bootstick/konfigurierte Volumes/VM-Platten/unbekannte Holder ausschließen,
+  nach Stoppen erneut prüfen. Keine Host-Platten für Tests verwenden.
+- VMs können einen expliziten `directory`-Namen für verwaltete Daten/Firmware
+  erhalten. Default bleibt der interne VM-Name; bestehende VMs werden nicht
+  umgestellt. Ein direkt genutzter Abbildordner kann wiederverwendet werden,
+  wenn er keiner anderen VM gehört und keine fremden Dateien enthält.
+- Docker 26 / Compose 2.26: NVIDIA-CDI in `deploy.resources.reservations.devices`
+  mit `driver: cdi`, qualifizierten `device_ids`, ohne `count`/`options` übergeben.
+  `service.devices` interpretiert diese Compose-Version als Host-Dateipfade.
+  Der Start eines alten, deshalb gescheiterten verwalteten Containers darf nur
+  dessen Dienst mit `up --no-deps --force-recreate --pull never` erneuern;
+  eingebundene Daten und fremde Dienste erhalten.

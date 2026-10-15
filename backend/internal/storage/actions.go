@@ -57,7 +57,8 @@ type CreateRequest struct {
 	Disks      []string `json:"disks"` // names like "sda"
 	// Erase repeats the disks to be wiped. Creating a volume destroys
 	// everything on them, so the caller has to say so explicitly.
-	Erase []string `json:"erase"`
+	Erase      []string          `json:"erase"`
+	Identities map[string]string `json:"identities,omitempty"`
 }
 
 func sameSet(a, b []string) bool {
@@ -200,6 +201,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 		return err
 	}
 	status := m.status(devices, m.arrays(ctx))
+	if err := validateDiskIdentities(req, status); err != nil {
+		return err
+	}
 	smallest := ^uint64(0)
 	for _, name := range req.Disks {
 		disk, err := m.usable(status, name)
@@ -207,6 +211,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 			return err
 		}
 		smallest = min(smallest, disk.SizeBytes)
+	}
+	devices, err = m.releaseOldArrays(ctx, devices, req.Disks)
+	if err != nil {
+		return err
 	}
 	sizeMiB := memberSizeMiB(smallest)
 

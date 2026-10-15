@@ -42,6 +42,9 @@ type Memory struct {
 	UsedBytes      uint64 `json:"usedBytes"`
 	FreeBytes      uint64 `json:"freeBytes"`
 	AvailableBytes uint64 `json:"availableBytes"`
+	CacheBytes     uint64 `json:"cacheBytes"`
+	DirtyBytes     uint64 `json:"dirtyBytes"`
+	WritebackBytes uint64 `json:"writebackBytes"`
 }
 
 // Image describes the system image in RAM. It is nil when TitanOS is not
@@ -170,7 +173,7 @@ func (m *Monitor) Info() Info {
 		Kernel:        readTrimmed("/proc/sys/kernel/osrelease"),
 		UptimeSeconds: readUptime(),
 		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage},
-		Memory:        parseMeminfo(readString("/proc/meminfo")),
+		Memory:        ReadMemory(),
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},
 		Temperatures:  append([]Temperature{}, temperatures...),
@@ -234,6 +237,8 @@ func cpuModel(cpuinfo string) string {
 // Used includes all occupied RAM, including caches, kernel memory and tmpfs.
 // Available is the kernel's separate estimate of capacity for new workloads.
 // Do not add the RAM image, VM allocations or Shmem: they are already counted.
+func ReadMemory() Memory { return parseMeminfo(readString("/proc/meminfo")) }
+
 func parseMeminfo(meminfo string) Memory {
 	values := map[string]uint64{}
 	for line := range strings.SplitSeq(meminfo, "\n") {
@@ -257,7 +262,12 @@ func parseMeminfo(meminfo string) Memory {
 	if !ok {
 		available = free
 	}
-	return Memory{TotalBytes: total, UsedBytes: total - free, FreeBytes: free, AvailableBytes: min(available, total)}
+	cache := values["Cached"] - min(values["Cached"], values["Shmem"])
+	cache = min(total-free, cache)
+	for _, extra := range []uint64{values["Buffers"], values["SReclaimable"]} {
+		cache += min(total-free-cache, extra)
+	}
+	return Memory{TotalBytes: total, UsedBytes: total - free, FreeBytes: free, AvailableBytes: min(available, total), CacheBytes: cache, DirtyBytes: values["Dirty"], WritebackBytes: values["Writeback"]}
 }
 
 type cpuTimes struct {
