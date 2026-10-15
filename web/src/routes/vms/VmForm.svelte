@@ -1,18 +1,18 @@
 <script lang="ts">
 	// The form a VM is made and changed with. With `existing` it edits that
-	// VM: what cannot change afterwards (name, template, firmware) is fixed.
+	// VM: the internal identifier, template and firmware stay fixed.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Hardware, type Share, type VM, type VMHost, type VMStatus } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
+	import { newVMIdentifier, validVMDisplayName, vmLabel } from '#lib/vm-name.ts';
 
 	let { existing }: { existing?: VM } = $props();
 
 	const TEMPLATES = ['linux', 'windows', 'other'] as const;
 	const SIZES = [16, 32, 64, 128, 256, 512];
-	const NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 	const TAG = /^[A-Za-z0-9_-]{1,36}$/;
 	const GIB = 1024 ** 3;
 
@@ -35,7 +35,7 @@
 	// The form is made anew for every VM, so what it starts from is read once.
 	const initial = untrack(() => existing);
 	let template = $state<(typeof TEMPLATES)[number]>(initial?.template ?? 'linux');
-	let name = $state(initial?.name ?? '');
+	let displayName = $state(initial ? vmLabel(initial) : '');
 	let description = $state(initial?.description ?? '');
 	let vcpus = $state(initial?.vcpus ?? 2);
 	let memoryGiB = $state(initial ? initial.memoryMiB / 1024 : 2);
@@ -66,6 +66,7 @@
 	const maxMemory = $derived(Math.max(1, Math.floor(machine.memoryBytes / GIB)));
 	const freeMemory = $derived(Math.max(0, machine.memoryBytes - machine.usedMemoryBytes));
 	const taken = $derived((status?.vms ?? []).map((vm) => vm.name));
+	const name = $derived(initial?.name ?? newVMIdentifier(displayName, taken));
 	const hybrid = $derived(host.cpus.some((cpu) => cpu.kind !== ''));
 
 	const fail = (err: unknown) => (error = { text: errorText(err instanceof ApiError ? err.code : 'internal'), detail: '' });
@@ -191,11 +192,12 @@
 
 	// --- submit --------------------------------------------------------------
 
-	const nameProblem = $derived(existing || name === '' ? '' : !NAME.test(name) ? t('vms.new.nameInvalid') : taken.includes(name) ? t('vms.new.nameExists') : '');
+	const duplicateName = $derived((status?.vms ?? []).some((vm) => vm.name !== existing?.name && vmLabel(vm).toLowerCase() === displayName.trim().toLowerCase()));
+	const nameProblem = $derived(displayName === '' ? '' : !validVMDisplayName(displayName) ? t('vms.displayNameInvalid') : duplicateName ? t('vms.new.nameExists') : '');
 	const memoryNote = $derived(memoryGiB * GIB > freeMemory && !running ? t('vms.new.memoryOver', { free: formatBytes(freeMemory) }) : '');
 	const blocked = $derived(
 		busy ||
-			(!existing && (!NAME.test(name) || taken.includes(name))) ||
+			!validVMDisplayName(displayName) || duplicateName ||
 			(!existing && disks.length === 0 && iso.trim() === '') ||
 			disks.some(diskBlocked) ||
 			(pinning && pinned.length === 0) ||
@@ -226,6 +228,7 @@
 		try {
 			await api.post('/vms', {
 				name,
+				displayName: displayName.trim(),
 				description,
 				template,
 				autostart,
@@ -252,7 +255,7 @@
 		busy = true;
 		error = null;
 		try {
-			await api.put(`/vms/${existing.name}`, { description, autostart, ...hardwareSettings() });
+			await api.put(`/vms/${existing.name}`, { displayName: displayName.trim(), description, autostart, ...hardwareSettings() });
 			await goto(`/vms?vm=${existing.name}`);
 		} catch (err) {
 			problem(err);
@@ -262,8 +265,8 @@
 </script>
 
 <div class="title">
-	<p class="muted crumbs"><a href="/vms">{t('vms.title')}</a> › {existing ? existing.name : t('vms.new.crumb')}</p>
-	<h1>{existing ? t('vms.dialog.edit', { name: existing.name }) : t('vms.new.title')}</h1>
+	<p class="muted crumbs"><a href="/vms">{t('vms.title')}</a> › {existing ? vmLabel(existing) : t('vms.new.crumb')}</p>
+	<h1>{existing ? t('vms.dialog.edit', { name: vmLabel(existing) }) : t('vms.new.title')}</h1>
 </div>
 
 {#if status && !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
@@ -291,7 +294,7 @@
 				{/if}
 				<div class="row">
 					<label class="narrow"><span>{t('vms.new.name')}</span>
-						<input class="field mono" type="text" bind:value={name} maxlength="31" autocapitalize="none" spellcheck="false" aria-invalid={nameProblem !== ''} disabled={!!existing} />
+						<input class="field" type="text" bind:value={displayName} maxlength="160" aria-invalid={nameProblem !== ''} disabled={busy} placeholder="Home Assistant" />
 						{#if nameProblem}<small class="warn" role="alert">{nameProblem}</small>{/if}
 					</label>
 					<label class="wide"><span>{t('vms.new.description')}</span><input class="field" type="text" bind:value={description} maxlength="200" /></label>
@@ -547,7 +550,7 @@
 	<aside class="tile" aria-labelledby="summary-title">
 		<h2 class="tile-title" id="summary-title">{t('vms.new.summary')}</h2>
 		<dl>
-			<div><dt>{t('vms.new.name')}</dt><dd class="mono">{name || '–'}</dd></div>
+			<div><dt>{t('vms.new.name')}</dt><dd>{displayName.trim() || '–'}</dd></div>
 			<div><dt>{t('vms.new.template')}</dt><dd>{t(`vms.template.${template}`)}</dd></div>
 			<div><dt>{t('vms.new.vcpus')}</dt><dd class="mono">{vcpuCount}{pinning ? ` (CPU ${pinned.join(', ') || '–'})` : ''}</dd></div>
 			<div><dt>{t('vms.new.memory')}</dt><dd class="mono">{memoryGiB} GB</dd></div>

@@ -163,6 +163,7 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 	}
 	domain := el("domain", "type", "kvm").with(
 		el("name").text(vm.Name),
+		el("title").text(vm.Label()),
 		el("uuid").text(vm.UUID),
 		el("description").text(vm.Description),
 		el("memory", "unit", "MiB").text(fmt.Sprint(vm.MemoryMiB)),

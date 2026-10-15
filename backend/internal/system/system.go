@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,14 +17,15 @@ import (
 
 // Info is a snapshot of the machine for the dashboard.
 type Info struct {
-	Hostname      string   `json:"hostname"`
-	Kernel        string   `json:"kernel"`
-	UptimeSeconds int64    `json:"uptimeSeconds"`
-	CPU           CPU      `json:"cpu"`
-	Memory        Memory   `json:"memory"`
-	Image         *Image   `json:"image"`
-	Stick         Stick    `json:"stick"`
-	Network       *Network `json:"network"`
+	Hostname      string        `json:"hostname"`
+	Kernel        string        `json:"kernel"`
+	UptimeSeconds int64         `json:"uptimeSeconds"`
+	CPU           CPU           `json:"cpu"`
+	Memory        Memory        `json:"memory"`
+	Image         *Image        `json:"image"`
+	Stick         Stick         `json:"stick"`
+	Network       *Network      `json:"network"`
+	Temperatures  []Temperature `json:"temperatures"`
 }
 
 type CPU struct {
@@ -33,8 +35,10 @@ type CPU struct {
 }
 
 type Memory struct {
-	TotalBytes uint64 `json:"totalBytes"`
-	UsedBytes  uint64 `json:"usedBytes"`
+	TotalBytes     uint64 `json:"totalBytes"`
+	UsedBytes      uint64 `json:"usedBytes"`
+	FreeBytes      uint64 `json:"freeBytes"`
+	AvailableBytes uint64 `json:"availableBytes"`
 }
 
 // Image describes the system image in RAM. It is nil when TitanOS is not
@@ -72,10 +76,11 @@ const (
 // Monitor samples the values that are rates (CPU usage, network throughput)
 // in the background, so that a request gets them without waiting.
 type Monitor struct {
-	mu      sync.RWMutex
-	cpu     float64
-	rx, tx  float64
-	network string
+	mu           sync.RWMutex
+	cpu          float64
+	rx, tx       float64
+	network      string
+	temperatures []Temperature
 }
 
 // NewMonitor starts sampling until ctx is done.
@@ -86,6 +91,9 @@ func NewMonitor(ctx context.Context) *Monitor {
 }
 
 func (m *Monitor) run(ctx context.Context) {
+	m.mu.Lock()
+	m.temperatures = readTemperatures("/sys")
+	m.mu.Unlock()
 	ticker := time.NewTicker(sampleInterval)
 	defer ticker.Stop()
 
@@ -117,9 +125,11 @@ func (m *Monitor) run(ctx context.Context) {
 				txRate = float64(tx-prevTx) / seconds
 			}
 			prevIface, prevRx, prevTx = iface, rx, tx
+			temperatures := readTemperatures("/sys")
 
 			m.mu.Lock()
 			m.cpu, m.rx, m.tx, m.network = usage, rxRate, txRate, iface
+			m.temperatures = temperatures
 			m.mu.Unlock()
 		}
 	}
@@ -129,6 +139,7 @@ func (m *Monitor) run(ctx context.Context) {
 func (m *Monitor) Info() Info {
 	m.mu.RLock()
 	usage, rx, tx := m.cpu, m.rx, m.tx
+	temperatures := slices.Clone(m.temperatures)
 	m.mu.RUnlock()
 
 	hostname, _ := os.Hostname()
@@ -140,6 +151,7 @@ func (m *Monitor) Info() Info {
 		Memory:        parseMeminfo(readString("/proc/meminfo")),
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},
+		Temperatures:  append([]Temperature{}, temperatures...),
 	}
 
 	if route := defaultRoute(); route.iface != "" {
@@ -187,9 +199,9 @@ func cpuModel(cpuinfo string) string {
 	return ""
 }
 
-// parseMeminfo reads total and used memory from /proc/meminfo. "Used" is
-// what is not available to new programs; caches that the kernel can drop do
-// not count.
+// Used includes all occupied RAM, including caches, kernel memory and tmpfs.
+// Available is the kernel's separate estimate of capacity for new workloads.
+// Do not add the RAM image, VM allocations or Shmem: they are already counted.
 func parseMeminfo(meminfo string) Memory {
 	values := map[string]uint64{}
 	for line := range strings.SplitSeq(meminfo, "\n") {
@@ -202,16 +214,18 @@ func parseMeminfo(meminfo string) Memory {
 			continue
 		}
 		kib, err := strconv.ParseUint(fields[0], 10, 64)
-		if err != nil {
+		if err != nil || kib > ^uint64(0)/1024 {
 			continue
 		}
 		values[name] = kib * 1024
 	}
-	total, available := values["MemTotal"], values["MemAvailable"]
-	if available > total {
-		available = total
+	total := values["MemTotal"]
+	free := min(values["MemFree"], total)
+	available, ok := values["MemAvailable"]
+	if !ok {
+		available = free
 	}
-	return Memory{TotalBytes: total, UsedBytes: total - available}
+	return Memory{TotalBytes: total, UsedBytes: total - free, FreeBytes: free, AvailableBytes: min(available, total)}
 }
 
 type cpuTimes struct {

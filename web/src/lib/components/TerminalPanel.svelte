@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { vmLabel } from '#lib/vm-name.ts';
 	// The terminal at the lower edge of every page: a root shell on the NAS
 	// and consoles of containers as tabs. The page above stays usable.
 	import { api, ApiError, type DockerStatus, type VMStatus } from '#lib/api.ts';
@@ -15,7 +16,7 @@
 	let error = $state('');
 	let menu = $state(false);
 	let containers = $state<{ id: string; name: string }[]>([]);
-	let machines = $state<string[]>([]);
+	let machines = $state<{ name: string; label: string }[]>([]);
 	let searching = $state(false);
 	let query = $state('');
 	let now = $state(Date.now());
@@ -77,7 +78,7 @@
 			containers = [];
 		}
 		try {
-			machines = (await api.get<VMStatus>('/vms')).vms.filter((vm) => vm.state === 'running').map((vm) => vm.name);
+			machines = (await api.get<VMStatus>('/vms')).vms.filter((vm) => vm.state === 'running').map((vm) => ({ name: vm.name, label: vmLabel(vm) }));
 		} catch {
 			machines = [];
 		}
@@ -155,8 +156,8 @@
 					{/each}
 					{#if machines.length > 0}
 						<span class="muted heading">{t('terminal.newVm')}</span>
-						{#each machines as machine (machine)}
-							<button type="button" role="menuitem" onclick={() => choose(() => addVmConsole(machine))}><span class="kind vm" aria-hidden="true">VM</span><span class="mono">{machine}</span></button>
+						{#each machines as machine (machine.name)}
+							<button type="button" role="menuitem" onclick={() => choose(() => addVmConsole(machine.name, machine.label))}><span class="kind vm" aria-hidden="true">VM</span><span class="mono">{machine.label}</span></button>
 						{/each}
 					{/if}
 					<a role="menuitem" href="/vms" onclick={() => (menu = false)}><span class="kind vm" aria-hidden="true">VM</span>{t('terminal.vmConsole')}</a>

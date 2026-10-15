@@ -8,7 +8,7 @@ export const COLUMNS = 12;
 export const ROW_HEIGHT = 72;
 export const GAP = 16;
 
-export const TILE_IDS = ['system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia'] as const;
+export const TILE_IDS = ['system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia', 'temperatures'] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type TileId = StaticTileId | `vm:${string}` | `container:${string}`;
 
@@ -19,6 +19,7 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	volumes: { title: 'tile.volumes', minW: 4, minH: 2 },
 	network: { title: 'tile.network', minW: 3, minH: 3 },
 	disks: { title: 'tile.disks', minW: 3, minH: 2 },
+	temperatures: { title: 'temperatures.title', minW: 3, minH: 3 },
 	igpu: { title: 'tile.igpu', minW: 3, minH: 4 },
 	npu: { title: 'tile.npu', minW: 3, minH: 4 },
 	nvidia: { title: 'tile.nvidia', minW: 3, minH: 4 }

@@ -116,6 +116,7 @@
 			<span>{t('create.capacity')}</span>
 			<span class="mono" class:muted={!capacity.ok}>{capacity.text}</span>
 		</div>
+		{#if taken.length === 0}<p class="muted">{t('create.firstFolders')}</p>{/if}
 
 		{#if capacity.ok}
 			<label class="confirm">
