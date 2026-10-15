@@ -118,6 +118,32 @@ func (m *Manager) localDriver(dir string) (Manifest, error) {
 func (m *Manager) buildDir(volume string) string {
 	return filepath.Join(m.baseDir(volume), "nvidia-build", m.Release)
 }
+
+// The extracted SDK is reused between builds. Its parent directories must
+// therefore be private to titand, never pre-seeded writable share directories.
+func (m *Manager) secureBuildDir(volume string) error {
+	root, err := os.OpenRoot(filepath.Join(m.mountRoot, volume))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	path := ""
+	for _, part := range []string{".titanos", "plugins", "nvidia-build", m.Release} {
+		path = filepath.Join(path, part)
+		if err := root.Mkdir(path, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+		st, err := root.Lstat(path)
+		if err != nil {
+			return err
+		}
+		owner, ok := st.Sys().(*syscall.Stat_t)
+		if !st.IsDir() || st.Mode().Perm()&0022 != 0 || !ok || owner.Uid != uint32(os.Geteuid()) {
+			return errors.New("unsafe NVIDIA build directory permissions")
+		}
+	}
+	return nil
+}
 func (m *Manager) fetchBuildSDK(ctx context.Context) (buildSDK, error) {
 	var sdk buildSDK
 	base, err := m.releaseBase()
@@ -154,7 +180,7 @@ func (m *Manager) fetchBuildSDK(ctx context.Context) (buildSDK, error) {
 func (m *Manager) buildPhase(state string) { m.mu.Lock(); m.driverStatus.State = state; m.mu.Unlock() }
 func (m *Manager) prepareSDK(ctx context.Context, volume string, sdk buildSDK) (string, error) {
 	parent := m.buildDir(volume)
-	if err := os.MkdirAll(parent, 0700); err != nil {
+	if err := m.secureBuildDir(volume); err != nil {
 		return "", err
 	}
 	// The SDK and temporary build output must never spill into the RAM overlay.

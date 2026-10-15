@@ -200,3 +200,34 @@ func TestLocalBuildOSUpdateUsesNewSignedBundledDriver(t *testing.T) {
 		t.Fatal("rollback lost local trust", err)
 	}
 }
+
+func TestBuildRootRejectsWritableOrRedirectedParents(t *testing.T) {
+	for _, unsafe := range []string{"symlink", "writable"} {
+		t.Run(unsafe, func(t *testing.T) {
+			m, _ := newTestManager(t)
+			m.Release = "1.0.0"
+			volume := filepath.Join(m.mountRoot, "data")
+			if err := os.MkdirAll(volume, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if unsafe == "symlink" {
+				os.Symlink(t.TempDir(), filepath.Join(volume, ".titanos"))
+			} else {
+				os.Mkdir(filepath.Join(volume, ".titanos"), 0700)
+				os.Chmod(filepath.Join(volume, ".titanos"), 0777)
+			}
+			if err := m.secureBuildDir("data"); err == nil {
+				t.Fatal("unsafe build root accepted")
+			}
+		})
+	}
+	m, _ := newTestManager(t)
+	m.Release = "1.0.0"
+	os.MkdirAll(filepath.Join(m.mountRoot, "data"), 0700)
+	if err := m.secureBuildDir("data"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.secureBuildDir("data"); err != nil {
+		t.Fatal("reuse", err)
+	}
+}
