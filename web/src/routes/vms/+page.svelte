@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { storage } from '#lib/storage.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -23,6 +24,8 @@
 
 	const vms = $derived(status?.vms ?? []);
 	const current = $derived(vms.find((vm) => vm.name === page.url.searchParams.get('vm')) ?? vms[0]);
+
+    const lowSpace = $derived((storage.status?.volumes ?? []).filter(volume => volume.mounted && volume.sizeBytes > 0 && volume.usedBytes / volume.sizeBytes >= 0.9 && current?.disks.some(disk => disk.volume === volume.name || disk.path?.startsWith(`/mnt/${volume.name}/`))).map(volume => volume.name));
 
 	function problem(err: unknown): { text: string; detail: string } {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -175,7 +178,8 @@
 					<a class="btn" href="/vms/edit?vm={current.name}">{t('vms.edit')}</a>
 				</div>
 			</div>
-			{#if !current.available}<p class="notice-warn" role="status">{t('vms.unavailable')}</p>{/if}
+			{#if lowSpace.length}<p class="notice-warn" role="status">{t('vms.lowSpace', { volumes: lowSpace.join(', ') })}</p>{/if}
+            {#if !current.available}<p class="notice-warn" role="status">{t('vms.unavailable')}</p>{/if}
 			{#if current.job}
 				<div class={current.job.state === 'failed' ? 'notice-error' : 'notice-warn'} role="status">
 					{t(current.job.state === 'failed' ? 'vms.jobFailed' : 'vms.jobRunning', { file: current.job.text })}

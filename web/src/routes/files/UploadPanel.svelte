@@ -37,7 +37,9 @@
 						<span class="state warn">{t('uploads.conflict')}</span>
 					{:else if item.state === 'paused'}
 						<span class="state warn">{t('uploads.paused')} · {formatPercent(percent(item))}</span>
-					{:else if item.state === 'retrying'}
+					{:else if item.state === 'pressure'}
+                        <span class="state warn">{t('error.upload_memory_pressure')}</span>
+                    {:else if item.state === 'retrying'}
 						<span class="state warn">{t('uploads.retrying')}</span>
 					{:else if item.state === 'queued'}
 						<span class="state muted">{t('uploads.queued')}</span>
@@ -48,10 +50,10 @@
 						<button type="button" class="btn small" onclick={() => resolve(item, 'replace')}>{t('uploads.replace')}</button>
 						<button type="button" class="btn small" onclick={() => resolve(item, 'rename')}>{t('uploads.keepBoth')}</button>
 						<button type="button" class="btn small" onclick={() => resolve(item, 'skip')}>{t('uploads.skip')}</button>
-					{:else if item.state === 'uploading' || item.state === 'retrying' || item.state === 'queued'}
+					{:else if item.state === 'uploading' || item.state === 'retrying' || item.state === 'pressure' || item.state === 'queued'}
 						<button type="button" class="icon" aria-label="{t('uploads.pause')}: {item.name}" onclick={() => pause(item)}><Icon name="pause" size={16} /></button>
 						<button type="button" class="icon" aria-label="{t('uploads.cancel')}: {item.name}" onclick={() => cancel(item)}><Icon name="close" size={16} /></button>
-					{:else if item.state === 'paused'}
+					{:else if item.state === 'paused' || item.state === 'failed'}
 						<button type="button" class="icon" aria-label="{t('uploads.resume')}: {item.name}" onclick={() => resume(item)}><Icon name="play" size={16} /></button>
 						<button type="button" class="icon" aria-label="{t('uploads.cancel')}: {item.name}" onclick={() => cancel(item)}><Icon name="close" size={16} /></button>
 					{/if}

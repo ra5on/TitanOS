@@ -35,7 +35,14 @@
 	// The form is made anew for every VM, so what it starts from is read once.
 	const initial = untrack(() => existing);
 	let template = $state<(typeof TEMPLATES)[number]>(initial?.template ?? 'linux');
-	let displayName = $state(initial ? vmLabel(initial) : '');
+	let chosenDirectory = $state(initial?.directory ?? '');
+ let reuseImageFolder = $state(true);
+ const directFolder = $derived.by(() => {
+  const image = disks.find(d => d.mode === 'direct');
+  const match = image?.path.match(/^\/mnt\/([^/]+)\/vms\/([^/]+)\/[^/]+$/);
+  return match ? { volume: match[1], directory: match[2] } : null;
+ });
+ let displayName = $state(initial ? vmLabel(initial) : '');
 	let description = $state(initial?.description ?? '');
 	let vcpus = $state(initial?.vcpus ?? 2);
 	let memoryGiB = $state(initial ? initial.memoryMiB / 1024 : 2);
@@ -62,11 +69,12 @@
 		const found = volumes.find((candidate) => candidate.name === volume);
 		return found ? found.sizeBytes - found.usedBytes : 0;
 	};
-	const machine = $derived(status?.host ?? { cpus: 1, memoryBytes: 0, usedMemoryBytes: 0, cpuModel: '' });
+	const machine = $derived(status?.host ?? { availableMemoryBytes: 0, cpus: 1, memoryBytes: 0, usedMemoryBytes: 0, cpuModel: '' });
 	const maxMemory = $derived(Math.max(1, Math.floor(machine.memoryBytes / GIB)));
-	const freeMemory = $derived(Math.max(0, machine.memoryBytes - machine.usedMemoryBytes));
+	const freeMemory = $derived(Math.max(0, machine.availableMemoryBytes ?? machine.memoryBytes - machine.usedMemoryBytes));
 	const taken = $derived((status?.vms ?? []).map((vm) => vm.name));
 	const name = $derived(initial?.name ?? newVMIdentifier(displayName, taken));
+ const directory = $derived(chosenDirectory.trim() || (reuseImageFolder ? directFolder?.directory : '') || name);
 	const hybrid = $derived(host.cpus.some((cpu) => cpu.kind !== ''));
 
 	const fail = (err: unknown) => (error = { text: errorText(err instanceof ApiError ? err.code : 'internal'), detail: '' });
@@ -206,7 +214,7 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: ['vm_failed', 'hardware_incomplete_group'].includes(code) && err instanceof ApiError ? err.message : '' };
+		error = { text: errorText(code), detail: ['vm_failed', 'hardware_incomplete_group', 'invalid_folder'].includes(code) && err instanceof ApiError ? err.message : '' };
 	}
 
 	const hardwareSettings = () => ({
@@ -228,6 +236,8 @@
 		try {
 			await api.post('/vms', {
 				name,
+ directory: directory !== name ? directory : undefined,
+ volume: reuseImageFolder && directFolder ? directFolder.volume : undefined,
 				displayName: displayName.trim(),
 				description,
 				template,
@@ -299,7 +309,12 @@
 					</label>
 					<label class="wide"><span>{t('vms.new.description')}</span><input class="field" type="text" bind:value={description} maxlength="200" /></label>
 				</div>
-				<label class="check"><input type="checkbox" bind:checked={autostart} /><span>{t('vms.autostartLabel')}</span></label>
+				{#if !existing}
+     <label><span>{t('vms.directory')}</span><input class="field" bind:value={chosenDirectory} placeholder={directory} disabled={busy} /><small>{t('vms.directoryHint')}</small></label>
+     {#if directFolder}<label class="check"><input type="checkbox" bind:checked={reuseImageFolder} disabled={busy || !!chosenDirectory.trim()} /><span>{t('vms.reuseDirectory', { name: directFolder.directory })}</span></label>{/if}
+     <p class="mono muted">{t('vms.directoryPreview', { name: directory })}</p>
+    {:else}<p class="mono muted">{t('vms.directoryPreview', { name: existing.directory || existing.name })}</p>{/if}
+    <label class="check"><input type="checkbox" bind:checked={autostart} /><span>{t('vms.autostartLabel')}</span></label>
 			</div>
 		</section>
 

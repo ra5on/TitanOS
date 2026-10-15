@@ -5,6 +5,7 @@ Boots four times: create/snapshot, normal remount, degraded boot/replace,
 remount after replacement. No host block devices are attached.
 """
 import argparse
+import hashlib
 import http.cookiejar
 import importlib.util
 import json
@@ -20,9 +21,50 @@ import urllib.error
 import urllib.request
 import zipfile
 
+from cdi_smoke import check_cdi
+
 spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).with_name('smoke-release.py'))
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
+
+
+def check_uploads(request, opener, url, remote, password):
+    state = request('/system/memory')
+    assert state['settings']['cachePercent'] == 20 and not state.get('error'), state
+    state = request('/system/memory', {'cachePercent': 40}, 'PUT')
+    assert state['settings']['cachePercent'] == 40 and not state.get('error'), state
+    assert int(remote('cat /proc/sys/vm/dirty_bytes')) > 0
+    assert remote('cat /proc/sys/vm/dirty_ratio') == '0'
+    root = 'volume/mirror'
+    content = b'upload-memory-check-' * (1024 * 1024)
+    part = request('/files/uploads', {'root': root, 'dir': 'appdata', 'name': 'upload.bin', 'size': len(content)})
+    def chunk(path, data, method='PATCH'):
+        req = urllib.request.Request(url + '/api/v1' + path, data=data, method=method, headers={'Origin': url, 'Content-Type': 'application/octet-stream'})
+        with opener.open(req, timeout=90) as response:
+            body = response.read()
+            return json.loads(body) if body else None
+    received = 8 * 1024 * 1024
+    status = chunk('/files/uploads/' + part['id'] + '?offset=0', content[:received])
+    assert status['offset'] == received, status
+    remote('systemctl restart titand.service')
+    for attempt in range(45):
+        try:
+            if request('/health').get('ready'):
+                break
+        except OSError:
+            pass
+        time.sleep(1)
+    request('/login', {'name': 'storagetester', 'password': password})
+    parts = request('/files/uploads?root=volume%2Fmirror&path=appdata')
+    assert len(parts) == 1 and parts[0]['offset'] == received, parts
+    chunk('/files/uploads/' + part['id'] + '/verify?offset=0', content[:received], 'POST')
+    for offset in range(received, len(content), 8 * 1024 * 1024):
+        chunk('/files/uploads/' + part['id'] + '?offset=' + str(offset), content[offset:offset + 8 * 1024 * 1024])
+    request('/files/uploads/' + part['id'] + '/finish', {})
+    actual = remote('sha256sum /mnt/mirror/appdata/upload.bin').split()[0]
+    assert actual == hashlib.sha256(content).hexdigest(), actual
+    assert request('/files/uploads?root=volume%2Fmirror&path=appdata') == []
+    remote('rm /mnt/mirror/appdata/upload.bin')
 
 
 def smoke(archive, plugins, log, timeout):
@@ -120,6 +162,17 @@ def smoke(archive, plugins, log, timeout):
                     disks = {d['serial']: d['name'] for d in request('/storage')['disks']}
                     if boot == 1:
                         members = [disks['BTRFS1'], disks['BTRFS2']]
+                        # Exercise real foreign RAID release, only on these fresh
+                        # virtual disks. A partial selection must change nothing.
+                        assert all(name.startswith('vd') for name in members), members
+                        remote('mdadm --create /dev/md/old --run --metadata=1.2 --level=1 --raid-devices=2 ' + ' '.join('/dev/' + name for name in members) + '; mkfs.ext4 -q /dev/md/old')
+                        try:
+                            request('/storage/volumes', {'name': 'unsafe', 'level': 'raid0', 'filesystem': 'ext4', 'disks': members[:1], 'erase': members[:1]})
+                        except RuntimeError as error:
+                            assert 'disk_unavailable' in str(error), error
+                        else:
+                            raise AssertionError('accepted partial foreign RAID selection')
+                        remote('test -b /dev/md/old; mdadm --detail /dev/md/old')
                         request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members})
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
@@ -128,6 +181,12 @@ def smoke(archive, plugins, log, timeout):
                         request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})
                         created = next(vm for vm in request('/vms')['vms'] if vm['name'] == 'disk-test')
                         assert created['displayName'] == 'Home Assistant Test', created
+                        remote('mkdir "/mnt/mirror/vms/Home Assistant"; qemu-img create -q -f qcow2 "/mnt/mirror/vms/Home Assistant/ha.qcow2" 1G')
+                        request('/vms', {'name': 'home-assistant', 'displayName': 'Home Assistant', 'directory': 'Home Assistant', 'volume': 'mirror', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'path': '/mnt/mirror/vms/Home Assistant/ha.qcow2', 'format': 'qcow2'}]})
+                        remote('test ! -e /mnt/mirror/vms/home-assistant')
+                        check_uploads(request, opener, url, remote, password)
+                        check_cdi(request, remote)
+                        print('Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed', flush=True)
                         request('/vms/disk-test', {'displayName': 'Home Assistant NAS', 'memoryMiB': 512, 'vcpus': 1, 'network': created['network']}, 'PUT')
                         memory = request('/system')['memory']
                         assert memory['usedBytes'] + memory['freeBytes'] == memory['totalBytes'], memory

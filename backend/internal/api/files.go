@@ -13,6 +13,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
 var fileErrors = []struct {
@@ -28,6 +29,8 @@ var fileErrors = []struct {
 	{files.ErrMismatch, http.StatusConflict, "upload_mismatch"},
 	{files.ErrIncomplete, http.StatusConflict, "upload_incomplete"},
 	{files.ErrConfirm, http.StatusBadRequest, "not_confirmed"},
+	{files.ErrVolumeChanged, http.StatusConflict, "upload_volume_unavailable"},
+	{system.ErrMemoryPressure, http.StatusServiceUnavailable, "upload_memory_pressure"},
 	{files.ErrNoUpload, http.StatusNotFound, "upload_not_found"},
 }
 
@@ -57,13 +60,13 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 			continue
 		}
 		roots = append(roots, files.Root{
-			ID: "share/" + share.Name, Name: share.Name, Kind: "share", Dir: dir,
+			ID: "share/" + share.Name, Name: share.Name, Kind: "share", Dir: dir, Volume: share.Volume,
 			Writable: level == shares.ReadWrite, Recycle: share.Recycle.Enabled,
 		})
 	}
 	if user.Role.CanAdminister() {
 		for _, volume := range mounted {
-			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Writable: true})
+			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Volume: volume, Writable: true})
 		}
 	}
 	return roots
@@ -231,6 +234,9 @@ func (s *Server) handleUploadStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeUpload(w, r) {
+		return
+	}
 	status, err := s.opts.Files.UploadStatus(r.PathValue("id"), currentUser(r).Name)
 	if err != nil {
 		writeFileError(w, err)
@@ -242,12 +248,15 @@ func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 // handleUploadChunk appends the request body to an upload. The body goes
 // straight to the volume; nothing is kept in RAM or on the stick.
 func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeUpload(w, r) {
+		return
+	}
 	offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
 	if err != nil || offset < 0 {
 		writeFileError(w, files.ErrInvalid)
 		return
 	}
-	status, err := s.opts.Files.WriteChunk(r.PathValue("id"), currentUser(r).Name, offset, r.Body)
+	status, err := s.opts.Files.WriteChunkContext(r.Context(), r.PathValue("id"), currentUser(r).Name, offset, r.Body)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -256,6 +265,9 @@ func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUploadFinish(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeUpload(w, r) {
+		return
+	}
 	user := currentUser(r)
 	status, err := s.opts.Files.FinishUpload(r.PathValue("id"), user.Name)
 	if err != nil {
@@ -267,9 +279,62 @@ func (s *Server) handleUploadFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUploadAbort(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeUpload(w, r) {
+		return
+	}
 	if err := s.opts.Files.AbortUpload(r.PathValue("id"), currentUser(r).Name); err != nil {
 		writeFileError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleUploads(w http.ResponseWriter, r *http.Request) {
+	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+	if !ok {
+		return
+	}
+	uploads, err := s.opts.Files.Uploads(root, r.URL.Query().Get("path"), currentUser(r).Name, currentUser(r).UID)
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, 200, uploads)
+}
+func (s *Server) handleUploadVerify(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeUpload(w, r) {
+		return
+	}
+	offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+	if err != nil {
+		writeFileError(w, files.ErrInvalid)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
+	if err = s.opts.Files.VerifyChunk(r.PathValue("id"), currentUser(r).Name, offset, r.Body); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (s *Server) authorizeUpload(w http.ResponseWriter, r *http.Request) bool {
+	previous, err := s.opts.Files.UploadRoot(r.PathValue("id"), currentUser(r).Name)
+	if err != nil {
+		writeFileError(w, err)
+		return false
+	}
+	root, ok := s.fileRoot(w, r, previous.ID)
+	if !ok {
+		return false
+	}
+	if !root.Writable {
+		writeFileError(w, files.ErrReadOnly)
+		return false
+	}
+	if root.Dir != previous.Dir || root.Volume != previous.Volume {
+		writeFileError(w, files.ErrVolumeChanged)
+		return false
+	}
+	return true
 }

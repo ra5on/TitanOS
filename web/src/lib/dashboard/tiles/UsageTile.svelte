@@ -15,7 +15,7 @@
  {#if kind === 'cpu' && options.temperature}<div class="detail"><span class="muted">Package id 0</span><span class="mono">{temperature?.celsius == null ? '–' : `${temperature.celsius.toFixed(1)} °C`}</span></div>{/if}
  {#if options.details}
   {#if kind === 'cpu'}<span class="muted model">{info.cpu.model} · {info.cpu.threads}</span>
-  {:else}<div class="detail"><span class="muted">{t('system.memoryIncludesCache')}</span><span class="mono">{t('system.memoryAvailable', { value: formatBytes(info.memory.availableBytes) })}</span></div>{/if}
+  {:else}<div class="detail"><span class="muted">{t('system.memoryCache', { value: formatBytes(info.memory.cacheBytes ?? 0) })}</span><span class="mono">{t('system.memoryAvailable', { value: formatBytes(info.memory.availableBytes) })}</span></div>{/if}
  {/if}
  {#if options.history}<History values={systemHistory[kind]} />{/if}
 {/if}

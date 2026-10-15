@@ -66,10 +66,11 @@ func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"kvm": s.opts.VMs.HasKVM(),
 		"host": map[string]any{
-			"cpus":            runtime.NumCPU(),
-			"memoryBytes":     memory.TotalBytes,
-			"usedMemoryBytes": memory.UsedBytes,
-			"cpuModel":        s.opts.Monitor.Info().CPU.Model,
+			"cpus":                 runtime.NumCPU(),
+			"memoryBytes":          memory.TotalBytes,
+			"usedMemoryBytes":      memory.UsedBytes,
+			"availableMemoryBytes": memory.AvailableBytes,
+			"cpuModel":             s.opts.Monitor.Info().CPU.Model,
 		},
 		// With the bridge, VMs can have an address of their own in the network.
 		"bridge": s.opts.Network.HasBridge(),

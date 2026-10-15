@@ -407,14 +407,24 @@ func run(opts options) error {
 	if err := energy.Load(); err != nil {
 		slog.Warn("energy settings unavailable", "err", err)
 	}
+	monitor := system.NewMonitor(ctx)
+	memoryPolicy := system.NewMemoryPolicy(store, system.ReadMemory)
+	memoryPolicy.Disabled = opts.dev
+	if err := memoryPolicy.Load(); err != nil {
+		slog.Warn("memory budget unavailable", "err", err)
+	}
+	go memoryPolicy.Run(ctx)
+	fileManager := files.NewManager(shares.UsersGID)
+	fileManager.Acquire = memoryPolicy.Acquire
+	fileManager.Available = func(root files.Root) bool { return slices.Contains(volumes.Mounted(), root.Volume) }
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
 		Users:         users,
-		Monitor:       system.NewMonitor(ctx),
+		Monitor:       monitor,
 		Storage:       volumes,
 		Shares:        folders,
-		Files:         files.NewManager(shares.UsersGID),
+		Files:         fileManager,
 		Docker:        containers,
 		Catalog:       appCatalog,
 		Terminal:      shells,
@@ -436,6 +446,7 @@ func run(opts options) error {
 		Settings:      settings,
 		Energy:        energy,
 		PowerButton:   powerButton,
+		MemoryPolicy:  memoryPolicy,
 		Power:         power,
 		Version:       version.Version,
 		ShareDir:      shareDir,

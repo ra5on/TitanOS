@@ -66,7 +66,7 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
-		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
+		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
 		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
@@ -98,13 +98,13 @@ func disabledEnergy(store *config.Store) *system.EnergyManager {
 
 func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts := newTestServer(t)
-	for _, route := range []struct{ method, path string }{{"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("anonymous %s: %d", route.path, res.StatusCode)
 		}
 	}
 	ts.setup()
-	for _, path := range []string{"/system/power-button", "/plugins/tailscale"} {
+	for _, path := range []string{"/system/memory", "/system/power-button", "/plugins/tailscale"} {
 		if res, body := ts.request("GET", "/api/v1"+path, nil); res.StatusCode != 200 || !strings.Contains(string(body), `"readOnly":true`) {
 			t.Fatalf("owner status %s: %d %s", path, res.StatusCode, body)
 		}
@@ -127,7 +127,7 @@ func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, route := range []struct{ method, path string }{{"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.do(guest, route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Fatalf("user %s: %d", route.path, res.StatusCode)
 		}
@@ -1329,4 +1329,11 @@ func TestSnapshotsAndHardwareControlsRequireAdministrator(t *testing.T) {
 			t.Errorf("%v: %d", route, res.StatusCode)
 		}
 	}
+}
+
+func disabledMemory(store *config.Store) *system.MemoryPolicy {
+	m := system.NewMemoryPolicy(store, func() system.Memory { return system.Memory{TotalBytes: 8 << 30, AvailableBytes: 4 << 30} })
+	m.Disabled = true
+	m.Load()
+	return m
 }

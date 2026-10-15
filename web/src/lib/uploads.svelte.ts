@@ -6,7 +6,7 @@ import { api, ApiError, type UploadStatus } from './api.ts';
 /** Size of one request. A lost connection costs at most this much again. */
 const CHUNK_BYTES = 8 * 1024 * 1024;
 
-export type UploadState = 'queued' | 'uploading' | 'paused' | 'retrying' | 'conflict' | 'done' | 'failed';
+export type UploadState = 'queued' | 'uploading' | 'paused' | 'retrying' | 'pressure' | 'conflict' | 'done' | 'failed';
 
 export type Upload = {
 	key: number;
@@ -70,21 +70,36 @@ async function transfer(item: Upload) {
 			item.id = status.id;
 			item.name = status.name;
 		}
+        else {
+            // A restarted daemon rediscovers persistent partial uploads here.
+            await api.get<UploadStatus[]>(`/files/uploads?root=${encodeURIComponent(item.root)}&path=${encodeURIComponent(item.dir)}`);
+            item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+        }
 		let failures = 0;
 		while (item.sent < item.file.size) {
 			// Reading state through a function keeps TypeScript from assuming it cannot change meanwhile.
-			if (stateOf(item) !== 'uploading' && stateOf(item) !== 'retrying') return;
+			if (stateOf(item) !== 'uploading' && stateOf(item) !== 'retrying' && stateOf(item) !== 'pressure') return;
 			const started = performance.now();
 			try {
 				const res = await fetch(`/api/v1/files/uploads/${item.id}?offset=${item.sent}`, {
 					method: 'PATCH', credentials: 'same-origin', body: item.file.slice(item.sent, item.sent + CHUNK_BYTES)
 				});
-				if (res.status === 409) {
+				const problem = !res.ok ? (await res.json().catch(() => null))?.error?.code ?? 'internal' : '';
+                if (problem === 'upload_memory_pressure') {
+                    if (stateOf(item) !== 'paused') item.state = 'pressure';
+                    item.speed = 0;
+                    await sleep(3000);
+                    item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+                    continue;
+                }
+                if (problem === 'upload_mismatch') {
 					// The NAS has more or less than we think: ask and continue there.
-					item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+					const current = await api.get<UploadStatus>(`/files/uploads/${item.id}`);
+                    item.sent = current.offset;
+                    if (current.busy) await sleep(500);
 					continue;
 				}
-				if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => null))?.error?.code ?? 'internal', '');
+				if (!res.ok) throw new ApiError(res.status, problem, '');
 				const status: UploadStatus = await res.json();
 				const seconds = (performance.now() - started) / 1000;
 				const rate = seconds > 0 ? (status.offset - item.sent) / seconds : 0;
@@ -92,7 +107,7 @@ async function transfer(item: Upload) {
 				item.sent = status.offset;
 				// Back to normal after a lost connection – but a pause or cancel
 				// that came in while this request was on its way stays.
-				if (stateOf(item) === 'retrying') item.state = 'uploading';
+				if (stateOf(item) === 'retrying' || stateOf(item) === 'pressure') item.state = 'uploading';
 				failures = 0;
 			} catch (err) {
 				if (err instanceof ApiError) throw err;
@@ -107,6 +122,7 @@ async function transfer(item: Upload) {
 				}
 			}
 		}
+		if (stateOf(item) === 'paused') return;
 		const done = await api.post<UploadStatus>(`/files/uploads/${item.id}/finish`);
 		item.name = done.name;
 		item.state = 'done';
@@ -125,11 +141,12 @@ function stateOf(item: Upload): UploadState {
 }
 
 export function pause(item: Upload) {
-	if (item.state === 'uploading' || item.state === 'retrying' || item.state === 'queued') item.state = 'paused';
+	if (item.state === 'uploading' || item.state === 'retrying' || item.state === 'pressure' || item.state === 'queued') item.state = 'paused';
 }
 
 export function resume(item: Upload) {
-	if (item.state !== 'paused') return;
+	if (item.state !== 'paused' && item.state !== 'failed') return;
+	item.error = '';
 	// If the last request before the pause is still on its way, the loop
 	// that sent it simply carries on; otherwise the upload queues up again.
 	item.state = item.busy ? 'uploading' : 'queued';
@@ -145,20 +162,34 @@ export function resolve(item: Upload, decision: 'replace' | 'rename' | 'skip') {
 	work();
 }
 
+/** Verify the complete received prefix before resuming a reselected file. */
+export async function recover(file: File, root: { id: string; name: string }, dir: string, status: UploadStatus) {
+    if (file.size !== status.size) throw new ApiError(409, 'upload_mismatch', '');
+    for (let offset = 0; offset < status.offset; offset += CHUNK_BYTES) {
+        const res = await fetch(`/api/v1/files/uploads/${status.id}/verify?offset=${offset}`, {
+            method: 'POST', credentials: 'same-origin', body: file.slice(offset, Math.min(offset + CHUNK_BYTES, status.offset))
+        });
+        if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => null))?.error?.code ?? 'internal', '');
+    }
+    if (uploads.items.some(item => item.id === status.id)) return;
+    uploads.items.push({ key: nextKey++, file, root: root.id, rootName: root.name, dir, name: status.name,
+        sent: status.offset, state: 'queued', speed: 0, error: '', conflict: '', id: status.id, busy: false });
+    work();
+}
+
 /** Stops an upload and removes what has arrived of it. */
 export async function cancel(item: Upload) {
-	const id = item.id;
-	item.state = 'paused';
-	remove(item);
-	// A request that is still on its way holds the upload for a moment.
-	for (let attempt = 0; id && attempt < 5; attempt++) {
-		try {
-			await api.delete(`/files/uploads/${id}`);
-			return;
-		} catch {
-			await sleep(600);
-		}
-	}
+    item.state = 'paused';
+    // Let an in-flight request release its file before asking to remove it.
+    for (let attempt = 0; attempt < 30 && item.busy; attempt++) await sleep(500);
+    try {
+        if (item.id) await api.delete(`/files/uploads/${item.id}`);
+        remove(item);
+        uploads.finished++;
+    } catch (err) {
+        item.error = err instanceof ApiError ? err.code : 'unreachable';
+        item.state = 'failed';
+    }
 }
 
 function remove(item: Upload) {

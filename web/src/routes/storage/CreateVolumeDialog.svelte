@@ -24,12 +24,18 @@
 	let level = $state<RaidLevel>('raid1');
 	let filesystem = $state<Filesystem>('ext4');
 	let selected = $state<string[]>([]);
+    let selectionIdentities = $state<Record<string, string>>({});
+    function remember(disk: Disk, checked: boolean) {
+        if (checked && disk.identity) selectionIdentities[disk.name] = disk.identity;
+        else delete selectionIdentities[disk.name];
+    }
 	let confirmed = $state(false);
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 
 	const usable = $derived(disks.filter(isUsable));
 	const chosen = $derived(usable.filter((disk) => selected.includes(disk.name)));
+	const staleSelection = $derived(selected.length !== chosen.length || chosen.some(disk => disk.identity !== selectionIdentities[disk.name]));
 	const min = $derived(LEVELS.find((entry) => entry.id === level)!.min);
 
 	/** What the volume will hold; the same for every disk as the smallest one. */
@@ -49,7 +55,7 @@
 		if (taken.includes(name)) return errorText('volume_exists');
 		return '';
 	});
-	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && confirmed && !working);
+	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && !working);
 
 	// Whoever changes the selection has to confirm the erasing again.
 	$effect(() => {
@@ -63,11 +69,11 @@
 		working = true;
 		error = null;
 		try {
-			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected) });
+			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected), identities: $state.snapshot(selectionIdentities) });
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = { text: errorText(code), detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '' };
+			error = { text: errorText(code), detail: ['storage_failed', 'disk_unavailable', 'volume_busy'].includes(code) && err instanceof ApiError ? err.message : '' };
 			working = false;
 		}
 	}
@@ -97,7 +103,11 @@
 
 		<div class="field-row">
 			<span class="label">{t('create.disks')}</span>
-			<DiskPicker disks={usable} bind:selected name="volume-disks" />
+			<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
+            {#if staleSelection}
+                <p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
+                <button type="button" class="btn" onclick={() => { selected = []; selectionIdentities = {}; }}>{t('create.clearSelection')}</button>
+            {/if}
 		</div>
 
 		<div class="field-row">
