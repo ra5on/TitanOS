@@ -1001,7 +1001,7 @@
 	"plugins.volume": "Volume für Plugins",
 	"plugins.confirmName": "Zur Bestätigung den Namen des Plugins eingeben: {name}",
 	"plugins.enabled": "Eingeschaltet",
-	"plugins.enabledNote": "Ausschalten nimmt das Plugin sofort aus dem System; installiert bleibt es. Bereits geladene Kernelmodule bleiben bis zum nächsten Neustart geladen.",
+	"plugins.enabledNote": "Einschalten aktiviert die Treiber und Dienste. Ausschalten beendet sie und entlädt die Kernelmodule; belegte Module verhindern das Abschalten. Die Plugin-Dateien bleiben installiert.",
 	"plugins.remove": "Entfernen …",
 	"plugins.removeTitle": "{name} entfernen?",
 	"plugins.removeText": "Das Plugin wird ausgeschaltet und vom Volume gelöscht. Was du hochgeladen hast, bleibt in der Freigabe liegen.",

@@ -1001,7 +1001,7 @@
 	"plugins.volume": "Volume for plugins",
 	"plugins.confirmName": "To confirm, enter the name of the plugin: {name}",
 	"plugins.enabled": "Switched on",
-	"plugins.enabledNote": "Switching it off takes the plugin out of the system at once; it stays installed. Kernel modules that are loaded stay loaded until the next restart.",
+	"plugins.enabledNote": "Switching on activates the drivers and services. Switching off stops them and unloads kernel modules; modules in use prevent deactivation. The plugin files remain installed.",
 	"plugins.remove": "Remove …",
 	"plugins.removeTitle": "Remove {name}?",
 	"plugins.removeText": "The plugin is switched off and deleted from the volume. What you uploaded stays in the share.",
