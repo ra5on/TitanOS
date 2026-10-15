@@ -35,10 +35,7 @@ stage=work/'plugin';source=work/'sources';out=work/'result'
 for folder in [stage,source,out]:shutil.rmtree(folder,ignore_errors=True);folder.mkdir()
 for package in lock['packages']:
     destination=source if package['name']=='nvidia-kernel-open-dkms' else stage
-    subprocess.run(['dpkg-deb','-x',str(work/'packages'/package['file']),str(destination)],check=True)
-    # Toolkit 1.20.1's archive marks ./ as 0644. Restore the staging directory's
-    # search permission; the confined builder deliberately has no DAC override.
-    destination.chmod(0o755)
+    fetcher.extract(work/'packages'/package['file'],destination)
 kernelsource=source/'usr/src'/('nvidia-'+driver)
 with tarfile.open(out/'nvidia-kernel-sources.tar.gz','w:gz') as archive:archive.add(kernelsource,arcname='nvidia-'+driver)
 subprocess.run(['make','-C',str(kernelsource),'-j2','modules','KERNEL_UNAME='+kernel,'SYSSRC=/lib/modules/'+kernel+'/source','SYSOUT=/lib/modules/'+kernel+'/build'],check=True)
