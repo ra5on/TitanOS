@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,11 +15,14 @@ import (
 )
 
 type fakeRunner struct {
+	mu       sync.Mutex
 	commands []string
 	fail     string
 }
 
 func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -55,6 +59,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 
 func files(t *testing.T, m *Manager) map[string]string {
 	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	found := map[string]string{}
 	entries, _ := os.ReadDir(m.dir)
 	for _, entry := range entries {
@@ -364,5 +370,33 @@ func TestChangeSurvivesLostRequest(t *testing.T) {
 	}
 	if len(runner.commands) == 0 {
 		t.Fatal("configuration not applied")
+	}
+}
+
+func TestRollbackRetriesRetiredBridge(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Change(ctx, Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	runner.fail = "networkctl delete br0"
+	if err := m.Revert(ctx); err == nil {
+		t.Fatal("bridge deletion failure was ignored")
+	}
+	if err := m.Confirm(); !errors.Is(err, ErrReverting) {
+		t.Fatalf("failed rollback confirmable: %v", err)
+	}
+	if len(files(t, m)) != 0 {
+		t.Fatal("networkd still has the obsolete definition")
+	}
+	runner.commands, runner.fail = nil, ""
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "networkctl delete br0") || m.PendingSeconds() != 0 {
+		t.Fatalf("retired bridge was forgotten on retry: %v", runner.commands)
 	}
 }
