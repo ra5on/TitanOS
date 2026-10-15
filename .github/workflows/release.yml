@@ -135,6 +135,7 @@ jobs:
           path: |
             out/release-smoke*.log
             out/storage-smoke*.log
+            out/network-smoke*.log
           if-no-files-found: ignore
           retention-days: 7
 

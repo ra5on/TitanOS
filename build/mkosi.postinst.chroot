@@ -48,6 +48,13 @@ ln -sf /dev/null /etc/systemd/system/mdmonitor.service
 # Never start hd-idle's independent daemon with its default ten-minute timer.
 ln -sf /dev/null /etc/systemd/system/hd-idle.service
 
+# Filtering is off by project policy. Do not load an independent ruleset;
+# Docker still manages NAT and port publishing through iptables.
+ln -sf /dev/null /etc/systemd/system/nftables.service
+# TitanOS uses br0 or QEMU user networking, never libvirt's default NAT network.
+# Its automatic startup would introduce a second, independent firewall owner.
+rm -f /etc/libvirt/qemu/networks/autostart/default.xml
+
 # Virtual machines: QEMU runs as its own user, not as root. It reaches the
 # disks of the VMs and installation media in shares through the group all
 # accounts are in. libvirt must not change the owner of those files, which
@@ -73,6 +80,8 @@ chown -R libvirt-qemu /var/lib/swtpm-localca
 # directory.
 chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
     /usr/lib/systemd/system/titanos-boot-check.service \
+    /usr/lib/systemd/system/titanos-firewall-open.service \
+    /usr/lib/systemd/system/docker.service.d /usr/libexec/titanos-firewall-open \
     /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos
 
 # SSH is off: titand starts it when an administrator switches it on. The
