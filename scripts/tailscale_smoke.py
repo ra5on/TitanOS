@@ -1,8 +1,6 @@
 """Optional plugin/configuration checks, exclusively inside the disposable NAS."""
-import json
 import shlex
 import subprocess
-import time
 
 
 def check_tailscale(request, ssh, ssh_options, ssh_port, plugins):
