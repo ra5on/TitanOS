@@ -268,7 +268,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	volume := VolumeConfig{
 		Name: req.Name, Level: req.Level, Filesystem: req.Filesystem,
 		ArrayUUID: arrayUUID, FilesystemUUID: strings.TrimSpace(fsUUID),
-		Created: time.Now().UTC().Truncate(time.Second),
+		Created:           time.Now().UTC().Truncate(time.Second),
+		InitializeFolders: len(m.configured()) == 0,
 	}
 	// Record the volume before mounting: if the stick cannot be written,
 	// the array exists but is not lost – it shows up as a foreign RAID.
@@ -298,7 +299,10 @@ func (m *Manager) mount(ctx context.Context, volume VolumeConfig) error {
 		options += ",subvolid=5,degraded"
 	}
 	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
-	return err
+	if err != nil {
+		return err
+	}
+	return m.initializeFolders(volume)
 }
 
 // mountAll mounts every configured volume whose array is running and that
@@ -320,6 +324,9 @@ func (m *Manager) mountAll(ctx context.Context) {
 	var arrays []array
 	for _, volume := range configured {
 		if mounts[filepath.Join(m.mountRoot, volume.Name)] {
+			if err := m.initializeFolders(volume); err != nil {
+				slog.Warn("initialize volume folders", "name", volume.Name, "err", err)
+			}
 			continue
 		}
 		if volume.Filesystem == "btrfs" {

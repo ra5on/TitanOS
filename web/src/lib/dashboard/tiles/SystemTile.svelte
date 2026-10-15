@@ -15,6 +15,7 @@
 	<div class="meter">
 		<div class="row"><span>{t('system.memory')}</span><span class="mono">{formatBytesOf(info.memory.usedBytes, info.memory.totalBytes)}</span></div>
 		<div class="bar"><span style:width="{memoryPercent}%"></span></div>
+		<div class="memory-note muted"><span>{t('system.memoryIncludesCache')}</span><span>{t('system.memoryAvailable', { value: formatBytes(info.memory.availableBytes) })}</span></div>
 	</div>
 	<dl>
 		<div><dt>{t('system.inRam')}</dt><dd class="mono">{info.image ? formatBytes(info.image.sizeBytes) : '–'}</dd></div>
@@ -28,6 +29,7 @@
 {/if}
 
 <style>
+	.memory-note { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 0.75rem; }
 	.meter {
 		display: flex;
 		flex-direction: column;

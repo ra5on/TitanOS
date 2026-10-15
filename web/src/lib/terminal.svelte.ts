@@ -68,14 +68,14 @@ export function addContainerConsole(container: string, name: string) {
 }
 
 /** Opens the serial console of a VM, or shows the one that is open already. */
-export function addVmConsole(name: string) {
+export function addVmConsole(name: string, label = name) {
 	const existing = terminal.sessions.find((session) => session.kind === 'vm' && session.container === name);
 	if (existing) {
 		terminal.active = existing.id;
 		terminal.open = true;
 		return;
 	}
-	add({ kind: 'vm', title: name, container: name, shell: '' });
+	add({ kind: 'vm', title: label, container: name, shell: '' });
 }
 
 export function closeSession(id: number) {

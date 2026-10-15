@@ -83,7 +83,8 @@ export type SystemInfo = {
 	kernel: string;
 	uptimeSeconds: number;
 	cpu: { model: string; threads: number; usagePercent: number };
-	memory: { totalBytes: number; usedBytes: number };
+	memory: { totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number };
+	temperatures: Temperature[];
 	image: { slot: string; sizeBytes: number; overlayUsedBytes: number; overlayTotalBytes: number } | null;
 	stick: { label: string; present: boolean };
 	network: {
@@ -103,6 +104,15 @@ export type SystemInfo = {
 export type Preferences = {
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
+};
+
+export type Temperature = {
+	id: string;
+	chip: string;
+	label: string;
+	device: string;
+	celsius: number | null;
+	criticalC: number | null;
 };
 
 export type DiskRole = 'stick' | 'member' | 'free' | 'used';
@@ -253,6 +263,7 @@ export type VMFolder = { path: string; tag: string; readOnly: boolean };
 
 export type VM = {
 	name: string;
+	displayName?: string;
 	description: string;
 	template: 'linux' | 'windows' | 'other';
 	memoryMiB: number;

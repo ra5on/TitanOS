@@ -25,6 +25,7 @@ var vmErrors = []struct {
 	{vm.ErrDisabled, http.StatusConflict, "read_only"},
 	{vm.ErrNoKVM, http.StatusConflict, "no_kvm"},
 	{vm.ErrInvalidName, http.StatusBadRequest, "invalid_vm_name"},
+	{vm.ErrInvalidDisplayName, http.StatusBadRequest, "invalid_vm_display_name"},
 	{vm.ErrExists, http.StatusConflict, "vm_exists"},
 	{vm.ErrNotFound, http.StatusNotFound, "vm_not_found"},
 	{vm.ErrInvalid, http.StatusBadRequest, "invalid_vm"},

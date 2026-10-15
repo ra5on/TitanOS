@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { vmLabel } from '#lib/vm-name.ts';
 	import 'gridstack/dist/gridstack.min.css';
 
 	import { GridStack } from 'gridstack';
@@ -19,8 +20,9 @@
 	import NetworkTile from './tiles/NetworkTile.svelte';
 	import SystemTile from './tiles/SystemTile.svelte';
 	import VolumesTile from './tiles/VolumesTile.svelte';
+	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
 
-	const CONTENT: Record<StaticTileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile, disks: DisksTile, igpu: IGPUTile, npu: NPUTile, nvidia: NVIDIATile };
+	const CONTENT: Record<StaticTileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile, disks: DisksTile, igpu: IGPUTile, npu: NPUTile, nvidia: NVIDIATile, temperatures: TemperaturesTile };
 
 	/** Below this width the tiles are stacked and cannot be arranged. */
 	const STACK_BELOW = 760;
@@ -41,7 +43,11 @@
 	let workloadsReady = $state(false);
 	let workloadError = $state('');
 	let selection = $state('');
-	const titleOf = (id: TileId) => workload(id)?.name ?? t(tileSpec(id).title);
+	const titleOf = (id: TileId) => {
+		const target = workload(id);
+		const vm = target?.kind === 'vm' ? vms.find((vm) => vm.name === target.name) : undefined;
+		return vm ? vmLabel(vm) : target?.name ?? t(tileSpec(id).title);
+	};
 	const watchWorkloads = $derived(admin && (editing || shown.some((tile) => workload(tile.id))));
 	$effect(() => {
 		if (!watchWorkloads) return;
@@ -148,10 +154,11 @@
 
 	async function finish() {
 		const layout = readGrid();
+		const preferences = { ...session.dashboard, version: 2, tiles: layout };
 		saving = true;
 		error = '';
 		try {
-			await api.put('/preferences/dashboard', { version: 2, tiles: layout });
+			await api.put('/preferences/dashboard', preferences);
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			saving = false;
@@ -159,7 +166,7 @@
 		}
 		saving = false;
 		saved = layout;
-		session.dashboard = { version: 2, tiles: layout };
+		session.dashboard = preferences;
 		editing = false;
 		rebuild(layout);
 	}
@@ -247,7 +254,7 @@
 				<select id="workload" class="field" bind:value={selection}>
 					<option value="">{t('dashboard.pickWorkload')}</option>
 					<optgroup label={t('tile.vm')}>
-						{#each vms.filter((vm) => !shown.some((tile) => tile.id === `vm:${vm.name}`)) as vm (vm.name)}<option value="vm:{vm.name}">{vm.name}</option>{/each}
+						{#each vms.filter((vm) => !shown.some((tile) => tile.id === `vm:${vm.name}`)) as vm (vm.name)}<option value="vm:{vm.name}">{vmLabel(vm)}</option>{/each}
 					</optgroup>
 					<optgroup label={t('tile.container')}>
 						{#each containers.filter((container) => !shown.some((tile) => tile.id === `container:${container.name}`)) as container (container.name)}<option value="container:{container.name}">{container.name}</option>{/each}
