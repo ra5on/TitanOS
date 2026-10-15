@@ -107,7 +107,13 @@ jobs:
           sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
-      - name: Build Intel GPU Tools and Coral USB plugins
+      - name: Test NVIDIA compilation in the NAS build environment
+        run: |
+          sdk="$PWD/out/plugins/nvidia-build-sdk.tar.zst"
+          cd backend
+          sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
+
+      - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins

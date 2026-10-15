@@ -33,6 +33,9 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 	if m.Disabled {
 		return ErrDisabled
 	}
+	if m.UpdateAllowed != nil && !m.UpdateAllowed() {
+		return ErrBusy
+	}
 	if !releaseVersion.MatchString(version) || version == m.Release {
 		return ErrInvalid
 	}
@@ -69,7 +72,9 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 	for name, old := range installed {
 		oldPath := filepath.Join(m.dir(settings.Volume), name+manifestSuffix)
 		manifest := old
-		if asset, available := assets[name]; available && m.official(oldPath) {
+		_, localErr := m.localDriver(m.dir(settings.Volume))
+		trusted := m.official(oldPath) || (name == "nvidia" && localErr == nil)
+		if asset, available := assets[name]; available && trusted {
 			data, err := fetch(ctx, base+asset, 64<<10)
 			if err != nil {
 				return fmt.Errorf("plugin %s: %w", name, err)
@@ -101,7 +106,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 		} else {
 			// Kernel-independent community extensions can be kept unchanged.
 			// Never silently drop an enabled driver when no compatible build exists.
-			if old.Kernel != "" && old.Kernel != kernel {
+			if old.LocalBuild || (old.Kernel != "" && old.Kernel != kernel) {
 				return fmt.Errorf("%w: no trusted build of %s for kernel %s; remove it before updating", ErrInvalid, name, kernel)
 			}
 			for _, suffix := range []string{".raw", manifestSuffix} {

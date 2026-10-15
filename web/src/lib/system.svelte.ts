@@ -9,11 +9,21 @@ export const system = $state<{ info: SystemInfo | null; reachable: boolean }>({
 	reachable: true
 });
 
+export const systemHistory = $state<{ cpu: number[]; memory: number[] }>({ cpu: [], memory: [] });
+let lastSample = 0;
 async function poll() {
 	if (document.hidden) return;
 	try {
 		system.info = await api.get<SystemInfo>('/system');
 		system.reachable = true;
+        const now = Date.now();
+        if (now - lastSample > INTERVAL_MS * 3) { systemHistory.cpu = []; systemHistory.memory = []; }
+        if (now - lastSample >= INTERVAL_MS * .8) {
+            const { cpu, memory } = system.info;
+            systemHistory.cpu = [...systemHistory.cpu.slice(-89), cpu.usagePercent];
+            systemHistory.memory = [...systemHistory.memory.slice(-89), memory.totalBytes > 0 ? memory.usedBytes / memory.totalBytes * 100 : 0];
+            lastSample = now;
+        }
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 401) sessionExpired();
 		else system.reachable = false;

@@ -121,6 +121,10 @@ func (s *Server) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) pluginsEditable(w http.ResponseWriter) bool {
+	if s.opts.Tailscale != nil && s.opts.Tailscale.Pending() {
+		writeError(w, 409, "tailscale_failed", "Confirm or undo the pending Tailscale settings first")
+		return false
+	}
 	if s.opts.Update == nil {
 		return true
 	}
@@ -143,6 +147,8 @@ func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	switch req.Action {
+	case "prepare":
+		err = s.opts.Plugins.RequestDriverBuild(s.opts.Storage.Mounted())
 	case "check":
 		err = s.opts.Plugins.RequestDriverUpdate(req.SHA256, s.opts.Storage.Mounted())
 	case "automatic":

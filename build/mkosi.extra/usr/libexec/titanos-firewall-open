@@ -30,3 +30,8 @@ for firewall in iptables ip6tables; do
     "$firewall" -w 5 -S DOCKER-USER >/dev/null 2>&1 || "$firewall" -w 5 -N DOCKER-USER
     accept_first DOCKER-USER
 done
+
+# Tailscale must mark forwarded packets before the unrestricted host rules.
+if [ -x /usr/libexec/titanos-tailscale-firewall ]; then
+    /usr/libexec/titanos-tailscale-firewall
+fi

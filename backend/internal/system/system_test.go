@@ -72,3 +72,24 @@ func TestCPUModel(t *testing.T) {
 		t.Errorf("cpuModel = %q", got)
 	}
 }
+
+func TestIPv6DefaultRoute(t *testing.T) {
+	line := func(gateway, metric, flags, iface string) string {
+		return "00000000000000000000000000000000 00 00000000000000000000000000000000 00 " + gateway + " " + metric + " 00000000 00000000 " + flags + " " + iface + "\n"
+	}
+	table := line("00000000000000000000000000000000", "00000000", "00200200", "lo") +
+		line("fe800000000000000000000000000001", "00000400", "00000003", "br0") +
+		line("20010db8000000000000000000000001", "00000800", "00000003", "eth1")
+	if got := parseDefaultRoute6(table, ""); got.iface != "br0" || got.gateway != "fe80::1%br0" {
+		t.Fatal(got)
+	}
+	if got := parseDefaultRoute6(table, "eth1"); got.iface != "eth1" || got.gateway != "2001:db8::1" {
+		t.Fatal(got)
+	}
+	if got := parseDefaultRoute6(table, "missing"); got.iface != "" {
+		t.Fatal(got)
+	}
+	if got := parseDefaultRoute6(line("fe800000000000000000000000000001", "badmetric", "00000003", "br0"), ""); got.iface != "" {
+		t.Fatal(got)
+	}
+}

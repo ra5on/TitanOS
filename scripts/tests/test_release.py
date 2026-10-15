@@ -100,6 +100,9 @@ class ReleaseTest(unittest.TestCase):
             sha256=hashlib.sha256(b"plugin image").hexdigest(), size=len(b"plugin image"))))
         for name in ["nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             (plugins / name).write_bytes(b"archive fixture")
+        (plugins / "nvidia-build-sdk.tar.zst").write_bytes(b"SDK fixture")
+        (plugins / "nvidia-build-sdk-sources.txt").write_text("SDK sources fixture")
+        (plugins / "nvidia-build-sdk.json").write_text(json.dumps(dict(asset="nvidia-build-sdk.tar.zst",version="0.1.0-beta.1",kernel="6.12-test",sha256=hashlib.sha256(b"SDK fixture").hexdigest(),size=len(b"SDK fixture"))))
         self.release = self.repo / "out/release"
         self.keys = self.repo / "keys"
         self.keys.mkdir()
@@ -129,7 +132,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz",
                      "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt",
-                     "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
+                     "nvidia-build-sdk.tar.zst", "nvidia-build-sdk-sources.txt", "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
                 path = self.release / name
                 original = path.read_bytes()
@@ -146,7 +149,7 @@ class ReleaseTest(unittest.TestCase):
 
     def test_multiple_plugins_signed_and_verified(self):
         plugins = self.repo / "out/plugins"
-        for name in ["intel-gpu-tools", "coral-usb"]:
+        for name in ["intel-gpu-tools", "coral-usb", "tailscale"]:
             data = name.encode()
             (plugins / (name + ".raw")).write_bytes(data)
             (plugins / (name + ".plugin.json")).write_text(json.dumps(dict(
@@ -155,7 +158,7 @@ class ReleaseTest(unittest.TestCase):
         self.pack()
         self.sign()
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
-        self.assertEqual(len(json.loads((self.release / "manifest.json").read_text())["plugins"]), 3)
+        self.assertEqual(len(json.loads((self.release / "manifest.json").read_text())["plugins"]), 4)
         (self.release / "intel-gpu-tools.plugin.json.minisig").unlink()
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)

@@ -11,13 +11,12 @@ akzeptiert nur Tags `v*`. Private Sicherheitsmeldungen sind aktiviert.
 Diese Einstellungen gehören zum Repository und werden nicht durch die
 Workflow-Datei allein eingerichtet.
 
-Auch unabhängige NVIDIA-Updates nutzen diese Tag-Regel: Der tägliche Lauf auf
-`main` stößt den Treiber-Workflow vom neuesten veröffentlichten Release-Tag an,
-der diesen Workflow enthält. Nur der delegierende Job darf Workflows starten;
-der Signierjob wartet weiterhin auf die Freigabe im Environment `release`.
-Die Zielversion des Treibers kann dabei ein anderes vorhandenes OS-Release sein.
-Vor der ersten Veröffentlichung eines Tags mit diesem Workflow wird kein
-Treiberlauf delegiert.
+Neue NVIDIA-Treiber werden ab beta.6 aus dem authentifizierten öffentlichen
+NVIDIA-Repository geladen und auf ausdrücklichen Knopfdruck auf dem NAS gebaut.
+Der frühere CI-Treiberworkflow ist nur noch manuell verfügbar. Die passende
+Bauumgebung wird weiterhin pro OS-Release gebaut und über dessen signiertes
+Manifest geprüft; sie liegt auf dem Daten-Volume, nicht im RAM-System.
+Siehe [NVIDIA-LOCAL-BUILD.md](NVIDIA-LOCAL-BUILD.md).
 
 Seit dem 14. Oktober 2026 sind beide öffentlichen Schlüssel eingebaut und die
 Secrets `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` eingerichtet:
@@ -149,6 +148,8 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `intel-gpu-tools.raw`, `intel-gpu-tools.plugin.json`, `.minisig`, `intel-gpu-tools-licenses.tar.gz` | optionale Intel-Werkzeuge, Signatur, Originalhinweise und Debian-Quellpaketlinks |
 | `coral-usb.raw`, `coral-usb.plugin.json`, `.minisig`, `coral-usb-licenses.tar.gz` | Coral-USB-Diagnose und Container-Zuordnung; ohne Google-Runtime |
 | `nvidia-kernel-sources.tar.gz`, `nvidia-licenses.tar.gz` | passende offene Kernelquellen und originale NVIDIA-/Toolkit-Lizenztexte samt Paket-/Quellverzeichnis |
+| `nvidia-build-sdk.tar.zst`, `nvidia-build-sdk-sources.txt` | exakte Kernelheader und abgeschlossene Bauumgebung mit Original-Lizenztexten und Debian-Quellpaketlinks; SHA-256 im signierten Manifest |
+| `tailscale.raw`, `tailscale.plugin.json`, `.minisig`, `tailscale-licenses.tar.gz` | Tailscale, Subnet-/Exit-Node-Einstellungen und Original-Lizenztexte |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
 | `titanos-<version>-licenses.tar.gz` | Original-Lizenzhinweise und maschinenlesbares Komponentenverzeichnis |

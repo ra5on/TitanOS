@@ -3,8 +3,6 @@ name: NVIDIA driver updates
 # Only driver assets are appended to an existing release. Its OS manifest,
 # slots and original plugins are never changed. Signing still needs approval.
 on:
-  schedule:
-    - cron: '17 4 * * *'
   workflow_dispatch:
     inputs:
       version:

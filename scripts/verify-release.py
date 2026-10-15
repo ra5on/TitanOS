@@ -24,7 +24,7 @@ def verify(release, keys):
     names = set()
     for plugin in plugins:
         name = plugin.get("name")
-        if name not in {"nvidia", "intel-gpu-tools", "coral-usb"} or name in names or plugin.get("asset") != name + ".plugin.json":
+        if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale"} or name in names or plugin.get("asset") != name + ".plugin.json":
             raise ValueError("invalid plugin inventory")
         names.add(name)
         signed.append(name + ".plugin.json")
@@ -75,6 +75,11 @@ def verify(release, keys):
             required.add("nvidia-kernel-sources.tar.gz")
         if not required <= checksums.keys():
             raise ValueError("plugin source/license archive missing: " + name)
+    if sdk := manifest.get("nvidiaBuildSDK"):
+        if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != version or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
+            raise ValueError("SDK target mismatch")
+        if checksums.get(sdk["asset"]) != sdk["sha256"] or (release / sdk["asset"]).stat().st_size != sdk["size"] or "nvidia-build-sdk-sources.txt" not in checksums:
+            raise ValueError("SDK integrity/sources mismatch")
     return version
 
 

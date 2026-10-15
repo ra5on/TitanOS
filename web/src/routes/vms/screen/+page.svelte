@@ -24,6 +24,13 @@
 <svelte:head><title>{displayName || name} · TitanOS</title></svelte:head>
 
 <div class="window">
+	<div class="frame">
+		{#if running}
+			{#key name}<VncScreen bind:this={screen} vm={name} {mode} />{/key}
+		{:else if running === false}
+			<p class="muted off">{t('vms.off', { name: displayName || name })}</p>
+		{/if}
+	</div>
 	<div class="bar">
 		<span class="mono">{displayName || name}</span>
 		<span class="grow"></span>
@@ -31,13 +38,6 @@
 		{#each MODES as entry (entry)}
 			<button type="button" aria-pressed={mode === entry} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
 		{/each}
-	</div>
-	<div class="frame">
-		{#if running}
-			{#key name}<VncScreen bind:this={screen} vm={name} {mode} />{/key}
-		{:else if running === false}
-			<p class="muted off">{t('vms.off', { name: displayName || name })}</p>
-		{/if}
 	</div>
 </div>
 
@@ -52,12 +52,13 @@
 		background: var(--bg);
 	}
 	.bar {
+		flex-wrap: wrap;
 		flex: none;
 		display: flex;
 		align-items: center;
 		gap: 4px;
 		padding: 4px 12px;
-		border-bottom: 1px solid var(--border);
+		border-top: 1px solid var(--border);
 		font-size: 0.8125rem;
 	}
 	.grow {
