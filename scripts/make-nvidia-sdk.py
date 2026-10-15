@@ -5,6 +5,10 @@ from pathlib import Path
 from urllib.parse import quote
 root,kernel,version,out=Path(sys.argv[1]),sys.argv[2],sys.argv[3],Path(sys.argv[4])
 repo=Path(__file__).resolve().parents[1]
+# Fail before publishing an SDK if any recipe executable is unavailable in
+# its root. A tool present on the CI host does not satisfy this requirement.
+subprocess.run(['chroot',str(root),'/bin/sh','-ec',
+    'for tool in python3 gpg gpgv dpkg-deb make gcc ld modinfo mksquashfs zstd tar; do command -v "$tool" >/dev/null; done'],check=True)
 recipe=root/'usr/lib/titanos/nvidia-build'
 for folder in ['scripts','plugins/nvidia']:(recipe/folder).mkdir(parents=True,exist_ok=True)
 for name in ['update-nvidia-lock.py','fetch-nvidia.py','make-plugin.sh','nvidia-plugin-metadata.py','nvidia-nas-build.py']:
