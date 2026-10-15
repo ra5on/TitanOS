@@ -6,6 +6,8 @@ Kind=!*
 
 [Network]
 DHCP=yes
+IPv6AcceptRA=yes
+KeepConfiguration=no
 
 [DHCPv4]
 # The machine ID changes on every boot. Identify by MAC address so that the

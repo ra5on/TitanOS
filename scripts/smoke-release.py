@@ -22,6 +22,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from network_smoke import check_network
+
 
 def command(*args, **kwargs):
     subprocess.run(args, check=True, stdout=subprocess.DEVNULL, **kwargs)
@@ -186,6 +188,7 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                     if plugins:
                         try:
                             plugin_test(boot)
+                            check_network(boot, request, directory, ssh_port)
                         except Exception:
                             with log.with_suffix(".services.log").open("wb") as diagnostic:
                                 subprocess.run(["ssh", "-i", str(directory / "ssh-key"), "-p", str(ssh_port),

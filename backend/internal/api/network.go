@@ -17,7 +17,7 @@ func writeNetworkError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "read_only", err.Error())
 	case errors.Is(err, network.ErrNotLoaded):
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
-	case errors.Is(err, network.ErrPending):
+	case errors.Is(err, network.ErrPending), errors.Is(err, network.ErrReverting):
 		writeError(w, http.StatusConflict, "network_pending", err.Error())
 	case errors.Is(err, network.ErrNoPending):
 		writeError(w, http.StatusConflict, "network_not_pending", err.Error())
