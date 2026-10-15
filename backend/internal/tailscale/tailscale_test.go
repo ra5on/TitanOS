@@ -200,3 +200,18 @@ func TestDaemonRestartReappliesOnlySavedRouting(t *testing.T) {
 		t.Fatal("unconfirmed state survived restart", string(data), f.calls, err)
 	}
 }
+
+func TestStateRejectsWritableAncestors(t *testing.T) {
+	for _, directory := range []string{".titanos", ".titanos/tailscale"} {
+		t.Run(directory, func(t *testing.T) {
+			m, _ := fixture(t)
+			path := filepath.Join(m.mountRoot, "data", directory)
+			if err := os.Chmod(path, 0777); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Prepare("tailscale", "data"); err == nil {
+				t.Fatal("accepted externally writable private state directory")
+			}
+		})
+	}
+}

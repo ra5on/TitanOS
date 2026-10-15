@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -201,22 +202,26 @@ func (m *Manager) Prepare(name, volume string) error {
 	if m.Disabled || !m.loaded || !volumeRE.MatchString(volume) {
 		return ErrUnavailable
 	}
-	path := filepath.Join(m.mountRoot, volume, ".titanos", "tailscale")
-	// Resolve each existing ancestor before touching data. A share must not be
-	// able to redirect the privileged daemon state into the RAM root or elsewhere.
+	// Reject pre-seeded share directories before touching private node keys.
 	root, err := os.OpenRoot(filepath.Join(m.mountRoot, volume))
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	if err = root.MkdirAll(".titanos/tailscale", 0700); err != nil {
-		return err
+	for _, path := range []string{".titanos", ".titanos/tailscale"} {
+		if err := root.Mkdir(path, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+		st, err := root.Lstat(path)
+		if err != nil {
+			return err
+		}
+		owner, ok := st.Sys().(*syscall.Stat_t)
+		if !st.IsDir() || st.Mode().Perm()&0022 != 0 || !ok || owner.Uid != uint32(os.Geteuid()) {
+			return errors.New("unsafe Tailscale data directory")
+		}
 	}
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil || resolved != path {
-		return errors.New("unsafe Tailscale data directory")
-	}
-	if err = os.Chmod(path, 0700); err != nil {
+	if err = root.Chmod(".titanos/tailscale", 0700); err != nil {
 		return err
 	}
 	m.volume = volume
