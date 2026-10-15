@@ -23,6 +23,7 @@ import zipfile
 from pathlib import Path
 
 from network_smoke import check_network
+from tailscale_smoke import check_tailscale
 
 
 def command(*args, **kwargs):
@@ -140,6 +141,8 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                 request("/api/v1/plugins/nvidia/disable", {})
                 request("/api/v1/plugins/nvidia", method="DELETE")
                 command(*ssh, "test ! -e /run/extensions/nvidia.raw && test ! -e /usr/bin/nvidia-smi && test -f /mnt/smoketest/plugins/nvidia.raw")
+            if boot == 2:
+                check_tailscale(request, ssh, ssh_options, ssh_port, plugins)
             request("/api/v1/system/ssh", {"enabled": False}, method="PUT")
             print(f"Boot {boot}: plugin trust, sysext, RAM module index, missing-GPU handling and lifecycle passed", flush=True)
         password = secrets.token_urlsafe(24)

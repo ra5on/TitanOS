@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"log/slog"
 	"net/http"
@@ -19,7 +20,7 @@ func writeTailscaleError(w http.ResponseWriter, err error) {
 	if errors.Is(err, tailscale.ErrInvalid) {
 		status = 400
 	}
-	if errors.Is(err, tailscale.ErrUnavailable) || errors.Is(err, tailscale.ErrPending) {
+	if errors.Is(err, tailscale.ErrUnavailable) || errors.Is(err, tailscale.ErrPending) || errors.Is(err, plugins.ErrDisabled) || errors.Is(err, plugins.ErrNotFound) || errors.Is(err, plugins.ErrUpdatePending) || errors.Is(err, plugins.ErrDriverPending) {
 		status = 409
 	}
 	writeError(w, status, "tailscale_failed", err.Error())
@@ -33,7 +34,7 @@ func (s *Server) handleTailscaleSettings(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.Tailscale.Set(settings); err != nil {
+	if err := s.tailscaleRuntimeAction(func() error { return s.opts.Tailscale.Set(settings) }); err != nil {
 		writeTailscaleError(w, err)
 		return
 	}
@@ -53,7 +54,7 @@ func (s *Server) handleTailscaleAction(w http.ResponseWriter, r *http.Request) {
 	case "undo":
 		err = s.opts.Tailscale.Undo()
 	default:
-		err = s.opts.Tailscale.Action(action)
+		err = s.tailscaleRuntimeAction(func() error { return s.opts.Tailscale.Action(action) })
 	}
 	if err != nil {
 		writeTailscaleError(w, err)
@@ -61,4 +62,11 @@ func (s *Server) handleTailscaleAction(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("Tailscale action", "action", action, "by", currentUser(r).Name)
 	s.handleTailscale(w, r)
+}
+
+func (s *Server) tailscaleRuntimeAction(action func() error) error {
+	if s.opts.Plugins != nil {
+		return s.opts.Plugins.RuntimeAction("tailscale", action)
+	}
+	return action()
 }

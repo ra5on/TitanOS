@@ -95,10 +95,13 @@ func TestFailedApplyAndFailedRollback(t *testing.T) {
 	if err := m.Set(Settings{AcceptDNS: true}); err == nil {
 		t.Fatal("failure hidden")
 	}
-	if m.settings.AcceptDNS || m.pending != nil {
-		t.Fatal("saved failed change")
+	if m.settings.AcceptDNS || m.pending == nil || m.store.Changes() != 0 {
+		t.Fatal("failed rollback must be retried without saving")
 	}
 	f.fail = false
+	if err := m.Undo(); err != nil || m.pending != nil {
+		t.Fatal("rollback did not recover", err)
+	}
 	m.Set(Settings{AcceptDNS: true})
 	f.fail = true
 	if err := m.Undo(); err == nil || m.pending == nil {
@@ -171,5 +174,29 @@ func TestDisabledAndUnsafeVolume(t *testing.T) {
 	os.Symlink(t.TempDir(), filepath.Join(m.mountRoot, "data/.titanos/tailscale"))
 	if err := m.Prepare("tailscale", "data"); err == nil {
 		t.Fatal("symlink state path")
+	}
+}
+
+func TestDaemonRestartReappliesOnlySavedRouting(t *testing.T) {
+	m, f := fixture(t)
+	if err := m.Set(Settings{AcceptDNS: true}); err != nil {
+		t.Fatal(err)
+	}
+	m.timer.Stop()
+	restored := NewManager(m.store)
+	restored.runtime, restored.mountRoot, restored.runner = m.runtime, m.mountRoot, f
+	if err := restored.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Prepare("tailscale", "data"); err != nil {
+		t.Fatal(err)
+	}
+	f.calls = nil
+	if err := restored.Activate("tailscale"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(m.runtime.Dir(), "runtime"))
+	if err != nil || !strings.Contains(string(data), "TAILSCALE_ACCEPT_DNS=false") || len(f.calls) != 1 {
+		t.Fatal("unconfirmed state survived restart", string(data), f.calls, err)
 	}
 }

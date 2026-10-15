@@ -129,10 +129,12 @@ type Status struct {
 
 // Manager installs plugins and keeps the system in line with the settings.
 type Manager struct {
-	PrepareRuntime func(name, volume string) error // optional plugin-specific volatile configuration
-	ChangeAllowed  func() bool                     // checked under actions, serializes with update staging
-	store          *config.Store
-	runner         run.Runner
+	PrepareRuntime  func(name, volume string) error // optional plugin-specific volatile configuration
+	ActivateRuntime func(name string) error         // reapplies saved configuration even if the service was already running
+	ChangeAllowed   func() bool                     // checked under actions, serializes with update staging
+	UpdateAllowed   func() bool                     // plugin-specific pending trials, independent of updater phase
+	store           *config.Store
+	runner          run.Runner
 	// Disabled leaves the system alone. Set in development mode.
 	LocalBuilds bool // build updated open modules on the NAS, only on request
 	buildKey    []byte
@@ -170,6 +172,26 @@ type Manager struct {
 	driverAttempt  time.Time
 	driverVolume   string
 	bootID         string
+}
+
+// RuntimeAction keeps configuration changes from racing sysext removal or an
+// OS update. A pending access trial is resolved directly by its manager.
+func (m *Manager) RuntimeAction(name string, action func() error) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.Disabled {
+		return ErrDisabled
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrUpdatePending
+	}
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
+	if _, active := m.active[name]; !active {
+		return ErrNotFound
+	}
+	return action()
 }
 
 // NewManager returns a manager working on the real system.
@@ -781,6 +803,9 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 					break
 				}
 			}
+		}
+		if failure == nil && m.ActivateRuntime != nil {
+			failure = m.ActivateRuntime(name)
 		}
 		if failure != nil {
 			m.problems[name] = "activation"

@@ -234,6 +234,20 @@ func (m *Manager) writeRuntime(s Settings) error {
 	}
 	return nil
 }
+
+// A titand restart must restore saved choices even when tailscaled kept
+// running. systemctl start alone does not rerun ExecStartPost in that case.
+func (m *Manager) Activate(name string) error {
+	if name != "tailscale" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Disabled || !m.loaded || m.pending != nil {
+		return ErrUnavailable
+	}
+	return m.apply(m.settings)
+}
 func (m *Manager) apply(s Settings) error {
 	old := m.settings
 	if err := m.writeRuntime(s); err != nil {
@@ -263,7 +277,13 @@ func (m *Manager) Set(s Settings) error {
 		return ErrPending
 	}
 	if err := m.apply(s); err != nil {
-		m.apply(m.settings)
+		if rollbackErr := m.apply(m.settings); rollbackErr != nil {
+			previous := m.settings
+			m.pending = &previous
+			m.deadline = time.Now()
+			m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+			err = errors.Join(err, rollbackErr)
+		}
 		m.problem = err.Error()
 		return err
 	}

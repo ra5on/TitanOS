@@ -155,3 +155,48 @@ func TestManualBuildIsOnlyQueued(t *testing.T) {
 		t.Fatal("check implicitly builds")
 	}
 }
+
+func TestLocalBuildOSUpdateUsesNewSignedBundledDriver(t *testing.T) {
+	f, p, _ := localFixture(t)
+	m := f.m
+	oldRelease := m.Release
+	if err := m.SelectDriver(p.SHA256, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	m.bootID = "second-boot"
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	oldDir := m.dir("data")
+	replacement := plugin(t, f.dir, "nvidia", func(p *Manifest) { p.Kernel = "new-kernel"; p.Version = "1.0.0" })
+	f.sign(t, filepath.Base(replacement))
+	fetch := func(_ context.Context, url string, _ int64) ([]byte, error) {
+		return os.ReadFile(filepath.Join(f.dir, strings.TrimPrefix(url, "https://release/")))
+	}
+	download := func(_ context.Context, url, dest, sum string, size int64) error {
+		return copyFile(filepath.Join(f.dir, strings.TrimPrefix(url, "https://release/")), dest, 0600)
+	}
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "new-kernel", "https://release/", map[string]string{"nvidia": "nvidia.plugin.json"}, []string{"data"}, fetch, download); err != nil {
+		t.Fatal(err)
+	}
+	if m.dir("data") != oldDir {
+		t.Fatal("staging changed running driver")
+	}
+	m.Release = "1.0.0"
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.installed("data")["nvidia"]; got.LocalBuild || got.Kernel != "new-kernel" || !m.official(filepath.Join(m.dir("data"), "nvidia.plugin.json")) {
+		t.Fatalf("wrong replacement %+v", got)
+	}
+	m.Release = oldRelease
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if m.dir("data") != oldDir {
+		t.Fatal("rollback lost selected local set")
+	}
+	if _, err := m.localDriver(oldDir); err != nil {
+		t.Fatal("rollback lost local trust", err)
+	}
+}

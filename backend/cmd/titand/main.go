@@ -233,6 +233,7 @@ func run(opts options) error {
 	}
 	extensions := plugins.NewManager(store)
 	extensions.PrepareRuntime = tailnet.Prepare
+	extensions.ActivateRuntime = tailnet.Activate
 	extensions.LocalBuilds = true
 	extensions.Release = strings.TrimPrefix(version.Version, "v")
 	extensions.Disabled = opts.dev
@@ -339,6 +340,7 @@ func run(opts options) error {
 		status := updates.Status()
 		return !tailnet.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
 	}
+	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
 	go machines.Run(ctx, volumes.Mounted)
