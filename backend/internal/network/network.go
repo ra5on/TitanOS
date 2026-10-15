@@ -39,7 +39,8 @@ const (
 	Bridge = "br0"
 	bond   = "bond0"
 	// trial is how long a change waits for its confirmation.
-	trial = 2 * time.Minute
+	trial        = 2 * time.Minute
+	applyTimeout = 30 * time.Second
 	// prefix marks the files this package writes for systemd-networkd.
 	prefix = "10-titanos-"
 )
@@ -51,6 +52,7 @@ var (
 	ErrInvalid   = errors.New("network: invalid setting")
 	ErrNoPending = errors.New("network: no change is waiting for confirmation")
 	ErrPending   = errors.New("network: a change is waiting for confirmation")
+	ErrReverting = errors.New("network: restoring the previous configuration")
 )
 
 var hostnameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -118,9 +120,12 @@ type Manager struct {
 	active  Config
 	pending *Config
 	// before is what comes back if the pending change is not confirmed.
-	before   Config
-	deadline time.Time
-	timer    *time.Timer
+	before    Config
+	deadline  time.Time
+	timer     *time.Timer
+	reverting bool
+	// Remember retired netdevs until deletion succeeds, including rollback retries.
+	retired map[string]bool
 }
 
 // NewManager returns a manager working on the real system.
@@ -147,6 +152,9 @@ func (m *Manager) Load(ctx context.Context) error {
 	m.active, m.loaded = normal(cfg), true
 	if missing || m.Disabled {
 		return nil
+	}
+	if err := m.validate(m.active); err != nil {
+		return err
 	}
 	return m.apply(ctx, m.active)
 }
@@ -274,7 +282,7 @@ func (m *Manager) render(cfg Config) map[string]string {
 	}
 	// member writes the file of an interface that only carries another one.
 	member := func(name, line string) {
-		files[prefix+name+".network"] = "[Match]\nName=" + name + "\n\n[Network]\n" + line + "\nLinkLocalAddressing=no\nDHCP=no\n"
+		files[prefix+name+".network"] = "[Match]\nName=" + name + "\n\n[Network]\n" + line + "\nLinkLocalAddressing=no\nIPv6AcceptRA=no\nDHCP=no\nKeepConfiguration=no\n"
 	}
 
 	lower := cfg.Ports[0]
@@ -301,7 +309,9 @@ func (m *Manager) render(cfg Config) map[string]string {
 	}
 
 	var b strings.Builder
-	b.WriteString("[Match]\nName=" + lower + "\n\n[Network]\n")
+	// Only the topmost link owns addresses/routes. Explicit RA reception keeps
+	// IPv6 working even when Docker enables forwarding on the NAS.
+	b.WriteString("[Match]\nName=" + lower + "\n\n[Network]\nIPv6AcceptRA=yes\nKeepConfiguration=no\n")
 	if cfg.DHCP {
 		b.WriteString("DHCP=yes\n")
 	} else {
@@ -327,31 +337,45 @@ func (m *Manager) render(cfg Config) map[string]string {
 
 // apply puts a configuration in place. The caller holds the lock.
 func (m *Manager) apply(ctx context.Context, cfg Config) error {
-	if cfg.Bridge {
-		// Install before networkd creates br0, and on every boot. Docker's
-		// FORWARD policy must not block LAN traffic to bridged VM guests.
-		if _, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-bridge-forwarding"); err != nil {
-			return fmt.Errorf("prepare VM bridge forwarding: %w", err)
-		}
+	ctx, cancel := context.WithTimeout(ctx, applyTimeout)
+	defer cancel()
+	if _, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-firewall-open"); err != nil {
+		return fmt.Errorf("disable firewall filtering: %w", err)
 	}
 	files := m.render(cfg)
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
 		return err
 	}
-	old, _ := os.ReadDir(m.dir)
+	old, err := os.ReadDir(m.dir)
+	if err != nil {
+		return err
+	}
+	if m.retired == nil {
+		m.retired = map[string]bool{}
+	}
+	for name := range m.retired {
+		if files[prefix+name+".netdev"] != "" {
+			delete(m.retired, name)
+		}
+	}
 	for _, entry := range old {
 		if name := entry.Name(); strings.HasPrefix(name, prefix) && files[name] == "" {
-			os.Remove(filepath.Join(m.dir, name))
-			// A bridge, bond or VLAN that is no longer wanted has to go, or
-			// it keeps the port.
+			if err := os.Remove(filepath.Join(m.dir, name)); err != nil {
+				return err
+			}
 			if device, isDevice := strings.CutSuffix(strings.TrimPrefix(name, prefix), ".netdev"); isDevice && files[prefix+device+".netdev"] == "" {
-				m.runner.Run(ctx, "", "networkctl", "delete", device)
+				m.retired[device] = true
 			}
 		}
 	}
 	names := make([]string, 0, len(files))
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(m.dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(m.dir, name)
+		if err := os.WriteFile(path+".tmp", []byte(content), 0o644); err != nil {
+			return err
+		}
+		if err := os.Rename(path+".tmp", path); err != nil {
+			os.Remove(path + ".tmp")
 			return err
 		}
 		names = append(names, name)
@@ -359,9 +383,36 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 	if _, err := m.runner.Run(ctx, "", "networkctl", "reload"); err != nil {
 		return err
 	}
-	// Ports that changed their role do not notice by themselves.
+	// Forget obsolete .netdev files before deleting their links, so networkd
+	// cannot recreate a bridge we are removing (including during rollback).
+	for name := range m.retired {
+		if _, err := os.Stat(filepath.Join(m.sys, "class/net", name)); errors.Is(err, fs.ErrNotExist) {
+			delete(m.retired, name)
+			continue
+		}
+		if _, err := m.runner.Run(ctx, "", "networkctl", "delete", name); err != nil {
+			return err
+		}
+		delete(m.retired, name)
+	}
+	// Reconfigure both released/selected physical ports and existing virtual
+	// links. Newly created links are configured by networkd on appearance.
+	links := []string{}
 	for _, port := range m.Interfaces() {
-		m.runner.Run(ctx, "", "networkctl", "reconfigure", port.Name)
+		links = append(links, port.Name)
+	}
+	for name := range files {
+		if link, ok := strings.CutSuffix(strings.TrimPrefix(name, prefix), ".netdev"); ok {
+			if _, err := os.Stat(filepath.Join(m.sys, "class/net", link)); err == nil {
+				links = append(links, link)
+			}
+		}
+	}
+	sort.Strings(links)
+	if len(links) > 0 {
+		if _, err := m.runner.Run(ctx, "", "networkctl", append([]string{"reconfigure"}, links...)...); err != nil {
+			return err
+		}
 	}
 	if current, _ := os.Hostname(); cfg.Hostname != "" && cfg.Hostname != current {
 		if _, err := m.runner.Run(ctx, "", "hostnamectl", "hostname", cfg.Hostname); err != nil {
@@ -393,10 +444,13 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 	if m.pending != nil {
 		return ErrPending
 	}
+	// Losing the HTTP connection is expected while its interface moves to br0.
+	// Finish the bounded operation and leave rollback to the confirmation timer.
+	ctx = context.WithoutCancel(ctx)
 	if err := m.apply(ctx, cfg); err != nil {
 		// Half a change is worse than none.
-		m.apply(context.WithoutCancel(ctx), m.active)
-		return err
+		m.before, m.pending = m.active, &cfg
+		return errors.Join(err, m.rollback(ctx))
 	}
 	m.before, m.pending, m.deadline = m.active, &cfg, time.Now().Add(m.trial)
 	m.timer = time.AfterFunc(m.trial, func() {
@@ -404,7 +458,9 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 		defer m.mu.Unlock()
 		if m.pending != nil {
 			slog.Warn("network change was not confirmed, going back")
-			m.rollback(context.Background())
+			if err := m.rollback(context.Background()); err != nil {
+				slog.Error("network rollback failed; will retry", "err", err)
+			}
 		}
 	})
 	return nil
@@ -444,8 +500,23 @@ func (m *Manager) rollback(ctx context.Context) error {
 	if m.timer != nil {
 		m.timer.Stop()
 	}
-	m.pending = nil
-	return m.apply(ctx, m.before)
+	m.reverting = true
+	if err := m.apply(context.WithoutCancel(ctx), m.before); err != nil {
+		// A failed rollback must not silently clear the pending change, nor may
+		// it be confirmed while half-restored. Retry transient networkd failures.
+		m.timer = time.AfterFunc(5*time.Second, func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			if m.pending != nil {
+				if err := m.rollback(context.Background()); err != nil {
+					slog.Error("network rollback failed; will retry", "err", err)
+				}
+			}
+		})
+		return err
+	}
+	m.pending, m.reverting = nil, false
+	return nil
 }
 
 // Confirm keeps the change on trial and stores it on the stick.
@@ -454,6 +525,9 @@ func (m *Manager) Confirm() error {
 	defer m.mu.Unlock()
 	if m.pending == nil {
 		return ErrNoPending
+	}
+	if m.reverting {
+		return ErrReverting
 	}
 	if err := m.store.WriteJSON(configFile, *m.pending); err != nil {
 		return err

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,11 +15,17 @@ import (
 )
 
 type fakeRunner struct {
+	mu       sync.Mutex
 	commands []string
 	fail     string
 }
 
 func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	line := name + " " + strings.Join(args, " ")
 	r.commands = append(r.commands, line)
 	if r.fail != "" && strings.Contains(line, r.fail) {
@@ -52,6 +59,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 
 func files(t *testing.T, m *Manager) map[string]string {
 	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	found := map[string]string{}
 	entries, _ := os.ReadDir(m.dir)
 	for _, entry := range entries {
@@ -115,7 +124,7 @@ func TestRender(t *testing.T) {
 	}
 
 	plain := m.render(Config{Ports: []string{"enp1s0"}, Address: "192.168.1.20/24", Gateway: "192.168.1.1", DNS: []string{"192.168.1.1", "1.1.1.1"}})
-	if len(plain) != 1 || plain["10-titanos-enp1s0.network"] != "[Match]\nName=enp1s0\n\n[Network]\nDHCP=no\nAddress=192.168.1.20/24\nGateway=192.168.1.1\nDNS=192.168.1.1\nDNS=1.1.1.1\n" {
+	if len(plain) != 1 || plain["10-titanos-enp1s0.network"] != "[Match]\nName=enp1s0\n\n[Network]\nIPv6AcceptRA=yes\nKeepConfiguration=no\nDHCP=no\nAddress=192.168.1.20/24\nGateway=192.168.1.1\nDNS=192.168.1.1\nDNS=1.1.1.1\n" {
 		t.Errorf("fixed address on one port: %v", plain)
 	}
 
@@ -143,7 +152,7 @@ func TestRender(t *testing.T) {
 	}
 }
 
-func TestBridgeForwardingBeforeNetworkChange(t *testing.T) {
+func TestFirewallBeforeNetworkChange(t *testing.T) {
 	m, runner := newTestManager(t)
 	ctx := context.Background()
 	cfg := Config{Hostname: "nas", Ports: []string{"enp1s0"}, DHCP: true}
@@ -152,7 +161,7 @@ func TestBridgeForwardingBeforeNetworkChange(t *testing.T) {
 	}
 	before := files(t, m)
 	runner.commands = nil
-	runner.fail = "titanos-bridge-forwarding"
+	runner.fail = "titanos-firewall-open"
 	cfg.Bridge = true
 	if err := m.apply(ctx, cfg); err == nil {
 		t.Fatal("bridge must not be configured when forwarding setup fails")
@@ -160,14 +169,14 @@ func TestBridgeForwardingBeforeNetworkChange(t *testing.T) {
 	if got := files(t, m); len(got) != len(before) || got["10-titanos-enp1s0.network"] != before["10-titanos-enp1s0.network"] {
 		t.Fatalf("failed preparation changed networkd files: %v", got)
 	}
-	if len(runner.commands) != 1 || !strings.Contains(runner.commands[0], "titanos-bridge-forwarding") {
+	if len(runner.commands) != 1 || !strings.Contains(runner.commands[0], "titanos-firewall-open") {
 		t.Fatalf("networkd touched despite failed preparation: %v", runner.commands)
 	}
 	runner.commands, runner.fail = nil, ""
 	if err := m.apply(ctx, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(runner.commands[0], "titanos-bridge-forwarding") || !strings.Contains(files(t, m)["10-titanos-enp1s0.network"], "Bridge=br0") {
+	if !strings.Contains(runner.commands[0], "titanos-firewall-open") || !strings.Contains(files(t, m)["10-titanos-enp1s0.network"], "Bridge=br0") {
 		t.Fatalf("forwarding must be ready before br0 is created: %v", runner.commands)
 	}
 }
@@ -266,7 +275,128 @@ func TestChangeOnTrial(t *testing.T) {
 		t.Error("a change that could not be applied was accepted")
 	}
 	runner.fail = ""
-	if got := files(t, m); len(got) != 3 || m.PendingSeconds() != 0 {
+	if got := files(t, m); len(got) != 3 || m.PendingSeconds() == 0 {
 		t.Errorf("after a failed change: %v", got)
+	}
+	if err := m.Confirm(); !errors.Is(err, ErrReverting) {
+		t.Errorf("a failed rollback must not be confirmable: %v", err)
+	}
+	if err := m.Revert(ctx); err != nil || m.PendingSeconds() != 0 {
+		t.Errorf("retry rollback: %v", err)
+	}
+}
+
+func TestAddressOwnership(t *testing.T) {
+	m, _ := newTestManager(t)
+	for _, dhcp := range []bool{true, false} {
+		cfg := Config{Ports: []string{"enp1s0"}, Bridge: true, DHCP: dhcp, Address: "192.168.10.5/24", Gateway: "192.168.10.1"}
+		got := m.render(cfg)
+		port, bridge := got[prefix+"enp1s0.network"], got[prefix+"br0.network"]
+		for _, setting := range []string{"DHCP=no", "IPv6AcceptRA=no", "LinkLocalAddressing=no", "KeepConfiguration=no", "Bridge=br0"} {
+			if !strings.Contains(port, setting) {
+				t.Errorf("bridge port lacks %s: %s", setting, port)
+			}
+		}
+		if strings.Contains(port, "\nAddress=") || strings.Contains(port, "\nGateway=") || !strings.Contains(bridge, "IPv6AcceptRA=yes") {
+			t.Fatalf("addresses/routes must belong to br0: %v", got)
+		}
+		if dhcp && !strings.Contains(bridge, "ClientIdentifier=mac") || !dhcp && !strings.Contains(bridge, "Address=192.168.10.5/24") {
+			t.Errorf("bridge address configuration: %s", bridge)
+		}
+	}
+}
+
+func TestReconfigureFailureAndRetiredBridge(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bridge := Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}
+	if err := m.Change(ctx, bridge); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Confirm(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "networkctl reconfigure br0 enp1s0 enp2s0") {
+		t.Fatalf("existing br0 was not reconfigured: %v", runner.commands)
+	}
+	runner.fail = "networkctl reconfigure"
+	fixed := bridge
+	fixed.DHCP, fixed.Address = false, "192.168.10.5/24"
+	if err := m.Change(ctx, fixed); err == nil {
+		t.Fatal("reconfigure failure was ignored")
+	}
+	runner.fail = ""
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Change(ctx, Config{Hostname: "nas", DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// The old definition must be forgotten before the bridge is removed.
+	runner.commands = nil
+	if err := m.Change(ctx, Config{Hostname: "nas", DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	reload, remove := slices.Index(runner.commands, "networkctl reload"), slices.Index(runner.commands, "networkctl delete br0")
+	if reload < 0 || remove <= reload {
+		t.Fatalf("delete before reload: %v", runner.commands)
+	}
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChangeSurvivesLostRequest(t *testing.T) {
+	m, runner := newTestManager(t)
+	if err := m.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.Change(ctx, Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if m.PendingSeconds() == 0 {
+		t.Fatal("missing rollback timer")
+	}
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.commands) == 0 {
+		t.Fatal("configuration not applied")
+	}
+}
+
+func TestRollbackRetriesRetiredBridge(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Change(ctx, Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	runner.fail = "networkctl delete br0"
+	if err := m.Revert(ctx); err == nil {
+		t.Fatal("bridge deletion failure was ignored")
+	}
+	if err := m.Confirm(); !errors.Is(err, ErrReverting) {
+		t.Fatalf("failed rollback confirmable: %v", err)
+	}
+	if len(files(t, m)) != 0 {
+		t.Fatal("networkd still has the obsolete definition")
+	}
+	runner.commands, runner.fail = nil, ""
+	if err := m.Revert(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "networkctl delete br0") || m.PendingSeconds() != 0 {
+		t.Fatalf("retired bridge was forgotten on retry: %v", runner.commands)
 	}
 }
