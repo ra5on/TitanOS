@@ -1883,5 +1883,7 @@
 	"disk.blocked.testing": "Disk test running",
 	"disk.blocked.small": "Disk too small",
 	"disk.blocked.vm": "Assigned to VM",
-	"memoryPolicy.readOnly": "Memory settings are currently read-only."
+	"memoryPolicy.readOnly": "Memory settings are currently read-only.",
+	"create.changedDisks": "The selected disks changed or are no longer available. Please select them again.",
+	"create.clearSelection": "Clear selection"
 }
