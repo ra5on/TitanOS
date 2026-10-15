@@ -13,8 +13,12 @@ def check_network(boot, request, directory, ssh_port):
            "-o", f"UserKnownHostsFile={directory}/known_hosts", "betatester@127.0.0.1"]
 
     def remote(script, timeout=60):
-        return subprocess.check_output([*ssh, "sudo sh -ec " + shlex.quote(script)],
-                                       text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
+        try:
+            return subprocess.check_output([*ssh, "sudo sh -ec " + shlex.quote(script)],
+                                           text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
+        except subprocess.CalledProcessError as error:
+            print(error.output, flush=True)
+            raise
 
     def wait_for(check, timeout=60):
         deadline = time.monotonic() + timeout
@@ -86,6 +90,8 @@ def check_network(boot, request, directory, ssh_port):
 
         # A separate guest namespace is attached just like a libvirt tap. Its
         # MAC must reach QEMU's DHCP server through the actual networkd bridge.
+        # /run is mounted noexec by Debian's initramfs. The DHCP hook must live
+        # on the executable RAM overlay; only its result belongs in /run.
         remote("""ip netns add titan-smoke
 ip link add ts-vm type veth peer name eth0 netns titan-smoke
 ip link set ts-vm master br0
@@ -93,15 +99,15 @@ ip link set ts-vm up
 ip -n titan-smoke link set lo up
 ip -n titan-smoke link set eth0 address 52:54:00:ba:ad:01
 ip -n titan-smoke link set eth0 up
-cat > /run/titan-smoke-dhcp <<'EOF'
+cat > /root/titan-smoke-dhcp <<'EOF'
 #!/bin/sh
 [ "$1" = bound ] || exit 0
 ip address replace "$ip/24" dev "$interface"
 ip route replace default via "$router" dev "$interface"
 printf '%s' "$ip" > /run/titan-smoke-ip
 EOF
-chmod 755 /run/titan-smoke-dhcp
-ip netns exec titan-smoke busybox udhcpc -i eth0 -n -q -t 5 -T 2 -s /run/titan-smoke-dhcp
+chmod 755 /root/titan-smoke-dhcp
+ip netns exec titan-smoke busybox udhcpc -i eth0 -n -q -t 5 -T 2 -s /root/titan-smoke-dhcp
 test -s /run/titan-smoke-ip
 ip netns exec titan-smoke ping -c 1 -W 3 10.0.2.2""")
         guest_ip = remote("cat /run/titan-smoke-ip")
@@ -131,7 +137,8 @@ iptables -t nat -S POSTROUTING | grep MASQUERADE
 ip netns exec titan-smoke ping -c 1 -W 3 10.0.2.2
 systemctl stop docker.socket docker.service
 ip link delete ts-vm
-ip netns delete titan-smoke""", timeout=120)
+ip netns delete titan-smoke
+rm -f /root/titan-smoke-dhcp /run/titan-smoke-ip""", timeout=120)
         print(f"Network boot {boot}: stable MAC, address ownership, guest DHCP, live port and Docker restart passed", flush=True)
     except Exception:
         try:
