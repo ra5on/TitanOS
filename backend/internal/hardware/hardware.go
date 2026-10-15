@@ -17,7 +17,8 @@ var (
 	// ErrUnknown means a device is not there (any more).
 	ErrUnknown = errors.New("hardware: no such device")
 	// ErrNotPassable means a device cannot be handed to a VM.
-	ErrNotPassable = errors.New("hardware: the device cannot be handed to a VM")
+	ErrNotPassable     = errors.New("hardware: the device cannot be handed to a VM")
+	ErrIncompleteGroup = errors.New("hardware: explicitly select the other functions in the IOMMU group")
 )
 
 // PCI is a device on the PCI bus.
@@ -37,7 +38,7 @@ type PCI struct {
 	// Primary is the display the firmware used: the console of the NAS.
 	Primary bool `json:"primary"`
 	// Companions are the other functions of the same card, such as the
-	// sound output of a graphics card. They go to a VM together with it.
+	// sound output of a graphics card. They require an explicit selection.
 	Companions []string `json:"companions"`
 	// Passable says whether the device can be handed to a VM; if not,
 	// Reason says why: no_iommu, shared_group, npu.
@@ -198,8 +199,8 @@ func (m *Manager) usb() []USB {
 	return devices
 }
 
-// Check makes sure devices can be handed to a VM and returns the PCI
-// addresses with the companions of every card added.
+// Check validates the explicit selection. It never adds devices. Functions
+// sharing an IOMMU group must be selected together or the request is refused.
 func (m *Manager) Check(pci, usb []string) ([]string, error) {
 	status := m.Status()
 	var addresses []string
@@ -218,6 +219,7 @@ func (m *Manager) Check(pci, usb []string) ([]string, error) {
 			if !named {
 				return nil, fmt.Errorf("%w: %s", ErrUnknown, address)
 			}
+			add(address)
 			continue
 		}
 		device := status.PCI[at]
@@ -226,7 +228,29 @@ func (m *Manager) Check(pci, usb []string) ([]string, error) {
 		}
 		add(address)
 		for _, companion := range device.Companions {
-			add(companion)
+			group, err := os.Readlink(filepath.Join(m.sys, "bus/pci/devices", companion, "iommu_group"))
+			if err == nil && filepath.Base(group) == fmt.Sprint(device.IOMMUGroup) && !slices.Contains(pci, companion) {
+				return nil, fmt.Errorf("%w: %s", ErrIncompleteGroup, companion)
+			}
+		}
+	}
+	for _, address := range addresses {
+		groupPath := filepath.Join(m.sys, "bus/pci/devices", address, "iommu_group/devices")
+		members, err := os.ReadDir(groupPath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrNotPassable, address)
+		}
+		for _, member := range members {
+			class := m.read(m.sys, "bus/pci/devices", member.Name(), "class")
+			if strings.HasPrefix(class, "0x0604") {
+				continue
+			}
+			if slot(member.Name()) != slot(address) {
+				return nil, fmt.Errorf("%w: shared group of %s", ErrNotPassable, address)
+			}
+			if !slices.Contains(pci, member.Name()) {
+				return nil, fmt.Errorf("%w: %s", ErrIncompleteGroup, member.Name())
+			}
 		}
 	}
 	for _, id := range usb {

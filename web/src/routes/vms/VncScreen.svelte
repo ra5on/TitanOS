@@ -12,8 +12,6 @@
 
 	let target = $state<HTMLElement>();
 	let phase = $state<'connecting' | 'connected' | 'lost'>('connecting');
-	let guest = $state({ width: 0, height: 0 });
-	let shown = $state({ width: 0, height: 0 });
 
 	let rfb: RFB | undefined;
 
@@ -26,13 +24,6 @@
 		rfb.clipViewport = false;
 	}
 
-	function measure() {
-		const canvas = target?.querySelector('canvas');
-		if (!canvas) return;
-		guest = { width: canvas.width, height: canvas.height };
-		const box = canvas.getBoundingClientRect();
-		shown = { width: Math.round(box.width), height: Math.round(box.height) };
-	}
 
 	$effect(() => {
 		if (!target) return;
@@ -47,7 +38,6 @@
 			applyMode();
 			connection.addEventListener('connect', () => {
 				phase = 'connected';
-				measure();
 				connection.focus();
 			});
 			connection.addEventListener('disconnect', () => {
@@ -61,12 +51,10 @@
 		// Only the element decides when to connect anew: neither the display
 		// mode nor the state of the connection may start this over.
 		untrack(connect);
-		const timer = setInterval(measure, 1000);
 
 		return () => {
 			closed = true;
 			clearTimeout(retry);
-			clearInterval(timer);
 			rfb?.disconnect();
 			rfb = undefined;
 		};
@@ -97,8 +85,6 @@
 <div class="screen" class:full={mode === 'full'} bind:this={target}></div>
 {#if phase !== 'connected'}
 	<p class="state" role="status">{t(phase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</p>
-{:else if guest.width > 0}
-	<span class="chip resolution mono">{t('vms.resolution', { width: guest.width, height: guest.height, shownWidth: shown.width, shownHeight: shown.height })}</span>
 {/if}
 
 <style>
@@ -119,13 +105,6 @@
 		justify-content: center;
 		color: var(--muted);
 		font-size: 0.875rem;
-		pointer-events: none;
-	}
-	.resolution {
-		position: absolute;
-		right: 10px;
-		bottom: 10px;
-		opacity: 0.85;
 		pointer-events: none;
 	}
 </style>

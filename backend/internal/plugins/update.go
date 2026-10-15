@@ -37,6 +37,11 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 		return ErrInvalid
 	}
 	settings := m.current()
+	if settings.PendingDriver != nil {
+		return ErrDriverPending
+	}
+	// A new OS gets its own bundled plugin set, never the old driver selection.
+	settings.DriverSet = ""
 	if settings.Volume == "" {
 		return m.store.WriteJSON(releaseSettingsPath(version), settings)
 	}

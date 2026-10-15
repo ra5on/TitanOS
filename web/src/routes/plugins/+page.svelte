@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -24,18 +25,20 @@
 		licenseUrl?: string;
 		problem: string;
 	};
-	type Status = { volume: string; kernel: string; plugins: Plugin[]; catalog: { release: string; state: string; error?: string } };
+	type Status = { driverUpdate: DriverStatus; volume: string; kernel: string; plugins: Plugin[]; catalog: { release: string; state: string; error?: string } };
 
 	let status = $state<Status | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let picked = $state('');
 	let asking = $state(false);
+	let activate = $state(true);
 	let confirm = $state('');
 	let volume = $state('');
 	let busy = $state(false);
 	let refreshing = $state(false);
 	let removing = $state(false);
 
+	const locked = $derived(busy || !!status?.driverUpdate?.pending);
 	const plugins = $derived(status?.plugins ?? []);
 	const current = $derived(plugins.find((plugin) => plugin.name === picked) ?? plugins[0]);
 	const volumes = $derived((storage.status?.volumes ?? []).filter((entry) => entry.mounted).map((entry) => entry.name));
@@ -98,6 +101,7 @@
 	}
 
 	function ask() {
+		activate = true;
 		confirm = '';
 		volume = status?.volume || volumes[0] || '';
 		error = null;
@@ -201,11 +205,11 @@
 				{#if !current.installed && !asking}
 					<div class="row">
 						<span class="muted path">{current.download ? t('plugins.githubSource', { version: status.catalog.release }) : current.path}</span>
-						<button type="button" class="btn btn-primary" disabled={busy || refreshing || !volumes.length || current.problem === 'kernel'} onclick={ask}>{t(current.download ? 'plugins.downloadInstall' : 'plugins.install')}</button>
+						<button type="button" class="btn btn-primary" disabled={locked || refreshing || !volumes.length || current.problem === 'kernel'} onclick={ask}>{t(current.download ? 'plugins.downloadInstall' : 'plugins.install')}</button>
 					</div>
 					{#if !volumes.length}<p class="muted">{t('plugins.needVolume')} <a href="/storage">{t('nav.storage')}</a></p>{/if}
 				{:else if !current.installed}
-					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume } : { path: current.path, volume, confirm })))}>
+					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm, activate })))}>
 						<p class="notice-warn">{t(current.official ? 'plugins.trustOfficial' : 'plugins.trustCommunity')}</p>
 						{#if current.download}<p class="muted">{t('plugins.downloadNote', { size: formatBytes(current.size) })}</p>{/if}
 						{#if current.licenseUrl}<a href={current.licenseUrl}>{t('plugins.licenses')}</a>{/if}
@@ -219,6 +223,8 @@
 								<input class="field mono" type="text" bind:value={confirm} autocapitalize="none" spellcheck="false" />
 							</label>
 						{/if}
+						<label class="check"><input type="checkbox" bind:checked={activate} disabled={busy} /><span>{t('plugins.activateNow')}</span></label>
+						<p class="muted note">{t('plugins.activateLaterHint')}</p>
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 						<div class="row">
 							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
@@ -227,10 +233,11 @@
 					</form>
 				{:else}
 					<div class="row">
-						<label class="check"><input type="checkbox" checked={current.enabled} disabled={busy} onchange={(event) => run(() => api.post<Status>(`/plugins/${current.name}/${event.currentTarget.checked ? 'enable' : 'disable'}`))} /><span>{t('plugins.enabled')}</span></label>
-						<button type="button" class="btn" onclick={() => (removing = true)} disabled={busy}>{t('plugins.remove')}</button>
+						<label class="check"><input type="checkbox" checked={current.enabled} disabled={locked} onchange={(event) => run(() => api.post<Status>(`/plugins/${current.name}/${event.currentTarget.checked ? 'enable' : 'disable'}`))} /><span>{t('plugins.enabled')}</span></label>
+						<button type="button" class="btn" onclick={() => (removing = true)} disabled={locked}>{t('plugins.remove')}</button>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
+					{#if current.name === 'nvidia' && current.official && status.driverUpdate}<DriverUpdates status={status.driverUpdate} {busy} action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))} />{/if}
 					{#if current.enabled && current.problem === 'activation'}<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}>{t('plugins.retry')}</button>{/if}
 				{/if}
 			</div>

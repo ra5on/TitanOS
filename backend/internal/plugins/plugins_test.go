@@ -77,6 +77,48 @@ func TestFailedActivationCanBeRetried(t *testing.T) {
 	}
 }
 
+func TestInstallWithoutActivationLeavesRunningConsumersAlone(t *testing.T) {
+	m, r := newTestManager(t)
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", func(p *Manifest) {
+		p.Modules = []string{"nvidia", "nvidia_uvm"}
+		p.Services = []string{"titanos-nvidia.service"}
+	})
+	ctx, mounted := context.Background(), []string{"data"}
+	// Establish the normal background state before installing, as on a NAS
+	// with running VMs. Even unusable/busy hardware must allow storage only.
+	if err := m.Apply(ctx, mounted); err != nil {
+		t.Fatal(err)
+	}
+	r.commands = nil
+	r.fail = "nvidia"
+	if err := m.InstallWithActivation(ctx, path, "data", "gpu", mounted, false); err != nil {
+		t.Fatal(err)
+	}
+	if d := m.Status(mounted).Plugins[0]; !d.Installed || d.Enabled || d.Active || d.Problem != "" {
+		t.Fatalf("deferred plugin: %+v", d)
+	}
+	for _, command := range r.commands {
+		t.Fatalf("installation changed running system: %s", command)
+	}
+	// Background reconciliation must also leave existing consumers alone.
+	if err := m.Apply(ctx, mounted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(m.extDir, "gpu.raw")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deferred image mounted: %v", err)
+	}
+	if len(r.commands) != 0 {
+		t.Fatalf("deferred installation affected reconciliation: %v", r.commands)
+	}
+	r.fail = ""
+	if err := m.SetEnabled(ctx, "gpu", true, mounted); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Status(mounted).Plugins[0].Active {
+		t.Fatal("explicit later activation failed")
+	}
+}
+
 func TestBusyDriverCannotBeUnmountedOrRemoved(t *testing.T) {
 	m, r := newTestManager(t)
 	ctx := context.Background()

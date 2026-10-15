@@ -53,9 +53,11 @@ var (
 	ErrNotFound      = errors.New("plugins: not found")
 	ErrExists        = errors.New("plugins: this plugin is installed already")
 	// ErrInvalid means the manifest or the image is not what it should be.
-	ErrInvalid      = errors.New("plugins: not a valid plugin")
-	ErrNotConfirmed = errors.New("plugins: the installation was not confirmed")
-	ErrBusy         = errors.New("plugins: a service or kernel module is still in use")
+	ErrInvalid       = errors.New("plugins: not a valid plugin")
+	ErrNotConfirmed  = errors.New("plugins: the installation was not confirmed")
+	ErrBusy          = errors.New("plugins: a service or kernel module is still in use")
+	ErrDriverPending = errors.New("plugins: cancel the scheduled driver activation or reboot before changing plugins")
+	ErrUpdatePending = errors.New("plugins: finish or cancel the system update before changing plugins")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -67,6 +69,8 @@ type Manifest struct {
 	// Description maps a language to a text.
 	Description map[string]string `json:"description"`
 	Version     string            `json:"version"`
+	TitanOS     string            `json:"titanos,omitempty"`
+	Revision    uint64            `json:"revision,omitempty"`
 	// SHA256 and Size are those of the image <name>.raw.
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
@@ -85,7 +89,10 @@ type Settings struct {
 	// Volume holds the installed plugins.
 	Volume string `json:"volume"`
 	// Enabled are the plugins laid over the system.
-	Enabled []string `json:"enabled"`
+	Enabled          []string          `json:"enabled"`
+	AutomaticDrivers *bool             `json:"automaticDrivers,omitempty"`
+	DriverSet        string            `json:"driverSet,omitempty"`
+	PendingDriver    *DriverActivation `json:"pendingDriver,omitempty"`
 }
 
 // Plugin is a plugin as shown in the UI.
@@ -112,9 +119,10 @@ type Plugin struct {
 type Status struct {
 	Volume string `json:"volume"`
 	// Kernel is the release of the running kernel.
-	Kernel  string        `json:"kernel"`
-	Plugins []Plugin      `json:"plugins"`
-	Catalog CatalogStatus `json:"catalog"`
+	Kernel       string             `json:"kernel"`
+	Plugins      []Plugin           `json:"plugins"`
+	Catalog      CatalogStatus      `json:"catalog"`
+	DriverUpdate DriverUpdateStatus `json:"driverUpdate"`
 }
 
 // Manager installs plugins and keeps the system in line with the settings.
@@ -150,13 +158,20 @@ type Manager struct {
 	catalogAttempt time.Time
 	catalogLoading bool
 	// applied is what was last handed to systemd, to notice changes.
-	applied string
+	applied        string
+	driverRequests chan string
+	driverActions  sync.Mutex
+	driverStatus   DriverUpdateStatus
+	driverAttempt  time.Time
+	driverVolume   string
+	bootID         string
 }
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
-	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS"}
+	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	return &Manager{driverRequests: make(chan string, 1), bootID: strings.TrimSpace(string(boot)), store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS"}
 }
 
 // Load reads the settings from /config.
@@ -175,6 +190,9 @@ func (m *Manager) Load() error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	if err := m.loadDriverSelection(&settings); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
@@ -184,11 +202,19 @@ func (m *Manager) Load() error {
 func (m *Manager) current() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Settings{Volume: m.settings.Volume, Enabled: slices.Clone(m.settings.Enabled)}
+	settings := m.settings
+	settings.Enabled = slices.Clone(settings.Enabled)
+	return settings
 }
 
 // Volume returns the volume the plugins are installed on, or "" while there are none.
 func (m *Manager) Volume() string {
+	m.mu.Lock()
+	downloading := m.driverVolume
+	m.mu.Unlock()
+	if downloading != "" {
+		return downloading
+	}
 	settings := m.current()
 	if len(settings.Enabled) == 0 && len(m.installed(settings.Volume)) == 0 {
 		return ""
@@ -213,6 +239,9 @@ func (m *Manager) save(settings Settings) error {
 func (m *Manager) dir(volume string) string {
 	if releaseVersion.MatchString(m.Release) {
 		dir := m.releaseDir(volume, m.Release)
+		if id := m.current().DriverSet; id != "" {
+			return filepath.Join(dir, ".sets", id)
+		}
 		if _, err := os.Stat(filepath.Join(dir, ".ready")); err == nil {
 			return dir
 		}
@@ -313,6 +342,11 @@ func (m *Manager) Status(mounted []string) Status {
 	// An identical signed local copy can still be installed without a network.
 	catalog, available := m.catalogSnapshot()
 	status.Catalog = catalog
+	status.DriverUpdate = m.driverSnapshot(settings)
+	if status.DriverUpdate.CanRestore {
+		bundled, e := readManifest(filepath.Join(m.releaseDir(settings.Volume, m.Release), "nvidia"+manifestSuffix))
+		status.DriverUpdate.CanRestore = e == nil && bundled.SHA256 != m.installed(settings.Volume)["nvidia"].SHA256
+	}
 	downloads := map[string]int{}
 	for _, plugin := range available {
 		if !names[plugin.Name] {
@@ -379,15 +413,24 @@ func hashFile(path string, limit int64) (string, int64, error) {
 // switches it on. confirm has to be the name of the plugin: nothing has
 // checked what is in it.
 func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
+	return m.InstallWithActivation(ctx, manifestPath, volume, confirm, mounted, true)
+}
+
+// InstallWithActivation can store a verified plugin without touching live
+// drivers, services or sysext. Devices already in use remain with their owners.
+func (m *Manager) InstallWithActivation(ctx context.Context, manifestPath, volume, confirm string, mounted []string, activate bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
-	return m.install(ctx, manifestPath, volume, confirm, mounted)
+	return m.install(ctx, manifestPath, volume, confirm, mounted, activate)
 }
 
 // install is shared by local files and verified downloads. Caller holds actions.
-func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
+func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm string, mounted []string, activate bool) error {
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	if m.Disabled {
 		return ErrDisabled
@@ -460,11 +503,16 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 		os.Remove(target)
 		return fmt.Errorf("%w: plugin metadata changed while being copied", ErrInvalid)
 	}
-	if !slices.Contains(settings.Enabled, manifest.Name) {
+	// A previous interrupted installation may have left an enabled name.
+	settings.Enabled = slices.DeleteFunc(settings.Enabled, func(name string) bool { return name == manifest.Name })
+	if activate {
 		settings.Enabled = append(settings.Enabled, manifest.Name)
 	}
 	if err := m.save(settings); err != nil {
 		return err
+	}
+	if !activate {
+		return nil
 	}
 	return m.apply(ctx, mounted)
 }
@@ -494,8 +542,11 @@ func copyFile(from, to string, mode os.FileMode) error {
 func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	return m.setEnabled(ctx, name, enabled, mounted)
 }
@@ -537,8 +588,11 @@ func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mou
 func (m *Manager) Remove(ctx context.Context, name string, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	if err := m.setEnabled(ctx, name, false, mounted); err != nil {
 		return err
@@ -552,6 +606,7 @@ func (m *Manager) Remove(ctx context.Context, name string, mounted []string) err
 // Run lays the enabled plugins over the system once their volume is
 // mounted and takes them away before it goes, until ctx is done.
 func (m *Manager) Run(ctx context.Context, mounted func() []string) {
+	go m.runDriverUpdates(ctx, mounted)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -599,7 +654,10 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	key := settings.Volume + ":"
+	key := ":"
+	if len(names) > 0 {
+		key = settings.Volume + ":"
+	}
 	for _, name := range names {
 		key += name + "=" + wanted[name].SHA256 + ";"
 	}

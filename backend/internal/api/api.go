@@ -73,6 +73,7 @@ type Options struct {
 	// UPS watches the uninterruptible power supply.
 	UPS      *ups.Manager
 	Settings *system.Settings
+	Energy   *system.EnergyManager
 	Power    system.Power
 	Version  string
 	// ShareDir holds the texts of the licenses.
@@ -202,6 +203,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("GET /api/v1/system/energy", s.requireAdmin(s.handleEnergy))
+	mux.HandleFunc("PUT /api/v1/system/energy", s.requireAdmin(s.handleEnergyChange))
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
 	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
@@ -219,6 +222,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
 	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))
+	mux.HandleFunc("POST /api/v1/notifications/dismiss", s.requireAdmin(s.handleDismissNotifications))
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
 	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
 	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
@@ -256,6 +260,7 @@ func New(opts Options) *Server {
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
+	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireAdmin(s.handlePluginInstall))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))

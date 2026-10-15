@@ -84,10 +84,14 @@ func TestStatus(t *testing.T) {
 		t.Errorf("USB = %+v", status.USB)
 	}
 
-	// The sound output goes along with its card.
-	if pci, err := m.Check([]string{"0000:01:00.0"}, []string{"1a86:55d4"}); err != nil || !slices.Equal(pci, []string{"0000:01:00.0", "0000:01:00.1"}) {
-		t.Errorf("Check = %v, %v", pci, err)
+	// A card never acquires an unselected companion.
+	if pci, err := m.Check([]string{"0000:01:00.0"}, nil); !errors.Is(err, ErrIncompleteGroup) || len(pci) != 0 {
+		t.Errorf("incomplete explicit selection = %v, %v", pci, err)
 	}
+	if pci, err := m.Check(nil, nil); err != nil || len(pci) != 0 {
+		t.Fatalf("empty selection passed devices: %v, %v", pci, err)
+	}
+
 	if pci, err := m.Check([]string{"0000:01:00.0", "0000:01:00.1"}, nil); err != nil || len(pci) != 2 {
 		t.Errorf("card with its companion named: %v, %v", pci, err)
 	}
@@ -112,5 +116,26 @@ func TestStatus(t *testing.T) {
 	device(t, plain, "0000:01:00.0", "030000", "10de", -1, nil)
 	if status := (&Manager{sys: plain}).Status(); status.IOMMU || status.PCI[0].Passable || status.PCI[0].Reason != "no_iommu" {
 		t.Errorf("without IOMMU = %+v", status)
+	}
+}
+
+func TestSeparateCompanionRequiresExplicitSelectionAndCleanGroup(t *testing.T) {
+	sys := t.TempDir()
+	card, sound := "0000:01:00.0", "0000:01:00.1"
+	device(t, sys, card, "030000", "10de", 2, nil)
+	device(t, sys, sound, "040300", "10de", 3, nil)
+	m := &Manager{sys: sys}
+	if got, err := m.Check([]string{card}, nil); err != nil || !slices.Equal(got, []string{card}) {
+		t.Fatalf("unselected companion added: %v, %v", got, err)
+	}
+	if got, err := m.Check([]string{card, sound}, nil); err != nil || !slices.Equal(got, []string{card, sound}) {
+		t.Fatalf("explicit companion rejected: %v, %v", got, err)
+	}
+	device(t, sys, "0000:03:00.0", "010802", "144d", 3, nil)
+	if _, err := m.Check([]string{card, sound}, nil); !errors.Is(err, ErrNotPassable) {
+		t.Fatalf("companion sharing its group with storage accepted: %v", err)
+	}
+	if got, err := m.Check([]string{card}, nil); err != nil || !slices.Equal(got, []string{card}) {
+		t.Fatalf("unselected companion blocked isolated card: %v, %v", got, err)
 	}
 }
