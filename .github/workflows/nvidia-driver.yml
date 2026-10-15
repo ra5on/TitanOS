@@ -25,7 +25,38 @@ permissions:
   contents: read
   actions: read
 jobs:
+  dispatch:
+    # The signing environment permits v* tags only. A scheduled/default-branch
+    # run delegates to published, reviewed code instead of widening that rule.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Run the driver workflow from a published release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          DRIVER: ${{ inputs.driver || 'latest' }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          execution_tag=
+          while IFS= read -r tag; do
+            if gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/nvidia-driver.yml?ref=$tag" >/dev/null 2>&1; then
+              execution_tag=$tag
+              break
+            fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"))) | .tag_name')
+          if [ -z "$execution_tag" ]; then
+            echo "No published release contains the driver workflow yet."
+            exit 0
+          fi
+          gh workflow run nvidia-driver.yml --repo "$GITHUB_REPOSITORY" --ref "$execution_tag" \
+            -f version="$VERSION" -f driver="$DRIVER" -f force="$FORCE"
+          echo "Driver check dispatched from $execution_tag; signing still requires release approval."
   targets:
+    if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     outputs:
       versions: ${{ steps.targets.outputs.versions }}
