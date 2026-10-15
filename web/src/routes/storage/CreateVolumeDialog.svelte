@@ -63,11 +63,11 @@
 		working = true;
 		error = null;
 		try {
-			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected) });
+			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected), identities: Object.fromEntries(chosen.filter(d => d.identity).map(d => [d.name, d.identity])) });
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = { text: errorText(code), detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '' };
+			error = { text: errorText(code), detail: ['storage_failed', 'disk_unavailable', 'volume_busy'].includes(code) && err instanceof ApiError ? err.message : '' };
 			working = false;
 		}
 	}
@@ -97,7 +97,7 @@
 
 		<div class="field-row">
 			<span class="label">{t('create.disks')}</span>
-			<DiskPicker disks={usable} bind:selected name="volume-disks" />
+			<DiskPicker {disks} bind:selected name="volume-disks" />
 		</div>
 
 		<div class="field-row">

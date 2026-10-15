@@ -89,7 +89,7 @@ export type SystemInfo = {
 	kernel: string;
 	uptimeSeconds: number;
 	cpu: { model: string; threads: number; usagePercent: number };
-	memory: { totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number };
+	memory: { totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number; cacheBytes?: number; dirtyBytes?: number; writebackBytes?: number };
 	temperatures: Temperature[];
 	image: { slot: string; sizeBytes: number; overlayUsedBytes: number; overlayTotalBytes: number } | null;
 	stick: { label: string; present: boolean };
@@ -122,6 +122,8 @@ export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
 export type Filesystem = 'ext4' | 'xfs' | 'btrfs';
 
 export type Disk = {
+ identity?: string;
+ unavailableReason?: 'stick' | 'volume' | 'mounted' | 'testing' | 'small' | 'vm';
 	name: string;
 	path: string;
 	model: string;
@@ -193,7 +195,7 @@ export type FileRoot = {
 
 export type FileEntry = { name: string; dir: boolean; size: number; modified: string };
 
-export type UploadStatus = { id: string; offset: number; size: number; name: string };
+export type UploadStatus = { id: string; offset: number; size: number; name: string; busy?: boolean };
 
 export type DockerContainer = {
 	id: string;
@@ -262,6 +264,7 @@ export type VMDisk = {
 export type VMFolder = { path: string; tag: string; readOnly: boolean };
 
 export type VM = {
+ directory?: string;
 	name: string;
 	displayName?: string;
 	description: string;
@@ -300,7 +303,7 @@ export type VMStatus = {
 	kvm: boolean;
 	/** Whether the bridge is set up that gives VMs an address of their own. */
 	bridge: boolean;
-	host: { cpus: number; memoryBytes: number; usedMemoryBytes: number; cpuModel: string };
+	host: { cpus: number; memoryBytes: number; usedMemoryBytes: number; availableMemoryBytes?: number; cpuModel: string };
 	vms: VM[];
 };
 

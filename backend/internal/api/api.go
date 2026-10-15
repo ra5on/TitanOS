@@ -73,12 +73,13 @@ type Options struct {
 	// Backup copies shares to another volume, server or the cloud.
 	Backup *backup.Manager
 	// UPS watches the uninterruptible power supply.
-	UPS         *ups.Manager
-	Settings    *system.Settings
-	Energy      *system.EnergyManager
-	PowerButton *system.PowerButtonManager
-	Power       system.Power
-	Version     string
+	UPS          *ups.Manager
+	Settings     *system.Settings
+	Energy       *system.EnergyManager
+	PowerButton  *system.PowerButtonManager
+	MemoryPolicy *system.MemoryPolicy
+	Power        system.Power
+	Version      string
 	// ShareDir holds the texts of the licenses.
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -172,6 +173,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
 	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
 	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
+	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
 	mux.HandleFunc("GET /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadStatus))
 	mux.HandleFunc("PATCH /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadChunk))
@@ -206,6 +209,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("GET /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicy))
+	mux.HandleFunc("PUT /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicyChange))
 	mux.HandleFunc("GET /api/v1/system/power-button", s.requireAdmin(s.handlePowerButton))
 	mux.HandleFunc("PUT /api/v1/system/power-button", s.requireAdmin(s.handlePowerButtonChange))
 	mux.HandleFunc("GET /api/v1/system/energy", s.requireAdmin(s.handleEnergy))

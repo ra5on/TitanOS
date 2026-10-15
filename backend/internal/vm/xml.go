@@ -132,7 +132,7 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		// would find an empty TPM after every restart of the NAS.
 		devices = devices.with(el("tpm", "model", "tpm-crb").with(
 			el("backend", "type", "emulator", "version", "2.0", "persistent_state", "yes").with(
-				el("source", "type", "dir", "path", filepath.Join(m.dir(vm.Volume, vm.Name), "tpm")),
+				el("source", "type", "dir", "path", filepath.Join(m.dir(vm.Volume, vm.folder()), "tpm")),
 			),
 		))
 	}
@@ -197,7 +197,7 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		el("os").with(
 			el("type", "arch", "x86_64", "machine", "q35").text("hvm"),
 			loader,
-			el("nvram").text(filepath.Join(m.dir(vm.Volume, vm.Name), "nvram.fd")),
+			el("nvram").text(filepath.Join(m.dir(vm.Volume, vm.folder()), "nvram.fd")),
 			// An empty disk does not boot, so a new VM falls through to
 			// the installation medium; an installed one starts from disk.
 			el("boot", "dev", "hd"),

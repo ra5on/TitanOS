@@ -69,7 +69,7 @@ func (m *Manager) engineRunning() bool {
 
 func usesDevice(info apiInspect, device hardware.ContainerDevice) bool {
 	for _, id := range strings.Split(info.Config.Labels["titanos.hardware"], ",") {
-		if id == device.ID {
+		if device.ID != "" && id == device.ID {
 			return true
 		}
 	}
@@ -112,24 +112,23 @@ func usesDevice(info apiInspect, device hardware.ContainerDevice) bool {
 			return true
 		}
 		for _, id := range req.DeviceIDs {
-			if id == device.UUID || id == device.Index || id == "all" || strings.HasSuffix(id, "="+device.UUID) {
+			if id == device.UUID || id == device.Index || id == "nvidia.com/gpu="+device.UUID || id == "nvidia.com/gpu="+device.Index || id == "nvidia.com/gpu=all" || id == "all" || strings.HasSuffix(id, "="+device.UUID) {
 				return true
 			}
 		}
 	}
-	for _, value := range info.Config.Env {
-		if ids, ok := strings.CutPrefix(value, "NVIDIA_VISIBLE_DEVICES="); ok {
-			for _, id := range strings.Split(ids, ",") {
-				if id == "all" || id == device.UUID || id == device.Index {
-					return true
+	// The image's NVIDIA_VISIBLE_DEVICES default has no effect on native
+	// CDI with runc. Only the legacy NVIDIA runtime interprets this variable.
+	if info.HostConfig.Runtime == "nvidia" {
+		for _, value := range info.Config.Env {
+			if ids, ok := strings.CutPrefix(value, "NVIDIA_VISIBLE_DEVICES="); ok {
+				for _, id := range strings.Split(ids, ",") {
+					if id == "all" || id == device.UUID || id == device.Index {
+						return true
+					}
 				}
+				return false
 			}
-		}
-	}
-	// An explicit visibility list already decides which GPU is used.
-	for _, value := range info.Config.Env {
-		if strings.HasPrefix(value, "NVIDIA_VISIBLE_DEVICES=") {
-			return false
 		}
 	}
 	return info.HostConfig.Runtime == "nvidia"

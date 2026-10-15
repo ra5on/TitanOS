@@ -7,15 +7,13 @@ package files
 
 import (
 	"archive/zip"
-	"crypto/rand"
-	"encoding/hex"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -25,10 +23,11 @@ import (
 
 // Root is a directory a user may work in.
 type Root struct {
-	ID   string `json:"id"`   // "share/fotos", "volume/data"
-	Name string `json:"name"` // fotos
-	Kind string `json:"kind"` // share, volume
-	Dir  string `json:"-"`
+	ID     string `json:"id"`   // "share/fotos", "volume/data"
+	Name   string `json:"name"` // fotos
+	Kind   string `json:"kind"` // share, volume
+	Dir    string `json:"-"`
+	Volume string `json:"-"`
 	// Writable is false for accounts with read-only access.
 	Writable bool `json:"writable"`
 	// Recycle moves deleted files to the share's recycle bin.
@@ -67,7 +66,7 @@ const (
 
 // hidden reports whether a name is internal and not shown.
 func hidden(name string) bool {
-	return name == RecycleDir || strings.HasSuffix(name, partSuffix)
+	return name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
 }
 
 // clean checks a slash-separated path relative to a root. "" is the root.
@@ -116,7 +115,10 @@ func mapError(err error) error {
 // Manager carries out file operations and keeps track of running uploads.
 type Manager struct {
 	// GID is the group files and folders are given ("users").
-	GID int
+	GID       int
+	Available func(Root) bool
+	Acquire   func(context.Context) (int64, func(), error)
+	syncFile  func(*os.File) error
 
 	mu      sync.Mutex
 	uploads map[string]*upload
@@ -125,7 +127,7 @@ type Manager struct {
 
 // NewManager returns a file manager that gives new files the group gid.
 func NewManager(gid int) *Manager {
-	return &Manager{GID: gid, uploads: map[string]*upload{}, now: time.Now}
+	return &Manager{GID: gid, uploads: map[string]*upload{}, now: time.Now, syncFile: func(f *os.File) error { return f.Sync() }}
 }
 
 // Usage returns the total and free bytes of the filesystem a root is on.
@@ -378,215 +380,4 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 		}
 	}
 	return archive.Close()
-}
-
-// upload is a file on its way in. It is written to a hidden part file in
-// the target folder and only gets its real name once it is complete.
-type upload struct {
-	id, user   string
-	uid        int
-	root       Root
-	name, part string // paths relative to the root
-	size       int64
-	offset     int64
-	touched    time.Time
-	busy       bool
-}
-
-// UploadStatus tells a client where to continue.
-type UploadStatus struct {
-	ID     string `json:"id"`
-	Offset int64  `json:"offset"`
-	Size   int64  `json:"size"`
-	// Name is the final name; it differs from the requested one when a
-	// free name had to be found.
-	Name string `json:"name"`
-}
-
-// Conflict modes for a file that already exists.
-const (
-	ConflictFail    = ""
-	ConflictReplace = "replace"
-	ConflictRename  = "rename"
-)
-
-// StartUpload prepares an upload of size bytes to dir/name.
-func (m *Manager) StartUpload(root Root, dir, name string, size int64, conflict, user string, uid int) (UploadStatus, error) {
-	if !root.Writable {
-		return UploadStatus{}, ErrReadOnly
-	}
-	dir, err := clean(dir)
-	if err != nil || !validName(name) || size < 0 {
-		return UploadStatus{}, ErrInvalid
-	}
-	if _, free := Usage(root); uint64(size) > free {
-		return UploadStatus{}, ErrNoSpace
-	}
-	r, err := os.OpenRoot(root.Dir)
-	if err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	defer r.Close()
-	if info, err := r.Stat(dir); err != nil || !info.IsDir() {
-		return UploadStatus{}, ErrNotFound
-	}
-
-	target := path.Join(dir, name)
-	if info, err := r.Lstat(target); err == nil {
-		switch {
-		case conflict == ConflictRename:
-			ext := path.Ext(name)
-			for n := 2; ; n++ {
-				target = path.Join(dir, fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(name, ext), n, ext))
-				if _, err := r.Lstat(target); err != nil {
-					break
-				}
-			}
-		case conflict == ConflictReplace && !info.IsDir():
-		default:
-			return UploadStatus{}, ErrExists
-		}
-	}
-
-	raw := make([]byte, 12)
-	if _, err := rand.Read(raw); err != nil {
-		return UploadStatus{}, err
-	}
-	id := hex.EncodeToString(raw)
-	part := path.Join(dir, "."+path.Base(target)+"."+id+partSuffix)
-	f, err := r.OpenFile(part, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	f.Close()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.prune()
-	m.uploads[id] = &upload{id: id, user: user, uid: uid, root: root, name: target, part: part, size: size, touched: m.now()}
-	return UploadStatus{ID: id, Size: size, Name: path.Base(target)}, nil
-}
-
-// prune forgets uploads nobody continued and removes their part files.
-// The caller holds the lock.
-func (m *Manager) prune() {
-	for id, u := range m.uploads {
-		if !u.busy && m.now().Sub(u.touched) > uploadIdle {
-			os.Remove(filepath.Join(u.root.Dir, filepath.FromSlash(u.part)))
-			delete(m.uploads, id)
-		}
-	}
-}
-
-// claim returns the upload for exclusive use; release gives it back.
-func (m *Manager) claim(id, user string) (*upload, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	u, ok := m.uploads[id]
-	if !ok || u.user != user {
-		return nil, ErrNoUpload
-	}
-	if u.busy {
-		return nil, ErrMismatch
-	}
-	u.busy = true
-	return u, nil
-}
-
-func (m *Manager) release(u *upload, done bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	u.busy = false
-	u.touched = m.now()
-	if done {
-		delete(m.uploads, u.id)
-	}
-}
-
-// UploadStatus returns how much of an upload has arrived.
-func (m *Manager) UploadStatus(id, user string) (UploadStatus, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	u, ok := m.uploads[id]
-	if !ok || u.user != user {
-		return UploadStatus{}, ErrNoUpload
-	}
-	return UploadStatus{ID: id, Offset: u.offset, Size: u.size, Name: path.Base(u.name)}, nil
-}
-
-// WriteChunk appends data to an upload. offset must be where the upload
-// stands; a client that lost track asks UploadStatus first.
-func (m *Manager) WriteChunk(id, user string, offset int64, data io.Reader) (UploadStatus, error) {
-	u, err := m.claim(id, user)
-	if err != nil {
-		return UploadStatus{}, err
-	}
-	defer m.release(u, false)
-	if offset != u.offset {
-		return UploadStatus{}, ErrMismatch
-	}
-	r, err := os.OpenRoot(u.root.Dir)
-	if err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	defer r.Close()
-	f, err := r.OpenFile(u.part, os.O_WRONLY, 0)
-	if err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	defer f.Close()
-	if _, err := f.Seek(offset, io.SeekStart); err != nil {
-		return UploadStatus{}, err
-	}
-	// Never more than announced, whatever the client sends.
-	written, err := io.Copy(f, io.LimitReader(data, u.size-u.offset))
-	u.offset += written
-	if err != nil {
-		// Keep what arrived: the client continues from there.
-		f.Truncate(u.offset)
-		return UploadStatus{ID: id, Offset: u.offset, Size: u.size, Name: path.Base(u.name)}, mapError(err)
-	}
-	return UploadStatus{ID: id, Offset: u.offset, Size: u.size, Name: path.Base(u.name)}, nil
-}
-
-// FinishUpload gives a complete upload its real name.
-func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
-	u, err := m.claim(id, user)
-	if err != nil {
-		return UploadStatus{}, err
-	}
-	done := false
-	defer func() { m.release(u, done) }()
-	if u.offset != u.size {
-		return UploadStatus{}, ErrIncomplete
-	}
-	r, err := os.OpenRoot(u.root.Dir)
-	if err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	defer r.Close()
-	if f, err := r.OpenFile(u.part, os.O_WRONLY, 0); err == nil {
-		f.Sync()
-		f.Close()
-	}
-	m.own(r, u.part, u.uid, false)
-	if err := r.Rename(u.part, u.name); err != nil {
-		return UploadStatus{}, mapError(err)
-	}
-	done = true
-	return UploadStatus{ID: id, Offset: u.offset, Size: u.size, Name: path.Base(u.name)}, nil
-}
-
-// AbortUpload drops an upload and what has arrived of it.
-func (m *Manager) AbortUpload(id, user string) error {
-	u, err := m.claim(id, user)
-	if err != nil {
-		return err
-	}
-	defer m.release(u, true)
-	if r, err := os.OpenRoot(u.root.Dir); err == nil {
-		r.Remove(u.part)
-		r.Close()
-	}
-	return nil
 }

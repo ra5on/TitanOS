@@ -451,7 +451,13 @@ func (m *Manager) Action(ctx context.Context, id, action string) error {
 			return err
 		}
 	}
-	return mapAPIError(m.api.post(ctx, "/containers/"+id+"/"+action, nil))
+	err := m.api.post(ctx, "/containers/"+id+"/"+action, nil)
+	if action == "start" && err != nil && strings.Contains(err.Error(), "nvidia.com/gpu=") && strings.Contains(err.Error(), "no such file or directory") {
+		if repaired, repairErr := m.recreateLegacyCDI(ctx, id); repaired {
+			return repairErr
+		}
+	}
+	return mapAPIError(err)
 }
 
 // Remove stops and deletes a container. Its data in mounted folders stays.

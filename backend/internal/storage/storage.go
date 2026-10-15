@@ -57,13 +57,15 @@ const (
 
 // Disk is a physical disk as shown in the UI.
 type Disk struct {
-	Name      string `json:"name"` // sda
-	Path      string `json:"path"` // /dev/sda
-	Model     string `json:"model"`
-	Serial    string `json:"serial"`
-	SizeBytes uint64 `json:"sizeBytes"`
-	Kind      string `json:"kind"` // hdd, ssd, nvme, usb
-	Role      string `json:"role"`
+	Identity          string `json:"identity"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
+	Name              string `json:"name"` // sda
+	Path              string `json:"path"` // /dev/sda
+	Model             string `json:"model"`
+	Serial            string `json:"serial"`
+	SizeBytes         uint64 `json:"sizeBytes"`
+	Kind              string `json:"kind"` // hdd, ssd, nvme, usb
+	Role              string `json:"role"`
 	// Volume and MemberState are set for members.
 	Volume      string `json:"volume,omitempty"`
 	MemberState string `json:"memberState,omitempty"`
@@ -332,6 +334,18 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 			}
 		}
 		status.Volumes = append(status.Volumes, volume)
+	}
+	claimed := map[string]string{}
+	if m.Claimed != nil {
+		claimed = m.Claimed()
+	}
+	for i := range status.Disks {
+		disk := &status.Disks[i]
+		disk.Identity = diskIdentity(*disk)
+		disk.UnavailableReason = diskUnavailable(*disk)
+		if claimed[disk.Name] != "" {
+			disk.UnavailableReason = "vm"
+		}
 	}
 	return status
 }

@@ -118,8 +118,9 @@ type VM struct {
 	MemoryMiB int    `json:"memoryMiB"`
 	VCPUs     int    `json:"vcpus"`
 	// Volume holds the VM's folder with the firmware's settings.
-	Volume string `json:"volume"`
-	Disks  []Disk `json:"disks"`
+	Volume    string `json:"volume"`
+	Directory string `json:"directory,omitempty"`
+	Disks     []Disk `json:"disks"`
 	// ISO is the path of the installation medium, or empty.
 	ISO string `json:"iso"`
 	// Autostart starts the VM once its volumes are there after a boot.
@@ -215,6 +216,7 @@ type Manager struct {
 	// sysDir and devDir are /sys and /dev.
 	sysDir, devDir string
 
+	createMu    sync.Mutex
 	mu          sync.Mutex
 	loaded      bool
 	vms         map[string]VM
@@ -279,7 +281,7 @@ func (m *Manager) diskPath(vm VM, disk Disk) string {
 	if disk.Path != "" {
 		return disk.Path
 	}
-	return filepath.Join(m.dir(disk.Volume, vm.Name), disk.File)
+	return filepath.Join(m.dir(disk.Volume, vm.folder()), disk.File)
 }
 
 // SerialSocket is where the serial port of a running VM is reachable.
@@ -526,6 +528,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	if duplicateLabel {
 		return ErrExists
 	}
+	if !validVMDirectory(vm.folder()) {
+		return fmt.Errorf("%w: invalid VM folder", ErrBadFolder)
+	}
 	if !slices.Contains([]string{"linux", "windows", "other"}, vm.Template) {
 		return fmt.Errorf("%w: unknown template", ErrInvalid)
 	}
@@ -643,6 +648,9 @@ func (m *Manager) makeDir(volume, name string) (string, error) {
 		if err := os.Mkdir(path, 0o770); err != nil && !errors.Is(err, fs.ErrExist) {
 			return "", err
 		}
+		if info, err := os.Lstat(path); err != nil || !info.IsDir() {
+			return "", ErrBadFolder
+		}
 		var fsInfo unix.Statfs_t
 		if err := unix.Statfs(path, &fsInfo); err != nil {
 			return "", err
@@ -679,6 +687,8 @@ func newMAC() string {
 
 // Create makes a new VM with its disks. It does not start it.
 func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
+	m.createMu.Lock()
+	defer m.createMu.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -695,6 +705,9 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 	if exists {
 		return ErrExists
 	}
+	if err := m.checkDirectory(vm); err != nil {
+		return err
+	}
 	vm.UUID, vm.MAC, vm.Created = newUUID(), newMAC(), time.Now().UTC().Truncate(time.Second)
 
 	// Whatever is made here is taken back if a later step fails.
@@ -704,12 +717,12 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 			os.Remove(path)
 		}
 		for _, volume := range vm.volumes() {
-			os.Remove(m.dir(volume, vm.Name)) // only if empty
+			os.Remove(m.dir(volume, vm.folder())) // only if empty
 		}
 		return err
 	}
 	for _, volume := range vm.volumes() {
-		if _, err := m.makeDir(volume, vm.Name); err != nil {
+		if _, err := m.makeDir(volume, vm.folder()); err != nil {
 			return fail(err)
 		}
 	}
@@ -896,7 +909,7 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 
 	// The firmware keeps its settings (boot order, …) in a file of its
 	// own. QEMU must be able to write it, so it is made here, not by libvirt.
-	dir, err := m.makeDir(vm.Volume, name)
+	dir, err := m.makeDir(vm.Volume, vm.folder())
 	if err != nil {
 		return err
 	}
@@ -1070,10 +1083,10 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 				slog.Warn("disk of a removed VM not deleted", "vm", name, "err", err)
 			}
 		}
-		os.Remove(filepath.Join(m.dir(vm.Volume, name), "nvram.fd"))
-		os.RemoveAll(filepath.Join(m.dir(vm.Volume, name), "tpm"))
+		os.Remove(filepath.Join(m.dir(vm.Volume, vm.folder()), "nvram.fd"))
+		os.RemoveAll(filepath.Join(m.dir(vm.Volume, vm.folder()), "tpm"))
 		for _, volume := range vm.volumes() {
-			os.Remove(m.dir(volume, name))
+			os.Remove(m.dir(volume, vm.folder()))
 		}
 	}
 	return nil
