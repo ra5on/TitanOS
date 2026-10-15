@@ -149,3 +149,16 @@ Die Go-Tests in `backend/internal/plugins/catalog_test.go` prüfen den Katalog
 und Downloads mit einem lokalen HTTP-Server und echten minisign-Signaturen:
 Abruf erst bei Bedarf, Versions-/Kernelbindung, Manipulationen, Abbrüche,
 Bereinigung und die Sperre bei einem beginnenden Systemupdate.
+
+### Installation bei laufenden VMs und Containern
+
+Im Entwicklungsstand nach beta.3 kann beim Installieren „Direkt aktivieren“
+abgewählt werden. Signatur, Kernel und Prüfsumme werden weiterhin geprüft;
+die Dateien werden nur auf dem Daten-Volume gespeichert. Die Installation lädt
+keine Treiber und stoppt keine VMs oder Container. Späteres Einschalten bindet
+das Plugin wie bisher ein. Eine GPU, die exklusiv an eine VM durchgereicht ist,
+bleibt bis zur Rückgabe bei dieser VM.
+
+Die Sperre während eines Systemupdates ist unabhängig von laufenden VMs. Sie
+wird jetzt ausdrücklich als Systemupdate-Sperre angezeigt. Die vorherige
+allgemeine Meldung über eine belegte GPU konnte hier irreführend erscheinen.

@@ -30,6 +30,7 @@
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let picked = $state('');
 	let asking = $state(false);
+	let activate = $state(true);
 	let confirm = $state('');
 	let volume = $state('');
 	let busy = $state(false);
@@ -98,6 +99,7 @@
 	}
 
 	function ask() {
+		activate = true;
 		confirm = '';
 		volume = status?.volume || volumes[0] || '';
 		error = null;
@@ -205,7 +207,7 @@
 					</div>
 					{#if !volumes.length}<p class="muted">{t('plugins.needVolume')} <a href="/storage">{t('nav.storage')}</a></p>{/if}
 				{:else if !current.installed}
-					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume } : { path: current.path, volume, confirm })))}>
+					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm, activate })))}>
 						<p class="notice-warn">{t(current.official ? 'plugins.trustOfficial' : 'plugins.trustCommunity')}</p>
 						{#if current.download}<p class="muted">{t('plugins.downloadNote', { size: formatBytes(current.size) })}</p>{/if}
 						{#if current.licenseUrl}<a href={current.licenseUrl}>{t('plugins.licenses')}</a>{/if}
@@ -219,6 +221,8 @@
 								<input class="field mono" type="text" bind:value={confirm} autocapitalize="none" spellcheck="false" />
 							</label>
 						{/if}
+						<label class="check"><input type="checkbox" bind:checked={activate} disabled={busy} /><span>{t('plugins.activateNow')}</span></label>
+						<p class="muted note">{t('plugins.activateLaterHint')}</p>
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 						<div class="row">
 							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>

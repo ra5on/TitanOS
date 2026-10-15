@@ -66,9 +66,8 @@
 		</button>
 	</div>
 	{#if role !== 'user'}
-		<button type="button" class="terminal" aria-pressed={terminal.open} title={t('terminal.shortcut')} onclick={toggleTerminal}>
+		<button type="button" class="terminal" aria-pressed={terminal.open} aria-label={t('terminal.title')} title={t('terminal.shortcut')} onclick={toggleTerminal}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
-			<span>{t('terminal.title')}</span>
 		</button>
 		<Notifications />
 	{/if}
@@ -96,11 +95,13 @@
 		display: flex;
 	}
 	.terminal {
+		width: 2.75rem;
 		height: 2.75rem;
+		justify-content: center;
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 0 14px;
+		padding: 0;
 		background: transparent;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -114,11 +115,7 @@
 		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 		font-weight: 500;
 	}
-	@media (max-width: 1100px) {
-		.terminal span {
-			display: none;
-		}
-	}
+
 	header > .nav-shell {
 		flex: 1 1 auto;
 		min-width: 0;

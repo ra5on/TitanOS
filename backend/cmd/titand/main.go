@@ -193,7 +193,12 @@ func run(opts options) error {
 
 	// Virtual machines; starts those marked for autostart once their volumes are there.
 	machines := vm.NewManager(store, shares.UsersGID)
-	machines.BeforeStart = containers.BeginVM
+	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
+		if _, err := hardware.NewManager().Check(pci, usb); err != nil {
+			return nil, err
+		}
+		return containers.BeginVM(ctx, name, pci, usb, autoGPU)
+	}
 	machines.AfterPoll = containers.ReturnVMHardware
 	machines.Disabled = opts.dev
 	if err := machines.Load(); err != nil {
@@ -382,6 +387,11 @@ func run(opts options) error {
 		slog.Warn("NVIDIA settings unavailable", "err", err)
 	}
 	go nvidia.Run(ctx)
+	energy := system.NewEnergyManager(store)
+	energy.Disabled = opts.dev
+	if err := energy.Load(); err != nil {
+		slog.Warn("energy settings unavailable", "err", err)
+	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -408,6 +418,7 @@ func run(opts options) error {
 		UPS:           supply,
 		Certificate:   certs,
 		Settings:      settings,
+		Energy:        energy,
 		Power:         power,
 		Version:       version.Version,
 		ShareDir:      shareDir,

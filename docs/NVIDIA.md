@@ -134,3 +134,26 @@ Technische Grundlagen: [NVIDIA-Treiber](https://docs.nvidia.com/datacenter/tesla
 [offene Kernelmodule](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/kernel-modules.html),
 [CDI](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html)
 und [DRM-Messwerte](https://www.kernel.org/doc/html/latest/gpu/drm-usage-stats.html).
+
+## Aktivierungsfehler in beta.3
+
+Wenn `nvidia-smi -L` die Karte erkennt, der Dienst aber mit
+`mv: cannot stat '/run/cdi/.titanos-nvidia.tmp'` scheitert, liegt das an der
+Veröffentlichung der CDI-Datei: nvidia-ctk ergänzt bei diesem Dateinamen
+selbstständig `.yaml`. Der Entwicklungsstand nach beta.3 schreibt die
+YAML-Ausgabe stattdessen in eine temporäre Datei und benennt sie erst nach
+erfolgreichem Abschluss atomar um. Fehlgeschlagene Downloads sind davon
+unabhängig. Die Korrektur wurde mit dem echten nvidia-ctk aus beta.3 und
+mit simuliertem Abbruch geprüft.
+
+Die temporäre Korrektur wurde am 15. Oktober 2026 auf einer RTX 5060 Ti bestätigt:
+Das Plugin ließ sich anschließend aktivieren. Diese Bestätigung umfasst noch
+keine CUDA-/NVENC-Aufträge oder die Übergabe der Karte an eine VM.
+
+Bei der Installation kann „Direkt aktivieren“ abgewählt werden. Dann liegen die
+geprüften Plugin-Dateien auf dem Daten-Volume, ohne Treiber zu laden oder Geräte
+von laufenden VMs/Containern anzufassen. Die Aktivierung erfolgt später über den
+Plugin-Schalter, wenn die Hardware für das NAS verfügbar ist. VMs ohne diese
+GPU müssen dafür nicht ausgeschaltet werden. Ein laufendes oder noch nicht
+abgeschlossenes Systemupdate wird separat gemeldet; beta.3 konnte dafür
+irreführend „Plugin/GPU wird verwendet“ anzeigen.

@@ -356,3 +356,17 @@ func TestOfficialDownloadFailureNeverActivatesOrLeavesStagingFiles(t *testing.T)
 		})
 	}
 }
+
+func TestOfficialInstallCanDeferActivation(t *testing.T) {
+	f := newCatalogFixture(t)
+	if err := f.m.InstallOfficialWithActivation(context.Background(), "intel-gpu-tools", "data", []string{"data"}, false); err != nil {
+		t.Fatal(err)
+	}
+	items := f.m.Status([]string{"data"}).Plugins
+	if len(items) != 1 || !items[0].Installed || !items[0].Official || items[0].Enabled || items[0].Active {
+		t.Fatalf("signed deferred installation: %+v", items)
+	}
+	if f.count(true) != 1 || len(f.runner.commands) != 0 {
+		t.Fatalf("download count %d, system commands %v", f.count(true), f.runner.commands)
+	}
+}

@@ -1,9 +1,24 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
+	const areas: { href: string; label: MessageKey; admin?: boolean }[] = [
+		{ href: 'appearance', label: 'menu.appearance' },
+		{ href: 'network', label: 'netcfg.title', admin: true },
+		{ href: 'notifications', label: 'notify.settingsTitle', admin: true },
+		{ href: 'updates', label: 'update.title', admin: true },
+		{ href: 'access', label: 'access.title', admin: true },
+		{ href: 'backups', label: 'backup.title', admin: true },
+		{ href: 'stick', label: 'stick.title', admin: true },
+		{ href: 'ups', label: 'ups.title', admin: true },
+		{ href: 'hardware', label: 'hardware.title', admin: true },
+		{ href: 'energy', label: 'energy.title', admin: true },
+		{ href: 'about', label: 'about.title' }
+	];
+	const sortedAreas = $derived(areas.filter((area) => !area.admin || admin).toSorted((a, b) => t(a.label).localeCompare(t(b.label), i18n.locale)));
+
 	let terminals = $state<{ enabled: boolean } | null>(null);
 	let error = $state('');
 
@@ -40,48 +55,9 @@
 <h1>{t('settings.title')}</h1>
 
 <div class="areas">
-	<a class="tile" href="/settings/appearance">
-		<span class="name">{t('menu.appearance')}</span>
-		<span class="muted">{t('settings.appearanceDesc')}</span>
-	</a>
-	{#if admin}
-		<a class="tile" href="/settings/network">
-			<span class="name">{t('netcfg.title')}</span>
-			<span class="muted">{t('netcfg.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/notifications">
-			<span class="name">{t('notify.settingsTitle')}</span>
-			<span class="muted">{t('notify.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/updates">
-			<span class="name">{t('update.title')}</span>
-			<span class="muted">{t('update.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/access">
-			<span class="name">{t('access.title')}</span>
-			<span class="muted">{t('access.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/backups">
-			<span class="name">{t('backup.title')}</span>
-			<span class="muted">{t('backup.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/stick">
-			<span class="name">{t('stick.title')}</span>
-			<span class="muted">{t('stick.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/ups">
-			<span class="name">{t('ups.title')}</span>
-			<span class="muted">{t('ups.settingsDesc')}</span>
-		</a>
-		<a class="tile" href="/settings/hardware">
-			<span class="name">{t('hardware.title')}</span>
-			<span class="muted">{t('hardware.settingsDesc')}</span>
-		</a>
-	{/if}
-	<a class="tile" href="/settings/about">
-		<span class="name">{t('about.title')}</span>
-		<span class="muted">{t('about.settingsDesc')}</span>
-	</a>
+	{#each sortedAreas as area (area.href)}
+		<a class="tile" href="/settings/{area.href}"><span class="name">{t(area.label)}</span></a>
+	{/each}
 </div>
 
 {#if admin && timezone}
@@ -140,14 +116,15 @@
 	}
 	.areas {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: var(--gap);
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+		gap: 10px;
 	}
 	a {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: var(--tile-pad);
+		justify-content: center;
+		min-height: 48px;
+		padding: 10px 14px;
 		color: var(--text);
 		text-decoration: none;
 		font-size: 0.875rem;

@@ -22,6 +22,7 @@ var pluginErrors = []struct {
 	{plugins.ErrInvalid, http.StatusBadRequest, "invalid_plugin"},
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
+	{plugins.ErrUpdatePending, http.StatusConflict, "plugin_update_pending"},
 	{plugins.ErrDownload, http.StatusBadGateway, "plugin_download_failed"},
 	{plugins.ErrRelease, http.StatusNotFound, "plugin_release_unavailable"},
 }
@@ -62,7 +63,10 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	if !s.pluginsEditable(w) {
 		return
 	}
-	var req struct{ Name, Path, Volume, Confirm string }
+	var req struct {
+		Name, Path, Volume, Confirm string
+		Activate                    *bool `json:"activate"`
+	}
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -70,11 +74,12 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_plugin", "choose a release plugin or a local file")
 		return
 	}
+	activate := req.Activate == nil || *req.Activate
 	var err error
 	if req.Name != "" {
-		err = s.opts.Plugins.InstallOfficial(r.Context(), req.Name, req.Volume, s.opts.Storage.Mounted())
+		err = s.opts.Plugins.InstallOfficialWithActivation(r.Context(), req.Name, req.Volume, s.opts.Storage.Mounted(), activate)
 	} else {
-		err = s.opts.Plugins.Install(r.Context(), req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted())
+		err = s.opts.Plugins.InstallWithActivation(r.Context(), req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted(), activate)
 	}
 	if err != nil {
 		writePluginError(w, err)
@@ -120,7 +125,7 @@ func (s *Server) pluginsEditable(w http.ResponseWriter) bool {
 	}
 	status := s.opts.Update.Status()
 	if status.Pending != nil || status.Progress.Phase == "download" || status.Progress.Phase == "switch" {
-		writeError(w, http.StatusConflict, "plugin_busy", "Finish or cancel the system update before changing plugins")
+		writeError(w, http.StatusConflict, "plugin_update_pending", "Finish or cancel the system update before changing plugins")
 		return false
 	}
 	return true

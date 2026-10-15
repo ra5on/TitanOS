@@ -202,10 +202,16 @@ func (m *Manager) fetchCatalog(ctx context.Context) ([]catalogEntry, error) {
 // InstallOfficial accepts a name, never a client-supplied URL. Downloads go
 // directly to the selected data volume; nothing is staged in RAM or on USB.
 func (m *Manager) InstallOfficial(ctx context.Context, name, volume string, mounted []string) error {
+	return m.InstallOfficialWithActivation(ctx, name, volume, mounted, true)
+}
+
+// InstallOfficialWithActivation verifies the same signed release in either
+// mode; deferred activation changes only the live system integration.
+func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volume string, mounted []string, activate bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	if m.Disabled {
 		return ErrDisabled
@@ -262,7 +268,7 @@ func (m *Manager) InstallOfficial(ctx context.Context, name, volume string, moun
 	if err := m.downloadImage(ctx, base+name+".raw", filepath.Join(stage, name+".raw"), selected.plugin.Manifest); err != nil {
 		return err
 	}
-	return m.install(ctx, path, volume, "", mounted)
+	return m.install(ctx, path, volume, "", mounted, activate)
 }
 
 func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest Manifest) error {

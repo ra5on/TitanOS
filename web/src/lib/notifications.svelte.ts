@@ -25,12 +25,24 @@ function readSeen(): number {
 /** What happened on the NAS, the newest first; `seen` is the time up to which it was looked at in this browser. */
 export const notifications = $state<{ list: Notice[]; seen: number }>({ list: [], seen: readSeen() });
 
+let generation = 0;
+
 export async function loadNotifications() {
+	const request = ++generation;
 	try {
-		notifications.list = (await api.get<{ messages: Notice[] }>('/notifications')).messages;
+		const result = await api.get<{ messages: Notice[] }>('/notifications');
+		if (request === generation) notifications.list = result.messages;
 	} catch {
 		// The list stays as it is; the next change brings it again.
 	}
+}
+
+export async function dismissNotifications(ids: number[]) {
+	++generation;
+	const result = await api.post<{ messages: Notice[] }>('/notifications/dismiss', { ids });
+	++generation;
+	notifications.list = result.messages;
+	await loadNotifications();
 }
 
 export function unreadCount(): number {

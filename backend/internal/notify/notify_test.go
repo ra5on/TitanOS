@@ -31,6 +31,33 @@ func newManager(t *testing.T) (*Manager, string) {
 	return m, dir
 }
 
+func TestDismissKeepsNewArrivalsAndRefreshesOtherBrowsers(t *testing.T) {
+	m, _ := newManager(t)
+	m.Notify(Info, "test", "first")
+	first := m.Messages()[0].ID
+	m.Notify(Warning, "test", "second")
+	revision := m.Latest()
+	m.Dismiss([]int{first, first, 999})
+	if messages := m.Messages(); len(messages) != 1 || messages[0].Subject != "second" {
+		t.Fatalf("new arrival lost: %+v", messages)
+	}
+	if m.Latest() <= revision {
+		t.Fatal("other browsers will not refresh")
+	}
+	m.Dismiss([]int{first})
+	if m.Latest() != revision+1 {
+		t.Fatal("no-op changed revision")
+	}
+	m.Dismiss([]int{m.Messages()[0].ID})
+	if len(m.Messages()) != 0 {
+		t.Fatal("last message retained")
+	}
+	m.Notify(Info, "test", "third")
+	if m.Messages()[0].ID <= revision {
+		t.Fatal("deleted IDs were reused")
+	}
+}
+
 // sink records what the push services would have received.
 type sink struct {
 	mu       sync.Mutex

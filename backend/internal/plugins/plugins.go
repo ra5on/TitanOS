@@ -53,9 +53,10 @@ var (
 	ErrNotFound      = errors.New("plugins: not found")
 	ErrExists        = errors.New("plugins: this plugin is installed already")
 	// ErrInvalid means the manifest or the image is not what it should be.
-	ErrInvalid      = errors.New("plugins: not a valid plugin")
-	ErrNotConfirmed = errors.New("plugins: the installation was not confirmed")
-	ErrBusy         = errors.New("plugins: a service or kernel module is still in use")
+	ErrInvalid       = errors.New("plugins: not a valid plugin")
+	ErrNotConfirmed  = errors.New("plugins: the installation was not confirmed")
+	ErrBusy          = errors.New("plugins: a service or kernel module is still in use")
+	ErrUpdatePending = errors.New("plugins: finish or cancel the system update before changing plugins")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -379,15 +380,21 @@ func hashFile(path string, limit int64) (string, int64, error) {
 // switches it on. confirm has to be the name of the plugin: nothing has
 // checked what is in it.
 func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
+	return m.InstallWithActivation(ctx, manifestPath, volume, confirm, mounted, true)
+}
+
+// InstallWithActivation can store a verified plugin without touching live
+// drivers, services or sysext. Devices already in use remain with their owners.
+func (m *Manager) InstallWithActivation(ctx context.Context, manifestPath, volume, confirm string, mounted []string, activate bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
-	return m.install(ctx, manifestPath, volume, confirm, mounted)
+	return m.install(ctx, manifestPath, volume, confirm, mounted, activate)
 }
 
 // install is shared by local files and verified downloads. Caller holds actions.
-func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm string, mounted []string) error {
+func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm string, mounted []string, activate bool) error {
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	if m.Disabled {
 		return ErrDisabled
@@ -460,11 +467,16 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 		os.Remove(target)
 		return fmt.Errorf("%w: plugin metadata changed while being copied", ErrInvalid)
 	}
-	if !slices.Contains(settings.Enabled, manifest.Name) {
+	// A previous interrupted installation may have left an enabled name.
+	settings.Enabled = slices.DeleteFunc(settings.Enabled, func(name string) bool { return name == manifest.Name })
+	if activate {
 		settings.Enabled = append(settings.Enabled, manifest.Name)
 	}
 	if err := m.save(settings); err != nil {
 		return err
+	}
+	if !activate {
+		return nil
 	}
 	return m.apply(ctx, mounted)
 }
@@ -495,7 +507,7 @@ func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool, mou
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	return m.setEnabled(ctx, name, enabled, mounted)
 }
@@ -538,7 +550,7 @@ func (m *Manager) Remove(ctx context.Context, name string, mounted []string) err
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrBusy
+		return ErrUpdatePending
 	}
 	if err := m.setEnabled(ctx, name, false, mounted); err != nil {
 		return err
@@ -599,7 +611,10 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	key := settings.Volume + ":"
+	key := ":"
+	if len(names) > 0 {
+		key = settings.Volume + ":"
+	}
 	for _, name := range names {
 		key += name + "=" + wanted[name].SHA256 + ";"
 	}
