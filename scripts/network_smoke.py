@@ -76,8 +76,12 @@ def check_network(boot, request, directory, ssh_port):
             print("Network: confirmed bridge restored after reboot", flush=True)
 
         assert remote("cat /sys/class/net/br0/address") == mac
-        addresses = json.loads(remote(f"ip -j -4 address show dev {shlex.quote(port)}"))
-        assert not addresses[0]["addr_info"], addresses
+        # `ip -4 address` omits an interface entirely when it has no IPv4
+        # address. Inspect all families so existence and address ownership are
+        # checked separately instead of indexing an empty result.
+        addresses = json.loads(remote(f"ip -j address show dev {shlex.quote(port)}"))
+        assert len(addresses) == 1 and addresses[0]["ifname"] == port, addresses
+        assert not any(a["family"] == "inet" for a in addresses[0]["addr_info"]), addresses
         remote("systemctl is-active --quiet titanos-firewall-open.service; test ! -e /etc/libvirt/qemu/networks/autostart/default.xml")
 
         # A separate guest namespace is attached just like a libvirt tap. Its
