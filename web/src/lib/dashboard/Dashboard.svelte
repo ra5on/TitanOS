@@ -3,14 +3,15 @@
 
 	import { GridStack } from 'gridstack';
 	import { onDestroy, type Component } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api, ApiError, type VM, type VMStatus, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDuration } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
-	import { COLUMNS, defaultLayout, defaultPlacement, GAP, ROW_HEIGHT, sanitizeLayout, TILE_IDS, TILES, type TileId, type TilePlacement } from './tiles.ts';
+	import { COLUMNS, defaultLayout, defaultPlacement, GAP, ROW_HEIGHT, sanitizeLayout, TILE_IDS, TILES, tileSpec, workload, type StaticTileId, type TileId, type TilePlacement } from './tiles.ts';
+	import WorkloadTile from './tiles/WorkloadTile.svelte';
 	import IGPUTile from './tiles/IGPUTile.svelte';
 	import NPUTile from './tiles/NPUTile.svelte';
 	import NVIDIATile from './tiles/NVIDIATile.svelte';
@@ -19,7 +20,7 @@
 	import SystemTile from './tiles/SystemTile.svelte';
 	import VolumesTile from './tiles/VolumesTile.svelte';
 
-	const CONTENT: Record<TileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile, disks: DisksTile, igpu: IGPUTile, npu: NPUTile, nvidia: NVIDIATile };
+	const CONTENT: Record<StaticTileId, Component> = { system: SystemTile, volumes: VolumesTile, network: NetworkTile, disks: DisksTile, igpu: IGPUTile, npu: NPUTile, nvidia: NVIDIATile };
 
 	/** Below this width the tiles are stacked and cannot be arranged. */
 	const STACK_BELOW = 760;
@@ -33,6 +34,50 @@
 	let editing = $state(false);
 	let saving = $state(false);
 	let error = $state('');
+
+	const admin = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
+	let vms = $state<VM[]>([]);
+	let containers = $state<DockerContainer[]>([]);
+	let workloadsReady = $state(false);
+	let workloadError = $state('');
+	let selection = $state('');
+	const titleOf = (id: TileId) => workload(id)?.name ?? t(tileSpec(id).title);
+	const watchWorkloads = $derived(admin && (editing || shown.some((tile) => workload(tile.id))));
+	$effect(() => {
+		if (!watchWorkloads) return;
+		let disposed = false;
+		let fetching = false;
+		async function refresh() {
+			if (fetching || document.hidden) return;
+			fetching = true;
+			try {
+				const [machines, docker] = await Promise.all([api.get<VMStatus>('/vms'), api.get<DockerStatus>('/docker')]);
+				if (!disposed) { vms = machines.vms; containers = docker.containers; workloadsReady = true; workloadError = ''; }
+			} catch (err) {
+				if (!disposed) workloadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			} finally { fetching = false; }
+		}
+		refresh();
+		const timer = setInterval(refresh, 5000);
+		return () => { disposed = true; clearInterval(timer); };
+	});
+	// Version 1 did not show detected accelerators by default. Add them once;
+	// version 2 retains a user's later choice to hide them.
+	let hardwareMigrated = false;
+	$effect(() => {
+		if (hardwareMigrated || editing || !system.info?.accelerators.length) return;
+		hardwareMigrated = true;
+		if ((session.dashboard as { version?: number } | null)?.version === 2) return;
+		const ids = new Set<StaticTileId>(system.info.accelerators.map((device) => device.kind === 'npu' ? 'npu' : device.vendor === 'NVIDIA' ? 'nvidia' : 'igpu'));
+		const layout = [...shown, ...[...ids].filter((id) => !shown.some((tile) => tile.id === id)).map(defaultPlacement)];
+		saved = layout;
+		rebuild(layout);
+	});
+	function addWorkload() {
+		const id = selection as TileId;
+		if (workload(id) && !shown.some((tile) => tile.id === id)) rebuild([...readGrid(), defaultPlacement(id)]);
+		selection = '';
+	}
 
 	let grid: GridStack | undefined;
 
@@ -106,7 +151,7 @@
 		saving = true;
 		error = '';
 		try {
-			await api.put('/preferences/dashboard', { version: 1, tiles: layout });
+			await api.put('/preferences/dashboard', { version: 2, tiles: layout });
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			saving = false;
@@ -114,7 +159,7 @@
 		}
 		saving = false;
 		saved = layout;
-		session.dashboard = { version: 1, tiles: layout };
+		session.dashboard = { version: 2, tiles: layout };
 		editing = false;
 		rebuild(layout);
 	}
@@ -155,23 +200,30 @@
 	{#key revision}
 		<div class="grid-stack" {@attach attachGrid}>
 			{#each shown as tile (tile.id)}
-				{@const spec = TILES[tile.id]}
-				{@const Content = CONTENT[tile.id]}
+				{@const spec = tileSpec(tile.id)}
+				{@const target = workload(tile.id)}
 				<div class="grid-stack-item" gs-id={tile.id} gs-x={tile.x} gs-y={tile.y} gs-w={tile.w} gs-h={tile.h} gs-min-w={spec.minW} gs-min-h={spec.minH} gs-auto-position={tile.x === undefined ? 'true' : undefined}>
 					<section class="grid-stack-item-content tile" aria-labelledby="tile-{tile.id}">
 						<div class="tile-head">
 							{#if editing}
-								<span class="grip" role="img" aria-label={t('dashboard.move', { tile: t(spec.title) })}><Icon name="grip" /></span>
+								<span class="grip" role="img" aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}><Icon name="grip" /></span>
 							{/if}
-							<h2 class="tile-title" id="tile-{tile.id}">{t(spec.title)}</h2>
+							<h2 class="tile-title" id="tile-{tile.id}">{titleOf(tile.id)}</h2>
 							{#if editing}
 								<span class="size mono">{tile.w} × {tile.h}</span>
-								<button type="button" class="hide" aria-label={t('dashboard.hide', { tile: t(spec.title) })} onclick={() => rebuild(readGrid().filter((other) => other.id !== tile.id))}>
+								<button type="button" class="hide" aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })} onclick={() => rebuild(readGrid().filter((other) => other.id !== tile.id))}>
 									<Icon name="close" size={16} />
 								</button>
 							{/if}
 						</div>
-						<div class="tile-body"><Content /></div>
+						<div class="tile-body">
+							{#if target}
+								<WorkloadTile kind={target.kind} name={target.name} vm={vms.find((vm) => vm.name === target.name)} container={containers.find((container) => container.name === target.name)} ready={workloadsReady} error={workloadError} {admin} />
+							{:else}
+								{@const Content = CONTENT[tile.id as StaticTileId]}
+								<Content />
+							{/if}
+						</div>
 					</section>
 				</div>
 			{/each}
@@ -189,11 +241,30 @@
 		{:else}
 			<span>{t('dashboard.allVisible')}</span>
 		{/each}
+		{#if admin}
+			<div class="workload-picker">
+				<label for="workload">{t('dashboard.workload')}</label>
+				<select id="workload" class="field" bind:value={selection}>
+					<option value="">{t('dashboard.pickWorkload')}</option>
+					<optgroup label={t('tile.vm')}>
+						{#each vms.filter((vm) => !shown.some((tile) => tile.id === `vm:${vm.name}`)) as vm (vm.name)}<option value="vm:{vm.name}">{vm.name}</option>{/each}
+					</optgroup>
+					<optgroup label={t('tile.container')}>
+						{#each containers.filter((container) => !shown.some((tile) => tile.id === `container:${container.name}`)) as container (container.name)}<option value="container:{container.name}">{container.name}</option>{/each}
+					</optgroup>
+				</select>
+				<button class="btn" disabled={!selection} onclick={addWorkload}>{t('dashboard.addWorkload')}</button>
+			</div>
+			{#if workloadError}<p class="notice-error" role="alert">{workloadError}</p>{/if}
+		{/if}
+
 		<span class="muted note">{t('dashboard.hiddenHint')}</span>
 	</section>
 {/if}
 
 <style>
+	.workload-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+	.workload-picker select { width: auto; flex: 1; min-width: 180px; }
 	.head {
 		display: flex;
 		flex-wrap: wrap;

@@ -40,6 +40,7 @@ var vmErrors = []struct {
 	{vm.ErrBadImage, http.StatusBadRequest, "invalid_image"},
 	{hardware.ErrUnknown, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrNotPassable, http.StatusBadRequest, "device_unavailable"},
+	{hardware.ErrIncompleteGroup, http.StatusBadRequest, "hardware_incomplete_group"},
 }
 
 func writeVMError(w http.ResponseWriter, err error) {
@@ -85,7 +86,7 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mounted := s.opts.Storage.Mounted()
-	// A card goes to a VM with all its functions, e.g. its sound output.
+	// Validate only the hardware the owner explicitly selected.
 	pci, err := s.opts.Hardware.Check(req.PCI, req.USB)
 	if err != nil {
 		writeVMError(w, err)

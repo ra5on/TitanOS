@@ -11,6 +11,14 @@ akzeptiert nur Tags `v*`. Private Sicherheitsmeldungen sind aktiviert.
 Diese Einstellungen gehören zum Repository und werden nicht durch die
 Workflow-Datei allein eingerichtet.
 
+Auch unabhängige NVIDIA-Updates nutzen diese Tag-Regel: Der tägliche Lauf auf
+`main` stößt den Treiber-Workflow vom neuesten veröffentlichten Release-Tag an,
+der diesen Workflow enthält. Nur der delegierende Job darf Workflows starten;
+der Signierjob wartet weiterhin auf die Freigabe im Environment `release`.
+Die Zielversion des Treibers kann dabei ein anderes vorhandenes OS-Release sein.
+Vor der ersten Veröffentlichung eines Tags mit diesem Workflow wird kein
+Treiberlauf delegiert.
+
 Seit dem 14. Oktober 2026 sind beide öffentlichen Schlüssel eingebaut und die
 Secrets `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` eingerichtet:
 

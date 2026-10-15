@@ -65,13 +65,50 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
-		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()),
+		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store),
 		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
 	ts.client = ts.newClient()
 	return ts
+}
+
+func disabledEnergy(store *config.Store) *system.EnergyManager {
+	m := system.NewEnergyManager(store)
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
+	ts := newTestServer(t)
+	for _, route := range []struct{ method, path string }{{"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("anonymous %s: %d", route.path, res.StatusCode)
+		}
+	}
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/system/energy", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"readOnly":true`) {
+		t.Fatalf("energy: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/system/energy", map[string]string{"governor": "powersave"}); res.StatusCode != http.StatusConflict {
+		t.Fatal("development mode allowed energy changes")
+	}
+	if res, _ := ts.request("POST", "/api/v1/notifications/dismiss", map[string]any{"ids": []int{1}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("owner dismissal: %d", res.StatusCode)
+	}
+	if res, _ := ts.request("POST", "/api/v1/notifications/dismiss", map[string]any{"ids": []int{-1}}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("invalid message ID accepted")
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, route := range []struct{ method, path string }{{"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+		if res, _ := ts.do(guest, route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusForbidden {
+			t.Fatalf("user %s: %d", route.path, res.StatusCode)
+		}
+	}
 }
 
 // disabledDocker returns a Docker manager that never touches the system.
@@ -1130,7 +1167,7 @@ func TestPluginsAreForAdministrators(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/nvidia/updates"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
@@ -1202,6 +1239,16 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+	// The NAS terminal accepts the existing authenticated admin session.
+	if res, body := ts.request("GET", "/api/v1/terminal/shell", nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("NAS shell before confirmation: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("terminal-guest", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "terminal-guest", Password: testPassword})
+	if res, _ := ts.do(guest, "GET", "/api/v1/terminal/shell", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("guest shell: %d", res.StatusCode)
+	}
 
 	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
 		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)

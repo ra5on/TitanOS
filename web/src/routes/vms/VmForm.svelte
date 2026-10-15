@@ -181,6 +181,11 @@
 
 	const usedElsewhere = (id: string) => (hardware?.usedBy[id] ?? []).filter((vm) => vm !== existing?.name);
 	const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]);
+	function togglePCI(address: string, companions: string[]) {
+		// Removing a card also removes its dependent selections. Adding it
+		// never selects another function on the owner's behalf.
+		pci = pci.includes(address) ? pci.filter((id) => id !== address && !companions.includes(id)) : [...pci, address];
+	}
 	const folderProblem = (folder: { path: string; tag: string }, index: number) =>
 		!folder.path.startsWith('/mnt/') ? t('vms.form.folderPath') : !TAG.test(folder.tag) ? t('vms.form.folderTag') : folders.some((other, at) => at !== index && other.tag === folder.tag) ? t('vms.form.folderTwice') : '';
 
@@ -199,7 +204,7 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: code === 'vm_failed' && err instanceof ApiError ? err.message : '' };
+		error = { text: errorText(code), detail: ['vm_failed', 'hardware_incomplete_group'].includes(code) && err instanceof ApiError ? err.message : '' };
 	}
 
 	const hardwareSettings = () => ({
@@ -464,12 +469,19 @@
 		<section class="tile" aria-labelledby="s4">
 			<div class="step"><span class="number" aria-hidden="true">4</span><h2 id="s4">{t('vms.form.step4')}</h2><span class="grow"></span><a class="muted small-link" href="/settings/hardware">{t('vms.form.hardwarePage')}</a></div>
 			<fieldset class="content" disabled={running}>
+				<p class="muted note">{t('vms.form.explicitDevices')}</p>
 				{#if hardware && !hardware.hardware.iommu && hardware.hardware.pci.length > 0}<p class="notice-warn">{t('hardware.noIommu')}</p>{/if}
 				{#each hardware?.hardware.pci ?? [] as device (device.address)}
 					{@const elsewhere = usedElsewhere(device.address)}
 					<div class="device">
-						<label class="check"><input type="checkbox" checked={pci.includes(device.address)} disabled={!device.passable} onchange={() => (pci = toggle(pci, device.address))} /><span>{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span></label>
+						<label class="check"><input type="checkbox" checked={pci.includes(device.address)} disabled={!device.passable} onchange={() => togglePCI(device.address, device.companions)} /><span>{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span></label>
 						<span class="muted mono ids">{device.address} · {device.vendor}:{device.device}{device.companions.length > 0 ? ` · ${t('hardware.companions', { list: device.companions.join(', ') })}` : ''}</span>
+						{#if pci.includes(device.address)}
+							{#each device.companions as address (address)}
+								<label class="check"><input type="checkbox" checked={pci.includes(address)} onchange={() => (pci = toggle(pci, address))} /><span>{t('vms.form.companion', { address })}</span></label>
+							{/each}
+							{#if device.companions.length}<small>{t('vms.form.requiredCompanions', { list: device.companions.join(', ') })}</small>{/if}
+						{/if}
 						{#if !device.passable}
 							<small>{tOr(`hardware.reason.${device.reason}`, device.reason)}</small>
 						{:else}

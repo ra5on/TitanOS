@@ -214,9 +214,8 @@ func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
 // terminal data in both directions; a text message {"cols":80,"rows":24}
 // tells the size of the terminal.
 //
-// A shell is a way into the system. It needs an administrator who entered
-// the password again within the last minutes, and terminals must not be
-// switched off in the settings.
+// Routes require an authenticated administrator. The NAS terminal uses the
+// existing login; guest consoles still require recent password confirmation.
 func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
 	user := currentUser(r)
 	if !s.opts.Terminal.Enabled() {
@@ -224,7 +223,7 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target str
 		return
 	}
 	cookie, err := r.Cookie(s.cookieName())
-	if err != nil || !s.sessions.Confirmed(cookie.Value) {
+	if target != "nas" && (err != nil || !s.sessions.Confirmed(cookie.Value)) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
 		return
 	}

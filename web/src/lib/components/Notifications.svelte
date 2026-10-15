@@ -1,11 +1,21 @@
 <script lang="ts">
 	import { formatDateTime } from '#lib/format.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
-	import { loadNotifications, markSeen, notifications, noticeText, unreadCount } from '#lib/notifications.svelte.ts';
+	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { ApiError } from '#lib/api.ts';
+	import { dismissNotifications, loadNotifications, markSeen, notifications, noticeText, unreadCount } from '#lib/notifications.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 
 	let open = $state(false);
+	let busy = $state(false);
+	let error = $state('');
+	async function dismiss(ids: number[]) {
+		busy = true;
+		error = '';
+		try { await dismissNotifications(ids); }
+		catch (err) { error = errorText(err instanceof ApiError ? err.code : 'internal'); }
+		finally { busy = false; }
+	}
 	let root = $state<HTMLElement>();
 	// What was new when the list was opened stays marked while it is open.
 	let newSince = $state(0);
@@ -60,6 +70,10 @@
 				<span class="name">{t('notify.title')}</span>
 				<a href="/settings/notifications" onclick={() => (open = false)}>{t('notify.configure')}</a>
 			</div>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#if notifications.list.length > 0}
+				<button class="btn clear" type="button" disabled={busy} onclick={() => dismiss(notifications.list.map((notice) => notice.id))}>{t('notify.deleteAll')}</button>
+			{/if}
 			{#if notifications.list.length === 0}
 				<p class="empty muted">{t('notify.empty')}</p>
 			{:else}
@@ -70,6 +84,7 @@
 							<div class="line">
 								<span class="chip {CHIP[notice.severity]}">{t(SEVERITY[notice.severity])}</span>
 								<time class="muted" datetime={notice.time}>{formatDateTime(new Date(notice.time))}</time>
+								<button class="btn dismiss" type="button" disabled={busy} aria-label={t('notify.deleteOne', { title: text.title })} title={t('common.delete')} onclick={() => dismiss([notice.id])}><Icon name="trash" size={14} /></button>
 							</div>
 							<span class="what">{text.title}</span>
 							<span class="muted">{text.text}</span>
@@ -83,6 +98,8 @@
 </div>
 
 <style>
+	.clear { margin: 0 16px 8px; }
+	.dismiss { margin-left: auto; padding: 5px; min-height: 28px; }
 	.notifications {
 		position: relative;
 	}

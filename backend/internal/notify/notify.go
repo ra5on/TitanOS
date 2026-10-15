@@ -22,6 +22,7 @@ import (
 	"net/smtp"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -252,12 +253,23 @@ func (m *Manager) Messages() []Message {
 	return list
 }
 
-// Latest returns the number of the newest message, 0 if there is none.
+// Latest returns a revision that changes when messages are added or dismissed.
 // The web UI asks for the list again when it changes.
 func (m *Manager) Latest() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.nextID - 1
+}
+
+// Dismiss removes only the messages the caller has seen. New arrivals are kept.
+func (m *Manager) Dismiss(ids []int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	before := len(m.messages)
+	m.messages = slices.DeleteFunc(m.messages, func(message Message) bool { return slices.Contains(ids, message.ID) })
+	if len(m.messages) != before {
+		m.nextID++ // Also refresh the list in other open browsers.
+	}
 }
 
 // Loaded says whether the settings were read from /config.

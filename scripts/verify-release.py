@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify signatures, complete asset checksums and the update manifest before publishing."""
+import importlib.util
 import hashlib
 import json
 import re
@@ -40,7 +41,14 @@ def verify(release, keys):
         if not match or match[2] in checksums:
             raise ValueError("invalid or duplicate checksum entry")
         checksums[match[2]] = match[1]
-    expected = {p.name for p in release.iterdir() if p.is_file()} - {"SHA256SUMS", *(name + ".minisig" for name in signed)}
+    # Independent drivers have their own signed inventory and immutable assets.
+    # Authenticate every additional image/archive before excluding it from the
+    # original OS checksum list, which is deliberately never replaced.
+    spec = importlib.util.spec_from_file_location("nvidia_release", Path(__file__).with_name("nvidia-update-release.py"))
+    driver_release = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver_release)
+    extra = driver_release.verify_directory(release, keys)
+    expected = {p.name for p in release.iterdir() if p.is_file()} - extra - {"SHA256SUMS", *(name + ".minisig" for name in signed)}
     if set(checksums) != expected:
         raise ValueError("checksum inventory does not match release assets")
     for name, checksum in checksums.items():

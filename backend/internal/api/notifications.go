@@ -12,6 +12,27 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"messages": s.opts.Notify.Messages()})
 }
 
+func (s *Server) handleDismissNotifications(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []int `json:"ids"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if len(req.IDs) > 100 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "too many notification IDs")
+		return
+	}
+	for _, id := range req.IDs {
+		if id <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "invalid notification ID")
+			return
+		}
+	}
+	s.opts.Notify.Dismiss(req.IDs)
+	s.handleNotifications(w, r)
+}
+
 // handleNotifySettings shows where messages go. Passwords and tokens are
 // left out; secretSet says which of them are stored.
 func (s *Server) handleNotifySettings(w http.ResponseWriter, r *http.Request) {

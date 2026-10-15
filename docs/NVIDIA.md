@@ -134,3 +134,86 @@ Technische Grundlagen: [NVIDIA-Treiber](https://docs.nvidia.com/datacenter/tesla
 [offene Kernelmodule](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/kernel-modules.html),
 [CDI](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html)
 und [DRM-Messwerte](https://www.kernel.org/doc/html/latest/gpu/drm-usage-stats.html).
+
+## Aktivierungsfehler in beta.3
+
+Wenn `nvidia-smi -L` die Karte erkennt, der Dienst aber mit
+`mv: cannot stat '/run/cdi/.titanos-nvidia.tmp'` scheitert, liegt das an der
+Veröffentlichung der CDI-Datei: nvidia-ctk ergänzt bei diesem Dateinamen
+selbstständig `.yaml`. Der Entwicklungsstand nach beta.3 schreibt die
+YAML-Ausgabe stattdessen in eine temporäre Datei und benennt sie erst nach
+erfolgreichem Abschluss atomar um. Fehlgeschlagene Downloads sind davon
+unabhängig. Die Korrektur wurde mit dem echten nvidia-ctk aus beta.3 und
+mit simuliertem Abbruch geprüft.
+
+Die temporäre Korrektur wurde am 15. Oktober 2026 auf einer RTX 5060 Ti bestätigt:
+Das Plugin ließ sich anschließend aktivieren. Diese Bestätigung umfasst noch
+keine CUDA-/NVENC-Aufträge oder die Übergabe der Karte an eine VM.
+
+Bei der Installation kann „Direkt aktivieren“ abgewählt werden. Dann liegen die
+geprüften Plugin-Dateien auf dem Daten-Volume, ohne Treiber zu laden oder Geräte
+von laufenden VMs/Containern anzufassen. Die Aktivierung erfolgt später über den
+Plugin-Schalter, wenn die Hardware für das NAS verfügbar ist. VMs ohne diese
+GPU müssen dafür nicht ausgeschaltet werden. Ein laufendes oder noch nicht
+abgeschlossenes Systemupdate wird separat gemeldet; beta.3 konnte dafür
+irreführend „Plugin/GPU wird verwendet“ anzeigen.
+
+## Versionsmenü und unabhängige Updates (Entwicklung nach beta.3)
+
+Unter **Plugins → NVIDIA → NVIDIA-Treiberversion** werden die für den laufenden
+TitanOS-Release und dessen exakten Kernel veröffentlichten Versionen angeboten.
+Die Kernelmodule sind offen; Firmware und Treiberbibliotheken behalten ihre
+NVIDIA-Lizenz. Ein beliebiges upstream `.run`-Paket wird nicht auf dem NAS gebaut.
+
+Standardmäßig sucht TitanOS täglich nach neuen Versionen und lädt die empfohlene
+Version automatisch auf das Daten-Volume. Die Option lässt sich abschalten.
+**Versionen prüfen** sucht sofort; eine andere Version im Menü lässt sich über
+**Diese Version herunterladen** bereitstellen. Heruntergeladene Versionen können
+auch bei vorübergehend fehlender Internetverbindung gewählt werden.
+
+**Beim nächsten Neustart verwenden** speichert die Auswahl. Geladene Treiber und
+laufende GPU-VMs/-Container bleiben bis dahin unberührt. Ein Neustart von titand
+allein reicht ausdrücklich nicht. **Auswahl zurücknehmen** verwirft die geplante
+Aktivierung. Bis zur Rücknahme oder zum Neustart sind weitere Plugin-Änderungen
+und die Vorbereitung eines OS-Updates gesperrt, damit der vorbereitete Satz
+nicht veraltet. Ein ausgeschaltetes Plugin bleibt ausgeschaltet. Bei Problemen
+kann der mit TitanOS ausgelieferte Treiber für den nächsten Neustart gewählt
+werden. Ein automatischer Download überschreibt die bewusste Auswahl nie.
+
+Downloads liegen in `.titanos/plugins/driver-updates/<OS-Version>/<SHA256>/` auf
+dem Plugin-Volume. Erst vollständige, signierte und nachgeprüfte Dateien bekommen
+einen Ready-Marker. Bei Auswahl entsteht ein kompletter Plugin-Satz unter
+`releases/<OS-Version>/.sets/` über Hardlinks; die Einstellungen in
+`/config/plugins/releases/<OS-Version>.json` enthalten Auswahl und Boot-ID.
+Die Originaldateien bleiben für den OS-Rückfall erhalten. Eine automatische
+Bereinigung alter Downloads und vorbereiteter Sätze ist noch nicht umgesetzt.
+
+### Veröffentlichung ohne neue TitanOS-Version
+
+Der Workflow **NVIDIA driver updates** prüft täglich die jeweils jüngste Stable-
+und Beta-Version. Er benötigt keinen neuen OS-Build oder Tag. `workflow_dispatch`
+kann gezielt eine vorhandene TitanOS-Version, eine upstream Treiberversion oder
+`latest` und einen erzwungenen Neubau wählen. Eine neue Workflow-Ausführung trägt
+eine höhere Revision; ein erneuter Publish derselben Revision wird abgelehnt.
+
+`scripts/update-nvidia-lock.py` prüft NVIDIAs `InRelease` gegen den im Repository
+festgelegten Schlüssel, danach den SHA-256 des Paketindex. Nur vollständige
+Paketgruppen gleicher Treiberversion bzw. gleicher Toolkitversion werden gewählt.
+Die Pakete werden weiterhin per SHA-256 und Debian-Paketidentität geprüft.
+Compiler und Header laufen ausschließlich im wegwerfbaren Debian-Buildroot.
+Fehlen die exakten Kernelheader, schlägt der Build fehl, statt auf einen anderen
+Kernel auszuweichen.
+
+Der Publish-Job benötigt weiterhin die Freigabe des geschützten Environments
+`release`. Unveränderliche Images, signierte Plugin-Manifeste sowie Quellen- und
+Lizenzarchive werden als `nvidia-update-<SHA256>.*` zum vorhandenen OS-Release
+hinzugefügt. Zuletzt wird das signierte Versionsmenü `nvidia-updates.json`
+ersetzt. Die ursprünglichen `manifest.json`, `SHA256SUMS`, `nvidia.raw` und
+OS-Dateien bleiben unverändert. Dadurch funktionieren auch ältere NAS-Updater.
+Ein kurzzeitig uneinheitliches Menü/Signatur-Paar wird verworfen; installierte
+und bereits heruntergeladene Treiber bleiben erhalten.
+
+Die CI kontrolliert Signaturen, Archive, Image-Inhalt, Modulversion und exakten
+Kernel. Sie kann ohne NVIDIA-Hardware keine CUDA-/Transcoding-Funktion oder
+GPU-Rückgabe aus einer VM bestätigen. Der erste echte unabhängige Treiberwechsel
+muss nach Veröffentlichung mit einer GPU getestet werden.

@@ -126,7 +126,7 @@ func TestReleaseSettingsAndFirstMutationPreserveLegacyRollback(t *testing.T) {
 		t.Fatal("new release changes lost")
 	}
 	m.ChangeAllowed = func() bool { return false }
-	if err := m.Install(ctx, path, "data", "tools", []string{"data"}); !errors.Is(err, ErrBusy) {
+	if err := m.Install(ctx, path, "data", "tools", []string{"data"}); !errors.Is(err, ErrUpdatePending) {
 		t.Fatal("mutation raced update", err)
 	}
 }
