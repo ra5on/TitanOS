@@ -16,17 +16,13 @@
 {:else if !item}
 	<p class="muted">{t('dashboard.workloadMissing', { name })}</p>
 {:else}
-	<div class="status"><span class="chip" class:ok={running}>{tOr(`${kind === 'vm' ? 'vms' : 'docker'}.state.${item.state}`, item.state)}</span><span class="muted">{t(kind === 'vm' ? 'tile.vm' : 'tile.container')}</span></div>
-	<div class="usage"><span>{t('dashboard.workloadCPU')}</span><strong class="mono">{running ? formatPercent(item.cpuPercent) : '–'}</strong></div>
-	{#if running}<div class="bar"><span style:width="{Math.min(100, item.cpuPercent)}%"></span></div>{/if}
-	<div class="usage"><span>{t('dashboard.workloadRAM')}</span><strong class="mono">{running ? formatBytes(item.memoryBytes) : '–'}</strong></div>
-	<p class="muted note">{t(kind === 'vm' ? 'dashboard.vmCPUHint' : 'dashboard.containerCPUHint')}</p>
-	<a href={kind === 'vm' ? `/vms?vm=${encodeURIComponent(name)}` : '/docker'}>{t(kind === 'vm' ? 'dashboard.openVM' : 'dashboard.openContainer')}</a>
+ <div class="usage"><span>{t('dashboard.workloadCPU')}</span><strong class="mono">{running ? formatPercent(item.cpuPercent) : '–'}</strong></div>
+ <div class="usage" title={t(kind === 'vm' ? 'dashboard.hostRAM' : 'dashboard.containerRAM')}><span>{t('dashboard.workloadRAM')}</span><strong class="mono">{running ? formatBytes(item.memoryBytes) : '–'}</strong></div>
+ {#if !running}<span class="muted state">{tOr(`${kind === 'vm' ? 'vms' : 'docker'}.state.${item.state}`, item.state)}</span>{/if}
 {/if}
 
 <style>
-	.status, .usage { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.usage { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 	.usage strong { font-size: 1.2rem; font-weight: 500; }
-	.note, a { font-size: 0.75rem; }
-	.note { margin: 0; }
+	.state { font-size: .75rem; }
 </style>

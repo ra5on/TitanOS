@@ -138,7 +138,7 @@ Volume-Verschlüsselung, eingebauter Fernzugriff, Energiezeitpläne/Wake-on-LAN,
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Btrfs und automatische Plugin-Mitnahme sind ab beta.3 enthalten. Beim ersten Update aus beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, eingebauter Fernzugriff, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Btrfs und automatische Plugin-Mitnahme sind ab beta.3 enthalten. Beim ersten Update aus beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 
@@ -183,3 +183,10 @@ Maßgeblich ist der Lizenztext in [LICENSE.md](LICENSE.md). Fremdkomponenten (Li
 ## Mitmachen
 
 Beiträge sind willkommen – bitte lies zuerst [CONTRIBUTING.md](CONTRIBUTING.md) (auf Englisch). Sicherheitslücken bitte nicht öffentlich melden, sondern wie in [SECURITY.md](SECURITY.md) beschrieben.
+
+### Entwicklungsstand nach Beta 5
+
+- Getrennte CPU-/RAM-/Systemkacheln, kleinere VM-/Containerkacheln und Einstellungen für Kachelbreite, Höhe und Zusatzwerte; IPv6 im Netzwerk-Dashboard. [Monitoring](docs/MONITORING.md).
+- Einstellungen für den physischen [Ein-/Ausschalter](docs/POWER-BUTTON.md).
+- [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
+- Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.

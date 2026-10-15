@@ -55,3 +55,25 @@ Schnittstellen:
 [DRM-fdinfo](https://docs.kernel.org/gpu/drm-usage-stats.html),
 [Intel-NPU-Zähler in Linux 6.12](https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/v6.12/drivers/accel/ivpu/ivpu_sysfs.c),
 [hwmon](https://docs.kernel.org/hwmon/sysfs-interface.html).
+
+## Dashboard nach Beta 5
+
+CPU, Arbeitsspeicher und Systeminfos sind getrennte Kacheln. Vorhandene Layouts
+werden einmal ergänzt; die bisherige Systemkachel wird nicht verschoben oder
+verkleinert. Ab Layoutversion 3 bleiben auch bewusst entfernte CPU-/RAM-Kacheln
+entfernt. Der Bearbeitungsmodus bietet für jede Kachel Breite/Höhe in Rasterzellen.
+Scrollende Inhalte dürfen die vom Nutzer gewählte Größe nicht verändern.
+
+Bei CPU/RAM und Beschleunigern lassen sich Zusatzwerte und Verlauf getrennt
+schalten. Die CPU-Kachel kann den vorhandenen coretemp-Sensor „Package id 0“
+als Zahl anzeigen. Der CPU-/RAM-Verlauf umfasst etwa drei Minuten im Browser;
+eine Beobachtungslücke unterbricht den Verlauf. Netzwerk zeigt auf Wunsch IPv4,
+IPv6, Gateways, MAC, MTU, Linktempo und Verkehr; die Schnittstelle ist wählbar.
+Ein verschwundener ausgewählter Anschluss wird nicht stillschweigend ersetzt.
+
+VM-/Container-Kacheln zeigen kompakt den Namen sowie CPU und RAM. VM-RAM ist
+der resident belegte Speicher des QEMU-Prozesses (VmRSS), nicht das konfigurierte
+RAM-Limit oder allein die Anwendungen im Gast. Deshalb kann eine VM mit 8 GiB
+zugewiesenem Speicher beispielsweise 3,12 GiB resident belegen. Die NAS-Summe
+bleibt `MemTotal − MemFree` und zählt das laufende System mit. Die zugewiesenen
+8 GiB dürfen nicht zusätzlich auf diese Summe addiert werden.

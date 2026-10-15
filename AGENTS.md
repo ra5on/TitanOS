@@ -444,7 +444,7 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   - **Auflösung anpassen:** Die VM übernimmt die Fenstergröße als Auflösung (noVNC Remote-Resize; braucht passende Unterstützung in QEMU und im Gast, z. B. virtio-gpu mit Gastagent – vorab prüfen). Fallback: Skalieren.
   - **100 %:** pixelgenau, mit Scrollen.
   - Keine eingeblendete Auflösungs- oder Skalierungsanzeige im Bild.
-- **Vollbild** über die Fullscreen-API des Browsers: Konsole füllt den ganzen Bildschirm, schwebende Leiste oben (VM-Name, Strg+Alt+Entf, Anzeigemodus, „Vollbild beenden“), Esc beendet. Zusätzlich Seitenleiste mit VM-Liste ausblendbar für mehr Platz.
+- **Vollbild** über die Fullscreen-API des Browsers: Konsole füllt den ganzen Bildschirm, schwebende Leiste unten (VM-Name, Strg+Alt+Entf, Anzeigemodus, „Vollbild beenden“), Esc beendet. Zusätzlich Seitenleiste mit VM-Liste ausblendbar für mehr Platz.
 - Tastatur als Scancodes übertragen (noVNC/QEMU Extended Key Events), damit deutsche Tastaturen korrekt ankommen – mit deutschem Gast testen.
 - Automatisch neu verbinden, wenn die VM neu startet.
 - Ansicht **Serielle Konsole** (ttyS0 über libvirt) im selben Terminal-Stil – für Server-VMs ohne Desktop.
@@ -508,10 +508,16 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Destruktive Aktionen (RAID anlegen, Platte löschen) immer mit ausdrücklicher Bestätigung in der UI.
 - Datenverlust vermeiden hat Vorrang vor Funktionen.
 
-### Unabhängige NVIDIA-Treiber (Entwicklungsstand nach beta.3)
+### NVIDIA-Treiber auf dem NAS (Entwicklungsstand nach beta.5)
 
-- Nutzer wählt unter Plugins › NVIDIA eine passende Treiberversion, einschließlich Rückkehr zum mitgelieferten Treiber. Standard: täglich nach signierten Versionen suchen und die empfohlene Version auf das Plugin-Daten-Volume laden; abschaltbar. Niemals automatisch aktivieren.
-- Aktivierung ausdrücklich für den nächsten **NAS-Neustart**, mit Boot-ID abgesichert. Ein titand-Neustart wechselt keine geladenen Module/Bibliotheken. Auswahl bis zum Neustart rücknehmbar; andere Plugin-Mutationen und Systemupdate-Vorbereitung sind währenddessen gesperrt. Pro OS-Release getrennte Auswahl und vollständige vorbereitete Plugin-Sätze über Hardlinks. Originale Dateien für OS-Rollback bleiben erhalten.
-- `.github/workflows/nvidia-driver.yml`: täglich NVIDIA-Archiv mit fest hinterlegtem GPG-Schlüssel authentifizieren, kohärente Paketstände wählen, offene Module gegen den exakten Kernel des vorhandenen Releases bauen. Manuell kann eine ältere NVIDIA-Version gebaut werden. Signieren/Veröffentlichen weiterhin nur im geschützten Environment `release` mit Freigabe.
-- Zusätzliche Assets am vorhandenen OS-Release: `nvidia-update-<sha256>.*` (unveränderliche Images/Manifeste/Quellen/Lizenzen), `nvidia-updates.json` + Signatur als veränderliches Versionsmenü. Ursprüngliche OS-Manifeste/Prüfsummen/Plugins werden nicht ersetzt; keine neuen Plugin-only-Releases, die alte Beta-Updater verwirren könnten. Alle Zusatzdateien separat authentifiziert; Empfehlung nach Treiber-/Toolkitversion, nicht bloß neuestem Build (ältere Versionen bleiben auswählbar).
-- Automatische Downloads/Status schreiben nie nach `/config`; nur Benutzeränderungen speichern Einstellungen atomar. Keine Compiler auf dem NAS. Hardware-Treiberwechsel nach Neustart, CUDA/NVENC und reale GPU-VM-/Container-Nutzung müssen weiter auf echter Hardware geprüft werden.
+- Nutzerentscheidung vom 15.10.2026: öffentliche neue NVIDIA-Treiber automatisch herunterladen, offene Kernelmodule direkt auf dem NAS bauen, **nur per Knopf „Treiber vorbereiten“**. Keine älteren Archivversionen zusätzlich anbieten. Aktivierung weiterhin ausdrücklich beim nächsten NAS-Neustart, mit Boot-ID und Rückkehr zum mitgelieferten Treiber.
+- Separate, im OS-Manifest authentifizierte Bauumgebung mit exakten Kernelheadern; Compiler, Pakete und Arbeitsdateien ausschließlich auf dem Plugin-Daten-Volume. 5 GiB frei, Build begrenzt auf 2 GiB RAM und 200 % CPU, Compilerlauf ohne Netzwerk. Dies ersetzt die frühere Entscheidung „keine Compiler auf dem NAS“ ausdrücklich.
+- NVIDIA-InRelease/GPG und Paketprüfsummen prüfen; fertiges lokales Image mit NAS-eigenem Schlüssel authentifizieren, in der UI „Auf diesem NAS gebaut“, niemals als offiziell signiert ausgeben. API-Status liest keine Konfiguration vom Stick. Details: `docs/NVIDIA-LOCAL-BUILD.md`.
+- CI baut die passende Bauumgebung und prüft den realen Buildpfad. Der ältere Workflow für fertig gebaute Zusatztreiber bleibt manuell; täglicher CI-Treiberbau ist abgeschaltet. Hardwareaktivierung/CUDA/NVENC weiter auf echtem NAS prüfen.
+
+### Ergänzungen nach beta.5
+
+- Dashboard Layoutversion 3: CPU, RAM und Systeminfos getrennt, pro Kachel Rasterbreite/-höhe und Anzeigeoptionen. CPU-Temperatur optional aus coretemp „Package id 0“. GridStack besitzt seine DOM-Größen; Svelte darf beim Scrollen/Resize keine Neuinitialisierung auslösen. VM-/Container-Kacheln kompakt mit Name, CPU und RAM. VM-RAM = QEMU VmRSS, NAS-RAM bleibt MemTotal − MemFree. Netzwerk mit Schnittstellenwahl, IPv4/IPv6, Gateways, MAC, MTU und Traffic. Siehe `docs/MONITORING.md`.
+- Bildschirmbefehle unterhalb des VNC-Fensters, auch im separaten Tab; VM-Power-Aktionen bleiben oben. Vollbildleiste unten.
+- Einstellungen › Ein-/Ausschalter: kurzer physischer Tastendruck ignorieren/neustarten/herunterfahren, logind per Reload, persistente Wahl in `/config/system/power-button.json`; langer hardwareseitiger Ausschaltimpuls unverändert. Siehe `docs/POWER-BUTTON.md`.
+- Tailscale als signiertes Plugin mit eigener Detail-/Einstellungsansicht, Subnet-Routing, NAS als Exit Node oder Nutzung eines anderen Exit Nodes, LAN-Zugang bleibt erhalten. Einstellungen mit zweiminütiger Sicherheitsfrist; private Geräteschlüssel auf dem Daten-Volume. Scoped Tailscale-Firewall-Hooks vor der allgemeinen Freigabe erhalten. Siehe `docs/TAILSCALE.md`; echtes Tailnet weiter prüfen.

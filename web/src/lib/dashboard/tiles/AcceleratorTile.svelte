@@ -3,7 +3,9 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
-	let { kind }: { kind: 'igpu' | 'npu' | 'nvidia' } = $props();
+	import type { TileOptions } from '../options.ts';
+ import { tileOptions } from '../options.ts';
+ let { kind, options = tileOptions(null, kind) }: { kind: 'igpu' | 'npu' | 'nvidia'; options?: TileOptions } = $props();
 	const devices = $derived((system.info?.accelerators ?? []).filter((device) =>
 		kind === 'npu' ? device.kind === 'npu' : device.kind !== 'npu' && (kind === 'nvidia' ? device.vendor === 'NVIDIA' : device.vendor !== 'NVIDIA')));
 	function historyPath(history: (number | null)[]): string {
@@ -37,8 +39,9 @@
 					<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="43" /><circle class="load" cx="50" cy="50" r="43" pathLength="100" stroke-dasharray="{device.usagePercent ?? 0} 100" /></svg>
 					<span class="mono">{device.usagePercent === null ? '–' : formatPercent(device.usagePercent)}</span>
 				</div>
-				<div class="history"><span class="muted">{t('accelerator.usage')}</span><svg viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-label={t('accelerator.history')}><path class="guide" d="M0 4H240M0 32H240M0 60H240" /><path class="line" d={historyPath(device.history)} /></svg><span class="muted caption">{t('accelerator.history')}</span></div>
+				{#if options.history}<div class="history"><span class="muted">{t('accelerator.usage')}</span><svg viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-label={t('accelerator.history')}><path class="guide" d="M0 4H240M0 32H240M0 60H240" /><path class="line" d={historyPath(device.history)} /></svg><span class="muted caption">{t('accelerator.history')}</span></div>{/if}
 			</div>
+            {#if options.details}
 			<dl>
 				<div><dt>{t('accelerator.temperature')}</dt><dd class="mono">{value(device.temperatureC, '°C')}</dd></div>
 				<div><dt>{t('accelerator.power')}</dt><dd class="mono">{value(device.powerWatts, 'W')}</dd></div>
@@ -48,8 +51,9 @@
 			{#each device.engines as engine (engine.name)}
 				<div class="engine"><div><span>{engine.name === 'encode' ? t('accelerator.encode') : engine.name === 'decode' ? t('accelerator.decode') : engine.name}</span><span class="mono">{formatPercent(engine.usagePercent)}</span></div><div class="bar"><span style:width="{engine.usagePercent}%"></span></div></div>
 			{/each}
+            {/if}
 			{#if device.state === 'driver_missing' && kind === 'nvidia'}<a href="/plugins">{t('accelerator.installNvidia')}</a>{/if}
-			{#if [device.usagePercent, device.temperatureC, device.powerWatts, device.memoryUsedBytes, device.frequencyMHz].some((metric) => metric === null)}<p class="muted caption">{t('accelerator.unavailable')}</p>{/if}
+			{#if options.details && [device.usagePercent, device.temperatureC, device.powerWatts, device.memoryUsedBytes, device.frequencyMHz].some((metric) => metric === null)}<p class="muted caption">{t('accelerator.unavailable')}</p>{/if}
 		</section>
 	{/each}
 {/if}

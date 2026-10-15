@@ -4,6 +4,8 @@ package system
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"net"
 	"os"
 	"runtime"
@@ -25,6 +27,7 @@ type Info struct {
 	Image         *Image        `json:"image"`
 	Stick         Stick         `json:"stick"`
 	Network       *Network      `json:"network"`
+	Networks      []Network     `json:"networks"`
 	Temperatures  []Temperature `json:"temperatures"`
 }
 
@@ -57,12 +60,18 @@ type Stick struct {
 
 // Network describes the interface that holds the default route.
 type Network struct {
-	Interface        string  `json:"interface"`
-	IPv4             string  `json:"ipv4"`
-	Gateway          string  `json:"gateway"`
-	SpeedMbps        int     `json:"speedMbps"`
-	RxBytesPerSecond float64 `json:"rxBytesPerSecond"`
-	TxBytesPerSecond float64 `json:"txBytesPerSecond"`
+	Interface        string   `json:"interface"`
+	IPv4             string   `json:"ipv4"`
+	IPv4Addresses    []string `json:"ipv4Addresses"`
+	IPv6Addresses    []string `json:"ipv6Addresses"`
+	Gateway6         string   `json:"gateway6"`
+	MAC              string   `json:"mac"`
+	MTU              int      `json:"mtu"`
+	State            string   `json:"state"`
+	Gateway          string   `json:"gateway"`
+	SpeedMbps        int      `json:"speedMbps"`
+	RxBytesPerSecond float64  `json:"rxBytesPerSecond"`
+	TxBytesPerSecond float64  `json:"txBytesPerSecond"`
 }
 
 const (
@@ -80,6 +89,7 @@ type Monitor struct {
 	cpu          float64
 	rx, tx       float64
 	network      string
+	rates        map[string][2]float64
 	temperatures []Temperature
 }
 
@@ -100,6 +110,7 @@ func (m *Monitor) run(ctx context.Context) {
 	prevCPU, _ := readCPUTimes()
 	prevIface := defaultRoute().iface
 	prevRx, prevTx := readNetBytes(prevIface)
+	previous := networkCounters()
 	prevTime := time.Now()
 
 	for {
@@ -126,8 +137,17 @@ func (m *Monitor) run(ctx context.Context) {
 			}
 			prevIface, prevRx, prevTx = iface, rx, tx
 			temperatures := readTemperatures("/sys")
+			current := networkCounters()
+			rates := make(map[string][2]float64)
+			for name, counters := range current {
+				if before, ok := previous[name]; ok && seconds > 0 && counters[0] >= before[0] && counters[1] >= before[1] {
+					rates[name] = [2]float64{float64(counters[0]-before[0]) / seconds, float64(counters[1]-before[1]) / seconds}
+				}
+			}
+			previous = current
 
 			m.mu.Lock()
+			m.rates = rates
 			m.cpu, m.rx, m.tx, m.network = usage, rxRate, txRate, iface
 			m.temperatures = temperatures
 			m.mu.Unlock()
@@ -140,6 +160,8 @@ func (m *Monitor) Info() Info {
 	m.mu.RLock()
 	usage, rx, tx := m.cpu, m.rx, m.tx
 	temperatures := slices.Clone(m.temperatures)
+	rates := m.rates
+	sampledInterface := m.network
 	m.mu.RUnlock()
 
 	hostname, _ := os.Hostname()
@@ -155,13 +177,23 @@ func (m *Monitor) Info() Info {
 	}
 
 	if route := defaultRoute(); route.iface != "" {
+		if sampledInterface != route.iface {
+			rx, tx = 0, 0
+		}
 		info.Network = &Network{
-			Interface:        route.iface,
-			IPv4:             interfaceIPv4(route.iface),
+			Interface: route.iface,
+
 			Gateway:          route.gateway,
 			SpeedMbps:        readSpeed(route.iface),
 			RxBytesPerSecond: rx,
 			TxBytesPerSecond: tx,
+		}
+	}
+	info.Networks = networkDetails(rates)
+	for i := range info.Networks {
+		if info.Network != nil && info.Networks[i].Interface == info.Network.Interface {
+			info.Network = &info.Networks[i]
+			break
 		}
 	}
 	return info
@@ -276,7 +308,11 @@ type route struct {
 }
 
 func defaultRoute() route {
-	return parseDefaultRoute(readString("/proc/net/route"))
+	r := parseDefaultRoute(readString("/proc/net/route"))
+	if r.iface == "" {
+		r = parseDefaultRoute6(readString("/proc/net/ipv6_route"), "")
+	}
+	return r
 }
 
 // parseDefaultRoute finds the default route with the lowest metric in
@@ -302,21 +338,89 @@ func parseDefaultRoute(table string) route {
 	return best
 }
 
-func interfaceIPv4(name string) string {
-	iface, err := net.InterfaceByName(name)
-	if err != nil {
-		return ""
+// IPv6 routes use network-byte-order hex and a hexadecimal metric. Only
+// usable, unicast, non-source-specific defaults are candidates.
+func parseDefaultRoute6(table, iface string) route {
+	var best route
+	bestMetric := uint64(^uint32(0)) + 1
+	for _, line := range strings.Split(table, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 10 || f[0] != strings.Repeat("0", 32) || f[1] != "00" || f[3] != "00" || f[9] == "lo" || (iface != "" && f[9] != iface) {
+			continue
+		}
+		metric, e1 := strconv.ParseUint(f[5], 16, 32)
+		flags, e2 := strconv.ParseUint(f[8], 16, 32)
+		raw, e3 := hex.DecodeString(f[4])
+		if e1 != nil || e2 != nil || e3 != nil || len(raw) != 16 || flags&1 == 0 || flags&0x200 != 0 || metric >= bestMetric {
+			continue
+		}
+		gateway := ""
+		if ip := net.IP(raw); !ip.IsUnspecified() {
+			gateway = ip.String()
+			if ip.IsLinkLocalUnicast() {
+				gateway += "%" + f[9]
+			}
+		}
+		best, bestMetric = route{f[9], gateway}, metric
 	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return ""
-	}
+	return best
+}
+
+func interfaceAddresses(addrs []net.Addr) (v4, v6 []string) {
+	v4, v6 = []string{}, []string{}
 	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
-			return ipnet.String()
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsUnspecified() {
+			if ipnet.IP.To4() != nil {
+				v4 = append(v4, ipnet.String())
+			} else {
+				v6 = append(v6, ipnet.String())
+			}
 		}
 	}
-	return ""
+	slices.Sort(v4)
+	slices.Sort(v6)
+	return slices.Compact(v4), slices.Compact(v6)
+}
+
+func networkCounters() map[string][2]uint64 {
+	result := make(map[string][2]uint64)
+	interfaces, _ := net.Interfaces()
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		rx, tx := readNetBytes(iface.Name)
+		result[iface.Name] = [2]uint64{rx, tx}
+	}
+	return result
+}
+
+func networkDetails(rates map[string][2]float64) []Network {
+	result := []Network{}
+	interfaces, _ := net.Interfaces()
+	ipv4Route := parseDefaultRoute(readString("/proc/net/route"))
+	ipv6Routes := readString("/proc/net/ipv6_route")
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		v4, v6 := interfaceAddresses(addrs)
+		n := Network{Interface: iface.Name, IPv4Addresses: v4, IPv6Addresses: v6,
+			MAC: iface.HardwareAddr.String(), MTU: iface.MTU, SpeedMbps: readSpeed(iface.Name),
+			State:            readTrimmed(fmt.Sprintf("/sys/class/net/%s/operstate", iface.Name)),
+			RxBytesPerSecond: rates[iface.Name][0], TxBytesPerSecond: rates[iface.Name][1],
+			Gateway6: parseDefaultRoute6(ipv6Routes, iface.Name).gateway}
+		if len(v4) > 0 {
+			n.IPv4 = v4[0]
+		}
+		if ipv4Route.iface == iface.Name {
+			n.Gateway = ipv4Route.gateway
+		}
+		result = append(result, n)
+	}
+	slices.SortFunc(result, func(a, b Network) int { return strings.Compare(a.Interface, b.Interface) })
+	return result
 }
 
 func readNetBytes(iface string) (rx, tx uint64) {

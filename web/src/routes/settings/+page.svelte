@@ -14,6 +14,7 @@
 		{ href: 'stick', label: 'stick.title', admin: true },
 		{ href: 'ups', label: 'ups.title', admin: true },
 		{ href: 'hardware', label: 'hardware.title', admin: true },
+		{ href: 'power-button', label: 'powerButton.title', admin: true },
 		{ href: 'energy', label: 'energy.title', admin: true },
 		{ href: 'temperatures', label: 'temperatures.title' },
 		{ href: 'about', label: 'about.title' }

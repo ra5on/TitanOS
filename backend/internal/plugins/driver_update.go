@@ -27,6 +27,7 @@ type DriverActivation struct {
 	Version string `json:"version"`
 }
 type DriverVersion struct {
+	Local       bool   `json:"local"`
 	Driver      string `json:"driver"`
 	Toolkit     string `json:"toolkit"`
 	Recommended bool   `json:"recommended"`
@@ -37,6 +38,7 @@ type DriverVersion struct {
 	Downloaded  bool   `json:"downloaded"`
 }
 type DriverUpdateStatus struct {
+	Source     *DriverSource     `json:"source,omitempty"`
 	Versions   []DriverVersion   `json:"versions"`
 	State      string            `json:"state"` // idle, checking, downloading, ready, current, unavailable, error
 	Automatic  bool              `json:"automatic"`
@@ -109,10 +111,12 @@ func (m *Manager) cachedDriver(dir string, verifyImage bool) (Manifest, error) {
 		return Manifest{}, err
 	}
 	sig, err := os.ReadFile(filepath.Join(dir, "nvidia"+manifestSuffix+".minisig"))
-	if err != nil {
-		return Manifest{}, err
+	var manifest Manifest
+	if err == nil {
+		manifest, err = m.validDriver(data, sig)
+	} else if os.IsNotExist(err) {
+		manifest, err = m.localDriver(dir)
 	}
-	manifest, err := m.validDriver(data, sig)
 	if err != nil {
 		return manifest, err
 	}
@@ -156,7 +160,7 @@ func (m *Manager) newestCached(volume string) (Manifest, error) {
 			}
 		}
 		if !found {
-			m.driverStatus.Versions = append(m.driverStatus.Versions, DriverVersion{Version: manifest.Version, SHA256: manifest.SHA256, Revision: manifest.Revision, Size: manifest.Size, Downloaded: true})
+			m.driverStatus.Versions = append(m.driverStatus.Versions, DriverVersion{Version: manifest.Version, SHA256: manifest.SHA256, Revision: manifest.Revision, Size: manifest.Size, Downloaded: true, Local: strings.HasSuffix(manifest.Version, "-local")})
 		}
 		m.mu.Unlock()
 		if manifest.Revision > newest.Revision {
@@ -169,6 +173,9 @@ func (m *Manager) newestCached(volume string) (Manifest, error) {
 // No actions lock during HTTP: status and unrelated VMs remain responsive.
 // Downloading only writes an isolated cache directory, never live plugins.
 func (m *Manager) CheckDriverUpdate(ctx context.Context, mounted []string) error {
+	if m.LocalBuilds {
+		return m.checkLocalDriver(ctx, mounted, false)
+	}
 	return m.checkDriverUpdate(ctx, mounted, "")
 }
 func (m *Manager) checkDriverUpdate(ctx context.Context, mounted []string, selected string) (err error) {
@@ -425,7 +432,11 @@ func (m *Manager) runDriverUpdates(ctx context.Context, mounted func() []string)
 			return
 		case <-ticker.C:
 		case hash := <-m.driverRequests:
-			_ = m.checkDriverUpdate(ctx, mounted(), hash)
+			if m.LocalBuilds {
+				_ = m.checkLocalDriver(ctx, mounted(), hash == "prepare")
+			} else {
+				_ = m.checkDriverUpdate(ctx, mounted(), hash)
+			}
 		}
 	}
 }
@@ -510,9 +521,9 @@ func (m *Manager) SelectDriver(hash string, mounted []string) error {
 		if name == "nvidia" {
 			from = source
 		}
-		for _, suffix := range []string{".raw", manifestSuffix, manifestSuffix + ".minisig"} {
+		for _, suffix := range []string{".raw", manifestSuffix, manifestSuffix + ".minisig", ".local-build.json"} {
 			err := os.Link(filepath.Join(from, name+suffix), filepath.Join(destination, name+suffix))
-			if os.IsNotExist(err) && suffix == manifestSuffix+".minisig" && name != "nvidia" {
+			if os.IsNotExist(err) && (suffix == ".local-build.json" || (suffix == manifestSuffix+".minisig" && (name != "nvidia" || strings.HasSuffix(manifest.Version, "-local")))) {
 				continue
 			}
 			if err != nil {

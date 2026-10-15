@@ -158,62 +158,13 @@ GPU müssen dafür nicht ausgeschaltet werden. Ein laufendes oder noch nicht
 abgeschlossenes Systemupdate wird separat gemeldet; beta.3 konnte dafür
 irreführend „Plugin/GPU wird verwendet“ anzeigen.
 
-## Versionsmenü und unabhängige Updates (Entwicklung nach beta.3)
+## Neue Treiber auf dem NAS vorbereiten
 
-Unter **Plugins → NVIDIA → NVIDIA-Treiberversion** werden die für den laufenden
-TitanOS-Release und dessen exakten Kernel veröffentlichten Versionen angeboten.
-Die Kernelmodule sind offen; Firmware und Treiberbibliotheken behalten ihre
-NVIDIA-Lizenz. Ein beliebiges upstream `.run`-Paket wird nicht auf dem NAS gebaut.
+Der Entwicklungsstand nach Beta 5 lädt neue öffentliche NVIDIA-Pakete und baut
+nach Klick auf **Treiber vorbereiten** die offenen Module direkt auf dem NAS.
+Compiler und Arbeitsdateien bleiben auf dem Daten-Volume. Der fertige Treiber
+wird erst nach ausdrücklicher Auswahl beim nächsten NAS-Neustart verwendet;
+der mitgelieferte Treiber bleibt als Rückkehrmöglichkeit erhalten.
 
-Standardmäßig sucht TitanOS täglich nach neuen Versionen und lädt die empfohlene
-Version automatisch auf das Daten-Volume. Die Option lässt sich abschalten.
-**Versionen prüfen** sucht sofort; eine andere Version im Menü lässt sich über
-**Diese Version herunterladen** bereitstellen. Heruntergeladene Versionen können
-auch bei vorübergehend fehlender Internetverbindung gewählt werden.
-
-**Beim nächsten Neustart verwenden** speichert die Auswahl. Geladene Treiber und
-laufende GPU-VMs/-Container bleiben bis dahin unberührt. Ein Neustart von titand
-allein reicht ausdrücklich nicht. **Auswahl zurücknehmen** verwirft die geplante
-Aktivierung. Bis zur Rücknahme oder zum Neustart sind weitere Plugin-Änderungen
-und die Vorbereitung eines OS-Updates gesperrt, damit der vorbereitete Satz
-nicht veraltet. Ein ausgeschaltetes Plugin bleibt ausgeschaltet. Bei Problemen
-kann der mit TitanOS ausgelieferte Treiber für den nächsten Neustart gewählt
-werden. Ein automatischer Download überschreibt die bewusste Auswahl nie.
-
-Downloads liegen in `.titanos/plugins/driver-updates/<OS-Version>/<SHA256>/` auf
-dem Plugin-Volume. Erst vollständige, signierte und nachgeprüfte Dateien bekommen
-einen Ready-Marker. Bei Auswahl entsteht ein kompletter Plugin-Satz unter
-`releases/<OS-Version>/.sets/` über Hardlinks; die Einstellungen in
-`/config/plugins/releases/<OS-Version>.json` enthalten Auswahl und Boot-ID.
-Die Originaldateien bleiben für den OS-Rückfall erhalten. Eine automatische
-Bereinigung alter Downloads und vorbereiteter Sätze ist noch nicht umgesetzt.
-
-### Veröffentlichung ohne neue TitanOS-Version
-
-Der Workflow **NVIDIA driver updates** prüft täglich die jeweils jüngste Stable-
-und Beta-Version. Er benötigt keinen neuen OS-Build oder Tag. `workflow_dispatch`
-kann gezielt eine vorhandene TitanOS-Version, eine upstream Treiberversion oder
-`latest` und einen erzwungenen Neubau wählen. Eine neue Workflow-Ausführung trägt
-eine höhere Revision; ein erneuter Publish derselben Revision wird abgelehnt.
-
-`scripts/update-nvidia-lock.py` prüft NVIDIAs `InRelease` gegen den im Repository
-festgelegten Schlüssel, danach den SHA-256 des Paketindex. Nur vollständige
-Paketgruppen gleicher Treiberversion bzw. gleicher Toolkitversion werden gewählt.
-Die Pakete werden weiterhin per SHA-256 und Debian-Paketidentität geprüft.
-Compiler und Header laufen ausschließlich im wegwerfbaren Debian-Buildroot.
-Fehlen die exakten Kernelheader, schlägt der Build fehl, statt auf einen anderen
-Kernel auszuweichen.
-
-Der Publish-Job benötigt weiterhin die Freigabe des geschützten Environments
-`release`. Unveränderliche Images, signierte Plugin-Manifeste sowie Quellen- und
-Lizenzarchive werden als `nvidia-update-<SHA256>.*` zum vorhandenen OS-Release
-hinzugefügt. Zuletzt wird das signierte Versionsmenü `nvidia-updates.json`
-ersetzt. Die ursprünglichen `manifest.json`, `SHA256SUMS`, `nvidia.raw` und
-OS-Dateien bleiben unverändert. Dadurch funktionieren auch ältere NAS-Updater.
-Ein kurzzeitig uneinheitliches Menü/Signatur-Paar wird verworfen; installierte
-und bereits heruntergeladene Treiber bleiben erhalten.
-
-Die CI kontrolliert Signaturen, Archive, Image-Inhalt, Modulversion und exakten
-Kernel. Sie kann ohne NVIDIA-Hardware keine CUDA-/Transcoding-Funktion oder
-GPU-Rückgabe aus einer VM bestätigen. Der erste echte unabhängige Treiberwechsel
-muss nach Veröffentlichung mit einer GPU getestet werden.
+Die vollständige Anleitung, Herkunftsprüfung und Testgrenzen stehen in
+[NVIDIA-LOCAL-BUILD.md](NVIDIA-LOCAL-BUILD.md).

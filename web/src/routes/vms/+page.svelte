@@ -183,28 +183,6 @@
 				</div>
 			{/if}
 
-			<div class="toolbar">
-				<span class="muted">{t('vms.screen')}</span>
-				<span class="grow"></span>
-				{#if current.state === 'running'}
-					<button type="button" onclick={() => screen?.ctrlAltDel()}>{t('vms.ctrlAltDel')}</button>
-					<button type="button" onclick={() => open('paste')}>{t('vms.clipboard')}</button>
-					<span class="muted label" id="vm-scale">{t('vms.display')}</span>
-					<span class="modes" role="group" aria-labelledby="vm-scale">
-						{#each MODES as entry (entry)}
-							<button type="button" aria-pressed={mode === entry} title={t(`vms.mode.${entry}.hint`)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
-						{/each}
-					</span>
-					<button type="button" onclick={saveScreenshot}>{t('vms.screenshot')}</button>
-				{/if}
-				<button type="button" aria-pressed={sidebar} onclick={() => (sidebar = !sidebar)}>{t('vms.sidebar')}</button>
-				{#if current.state === 'running'}
-					<button type="button" onclick={() => addVmConsole(current.name, vmLabel(current))}>{t('vms.serial')}</button>
-					<a class="tool" href="/vms/screen?vm={current.name}" target="_blank" rel="noopener" onclick={(event) => { event.preventDefault(); window.open(`/vms/screen?vm=${current.name}`, `vm-${current.name}`, 'popup,width=1296,height=860'); }}>{t('vms.ownWindow')}</a>
-					<button type="button" class="strong" onclick={() => frame?.requestFullscreen()}>{t('vms.fullscreen')}</button>
-				{/if}
-			</div>
-
 			<div class="frame" class:fullscreen bind:this={frame}>
 				{#if current.state === 'running'}
 					{#key current.name}
@@ -227,6 +205,28 @@
 					</div>
 				{/if}
 			</div>
+			<div class="toolbar">
+				<span class="muted">{t('vms.screen')}</span>
+				<span class="grow"></span>
+				{#if current.state === 'running'}
+					<button type="button" onclick={() => screen?.ctrlAltDel()}>{t('vms.ctrlAltDel')}</button>
+					<button type="button" onclick={() => open('paste')}>{t('vms.clipboard')}</button>
+					<span class="muted label" id="vm-scale">{t('vms.display')}</span>
+					<span class="modes" role="group" aria-labelledby="vm-scale">
+						{#each MODES as entry (entry)}
+							<button type="button" aria-pressed={mode === entry} title={t(`vms.mode.${entry}.hint`)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
+						{/each}
+					</span>
+					<button type="button" onclick={saveScreenshot}>{t('vms.screenshot')}</button>
+				{/if}
+				<button type="button" aria-pressed={sidebar} onclick={() => (sidebar = !sidebar)}>{t('vms.sidebar')}</button>
+				{#if current.state === 'running'}
+					<button type="button" onclick={() => addVmConsole(current.name, vmLabel(current))}>{t('vms.serial')}</button>
+					<a class="tool" href="/vms/screen?vm={current.name}" target="_blank" rel="noopener" onclick={(event) => { event.preventDefault(); window.open(`/vms/screen?vm=${current.name}`, `vm-${current.name}`, 'popup,width=1296,height=860'); }}>{t('vms.ownWindow')}</a>
+					<button type="button" class="strong" onclick={() => frame?.requestFullscreen()}>{t('vms.fullscreen')}</button>
+				{/if}
+			</div>
+
 			<p class="muted hint">{t('vms.hint')} <button type="button" class="link" onclick={showXML}>{t('vms.showXml')}</button></p>
 		</section>
 	</div>
@@ -440,7 +440,7 @@
 	}
 	.fsbar {
 		position: absolute;
-		top: 10px;
+		bottom: 10px;
 		left: 50%;
 		transform: translateX(-50%);
 		padding: 4px 10px;

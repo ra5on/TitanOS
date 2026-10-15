@@ -8,18 +8,23 @@ import urllib.request
 from pathlib import Path
 
 
+def digest(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def fetch(lock_path, destination):
     lock = json.loads(lock_path.read_text())
     destination.mkdir(parents=True, exist_ok=True)
     for package in lock["packages"]:
         target = destination / package["file"]
-        if not target.exists() or hashlib.sha256(target.read_bytes()).hexdigest() != package["sha256"]:
+        if not target.exists() or digest(target) != package["sha256"]:
             partial = target.with_suffix(".part")
             print("Fetching", package["name"], package["version"], flush=True)
             with urllib.request.urlopen(lock["repository"] + package["file"], timeout=120) as response, partial.open("wb") as output:
                 while block := response.read(1 << 20):
                     output.write(block)
-            if hashlib.sha256(partial.read_bytes()).hexdigest() != package["sha256"]:
+            if digest(partial) != package["sha256"]:
                 partial.unlink()
                 raise ValueError("NVIDIA package checksum mismatch: " + package["name"])
             partial.replace(target)
