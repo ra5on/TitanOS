@@ -24,13 +24,14 @@
 
 	const current = $derived(terminal.sessions.find((session) => session.id === terminal.active));
 	const screen = $derived(current ? screens[current.id] : undefined);
+	const currentConfirmed = $derived(current?.kind === 'nas' || confirmed === true);
 
 	/** Asks titand what is allowed; false if a session has no reason to wait. */
 	async function check(): Promise<boolean> {
 		try {
 			info = await api.get('/terminal');
 			confirmed = (await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed;
-			return !confirmed || !info?.enabled;
+			return (current?.kind !== 'nas' && !confirmed) || !info?.enabled;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			return false;
@@ -200,7 +201,7 @@
 	<div class="body">
 		{#if info && !info.enabled}
 			<p class="message">{t('terminal.off')} <a href="/settings">{t('nav.settings')}</a></p>
-		{:else if confirmed === false}
+		{:else if current?.kind !== 'nas' && confirmed === false}
 			<form class="confirm" onsubmit={confirm}>
 				<p>{t('docker.consoleConfirm')}</p>
 				<label><span class="muted">{t('auth.password')}</span>
@@ -220,7 +221,7 @@
 		{/if}
 		{#each terminal.sessions as session (session.id)}
 			{#key session.shell}
-				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && confirmed === true} fontSize={terminal.fontSize} confirmed={confirmed === true && info?.enabled === true} onrefused={check} />
+				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind === 'nas' || confirmed === true) && info?.enabled === true} onrefused={check} />
 			{/key}
 		{/each}
 	</div>

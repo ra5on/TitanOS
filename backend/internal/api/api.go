@@ -260,6 +260,7 @@ func New(opts Options) *Server {
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
+	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireAdmin(s.handlePluginInstall))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))

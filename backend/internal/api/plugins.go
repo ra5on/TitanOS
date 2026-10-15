@@ -21,6 +21,7 @@ var pluginErrors = []struct {
 	{plugins.ErrExists, http.StatusConflict, "plugin_exists"},
 	{plugins.ErrInvalid, http.StatusBadRequest, "invalid_plugin"},
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
+	{plugins.ErrDriverPending, http.StatusConflict, "plugin_driver_pending"},
 	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
 	{plugins.ErrUpdatePending, http.StatusConflict, "plugin_update_pending"},
 	{plugins.ErrDownload, http.StatusBadGateway, "plugin_download_failed"},
@@ -129,4 +130,36 @@ func (s *Server) pluginsEditable(w http.ResponseWriter) bool {
 		return false
 	}
 	return true
+}
+
+func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action    string `json:"action"`
+		SHA256    string `json:"sha256"`
+		Automatic bool   `json:"automatic"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	var err error
+	switch req.Action {
+	case "check":
+		err = s.opts.Plugins.RequestDriverUpdate(req.SHA256, s.opts.Storage.Mounted())
+	case "automatic":
+		err = s.opts.Plugins.SetAutomaticDrivers(req.Automatic)
+	case "select":
+		if !s.pluginsEditable(w) {
+			return
+		}
+		err = s.opts.Plugins.SelectDriver(req.SHA256, s.opts.Storage.Mounted())
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_plugin", "unknown driver action")
+		return
+	}
+	if err != nil {
+		writePluginError(w, err)
+		return
+	}
+	slog.Info("NVIDIA driver update action", "action", req.Action, "by", currentUser(r).Name)
+	s.handlePlugins(w, r)
 }

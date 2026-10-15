@@ -1167,7 +1167,7 @@ func TestPluginsAreForAdministrators(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/plugins"}, {"POST", "/api/v1/plugins"}, {"POST", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/nvidia/updates"}, {"POST", "/api/v1/plugins/x/enable"}, {"DELETE", "/api/v1/plugins/x"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
@@ -1239,6 +1239,16 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+	// The NAS terminal accepts the existing authenticated admin session.
+	if res, body := ts.request("GET", "/api/v1/terminal/shell", nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("NAS shell before confirmation: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("terminal-guest", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "terminal-guest", Password: testPassword})
+	if res, _ := ts.do(guest, "GET", "/api/v1/terminal/shell", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("guest shell: %d", res.StatusCode)
+	}
 
 	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
 		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)

@@ -210,6 +210,9 @@ func (m *Manager) InstallOfficial(ctx context.Context, name, volume string, moun
 func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volume string, mounted []string, activate bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
 		return ErrUpdatePending
 	}
