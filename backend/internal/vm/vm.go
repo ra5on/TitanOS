@@ -186,6 +186,7 @@ type Manager struct {
 	AutoReady   func() bool
 	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
 	AfterPoll   func(context.Context, map[string]bool) error
+	Timezone    func() string
 
 	store  *config.Store
 	runner run.Runner
@@ -217,15 +218,17 @@ type Manager struct {
 	// sysDir and devDir are /sys and /dev.
 	sysDir, devDir string
 
-	operations   sync.Map
-	snapshotJobs map[string]*Job
-	createMu     sync.Mutex
-	mu           sync.Mutex
-	loaded       bool
-	vms          map[string]VM
-	samples      map[string]*sample
-	autostarted  map[string]bool
-	jobs         map[string]*Job
+	operations      sync.Map
+	snapshotJobs    map[string]*Job
+	snapshotSpaceMu sync.Mutex
+	snapshotSpace   map[uint64]uint64
+	createMu        sync.Mutex
+	mu              sync.Mutex
+	loaded          bool
+	vms             map[string]VM
+	samples         map[string]*sample
+	autostarted     map[string]bool
+	jobs            map[string]*Job
 	// reserved is the set of CPUs kept free for exclusive VMs right now.
 	reserved string
 	// borrowed are whole disks whose device node was opened to QEMU.

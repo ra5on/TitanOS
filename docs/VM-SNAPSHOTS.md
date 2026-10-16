@@ -32,7 +32,9 @@ Snapshot-Dateien sowie Platten und Firmware registrierter VMs.
 
 Wiederherstellen ist nur bei ausgeschalteter VM und nach Eingabe des VM-Namens
 möglich. Alle benötigten Volumes, Pfade, Dateitypen, Größen und der freie Platz
-werden vorab geprüft. Neue Dateien werden neben den bisherigen vorbereitet;
+werden vorab geprüft. Gleichzeitige Snapshot-Vorgänge reservieren ihren Bedarf
+gemeinsam pro Dateisystem; eine Reservierung wird erst nach Abschluss freigegeben.
+Schreibzugriffe anderer Dienste können den verfügbaren Platz trotzdem verändern. Neue Dateien werden neben den bisherigen vorbereitet;
 bisherige Dateien bleiben bis zum vollständigen Wechsel als Rückfallebene
 vorhanden. Die VM-Konfiguration wird zuletzt atomar gespeichert. Ein RAM-Restore
 startet die VM; ohne RAM bleibt sie zunächst ausgeschaltet. Der aktuelle Zeitplan

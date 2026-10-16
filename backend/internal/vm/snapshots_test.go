@@ -381,3 +381,105 @@ func TestVMFileProtectionIncludesDirectImagesAndAncestors(t *testing.T) {
 		t.Fatal("removed VM still protects image")
 	}
 }
+
+func TestConcurrentSnapshotSpaceCannotBeClaimedTwice(t *testing.T) {
+	m, v := snapshotFixture(t)
+	path := filepath.Join(m.mountRoot, v.Volume)
+	free, err := freeBytes(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := m.reserveSnapshotSpace(map[string]int64{path: free * 3 / 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.reserveSnapshotSpace(map[string]int64{m.dir(v.Volume, v.folder()): free / 2}); !errors.Is(err, ErrNoSpace) {
+		t.Fatalf("overcommitted same filesystem via another path: %v", err)
+	}
+	release()
+	release()
+	next, err := m.reserveSnapshotSpace(map[string]int64{path: free * 3 / 4})
+	if err != nil {
+		t.Fatal("reservation leaked", err)
+	}
+	next()
+	if _, err = m.reserveSnapshotSpace(map[string]int64{path: 1 << 62}); !errors.Is(err, ErrNoSpace) {
+		t.Fatal(err)
+	}
+	next, err = m.reserveSnapshotSpace(map[string]int64{path: free / 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next()
+}
+
+func TestSnapshotFailuresResumeOrKeepRecoveryAndReleaseSpace(t *testing.T) {
+	if _, err := os.Stat(firmware(VM{}).code); err != nil {
+		t.Skip("OVMF is not installed")
+	}
+	for _, failure := range []string{"copy", "resume"} {
+		t.Run(failure, func(t *testing.T) {
+			m, v := snapshotFixture(t)
+			runner := &snapshotRunner{base: m.runner.(*fakeRunner), m: m, v: v, failRestore: failure == "resume"}
+			if failure == "copy" {
+				runner.base.fail = "qemu-img info"
+			}
+			m.runner = runner
+			os.WriteFile(filepath.Join(m.pidDir, v.Name+".pid"), []byte(fmt.Sprint(os.Getpid())), 0600)
+			if err := m.CreateSnapshot(context.Background(), v.Name, SnapshotRequest{Name: "failure", Memory: true, AllowPause: true}, v.volumes()); err != nil {
+				t.Fatal(err)
+			}
+			status := waitSnapshot(t, m, v)
+			if status.Job == nil || status.Job.State != "failed" {
+				t.Fatalf("failure not visible: %+v", status)
+			}
+			m.snapshotSpaceMu.Lock()
+			reserved := len(m.snapshotSpace)
+			m.snapshotSpaceMu.Unlock()
+			if reserved != 0 {
+				t.Fatal("failed snapshot leaked disk reservation")
+			}
+			if failure == "copy" {
+				if status.Pending || m.pid(v.Name) == 0 || len(status.Snapshots) != 0 {
+					t.Fatalf("copy failure did not resume original guest: %+v", status)
+				}
+			} else {
+				if !status.Pending || m.pid(v.Name) != 0 {
+					t.Fatal("failed resume lost recovery state")
+				}
+				if err := m.RecoverSnapshot(context.Background(), v.Name, v.Name, false, v.volumes()); !errors.Is(err, ErrSnapshotRecovery) {
+					t.Fatal("ambiguous RAM restore replayed", err)
+				}
+			}
+		})
+	}
+}
+
+func TestSnapshotScheduleUsesCurrentTimezoneAndSkipsRepeatedDSTHour(t *testing.T) {
+	m, v := snapshotFixture(t)
+	zone := "Europe/Berlin"
+	m.Timezone = func() string { return zone }
+	schedule := SnapshotSchedule{Enabled: true, Time: "02:30", Days: []int{0}, Keep: 5}
+	if err := m.SetSnapshotSchedule(v.Name, schedule); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC)
+	m.runSnapshotSchedules(context.Background(), v.volumes(), now)
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 1 {
+		t.Fatalf("ignored NAS timezone: %+v", s)
+	}
+	m.runSnapshotSchedules(context.Background(), v.volumes(), now.Add(time.Hour))
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 1 {
+		t.Fatal("repeated DST hour ran twice")
+	}
+	zone = "UTC"
+	next := now.Add(7 * 24 * time.Hour)
+	m.runSnapshotSchedules(context.Background(), v.volumes(), next)
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 1 {
+		t.Fatal("ignored new timezone")
+	}
+	m.runSnapshotSchedules(context.Background(), v.volumes(), next.Add(2*time.Hour))
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 2 {
+		t.Fatalf("new timezone did not take effect: %+v", s)
+	}
+}

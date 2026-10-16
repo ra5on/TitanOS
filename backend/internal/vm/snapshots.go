@@ -86,6 +86,57 @@ type snapshotOperation struct {
 	Runtime  string         `json:"runtime"`
 }
 
+// Reservations are shared by all snapshot jobs. Count conservatively until a
+// job finishes, including bytes it may already have written. This prevents two
+// simultaneous schedules from both claiming the same free volume space.
+func (m *Manager) reserveSnapshotSpace(requested map[string]int64) (func(), error) {
+	m.snapshotSpaceMu.Lock()
+	defer m.snapshotSpaceMu.Unlock()
+	needs := map[uint64]uint64{}
+	free := map[uint64]uint64{}
+	for path, amount := range requested {
+		if amount < 0 {
+			return nil, ErrNoSpace
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		dev := info.Sys().(*syscall.Stat_t).Dev
+		available, err := freeBytes(path)
+		if err != nil {
+			return nil, err
+		}
+		needs[dev] += uint64(amount)
+		free[dev] = uint64(max(available, 0))
+	}
+	for dev, need := range needs {
+		available := free[dev] - min(free[dev], m.snapshotSpace[dev])
+		if need > available {
+			return nil, ErrNoSpace
+		}
+	}
+	if m.snapshotSpace == nil {
+		m.snapshotSpace = map[uint64]uint64{}
+	}
+	for dev, need := range needs {
+		m.snapshotSpace[dev] += need
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.snapshotSpaceMu.Lock()
+			defer m.snapshotSpaceMu.Unlock()
+			for dev, need := range needs {
+				m.snapshotSpace[dev] -= need
+				if m.snapshotSpace[dev] == 0 {
+					delete(m.snapshotSpace, dev)
+				}
+			}
+		})
+	}, nil
+}
+
 // All lifecycle mutations of a VM take this lock, including asynchronous work.
 func (m *Manager) operation(name string) (*sync.Mutex, error) {
 	value, _ := m.operations.LoadOrStore(name, &sync.Mutex{})
@@ -398,16 +449,19 @@ func (m *Manager) createSnapshot(ctx context.Context, name string, req SnapshotR
 	if running {
 		need += int64(v.MemoryMiB) << 20
 	}
-	free, err := freeBytes(filepath.Join(m.mountRoot, v.Volume))
-	if err != nil || free < need {
-		return ErrNoSpace
-	}
 	if err = m.snapshotPath(m.snapshotRoot(v), true); err != nil {
+		return err
+	}
+	releaseSpace, err := m.reserveSnapshotSpace(map[string]int64{filepath.Join(m.mountRoot, v.Volume): need})
+	if err != nil {
 		return err
 	}
 	ctx = context.WithoutCancel(ctx)
 	release = false
-	m.snapshotJob(name, func() error { return m.captureSnapshot(ctx, v, req, automatic, running) }, lock)
+	m.snapshotJob(name, func() error {
+		defer releaseSpace()
+		return m.captureSnapshot(ctx, v, req, automatic, running)
+	}, lock)
 	return nil
 }
 func (m *Manager) captureSnapshot(ctx context.Context, v VM, req SnapshotRequest, automatic, running bool) (result error) {
@@ -692,12 +746,6 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id, confirm string,
 		needs[dev] += allocated
 		paths[dev] = parent
 	}
-	for dev, n := range needs {
-		free, e := freeBytes(paths[dev])
-		if e != nil || free < n+(256<<20) {
-			return ErrNoSpace
-		}
-	}
 	if memory {
 		p := filepath.Join(m.snapshotRoot(v), id, "memory.save")
 		if err = m.snapshotPath(p, false); err != nil {
@@ -707,9 +755,20 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id, confirm string,
 			return err
 		}
 	}
+	budget := map[string]int64{}
+	for dev, amount := range needs {
+		budget[paths[dev]] = amount + (256 << 20)
+	}
+	releaseSpace, err := m.reserveSnapshotSpace(budget)
+	if err != nil {
+		return err
+	}
 	release = false
 	ctx = context.WithoutCancel(ctx)
-	m.snapshotJob(name, func() error { return m.restoreSnapshot(ctx, v, s, memory) }, lock)
+	m.snapshotJob(name, func() error {
+		defer releaseSpace()
+		return m.restoreSnapshot(ctx, v, s, memory)
+	}, lock)
 	return nil
 }
 func snapshotStaging(f SnapshotFile, id, suffix string) string {
@@ -1014,6 +1073,15 @@ func (m *Manager) SetSnapshotSchedule(name string, s SnapshotSchedule) error {
 	return nil
 }
 func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, now time.Time) {
+	// Go caches time.Local. Use the current NAS setting explicitly so changing
+	// the time zone does not require a daemon restart for these schedules.
+	if m.Timezone != nil {
+		location, err := time.LoadLocation(m.Timezone())
+		if err != nil {
+			return
+		}
+		now = now.In(location)
+	}
 	for _, status := range m.List(mounted) {
 		s := status.SnapshotSchedule
 		if !status.Available || !s.Enabled || !validSnapshotSchedule(s) || now.Format("15:04") != s.Time || !slices.Contains(s.Days, int(now.Weekday())) {

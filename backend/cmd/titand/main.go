@@ -194,6 +194,7 @@ func run(opts options) error {
 
 	// Virtual machines; starts those marked for autostart once their volumes are there.
 	machines := vm.NewManager(store, shares.UsersGID)
+	machines.Timezone = settings.CurrentTimezone
 	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
 		if _, err := hardware.NewManager().Check(pci, usb); err != nil {
 			return nil, err

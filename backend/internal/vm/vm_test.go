@@ -424,6 +424,13 @@ func TestExistingImagesAndWholeDisks(t *testing.T) {
 		}
 	}
 
+	// The tiny fake conversion can finish before the Start call above. In that
+	// valid case stop the fake guest before exercising offline disk operations.
+	if m.pid("alt") != 0 {
+		if err := m.Action(ctx, "alt", "poweroff"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// Disks grow, never shrink; whole disks do neither.
 	if err := m.Grow(ctx, "alt", 0, 4*gib); !errors.Is(err, ErrInvalid) {
 		t.Errorf("shrinking: %v", err)
