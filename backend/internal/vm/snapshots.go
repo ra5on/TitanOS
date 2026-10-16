@@ -98,7 +98,15 @@ func (m *Manager) reserveSnapshotSpace(requested map[string]int64) (func(), erro
 		if amount < 0 {
 			return nil, ErrNoSpace
 		}
-		info, err := os.Stat(path)
+		// Btrfs subvolumes have different st_dev values but share the same
+		// capacity. Identify the configured volume at /mnt/<name>, including
+		// when restoring an imported image below a nested subvolume.
+		relative, err := filepath.Rel(m.mountRoot, filepath.Clean(path))
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+			return nil, ErrUnknownVolume
+		}
+		volumeRoot := filepath.Join(m.mountRoot, strings.Split(relative, string(os.PathSeparator))[0])
+		info, err := os.Stat(volumeRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +116,11 @@ func (m *Manager) reserveSnapshotSpace(requested map[string]int64) (func(), erro
 			return nil, err
 		}
 		needs[dev] += uint64(amount)
-		free[dev] = uint64(max(available, 0))
+		capacity := uint64(max(available, 0))
+		if previous, exists := free[dev]; exists {
+			capacity = min(capacity, previous)
+		}
+		free[dev] = capacity
 	}
 	for dev, need := range needs {
 		available := free[dev] - min(free[dev], m.snapshotSpace[dev])
