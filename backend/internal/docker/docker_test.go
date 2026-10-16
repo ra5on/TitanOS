@@ -441,3 +441,14 @@ func TestSetCompose(t *testing.T) {
 		t.Errorf("concurrent change: %v", err)
 	}
 }
+
+func TestEngineDoesNotReportReadyBeforeDataRootApplied(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	if m.Status(context.Background()).Running {
+		t.Fatal("socket answering before reconciliation is not ready for app installation")
+	}
+	m.applied = m.dataRoot("data")
+	if !m.Status(context.Background()).Running {
+		t.Fatal("applied engine should be ready")
+	}
+}

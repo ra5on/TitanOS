@@ -74,3 +74,9 @@ Source: https://github.com/tailscale/tailscale/tree/v1.104.1
 NVIDIA build SDK: Debian build tools and exact kernel headers retain their original
 licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lists
 the corresponding Debian source packages. The SDK is separate from the NAS RAM image.
+# Immich app-store composition
+# The adapted official v3.3.3 Compose source retains AGPL-3.0-only.
+# Original license and modified source: backend/internal/catalog/builtin/immich/.
+# Both are included in the release license archive under templates/immich/.
+# Container images are fetched only when installing an app; each image retains
+# its upstream license. TitanOS does not replace Immich or Open WebUI branding.

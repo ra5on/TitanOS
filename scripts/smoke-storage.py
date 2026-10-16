@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import shlex
 import ssl
 import subprocess
 import tempfile
@@ -22,6 +23,7 @@ import urllib.request
 import zipfile
 
 from cdi_smoke import check_cdi
+from vm_snapshot_smoke import check_vm_snapshots
 
 spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).with_name('smoke-release.py'))
 helper = importlib.util.module_from_spec(spec)
@@ -110,8 +112,12 @@ def smoke(archive, plugins, log, timeout):
                        '-o', 'StrictHostKeyChecking=accept-new', '-o', f'UserKnownHostsFile={directory}/known_hosts', '-o', 'ConnectTimeout=3']
         ssh = ['ssh', *ssh_options, '-p', str(ssh_port), 'storagetester@127.0.0.1']
 
-        def remote(command):
-            return subprocess.check_output([*ssh, 'sudo sh -ec ' + "'" + command.replace("'", "'\\''") + "'"], text=True, timeout=90).strip()
+        def remote(command, timeout=180):
+            return subprocess.check_output([*ssh, 'sudo sh -ec ' + "'" + command.replace("'", "'\\''") + "'"], text=True, timeout=timeout).strip()
+
+        def put(source, destination):
+            with open(source, 'rb') as stream:
+                subprocess.run([*ssh, 'sudo sh -c ' + shlex.quote('cat > ' + shlex.quote(destination))], stdin=stream, check=True)
 
         def volume():
             return next(v for v in request('/storage')['volumes'] if v['name'] == 'mirror')
@@ -186,6 +192,19 @@ def smoke(archive, plugins, log, timeout):
                         remote('test ! -e /mnt/mirror/vms/home-assistant')
                         check_uploads(request, opener, url, remote, password)
                         check_cdi(request, remote)
+                        snapshot_vm, snapshot = check_vm_snapshots(request, remote, put, directory, volume='mirror')
+                        for attempt in range(60):
+                            try:
+                                if request('/health').get('ready'): break
+                            except OSError: pass
+                            time.sleep(1)
+                        request('/login', {'name': 'storagetester', 'password': password})
+                        assert len(request(f'/vms/{snapshot_vm}/snapshots')['snapshots']) == 1
+                        request(f'/vms/{snapshot_vm}/poweroff', {})
+                        request(f'/vms/{snapshot_vm}/snapshots/{snapshot["id"]}', {'confirm': snapshot['name']}, 'DELETE')
+                        request(f'/vms/{snapshot_vm}', {'deleteDisks': True, 'confirm': snapshot_vm}, 'DELETE')
+                        remote('rm -r /mnt/mirror/snapshot-tools')
+                        print('VM RAM/disk/UEFI/TPM restore on Btrfs and metadata persistence passed', flush=True)
                         print('Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed', flush=True)
                         request('/vms/disk-test', {'displayName': 'Home Assistant NAS', 'memoryMiB': 512, 'vcpus': 1, 'network': created['network']}, 'PUT')
                         memory = request('/system')['memory']

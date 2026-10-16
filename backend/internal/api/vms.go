@@ -22,6 +22,11 @@ var vmErrors = []struct {
 	status int
 	code   string
 }{
+	{vm.ErrSnapshotBusy, http.StatusConflict, "vm_snapshot_busy"},
+	{vm.ErrSnapshotUnsupported, http.StatusConflict, "vm_snapshot_unsupported"},
+	{vm.ErrSnapshotRecovery, http.StatusConflict, "vm_snapshot_recovery"},
+	{vm.ErrSnapshotRuntime, http.StatusConflict, "vm_snapshot_runtime"},
+	{vm.ErrSnapshotExists, http.StatusConflict, "vm_snapshot_exists"},
 	{vm.ErrDisabled, http.StatusConflict, "read_only"},
 	{vm.ErrNoKVM, http.StatusConflict, "no_kvm"},
 	{vm.ErrInvalidName, http.StatusBadRequest, "invalid_vm_name"},

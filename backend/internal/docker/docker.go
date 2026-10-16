@@ -377,9 +377,10 @@ func (m *Manager) Status(ctx context.Context) Status {
 		status.Jobs[name] = *job
 	}
 	apps := m.knownApps()
+	ready := m.applied != ""
 	m.mu.Unlock()
 	status.Apps = apps
-	if m.Disabled {
+	if m.Disabled || !ready {
 		return status
 	}
 
