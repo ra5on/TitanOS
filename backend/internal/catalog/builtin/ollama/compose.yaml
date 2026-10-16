@@ -1,59 +1,393 @@
+
 x-titanos:
-  name: Ollama + Open WebUI
-  main: open-webui
+  name: Ollama
+  main: ollama
   category: productivity
+
   description:
-    de: Lokale KI-Modelle mit Ollama ausführen und in Open WebUI mit ihnen chatten.
-    en: Run local AI models with Ollama and chat with them in Open WebUI.
+    de: >-
+      Lokale KI-Modelle mit Ollama ausführen.
+      Unterstützt CPU, NVIDIA, AMD und Vulkan.
+      Inklusive API, Modellverwaltung und
+      erweiterten Inferenz-Einstellungen.
+    en: >-
+      Run local AI models with Ollama.
+      Supports CPU, NVIDIA, AMD and Vulkan.
+      Includes API, model management and
+      advanced inference settings.
+
   tips:
-    de: Beim ersten Öffnen das Administratorkonto erstellen. Modelle anschließend in Open WebUI auswählen und herunterladen; Speicher- und RAM-Bedarf hängen vom Modell ab. CPU-Betrieb ist voreingestellt. Für NVIDIA beim Dienst ollama ausdrücklich die gewünschte GPU auswählen; das NVIDIA-Plugin muss aktiv sein. Die Ollama-API ist nur im internen App-Netz erreichbar. Chats, Konten und Modelle bleiben auf dem Daten-Volume erhalten. Bestehende Ollama-Installationen werden nicht verändert.
-    en: Create the administrator account on first opening. Then choose and download models in Open WebUI; disk and memory requirements depend on the model. CPU operation is the default. For NVIDIA, explicitly select a GPU for the ollama service; the NVIDIA plugin must be active. The Ollama API is available only within the app network. Chats, accounts and models persist on the data volume. Existing Ollama installations are not changed.
+    de: >-
+      Ollama stellt eine API auf Port 11434 bereit.
+      Eine grafische Oberfläche ist nicht enthalten.
+      Modelle können über die Docker-Konsole mit
+      ollama pull heruntergeladen werden.
+      CPU-Betrieb ist voreingestellt.
+      Für NVIDIA muss eine GPU im Docker-Dienst
+      freigegeben werden. AMD benötigt das ROCm-Image
+      und passende Gerätefreigaben.
+      Modelle bleiben dauerhaft gespeichert.
+      Die API besitzt standardmäßig keine
+      Benutzeranmeldung. Nicht öffentlich freigeben.
+    en: >-
+      Ollama provides an API on port 11434.
+      No graphical interface is included.
+      Download models using ollama pull.
+      CPU operation is enabled by default.
+      NVIDIA requires Docker GPU allocation.
+      AMD requires the ROCm image and device access.
+      Models are stored persistently.
+      The API has no user authentication by default.
+      Do not expose it publicly.
+
   variables:
-    WEBUI_SECRET_KEY:
-      label: { de: Schlüssel für Anmeldungen, en: Session secret }
-      secret: generate
-      required: true
+
+    # ==========================================
+    # SERVER
+    # ==========================================
+
+    OLLAMA_HOST:
+      label: { de: Serveradresse, en: Server address }
+
+    OLLAMA_ORIGINS:
+      label: { de: Erlaubte CORS-Ursprünge, en: Allowed CORS origins }
+
+    OLLAMA_MODELS:
+      label: { de: Modellverzeichnis, en: Model directory }
+
+    OLLAMA_NO_CLOUD:
+      label: { de: Cloudfunktionen deaktivieren, en: Disable cloud features }
+
+    OLLAMA_AUTH:
+      label: { de: Interne Clientauthentifizierung, en: Internal client authentication }
+
+    OLLAMA_REMOTES:
+      label: { de: Erlaubte Remote-Modellserver, en: Allowed remote model hosts }
+
+    OLLAMA_CREATE_REMOTE:
+      label: { de: Modellerstellung über Server erzwingen, en: Force remote model creation }
+
+    # ==========================================
+    # MODELLE UND PERFORMANCE
+    # ==========================================
+
+    OLLAMA_CONTEXT_LENGTH:
+      label: { de: Standard-Kontextlänge in Tokens, en: Default context length in tokens }
+
+    OLLAMA_KEEP_ALIVE:
+      label: { de: Modell im RAM behalten, en: Model keep-alive duration }
+
+    OLLAMA_LOAD_TIMEOUT:
+      label: { de: Ladezeitlimit, en: Model loading timeout }
+
+    OLLAMA_MAX_LOADED_MODELS:
+      label: { de: Maximal geladene Modelle, en: Maximum loaded models }
+
+    OLLAMA_NUM_PARALLEL:
+      label: { de: Parallele Anfragen, en: Parallel requests }
+
+    OLLAMA_MAX_QUEUE:
+      label: { de: Maximale Warteschlange, en: Maximum request queue }
+
+    OLLAMA_MAX_TRANSFER_STREAMS:
+      label: { de: Parallele Modelltransfers, en: Parallel model transfers }
+
+    OLLAMA_GO_TEMPLATE:
+      label: { de: Modelltemplates verwenden, en: Enable model templates }
+
+    # ==========================================
+    # GPU UND SPEICHER
+    # ==========================================
+
+    OLLAMA_FLASH_ATTENTION:
+      label: { de: Flash Attention aktivieren, en: Enable Flash Attention }
+
+    OLLAMA_KV_CACHE_TYPE:
+      label: { de: KV-Cache-Präzision, en: KV cache precision }
+
+    OLLAMA_GPU_OVERHEAD:
+      label: { de: Reservierter VRAM in Bytes, en: Reserved VRAM in bytes }
+
+    OLLAMA_SCHED_SPREAD:
+      label: { de: Modelle über mehrere GPUs verteilen, en: Spread models across GPUs }
+
+    OLLAMA_LLM_LIBRARY:
+      label: { de: Inferenz-Backend erzwingen, en: Force inference backend }
+
+    OLLAMA_IGPU_ENABLE:
+      label: { de: Integrierte GPU aktivieren, en: Enable integrated GPU }
+
+    OLLAMA_VULKAN:
+      label: { de: Vulkan aktivieren, en: Enable Vulkan }
+
+    LLAMA_ARG_FIT:
+      label: { de: Automatische Speicheranpassung, en: Automatic memory fitting }
+
+    LLAMA_ARG_FIT_TARGET:
+      label: { de: Freier VRAM als Ziel in MiB, en: Target free VRAM in MiB }
+
+    # ==========================================
+    # NVIDIA
+    # ==========================================
+
+    NVIDIA_VISIBLE_DEVICES:
+      label: { de: NVIDIA-GPUs, en: NVIDIA GPUs }
+
+    NVIDIA_DRIVER_CAPABILITIES:
+      label: { de: NVIDIA-Treiberfunktionen, en: NVIDIA driver capabilities }
+
+    CUDA_VISIBLE_DEVICES:
+      label: { de: Sichtbare CUDA-Geräte, en: Visible CUDA devices }
+
+    # ==========================================
+    # AMD
+    # ==========================================
+
+    HIP_VISIBLE_DEVICES:
+      label: { de: Sichtbare AMD HIP-Geräte, en: Visible AMD HIP devices }
+
+    ROCR_VISIBLE_DEVICES:
+      label: { de: Sichtbare ROCm-Geräte, en: Visible ROCm devices }
+
+    GPU_DEVICE_ORDINAL:
+      label: { de: AMD-GPU-Auswahl, en: AMD GPU selection }
+
+    HSA_OVERRIDE_GFX_VERSION:
+      label: { de: AMD-GFX-Version überschreiben, en: Override AMD GFX version }
+
+    # ==========================================
+    # VULKAN
+    # ==========================================
+
+    GGML_VK_VISIBLE_DEVICES:
+      label: { de: Sichtbare Vulkan-Geräte, en: Visible Vulkan devices }
+
+    # ==========================================
+    # DEBUG UND WARTUNG
+    # ==========================================
+
+    OLLAMA_DEBUG:
+      label: { de: Debug-Protokollierung, en: Debug logging }
+
+    OLLAMA_DEBUG_LOG_REQUESTS:
+      label: { de: Anfrageinhalte protokollieren, en: Log request bodies }
+
+    OLLAMA_NOPRUNE:
+      label: { de: Blob-Bereinigung verhindern, en: Disable blob pruning }
+
+    OLLAMA_NOHISTORY:
+      label: { de: Terminalverlauf deaktivieren, en: Disable terminal history }
+
+    OLLAMA_EDITOR:
+      label: { de: Terminal-Texteditor, en: Terminal editor }
+
+    # ==========================================
+    # PROXY
+    # ==========================================
+
+    HTTP_PROXY:
+      label: { de: HTTP-Proxy, en: HTTP proxy }
+
+    HTTPS_PROXY:
+      label: { de: HTTPS-Proxy, en: HTTPS proxy }
+
+    NO_PROXY:
+      label: { de: Proxy-Ausnahmen, en: Proxy exceptions }
+
+  # ============================================
+  # PERSISTENTE DATEN
+  # ============================================
+
   paths:
     /root/.ollama:
-      label: { de: Modelle, en: Models }
-    /app/backend/data:
-      label: { de: Konten, Chats und WebUI-Daten, en: Accounts, chats and WebUI data }
+      label:
+        de: Modelle und Ollama-Daten
+        en: Models and Ollama data
+
+  # ============================================
+  # PORTS
+  # ============================================
+
   ports:
-    "8080":
-      label: Open WebUI
-      webui: true
+    "11434":
+      label: Ollama API
+      webui: false
+
+
 services:
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:v0.12.2
-    restart: unless-stopped
-    environment:
-      TZ: ""
-      OLLAMA_BASE_URL: http://ollama:11434
-      WEBUI_SECRET_KEY: ""
-      WEBUI_AUTH: "true"
-      ENABLE_OPENAI_API: "false"
-    ports:
-      - "3000:8080"
-    volumes:
-      - ./webui:/app/backend/data
-    depends_on:
-      ollama: { condition: service_healthy }
-    healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      start_period: 180s
-      retries: 5
+
   ollama:
-    image: ollama/ollama:0.40.5
+    image: ollama/ollama:latest
     restart: unless-stopped
+
     environment:
-      OLLAMA_HOST: 0.0.0.0:11434
-      OLLAMA_KEEP_ALIVE: 5m
+
+      # ========================================
+      # GRUNDKONFIGURATION
+      # ========================================
+
+      TZ: "Europe/Berlin"
+
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_ORIGINS: ""
+      OLLAMA_MODELS: "/root/.ollama/models"
+
+      # Cloudfunktionen deaktivieren
+      OLLAMA_NO_CLOUD: "true"
+
+      # Keine interne Clientauthentifizierung
+      OLLAMA_AUTH: "false"
+
+      OLLAMA_REMOTES: "ollama.com"
+      OLLAMA_CREATE_REMOTE: "false"
+
+      # ========================================
+      # MODELLE
+      # ========================================
+
+      # Standard-Kontextlänge
+      OLLAMA_CONTEXT_LENGTH: "8192"
+
+      # Modell nach 5 Minuten entladen
+      OLLAMA_KEEP_ALIVE: "-1"
+
+      # Zeitlimit beim Laden
+      OLLAMA_LOAD_TIMEOUT: "5m"
+
+      # Maximal gleichzeitig geladene Modelle
+      OLLAMA_MAX_LOADED_MODELS: "1"
+
+      # Parallele Anfragen pro Modell
+      OLLAMA_NUM_PARALLEL: "1"
+
+      # Maximale Warteschlange
+      OLLAMA_MAX_QUEUE: "128"
+
+      # Parallele Safetensors-Transfers
+      OLLAMA_MAX_TRANSFER_STREAMS: "4"
+
+      # Modelfile-Templates
+      OLLAMA_GO_TEMPLATE: "true"
+
+      # ========================================
+      # PERFORMANCE UND SPEICHER
+      # ========================================
+
+      # Effizientere Attention
+      OLLAMA_FLASH_ATTENTION: "true"
+
+      # f16 = volle Präzision
+      # q8_0 = geringerer VRAM-Bedarf
+      # q4_0 = stärker komprimiert
+      OLLAMA_KV_CACHE_TYPE: "q8_0"
+
+      # Reservierter VRAM in Bytes
+      OLLAMA_GPU_OVERHEAD: "0"
+
+      # Mehrere GPUs gemeinsam verwenden
+      OLLAMA_SCHED_SPREAD: "false"
+
+      # Inferenz-Backend automatisch wählen
+      OLLAMA_LLM_LIBRARY: ""
+
+      # Integrierte GPUs standardmäßig aus
+      OLLAMA_IGPU_ENABLE: "false"
+
+      # Vulkan deaktiviert
+      OLLAMA_VULKAN: "false"
+
+      # Automatische Speicheranpassung
+      LLAMA_ARG_FIT: "on"
+      LLAMA_ARG_FIT_TARGET: ""
+
+      # ========================================
+      # NVIDIA
+      # ========================================
+
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+
+      # Optionale GPU-Filter nur bei Bedarf setzen.
+      # Leere Filter können Geräte unsichtbar machen.
+      #
+      # CUDA_VISIBLE_DEVICES: "0"
+
+      # ========================================
+      # AMD / ROCm
+      # ========================================
+
+      # Nur für geeignete AMD-Systeme verwenden.
+      # Zusätzlich ROCm-Image und Devices einrichten.
+      #
+      # HIP_VISIBLE_DEVICES: "0"
+      # ROCR_VISIBLE_DEVICES: "0"
+      # GPU_DEVICE_ORDINAL: "0"
+      # HSA_OVERRIDE_GFX_VERSION: ""
+
+      # ========================================
+      # VULKAN
+      # ========================================
+
+      # GGML_VK_VISIBLE_DEVICES: "0"
+
+      # ========================================
+      # DEBUGGING
+      # ========================================
+
+      OLLAMA_DEBUG: "false"
+      OLLAMA_DEBUG_LOG_REQUESTS: "false"
+
+      OLLAMA_NOPRUNE: "false"
+      OLLAMA_NOHISTORY: "false"
+
+      OLLAMA_EDITOR: ""
+
+      # ========================================
+      # PROXY
+      # ========================================
+
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      NO_PROXY: ""
+
+    # ==========================================
+    # API
+    # ==========================================
+
+    ports:
+      - "11434:11434"
+
+    # ==========================================
+    # DATENSPEICHER
+    # ==========================================
+
     volumes:
       - ./models:/root/.ollama
+
+    # ==========================================
+    # OPTIONAL: NVIDIA GPU
+    #
+    # Für NVIDIA diese Sektion aktivieren.
+    # Ohne Freigabe läuft der Container auf CPU.
+    #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    # ==========================================
+
+    # ==========================================
+    # HEALTHCHECK
+    # ==========================================
+
     healthcheck:
-      test: [CMD, ollama, list]
+      test:
+        - CMD
+        - ollama
+        - list
       interval: 10s
       timeout: 10s
       start_period: 30s
