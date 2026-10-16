@@ -547,3 +547,25 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   Der Start eines alten, deshalb gescheiterten verwalteten Containers darf nur
   dessen Dienst mit `up --no-deps --force-recreate --pull never` erneuern;
   eingebundene Daten und fremde Dienste erhalten.
+
+
+## Entwicklungsstand nach Beta 0.2.0
+
+- VM-Snapshots: Menü neben Bearbeiten, manuelle Aufnahme, Wiederherstellung,
+  Löschen und Zeitpläne mit Aufbewahrung. Vollständige unabhängige qcow2-/raw-
+  Dateien, Konfiguration, UEFI und TPM; laufende Gäste einschließlich RAM mit
+  ausdrücklich bestätigter Unterbrechung. PCI/USB, Hostordner, physische Platten
+  und angehängte ISOs bleiben ausgeschlossen. Kein qcow2-Backing-Chain-Management.
+  Private Ablage und Wiederanlaufjournal auf dem VM-Volume, kein RAM-/Stick-Staging.
+  Details und Grenzen: `docs/VM-SNAPSHOTS.md`.
+- Dateimanager schützt registrierte VM-Dateien samt Elternordnern vor Löschen,
+  Umbenennen und Upload-Ersetzung. VM-Lebenszyklusaktionen bleiben der VM-Seite
+  zugeordnet; normale Dateien sind weiterhin bearbeitbar.
+- Eigene App-Vorlagen: Immich mit PostgreSQL/Valkey/ML; Ollama mit Open WebUI.
+  CPU als Standard, GPU nur ausdrücklich pro Dienst. Keine vorinstallierten
+  Sprachmodelle, Daten auf dem Docker-Volume, zufällige persistente Geheimnisse.
+  Die abgeleitete Immich-Compose-Vorlage bleibt AGPL-3.0-only und liegt samt
+  Lizenz im Release-Lizenzarchiv. Details: `docs/NATIVE-APPS.md`.
+- Release-Prüfung ergänzt echte RAM-/Platten-Restores in einem verschachtelten
+  QEMU-Gast auf Btrfs sowie separate App-Installations- und Persistenztests.
+  App-Tests nur auf Wegwerf-Runnern bzw. isolierten NAS-Test-VMs ausführen.

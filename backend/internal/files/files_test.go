@@ -341,3 +341,43 @@ func TestZip(t *testing.T) {
 		t.Errorf("zipping the recycle bin: %v", err)
 	}
 }
+
+func TestVMManagedFilesCannotBeChangedOrReplacedByUploads(t *testing.T) {
+	m, root, _ := newRoot(t)
+	protected := filepath.Join(root.Dir, "urlaub")
+	m.Protected = func(p string) bool { return p == protected || strings.HasPrefix(p, protected+"/") }
+	for _, change := range []func() error{
+		func() error { return m.Delete(root, []string{"urlaub"}, "alex", true) },
+		func() error { return m.Rename(root, "urlaub", "moved") },
+		func() error { return m.Rename(root, "notiz.txt", "urlaub/other") },
+		func() error { return m.Mkdir(root, "urlaub/child", os.Getuid()) },
+		func() error {
+			_, e := m.StartUpload(root, "urlaub", "strand.jpg", 0, ConflictReplace, "alex", os.Getuid())
+			return e
+		},
+	} {
+		if e := change(); !errors.Is(e, ErrProtected) {
+			t.Fatalf("managed file mutation accepted: %v", e)
+		}
+	}
+	// Ownership can change while an upload is in flight: check again at commit.
+	m.Protected = nil
+	part, e := m.StartUpload(root, "urlaub", "strand.jpg", 0, ConflictReplace, "alex", os.Getuid())
+	if e != nil {
+		t.Fatal(e)
+	}
+	m.Protected = func(p string) bool { return p == filepath.Join(protected, "strand.jpg") }
+	if _, e = m.FinishUpload(part.ID, "alex"); !errors.Is(e, ErrProtected) {
+		t.Fatal(e)
+	}
+	data, _ := os.ReadFile(filepath.Join(protected, "strand.jpg"))
+	if string(data) != "strand" {
+		t.Fatal("managed image replaced")
+	}
+	if e = m.AbortUpload(part.ID, "alex"); e != nil {
+		t.Fatal(e)
+	}
+	if e = m.Mkdir(root, "unrelated", os.Getuid()); e != nil {
+		t.Fatal(e)
+	}
+}

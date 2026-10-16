@@ -415,6 +415,7 @@ func run(opts options) error {
 	}
 	go memoryPolicy.Run(ctx)
 	fileManager := files.NewManager(shares.UsersGID)
+	fileManager.Protected = machines.ProtectFile
 	fileManager.Acquire = memoryPolicy.Acquire
 	fileManager.Available = func(root files.Root) bool { return slices.Contains(volumes.Mounted(), root.Volume) }
 	handler := api.New(api.Options{

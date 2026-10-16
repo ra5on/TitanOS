@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -46,6 +47,7 @@ var (
 	ErrNotFound   = errors.New("files: no such file or folder")
 	ErrExists     = errors.New("files: a file or folder with this name exists")
 	ErrInvalid    = errors.New("files: invalid name or path")
+	ErrProtected  = errors.New("files: path is managed by a virtual machine")
 	ErrReadOnly   = errors.New("files: no write access")
 	ErrNoSpace    = errors.New("files: not enough free space")
 	ErrMismatch   = errors.New("files: upload does not continue where it stopped")
@@ -66,7 +68,7 @@ const (
 
 // hidden reports whether a name is internal and not shown.
 func hidden(name string) bool {
-	return name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
+	return name == ".titanos" || strings.Contains(name, ".titanos-snapshot-") || name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
 }
 
 // clean checks a slash-separated path relative to a root. "" is the root.
@@ -115,6 +117,7 @@ func mapError(err error) error {
 // Manager carries out file operations and keeps track of running uploads.
 type Manager struct {
 	// GID is the group files and folders are given ("users").
+	Protected func(string) bool
 	GID       int
 	Available func(Root) bool
 	Acquire   func(context.Context) (int64, func(), error)
@@ -128,6 +131,10 @@ type Manager struct {
 // NewManager returns a file manager that gives new files the group gid.
 func NewManager(gid int) *Manager {
 	return &Manager{GID: gid, uploads: map[string]*upload{}, now: time.Now, syncFile: func(f *os.File) error { return f.Sync() }}
+}
+
+func (m *Manager) protected(root Root, p string) bool {
+	return m.Protected != nil && m.Protected(filepath.Join(root.Dir, p))
 }
 
 // Usage returns the total and free bytes of the filesystem a root is on.
@@ -202,6 +209,9 @@ func (m *Manager) Mkdir(root Root, name string, uid int) error {
 	if err != nil || name == "." || !validName(path.Base(name)) {
 		return ErrInvalid
 	}
+	if m.protected(root, name) {
+		return ErrProtected
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return mapError(err)
@@ -231,6 +241,9 @@ func (m *Manager) Rename(root Root, from, to string) error {
 	if strings.HasPrefix(to+"/", from+"/") {
 		return ErrInvalid // a folder cannot move into itself
 	}
+	if m.protected(root, from) || m.protected(root, to) {
+		return ErrProtected
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return mapError(err)
@@ -253,6 +266,11 @@ func (m *Manager) Delete(root Root, paths []string, user string, permanent bool)
 	}
 	if !root.Recycle && !permanent {
 		return ErrConfirm
+	}
+	for _, p := range paths {
+		if m.protected(root, p) {
+			return ErrProtected
+		}
 	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {

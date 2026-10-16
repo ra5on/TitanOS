@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Adapted from the official Immich v3.3.3 release composition by TitanOS,
+# 2026-10-16: app-store metadata, linked secret, persistent bind mounts,
+# health dependencies and explicit service addresses. See adjacent LICENSE.
+# https://github.com/immich-app/immich/releases/tag/v3.3.3
+x-titanos:
+  name: Immich
+  main: immich-server
+  category: photos
+  description:
+    de: Fotos und Videos sichern, durchsuchen und teilen. Mit Datenbank und Gesichtserkennung.
+    en: Back up, search and share photos and videos. Includes the database and face recognition.
+  tips:
+    de: Mindestens 6 GB RAM und 2 CPU-Kerne für Immich einplanen. Beim ersten Öffnen ein Administratorkonto anlegen. Datenbank und Fotos liegen getrennt auf dem Daten-Volume; beide sichern. KI-Modelle werden beim ersten Einsatz geladen. CPU-Betrieb ist voreingestellt. Eine GPU für Videoverarbeitung gezielt beim Dienst immich-server auswählen und in Immich aktivieren. Für KI-Beschleunigung benötigt der ML-Dienst zusätzlich das passende offizielle CUDA-/OpenVINO-Abbild. Versionswechsel gemeinsam für Server und ML durchführen und vorher die Immich-Upgradehinweise lesen.
+    en: Allow at least 6 GB RAM and 2 CPU cores for Immich. Create an administrator account on first opening. Database and photos are stored separately on the data volume; back up both. AI models download on first use. CPU operation is the default. Select a GPU explicitly for immich-server and enable transcoding acceleration in Immich. ML acceleration additionally requires the matching official CUDA/OpenVINO image. Upgrade server and ML together after reading the Immich upgrade notes.
+  variables:
+    DB_PASSWORD:
+      label: { de: Datenbankpasswort, en: Database password }
+      secret: generate
+      required: true
+    POSTGRES_PASSWORD:
+      from: DB_PASSWORD
+  paths:
+    /data:
+      label: { de: Fotos und Videos, en: Photos and videos }
+    /var/lib/postgresql/data:
+      label: { de: PostgreSQL-Datenbank (lokales Volume), en: PostgreSQL database (local volume) }
+    /cache:
+      label: { de: KI-Modelle, en: AI models }
+  ports:
+    "2283":
+      label: Immich
+      webui: true
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:v3.3.3
+    restart: unless-stopped
+    environment:
+      TZ: ""
+      DB_HOSTNAME: database
+      DB_USERNAME: postgres
+      DB_DATABASE_NAME: immich
+      DB_PASSWORD: ""
+      REDIS_HOSTNAME: redis
+      IMMICH_MACHINE_LEARNING_URL: http://immich-machine-learning:3003
+    volumes:
+      - ./library:/data
+    ports:
+      - "2283:2283"
+    depends_on:
+      database: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      disable: false
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:v3.3.3
+    restart: unless-stopped
+    environment:
+      TZ: ""
+    volumes:
+      - ./model-cache:/cache
+    healthcheck:
+      disable: false
+  redis:
+    image: docker.io/valkey/valkey:9@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ""
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    shm_size: 128mb
+    healthcheck:
+      disable: false

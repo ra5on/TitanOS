@@ -98,7 +98,7 @@ export type InstallForm = {
 type Meta = {
 	main: unknown;
 	tips: Localized;
-	variables: Record<string, { label?: Localized; help?: Localized; placeholder?: unknown; required?: unknown; secret?: unknown; fill?: unknown } | undefined>;
+	variables: Record<string, { label?: Localized; help?: Localized; placeholder?: unknown; required?: unknown; secret?: unknown; fill?: unknown; from?: unknown } | undefined>;
 	paths: Record<string, { label?: Localized; suggest?: unknown } | undefined>;
 	ports: Record<string, { label?: Localized; webui?: unknown } | undefined>;
 };
@@ -179,6 +179,8 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 
 		for (const pair of entries.env) {
 			const info = meta.variables[pair.name] ?? {};
+			// A dependent service uses the same generated secret, without a second editable copy.
+			if (typeof info.from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(info.from)) continue;
 			const fill = (['timezone', 'uid', 'gid'].includes(String(info.fill)) ? String(info.fill) : (FILLED[pair.name] ?? '')) as VarField['fill'];
 			const field: VarField = {
 				service,
@@ -305,6 +307,7 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 export function build(tpl: Template, form: InstallForm): { compose: string; env: Record<string, string> } {
 	const doc = parseDocument(tpl.compose);
 	const env: Record<string, string> = {};
+	const meta = readMeta(tpl.compose);
 	const own = new Map(form.own.vars.map((pair) => [pair.name, pair.value]));
 
 	for (const service of serviceNames(doc)) {
@@ -313,7 +316,11 @@ export function build(tpl: Template, form: InstallForm): { compose: string; env:
 
 		for (const pair of entries.env) {
 			const field = form.vars.find((candidate) => candidate.service === service && candidate.name === pair.name);
-			if (!field) continue;
+			if (!field) {
+				const from = meta.variables[pair.name]?.from;
+				if (typeof from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(from)) pair.value = '${' + from + '}';
+				continue;
+			}
 			if (field.secret && field.value !== '') {
 				env[field.name] = field.value;
 				pair.value = '${' + field.name + '}';

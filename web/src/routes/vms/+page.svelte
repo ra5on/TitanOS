@@ -8,6 +8,7 @@
 	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
+	import Snapshots from './Snapshots.svelte';
 	import VncScreen, { type ScaleMode } from './VncScreen.svelte';
 
 	let status = $state<VMStatus | null>(null);
@@ -175,6 +176,7 @@
 						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !current.available || !status.kvm || !!current.job}>{t('vms.start')}</button>
 						<button type="button" class="btn" onclick={() => open('remove')} disabled={busy}>{t('vms.remove')}</button>
 					{/if}
+					<Snapshots vm={current} />
 					<a class="btn" href="/vms/edit?vm={current.name}">{t('vms.edit')}</a>
 				</div>
 			</div>

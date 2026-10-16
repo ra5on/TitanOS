@@ -115,6 +115,14 @@ def application(destination):
         components.append(dict(ecosystem="npm", name=name, version=version,
                                license=package.get("license", "see original notices"),
                                source=locked["resolved"], notices=notices))
+    # The adapted Immich composition retains its upstream license. Include
+    # both the complete original license and our modified source in releases.
+    directory = REPO / "backend/internal/catalog/builtin/immich"
+    components.append(dict(ecosystem="Template", name="Immich composition", version="3.3.3-titanos",
+                           license="AGPL-3.0-only",
+                           source="https://github.com/immich-app/immich/releases/tag/v3.3.3",
+                           notices=copy_notices(directory, [directory / "LICENSE", directory / "compose.yaml"],
+                                                licenses / "templates/immich")))
     write_inventory(destination, components)
 
 

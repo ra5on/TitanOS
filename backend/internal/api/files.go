@@ -21,6 +21,7 @@ var fileErrors = []struct {
 	status int
 	code   string
 }{
+	{files.ErrProtected, http.StatusConflict, "vm_file_protected"},
 	{files.ErrNotFound, http.StatusNotFound, "file_not_found"},
 	{files.ErrExists, http.StatusConflict, "file_exists"},
 	{files.ErrInvalid, http.StatusBadRequest, "invalid_path"},
