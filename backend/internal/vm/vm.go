@@ -107,9 +107,10 @@ type Folder struct {
 
 // VM is a virtual machine as stored in /config.
 type VM struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName,omitempty"`
-	Description string `json:"description"`
+	SnapshotSchedule SnapshotSchedule `json:"snapshotSchedule"`
+	Name             string           `json:"name"`
+	DisplayName      string           `json:"displayName,omitempty"`
+	Description      string           `json:"description"`
 	// Template decides which virtual hardware the guest gets: linux,
 	// windows or other.
 	Template  string `json:"template"`
@@ -185,6 +186,7 @@ type Manager struct {
 	AutoReady   func() bool
 	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
 	AfterPoll   func(context.Context, map[string]bool) error
+	Timezone    func() string
 
 	store  *config.Store
 	runner run.Runner
@@ -216,13 +218,17 @@ type Manager struct {
 	// sysDir and devDir are /sys and /dev.
 	sysDir, devDir string
 
-	createMu    sync.Mutex
-	mu          sync.Mutex
-	loaded      bool
-	vms         map[string]VM
-	samples     map[string]*sample
-	autostarted map[string]bool
-	jobs        map[string]*Job
+	operations      sync.Map
+	snapshotJobs    map[string]*Job
+	snapshotSpaceMu sync.Mutex
+	snapshotSpace   map[uint64]uint64
+	createMu        sync.Mutex
+	mu              sync.Mutex
+	loaded          bool
+	vms             map[string]VM
+	samples         map[string]*sample
+	autostarted     map[string]bool
+	jobs            map[string]*Job
 	// reserved is the set of CPUs kept free for exclusive VMs right now.
 	reserved string
 	// borrowed are whole disks whose device node was opened to QEMU.
@@ -238,7 +244,8 @@ func NewManager(store *config.Store, gid int) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
 		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
-		FreeDisks: func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
+		snapshotJobs: map[string]*Job{},
+		FreeDisks:    func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
 	}
 }
 
@@ -343,6 +350,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		if !loaded {
 			m.Load()
 		} else if !m.Disabled {
+			m.runSnapshotSchedules(ctx, mounted(), time.Now())
 			m.autostart(ctx, mounted())
 			m.sample()
 			if m.AfterPoll != nil {
@@ -796,6 +804,14 @@ type Change struct {
 // Update changes a VM. Everything but the display name, description and autostart
 // belongs to the virtual hardware and only changes while the VM is off.
 func (m *Manager) Update(ctx context.Context, name string, change Change, mounted []string) error {
+	lock, lockErr := m.operation(name)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer lock.Unlock()
+	if v, e := m.get(name); e == nil && m.pendingSnapshot(v) {
+		return ErrSnapshotRecovery
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -861,6 +877,14 @@ func (m *Manager) XML(name string) (string, error) {
 
 // Start boots a VM.
 func (m *Manager) Start(ctx context.Context, name string, mounted []string) error {
+	lock, lockErr := m.operation(name)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer lock.Unlock()
+	if v, e := m.get(name); e == nil && m.pendingSnapshot(v) {
+		return ErrSnapshotRecovery
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -1022,6 +1046,14 @@ func copyFile(from, to string) error {
 
 // Action asks a running VM to shut down or restart, or switches it off.
 func (m *Manager) Action(ctx context.Context, name, action string) error {
+	lock, lockErr := m.operation(name)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer lock.Unlock()
+	if v, e := m.get(name); e == nil && m.pendingSnapshot(v) {
+		return ErrSnapshotRecovery
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -1043,12 +1075,29 @@ func (m *Manager) Action(ctx context.Context, name, action string) error {
 // Delete forgets a VM. Its disks stay unless deleteDisks is set, which
 // needs the name of the VM once more as confirmation.
 func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
+	lock, lockErr := m.operation(name)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer lock.Unlock()
+	if v, e := m.get(name); e == nil && m.pendingSnapshot(v) {
+		return ErrSnapshotRecovery
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}
 	vm, err := m.get(name)
 	if err != nil {
 		return err
+	}
+	entries, readErr := os.ReadDir(m.snapshotRoot(vm))
+	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+		return readErr
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && snapshotID.MatchString(entry.Name()) {
+			return ErrSnapshotExists
+		}
 	}
 	if m.pid(name) != 0 {
 		return ErrRunning

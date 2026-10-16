@@ -90,6 +90,9 @@ func (m *Manager) StartUpload(root Root, dir, name string, size int64, conflict,
 	if err != nil || !validName(name) || size < 0 {
 		return UploadStatus{}, ErrInvalid
 	}
+	if m.protected(root, path.Join(dir, name)) {
+		return UploadStatus{}, ErrProtected
+	}
 	if conflict != "" && conflict != ConflictReplace && conflict != ConflictRename {
 		return UploadStatus{}, ErrInvalid
 	}
@@ -316,6 +319,9 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	defer func() { m.release(u, done) }()
 	if u.offset.Load() != u.size {
 		return UploadStatus{}, ErrIncomplete
+	}
+	if m.protected(u.root, u.name) {
+		return UploadStatus{}, ErrProtected
 	}
 	r, err := m.openUpload(u)
 	if err != nil {

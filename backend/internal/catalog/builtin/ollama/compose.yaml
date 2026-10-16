@@ -1,0 +1,60 @@
+x-titanos:
+  name: Ollama + Open WebUI
+  main: open-webui
+  category: productivity
+  description:
+    de: Lokale KI-Modelle mit Ollama ausführen und in Open WebUI mit ihnen chatten.
+    en: Run local AI models with Ollama and chat with them in Open WebUI.
+  tips:
+    de: Beim ersten Öffnen das Administratorkonto erstellen. Modelle anschließend in Open WebUI auswählen und herunterladen; Speicher- und RAM-Bedarf hängen vom Modell ab. CPU-Betrieb ist voreingestellt. Für NVIDIA beim Dienst ollama ausdrücklich die gewünschte GPU auswählen; das NVIDIA-Plugin muss aktiv sein. Die Ollama-API ist nur im internen App-Netz erreichbar. Chats, Konten und Modelle bleiben auf dem Daten-Volume erhalten. Bestehende Ollama-Installationen werden nicht verändert.
+    en: Create the administrator account on first opening. Then choose and download models in Open WebUI; disk and memory requirements depend on the model. CPU operation is the default. For NVIDIA, explicitly select a GPU for the ollama service; the NVIDIA plugin must be active. The Ollama API is available only within the app network. Chats, accounts and models persist on the data volume. Existing Ollama installations are not changed.
+  variables:
+    WEBUI_SECRET_KEY:
+      label: { de: Schlüssel für Anmeldungen, en: Session secret }
+      secret: generate
+      required: true
+  paths:
+    /root/.ollama:
+      label: { de: Modelle, en: Models }
+    /app/backend/data:
+      label: { de: Konten, Chats und WebUI-Daten, en: Accounts, chats and WebUI data }
+  ports:
+    "8080":
+      label: Open WebUI
+      webui: true
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.12.2
+    restart: unless-stopped
+    environment:
+      TZ: ""
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_SECRET_KEY: ""
+      WEBUI_AUTH: "true"
+      ENABLE_OPENAI_API: "false"
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./webui:/app/backend/data
+    depends_on:
+      ollama: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+  ollama:
+    image: ollama/ollama:0.40.5
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: 5m
+    volumes:
+      - ./models:/root/.ollama
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+      retries: 5

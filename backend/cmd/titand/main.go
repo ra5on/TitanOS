@@ -194,6 +194,7 @@ func run(opts options) error {
 
 	// Virtual machines; starts those marked for autostart once their volumes are there.
 	machines := vm.NewManager(store, shares.UsersGID)
+	machines.Timezone = settings.CurrentTimezone
 	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
 		if _, err := hardware.NewManager().Check(pci, usb); err != nil {
 			return nil, err
@@ -415,6 +416,7 @@ func run(opts options) error {
 	}
 	go memoryPolicy.Run(ctx)
 	fileManager := files.NewManager(shares.UsersGID)
+	fileManager.Protected = machines.ProtectFile
 	fileManager.Acquire = memoryPolicy.Acquire
 	fileManager.Available = func(root files.Root) bool { return slices.Contains(volumes.Mounted(), root.Volume) }
 	handler := api.New(api.Options{
