@@ -126,7 +126,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird noch nicht unterstützt.
 - **Plugins direkt von GitHub:** Die Plugin-Seite zeigt den signierten Katalog des laufenden Releases. Pakete werden erst beim Installieren auf das Daten-Volume geladen und vor der Aktivierung geprüft. Die manuelle Installation aus einer Freigabe bleibt möglich. [Plugin-Installation](docs/PLUGINS.md#installation-der-zusätzlichen-plugins).
 - **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
-- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus beta.3 oder einer späteren Version gestartet werden; der Updater in beta.2 kann das noch nicht.
+- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus v0.1.0-beta.3 oder einer späteren Version gestartet werden; der Updater in v0.1.0-beta.2 kann das noch nicht.
 
 ## Noch geplant
 
@@ -139,7 +139,7 @@ Volume-Verschlüsselung, weitere Fernzugriffsoptionen, Energiezeitpläne/Wake-on
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Btrfs und automatische Plugin-Mitnahme sind ab beta.3 enthalten. Beim ersten Update aus beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Btrfs und automatische Plugin-Mitnahme sind ab v0.1.0-beta.3 enthalten. Beim ersten Update aus v0.1.0-beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 
