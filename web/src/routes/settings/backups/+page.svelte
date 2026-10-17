@@ -5,9 +5,10 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import FolderTree from './FolderTree.svelte';
+	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Kind = 'local' | 's3' | 'sftp' | 'rest';
+	type Kind = 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
 		type: Kind;
 		volume?: string;
@@ -147,6 +148,19 @@
 		}
 	}
 
+	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
+	let pairCode = $state('');
+	function decodeCode(text: string): { url: string; user: string; password: string } | null {
+		try {
+			const body = text.trim().replace(/^titanos-backup:/, '').replace(/-/g, '+').replace(/_/g, '/');
+			const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0))));
+			return data.v === 1 && typeof data.url === 'string' && typeof data.user === 'string' && typeof data.password === 'string' ? data : null;
+		} catch {
+			return null;
+		}
+	}
+	const pairing = $derived(decodeCode(pairCode));
+
 	async function showKey() {
 		if (publicKey) return;
 		try {
@@ -160,6 +174,7 @@
 		if (!draft) return;
 		draft.destination.type = kind;
 		if (kind === 'sftp') showKey();
+		if (kind === 'titanos') pairCode = '';
 	}
 
 	// Only what belongs to the chosen kind of destination is sent.
@@ -171,6 +186,10 @@
 				return { type: 's3', endpoint: d.endpoint?.trim(), bucket: d.bucket?.trim(), prefix: d.prefix?.trim(), accessKey: d.accessKey?.trim(), secretKey: d.secretKey };
 			case 'sftp':
 				return { type: 'sftp', host: d.host?.trim(), port: Number(d.port) || 22, user: d.user?.trim(), path: d.path?.trim() };
+			case 'titanos': {
+				const code = decodeCode(pairCode);
+				return { type: 'rest', url: code?.url, username: code?.user, password: code?.password };
+			}
 			default:
 				return { type: 'rest', url: d.url?.trim(), username: d.username?.trim(), password: d.password };
 		}
@@ -181,6 +200,11 @@
 		if (!draft) return;
 		busy = true;
 		error = null;
+		if (draft.destination.type === 'titanos' && !decodeCode(pairCode)) {
+			error = { text: t('backup.pairCodeInvalid'), detail: '' };
+			busy = false;
+			return;
+		}
 		const chosen = draft.sources.filter((name) => modes[name] === 'only' && !(draft!.folders?.[name]?.length));
 		if (chosen.length > 0) {
 			error = { text: t('backup.noFolderChosen', { share: chosen[0] }), detail: '' };
@@ -311,6 +335,7 @@
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if overview}
+	<TargetPanel />
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
 		{@const state = view.state}
@@ -409,7 +434,7 @@
 		<fieldset>
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each ['local', 's3', 'sftp', 'rest'] as const as kind (kind)}
+				{#each ['local', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
 					<button type="button" role="radio" aria-checked={draft.destination.type === kind} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
 				{/each}
 			</div>
@@ -445,6 +470,12 @@
 					<label><span>{t('backup.publicKey')}</span><textarea class="field mono key" readonly rows="2" onfocus={(event) => event.currentTarget.select()}>{publicKey}</textarea></label>
 					<p class="muted">{t('backup.publicKeyHint')}</p>
 				{/if}
+			{:else if draft.destination.type === 'titanos'}
+				<label class="block"><span>{t('backup.pairCode')}</span>
+					<textarea class="field mono" rows="3" bind:value={pairCode} spellcheck="false" autocomplete="off" placeholder="titanos-backup:…" required></textarea>
+				</label>
+				{#if pairing}<p class="notice-ok">{t('backup.pairCodeOk', { url: pairing.url })}</p>{:else if pairCode.trim()}<p class="notice-warn">{t('backup.pairCodeInvalid')}</p>{/if}
+				<p class="muted">{t('backup.pairCodeHint')}</p>
 			{:else}
 				<div class="row">
 					<label class="wide"><span>{t('backup.restUrl')}</span><input class="field mono" type="url" bind:value={draft.destination.url} placeholder="https://backup.example.org:8000/nas" spellcheck="false" required /></label>
