@@ -76,6 +76,12 @@ func load(store *config.Store) (tls.Certificate, error) {
 	if time.Until(leaf.NotAfter) < renewBefore {
 		return tls.Certificate{}, errors.New("certificate expires soon")
 	}
+	if leaf.Subject.SerialNumber == "" {
+		// Made before names were unique: Firefox and Chrome may take an
+		// earlier TitanOS certificate of the same name for its issuer and
+		// refuse it without a way to proceed. Safari does not.
+		return tls.Certificate{}, errors.New("certificate name not unique")
+	}
 	return cert, nil
 }
 
@@ -90,8 +96,12 @@ func generate(hostname string, now time.Time) (certPEM, keyPEM []byte, err error
 	}
 
 	template := &x509.Certificate{
-		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: hostname, Organization: []string{"TitanOS"}},
+		SerialNumber: serial,
+		// Every certificate gets a name of its own. A browser that saw a
+		// certificate of another TitanOS (or of this NAS before a new stick)
+		// would otherwise look for the issuer under the same name, find the
+		// old certificate and reject the new one as wrongly signed.
+		Subject:               pkix.Name{CommonName: hostname, Organization: []string{"TitanOS"}, SerialNumber: fmt.Sprintf("%032x", serial)},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(validity),
 		KeyUsage:              x509.KeyUsageDigitalSignature,

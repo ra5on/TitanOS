@@ -62,7 +62,14 @@ func TestValidation(t *testing.T) {
 		share Share
 		want  error
 	}{
-		"upper case":             {Share{Name: "Fotos", Volume: "data"}, ErrInvalidName},
+		"Samba variable":         {Share{Name: "fotos %U", Volume: "data"}, ErrInvalidName},
+		"Samba section end":      {Share{Name: "fotos]", Volume: "data"}, ErrInvalidName},
+		"hidden folder":          {Share{Name: ".titanos", Volume: "data"}, ErrInvalidName},
+		"leading blank":          {Share{Name: " Fotos", Volume: "data"}, ErrInvalidName},
+		"trailing dot":           {Share{Name: "Fotos.", Volume: "data"}, ErrInvalidName},
+		"Windows reserved":       {Share{Name: "a:b", Volume: "data"}, ErrInvalidName},
+		"too long":               {Share{Name: strings.Repeat("ä", 33), Volume: "data"}, ErrInvalidName},
+		"samba section any case": {Share{Name: "Global", Volume: "data"}, ErrInvalidName},
 		"path in name":           {Share{Name: "../etc", Volume: "data"}, ErrInvalidName},
 		"samba section":          {Share{Name: "global", Volume: "data"}, ErrInvalidName},
 		"unknown volume":         {Share{Name: "fotos", Volume: "nope"}, ErrUnknownVolume},
@@ -79,6 +86,19 @@ func TestValidation(t *testing.T) {
 	}
 	if len(m.List()) != 0 {
 		t.Errorf("rejected shares were stored: %v", m.List())
+	}
+}
+
+func TestNamesWithCapitalsAndBlanks(t *testing.T) {
+	m, _ := newTestManager(t)
+	for _, name := range []string{"Fotos 2024", "Musik", "Büro-Daten", "a.b_c", strings.Repeat("ä", 32)} {
+		if err := m.Create(Share{Name: name, Volume: "data"}, volumes, users); err != nil {
+			t.Errorf("%q: %v", name, err)
+		}
+	}
+	// SMB clients do not tell "Musik" and "musik" apart.
+	if err := m.Create(Share{Name: "musik", Volume: "data"}, volumes, users); !errors.Is(err, ErrExists) {
+		t.Errorf("same name in other case: %v", err)
 	}
 }
 
@@ -189,6 +209,13 @@ func TestRenderExportsAndPasswords(t *testing.T) {
 	// Whole volumes are never exported, only the folders of shares.
 	if strings.Contains(exports, "crossmnt") || strings.Contains(exports, "/mnt") {
 		t.Errorf("exports reach beyond the shares:\n%s", exports)
+	}
+	spaced := renderExports([]Share{{Name: "Fotos 2024", Volume: "data", NFS: NFS{Enabled: true, Clients: []string{"tv.lan"}}}}, "/srv/nfs")
+	if !strings.Contains(spaced, "\n/srv/nfs/Fotos\\0402024 tv.lan(") {
+		t.Errorf("blank not escaped:\n%s", spaced)
+	}
+	if got := parseMounts("/dev/md0 /srv/nfs/Fotos\\0402024 ext4 rw 0 0\n"); !got["/srv/nfs/Fotos 2024"] {
+		t.Errorf("mount point with blank not read: %v", got)
 	}
 	if none := renderExports([]Share{{Name: "privat", Volume: "data", SMB: true}}, "/srv/nfs"); strings.Contains(none, "/srv/nfs") {
 		t.Errorf("nothing is exported, yet:\n%s", none)
