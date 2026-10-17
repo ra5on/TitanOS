@@ -95,11 +95,11 @@ def check_immich(url,restart):
 
 def run():
     if os.environ.get('GITHUB_ACTIONS')!='true':raise SystemExit('Run only on an ephemeral GitHub Actions runner; use functions with an isolated NAS test harness locally.')
-    repo=Path(__file__).resolve().parents[1]
+    here=Path(__file__).resolve().parent
     with tempfile.TemporaryDirectory(prefix='titanos-apps-') as temp:
         for app,container_port,test in [('ollama',8080,check_ollama),('immich',2283,check_immich)]:
             directory=Path(temp)/app;directory.mkdir(mode=0o700)
-            rendered=json.loads(subprocess.check_output(['node',str(repo/'scripts/native-apps-render.mjs'),app],text=True))
+            rendered=json.loads(subprocess.check_output(['node',str(here/'native-apps-render.mjs'),app],text=True))
             (directory/'compose.yaml').write_text(rendered['compose'])
             secret=directory/'.env';secret.write_text(''.join(k+'='+v+'\n' for k,v in rendered['env'].items()));secret.chmod(0o600)
             # Test services listen only on loopback, at an ephemeral port.

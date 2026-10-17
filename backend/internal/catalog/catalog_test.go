@@ -54,26 +54,82 @@ func zipFile(files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func TestBuiltinCatalog(t *testing.T) {
+// officialServer serves a rebuilt archive of the official repository.
+func officialServer(t *testing.T, files map[string]string) (*httptest.Server, *int) {
+	t.Helper()
+	fetched := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ra5on/TitanOS-Apps/archive/HEAD.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"o1"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		fetched++
+		w.Header().Set("ETag", `"o1"`)
+		w.Write(tarball(files))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, &fetched
+}
+
+func TestOfficialCatalog(t *testing.T) {
+	srv, fetched := officialServer(t, map[string]string{
+		"TitanOS-Apps-abc/beispiel/compose.yaml": withMeta,
+		"TitanOS-Apps-abc/immich/LICENSE":        "AGPL",
+		"TitanOS-Apps-abc/README.md":             "hi",
+	})
 	m := NewManager(config.Open(t.TempDir()))
+	m.SetOfficialURL(srv.URL + "/ra5on/TitanOS-Apps")
+	m.Load()
+
+	// Before the first fetch the store is empty, without an error.
 	sources, apps := m.Status()
-	if len(sources) != 1 || !sources[0].Builtin || sources[0].Format != "titanos" || sources[0].Count != len(apps) {
-		t.Fatalf("sources = %+v", sources)
+	if len(sources) != 1 || !sources[0].Builtin || sources[0].ID != BuiltinID || sources[0].Count != 0 || sources[0].Error != "" || len(apps) != 0 {
+		t.Fatalf("before the fetch: %+v, %d apps", sources, len(apps))
 	}
-	if len(apps) < 5 {
-		t.Fatalf("only %d built-in apps", len(apps))
+
+	m.Refresh(context.Background())
+	sources, apps = m.Status()
+	if !sources[0].Builtin || sources[0].Format != "titanos" || sources[0].Count != 1 || sources[0].Updated.IsZero() || len(apps) != 1 {
+		t.Fatalf("after the fetch: %+v, %d apps", sources, len(apps))
 	}
-	for _, app := range apps {
-		if app.Name == app.ID || app.Category == "" || app.Image == "" || app.Description["de"] == "" || app.Description["en"] == "" {
-			t.Errorf("incomplete template: %+v", app)
-		}
-		compose, err := m.Compose(BuiltinID, app.ID)
-		if err != nil || !strings.Contains(compose, "services:") {
-			t.Errorf("Compose(%s) = %v", app.ID, err)
-		}
+	app := apps[0]
+	if app.Source != BuiltinID || app.Name != "Beispiel" || app.Description["de"] == "" || app.Description["en"] == "" {
+		t.Errorf("template: %+v", app)
+	}
+	if compose, err := m.Compose(BuiltinID, app.ID); err != nil || compose != withMeta {
+		t.Errorf("Compose = %q, %v", compose, err)
 	}
 	if _, err := m.Compose(BuiltinID, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown app: %v", err)
+	}
+	if err := m.Remove(BuiltinID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("removing the official catalog: %v", err)
+	}
+
+	// An unchanged archive is not sent again; a lost connection keeps the apps.
+	m.Refresh(context.Background())
+	if *fetched != 1 {
+		t.Errorf("archive sent %d times", *fetched)
+	}
+	srv.Close()
+	m.Refresh(context.Background())
+	sources, apps = m.Status()
+	if sources[0].Error != "unreachable" || len(apps) != 1 {
+		t.Errorf("unreachable: %+v, %d apps", sources[0], len(apps))
+	}
+}
+
+func TestOfficialCatalogOffline(t *testing.T) {
+	srv, _ := officialServer(t, nil)
+	srv.Close()
+	m := NewManager(config.Open(t.TempDir()))
+	m.SetOfficialURL(srv.URL + "/ra5on/TitanOS-Apps")
+	m.Refresh(context.Background())
+	sources, apps := m.Status()
+	if sources[0].Error != "unreachable" || len(apps) != 0 {
+		t.Errorf("offline: %+v, %d apps", sources[0], len(apps))
 	}
 }
 
@@ -183,6 +239,7 @@ func TestSources(t *testing.T) {
 
 	store := config.Open(t.TempDir())
 	m := NewManager(store)
+	m.SetOfficialURL(srv.URL + "/missing")
 	ctx := context.Background()
 	if err := m.Add(ctx, "", srv.URL+"/forge/apps"); !errors.Is(err, ErrNotLoaded) {
 		t.Fatalf("before Load: %v", err)
@@ -190,7 +247,6 @@ func TestSources(t *testing.T) {
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}
-	builtin := len(m.builtin.apps)
 
 	for address, want := range map[string]error{
 		"ftp://example.org/apps":    ErrInvalidURL,
@@ -212,7 +268,7 @@ func TestSources(t *testing.T) {
 		t.Errorf("duplicate: %v", err)
 	}
 	sources, apps := m.Status()
-	if len(sources) != 5 || len(apps) != builtin+4 {
+	if len(sources) != 5 || len(apps) != 4 {
 		t.Fatalf("%d sources, %d apps", len(sources), len(apps))
 	}
 	single := sources[4]
@@ -229,20 +285,21 @@ func TestSources(t *testing.T) {
 
 	// Sources survive a restart; their apps are fetched again.
 	again := NewManager(store)
+	again.SetOfficialURL(srv.URL + "/missing")
 	if err := again.Load(); err != nil {
 		t.Fatal(err)
 	}
-	if sources, apps := again.Status(); len(sources) != 5 || len(apps) != builtin {
+	if sources, apps := again.Status(); len(sources) != 5 || len(apps) != 0 {
 		t.Fatalf("after a restart: %d sources, %d apps", len(sources), len(apps))
 	}
 	again.Refresh(ctx)
-	if _, apps := again.Status(); len(apps) != builtin+4 {
+	if _, apps := again.Status(); len(apps) != 4 {
 		t.Errorf("after the refresh: %d apps", len(apps))
 	}
 	// A source that did not change is not sent again.
 	before := full
 	again.Refresh(ctx)
-	if sources, apps := again.Status(); full != before || len(apps) != builtin+4 || sources[1].Error != "" || sources[1].Count != 1 {
+	if sources, apps := again.Status(); full != before || len(apps) != 4 || sources[1].Error != "" || sources[1].Count != 1 {
 		t.Errorf("unchanged source: fetched %d times more, %+v", full-before, sources[1])
 	}
 
@@ -250,17 +307,14 @@ func TestSources(t *testing.T) {
 	srv.Close()
 	again.Refresh(ctx)
 	sources, apps = again.Status()
-	if len(apps) != builtin+4 || sources[1].Error != "unreachable" || sources[1].Count != 1 {
+	if len(apps) != 4 || sources[1].Error != "unreachable" || sources[1].Count != 1 {
 		t.Errorf("unreachable source: %+v, %d apps", sources[1], len(apps))
 	}
 
 	if err := again.Remove(sources[1].ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := again.Remove(BuiltinID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("removing the built-in catalog: %v", err)
-	}
-	if sources, apps := again.Status(); len(sources) != 4 || len(apps) != builtin+3 {
+	if sources, apps := again.Status(); len(sources) != 4 || len(apps) != 3 {
 		t.Errorf("after removing: %d sources, %d apps", len(sources), len(apps))
 	}
 }
