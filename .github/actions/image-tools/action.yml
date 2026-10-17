@@ -19,7 +19,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools fdisk kmod openssh-client smbclient gcc libc6-dev
+        sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools fdisk kmod openssh-client smbclient gcc libc6-dev restic
         # The version the image is developed with.
         python3 -m venv "$RUNNER_TEMP/mkosi"
         "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'

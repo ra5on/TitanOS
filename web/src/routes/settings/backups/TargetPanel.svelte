@@ -153,11 +153,15 @@
 {/if}
 
 <style>
-	.target { margin-bottom: var(--gap); }
-	.head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+	.target { margin-bottom: var(--gap); padding: var(--tile-pad); overflow-wrap: anywhere; }
+	.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
 	.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.8rem 1.2rem; margin: 0.6rem 0; }
 	.source { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; padding: 0.4rem 0; border-top: 1px solid var(--border); }
 	.source .name { min-width: 8rem; }
+	.narrow { display: grid; gap: 0.3rem; width: min(100%, 20rem); min-width: 0; }
+	.narrow .field { width: 100%; min-width: 0; }
+	.check { display: flex; align-items: center; gap: 0.5rem; }
+	.check input { flex-shrink: 0; }
 	h3 { margin: 1rem 0 0.3rem; font-size: 0.95rem; }
 	textarea { width: 100%; box-sizing: border-box; }
 </style>
