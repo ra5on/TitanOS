@@ -104,12 +104,19 @@ type Job struct {
 	Sources     []string    `json:"sources"`
 	Destination Destination `json:"destination"`
 	Enabled     bool        `json:"enabled"`
-	// Every is daily or weekly, at Time (HH:MM); Weekday (0 = Sunday)
-	// counts for weekly.
-	Every   string `json:"every"`
-	Weekday int    `json:"weekday"`
-	Time    string `json:"time"`
-	Keep    Keep   `json:"keep"`
+	// Every is hourly, daily, weekly or monthly; see schedule.go. Time,
+	// Weekday (0 = Sunday) are the first time and the one weekday; the lists
+	// carry more of them. WindowFrom and WindowTo limit when runs start.
+	Every      string   `json:"every"`
+	Interval   int      `json:"interval,omitempty"`
+	Weekday    int      `json:"weekday"`
+	Weekdays   []int    `json:"weekdays,omitempty"`
+	MonthDay   int      `json:"monthDay,omitempty"`
+	Time       string   `json:"time"`
+	Times      []string `json:"times,omitempty"`
+	WindowFrom string   `json:"windowFrom,omitempty"`
+	WindowTo   string   `json:"windowTo,omitempty"`
+	Keep       Keep     `json:"keep"`
 	// Password encrypts the backup. It is made once and never changes.
 	Password string `json:"password,omitempty"`
 }
@@ -242,8 +249,8 @@ func check(job Job, shares []Source, volumes []string) error {
 		}
 		sourceVolumes = append(sourceVolumes, shares[at].Volume)
 	}
-	if job.Every != "daily" && job.Every != "weekly" || job.Weekday < 0 || job.Weekday > 6 || !clockForm.MatchString(job.Time) {
-		return invalid("schedule")
+	if err := checkSchedule(job); err != nil {
+		return err
 	}
 	for _, count := range []int{job.Keep.Daily, job.Keep.Weekly, job.Keep.Monthly} {
 		if count < 0 || count > 999 {
@@ -300,6 +307,8 @@ type View struct {
 	Job       Job             `json:"job"`
 	SecretSet map[string]bool `json:"secretSet"`
 	State     State           `json:"state"`
+	// Next is when the job runs next; empty if it is off.
+	Next *time.Time `json:"next"`
 }
 
 // List returns the jobs with what is known about their runs.
@@ -310,7 +319,11 @@ func (m *Manager) List() []View {
 	views := []View{}
 	for _, job := range jobs {
 		shown, set := withoutSecrets(job)
-		views = append(views, View{Job: shown, SecretSet: set, State: m.state(job)})
+		view := View{Job: shown, SecretSet: set, State: m.state(job)}
+		if next, ok := job.NextRun(m.now()); ok {
+			view.Next = &next
+		}
+		views = append(views, view)
 	}
 	return views
 }
@@ -925,29 +938,6 @@ func (m *Manager) Restore(id, snapshot, volume string) (string, error) {
 		return err
 	})
 	return target, err
-}
-
-// due reports whether a job should run now: its time of today (or of its
-// weekday) has come and it has not run since.
-func due(job Job, state State, now time.Time) bool {
-	if !job.Enabled || state.Running {
-		return false
-	}
-	var hour, minute int
-	fmt.Sscanf(job.Time, "%d:%d", &hour, &minute)
-	at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
-	if job.Every == "weekly" {
-		at = at.AddDate(0, 0, -((int(now.Weekday()) - job.Weekday + 7) % 7))
-	}
-	if now.Before(at) {
-		// Not yet today; the turn before this one may still be owed.
-		if job.Every == "weekly" {
-			at = at.AddDate(0, 0, -7)
-		} else {
-			at = at.AddDate(0, 0, -1)
-		}
-	}
-	return state.LastRun == nil || state.LastRun.Before(at)
 }
 
 // Run starts the jobs when their time has come, until ctx is done. A NAS
