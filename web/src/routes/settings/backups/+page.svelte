@@ -4,6 +4,7 @@
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import FolderTree from './FolderTree.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Kind = 'local' | 's3' | 'sftp' | 'rest';
@@ -24,7 +25,7 @@
 		username?: string;
 		password?: string;
 	};
-	type Job = { id: string; sources: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
+	type Job = { id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
 	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string };
 	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
@@ -69,6 +70,7 @@
 		isNew = true;
 		secretSet = {};
 		draft = { id: '', sources: [], destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', interval: 6, weekday: 0, weekdays: [1], monthDay: 1, time: '02:30', times: ['02:30'], keep: { daily: 7, weekly: 4, monthly: 6 } };
+		loadSelection(draft);
 	}
 
 	function edit(view: View) {
@@ -82,7 +84,42 @@
 		draft.monthDay ||= 1;
 		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
 		if (!draft.times?.length) draft.times = [draft.time];
+		loadSelection(draft);
 		if (draft.destination.type === 'sftp') showKey();
+	}
+
+	type Mode = 'whole' | 'all' | 'only';
+	const EXTRAS = ['appdata', 'vms', 'config'] as const;
+	/** Per share: all of it, or with folders left out, or only some folders. */
+	let modes = $state<Record<string, Mode>>({});
+	let patterns = $state('');
+
+	function loadSelection(job: Job) {
+		modes = {};
+		for (const name of job.sources) {
+			modes[name] = job.folders?.[name]?.length ? 'only' : job.skip?.some((skip) => skip.startsWith(`${name}/`)) ? 'all' : 'whole';
+		}
+		patterns = (job.patterns ?? []).join('\n');
+	}
+
+	function setMode(name: string, mode: Mode) {
+		if (!draft) return;
+		modes[name] = mode;
+		// What belongs to the other way of choosing is dropped.
+		if (mode !== 'only' && draft.folders) delete draft.folders[name];
+		if (mode !== 'all' && draft.skip) draft.skip = draft.skip.filter((skip) => !skip.startsWith(`${name}/`));
+	}
+
+	function setFolders(name: string, folders: string[], skip: string[]) {
+		if (!draft) return;
+		draft.folders = { ...draft.folders, [name]: folders };
+		draft.skip = skip;
+	}
+
+	function toggleExtra(extra: string) {
+		if (!draft) return;
+		const list = draft.extras ?? [];
+		draft.extras = list.includes(extra) ? list.filter((e) => e !== extra) : [...list, extra];
 	}
 
 	function toggleDay(day: number) {
@@ -101,7 +138,13 @@
 
 	function toggleSource(name: string) {
 		if (!draft) return;
-		draft.sources = draft.sources.includes(name) ? draft.sources.filter((source) => source !== name) : [...draft.sources, name];
+		const on = !draft.sources.includes(name);
+		draft.sources = on ? [...draft.sources, name] : draft.sources.filter((source) => source !== name);
+		if (on) modes[name] = 'whole';
+		else {
+			setMode(name, 'whole');
+			delete modes[name];
+		}
 	}
 
 	async function showKey() {
@@ -138,9 +181,17 @@
 		if (!draft) return;
 		busy = true;
 		error = null;
+		const chosen = draft.sources.filter((name) => modes[name] === 'only' && !(draft!.folders?.[name]?.length));
+		if (chosen.length > 0) {
+			error = { text: t('backup.noFolderChosen', { share: chosen[0] }), detail: '' };
+			busy = false;
+			return;
+		}
+		const folders = Object.fromEntries(Object.entries(draft.folders ?? {}).filter(([name, list]) => modes[name] === 'only' && list.length > 0));
+		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
 		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
 		const weekdays = [...(draft.weekdays ?? [])].sort();
-		const job = { ...draft, id: draft.id.trim().toLowerCase(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
+		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim().toLowerCase(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
 			overview = isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job);
 			const created = isNew ? job : null;
@@ -325,11 +376,35 @@
 		{/if}
 		<fieldset>
 			<legend>{t('backup.sources')}</legend>
+			{#each overview.shares as share (share.name)}
+				<div class="source">
+					<div class="row">
+						<label class="check"><input type="checkbox" checked={draft.sources.includes(share.name)} onchange={() => toggleSource(share.name)} /><span class="mono">{share.name}</span></label>
+						{#if draft.sources.includes(share.name)}
+							<select class="field narrow" aria-label={t('backup.modeOf', { share: share.name })} value={modes[share.name] ?? 'whole'} onchange={(e) => setMode(share.name, e.currentTarget.value as Mode)}>
+								<option value="whole">{t('backup.mode.whole')}</option>
+								<option value="all">{t('backup.mode.all')}</option>
+								<option value="only">{t('backup.mode.only')}</option>
+							</select>
+						{/if}
+					</div>
+					{#if draft.sources.includes(share.name) && modes[share.name] && modes[share.name] !== 'whole'}
+						<p class="muted">{t(modes[share.name] === 'only' ? 'backup.onlyHint' : 'backup.allHint')}</p>
+						<FolderTree share={share.name} mode={modes[share.name] as 'all' | 'only'} folders={draft.folders?.[share.name] ?? []} skip={draft.skip ?? []} onchange={(folders, skip) => setFolders(share.name, folders, skip)} />
+					{/if}
+				</div>
+			{/each}
+			<p class="legend-sub">{t('backup.extras')}</p>
 			<div class="row">
-				{#each overview.shares as share (share.name)}
-					<label class="check"><input type="checkbox" checked={draft.sources.includes(share.name)} onchange={() => toggleSource(share.name)} /><span class="mono">{share.name}</span></label>
+				{#each EXTRAS as extra (extra)}
+					<label class="check"><input type="checkbox" checked={draft.extras?.includes(extra)} onchange={() => toggleExtra(extra)} /><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label>
 				{/each}
 			</div>
+			{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
+			<label class="block"><span>{t('backup.patterns')}</span>
+				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
+			</label>
+			<p class="muted">{t('backup.patternsHint')}</p>
 		</fieldset>
 		<fieldset>
 			<legend>{t('backup.destination')}</legend>
@@ -450,7 +525,7 @@
 		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 		<div class="actions">
 			<button type="button" class="btn" onclick={() => ((draft = null), (error = null))} disabled={busy}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={busy || draft.sources.length === 0}>{isNew ? t('backup.create') : t('notify.save')}</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || (draft.sources.length === 0 && !draft.extras?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button>
 		</div>
 	</form>
 {/if}
@@ -678,4 +753,7 @@
 	}
 	.days { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 	.inline { display: flex; align-items: center; gap: 0.4rem; }
+	.source { margin-bottom: 0.6rem; }
+	.legend-sub { margin: 0.8rem 0 0.3rem; font-weight: 600; }
+	.block { display: grid; gap: 0.3rem; margin-top: 0.6rem; }
 </style>
