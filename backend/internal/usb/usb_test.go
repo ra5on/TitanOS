@@ -145,3 +145,34 @@ func TestPlugNotice(t *testing.T) {
 		t.Errorf("plugged = %v", plugged)
 	}
 }
+
+func TestBackupNeverWritesIntoUnverifiedMount(t *testing.T) {
+	m, f := newTest(t)
+	ctx := context.Background()
+	work := func(*os.Root) error { t.Fatal("unverified mount was writable"); return nil }
+	if err := m.WithMounted(ctx, "missing", work); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	m.Disabled = true
+	if err := m.WithMounted(ctx, "AAAA-BBBB", work); !errors.Is(err, ErrDisabled) {
+		t.Fatal(err)
+	}
+	m.Disabled = false
+	if err := m.Mount(ctx, "AAAA-BBBB"); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(m.mountsFile, []byte(*f.mounts), 0600)
+	// A textual mount listing alone is not evidence that the directory is a
+	// mounted filesystem. The callback must never receive this ordinary folder.
+	if err := m.WithMounted(ctx, "AAAA-BBBB", work); err == nil {
+		t.Fatal("ordinary directory accepted")
+	}
+	m.operation.Lock()
+	if err := m.Eject(ctx, "AAAA-BBBB"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	if err := m.Mount(ctx, "AAAA-BBBB"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	m.operation.Unlock()
+}

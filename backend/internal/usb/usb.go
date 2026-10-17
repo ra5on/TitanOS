@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/run"
@@ -99,7 +100,8 @@ type Manager struct {
 	// OnPlug is told of each drive that appeared since the last look.
 	OnPlug func(Device)
 
-	mu sync.Mutex
+	operation sync.Mutex
+	mu        sync.Mutex
 	// seen are the drives of the last look; nil until there was one.
 	seen map[string]bool
 }
@@ -205,10 +207,18 @@ func (m *Manager) find(ctx context.Context, id string) (Device, error) {
 	if err != nil {
 		return Device{}, err
 	}
+	var selected *Device
 	for _, d := range devices {
 		if d.ID == id {
-			return d, nil
+			if selected != nil {
+				return Device{}, fmt.Errorf("ambiguous USB filesystem UUID")
+			}
+			copy := d
+			selected = &copy
 		}
+	}
+	if selected != nil {
+		return *selected, nil
 	}
 	return Device{}, ErrNotFound
 }
@@ -248,6 +258,14 @@ func (m *Manager) Dir(name string) (string, bool) {
 // Mount mounts a drive for browsing. The mount cannot run programs, make
 // device files or use set-uid files from the drive.
 func (m *Manager) Mount(ctx context.Context, id string) error {
+	if !m.operation.TryLock() {
+		return ErrBusy
+	}
+	defer m.operation.Unlock()
+	return m.mount(ctx, id)
+}
+
+func (m *Manager) mount(ctx context.Context, id string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -277,6 +295,10 @@ func (m *Manager) Mount(ctx context.Context, id string) error {
 
 // Eject writes out what is waiting and unmounts a drive.
 func (m *Manager) Eject(ctx context.Context, id string) error {
+	if !m.operation.TryLock() {
+		return ErrBusy
+	}
+	defer m.operation.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -362,4 +384,59 @@ func (m *Manager) look(ctx context.Context) {
 			m.OnPlug(d)
 		}
 	}
+}
+
+// WithMounted opens the selected filesystem, never its empty mount directory.
+// The open root pins that filesystem even if an external unmount is attempted.
+// Explicitly configured backup jobs may mount their target; ejection is blocked
+// while copying. Drives are left mounted for browsing and safe manual ejection.
+func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root) error) error {
+	if m.Disabled {
+		return ErrDisabled
+	}
+	m.operation.Lock()
+	defer m.operation.Unlock()
+	d, err := m.find(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !d.Mounted {
+		if err := m.mount(ctx, id); err != nil {
+			return err
+		}
+		d, err = m.find(ctx, id)
+		if err != nil {
+			return err
+		}
+	}
+	if !d.Mounted {
+		return ErrNotMounted
+	}
+	root, err := os.OpenRoot(d.Dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	// Recheck after opening: refuse a vanished/replaced mount before any write.
+	again, err := m.find(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !again.Mounted || again.Dir != d.Dir || again.path != d.path {
+		return ErrNotMounted
+	}
+	info, err := root.Stat(".")
+	if err != nil {
+		return err
+	}
+	device, err := os.Stat(d.path)
+	if err != nil {
+		return err
+	}
+	mountedStat, ok := info.Sys().(*syscall.Stat_t)
+	deviceStat, okDevice := device.Sys().(*syscall.Stat_t)
+	if !ok || !okDevice || device.Mode()&os.ModeDevice == 0 || mountedStat.Dev != deviceStat.Rdev {
+		return ErrNotMounted
+	}
+	return work(root)
 }

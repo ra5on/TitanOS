@@ -5,9 +5,9 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
-	type Settings = { enabled: boolean; volume: string; keep: number };
+	type Settings = { enabled: boolean; volume: string; keep: number; schedule: string; time: string; weekday: number };
 	type Backup = { name: string; volume: string; time: string; sizeBytes: number; hostname: string; version: string };
-	type State = { settings: Settings; target: string; lastCheck: string | null; lastError: string; backups: Backup[] };
+	type State = { settings: Settings; target: string; lastCheck: string | null; lastError: string; backups: Backup[]; next: string | null };
 	type Answer = { backup: State; volumes: string[] | null };
 
 	let status = $state<State | null>(null);
@@ -114,6 +114,7 @@
 		<dl>
 			<div><dt>{t('stick.target')}</dt><dd class="mono">{status.target ? `/mnt/${status.target}/.titanos/backups` : '–'}</dd></div>
 			<div><dt>{t('stick.lastCheck')}</dt><dd>{status.lastCheck ? formatDateTime(new Date(status.lastCheck)) : '–'}</dd></div>
+			{#if status.next}<div><dt>{t('stick.next')}</dt><dd>{formatDateTime(new Date(status.next))}</dd></div>{/if}
 			<div><dt>{t('stick.count')}</dt><dd>{status.backups.length}</dd></div>
 		</dl>
 		<div class="actions start">
@@ -124,6 +125,12 @@
 
 	<form class="tile" onsubmit={save}>
 		<h2 class="tile-title">{t('stick.settings')}</h2>
+ <div class="row">
+ <label><span>{t('stick.schedule')}</span><select class="field" bind:value={draft.schedule} onchange={() => { draft!.time ||= '03:00'; }}>
+ <option value="">{t('stick.schedule.off')}</option><option value="daily">{t('stick.schedule.daily')}</option><option value="weekly">{t('stick.schedule.weekly')}</option></select></label>
+ {#if draft.schedule}<label><span>{t('stick.schedule.time')}</span><input class="field" type="time" bind:value={draft.time} required /></label>{/if}
+ {#if draft.schedule === 'weekly'}<label><span>{t('stick.schedule.day')}</span><select class="field" bind:value={draft.weekday}>{#each [1,2,3,4,5,6,0] as const as day}<option value={day}>{t(`backup.weekday.${day}`)}</option>{/each}</select></label>{/if}
+ </div><p class="muted">{t('stick.schedule.hint')}</p>
 		<label class="check"><input type="checkbox" bind:checked={draft.enabled} /><span>{t('stick.enabled')}</span><small>{t('stick.enabledHint')}</small></label>
 		<div class="row">
 			<label class="narrow"><span>{t('stick.volume')}</span>

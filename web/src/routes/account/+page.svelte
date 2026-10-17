@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	// One's own account: password, second factor, logged-in devices.
 	import qrcode from 'qrcode-generator';
 	import { api, ApiError } from '#lib/api.ts';
@@ -105,7 +106,9 @@
 	}
 </script>
 
+
 <h1>{t('account.title')}</h1>
+<SoundSettings />
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 {#if user}
