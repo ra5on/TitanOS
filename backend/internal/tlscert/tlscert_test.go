@@ -2,7 +2,13 @@ package tlscert
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"slices"
 	"testing"
 	"time"
@@ -74,5 +80,61 @@ func TestWithoutStore(t *testing.T) {
 	}
 	if len(cert.Certificate) == 0 {
 		t.Error("no certificate returned")
+	}
+}
+
+func TestNamesAreUnique(t *testing.T) {
+	// Two certificates of the same NAS must not share subject and issuer:
+	// Firefox would take the older one for the issuer of the newer.
+	names := map[string]bool{}
+	for range 2 {
+		certPEM, _, err := generate("nas", time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		block, _ := pem.Decode(certPEM)
+		leaf, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if leaf.Subject.String() != leaf.Issuer.String() || leaf.Subject.CommonName != "nas" {
+			t.Errorf("subject %q, issuer %q", leaf.Subject, leaf.Issuer)
+		}
+		if names[leaf.Subject.String()] {
+			t.Errorf("subject %q used twice", leaf.Subject)
+		}
+		names[leaf.Subject.String()] = true
+	}
+}
+
+func TestReplacesCertificateWithSharedName(t *testing.T) {
+	// A certificate as earlier versions made it: CN=nas, O=TitanOS only.
+	store := config.Open(t.TempDir())
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(42),
+		Subject:      pkix.Name{CommonName: "nas", Organization: []string{"TitanOS"}},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(validity),
+		DNSNames:     []string{"nas"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
+	store.Write(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	store.Write(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+
+	cert, err := LoadOrCreate(store, "nas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(cert.Certificate[0], der) {
+		t.Fatal("certificate with a shared name was kept")
+	}
+	again, err := LoadOrCreate(store, "nas")
+	if err != nil || !bytes.Equal(again.Certificate[0], cert.Certificate[0]) {
+		t.Error("the replacement was not stored and reused")
 	}
 }

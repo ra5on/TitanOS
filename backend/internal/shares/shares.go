@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -94,12 +96,44 @@ var (
 )
 
 var (
-	nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 	// A host name, an address, a network (192.168.1.0/24) or a pattern (*.lan).
 	clientRE = regexp.MustCompile(`^[A-Za-z0-9*][A-Za-z0-9.:/*_-]{0,99}$`)
 	// Names Samba gives a meaning of their own.
 	reservedNames = []string{"global", "homes", "printers", "print", "ipc"}
 )
+
+// maxNameLength is in characters; longer names get cut off in the
+// network view of Windows and in Finder.
+const maxNameLength = 32
+
+// ValidName reports whether a share may be called name. Letters of any
+// language, digits, spaces, "-", "_" and "." are allowed, so "Fotos 2024"
+// works. Left out are characters that Samba, Windows or macOS treat
+// specially in a share name or path ("%" is a Samba variable, "[ ]" end the
+// section in smb.conf, "/ \ : * ? \" < > |" are not allowed by Windows).
+// The name is also the folder on the volume, so it must not start with "."
+// (hidden, and the place of .titanos and .recycle), and Windows drops a
+// blank or "." at the end.
+func ValidName(name string) bool {
+	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxNameLength {
+		return false
+	}
+	if strings.TrimSpace(name) != name || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") || strings.Contains(name, "  ") {
+		return false
+	}
+	for _, r := range name {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(" -_.", r) {
+			return false
+		}
+	}
+	return !slices.ContainsFunc(reservedNames, func(reserved string) bool { return strings.EqualFold(reserved, name) })
+}
+
+// sameName compares like Samba and the SMB clients do: "Fotos" and "fotos"
+// are the same share.
+func sameName(a, b string) bool {
+	return strings.EqualFold(a, b)
+}
 
 // Manager knows the shares and applies them to the system.
 type Manager struct {
@@ -177,7 +211,7 @@ func (m *Manager) save(shares []Share) error {
 
 // normalize checks a share and fills in defaults.
 func normalize(share *Share, volumes, users []string) error {
-	if !nameRE.MatchString(share.Name) || slices.Contains(reservedNames, share.Name) {
+	if !ValidName(share.Name) {
 		return ErrInvalidName
 	}
 	if !slices.Contains(volumes, share.Volume) {
@@ -228,7 +262,7 @@ func (m *Manager) Create(share Share, volumes, users []string) error {
 	if !m.loaded {
 		return ErrNotLoaded
 	}
-	if slices.ContainsFunc(m.shares, func(s Share) bool { return s.Name == share.Name }) {
+	if slices.ContainsFunc(m.shares, func(s Share) bool { return sameName(s.Name, share.Name) }) {
 		return ErrExists
 	}
 	return m.save(append(slices.Clone(m.shares), share))
@@ -639,7 +673,7 @@ func renderExports(shares []Share, root string) string {
 	}
 	sort.Strings(clients)
 	// Read-only, and only a way in: it holds nothing but the mount points.
-	b.WriteString(root)
+	b.WriteString(exportPath(root))
 	for _, client := range clients {
 		fmt.Fprintf(&b, " %s(ro,fsid=0,sync,no_subtree_check,all_squash)", client)
 	}
@@ -648,7 +682,7 @@ func renderExports(shares []Share, root string) string {
 		if !share.NFS.Enabled {
 			continue
 		}
-		b.WriteString(filepath.Join(root, share.Name))
+		b.WriteString(exportPath(filepath.Join(root, share.Name)))
 		for _, client := range share.NFS.Clients {
 			// Every NFS client writes as nobody:users, so that files fit the
 			// share's group whatever user numbers the client has.
@@ -659,17 +693,47 @@ func renderExports(shares []Share, root string) string {
 	return b.String()
 }
 
+// exportPath writes a path for /etc/exports, where a blank would end it:
+// exportfs reads blanks and backslashes as octal escapes, like fstab.
+func exportPath(path string) string {
+	return strings.NewReplacer("\\", `\134`, " ", `\040`, "\t", `\011`).Replace(path)
+}
+
 // mountPoints returns what is mounted right now.
 func mountPoints() map[string]bool {
 	data, _ := os.ReadFile("/proc/self/mounts")
+	return parseMounts(string(data))
+}
+
+// parseMounts reads the mount points from /proc/self/mounts, which writes
+// a blank in a path as \040.
+func parseMounts(data string) map[string]bool {
 	mounts := map[string]bool{}
-	for line := range strings.SplitSeq(string(data), "\n") {
+	for line := range strings.SplitSeq(data, "\n") {
 		if fields := strings.Fields(line); len(fields) >= 2 {
-			mounts[fields[1]] = true
+			mounts[unescapeOctal(fields[1])] = true
 		}
 	}
 	return mounts
 }
+
+func unescapeOctal(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+3 < len(s) && isOctal(s[i+1]) && isOctal(s[i+2]) && isOctal(s[i+3]) {
+			b.WriteByte((s[i+1]-'0')<<6 | (s[i+2]-'0')<<3 | (s[i+3] - '0'))
+			i += 3
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func isOctal(c byte) bool { return c >= '0' && c <= '7' }
 
 // bindShares mounts the folder of every NFS share at <nfsRoot>/<name>.
 func (m *Manager) bindShares(ctx context.Context, shares []Share) error {
