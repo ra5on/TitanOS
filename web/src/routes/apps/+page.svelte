@@ -1,4 +1,5 @@
 <script lang="ts">
+ import AppIcon from '#lib/components/AppIcon.svelte';
 	import { api, ApiError, type AppSource, type AppStore, type CatalogApp, type DockerStatus, type Share } from '#lib/api.ts';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
@@ -185,7 +186,7 @@
 				{#each visible as app (`${app.source}/${app.id}`)}
 					<button type="button" class="tile card" aria-pressed={selected?.id === app.id && selected.source === app.source} onclick={() => (selected = app)}>
 						<span class="card-head">
-							<span class="monogram" style:background="hsl({hue(app)} 45% 42%)" aria-hidden="true">{monogram(app)}</span>
+							<span class="monogram" style:background="hsl({hue(app)} 45% 42%)" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
 							<span class="names"><span class="name">{app.name}</span><span class="muted category">{categoryLabel(categoryOf(app))}</span></span>
 						</span>
 						<span class="description">{describe(app)}</span>
@@ -224,7 +225,7 @@
 		font-size: 0.875rem;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.buttons {

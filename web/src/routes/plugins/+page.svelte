@@ -266,7 +266,7 @@
 		gap: 4px;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.intro {
@@ -304,7 +304,7 @@
 		display: flex;
 		align-items: center;
 		gap: 14px;
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border-width: 2px;
 		color: var(--text);
 		font: inherit;
@@ -384,7 +384,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		padding: 18px 20px;
+		padding: var(--tile-pad);
 		font-size: 0.875rem;
 	}
 	.block {

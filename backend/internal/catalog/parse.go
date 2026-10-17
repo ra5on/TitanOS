@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -55,6 +56,7 @@ type template struct {
 	Services yaml.Node `yaml:"services"`
 	Meta     *struct {
 		Name        string    `yaml:"name"`
+		Icon        string    `yaml:"icon"`
 		Category    string    `yaml:"category"`
 		Description localized `yaml:"description"`
 	} `yaml:"x-titanos"`
@@ -140,6 +142,7 @@ func parse(source string, files map[string]string) ([]App, string, error) {
 		switch {
 		case tpl.Meta != nil:
 			format = "titanos"
+			app.Icon = safeIcon(tpl.Meta.Icon)
 			if name := clip(tpl.Meta.Name, 60); name != "" {
 				app.Name = name
 			}
@@ -185,7 +188,9 @@ func readCasaOS(app *App, meta map[string]yaml.Node) bool {
 		return false
 	}
 	var title, tagline, description localized
-	var category string
+	var category, icon string
+	field("icon", &icon)
+	app.Icon = safeIcon(icon)
 	field("title", &title)
 	field("tagline", &tagline)
 	field("description", &description)
@@ -243,4 +248,14 @@ func MissingDevices(compose string) []string {
 	}
 	sort.Strings(missing)
 	return missing
+}
+
+// Images are browser-fetched URLs, never HTML or server-side requests.
+func safeIcon(value string) string {
+	value = strings.TrimSpace(value)
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || len(value) > 2048 {
+		return ""
+	}
+	return value
 }

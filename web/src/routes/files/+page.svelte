@@ -363,11 +363,11 @@
 {/if}
 
 <style>
- .unfinished { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+ .unfinished { padding: calc(var(--row-pad) + 2px) var(--tile-pad); border-bottom: 1px solid var(--border); }
  .unfinished-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
  .unfinished-row > span { flex: 1; overflow-wrap: anywhere; }
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.layout {

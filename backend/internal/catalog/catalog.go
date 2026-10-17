@@ -84,6 +84,7 @@ type App struct {
 	// has only one text uses the key "".
 	Description map[string]string `json:"description"`
 	// Image is the image of the first service.
+	Icon     string `json:"icon"`
 	Image    string `json:"image"`
 	Services int    `json:"services"`
 

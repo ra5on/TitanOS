@@ -1,3 +1,4 @@
+import { publicURL } from '../app-links.ts';
 // Turns a template from the app store into the fields of the install
 // panel and, with what was entered there, into the compose file of the app.
 
@@ -81,6 +82,7 @@ export type OwnPort = { host: string; container: string; protocol: 'tcp' | 'udp'
 export type Risk = 'privileged' | 'hostNetwork' | 'dockerSocket' | 'rootMount' | 'capabilities';
 
 export type InstallForm = {
+ publicUrl: string;
 	name: string;
 	/** What the template's author wants read before the installation. */
 	tips: Localized;
@@ -100,7 +102,8 @@ type Meta = {
 	tips: Localized;
 	variables: Record<string, { label?: Localized; help?: Localized; placeholder?: unknown; required?: unknown; secret?: unknown; fill?: unknown; from?: unknown } | undefined>;
 	paths: Record<string, { label?: Localized; suggest?: unknown } | undefined>;
-	ports: Record<string, { label?: Localized; webui?: unknown } | undefined>;
+	icon?: string;
+ ports: Record<string, { label?: Localized; webui?: unknown } | undefined>;
 };
 
 function record(value: unknown): Record<string, never> {
@@ -109,7 +112,7 @@ function record(value: unknown): Record<string, never> {
 
 function readMeta(compose: string): Meta {
 	const meta = record((parseDocument(compose).toJS() ?? {})['x-titanos']);
-	return { main: meta.main, tips: meta.tips, variables: record(meta.variables), paths: record(meta.paths), ports: record(meta.ports) };
+	return { icon: meta.icon, main: meta.main, tips: meta.tips, variables: record(meta.variables), paths: record(meta.paths), ports: record(meta.ports) };
 }
 
 const FILLED: Record<string, VarField['fill']> = { TZ: 'timezone', PUID: 'uid', PGID: 'gid' };
@@ -157,7 +160,7 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 	const filled = { timezone: tpl.timezone, uid: String(tpl.uid), gid: String(tpl.gid) };
 
 	const main = typeof meta.main === 'string' && services.includes(meta.main) ? meta.main : services[0];
-	const form: InstallForm = { name, tips: meta.tips, risks: [], missingDevices: [], main, vars: [], paths: [], ports: [], own: { vars: [], paths: [], ports: [] } };
+	const form: InstallForm = { publicUrl: readService(doc, main).publicUrl, name, tips: meta.tips, risks: [], missingDevices: [], main, vars: [], paths: [], ports: [], own: { vars: [], paths: [], ports: [] } };
 	const reserved = new Set<string>();
 	const risks = new Set<Risk>();
 	const content = record(doc.toJS().services);
@@ -292,6 +295,7 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 	};
 	problems.missing = problems.vars.filter(Boolean).length;
 	problems.blocking =
+		(!!form.publicUrl.trim() && !publicURL(form.publicUrl)) ||
 		problems.name !== '' ||
 		problems.missing > 0 ||
 		[...problems.paths, ...problems.ownPaths].includes('invalid') ||
@@ -312,7 +316,12 @@ export function build(tpl: Template, form: InstallForm): { compose: string; env:
 
 	for (const service of serviceNames(doc)) {
 		const entries = readService(doc, service);
-		const templatePorts = entries.ports.map((row) => row.host);
+  if (service === form.main) entries.publicUrl = form.publicUrl;
+  if (service === form.main && typeof meta.icon === 'string') {
+   entries.labels = entries.labels.filter(pair => pair.name !== 'titanos.icon');
+   entries.labels.push({ name: 'titanos.icon', value: meta.icon });
+  }
+  const templatePorts = entries.ports.map((row) => row.host);
 
 		for (const pair of entries.env) {
 			const field = form.vars.find((candidate) => candidate.service === service && candidate.name === pair.name);

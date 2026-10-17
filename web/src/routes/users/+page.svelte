@@ -215,7 +215,7 @@
 		font-size: 0.875rem;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.table {
@@ -228,7 +228,7 @@
 		font-size: 0.875rem;
 	}
 	th {
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border-bottom: 1px solid var(--panel-border);
 		text-align: left;
 		font-size: 0.75rem;
