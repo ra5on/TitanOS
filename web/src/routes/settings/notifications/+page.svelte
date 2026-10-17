@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -85,6 +86,7 @@
 	}
 </script>
 
+
 {#snippet secretNote(channel: Channel)}
 	{#if secretSet[channel]}
 		<button type="button" class="link" onclick={() => toggleClear(channel)}>{clear.includes(channel) ? t('notify.secretRemoved') : t('notify.secretRemove')}</button>
@@ -109,6 +111,7 @@
 	<h1>{t('notify.settingsTitle')}</h1>
 	<p class="muted intro">{t('notify.intro')}</p>
 </div>
+<SoundSettings />
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 

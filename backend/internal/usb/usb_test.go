@@ -22,10 +22,11 @@ const listing = `{"blockdevices":[
 ]}`
 
 type fake struct {
-	t      *testing.T
-	calls  []string
-	mounts *string
-	fail   string
+	t       *testing.T
+	calls   []string
+	mounts  *string
+	fail    string
+	listing string
 }
 
 func (f *fake) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
@@ -36,6 +37,9 @@ func (f *fake) Run(ctx context.Context, stdin, name string, args ...string) (str
 	}
 	switch name {
 	case "lsblk":
+		if f.listing != "" {
+			return f.listing, nil
+		}
 		return listing, nil
 	case "mount":
 		dir := args[len(args)-1]
@@ -143,5 +147,77 @@ func TestPlugNotice(t *testing.T) {
 	m.look(context.Background())
 	if len(plugged) != 2 {
 		t.Errorf("plugged = %v", plugged)
+	}
+}
+
+func TestBackupNeverWritesIntoUnverifiedMount(t *testing.T) {
+	m, f := newTest(t)
+	ctx := context.Background()
+	work := func(*os.Root) error { t.Fatal("unverified mount was writable"); return nil }
+	if err := m.WithMounted(ctx, "missing", work); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	m.Disabled = true
+	if err := m.WithMounted(ctx, "AAAA-BBBB", work); !errors.Is(err, ErrDisabled) {
+		t.Fatal(err)
+	}
+	m.Disabled = false
+	if err := m.Mount(ctx, "AAAA-BBBB"); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(m.mountsFile, []byte(*f.mounts), 0600)
+	// A textual mount listing alone is not evidence that the directory is a
+	// mounted filesystem. The callback must never receive this ordinary folder.
+	if err := m.WithMounted(ctx, "AAAA-BBBB", work); err == nil {
+		t.Fatal("ordinary directory accepted")
+	}
+	m.operation.Lock()
+	if err := m.Eject(ctx, "AAAA-BBBB"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	if err := m.Mount(ctx, "AAAA-BBBB"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	m.operation.Unlock()
+}
+
+func TestWholeDiskPartitionAliasListedOnce(t *testing.T) {
+	var devices []Device
+	disk := node{Name: "/dev/sdb", Type: "disk", Transport: "usb", FSType: "vfat", UUID: "1234-ABCD", Size: 1000, Children: []node{{Name: "/dev/sdb1", Type: "part", FSType: "vfat", UUID: "1234-ABCD", Size: 1000}}}
+	collect(disk, "", &devices, nil)
+	if len(devices) != 1 || devices[0].path != "/dev/sdb1" {
+		t.Fatalf("aliases: %+v", devices)
+	}
+	disk.Children[0].Size = 500
+	devices = nil
+	collect(disk, "", &devices, nil)
+	if len(devices) != 2 {
+		t.Fatal("nonidentical filesystems were silently collapsed")
+	}
+}
+
+func TestDuplicateUUIDOnDifferentDrivesRejected(t *testing.T) {
+	m, f := newTest(t)
+	f.listing = strings.ReplaceAll(listing, "NTFS0000000000AA", "AAAA-BBBB")
+	if _, err := m.find(context.Background(), "AAAA-BBBB"); err == nil {
+		t.Fatal("duplicate UUID accepted")
+	}
+}
+
+func TestMountedIdentitySupportsBtrfsVirtualDevice(t *testing.T) {
+	const info = "50 30 0:42 / /run/titanos-usb/backup rw - btrfs /dev/sdb1 rw\n"
+	if !matchesMount(info, "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", "50") {
+		t.Fatal("Btrfs virtual identity rejected")
+	}
+	for _, dev := range []string{"0", "99"} {
+		if matchesMount(info, "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", dev) {
+			t.Fatal("wrong pinned filesystem accepted")
+		}
+	}
+	if matchesMount(info, "/run/titanos-usb/backup", "/dev/sdc1", "btrfs", "50") {
+		t.Fatal("different drive accepted")
+	}
+	if matchesMount("", "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", "50") {
+		t.Fatal("missing mount accepted")
 	}
 }
