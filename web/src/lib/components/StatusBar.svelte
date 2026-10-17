@@ -63,4 +63,5 @@
 			padding: 10px 16px;
 		}
 	}
+ footer span { min-width: 0; overflow-wrap: anywhere; }
 </style>

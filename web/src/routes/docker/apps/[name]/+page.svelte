@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
@@ -146,6 +147,7 @@
 			<label><span>{t('editor.network')}</span>
 				<select class="field" bind:value={form.network} onchange={commit}>{#each NETWORKS as mode (mode)}<option value={mode}>{t(`editor.network.${mode}` as 'editor.network.host')}</option>{/each}{#if !NETWORKS.includes(form.network)}<option value={form.network}>{form.network}</option>{/if}</select>
 			</label>
+			<label><span>{t('editor.publicUrl')}</span><input class="field mono" type="url" bind:value={form.publicUrl} oninput={commit} placeholder="https://app.example.org" spellcheck="false" /><small>{t('editor.publicUrlHint')}</small>{#if form.publicUrl.trim() && !publicURL(form.publicUrl)}<small class="notice-error" role="alert">{t('editor.publicUrlInvalid')}</small>{/if}</label>
 			<label><span>{t('editor.webui')}</span><input class="field mono" type="text" bind:value={form.webui} oninput={commit} placeholder="8096" spellcheck="false" /><small>{t('editor.webuiHint')}</small></label>
 		</div>
 		<label class="check"><input type="checkbox" bind:checked={form.privileged} onchange={commit} /><span>{t('editor.privileged')}</span></label>
@@ -236,7 +238,7 @@
 		text-decoration: none;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.location {
@@ -356,7 +358,7 @@
 	.yaml {
 		min-height: 60vh;
 		height: auto;
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		font-size: 0.8125rem;
 		line-height: 1.55;
 		resize: vertical;
@@ -381,4 +383,9 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
+ @media (max-width: 760px) {
+ .grid { grid-template-columns: minmax(0, 1fr); }
+ .row { flex-wrap: wrap; }
+ .row > label { min-width: 0; flex: 1 1 100%; }
+ }
 </style>

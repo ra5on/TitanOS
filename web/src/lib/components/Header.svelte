@@ -95,8 +95,8 @@
 		display: flex;
 	}
 	.terminal {
-		width: 2.75rem;
-		height: 2.75rem;
+		width: 44px;
+		height: 44px;
 		justify-content: center;
 		display: flex;
 		align-items: center;
@@ -126,7 +126,7 @@
 	.nav-arrow {
 		flex: none;
 		width: 28px;
-		height: 36px;
+		height: 44px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -184,7 +184,7 @@
 	@media (max-width: 480px) {
 		header { gap: 4px; padding: 8px; }
 		.terminal { padding: 0 8px; }
-		.nav-arrow { width: 24px; }
+		.nav-arrow { width: 28px; }
 		.nav-shell, .nav-items { gap: 2px; }
 		nav a { padding-inline: 10px; }
 	}

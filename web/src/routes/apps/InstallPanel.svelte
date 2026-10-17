@@ -1,4 +1,6 @@
 <script lang="ts">
+ import { publicURL } from '#lib/app-links.ts';
+ import AppIcon from '#lib/components/AppIcon.svelte';
 	// Installs an app from a template: everything is filled in, and every
 	// field says where its value comes from.
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
@@ -142,7 +144,7 @@
 
 <aside class="tile" aria-labelledby="install-title" bind:this={panel}>
 	<div class="top">
-		<span class="monogram" style:background="hsl({hue} 45% 42%)" aria-hidden="true">{monogram}</span>
+		<span class="monogram" style:background="hsl({hue} 45% 42%)" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
 		<div class="about">
 			<h2 id="install-title">{t('apps.panelTitle', { name: app.name })}</h2>
 			<span class="muted text">{description}</span>
@@ -193,6 +195,7 @@
 			</div>
 		{:else}
 			<div class="body">
+				<label class="stack"><span>{t('editor.publicUrl')}</span><input class="field mono" type="url" bind:value={form.publicUrl} placeholder="https://app.example.org" spellcheck="false" /><small>{t('editor.publicUrlHint')}</small>{#if form.publicUrl.trim() && !publicURL(form.publicUrl)}<small class="notice-error" role="alert">{t('editor.publicUrlInvalid')}</small>{/if}</label>
 				<label class="stack">
 					<span>{t('apps.name')}</span>
 					<input class="field mono" type="text" bind:value={form.name} oninput={renamed} maxlength="32" autocapitalize="none" spellcheck="false" aria-invalid={problems.name !== ''} />
@@ -532,4 +535,9 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
+ @media (max-width: 760px) {
+ .grid { grid-template-columns: minmax(0, 1fr); }
+ .row { flex-wrap: wrap; }
+
+ }
 </style>

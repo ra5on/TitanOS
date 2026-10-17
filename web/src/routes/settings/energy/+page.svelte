@@ -51,7 +51,7 @@
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 
 <style>
-	h1 { font-size: 1.5rem; font-weight: 600; }
+	h1 { font-size: var(--text-page); font-weight: 600; }
 	form { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 	.tile { width: 100%; max-width: 640px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 10px; }
 	label { font-weight: 600; }

@@ -236,7 +236,7 @@
 		font-size: 0.875rem;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.buttons {
@@ -272,7 +272,7 @@
 		font-size: 0.875rem;
 	}
 	th {
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border-bottom: 1px solid var(--panel-border);
 		text-align: left;
 		font-size: 0.75rem;
@@ -281,7 +281,7 @@
 		white-space: nowrap;
 	}
 	td {
-		padding: 12px 16px;
+		padding: var(--row-pad) var(--tile-pad);
 		border-bottom: 1px solid var(--panel-border);
 		vertical-align: top;
 	}
@@ -330,10 +330,10 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 16px;
-		padding: 18px 20px;
+		padding: var(--tile-pad);
 		border-style: dashed;
 	}
-	.disk-sleep { padding: 18px 20px; }
+	.disk-sleep { padding: var(--tile-pad); }
 	.sleep-copy { display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
 	.sleep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 0.875rem; }
 	.sleep-controls select { width: auto; min-width: 150px; }
