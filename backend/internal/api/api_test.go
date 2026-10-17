@@ -1287,6 +1287,20 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+	// Without the prompt switched off, consoles ask for the password again.
+	var confirmed struct{ Confirmed bool }
+	_, body0 := ts.request("GET", "/api/v1/session/confirmed", nil)
+	if json.Unmarshal(body0, &confirmed); confirmed.Confirmed {
+		t.Error("confirmed without entering the password")
+	}
+	if res, _ := ts.request("PUT", "/api/v1/terminal", map[string]bool{"confirm": false}); res.StatusCode != http.StatusOK {
+		t.Errorf("switching the prompt off: %d", res.StatusCode)
+	}
+	_, body0 = ts.request("GET", "/api/v1/session/confirmed", nil)
+	if json.Unmarshal(body0, &confirmed); !confirmed.Confirmed {
+		t.Error("the prompt is off but the session is not confirmed")
+	}
+	ts.request("PUT", "/api/v1/terminal", map[string]bool{"confirm": true})
 	// The NAS terminal accepts the existing authenticated admin session.
 	if res, body := ts.request("GET", "/api/v1/terminal/shell", nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
 		t.Errorf("NAS shell before confirmation: %d %s", res.StatusCode, body)

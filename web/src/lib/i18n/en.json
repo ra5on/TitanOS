@@ -760,6 +760,8 @@
 	"error.terminal_off": "Terminal and consoles are switched off in the settings.",
 	"settings.terminal": "Allow terminal and consoles",
 	"settings.terminalDesc": "A root shell on the NAS and consoles in containers, for owners and administrators only. The NAS shell opens without another password prompt; guest consoles require confirmation again. Switching this off ends open sessions at once.",
+	"settings.terminalConfirm": "Ask for the password before container consoles",
+	"settings.terminalConfirmDesc": "Also applies to downloading stick backups. Switched off, consoles open without a password, so a stolen login cookie is enough for root access to containers. Only administrators, the 15-minute idle limit and the log remain.",
 	"terminal.shortcut": "Terminal (Ctrl+`)",
 	"vms.title": "Virtual machines",
 	"vms.create": "New VM",

@@ -222,8 +222,7 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target str
 		writeError(w, http.StatusForbidden, "terminal_off", "terminals are switched off in the settings")
 		return
 	}
-	cookie, err := r.Cookie(s.cookieName())
-	if target != "nas" && (err != nil || !s.sessions.Confirmed(cookie.Value)) {
+	if target != "nas" && !s.confirmed(r) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
 		return
 	}
@@ -299,21 +298,31 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target str
 func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{
 		"enabled": s.opts.Terminal.Enabled(),
+		"confirm": s.opts.Terminal.ConfirmRequired(),
 		// Without a shell on the NAS there are container consoles only.
 		"nasShell": !s.opts.Terminal.Disabled,
 	})
 }
 
 func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Enabled bool }
+	var req struct{ Enabled, Confirm *bool }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Terminal.SetEnabled(req.Enabled); err != nil {
-		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
-		return
+	if req.Enabled != nil {
+		if err := s.opts.Terminal.SetEnabled(*req.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+			return
+		}
+		slog.Info("terminals switched", "enabled", *req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
-	slog.Info("terminals switched", "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
+	if req.Confirm != nil {
+		if err := s.opts.Terminal.SetConfirmRequired(*req.Confirm); err != nil {
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+			return
+		}
+		slog.Info("password prompt for consoles switched", "required", *req.Confirm, "by", currentUser(r).Name, "ip", remoteIP(r))
+	}
 	s.handleTerminal(w, r)
 }
 
@@ -348,6 +357,15 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfirmed(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"confirmed": s.confirmed(r)})
+}
+
+// confirmed reports whether the password was entered again recently. When
+// the owner switched the prompt off in the settings, it always counts.
+func (s *Server) confirmed(r *http.Request) bool {
+	if !s.opts.Terminal.ConfirmRequired() {
+		return true
+	}
 	cookie, err := r.Cookie(s.cookieName())
-	writeJSON(w, http.StatusOK, map[string]bool{"confirmed": err == nil && s.sessions.Confirmed(cookie.Value)})
+	return err == nil && s.sessions.Confirmed(cookie.Value)
 }

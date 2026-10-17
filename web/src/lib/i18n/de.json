@@ -760,6 +760,8 @@
 	"error.terminal_off": "Terminal und Konsolen sind in den Einstellungen abgeschaltet.",
 	"settings.terminal": "Terminal und Konsolen erlauben",
 	"settings.terminalDesc": "Eine root-Shell auf dem NAS und Konsolen in Containern, nur für Besitzer und Administratoren. Die NAS-Shell öffnet sich ohne zusätzliche Passwortabfrage; Gastkonsolen verlangen eine erneute Bestätigung. Beim Abschalten enden offene Sitzungen sofort.",
+	"settings.terminalConfirm": "Passwort vor Container-Konsolen abfragen",
+	"settings.terminalConfirmDesc": "Gilt auch für das Herunterladen von Sicherungen des Sticks. Ausgeschaltet öffnen sich Konsolen ohne Passwort. Dann genügt ein gestohlener Anmelde-Cookie für root-Zugriff auf Container. Nur Administratoren, 15 Minuten Inaktivität und das Protokoll bleiben.",
 	"terminal.shortcut": "Terminal (Strg+`)",
 	"vms.title": "Virtuelle Maschinen",
 	"vms.create": "Neue VM",
