@@ -33,6 +33,7 @@ var fileErrors = []struct {
 	{files.ErrVolumeChanged, http.StatusConflict, "upload_volume_unavailable"},
 	{system.ErrMemoryPressure, http.StatusServiceUnavailable, "upload_memory_pressure"},
 	{files.ErrNoUpload, http.StatusNotFound, "upload_not_found"},
+	{files.ErrNoJob, http.StatusNotFound, "job_not_found"},
 }
 
 func writeFileError(w http.ResponseWriter, err error) {
@@ -66,6 +67,16 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 		})
 	}
 	if user.Role.CanAdminister() {
+		if s.opts.USB != nil {
+			for _, drive := range s.opts.USB.Mounted() {
+				roots = append(roots, files.Root{ID: "usb/" + drive.Mount, Name: drive.Name, Kind: "usb", Dir: drive.Dir, Writable: true})
+			}
+		}
+		// The stick is only looked at, apart from text files. Its secrets
+		// stay hidden; /config is a link, so that listing the roots does not
+		// wake the stick up.
+		roots = append(roots, files.Root{ID: "stick", Name: "TITANOS", Kind: "stick", Dir: s.opts.Store.Dir(), Editable: true,
+			Hide: []string{"users", "tls", "ssh", "notify", "backup"}})
 		for _, volume := range mounted {
 			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Volume: volume, Writable: true})
 		}
@@ -94,7 +105,10 @@ type rootResponse struct {
 func (s *Server) handleFileRoots(w http.ResponseWriter, r *http.Request) {
 	list := []rootResponse{}
 	for _, root := range s.fileRoots(currentUser(r)) {
-		total, free := files.Usage(root)
+		var total, free uint64
+		if root.Kind != "stick" {
+			total, free = files.Usage(root)
+		}
 		list = append(list, rootResponse{Root: root, TotalBytes: total, FreeBytes: free})
 	}
 	writeJSON(w, http.StatusOK, list)
@@ -338,4 +352,62 @@ func (s *Server) authorizeUpload(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// handleFileText saves a text file on the stick.
+func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Root, Path, Content string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	root, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	if err := s.opts.Files.SaveText(root, req.Path, req.Content); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	slog.Info("text file saved", "root", root.ID, "path", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleFileCopy starts copying or moving files between roots.
+func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Root, ToRoot, ToDir, Conflict string
+		Paths                         []string
+		Move                          bool
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	src, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	dst, ok := s.fileRoot(w, r, req.ToRoot)
+	if !ok {
+		return
+	}
+	user := currentUser(r)
+	job, err := s.opts.Files.StartCopy(src, req.Paths, dst, req.ToDir, req.Move, req.Conflict, user.Name, user.UID)
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	slog.Info("copy started", "from", src.ID, "to", dst.ID, "move", req.Move, "by", user.Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusAccepted, job)
+}
+
+func (s *Server) handleFileJobs(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.opts.Files.Jobs(currentUser(r).Name))
+}
+
+func (s *Server) handleFileJobCancel(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Files.CancelJob(currentUser(r).Name, r.PathValue("id")); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

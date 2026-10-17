@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -33,6 +34,25 @@ type Root struct {
 	Writable bool `json:"writable"`
 	// Recycle moves deleted files to the share's recycle bin.
 	Recycle bool `json:"recycle"`
+	// Editable allows saving text files (SaveText) although the root is read-only.
+	Editable bool `json:"editable"`
+	// Hide lists top-level names that do not exist as far as users can tell;
+	// with it, files called .env are hidden everywhere. The stick keeps
+	// password hashes and keys there.
+	Hide []string `json:"-"`
+}
+
+// secret reports whether a path is one the root hides.
+func (r Root) secret(rel string) bool {
+	if len(r.Hide) == 0 {
+		return false
+	}
+	for i, part := range strings.Split(rel, "/") {
+		if i == 0 && slices.Contains(r.Hide, part) || part == ".env" {
+			return true
+		}
+	}
+	return false
 }
 
 // Entry is a file or folder in a listing.
@@ -123,6 +143,7 @@ type Manager struct {
 	Acquire   func(context.Context) (int64, func(), error)
 	syncFile  func(*os.File) error
 
+	jobs    jobs
 	mu      sync.Mutex
 	uploads map[string]*upload
 	now     func() time.Time
@@ -152,6 +173,9 @@ func (m *Manager) List(root Root, dir string) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if root.secret(dir) {
+		return nil, ErrNotFound
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return nil, mapError(err)
@@ -168,7 +192,7 @@ func (m *Manager) List(root Root, dir string) ([]Entry, error) {
 	}
 	entries := []Entry{}
 	for _, item := range items {
-		if hidden(item.Name()) {
+		if hidden(item.Name()) || root.secret(path.Join(dir, item.Name())) {
 			continue
 		}
 		info, err := item.Info()
@@ -324,6 +348,9 @@ func (m *Manager) Open(root Root, name string) (*os.File, fs.FileInfo, error) {
 	if err != nil || name == "." {
 		return nil, nil, ErrInvalid
 	}
+	if root.secret(name) {
+		return nil, nil, ErrNotFound
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return nil, nil, mapError(err)
@@ -355,13 +382,16 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 		if err != nil || p == "." {
 			return ErrInvalid
 		}
+		if root.secret(p) {
+			return ErrNotFound
+		}
 		// Names in the archive start at the selected item, not at the root.
 		prefix := path.Dir(p)
 		err = fs.WalkDir(r.FS(), p, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if hidden(entry.Name()) {
+			if hidden(entry.Name()) || root.secret(name) {
 				if entry.IsDir() {
 					return fs.SkipDir
 				}

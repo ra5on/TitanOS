@@ -213,6 +213,17 @@ func (m *Manager) configured() []VolumeConfig {
 	return append([]VolumeConfig(nil), m.volumes...)
 }
 
+// FilesystemUUIDs returns the filesystem UUIDs of the volumes of the NAS.
+func (m *Manager) FilesystemUUIDs() []string {
+	var uuids []string
+	for _, volume := range m.configured() {
+		if volume.FilesystemUUID != "" {
+			uuids = append(uuids, volume.FilesystemUUID)
+		}
+	}
+	return uuids
+}
+
 func (m *Manager) find(name string) (VolumeConfig, bool) {
 	for _, volume := range m.configured() {
 		if volume.Name == name {

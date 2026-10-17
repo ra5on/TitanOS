@@ -33,6 +33,10 @@ type Settings struct {
 	// Enabled allows shells on the NAS and in containers. It is on unless
 	// someone switched it off.
 	Enabled bool `json:"enabled"`
+	// NoConfirm skips the password prompt before consoles and downloads of
+	// stick backups. Off unless the owner chose it: a console is a root
+	// shell, and without the prompt a stolen login cookie is enough.
+	NoConfirm bool `json:"noConfirm,omitempty"`
 }
 
 // Manager knows whether terminals are allowed and starts shells.
@@ -44,8 +48,9 @@ type Manager struct {
 	// command is what a session runs.
 	command []string
 
-	mu      sync.Mutex
-	enabled bool
+	mu        sync.Mutex
+	enabled   bool
+	noConfirm bool
 	// off is closed when terminals are switched off, to end running sessions.
 	off chan struct{}
 }
@@ -64,7 +69,25 @@ func (m *Manager) Load() error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.enabled = settings.Enabled
+	m.enabled, m.noConfirm = settings.Enabled, settings.NoConfirm
+	return nil
+}
+
+// ConfirmRequired reports whether consoles ask for the password again.
+func (m *Manager) ConfirmRequired() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return !m.noConfirm
+}
+
+// SetConfirmRequired chooses whether consoles ask for the password again.
+func (m *Manager) SetConfirmRequired(required bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.store.WriteJSON(settingsFile, Settings{Enabled: m.enabled, NoConfirm: !required}); err != nil {
+		return err
+	}
+	m.noConfirm = !required
 	return nil
 }
 
@@ -79,7 +102,7 @@ func (m *Manager) Enabled() bool {
 func (m *Manager) SetEnabled(enabled bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.store.WriteJSON(settingsFile, Settings{Enabled: enabled}); err != nil {
+	if err := m.store.WriteJSON(settingsFile, Settings{Enabled: enabled, NoConfirm: m.noConfirm}); err != nil {
 		return err
 	}
 	if m.enabled && !enabled {

@@ -4,9 +4,11 @@
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import FolderTree from './FolderTree.svelte';
+	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Kind = 'local' | 's3' | 'sftp' | 'rest';
+	type Kind = 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
 		type: Kind;
 		volume?: string;
@@ -24,9 +26,9 @@
 		username?: string;
 		password?: string;
 	};
-	type Job = { id: string; sources: string[]; destination: Destination; enabled: boolean; every: 'daily' | 'weekly'; weekday: number; time: string; keep: { daily: number; weekly: number; monthly: number } };
+	type Job = { id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
 	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string };
-	type View = { job: Job; secretSet: Record<string, boolean>; state: State };
+	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
 
@@ -68,7 +70,8 @@
 		error = null;
 		isNew = true;
 		secretSet = {};
-		draft = { id: '', sources: [], destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', weekday: 0, time: '02:30', keep: { daily: 7, weekly: 4, monthly: 6 } };
+		draft = { id: '', sources: [], destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', interval: 6, weekday: 0, weekdays: [1], monthDay: 1, time: '02:30', times: ['02:30'], keep: { daily: 7, weekly: 4, monthly: 6 } };
+		loadSelection(draft);
 	}
 
 	function edit(view: View) {
@@ -77,13 +80,86 @@
 		secretSet = view.secretSet;
 		draft = JSON.parse(JSON.stringify(view.job)) as Job;
 		draft.destination = { port: 22, ...draft.destination, secretKey: '', password: '' };
+		// Jobs from before the schedule grew carry one weekday and one time.
+		draft.interval ||= 6;
+		draft.monthDay ||= 1;
+		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
+		if (!draft.times?.length) draft.times = [draft.time];
+		loadSelection(draft);
 		if (draft.destination.type === 'sftp') showKey();
+	}
+
+	type Mode = 'whole' | 'all' | 'only';
+	const EXTRAS = ['appdata', 'vms', 'config'] as const;
+	/** Per share: all of it, or with folders left out, or only some folders. */
+	let modes = $state<Record<string, Mode>>({});
+	let patterns = $state('');
+
+	function loadSelection(job: Job) {
+		modes = {};
+		for (const name of job.sources) {
+			modes[name] = job.folders?.[name]?.length ? 'only' : job.skip?.some((skip) => skip.startsWith(`${name}/`)) ? 'all' : 'whole';
+		}
+		patterns = (job.patterns ?? []).join('\n');
+	}
+
+	function setMode(name: string, mode: Mode) {
+		if (!draft) return;
+		modes[name] = mode;
+		// What belongs to the other way of choosing is dropped.
+		if (mode !== 'only' && draft.folders) delete draft.folders[name];
+		if (mode !== 'all' && draft.skip) draft.skip = draft.skip.filter((skip) => !skip.startsWith(`${name}/`));
+	}
+
+	function setFolders(name: string, folders: string[], skip: string[]) {
+		if (!draft) return;
+		draft.folders = { ...draft.folders, [name]: folders };
+		draft.skip = skip;
+	}
+
+	function toggleExtra(extra: string) {
+		if (!draft) return;
+		const list = draft.extras ?? [];
+		draft.extras = list.includes(extra) ? list.filter((e) => e !== extra) : [...list, extra];
+	}
+
+	function toggleDay(day: number) {
+		if (!draft) return;
+		const days = draft.weekdays ?? [];
+		// At least one day stays.
+		draft.weekdays = days.includes(day) ? (days.length > 1 ? days.filter((d) => d !== day) : days) : [...days, day];
+	}
+
+	const needsTimes = (every: string) => every !== 'hourly';
+	const windowOn = $derived(!!draft?.windowFrom);
+	function toggleWindow(on: boolean) {
+		if (!draft) return;
+		[draft.windowFrom, draft.windowTo] = on ? ['01:00', '06:00'] : ['', ''];
 	}
 
 	function toggleSource(name: string) {
 		if (!draft) return;
-		draft.sources = draft.sources.includes(name) ? draft.sources.filter((source) => source !== name) : [...draft.sources, name];
+		const on = !draft.sources.includes(name);
+		draft.sources = on ? [...draft.sources, name] : draft.sources.filter((source) => source !== name);
+		if (on) modes[name] = 'whole';
+		else {
+			setMode(name, 'whole');
+			delete modes[name];
+		}
 	}
+
+	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
+	let pairCode = $state('');
+	function decodeCode(text: string): { url: string; user: string; password: string } | null {
+		try {
+			const body = text.trim().replace(/^titanos-backup:/, '').replace(/-/g, '+').replace(/_/g, '/');
+			const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0))));
+			return data.v === 1 && typeof data.url === 'string' && typeof data.user === 'string' && typeof data.password === 'string' ? data : null;
+		} catch {
+			return null;
+		}
+	}
+	const pairing = $derived(decodeCode(pairCode));
 
 	async function showKey() {
 		if (publicKey) return;
@@ -98,6 +174,7 @@
 		if (!draft) return;
 		draft.destination.type = kind;
 		if (kind === 'sftp') showKey();
+		if (kind === 'titanos') pairCode = '';
 	}
 
 	// Only what belongs to the chosen kind of destination is sent.
@@ -109,6 +186,10 @@
 				return { type: 's3', endpoint: d.endpoint?.trim(), bucket: d.bucket?.trim(), prefix: d.prefix?.trim(), accessKey: d.accessKey?.trim(), secretKey: d.secretKey };
 			case 'sftp':
 				return { type: 'sftp', host: d.host?.trim(), port: Number(d.port) || 22, user: d.user?.trim(), path: d.path?.trim() };
+			case 'titanos': {
+				const code = decodeCode(pairCode);
+				return { type: 'rest', url: code?.url, username: code?.user, password: code?.password };
+			}
 			default:
 				return { type: 'rest', url: d.url?.trim(), username: d.username?.trim(), password: d.password };
 		}
@@ -119,7 +200,22 @@
 		if (!draft) return;
 		busy = true;
 		error = null;
-		const job = { ...draft, id: draft.id.trim().toLowerCase(), weekday: Number(draft.weekday), destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
+		if (draft.destination.type === 'titanos' && !decodeCode(pairCode)) {
+			error = { text: t('backup.pairCodeInvalid'), detail: '' };
+			busy = false;
+			return;
+		}
+		const chosen = draft.sources.filter((name) => modes[name] === 'only' && !(draft!.folders?.[name]?.length));
+		if (chosen.length > 0) {
+			error = { text: t('backup.noFolderChosen', { share: chosen[0] }), detail: '' };
+			busy = false;
+			return;
+		}
+		const folders = Object.fromEntries(Object.entries(draft.folders ?? {}).filter(([name, list]) => modes[name] === 'only' && list.length > 0));
+		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
+		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
+		const weekdays = [...(draft.weekdays ?? [])].sort();
+		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim().toLowerCase(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
 			overview = isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job);
 			const created = isNew ? job : null;
@@ -209,7 +305,24 @@
 
 	function when(job: Job): string {
 		if (!job.enabled) return t('backup.manual');
-		return job.every === 'weekly' ? t('backup.whenWeekly', { day: t(`backup.day.${job.weekday}` as 'backup.day.0'), time: job.time }) : t('backup.whenDaily', { time: job.time });
+		const times = (job.times?.length ? job.times : [job.time]).join(', ');
+		let text: string;
+		switch (job.every) {
+			case 'hourly':
+				text = t('backup.whenHourly', { hours: job.interval ?? 1, minute: job.time.slice(3) });
+				break;
+			case 'weekly': {
+				const days = (job.weekdays?.length ? job.weekdays : [job.weekday]).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+				text = t('backup.whenWeekly', { day: days.map((d) => t(`backup.dayShort.${d}` as 'backup.dayShort.0')).join(', '), time: times });
+				break;
+			}
+			case 'monthly':
+				text = t('backup.whenMonthly', { day: job.monthDay ?? 1, time: times });
+				break;
+			default:
+				text = t('backup.whenDaily', { time: times });
+		}
+		return job.windowFrom ? `${text} · ${t('backup.whenWindow', { from: job.windowFrom, to: job.windowTo ?? '' })}` : text;
 	}
 </script>
 
@@ -222,9 +335,11 @@
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if overview}
+	<TargetPanel />
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
 		{@const state = view.state}
+		{@const next = view.next}
 		<section class="tile">
 			<div class="head">
 				<div>
@@ -243,6 +358,7 @@
 			{/if}
 			<dl>
 				<div><dt>{t('backup.schedule')}</dt><dd>{when(job)}</dd></div>
+				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>{/if}
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
 				<div><dt>{t('backup.keeps')}</dt><dd>{job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
 			</dl>
@@ -285,16 +401,40 @@
 		{/if}
 		<fieldset>
 			<legend>{t('backup.sources')}</legend>
+			{#each overview.shares as share (share.name)}
+				<div class="source">
+					<div class="row">
+						<label class="check"><input type="checkbox" checked={draft.sources.includes(share.name)} onchange={() => toggleSource(share.name)} /><span class="mono">{share.name}</span></label>
+						{#if draft.sources.includes(share.name)}
+							<select class="field narrow" aria-label={t('backup.modeOf', { share: share.name })} value={modes[share.name] ?? 'whole'} onchange={(e) => setMode(share.name, e.currentTarget.value as Mode)}>
+								<option value="whole">{t('backup.mode.whole')}</option>
+								<option value="all">{t('backup.mode.all')}</option>
+								<option value="only">{t('backup.mode.only')}</option>
+							</select>
+						{/if}
+					</div>
+					{#if draft.sources.includes(share.name) && modes[share.name] && modes[share.name] !== 'whole'}
+						<p class="muted">{t(modes[share.name] === 'only' ? 'backup.onlyHint' : 'backup.allHint')}</p>
+						<FolderTree share={share.name} mode={modes[share.name] as 'all' | 'only'} folders={draft.folders?.[share.name] ?? []} skip={draft.skip ?? []} onchange={(folders, skip) => setFolders(share.name, folders, skip)} />
+					{/if}
+				</div>
+			{/each}
+			<p class="legend-sub">{t('backup.extras')}</p>
 			<div class="row">
-				{#each overview.shares as share (share.name)}
-					<label class="check"><input type="checkbox" checked={draft.sources.includes(share.name)} onchange={() => toggleSource(share.name)} /><span class="mono">{share.name}</span></label>
+				{#each EXTRAS as extra (extra)}
+					<label class="check"><input type="checkbox" checked={draft.extras?.includes(extra)} onchange={() => toggleExtra(extra)} /><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label>
 				{/each}
 			</div>
+			{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
+			<label class="block"><span>{t('backup.patterns')}</span>
+				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
+			</label>
+			<p class="muted">{t('backup.patternsHint')}</p>
 		</fieldset>
 		<fieldset>
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each ['local', 's3', 'sftp', 'rest'] as const as kind (kind)}
+				{#each ['local', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
 					<button type="button" role="radio" aria-checked={draft.destination.type === kind} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
 				{/each}
 			</div>
@@ -330,6 +470,12 @@
 					<label><span>{t('backup.publicKey')}</span><textarea class="field mono key" readonly rows="2" onfocus={(event) => event.currentTarget.select()}>{publicKey}</textarea></label>
 					<p class="muted">{t('backup.publicKeyHint')}</p>
 				{/if}
+			{:else if draft.destination.type === 'titanos'}
+				<label class="block"><span>{t('backup.pairCode')}</span>
+					<textarea class="field mono" rows="3" bind:value={pairCode} spellcheck="false" autocomplete="off" placeholder="titanos-backup:…" required></textarea>
+				</label>
+				{#if pairing}<p class="notice-ok">{t('backup.pairCodeOk', { url: pairing.url })}</p>{:else if pairCode.trim()}<p class="notice-warn">{t('backup.pairCodeInvalid')}</p>{/if}
+				<p class="muted">{t('backup.pairCodeHint')}</p>
 			{:else}
 				<div class="row">
 					<label class="wide"><span>{t('backup.restUrl')}</span><input class="field mono" type="url" bind:value={draft.destination.url} placeholder="https://backup.example.org:8000/nas" spellcheck="false" required /></label>
@@ -345,19 +491,56 @@
 				<div class="row">
 					<label class="narrow"><span>{t('backup.every')}</span>
 						<select class="field" bind:value={draft.every}>
+							<option value="hourly">{t('backup.every.hourly')}</option>
 							<option value="daily">{t('backup.every.daily')}</option>
 							<option value="weekly">{t('backup.every.weekly')}</option>
+							<option value="monthly">{t('backup.every.monthly')}</option>
 						</select>
 					</label>
-					{#if draft.every === 'weekly'}
-						<label class="narrow"><span>{t('backup.weekday')}</span>
-							<select class="field" bind:value={draft.weekday}>
-								{#each WEEKDAYS as day (day)}<option value={day}>{t(`backup.day.${day}` as 'backup.day.0')}</option>{/each}
+					{#if draft.every === 'hourly'}
+						<label class="narrow"><span>{t('backup.interval')}</span>
+							<select class="field" bind:value={draft.interval}>
+								{#each [1, 2, 3, 4, 6, 12] as hours (hours)}<option value={hours}>{t('backup.intervalHours', { hours })}</option>{/each}
 							</select>
 						</label>
 					{/if}
-					<label class="tiny"><span>{t('update.autoTime')}</span><input class="field mono" type="time" bind:value={draft.time} required /></label>
+					{#if draft.every === 'monthly'}
+						<label class="tiny"><span>{t('backup.monthDay')}</span>
+							<select class="field mono" bind:value={draft.monthDay}>
+								{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}<option value={day}>{day}.</option>{/each}
+							</select>
+						</label>
+					{/if}
 				</div>
+				{#if draft.every === 'weekly'}
+					<div class="days" role="group" aria-label={t('backup.weekdays')}>
+						{#each WEEKDAYS as day (day)}
+							<label class="check"><input type="checkbox" checked={draft.weekdays?.includes(day)} onchange={() => toggleDay(day)} /><span>{t(`backup.dayShort.${day}` as 'backup.dayShort.0')}</span></label>
+						{/each}
+					</div>
+				{/if}
+				{#if needsTimes(draft.every)}
+					<div class="row">
+						{#each draft.times ?? [] as _, i (i)}
+							<label class="tiny"><span>{i === 0 ? t('update.autoTime') : ''}&nbsp;</span>
+								<span class="inline"><input class="field mono" type="time" bind:value={draft.times![i]} required />
+									{#if (draft.times?.length ?? 0) > 1}<button type="button" class="btn small" aria-label={t('backup.removeTime')} onclick={() => (draft!.times = draft!.times!.filter((_, n) => n !== i))}>✕</button>{/if}
+								</span>
+							</label>
+						{/each}
+						{#if (draft.times?.length ?? 0) < 8}<button type="button" class="btn small" onclick={() => (draft!.times = [...(draft!.times ?? []), '12:00'])}>{t('backup.addTime')}</button>{/if}
+					</div>
+				{:else}
+					<label class="tiny"><span>{t('backup.minute')}</span><input class="field mono" type="time" bind:value={draft.times![0]} required /></label>
+				{/if}
+				<label class="check"><input type="checkbox" checked={windowOn} onchange={(e) => toggleWindow(e.currentTarget.checked)} /><span>{t('backup.window')}</span></label>
+				{#if windowOn}
+					<div class="row">
+						<label class="tiny"><span>{t('backup.windowFrom')}</span><input class="field mono" type="time" bind:value={draft.windowFrom} required /></label>
+						<label class="tiny"><span>{t('backup.windowTo')}</span><input class="field mono" type="time" bind:value={draft.windowTo} required /></label>
+					</div>
+					<p class="muted">{t('backup.windowHint')}</p>
+				{/if}
 				<p class="muted">{t('backup.catchUp')}</p>
 			{/if}
 		</fieldset>
@@ -373,7 +556,7 @@
 		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 		<div class="actions">
 			<button type="button" class="btn" onclick={() => ((draft = null), (error = null))} disabled={busy}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={busy || draft.sources.length === 0}>{isNew ? t('backup.create') : t('notify.save')}</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || (draft.sources.length === 0 && !draft.extras?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button>
 		</div>
 	</form>
 {/if}
@@ -599,4 +782,9 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
+	.days { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+	.inline { display: flex; align-items: center; gap: 0.4rem; }
+	.source { margin-bottom: 0.6rem; }
+	.legend-sub { margin: 0.8rem 0 0.3rem; font-weight: 600; }
+	.block { display: grid; gap: 0.3rem; margin-top: 0.6rem; }
 </style>
