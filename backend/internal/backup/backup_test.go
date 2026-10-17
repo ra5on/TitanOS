@@ -15,6 +15,8 @@ import (
 // fakeRestic stands in for the program: it notes how it was called and
 // answers the way restic does.
 const fakeRestic = `#!/bin/sh
+# Handle cancellation even if it arrives before the slow child is spawned.
+trap 'exit 130' INT
 dir=$(dirname "$0")
 echo "$* | repo=$RESTIC_REPOSITORY cache=$RESTIC_CACHE_DIR aws=$AWS_ACCESS_KEY_ID rest=$RESTIC_REST_USERNAME" >> "$dir/calls"
 [ -n "$RESTIC_PASSWORD" ] || { echo "no password" >&2; exit 1; }
