@@ -2,6 +2,7 @@
 	import { api, ApiError, type AccessLevel, type Account, type Share } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { session } from '#lib/session.svelte.ts';
 
 	type Props = {
 		/** The share to edit; undefined creates a new one. */
@@ -13,7 +14,11 @@
 	};
 	let { share, volumes, accounts, onclose, ondone }: Props = $props();
 
-	const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+	// As shares.ValidName: letters, digits, blanks, - _ and ., up to 32 characters,
+	// no blank or dot at the start or end, no double blank, no name Samba reserves.
+	const NAME = /^(?![ .])(?!.*[ .]$)(?!.*  )[\p{L}\p{N} ._-]{1,32}$/u;
+	const RESERVED = ['global', 'homes', 'printers', 'print', 'ipc'];
+	const validName = (name: string) => NAME.test(name) && !RESERVED.includes(name.toLowerCase());
 	const LEVELS: ('' | AccessLevel)[] = ['', 'ro', 'rw'];
 
 	// svelte-ignore state_referenced_locally
@@ -23,7 +28,8 @@
 		smb: share?.smb ?? true,
 		nfs: share?.nfs.enabled ?? false,
 		clients: (share?.nfs.clients ?? []).join('\n'),
-		access: { ...(share?.access ?? {}) } as Record<string, AccessLevel>,
+		// Whoever creates a share can use it; Samba does not offer a share no one may open.
+		access: { ...(share?.access ?? (session.data?.user ? { [session.data.user.name]: 'rw' } : {})) } as Record<string, AccessLevel>,
 		guest: share?.guest ?? false,
 		browseable: share?.browseable ?? true,
 		recycle: share?.recycle.enabled ?? false,
@@ -34,7 +40,8 @@
 	let working = $state(false);
 	let error = $state('');
 
-	const nameError = $derived(draft.name !== '' && !NAME.test(draft.name) ? errorText('invalid_share_name') : '');
+	const nameError = $derived(draft.name !== '' && !validName(draft.name) ? errorText('invalid_share_name') : '');
+	const nobody = $derived(draft.smb && !draft.guest && Object.keys(draft.access).length === 0);
 
 	function setAccess(user: string, level: '' | AccessLevel) {
 		if (level === '') delete draft.access[user];
@@ -43,7 +50,7 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (!NAME.test(draft.name)) return void (error = errorText('invalid_share_name'));
+		if (!validName(draft.name)) return void (error = errorText('invalid_share_name'));
 		working = true;
 		error = '';
 		const body = {
@@ -58,7 +65,7 @@
 			timeMachine: { enabled: draft.smb && draft.timeMachine, sizeGB: Number(draft.sizeGB) || 0 }
 		};
 		try {
-			if (share) await api.put(`/shares/${share.name}`, body);
+			if (share) await api.put(`/shares/${encodeURIComponent(share.name)}`, body);
 			else await api.post('/shares', body);
 			ondone();
 		} catch (err) {
@@ -74,7 +81,7 @@
 			<label class="field-row">
 				<span class="label">{t('share.name')}</span>
 				<!-- svelte-ignore a11y_autofocus -->
-				<input class="field mono" type="text" bind:value={draft.name} maxlength="32" disabled={!!share} autocapitalize="none" spellcheck="false" autofocus={!share} />
+				<input class="field mono" type="text" bind:value={draft.name} maxlength="32" disabled={!!share} spellcheck="false" autofocus={!share} />
 				<small class:problem={nameError}>{nameError || t('share.nameHint')}</small>
 			</label>
 			<label class="field-row">
@@ -117,6 +124,7 @@
 				{/each}
 				<label class="check"><input type="checkbox" bind:checked={draft.guest} /><span>{t('share.guest')}</span></label>
 				{#if draft.guest}<p class="notice-warn" role="alert">{t('share.guestWarning')}</p>{/if}
+				{#if nobody}<p class="notice-warn" role="alert">{t('share.nobodyWarning')}</p>{/if}
 			</fieldset>
 
 			<fieldset>

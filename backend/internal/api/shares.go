@@ -77,6 +77,11 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &share) {
 		return
 	}
+	// Samba does not offer a share that no one may open. Unless the form
+	// says otherwise, whoever creates it can read and write.
+	if len(share.Access) == 0 && !share.Guest {
+		share.Access = map[string]string{currentUser(r).Name: shares.ReadWrite}
+	}
 	if err := s.opts.Shares.Create(share, s.opts.Storage.Names(), s.userNames()); err != nil {
 		writeShareError(w, err)
 		return
