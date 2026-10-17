@@ -64,8 +64,7 @@ func (s *Server) handleConfigBackupRun(w http.ResponseWriter, r *http.Request) {
 // the NAS. It holds password hashes and every secret of the NAS, so the
 // password has to be entered again first, as for a console.
 func (s *Server) handleConfigBackupDownload(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(s.cookieName())
-	if err != nil || !s.sessions.Confirmed(cookie.Value) {
+	if !s.confirmed(r) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to download a backup")
 		return
 	}

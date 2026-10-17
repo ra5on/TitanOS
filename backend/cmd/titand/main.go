@@ -25,6 +25,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -45,6 +46,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
+	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
@@ -368,6 +370,20 @@ func run(opts options) error {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
 	go backups.Run(ctx)
+	// Backups of other TitanOS, taken in over Tailscale.
+	backupTarget := backuptarget.NewManager(store)
+	backupTarget.Disabled = opts.dev
+	backupTarget.Addresses = func() []string { return tailnet.Status().IPs }
+	backupTarget.Host = func() string { return tailnet.Status().Name }
+	backupTarget.Mounted = volumes.Mounted
+	backupTarget.Load()
+	go backupTarget.Run(ctx)
+	// Drives plugged in over USB: shown, and mounted on a click.
+	drives := usb.NewManager()
+	drives.Disabled = opts.dev
+	drives.Reserved = func(uuid string) bool { return slices.Contains(volumes.FilesystemUUIDs(), uuid) }
+	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
+	go drives.Watch(ctx)
 
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.
 	supply := ups.NewManager(store)
@@ -439,6 +455,8 @@ func run(opts options) error {
 		Network:       connection,
 		Notify:        notifier,
 		ConfigBackup:  stickBackup,
+		USB:           drives,
+		BackupTarget:  backupTarget,
 		Diagnose:      diagnose.NewManager(store, version.Version),
 		SSH:           access,
 		Update:        updates,

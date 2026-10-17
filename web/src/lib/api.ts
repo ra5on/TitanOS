@@ -186,11 +186,43 @@ export type Share = {
 export type FileRoot = {
 	id: string;
 	name: string;
-	kind: 'share' | 'volume';
+	kind: 'share' | 'volume' | 'usb' | 'stick';
 	writable: boolean;
 	recycle: boolean;
+	/** Text files can be saved although the root is read-only (the stick). */
+	editable?: boolean;
 	totalBytes: number;
 	freeBytes: number;
+};
+
+export type CopyJob = {
+	id: string;
+	move: boolean;
+	state: 'running' | 'done' | 'failed' | 'cancelled';
+	from: string;
+	to: string;
+	dir: string;
+	names: string[];
+	files: number;
+	done: number;
+	bytes: number;
+	copied: number;
+	current: string;
+	error: string;
+};
+
+export type UsbDevice = {
+	id: string;
+	name: string;
+	label: string;
+	model: string;
+	fsType: string;
+	size: number;
+	supported: boolean;
+	mounted: boolean;
+	mount: string;
+	freeBytes: number;
+	root: string;
 };
 
 export type FileEntry = { name: string; dir: boolean; size: number; modified: string };

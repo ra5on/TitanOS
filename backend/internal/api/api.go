@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -35,6 +36,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
+	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -72,6 +74,10 @@ type Options struct {
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
 	Backup *backup.Manager
+	// BackupTarget takes in the backups of other TitanOS over Tailscale.
+	BackupTarget *backuptarget.Manager
+	// USB lists and mounts drives plugged in over USB; nil if there is none.
+	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
 	UPS          *ups.Manager
 	Settings     *system.Settings
@@ -173,6 +179,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
 	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
 	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("PUT /api/v1/files/text", s.requireAdmin(s.handleFileText))
+	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
+	mux.HandleFunc("GET /api/v1/files/jobs", s.requireUser(s.handleFileJobs))
+	mux.HandleFunc("POST /api/v1/files/jobs/{id}/cancel", s.requireUser(s.handleFileJobCancel))
+	mux.HandleFunc("GET /api/v1/usb", s.requireAdmin(s.handleUSB))
+	mux.HandleFunc("POST /api/v1/usb/{id}/mount", s.requireAdmin(s.handleUSBMount))
+	mux.HandleFunc("POST /api/v1/usb/{id}/eject", s.requireAdmin(s.handleUSBEject))
 	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
@@ -253,6 +266,11 @@ func New(opts Options) *Server {
 	// Backups of shares. They hold everyone's files: administrators only.
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
+	mux.HandleFunc("GET /api/v1/backups/target", s.requireAdmin(s.handleBackupTarget))
+	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.handleBackupTargetSet))
+	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
+	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
+	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))
 	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireAdmin(s.handleBackupDelete))

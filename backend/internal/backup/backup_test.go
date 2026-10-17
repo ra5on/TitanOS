@@ -335,7 +335,13 @@ func TestInvalidJobs(t *testing.T) {
 		"no share":            func(j *Job) { j.Sources = nil },
 		"unknown share":       func(j *Job) { j.Sources = []string{"gone"} },
 		"time":                func(j *Job) { j.Time = "25:00" },
-		"rhythm":              func(j *Job) { j.Every = "hourly" },
+		"rhythm":              func(j *Job) { j.Every = "yearly" },
+		"interval":            func(j *Job) { j.Every, j.Interval = "hourly", 5 },
+		"month day":           func(j *Job) { j.Every, j.MonthDay = "monthly", 31 },
+		"weekday":             func(j *Job) { j.Every, j.Weekdays = "weekly", []int{1, 7} },
+		"second time":         func(j *Job) { j.Times = []string{"03:00", "3pm"} },
+		"half a window":       func(j *Job) { j.WindowFrom = "01:00" },
+		"empty window":        func(j *Job) { j.WindowFrom, j.WindowTo = "01:00", "01:00" },
 		"keep":                func(j *Job) { j.Keep.Daily = -1 },
 		"kind":                func(j *Job) { j.Destination.Type = "ftp" },
 		"endpoint":            func(j *Job) { j.Destination.Endpoint = "s3.example.com" },
@@ -434,6 +440,77 @@ func TestSchedule(t *testing.T) {
 		if got := due(tc.job, tc.state, at(tc.now)); got != tc.want {
 			t.Errorf("%s: due = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestScheduleKinds(t *testing.T) {
+	at := func(text string) time.Time {
+		parsed, err := time.ParseInLocation("2006-01-02 15:04", text, time.Local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed
+	}
+	ran := func(text string) State { last := at(text); return State{LastRun: &last} }
+	hourly := Job{Enabled: true, Every: "hourly", Interval: 6, Time: "00:15"}
+	twice := Job{Enabled: true, Every: "daily", Times: []string{"15:00", "03:00"}, Time: "03:00"}
+	days := Job{Enabled: true, Every: "weekly", Weekdays: []int{1, 3, 5}, Times: []string{"03:00"}, Time: "03:00"} // Mon, Wed, Fri; 2026-10-14 is a Wednesday
+	monthly := Job{Enabled: true, Every: "monthly", MonthDay: 1, Time: "04:00"}
+	night := twice
+	night.WindowFrom, night.WindowTo = "01:00", "06:00"
+	late := hourly
+	late.WindowFrom, late.WindowTo = "22:00", "04:00" // over midnight
+	cases := []struct {
+		name  string
+		job   Job
+		state State
+		now   string
+		want  bool
+	}{
+		{"hourly, slot at 12:15 passed", hourly, ran("2026-10-14 06:20"), "2026-10-14 12:15", true},
+		{"hourly, between slots", hourly, ran("2026-10-14 12:16"), "2026-10-14 17:00", false},
+		{"two times, second one owed", twice, ran("2026-10-14 03:01"), "2026-10-14 15:00", true},
+		{"two times, both done", twice, ran("2026-10-14 15:01"), "2026-10-14 20:00", false},
+		{"weekdays, Wednesday owed", days, ran("2026-10-12 03:01"), "2026-10-14 03:00", true},
+		{"weekdays, Thursday has nothing", days, ran("2026-10-14 03:01"), "2026-10-15 12:00", false},
+		{"weekdays, Friday owed", days, ran("2026-10-14 03:01"), "2026-10-16 03:00", true},
+		{"monthly, before the first", monthly, ran("2026-10-01 04:01"), "2026-10-30 12:00", false},
+		{"monthly, first of the month", monthly, ran("2026-10-01 04:01"), "2026-11-01 04:00", true},
+		{"window waits", night, ran("2026-10-13 15:01"), "2026-10-14 03:30", true},
+		{"window closed", night, ran("2026-10-13 15:01"), "2026-10-14 15:30", false},
+		{"window over midnight, open", late, ran("2026-10-14 12:16"), "2026-10-14 23:00", true},
+		{"window over midnight, closed", late, ran("2026-10-14 12:16"), "2026-10-14 18:00", false},
+	}
+	for _, tc := range cases {
+		if got := due(tc.job, tc.state, at(tc.now)); got != tc.want {
+			t.Errorf("%s: due = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	// A failed attempt is tried again after a while, once.
+	failed := ran("2026-10-14 03:01")
+	failed.LastError = "unreachable"
+	last := at("2026-10-13 15:01")
+	failed.LastOK = &last
+	if due(twice, failed, at("2026-10-14 03:20")) || !due(twice, failed, at("2026-10-14 03:31")) {
+		t.Error("retry after a failed attempt")
+	}
+	failed.LastOK = failed.LastRun
+	if due(twice, failed, at("2026-10-14 03:40")) {
+		t.Error("retry although the slot was met")
+	}
+
+	next, ok := night.NextRun(at("2026-10-14 15:30"))
+	if !ok || !next.Equal(at("2026-10-15 03:00")) {
+		t.Errorf("next = %v", next)
+	}
+	// A slot outside the window waits for the window to open.
+	night.Times = []string{"22:00"}
+	if next, _ := night.NextRun(at("2026-10-14 15:30")); !next.Equal(at("2026-10-15 01:00")) {
+		t.Errorf("next with the window closed = %v", next)
+	}
+	if _, ok := (Job{Every: "daily", Time: "01:00"}).NextRun(at("2026-10-14 15:30")); ok {
+		t.Error("a job that is off has no next run")
 	}
 }
 

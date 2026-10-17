@@ -22,11 +22,11 @@
 	];
 	const sortedAreas = $derived(areas.filter((area) => !area.admin || admin).toSorted((a, b) => t(a.label).localeCompare(t(b.label), i18n.locale)));
 
-	let terminals = $state<{ enabled: boolean } | null>(null);
+	let terminals = $state<{ enabled: boolean; confirm: boolean } | null>(null);
 	let error = $state('');
 
 	$effect(() => {
-		if (admin) api.get<{ enabled: boolean }>('/terminal').then((res) => (terminals = res), () => {});
+		if (admin) api.get<{ enabled: boolean; confirm: boolean }>('/terminal').then((res) => (terminals = res), () => {});
 	});
 
 	let timezone = $state('');
@@ -48,7 +48,16 @@
 	async function setTerminals(enabled: boolean) {
 		error = '';
 		try {
-			terminals = await api.put<{ enabled: boolean }>('/terminal', { enabled });
+			terminals = await api.put<{ enabled: boolean; confirm: boolean }>('/terminal', { enabled });
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
+
+	async function setConfirm(confirm: boolean) {
+		error = '';
+		try {
+			terminals = await api.put<{ enabled: boolean; confirm: boolean }>('/terminal', { confirm });
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
@@ -81,6 +90,11 @@
 			<span class="name">{t('settings.terminal')}</span>
 		</label>
 		<p class="muted">{t('settings.terminalDesc')}</p>
+		<label class="check">
+			<input type="checkbox" checked={terminals.confirm} onchange={(event) => setConfirm(event.currentTarget.checked)} />
+			<span class="name">{t('settings.terminalConfirm')}</span>
+		</label>
+		<p class="muted">{t('settings.terminalConfirmDesc')}</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	</section>
 {/if}
