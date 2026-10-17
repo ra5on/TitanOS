@@ -119,7 +119,12 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	if n.Transport != "" {
 		transport = n.Transport
 	}
-	if n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
+	// Some FAT superfloppies expose a whole-device partition alias. Prefer
+	// that partition, without accepting duplicate UUIDs on separate devices.
+	alias := n.Type == "disk" && slices.ContainsFunc(n.Children, func(child node) bool {
+		return child.Type == "part" && child.UUID == n.UUID && child.FSType == n.FSType && child.Size == n.Size
+	})
+	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
 			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {

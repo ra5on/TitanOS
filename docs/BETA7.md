@@ -49,3 +49,9 @@ JavaScript-Fehler. Die persönliche Tonauswahl übersteht einen Seitenreload.
 HTTPS mit dem aktuellen Zertifikatscode ist nach Zulassen des selbst signierten
 Zertifikats in allen drei Browsern erreichbar. Die automatisierte Vorschau
 prüft den Wiedergabepfad, nicht die akustische Wirkung an echten Lautsprechern.
+
+Zusätzlich in einem isolierten QEMU-NAS mit virtuellem FAT-USB-Laufwerk geprüft:
+Mount-Identität, zwei Kopierläufe mit geänderter und gelöschter Quelldatei,
+Auswurfsperre und sicheres Auswerfen. Linux-Partitionen, die ein FAT-Dateisystem
+auf dem ganzen Gerät vollständig abbilden, werden nur einmal angeboten;
+identische UUIDs auf getrennten Geräten bleiben ein Fehler.

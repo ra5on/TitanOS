@@ -22,10 +22,11 @@ const listing = `{"blockdevices":[
 ]}`
 
 type fake struct {
-	t      *testing.T
-	calls  []string
-	mounts *string
-	fail   string
+	t       *testing.T
+	calls   []string
+	mounts  *string
+	fail    string
+	listing string
 }
 
 func (f *fake) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
@@ -36,6 +37,9 @@ func (f *fake) Run(ctx context.Context, stdin, name string, args ...string) (str
 	}
 	switch name {
 	case "lsblk":
+		if f.listing != "" {
+			return f.listing, nil
+		}
 		return listing, nil
 	case "mount":
 		dir := args[len(args)-1]
@@ -175,4 +179,27 @@ func TestBackupNeverWritesIntoUnverifiedMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.operation.Unlock()
+}
+
+func TestWholeDiskPartitionAliasListedOnce(t *testing.T) {
+	var devices []Device
+	disk := node{Name: "/dev/sdb", Type: "disk", Transport: "usb", FSType: "vfat", UUID: "1234-ABCD", Size: 1000, Children: []node{{Name: "/dev/sdb1", Type: "part", FSType: "vfat", UUID: "1234-ABCD", Size: 1000}}}
+	collect(disk, "", &devices, nil)
+	if len(devices) != 1 || devices[0].path != "/dev/sdb1" {
+		t.Fatalf("aliases: %+v", devices)
+	}
+	disk.Children[0].Size = 500
+	devices = nil
+	collect(disk, "", &devices, nil)
+	if len(devices) != 2 {
+		t.Fatal("nonidentical filesystems were silently collapsed")
+	}
+}
+
+func TestDuplicateUUIDOnDifferentDrivesRejected(t *testing.T) {
+	m, f := newTest(t)
+	f.listing = strings.ReplaceAll(listing, "NTFS0000000000AA", "AAAA-BBBB")
+	if _, err := m.find(context.Background(), "AAAA-BBBB"); err == nil {
+		t.Fatal("duplicate UUID accepted")
+	}
 }
