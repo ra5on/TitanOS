@@ -38,3 +38,14 @@ ersetzt. Dadurch wird die Verwechslung mit einem früheren TitanOS-Zertifikat
 vermieden, die Chrome/Firefox vollständig blockieren konnte. Eine normale
 Vertrauenswarnung bleibt bei selbst signierten Zertifikaten erwartbar.
 Eigene Zertifikate werden durch diese Migration nicht ersetzt.
+
+## Prüfstand
+
+Lokale Go-Tests einschließlich echter restic-Sicherung/Rücksicherung, Web-Tests,
+Svelte-Typprüfung und 23 Release-Verpackungs-/Signaturtests bestanden. Getestet
+mit Chrome 155, Edge 155 und Firefox 157 auf 360 und 1440 Pixeln: Einstellungen
+für Töne, Stick-Sicherung, Backups und Nutzerkonto ohne Seitenüberlauf oder
+JavaScript-Fehler. Die persönliche Tonauswahl übersteht einen Seitenreload.
+HTTPS mit dem aktuellen Zertifikatscode ist nach Zulassen des selbst signierten
+Zertifikats in allen drei Browsern erreichbar. Die automatisierte Vorschau
+prüft den Wiedergabepfad, nicht die akustische Wirkung an echten Lautsprechern.

@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** TitanOS befindet sich in der Beta-Phase. [v0.2.0-beta.5](https://github.com/ra5on/TitanOS/releases/tag/v0.2.0-beta.5) ist veröffentlicht und bringt eine kompaktere mobile WebUI sowie App-Icons und zusätzliche Zugriffslinks. Weitere Änderungen im Hauptzweig sind erst mit ihrem jeweiligen Release verfügbar. Alle Downloads stehen unter [Releases](https://github.com/ra5on/TitanOS/releases).
+> **Stand:** TitanOS befindet sich in der Beta-Phase. Vollständig veröffentlichte Downloads und Änderungen stehen unter [Releases](https://github.com/ra5on/TitanOS/releases). Diese README beschreibt den Hauptzweig; Änderungen werden erst mit dem zugehörigen Release auf bestehenden Installationen verfügbar.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -27,7 +27,10 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Apps mit passenden Icons und drei Zugriffswegen:** lokale WebUI, Tailscale-WebUI bei aktiver Verbindung und eine selbst hinterlegte öffentliche URL, etwa hinter Cloudflare. Protokoll, Port und Pfad gehören zur App-Vorlage. Das Eintragen einer URL richtet keinen Tunnel ein. [App-Links](docs/APP-LINKS.md).
 - **Eigener App-Katalog:** [TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps) enthält auch acht Storytold-Web-Apps als Docker-Pakete. Die Paketierung prüft regelmäßig neue stabile Upstream-Releases und veröffentlicht sie nach erfolgreichen Tests. Bereits installierte Container aktualisierst du über die Docker-Ansicht.
 - **Dateien in Storytold-Apps:** Diese Apps verarbeiten Dokumente im Browser. Eine NAS-Freigabe auf dem eigenen Rechner verbinden und Dateien dort öffnen bzw. exportieren; ein Container-Pfad allein gibt dem Browser keinen Zugriff auf NAS-Dateien.
-- **Im Hauptzweig für Beta 6 vorbereitet:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
+- **Beta 6:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
+
+- **Beta 7 – USB-Kopie-Backups:** ausgewählte Freigaben nach Zeitplan auf eine externe Platte kopieren. Direkt lesbar und unverschlüsselt; gelöschte Quelldateien bleiben auf dem Ziel erhalten, geänderte werden ersetzt. [Ablauf und Grenzen](docs/USB-COPY-BACKUPS.md).
+- **Beta 7 – Stick-Zeitplan und Töne:** tägliche/wöchentliche Prüfung der Konfigurationssicherung zusätzlich zur Sicherung nach Änderungen. Fünf sanfte Benachrichtigungstöne mit Vorschau, Lautstärke und Auswahl pro Konto. [Einstellungen](docs/BETA7.md).
 
 ## Was schon funktioniert
 
