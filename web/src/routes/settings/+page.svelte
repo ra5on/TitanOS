@@ -128,7 +128,7 @@
 		margin: 0;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.areas {

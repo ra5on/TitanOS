@@ -1,11 +1,11 @@
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 // The build output goes straight into the Go package that embeds it into titand.
 const out = '../backend/internal/webui/dist';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
 	plugins: [
 		sveltekit({
 			// Single-page app: titand answers every unknown path with index.html.
@@ -24,7 +24,7 @@ export default defineConfig({
 	server: {
 		// During development the API comes from a locally running titand.
 		proxy: {
-			'/api': { target: 'http://127.0.0.1:8080', ws: true }
+			'/api': { target: loadEnv(mode, '.', '').TITANOS_DEV_API || 'http://127.0.0.1:8080', ws: true }
 		}
 	}
-});
+}));

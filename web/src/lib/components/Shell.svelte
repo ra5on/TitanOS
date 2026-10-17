@@ -85,16 +85,16 @@
 	main {
 		flex: 1 1 auto;
 		width: 100%;
-		max-width: 1440px;
+		min-width: 0;
 		margin: 0 auto;
-		padding: 28px 32px 36px;
+		padding: var(--page-pad) var(--page-pad) 28px;
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
+		gap: var(--gap);
 	}
 	@media (max-width: 760px) {
 		main {
-			padding: 20px 16px 28px;
+			padding: 16px var(--page-pad) 24px;
 		}
 	}
 </style>

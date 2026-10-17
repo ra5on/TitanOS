@@ -58,7 +58,7 @@ func fakeEngine(t *testing.T) (socket string, calls *[]string) {
 	mux.HandleFunc("GET /v1.43/containers/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`[
 		 {"Id":"aaaaaaaaaaaa1111","Names":["/whoami-web-1"],"Image":"traefik/whoami","ImageID":"sha256:img1","State":"running",
-		  "Labels":{"com.docker.compose.project":"whoami","com.docker.compose.service":"web","titanos.webui":"8080"},
+		  "Labels":{"com.docker.compose.project":"whoami","com.docker.compose.service":"web","titanos.webui":"8080","titanos.public-url":"https://cloud.example.org/app","titanos.icon":"https://example.org/icon.png"},
 		  "Ports":[{"IP":"0.0.0.0","PrivatePort":80,"PublicPort":8080,"Type":"tcp"},{"IP":"::","PrivatePort":80,"PublicPort":8080,"Type":"tcp"},{"PrivatePort":443,"Type":"tcp"}]},
 		 {"Id":"bbbbbbbbbbbb2222","Names":["/alt"],"Image":"busybox","ImageID":"sha256:img2","State":"exited","Labels":{},"Ports":[]}]`))
 	})
@@ -386,6 +386,9 @@ func TestUpdateHints(t *testing.T) {
 	// The registry has "new" for traefik/whoami while the container runs "old".
 	if !web.UpdateAvailable || stopped.UpdateAvailable || status.UpdatesChecked.IsZero() {
 		t.Errorf("update hints: web=%v stopped=%v checked=%v", web.UpdateAvailable, stopped.UpdateAvailable, status.UpdatesChecked)
+	}
+	if web.PublicURL != "https://cloud.example.org/app" || web.Icon != "https://example.org/icon.png" {
+		t.Fatalf("app metadata lost: %+v", web)
 	}
 	if web.WebUI != "8080" {
 		t.Errorf("webui = %q", web.WebUI)

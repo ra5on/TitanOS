@@ -2070,5 +2070,10 @@
 	"error.vm_snapshot_exists": "Explicitly delete the VM snapshots before removing this VM.",
 	"snapshots.incomplete": "Incomplete or unreadable snapshot",
 	"error.vm_file_protected": "This path belongs to a VM. Manage disks and firmware through VM settings; review its snapshots before removal.",
-	"snapshots.reason.iso": "Eject the installation medium in VM settings before taking a snapshot. The external ISO file is not captured."
+	"snapshots.reason.iso": "Eject the installation medium in VM settings before taking a snapshot. The external ISO file is not captured.",
+	"docker.tailscaleWebui": "Tailscale Web UI",
+	"docker.publicWebui": "Public",
+	"editor.publicUrl": "Public URL (optional)",
+	"editor.publicUrlHint": "Full HTTP/HTTPS address, for example your Cloudflare tunnel. Does not create a tunnel. Leave empty to hide the button.",
+	"editor.publicUrlInvalid": "Enter a full HTTP/HTTPS address without a username or password."
 }

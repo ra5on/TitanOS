@@ -1,5 +1,7 @@
 <script lang="ts">
-	import type { DockerContainer } from '#lib/api.ts';
+	import { appURL, publicURL } from '#lib/app-links.ts';
+ import AppIcon from '#lib/components/AppIcon.svelte';
+ import type { DockerContainer } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -7,6 +9,7 @@
 	type Props = {
 		container: DockerContainer;
 		host: string;
+ tailscaleHost?: string;
 		busy: boolean;
 		/** One row inside a stack instead of a card of its own. */
 		compact?: boolean;
@@ -16,7 +19,7 @@
 		onconsole: () => void;
 		onupdate: () => void;
 	};
-	let { container, host, busy, compact = false, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
+	let { container, host, tailscaleHost = '', busy, compact = false, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
 
 	const running = $derived(container.state === 'running' || container.state === 'restarting');
 	let menu = $state(false);
@@ -24,7 +27,6 @@
 
 	// Without an icon from a template, an app gets a monogram in a color of
 	// its own, derived from its name so that it stays the same.
-	const monogram = $derived(container.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).replace(/^./, (c) => c.toUpperCase()) || '?');
 	const hue = $derived([...container.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7));
 
 	const since = $derived.by(() => {
@@ -42,13 +44,9 @@
 		return values.map((value, index) => `${((index / (values.length - 1)) * 100).toFixed(1)},${(22 - (value / peak) * 20).toFixed(1)}`).join(' ');
 	});
 
-	/** Where the app's own web interface is, from the label titanos.webui. */
-	const webui = $derived.by(() => {
-		const value = container.webui.trim();
-		if (/^\d+(\/.*)?$/.test(value)) return `http://${host}:${value}`;
-		if (/^https?:\/\//.test(value)) return value.replace('[host]', host);
-		return '';
-	});
+ const webui = $derived(appURL(container.webui, host));
+ const tailscaleURL = $derived(appURL(container.webui, tailscaleHost, true));
+ const externalURL = $derived(publicURL(container.publicUrl ?? ''));
 
 	function choose(action: () => void) {
 		menu = false;
@@ -58,13 +56,14 @@
 
 <svelte:window onclick={(event) => menu && !root?.contains(event.target as Node) && (menu = false)} onkeydown={(event) => event.key === 'Escape' && (menu = false)} />
 
+{#snippet links()}
+ {#if webui}<a class="btn small" href={webui} target="_blank" rel="noreferrer">{t('docker.webui')}</a>{/if}
+ {#if tailscaleURL}<a class="btn small" href={tailscaleURL} target="_blank" rel="noreferrer">{t('docker.tailscaleWebui')}</a>{/if}
+ {#if externalURL}<a class="btn small" href={externalURL} target="_blank" rel="noreferrer">{t('docker.publicWebui')}</a>{/if}
+{/snippet}
 {#snippet ports()}
 	{#each container.ports as port (`${port.host}/${port.protocol}`)}
-		{#if port.protocol === 'tcp'}
-			<a class="chip mono" href="http://{host}:{port.host}" target="_blank" rel="noreferrer">{port.host}</a>
-		{:else}
-			<span class="chip mono">{port.host}/{port.protocol}</span>
-		{/if}
+        <span class="chip mono">{port.host}{port.protocol === 'udp' ? '/udp' : ''}</span>
 	{/each}
 {/snippet}
 
@@ -93,7 +92,7 @@
 			<span class="line"><span class="name">{container.service || container.name}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
 			<span class="mono image">{container.image}</span>
 		</span>
-		<span class="ports">{@render ports()}{#if webui}<a class="chip" href={webui} target="_blank" rel="noreferrer">{t('docker.webui')}</a>{/if}</span>
+		<span class="ports">{@render ports()}{@render links()}</span>
 		<span class="mono value">{running ? formatPercent(container.cpuPercent) : '–'}</span>
 		<span class="mono value">{running ? formatBytes(container.memoryBytes) : '–'}</span>
 		<button type="button" class="btn small" onclick={() => onaction(running ? 'stop' : 'start')} disabled={busy}>{t(running ? 'docker.stop' : 'docker.start')}</button>
@@ -103,7 +102,7 @@
 {:else}
 	<article class="tile" bind:this={root} aria-label={container.name}>
 		<div class="top">
-			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}>{monogram}</button>
+			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={container.name} /> </button>
 			<div class="names">
 				<div class="line">
 					<span class="name">{container.name}</span>
@@ -124,7 +123,7 @@
 		{/if}
 		<div class="bottom">
 			<span class="muted since">{since}</span>
-			{#if webui}<a class="btn small" href={webui} target="_blank" rel="noreferrer">{t('docker.webui')}</a>{/if}
+			{@render links()}
 			<button type="button" class="btn small" onclick={() => onaction(running ? 'stop' : 'start')} disabled={busy}>
 				<Icon name={running ? 'pause' : 'play'} size={14} />{t(running ? 'docker.stop' : 'docker.start')}
 			</button>
@@ -245,6 +244,7 @@
 	}
 	.bottom {
 		display: flex;
+ flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
@@ -321,4 +321,13 @@
 		border: 0;
 		background: var(--border);
 	}
+ @media (max-width: 760px) {
+ .member { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; padding: var(--tile-pad); }
+ .member .ports { grid-column: 2 / -1; }
+ .member .value { text-align: left; grid-column: 2; }
+ .member > .more { grid-column: 3; grid-row: 1; }
+ .member > .btn { grid-column: 3; grid-row: 3 / 5; }
+ .bottom .since { flex-basis: 100%; }
+ .small, .more { min-height: 44px; }
+ }
 </style>

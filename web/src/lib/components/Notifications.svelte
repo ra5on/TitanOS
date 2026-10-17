@@ -224,6 +224,8 @@
 			position: fixed;
 			top: 60px;
 			right: 12px;
+ max-width: calc(100vw - 24px);
+ max-height: calc(100dvh - 76px);
 		}
 	}
 </style>
