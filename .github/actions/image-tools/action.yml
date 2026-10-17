@@ -1,0 +1,26 @@
+name: Tools for building the image
+description: Node, Go, mkosi and the packages that release.yml and plugins.yml build and boot the image with.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+
+    - uses: actions/setup-go@v7
+      with:
+        go-version: '1.27'
+        cache-dependency-path: backend/go.sum
+
+    - name: Packages and mkosi
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools fdisk kmod openssh-client smbclient gcc libc6-dev
+        # The version the image is developed with.
+        python3 -m venv "$RUNNER_TEMP/mkosi"
+        "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
+        echo "$RUNNER_TEMP/mkosi/bin" >> "$GITHUB_PATH"
