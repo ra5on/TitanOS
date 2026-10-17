@@ -4,12 +4,34 @@ name: Release
 # as a release, with the manifest that NAS boxes update from. The manifest
 # is signed in a second job that needs an approval and alone sees the key.
 # See docs/RELEASING.md.
+#
+# Pull requests rehearse only the image and its boot here; plugin changes are
+# tested by plugins.yml. Tags and manual runs build and test everything.
 
 on:
   push:
     tags: ['v*']
   pull_request:
-    paths: ['build/**', 'boot/**', 'plugins/**', 'scripts/**', 'backend/internal/plugins/**', 'backend/internal/api/plugins.go', 'web/src/routes/plugins/**', 'docs/releases/**', '.github/workflows/release.yml']
+    paths:
+      - 'build/**'
+      - 'boot/**'
+      - 'scripts/make-zip.sh'
+      - 'scripts/make-release.sh'
+      - 'scripts/sign-release.sh'
+      - 'scripts/verify-release.py'
+      - 'scripts/check-release-keys.py'
+      - 'scripts/third-party-licenses.py'
+      - 'scripts/licenses/**'
+      - 'scripts/smoke-release.py'
+      - 'scripts/smoke-storage.py'
+      - 'scripts/network_smoke.py'
+      - 'scripts/vm_snapshot_smoke.py'
+      - 'scripts/snapshot-guest.c'
+      - 'scripts/native_apps_smoke.py'
+      - 'scripts/native-apps-render.mjs'
+      - 'docs/releases/**'
+      - '.github/actions/image-tools/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -58,25 +80,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.27'
-          cache-dependency-path: backend/go.sum
-
-      - name: Tools for building the image
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools fdisk kmod openssh-client smbclient gcc libc6-dev
-          # The version the image is developed with.
-          python3 -m venv "$RUNNER_TEMP/mkosi"
-          "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
-          echo "$RUNNER_TEMP/mkosi/bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/image-tools
 
       - name: Signing keys for the image
         run: |
@@ -103,36 +107,42 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
 
       - name: Build the matching NVIDIA plugin
+        if: github.event_name != 'pull_request'
         run: |
           sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
       - name: Test NVIDIA compilation in the NAS build environment
+        if: github.event_name != 'pull_request'
         run: |
           sdk="$PWD/out/plugins/nvidia-build-sdk.tar.zst"
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
       - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
+        if: github.event_name != 'pull_request'
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
       - name: Pack the release
+        env:
+          # Only a pull request packs the system alone; it is never published.
+          WITHOUT_PLUGINS: ${{ github.event_name == 'pull_request' && '1' || '' }}
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
       - name: Exercise signing and verification with a disposable key
         if: github.event_name != 'push'
         run: |
           scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
-          python3 scripts/verify-release.py out/release build/mkosi.extra/usr/share/titanos/update-keys
+          python3 scripts/verify-release.py ${{ github.event_name == 'pull_request' && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
           rm "$RUNNER_TEMP/rehearsal.key"
 
       - name: Boot the actual installation ZIP in UEFI QEMU
-        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip --plugins out/release --timeout 420
+        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
 
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
-        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip --plugins out/release --timeout 420
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
 
       - uses: actions/upload-artifact@v7
         if: always()

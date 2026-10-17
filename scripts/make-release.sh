@@ -13,6 +13,8 @@
 # Usage: scripts/make-release.sh <version> <stable|beta> [changelog file]
 #   MIN_VERSION=x.y.z   oldest version that may update to this one directly
 #   ALLOW_DEV=1         accept a development build; for tests only
+#   WITHOUT_PLUGINS=1   pack only the system (image rehearsals on pull requests);
+#                       verify-release.py rejects such a release unless told so
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
 set -eu
@@ -71,7 +73,7 @@ for file in vmlinuz initrd.img filesystem.squashfs; do
 done
 
 VERSION=$version CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
-    MIN_VERSION=${MIN_VERSION:-} python3 - <<'PY'
+    MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
 import datetime, hashlib, json, os, tarfile, shutil
 from pathlib import Path
 
@@ -110,7 +112,8 @@ if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
 # Kernel plugins are separate downloads; they must match this exact system.
 manifest["plugins"] = []
-for path in sorted(Path("out/plugins").glob("*.plugin.json")):
+without_plugins = os.environ["WITHOUT_PLUGINS"] == "1"
+for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin.json")):
     plugin = json.loads(path.read_text())
     name = plugin["name"]
     if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale"} or path.name != name + ".plugin.json":
@@ -126,16 +129,17 @@ for path in sorted(Path("out/plugins").glob("*.plugin.json")):
     for asset in assets:
         shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
     manifest["plugins"].append({"name": name, "asset": path.name})
-if not any(p["name"] == "nvidia" for p in manifest["plugins"]):
-    raise ValueError("NVIDIA plugin missing")
-sdk = json.loads(Path("out/plugins/nvidia-build-sdk.json").read_text())
-if sdk["version"] != version or sdk["kernel"] != manifest["kernel"] or sdk["asset"] != "nvidia-build-sdk.tar.zst":
-    raise ValueError("NVIDIA SDK target mismatch")
-if sha256(Path("out/plugins") / sdk["asset"]) != sdk["sha256"] or (Path("out/plugins") / sdk["asset"]).stat().st_size != sdk["size"]:
-    raise ValueError("NVIDIA SDK integrity mismatch")
-manifest["nvidiaBuildSDK"] = sdk
-for asset in [sdk["asset"], "nvidia-build-sdk-sources.txt"]:
-    shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
+if not without_plugins:
+    if not any(p["name"] == "nvidia" for p in manifest["plugins"]):
+        raise ValueError("NVIDIA plugin missing")
+    sdk = json.loads(Path("out/plugins/nvidia-build-sdk.json").read_text())
+    if sdk["version"] != version or sdk["kernel"] != manifest["kernel"] or sdk["asset"] != "nvidia-build-sdk.tar.zst":
+        raise ValueError("NVIDIA SDK target mismatch")
+    if sha256(Path("out/plugins") / sdk["asset"]) != sdk["sha256"] or (Path("out/plugins") / sdk["asset"]).stat().st_size != sdk["size"]:
+        raise ValueError("NVIDIA SDK integrity mismatch")
+    manifest["nvidiaBuildSDK"] = sdk
+    for asset in [sdk["asset"], "nvidia-build-sdk-sources.txt"]:
+        shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")

@@ -14,7 +14,7 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def verify(release, keys):
+def verify(release, keys, without_plugins=False):
     manifest = json.loads((release / "manifest.json").read_text())
     version = manifest["version"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?", version):
@@ -28,6 +28,9 @@ def verify(release, keys):
             raise ValueError("invalid plugin inventory")
         names.add(name)
         signed.append(name + ".plugin.json")
+    # A release without the matching NVIDIA plugin is an image rehearsal only.
+    if not without_plugins and ("nvidia" not in names or "nvidiaBuildSDK" not in manifest):
+        raise ValueError("NVIDIA plugin or build SDK missing (image-only rehearsal?)")
     # Every signature must verify using the same trusted key.
     for key in sorted(keys.glob("*.pub")):
         if all(subprocess.run(["minisign", "-V", "-q", "-p", str(key), "-m", str(release / name)],
@@ -84,9 +87,13 @@ def verify(release, keys):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit("usage: verify-release.py <release directory> <public keys directory>")
+    args = sys.argv[1:]
+    without_plugins = "--without-plugins" in args
+    if without_plugins:
+        args.remove("--without-plugins")
+    if len(args) != 2:
+        sys.exit("usage: verify-release.py [--without-plugins] <release directory> <public keys directory>")
     try:
-        print("Verified TitanOS", verify(Path(sys.argv[1]), Path(sys.argv[2])))
+        print("Verified TitanOS", verify(Path(args[0]), Path(args[1]), without_plugins))
     except (ValueError, OSError, KeyError) as error:
         sys.exit(str(error))
