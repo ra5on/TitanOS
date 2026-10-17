@@ -19,10 +19,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/run"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -92,6 +92,7 @@ type Manager struct {
 	runner run.Runner
 	// root is where drives are mounted; mountsFile lists what is mounted.
 	root, mountsFile string
+	mountInfoFile    string
 	// Disabled refuses to mount anything: in development mode titand runs on
 	// the developer's own machine.
 	Disabled bool
@@ -108,7 +109,7 @@ type Manager struct {
 
 // NewManager returns a manager for the real system.
 func NewManager() *Manager {
-	return &Manager{runner: run.Exec{}, root: "/run/titanos-usb", mountsFile: "/proc/self/mounts"}
+	return &Manager{runner: run.Exec{}, root: "/run/titanos-usb", mountsFile: "/proc/self/mounts", mountInfoFile: "/proc/self/mountinfo"}
 }
 
 // bootStickLabel is the label of the stick TitanOS runs from.
@@ -430,18 +431,47 @@ func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root
 	if !again.Mounted || again.Dir != d.Dir || again.path != d.path {
 		return ErrNotMounted
 	}
-	info, err := root.Stat(".")
+	// Linux mount IDs identify the pinned mount even for Btrfs subvolumes,
+	// whose stat device number need not match mountinfo's device number.
+	directory, err := root.Open(".")
 	if err != nil {
 		return err
 	}
-	device, err := os.Stat(d.path)
+	defer directory.Close()
+	var stat unix.Statx_t
+	if err := unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &stat); err != nil {
+		return err
+	}
+	if stat.Mask&unix.STATX_MNT_ID == 0 {
+		return ErrNotMounted
+	}
+	mountInfo, err := os.ReadFile(m.mountInfoFile)
 	if err != nil {
 		return err
 	}
-	mountedStat, ok := info.Sys().(*syscall.Stat_t)
-	deviceStat, okDevice := device.Sys().(*syscall.Stat_t)
-	if !ok || !okDevice || device.Mode()&os.ModeDevice == 0 || mountedStat.Dev != deviceStat.Rdev {
+	if !matchesMount(string(mountInfo), d.Dir, d.path, d.FSType, fmt.Sprintf("%d", stat.Mnt_id)) {
 		return ErrNotMounted
 	}
 	return work(root)
+}
+
+func matchesMount(info, dir, device, fsType, mountID string) bool {
+	for _, line := range strings.Split(info, "\n") {
+		before, after, ok := strings.Cut(line, " - ")
+		if !ok {
+			continue
+		}
+		fields, tail := strings.Fields(before), strings.Fields(after)
+		if len(fields) < 6 || len(tail) < 3 {
+			continue
+		}
+		// Our generated mount directory and lsblk device path contain no spaces.
+		if fields[4] == dir && fields[0] == mountID && tail[1] == device {
+			if fsType == "ntfs" {
+				return tail[0] == "ntfs3"
+			}
+			return tail[0] == fsType
+		}
+	}
+	return false
 }

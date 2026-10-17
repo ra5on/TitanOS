@@ -203,3 +203,21 @@ func TestDuplicateUUIDOnDifferentDrivesRejected(t *testing.T) {
 		t.Fatal("duplicate UUID accepted")
 	}
 }
+
+func TestMountedIdentitySupportsBtrfsVirtualDevice(t *testing.T) {
+	const info = "50 30 0:42 / /run/titanos-usb/backup rw - btrfs /dev/sdb1 rw\n"
+	if !matchesMount(info, "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", "50") {
+		t.Fatal("Btrfs virtual identity rejected")
+	}
+	for _, dev := range []string{"0", "99"} {
+		if matchesMount(info, "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", dev) {
+			t.Fatal("wrong pinned filesystem accepted")
+		}
+	}
+	if matchesMount(info, "/run/titanos-usb/backup", "/dev/sdc1", "btrfs", "50") {
+		t.Fatal("different drive accepted")
+	}
+	if matchesMount("", "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", "50") {
+		t.Fatal("missing mount accepted")
+	}
+}
