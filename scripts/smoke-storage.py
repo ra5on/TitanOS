@@ -30,6 +30,30 @@ helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 
 
+def check_smb_share(request, remote, smb_port, password, directory):
+    # A new share with capitals and a blank, created without naming anyone:
+    # whoever creates it must be able to use it over SMB right away.
+    request('/shares', {'name': 'Fotos 2024', 'volume': 'mirror', 'smb': True})
+    share = next(s for s in request('/shares') if s['name'] == 'Fotos 2024')
+    assert share['access'] == {'storagetester': 'rw'}, share
+    upload = directory / 'smb-upload.txt'
+    upload.write_text('über SMB\n')
+    env = dict(os.environ, PASSWD=password)
+    command = ['smbclient', '//127.0.0.1/Fotos 2024', '-p', str(smb_port), '-U', 'storagetester', '-m', 'SMB3',
+               '-c', f'put "{upload}" "Neue Datei.txt"; get "Neue Datei.txt" "{directory}/smb-back.txt"']
+    deadline = time.monotonic() + 60
+    while True:
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            break
+        if time.monotonic() > deadline:
+            raise AssertionError(f'share not reachable over SMB: {result.stdout}{result.stderr}')
+        time.sleep(2)
+    assert (directory / 'smb-back.txt').read_text() == 'über SMB\n'
+    assert remote('cat "/mnt/mirror/Fotos 2024/Neue Datei.txt"') == 'über SMB'
+    print('SMB share with capitals and blank: created, reachable, writable', flush=True)
+
+
 def check_uploads(request, opener, url, remote, password):
     state = request('/system/memory')
     assert state['settings']['cachePercent'] == 20 and not state.get('error'), state
@@ -92,7 +116,7 @@ def smoke(archive, plugins, log, timeout):
         for index in (1, 2, 3):
             helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '2G')
         helper.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory / 'key'))
-        port, ssh_port = helper.free_port(), helper.free_port()
+        port, ssh_port, smb_port = helper.free_port(), helper.free_port(), helper.free_port()
         url = f'https://127.0.0.1:{port}'
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
                                             urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
@@ -128,7 +152,7 @@ def smoke(archive, plugins, log, timeout):
             '-drive', f'if=pflash,format=raw,file={directory}/OVMF_VARS.fd',
             '-device', 'qemu-xhci', '-drive', f'if=none,id=stick,format=raw,file={disk}',
             '-device', 'usb-storage,drive=stick,removable=on,bootindex=0',
-            '-netdev', f'user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443,hostfwd=tcp:127.0.0.1:{ssh_port}-:22',
+            '-netdev', f'user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443,hostfwd=tcp:127.0.0.1:{ssh_port}-:22,hostfwd=tcp:127.0.0.1:{smb_port}-:445',
             '-device', 'virtio-net-pci,netdev=net0',
             '-smbios', 'type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200',
             '-display', 'none', '-serial', 'stdio', '-monitor', 'none', '-no-reboot']
@@ -191,6 +215,7 @@ def smoke(archive, plugins, log, timeout):
                         request('/vms', {'name': 'home-assistant', 'displayName': 'Home Assistant', 'directory': 'Home Assistant', 'volume': 'mirror', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'path': '/mnt/mirror/vms/Home Assistant/ha.qcow2', 'format': 'qcow2'}]})
                         remote('test ! -e /mnt/mirror/vms/home-assistant')
                         check_uploads(request, opener, url, remote, password)
+                        check_smb_share(request, remote, smb_port, password, directory)
                         check_cdi(request, remote)
                         snapshot_vm, snapshot = check_vm_snapshots(request, remote, put, directory, volume='mirror')
                         for attempt in range(60):

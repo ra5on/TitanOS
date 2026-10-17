@@ -41,7 +41,7 @@
 		dialog = null;
 		error = '';
 		try {
-			await api.delete(`/shares/${share.name}`);
+			await api.delete(`/shares/${encodeURIComponent(share.name)}`);
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
@@ -53,13 +53,16 @@
 		if (share.smb) {
 			list.push(
 				{ label: t('shares.windows'), value: `\\\\${host}\\${share.name}` },
-				{ label: t('shares.mac'), value: `smb://${host}/${share.name}` },
-				{ label: t('shares.linux'), value: `smb://${host}/${share.name}` }
+				{ label: t('shares.mac'), value: `smb://${host}/${encodeURIComponent(share.name)}` },
+				{ label: t('shares.linux'), value: `smb://${host}/${encodeURIComponent(share.name)}` }
 			);
 		}
-		if (share.nfs.enabled) list.push({ label: t('shares.nfs'), value: `mount -t nfs ${host}:/${share.name} /mnt/${share.name}` });
+		if (share.nfs.enabled) list.push({ label: t('shares.nfs'), value: `mount -t nfs ${quote(`${host}:/${share.name}`)} ${quote(`/mnt/${share.name}`)}` });
 		return list;
 	}
+
+	// A shell word: names may contain blanks.
+	const quote = (word: string) => (/^[\w./:@-]+$/.test(word) ? word : `'${word}'`);
 
 	async function copy(value: string) {
 		try {
@@ -103,6 +106,7 @@
 				{#if share.timeMachine.enabled}<span class="chip">{t('shares.timeMachineChip')}</span>{/if}
 				{#if share.smb && !share.browseable}<span class="chip">{t('shares.hiddenChip')}</span>{/if}
 				{#if share.guest}<span class="chip warn">{t('shares.guest')}</span>{/if}
+				{#if share.smb && !share.guest && Object.keys(share.access).length === 0}<span class="chip warn">{t('shares.nobodyChip')}</span>{/if}
 				{#if !share.available}<span class="chip error">{t('shares.unavailable')}</span>{/if}
 				<span class="mono path">{share.path}</span>
 			</div>
