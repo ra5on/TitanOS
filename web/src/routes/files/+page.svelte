@@ -1,17 +1,26 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { api, ApiError, type FileEntry, type FileRoot, type UploadStatus } from '#lib/api.ts';
+	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDiskBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
+	import CopyDialog from './CopyDialog.svelte';
+	import JobsPanel from './JobsPanel.svelte';
+	import TextEditor from './TextEditor.svelte';
 	import UploadPanel from './UploadPanel.svelte';
 
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 
 	let roots = $state<FileRoot[] | null>(null);
+	let usbDevices = $state<UsbDevice[]>([]);
+	let usbBusy = $state('');
+	let copying = $state<{ move: boolean } | null>(null);
+	let editing = $state<string | null>(null);
+	let jobsTick = $state(0);
+
 	let rootId = $state('');
 	let dir = $state(''); // folder inside the root, "" for its top
 	let entries = $state<FileEntry[] | null>(null);
@@ -60,6 +69,50 @@
 			error = fail(err);
 		}
 	}
+
+	async function loadUsb() {
+		if (!canAdminister) return;
+		try {
+			const list = await api.get<UsbDevice[]>('/usb');
+			const before = usbDevices.filter((d) => d.mounted).map((d) => d.id).join();
+			usbDevices = list;
+			// A drive that was mounted or taken away changes the places on the left.
+			if (before !== list.filter((d) => d.mounted).map((d) => d.id).join()) loadRoots();
+		} catch {
+			// The next look may work.
+		}
+	}
+
+	async function usbAction(device: UsbDevice, action: 'mount' | 'eject') {
+		usbBusy = device.id;
+		error = '';
+		try {
+			usbDevices = await api.post<UsbDevice[]>(`/usb/${encodeURIComponent(device.id)}/${action}`);
+			if (action === 'eject' && rootId === device.root) open('', '');
+			await loadRoots();
+			if (action === 'mount') {
+				const mounted = usbDevices.find((d) => d.id === device.id);
+				if (mounted?.root) open(mounted.root, '');
+			}
+		} catch (err) {
+			error = fail(err);
+		}
+		usbBusy = '';
+	}
+
+	$effect(() => {
+		if (!canAdminister) return;
+		loadUsb();
+		const timer = setInterval(() => !document.hidden && loadUsb(), 5000);
+		return () => clearInterval(timer);
+	});
+
+	const unmounted = $derived(usbDevices.filter((device) => !device.mounted));
+	const editable = $derived.by(() => {
+		if (!root?.editable || selected.length !== 1) return false;
+		const entry = entries?.find((candidate) => candidate.name === selected[0]);
+		return !!entry && !entry.dir && entry.size <= 512 * 1024;
+	});
 
 	async function load() {
 		if (!rootId) { entries = null; pending = []; return; }
@@ -217,20 +270,38 @@
 {:else if roots}
 	<div class="layout">
 		<nav class="tile places" aria-label={t('files.shares')}>
-			{#each ['share', 'volume'] as kind (kind)}
+			{#each ['share', 'volume', 'usb', 'stick'] as kind (kind)}
 				{@const list = roots.filter((candidate) => candidate.kind === kind)}
 				{#if list.length > 0}
-					<span class="group">{t(kind === 'share' ? 'files.shares' : 'files.volumes')}{kind === 'volume' ? ` · ${t('files.adminOnly')}` : ''}</span>
+					<span class="group">{t(kind === 'share' ? 'files.shares' : kind === 'volume' ? 'files.volumes' : kind === 'usb' ? 'files.usb' : 'files.stick')}{kind === 'share' ? '' : ` · ${t('files.adminOnly')}`}</span>
 					{#each list as place (place.id)}
 						<button type="button" class:current={place.id === rootId} aria-current={place.id === rootId ? 'true' : undefined} onclick={() => open(place.id, '')}>
 							<Icon name={kind === 'share' ? 'folder' : 'disk'} size={16} />
 							<span class="place-name">{place.name}</span>
-							{#if !place.writable}<span class="chip">{t('files.readOnly')}</span>{/if}
+							{#if !place.writable && kind !== 'stick'}<span class="chip">{t('files.readOnly')}</span>{/if}
 						</button>
+						{#if kind === 'usb'}
+							{@const device = usbDevices.find((d) => d.root === place.id)}
+							{#if device}<button type="button" class="eject" disabled={usbBusy === device.id} onclick={() => usbAction(device, 'eject')}>{t('files.eject')}</button>{/if}
+						{/if}
 					{/each}
 				{/if}
 			{/each}
-			{#if root}
+			{#if canAdminister && unmounted.length > 0}
+				<span class="group">{t('files.usbPlugged')}</span>
+				{#each unmounted as device (device.id)}
+					<div class="usb">
+						<Icon name="disk" size={16} />
+						<span class="place-name">{device.name} <span class="muted mono">{device.fsType}</span></span>
+						{#if device.supported}
+							<button type="button" class="mount" disabled={usbBusy === device.id} onclick={() => usbAction(device, 'mount')}>{t('files.mount')}</button>
+						{:else}
+							<span class="chip">{t('files.usbUnsupported')}</span>
+						{/if}
+					</div>
+				{/each}
+			{/if}
+			{#if root && root.kind !== 'stick'}
 				<span class="usage muted">{root.name}<br /><span class="mono">{t('files.free', { free: formatDiskBytes(root.freeBytes), total: formatDiskBytes(root.totalBytes) })}</span></span>
 			{/if}
 		</nav>
@@ -306,13 +377,19 @@
 				<div class="actions">
 					<span class="muted count">{t('files.selected', { count: selected.length })}</span>
 					<button type="button" class="btn" onclick={download}><Icon name="download" size={16} />{t('files.download')}</button>
+					{#if root?.kind !== 'stick'}
+						<button type="button" class="btn" onclick={() => (copying = { move: false })}>{t('files.copy')}</button>
+					{/if}
+					{#if editable}<button type="button" class="btn" onclick={() => (editing = join(dir, selected[0]))}>{t('files.edit')}</button>{/if}
 					{#if root?.writable}
+						<button type="button" class="btn" onclick={() => (copying = { move: true })}>{t('files.move')}</button>
 						{#if selected.length === 1}<button type="button" class="btn" onclick={() => show('rename')}>{t('files.rename')}</button>{/if}
 						<button type="button" class="btn danger" onclick={() => show('delete')}>{t('files.delete')}</button>
 					{/if}
 				</div>
 			{/if}
 
+			{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
 			{#if root?.writable}
 				<p class="drop" class:active={dragging}>
 					<Icon name="upload" size={18} />{dragging ? t('files.dropNow', { path: join(root.name, dir) }) : t('files.dropHint')}
@@ -322,7 +399,15 @@
 	</div>
 {/if}
 
+<JobsPanel refresh={jobsTick} onfinished={() => { load(); loadRoots(); }} />
 <UploadPanel />
+
+{#if copying && root && roots}
+	<CopyDialog {roots} from={root} paths={selected.map((name) => join(dir, name))} move={copying.move} startDir={dir} onclose={() => (copying = null)} ondone={() => { copying = null; selected = []; jobsTick++; }} />
+{/if}
+{#if editing && root}
+	<TextEditor root={root.id} path={editing} onclose={() => { editing = null; load(); }} />
+{/if}
 
 {#if dialog}
 	{@const kind = dialog.kind}
@@ -583,4 +668,7 @@
 			display: none;
 		}
 	}
+	.usb { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px; color: var(--muted); font-size: 0.875rem; }
+	.mount, .eject { background: var(--chip); border: 0; border-radius: var(--radius-ctl); color: var(--text); cursor: pointer; font: inherit; font-size: 0.8rem; padding: 0.2rem 0.6rem; }
+	.eject { align-self: flex-end; margin: -4px 10px 4px; }
 </style>
