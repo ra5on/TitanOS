@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -69,7 +70,7 @@ func newTestServer(t *testing.T) *testServer {
 	power := fakePower{actions: make(chan string, 1)}
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
 	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
@@ -250,6 +251,14 @@ func loadedCatalog(t *testing.T, store *config.Store) *catalog.Manager {
 	m.SetOfficialURL(srv.URL + "/apps")
 	m.Load()
 	m.Refresh(context.Background())
+	return m
+}
+
+// loadedTarget returns a backup target that serves nothing (development mode).
+func loadedTarget(store *config.Store) *backuptarget.Manager {
+	m := backuptarget.NewManager(store)
+	m.Disabled = true
+	m.Load()
 	return m
 }
 
@@ -529,7 +538,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: fakePower{}}))
+	srv := httptest.NewServer(New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: fakePower{}}))
 	defer srv.Close()
 	ts := &testServer{t: t, url: srv.URL, client: http.DefaultClient}
 
@@ -1143,6 +1152,30 @@ func TestAbout(t *testing.T) {
 	ts.setup()
 	if res, body := ts.request("GET", "/api/v1/about", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"version":"1.2.3"`) || !strings.Contains(string(body), `"thirdParty":`) {
 		t.Errorf("about: %d %s", res.StatusCode, body)
+	}
+}
+
+func TestBackupTargetSettings(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/backups/target", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) || !strings.Contains(string(body), `"sources":[]`) {
+		t.Errorf("target: %d %s", res.StatusCode, body)
+	}
+	// In development mode nothing is served or paired.
+	if res, body := ts.request("PUT", "/api/v1/backups/target", map[string]any{"enabled": true, "volume": "tank"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("switching on: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/backups/target/sources", map[string]string{"name": "keller"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("pairing: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/backups/target/sources/keller", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "backup_source_not_found" {
+		t.Errorf("removing an unknown source: %d %s", res.StatusCode, body)
+	}
+	guest := ts.newClient()
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	if res, _ := ts.do(guest, "GET", "/api/v1/backups/target", nil); res.StatusCode != http.StatusForbidden {
+		t.Errorf("target as a plain user: %d", res.StatusCode)
 	}
 }
 

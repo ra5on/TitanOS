@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -73,6 +74,8 @@ type Options struct {
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
 	Backup *backup.Manager
+	// BackupTarget takes in the backups of other TitanOS over Tailscale.
+	BackupTarget *backuptarget.Manager
 	// USB lists and mounts drives plugged in over USB; nil if there is none.
 	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
@@ -263,6 +266,10 @@ func New(opts Options) *Server {
 	// Backups of shares. They hold everyone's files: administrators only.
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
+	mux.HandleFunc("GET /api/v1/backups/target", s.requireAdmin(s.handleBackupTarget))
+	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.handleBackupTargetSet))
+	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
+	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
 	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))

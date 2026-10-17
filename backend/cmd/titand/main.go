@@ -25,6 +25,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -369,6 +370,14 @@ func run(opts options) error {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
 	go backups.Run(ctx)
+	// Backups of other TitanOS, taken in over Tailscale.
+	backupTarget := backuptarget.NewManager(store)
+	backupTarget.Disabled = opts.dev
+	backupTarget.Addresses = func() []string { return tailnet.Status().IPs }
+	backupTarget.Host = func() string { return tailnet.Status().Name }
+	backupTarget.Mounted = volumes.Mounted
+	backupTarget.Load()
+	go backupTarget.Run(ctx)
 	// Drives plugged in over USB: shown, and mounted on a click.
 	drives := usb.NewManager()
 	drives.Disabled = opts.dev
@@ -447,6 +456,7 @@ func run(opts options) error {
 		Notify:        notifier,
 		ConfigBackup:  stickBackup,
 		USB:           drives,
+		BackupTarget:  backupTarget,
 		Diagnose:      diagnose.NewManager(store, version.Version),
 		SSH:           access,
 		Update:        updates,
