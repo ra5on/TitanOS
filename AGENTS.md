@@ -569,3 +569,12 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Release-Prüfung ergänzt echte RAM-/Platten-Restores in einem verschachtelten
   QEMU-Gast auf Btrfs sowie separate App-Installations- und Persistenztests.
   App-Tests nur auf Wegwerf-Runnern bzw. isolierten NAS-Test-VMs ausführen.
+
+## Entwicklungsstand Beta 0.2.0-beta.5
+
+- Gemeinsame UI-Größen/Abstände und mobile Docker-Stacks, Filter, Formulare und
+  Dialoge. Persönliche Schriftskalierung und Dashboard-Layouts bleiben erhalten.
+- Katalog-Icons über `x-titanos.icon`/CasaOS; neue Installationen übernehmen
+  `titanos.icon`. Weblinks: `titanos.webui`, aktiver Tailscale-Hostname und optionale
+  `titanos.public-url` für externe Proxys. Details: `docs/APP-LINKS.md`.
+- Storytold-Paketierung und App-Vorlagen bleiben ausschließlich in TitanOS-Apps.

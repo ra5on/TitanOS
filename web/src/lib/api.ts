@@ -212,6 +212,8 @@ export type DockerContainer = {
 	cpuHistory: number[];
 	/** Value of the label titanos.webui: a host port, a port with a path or a URL. */
 	webui: string;
+ publicUrl: string;
+ icon: string;
 	updateAvailable: boolean;
 };
 
@@ -238,6 +240,7 @@ export type AppSource = {
 };
 
 export type CatalogApp = {
+ icon: string;
 	id: string;
 	source: string;
 	name: string;

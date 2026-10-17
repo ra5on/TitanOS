@@ -90,7 +90,9 @@ type Container struct {
 	// WebUI is the address of the app's own web interface, from the label
 	// "titanos.webui": a host port ("8096"), a port with a path
 	// ("8096/admin") or a full URL. Empty if the label is not set.
-	WebUI string `json:"webui"`
+	WebUI     string `json:"webui"`
+	PublicURL string `json:"publicUrl"`
+	Icon      string `json:"icon"`
 	// UpdateAvailable is true when the registry has a newer image for the
 	// container's tag than the one it runs.
 	UpdateAvailable bool `json:"updateAvailable"`
@@ -408,6 +410,8 @@ func (m *Manager) Status(ctx context.Context) Status {
 		}
 		container.Managed = slices.Contains(apps, container.App)
 		container.WebUI = c.Labels[WebUILabel]
+		container.PublicURL = c.Labels["titanos.public-url"]
+		container.Icon = c.Labels["titanos.icon"]
 		if remote := m.remote[c.Image]; remote != "" {
 			if digests, known := m.local[c.ImageID]; known && !slices.Contains(digests, remote) {
 				container.UpdateAvailable = true

@@ -6,9 +6,21 @@
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
-	import ContainerCard from './ContainerCard.svelte';
+	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
+ import ContainerCard from './ContainerCard.svelte';
 
-	const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+	let tailnet = $state<TailnetStatus | null>(null);
+ const tailscaleHost = $derived(tailnetHost(tailnet));
+ $effect(() => {
+  let disposed = false;
+  const refresh = async () => {
+   if (document.hidden) return;
+   try { const value = await api.get<TailnetStatus>('/plugins/tailscale'); if (!disposed) tailnet = value; } catch { if (!disposed) tailnet = null; }
+  };
+  refresh(); const timer = setInterval(refresh, 15000);
+  return () => { disposed = true; clearInterval(timer); };
+ });
+ const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 	let status = $state<DockerStatus | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -223,7 +235,7 @@
 			</button>
 			{#if openStack}
 				{#each stack.members as container (container.id)}
-					<ContainerCard {container} {host} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+					<ContainerCard {container} {host} {tailscaleHost} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 				{/each}
 			{/if}
 		</section>
@@ -231,7 +243,7 @@
 
 	<div class="cards">
 		{#each singles as container (container.id)}
-			<ContainerCard {container} {host} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+			<ContainerCard {container} {host} {tailscaleHost} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 		{/each}
 	</div>
 	{#if containers.length === 0 && jobs.length === 0}
@@ -309,7 +321,7 @@
 		gap: 6px;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.summary {
@@ -373,6 +385,10 @@
 	}
 	.filters {
 		display: flex;
+ min-width: 0;
+ max-width: 100%;
+ overflow-x: auto;
+ scrollbar-width: thin;
 		gap: 4px;
 		padding: 3px;
 		background: var(--panel-bg);
@@ -380,6 +396,7 @@
 		border-radius: var(--radius-ctl);
 	}
 	.filters button {
+ flex: none;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -400,7 +417,7 @@
 	}
 	.cards {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
 		gap: var(--gap);
 	}
 	.stack {
@@ -413,7 +430,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		background: transparent;
 		border: 0;
 		color: var(--text);

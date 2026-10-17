@@ -26,8 +26,8 @@
 	dialog {
 		width: calc(100% - 32px);
 		max-width: 520px;
-		max-height: calc(100vh - 32px);
-		padding: 24px;
+		max-height: calc(100dvh - 32px);
+		padding: var(--tile-pad);
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: var(--muted) transparent;
@@ -69,4 +69,9 @@
 		flex: none;
 		margin: 2px 0 0;
 	}
+ @media (max-width: 760px) {
+ dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); overflow-x: hidden; }
+ dialog :global(.dialog-actions) { flex-wrap: wrap; }
+ dialog :global(.dialog-actions > *) { flex: 1 1 auto; }
+ }
 </style>

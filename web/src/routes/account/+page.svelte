@@ -197,7 +197,7 @@
 
 <style>
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	section {
@@ -307,7 +307,7 @@
 	}
 	.codes {
 		margin: 12px 0;
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);

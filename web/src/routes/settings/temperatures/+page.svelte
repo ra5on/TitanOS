@@ -57,7 +57,7 @@
 
 <style>
 	.heading { display: flex; flex-direction: column; gap: 8px; }
-	h1 { font-size: 1.5rem; font-weight: 600; }
+	h1 { font-size: var(--text-page); font-weight: 600; }
 	.options { padding: var(--tile-pad); display: flex; flex-direction: column; gap: 16px; }
 	p { margin: 0; font-size: 0.875rem; }
 	.check, .sensor, .actions { display: flex; align-items: center; gap: 12px; }

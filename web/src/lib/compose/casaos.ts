@@ -127,7 +127,7 @@ export function fromCasaOS(compose: string, appId: string, ctx: CasaContext): st
 	}
 
 	doc.delete('x-casaos');
-	const meta: Record<string, unknown> = { main, tips: texts(record(top.tips).before_install), variables, paths, ports };
+	const meta: Record<string, unknown> = { icon: top.icon, main, tips: texts(record(top.tips).before_install), variables, paths, ports };
 	doc.set('x-titanos', Object.fromEntries(Object.entries(meta).filter(([, value]) => value !== undefined)));
 	return doc.toString({ lineWidth: 0 });
 }

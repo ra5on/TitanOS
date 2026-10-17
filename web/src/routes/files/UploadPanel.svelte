@@ -71,7 +71,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 14px 16px;
+		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		font-size: 0.8125rem;
 	}
 	.head,

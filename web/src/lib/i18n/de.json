@@ -1947,5 +1947,10 @@
 	"error.vm_snapshot_exists": "Vor dem Entfernen der VM ihre Snapshots ausdrücklich löschen.",
 	"snapshots.incomplete": "Unvollständiger oder nicht lesbarer Snapshot",
 	"error.vm_file_protected": "Dieser Pfad gehört zu einer VM. Platten und Firmware über die VM-Verwaltung ändern; vor dem Entfernen ihre Snapshots prüfen.",
-	"snapshots.reason.iso": "Vor dem Snapshot das Installationsmedium in den VM-Einstellungen auswerfen. Die externe ISO-Datei wird nicht mitgesichert."
+	"snapshots.reason.iso": "Vor dem Snapshot das Installationsmedium in den VM-Einstellungen auswerfen. Die externe ISO-Datei wird nicht mitgesichert.",
+	"docker.tailscaleWebui": "Tailscale Web UI",
+	"docker.publicWebui": "Öffentlich",
+	"editor.publicUrl": "Öffentliche URL (optional)",
+	"editor.publicUrlHint": "Vollständige HTTP-/HTTPS-Adresse, z. B. vom Cloudflare-Tunnel. Richtet keinen Tunnel ein. Leer lassen, um den Knopf auszublenden.",
+	"editor.publicUrlInvalid": "Bitte eine vollständige HTTP-/HTTPS-Adresse ohne Benutzername oder Passwort eingeben."
 }

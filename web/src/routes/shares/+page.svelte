@@ -172,7 +172,7 @@
 		font-size: 0.875rem;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	.list {
@@ -184,7 +184,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		padding: 20px 22px;
+		padding: var(--tile-pad);
 	}
 	.top {
 		display: flex;

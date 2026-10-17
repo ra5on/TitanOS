@@ -1,6 +1,7 @@
 // Reads one service of a compose file into the fields of the form and
 // writes them back. Whatever the form does not understand stays as it is.
 
+import { publicURL } from '../app-links.ts';
 import { isAlias, isMap, isNode, isScalar, Scalar, type Document } from 'yaml';
 
 export type PathRow = { host: string; container: string; readOnly: boolean; raw?: unknown };
@@ -14,6 +15,7 @@ export type ServiceForm = {
 	privileged: boolean;
 	hardware: string[];
 	webui: string;
+ publicUrl: string;
 	paths: PathRow[];
 	ports: PortRow[];
 	env: Pair[];
@@ -21,6 +23,7 @@ export type ServiceForm = {
 };
 
 export const WEBUI_LABEL = 'titanos.webui';
+export const PUBLIC_URL_LABEL = 'titanos.public-url';
 export const RESTART_POLICIES = ['no', 'always', 'unless-stopped', 'on-failure'];
 export const NETWORKS = ['bridge', 'host', 'none'];
 
@@ -68,7 +71,8 @@ export function readService(doc: Document, service: string): ServiceForm {
 		privileged: at('privileged') === true,
 		hardware: list(at('x-titanos-hardware')).filter((entry): entry is string => typeof entry === 'string'),
 		webui: labels.find((label) => label.name === WEBUI_LABEL)?.value ?? '',
-		labels: labels.filter((label) => label.name !== WEBUI_LABEL),
+		publicUrl: labels.find((label) => label.name === PUBLIC_URL_LABEL)?.value ?? '',
+ labels: labels.filter((label) => label.name !== WEBUI_LABEL && label.name !== PUBLIC_URL_LABEL),
 		env: pairs(at('environment')),
 		paths: list(at('volumes')).map((entry): PathRow => {
 			if (typeof entry === 'string') {
@@ -158,9 +162,10 @@ export function writeService(doc: Document, service: string, form: ServiceForm) 
 		);
 	}
 	if (!same('env')) set('environment', Object.fromEntries(form.env.filter((pair) => pair.name.trim()).map((pair) => [pair.name.trim(), pair.value])));
-	if (!same('labels') || !same('webui')) {
+	if (!same('labels') || !same('webui') || !same('publicUrl')) {
 		const labels = form.labels.filter((pair) => pair.name.trim()).map((pair) => [pair.name.trim(), pair.value]);
 		if (form.webui.trim()) labels.push([WEBUI_LABEL, form.webui.trim()]);
+ if (form.publicUrl.trim()) labels.push([PUBLIC_URL_LABEL, form.publicUrl.trim()]);
 		set('labels', Object.fromEntries(labels));
 	}
 }
@@ -187,5 +192,5 @@ export function check(form: ServiceForm, taken: Map<string, string>, t: (key: 'e
 		return form.env.some((other, at) => at !== index && other.name === pair.name) ? t('editor.envDuplicate') : '';
 	});
 	const paths = form.paths.map((row) => (row.raw === undefined && (!row.host.trim() || !row.container.trim().startsWith('/')) ? t('editor.pathInvalid') : ''));
-	return { ports, env, paths, any: [...ports, ...env, ...paths].some(Boolean) || !form.image.trim() };
+	return { ports, env, paths, any: [...ports, ...env, ...paths].some(Boolean) || !form.image.trim() || (!!form.publicUrl.trim() && !publicURL(form.publicUrl)) };
 }

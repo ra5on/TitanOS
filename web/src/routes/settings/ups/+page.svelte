@@ -203,7 +203,7 @@
 		font-size: 0.875rem;
 	}
 	h1 {
-		font-size: 1.5rem;
+		font-size: var(--text-page);
 		font-weight: 600;
 	}
 	section,
