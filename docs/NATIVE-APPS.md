@@ -1,12 +1,12 @@
 # Eigene Apps: Immich und Ollama
 
-Die mit TitanOS ausgelieferten Vorlagen stehen im App-Store unter der Quelle
-TitanOS. Es werden keine Container-Abbilder oder KI-Modelle in das NAS-System
-gepackt. Erst die Installation lädt die ausgewählten Container auf das
+Die Vorlagen liegen im Repository [ra5on/TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps)
+und erscheinen im App-Store unter der Quelle „Offiziell“; TitanOS lädt sie zur
+Laufzeit (nur im RAM). Es werden keine Container-Abbilder oder KI-Modelle in das
+NAS-System gepackt. Erst die Installation lädt die ausgewählten Container auf das
 Docker-Daten-Volume. Ports, Pfade und Umgebungswerte lassen sich im vorhandenen
 Installationsdialog anpassen; eine zweite Installation bekommt einen eigenen
 App-Namen und Datenordner.
-
 ## Immich
 
 Enthalten sind Immich Server und Machine Learning **v3.3.3**, Valkey **9** und die

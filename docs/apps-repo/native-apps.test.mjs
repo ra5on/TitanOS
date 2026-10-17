@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parse } from 'yaml';
-import { readTemplate, build } from '../src/lib/compose/template.ts';
-const template=(app)=>({compose:readFileSync(new URL(`../../backend/internal/catalog/builtin/${app}/compose.yaml`,import.meta.url),'utf8'),timezone:'Europe/Berlin',uid:1000,gid:100,listening:[],appdata:'/mnt/data/appdata',missingDevices:[]});
+const { parse } = await import(`${process.env.TITANOS_DIR}/web/node_modules/yaml/dist/index.js`);
+// Runs in the TitanOS-Apps repository; TITANOS_DIR points at a TitanOS checkout
+// (with `npm ci` run in web/), which provides the install-form code and `yaml`.
+const titanos=process.env.TITANOS_DIR;
+if(!titanos)throw Error('TITANOS_DIR is not set');
+const { readTemplate, build } = await import(`${titanos}/web/src/lib/compose/template.ts`);
+const template=(app)=>({compose:readFileSync(new URL(`../${app}/compose.yaml`,import.meta.url),'utf8'),timezone:'Europe/Berlin',uid:1000,gid:100,listening:[],appdata:'/mnt/data/appdata',missingDevices:[]});
 test('Immich install shares exactly one generated DB password and persists every required data directory',()=>{
  const tpl=template('immich');const form=readTemplate(tpl,'photos',[],new Map([['2283/tcp','existing-app']]));
  assert.equal(form.vars.filter(v=>v.secret).length,1);
