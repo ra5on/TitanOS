@@ -1,5 +1,6 @@
 // Package catalog knows the apps that can be installed: Compose templates
-// from the catalog built into TitanOS and from sources the administrator adds.
+// from the official catalog (the repository ra5on/TitanOS-Apps) and from
+// sources the administrator adds.
 //
 // A source is a Git repository, an archive or a single compose file behind
 // an HTTP address. Templates are kept in memory only; they are fetched
@@ -9,7 +10,6 @@ package catalog
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
 	"errors"
 	"io/fs"
@@ -28,8 +28,10 @@ import (
 
 const (
 	sourcesFile = "docker/sources.json"
-	// BuiltinID is the source that comes with TitanOS.
+	// BuiltinID is the official source. It cannot be removed.
 	BuiltinID = "titanos"
+	// OfficialURL is where the official apps are fetched from.
+	OfficialURL = "https://github.com/ra5on/TitanOS-Apps"
 
 	refreshInterval = 24 * time.Hour
 	// retryInterval is how long a source that could not be fetched is left alone.
@@ -48,9 +50,6 @@ var (
 	// ErrEmpty means the source was read but holds no compose file.
 	ErrEmpty = errors.New("catalog: no apps in this source")
 )
-
-//go:embed builtin
-var builtinFS embed.FS
 
 // Source is an address apps are read from, as stored in /config.
 type Source struct {
@@ -110,23 +109,21 @@ type Manager struct {
 	loaded  bool
 	sources []Source
 	states  map[string]*state
-	builtin state
+	// official is the address of the official source; tests point it elsewhere.
+	official string
 }
 
-// NewManager returns a manager with the built-in catalog.
+// NewManager returns a manager. The official catalog is empty until it has
+// been fetched; without a network the store stays empty.
 func NewManager(store *config.Store) *Manager {
-	m := &Manager{store: store, client: newClient(), states: map[string]*state{}}
-	files := map[string]string{}
-	fs.WalkDir(builtinFS, "builtin", func(path string, entry fs.DirEntry, err error) error {
-		if err == nil && !entry.IsDir() {
-			data, _ := builtinFS.ReadFile(path)
-			files[path] = string(data)
-		}
-		return nil
-	})
-	apps, format, _ := parse(BuiltinID, files)
-	m.builtin = state{apps: apps, format: format}
-	return m
+	return &Manager{store: store, client: newClient(), states: map[string]*state{}, official: OfficialURL}
+}
+
+// SetOfficialURL points the official source somewhere else (mirrors, tests).
+func (m *Manager) SetOfficialURL(address string) {
+	m.mu.Lock()
+	m.official = address
+	m.mu.Unlock()
 }
 
 // Load reads the sources from /config.
@@ -173,7 +170,7 @@ func (m *Manager) refresh(ctx context.Context, all bool) {
 	m.mu.Lock()
 	var due []Source
 	now := time.Now()
-	for _, source := range m.sources {
+	for _, source := range append([]Source{{ID: BuiltinID, Name: "TitanOS", URL: m.official}}, m.sources...) {
 		st := m.states[source.ID]
 		switch {
 		case all || st == nil:
@@ -245,11 +242,13 @@ func (m *Manager) fetch(ctx context.Context, source Source, etag string) ([]App,
 func (m *Manager) Status() ([]SourceStatus, []App) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	sources := []SourceStatus{{
-		Source: Source{ID: BuiltinID, Name: "TitanOS"}, Builtin: true,
-		Format: m.builtin.format, Count: len(m.builtin.apps),
-	}}
-	apps := slices.Clone(m.builtin.apps)
+	official := SourceStatus{Source: Source{ID: BuiltinID, Name: "TitanOS", URL: m.official}, Builtin: true}
+	var apps []App
+	if st := m.states[BuiltinID]; st != nil {
+		official.Format, official.Count, official.Updated, official.Error = st.format, len(st.apps), st.updated, st.err
+		apps = slices.Clone(st.apps)
+	}
+	sources := []SourceStatus{official}
 	for _, source := range m.sources {
 		status := SourceStatus{Source: source}
 		if st := m.states[source.ID]; st != nil {
@@ -341,15 +340,11 @@ func (m *Manager) Remove(id string) error {
 func (m *Manager) Compose(source, app string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	apps := m.builtin.apps
-	if source != BuiltinID {
-		st := m.states[source]
-		if st == nil {
-			return "", ErrNotFound
-		}
-		apps = st.apps
+	st := m.states[source]
+	if st == nil {
+		return "", ErrNotFound
 	}
-	for _, candidate := range apps {
+	for _, candidate := range st.apps {
 		if candidate.ID == app {
 			return candidate.compose, nil
 		}

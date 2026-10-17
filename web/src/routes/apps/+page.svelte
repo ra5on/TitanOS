@@ -59,10 +59,10 @@
 	const hue = (app: CatalogApp) => [...app.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
 
 	function checked(source: AppSource): string {
-		if (source.builtin) return t('apps.builtin');
 		if (source.error) return tOr(`apps.sourceError.${source.error}`, source.error);
 		const time = new Date(source.updated).getTime();
 		if (!time || time < 0) return t('apps.neverChecked');
+		if (source.builtin) return t('apps.builtin');
 		return t('apps.checked', { time: new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'short', timeStyle: 'short' }).format(time) });
 	}
 
@@ -104,6 +104,9 @@
 </div>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+{#if store && sources[0]?.builtin && sources[0].count === 0}
+	<p class="notice-warn" role="status">{sources[0].error ? t('apps.officialOffline') : t('apps.officialPending')}</p>
+{/if}
 {#if docker && !ready}
 	<p class="notice-warn" role="status">{t('apps.dockerOff')} <a href="/docker">{t('apps.dockerOpen')}</a></p>
 {/if}
