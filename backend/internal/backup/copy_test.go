@@ -13,6 +13,7 @@ import (
 func TestUSBCopyRetainsDeletedAndReplacesChanged(t *testing.T) {
 	source, target := t.TempDir(), t.TempDir()
 	m := NewManager(config.Open(t.TempDir()))
+	m.mountRoot = t.TempDir() // state files must stay inside the test, even when run as root
 	m.Sources = func() []Source { return []Source{{Name: "docs", Volume: "tank", Path: source}} }
 	m.WithUSB = func(ctx context.Context, id string, work func(*os.Root) error) error {
 		if id != "ABCD-1234" {
