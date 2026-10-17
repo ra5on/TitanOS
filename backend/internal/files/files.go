@@ -123,6 +123,7 @@ type Manager struct {
 	Acquire   func(context.Context) (int64, func(), error)
 	syncFile  func(*os.File) error
 
+	jobs    jobs
 	mu      sync.Mutex
 	uploads map[string]*upload
 	now     func() time.Time
