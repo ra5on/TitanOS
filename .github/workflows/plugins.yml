@@ -33,7 +33,7 @@ on:
       version:
         description: 'Version the rehearsal image and plugins are built as'
         required: true
-        default: '0.2.0-beta.2'
+        default: '0.2.0-beta.4'
 
 concurrency:
   group: plugins-${{ github.ref }}
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      VERSION: ${{ inputs.version || '0.2.0-beta.2' }}
+      VERSION: ${{ inputs.version || '0.2.0-beta.4' }}
     steps:
       - uses: actions/checkout@v7
 
