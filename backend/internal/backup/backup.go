@@ -66,8 +66,9 @@ var (
 
 // Destination is where a backup goes.
 type Destination struct {
-	// Type is local, s3, sftp or rest.
-	Type string `json:"type"`
+	// Type is local, usb-copy, s3, sftp or rest.
+	Type     string `json:"type"`
+	DeviceID string `json:"deviceId,omitempty"`
 	// local: a folder on another volume.
 	Volume string `json:"volume,omitempty"`
 	Folder string `json:"folder,omitempty"`
@@ -178,6 +179,8 @@ type Manager struct {
 	Disabled bool
 	// Sources returns the shares whose volume is mounted right now.
 	Sources func() []Source
+	// WithUSB pins a mounted filesystem for the complete copy operation.
+	WithUSB func(context.Context, string, func(*os.Root) error) error
 	// OnResult is told how each scheduled or started backup ended.
 	OnResult func(job string, err error)
 
@@ -268,6 +271,15 @@ func check(job Job, shares []Source, volumes []string) error {
 	}
 	d := job.Destination
 	switch d.Type {
+	case "usb-copy":
+		if !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID) || !relative(d.Folder) || len(job.Extras) != 0 {
+			return invalid("USB identity, folder or unsupported extra source")
+		}
+		for _, pattern := range job.Patterns {
+			if _, err := path.Match(pattern, ""); err != nil || strings.Contains(pattern, "/") || strings.Contains(pattern, "**") {
+				return invalid("USB copy patterns must match single file or folder names")
+			}
+		}
 	case "local":
 		if !slices.Contains(volumes, d.Volume) {
 			return invalid("volume")
@@ -352,7 +364,7 @@ func defaults(job *Job) {
 	if job.Destination.Type == "sftp" && job.Destination.Port == 0 {
 		job.Destination.Port = 22
 	}
-	if job.Destination.Type == "local" && job.Destination.Folder == "" {
+	if (job.Destination.Type == "local" || job.Destination.Type == "usb-copy") && job.Destination.Folder == "" {
 		job.Destination.Folder = "backups/" + job.ID
 	}
 	if job.Every == "" {
@@ -371,6 +383,9 @@ func (m *Manager) Create(job Job, volumes []string) error {
 		return err
 	}
 	job.Password = base64.RawURLEncoding.EncodeToString(secret)
+	if job.Destination.Type == "usb-copy" {
+		job.Password = ""
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if slices.ContainsFunc(m.jobs, func(j Job) bool { return j.ID == job.ID }) {
@@ -393,6 +408,9 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 	}
 	old := m.jobs[at]
 	job.ID, job.Password = old.ID, old.Password
+	if (job.Destination.Type == "usb-copy") != (old.Destination.Type == "usb-copy") {
+		return invalid("create a separate job to change the backup format")
+	}
 	if job.Destination.SecretKey == "" {
 		job.Destination.SecretKey = old.Destination.SecretKey
 	}
@@ -545,6 +563,9 @@ func (m *Manager) update(job Job, change func(*State)) {
 func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup func(), err error) {
 	cleanup = func() {}
 	d := job.Destination
+	if d.Type == "usb-copy" {
+		return "", nil, nil, cleanup, invalid("plain copies have no restic snapshots; restore files with the file manager")
+	}
 	cache := ""
 	if volume := m.homeVolume(job); volume != "" {
 		// restic's cache is large; it never goes into the RAM.
@@ -767,6 +788,9 @@ func (m *Manager) Stop(id string) error {
 }
 
 func (m *Manager) backup(ctx context.Context, job Job) error {
+	if job.Destination.Type == "usb-copy" {
+		return m.copyUSB(ctx, job)
+	}
 	sel := m.selection(job)
 	paths := sel.paths
 	if len(paths) == 0 {

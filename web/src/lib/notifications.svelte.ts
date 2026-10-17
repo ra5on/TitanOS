@@ -1,3 +1,4 @@
+import { soundForNotices } from './sound.svelte.ts';
 import { api } from './api.ts';
 import { tOr } from './i18n/index.svelte.ts';
 
@@ -31,7 +32,7 @@ export async function loadNotifications() {
 	const request = ++generation;
 	try {
 		const result = await api.get<{ messages: Notice[] }>('/notifications');
-		if (request === generation) notifications.list = result.messages;
+		if (request === generation) { notifications.list = result.messages; soundForNotices(result.messages); }
 	} catch {
 		// The list stays as it is; the next change brings it again.
 	}

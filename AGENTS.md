@@ -585,3 +585,21 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   `titanos.icon`. Weblinks: `titanos.webui`, aktiver Tailscale-Hostname und optionale
   `titanos.public-url` für externe Proxys. Details: `docs/APP-LINKS.md`.
 - Storytold-Paketierung und App-Vorlagen bleiben ausschließlich in TitanOS-Apps.
+
+## Beta 0.2.0-beta.7
+
+- USB-Kopie-Backups: `backup/copy.go`, Ziel `usb-copy` mit Dateisystem-UUID.
+  Keine Löschweitergabe und keine Versionierung/Verschlüsselung; ausschließlich
+  Freigaben, reguläre Dateien und einfache Namensmuster. `os.Root` hält das
+  geprüfte Ziel-Dateisystem fest, keine Ausweichschreibzugriffe ins RAM.
+  Die USB-Verwaltung sperrt Auswerfen während einer Kopie. Siehe
+  `docs/USB-COPY-BACKUPS.md`; Tests niemals auf Host-Platten ausführen.
+- Stick-Konfiguration: zusätzlicher täglicher/wöchentlicher Zeitplan in
+  `/config/system/backup.json`; NAS-Zeitzone, Startsicherung und Änderungsbündelung
+  bleiben aktiv. Unveränderte Konfiguration wird nicht doppelt archiviert.
+- Benachrichtigungstöne pro Nutzer in `sound.json`, standardmäßig aus. Lokale
+  Web-Audio-Sinustöne, nur nach Browserinteraktion, keine Wiedergabe alter
+  Meldungen beim Laden und höchstens ein Ton je zehn Sekunden. `docs/BETA7.md`.
+- Projektinhaber meldet USB-Installation, Neustarts, RAID, Freigaben sowie USB
+  und GPU auf echter Server-Hardware mit Beta 2 erfolgreich; keine pauschale
+  Hardware-Abnahme neuer Beta-7-Funktionen daraus ableiten.

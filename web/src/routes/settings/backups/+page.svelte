@@ -8,9 +8,10 @@
 	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Kind = 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
+	type Kind = 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
 		type: Kind;
+		deviceId?: string;
 		volume?: string;
 		folder?: string;
 		endpoint?: string;
@@ -32,6 +33,7 @@
 	type Overview = { jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
 
+	let usbDrives = $state<{id: string; name: string; supported: boolean}[]>([]);
 	let overview = $state<Overview | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state(false);
@@ -52,6 +54,7 @@
 	async function load() {
 		try {
 			overview = await api.get<Overview>('/backups');
+			usbDrives = await api.get<typeof usbDrives>('/usb');
 		} catch (err) {
 			if (!overview) problem(err);
 		}
@@ -173,6 +176,7 @@
 	function setKind(kind: Kind) {
 		if (!draft) return;
 		draft.destination.type = kind;
+		if (kind === 'usb-copy') { draft.extras = []; draft.keep = {daily: 0, weekly: 0, monthly: 0}; }
 		if (kind === 'sftp') showKey();
 		if (kind === 'titanos') pairCode = '';
 	}
@@ -180,6 +184,7 @@
 	// Only what belongs to the chosen kind of destination is sent.
 	function destination(d: Destination): Destination {
 		switch (d.type) {
+			case 'usb-copy': return { type: 'usb-copy', deviceId: d.deviceId, folder: d.folder };
 			case 'local':
 				return { type: 'local', volume: d.volume, folder: d.folder };
 			case 's3':
@@ -221,7 +226,7 @@
 			const created = isNew ? job : null;
 			draft = null;
 			// Without its password a backup is worthless: show it right away.
-			if (created) showPassword(created as Job);
+			if (created && created.destination.type !== 'usb-copy') showPassword(created as Job);
 		} catch (err) {
 			problem(err);
 		}
@@ -291,6 +296,7 @@
 	}
 
 	function where(d: Destination): string {
+		if (d.type === 'usb-copy') return `USB ${d.deviceId} / ${d.folder}`;
 		switch (d.type) {
 			case 'local':
 				return `/mnt/${d.volume}/${d.folder}`;
@@ -360,7 +366,7 @@
 				<div><dt>{t('backup.schedule')}</dt><dd>{when(job)}</dd></div>
 				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>{/if}
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
-				<div><dt>{t('backup.keeps')}</dt><dd>{job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
+				<div><dt>{t('backup.keeps')}</dt><dd>{job.destination.type === 'usb-copy' ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
 			</dl>
 			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre></div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">{t('backup.warning')}<pre>{state.warning}</pre></div>{/if}
@@ -370,8 +376,8 @@
 					<button type="button" class="btn" onclick={() => act(job, 'stop')}>{t('backup.stop')}</button>
 				{:else}
 					<button type="button" class="btn btn-primary" onclick={() => act(job, 'run')}>{t('backup.run')}</button>
-					<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
-					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>
+					{#if job.destination.type !== 'usb-copy'}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
+					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>
 					<button type="button" class="btn" onclick={() => (removing = job)}>{t('backup.remove')}</button>
 				{/if}
@@ -419,27 +425,34 @@
 					{/if}
 				</div>
 			{/each}
-			<p class="legend-sub">{t('backup.extras')}</p>
+			{#if draft.destination.type !== 'usb-copy'}<p class="legend-sub">{t('backup.extras')}</p>
 			<div class="row">
 				{#each EXTRAS as extra (extra)}
 					<label class="check"><input type="checkbox" checked={draft.extras?.includes(extra)} onchange={() => toggleExtra(extra)} /><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label>
 				{/each}
 			</div>
-			{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
+			{/if}{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
 			<label class="block"><span>{t('backup.patterns')}</span>
 				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
 			</label>
-			<p class="muted">{t('backup.patternsHint')}</p>
+			<p class="muted">{t(draft.destination.type === 'usb-copy' ? 'backup.copyPatterns' : 'backup.patternsHint')}</p>
 		</fieldset>
 		<fieldset>
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each ['local', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
-					<button type="button" role="radio" aria-checked={draft.destination.type === kind} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
+				{#each ['local', 'usb-copy', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
+					<button type="button" role="radio" aria-checked={draft.destination.type === kind} disabled={!isNew && ((kind === 'usb-copy') !== (draft.destination.type === 'usb-copy'))} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
 				{/each}
 			</div>
 			<p class="muted">{t(`backup.kindHint.${draft.destination.type}`)}</p>
-			{#if draft.destination.type === 'local'}
+			{#if draft.destination.type === 'usb-copy'}
+ <label class="block"><span>{t('backup.usbDevice')}</span><select class="field" bind:value={draft.destination.deviceId} required>
+ <option value="" disabled>–</option>
+ {#if draft.destination.deviceId && !usbDrives.some(d => d.id === draft?.destination.deviceId)}<option value={draft.destination.deviceId}>{draft.destination.deviceId} · {t('backup.usbMissing')}</option>{/if}
+ {#each usbDrives.filter(d => d.supported) as drive (drive.id)}<option value={drive.id}>{drive.name} · {drive.id}</option>{/each}
+ </select></label>
+ <label class="block"><span>{t('backup.folder')}</span><input class="field mono" bind:value={draft.destination.folder} placeholder={`backups/${draft.id || 'name'}`} /></label>
+ {:else if draft.destination.type === 'local'}
 				<div class="row">
 					<label class="narrow"><span>{t('backup.volume')}</span>
 						<select class="field" bind:value={draft.destination.volume} required>
@@ -544,7 +557,7 @@
 				<p class="muted">{t('backup.catchUp')}</p>
 			{/if}
 		</fieldset>
-		<fieldset>
+		{#if draft.destination.type !== 'usb-copy'}<fieldset>
 			<legend>{t('backup.keeps')}</legend>
 			<div class="row">
 				<label class="tiny"><span>{t('backup.keepDaily')}</span><input class="field mono" type="number" min="0" max="999" bind:value={draft.keep.daily} /></label>
@@ -552,7 +565,7 @@
 				<label class="tiny"><span>{t('backup.keepMonthly')}</span><input class="field mono" type="number" min="0" max="999" bind:value={draft.keep.monthly} /></label>
 			</div>
 			<p class="muted">{t('backup.keepHint')}</p>
-		</fieldset>
+		</fieldset>{/if}
 		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 		<div class="actions">
 			<button type="button" class="btn" onclick={() => ((draft = null), (error = null))} disabled={busy}>{t('common.cancel')}</button>

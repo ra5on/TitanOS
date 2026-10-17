@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/run"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -91,6 +92,7 @@ type Manager struct {
 	runner run.Runner
 	// root is where drives are mounted; mountsFile lists what is mounted.
 	root, mountsFile string
+	mountInfoFile    string
 	// Disabled refuses to mount anything: in development mode titand runs on
 	// the developer's own machine.
 	Disabled bool
@@ -99,14 +101,15 @@ type Manager struct {
 	// OnPlug is told of each drive that appeared since the last look.
 	OnPlug func(Device)
 
-	mu sync.Mutex
+	operation sync.Mutex
+	mu        sync.Mutex
 	// seen are the drives of the last look; nil until there was one.
 	seen map[string]bool
 }
 
 // NewManager returns a manager for the real system.
 func NewManager() *Manager {
-	return &Manager{runner: run.Exec{}, root: "/run/titanos-usb", mountsFile: "/proc/self/mounts"}
+	return &Manager{runner: run.Exec{}, root: "/run/titanos-usb", mountsFile: "/proc/self/mounts", mountInfoFile: "/proc/self/mountinfo"}
 }
 
 // bootStickLabel is the label of the stick TitanOS runs from.
@@ -117,7 +120,12 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	if n.Transport != "" {
 		transport = n.Transport
 	}
-	if n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
+	// Some FAT superfloppies expose a whole-device partition alias. Prefer
+	// that partition, without accepting duplicate UUIDs on separate devices.
+	alias := n.Type == "disk" && slices.ContainsFunc(n.Children, func(child node) bool {
+		return child.Type == "part" && child.UUID == n.UUID && child.FSType == n.FSType && child.Size == n.Size
+	})
+	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
 			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {
@@ -205,10 +213,18 @@ func (m *Manager) find(ctx context.Context, id string) (Device, error) {
 	if err != nil {
 		return Device{}, err
 	}
+	var selected *Device
 	for _, d := range devices {
 		if d.ID == id {
-			return d, nil
+			if selected != nil {
+				return Device{}, fmt.Errorf("ambiguous USB filesystem UUID")
+			}
+			copy := d
+			selected = &copy
 		}
+	}
+	if selected != nil {
+		return *selected, nil
 	}
 	return Device{}, ErrNotFound
 }
@@ -248,6 +264,14 @@ func (m *Manager) Dir(name string) (string, bool) {
 // Mount mounts a drive for browsing. The mount cannot run programs, make
 // device files or use set-uid files from the drive.
 func (m *Manager) Mount(ctx context.Context, id string) error {
+	if !m.operation.TryLock() {
+		return ErrBusy
+	}
+	defer m.operation.Unlock()
+	return m.mount(ctx, id)
+}
+
+func (m *Manager) mount(ctx context.Context, id string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -277,6 +301,10 @@ func (m *Manager) Mount(ctx context.Context, id string) error {
 
 // Eject writes out what is waiting and unmounts a drive.
 func (m *Manager) Eject(ctx context.Context, id string) error {
+	if !m.operation.TryLock() {
+		return ErrBusy
+	}
+	defer m.operation.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -362,4 +390,88 @@ func (m *Manager) look(ctx context.Context) {
 			m.OnPlug(d)
 		}
 	}
+}
+
+// WithMounted opens the selected filesystem, never its empty mount directory.
+// The open root pins that filesystem even if an external unmount is attempted.
+// Explicitly configured backup jobs may mount their target; ejection is blocked
+// while copying. Drives are left mounted for browsing and safe manual ejection.
+func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root) error) error {
+	if m.Disabled {
+		return ErrDisabled
+	}
+	m.operation.Lock()
+	defer m.operation.Unlock()
+	d, err := m.find(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !d.Mounted {
+		if err := m.mount(ctx, id); err != nil {
+			return err
+		}
+		d, err = m.find(ctx, id)
+		if err != nil {
+			return err
+		}
+	}
+	if !d.Mounted {
+		return ErrNotMounted
+	}
+	root, err := os.OpenRoot(d.Dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	// Recheck after opening: refuse a vanished/replaced mount before any write.
+	again, err := m.find(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !again.Mounted || again.Dir != d.Dir || again.path != d.path {
+		return ErrNotMounted
+	}
+	// Linux mount IDs identify the pinned mount even for Btrfs subvolumes,
+	// whose stat device number need not match mountinfo's device number.
+	directory, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	var stat unix.Statx_t
+	if err := unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &stat); err != nil {
+		return err
+	}
+	if stat.Mask&unix.STATX_MNT_ID == 0 {
+		return ErrNotMounted
+	}
+	mountInfo, err := os.ReadFile(m.mountInfoFile)
+	if err != nil {
+		return err
+	}
+	if !matchesMount(string(mountInfo), d.Dir, d.path, d.FSType, fmt.Sprintf("%d", stat.Mnt_id)) {
+		return ErrNotMounted
+	}
+	return work(root)
+}
+
+func matchesMount(info, dir, device, fsType, mountID string) bool {
+	for _, line := range strings.Split(info, "\n") {
+		before, after, ok := strings.Cut(line, " - ")
+		if !ok {
+			continue
+		}
+		fields, tail := strings.Fields(before), strings.Fields(after)
+		if len(fields) < 6 || len(tail) < 3 {
+			continue
+		}
+		// Our generated mount directory and lsblk device path contain no spaces.
+		if fields[4] == dir && fields[0] == mountID && tail[1] == device {
+			if fsType == "ntfs" {
+				return tail[0] == "ntfs3"
+			}
+			return tail[0] == fsType
+		}
+	}
+	return false
 }

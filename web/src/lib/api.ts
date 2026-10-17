@@ -102,6 +102,7 @@ export type SystemInfo = {
 };
 
 export type Preferences = {
+	sound: Record<string, unknown> | null;
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
 };

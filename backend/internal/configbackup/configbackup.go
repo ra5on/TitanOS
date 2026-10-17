@@ -80,7 +80,10 @@ type Settings struct {
 	// Volume to save to; empty for the first one that is mounted.
 	Volume string `json:"volume"`
 	// Keep is how many backups stay; older ones are removed.
-	Keep int `json:"keep"`
+	Keep     int    `json:"keep"`
+	Schedule string `json:"schedule"`
+	Time     string `json:"time"`
+	Weekday  int    `json:"weekday"`
 }
 
 // Manifest is the first file in a backup and says what it is.
@@ -116,6 +119,7 @@ type State struct {
 	LastCheck *time.Time `json:"lastCheck"`
 	LastError string     `json:"lastError"`
 	Backups   []Backup   `json:"backups"`
+	Next      *time.Time `json:"next"`
 }
 
 // Manager makes, lists and restores the backups.
@@ -171,6 +175,9 @@ func (m *Manager) Load() error {
 
 // SetSettings stores new settings. known are the volumes that exist.
 func (m *Manager) SetSettings(settings Settings, known []string) error {
+	if err := checkSchedule(settings); err != nil {
+		return err
+	}
 	if settings.Keep < 1 || settings.Keep > 100 {
 		return fmt.Errorf("%w: keep", ErrInvalid)
 	}
@@ -220,6 +227,7 @@ func (m *Manager) State(mounted []string) State {
 		state.LastCheck = &at
 	}
 	m.mu.Unlock()
+	state.Next = nextScheduled(state.Settings, m.now())
 	state.Target = target(state.Settings, mounted)
 	state.Backups = m.List(mounted)
 	return state
@@ -472,6 +480,8 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		done         bool
 		changedSince time.Time
 		retryAfter   time.Time
+		planned      *time.Time
+		previous     Settings
 	)
 	for tick := 0; ; tick++ {
 		select {
@@ -480,17 +490,22 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		case <-ticker.C:
 		}
 		settings := m.current()
+		if settings != previous {
+			planned = nextScheduled(settings, m.now())
+			previous = settings
+		}
 		// The first minutes belong to the start of the NAS.
 		if !settings.Enabled || tick < 2 || m.now().Before(retryAfter) {
 			continue
 		}
 		changes := m.store.Changes()
-		due := !done
+		scheduled := planned != nil && !m.now().Before(*planned)
+		due := !done || scheduled
 		if done && changes != saved {
 			if changedSince.IsZero() {
 				changedSince = m.now()
 			}
-			due = m.now().Sub(changedSince) >= settle
+			due = due || m.now().Sub(changedSince) >= settle
 		}
 		if !due {
 			continue
@@ -504,6 +519,9 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			retryAfter = m.now().Add(time.Hour)
 		default:
 			saved, done, changedSince = changes, true, time.Time{}
+			if scheduled {
+				planned = nextScheduled(settings, m.now())
+			}
 		}
 	}
 }
@@ -769,4 +787,33 @@ func (m *Manager) candidates(ctx context.Context) []string {
 		}
 	}
 	return names
+}
+
+// nextScheduled uses NAS local time and calendar days (including DST changes).
+// A missed schedule after a reboot is covered by the existing startup backup.
+func nextScheduled(s Settings, now time.Time) *time.Time {
+	if !s.Enabled || s.Schedule == "" || checkSchedule(s) != nil {
+		return nil
+	}
+	clock, _ := time.Parse("15:04", s.Time)
+	for day := 0; day < 9; day++ {
+		date := now.AddDate(0, 0, day)
+		candidate := time.Date(date.Year(), date.Month(), date.Day(), clock.Hour(), clock.Minute(), 0, 0, now.Location())
+		if candidate.After(now) && (s.Schedule == "daily" || int(candidate.Weekday()) == s.Weekday) {
+			return &candidate
+		}
+	}
+	return nil
+}
+func checkSchedule(s Settings) error {
+	if s.Schedule == "" {
+		return nil
+	}
+	if s.Schedule != "daily" && s.Schedule != "weekly" {
+		return fmt.Errorf("%w: schedule", ErrInvalid)
+	}
+	if _, err := time.Parse("15:04", s.Time); err != nil || len(s.Time) != 5 || s.Weekday < 0 || s.Weekday > 6 {
+		return fmt.Errorf("%w: schedule time or weekday", ErrInvalid)
+	}
+	return nil
 }

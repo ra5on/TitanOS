@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** TitanOS befindet sich in der Beta-Phase. [v0.2.0-beta.5](https://github.com/ra5on/TitanOS/releases/tag/v0.2.0-beta.5) ist veröffentlicht und bringt eine kompaktere mobile WebUI sowie App-Icons und zusätzliche Zugriffslinks. Weitere Änderungen im Hauptzweig sind erst mit ihrem jeweiligen Release verfügbar. Alle Downloads stehen unter [Releases](https://github.com/ra5on/TitanOS/releases).
+> **Stand:** TitanOS befindet sich in der Beta-Phase. Vollständig veröffentlichte Downloads und Änderungen stehen unter [Releases](https://github.com/ra5on/TitanOS/releases). Diese README beschreibt den Hauptzweig; Änderungen werden erst mit dem zugehörigen Release auf bestehenden Installationen verfügbar.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -27,7 +27,10 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Apps mit passenden Icons und drei Zugriffswegen:** lokale WebUI, Tailscale-WebUI bei aktiver Verbindung und eine selbst hinterlegte öffentliche URL, etwa hinter Cloudflare. Protokoll, Port und Pfad gehören zur App-Vorlage. Das Eintragen einer URL richtet keinen Tunnel ein. [App-Links](docs/APP-LINKS.md).
 - **Eigener App-Katalog:** [TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps) enthält auch acht Storytold-Web-Apps als Docker-Pakete. Die Paketierung prüft regelmäßig neue stabile Upstream-Releases und veröffentlicht sie nach erfolgreichen Tests. Bereits installierte Container aktualisierst du über die Docker-Ansicht.
 - **Dateien in Storytold-Apps:** Diese Apps verarbeiten Dokumente im Browser. Eine NAS-Freigabe auf dem eigenen Rechner verbinden und Dateien dort öffnen bzw. exportieren; ein Container-Pfad allein gibt dem Browser keinen Zugriff auf NAS-Dateien.
-- **Im Hauptzweig für Beta 6 vorbereitet:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
+- **Beta 6:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
+
+- **Beta 7 – USB-Kopie-Backups:** ausgewählte Freigaben nach Zeitplan auf eine externe Platte kopieren. Direkt lesbar und unverschlüsselt; gelöschte Quelldateien bleiben auf dem Ziel erhalten, geänderte werden ersetzt. [Ablauf und Grenzen](docs/USB-COPY-BACKUPS.md).
+- **Beta 7 – Stick-Zeitplan und Töne:** tägliche/wöchentliche Prüfung der Konfigurationssicherung zusätzlich zur Sicherung nach Änderungen. Fünf sanfte Benachrichtigungstöne mit Vorschau, Lautstärke und Auswahl pro Konto. [Einstellungen](docs/BETA7.md).
 
 ## Was schon funktioniert
 
@@ -123,7 +126,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird noch nicht unterstützt.
 - **Plugins direkt von GitHub:** Die Plugin-Seite zeigt den signierten Katalog des laufenden Releases. Pakete werden erst beim Installieren auf das Daten-Volume geladen und vor der Aktivierung geprüft. Die manuelle Installation aus einer Freigabe bleibt möglich. [Plugin-Installation](docs/PLUGINS.md#installation-der-zusätzlichen-plugins).
 - **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
-- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus beta.3 oder einer späteren Version gestartet werden; der Updater in beta.2 kann das noch nicht.
+- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus v0.1.0-beta.3 oder einer späteren Version gestartet werden; der Updater in v0.1.0-beta.2 kann das noch nicht.
 
 ## Noch geplant
 
@@ -136,7 +139,7 @@ Volume-Verschlüsselung, weitere Fernzugriffsoptionen, Energiezeitpläne/Wake-on
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Btrfs und automatische Plugin-Mitnahme sind ab beta.3 enthalten. Beim ersten Update aus beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Btrfs und automatische Plugin-Mitnahme sind ab v0.1.0-beta.3 enthalten. Beim ersten Update aus v0.1.0-beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
 ## Installation der Beta
 
