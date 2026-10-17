@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { armSound } from '#lib/sound.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { ApiError } from '#lib/api.ts';
@@ -53,7 +54,8 @@
 	const CHIP = { info: 'info', warning: 'warn', error: 'error' } as const;
 </script>
 
-<svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
+
+<svelte:window onclick={onWindowClick} onpointerdown={() => void armSound()} onkeydown={(event) => { void armSound(); onKeydown(event); }} />
 
 <div class="notifications" bind:this={root}>
 	<button type="button" class="trigger" class:open aria-haspopup="dialog" aria-expanded={open} title={t('notify.title')} onclick={toggle}>

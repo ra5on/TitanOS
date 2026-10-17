@@ -1,4 +1,6 @@
 import { api, ApiError, type Preferences, type Session, type User } from './api.ts';
+import { sound, resetSound } from './sound.svelte.ts';
+import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
 
@@ -13,6 +15,7 @@ async function loadPreferences() {
 	try {
 		const prefs = await api.get<Preferences>('/preferences');
 		session.dashboard = prefs.dashboard;
+		sound.settings = sanitizeSound(prefs.sound);
 		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
 	} catch {
 		// The UI works with defaults; saving will report the problem.
@@ -24,6 +27,7 @@ async function loadPreferences() {
 export async function refreshSession() {
 	try {
 		const data = await api.get<Session>('/session');
+		if (data.user?.name !== session.data?.user?.name) resetSound();
 		if (data.user) await loadPreferences();
 		session.data = data;
 		session.status = 'ready';
@@ -53,5 +57,6 @@ export async function logout() {
 
 /** Called when the NAS says the session is gone (restart, timeout). */
 export function sessionExpired() {
+	resetSound();
 	if (session.data) session.data = { ...session.data, user: null };
 }

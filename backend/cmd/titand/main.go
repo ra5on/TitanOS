@@ -369,7 +369,6 @@ func run(opts options) error {
 	if err := backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
-	go backups.Run(ctx)
 	// Backups of other TitanOS, taken in over Tailscale.
 	backupTarget := backuptarget.NewManager(store)
 	backupTarget.Disabled = opts.dev
@@ -381,6 +380,8 @@ func run(opts options) error {
 	// Drives plugged in over USB: shown, and mounted on a click.
 	drives := usb.NewManager()
 	drives.Disabled = opts.dev
+	backups.WithUSB = drives.WithMounted
+	go backups.Run(ctx)
 	drives.Reserved = func(uuid string) bool { return slices.Contains(volumes.FilesystemUUIDs(), uuid) }
 	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
 	go drives.Watch(ctx)
