@@ -171,6 +171,19 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)
 
+    def test_image_only_rehearsal_is_not_a_release(self):
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        shutil.rmtree(self.repo / "out/plugins")
+        self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.command("env", "WITHOUT_PLUGINS=1", "scripts/make-release.sh", "0.1.0-beta.1", "beta")
+        self.sign()
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        self.assertEqual(manifest["plugins"], [])
+        self.assertNotIn("nvidiaBuildSDK", manifest)
+        with self.assertRaisesRegex(ValueError, "image-only"):
+            verify.verify(self.release, self.keys)
+        self.assertEqual(verify.verify(self.release, self.keys, without_plugins=True), "0.1.0-beta.1")
+
     def test_plugin_for_wrong_kernel_cannot_be_packed(self):
         self.pack()
         path = self.repo / "out/plugins/nvidia.plugin.json"

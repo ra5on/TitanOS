@@ -1,0 +1,108 @@
+name: Plugins
+
+# Builds the official plugins against a freshly built image and boots that
+# image with them: NVIDIA (open modules, NAS build SDK), Intel GPU Tools,
+# Coral USB and Tailscale. Only for pull requests that touch plugins; image
+# changes are rehearsed by release.yml, and a tag builds and tests both.
+# Disposable signing key only, nothing is published.
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - 'scripts/make-plugin.sh'
+      - 'scripts/make-nvidia-plugin.sh'
+      - 'scripts/make-nvidia-sdk.py'
+      - 'scripts/fetch-nvidia.py'
+      - 'scripts/nvidia-plugin-metadata.py'
+      - 'scripts/nvidia-nas-build.py'
+      - 'scripts/nvidia-update-release.py'
+      - 'scripts/update-nvidia-lock.py'
+      - 'scripts/make-tools-plugins.sh'
+      - 'scripts/tools-plugin-stage.py'
+      - 'scripts/make-tailscale-plugin.py'
+      - 'scripts/tailscale_smoke.py'
+      - 'scripts/cdi_smoke.py'
+      - 'backend/internal/plugins/**'
+      - 'backend/internal/api/plugins.go'
+      - 'web/src/routes/plugins/**'
+      - '.github/actions/image-tools/**'
+      - '.github/workflows/plugins.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version the rehearsal image and plugins are built as'
+        required: true
+        default: '0.2.0-beta.2'
+
+concurrency:
+  group: plugins-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  plugins:
+    name: Plugins on the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ inputs.version || '0.2.0-beta.2' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/image-tools
+
+      - name: Disposable signing key
+        run: minisign -G -W -p build/mkosi.extra/usr/share/titanos/update-keys/rehearsal.pub -s "$RUNNER_TEMP/rehearsal.key"
+
+      - name: Build titand with the web UI
+        run: make build VERSION="$VERSION"
+
+      - name: Build the image the plugins are made for
+        # As root mkosi needs no user namespace, which the runner restricts.
+        run: |
+          MKOSI_SUDO=1 scripts/make-zip.sh
+          sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
+
+      - name: Build the matching NVIDIA plugin
+        run: |
+          sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh "$VERSION"
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
+      - name: Test NVIDIA compilation in the NAS build environment
+        run: |
+          sdk="$PWD/out/plugins/nvidia-build-sdk.tar.zst"
+          cd backend
+          sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
+
+      - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
+        run: |
+          sudo env PATH="$PATH" scripts/make-tools-plugins.sh "$VERSION"
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
+      - name: Pack, sign and verify with the disposable key
+        run: |
+          printf '%s\n' 'Plugin rehearsal. Disposable signing key. Not for distribution.' > changelog.txt
+          scripts/make-release.sh "$VERSION" beta changelog.txt
+          scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
+          python3 scripts/verify-release.py out/release build/mkosi.extra/usr/share/titanos/update-keys
+          rm "$RUNNER_TEMP/rehearsal.key"
+
+      - name: NVIDIA and Tailscale plugins in UEFI QEMU
+        run: python3 scripts/smoke-release.py "out/release/titanos-$VERSION.zip" --plugins out/release --timeout 420
+
+      - name: Intel GPU Tools, Coral USB and container devices in UEFI QEMU
+        run: python3 scripts/smoke-storage.py "out/release/titanos-$VERSION.zip" --plugins out/release --timeout 420
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: plugins-boot-log
+          path: |
+            out/release-smoke*.log
+            out/storage-smoke*.log
+            out/network-smoke*.log
+          if-no-files-found: ignore
+          retention-days: 7

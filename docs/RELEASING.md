@@ -81,9 +81,14 @@ verwenden und den Ablauf unter „Schlüsselwechsel und Verlust“ beachten.
 ## Probelauf ohne Veröffentlichung
 
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den
-Image-Probelauf aus. Zusätzlich lässt er sich unter Actions › Release mit
-„Run workflow“ und einer Version starten. Solche Läufe veröffentlichen
-nichts und haben keinen Zugriff auf die Signiergeheimnisse.
+Image-Probelauf aus (`release.yml`). Er baut und startet nur das System, ohne
+Plugins (`WITHOUT_PLUGINS=1`); ein solches Paket lehnt `verify-release.py` ab,
+außer mit `--without-plugins`. Änderungen an Plugins, ihren Skripten und der
+Plugin-Seite prüft stattdessen `plugins.yml`: Abbild bauen, alle offiziellen
+Plugins dagegen bauen und mit `--plugins` in QEMU starten. Ein Tag und
+Actions › Release › „Run workflow“ bauen und prüfen immer beides. Solche Läufe
+veröffentlichen nichts (außer dem Tag) und Probeläufe haben keinen Zugriff auf
+die Signiergeheimnisse.
 
 Der Probelauf baut mit einem kurzlebigen Testschlüssel, prüft Signaturen,
 packt alle Lizenznachweise und startet das tatsächliche ZIP zweimal in
