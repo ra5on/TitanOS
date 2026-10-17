@@ -83,6 +83,9 @@ func (m *Manager) StartCopy(src Root, paths []string, dst Root, dir string, move
 	if !dst.Writable || move && !src.Writable {
 		return Job{}, ErrReadOnly
 	}
+	if len(src.Hide) > 0 {
+		return Job{}, ErrProtected
+	}
 	if conflict == "" {
 		conflict = ConflictRename
 	}

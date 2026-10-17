@@ -35,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
+	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -72,6 +73,8 @@ type Options struct {
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
 	Backup *backup.Manager
+	// USB lists and mounts drives plugged in over USB; nil if there is none.
+	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
 	UPS          *ups.Manager
 	Settings     *system.Settings
@@ -173,6 +176,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
 	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
 	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("PUT /api/v1/files/text", s.requireAdmin(s.handleFileText))
+	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
+	mux.HandleFunc("GET /api/v1/files/jobs", s.requireUser(s.handleFileJobs))
+	mux.HandleFunc("POST /api/v1/files/jobs/{id}/cancel", s.requireUser(s.handleFileJobCancel))
+	mux.HandleFunc("GET /api/v1/usb", s.requireAdmin(s.handleUSB))
+	mux.HandleFunc("POST /api/v1/usb/{id}/mount", s.requireAdmin(s.handleUSBMount))
+	mux.HandleFunc("POST /api/v1/usb/{id}/eject", s.requireAdmin(s.handleUSBEject))
 	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))

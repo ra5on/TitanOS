@@ -736,8 +736,25 @@ func TestShareAccessInTheAPI(t *testing.T) {
 func TestFilesNeedARoot(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	if res, body := ts.request("GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+	// An administrator sees the stick, and nothing else yet.
+	if res, body := ts.request("GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"id":"stick"`) || strings.Contains(string(body), "share/") {
 		t.Errorf("roots: %d %s", res.StatusCode, body)
+	}
+	res, body := ts.request("GET", "/api/v1/files/list?root=stick", nil)
+	if res.StatusCode != http.StatusOK || strings.Contains(string(body), `"users"`) {
+		t.Errorf("stick listing: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/files/list?root=stick&path=users", nil); res.StatusCode != http.StatusNotFound {
+		t.Errorf("secrets of the stick: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "nicht-da.json", "content": "{}"}); res.StatusCode != http.StatusNotFound {
+		t.Errorf("saving a file that is not there: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/usb", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Errorf("usb: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("GET", "/api/v1/files/jobs", nil); res.StatusCode != http.StatusOK {
+		t.Errorf("jobs: %d", res.StatusCode)
 	}
 	for _, target := range []string{
 		"/api/v1/files/list?root=share/fotos",

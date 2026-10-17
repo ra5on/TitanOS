@@ -50,7 +50,7 @@ func newTest(t *testing.T) (*Manager, *fake) {
 	mounts := ""
 	f := &fake{t: t, mounts: &mounts}
 	m := &Manager{runner: f, root: filepath.Join(root, "usb"), mountsFile: filepath.Join(root, "mounts")}
-	m.Reserved = func(path string) bool { return path == "/dev/sde" }
+	m.Reserved = func(uuid string) bool { return uuid == "in-volume" }
 	os.WriteFile(m.mountsFile, nil, 0o644)
 	return m, f
 }

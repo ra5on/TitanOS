@@ -94,8 +94,8 @@ type Manager struct {
 	// Disabled refuses to mount anything: in development mode titand runs on
 	// the developer's own machine.
 	Disabled bool
-	// Reserved reports a device path that belongs to a volume of the NAS.
-	Reserved func(path string) bool
+	// Reserved reports a filesystem UUID that belongs to a volume of the NAS.
+	Reserved func(uuid string) bool
 	// OnPlug is told of each drive that appeared since the last look.
 	OnPlug func(Device)
 
@@ -120,7 +120,7 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	if n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
-			n.Label != bootStickLabel && (reserved == nil || !reserved(n.Name)) {
+			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {
 			_, supported := filesystems[n.FSType]
 			*out = append(*out, Device{ID: n.UUID, Label: n.Label, Model: strings.TrimSpace(n.Model), FSType: n.FSType, Size: n.Size, Supported: supported, path: n.Name})
 		}
@@ -211,6 +211,28 @@ func (m *Manager) find(ctx context.Context, id string) (Device, error) {
 		}
 	}
 	return Device{}, ErrNotFound
+}
+
+// Mounted is a drive that is mounted, found without asking lsblk.
+type Mounted struct {
+	// Mount is the folder name; Name is what to show.
+	Mount, Name, Dir string
+}
+
+// Mounted returns the drives that are mounted right now.
+func (m *Manager) Mounted() []Mounted {
+	var drives []Mounted
+	for _, dir := range m.mounts() {
+		name := filepath.Base(dir)
+		// The mount name ends in a short piece of the UUID.
+		shown := name
+		if at := strings.LastIndex(name, "-"); at > 0 {
+			shown = name[:at]
+		}
+		drives = append(drives, Mounted{Mount: name, Name: shown, Dir: dir})
+	}
+	sort.Slice(drives, func(i, j int) bool { return drives[i].Mount < drives[j].Mount })
+	return drives
 }
 
 // Dir returns where a drive is mounted, by the name of its mount.
