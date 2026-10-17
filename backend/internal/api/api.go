@@ -253,6 +253,7 @@ func New(opts Options) *Server {
 	// Backups of shares. They hold everyone's files: administrators only.
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
+	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))
 	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireAdmin(s.handleBackupDelete))

@@ -19,6 +19,7 @@ var backupErrors = []struct {
 	{backup.ErrExists, http.StatusConflict, "backup_job_exists"},
 	{backup.ErrNotFound, http.StatusNotFound, "backup_job_not_found"},
 	{backup.ErrRunning, http.StatusConflict, "backup_job_running"},
+	{backup.ErrFolder, http.StatusConflict, "folder_unreadable"},
 	{backup.ErrSources, http.StatusConflict, "backup_no_sources"},
 }
 
@@ -152,4 +153,15 @@ func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"publicKey": key})
+}
+
+// handleBackupFolders lists the folders in a folder of a share, for choosing
+// what a backup saves.
+func (s *Server) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
+	folders, err := s.opts.Backup.Folders(r.URL.Query().Get("share"), r.URL.Query().Get("dir"))
+	if err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"folders": folders})
 }

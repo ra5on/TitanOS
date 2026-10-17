@@ -1138,6 +1138,9 @@ func TestBackupsKeepTheirSecrets(t *testing.T) {
 	if res.StatusCode != http.StatusOK || strings.Contains(string(body), "s3-secret-value") || !strings.Contains(string(body), `"secretKey":true`) || strings.Contains(string(body), `"password":"`) {
 		t.Fatalf("create: %d %s", res.StatusCode, body)
 	}
+	if res, body := ts.request("GET", "/api/v1/backups/folders?share=gone&dir=", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "backup_job_not_found" {
+		t.Errorf("folders of an unknown share: %d %s", res.StatusCode, body)
+	}
 	if res, body := ts.request("POST", "/api/v1/backups", job); res.StatusCode != http.StatusConflict || errorCode(t, body) != "backup_job_exists" {
 		t.Errorf("twice: %d %s", res.StatusCode, body)
 	}
