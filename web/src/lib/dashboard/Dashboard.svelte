@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import 'gridstack/dist/gridstack.min.css';
 
@@ -75,7 +76,8 @@
 	const titleOf = (id: TileId) => {
 		const target = workload(id);
 		const vm = target?.kind === 'vm' ? vms.find((vm) => vm.name === target.name) : undefined;
-		return vm ? vmLabel(vm) : target?.name ?? t(tileSpec(id).title);
+		const container = target?.kind === 'container' ? containers.find((container) => container.name === target.name) : undefined;
+		return vm ? vmLabel(vm) : container ? dockerName(container, 'distinct') : target?.name ?? t(tileSpec(id).title);
 	};
 	const watchWorkloads = $derived(admin && (editing || shown.some((tile) => workload(tile.id))));
 	$effect(() => {
@@ -299,7 +301,7 @@
 						{#each vms.filter((vm) => !shown.some((tile) => tile.id === `vm:${vm.name}`)) as vm (vm.name)}<option value="vm:{vm.name}">{vmLabel(vm)}</option>{/each}
 					</optgroup>
 					<optgroup label={t('tile.container')}>
-						{#each containers.filter((container) => !shown.some((tile) => tile.id === `container:${container.name}`)) as container (container.name)}<option value="container:{container.name}">{container.name}</option>{/each}
+						{#each containers.filter((container) => !shown.some((tile) => tile.id === `container:${container.name}`)) as container (container.name)}<option value="container:{container.name}">{dockerName(container, 'distinct')}</option>{/each}
 					</optgroup>
 				</select>
 				<button class="btn" disabled={!selection} onclick={addWorkload}>{t('dashboard.addWorkload')}</button>
