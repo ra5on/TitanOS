@@ -425,6 +425,7 @@
 		display: flex;
 		flex-direction: column;
 	}
+	.stack:has(:global(.menu-open)) { position: relative; z-index: 20; }
 	.stack-head {
 		display: flex;
 		flex-wrap: wrap;
