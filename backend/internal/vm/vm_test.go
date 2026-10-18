@@ -92,6 +92,8 @@ func TestCreateStartDelete(t *testing.T) {
 	for name, change := range map[string]func(*VM){
 		"bad name":         func(vm *VM) { vm.Name = "Debian VM" },
 		"unknown template": func(vm *VM) { vm.Template = "beos" },
+		"unknown firmware": func(vm *VM) { vm.Firmware = "wrong" },
+		"BIOS Secure Boot": func(vm *VM) { vm.Firmware = "bios"; vm.SecureBoot = true },
 		"too little RAM":   func(vm *VM) { vm.MemoryMiB = 16 },
 		"too many vCPUs":   func(vm *VM) { vm.VCPUs = 100000 },
 		"nothing to boot":  func(vm *VM) { vm.Disks, vm.ISO = nil, "" },

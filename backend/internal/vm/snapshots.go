@@ -235,12 +235,14 @@ func (m *Manager) snapshotFiles(v VM) ([]SnapshotFile, error) {
 		}
 	}
 	dir := m.dir(v.Volume, v.folder())
-	if _, err := os.Lstat(filepath.Join(dir, "nvram.fd")); err == nil {
-		if err = add(filepath.Join(dir, "nvram.fd")); err != nil {
+	if v.Firmware != "bios" {
+		if _, err := os.Lstat(filepath.Join(dir, "nvram.fd")); err == nil {
+			if err = add(filepath.Join(dir, "nvram.fd")); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
 	}
 	if v.TPM {
 		path := filepath.Join(dir, "tpm")
@@ -350,7 +352,7 @@ func (m *Manager) readSnapshot(v VM, id string) (Snapshot, error) {
 	for i, f := range s.Files {
 		allowed := i < len(s.VM.Disks) && f.Target == m.diskPath(s.VM, s.VM.Disks[i])
 		dir := m.dir(v.Volume, v.folder())
-		allowed = allowed || f.Target == filepath.Join(dir, "nvram.fd") || (s.VM.TPM && f.Directory && f.Target == filepath.Join(dir, "tpm"))
+		allowed = allowed || (s.VM.Firmware != "bios" && f.Target == filepath.Join(dir, "nvram.fd")) || (s.VM.TPM && f.Directory && f.Target == filepath.Join(dir, "tpm"))
 		if f.Directory && f.Target != filepath.Join(dir, "tpm") {
 			return s, ErrInvalid
 		}
@@ -431,14 +433,8 @@ func (m *Manager) createSnapshot(ctx context.Context, name string, req SnapshotR
 	if err := m.snapshotPath(m.dir(v.Volume, v.folder()), false); err != nil {
 		return err
 	}
-	nvram := filepath.Join(m.dir(v.Volume, v.folder()), "nvram.fd")
-	if _, e := os.Lstat(nvram); errors.Is(e, fs.ErrNotExist) {
-		if e = copyFile(firmware(v).vars, nvram); e != nil {
-			return e
-		}
-		if e = m.share(nvram, 0o660); e != nil {
-			return e
-		}
+	if err := m.prepareNVRAM(v); err != nil {
+		return err
 	}
 	if v.TPM {
 		if err := m.prepareTPM(m.dir(v.Volume, v.folder())); err != nil {

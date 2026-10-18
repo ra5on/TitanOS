@@ -603,3 +603,12 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Projektinhaber meldet USB-Installation, Neustarts, RAID, Freigaben sowie USB
   und GPU auf echter Server-Hardware mit Beta 2 erfolgreich; keine pauschale
   Hardware-Abnahme neuer Beta-7-Funktionen daraus ableiten.
+
+## VM-Firmware-Auswahl (Entwicklungsstand nach Beta 7)
+
+- Beim Anlegen UEFI/OVMF (Standard) oder Legacy-BIOS/SeaBIOS. `firmware` in der
+  VM-Konfiguration; fehlendes Feld bleibt UEFI. Auswahl nach dem Anlegen fest.
+- BIOS verwendet q35 und `/usr/share/seabios/bios-256k.bin`, ohne NVRAM. Secure
+  Boot mit BIOS wird abgelehnt; Windows-11-Option nur unter UEFI.
+- Snapshots sichern bei BIOS keine UEFI-Variablen. RAM-Kompatibilität prüft
+  die tatsächlich ausgewählte Firmware. TitanOS selbst bootet weiterhin nur UEFI.

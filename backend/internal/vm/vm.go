@@ -111,8 +111,9 @@ type VM struct {
 	Name             string           `json:"name"`
 	DisplayName      string           `json:"displayName,omitempty"`
 	Description      string           `json:"description"`
-	// Template decides which virtual hardware the guest gets: linux,
-	// windows or other.
+	// Firmware is fixed at creation. Empty preserves UEFI for existing configurations.
+	Firmware string `json:"firmware,omitempty"`
+	// Template decides which virtual hardware the guest gets: linux, windows or other.
 	Template  string `json:"template"`
 	UUID      string `json:"uuid"`
 	MAC       string `json:"mac"`
@@ -542,6 +543,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	if !slices.Contains([]string{"linux", "windows", "other"}, vm.Template) {
 		return fmt.Errorf("%w: unknown template", ErrInvalid)
 	}
+	if err := validateFirmware(*vm); err != nil {
+		return err
+	}
 	if len(vm.CPUPin) > 0 {
 		// One vCPU per pinned CPU.
 		vm.VCPUs = len(vm.CPUPin)
@@ -937,14 +941,8 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	if err != nil {
 		return err
 	}
-	nvram := filepath.Join(dir, "nvram.fd")
-	if _, err := os.Stat(nvram); errors.Is(err, fs.ErrNotExist) {
-		if err := copyFile(firmware(vm).vars, nvram); err != nil {
-			return err
-		}
-		if err := m.share(nvram, 0o660); err != nil {
-			return err
-		}
+	if err := m.prepareNVRAM(vm); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(m.runDir, 0o770); err != nil {
 		return err
