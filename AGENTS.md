@@ -172,7 +172,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Kopfzeile immer einzeilig mit fester Höhe (ca. 60 px). Reicht die Breite nicht, scrollt die Navigation seitlich mit sichtbarer Scrollleiste, Links-/Rechtspfeilen und Ziehen mit gedrückter Maustaste. Normale Link-Klicks, Tastatur und Touch bleiben bedienbar.
 - Statusleiste unten: Volume-Zustand, laufende Rebuilds/Prüfungen, Version und System-Slot.
 - Schrift: IBM Plex Sans für Text, IBM Plex Mono für Werte, Pfade, Gerätenamen (lokal ausliefern, keine Google-Fonts-Abhängigkeit im Produkt).
-- Mobil: Navigation seitlich scrollen, Kacheln stapeln, breite Tabellen horizontal scrollbar.
+- Mobil: bis 760 px Hauptnavigation über einen Menüknopf mit aktuellem Bereich und aufklappbaren Links (native Popover-Funktion, Escape/Außenklick schließt). Desktop behält die seitlich scrollbare Reiterleiste. Kacheln stapeln, breite Tabellen horizontal scrollbar.
 
 **Marke** (Entwurf `Brand.dc.html`, Dateien in `docs/brand/`)
 - Symbol: Sechseck-Rahmen mit „T“ (mit Fuge zwischen Balken und Stamm). Schriftzug „TITANOS“ aus eigenen geometrischen Formen (keine Schriftart, keine Lizenzfrage): gleiche Strichstärke, „A“ ohne Querstrich, „T“ mit Fuge.
@@ -603,3 +603,13 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Projektinhaber meldet USB-Installation, Neustarts, RAID, Freigaben sowie USB
   und GPU auf echter Server-Hardware mit Beta 2 erfolgreich; keine pauschale
   Hardware-Abnahme neuer Beta-7-Funktionen daraus ableiten.
+
+## Katalog und mobile Navigation (nach Beta 7)
+
+- Offizielle Quelle heißt „TitanOS-Apps“; interne ID `titanos` bleibt stabil.
+  Beim Laden werden manuell hinzugefügte Doppelungen dieser Repository-URL
+  einmalig aus `docker/sources.json` entfernt. Installationseinstellungen und
+  andere Quellen bleiben erhalten. `Add` verhindert erneute Doppelungen.
+- Die mobile Hauptnavigation nutzt ein natives Popover mit Rollenfilter und
+  mindestens 44 px hohen Links. Schließt bei Navigation, Escape, Außenklick
+  und Wechsel zur Desktopbreite. Kein Fokusfang oder verändertes Desktop-Scrolling.

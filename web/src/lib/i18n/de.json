@@ -2113,5 +2113,7 @@
 	"backup.weekday.3": "Mittwoch",
 	"backup.weekday.4": "Donnerstag",
 	"backup.weekday.5": "Freitag",
-	"backup.weekday.6": "Samstag"
+	"backup.weekday.6": "Samstag",
+	"nav.openMenu": "Navigation öffnen: {page}",
+	"nav.closeMenu": "Navigation schließen"
 }

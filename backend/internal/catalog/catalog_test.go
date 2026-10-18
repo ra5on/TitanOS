@@ -239,7 +239,7 @@ func TestSources(t *testing.T) {
 
 	store := config.Open(t.TempDir())
 	m := NewManager(store)
-	m.SetOfficialURL(srv.URL + "/missing")
+	m.SetOfficialURL(srv.URL + "/official-unavailable")
 	ctx := context.Background()
 	if err := m.Add(ctx, "", srv.URL+"/forge/apps"); !errors.Is(err, ErrNotLoaded) {
 		t.Fatalf("before Load: %v", err)
