@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -20,6 +21,10 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 	if m.WithUSB == nil {
 		return fmt.Errorf("USB copy target is unavailable")
 	}
+	return m.WithUSB(ctx, job.Destination.DeviceID, func(target *os.Root) error { return m.copyTo(ctx, job, target) })
+}
+
+func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	sources := map[string]Source{}
 	for _, source := range m.sources() {
 		sources[source.Name] = source
@@ -30,7 +35,7 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 		}
 	}
 	var total uint64
-	err := m.WithUSB(ctx, job.Destination.DeviceID, func(target *os.Root) error {
+	err := func() error {
 		for _, name := range job.Sources {
 			source := sources[name]
 			root, err := os.OpenRoot(source.Path)
@@ -83,7 +88,13 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 						if err := copyDirectories(target, path.Dir(dst)); err != nil {
 							return err
 						}
-						n, err := copyFile(ctx, root, rel, target, dst)
+						n, err := copyFileProgress(ctx, root, rel, target, dst, func(done int64) {
+							m.mu.Lock()
+							if state := m.states[job.ID]; state != nil {
+								state.BytesDone = total + uint64(done)
+							}
+							m.mu.Unlock()
+						})
 						if err != nil {
 							return err
 						}
@@ -102,7 +113,7 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 			}
 		}
 		return nil
-	})
+	}()
 	if err == nil {
 		m.update(job, func(s *State) { s.Bytes, s.BytesDone, s.Percent = total, total, 100 })
 	}
@@ -133,6 +144,10 @@ func copyDirectories(root *os.Root, dir string) error {
 }
 
 func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root, to string) (int64, error) {
+	return copyFileProgress(ctx, source, from, target, to, nil)
+}
+
+func copyFileProgress(ctx context.Context, source *os.Root, from string, target *os.Root, to string, progress func(int64)) (int64, error) {
 	info, err := target.Lstat(to)
 	if err == nil && !info.Mode().IsRegular() {
 		return 0, fmt.Errorf("copy destination %s is not a regular file", to)
@@ -153,6 +168,26 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 	if !before.Mode().IsRegular() {
 		return 0, fmt.Errorf("source changed type")
 	}
+	// Compare content even when timestamps match, without rewriting unchanged files.
+	if info != nil && info.Size() == before.Size() {
+		same, err := sameCopy(ctx, input, target, to)
+		if err != nil {
+			return 0, err
+		}
+		after, err := input.Stat()
+		if err != nil {
+			return 0, err
+		}
+		if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+			return 0, fmt.Errorf("source changed during comparison: %s", from)
+		}
+		if same {
+			return before.Size(), nil
+		}
+		if _, err := input.Seek(0, io.SeekStart); err != nil {
+			return 0, err
+		}
+	}
 	temp := path.Join(path.Dir(to), ".titanos-copy-"+rand.Text())
 	output, err := target.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
@@ -170,6 +205,9 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 		if n > 0 {
 			written, err := output.Write(buf[:n])
 			total += int64(written)
+			if progress != nil {
+				progress(total)
+			}
 			if err != nil {
 				return total, err
 			}
@@ -191,6 +229,9 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 	if total != before.Size() || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
 		return total, fmt.Errorf("source changed during copying: %s", from)
 	}
+	if err := target.Chtimes(temp, before.ModTime(), before.ModTime()); err != nil {
+		return total, err
+	}
 	if err := output.Sync(); err != nil {
 		return total, err
 	}
@@ -201,4 +242,39 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 		return total, err
 	}
 	return total, nil
+}
+
+func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string) (bool, error) {
+	other, err := target.OpenFile(to, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return false, err
+	}
+	defer other.Close()
+	info, err := other.Stat()
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, fmt.Errorf("destination changed type")
+	}
+	a, b := make([]byte, 256<<10), make([]byte, 256<<10)
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		n, e1 := io.ReadFull(input, a)
+		k, e2 := io.ReadFull(other, b)
+		if e1 != nil && e1 != io.EOF && e1 != io.ErrUnexpectedEOF {
+			return false, e1
+		}
+		if e2 != nil && e2 != io.EOF && e2 != io.ErrUnexpectedEOF {
+			return false, e2
+		}
+		if n != k || !bytes.Equal(a[:n], b[:k]) {
+			return false, nil
+		}
+		if e1 != nil || e2 != nil {
+			return e1 == e2, nil
+		}
+	}
 }

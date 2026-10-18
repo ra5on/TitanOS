@@ -9,7 +9,7 @@
 
 ---
 
-> **Stand:** TitanOS befindet sich in der Beta-Phase. Vollständig veröffentlichte Downloads und Änderungen stehen unter [Releases](https://github.com/ra5on/TitanOS/releases). Diese README beschreibt den Hauptzweig; Änderungen werden erst mit dem zugehörigen Release auf bestehenden Installationen verfügbar.
+> **Stand:** Ab **0.5.0 Stable** verwendet TitanOS einen gemeinsamen Updatekanal. Neue optionale Funktionen tragen bei Bedarf ein **Beta**-Label. Vollständig veröffentlichte Downloads und Änderungen stehen unter [Releases](https://github.com/ra5on/TitanOS/releases). Diese README beschreibt den Hauptzweig; Änderungen werden erst mit dem zugehörigen Release auf bestehenden Installationen verfügbar.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
@@ -22,6 +22,9 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
 ## Aktuelle Neuerungen
+
+- **0.5.0 Stable:** ein gemeinsamer Updatekanal, Daten-Volume als Startansicht im Dateimanager und der selbst vergebene App-Name in Docker.
+- **SMB-Ordnerkopie (Beta):** zweites NAS mit Benutzername/Passwort verbinden, Freigabe auswählen und komplette Ordnerbäume sofort oder nach Zeitplan kopieren. Neue und geänderte Dateien werden übertragen; gelöschte Quelldateien bleiben am Ziel. [Einrichtung und Rücksicherung](docs/SMB-COPY-BACKUPS.md).
 
 - **WebUI für Desktop und Smartphone:** kompaktere Texte und Abstände, anpassbare Schriftgröße und Dichte, mobile Formulare und Dialoge sowie seitlich scrollbare Navigation und Tabellen.
 - **Apps mit passenden Icons und drei Zugriffswegen:** lokale WebUI, Tailscale-WebUI bei aktiver Verbindung und eine selbst hinterlegte öffentliche URL, etwa hinter Cloudflare. Protokoll, Port und Pfad gehören zur App-Vorlage. Das Eintragen einer URL richtet keinen Tunnel ein. [App-Links](docs/APP-LINKS.md).
@@ -141,7 +144,7 @@ Volume-Verschlüsselung, weitere Fernzugriffsoptionen, Energiezeitpläne/Wake-on
 - Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
 - Btrfs und automatische Plugin-Mitnahme sind ab v0.1.0-beta.3 enthalten. Beim ersten Update aus v0.1.0-beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
 
-## Installation der Beta
+## Installation
 
 Downloads stehen auf den [Release-Seiten](https://github.com/ra5on/TitanOS/releases). Das gewünschte vollständig veröffentlichte Release auswählen. Für einen neuen Stick:
 
@@ -150,7 +153,7 @@ Downloads stehen auf den [Release-Seiten](https://github.com/ra5on/TitanOS/relea
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
 
-Weitere Betas werden unter „Einstellungen › Updates“ im Kanal **Beta** angeboten. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
+Updates werden unter **Einstellungen › Updates** angeboten. Ab 0.5.0 gibt es nur noch den Stable-Kanal; bisherige Beta-Einstellungen werden automatisch umgestellt. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
 
 Während ein neues Release noch gebaut wird, kann dessen Tag bereits im GitHub-Feed stehen. Die Beta-Update-Suche kann dann vorübergehend einen Abruffehler melden, weil das signierte Manifest noch fehlt. Nach der vollständigen Veröffentlichung erneut nach Updates suchen.
 
@@ -162,13 +165,13 @@ Nach einem Stick-Ausfall einen neuen Stick vorbereiten und beim ersten Start **v
 
 Ohne Konfigurationssicherung bleiben die Daten erhalten, es gibt aber noch keinen geführten Import beliebiger vorhandener Volumes.
 
-## Tests und Weg zur Stable-Version
+## Tests und Funktionsstatus
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
 Der Projektinhaber bestätigt auf seinem Server mit **Beta 2** die Installation auf einem echten USB-Stick, Neustarts, RAID, Freigaben sowie funktionierendes USB und GPU. Das ist ein Hardwarebericht für diesen Stand und diesen Server; die genaue Versionsreihe und Gerätemodelle sind damit noch nicht dokumentiert. Neuere Funktionen benötigen eigene Abnahmetests, insbesondere die Wiederherstellung auf einem Ersatzstick, Backups samt Rücksicherung und der Zugriff über ein echtes Tailnet.
 
-Eine Stable-Version soll einen geprüften Kern bereitstellen. Neue optionale Funktionen können danach gesondert als experimentell gekennzeichnet werden. Diese Aufteilung ist geplant; die bisherigen Releases bleiben Betas. Der Updatekanal lässt sich unter **Einstellungen › Updates** wählen.
+Ab 0.5.0 erscheint das System als Stable. Neue optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, nicht einen zweiten Updatekanal. Frühere Releases behalten ihre Beta-Bezeichnung.
 
 ## Entwicklung
 
