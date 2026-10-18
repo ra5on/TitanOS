@@ -38,27 +38,27 @@
  <button class="btn" onclick={()=>edit()}>{t('backup.smb.add')}</button>
 </section>
 {#if draft}
- <Dialog title={t('backup.smb.title')} onclose={()=>{if(!busy)draft=null;}}>
+ <Dialog title={t('backup.smb.title')} locked={busy} onclose={()=>{if(!busy)draft=null;}}>
  <form onsubmit={save}>
   <p class="muted">{t('backup.smb.setup')}</p>
-  <label>{t('backup.smb.name')}<input class="field" bind:value={draft.id} pattern={'[a-z][a-z0-9-]{0,30}'} required disabled={editing} /></label>
+  <label>{t('backup.smb.name')}<input class="field" bind:value={draft.id} pattern="[a-z][a-z0-9\-]*" maxlength="31" required disabled={editing} /></label>
   <label>{t('backup.smb.host')}<input class="field" bind:value={draft.host} oninput={()=>{shares=[];if(draft)draft.share='';}} required /></label>
   <label>{t('backup.smb.user')}<input class="field" bind:value={draft.username} oninput={()=>{shares=[];if(draft)draft.share='';}} required autocomplete="off" /></label>
   <label>{t('backup.smb.password')}<input class="field" type="password" bind:value={draft.password} autocomplete="new-password" placeholder={targets.some(t=>t.id===draft?.id)?t('backup.smb.keepPassword'):''} /></label>
   <button class="btn" type="button" disabled={busy||!draft.id||!draft.host||!draft.username} onclick={discover}>{t('backup.smb.discover')}</button>
-  <label>{t('backup.smb.share')}<select class="field" bind:value={draft.share} required><option value="" disabled>–</option>{#each shares as share(share)}<option value={share}>{share}</option>{/each}</select></label>
+  <label>{t('backup.smb.share')}<select class="field" aria-label={t('backup.smb.share')} bind:value={draft.share} required><option value="" disabled>–</option>{#each shares as share(share)}<option value={share}>{share}</option>{/each}</select></label>
   <label>{t('backup.smb.folder')}<input class="field" bind:value={draft.folder} placeholder="TitanOS" /></label>
   <p class="muted">{t('backup.smb.credentialsHint')}</p>
   {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-  <button class="btn btn-primary" disabled={busy||!draft.share}>{busy?t('backup.smb.testing'):t('backup.smb.save')}</button>
+  <div class="dialog-actions"><button type="button" class="btn" disabled={busy} onclick={()=>draft=null}>{t('common.cancel')}</button><button class="btn btn-primary" disabled={busy||!draft.share}>{busy?t('backup.smb.testing'):t('backup.smb.save')}</button></div>
  </form>
  </Dialog>
 {/if}
 {#if deleting}
- <Dialog title={t('backup.remove')} onclose={()=>{if(!busy)deleting=null;}}>
+ <Dialog title={t('backup.remove')} locked={busy} onclose={()=>{if(!busy)deleting=null;}}>
  <p>{t('backup.smb.removeHint')}</p>
  {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
- <button class="btn" disabled={busy} onclick={remove}>{t('backup.remove')}</button>
+ <div class="dialog-actions"><button class="btn" disabled={busy} onclick={()=>deleting=null}>{t('common.cancel')}</button><button class="btn" disabled={busy} onclick={remove}>{t('backup.remove')}</button></div>
  </Dialog>
 {/if}
 <style>

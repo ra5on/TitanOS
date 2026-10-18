@@ -2153,5 +2153,6 @@
 	"backup.smb.target": "Eingerichtetes SMB-Ziel",
 	"backup.smb.first": "Fehlt ein Ziel, diesen Dialog schließen und zuerst oben ein SMB-Ziel einrichten. Der Speicherort enthält den Auftragsordner, den Freigabenamen und den vollständigen relativen Quellpfad.",
 	"backup.smb.jobFolder": "Auftragsordner im Ziel",
-	"update.singleChannel": "Alle TitanOS-Updates erscheinen im gemeinsamen Stable-Kanal. Einzelne neue Funktionen sind direkt in der Oberfläche als Beta gekennzeichnet."
+	"update.singleChannel": "Alle TitanOS-Updates erscheinen im gemeinsamen Stable-Kanal. Einzelne neue Funktionen sind direkt in der Oberfläche als Beta gekennzeichnet.",
+	"files.chooseRoot": "Kein Daten-Volume verfügbar. Wähle einen Speicherort aus der Liste."
 }

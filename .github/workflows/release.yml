@@ -213,7 +213,7 @@ jobs:
             echo
             echo "---"
             echo
-            echo "**Installing:** verify \`titanos-$VERSION.zip.minisig\`, then unpack \`titanos-$VERSION.zip\` onto a FAT32 stick named \`TITANOS\`. See the README for prerequisites. For a pre-release, select the Beta channel under Settings › Updates."
+            echo "**Installing:** verify \`titanos-$VERSION.zip.minisig\`, then unpack \`titanos-$VERSION.zip\` onto a FAT32 stick named \`TITANOS\`. See the README for prerequisites. From 0.5.0 onward, Settings › Updates follows the single Stable channel; optional Beta features are marked in the interface."
             echo
             echo "**License:** Fair Source (FSL-1.1-ALv2). This version is available under Apache-2.0 from $apache."
             echo

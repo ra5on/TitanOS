@@ -225,3 +225,9 @@ Ab Beta 9 lassen sich gängige UTF-8-Textdateien bis 512 KiB direkt unter
 **Dateien → Bearbeiten** speichern, auch JSON/YAML auf beschreibbaren Freigaben,
 Volumes und USB-Geräten. Der Upload auf externe exFAT-Laufwerke wurde korrigiert.
 [Bedienung, Dateiformate und Grenzen](docs/FILE-EDITOR.md).
+
+### Windows meldet einen zu langen Zielpfad
+
+Bei tiefen Ordnerbäumen gelten zusätzlich Grenzen des Windows-Kopierprogramms.
+Siehe [Kopieren langer Pfade über SMB](docs/WINDOWS-SMB.md) für Robocopy und die
+Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
