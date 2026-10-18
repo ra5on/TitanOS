@@ -622,3 +622,18 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   Boot mit BIOS wird abgelehnt; Windows-11-Option nur unter UEFI.
 - Snapshots sichern bei BIOS keine UEFI-Variablen. RAM-Kompatibilität prüft
   die tatsächlich ausgewählte Firmware. TitanOS selbst bootet weiterhin nur UEFI.
+
+## Datei-Editor und USB-Uploads (Folgestand nach Beta 7)
+
+- `GET/PUT /files/text`: UTF-8 bis 512 KiB, gängige Textformate, JSON-Prüfung,
+  Version per Inhalts-Hash gegen veraltete Entwürfe, temporäre Datei mit fsync,
+  `.prev` als vorherige Fassung. Rechte, Eigentümer, Benutzerattribute und
+  Zugriffs-ACLs erhalten; VM-Dateien und Stick-Geheimnisse schützen.
+- Schreibbare Shares für berechtigte Nutzer, ganze Volumes/USB/Stick weiterhin
+  nur über die vorhandenen Administrator-Wurzeln. Keine Office-/PDF-Bearbeitung.
+- USB-Verfügbarkeit anhand Mount-ID und Pfad statt leerem internen Volume-Namen.
+  Upload-Abschluss mit `renameat2(RENAME_NOREPLACE)` über geöffnete Elternordner;
+  keine Hardlink-Abhängigkeit für FAT/exFAT. FAT/exFAT/NTFS mounten root-only,
+  damit private Upload-Metadaten nicht durch gelockerte Prüfungen ersetzt werden.
+- `scripts/files_usb_smoke.py` prüft echte exFAT-Uploads und Textänderungen in
+  der Wegwerf-VM. Nur neu erzeugte Image-Dateien formatieren, nie Host-Platten.

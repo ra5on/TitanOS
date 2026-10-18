@@ -24,6 +24,7 @@ on:
       - 'scripts/licenses/**'
       - 'scripts/smoke-release.py'
       - 'scripts/smoke-storage.py'
+      - 'scripts/files_usb_smoke.py'
       - 'scripts/network_smoke.py'
       - 'scripts/vm_snapshot_smoke.py'
       - 'scripts/snapshot-guest.c'

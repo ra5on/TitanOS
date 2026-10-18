@@ -145,6 +145,7 @@ type Manager struct {
 
 	jobs    jobs
 	mu      sync.Mutex
+	textMu  sync.Mutex
 	uploads map[string]*upload
 	now     func() time.Time
 }

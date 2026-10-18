@@ -2121,5 +2121,13 @@
 	"vms.form.bios": "Legacy BIOS (SeaBIOS)",
 	"vms.form.firmwareNote": "UEFI for modern systems; legacy BIOS for older systems or existing BIOS images. This choice is fixed when creating the VM.",
 	"vms.form.firmwareFixed": "Boot firmware was fixed when this VM was created. It must match the installation on its virtual disk.",
-	"vms.form.biosWindows": "Choose UEFI with TPM and Secure Boot for Windows 11. Legacy BIOS is intended for older Windows versions."
+	"vms.form.biosWindows": "Choose UEFI with TPM and Secure Boot for Windows 11. Legacy BIOS is intended for older Windows versions.",
+	"files.editHint": "UTF-8 text files up to 512 KiB. The previous version is kept beside the file as .prev. Save with Ctrl+S or ⌘S.",
+	"files.editTooLarge": "The text exceeds 512 KiB and cannot be saved here.",
+	"files.editDiscard": "Discard unsaved changes?",
+	"files.editContinue": "Keep editing",
+	"files.editDiscardButton": "Discard changes",
+	"error.text_conflict": "The file has changed since you opened it. Your draft is preserved. Reopen the current file and reconcile the changes.",
+	"error.not_text": "This is not a supported UTF-8 text file, or it exceeds 512 KiB.",
+	"error.invalid_json": "The content is not valid JSON. Check brackets, quotes and commas."
 }

@@ -756,7 +756,7 @@ func TestFilesNeedARoot(t *testing.T) {
 	if res, body := ts.request("GET", "/api/v1/files/list?root=stick&path=users", nil); res.StatusCode != http.StatusNotFound {
 		t.Errorf("secrets of the stick: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "nicht-da.json", "content": "{}"}); res.StatusCode != http.StatusNotFound {
+	if res, body := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "nicht-da.json", "content": "{}", "version": "test"}); res.StatusCode != http.StatusNotFound {
 		t.Errorf("saving a file that is not there: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("GET", "/api/v1/usb", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
@@ -1425,4 +1425,37 @@ func disabledMemory(store *config.Store) *system.MemoryPolicy {
 	m.Disabled = true
 	m.Load()
 	return m
+}
+
+func TestTextEditorReadsAndSavesLargeJSONWithVersion(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if err := ts.store.WriteJSON("editor.json", map[string]string{"text": "original"}); err != nil {
+		t.Fatal(err)
+	}
+	res, body := ts.request("GET", "/api/v1/files/text?root=stick&path=editor.json", nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	var original files.TextFile
+	if err := json.Unmarshal(body, &original); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"text":"` + strings.Repeat("x", 80000) + `"}`
+	payload := map[string]string{"root": "stick", "path": "editor.json", "content": content, "version": original.Version}
+	if res, body = ts.request("PUT", "/api/v1/files/text", payload); res.StatusCode != http.StatusOK {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	if res, body = ts.request("PUT", "/api/v1/files/text", payload); res.StatusCode != http.StatusConflict || errorCode(t, body) != "text_conflict" {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	payload["version"] = ""
+	if res, _ = ts.request("PUT", "/api/v1/files/text", payload); res.StatusCode != http.StatusConflict {
+		t.Fatal("missing version", res.StatusCode)
+	}
+	for _, target := range []string{"/api/v1/files/text?root=stick&path=users", "/api/v1/files/text?root=volume/missing&path=x.json"} {
+		if res, _ = ts.request("GET", target, nil); res.StatusCode != http.StatusNotFound {
+			t.Fatal(target, res.StatusCode)
+		}
+	}
 }

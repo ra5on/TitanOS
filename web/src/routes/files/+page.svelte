@@ -10,6 +10,7 @@
 	import CopyDialog from './CopyDialog.svelte';
 	import JobsPanel from './JobsPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
+	import { isEditableText } from '#lib/text-files.ts';
 	import UploadPanel from './UploadPanel.svelte';
 
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
@@ -109,9 +110,9 @@
 
 	const unmounted = $derived(usbDevices.filter((device) => !device.mounted));
 	const editable = $derived.by(() => {
-		if (!root?.editable || selected.length !== 1) return false;
+		if (!(root?.editable || root?.writable) || selected.length !== 1) return false;
 		const entry = entries?.find((candidate) => candidate.name === selected[0]);
-		return !!entry && !entry.dir && entry.size <= 512 * 1024;
+		return !!entry && !entry.dir && isEditableText(entry.name, entry.size);
 	});
 
 	async function load() {
@@ -406,7 +407,7 @@
 	<CopyDialog {roots} from={root} paths={selected.map((name) => join(dir, name))} move={copying.move} startDir={dir} onclose={() => (copying = null)} ondone={() => { copying = null; selected = []; jobsTick++; }} />
 {/if}
 {#if editing && root}
-	<TextEditor root={root.id} path={editing} onclose={() => { editing = null; load(); }} />
+	<TextEditor root={root.id} stick={root.kind === 'stick'} path={editing} onclose={() => { editing = null; load(); }} />
 {/if}
 
 {#if dialog}

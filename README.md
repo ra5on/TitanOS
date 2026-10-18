@@ -208,10 +208,17 @@ Beiträge sind willkommen – bitte lies zuerst [CONTRIBUTING.md](CONTRIBUTING.m
 - Fernzugriff über das [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
 - Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.
 
-### VM-Firmware (ab Beta 8)
+### VM-Firmware (ab Beta 9)
 
 Beim Anlegen einer VM kann zwischen **UEFI (OVMF)** und **Legacy-BIOS (SeaBIOS)**
 gewählt werden. UEFI bleibt Standard; vorhandene VMs behalten UEFI. Die Auswahl
 ist nach dem Anlegen fest, da sie zum installierten Gast passen muss. Für
 Windows 11 UEFI mit TPM und Secure Boot verwenden. TitanOS selbst benötigt
-weiterhin UEFI zum Starten. Die Auswahl ist ab Beta 8 verfügbar.
+weiterhin UEFI zum Starten. Die Auswahl ist ab Beta 9 verfügbar.
+
+### Dateien bearbeiten und externe USB-Laufwerke
+
+Ab Beta 9 lassen sich gängige UTF-8-Textdateien bis 512 KiB direkt unter
+**Dateien → Bearbeiten** speichern, auch JSON/YAML auf beschreibbaren Freigaben,
+Volumes und USB-Geräten. Der Upload auf externe exFAT-Laufwerke wurde korrigiert.
+[Bedienung, Dateiformate und Grenzen](docs/FILE-EDITOR.md).

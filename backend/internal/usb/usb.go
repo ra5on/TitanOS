@@ -39,11 +39,14 @@ var (
 	ErrNotMounted = errors.New("usb: the drive is not mounted")
 )
 
-// filesystems that can be mounted, with the type mount is told and options.
+// Filesystems without Unix ownership use root-only mount permissions. Upload
+// metadata and partial files must satisfy the same 0600 ownership checks as on
+// native Linux filesystems; do not weaken those checks for removable media.
+// File access remains mediated by the authenticated file-manager API.
 var filesystems = map[string]struct{ kind, options string }{
-	"vfat":  {"vfat", "iocharset=utf8,flush"},
-	"exfat": {"exfat", ""},
-	"ntfs":  {"ntfs3", ""},
+	"vfat":  {"vfat", "iocharset=utf8,flush,uid=0,gid=0,fmask=0177,dmask=0077"},
+	"exfat": {"exfat", "uid=0,gid=0,fmask=0177,dmask=0077"},
+	"ntfs":  {"ntfs3", "uid=0,gid=0,fmask=0177,dmask=0077"},
 	"ext2":  {"ext2", ""},
 	"ext3":  {"ext3", ""},
 	"ext4":  {"ext4", ""},

@@ -2121,5 +2121,13 @@
 	"vms.form.bios": "Legacy-BIOS (SeaBIOS)",
 	"vms.form.firmwareNote": "UEFI für moderne Systeme; Legacy-BIOS für ältere Systeme oder vorhandene BIOS-Abbilder. Die Auswahl wird beim Anlegen festgelegt.",
 	"vms.form.firmwareFixed": "Die Start-Firmware wurde beim Anlegen festgelegt. Sie muss zur Installation auf der virtuellen Platte passen.",
-	"vms.form.biosWindows": "Für Windows 11 UEFI mit TPM und Secure Boot wählen. Legacy-BIOS ist für ältere Windows-Versionen gedacht."
+	"vms.form.biosWindows": "Für Windows 11 UEFI mit TPM und Secure Boot wählen. Legacy-BIOS ist für ältere Windows-Versionen gedacht.",
+	"files.editHint": "UTF-8-Textdateien bis 512 KiB. Die vorherige Fassung bleibt als .prev daneben. Speichern auch mit Strg+S bzw. ⌘S.",
+	"files.editTooLarge": "Der Text ist größer als 512 KiB und kann hier nicht gespeichert werden.",
+	"files.editDiscard": "Ungespeicherte Änderungen verwerfen?",
+	"files.editContinue": "Weiter bearbeiten",
+	"files.editDiscardButton": "Änderungen verwerfen",
+	"error.text_conflict": "Die Datei wurde inzwischen geändert. Deine Eingabe bleibt erhalten. Öffne die aktuelle Datei erneut und gleiche die Änderungen ab.",
+	"error.not_text": "Diese Datei ist kein unterstützter UTF-8-Text oder ist größer als 512 KiB.",
+	"error.invalid_json": "Der Inhalt ist kein gültiges JSON. Bitte prüfe Klammern, Anführungszeichen und Kommas."
 }

@@ -343,10 +343,7 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	if u.conflict == ConflictReplace {
 		err = r.Rename(u.part, u.name)
 	} else {
-		err = r.Link(u.part, u.name)
-		if err == nil {
-			err = r.Remove(u.part)
-		}
+		err = publishNewFile(r, u.part, u.name)
 	}
 	if err != nil {
 		return UploadStatus{}, mapError(err)
