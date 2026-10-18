@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { preferredFileRoot } from '#lib/file-root.ts';
 	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -8,6 +9,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
 	import CopyDialog from './CopyDialog.svelte';
+	import WindowsPath from './WindowsPath.svelte';
+	let windowsPath = $state(false);
 	import JobsPanel from './JobsPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { isEditableText } from '#lib/text-files.ts';
@@ -65,7 +68,11 @@
 	async function loadRoots() {
 		try {
 			roots = await api.get<FileRoot[]>('/files/roots');
-			if (!roots.some((candidate) => candidate.id === rootId)) open(roots[0]?.id ?? '', '');
+			if (!roots.some((candidate) => candidate.id === rootId)) {
+				let remembered = '';
+				try { remembered = localStorage.getItem(`titanos.files.root.${session.data?.user?.name}`) ?? ''; } catch {}
+				open(preferredFileRoot(roots, remembered), '');
+			}
 		} catch (err) {
 			error = fail(err);
 		}
@@ -135,6 +142,10 @@
 	}
 
 	function open(id: string, path: string) {
+		const chosen = roots?.find(root => root.id === id);
+		if (chosen?.kind === 'volume' || chosen?.kind === 'share') {
+			try { localStorage.setItem(`titanos.files.root.${session.data?.user?.name}`, id); } catch {}
+		}
 		rootId = id;
 		dir = path;
 		selected = [];
@@ -323,8 +334,9 @@
 			ondrop={dropped}
 		>
 			<div class="toolbar">
+				{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" class="btn" onclick={() => windowsPath = true}>{t('files.windowsPath')}</button>{/if}
 				<div class="crumbs mono">
-					<button type="button" onclick={() => open(rootId, '')}>{root?.name}</button>
+					{#if root}<button type="button" onclick={() => open(rootId, '')}>{root.name}</button>{/if}
 					{#each crumbs as crumb, index (index)}
 						<span class="muted">/</span>
 						<button type="button" onclick={() => open(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button>
@@ -371,7 +383,7 @@
 					<span class="num muted">{date.format(new Date(entry.modified))}</span>
 				</div>
 			{:else}
-				{#if entries}<p class="muted none">{t('files.empty')}</p>{/if}
+				{#if !root}<p class="muted none">{t('files.chooseRoot')}</p>{:else if entries}<p class="muted none">{t('files.empty')}</p>{/if}
 			{/each}
 
 			{#if selected.length > 0}
@@ -409,6 +421,8 @@
 {#if editing && root}
 	<TextEditor root={root.id} stick={root.kind === 'stick'} path={editing} onclose={() => { editing = null; load(); }} />
 {/if}
+
+{#if windowsPath && root}<WindowsPath {root} {dir} onclose={() => windowsPath = false} />{/if}
 
 {#if dialog}
 	{@const kind = dialog.kind}

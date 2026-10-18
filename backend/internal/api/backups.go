@@ -40,9 +40,10 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 		shares = []backup.Source{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"jobs":    s.opts.Backup.List(),
-		"shares":  shares,
-		"volumes": s.opts.Storage.Mounted(),
+		"jobs":       s.opts.Backup.List(),
+		"smbTargets": s.opts.Backup.SMBTargets(),
+		"shares":     shares,
+		"volumes":    s.opts.Storage.Mounted(),
 	})
 }
 
@@ -164,4 +165,35 @@ func (s *Server) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"folders": folders})
+}
+
+func (s *Server) handleSMBDiscover(w http.ResponseWriter, r *http.Request) {
+	var target backup.SMBTarget
+	if !readJSON(w, r, &target) {
+		return
+	}
+	shares, err := s.opts.Backup.SMBDiscover(r.Context(), target)
+	if err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"shares": shares})
+}
+func (s *Server) handleSMBSave(w http.ResponseWriter, r *http.Request) {
+	var target backup.SMBTarget
+	if !readJSON(w, r, &target) {
+		return
+	}
+	if err := s.opts.Backup.SaveSMBTarget(r.Context(), target); err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	s.handleBackups(w, r)
+}
+func (s *Server) handleSMBDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Backup.DeleteSMBTarget(r.PathValue("target")); err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	s.handleBackups(w, r)
 }

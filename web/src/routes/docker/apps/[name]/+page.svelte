@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
  import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
 	import { parseDocument, type Document } from 'yaml';
@@ -75,7 +76,7 @@
 		const map = new Map<string, string>();
 		for (const container of status?.containers ?? []) {
 			if (container.app === name) continue;
-			for (const port of container.ports) map.set(`${port.host}/${port.protocol}`, container.name);
+			for (const port of container.ports) map.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
 		}
 		return map;
 	});

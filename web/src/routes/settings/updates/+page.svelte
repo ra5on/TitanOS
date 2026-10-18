@@ -185,13 +185,7 @@
 
 	<form class="tile" onsubmit={save}>
 		<h2 class="tile-title">{t('update.settings')}</h2>
-		<label class="narrow"><span>{t('update.channel')}</span>
-			<select class="field" bind:value={draft.channel}>
-				<option value="stable">{t('update.channel.stable')}</option>
-				<option value="beta">{t('update.channel.beta')}</option>
-			</select>
-		</label>
-		{#if draft.channel === 'beta'}<p class="notice-warn">{t('update.betaHint')}</p>{/if}
+		<p class="muted">{t('update.singleChannel')}</p>
 		<label class="check"><input type="checkbox" bind:checked={draft.autoInstall} /><span>{t('update.auto')}</span></label>
 		{#if draft.autoInstall}
 			<label class="narrow"><span>{t('update.autoTime')}</span><input class="field mono" type="time" bind:value={draft.installTime} required /></label>

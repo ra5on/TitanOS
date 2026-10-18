@@ -263,6 +263,14 @@ func (m *Manager) Load() error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	// One release channel from 0.5.0 onward. Save the migration once so a
+	// rollback to an older beta also continues to follow stable releases.
+	if settings.Channel != ChannelStable {
+		settings.Channel = ChannelStable
+		if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+			return err
+		}
+	}
 	var pending *Pending
 	var stored Pending
 	if err := m.store.ReadJSON(pendingFile, &stored); err == nil {
@@ -278,7 +286,7 @@ var clockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 // SetSettings stores channel and schedule. The source is kept as it is.
 func (m *Manager) SetSettings(settings Settings) error {
-	if settings.Channel != ChannelStable && settings.Channel != ChannelBeta || !clockTime.MatchString(settings.InstallTime) {
+	if settings.Channel != "" && settings.Channel != ChannelStable && settings.Channel != ChannelBeta || !clockTime.MatchString(settings.InstallTime) {
 		return ErrInvalid
 	}
 	m.mu.Lock()
@@ -286,6 +294,7 @@ func (m *Manager) SetSettings(settings Settings) error {
 	if !m.loaded {
 		return ErrNotLoaded
 	}
+	settings.Channel = ChannelStable
 	settings.Source = m.settings.Source
 	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
 		return err

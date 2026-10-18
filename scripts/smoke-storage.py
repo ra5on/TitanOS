@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from files_usb_smoke import check_usb_files
+from smb_backup_smoke import check_smb_backup
 """Btrfs/optional-tool regression in disposable UEFI QEMU disks only.
 
 Boots four times: create/snapshot, normal remount, degraded boot/replace,
@@ -231,6 +232,7 @@ def smoke(archive, plugins, log, timeout):
                         check_usb_files(request, opener, url)
                         check_uploads(request, opener, url, remote, password)
                         check_smb_share(request, remote, smb_port, password, directory)
+                        check_smb_backup(request, remote, password)
                         check_cdi(request, remote)
                         snapshot_vm, snapshot = check_vm_snapshots(request, remote, put, directory, volume='mirror')
                         for attempt in range(60):

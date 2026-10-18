@@ -225,7 +225,7 @@ func (s *Server) handleHardware(w http.ResponseWriter, r *http.Request) {
 // with the same checks as every console.
 func (s *Server) handleVMSerial(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	s.serveConsole(w, r, "vm "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	s.serveConsole(w, r, "vm "+name, true, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		running := false
 		for _, known := range s.opts.VMs.List(nil) {
 			running = running || (known.Name == name && known.State == "running")

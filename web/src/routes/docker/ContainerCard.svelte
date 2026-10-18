@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
 	import { appURL, publicURL } from '#lib/app-links.ts';
  import AppIcon from '#lib/components/AppIcon.svelte';
  import type { DockerContainer } from '#lib/api.ts';
@@ -21,6 +22,7 @@
 	};
 	let { container, host, tailscaleHost = '', busy, compact = false, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
 
+	const displayName = $derived(dockerName(container));
 	const running = $derived(container.state === 'running' || container.state === 'restarting');
 	let menu = $state(false);
 	let root: HTMLElement | undefined = $state();
@@ -69,7 +71,7 @@
 
 {#snippet actions()}
 	{#if menu}
-		<div class="menu" role="menu" aria-label={t('docker.actionsFor', { name: container.name })}>
+		<div class="menu" role="menu" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })}>
 			<button type="button" role="menuitem" onclick={() => choose(onlogs)}>{t('docker.logs')}</button>
 			<button type="button" role="menuitem" onclick={() => choose(onconsole)} disabled={!running}>{t('docker.console')}</button>
 			{#if container.managed}
@@ -86,32 +88,32 @@
 {/snippet}
 
 {#if compact}
-	<div class="member" bind:this={root}>
+	<div class="member" class:menu-open={menu} bind:this={root}>
 		<span class="dot" class:ok={running} aria-hidden="true"></span>
 		<span class="names">
-			<span class="line"><span class="name">{container.service || container.name}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
+			<span class="line"><span class="name">{dockerName(container, 'service')}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
 			<span class="mono image">{container.image}</span>
 		</span>
 		<span class="ports">{@render ports()}{@render links()}</span>
 		<span class="mono value">{running ? formatPercent(container.cpuPercent) : '–'}</span>
 		<span class="mono value">{running ? formatBytes(container.memoryBytes) : '–'}</span>
 		<button type="button" class="btn small" onclick={() => onaction(running ? 'stop' : 'start')} disabled={busy}>{t(running ? 'docker.stop' : 'docker.start')}</button>
-		<button type="button" class="more" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
+		<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
 		{@render actions()}
 	</div>
 {:else}
-	<article class="tile" bind:this={root} aria-label={container.name}>
+	<article class="tile" class:menu-open={menu} bind:this={root} aria-label={displayName}>
 		<div class="top">
-			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={container.name} /> </button>
+			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>
 			<div class="names">
 				<div class="line">
-					<span class="name">{container.name}</span>
+					<span class="name" title={container.name}>{displayName}</span>
 					<span class="state"><span class="dot" class:ok={running} aria-hidden="true"></span>{t(`docker.state.${container.state}`)}</span>
 					{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
 				</div>
 				<span class="mono image">{container.image}</span>
 			</div>
-			<button type="button" class="more" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
+			<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
 		</div>
 		<div class="stats">
 			<div><span class="label">{t('docker.cpu')}</span><span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span></div>
@@ -133,21 +135,22 @@
 {/if}
 
 <style>
+	.menu-open { z-index: 20; }
 	article {
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
-		padding: 16px;
+		gap: 8px;
+		padding: 10px 12px;
 	}
 	.top {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 8px;
 	}
 	.monogram {
-		width: 44px;
-		height: 44px;
+		width: 36px;
+		height: 36px;
 		flex: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -321,6 +324,20 @@
 		border: 0;
 		background: var(--border);
 	}
+ @media (min-width: 1000px) {
+ article { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 120px) 160px minmax(220px, auto); column-gap: 20px; align-items: center; }
+ .top { grid-column: 1; grid-row: 1; }
+ article > .ports { grid-column: 2; grid-row: 1; }
+ .stats { grid-column: 3; grid-row: 1; gap: 8px; }
+ .bottom { grid-column: 4; grid-row: 1; justify-content: flex-end; max-width: 30rem; }
+ .bottom .since { flex-basis: 100%; text-align: right; }
+ }
+ @media (min-width: 761px) and (max-width: 999px) {
+ article { display: grid; grid-template-columns: minmax(0, 1fr) 160px; }
+ .top { grid-column: 1; }
+ .stats { grid-column: 2; grid-row: 1; }
+ article > .ports, .bottom { grid-column: 1 / -1; }
+ }
  @media (max-width: 760px) {
  .member { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; padding: var(--tile-pad); }
  .member .ports { grid-column: 2 / -1; }

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	// The terminal at the lower edge of every page: a root shell on the NAS
 	// and consoles of containers as tabs. The page above stays usable.
@@ -25,14 +26,14 @@
 
 	const current = $derived(terminal.sessions.find((session) => session.id === terminal.active));
 	const screen = $derived(current ? screens[current.id] : undefined);
-	const currentConfirmed = $derived(current?.kind === 'nas' || confirmed === true);
+	const currentConfirmed = $derived((current?.kind === 'nas' || current?.kind === 'ct') || confirmed === true);
 
 	/** Asks titand what is allowed; false if a session has no reason to wait. */
 	async function check(): Promise<boolean> {
 		try {
 			info = await api.get('/terminal');
 			confirmed = (await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed;
-			return (current?.kind !== 'nas' && !confirmed) || !info?.enabled;
+			return (current?.kind === 'vm' && !confirmed) || !info?.enabled;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			return false;
@@ -73,7 +74,7 @@
 		if (!menu) return;
 		try {
 			const status = await api.get<DockerStatus>('/docker');
-			containers = status.containers.filter((container) => container.state === 'running').map((container) => ({ id: container.id, name: container.name }));
+			containers = status.containers.filter((container) => container.state === 'running').map((container) => ({ id: container.id, name: dockerName(container, 'distinct') }));
 		} catch {
 			containers = [];
 		}
@@ -202,7 +203,7 @@
 	<div class="body">
 		{#if info && !info.enabled}
 			<p class="message">{t('terminal.off')} <a href="/settings">{t('nav.settings')}</a></p>
-		{:else if current?.kind !== 'nas' && confirmed === false}
+		{:else if current?.kind === 'vm' && confirmed === false}
 			<form class="confirm" onsubmit={confirm}>
 				<p>{t('docker.consoleConfirm')}</p>
 				<label><span class="muted">{t('auth.password')}</span>
@@ -222,7 +223,7 @@
 		{/if}
 		{#each terminal.sessions as session (session.id)}
 			{#key session.shell}
-				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind === 'nas' || confirmed === true) && info?.enabled === true} onrefused={check} />
+				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind !== 'vm' || confirmed === true) && info?.enabled === true} onrefused={check} />
 			{/key}
 		{/each}
 	</div>

@@ -1128,7 +1128,7 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "nightly", "installTime": "03:30"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_update_settings" {
 		t.Errorf("unknown channel: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"beta"`) || strings.Contains(string(body), "evil") {
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"stable"`) || strings.Contains(string(body), "evil") {
 		t.Errorf("settings: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("GET", "/api/v1/health", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"ready":`) {
@@ -1215,7 +1215,7 @@ func TestBackupsKeepTheirSecrets(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/smb/discover"}, {"PUT", "/api/v1/backups/smb"}, {"DELETE", "/api/v1/backups/smb/test"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
@@ -1333,10 +1333,11 @@ func TestAppStore(t *testing.T) {
 	}
 }
 
-func TestConsoleNeedsThePasswordAgain(t *testing.T) {
+func TestVMConsoleConfirmationAndDirectAdminShells(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+	console := "/api/v1/vms/test/serial"
+	dockerConsole := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
 	// Without the prompt switched off, consoles ask for the password again.
 	var confirmed struct{ Confirmed bool }
 	_, body0 := ts.request("GET", "/api/v1/session/confirmed", nil)
@@ -1362,6 +1363,16 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 		t.Fatalf("guest shell: %d", res.StatusCode)
 	}
 
+	// Docker uses the existing login even when confirmation is enabled.
+	if res, body := ts.request("GET", dockerConsole, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("Docker console before confirmation: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(guest, "GET", dockerConsole, nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("guest Docker console: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(ts.newClient(), "GET", dockerConsole, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous Docker console: %d", res.StatusCode)
+	}
 	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
 		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)
 	}
@@ -1393,7 +1404,7 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": false}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
 		t.Errorf("switching terminals off: %d %s", res.StatusCode, body)
 	}
-	for _, path := range []string{console, "/api/v1/terminal/shell"} {
+	for _, path := range []string{console, dockerConsole, "/api/v1/terminal/shell"} {
 		if res, body := ts.request("GET", path, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "terminal_off" {
 			t.Errorf("%s while terminals are off: %d %s", path, res.StatusCode, body)
 		}
