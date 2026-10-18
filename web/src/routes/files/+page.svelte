@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { preferredFileRoot } from '#lib/file-root.ts';
 	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -65,7 +66,11 @@
 	async function loadRoots() {
 		try {
 			roots = await api.get<FileRoot[]>('/files/roots');
-			if (!roots.some((candidate) => candidate.id === rootId)) open(roots[0]?.id ?? '', '');
+			if (!roots.some((candidate) => candidate.id === rootId)) {
+				let remembered = '';
+				try { remembered = localStorage.getItem(`titanos.files.root.${session.data?.user?.name}`) ?? ''; } catch {}
+				open(preferredFileRoot(roots, remembered), '');
+			}
 		} catch (err) {
 			error = fail(err);
 		}
@@ -135,6 +140,10 @@
 	}
 
 	function open(id: string, path: string) {
+		const chosen = roots?.find(root => root.id === id);
+		if (chosen?.kind === 'volume' || chosen?.kind === 'share') {
+			try { localStorage.setItem(`titanos.files.root.${session.data?.user?.name}`, id); } catch {}
+		}
 		rootId = id;
 		dir = path;
 		selected = [];

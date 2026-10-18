@@ -69,6 +69,7 @@ type Destination struct {
 	// Type is local, usb-copy, s3, sftp or rest.
 	Type     string `json:"type"`
 	DeviceID string `json:"deviceId,omitempty"`
+	TargetID string `json:"targetId,omitempty"`
 	// local: a folder on another volume.
 	Volume string `json:"volume,omitempty"`
 	Folder string `json:"folder,omitempty"`
@@ -164,7 +165,8 @@ type Snapshot struct {
 
 // Manager knows the jobs, runs them on time and restores from them.
 type Manager struct {
-	store *config.Store
+	store      *config.Store
+	smbTargets []SMBTarget
 	// restic is the program; mountRoot where volumes are mounted; workDir
 	// where the SSH key lies while a job runs.
 	restic, mountRoot, workDir string
@@ -207,8 +209,13 @@ func (m *Manager) Load() error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	targets, err := m.loadSMBTargets()
+	if err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.smbTargets = targets
 	m.jobs, m.loaded = jobs, true
 	return nil
 }
@@ -271,8 +278,8 @@ func check(job Job, shares []Source, volumes []string) error {
 	}
 	d := job.Destination
 	switch d.Type {
-	case "usb-copy":
-		if !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID) || !relative(d.Folder) || len(job.Extras) != 0 {
+	case "usb-copy", "smb-copy":
+		if (d.Type == "usb-copy" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb-copy" && !idForm.MatchString(d.TargetID)) || !relative(d.Folder) || len(job.Extras) != 0 {
 			return invalid("USB identity, folder or unsupported extra source")
 		}
 		for _, pattern := range job.Patterns {
@@ -364,7 +371,7 @@ func defaults(job *Job) {
 	if job.Destination.Type == "sftp" && job.Destination.Port == 0 {
 		job.Destination.Port = 22
 	}
-	if (job.Destination.Type == "local" || job.Destination.Type == "usb-copy") && job.Destination.Folder == "" {
+	if (job.Destination.Type == "local" || plainCopy(job.Destination.Type)) && job.Destination.Folder == "" {
 		job.Destination.Folder = "backups/" + job.ID
 	}
 	if job.Every == "" {
@@ -383,13 +390,16 @@ func (m *Manager) Create(job Job, volumes []string) error {
 		return err
 	}
 	job.Password = base64.RawURLEncoding.EncodeToString(secret)
-	if job.Destination.Type == "usb-copy" {
+	if plainCopy(job.Destination.Type) {
 		job.Password = ""
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if slices.ContainsFunc(m.jobs, func(j Job) bool { return j.ID == job.ID }) {
 		return ErrExists
+	}
+	if job.Destination.Type == "smb-copy" && !slices.ContainsFunc(m.smbTargets, func(t SMBTarget) bool { return t.ID == job.Destination.TargetID }) {
+		return invalid("SMB target")
 	}
 	return m.save(append(slices.Clone(m.jobs), job))
 }
@@ -408,7 +418,7 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 	}
 	old := m.jobs[at]
 	job.ID, job.Password = old.ID, old.Password
-	if (job.Destination.Type == "usb-copy") != (old.Destination.Type == "usb-copy") {
+	if (plainCopy(job.Destination.Type)) != (plainCopy(old.Destination.Type)) {
 		return invalid("create a separate job to change the backup format")
 	}
 	if job.Destination.SecretKey == "" {
@@ -420,6 +430,9 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 	defaults(&job)
 	if err := check(job, m.sources(), volumes); err != nil {
 		return err
+	}
+	if job.Destination.Type == "smb-copy" && !slices.ContainsFunc(m.smbTargets, func(t SMBTarget) bool { return t.ID == job.Destination.TargetID }) {
+		return invalid("SMB target")
 	}
 	jobs := slices.Clone(m.jobs)
 	jobs[at] = job
@@ -563,7 +576,7 @@ func (m *Manager) update(job Job, change func(*State)) {
 func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup func(), err error) {
 	cleanup = func() {}
 	d := job.Destination
-	if d.Type == "usb-copy" {
+	if plainCopy(d.Type) {
 		return "", nil, nil, cleanup, invalid("plain copies have no restic snapshots; restore files with the file manager")
 	}
 	cache := ""
@@ -788,7 +801,14 @@ func (m *Manager) Stop(id string) error {
 }
 
 func (m *Manager) backup(ctx context.Context, job Job) error {
-	if job.Destination.Type == "usb-copy" {
+	if plainCopy(job.Destination.Type) {
+		if job.Destination.Type == "smb-copy" {
+			target, err := m.smbTarget(job.Destination.TargetID)
+			if err != nil {
+				return err
+			}
+			return m.withSMB(ctx, target, func(root *os.Root) error { return m.copyTo(ctx, job, root) })
+		}
 		return m.copyUSB(ctx, job)
 	}
 	sel := m.selection(job)
@@ -1006,3 +1026,5 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 	}
 }
+
+func plainCopy(kind string) bool { return kind == "usb-copy" || kind == "smb-copy" }

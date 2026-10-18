@@ -5,13 +5,15 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import FolderTree from './FolderTree.svelte';
+	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Kind = 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
+	type Kind = 'smb-copy' | 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
 		type: Kind;
 		deviceId?: string;
+ targetId?: string;
 		volume?: string;
 		folder?: string;
 		endpoint?: string;
@@ -30,7 +32,7 @@
 	type Job = { id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
 	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string };
 	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
-	type Overview = { jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
+	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
 
 	let usbDrives = $state<{id: string; name: string; supported: boolean}[]>([]);
@@ -173,10 +175,11 @@
 		}
 	}
 
+	const plainCopy = (kind: string) => kind === 'usb-copy' || kind === 'smb-copy';
 	function setKind(kind: Kind) {
 		if (!draft) return;
 		draft.destination.type = kind;
-		if (kind === 'usb-copy') { draft.extras = []; draft.keep = {daily: 0, weekly: 0, monthly: 0}; }
+		if (plainCopy(kind)) { draft.extras = []; draft.keep = {daily: 0, weekly: 0, monthly: 0}; }
 		if (kind === 'sftp') showKey();
 		if (kind === 'titanos') pairCode = '';
 	}
@@ -184,6 +187,7 @@
 	// Only what belongs to the chosen kind of destination is sent.
 	function destination(d: Destination): Destination {
 		switch (d.type) {
+			case 'smb-copy': return {type:'smb-copy',targetId:d.targetId,folder:d.folder};
 			case 'usb-copy': return { type: 'usb-copy', deviceId: d.deviceId, folder: d.folder };
 			case 'local':
 				return { type: 'local', volume: d.volume, folder: d.folder };
@@ -226,7 +230,7 @@
 			const created = isNew ? job : null;
 			draft = null;
 			// Without its password a backup is worthless: show it right away.
-			if (created && created.destination.type !== 'usb-copy') showPassword(created as Job);
+			if (created && !plainCopy(created.destination.type)) showPassword(created as Job);
 		} catch (err) {
 			problem(err);
 		}
@@ -296,6 +300,7 @@
 	}
 
 	function where(d: Destination): string {
+		if (d.type === 'smb-copy') return `${d.targetId} / ${d.folder}`;
 		if (d.type === 'usb-copy') return `USB ${d.deviceId} / ${d.folder}`;
 		switch (d.type) {
 			case 'local':
@@ -341,6 +346,7 @@
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if overview}
+	<SmbTargets targets={overview.smbTargets} onchange={load} />
 	<TargetPanel />
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
@@ -349,7 +355,7 @@
 		<section class="tile">
 			<div class="head">
 				<div>
-					<h2 class="name mono">{job.id}</h2>
+					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">Beta</span>{/if}
 					<p class="muted">{job.sources.join(', ')} → <span class="mono">{where(job.destination)}</span></p>
 				</div>
 				{#if state.running}<span class="chip info">{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span>
@@ -360,13 +366,13 @@
 			</div>
 			{#if state.running}
 				<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(state.percent)} aria-label={t(`backup.phase.${state.phase}` as 'backup.phase.backup')}><span style:width="{state.percent}%"></span></div>
-				<p class="muted mono">{state.percent.toFixed(0)} %{#if state.bytesTotal > 0}{' · '}{formatBytes(state.bytesDone)} / {formatBytes(state.bytesTotal)}{/if}</p>
+				<p class="muted mono">{#if state.bytesTotal > 0}{state.percent.toFixed(0)} %{' · '}{formatBytes(state.bytesDone)} / {formatBytes(state.bytesTotal)}{:else}{formatBytes(state.bytesDone)}{/if}</p>
 			{/if}
 			<dl>
 				<div><dt>{t('backup.schedule')}</dt><dd>{when(job)}</dd></div>
 				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>{/if}
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
-				<div><dt>{t('backup.keeps')}</dt><dd>{job.destination.type === 'usb-copy' ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
+				<div><dt>{t('backup.keeps')}</dt><dd>{plainCopy(job.destination.type) ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
 			</dl>
 			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre></div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">{t('backup.warning')}<pre>{state.warning}</pre></div>{/if}
@@ -376,7 +382,7 @@
 					<button type="button" class="btn" onclick={() => act(job, 'stop')}>{t('backup.stop')}</button>
 				{:else}
 					<button type="button" class="btn btn-primary" onclick={() => act(job, 'run')}>{t('backup.run')}</button>
-					{#if job.destination.type !== 'usb-copy'}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
+					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>
 					<button type="button" class="btn" onclick={() => (removing = job)}>{t('backup.remove')}</button>
@@ -425,7 +431,7 @@
 					{/if}
 				</div>
 			{/each}
-			{#if draft.destination.type !== 'usb-copy'}<p class="legend-sub">{t('backup.extras')}</p>
+			{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
 			<div class="row">
 				{#each EXTRAS as extra (extra)}
 					<label class="check"><input type="checkbox" checked={draft.extras?.includes(extra)} onchange={() => toggleExtra(extra)} /><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label>
@@ -435,17 +441,22 @@
 			<label class="block"><span>{t('backup.patterns')}</span>
 				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
 			</label>
-			<p class="muted">{t(draft.destination.type === 'usb-copy' ? 'backup.copyPatterns' : 'backup.patternsHint')}</p>
+			<p class="muted">{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}</p>
 		</fieldset>
 		<fieldset>
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each ['local', 'usb-copy', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
-					<button type="button" role="radio" aria-checked={draft.destination.type === kind} disabled={!isNew && ((kind === 'usb-copy') !== (draft.destination.type === 'usb-copy'))} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
+				{#each ['local', 'usb-copy', 'smb-copy', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
+					<button type="button" role="radio" aria-checked={draft.destination.type === kind} disabled={!isNew && (plainCopy(kind) !== plainCopy(draft.destination.type))} onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button>
 				{/each}
 			</div>
 			<p class="muted">{t(`backup.kindHint.${draft.destination.type}`)}</p>
-			{#if draft.destination.type === 'usb-copy'}
+			{#if draft.destination.type === 'smb-copy'}
+ <span class="chip warn">Beta</span>
+ <label class="block"><span>{t('backup.smb.target')}</span><select class="field" bind:value={draft.destination.targetId} required><option value="" disabled>–</option>{#each overview?.smbTargets ?? [] as target(target.id)}<option value={target.id}>{target.id} · {target.host}/{target.share}</option>{/each}</select></label>
+ <p class="muted">{t('backup.smb.first')}</p>
+ <label class="block"><span>{t('backup.smb.jobFolder')}</span><input class="field" bind:value={draft.destination.folder} placeholder="backups/{draft.id}" /></label>
+ {:else if draft.destination.type === 'usb-copy'}
  <label class="block"><span>{t('backup.usbDevice')}</span><select class="field" bind:value={draft.destination.deviceId} required>
  <option value="" disabled>–</option>
  {#if draft.destination.deviceId && !usbDrives.some(d => d.id === draft?.destination.deviceId)}<option value={draft.destination.deviceId}>{draft.destination.deviceId} · {t('backup.usbMissing')}</option>{/if}
@@ -557,7 +568,7 @@
 				<p class="muted">{t('backup.catchUp')}</p>
 			{/if}
 		</fieldset>
-		{#if draft.destination.type !== 'usb-copy'}<fieldset>
+		{#if !plainCopy(draft.destination.type)}<fieldset>
 			<legend>{t('backup.keeps')}</legend>
 			<div class="row">
 				<label class="tiny"><span>{t('backup.keepDaily')}</span><input class="field mono" type="number" min="0" max="999" bind:value={draft.keep.daily} /></label>

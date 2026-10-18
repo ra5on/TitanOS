@@ -576,3 +576,41 @@ func TestPluginPreparationFailurePreservesFallbackSlot(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyBetaMigratesToOneStableChannel(t *testing.T) {
+	e := newEnv(t)
+	original := Settings{Channel: ChannelBeta, AutoInstall: true, InstallTime: "04:15", Source: e.m.source()}
+	if err := e.store.WriteJSON(settingsFile, original); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	var persisted Settings
+	if err := e.store.ReadJSON(settingsFile, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Channel != ChannelStable || !persisted.AutoInstall || persisted.InstallTime != original.InstallTime || persisted.Source != original.Source {
+		t.Fatalf("migration lost settings: %+v", persisted)
+	}
+	changes := e.store.Changes()
+	if err := e.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if e.store.Changes() != changes {
+		t.Fatal("unchanged settings written on each boot")
+	}
+	if err := e.m.SetSettings(original); err != nil {
+		t.Fatal(err)
+	}
+	if e.m.Status().Settings.Channel != ChannelStable {
+		t.Fatal("legacy client restored beta channel")
+	}
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	if err := e.m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if e.m.Status().Available == nil {
+		t.Fatal("stable update not offered")
+	}
+}

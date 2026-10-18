@@ -637,3 +637,13 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   damit private Upload-Metadaten nicht durch gelockerte Prüfungen ersetzt werden.
 - `scripts/files_usb_smoke.py` prüft echte exFAT-Uploads und Textänderungen in
   der Wegwerf-VM. Nur neu erzeugte Image-Dateien formatieren, nie Host-Platten.
+
+## 0.5.0 Stable (aktuelle Entscheidung des Projektinhabers)
+
+Ab 0.5.0 nur noch ein gemeinsamer Stable-Updatekanal. Die bisherigen Hinweise
+auf die Stable-/Beta-Auswahl beschreiben ältere Versionen. Legacy-Einstellungen
+werden einmalig auf Stable migriert; Signaturprüfung und A/B bleiben Pflicht.
+Neue optionale Funktionen tragen bei Bedarf ein Beta-Label, aktuell die
+SMB-Ordnerkopie. Konzept vom Projektinhaber bestätigt: zweites NAS einrichten,
+SMB-Zugangsdaten, Freigabenauswahl, Quellordner und Zeitplan; gelöschte Dateien
+im Ziel behalten. Siehe docs/SMB-COPY-BACKUPS.md.

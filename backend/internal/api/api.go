@@ -265,6 +265,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
 
 	// Backups of shares. They hold everyone's files: administrators only.
+	mux.HandleFunc("POST /api/v1/backups/smb/discover", s.requireAdmin(s.handleSMBDiscover))
+	mux.HandleFunc("PUT /api/v1/backups/smb", s.requireAdmin(s.handleSMBSave))
+	mux.HandleFunc("DELETE /api/v1/backups/smb/{target}", s.requireAdmin(s.handleSMBDelete))
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
 	mux.HandleFunc("GET /api/v1/backups/target", s.requireAdmin(s.handleBackupTarget))

@@ -21,6 +21,7 @@
 	};
 	let { container, host, tailscaleHost = '', busy, compact = false, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
 
+	const displayName = $derived(container.managed && container.app ? container.app : container.name);
 	const running = $derived(container.state === 'running' || container.state === 'restarting');
 	let menu = $state(false);
 	let root: HTMLElement | undefined = $state();
@@ -100,12 +101,12 @@
 		{@render actions()}
 	</div>
 {:else}
-	<article class="tile" bind:this={root} aria-label={container.name}>
+	<article class="tile" bind:this={root} aria-label={displayName}>
 		<div class="top">
-			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={container.name} /> </button>
+			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: container.name })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>
 			<div class="names">
 				<div class="line">
-					<span class="name">{container.name}</span>
+					<span class="name" title={container.name}>{displayName}</span>
 					<span class="state"><span class="dot" class:ok={running} aria-hidden="true"></span>{t(`docker.state.${container.state}`)}</span>
 					{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
 				</div>

@@ -1128,7 +1128,7 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "nightly", "installTime": "03:30"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_update_settings" {
 		t.Errorf("unknown channel: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"beta"`) || strings.Contains(string(body), "evil") {
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"stable"`) || strings.Contains(string(body), "evil") {
 		t.Errorf("settings: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("GET", "/api/v1/health", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"ready":`) {
@@ -1215,7 +1215,7 @@ func TestBackupsKeepTheirSecrets(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/backups"}, {"POST", "/api/v1/backups"}, {"POST", "/api/v1/backups/smb/discover"}, {"PUT", "/api/v1/backups/smb"}, {"DELETE", "/api/v1/backups/smb/test"}, {"POST", "/api/v1/backups/ssh-key"}, {"GET", "/api/v1/backups/x/snapshots"}, {"GET", "/api/v1/backups/x/password"}, {"POST", "/api/v1/backups/x/restore"}, {"POST", "/api/v1/backups/x/run"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

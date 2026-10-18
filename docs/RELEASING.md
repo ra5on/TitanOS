@@ -4,6 +4,16 @@ TitanOS installiert nur Updates, deren Manifest von einem Schlüssel aus
 seinem Abbild signiert ist. Die Release-Pipeline signiert zusätzlich das
 Installations-ZIP, alle Plugin-Manifeste und `SHA256SUMS` für sämtliche Release-Dateien.
 
+## Ab 0.5.0: ein gemeinsamer Kanal
+
+Neue System-Releases verwenden reguläre Tags wie `v0.5.0` und werden als Stable
+veröffentlicht. Optionale Beta-Funktionen werden in der Oberfläche und im
+Changelog gekennzeichnet. Alte Beta-Manifeste bleiben für Kompatibilitäts- und
+Rückwechseltests unterstützt; es gibt keine neue parallele Beta-Release-Reihe.
+Vor Veröffentlichung den Wechsel Beta 9 → 0.5.0 und den Rückwechsel prüfen.
+Der Storage-Smoke-Test prüft zusätzlich SMB-Kopien gegen einen verschlüsselten
+Samba-Server in einem separaten Netzwerk-Namensraum des Wegwerf-Gasts.
+
 ## Einmalig: Schlüssel und GitHub einrichten
 
 Das GitHub-Environment `release` verlangt eine Freigabe von `ra5on` und
