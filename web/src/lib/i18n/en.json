@@ -2129,5 +2129,6 @@
 	"files.editDiscardButton": "Discard changes",
 	"error.text_conflict": "The file has changed since you opened it. Your draft is preserved. Reopen the current file and reconcile the changes.",
 	"error.not_text": "This is not a supported UTF-8 text file, or it exceeds 512 KiB.",
-	"error.invalid_json": "The content is not valid JSON. Check brackets, quotes and commas."
+	"error.invalid_json": "The content is not valid JSON. Check brackets, quotes and commas.",
+	"error.file_name_too_long": "A file or folder name, or the path, is too long for the target filesystem. Shorten it; non-ASCII characters can occupy multiple bytes."
 }

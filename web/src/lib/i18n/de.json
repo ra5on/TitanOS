@@ -2129,5 +2129,6 @@
 	"files.editDiscardButton": "Änderungen verwerfen",
 	"error.text_conflict": "Die Datei wurde inzwischen geändert. Deine Eingabe bleibt erhalten. Öffne die aktuelle Datei erneut und gleiche die Änderungen ab.",
 	"error.not_text": "Diese Datei ist kein unterstützter UTF-8-Text oder ist größer als 512 KiB.",
-	"error.invalid_json": "Der Inhalt ist kein gültiges JSON. Bitte prüfe Klammern, Anführungszeichen und Kommas."
+	"error.invalid_json": "Der Inhalt ist kein gültiges JSON. Bitte prüfe Klammern, Anführungszeichen und Kommas.",
+	"error.file_name_too_long": "Ein Datei- oder Ordnername bzw. der Pfad ist für das Zieldateisystem zu lang. Bitte kürze ihn. Umlaute können mehrere Bytes belegen."
 }

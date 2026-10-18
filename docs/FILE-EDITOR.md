@@ -34,3 +34,23 @@ Bei FAT, exFAT und NTFS werden Dateien mit auf root beschränkten Einbinderechte
 bereitgestellt, damit Upload-Metadaten dieselben Schutzprüfungen erfüllen wie auf
 Linux-Dateisystemen. Der Dateimanager vermittelt den Zugriff für angemeldete
 Administratoren. Bestehende Dateisysteme werden nicht formatiert oder repariert.
+
+## Lange Namen und Windows-Netzwerkfreigaben
+
+Web-Uploads und Kopien verwenden temporäre Namen unabhängig vom Dateinamen.
+Damit benötigen gültige Namen am Dateisystemlimit keinen zusätzlichen Platz
+für interne Suffixe. Unterbrochene Uploads mit dem älteren Namensschema können
+weiterhin fortgesetzt werden.
+
+Windows-Explorer/SMB benutzt diesen Web-Upload-Pfad nicht. Bei „Dateiname für
+Zielordner zu lang“ müssen Dateinamen und vollständiger Zielpfad getrennt geprüft
+werden. Eine Verbindung als Netzlaufwerk (z. B. `Z:`) oder ein kürzerer Zielpfad
+kann die Windows-Pfadgrenze vermeiden. Eine Grenze einzelner Namen hebt das
+nicht auf: ext4 erlaubt beispielsweise höchstens 255 Bytes je Namen; Umlaute
+und andere Unicode-Zeichen können mehrere Bytes belegen. TitanOS kürzt oder
+benennt vorhandene Dateien nicht automatisch um.
+
+Quellen: [Windows-Pfadlängen](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation),
+[ext4-Verzeichniseinträge](https://www.kernel.org/doc/html/latest/filesystems/ext4/directory.html).
+Der Release-Test prüft einen 255-Byte-Dateinamen und einen verschachtelten
+SMB-Pfad über 260 Zeichen mit `smbclient`. Das ist kein Test des Windows-Explorers.

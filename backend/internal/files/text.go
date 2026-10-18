@@ -151,7 +151,7 @@ func (m *Manager) SaveTextVersion(root Root, name, content, version string) (Tex
 		if _, err := rand.Read(raw); err != nil {
 			return "", err
 		}
-		temp := path.Join(path.Dir(name), "."+path.Base(name)+"."+hex.EncodeToString(raw)+partSuffix)
+		temp := path.Join(path.Dir(name), ".titanos-edit-"+hex.EncodeToString(raw)+partSuffix)
 		out, err := r.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			return "", mapError(err)

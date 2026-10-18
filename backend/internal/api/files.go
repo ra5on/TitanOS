@@ -21,6 +21,7 @@ var fileErrors = []struct {
 	status int
 	code   string
 }{
+	{files.ErrNameTooLong, http.StatusBadRequest, "file_name_too_long"},
 	{files.ErrTextConflict, http.StatusConflict, "text_conflict"},
 	{files.ErrInvalidJSON, http.StatusBadRequest, "invalid_json"},
 	{files.ErrNotText, http.StatusBadRequest, "not_text"},

@@ -52,7 +52,14 @@ def check_smb_share(request, remote, smb_port, password, directory):
         time.sleep(2)
     assert (directory / 'smb-back.txt').read_text() == 'über SMB\n'
     assert remote('cat "/mnt/mirror/Fotos 2024/Neue Datei.txt"') == 'über SMB'
-    print('SMB share with capitals and blank: created, reachable, writable', flush=True)
+    # Exercise the server independently of Windows Explorer's path handling.
+    long_name = 'a' * 251 + '.txt'
+    deep = 'nested-' + 'b' * 33
+    commands = [f'mkdir "{deep}"', f'cd "{deep}"'] * 8
+    commands += [f'put "{upload}" "{long_name}"', f'get "{long_name}" "{directory}/smb-long-back.txt"']
+    subprocess.run(['smbclient', '//127.0.0.1/Fotos 2024', '-p', str(smb_port), '-U', 'storagetester', '-m', 'SMB3', '-c', '; '.join(commands)], env=env, check=True, capture_output=True, text=True, timeout=90)
+    assert (directory / 'smb-long-back.txt').read_bytes() == upload.read_bytes()
+    print('SMB: writable share, 255-byte filename and nested path longer than 260 characters passed', flush=True)
 
 
 def check_uploads(request, opener, url, remote, password):
