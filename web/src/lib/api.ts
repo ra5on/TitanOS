@@ -317,6 +317,7 @@ export type VM = {
 	folders: VMFolder[] | null;
 	tpm: boolean;
 	secureBoot: boolean;
+	firmware?: 'uefi' | 'bios';
 	pci: string[] | null;
 	autoGPU?: boolean;
 	usb: string[] | null;

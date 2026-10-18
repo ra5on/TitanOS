@@ -40,10 +40,13 @@ const emulator = "/usr/bin/qemu-system-x86_64"
 
 type firmwareFiles struct{ code, vars string }
 
-// firmware returns the UEFI firmware of a VM and the template its settings
+// firmware returns the firmware of a VM and the template its settings
 // start from. With Secure Boot it is the build that enforces signatures,
 // with the keys of Microsoft enrolled, which is what Windows expects.
 func firmware(vm VM) firmwareFiles {
+	if vm.Firmware == "bios" {
+		return firmwareFiles{"/usr/share/seabios/bios-256k.bin", ""}
+	}
 	if vm.SecureBoot {
 		return firmwareFiles{"/usr/share/OVMF/OVMF_CODE_4M.ms.fd", "/usr/share/OVMF/OVMF_VARS_4M.ms.fd"}
 	}
@@ -52,11 +55,14 @@ func firmware(vm VM) firmwareFiles {
 
 // domainXML describes a VM to libvirt.
 //
-// Every VM is a q35 machine with UEFI firmware and the CPU of the host. What
+// Every VM is a q35 machine with the chosen firmware and the CPU of the host. What
 // the guest gets as disk controller, network card and display depends on the
 // template: Linux has drivers for the fast virtio devices, other systems
 // get devices every system knows.
 func (m *Manager) domainXML(vm VM) (string, error) {
+	if err := validateFirmware(vm); err != nil {
+		return "", err
+	}
 	virtio := vm.Template == "linux"
 	diskBus, diskPrefix, nic, video := "sata", "sd", "e1000e", "vga"
 	if virtio {
@@ -155,6 +161,9 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 	}
 	files := firmware(vm)
 	loader := el("loader", "readonly", "yes", "type", "pflash").text(files.code)
+	if vm.Firmware == "bios" {
+		loader = el("loader", "readonly", "yes", "type", "rom").text(files.code)
+	}
 	features := el("features").with(el("acpi"), el("apic"))
 	if vm.SecureBoot {
 		loader = el("loader", "readonly", "yes", "secure", "yes", "type", "pflash").text(files.code)
@@ -193,16 +202,13 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		}
 		domain = domain.with(tune)
 	}
-	domain = domain.with(
-		el("os").with(
-			el("type", "arch", "x86_64", "machine", "q35").text("hvm"),
-			loader,
-			el("nvram").text(filepath.Join(m.dir(vm.Volume, vm.folder()), "nvram.fd")),
-			// An empty disk does not boot, so a new VM falls through to
-			// the installation medium; an installed one starts from disk.
-			el("boot", "dev", "hd"),
-			el("boot", "dev", "cdrom"),
-		),
+	osNode := el("os").with(el("type", "arch", "x86_64", "machine", "q35").text("hvm"), loader)
+	if vm.Firmware != "bios" {
+		osNode = osNode.with(el("nvram").text(filepath.Join(m.dir(vm.Volume, vm.folder()), "nvram.fd")))
+	}
+	// Empty disks fall through to the installation medium.
+	osNode = osNode.with(el("boot", "dev", "hd"), el("boot", "dev", "cdrom"))
+	domain = domain.with(osNode,
 		features,
 		el("cpu", "mode", "host-passthrough", "check", "none", "migratable", "off"),
 		el("clock", "offset", clock),
