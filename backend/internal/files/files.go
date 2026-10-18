@@ -64,16 +64,17 @@ type Entry struct {
 }
 
 var (
-	ErrNotFound   = errors.New("files: no such file or folder")
-	ErrExists     = errors.New("files: a file or folder with this name exists")
-	ErrInvalid    = errors.New("files: invalid name or path")
-	ErrProtected  = errors.New("files: path is managed by a virtual machine")
-	ErrReadOnly   = errors.New("files: no write access")
-	ErrNoSpace    = errors.New("files: not enough free space")
-	ErrMismatch   = errors.New("files: upload does not continue where it stopped")
-	ErrIncomplete = errors.New("files: upload is not complete")
-	ErrConfirm    = errors.New("files: deleting for good was not confirmed")
-	ErrNoUpload   = errors.New("files: no such upload")
+	ErrNameTooLong = errors.New("files: file name or path too long")
+	ErrNotFound    = errors.New("files: no such file or folder")
+	ErrExists      = errors.New("files: a file or folder with this name exists")
+	ErrInvalid     = errors.New("files: invalid name or path")
+	ErrProtected   = errors.New("files: path is managed by a virtual machine")
+	ErrReadOnly    = errors.New("files: no write access")
+	ErrNoSpace     = errors.New("files: not enough free space")
+	ErrMismatch    = errors.New("files: upload does not continue where it stopped")
+	ErrIncomplete  = errors.New("files: upload is not complete")
+	ErrConfirm     = errors.New("files: deleting for good was not confirmed")
+	ErrNoUpload    = errors.New("files: no such upload")
 )
 
 const (
@@ -122,6 +123,8 @@ func mapError(err error) error {
 		return ErrNotFound
 	case errors.Is(err, fs.ErrExist):
 		return ErrExists
+	case errors.Is(err, syscall.ENAMETOOLONG):
+		return ErrNameTooLong
 	case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT):
 		return ErrNoSpace
 	case errors.Is(err, syscall.ENOTEMPTY):
@@ -145,6 +148,7 @@ type Manager struct {
 
 	jobs    jobs
 	mu      sync.Mutex
+	textMu  sync.Mutex
 	uploads map[string]*upload
 	now     func() time.Time
 }

@@ -435,7 +435,7 @@ func run(opts options) error {
 	fileManager := files.NewManager(shares.UsersGID)
 	fileManager.Protected = machines.ProtectFile
 	fileManager.Acquire = memoryPolicy.Acquire
-	fileManager.Available = func(root files.Root) bool { return slices.Contains(volumes.Mounted(), root.Volume) }
+	fileManager.Available = func(root files.Root) bool { return fileRootAvailable(root, volumes.Mounted(), drives.Mounted()) }
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,

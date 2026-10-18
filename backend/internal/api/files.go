@@ -21,6 +21,10 @@ var fileErrors = []struct {
 	status int
 	code   string
 }{
+	{files.ErrNameTooLong, http.StatusBadRequest, "file_name_too_long"},
+	{files.ErrTextConflict, http.StatusConflict, "text_conflict"},
+	{files.ErrInvalidJSON, http.StatusBadRequest, "invalid_json"},
+	{files.ErrNotText, http.StatusBadRequest, "not_text"},
 	{files.ErrProtected, http.StatusConflict, "vm_file_protected"},
 	{files.ErrNotFound, http.StatusNotFound, "file_not_found"},
 	{files.ErrExists, http.StatusConflict, "file_exists"},
@@ -354,22 +358,41 @@ func (s *Server) authorizeUpload(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// handleFileText saves a text file on the stick.
+func (s *Server) handleReadFileText(w http.ResponseWriter, r *http.Request) {
+	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+	if !ok {
+		return
+	}
+	result, err := s.opts.Files.ReadText(root, r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleFileText saves an existing text file within the account's writable roots.
 func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Root, Path, Content string }
-	if !readJSON(w, r, &req) {
+	var req struct{ Root, Path, Content, Version string }
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
+	if !readJSONBody(w, r, &req) {
 		return
 	}
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	if err := s.opts.Files.SaveText(root, req.Path, req.Content); err != nil {
+	if req.Version == "" {
+		writeFileError(w, files.ErrTextConflict)
+		return
+	}
+	result, err := s.opts.Files.SaveTextVersion(root, req.Path, req.Content, req.Version)
+	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	slog.Info("text file saved", "root", root.ID, "path", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handleFileCopy starts copying or moving files between roots.
