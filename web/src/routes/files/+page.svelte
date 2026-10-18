@@ -333,7 +333,7 @@
 		>
 			<div class="toolbar">
 				<div class="crumbs mono">
-					<button type="button" onclick={() => open(rootId, '')}>{root?.name}</button>
+					{#if root}<button type="button" onclick={() => open(rootId, '')}>{root.name}</button>{/if}
 					{#each crumbs as crumb, index (index)}
 						<span class="muted">/</span>
 						<button type="button" onclick={() => open(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button>
@@ -380,7 +380,7 @@
 					<span class="num muted">{date.format(new Date(entry.modified))}</span>
 				</div>
 			{:else}
-				{#if entries}<p class="muted none">{t('files.empty')}</p>{/if}
+				{#if !root}<p class="muted none">{t('files.chooseRoot')}</p>{:else if entries}<p class="muted none">{t('files.empty')}</p>{/if}
 			{/each}
 
 			{#if selected.length > 0}

@@ -78,26 +78,31 @@ func (m *Manager) smbCredentials(t SMBTarget) SMBTarget {
 // Reject this NAS as its own destination (including DNS aliases). Besides not
 // surviving a NAS failure, a share below a source could recursively copy itself.
 func remoteSMB(ctx context.Context, host string) error {
+	_, err := remoteSMBAddress(ctx, host)
+	return err
+}
+
+func remoteSMBAddress(ctx context.Context, host string) (string, error) {
 	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, strings.Trim(host, "[]"))
 	if err != nil || len(addresses) == 0 {
-		return fmt.Errorf("SMB server cannot be resolved")
+		return "", fmt.Errorf("SMB server cannot be resolved")
 	}
 	local, err := net.InterfaceAddrs()
 	if err != nil {
-		return fmt.Errorf("cannot check SMB server address")
+		return "", fmt.Errorf("cannot check SMB server address")
 	}
 	for _, addr := range addresses {
 		if addr.IP.IsLoopback() || addr.IP.IsUnspecified() || addr.IP.IsMulticast() {
-			return invalid("SMB target must be a second NAS")
+			return "", invalid("SMB target must be a second NAS")
 		}
 		for _, a := range local {
 			ip, _, _ := net.ParseCIDR(a.String())
 			if ip.Equal(addr.IP) {
-				return invalid("SMB target must be a second NAS")
+				return "", invalid("SMB target must be a second NAS")
 			}
 		}
 	}
-	return nil
+	return addresses[0].IP.String(), nil
 }
 
 // authDir contains only a credential file and an empty mount point. Backup data
@@ -117,13 +122,15 @@ func (m *Manager) smbAuth(t SMBTarget) (string, error) {
 	return dir, nil
 }
 
-type boundedOutput struct{ bytes.Buffer }
+type boundedOutput struct{ buffer bytes.Buffer }
+
+func (b *boundedOutput) String() string { return b.buffer.String() }
 
 func (b *boundedOutput) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > 1<<20 {
+	if b.buffer.Len()+len(p) > 1<<20 {
 		return 0, fmt.Errorf("SMB response too large")
 	}
-	return b.Buffer.Write(p)
+	return b.buffer.Write(p)
 }
 
 func (m *Manager) SMBDiscover(ctx context.Context, target SMBTarget) ([]string, error) {
@@ -136,7 +143,8 @@ func (m *Manager) SMBDiscover(ctx context.Context, target SMBTarget) ([]string, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := remoteSMB(ctx, target.Host); err != nil {
+	address, err := remoteSMBAddress(ctx, target.Host)
+	if err != nil {
 		return nil, err
 	}
 	dir, err := m.smbAuth(target)
@@ -144,7 +152,7 @@ func (m *Manager) SMBDiscover(ctx context.Context, target SMBTarget) ([]string, 
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	cmd := exec.CommandContext(ctx, "smbclient", "-g", "-L", target.Host, "-A", filepath.Join(dir, "credentials"), "--option=client min protocol=SMB3", "--client-protection=encrypt", "-t", "15")
+	cmd := exec.CommandContext(ctx, "smbclient", "-g", "-L", target.Host, "-I", address, "-A", filepath.Join(dir, "credentials"), "--option=client min protocol=SMB3", "--client-protection=encrypt", "-t", "15")
 	var out boundedOutput
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
@@ -175,7 +183,8 @@ func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) 
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := remoteSMB(checkCtx, t.Host); err != nil {
+	address, err := remoteSMBAddress(checkCtx, t.Host)
+	if err != nil {
 		return err
 	}
 	dir, err := m.smbAuth(t)
@@ -192,7 +201,7 @@ func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) 
 	if err := os.Mkdir(mount, 0700); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(checkCtx, "mount.cifs", "//"+t.Host+"/"+t.Share, mount, "-o", "credentials="+filepath.Join(dir, "credentials")+",vers=3.0,seal,nosuid,nodev,noexec,soft,echo_interval=5,cache=none,file_mode=0600,dir_mode=0700")
+	cmd := exec.CommandContext(checkCtx, "mount.cifs", "//"+t.Host+"/"+t.Share, mount, "-o", "credentials="+filepath.Join(dir, "credentials")+",ip="+address+",vers=3.0,seal,nosuid,nodev,noexec,soft,echo_interval=5,cache=none,file_mode=0600,dir_mode=0700")
 	// mount can have completed just before the helper was cancelled. Always try
 	// to unmount the private mountpoint, even when the helper reports failure.
 	defer func() {
@@ -261,7 +270,13 @@ func (m *Manager) SaveSMBTarget(ctx context.Context, target SMBTarget) error {
 		if err != nil {
 			return err
 		}
-		return closeErr
+		if closeErr != nil {
+			return closeErr
+		}
+		if err := root.Remove(name); err != nil {
+			return fmt.Errorf("SMB destination does not permit removing temporary files")
+		}
+		return nil
 	}); err != nil {
 		return err
 	}

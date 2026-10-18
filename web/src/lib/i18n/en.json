@@ -2153,5 +2153,6 @@
 	"backup.smb.target": "Configured SMB destination",
 	"backup.smb.first": "If no destination is available, close this dialog and configure an SMB destination above first. Files are stored under the job folder, share name and full relative source path.",
 	"backup.smb.jobFolder": "Job folder at destination",
-	"update.singleChannel": "All TitanOS updates use one stable channel. Individual new features are marked Beta in the interface."
+	"update.singleChannel": "All TitanOS updates use one stable channel. Individual new features are marked Beta in the interface.",
+	"files.chooseRoot": "No data volume available. Choose a location from the list."
 }
