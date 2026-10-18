@@ -1,11 +1,12 @@
 <script lang="ts">
-	// Every area that does not exist yet ends up here.
+	// Unknown addresses are not promises of future features.
 	import { t } from '#lib/i18n/index.svelte.ts';
 </script>
 
 <section class="tile">
 	<h1>{t('placeholder.title')}</h1>
 	<p class="muted">{t('placeholder.text')}</p>
+	<a href="/">{t('nav.dashboard')}</a>
 </section>
 
 <style>

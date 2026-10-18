@@ -136,7 +136,19 @@ func (m *Manager) Load() error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sources = file.Sources
+	// Older versions allowed the official repository to be added a second time.
+	// Remove only that duplicate; installed apps and unrelated sources are untouched.
+	sources := slices.DeleteFunc(slices.Clone(file.Sources), func(source Source) bool {
+		return sameSource(source.URL, m.official) || sameSource(source.URL, OfficialURL)
+	})
+	if len(sources) != len(file.Sources) {
+		if err := m.store.WriteJSON(sourcesFile, struct {
+			Sources []Source `json:"sources"`
+		}{sources}); err != nil {
+			return err
+		}
+	}
+	m.sources = sources
 	m.loaded = true
 	return nil
 }
@@ -171,7 +183,7 @@ func (m *Manager) refresh(ctx context.Context, all bool) {
 	m.mu.Lock()
 	var due []Source
 	now := time.Now()
-	for _, source := range append([]Source{{ID: BuiltinID, Name: "TitanOS", URL: m.official}}, m.sources...) {
+	for _, source := range append([]Source{{ID: BuiltinID, Name: "TitanOS-Apps", URL: m.official}}, m.sources...) {
 		st := m.states[source.ID]
 		switch {
 		case all || st == nil:
@@ -243,7 +255,7 @@ func (m *Manager) fetch(ctx context.Context, source Source, etag string) ([]App,
 func (m *Manager) Status() ([]SourceStatus, []App) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	official := SourceStatus{Source: Source{ID: BuiltinID, Name: "TitanOS", URL: m.official}, Builtin: true}
+	official := SourceStatus{Source: Source{ID: BuiltinID, Name: "TitanOS-Apps", URL: m.official}, Builtin: true}
 	var apps []App
 	if st := m.states[BuiltinID]; st != nil {
 		official.Format, official.Count, official.Updated, official.Error = st.format, len(st.apps), st.updated, st.err
@@ -284,7 +296,7 @@ func (m *Manager) Add(ctx context.Context, name, address string) error {
 		err = ErrNotLoaded
 	case len(m.sources) >= maxSources:
 		err = ErrTooMany
-	case slices.ContainsFunc(m.sources, func(s Source) bool { return s.URL == address }):
+	case sameSource(address, m.official) || sameSource(address, OfficialURL) || slices.ContainsFunc(m.sources, func(s Source) bool { return sameSource(s.URL, address) }):
 		err = ErrExists
 	}
 	m.mu.Unlock()
@@ -302,6 +314,12 @@ func (m *Manager) Add(ctx context.Context, name, address string) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if sameSource(address, m.official) || sameSource(address, OfficialURL) || slices.ContainsFunc(m.sources, func(s Source) bool { return sameSource(s.URL, address) }) {
+		return ErrExists
+	}
+	if len(m.sources) >= maxSources {
+		return ErrTooMany
+	}
 	sources := append(slices.Clone(m.sources), source)
 	if err := m.store.WriteJSON(sourcesFile, struct {
 		Sources []Source `json:"sources"`

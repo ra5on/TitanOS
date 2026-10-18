@@ -2,22 +2,38 @@
 	import { vmLabel } from '#lib/vm-name.ts';
 	// The screen of a VM in a window of its own: nothing but the picture.
 	import { page } from '$app/state';
-	import { api, type VMStatus } from '#lib/api.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { api, ApiError, type VMStatus } from '#lib/api.ts';
+	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import VncScreen, { type ScaleMode } from '../VncScreen.svelte';
 
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
 	let running = $state<boolean | null>(null);
 	let displayName = $state('');
+	let error = $state('');
 	let mode = $state<ScaleMode>('scale');
 	let screen = $state<VncScreen>();
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 
 	$effect(() => {
-		const check = () => api.get<VMStatus>('/vms').then((res) => { const vm = res.vms.find((vm) => vm.name === name); running = vm?.state === 'running'; displayName = vm ? vmLabel(vm) : name; }, () => {});
+		const vmName = name;
+		let disposed = false;
+		running = null;
+		error = '';
+		const check = async () => {
+			try {
+				const res = await api.get<VMStatus>('/vms');
+				if (disposed) return;
+				const vm = res.vms.find((vm) => vm.name === vmName);
+				running = vm?.state === 'running';
+				displayName = vm ? vmLabel(vm) : vmName;
+				error = vm ? '' : errorText('vm_not_found');
+			} catch (err) {
+				if (!disposed) error = errorText(err instanceof ApiError ? err.code : 'internal');
+			}
+		};
 		check();
 		const timer = setInterval(check, 3000);
-		return () => clearInterval(timer);
+		return () => { disposed = true; clearInterval(timer); };
 	});
 </script>
 
@@ -27,6 +43,10 @@
 	<div class="frame">
 		{#if running}
 			{#key name}<VncScreen bind:this={screen} vm={name} {mode} />{/key}
+		{:else if error}
+			<p class="muted off" role="alert">{error}</p>
+		{:else if running === null}
+			<p class="muted off" role="status">{t('common.loading')}</p>
 		{:else if running === false}
 			<p class="muted off">{t('vms.off', { name: displayName || name })}</p>
 		{/if}
