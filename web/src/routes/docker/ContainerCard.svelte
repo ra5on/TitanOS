@@ -88,7 +88,7 @@
 {/snippet}
 
 {#if compact}
-	<div class="member" bind:this={root}>
+	<div class="member" class:menu-open={menu} bind:this={root}>
 		<span class="dot" class:ok={running} aria-hidden="true"></span>
 		<span class="names">
 			<span class="line"><span class="name">{dockerName(container, 'service')}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
@@ -102,7 +102,7 @@
 		{@render actions()}
 	</div>
 {:else}
-	<article class="tile" bind:this={root} aria-label={displayName}>
+	<article class="tile" class:menu-open={menu} bind:this={root} aria-label={displayName}>
 		<div class="top">
 			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>
 			<div class="names">
@@ -135,6 +135,7 @@
 {/if}
 
 <style>
+	.menu-open { z-index: 20; }
 	article {
 		position: relative;
 		display: flex;
@@ -324,11 +325,11 @@
 		background: var(--border);
 	}
  @media (min-width: 1000px) {
- article { display: grid; grid-template-columns: minmax(220px, 1fr) 160px minmax(220px, auto); column-gap: 20px; align-items: center; }
+ article { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 120px) 160px minmax(220px, auto); column-gap: 20px; align-items: center; }
  .top { grid-column: 1; grid-row: 1; }
- article > .ports { grid-column: 1; grid-row: 2; padding-left: 44px; }
- .stats { grid-column: 2; grid-row: 1 / 3; gap: 8px; }
- .bottom { grid-column: 3; grid-row: 1 / 3; justify-content: flex-end; max-width: 30rem; }
+ article > .ports { grid-column: 2; grid-row: 1; }
+ .stats { grid-column: 3; grid-row: 1; gap: 8px; }
+ .bottom { grid-column: 4; grid-row: 1; justify-content: flex-end; max-width: 30rem; }
  .bottom .since { flex-basis: 100%; text-align: right; }
  }
  @media (min-width: 761px) and (max-width: 999px) {
