@@ -208,10 +208,10 @@ Beiträge sind willkommen – bitte lies zuerst [CONTRIBUTING.md](CONTRIBUTING.m
 - Fernzugriff über das [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
 - Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.
 
-### VM-Firmware (Entwicklungsstand nach Beta 7)
+### VM-Firmware (ab Beta 8)
 
 Beim Anlegen einer VM kann zwischen **UEFI (OVMF)** und **Legacy-BIOS (SeaBIOS)**
 gewählt werden. UEFI bleibt Standard; vorhandene VMs behalten UEFI. Die Auswahl
 ist nach dem Anlegen fest, da sie zum installierten Gast passen muss. Für
 Windows 11 UEFI mit TPM und Secure Boot verwenden. TitanOS selbst benötigt
-weiterhin UEFI zum Starten. Diese Auswahl ist noch nicht im Beta-7-Abbild enthalten.
+weiterhin UEFI zum Starten. Die Auswahl ist ab Beta 8 verfügbar.
