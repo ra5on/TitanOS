@@ -152,7 +152,7 @@ func (m *Manager) SMBDiscover(ctx context.Context, target SMBTarget) ([]string, 
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	cmd := exec.CommandContext(ctx, "smbclient", "-g", "-L", target.Host, "-I", address, "-A", filepath.Join(dir, "credentials"), "--option=client min protocol=SMB3", "--client-protection=encrypt", "-t", "15")
+	cmd := exec.CommandContext(ctx, "smbclient", "-g", "-L", target.Host, "-I", address, "-A", filepath.Join(dir, "credentials"), "--option=client min protocol=SMB3_00", "--client-protection=encrypt", "-t", "15")
 	var out boundedOutput
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
@@ -201,7 +201,7 @@ func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) 
 	if err := os.Mkdir(mount, 0700); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(checkCtx, "mount.cifs", "//"+t.Host+"/"+t.Share, mount, "-o", "credentials="+filepath.Join(dir, "credentials")+",ip="+address+",vers=3.0,seal,nosuid,nodev,noexec,soft,echo_interval=5,cache=none,file_mode=0600,dir_mode=0700")
+	cmd := exec.CommandContext(checkCtx, "mount.cifs", "//"+t.Host+"/"+t.Share, mount, "-o", "credentials="+filepath.Join(dir, "credentials")+",ip="+address+",vers=3,seal,nosuid,nodev,noexec,soft,echo_interval=5,cache=none,file_mode=0600,dir_mode=0700")
 	// mount can have completed just before the helper was cancelled. Always try
 	// to unmount the private mountpoint, even when the helper reports failure.
 	defer func() {

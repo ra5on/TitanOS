@@ -647,3 +647,12 @@ Neue optionale Funktionen tragen bei Bedarf ein Beta-Label, aktuell die
 SMB-Ordnerkopie. Konzept vom Projektinhaber bestätigt: zweites NAS einrichten,
 SMB-Zugangsdaten, Freigabenauswahl, Quellordner und Zeitplan; gelöschte Dateien
 im Ziel behalten. Siehe docs/SMB-COPY-BACKUPS.md.
+
+### Ergänzung 0.5.0 (18. Oktober 2026)
+
+Auf ausdrücklichen Wunsch des Projektinhabers verwenden auch Docker-Konsolen
+die bestehende Besitzer-/Administrator-Anmeldung ohne zweite Passwortabfrage.
+VM-Konsolen behalten die bisherige Bestätigung. Benutzersperre, WebSocket-Origin,
+Terminal-Abschaltung und Sitzungsbegrenzung bleiben bestehen.
+Docker-Apps werden am Desktop als kompakte Zeilen mit dem eingetragenen App-Namen
+angezeigt; technische Container-Namen bleiben Identität und Suchmerkmal.

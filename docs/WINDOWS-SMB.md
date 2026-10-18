@@ -33,3 +33,13 @@ Microsoft muss auch die Anwendung dafür ausgelegt sein. Ein TitanOS-Update
 
 Quellen: [Microsoft: maximale Pfadlänge](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation),
 [Microsoft: Robocopy](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy).
+
+## Hilfe im Dateimanager
+
+Unter **Dateien → Windows-Pfad** zeigt TitanOS für den geöffneten SMB-Ordner
+seinen direkten Netzwerkpfad. Der Dialog erzeugt einen PowerShell-Befehl zum
+Verbinden mit einem freien Laufwerksbuchstaben sowie nach Eingabe des lokalen
+Quellordners einen Robocopy-Befehl. Beide Pfade werden als literale
+PowerShell-Zeichenfolgen maskiert. Die Befehle werden nur angezeigt und müssen
+auf dem Windows-PC ausgeführt werden. Bestehende Freigaben und Rechte bleiben
+erhalten; zusätzliche Freigaben oder symbolische Links werden nicht angelegt.

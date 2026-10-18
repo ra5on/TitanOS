@@ -9,6 +9,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
 	import CopyDialog from './CopyDialog.svelte';
+	import WindowsPath from './WindowsPath.svelte';
+	let windowsPath = $state(false);
 	import JobsPanel from './JobsPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { isEditableText } from '#lib/text-files.ts';
@@ -332,6 +334,7 @@
 			ondrop={dropped}
 		>
 			<div class="toolbar">
+				{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" class="btn" onclick={() => windowsPath = true}>{t('files.windowsPath')}</button>{/if}
 				<div class="crumbs mono">
 					{#if root}<button type="button" onclick={() => open(rootId, '')}>{root.name}</button>{/if}
 					{#each crumbs as crumb, index (index)}
@@ -418,6 +421,8 @@
 {#if editing && root}
 	<TextEditor root={root.id} stick={root.kind === 'stick'} path={editing} onclose={() => { editing = null; load(); }} />
 {/if}
+
+{#if windowsPath && root}<WindowsPath {root} {dir} onclose={() => windowsPath = false} />{/if}
 
 {#if dialog}
 	{@const kind = dialog.kind}

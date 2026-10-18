@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
 	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
@@ -235,7 +236,7 @@
 			</button>
 			{#if openStack}
 				{#each stack.members as container (container.id)}
-					<ContainerCard {container} {host} {tailscaleHost} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+					<ContainerCard {container} {host} {tailscaleHost} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 				{/each}
 			{/if}
 		</section>
@@ -243,7 +244,7 @@
 
 	<div class="cards">
 		{#each singles as container (container.id)}
-			<ContainerCard {container} {host} {tailscaleHost} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, container.name)} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+			<ContainerCard {container} {host} {tailscaleHost} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 		{/each}
 	</div>
 	{#if containers.length === 0 && jobs.length === 0}
@@ -255,7 +256,7 @@
 
 {#if dialog?.kind === 'logs'}
 	{@const container = dialog.container}
-	<Dialog title={t('docker.logsTitle', { name: container.name })} wide onclose={() => (dialog = null)}>
+	<Dialog title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })} wide onclose={() => (dialog = null)}>
 		<pre class="logs">{dialog.text === null ? '…' : dialog.text || t('docker.logsEmpty')}</pre>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => showLogs(container)}>{t('docker.logsRefresh')}</button>
@@ -417,8 +418,8 @@
 	}
 	.cards {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-		gap: var(--gap);
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
 	}
 	.stack {
 		display: flex;
