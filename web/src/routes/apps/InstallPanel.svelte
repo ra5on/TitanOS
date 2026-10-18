@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dockerName } from '#lib/docker-name.ts';
  import { publicURL } from '#lib/app-links.ts';
  import AppIcon from '#lib/components/AppIcon.svelte';
 	// Installs an app from a template: everything is filled in, and every
@@ -43,7 +44,7 @@
 	const used = $derived.by(() => {
 		const map = new Map<string, string>();
 		for (const port of tpl?.listening ?? []) map.set(`${port.port}/${port.protocol}`, '');
-		for (const container of docker?.containers ?? []) for (const port of container.ports) map.set(`${port.host}/${port.protocol}`, container.name);
+		for (const container of docker?.containers ?? []) for (const port of container.ports) map.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
 		return map;
 	});
 

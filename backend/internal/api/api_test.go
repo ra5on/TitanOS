@@ -1333,10 +1333,11 @@ func TestAppStore(t *testing.T) {
 	}
 }
 
-func TestConsoleNeedsThePasswordAgain(t *testing.T) {
+func TestVMConsoleConfirmationAndDirectAdminShells(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	console := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
+	console := "/api/v1/vms/test/serial"
+	dockerConsole := "/api/v1/docker/containers/aaaaaaaaaaaa1111/console"
 	// Without the prompt switched off, consoles ask for the password again.
 	var confirmed struct{ Confirmed bool }
 	_, body0 := ts.request("GET", "/api/v1/session/confirmed", nil)
@@ -1362,6 +1363,16 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 		t.Fatalf("guest shell: %d", res.StatusCode)
 	}
 
+	// Docker uses the existing login even when confirmation is enabled.
+	if res, body := ts.request("GET", dockerConsole, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("Docker console before confirmation: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(guest, "GET", dockerConsole, nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("guest Docker console: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(ts.newClient(), "GET", dockerConsole, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous Docker console: %d", res.StatusCode)
+	}
 	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
 		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)
 	}
@@ -1393,7 +1404,7 @@ func TestConsoleNeedsThePasswordAgain(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": false}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
 		t.Errorf("switching terminals off: %d %s", res.StatusCode, body)
 	}
-	for _, path := range []string{console, "/api/v1/terminal/shell"} {
+	for _, path := range []string{console, dockerConsole, "/api/v1/terminal/shell"} {
 		if res, body := ts.request("GET", path, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "terminal_off" {
 			t.Errorf("%s while terminals are off: %d %s", path, res.StatusCode, body)
 		}
