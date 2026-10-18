@@ -2115,5 +2115,11 @@
 	"backup.weekday.5": "Freitag",
 	"backup.weekday.6": "Samstag",
 	"nav.openMenu": "Navigation öffnen: {page}",
-	"nav.closeMenu": "Navigation schließen"
+	"nav.closeMenu": "Navigation schließen",
+	"vms.form.firmware": "Start-Firmware",
+	"vms.form.uefi": "UEFI (OVMF)",
+	"vms.form.bios": "Legacy-BIOS (SeaBIOS)",
+	"vms.form.firmwareNote": "UEFI für moderne Systeme; Legacy-BIOS für ältere Systeme oder vorhandene BIOS-Abbilder. Die Auswahl wird beim Anlegen festgelegt.",
+	"vms.form.firmwareFixed": "Die Start-Firmware wurde beim Anlegen festgelegt. Sie muss zur Installation auf der virtuellen Platte passen.",
+	"vms.form.biosWindows": "Für Windows 11 UEFI mit TPM und Secure Boot wählen. Legacy-BIOS ist für ältere Windows-Versionen gedacht."
 }

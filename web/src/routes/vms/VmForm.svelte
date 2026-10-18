@@ -49,6 +49,7 @@
 	let pinning = $state((initial?.cpuPin?.length ?? 0) > 0);
 	let pinned = $state<number[]>(initial?.cpuPin ?? []);
 	let exclusive = $state(initial?.exclusive ?? false);
+	let firmware = $state<'uefi' | 'bios'>(initial?.firmware || 'uefi');
 	let secure = $state(initial ? initial.tpm : false);
 	let disks = $state<DiskDraft[]>([]);
 	let iso = $state(initial?.iso ?? '');
@@ -95,7 +96,7 @@
 	// Windows 11 asks for a TPM and Secure Boot: on with that template
 	// unless switched off, and not offered with the others.
 	$effect(() => {
-		if (!existing) secure = template === 'windows';
+		if (!existing) secure = template === 'windows' && firmware === 'uefi';
 	});
 
 	// --- processor -------------------------------------------------------
@@ -241,6 +242,7 @@
 				displayName: displayName.trim(),
 				description,
 				template,
+				firmware,
 				autostart,
 				tpm: secure,
 				secureBoot: secure,
@@ -297,7 +299,7 @@
 							</button>
 						{/each}
 					</div>
-					{#if template === 'windows'}
+					{#if template === 'windows' && firmware === 'uefi'}
 						<label class="check"><input type="checkbox" bind:checked={secure} /><span>{t('vms.form.secure')}</span></label>
 						<small>{t('vms.form.secureNote')}</small>
 					{/if}
@@ -364,8 +366,15 @@
 						{#if memoryNote}<small class="warn">{memoryNote}</small>{/if}
 					</div>
 				{/if}
+				<label for="vm-firmware">{t('vms.form.firmware')}</label>
+				<select id="vm-firmware" class="field" bind:value={firmware} disabled={!!existing || busy}>
+					<option value="uefi">{t('vms.form.uefi')}</option>
+					<option value="bios">{t('vms.form.bios')}</option>
+				</select>
+				<small>{t(existing ? 'vms.form.firmwareFixed' : 'vms.form.firmwareNote')}</small>
+				{#if firmware === 'bios' && template === 'windows'}<small class="warn">{t('vms.form.biosWindows')}</small>{/if}
 				<div class="facts">
-					<span class="chip">UEFI (OVMF)</span>
+					<span class="chip">{t(firmware === 'bios' ? 'vms.form.bios' : 'vms.form.uefi')}</span>
 					<span class="chip">{t('vms.new.machine')}</span>
 					<span class="chip">{t('vms.new.cpuMode')}</span>
 					{#if secure}<span class="chip">{t('vms.form.secureChip')}</span>{/if}

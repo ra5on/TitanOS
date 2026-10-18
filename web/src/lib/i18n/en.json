@@ -2115,5 +2115,11 @@
 	"backup.weekday.5": "Friday",
 	"backup.weekday.6": "Saturday",
 	"nav.openMenu": "Open navigation: {page}",
-	"nav.closeMenu": "Close navigation"
+	"nav.closeMenu": "Close navigation",
+	"vms.form.firmware": "Boot firmware",
+	"vms.form.uefi": "UEFI (OVMF)",
+	"vms.form.bios": "Legacy BIOS (SeaBIOS)",
+	"vms.form.firmwareNote": "UEFI for modern systems; legacy BIOS for older systems or existing BIOS images. This choice is fixed when creating the VM.",
+	"vms.form.firmwareFixed": "Boot firmware was fixed when this VM was created. It must match the installation on its virtual disk.",
+	"vms.form.biosWindows": "Choose UEFI with TPM and Secure Boot for Windows 11. Legacy BIOS is intended for older Windows versions."
 }

@@ -613,3 +613,12 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Die mobile Hauptnavigation nutzt ein natives Popover mit Rollenfilter und
   mindestens 44 px hohen Links. Schließt bei Navigation, Escape, Außenklick
   und Wechsel zur Desktopbreite. Kein Fokusfang oder verändertes Desktop-Scrolling.
+
+## VM-Firmware-Auswahl (Entwicklungsstand nach Beta 7)
+
+- Beim Anlegen UEFI/OVMF (Standard) oder Legacy-BIOS/SeaBIOS. `firmware` in der
+  VM-Konfiguration; fehlendes Feld bleibt UEFI. Auswahl nach dem Anlegen fest.
+- BIOS verwendet q35 und `/usr/share/seabios/bios-256k.bin`, ohne NVRAM. Secure
+  Boot mit BIOS wird abgelehnt; Windows-11-Option nur unter UEFI.
+- Snapshots sichern bei BIOS keine UEFI-Variablen. RAM-Kompatibilität prüft
+  die tatsächlich ausgewählte Firmware. TitanOS selbst bootet weiterhin nur UEFI.
