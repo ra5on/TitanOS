@@ -227,7 +227,9 @@ func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) 
 	var stat unix.Statfs_t
 	err = unix.Fstatfs(int(f.Fd()), &stat)
 	f.Close()
-	if err != nil || stat.Type != unix.CIFS_SUPER_MAGIC {
+	// Linux reports the SMB2 magic for modern SMB2/SMB3 mounts.
+	// The mount command above still requires encrypted SMB3.
+	if err != nil || (stat.Type != unix.CIFS_SUPER_MAGIC && stat.Type != unix.SMB2_SUPER_MAGIC) {
 		return fmt.Errorf("SMB destination is not mounted")
 	}
 	if t.Folder != "" {
