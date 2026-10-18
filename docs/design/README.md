@@ -24,3 +24,13 @@ Diese Dateien sind die Quelltexte der Entwürfe aus dem Design-Canvas „TitanOS
 | `Plugins.dc.html` | Plugins: Rechte-Abfrage, Installationsschritte, NVIDIA-Einstellungen (Energie, Leistungslimit) |
 
 Screenshots (optional) gehören nach `docs/design/screenshots/` mit demselben Dateinamen wie die Quelle, z. B. `Main.png`.
+
+### Docker-Anpassung (0.5.1)
+
+Der am 18. Oktober 2026 vom Projektinhaber bestätigte interaktive Folgeentwurf
+ersetzt die feste Trennung aus `DockerList.dc.html`: Container und Stacks im
+selben 12-Spalten-Raster, Breiten 3/4/8, Karten/Liste/Minimal. Minimal zeigt
+Name und Zustand und öffnet Details per Namensknopf. „Seite anpassen“ bietet
+Sortieren per Griff/Pfeilen, Anzeigeoptionen, Speichern/Abbrechen/Standard.
+Kleine Bildschirme stapeln; Theme-Werte bleiben die aus `Appearance.dc.html`.
+Die ursprüngliche Entwurfsdatei dokumentiert weiterhin die Container-Aktionen.

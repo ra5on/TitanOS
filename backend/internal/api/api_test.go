@@ -432,7 +432,7 @@ func TestPreferences(t *testing.T) {
 	ts.setup()
 
 	_, body := ts.request("GET", "/api/v1/preferences", nil)
-	if strings.TrimSpace(string(body)) != `{"appearance":null,"dashboard":null,"sound":null}` {
+	if strings.TrimSpace(string(body)) != `{"appearance":null,"dashboard":null,"docker":null,"sound":null}` {
 		t.Errorf("fresh preferences = %s", body)
 	}
 

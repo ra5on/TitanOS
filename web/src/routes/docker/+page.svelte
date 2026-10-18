@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { session } from '#lib/session.svelte.ts';
+	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, type DockerView, type DockerWidth } from '#lib/docker-layout.ts';
+	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -28,7 +31,31 @@
 	let busy = $state(false);
 	let search = $state('');
 	let filter = $state<'all' | 'running' | 'stopped' | 'updates'>('all');
-	let collapsed = $state<string[]>([]);
+	let expanded = $state<Record<string, boolean>>({});
+	let layout = $state(sanitizeDockerLayout(session.docker));
+	let savedLayout = $state(sanitizeDockerLayout(session.docker));
+	let editing = $state(false);
+	let savingLayout = $state(false);
+	let layoutError = $state('');
+	let layoutSaved = $state(false);
+	let dragged = $state<string | null>(null);
+	function startEditing() { editing = true; layoutSaved = false; layoutError = ''; search = ''; filter = 'all'; }
+	function setView(view: DockerView) { startEditing(); layout.view = view; expanded = {}; }
+	function move(from: string, to: string) { layout.order = moveDockerGroup(layout.order, groups, from, to); }
+	function moveBy(id: string, offset: number) {
+		const target = groups[groups.findIndex(group => group.id === id) + offset];
+		if (target) move(id, target.id);
+	}
+	function cancelLayout() { layout = sanitizeDockerLayout(savedLayout); editing = false; layoutError = ''; }
+	async function saveLayout() {
+		savingLayout = true; layoutError = '';
+		const value = sanitizeDockerLayout(layout);
+		try {
+			await api.put('/preferences/docker', value);
+			session.docker = value; savedLayout = value; editing = false; layoutSaved = true;
+		} catch (err) { layoutError = errorText(err instanceof ApiError ? err.code : 'internal'); }
+		finally { savingLayout = false; }
+	}
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
@@ -57,14 +84,9 @@
 				(search === '' || `${container.name} ${container.image} ${container.app}`.toLowerCase().includes(search.toLowerCase()))
 		)
 	);
-	// Containers of one Compose project with several services form a stack.
-	const stacks = $derived.by(() => {
-		const sizes = new Map<string, number>();
-		for (const container of containers) if (container.app) sizes.set(container.app, (sizes.get(container.app) ?? 0) + 1);
-		const names = [...new Set(visible.filter((container) => (sizes.get(container.app) ?? 0) > 1).map((container) => container.app))];
-		return names.map((name) => ({ name, members: visible.filter((container) => container.app === name), all: containers.filter((container) => container.app === name) }));
-	});
-	const singles = $derived(visible.filter((container) => !stacks.some((stack) => stack.name === container.app)));
+	const groups = $derived(orderedDockerGroups(dockerGroups(containers), layout.order));
+	const visibleIDs = $derived(new Set(visible.map(container => container.id)));
+	const shownGroups = $derived(groups.filter(group => group.members.some(container => visibleIDs.has(container.id))));
 	const updateCount = $derived(containers.filter((container) => container.updateAvailable).length);
 	const updatable = $derived(containers.some((container) => container.updateAvailable && container.managed));
 	const checked = $derived.by(() => {
@@ -171,6 +193,7 @@
 	</div>
 	{#if status?.settings.enabled}
 		<div class="buttons">
+			<button type="button" class="btn" onclick={startEditing} disabled={editing || !status.running || containers.length === 0}><Icon name="edit" />{t('docker.layout.edit')}</button>
 			<button type="button" class="btn" onclick={() => open('settings')}>{t('docker.settings')}</button>
 			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}>{t('docker.import')}</button>
 			{#if updatable}
@@ -214,12 +237,30 @@
 		</div>
 	{/each}
 
-	{#if containers.length > 0}
+	{#if containers.length > 0 || editing}
+		<div class="layout-toolbar">
+			<label class="view-picker"><span>{t('docker.layout.view')}</span><select class="field" value={layout.view} disabled={savingLayout} onchange={(event) => setView(event.currentTarget.value as DockerView)}>
+				<option value="cards">{t('docker.layout.cards')}</option><option value="list">{t('docker.layout.list')}</option><option value="minimal">{t('docker.layout.minimal')}</option>
+			</select></label>
+			{#if layoutSaved}<span class="muted" role="status">{t('docker.layout.saved')}</span>{/if}
+		</div>
+		{#if editing}
+			<div class="tile layout-editor">
+				<p>{t('docker.layout.hint')}</p>
+				<div class="buttons">
+					<label class="check"><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t('docker.layout.details')}</label>
+					<button class="btn" disabled={savingLayout} onclick={() => { layout = defaultDockerLayout(); expanded = {}; }}>{t('dashboard.restore')}</button>
+					<button class="btn" disabled={savingLayout} onclick={cancelLayout}>{t('common.cancel')}</button>
+					<button class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}>{t('docker.layout.save')}</button>
+				</div>
+				{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
+			</div>
+		{/if}
 		<div class="controls">
-			<input class="field search" type="search" bind:value={search} placeholder={t('docker.search')} aria-label={t('docker.search')} />
+			<input class="field search" type="search" disabled={editing} bind:value={search} placeholder={t('docker.search')} aria-label={t('docker.search')} />
 			<div class="filters" role="group">
 				{#each [['all', containers.length], ['running', runCount], ['stopped', containers.length - runCount], ['updates', updateCount]] as [id, count] (id)}
-					<button type="button" aria-pressed={filter === id} onclick={() => (filter = id as typeof filter)}>
+					<button type="button" aria-pressed={filter === id} disabled={editing} onclick={() => (filter = id as typeof filter)}>
 						{t(id === 'all' ? 'docker.filterAll' : id === 'running' ? 'docker.filterRunning' : id === 'stopped' ? 'docker.filterStopped' : 'docker.filterUpdates')}<span class="mono">{count}</span>
 					</button>
 				{/each}
@@ -227,24 +268,42 @@
 		</div>
 	{/if}
 
-	{#each stacks as stack (stack.name)}
-		{@const openStack = !collapsed.includes(stack.name)}
-		<section class="tile stack" aria-label="{t('docker.stack')} {stack.name}">
-			<button type="button" class="stack-head" aria-expanded={openStack} onclick={() => (collapsed = openStack ? [...collapsed, stack.name] : collapsed.filter((name) => name !== stack.name))}>
-				<span class="stack-name">{stack.name} <span class="chip">{t('docker.stack')}</span></span>
-				<span class="muted">{t('docker.stackSummary', { running: stack.all.filter(isRunning).length, total: stack.all.length })}</span>
-			</button>
-			{#if openStack}
-				{#each stack.members as container (container.id)}
-					<ContainerCard {container} {host} {tailscaleHost} {busy} compact onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
-				{/each}
-			{/if}
-		</section>
-	{/each}
-
-	<div class="cards">
-		{#each singles as container (container.id)}
-			<ContainerCard {container} {host} {tailscaleHost} {busy} onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))} onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })} onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))} onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+	<div class="cards" class:editing class:list={layout.view === 'list'}>
+		{#each shownGroups as group (group.id)}
+			{@const stack = group.members.length > 1}
+			{@const openStack = expanded[group.id] ?? layout.view !== 'minimal'}
+			<div class="layout-item" style:--columns={layout.widths[group.id] ?? (layout.view === 'minimal' ? 3 : stack ? 8 : 4)}>
+				{#if editing}
+					<div class="arrange">
+						<button class="btn grip" draggable={!savingLayout} disabled={savingLayout} aria-label={t('dashboard.move', { tile: group.name })}
+							ondragstart={(event) => { dragged = group.id; event.dataTransfer?.setData('text/plain', group.id); }} ondragend={() => (dragged = null)}
+							ondragover={(event) => { if (dragged && !savingLayout) event.preventDefault(); }}
+							ondrop={(event) => { event.preventDefault(); if (dragged && !savingLayout) move(dragged, group.id); dragged = null; }}><Icon name="grip" /></button>
+						<button class="btn" disabled={savingLayout || groups[0]?.id === group.id} aria-label={t('docker.layout.before', { name: group.name })} onclick={() => moveBy(group.id, -1)}>←</button>
+						<button class="btn" disabled={savingLayout || groups.at(-1)?.id === group.id} aria-label={t('docker.layout.after', { name: group.name })} onclick={() => moveBy(group.id, 1)}>→</button>
+						<select class="field" disabled={savingLayout || layout.view === 'list'} aria-label={t('docker.layout.width', { name: group.name })}
+							value={layout.widths[group.id] ?? (layout.view === 'minimal' ? 3 : stack ? 8 : 4)} onchange={(event) => (layout.widths[group.id] = Number(event.currentTarget.value) as DockerWidth)}>
+							<option value="3">{t('docker.layout.narrow')}</option><option value="4">{t('docker.layout.normal')}</option><option value="8">{t('docker.layout.wide')}</option>
+						</select>
+					</div>
+				{/if}
+				{#if stack}
+					<section class="tile stack" aria-label="{t('docker.stack')} {group.name}">
+						<button type="button" class="stack-head" aria-expanded={openStack} onclick={() => (expanded[group.id] = !openStack)}>
+							<span class="stack-name"><span aria-hidden="true">{openStack ? '▾' : '▸'}</span>{group.name} <span class="chip">{t('docker.stack')}</span></span>
+							<span class="muted">{t('docker.stackSummary', { running: group.members.filter(isRunning).length, total: group.members.length })}</span>
+							{#if group.members.some(container => container.updateAvailable)}<span class="chip warn">{t('docker.update')}</span>{/if}
+						</button>
+						{#if openStack}
+							{#each group.members.filter(container => visibleIDs.has(container.id)) as container (container.name)}
+								{@render card(container, true)}
+							{/each}
+						{/if}
+					</section>
+				{:else}
+					{@render card(group.members[0], false)}
+				{/if}
+			</div>
 		{/each}
 	</div>
 	{#if containers.length === 0 && jobs.length === 0}
@@ -253,6 +312,14 @@
 		<p class="muted">{t('docker.noMatch')}</p>
 	{/if}
 {/if}
+
+{#snippet card(container: DockerContainer, compact: boolean)}
+	<ContainerCard {container} {host} {tailscaleHost} {busy} {compact} view={layout.view} details={layout.details}
+		onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))}
+		onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })}
+		onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))}
+		onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
+{/snippet}
 
 {#if dialog?.kind === 'logs'}
 	{@const container = dialog.container}
@@ -416,11 +483,23 @@
 		color: var(--text);
 		font-weight: 500;
 	}
-	.cards {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 8px;
-	}
+	.cards { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); align-items: start; }
+	.layout-item { grid-column: span var(--columns); min-width: 0; container-type: inline-size; }
+	.layout-item:focus-within, .layout-item:has(:global(.menu-open)) { z-index: 30; }
+	.list .layout-item { grid-column: 1 / -1; }
+	.editing .layout-item { outline: 1px dashed var(--accent); border-radius: var(--radius-tile); }
+	.arrange, .layout-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+	.arrange { padding: 8px; }
+	.arrange .btn { padding: 0 8px; }
+	.arrange select { flex: 1; min-width: 6rem; width: auto; }
+	.grip { cursor: grab; }
+	.layout-editor { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+	.layout-editor p { font-size: .875rem; }
+	.view-picker { flex-direction: row; align-items: center; }
+	.layout-toolbar { justify-content: space-between; }
+	@media (max-width: 1100px) { .layout-item { grid-column: span 6; } }
+	@media (max-width: 760px) { .layout-item { grid-column: 1 / -1; } }
+
 	.stack {
 		display: flex;
 		flex-direction: column;
@@ -442,6 +521,8 @@
 		cursor: pointer;
 	}
 	.stack-name {
+		overflow-wrap: anywhere;
+		flex-wrap: wrap;
 		display: inline-flex;
 		align-items: center;
 		gap: 10px;
