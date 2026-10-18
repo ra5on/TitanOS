@@ -25,7 +25,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 
 - **WebUI für Desktop und Smartphone:** kompaktere Texte und Abstände, anpassbare Schriftgröße und Dichte, mobile Formulare und Dialoge sowie seitlich scrollbare Navigation und Tabellen.
 - **Apps mit passenden Icons und drei Zugriffswegen:** lokale WebUI, Tailscale-WebUI bei aktiver Verbindung und eine selbst hinterlegte öffentliche URL, etwa hinter Cloudflare. Protokoll, Port und Pfad gehören zur App-Vorlage. Das Eintragen einer URL richtet keinen Tunnel ein. [App-Links](docs/APP-LINKS.md).
-- **Eigener App-Katalog:** [TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps) enthält auch acht Storytold-Web-Apps als Docker-Pakete. Die Paketierung prüft regelmäßig neue stabile Upstream-Releases und veröffentlicht sie nach erfolgreichen Tests. Bereits installierte Container aktualisierst du über die Docker-Ansicht.
+- **Eigener App-Katalog:** [TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps) enthält auch 13 Storytold-/ArtCraft-Web-Apps als Docker-Pakete. Die Paketierung prüft regelmäßig neue stabile Upstream-Releases und veröffentlicht sie nach erfolgreichen Tests. Bereits installierte Container aktualisierst du über die Docker-Ansicht.
 - **Dateien in Storytold-Apps:** Diese Apps verarbeiten Dokumente im Browser. Eine NAS-Freigabe auf dem eigenen Rechner verbinden und Dateien dort öffnen bzw. exportieren; ein Container-Pfad allein gibt dem Browser keinen Zugriff auf NAS-Dateien.
 - **Beta 6:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
 
