@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { DockerView } from '#lib/docker-layout.ts';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { appURL, publicURL } from '#lib/app-links.ts';
  import AppIcon from '#lib/components/AppIcon.svelte';
@@ -14,17 +15,21 @@
 		busy: boolean;
 		/** One row inside a stack instead of a card of its own. */
 		compact?: boolean;
+		view?: DockerView;
+		details?: boolean;
 		onaction: (action: 'start' | 'stop' | 'restart') => void;
 		onlogs: () => void;
 		onremove: () => void;
 		onconsole: () => void;
 		onupdate: () => void;
 	};
-	let { container, host, tailscaleHost = '', busy, compact = false, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
+	let { container, host, tailscaleHost = '', busy, compact = false, view = 'cards', details = true, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
 
 	const displayName = $derived(dockerName(container));
 	const running = $derived(container.state === 'running' || container.state === 'restarting');
 	let menu = $state(false);
+	let expanded = $state(false);
+	const showDetails = $derived(view !== 'minimal' || expanded);
 	let root: HTMLElement | undefined = $state();
 
 	// Without an icon from a template, an app gets a monogram in a color of
@@ -91,8 +96,8 @@
 	<div class="member" class:menu-open={menu} bind:this={root}>
 		<span class="dot" class:ok={running} aria-hidden="true"></span>
 		<span class="names">
-			<span class="line"><span class="name">{dockerName(container, 'service')}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
-			<span class="mono image">{container.image}</span>
+			<span class="line"><span class="name">{dockerName(container, 'service')}</span><span class="state">{t(`docker.state.${container.state}`)}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
+			{#if details}<span class="mono image">{container.image}</span>{/if}
 		</span>
 		<span class="ports">{@render ports()}{@render links()}</span>
 		<span class="mono value">{running ? formatPercent(container.cpuPercent) : '–'}</span>
@@ -102,22 +107,23 @@
 		{@render actions()}
 	</div>
 {:else}
-	<article class="tile" class:menu-open={menu} bind:this={root} aria-label={displayName}>
+	<article class="tile" class:minimal={view === 'minimal'} class:list={view === 'list'} class:menu-open={menu} bind:this={root} aria-label={displayName}>
 		<div class="top">
-			<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>
+			{#if view !== 'minimal'}<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>{/if}
 			<div class="names">
 				<div class="line">
-					<span class="name" title={container.name}>{displayName}</span>
+					{#if view === 'minimal'}<button type="button" class="name expand" title={container.name} aria-expanded={expanded} onclick={() => { expanded = !expanded; menu = false; }}><span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {displayName}</button>{:else}<span class="name" title={container.name}>{displayName}</span>{/if}
 					<span class="state"><span class="dot" class:ok={running} aria-hidden="true"></span>{t(`docker.state.${container.state}`)}</span>
 					{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
 				</div>
-				<span class="mono image">{container.image}</span>
+				{#if details && showDetails}<span class="mono image">{container.image}</span>{/if}
 			</div>
-			<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
+			{#if showDetails}<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>{/if}
 		</div>
+		{#if showDetails}
 		<div class="stats">
 			<div><span class="label">{t('docker.cpu')}</span><span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span></div>
-			<svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">{#if running && spark}<polyline points={spark} />{/if}</svg>
+			{#if details}<svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">{#if running && spark}<polyline points={spark} />{/if}</svg>{:else}<span></span>{/if}
 			<div><span class="label">{t('docker.ram')}</span><span class="mono">{running ? formatBytes(container.memoryBytes) : '–'}</span></div>
 		</div>
 		{#if container.ports.length > 0}
@@ -131,6 +137,7 @@
 			</button>
 		</div>
 		{@render actions()}
+		{/if}
 	</article>
 {/if}
 
@@ -324,27 +331,27 @@
 		border: 0;
 		background: var(--border);
 	}
- @media (min-width: 1000px) {
- article { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 120px) 160px minmax(220px, auto); column-gap: 20px; align-items: center; }
- .top { grid-column: 1; grid-row: 1; }
- article > .ports { grid-column: 2; grid-row: 1; }
- .stats { grid-column: 3; grid-row: 1; gap: 8px; }
- .bottom { grid-column: 4; grid-row: 1; justify-content: flex-end; max-width: 30rem; }
- .bottom .since { flex-basis: 100%; text-align: right; }
- }
- @media (min-width: 761px) and (max-width: 999px) {
- article { display: grid; grid-template-columns: minmax(0, 1fr) 160px; }
- .top { grid-column: 1; }
- .stats { grid-column: 2; grid-row: 1; }
- article > .ports, .bottom { grid-column: 1 / -1; }
- }
- @media (max-width: 760px) {
- .member { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; padding: var(--tile-pad); }
- .member .ports { grid-column: 2 / -1; }
- .member .value { text-align: left; grid-column: 2; }
- .member > .more { grid-column: 3; grid-row: 1; }
- .member > .btn { grid-column: 3; grid-row: 3 / 5; }
- .bottom .since { flex-basis: 100%; }
- .small, .more { min-height: 44px; }
- }
+
+	.expand { background: none; border: 0; padding: 4px 0; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+	.minimal { padding: 10px 12px; }
+	.minimal .name { font-size: .875rem; }
+	.menu { max-width: calc(100% - 24px); }
+	@container (min-width: 900px) {
+		article.list { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 100px) 150px minmax(180px, auto); column-gap: 16px; align-items: center; }
+		.list .top { grid-column: 1; grid-row: 1; }
+		.list > .ports { grid-column: 2; grid-row: 1; }
+		.list .stats { grid-column: 3; grid-row: 1; }
+		.list .bottom { grid-column: 4; grid-row: 1; justify-content: flex-end; max-width: 30rem; }
+		.list .since { flex-basis: 100%; text-align: right; }
+	}
+	@container (max-width: 850px) {
+		.member { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
+		.member .ports { grid-column: 2 / -1; }
+		.member .value { text-align: left; grid-column: 2; }
+		.member > .more { grid-column: 3; grid-row: 1; }
+		.member > .btn { grid-column: 3; grid-row: 3 / 5; }
+	}
+	@media (max-width: 760px) {
+		.small, .more, .expand { min-height: 44px; }
+	}
 </style>

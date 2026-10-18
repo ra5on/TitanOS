@@ -9,17 +9,20 @@ export const session = $state<{
 	data: Session | null;
 	/** The dashboard layout stored for the account, as sent by the NAS. */
 	dashboard: Record<string, unknown> | null;
-}>({ status: 'loading', data: null, dashboard: null });
+	docker: Record<string, unknown> | null;
+}>({ status: 'loading', data: null, dashboard: null, docker: null });
 
 async function loadPreferences() {
 	try {
 		const prefs = await api.get<Preferences>('/preferences');
 		session.dashboard = prefs.dashboard;
+		session.docker = prefs.docker;
 		sound.settings = sanitizeSound(prefs.sound);
 		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
 	} catch {
 		// The UI works with defaults; saving will report the problem.
 		session.dashboard = null;
+		session.docker = null;
 	}
 }
 

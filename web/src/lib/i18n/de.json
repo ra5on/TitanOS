@@ -2165,5 +2165,20 @@
 	"files.windowsCopyHint": "Für lange Ordnerbäume: lokalen Quellordner eingeben und den erzeugten Befehl in PowerShell ausführen. Robocopy kopiert den gesamten Inhalt einschließlich Unterordnern. Geänderte Zieldateien können überschrieben werden; zusätzliche Zieldateien bleiben erhalten.",
 	"files.windowsSource": "Vollständiger Quellordner auf dem Windows-PC",
 	"files.windowsCopyCommand": "PowerShell-Kopierbefehl",
-	"files.windowsLimits": "Das verkürzt nicht die Unterordner innerhalb deiner Quelle. Robocopy unterstützt lange Pfade; Grenzen einzelner Dateinamen gelten weiterhin. TitanOS verändert keine Namen oder Freigaberechte."
+	"files.windowsLimits": "Das verkürzt nicht die Unterordner innerhalb deiner Quelle. Robocopy unterstützt lange Pfade; Grenzen einzelner Dateinamen gelten weiterhin. TitanOS verändert keine Namen oder Freigaberechte.",
+	"docker.layout.edit": "Seite anpassen",
+	"docker.layout.view": "Ansicht",
+	"docker.layout.cards": "Karten",
+	"docker.layout.list": "Liste",
+	"docker.layout.minimal": "Minimal",
+	"docker.layout.save": "Layout speichern",
+	"docker.layout.saved": "Layout gespeichert",
+	"docker.layout.hint": "Am Griff auf einen anderen Griff ziehen oder mit den Pfeilen verschieben. Breite je Kachel wählen; auf kleinen Bildschirmen werden Kacheln gestapelt. Wird für dein Konto gespeichert.",
+	"docker.layout.details": "Image und CPU-Verlauf anzeigen",
+	"docker.layout.before": "{name} nach vorne verschieben",
+	"docker.layout.after": "{name} nach hinten verschieben",
+	"docker.layout.width": "Breite von {name}",
+	"docker.layout.narrow": "Schmal",
+	"docker.layout.normal": "Normal",
+	"docker.layout.wide": "Breit"
 }

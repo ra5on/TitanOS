@@ -656,3 +656,16 @@ VM-Konsolen behalten die bisherige Bestätigung. Benutzersperre, WebSocket-Origi
 Terminal-Abschaltung und Sitzungsbegrenzung bleiben bestehen.
 Docker-Apps werden am Desktop als kompakte Zeilen mit dem eingetragenen App-Namen
 angezeigt; technische Container-Namen bleiben Identität und Suchmerkmal.
+
+### Docker-Layout ab 0.5.1
+
+- Vom Projektinhaber bestätigter Entwurf: gemeinsames Raster für Container und
+  Compose-Stacks; Karten, Liste und Minimal. Minimal klappt per Namensknopf auf.
+- „Seite anpassen“: Reihenfolge per Griff oder Pfeilen, Breiten 3/4/8 von 12
+  Spalten (Schmal/Normal/Breit), Image/CPU-Verlauf wählbar, Speichern/Abbrechen/
+  Standard. Listen nutzen volle Breite; kleine Bildschirme stapeln automatisch.
+- Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
+  Preferences-API mit RAM-Cache. Nur ausdrückliches Speichern schreibt.
+  Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die
+  nach Updates wechselnde Container-ID. Temporär fehlende Einträge bleiben
+  gespeichert; neue Apps werden angehängt. Keine App wird durch Layouts versteckt.

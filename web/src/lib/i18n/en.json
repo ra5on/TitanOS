@@ -2165,5 +2165,20 @@
 	"files.windowsCopyHint": "For long folder trees: enter the local source folder and run the generated command in PowerShell. Robocopy copies all contents including subfolders. Changed destination files may be overwritten; extra destination files are retained.",
 	"files.windowsSource": "Full source folder on your Windows PC",
 	"files.windowsCopyCommand": "PowerShell copy command",
-	"files.windowsLimits": "This does not shorten subfolders within your source. Robocopy supports long paths; individual filename limits still apply. TitanOS does not change names or share permissions."
+	"files.windowsLimits": "This does not shorten subfolders within your source. Robocopy supports long paths; individual filename limits still apply. TitanOS does not change names or share permissions.",
+	"docker.layout.edit": "Customize page",
+	"docker.layout.view": "View",
+	"docker.layout.cards": "Cards",
+	"docker.layout.list": "List",
+	"docker.layout.minimal": "Minimal",
+	"docker.layout.save": "Save layout",
+	"docker.layout.saved": "Layout saved",
+	"docker.layout.hint": "Drag a handle onto another handle or use the arrows to reorder. Choose each tile’s width; tiles stack on small screens. Saved for your account.",
+	"docker.layout.details": "Show image and CPU history",
+	"docker.layout.before": "Move {name} earlier",
+	"docker.layout.after": "Move {name} later",
+	"docker.layout.width": "Width of {name}",
+	"docker.layout.narrow": "Narrow",
+	"docker.layout.normal": "Normal",
+	"docker.layout.wide": "Wide"
 }
