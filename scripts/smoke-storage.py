@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from files_usb_smoke import check_usb_files
 """Btrfs/optional-tool regression in disposable UEFI QEMU disks only.
 
 Boots four times: create/snapshot, normal remount, degraded boot/replace,
@@ -51,7 +52,14 @@ def check_smb_share(request, remote, smb_port, password, directory):
         time.sleep(2)
     assert (directory / 'smb-back.txt').read_text() == 'über SMB\n'
     assert remote('cat "/mnt/mirror/Fotos 2024/Neue Datei.txt"') == 'über SMB'
-    print('SMB share with capitals and blank: created, reachable, writable', flush=True)
+    # Exercise the server independently of Windows Explorer's path handling.
+    long_name = 'a' * 251 + '.txt'
+    deep = 'nested-' + 'b' * 33
+    commands = [f'mkdir "{deep}"', f'cd "{deep}"'] * 8
+    commands += [f'put "{upload}" "{long_name}"', f'get "{long_name}" "{directory}/smb-long-back.txt"']
+    subprocess.run(['smbclient', '//127.0.0.1/Fotos 2024', '-p', str(smb_port), '-U', 'storagetester', '-m', 'SMB3', '-c', '; '.join(commands)], env=env, check=True, capture_output=True, text=True, timeout=90)
+    assert (directory / 'smb-long-back.txt').read_bytes() == upload.read_bytes()
+    print('SMB: writable share, 255-byte filename and nested path longer than 260 characters passed', flush=True)
 
 
 def check_uploads(request, opener, url, remote, password):
@@ -116,6 +124,10 @@ def smoke(archive, plugins, log, timeout):
         for index in (1, 2, 3):
             helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '2G')
         helper.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory / 'key'))
+        usb_disk = directory / 'external-exfat.img'
+        with usb_disk.open('wb') as image:
+            image.truncate(128 * 1024**2)
+        helper.command('mkfs.exfat', '-L', 'EXFAT-TEST', str(usb_disk))
         port, ssh_port, smb_port = helper.free_port(), helper.free_port(), helper.free_port()
         url = f'https://127.0.0.1:{port}'
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
@@ -152,6 +164,8 @@ def smoke(archive, plugins, log, timeout):
             '-drive', f'if=pflash,format=raw,file={directory}/OVMF_VARS.fd',
             '-device', 'qemu-xhci', '-drive', f'if=none,id=stick,format=raw,file={disk}',
             '-device', 'usb-storage,drive=stick,removable=on,bootindex=0',
+            '-drive', f'if=none,id=external,format=raw,file={usb_disk}',
+            '-device', 'usb-storage,drive=external,removable=on',
             '-netdev', f'user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443,hostfwd=tcp:127.0.0.1:{ssh_port}-:22,hostfwd=tcp:127.0.0.1:{smb_port}-:445',
             '-device', 'virtio-net-pci,netdev=net0',
             '-smbios', 'type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200',
@@ -214,6 +228,7 @@ def smoke(archive, plugins, log, timeout):
                         remote('mkdir "/mnt/mirror/vms/Home Assistant"; qemu-img create -q -f qcow2 "/mnt/mirror/vms/Home Assistant/ha.qcow2" 1G')
                         request('/vms', {'name': 'home-assistant', 'displayName': 'Home Assistant', 'directory': 'Home Assistant', 'volume': 'mirror', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'path': '/mnt/mirror/vms/Home Assistant/ha.qcow2', 'format': 'qcow2'}]})
                         remote('test ! -e /mnt/mirror/vms/home-assistant')
+                        check_usb_files(request, opener, url)
                         check_uploads(request, opener, url, remote, password)
                         check_smb_share(request, remote, smb_port, password, directory)
                         check_cdi(request, remote)

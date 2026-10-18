@@ -147,7 +147,7 @@ func (m *Manager) StartUpload(root Root, dir, name string, size int64, conflict,
 		return UploadStatus{}, err
 	}
 	id := hex.EncodeToString(raw)
-	part := path.Join(dir, "."+path.Base(target)+"."+id+partSuffix)
+	part := uploadPartName(target, id)
 	f, err := r.OpenFile(part, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return UploadStatus{}, mapError(err)
@@ -343,10 +343,7 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	if u.conflict == ConflictReplace {
 		err = r.Rename(u.part, u.name)
 	} else {
-		err = r.Link(u.part, u.name)
-		if err == nil {
-			err = r.Remove(u.part)
-		}
+		err = publishNewFile(r, u.part, u.name)
 	}
 	if err != nil {
 		return UploadStatus{}, mapError(err)
@@ -445,7 +442,7 @@ func (m *Manager) Uploads(root Root, dir, user string, uid int) ([]UploadStatus,
 			if path.Dir(record.Name) != dir || path.Dir(record.Part) != dir || record.Part+".json" != metaPath || !validName(path.Base(record.Name)) {
 				continue
 			}
-			if record.Part != path.Join(dir, "."+path.Base(record.Name)+"."+record.ID+partSuffix) {
+			if record.Part != uploadPartName(record.Name, record.ID) && record.Part != path.Join(dir, "."+path.Base(record.Name)+"."+record.ID+partSuffix) {
 				continue
 			}
 			if record.Conflict != "" && record.Conflict != ConflictRename && record.Conflict != ConflictReplace {
@@ -548,4 +545,9 @@ func (m *Manager) UploadRoot(id, user string) (Root, error) {
 		return Root{}, ErrNoUpload
 	}
 	return u.root, nil
+}
+
+// A full-length target name must leave room for neither the part suffix nor metadata.
+func uploadPartName(name, id string) string {
+	return path.Join(path.Dir(name), ".titanos-upload-"+id+partSuffix)
 }

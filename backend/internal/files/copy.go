@@ -357,8 +357,7 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	defer in.Close()
 	raw := make([]byte, 6)
 	rand.Read(raw)
-	dir, name := path.Split(final)
-	part := path.Join(dir, "."+name+"."+hex.EncodeToString(raw)+partSuffix)
+	part := path.Join(path.Dir(final), ".titanos-copy-"+hex.EncodeToString(raw)+partSuffix)
 	out, err := dr.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o660)
 	if err != nil {
 		return mapError(err)

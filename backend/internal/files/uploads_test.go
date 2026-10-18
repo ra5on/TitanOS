@@ -2,6 +2,7 @@ package files
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -148,5 +149,72 @@ func TestFinishDoesNotOverwriteNewlyCreatedTarget(t *testing.T) {
 	}
 	if err = m.AbortUpload(status.ID, "alex"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUploadFullLengthNameAndRecovery(t *testing.T) {
+	m, root, _ := newRoot(t)
+	name := strings.Repeat("a", 251) + ".txt"
+	part, err := m.StartUpload(root, "", name, 5, "", "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.WriteChunk(part.ID, "alex", 0, strings.NewReader("he")); err != nil {
+		t.Fatal(err)
+	}
+	fresh := NewManager(os.Getgid())
+	parts, err := fresh.Uploads(root, "", "alex", os.Getuid())
+	if err != nil || len(parts) != 1 {
+		t.Fatal(parts, err)
+	}
+	if _, err = fresh.WriteChunk(part.ID, "alex", 2, strings.NewReader("llo")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fresh.FinishUpload(part.ID, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root.Dir, name)) != "hello" {
+		t.Fatal("wrong content")
+	}
+}
+
+func TestUploadResumesLegacyPartNames(t *testing.T) {
+	m, root, _ := newRoot(t)
+	part, err := m.StartUpload(root, "", "legacy.txt", 5, "", "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.WriteChunk(part.ID, "alex", 0, strings.NewReader("he")); err != nil {
+		t.Fatal(err)
+	}
+	u := m.uploads[part.ID]
+	oldName := ".legacy.txt." + part.ID + partSuffix
+	record := uploadRecord{ID: part.ID, User: "alex", Root: root.ID, Name: "legacy.txt", Part: oldName, Size: 5}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(filepath.Join(root.Dir, u.part), filepath.Join(root.Dir, oldName)); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(filepath.Join(root.Dir, u.part+".json"), filepath.Join(root.Dir, oldName+".json")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(root.Dir, oldName+".json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fresh := NewManager(os.Getgid())
+	parts, err := fresh.Uploads(root, "", "alex", os.Getuid())
+	if err != nil || len(parts) != 1 {
+		t.Fatal(parts, err)
+	}
+	if _, err = fresh.WriteChunk(part.ID, "alex", 2, strings.NewReader("llo")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fresh.FinishUpload(part.ID, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root.Dir, "legacy.txt")) != "hello" {
+		t.Fatal("legacy recovery")
 	}
 }

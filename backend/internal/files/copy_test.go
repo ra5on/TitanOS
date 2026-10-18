@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -171,5 +172,23 @@ func TestJobsBelongToTheirUser(t *testing.T) {
 	}
 	if err := m.CancelJob("alex", job.ID); err != nil {
 		t.Errorf("cancel: %v", err)
+	}
+}
+
+func TestCopyFullLengthFileName(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	name := strings.Repeat("a", 251) + ".txt"
+	if err := os.WriteFile(filepath.Join(src.Dir, name), []byte("long name"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	job, err := m.StartCopy(src, []string{name}, dst, "ziel", false, "", "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job = finish(t, m, job.ID); job.State != JobDone {
+		t.Fatalf("%+v", job)
+	}
+	if read(t, filepath.Join(dst.Dir, "ziel", name)) != "long name" {
+		t.Fatal("wrong content")
 	}
 }

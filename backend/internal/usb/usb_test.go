@@ -87,7 +87,7 @@ func TestMountAndEject(t *testing.T) {
 		t.Fatal(err)
 	}
 	mount := strings.Join(f.calls, "\n")
-	if !strings.Contains(mount, "mount -t exfat -o nosuid,nodev,noexec /dev/sdb1 "+m.root+"/Fotos-Urlaub-aaaabb") {
+	if !strings.Contains(mount, "mount -t exfat -o nosuid,nodev,noexec,uid=0,gid=0,fmask=0177,dmask=0077 /dev/sdb1 "+m.root+"/Fotos-Urlaub-aaaabb") {
 		t.Errorf("mount command:\n%s", mount)
 	}
 	// Written by the fake mount into the mounts file.
