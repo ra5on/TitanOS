@@ -126,6 +126,10 @@ func (m *Manager) SaveText(root Root, name, content string) error {
 func (m *Manager) SaveTextVersion(root Root, name, content, version string) (TextFile, error) {
 	m.textMu.Lock()
 	defer m.textMu.Unlock()
+	name, cleanErr := clean(name)
+	if cleanErr != nil {
+		return TextFile{}, cleanErr
+	}
 	if len(content) > maxText || !utf8.ValidString(content) || strings.ContainsRune(content, 0) {
 		return TextFile{}, ErrInvalid
 	}
@@ -206,6 +210,18 @@ func (m *Manager) SaveTextVersion(root Root, name, content, version string) (Tex
 	}
 	if err = r.Rename(temp, name); err != nil {
 		return TextFile{}, mapError(err)
+	}
+	parent, err := r.Open(path.Dir(name))
+	if err != nil {
+		return TextFile{}, mapError(err)
+	}
+	err = parent.Sync()
+	closeErr := parent.Close()
+	if err != nil {
+		return TextFile{}, mapError(err)
+	}
+	if closeErr != nil {
+		return TextFile{}, mapError(closeErr)
 	}
 	return TextFile{Content: content, Version: textVersion([]byte(content))}, nil
 }

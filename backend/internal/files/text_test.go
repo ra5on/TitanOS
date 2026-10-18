@@ -67,15 +67,16 @@ func TestSaveText(t *testing.T) {
 		path, content string
 		want          error
 	}{
-		"broken json": {"network/network.json", `{"name":`, ErrInvalidJSON},
-		"new file":    {"network/other.json", `{}`, ErrNotFound},
-		"secret":      {"users/alex/account.json", `{}`, ErrNotFound},
-		"env":         {"apps/blog/.env", "X=1", ErrNotFound},
-		"backup copy": {"network/network.json.prev", "x", ErrInvalid},
-		"leaves":      {"../x", "x", ErrInvalid},
-		"binary":      {"apps/blog/compose.yaml", "a\x00b", ErrInvalid},
-		"too big":     {"apps/blog/compose.yaml", strings.Repeat("a", maxText+1), ErrInvalid},
-		"a folder":    {"apps", "x", ErrInvalid},
+		"normalized json": {"network/network.json/", `{"name":`, ErrInvalidJSON},
+		"broken json":     {"network/network.json", `{"name":`, ErrInvalidJSON},
+		"new file":        {"network/other.json", `{}`, ErrNotFound},
+		"secret":          {"users/alex/account.json", `{}`, ErrNotFound},
+		"env":             {"apps/blog/.env", "X=1", ErrNotFound},
+		"backup copy":     {"network/network.json.prev", "x", ErrInvalid},
+		"leaves":          {"../x", "x", ErrInvalid},
+		"binary":          {"apps/blog/compose.yaml", "a\x00b", ErrInvalid},
+		"too big":         {"apps/blog/compose.yaml", strings.Repeat("a", maxText+1), ErrInvalid},
+		"a folder":        {"apps", "x", ErrInvalid},
 	} {
 		if err := m.SaveText(root, tc.path, tc.content); !errors.Is(err, tc.want) {
 			t.Errorf("%s: %v, want %v", name, err, tc.want)

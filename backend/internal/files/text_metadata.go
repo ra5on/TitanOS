@@ -2,9 +2,10 @@ package files
 
 import (
 	"errors"
-	"golang.org/x/sys/unix"
 	"os"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // Atomic replacement must keep existing share ACLs and user metadata. FAT and

@@ -1459,3 +1459,19 @@ func TestTextEditorReadsAndSavesLargeJSONWithVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestTextEditorDoesNotExposeAdminRootsToUsers(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": "reader", "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	client := ts.newClient()
+	ts.do(client, "POST", "/api/v1/login", credentials{Name: "reader", Password: testPassword})
+	if res, body := ts.do(client, "GET", "/api/v1/files/text?root=stick&path=editor.json", nil); res.StatusCode != http.StatusNotFound {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	if res, body := ts.do(client, "PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "editor.json", "content": "{}", "version": "test"}); res.StatusCode != http.StatusNotFound {
+		t.Fatal(res.StatusCode, string(body))
+	}
+}
