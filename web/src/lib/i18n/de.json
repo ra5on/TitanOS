@@ -561,6 +561,7 @@
 	"docker.importSubmit": "Importieren und starten",
 	"docker.jobRunning": "{app} wird eingerichtet: Images werden geladen und Container gestartet …",
 	"docker.jobFailed": "{app} konnte nicht gestartet werden:",
+	"docker.jobDismiss": "Ausblenden",
 	"docker.settingsTitle": "Docker-Einstellungen",
 	"docker.enabled": "Docker eingeschaltet",
 	"docker.disableNote": "Beim Ausschalten werden alle Container gestoppt. Images, Container und Daten bleiben auf dem Volume.",

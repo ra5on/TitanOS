@@ -165,6 +165,15 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// handleAppJobDismiss hides the message of a failed app setup.
+func (s *Server) handleAppJobDismiss(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Docker.DismissJob(r.PathValue("name")); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleUpdatesCheck asks the registries now instead of waiting for the next round.
 func (s *Server) handleUpdatesCheck(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Docker.CheckUpdates(r.Context()); err != nil {
