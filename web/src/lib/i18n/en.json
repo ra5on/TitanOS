@@ -835,7 +835,7 @@
 	"vms.fullscreen": "Full screen",
 	"vms.exitFullscreen": "Leave full screen (Esc)",
 	"vms.off": "{name} is switched off",
-	"vms.hint": "Drag the lower right corner to make the window larger. What you type goes to the VM while its screen has the focus.",
+	"vms.hint": "The selected size is saved for your account. What you type goes to the VM while its screen has the focus.",
 	"vms.showXml": "View the configuration as XML",
 	"vms.screenConnecting": "Connecting to the screen …",
 	"vms.screenLost": "The connection to the screen was lost. Trying again …",
@@ -2180,5 +2180,13 @@
 	"docker.layout.width": "Width of {name}",
 	"docker.layout.narrow": "Narrow",
 	"docker.layout.normal": "Normal",
-	"docker.layout.wide": "Wide"
+	"docker.layout.wide": "Wide",
+	"vms.size": "Size",
+	"vms.size.small": "Small",
+	"vms.size.medium": "Medium",
+	"vms.size.large": "Large",
+	"vms.width": "Width",
+	"vms.size.saving": "Saving …",
+	"vms.size.failed": "Could not save the size.",
+	"vms.size.retry": "Retry saving"
 }

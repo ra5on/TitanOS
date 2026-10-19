@@ -835,7 +835,7 @@
 	"vms.fullscreen": "Vollbild",
 	"vms.exitFullscreen": "Vollbild beenden (Esc)",
 	"vms.off": "{name} ist ausgeschaltet",
-	"vms.hint": "Zieh das Fenster an der Ecke unten rechts größer. Tastatureingaben gehen an die VM, solange ihr Bildschirm den Fokus hat.",
+	"vms.hint": "Die gewählte Größe wird für dein Konto gespeichert. Tastatureingaben gehen an die VM, solange ihr Bildschirm den Fokus hat.",
 	"vms.showXml": "Konfiguration als XML ansehen",
 	"vms.screenConnecting": "Verbindung zum Bildschirm wird aufgebaut …",
 	"vms.screenLost": "Die Verbindung zum Bildschirm ist unterbrochen. Neuer Versuch …",
@@ -2180,5 +2180,13 @@
 	"docker.layout.width": "Breite von {name}",
 	"docker.layout.narrow": "Schmal",
 	"docker.layout.normal": "Normal",
-	"docker.layout.wide": "Breit"
+	"docker.layout.wide": "Breit",
+	"vms.size": "Größe",
+	"vms.size.small": "Klein",
+	"vms.size.medium": "Mittel",
+	"vms.size.large": "Groß",
+	"vms.width": "Breite",
+	"vms.size.saving": "Wird gespeichert …",
+	"vms.size.failed": "Größe konnte nicht gespeichert werden.",
+	"vms.size.retry": "Erneut speichern"
 }
