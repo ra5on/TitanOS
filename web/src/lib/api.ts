@@ -192,6 +192,7 @@ export type FileRoot = {
 	kind: 'share' | 'volume' | 'usb' | 'stick';
 	writable: boolean;
 	recycle: boolean;
+	recycleDays?: number;
 	/** Text files can be saved although the root is read-only (the stick). */
 	editable?: boolean;
 	totalBytes: number;
