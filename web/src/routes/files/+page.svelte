@@ -170,6 +170,19 @@
 		selected = checked ? [...selected, name] : selected.filter((other) => other !== name);
 	}
 
+	// A click on the row opens a folder or toggles the selection of a file.
+	// Clicks and keys aimed at the checkbox or the folder button inside the
+	// row are left to those controls.
+	function rowClicked(entry: FileEntry, event: MouseEvent | KeyboardEvent) {
+		if (event.target instanceof Element && event.target !== event.currentTarget && event.target.closest('input, button')) return;
+		if (event instanceof KeyboardEvent) {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+		}
+		if (entry.dir) open(rootId, join(dir, entry.name));
+		else toggle(entry.name, !selected.includes(entry.name));
+	}
+
 	function download() {
 		if (!entries || selected.length === 0) return;
 		const single = selected.length === 1 ? entries.find((entry) => entry.name === selected[0]) : undefined;
@@ -381,7 +394,7 @@
 				<span class="num">{t('files.modified')}</span>
 			</div>
 			{#each entries ?? [] as entry (entry.name)}
-				<div class="row" class:picked={selected.includes(entry.name)} onclick={rowClicked(entry)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') rowClicked(entry); }} role="button" tabindex="0" aria-label={entry.dir ? t('files.openFolder', { name: entry.name }) : t('files.selectFile', { name: entry.name })}>
+				<div class="row" class:picked={selected.includes(entry.name)} onclick={(event) => rowClicked(entry, event)} onkeydown={(event) => rowClicked(entry, event)} role="button" tabindex="0" aria-label={entry.dir ? t('files.openFolder', { name: entry.name }) : t('files.selectFile', { name: entry.name })}>
 					<input type="checkbox" aria-label={t('files.select', { name: entry.name })} checked={selected.includes(entry.name)} onchange={(event) => toggle(entry.name, event.currentTarget.checked)} />
 					{#if entry.dir}
 						<button type="button" class="entry" onclick={() => open(rootId, join(dir, entry.name))}><Icon name="folder" size={16} /><span>{entry.name}</span></button>
