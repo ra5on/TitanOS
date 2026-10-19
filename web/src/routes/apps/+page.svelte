@@ -1,6 +1,8 @@
 <script lang="ts">
  import AppIcon from '#lib/components/AppIcon.svelte';
 	import { api, ApiError, type AppSource, type AppStore, type CatalogApp, type DockerStatus, type Share } from '#lib/api.ts';
+ import EmptyState from '#lib/components/EmptyState.svelte';
+ import PageHead from '#lib/components/PageHead.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import InstallPanel from './InstallPanel.svelte';
@@ -93,16 +95,13 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('apps.title')}</h1>
-		{#if store}<p class="muted">{t(sources.length === 1 ? 'apps.summaryOne' : 'apps.summary', { apps: apps.length, sources: sources.length })}</p>{/if}
-	</div>
-	<div class="buttons">
+<PageHead title={t('apps.title')}>
+	{#if store}<p class="muted">{t(sources.length === 1 ? 'apps.summaryOne' : 'apps.summary', { apps: apps.length, sources: sources.length })}</p>{/if}
+	{#snippet actions()}
 		<button type="button" class="btn" aria-expanded={sourcesOpen} onclick={() => (sourcesOpen = !sourcesOpen)}>{t('apps.sources')}</button>
 		<a class="btn" href="/docker#import">{t('apps.import')}</a>
-	</div>
-</div>
+	{/snippet}
+</PageHead>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if store && sources[0]?.builtin && sources[0].count === 0}
@@ -197,7 +196,7 @@
 					</button>
 				{/each}
 			</div>
-			{#if visible.length === 0}<p class="none muted">{t('apps.none')}</p>{/if}
+			{#if visible.length === 0}<EmptyState inline title={t('apps.none')} />{/if}
 		</div>
 
 		{#if selected}
@@ -209,30 +208,6 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.title p {
-		font-size: 0.875rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
-	.buttons {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px;
-	}
 	.sources {
 		overflow: hidden;
 	}
@@ -463,12 +438,5 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.none {
-		padding: 32px;
-		border: 1px dashed var(--border);
-		border-radius: var(--radius-tile);
-		font-size: 0.875rem;
-		text-align: center;
 	}
 </style>

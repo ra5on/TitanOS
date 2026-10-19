@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { appearance, saveAppearance } from '#lib/theme/appearance.svelte.ts';
@@ -122,18 +123,14 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<p class="muted crumb">{t('appearance.breadcrumb')}</p>
-		<h1>{t('appearance.title')}</h1>
-		<p class="muted">{t('appearance.intro')}</p>
-	</div>
-	<div class="buttons">
+<PageHead title={t('appearance.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('appearance.intro')}</p>
+	{#snippet actions()}
 		<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
 		<button type="button" class="btn" onclick={() => themeFile.click()}>{t('appearance.import')}</button>
 		<input bind:this={themeFile} type="file" accept="application/json,.json" hidden onchange={importTheme} />
-	</div>
-</div>
+	{/snippet}
+</PageHead>
 
 <div class="columns">
 	<div class="editor">
@@ -259,31 +256,6 @@
 </div>
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
-	}
-	.crumb {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
-	.buttons {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
 	.columns {
 		display: flex;
 		flex-wrap: wrap;
@@ -368,20 +340,20 @@
 		gap: 4px;
 		padding: 6px;
 		border: 1px solid;
-		border-radius: 6px;
+		border-radius: var(--radius-small);
 	}
 	.swatch span {
 		flex: 1 1 0;
 		display: flex;
 		align-items: flex-end;
 		padding: 3px;
-		border-radius: 3px;
+		border-radius: var(--radius-bar);
 	}
 	.swatch i {
 		display: block;
 		width: 70%;
 		height: 3px;
-		border-radius: 2px;
+		border-radius: var(--radius-bar);
 		background: var(--accent);
 	}
 

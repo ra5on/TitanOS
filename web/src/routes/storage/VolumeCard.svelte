@@ -170,14 +170,14 @@
 	.track {
 		height: 8px;
 		background: var(--warn-border);
-		border-radius: 4px;
+		border-radius: var(--radius-bar);
 		overflow: hidden;
 	}
 	.track span {
 		display: block;
 		height: 100%;
 		background: var(--status-warn);
-		border-radius: 4px;
+		border-radius: var(--radius-bar);
 	}
 	.block {
 		display: flex;
@@ -217,7 +217,7 @@
 		padding: 2px;
 		background: transparent;
 		border: 0;
-		border-radius: 4px;
+		border-radius: var(--radius-small);
 		color: var(--muted);
 		cursor: pointer;
 	}

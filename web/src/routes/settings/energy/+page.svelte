@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	type Settings = { governor: string; preference: string; platform: string };
 	type Control = { key: keyof Settings; choices: string[]; current: string; mixed: boolean };
@@ -21,8 +22,9 @@
 	}
 </script>
 
-<h1>{t('energy.title')}</h1>
-<p class="muted">{t('energy.intro')}</p>
+<PageHead title={t('energy.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('energy.intro')}</p>
+</PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if status}
 	{#if status.error}<p class="notice-warn" role="status">{t('energy.startupError')} {status.error}</p>{/if}
@@ -51,7 +53,6 @@
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 
 <style>
-	h1 { font-size: var(--text-page); font-weight: 600; }
 	form { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 	.tile { width: 100%; max-width: 640px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 10px; }
 	label { font-weight: 600; }

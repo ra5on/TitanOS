@@ -70,7 +70,7 @@
   <details><summary>{t('tailscale.firewall')}</summary><p class="muted">{t('tailscale.firewallHint')}</p></details>
  {/if}
 </section>
-{#if loggingOut}<Dialog title={t('tailscale.logout')} onclose={() => loggingOut = false}><p>{t('tailscale.logoutHint')}</p><div class="actions"><button class="btn" onclick={() => loggingOut = false}>{t('common.cancel')}</button><button class="btn btn-danger" disabled={busy} onclick={() => action('logout')}>{t('tailscale.logout')}</button></div></Dialog>{/if}
+{#if loggingOut}<Dialog title={t('tailscale.logout')} onclose={() => loggingOut = false}><p>{t('tailscale.logoutHint')}</p><div class="dialog-actions"><button type="button" class="btn" onclick={() => loggingOut = false}>{t('common.cancel')}</button><button type="button" class="btn btn-danger" disabled={busy} onclick={() => action('logout')}>{t('tailscale.logout')}</button></div></Dialog>{/if}
 <style>
  .tailnet, fieldset { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
  .tailnet { border-top: 1px solid var(--border); padding-top: 20px; }

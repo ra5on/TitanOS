@@ -1,4 +1,6 @@
 <script lang="ts">
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, type DockerView, type DockerWidth } from '#lib/docker-layout.ts';
 	import Icon from '#lib/components/Icon.svelte';
@@ -190,22 +192,19 @@
 	const enable = () => run(() => api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }));
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('docker.title')}</h1>
-		{#if status?.running}
-			<p class="muted summary">
-				<span><span class="dot ok" aria-hidden="true"></span>{t('docker.running', { count: runCount })}</span>
-				<span><span class="dot" aria-hidden="true"></span>{t('docker.stopped', { count: containers.length - runCount })}</span>
-				<span class="mono">{totals}</span>
-				<span>{t('docker.version', { version: status.version })}</span>
-				<span>{checked}</span>
-				<button type="button" class="link" onclick={() => run(async () => (status = await api.post<DockerStatus>('/docker/updates/check')))} disabled={busy}>{t('docker.checkUpdates')}</button>
-			</p>
-		{/if}
-	</div>
-	{#if status?.settings.enabled}
-		<div class="buttons">
+<PageHead title={t('docker.title')}>
+	{#if status?.running}
+		<p class="muted summary">
+			<span><span class="dot ok" aria-hidden="true"></span>{t('docker.running', { count: runCount })}</span>
+			<span><span class="dot" aria-hidden="true"></span>{t('docker.stopped', { count: containers.length - runCount })}</span>
+			<span class="mono">{totals}</span>
+			<span>{t('docker.version', { version: status.version })}</span>
+			<span>{checked}</span>
+			<button type="button" class="link" onclick={() => run(async () => (status = await api.post<DockerStatus>('/docker/updates/check')))} disabled={busy}>{t('docker.checkUpdates')}</button>
+		</p>
+	{/if}
+	{#snippet actions()}
+		{#if status?.settings.enabled}
 			<button type="button" class="btn" onclick={startEditing} disabled={editing || !status.running || containers.length === 0}><Icon name="edit" />{t('docker.layout.edit')}</button>
 			<button type="button" class="btn" onclick={() => open('settings')}>{t('docker.settings')}</button>
 			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}>{t('docker.import')}</button>
@@ -213,9 +212,9 @@
 				<button type="button" class="btn" onclick={() => run(() => api.post('/docker/updates/apply'))} disabled={busy}>{t('docker.updateAll')}</button>
 			{/if}
 			<a class="btn btn-primary" href="/apps">{t('docker.installApp')}</a>
-		</div>
-	{/if}
-</div>
+		{/if}
+	{/snippet}
+</PageHead>
 
 {#if error}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
@@ -339,7 +338,7 @@
 		{/each}
 	</div>
 	{#if containers.length === 0 && jobs.length === 0 && idleApps.length === 0}
-		<p class="tile empty">{t('docker.empty')}</p>
+		<EmptyState title={t('docker.empty')} />
 	{:else if visible.length === 0 && containers.length > 0}
 		<p class="muted">{t('docker.noMatch')}</p>
 	{/if}
@@ -422,22 +421,6 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.summary {
 		display: flex;
 		flex-wrap: wrap;
@@ -584,10 +567,6 @@
 		gap: 10px;
 		font-size: 1rem;
 		font-weight: 600;
-	}
-	.empty {
-		padding: 28px 22px;
-		font-size: 0.875rem;
 	}
 	form {
 		display: flex;

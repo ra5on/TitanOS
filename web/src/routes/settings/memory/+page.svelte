@@ -1,5 +1,6 @@
 <script lang="ts">
  import { api, ApiError, type SystemInfo } from '#lib/api.ts';
+ import PageHead from '#lib/components/PageHead.svelte';
  import { formatBytes } from '#lib/format.ts';
  import { t, errorText } from '#lib/i18n/index.svelte.ts';
  type Status = { settings: { cachePercent: number }; readOnly: boolean; budgetBytes: number; reserveBytes: number; inFlightBytes: number; memory: SystemInfo['memory']; paused: boolean; error?: string };
@@ -18,8 +19,9 @@
   catch (err) { fail(err); } finally { busy = false; }
  }
 </script>
-<h1>{t('memoryPolicy.title')}</h1>
-<p class="muted">{t('memoryPolicy.intro')}</p>
+<PageHead title={t('memoryPolicy.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('memoryPolicy.intro')}</p>
+</PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if status}
  {#if status.error}<p class="notice-warn" role="status">{status.error}</p>{/if}
@@ -43,7 +45,6 @@
  </form>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 <style>
- h1 { font-size: var(--text-page); font-weight: 600; }
  .tile { max-width: 680px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 14px; }
  label { font-weight: 600; }
  p, dl { margin: 0; }

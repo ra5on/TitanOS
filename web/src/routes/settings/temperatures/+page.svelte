@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -30,7 +31,9 @@
 	}
 </script>
 
-<div class="heading"><a href="/settings">{t('settings.title')}</a><h1>{t('temperatures.title')}</h1><p class="muted">{t('temperatures.description')}</p></div>
+<PageHead title={t('temperatures.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('temperatures.description')}</p>
+</PageHead>
 <section class="tile options">
 	<label class="check"><input type="checkbox" bind:checked={show} disabled={saving} onchange={() => saved = false} /><strong>{t('temperatures.show')}</strong></label>
 	<p class="muted">{t('temperatures.perAccount')}</p>
@@ -56,8 +59,6 @@
 </section>
 
 <style>
-	.heading { display: flex; flex-direction: column; gap: 8px; }
-	h1 { font-size: var(--text-page); font-weight: 600; }
 	.options { padding: var(--tile-pad); display: flex; flex-direction: column; gap: 16px; }
 	p { margin: 0; font-size: 0.875rem; }
 	.check, .sensor, .actions { display: flex; align-items: center; gap: 12px; }

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import NvidiaPower from './NvidiaPower.svelte';
 	import { api, ApiError, type Hardware } from '#lib/api.ts';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 
 	let data = $state<Hardware | null>(null);
@@ -16,11 +18,9 @@
 	const users = (id: string) => data?.usedBy[id] ?? [];
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('hardware.title')}</p>
-	<h1>{t('hardware.title')}</h1>
-	<p class="muted intro">{t('hardware.intro')}</p>
-</div>
+<PageHead title={t('hardware.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('hardware.intro')}</p>
+</PageHead>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
@@ -53,7 +53,7 @@
 				</div>
 			</div>
 		{:else}
-			<p class="muted none">{t('hardware.nonePci')}</p>
+			<EmptyState inline title={t('hardware.nonePci')} />
 		{/each}
 	</section>
 
@@ -79,26 +79,13 @@
 				</div>
 			</div>
 		{:else}
-			<p class="muted none">{t('hardware.noneUsb')}</p>
+			<EmptyState inline title={t('hardware.noneUsb')} />
 		{/each}
 	</section>
 	<p class="muted hint">{t('hardware.how')}</p>
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
-	.intro,
 	.hint {
 		max-width: 60rem;
 		font-size: 0.875rem;
@@ -145,10 +132,5 @@
 	.use {
 		flex: 1 1 260px;
 		font-size: 0.8125rem;
-	}
-	.none {
-		padding: 14px 18px;
-		border-top: 1px solid var(--panel-border);
-		font-size: 0.875rem;
 	}
 </style>

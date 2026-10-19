@@ -4,6 +4,7 @@
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Hardware, type Share, type VM, type VMHost, type VMStatus } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -276,10 +277,11 @@
 	}
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/vms">{t('vms.title')}</a> › {existing ? vmLabel(existing) : t('vms.new.crumb')}</p>
-	<h1>{existing ? t('vms.dialog.edit', { name: vmLabel(existing) }) : t('vms.new.title')}</h1>
-</div>
+<PageHead
+	title={existing ? t('vms.dialog.edit', { name: vmLabel(existing) }) : t('vms.new.title')}
+	parent={{ href: '/vms', label: t('vms.title') }}
+	crumb={existing ? vmLabel(existing) : t('vms.new.crumb')}
+/>
 
 {#if status && !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
 {#if storage.status && volumes.length === 0}<p class="notice-warn" role="status">{t('vms.new.needVolume')}</p>{/if}
@@ -596,18 +598,6 @@
 </div>
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.layout {
 		display: flex;
 		flex-wrap: wrap;
