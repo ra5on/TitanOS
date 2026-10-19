@@ -171,14 +171,10 @@
 	}
 
 	// A click on the row opens a folder or toggles the selection of a file.
-	// Clicks and keys aimed at the checkbox or the folder button inside the
-	// row are left to those controls.
-	function rowClicked(entry: FileEntry, event: MouseEvent | KeyboardEvent) {
-		if (event.target instanceof Element && event.target !== event.currentTarget && event.target.closest('input, button')) return;
-		if (event instanceof KeyboardEvent) {
-			if (event.key !== 'Enter' && event.key !== ' ') return;
-			event.preventDefault();
-		}
+	// Clicks on the checkbox or the folder button inside the row are left to
+	// those controls.
+	function rowClicked(entry: FileEntry, event: MouseEvent) {
+		if (event.target instanceof Element && event.target.closest('input, button')) return;
 		if (entry.dir) open(rootId, join(dir, entry.name));
 		else toggle(entry.name, !selected.includes(entry.name));
 	}
@@ -394,7 +390,11 @@
 				<span class="num">{t('files.modified')}</span>
 			</div>
 			{#each entries ?? [] as entry (entry.name)}
-				<div class="row" class:picked={selected.includes(entry.name)} onclick={(event) => rowClicked(entry, event)} onkeydown={(event) => rowClicked(entry, event)} role="button" tabindex="0" aria-label={entry.dir ? t('files.openFolder', { name: entry.name }) : t('files.selectFile', { name: entry.name })}>
+				<!-- The whole row is a larger target for the mouse. Keyboards and screen
+				     readers use the checkbox and the folder button inside it, so the row
+				     itself is no control: one nested in another is announced badly. -->
+				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+				<div class="row" class:picked={selected.includes(entry.name)} onclick={(event) => rowClicked(entry, event)}>
 					<input type="checkbox" aria-label={t('files.select', { name: entry.name })} checked={selected.includes(entry.name)} onchange={(event) => toggle(entry.name, event.currentTarget.checked)} />
 					{#if entry.dir}
 						<button type="button" class="entry" onclick={() => open(rootId, join(dir, entry.name))}><Icon name="folder" size={16} /><span>{entry.name}</span></button>
