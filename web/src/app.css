@@ -19,6 +19,11 @@
 	--chip: #1e252c;
 	--accent: #6cb6ff;
 	--on-accent: #0b1622;
+	/* A VM's screen stays dark in every theme: the guest's picture decides
+	   its colors, and light bars around it would glare. */
+	--screen-bg: #050607;
+	--screen-chip: rgba(5, 6, 7, 0.7);
+	--screen-muted: #9aa3ad;
 
 	--surface-alpha: 0.55;
 	--glass-blur: 18px;

@@ -9,6 +9,7 @@
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
 	let running = $state<boolean | null>(null);
 	let displayName = $state('');
+	let resizable = $state(false);
 	let error = $state('');
 	let mode = $state<ScaleMode>('scale');
 	let screen = $state<VncScreen>();
@@ -26,6 +27,8 @@
 				const vm = res.vms.find((vm) => vm.name === vmName);
 				running = vm?.state === 'running';
 				displayName = vm ? vmLabel(vm) : vmName;
+				resizable = vm?.template === 'linux';
+				if (!resizable && mode === 'remote') mode = 'scale';
 				error = vm ? '' : errorText('vm_not_found');
 			} catch (err) {
 				if (!disposed) error = errorText(err instanceof ApiError ? err.code : 'internal');
@@ -42,7 +45,7 @@
 <div class="window">
 	<div class="frame">
 		{#if running}
-			{#key name}<VncScreen bind:this={screen} vm={name} {mode} />{/key}
+			{#key name}<VncScreen bind:this={screen} vm={name} {mode} {resizable} />{/key}
 		{:else if error}
 			<p class="muted off" role="alert">{error}</p>
 		{:else if running === null}
@@ -56,7 +59,7 @@
 		<span class="grow"></span>
 		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}>{t('vms.ctrlAltDel')}</button>
 		{#each MODES as entry (entry)}
-			<button type="button" aria-pressed={mode === entry} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
+			<button type="button" aria-pressed={mode === entry} disabled={entry === 'remote' && !resizable} title={t(entry === 'remote' && !resizable ? 'vms.mode.remote.unsupported' : `vms.mode.${entry}.hint`)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
 		{/each}
 	</div>
 </div>
