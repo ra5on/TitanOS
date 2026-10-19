@@ -446,7 +446,7 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 **VMs: Konsole**
 - Seite „VMs“: Liste der VMs links (Status, vCPU/RAM), rechts die gewählte VM mit Starten/Herunterfahren/Neustarten/Ausschalten erzwingen und Bearbeiten.
 - Ansicht **Bildschirm (VNC)** per noVNC über WebSocket-Proxy in titand (kein offener VNC-Port im LAN): Strg+Alt+Entf senden, Zwischenablage, Screenshot, in eigenem Fenster öffnen. Hinweis: Klick fängt Maus/Tastatur, Strg+Alt gibt frei.
-- Konsolenfenster frei in der Größe ziehbar (Ecke unten rechts); die Anzeige passt sich live an. Drei Anzeigemodi:
+- Konsolenfenster mit Größenknöpfen Klein/Mittel/Groß (50/75/100 %) und Breitenregler (40–100 %); Höhe folgt 16:9. Auswahl pro Konto in `/config/users/<name>/vnc.json`, im RAM gehalten und nur nach abgeschlossener Änderung gespeichert. Drei Anzeigemodi:
   - **Skalieren:** Bild ins Fenster einpassen, Seitenverhältnis bleibt (schwarze Ränder).
   - **Auflösung anpassen:** Die VM übernimmt die Fenstergröße als Auflösung (noVNC Remote-Resize; braucht passende Unterstützung in QEMU und im Gast, z. B. virtio-gpu mit Gastagent – vorab prüfen). Fallback: Skalieren.
   - **100 %:** pixelgenau, mit Scrollen.
