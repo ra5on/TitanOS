@@ -455,3 +455,22 @@ func TestEngineDoesNotReportReadyBeforeDataRootApplied(t *testing.T) {
 		t.Fatal("applied engine should be ready")
 	}
 }
+
+func TestDismissJob(t *testing.T) {
+	m := &Manager{jobs: map[string]*Job{
+		"failed":  {State: "failed", Output: "unauthorized"},
+		"running": {State: "running"},
+	}}
+	if err := m.DismissJob("failed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.jobs["failed"]; ok {
+		t.Error("failed job still there")
+	}
+	if err := m.DismissJob("running"); !errors.Is(err, ErrBusy) {
+		t.Errorf("running job: %v, want ErrBusy", err)
+	}
+	if err := m.DismissJob("unknown"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown job: %v, want ErrNotFound", err)
+	}
+}

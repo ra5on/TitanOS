@@ -216,6 +216,22 @@ func (m *Manager) begin(name string) (*Job, string, error) {
 	return job, settings.Volume, nil
 }
 
+// DismissJob forgets a failed setup, so its message goes away. A running
+// setup stays; a finished one is forgotten anyway.
+func (m *Manager) DismissJob(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	job := m.jobs[name]
+	if job == nil {
+		return ErrNotFound
+	}
+	if job.State == "running" {
+		return ErrBusy
+	}
+	delete(m.jobs, name)
+	return nil
+}
+
 // UpdateApp pulls the newest images of an app and recreates its containers.
 func (m *Manager) UpdateApp(ctx context.Context, name string) error {
 	job, volume, err := m.begin(name)
