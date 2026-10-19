@@ -636,7 +636,11 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	return nil
 }
 
-func freeBytes(path string) (int64, error) {
+// freeBytes is a variable so that tests do not depend on the free space of
+// the machine they run on.
+var freeBytes = statfsFree
+
+func statfsFree(path string) (int64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err

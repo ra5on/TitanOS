@@ -530,3 +530,70 @@ func TestDevelopmentModeRunsNothing(t *testing.T) {
 		t.Errorf("restic was called: %s", e.calls())
 	}
 }
+
+func TestOverdue(t *testing.T) {
+	at := func(text string) *time.Time {
+		parsed, err := time.ParseInLocation("2006-01-02 15:04", text, time.Local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &parsed
+	}
+	ok := func(text string) State {
+		return State{LastRun: at("2026-10-19 02:30"), LastOK: at(text), LastError: "unreachable"}
+	}
+	daily := Job{Enabled: true, Every: "daily", Time: "02:30"}
+	hourly := Job{Enabled: true, Every: "hourly", Interval: 1, Time: "00:15"}
+	weekly := Job{Enabled: true, Every: "weekly", Weekday: 0, Time: "04:00"} // Sundays
+	monthly := Job{Enabled: true, Every: "monthly", MonthDay: 1, Time: "03:00"}
+	cases := []struct {
+		name  string
+		job   Job
+		state State
+		now   string
+		want  bool
+	}{
+		{"never tried", daily, State{}, "2026-10-19 12:00", false},
+		{"daily, one run missed", daily, ok("2026-10-18 02:31"), "2026-10-19 12:00", false},
+		{"daily, two runs missed but not two days", daily, ok("2026-10-17 02:31"), "2026-10-19 02:30", false},
+		{"daily, two runs and two days", daily, ok("2026-10-17 02:31"), "2026-10-19 02:31", true},
+		{"hourly, failing for a day", hourly, ok("2026-10-18 13:00"), "2026-10-19 12:00", false},
+		{"hourly, failing for two days", hourly, ok("2026-10-17 11:00"), "2026-10-19 12:00", true},
+		{"weekly, one Sunday missed", weekly, ok("2026-10-11 04:01"), "2026-10-19 12:00", false},
+		{"weekly, two Sundays missed", weekly, ok("2026-10-04 04:01"), "2026-10-19 12:00", true},
+		{"monthly, one month missed", monthly, ok("2026-09-01 03:01"), "2026-10-19 12:00", false},
+		{"monthly, not worked for a year", monthly, ok("2025-09-01 03:01"), "2026-10-19 12:00", true},
+		{"failed from the start", daily, State{LastRun: at("2026-10-16 02:30"), LastError: "x"}, "2026-10-19 12:00", true},
+		{"switched off", Job{Every: "daily", Time: "02:30"}, ok("2026-10-01 02:31"), "2026-10-19 12:00", false},
+		{"running", daily, State{Running: true, LastOK: at("2026-10-01 02:31")}, "2026-10-19 12:00", false},
+	}
+	for _, tc := range cases {
+		if got := overdue(tc.job, tc.state, *at(tc.now)); got != tc.want {
+			t.Errorf("%s: overdue = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The warning comes once, keeps quiet while a run is going, and comes again
+// only after a backup worked in between.
+func TestOverdueWarnsOnce(t *testing.T) {
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.Local)
+	m := &Manager{now: func() time.Time { return now }, states: map[string]*State{}}
+	var warned []string
+	m.OnOverdue = func(job string) { warned = append(warned, job) }
+	job := Job{ID: "fotos", Enabled: true, Every: "daily", Time: "02:30"}
+	old, recent := now.Add(-5*24*time.Hour), now.Add(-time.Hour)
+	late := State{LastRun: &recent, LastOK: &old, LastError: "unreachable"}
+	m.checkOverdue(job, late)
+	m.checkOverdue(job, late)
+	m.checkOverdue(job, State{Running: true, LastOK: &old})
+	m.checkOverdue(job, late)
+	if len(warned) != 1 {
+		t.Fatalf("warned %d times, want once", len(warned))
+	}
+	m.checkOverdue(job, State{LastRun: &recent, LastOK: &recent})
+	m.checkOverdue(job, late)
+	if len(warned) != 2 {
+		t.Fatalf("no new warning after a backup worked in between: %v", warned)
+	}
+}

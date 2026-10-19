@@ -30,6 +30,9 @@ const (
 	// lookBack reaches back over the longest gap between two runs.
 	lookBack  = 35 * 24 * time.Hour
 	lookAhead = 62 * 24 * time.Hour
+	// overdueAfter is the least time without a backup that is worth a
+	// warning, however often a job is meant to run.
+	overdueAfter = 48 * time.Hour
 )
 
 // times returns the times of day a job runs at, in order.
@@ -189,4 +192,24 @@ func due(job Job, state State, now time.Time) bool {
 	}
 	// A target that was not there is tried again until it works.
 	return state.LastError != "" && now.Sub(*state.LastRun) >= retryAfter && (state.LastOK == nil || state.LastOK.Before(slot))
+}
+
+// overdue reports whether a job has gone without a backup that worked for at
+// least two of its scheduled moments and at least overdueAfter. A job that has
+// never been tried is not overdue: it starts right away.
+func overdue(job Job, state State, now time.Time) bool {
+	since := state.LastOK
+	if since == nil {
+		since = state.LastRun
+	}
+	if !job.Enabled || state.Running || since == nil || now.Sub(*since) < overdueAfter {
+		return false
+	}
+	// Every schedule has a moment within lookBack; further back there are
+	// more than two anyway.
+	from := since.Add(time.Second)
+	if from.Before(now.Add(-2 * lookBack)) {
+		return true
+	}
+	return len(job.slots(from, now)) >= 2
 }

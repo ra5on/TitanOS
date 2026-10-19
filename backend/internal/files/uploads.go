@@ -198,6 +198,7 @@ func (m *Manager) StartUpload(root Root, dir, name string, size int64, conflict,
 		return UploadStatus{}, mapError(err)
 	}
 	m.uploads[id] = u
+	m.noteUpload(root, id, part)
 	return u.status(), nil
 }
 func (m *Manager) prune() {
@@ -208,6 +209,7 @@ func (m *Manager) prune() {
 				_ = r.Remove(u.part + ".json")
 				r.Close()
 			}
+			m.forgetUpload(u.root, id)
 			delete(m.uploads, id)
 		}
 	}
@@ -350,6 +352,7 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	}
 	m.own(r, u.name, u.uid, false)
 	_ = r.Remove(u.part + ".json")
+	m.forgetUpload(u.root, u.id)
 	// Persist the directory entry as well as the file data.
 	parent, err := r.Open(path.Dir(u.name))
 	if err == nil {
@@ -380,6 +383,7 @@ func (m *Manager) AbortUpload(id, user string) error {
 	if err = r.Remove(u.part + ".json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return mapError(err)
 	}
+	m.forgetUpload(u.root, u.id)
 	done = true
 	return nil
 }

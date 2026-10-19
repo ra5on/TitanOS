@@ -366,6 +366,9 @@ func run(opts options) error {
 			notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	backups.OnOverdue = func(job string) {
+		notifier.Notify(notify.Warning, "backup_overdue", job)
+	}
 	if err := backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
@@ -436,6 +439,9 @@ func run(opts options) error {
 	fileManager.Protected = machines.ProtectFile
 	fileManager.Acquire = memoryPolicy.Acquire
 	fileManager.Available = func(root files.Root) bool { return fileRootAvailable(root, volumes.Mounted(), drives.Mounted()) }
+	if !opts.dev {
+		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
+	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
