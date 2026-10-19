@@ -471,6 +471,8 @@
 	"files.selected": "{count} ausgewählt",
 	"files.selectAll": "Alle auswählen",
 	"files.select": "{name} auswählen",
+	"files.openFolder": "Ordner {name} öffnen",
+	"files.selectFile": "{name} auswählen",
 	"files.download": "Herunterladen",
 	"files.rename": "Umbenennen",
 	"files.delete": "Löschen",
