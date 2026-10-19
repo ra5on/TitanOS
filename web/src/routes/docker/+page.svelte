@@ -60,7 +60,7 @@
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
 		| { kind: 'remove'; container: DockerContainer }
-		| { kind: 'removeApp'; app: string }
+		| { kind: 'removeApp'; app: string; purge: boolean; typed: string }
 		| null
 	>(null);
 	let draft = $state({ name: '', compose: '', enabled: true, volume: '' });
@@ -144,12 +144,16 @@
 
 	function remove(container: DockerContainer) {
 		dialog = null;
-		run(() => api.delete(container.managed ? `/docker/apps/${container.app}` : `/docker/containers/${container.id}`));
+		run(() => api.delete(`/docker/containers/${container.id}`));
 	}
 
-	function removeApp(app: string) {
+	function askRemoveApp(app: string) {
+		dialog = { kind: 'removeApp', app, purge: false, typed: '' };
+	}
+
+	function removeApp(app: string, purge: boolean) {
 		dialog = null;
-		run(() => api.delete(`/docker/apps/${app}`));
+		run(() => api.delete(`/docker/apps/${app}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`));
 	}
 
 	function open(kind: 'import' | 'settings') {
@@ -247,7 +251,7 @@
 				<div class="buttons job-actions">
 					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('common.retry')}</button>
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-					<button type="button" class="btn" disabled={busy} onclick={() => (dialog = { kind: 'removeApp', app })}>{t('docker.remove')}</button>
+					<button type="button" class="btn" disabled={busy} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
 					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.delete(`/docker/apps/${app}/job`))}>{t('docker.jobDismiss')}</button>
 				</div>
 			{/if}
@@ -260,7 +264,7 @@
 			<div class="buttons job-actions">
 				<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('docker.appStart')}</button>
 				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-				<button type="button" class="btn" disabled={busy} onclick={() => (dialog = { kind: 'removeApp', app })}>{t('docker.remove')}</button>
+				<button type="button" class="btn" disabled={busy} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
 			</div>
 		</div>
 	{/each}
@@ -344,7 +348,7 @@
 {#snippet card(container: DockerContainer, compact: boolean)}
 	<ContainerCard {container} {host} {tailscaleHost} {busy} {compact} view={layout.view} details={layout.details}
 		onaction={(action) => run(() => api.post(`/docker/containers/${container.id}/${action}`))}
-		onlogs={() => showLogs(container)} onremove={() => (dialog = { kind: 'remove', container })}
+		onlogs={() => showLogs(container)} onremove={() => (container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container }))}
 		onconsole={() => addContainerConsole(container.id, dockerName(container, 'distinct'))}
 		onupdate={() => run(() => api.post(`/docker/apps/${container.app}/update`))} />
 {/snippet}
@@ -360,12 +364,8 @@
 	</Dialog>
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
-	<Dialog title={t('docker.removeTitle', { name: container.managed ? container.app : container.name })} onclose={() => (dialog = null)}>
-		<p class="text">
-			{container.managed
-				? t('docker.removeApp', { app: container.app, path: `/mnt/${status?.settings.volume}/appdata/${container.app}` })
-				: t('docker.removeContainer')}
-		</p>
+	<Dialog title={t('docker.removeTitle', { name: container.name })} onclose={() => (dialog = null)}>
+		<p class="text">{t('docker.removeContainer')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-warn" onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
@@ -374,10 +374,19 @@
 {:else if dialog?.kind === 'removeApp'}
 	{@const app = dialog.app}
 	<Dialog title={t('docker.removeTitle', { name: app })} onclose={() => (dialog = null)}>
-		<p class="text">{t('docker.removeApp', { app, path: `/mnt/${status?.settings.volume}/appdata/${app}` })}</p>
+		{@const path = `/mnt/${status?.settings.volume}/appdata/${app}`}
+		<p class="text">{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}</p>
+		<label class="check"><input type="checkbox" bind:checked={dialog.purge} /><span>{t('docker.removeData', { path })}</span></label>
+		{#if dialog.purge}
+			<p class="notice-error">{t('docker.removeDataWarning')}</p>
+			<label class="confirm-name"><span>{t('docker.removeDataConfirm', { app })}</span>
+				<input class="field mono" type="text" bind:value={dialog.typed} autocomplete="off" autocapitalize="none" spellcheck="false" />
+			</label>
+		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={() => removeApp(app)}>{t('docker.removeSubmit')}</button>
+			<button type="button" class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}" disabled={dialog.purge && dialog.typed !== app}
+				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {:else if dialog}
@@ -447,6 +456,13 @@
 	}
 	.job-actions {
 		margin-top: 10px;
+	}
+	.confirm-name {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: 12px;
+		font-size: 0.875rem;
 	}
 	.link {
 		padding: 0;

@@ -297,8 +297,10 @@ func (m *Manager) Compose(name string) (string, error) {
 }
 
 // RemoveApp stops and removes the containers of an app and forgets its
-// compose file. The app's data folder on the volume stays.
-func (m *Manager) RemoveApp(ctx context.Context, name string) error {
+// compose file. The app's data folder on the volume stays, unless purge is
+// set: then its folder, its named volumes and, where no other container
+// uses them, its images go too, so that installing it again starts afresh.
+func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -315,7 +317,24 @@ func (m *Manager) RemoveApp(ctx context.Context, name string) error {
 		return ErrBusy
 	}
 	if running {
-		if _, err := m.runner.Run(ctx, "", "docker", m.compose(settings.Volume, name, "down", "--remove-orphans")...); err != nil {
+		down := []string{"down", "--remove-orphans"}
+		if purge {
+			down = append(down, "--volumes")
+		}
+		if out, err := m.runner.Run(ctx, "", "docker", m.compose(settings.Volume, name, down...)...); err != nil {
+			slog.Error("app removal failed", "app", name, "output", tail(out, 2000))
+			return err
+		}
+		if purge {
+			// Separately and without failing: an image another app uses
+			// stays, and Compose would give up on the first one.
+			if out, err := m.runner.Run(ctx, "", "docker", m.compose(settings.Volume, name, "down", "--rmi", "all")...); err != nil {
+				slog.Warn("images of a removed app kept", "app", name, "output", tail(out, 2000))
+			}
+		}
+	}
+	if purge && settings.Volume != "" {
+		if err := os.RemoveAll(m.appData(settings.Volume, name)); err != nil {
 			return err
 		}
 	}
