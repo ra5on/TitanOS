@@ -366,6 +366,9 @@ func run(opts options) error {
 			notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	backups.OnOverdue = func(job string) {
+		notifier.Notify(notify.Warning, "backup_overdue", job)
+	}
 	if err := backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}

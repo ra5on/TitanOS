@@ -185,6 +185,10 @@ type Manager struct {
 	WithUSB func(context.Context, string, func(*os.Root) error) error
 	// OnResult is told how each scheduled or started backup ended.
 	OnResult func(job string, err error)
+	// OnOverdue is told once when a job has gone without a backup that
+	// worked for too long (see overdue); again only after one worked.
+	OnOverdue func(job string)
+	overdue   map[string]bool
 
 	// queue lets one job work at a time.
 	queue sync.Mutex
@@ -1018,12 +1022,33 @@ func (m *Manager) Run(ctx context.Context) {
 			if m.stateFile(job) == "" {
 				continue
 			}
-			if due(job, m.state(job), m.now()) {
+			state := m.state(job)
+			if due(job, state, m.now()) {
 				if err := m.Start(job.ID); err != nil && !errors.Is(err, ErrRunning) {
 					slog.Warn("backup not started", "job", job.ID, "err", err)
 				}
 			}
+			m.checkOverdue(job, state)
 		}
+	}
+}
+
+// checkOverdue tells OnOverdue when a job became overdue.
+func (m *Manager) checkOverdue(job Job, state State) {
+	late := overdue(job, state, m.now())
+	m.mu.Lock()
+	if m.overdue == nil {
+		m.overdue = map[string]bool{}
+	}
+	// A running job keeps what was said: it may still fail.
+	changed := !state.Running && late != m.overdue[job.ID]
+	if changed {
+		m.overdue[job.ID] = late
+	}
+	m.mu.Unlock()
+	if changed && late && m.OnOverdue != nil {
+		slog.Warn("backup overdue", "job", job.ID)
+		m.OnOverdue(job.ID)
 	}
 }
 
