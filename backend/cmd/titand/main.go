@@ -436,6 +436,9 @@ func run(opts options) error {
 	fileManager.Protected = machines.ProtectFile
 	fileManager.Acquire = memoryPolicy.Acquire
 	fileManager.Available = func(root files.Root) bool { return fileRootAvailable(root, volumes.Mounted(), drives.Mounted()) }
+	if !opts.dev {
+		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
+	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
