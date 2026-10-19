@@ -539,7 +539,9 @@ func TestOverdue(t *testing.T) {
 		}
 		return &parsed
 	}
-	ok := func(text string) State { return State{LastRun: at("2026-10-19 02:30"), LastOK: at(text), LastError: "unreachable"} }
+	ok := func(text string) State {
+		return State{LastRun: at("2026-10-19 02:30"), LastOK: at(text), LastError: "unreachable"}
+	}
 	daily := Job{Enabled: true, Every: "daily", Time: "02:30"}
 	hourly := Job{Enabled: true, Every: "hourly", Interval: 1, Time: "00:15"}
 	weekly := Job{Enabled: true, Every: "weekly", Weekday: 0, Time: "04:00"} // Sundays
