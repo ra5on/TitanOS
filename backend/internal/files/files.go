@@ -146,6 +146,8 @@ type Manager struct {
 	GID       int
 	Available func(Root) bool
 	Acquire   func(context.Context) (int64, func(), error)
+	// MountRoot is where volumes are mounted ("/mnt" if empty).
+	MountRoot string
 	syncFile  func(*os.File) error
 
 	jobs    jobs
