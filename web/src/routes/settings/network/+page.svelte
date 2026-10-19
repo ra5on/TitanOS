@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Config = { hostname: string; ports: string[]; bondMode: string; vlan: number; bridge: boolean; dhcp: boolean; address: string; gateway: string; dns: string[] };
@@ -97,10 +98,7 @@
 	}
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('netcfg.title')}</p>
-	<h1>{t('netcfg.title')}</h1>
-</div>
+<PageHead title={t('netcfg.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -182,18 +180,6 @@
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.now {
 		display: flex;
 		flex-direction: column;

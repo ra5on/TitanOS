@@ -213,6 +213,7 @@
 		font-size: 0.875rem;
 	}
 	.working {
+		order: -2;
 		margin-right: auto;
 		align-self: center;
 		font-size: 0.8125rem;

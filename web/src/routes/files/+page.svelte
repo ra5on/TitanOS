@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { preferredFileRoot } from '#lib/file-root.ts';
 	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -280,17 +282,12 @@
 	}
 </script>
 
-<div class="head">
-	<h1>{t('files.title')}</h1>
-</div>
+<PageHead title={t('files.title')} />
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 {#if roots && roots.length === 0}
-	<div class="tile empty">
-		<p>{t('files.noRoots')}</p>
-		{#if canAdminister}<p class="muted">{t('files.noRootsAdmin')}</p>{/if}
-	</div>
+	<EmptyState title={t('files.noRoots')} text={canAdminister ? t('files.noRootsAdmin') : undefined} />
 {:else if roots}
 	<div class="layout">
 		<nav class="tile places" aria-label={t('files.shares')}>
@@ -306,7 +303,7 @@
 						</button>
 						{#if kind === 'usb'}
 							{@const device = usbDevices.find((d) => d.root === place.id)}
-							{#if device}<button type="button" class="eject" aria-label={t('files.eject')} disabled={usbBusy === device.id} onclick={() => usbAction(device, 'eject')}>{t('files.eject')}</button>{/if}
+							{#if device}<button type="button" class="eject" disabled={usbBusy === device.id} onclick={() => usbAction(device, 'eject')}>{t('files.eject')}</button>{/if}
 						{/if}
 					{/each}
 				{/if}
@@ -318,7 +315,7 @@
 						<Icon name="disk" size={16} />
 						<span class="place-name">{device.name} <span class="muted mono">{device.fsType}</span></span>
 						{#if device.supported}
-							<button type="button" class="mount" aria-label={t('files.mount')} disabled={usbBusy === device.id} onclick={() => usbAction(device, 'mount')}>{t('files.mount')}</button>
+							<button type="button" class="mount" disabled={usbBusy === device.id} onclick={() => usbAction(device, 'mount')}>{t('files.mount')}</button>
 						{:else}
 							<span class="chip">{t('files.usbUnsupported')}</span>
 						{/if}
@@ -349,23 +346,23 @@
 				<TrashView {root} user={session.data?.user?.name ?? ''} admin={canAdminister} onclose={() => { trash = false; load(); }} onchanged={() => { load(); loadRoots(); }} />
 			{:else}
 			<div class="toolbar">
-				{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" class="btn" aria-label={t('files.windowsPath')} onclick={() => windowsPath = true}>{t('files.windowsPath')}</button>{/if}
+				{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" class="btn" onclick={() => windowsPath = true}>{t('files.windowsPath')}</button>{/if}
 				<div class="crumbs mono">
-					{#if root}<button type="button" aria-label={root.name} onclick={() => open(rootId, '')}>{root.name}</button>{/if}
+					{#if root}<button type="button" onclick={() => open(rootId, '')}>{root.name}</button>{/if}
 					{#each crumbs as crumb, index (index)}
 						<span class="muted">/</span>
-						<button type="button" aria-label={crumb} onclick={() => open(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button>
+						<button type="button" onclick={() => open(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button>
 					{/each}
 				</div>
 				{#if root?.writable}
-					<button type="button" class="btn" aria-label={t('files.upload')} onclick={() => fileInput?.click()}><Icon name="upload" size={16} />{t('files.upload')}</button>
-					<button type="button" class="btn" aria-label={t('files.uploadFolder')} onclick={() => folderInput?.click()}>{t('files.uploadFolder')}</button>
-					<button type="button" class="btn" aria-label={t('files.newFolder')} onclick={() => show('mkdir')}>{t('files.newFolder')}</button>
+					<button type="button" class="btn" onclick={() => fileInput?.click()}><Icon name="upload" size={16} />{t('files.upload')}</button>
+					<button type="button" class="btn" onclick={() => folderInput?.click()}>{t('files.uploadFolder')}</button>
+					<button type="button" class="btn" onclick={() => show('mkdir')}>{t('files.newFolder')}</button>
 					<input bind:this={fileInput} type="file" multiple hidden onchange={(event) => picked(event.currentTarget)} />
 					<input bind:this={folderInput} type="file" webkitdirectory hidden onchange={(event) => picked(event.currentTarget)} />
 				{/if}
 				{#if root?.kind === 'share' && root.recycle}
-					<button type="button" class="btn" aria-label={t('files.trash')} onclick={() => { trash = true; selected = []; }}><Icon name="trash" size={16} />{t('files.trash')}</button>
+					<button type="button" class="btn" onclick={() => { trash = true; selected = []; }}><Icon name="trash" size={16} />{t('files.trash')}</button>
 				{/if}
 			</div>
 
@@ -405,21 +402,21 @@
 					<span class="num muted">{date.format(new Date(entry.modified))}</span>
 				</div>
 			{:else}
-				{#if !root}<p class="muted none">{t('files.chooseRoot')}</p>{:else if entries}<p class="muted none">{t('files.empty')}</p>{/if}
+				{#if !root}<EmptyState inline title={t('files.chooseRoot')} />{:else if entries}<EmptyState inline title={t('files.empty')} />{/if}
 			{/each}
 
 			{#if selected.length > 0}
 				<div class="actions">
 					<span class="muted count">{t('files.selected', { count: selected.length })}</span>
-					<button type="button" class="btn" aria-label={t('files.download')} onclick={download}><Icon name="download" size={16} />{t('files.download')}</button>
+					<button type="button" class="btn" onclick={download}><Icon name="download" size={16} />{t('files.download')}</button>
 					{#if root?.kind !== 'stick'}
-						<button type="button" class="btn" aria-label={t('files.copy')} onclick={() => (copying = { move: false })}>{t('files.copy')}</button>
+						<button type="button" class="btn" onclick={() => (copying = { move: false })}>{t('files.copy')}</button>
 					{/if}
-					{#if editable}<button type="button" class="btn" aria-label={t('files.edit')} onclick={() => (editing = join(dir, selected[0]))}>{t('files.edit')}</button>{/if}
+					{#if editable}<button type="button" class="btn" onclick={() => (editing = join(dir, selected[0]))}>{t('files.edit')}</button>{/if}
 					{#if root?.writable}
 						<button type="button" class="btn" onclick={() => (copying = { move: true })}>{t('files.move')}</button>
 						{#if selected.length === 1}<button type="button" class="btn" onclick={() => show('rename')}>{t('files.rename')}</button>{/if}
-						<button type="button" class="btn danger" aria-label={t('files.delete')} onclick={() => show('delete')}>{t('files.delete')}</button>
+						<button type="button" class="btn btn-danger" onclick={() => show('delete')}>{t('files.delete')}</button>
 					{/if}
 				</div>
 			{/if}
@@ -489,10 +486,6 @@
  .unfinished { padding: calc(var(--row-pad) + 2px) var(--tile-pad); border-bottom: 1px solid var(--border); }
  .unfinished-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
  .unfinished-row > span { flex: 1; overflow-wrap: anywhere; }
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.layout {
 		display: grid;
 		grid-template-columns: 230px minmax(0, 1fr);
@@ -577,7 +570,7 @@
 		padding: 4px 6px;
 		background: transparent;
 		border: 0;
-		border-radius: 6px;
+		border-radius: var(--radius-small);
 		color: var(--text);
 		font: inherit;
 		cursor: pointer;
@@ -655,9 +648,6 @@
 		margin-right: auto;
 		font-size: 0.8125rem;
 	}
-	.danger {
-		color: var(--error-text);
-	}
 	.drop {
 		display: flex;
 		align-items: center;
@@ -674,13 +664,6 @@
 		border-color: var(--accent);
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		color: var(--text);
-	}
-	.empty {
-		padding: 28px 22px;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
 	}
 	form {
 		display: flex;

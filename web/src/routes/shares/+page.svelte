@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { api, ApiError, type Account, type Share } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -83,15 +85,14 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('shares.title')}</h1>
-		{#if shares}<p class="muted">{shares.length === 1 ? t('shares.summaryOne') : t('shares.summary', { count: shares.length })}</p>{/if}
-	</div>
-	{#if canAdminister}
-		<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })} disabled={volumes.length === 0}>{t('shares.new')}</button>
-	{/if}
-</div>
+<PageHead title={t('shares.title')}>
+	{#if shares}<p class="muted">{shares.length === 1 ? t('shares.summaryOne') : t('shares.summary', { count: shares.length })}</p>{/if}
+	{#snippet actions()}
+		{#if canAdminister}
+			<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })} disabled={volumes.length === 0}>{t('shares.new')}</button>
+		{/if}
+	{/snippet}
+</PageHead>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
@@ -134,10 +135,7 @@
 		</article>
 	{:else}
 		{#if shares}
-			<div class="tile empty">
-				<p>{t('shares.empty')}</p>
-				<p class="muted">{volumes.length === 0 ? t('shares.needVolume') : t('shares.emptyHint')}</p>
-			</div>
+			<EmptyState title={t('shares.empty')} text={volumes.length === 0 ? t('shares.needVolume') : t('shares.emptyHint')} />
 		{/if}
 	{/each}
 </div>
@@ -158,23 +156,6 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.list {
 		display: flex;
 		flex-direction: column;
@@ -250,13 +231,6 @@
 	}
 	.address .btn {
 		height: 2.25rem;
-	}
-	.empty {
-		padding: 28px 22px;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
 	}
 	.text {
 		font-size: 0.875rem;

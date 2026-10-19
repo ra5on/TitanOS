@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api, ApiError, type Account, type Role } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -94,13 +95,12 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('users.title')}</h1>
-		{#if accounts}<p class="muted">{accounts.length === 1 ? t('users.summaryOne') : t('users.summary', { count: accounts.length })}</p>{/if}
-	</div>
-	<button type="button" class="btn btn-primary" onclick={openCreate}>{t('users.new')}</button>
-</div>
+<PageHead title={t('users.title')}>
+	{#if accounts}<p class="muted">{accounts.length === 1 ? t('users.summaryOne') : t('users.summary', { count: accounts.length })}</p>{/if}
+	{#snippet actions()}
+		<button type="button" class="btn btn-primary" onclick={openCreate}>{t('users.new')}</button>
+	{/snippet}
+</PageHead>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
@@ -201,23 +201,6 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.table {
 		overflow-x: auto;
 	}

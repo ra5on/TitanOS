@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
@@ -119,14 +121,13 @@
 	}
 </script>
 
-<div class="title">
-	<div class="row">
-		<h1>{t('plugins.title')}</h1>
+<PageHead title={t('plugins.title')}>
+	<p class="muted">{t('plugins.intro')} <a href="/apps">{t('nav.apps')}</a></p>
+	<p class="muted">{t('plugins.catalogIntro')}</p>
+	{#snippet actions()}
 		<button type="button" class="btn" disabled={busy || refreshing} onclick={() => refreshCatalog(true)}>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button>
-	</div>
-	<p class="muted intro">{t('plugins.intro')} <a href="/apps">{t('nav.apps')}</a></p>
-	<p class="muted intro">{t('plugins.catalogIntro')}</p>
-</div>
+	{/snippet}
+</PageHead>
 
 {#if status?.catalog.state === 'development'}
 	<p class="notice-warn" role="status">{t('plugins.catalogDevelopment')}</p>
@@ -144,13 +145,10 @@
 {/if}
 
 {#if status && plugins.length === 0}
-	<section class="tile empty">
-		<h2>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.emptyTitle')}</h2>
-		{#if !refreshing}
-			<p class="muted">{t('plugins.emptyText')}</p>
-			<p class="muted">{t('plugins.emptyOfficial')}</p>
-		{/if}
-	</section>
+	<EmptyState
+		title={t(refreshing ? 'plugins.catalogLoading' : 'plugins.emptyTitle')}
+		text={refreshing ? undefined : [t('plugins.emptyText'), t('plugins.emptyOfficial')]}
+	/>
 {:else if status && current}
 	<div class="layout">
 		<div class="list">
@@ -265,10 +263,6 @@
 		flex-direction: column;
 		gap: 4px;
 	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.intro {
 		max-width: 60rem;
 		font-size: 0.875rem;
@@ -279,13 +273,6 @@
 		gap: 8px;
 		padding: 32px;
 		font-size: 0.875rem;
-	}
-	.empty h2 {
-		font-size: 1.0625rem;
-		font-weight: 600;
-	}
-	.empty p {
-		max-width: 52rem;
 	}
 	.layout {
 		display: flex;

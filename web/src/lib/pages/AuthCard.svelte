@@ -58,7 +58,7 @@
 	.host {
 		padding: 3px 8px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-small);
 		font-size: 0.75rem;
 		color: var(--muted);
 	}
