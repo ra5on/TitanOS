@@ -179,6 +179,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
 	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
 	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("GET /api/v1/files/trash", s.requireUser(s.handleTrashList))
+	mux.HandleFunc("POST /api/v1/files/trash/{action}", s.requireUser(s.handleTrash))
 	mux.HandleFunc("GET /api/v1/files/text", s.requireUser(s.handleReadFileText))
 	mux.HandleFunc("PUT /api/v1/files/text", s.requireUser(s.handleFileText))
 	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))

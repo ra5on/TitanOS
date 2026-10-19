@@ -348,7 +348,7 @@ func TestApps(t *testing.T) {
 	// Removing the app keeps its data folder.
 	data := filepath.Join(m.mountRoot, "data/appdata/whoami")
 	os.WriteFile(filepath.Join(data, "wichtig.db"), []byte("x"), 0o644)
-	if err := m.RemoveApp(ctx, "whoami"); err != nil {
+	if err := m.RemoveApp(ctx, "whoami", false); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.ContainsFunc(runner.commands, func(c string) bool { return strings.HasSuffix(c, "down --remove-orphans") }) {
@@ -360,8 +360,28 @@ func TestApps(t *testing.T) {
 	if _, err := m.Compose("whoami"); !errors.Is(err, ErrNotFound) {
 		t.Error("compose file still stored")
 	}
-	if err := m.RemoveApp(ctx, "whoami"); !errors.Is(err, ErrNotFound) {
+	if err := m.RemoveApp(ctx, "whoami", false); !errors.Is(err, ErrNotFound) {
 		t.Errorf("remove twice: %v", err)
+	}
+
+	// Removing it with its data leaves nothing behind for a new install.
+	geheimData := filepath.Join(m.mountRoot, "data/appdata/geheim")
+	os.WriteFile(filepath.Join(geheimData, "alt.db"), []byte("x"), 0o644)
+	runner.fail = "--rmi all"
+	if err := m.RemoveApp(ctx, "geheim", true); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(runner.commands, func(c string) bool { return strings.HasSuffix(c, "down --remove-orphans --volumes") }) {
+		t.Errorf("no compose down with volumes in %v", runner.commands)
+	}
+	if _, err := os.Stat(geheimData); !os.IsNotExist(err) {
+		t.Errorf("data folder kept: %v", err)
+	}
+	if _, err := m.store.Read("apps/geheim/.env"); err == nil {
+		t.Error("secrets kept")
+	}
+	if err := m.CreateApp(ctx, "geheim", "services:\n  web:\n    image: traefik/whoami\n", nil); err != nil {
+		t.Errorf("installing again: %v", err)
 	}
 }
 

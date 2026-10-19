@@ -34,6 +34,8 @@ type Root struct {
 	Writable bool `json:"writable"`
 	// Recycle moves deleted files to the share's recycle bin.
 	Recycle bool `json:"recycle"`
+	// RecycleDays is how long the bin keeps what was deleted.
+	RecycleDays int `json:"recycleDays,omitempty"`
 	// Editable allows saving text files (SaveText) although the root is read-only.
 	Editable bool `json:"editable"`
 	// Hide lists top-level names that do not exist as far as users can tell;

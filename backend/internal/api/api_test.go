@@ -771,10 +771,18 @@ func TestFilesNeedARoot(t *testing.T) {
 		"/api/v1/files/list?root=../../etc",
 		"/api/v1/files/download?root=share/x&path=/etc/passwd",
 		"/api/v1/files/zip?root=share/x&path=a",
+		"/api/v1/files/trash?root=share/x&path=admin",
 	} {
 		if res, body := ts.request("GET", target, nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "file_not_found" {
 			t.Errorf("%s: %d %s", target, res.StatusCode, body)
 		}
+	}
+	// The stick has no recycle bin.
+	if res, body := ts.request("GET", "/api/v1/files/trash?root=stick", nil); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("recycle bin of the stick: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("POST", "/api/v1/files/trash/restore", map[string]any{"root": "share/x", "paths": []string{"admin/a"}}); res.StatusCode != http.StatusNotFound {
+		t.Errorf("restore without a root: %d", res.StatusCode)
 	}
 	if res, _ := ts.request("POST", "/api/v1/files/uploads", map[string]any{"root": "share/x", "name": "a", "size": 1}); res.StatusCode != http.StatusNotFound {
 		t.Errorf("upload without a root: %d", res.StatusCode)

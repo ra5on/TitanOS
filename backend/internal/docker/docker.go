@@ -392,11 +392,13 @@ func (m *Manager) Status(ctx context.Context) Status {
 	if err != nil {
 		return status
 	}
-	status.Running, status.Version = true, version
 	containers, err := m.api.containers(ctx)
 	if err != nil {
+		// Without the list the page would take every app for one
+		// without containers.
 		return status
 	}
+	status.Running, status.Version = true, version
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	status.UpdatesChecked = m.updatesChecked

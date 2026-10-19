@@ -132,11 +132,13 @@ func (s *Server) handleAppCompose(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := s.opts.Docker.RemoveApp(r.Context(), name); err != nil {
+	// Deleting the data is asked for by naming the app once more.
+	purge := r.URL.Query().Get("deleteData") == name
+	if err := s.opts.Docker.RemoveApp(r.Context(), name, purge); err != nil {
 		writeDockerError(w, err)
 		return
 	}
-	slog.Info("app removed (data kept)", "app", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	slog.Info("app removed", "app", name, "dataDeleted", purge, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
