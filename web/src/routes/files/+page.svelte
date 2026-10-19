@@ -381,7 +381,7 @@
 				<span class="num">{t('files.modified')}</span>
 			</div>
 			{#each entries ?? [] as entry (entry.name)}
-				<div class="row" class:picked={selected.includes(entry.name)} onclick={rowClicked(entry)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') rowClicked(entry); }} role="button" tabindex="0" aria-label={entry.dir ? t('files.openFolder', { name: entry.name }) : t('files.selectFile', { name: entry.name })} aria-selected={selected.includes(entry.name)}>
+				<div class="row" class:picked={selected.includes(entry.name)} onclick={rowClicked(entry)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') rowClicked(entry); }} role="button" tabindex="0" aria-label={entry.dir ? t('files.openFolder', { name: entry.name }) : t('files.selectFile', { name: entry.name })}>
 					<input type="checkbox" aria-label={t('files.select', { name: entry.name })} checked={selected.includes(entry.name)} onchange={(event) => toggle(entry.name, event.currentTarget.checked)} />
 					{#if entry.dir}
 						<button type="button" class="entry" onclick={() => open(rootId, join(dir, entry.name))}><Icon name="folder" size={16} /><span>{entry.name}</span></button>
