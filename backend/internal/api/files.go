@@ -67,7 +67,7 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 		}
 		roots = append(roots, files.Root{
 			ID: "share/" + share.Name, Name: share.Name, Kind: "share", Dir: dir, Volume: share.Volume,
-			Writable: level == shares.ReadWrite, Recycle: share.Recycle.Enabled,
+			Writable: level == shares.ReadWrite, Recycle: share.Recycle.Enabled, RecycleDays: share.Recycle.Days,
 		})
 	}
 	if user.Role.CanAdminister() {
@@ -182,6 +182,54 @@ func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("files deleted", "root", root.ID, "paths", req.Paths, "permanent", req.Permanent || !root.Recycle, "user", user.Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleTrashList(w http.ResponseWriter, r *http.Request) {
+	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+	if !ok {
+		return
+	}
+	user := currentUser(r)
+	entries, err := s.opts.Files.TrashList(root, r.URL.Query().Get("path"), user.Name, user.Role.CanAdminister())
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// handleTrash restores files from a share's recycle bin or deletes them
+// from it for good.
+func (s *Server) handleTrash(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Root  string
+		Paths []string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	root, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	user := currentUser(r)
+	action := r.PathValue("action")
+	var err error
+	switch action {
+	case "restore":
+		err = s.opts.Files.TrashRestore(root, req.Paths, user.Name, user.UID, user.Role.CanAdminister())
+	case "delete":
+		err = s.opts.Files.TrashDelete(root, req.Paths, user.Name, user.Role.CanAdminister())
+	default:
+		writeError(w, http.StatusNotFound, "not_found", "no such action")
+		return
+	}
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	slog.Info("recycle bin "+action, "root", root.ID, "paths", req.Paths, "user", user.Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 

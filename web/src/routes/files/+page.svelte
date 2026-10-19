@@ -15,6 +15,7 @@
 	import TextEditor from './TextEditor.svelte';
 	import { isEditableText } from '#lib/text-files.ts';
 	import UploadPanel from './UploadPanel.svelte';
+	import TrashView from './TrashView.svelte';
 
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 
@@ -24,6 +25,7 @@
 	let copying = $state<{ move: boolean } | null>(null);
 	let editing = $state<string | null>(null);
 	let jobsTick = $state(0);
+	let trash = $state(false);
 
 	let rootId = $state('');
 	let dir = $state(''); // folder inside the root, "" for its top
@@ -148,6 +150,7 @@
 		}
 		rootId = id;
 		dir = path;
+		trash = false;
 		selected = [];
 		entries = null; pending = [];
 		load();
@@ -333,6 +336,9 @@
 			}}
 			ondrop={dropped}
 		>
+			{#if trash && root}
+				<TrashView {root} user={session.data?.user?.name ?? ''} admin={canAdminister} onclose={() => { trash = false; load(); }} onchanged={() => { load(); loadRoots(); }} />
+			{:else}
 			<div class="toolbar">
 				{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" class="btn" onclick={() => windowsPath = true}>{t('files.windowsPath')}</button>{/if}
 				<div class="crumbs mono">
@@ -348,6 +354,9 @@
 					<button type="button" class="btn" onclick={() => show('mkdir')}>{t('files.newFolder')}</button>
 					<input bind:this={fileInput} type="file" multiple hidden onchange={(event) => picked(event.currentTarget)} />
 					<input bind:this={folderInput} type="file" webkitdirectory hidden onchange={(event) => picked(event.currentTarget)} />
+				{/if}
+				{#if root?.kind === 'share' && root.recycle}
+					<button type="button" class="btn" onclick={() => { trash = true; selected = []; }}><Icon name="trash" size={16} />{t('files.trash')}</button>
 				{/if}
 			</div>
 
@@ -407,6 +416,7 @@
 				<p class="drop" class:active={dragging}>
 					<Icon name="upload" size={18} />{dragging ? t('files.dropNow', { path: join(root.name, dir) }) : t('files.dropHint')}
 				</p>
+			{/if}
 			{/if}
 		</section>
 	</div>
