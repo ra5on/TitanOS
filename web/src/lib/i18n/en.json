@@ -852,6 +852,11 @@
 	"vms.mode.scale.hint": "Fit the picture into the window, keeping its aspect ratio",
 	"vms.mode.remote.hint": "The VM takes the size of the window as its resolution if the guest can do that; otherwise the picture is scaled",
 	"vms.mode.full.hint": "Pixel for pixel, with scrolling",
+	"vms.mode.remote.unsupported": "Only for VMs made from the Linux template: Windows and other systems get a standard graphics card that cannot take its resolution from the browser",
+	"vms.resolution.scaled": "Guest {size} · shown {shown}",
+	"vms.resolution.remote": "Resolution follows the window · {size}",
+	"vms.resolution.full": "Guest {size} · 1:1",
+	"vms.size.failed": "Could not save the height of the console.",
 	"vms.screenshot": "Screenshot",
 	"vms.sidebar": "List",
 	"vms.fullscreen": "Full screen",
@@ -2204,13 +2209,5 @@
 	"docker.layout.width": "Width of {name}",
 	"docker.layout.narrow": "Narrow",
 	"docker.layout.normal": "Normal",
-	"docker.layout.wide": "Wide",
-	"vms.size": "Size",
-	"vms.size.small": "Small",
-	"vms.size.medium": "Medium",
-	"vms.size.large": "Large",
-	"vms.width": "Width",
-	"vms.size.saving": "Saving …",
-	"vms.size.failed": "Could not save the size.",
-	"vms.size.retry": "Retry saving"
+	"docker.layout.wide": "Wide"
 }
