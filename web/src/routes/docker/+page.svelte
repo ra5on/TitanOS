@@ -60,6 +60,7 @@
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
 		| { kind: 'remove'; container: DockerContainer }
+		| { kind: 'removeApp'; app: string }
 		| null
 	>(null);
 	let draft = $state({ name: '', compose: '', enabled: true, volume: '' });
@@ -141,6 +142,11 @@
 	function remove(container: DockerContainer) {
 		dialog = null;
 		run(() => api.delete(container.managed ? `/docker/apps/${container.app}` : `/docker/containers/${container.id}`));
+	}
+
+	function removeApp(app: string) {
+		dialog = null;
+		run(() => api.delete(`/docker/apps/${app}`));
 	}
 
 	function open(kind: 'import' | 'settings') {
@@ -234,6 +240,14 @@
 		<div class={job.state === 'failed' ? 'notice-error' : 'notice-warn'} role="status">
 			{t(job.state === 'failed' ? 'docker.jobFailed' : 'docker.jobRunning', { app })}
 			{#if job.state === 'failed' && job.output}<pre>{job.output}</pre>{/if}
+			{#if job.state === 'failed'}
+				<div class="buttons job-actions">
+					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('common.retry')}</button>
+					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
+					<button type="button" class="btn" disabled={busy} onclick={() => (dialog = { kind: 'removeApp', app })}>{t('docker.remove')}</button>
+					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.delete(`/docker/apps/${app}/job`))}>{t('docker.jobDismiss')}</button>
+				</div>
+			{/if}
 		</div>
 	{/each}
 
@@ -343,6 +357,15 @@
 			<button type="button" class="btn btn-warn" onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
+{:else if dialog?.kind === 'removeApp'}
+	{@const app = dialog.app}
+	<Dialog title={t('docker.removeTitle', { name: app })} onclose={() => (dialog = null)}>
+		<p class="text">{t('docker.removeApp', { app, path: `/mnt/${status?.settings.volume}/appdata/${app}` })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" onclick={() => removeApp(app)}>{t('docker.removeSubmit')}</button>
+		</div>
+	</Dialog>
 {:else if dialog}
 	{@const kind = dialog.kind}
 	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} onclose={() => (dialog = null)}>
@@ -407,6 +430,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 10px;
+	}
+	.job-actions {
+		margin-top: 10px;
 	}
 	.link {
 		padding: 0;
