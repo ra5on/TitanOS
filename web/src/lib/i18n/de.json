@@ -562,6 +562,8 @@
 	"docker.jobRunning": "{app} wird eingerichtet: Images werden geladen und Container gestartet …",
 	"docker.jobFailed": "{app} konnte nicht gestartet werden:",
 	"docker.jobDismiss": "Ausblenden",
+	"docker.appIdle": "{app} hat keinen Container, zum Beispiel weil die Einrichtung gescheitert ist. Die Compose-Datei liegt weiter unter {path}.",
+	"docker.appStart": "Starten",
 	"docker.settingsTitle": "Docker-Einstellungen",
 	"docker.enabled": "Docker eingeschaltet",
 	"docker.disableNote": "Beim Ausschalten werden alle Container gestoppt. Images, Container und Daten bleiben auf dem Volume.",

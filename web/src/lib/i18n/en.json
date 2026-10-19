@@ -562,6 +562,8 @@
 	"docker.jobRunning": "{app} is being set up: images are pulled and containers started …",
 	"docker.jobFailed": "{app} could not be started:",
 	"docker.jobDismiss": "Dismiss",
+	"docker.appIdle": "{app} has no container, for example because its setup failed. Its compose file is still at {path}.",
+	"docker.appStart": "Start",
 	"docker.settingsTitle": "Docker settings",
 	"docker.enabled": "Docker turned on",
 	"docker.disableNote": "Turning it off stops all containers. Images, containers and data stay on the volume.",
