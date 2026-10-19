@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { session } from '#lib/session.svelte.ts';
+	import { vncWidth } from '#lib/vnc-size.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { goto } from '$app/navigation';
@@ -22,6 +24,26 @@
 	let dialogError = $state<{ text: string; detail: string } | null>(null);
 	let screen = $state<VncScreen>();
 	let frame = $state<HTMLElement>();
+	let width = $state(vncWidth(session.vnc));
+	let savingSize = $state(false);
+	let sizeError = $state('');
+	async function saveSize(next: number) {
+		if (savingSize) return;
+		width = vncWidth({ width: next });
+		const value = { width };
+		const previous = session.vnc;
+		session.vnc = value;
+		savingSize = true;
+		sizeError = '';
+		try {
+			await api.put('/preferences/vnc', value);
+		} catch (err) {
+			session.vnc = previous;
+			sizeError = errorText(err instanceof ApiError ? err.code : 'internal');
+		} finally {
+			savingSize = false;
+		}
+	}
 
 	const vms = $derived(status?.vms ?? []);
 	const current = $derived(vms.find((vm) => vm.name === page.url.searchParams.get('vm')) ?? vms[0]);
@@ -189,7 +211,20 @@
 				</div>
 			{/if}
 
-			<div class="frame" class:fullscreen bind:this={frame}>
+			<div class="size-controls">
+				<span id="vnc-size-label" class="muted">{t('vms.size')}</span>
+				<div role="group" aria-labelledby="vnc-size-label">
+					{#each [50, 75, 100] as preset, index}
+						<button type="button" class="btn" aria-pressed={width === preset} disabled={savingSize} onclick={() => saveSize(preset)}>{t(`vms.size.${(['small', 'medium', 'large'] as const)[index]}`)}</button>
+					{/each}
+				</div>
+				<label for="vnc-width" class="muted">{t('vms.width')}</label>
+				<input id="vnc-width" type="range" min="40" max="100" step="1" bind:value={width} disabled={savingSize} onchange={() => saveSize(width)} />
+				<output for="vnc-width" class="mono">{width} %</output>
+				{#if savingSize}<span role="status" class="muted">{t('vms.size.saving')}</span>{/if}
+			</div>
+			{#if sizeError}<p class="notice-error" role="alert">{t('vms.size.failed')} {sizeError} <button class="btn" onclick={() => saveSize(width)}>{t('vms.size.retry')}</button></p>{/if}
+			<div class="frame" style:--console-width={`${width}%`} class:fullscreen bind:this={frame}>
 				{#if current.state === 'running'}
 					{#key current.name}
 						<VncScreen bind:this={screen} vm={current.name} {mode} />
@@ -425,21 +460,28 @@
 	.fsbar .strong {
 		border: 1px solid var(--border);
 	}
-	/* The window of the console: drag its lower right corner. */
+	.size-controls, .size-controls > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+	.size-controls { font-size: 0.8125rem; }
+	.size-controls label { margin-left: 12px; }
+	.size-controls input { width: 180px; max-width: 100%; accent-color: var(--accent); }
+	.size-controls button[aria-pressed='true'] { color: var(--accent); border-color: var(--accent); background: var(--chip); }
+	/* Keep the chosen proportion while fitting narrow screens. */
 	.frame {
 		position: relative;
-		width: 100%;
+		width: var(--console-width);
 		max-width: 100%;
-		aspect-ratio: 16 / 10;
-		min-width: 320px;
-		min-height: 200px;
+		aspect-ratio: 16 / 9;
+		min-width: min(280px, 100%);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		overflow: hidden;
-		resize: both;
+		resize: none;
 	}
 	.frame.fullscreen {
+		width: 100%;
+		height: 100%;
+		max-height: none;
 		border: 0;
 		border-radius: 0;
 		resize: none;

@@ -10,19 +10,22 @@ export const session = $state<{
 	/** The dashboard layout stored for the account, as sent by the NAS. */
 	dashboard: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
-}>({ status: 'loading', data: null, dashboard: null, docker: null });
+	vnc: Record<string, unknown> | null;
+}>({ status: 'loading', data: null, dashboard: null, docker: null, vnc: null });
 
 async function loadPreferences() {
 	try {
 		const prefs = await api.get<Preferences>('/preferences');
 		session.dashboard = prefs.dashboard;
 		session.docker = prefs.docker;
+		session.vnc = prefs.vnc;
 		sound.settings = sanitizeSound(prefs.sound);
 		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
 	} catch {
 		// The UI works with defaults; saving will report the problem.
 		session.dashboard = null;
 		session.docker = null;
+		session.vnc = null;
 	}
 }
 
