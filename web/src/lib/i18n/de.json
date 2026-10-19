@@ -852,6 +852,11 @@
 	"vms.mode.scale.hint": "Bild ins Fenster einpassen, das Seitenverhältnis bleibt",
 	"vms.mode.remote.hint": "Die VM übernimmt die Fenstergröße als Auflösung, wenn das Gastsystem das kann; sonst wird skaliert",
 	"vms.mode.full.hint": "Pixelgenau, mit Scrollen",
+	"vms.mode.remote.unsupported": "Nur bei VMs mit der Vorlage Linux: Windows und andere Systeme bekommen eine Standard-Grafikkarte, die ihre Auflösung nicht vom Browser übernehmen kann",
+	"vms.resolution.scaled": "Gast {size} · angezeigt {shown}",
+	"vms.resolution.remote": "Auflösung folgt dem Fenster · {size}",
+	"vms.resolution.full": "Gast {size} · 1:1",
+	"vms.size.failed": "Die Höhe der Konsole konnte nicht gespeichert werden.",
 	"vms.screenshot": "Screenshot",
 	"vms.sidebar": "Liste",
 	"vms.fullscreen": "Vollbild",
@@ -2204,13 +2209,5 @@
 	"docker.layout.width": "Breite von {name}",
 	"docker.layout.narrow": "Schmal",
 	"docker.layout.normal": "Normal",
-	"docker.layout.wide": "Breit",
-	"vms.size": "Größe",
-	"vms.size.small": "Klein",
-	"vms.size.medium": "Mittel",
-	"vms.size.large": "Groß",
-	"vms.width": "Breite",
-	"vms.size.saving": "Wird gespeichert …",
-	"vms.size.failed": "Größe konnte nicht gespeichert werden.",
-	"vms.size.retry": "Erneut speichern"
+	"docker.layout.wide": "Breit"
 }

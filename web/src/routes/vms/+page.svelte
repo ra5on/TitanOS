@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { session } from '#lib/session.svelte.ts';
-	import { vncWidth } from '#lib/vnc-size.ts';
+	import { vncHeight } from '#lib/vnc-size.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { goto } from '$app/navigation';
@@ -24,24 +24,30 @@
 	let dialogError = $state<{ text: string; detail: string } | null>(null);
 	let screen = $state<VncScreen>();
 	let frame = $state<HTMLElement>();
-	let width = $state(vncWidth(session.vnc));
-	let savingSize = $state(false);
+	let height = $state(vncHeight(session.vnc));
 	let sizeError = $state('');
-	async function saveSize(next: number) {
-		if (savingSize) return;
-		width = vncWidth({ width: next });
-		const value = { width };
+	// The console is as wide as its column; its height is dragged at the
+	// corner. It is stored when the mouse lets go, not while dragging, so the
+	// stick is written once per change.
+	let dragFrom = 0;
+	function dragStart() {
+		dragFrom = frame?.getBoundingClientRect().height ?? 0;
+	}
+	async function dragEnd() {
+		if (!dragFrom || !frame || fullscreen) return;
+		const next = vncHeight({ height: frame.getBoundingClientRect().height });
+		const moved = Math.abs(next - dragFrom) >= 2;
+		dragFrom = 0;
+		if (!moved || next === height) return;
+		height = next;
 		const previous = session.vnc;
-		session.vnc = value;
-		savingSize = true;
+		session.vnc = { height };
 		sizeError = '';
 		try {
-			await api.put('/preferences/vnc', value);
+			await api.put('/preferences/vnc', { height });
 		} catch (err) {
 			session.vnc = previous;
 			sizeError = errorText(err instanceof ApiError ? err.code : 'internal');
-		} finally {
-			savingSize = false;
 		}
 	}
 
@@ -144,9 +150,18 @@
 	}
 
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
+	// Only the virtio graphics of the Linux template can take a resolution
+	// from the browser.
+	const modeHint = (entry: ScaleMode) => t(entry === 'remote' && current?.template !== 'linux' ? 'vms.mode.remote.unsupported' : `vms.mode.${entry}.hint`);
+	// A VM that cannot change its resolution falls back to scaling.
+	$effect(() => {
+		if (mode === 'remote' && current && current.template !== 'linux') mode = 'scale';
+	});
 </script>
 
 <svelte:document onfullscreenchange={() => (fullscreen = document.fullscreenElement === frame)} />
+<!-- The corner belongs to the frame itself; clicks into the picture land on noVNC's canvas. -->
+<svelte:window onpointerdown={(event) => { if (event.target === frame) dragStart(); }} onpointerup={dragEnd} />
 
 {#if error}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
@@ -211,41 +226,6 @@
 				</div>
 			{/if}
 
-			<div class="size-controls">
-				<span id="vnc-size-label" class="muted">{t('vms.size')}</span>
-				<div role="group" aria-labelledby="vnc-size-label">
-					{#each [50, 75, 100] as preset, index}
-						<button type="button" class="btn" aria-pressed={width === preset} disabled={savingSize} onclick={() => saveSize(preset)}>{t(`vms.size.${(['small', 'medium', 'large'] as const)[index]}`)}</button>
-					{/each}
-				</div>
-				<label for="vnc-width" class="muted">{t('vms.width')}</label>
-				<input id="vnc-width" type="range" min="40" max="100" step="1" bind:value={width} disabled={savingSize} onchange={() => saveSize(width)} />
-				<output for="vnc-width" class="mono">{width} %</output>
-				{#if savingSize}<span role="status" class="muted">{t('vms.size.saving')}</span>{/if}
-			</div>
-			{#if sizeError}<p class="notice-error" role="alert">{t('vms.size.failed')} {sizeError} <button class="btn" onclick={() => saveSize(width)}>{t('vms.size.retry')}</button></p>{/if}
-			<div class="frame" style:--console-width={`${width}%`} class:fullscreen bind:this={frame}>
-				{#if current.state === 'running'}
-					{#key current.name}
-						<VncScreen bind:this={screen} vm={current.name} {mode} />
-					{/key}
-					{#if fullscreen}
-						<div class="fsbar">
-							<span class="mono">{vmLabel(current)}</span>
-							<button type="button" onclick={() => screen?.ctrlAltDel()}>{t('vms.ctrlAltDel')}</button>
-							{#each MODES as entry (entry)}
-								<button type="button" aria-pressed={mode === entry} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
-							{/each}
-							<button type="button" class="strong" onclick={() => document.exitFullscreen()}>{t('vms.exitFullscreen')}</button>
-						</div>
-					{/if}
-				{:else}
-					<div class="off">
-						<span>{t('vms.off', { name: vmLabel(current) })}</span>
-						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !current.available || !status.kvm || !!current.job}>{t('vms.startVm')}</button>
-					</div>
-				{/if}
-			</div>
 			<div class="toolbar">
 				<span class="muted">{t('vms.screen')}</span>
 				<span class="grow"></span>
@@ -255,7 +235,7 @@
 					<span class="muted label" id="vm-scale">{t('vms.display')}</span>
 					<span class="modes" role="group" aria-labelledby="vm-scale">
 						{#each MODES as entry (entry)}
-							<button type="button" aria-pressed={mode === entry} title={t(`vms.mode.${entry}.hint`)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
+							<button type="button" aria-pressed={mode === entry} disabled={entry === 'remote' && current.template !== 'linux'} title={modeHint(entry)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
 						{/each}
 					</span>
 					<button type="button" onclick={saveScreenshot}>{t('vms.screenshot')}</button>
@@ -268,6 +248,29 @@
 				{/if}
 			</div>
 
+			{#if sizeError}<p class="notice-error" role="alert">{t('vms.size.failed')} {sizeError}</p>{/if}
+			<div class="frame" style:height={fullscreen ? null : `${height}px`} class:fullscreen bind:this={frame}>
+				{#if current.state === 'running'}
+					{#key current.name}
+						<VncScreen bind:this={screen} vm={current.name} {mode} resizable={current.template === 'linux'} />
+					{/key}
+					{#if fullscreen}
+						<div class="fsbar">
+							<span class="mono">{vmLabel(current)}</span>
+							<button type="button" onclick={() => screen?.ctrlAltDel()}>{t('vms.ctrlAltDel')}</button>
+							{#each MODES as entry (entry)}
+								<button type="button" aria-pressed={mode === entry} disabled={entry === 'remote' && current.template !== 'linux'} title={modeHint(entry)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
+							{/each}
+							<button type="button" class="strong" onclick={() => document.exitFullscreen()}>{t('vms.exitFullscreen')}</button>
+						</div>
+					{/if}
+				{:else}
+					<div class="off">
+						<span>{t('vms.off', { name: vmLabel(current) })}</span>
+						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !current.available || !status.kvm || !!current.job}>{t('vms.startVm')}</button>
+					</div>
+				{/if}
+			</div>
 			<p class="muted hint">{t('vms.hint')} <button type="button" class="link" onclick={showXML}>{t('vms.showXml')}</button></p>
 		</section>
 	</div>
@@ -460,23 +463,18 @@
 	.fsbar .strong {
 		border: 1px solid var(--border);
 	}
-	.size-controls, .size-controls > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-	.size-controls { font-size: 0.8125rem; }
-	.size-controls label { margin-left: 12px; }
-	.size-controls input { width: 180px; max-width: 100%; accent-color: var(--accent); }
-	.size-controls button[aria-pressed='true'] { color: var(--accent); border-color: var(--accent); background: var(--chip); }
-	/* Keep the chosen proportion while fitting narrow screens. */
+	/* As wide as the column; the height is dragged at the bottom right
+	   corner and never taller than the window. */
 	.frame {
 		position: relative;
-		width: var(--console-width);
-		max-width: 100%;
-		aspect-ratio: 16 / 9;
-		min-width: min(280px, 100%);
-		background: var(--bg);
+		width: 100%;
+		min-height: 240px;
+		max-height: calc(100vh - 160px);
+		background: var(--screen-bg);
 		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
+		border-radius: var(--radius-tile);
 		overflow: hidden;
-		resize: none;
+		resize: vertical;
 	}
 	.frame.fullscreen {
 		width: 100%;
@@ -486,9 +484,10 @@
 		border-radius: 0;
 		resize: none;
 	}
+	/* On top, as in the design; faint until the mouse comes near. */
 	.fsbar {
 		position: absolute;
-		bottom: 10px;
+		top: 10px;
 		left: 50%;
 		transform: translateX(-50%);
 		padding: 4px 10px;
@@ -496,7 +495,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		box-shadow: var(--shadow-menu);
-		opacity: 0.25;
+		opacity: 0.55;
 		transition: opacity 0.15s ease;
 	}
 	.fsbar:hover,
@@ -511,7 +510,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 14px;
-		color: var(--muted);
+		color: var(--screen-muted);
 		font-size: 0.9375rem;
 	}
 	.hint {
