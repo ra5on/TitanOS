@@ -96,6 +96,9 @@
 		return t('docker.updatesChecked', { time: new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'short', timeStyle: 'short' }).format(time) });
 	});
 	const jobs = $derived(Object.entries(status?.jobs ?? {}).filter(([, job]) => job.state !== 'done'));
+	// Apps whose setup never created a container (or whose containers are
+	// gone) have no card; without this they could not be removed.
+	const idleApps = $derived((status?.apps ?? []).filter((app) => !containers.some((container) => container.app === app) && !jobs.some(([name]) => name === app)));
 
 	function problem(err: unknown): { text: string; detail: string } {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -251,6 +254,17 @@
 		</div>
 	{/each}
 
+	{#each idleApps as app (app)}
+		<div class="notice-warn" role="status">
+			{t('docker.appIdle', { app, path: `/config/apps/${app}/compose.yaml` })}
+			<div class="buttons job-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('docker.appStart')}</button>
+				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
+				<button type="button" class="btn" disabled={busy} onclick={() => (dialog = { kind: 'removeApp', app })}>{t('docker.remove')}</button>
+			</div>
+		</div>
+	{/each}
+
 	{#if containers.length > 0 || editing}
 		<div class="layout-toolbar">
 			<label class="view-picker"><span>{t('docker.layout.view')}</span><select class="field" value={layout.view} disabled={savingLayout} onchange={(event) => setView(event.currentTarget.value as DockerView)}>
@@ -320,7 +334,7 @@
 			</div>
 		{/each}
 	</div>
-	{#if containers.length === 0 && jobs.length === 0}
+	{#if containers.length === 0 && jobs.length === 0 && idleApps.length === 0}
 		<p class="tile empty">{t('docker.empty')}</p>
 	{:else if visible.length === 0 && containers.length > 0}
 		<p class="muted">{t('docker.noMatch')}</p>
