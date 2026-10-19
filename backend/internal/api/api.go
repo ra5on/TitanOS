@@ -206,6 +206,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppRemove))
 	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppSetCompose))
 	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireAdmin(s.handleAppUpdate))
+	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/job", s.requireAdmin(s.handleAppJobDismiss))
 	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
 	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
