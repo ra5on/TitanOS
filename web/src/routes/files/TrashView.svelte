@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { api, ApiError, type FileEntry, type FileRoot } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -89,7 +90,7 @@
 		{/each}
 	</div>
 	{#if root.writable && entries && entries.length > 0}
-		<button type="button" class="btn danger" disabled={busy} onclick={() => (confirm = { kind: 'empty' })}>{t('files.trashEmpty')}</button>
+		<button type="button" class="btn btn-danger" disabled={busy} onclick={() => (confirm = { kind: 'empty' })}>{t('files.trashEmpty')}</button>
 	{/if}
 </div>
 
@@ -115,7 +116,7 @@
 		<span class="num muted">{atAccounts ? '' : date.format(new Date(entry.modified))}</span>
 	</div>
 {:else}
-	{#if entries}<p class="muted none">{t('files.trashNone')}</p>{/if}
+	{#if entries}<EmptyState inline title={t('files.trashNone')} />{/if}
 {/each}
 
 {#if selected.length > 0 && root.writable}
@@ -124,7 +125,7 @@
 		{#if !atAccounts}
 			<button type="button" class="btn" disabled={busy} onclick={() => act('restore', selected.map((name) => join(path, name)))}>{t('files.trashRestore')}</button>
 		{/if}
-		<button type="button" class="btn danger" disabled={busy} onclick={() => (confirm = { kind: 'delete' })}>{t('files.trashDeleteForever')}</button>
+		<button type="button" class="btn btn-danger" disabled={busy} onclick={() => (confirm = { kind: 'delete' })}>{t('files.trashDeleteForever')}</button>
 	</div>
 {/if}
 
@@ -167,7 +168,7 @@
 		padding: 4px 6px;
 		background: transparent;
 		border: 0;
-		border-radius: 6px;
+		border-radius: var(--radius-small);
 		color: var(--text);
 		font: inherit;
 		cursor: pointer;
@@ -233,10 +234,6 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.none {
-		padding: 28px 14px;
-		font-size: 0.875rem;
-	}
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -252,9 +249,6 @@
 	.count {
 		margin-right: auto;
 		font-size: 0.8125rem;
-	}
-	.danger {
-		color: var(--error-text);
 	}
 	@media (max-width: 760px) {
 		.row {

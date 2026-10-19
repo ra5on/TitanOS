@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
  import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
@@ -112,17 +113,15 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<a class="muted back" href="/docker">‹ {t('editor.back')}</a>
-		<h1>{t('editor.title', { name })}</h1>
-		<p class="muted mono location">{t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}</p>
-	</div>
-	<div class="segments" role="radiogroup">
-		<button type="button" role="radio" aria-checked={view === 'form'} onclick={() => show('form')}>{t('editor.form')}</button>
-		<button type="button" role="radio" aria-checked={view === 'compose'} onclick={() => show('compose')}>{t('editor.compose')}</button>
-	</div>
-</div>
+<PageHead title={t('editor.title', { name })} parent={{ href: '/docker', label: t('docker.title') }}>
+	<p class="muted mono location">{t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}</p>
+	{#snippet actions()}
+		<div class="segments" role="radiogroup">
+			<button type="button" role="radio" aria-checked={view === 'form'} onclick={() => show('form')}>{t('editor.form')}</button>
+			<button type="button" role="radio" aria-checked={view === 'compose'} onclick={() => show('compose')}>{t('editor.compose')}</button>
+		</div>
+	{/snippet}
+</PageHead>
 
 {#if loadError}<p class="notice-error" role="alert">{loadError}</p>{/if}
 {#if yamlError}<div class="notice-error" role="alert">{t('editor.yamlError')}<pre>{yamlError}</pre></div>{/if}
@@ -222,26 +221,6 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.back {
-		font-size: 0.8125rem;
-		text-decoration: none;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.location {
 		font-size: 0.8125rem;
 	}
@@ -253,9 +232,6 @@
 		background: var(--panel-bg);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
-	}
-	.head .segments {
-		align-self: flex-end;
 	}
 	.segments button {
 		height: 2.25rem;

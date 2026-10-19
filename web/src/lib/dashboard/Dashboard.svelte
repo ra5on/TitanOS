@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import 'gridstack/dist/gridstack.min.css';
@@ -210,15 +211,14 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('dashboard.title')}</h1>
-		{#if subtitle}<p class="muted">{subtitle}</p>{/if}
-	</div>
-	{#if !editing}
-		<button type="button" class="btn edit" onclick={startEditing}><Icon name="edit" size={16} />{t('dashboard.edit')}</button>
-	{/if}
-</div>
+<PageHead title={t('dashboard.title')}>
+	{#if subtitle}<p class="muted">{subtitle}</p>{/if}
+	{#snippet actions()}
+		{#if !editing}
+			<button type="button" class="btn edit" onclick={startEditing}><Icon name="edit" size={16} />{t('dashboard.edit')}</button>
+		{/if}
+	{/snippet}
+</PageHead>
 
 {#if editing}
 	<div class="editbar">
@@ -350,25 +350,6 @@
 
 	.workload-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 	.workload-picker select { width: auto; flex: 1; min-width: 180px; }
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
-	.title p {
-		font-size: 0.875rem;
-	}
 
 	.editbar {
 		display: flex;

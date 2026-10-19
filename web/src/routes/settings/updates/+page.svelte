@@ -3,6 +3,7 @@
 	// starts on trial; the one before stays as the fallback.
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -99,10 +100,7 @@
 	}
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('update.title')}</p>
-	<h1>{t('update.title')}</h1>
-</div>
+<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -224,18 +222,6 @@
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section,
 	form {
 		display: flex;

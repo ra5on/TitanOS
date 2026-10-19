@@ -1,6 +1,7 @@
 <script lang="ts">
 	// SSH access and the certificate of the web UI.
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -97,10 +98,7 @@
 	const fingerprint = $derived(certificate?.fingerprint.match(/.{1,2}/g)?.join(':') ?? '');
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('access.title')}</p>
-	<h1>{t('access.title')}</h1>
-</div>
+<PageHead title={t('access.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -172,18 +170,6 @@
 </section>
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section {
 		display: flex;
 		flex-direction: column;

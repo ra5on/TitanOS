@@ -1,4 +1,6 @@
 <script lang="ts">
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { vncWidth } from '#lib/vnc-size.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -156,11 +158,12 @@
 {/if}
 
 {#if status && vms.length === 0}
-	<div class="head-empty">
-		<h1>{t('vms.title')}</h1>
-		<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
-	</div>
-	<p class="tile empty">{t('vms.empty')}</p>
+	<PageHead title={t('vms.title')}>
+		{#snippet actions()}
+			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
+		{/snippet}
+	</PageHead>
+	<EmptyState title={t('vms.empty')} />
 {:else if status && current}
 	<div class="layout">
 		{#if sidebar}
@@ -308,7 +311,6 @@
 {/if}
 
 <style>
-	.head-empty,
 	.head {
 		display: flex;
 		flex-wrap: wrap;
@@ -319,12 +321,6 @@
 	h1 {
 		font-size: var(--text-page);
 		font-weight: 600;
-	}
-	.empty {
-		padding: 40px 32px;
-		color: var(--muted);
-		font-size: 0.875rem;
-		text-align: center;
 	}
 	.layout {
 		display: flex;

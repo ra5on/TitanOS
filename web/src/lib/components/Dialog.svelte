@@ -57,6 +57,12 @@
 		justify-content: flex-end;
 		gap: 8px;
 	}
+	/* The dangerous action stands left of "Cancel". Only the picture moves:
+	   in the markup "Cancel" stays first, so it gets the focus and Tab
+	   reaches it before the action. */
+	dialog :global(.dialog-actions > :is(.btn-danger, .btn-warn)) {
+		order: -1;
+	}
 	dialog :global(.confirm) {
 		display: flex;
 		align-items: flex-start;

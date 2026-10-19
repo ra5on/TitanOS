@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PageHead from '#lib/components/PageHead.svelte';
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	// One's own account: password, second factor, logged-in devices.
 	import qrcode from 'qrcode-generator';
@@ -107,7 +108,7 @@
 </script>
 
 
-<h1>{t('account.title')}</h1>
+<PageHead title={t('account.title')} />
 <SoundSettings />
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
@@ -199,10 +200,6 @@
 {/if}
 
 <style>
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section {
 		display: flex;
 		flex-direction: column;
@@ -258,10 +255,10 @@
 	}
 	/* A QR code is dark on light whatever the theme: scanners expect that. */
 	.paper {
-		fill: #fff;
+		fill: var(--qr-light);
 	}
 	.ink {
-		fill: #000;
+		fill: var(--qr-dark);
 	}
 	.fields {
 		flex: 1 1 320px;

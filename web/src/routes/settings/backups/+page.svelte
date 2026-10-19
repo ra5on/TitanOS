@@ -3,6 +3,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import FolderTree from './FolderTree.svelte';
 	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
@@ -337,11 +338,9 @@
 	}
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('backup.title')}</p>
-	<h1>{t('backup.title')}</h1>
-	<p class="muted intro">{t('backup.intro')}</p>
-</div>
+<PageHead title={t('backup.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('backup.intro')}</p>
+</PageHead>
 
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -642,22 +641,6 @@
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	.intro {
-		max-width: 60rem;
-		font-size: 0.875rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section,
 	form.tile {
 		display: flex;

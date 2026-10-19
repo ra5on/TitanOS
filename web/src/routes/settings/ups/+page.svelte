@@ -2,6 +2,7 @@
 	// The uninterruptible power supply: on battery the NAS shuts down
 	// cleanly before it is empty.
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDuration } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -84,11 +85,9 @@
 	const status = $derived(answer?.status);
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('ups.title')}</p>
-	<h1>{t('ups.title')}</h1>
-	<p class="muted intro">{t('ups.intro')}</p>
-</div>
+<PageHead title={t('ups.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('ups.intro')}</p>
+</PageHead>
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -190,22 +189,6 @@
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	.intro {
-		max-width: 60rem;
-		font-size: 0.875rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section,
 	form {
 		display: flex;
