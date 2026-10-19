@@ -266,7 +266,7 @@
 	.grip span {
 		width: 44px;
 		height: 4px;
-		border-radius: 2px;
+		border-radius: var(--radius-bar);
 		background: var(--border);
 	}
 	.toolbar {
@@ -323,7 +323,7 @@
 	.kind {
 		padding: 1px 6px;
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
-		border-radius: 4px;
+		border-radius: var(--radius-small);
 		font-size: 0.6875rem;
 		font-weight: 600;
 	}

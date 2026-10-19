@@ -64,7 +64,7 @@
 	}
 	.bar {
 		height: 8px;
-		border-radius: 4px;
+		border-radius: var(--radius-bar);
 	}
 	.empty {
 		flex: 1 1 auto;

@@ -1,5 +1,6 @@
 <script lang="ts">
  import { api, ApiError } from '#lib/api.ts';
+ import PageHead from '#lib/components/PageHead.svelte';
  import { t, errorText } from '#lib/i18n/index.svelte.ts';
  type Action = 'ignore' | 'reboot' | 'poweroff';
  type Status = { settings: { action: Action }; readOnly: boolean; error?: string };
@@ -15,8 +16,9 @@
   catch (err) { fail(err); } finally { busy = false; }
  }
 </script>
-<h1>{t('powerButton.title')}</h1>
-<p class="muted">{t('powerButton.intro')}</p>
+<PageHead title={t('powerButton.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<p class="muted">{t('powerButton.intro')}</p>
+</PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if status}
  {#if status.error}<p class="notice-warn" role="status">{status.error}</p>{/if}
@@ -33,7 +35,6 @@
  </form>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 <style>
- h1 { font-size: var(--text-page); font-weight: 600; }
  .tile { max-width: 640px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 14px; }
  label { font-weight: 600; }
  p { margin: 0; }

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { api, ApiError, type DiskSleepStatus, type StorageStatus, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -77,18 +79,15 @@
 	}
 </script>
 
-<div class="head">
-	<div class="title">
-		<h1>{t('storage.title')}</h1>
-		{#if storage.status}<p class="muted">{summary}</p>{/if}
-	</div>
-	{#if canAdminister}
-		<div class="buttons">
+<PageHead title={t('storage.title')}>
+	{#if storage.status}<p class="muted">{summary}</p>{/if}
+	{#snippet actions()}
+		{#if canAdminister}
 			<button type="button" class="btn" onclick={rescan} disabled={busy}>{t('storage.rescan')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })}>{t('storage.newVolume')}</button>
-		</div>
-	{/if}
-</div>
+		{/if}
+	{/snippet}
+</PageHead>
 
 {#if error}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
@@ -109,10 +108,7 @@
 			/>
 		{:else}
 			{#if storage.status}
-				<div class="tile empty">
-					<p>{t('storage.noVolumes')}</p>
-					<p class="muted">{t('storage.noVolumesHint')}</p>
-				</div>
+				<EmptyState title={t('storage.noVolumes')} text={t('storage.noVolumesHint')} />
 			{/if}
 		{/each}
 	</div>
@@ -235,10 +231,6 @@
 		gap: 4px;
 		font-size: 0.875rem;
 	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
@@ -253,14 +245,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--gap);
-	}
-	.empty {
-		flex: 1 1 auto;
-		padding: 28px 22px;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
 	}
 	.table {
 		overflow-x: auto;

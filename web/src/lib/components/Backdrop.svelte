@@ -79,7 +79,7 @@
 		background-position: center;
 	}
 	.dim {
-		background: #000;
+		background: var(--dim);
 		opacity: var(--bg-dim);
 	}
 </style>

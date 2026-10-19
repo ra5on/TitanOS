@@ -2,6 +2,7 @@
 	// What is running, and under which licenses.
 	import { api, ApiError } from '#lib/api.ts';
 	import Logo from '#lib/components/Logo.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
@@ -20,10 +21,7 @@
 	const slot = $derived(system.info?.image?.slot.toUpperCase() ?? '');
 </script>
 
-<div class="title">
-	<p class="muted crumbs"><a href="/settings">{t('nav.settings')}</a> › {t('about.title')}</p>
-	<h1>{t('about.title')}</h1>
-</div>
+<PageHead title={t('about.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
@@ -59,18 +57,6 @@
 {/if}
 
 <style>
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.crumbs {
-		font-size: 0.8125rem;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section {
 		display: flex;
 		flex-direction: column;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 
@@ -64,7 +65,7 @@
 	}
 </script>
 
-<h1>{t('settings.title')}</h1>
+<PageHead title={t('settings.title')} />
 
 <div class="areas">
 	{#each sortedAreas as area (area.href)}
@@ -126,10 +127,6 @@
 		width: 18px;
 		height: 18px;
 		margin: 0;
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
 	}
 	.areas {
 		display: grid;

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import DiskTests from './DiskTests.svelte';
 
@@ -102,7 +104,7 @@
 	}
 </script>
 
-<h1>{t('nav.tools')}</h1>
+<PageHead title={t('nav.tools')} />
 
 <DiskTests />
 
@@ -150,17 +152,13 @@
 				<span class="message">{#if level(entry.priority)}<span class="tag">{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span> {/if}{entry.message}</span>
 			</div>
 		{:else}
-			<p class="muted empty">{loading ? t('tools.loading') : t('tools.noLines')}</p>
+			<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
 		{/each}
 	</div>
 	<p class="muted note">{t('tools.logsNote')}</p>
 </section>
 
 <style>
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	section {
 		display: flex;
 		flex-direction: column;
