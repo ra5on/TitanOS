@@ -9,7 +9,9 @@ import time
 
 
 def check_smb_backup(request, remote, password):
-    base = '/mnt/mirror/.titanos/smb-copy-test'
+    # Not under .titanos: that folder is root's alone (0700) once titand
+    # has put anything there, and the Samba account must reach the share.
+    base = '/mnt/mirror/smb-copy-test'
     conf = '/run/titanos-smb-test/smb.conf'
     settings = f'''[global]
 workgroup = TITANOS
