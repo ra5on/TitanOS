@@ -41,6 +41,10 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Update.Status())
 }
 
+func (s *Server) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"progress": s.opts.Update.CurrentProgress()})
+}
+
 func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var settings update.Settings
 	if !readJSON(w, r, &settings) {

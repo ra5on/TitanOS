@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { revealTarget } from '#lib/reveal-target.ts';
 	import type { Volume } from '#lib/api.ts';
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -42,7 +43,7 @@
 	const canAdd = $derived((volume.filesystem !== 'btrfs' || volume.state === 'degraded') && volume.level !== 'raid0' && volume.state !== 'failed' && volume.state !== 'missing');
 </script>
 
-<article class="tile" class:warn={tone === 'warn'} class:error={tone === 'error'} aria-label={volume.name}>
+<article use:revealTarget id="volume-{volume.name}" class="tile" class:warn={tone === 'warn'} class:error={tone === 'error'} aria-label={volume.name}>
 	<div class="head">
 		<span class="mono name">{volume.name}</span>
 		<span class="chip">{t(`level.${volume.level}`)}</span>

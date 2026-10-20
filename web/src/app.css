@@ -396,3 +396,12 @@ button, a, input, select, textarea { touch-action: manipulation; }
  :root { --page-pad: 12px; }
  .tile { min-width: 0; }
 }
+
+/* 0.6: readable content outside Docker. Console pixels and personal scale stay intact. */
+main.readable .muted { color: color-mix(in srgb, var(--text) 30%, var(--muted)); }
+main.readable :is(p.muted, span.muted, .detail, .hint, dt) { font-size: max(0.875rem, 1em); }
+main.readable :is(.mono, td, dd) { overflow-wrap: anywhere; }
+main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; scroll-margin-top: 80px; }
+@media (max-width: 760px) {
+ main.readable :is(.toolbar button, .toolbar .tool, summary.btn) { min-height: 44px; height: auto; }
+}

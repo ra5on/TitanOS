@@ -24,6 +24,21 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
+func TestCurrentProgressDoesNotInspectTheStick(t *testing.T) {
+	// A zero-value manager has neither a store nor a clock. The background
+	// endpoint must work without loading config, keys or the slot cache.
+	want := Progress{Phase: "download", File: "filesystem.squashfs", Percent: 42}
+	manager := &Manager{progress: want}
+	got := manager.CurrentProgress()
+	if got != want || manager.slotCache != nil {
+		t.Fatalf("progress = %+v, cache = %+v", got, manager.slotCache)
+	}
+	got.Percent = 99
+	if manager.CurrentProgress().Percent != 42 {
+		t.Fatal("progress must be a copy")
+	}
+}
+
 // signer makes minisign keys and signatures the way the tool does.
 type signer struct {
 	id      [8]byte

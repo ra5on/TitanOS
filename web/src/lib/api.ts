@@ -14,8 +14,8 @@ export class ApiError extends Error {
 
 type Body = Record<string, unknown> | Blob | undefined;
 
-async function request<T>(method: string, path: string, body?: Body): Promise<T> {
-	const init: RequestInit = { method, credentials: 'same-origin' };
+async function request<T>(method: string, path: string, body?: Body, signal?: AbortSignal): Promise<T> {
+	const init: RequestInit = { method, credentials: 'same-origin', signal };
 	if (body instanceof Blob) {
 		init.body = body;
 	} else if (body !== undefined) {
@@ -50,7 +50,7 @@ async function request<T>(method: string, path: string, body?: Body): Promise<T>
 }
 
 export const api = {
-	get: <T>(path: string) => request<T>('GET', path),
+	get: <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal),
 	post: <T>(path: string, body?: Body) => request<T>('POST', path, body),
 	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
 	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body)

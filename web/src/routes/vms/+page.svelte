@@ -18,6 +18,11 @@
 	let status = $state<VMStatus | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state(false);
+	let pending = $state<{ name: string; action: string } | null>(null);
+	let feedback = $state('');
+	let retry = $state<{ vm: VM; action: string } | null>(null);
+	let search = $state('');
+	let actionsMenu = $state<HTMLDetailsElement>();
 	let mode = $state<ScaleMode>('scale');
 	let sidebar = $state(true);
 	let fullscreen = $state(false);
@@ -54,6 +59,7 @@
 	}
 
 	const vms = $derived(status?.vms ?? []);
+	const filteredVMs = $derived(vms.filter(vm => `${vmLabel(vm)} ${vm.name}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())));
 	const current = $derived(vms.find((vm) => vm.name === page.url.searchParams.get('vm')) ?? vms[0]);
 
     const lowSpace = $derived((storage.status?.volumes ?? []).filter(volume => volume.mounted && volume.sizeBytes > 0 && volume.usedBytes / volume.sizeBytes >= 0.9 && current?.disks.some(disk => disk.volume === volume.name || disk.path?.startsWith(`/mnt/${volume.name}/`))).map(volume => volume.name));
@@ -77,19 +83,22 @@
 		return () => clearInterval(timer);
 	});
 
-	async function run(action: () => Promise<unknown>) {
-		busy = true;
-		error = null;
+	async function act(vm: VM, action: string) {
+		if (busy) return;
+		busy = true; error = null; feedback = ''; retry = null;
+		pending = { name: vm.name, action };
 		try {
-			await action();
+			await api.post(`/vms/${encodeURIComponent(vm.name)}/${action}`);
+			feedback = t('ui.vmAccepted', { name: vmLabel(vm) });
 		} catch (err) {
-			error = problem(err);
+			error = problem(err); retry = { vm, action };
+		} finally {
+			await load(); pending = null; busy = false;
 		}
-		await load();
-		busy = false;
 	}
+	const pendingText = (action: string) => t(action === 'start' ? 'ui.starting' : action === 'shutdown' ? 'ui.stopping' : 'ui.rebooting');
+	$effect(() => { current?.name; if (actionsMenu) actionsMenu.open = false; });
 
-	const act = (vm: VM, action: string) => run(() => api.post(`/vms/${vm.name}/${action}`));
 	const specs = (vm: VM) => t('vms.specs', { vcpus: vm.vcpus, memory: formatBytes(vm.memoryMiB * 1024 * 1024) });
 
 	function detail(vm: VM): string {
@@ -124,7 +133,8 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (!current || !dialog) return;
+		if (!current || !dialog || busy) return;
+		busy = true;
 		dialogError = null;
 		try {
 			if (dialog.kind === 'remove') {
@@ -139,7 +149,7 @@
 			await load();
 		} catch (err) {
 			dialogError = problem(err);
-		}
+		} finally { busy = false; }
 	}
 
 	function saveScreenshot() {
@@ -163,7 +173,7 @@
 
 <svelte:document onfullscreenchange={() => (fullscreen = document.fullscreenElement === frame)} />
 <!-- The corner belongs to the frame itself; clicks into the picture land on noVNC's canvas. -->
-<svelte:window onpointerdown={(event) => { if (event.target === frame) dragStart(); }} onpointerup={dragEnd} />
+<svelte:window onkeydown={(event) => { if (event.key === 'Escape' && actionsMenu?.open) { actionsMenu.open = false; actionsMenu.querySelector('summary')?.focus(); } }} onclick={(event) => { if (actionsMenu?.open && event.target instanceof Node && !actionsMenu.contains(event.target)) actionsMenu.open = false; }} onpointerdown={(event) => { if (event.target === frame) dragStart(); }} onpointerup={dragEnd} />
 
 {#if error}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
@@ -187,10 +197,14 @@
 					<h2 class="tile-title" id="vms-title">{t('vms.title')}</h2>
 					<a class="btn add" href="/vms/new" aria-label={t('vms.create')} title={t('vms.create')}>+</a>
 				</div>
-				{#each vms as vm (vm.name)}
+				<label class="vm-search"><span class="sr-only">{t('ui.vmSearch')}</span><input class="field" type="search" bind:value={search} placeholder={t('ui.vmSearch')} /></label>
+				{#if filteredVMs.length === 0}<p class="vm-search">{t('ui.vmNoResults')}</p>{/if}
+				{#each filteredVMs as vm (vm.name)}
 					<a class="vm" href="/vms?vm={vm.name}" aria-current={vm.name === current.name ? 'true' : undefined}>
 						<span class="vm-name">{vmLabel(vm)}</span>
-						<span class="muted vm-state"><span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"></span>{t(`vms.state.${vm.state}`)} · {specs(vm)}</span>
+						<span class="muted vm-state"><span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"></span>{t(`vms.state.${vm.state}`)}</span>
+						<span class="vm-metrics mono"><span>{t('ui.cpu')} {vm.state === 'running' ? formatPercent(vm.cpuPercent) : '–'}</span><span>{t('ui.ram')} {vm.state === 'running' ? formatBytes(vm.memoryBytes) : '–'}</span></span>
+						<span class="muted vm-state">{specs(vm)}</span>
 					</a>
 				{/each}
 			</aside>
@@ -209,17 +223,29 @@
 				</div>
 				<div class="buttons">
 					{#if current.state === 'running'}
-						<button type="button" class="btn" onclick={() => act(current, 'reboot')} disabled={busy}>{t('vms.reboot')}</button>
-						<button type="button" class="btn" onclick={() => act(current, 'shutdown')} disabled={busy}>{t('vms.shutdown')}</button>
-						<button type="button" class="btn" onclick={() => open('poweroff')} disabled={busy}>{t('vms.poweroff')}</button>
+						<button type="button" class="btn btn-primary" onclick={() => act(current, 'shutdown')} disabled={busy}>{t('vms.shutdown')}</button>
 					{:else}
 						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !current.available || !status.kvm || !!current.job}>{t('vms.start')}</button>
-						<button type="button" class="btn" onclick={() => open('remove')} disabled={busy}>{t('vms.remove')}</button>
 					{/if}
-					<Snapshots vm={current} />
 					<a class="btn" href="/vms/edit?vm={current.name}">{t('vms.edit')}</a>
+					<Snapshots vm={current} />
+					<details class="actions-menu" bind:this={actionsMenu}>
+						<summary class="btn">{t('ui.more')} ▾</summary>
+						<div class="tile action-items">
+							{#if current.state === 'running'}
+								<button type="button" class="btn" onclick={() => { if (actionsMenu) actionsMenu.open = false; act(current, 'reboot'); }} disabled={busy}>{t('vms.reboot')}</button>
+								<button type="button" class="btn" onclick={() => { if (actionsMenu) actionsMenu.open = false; open('poweroff'); }} disabled={busy}>{t('vms.poweroff')}</button>
+							{:else}
+								<button type="button" class="btn" onclick={() => { if (actionsMenu) actionsMenu.open = false; open('remove'); }} disabled={busy}>{t('vms.remove')}</button>
+							{/if}
+							<button class="btn" type="button" onclick={() => { if (actionsMenu) actionsMenu.open = false; showXML(); }}>{t('vms.showXml')}</button>
+						</div>
+					</details>
 				</div>
 			</div>
+			{#if pending}<p class="notice-warn" role="status">{vmLabel(vms.find(vm => vm.name === pending?.name) ?? current)}: {pendingText(pending.action)}</p>{/if}
+			{#if feedback}<p class="notice-ok" role="status">{feedback}</p>{/if}
+			{#if retry && error}<button class="btn" type="button" disabled={busy} onclick={() => retry && act(retry.vm, retry.action)}>{t('ui.retry')}</button>{/if}
 			{#if lowSpace.length}<p class="notice-warn" role="status">{t('vms.lowSpace', { volumes: lowSpace.join(', ') })}</p>{/if}
             {#if !current.available}<p class="notice-warn" role="status">{t('vms.unavailable')}</p>{/if}
 			{#if current.job}
@@ -307,13 +333,20 @@
 			{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-				<button type="submit" class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}" disabled={kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(current)}>{t(`vms.submit.${kind}`)}</button>
+				<button type="submit" class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}" disabled={busy || (kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(current))}>{t(`vms.submit.${kind}`)}</button>
 			</div>
 		</form>
 	</Dialog>
 {/if}
 
 <style>
+	.vm-search { margin: 12px; }
+	.vm-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.875rem; }
+	.actions-menu { position: relative; }
+	.actions-menu summary { cursor: pointer; list-style: none; }
+	.action-items { position: absolute; right: 0; top: calc(100% + 6px); z-index: 12; min-width: 230px; padding: 8px; display: grid; gap: 8px; box-shadow: var(--shadow-menu); }
+
+
 	.head {
 		display: flex;
 		flex-wrap: wrap;
@@ -572,4 +605,5 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
+	@media (max-width: 760px) { aside { flex: 1 1 100%; } .action-items { right: auto; left: 0; } }
 </style>
