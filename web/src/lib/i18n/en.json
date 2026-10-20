@@ -569,7 +569,6 @@
 	"docker.removeAppPurge": "All containers of the app {app} are stopped and removed, as are its compose file, its secrets, its Docker volumes and its data folder {path}. Afterwards the app can be installed as new.",
 	"docker.removeData": "Delete the app's data as well ({path}, Docker volumes and images no other container uses)",
 	"docker.removeDataWarning": "The data is deleted for good, without a recycle bin. Shares given to the app as folders stay as they are.",
-	"docker.removeDataConfirm": "Type “{app}” to confirm",
 	"docker.removeDataSubmit": "Delete app and data",
 	"docker.importTitle": "Import a compose file",
 	"docker.importName": "Name of the app",
