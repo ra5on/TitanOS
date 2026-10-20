@@ -38,7 +38,7 @@
 			</span>
 			{#if details}<span class="mono image" title={container.image}>{container.image}</span>{/if}
 		</div>
-		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} links={links.extra} {...actions} />
+		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} {...actions} />
 	</div>
 
 	<div class="stats">
@@ -57,11 +57,15 @@
 			{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
 			{#if ports.length > MAX_PORTS}<span class="chip mono" title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span>{/if}
 		</span>
-		{#if links.main}<a class="btn small" href={links.main} target="_blank" rel="noreferrer"><Icon name="globe" size={14} />{t('docker.webui')}</a>{/if}
 		<button type="button" class="btn small" onclick={() => actions.onaction(running ? 'stop' : 'start')} disabled={busy}>
 			<Icon name={running ? 'stop' : 'play'} size={14} />{t(running ? 'docker.stop' : 'docker.start')}
 		</button>
 	</div>
+	{#if links.length > 0}
+		<div class="links">
+			{#each links as link (link.href)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
+		</div>
+	{/if}
 </article>
 
 <style>
@@ -181,6 +185,11 @@
 		gap: 4px;
 		min-width: 0;
 		overflow: hidden;
+	}
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
 	}
 	.ports .chip {
 		flex: none;

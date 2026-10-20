@@ -63,12 +63,18 @@
 		{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
 		{#if ports.length > MAX_PORTS}<span class="chip mono" title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span>{/if}
 	</div>
+	<!-- The addresses get a labelled line of their own in the stacked layout. -->
+	{#if links.length > 0}
+		<div class="links">
+			{#each links as link (link.href)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
+		</div>
+	{/if}
 	<div class="acts">
-		{#if links.main}<a class="btn small" href={links.main} target="_blank" rel="noreferrer" aria-label={t('docker.webui')}><Icon name="globe" size={14} /><span class="text">{t('docker.webui')}</span></a>{/if}
+		{#each links as link (link.href)}<a class="btn small link" href={link.href} target="_blank" rel="noreferrer" aria-label={link.label} title={link.label}><Icon name={link.icon} size={14} /><span class="text">{link.text}</span></a>{/each}
 		<button type="button" class="btn small toggle" onclick={() => actions.onaction(running ? 'stop' : 'start')} disabled={busy} aria-label={t(running ? 'docker.stop' : 'docker.start')}>
 			<Icon name={running ? 'stop' : 'play'} size={14} /><span class="text">{t(running ? 'docker.stop' : 'docker.start')}</span>
 		</button>
-		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} links={links.extra} {...actions} />
+		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} {...actions} />
 	</div>
 </div>
 
@@ -215,6 +221,20 @@
 		min-width: 5.25rem;
 	}
 
+	.links {
+		display: none;
+	}
+	/* With several addresses the buttons would crowd out the names. */
+	@container docker-list (max-width: 1180px) {
+		.link {
+			min-width: 2rem;
+			padding: 0;
+		}
+		.link .text {
+			display: none;
+		}
+	}
+
 	/* The values are cells of the list's columns; the wrapper only counts
 	   in the stacked layout. */
 	.stats {
@@ -227,7 +247,8 @@
 			grid-template-areas:
 				'who acts'
 				'stats stats'
-				'ports ports';
+				'ports ports'
+				'links links';
 			gap: 6px 12px;
 			padding: 10px 12px;
 		}
@@ -268,6 +289,22 @@
 			flex-wrap: wrap;
 		}
 		.ports:empty {
+			display: none;
+		}
+		.links {
+			grid-area: links;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+		.links .small {
+			min-width: 0;
+			padding: 0 0.75rem;
+		}
+		.links .small :global(svg) {
+			flex: none;
+		}
+		.acts .link {
 			display: none;
 		}
 		.acts {

@@ -2104,6 +2104,7 @@
 	"snapshots.reason.iso": "Vor dem Snapshot das Installationsmedium in den VM-Einstellungen auswerfen. Die externe ISO-Datei wird nicht mitgesichert.",
 	"docker.tailscaleWebui": "Tailscale Web UI",
 	"docker.publicWebui": "Öffentlich",
+	"docker.tailscaleShort": "Tailscale",
 	"editor.publicUrl": "Öffentliche URL (optional)",
 	"editor.publicUrlHint": "Vollständige HTTP-/HTTPS-Adresse, z. B. vom Cloudflare-Tunnel. Richtet keinen Tunnel ein. Leer lassen, um den Knopf auszublenden.",
 	"editor.publicUrlInvalid": "Bitte eine vollständige HTTP-/HTTPS-Adresse ohne Benutzername oder Passwort eingeben.",
