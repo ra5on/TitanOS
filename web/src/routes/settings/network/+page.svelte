@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { revealTarget } from '#lib/reveal-target.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -164,7 +165,7 @@
 						<label class="narrow"><span>{t('netcfg.gateway')}</span><input class="field mono" type="text" bind:value={draft.gateway} placeholder="192.168.1.1" spellcheck="false" /></label>
 					</div>
 				{/if}
-				<label class="narrow"><span>{t('netcfg.dnsField')}</span>
+				<label class="narrow" id="network-dns" use:revealTarget><span>{t('netcfg.dnsField')}</span>
 					<input class="field mono" type="text" bind:value={dns} placeholder={draft.dhcp ? t('netcfg.dnsAuto') : '192.168.1.1, 1.1.1.1'} spellcheck="false" />
 				</label>
 			</fieldset>

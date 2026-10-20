@@ -3,8 +3,8 @@ export function noticeLink(kind: string, subject: string): string | null {
 	if (kind.startsWith('volume_')) return `/storage#volume-${encodeURIComponent(subject)}`;
 	if (kind.startsWith('disk_test_')) return '/tools';
 	if (kind.startsWith('disk_')) return `/storage#disk-${encodeURIComponent(subject)}`;
-	if (kind.startsWith('config_backup_')) return '/settings/stick';
-	if (kind.startsWith('backup_')) return `/settings/backups#backup-${encodeURIComponent(subject)}`;
+	if (kind.startsWith('config_backup_')) return '/settings/backups/configuration';
+	if (kind.startsWith('backup_')) return `/settings/backups/data#backup-${encodeURIComponent(subject)}`;
 	if (kind.startsWith('update_')) return '/settings/updates';
 	if (kind.startsWith('ups_')) return '/settings/ups';
 	if (kind === 'certificate_expiring') return '/settings/access';
