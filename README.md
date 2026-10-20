@@ -9,11 +9,13 @@
 
 ---
 
-> **Stand:** Ab **0.5.0 Stable** verwendet TitanOS einen gemeinsamen Updatekanal. Neue optionale Funktionen tragen bei Bedarf ein **Beta**-Label. Vollständig veröffentlichte Downloads und Änderungen stehen unter [Releases](https://github.com/ra5on/TitanOS/releases). Diese README beschreibt den Hauptzweig; Änderungen werden erst mit dem zugehörigen Release auf bestehenden Installationen verfügbar.
+> **Aktuelle Version: [TitanOS 0.6.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1)** · Veröffentlicht am 20. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard von TitanOS mit den Kacheln System, Volumes und Netzwerk" width="900">
+  <img src="docs/screenshots/v0.6.1/einstellungen.png" alt="TitanOS 0.6.1: Einstellungen mit Suchfeld und alphabetisch sortierten Kacheln" width="900">
 </p>
+
+Die Screenshots zeigen die Weboberfläche von **0.6.1** mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
 
 ## Was TitanOS ist
 
@@ -21,21 +23,19 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Aktuelle Neuerungen
+## Weboberfläche in 0.6.1
 
-- **0.5.0 Stable:** ein gemeinsamer Updatekanal, Daten-Volume als Startansicht im Dateimanager und der selbst vergebene App-Name in Docker.
-- **SMB-Ordnerkopie (Beta):** zweites NAS mit Benutzername/Passwort verbinden, Freigabe auswählen und komplette Ordnerbäume sofort oder nach Zeitplan kopieren. Neue und geänderte Dateien werden übertragen; gelöschte Quelldateien bleiben am Ziel. [Einrichtung und Rücksicherung](docs/SMB-COPY-BACKUPS.md).
+- **Aufgeräumte Einstellungen:** alphabetische Kacheln und Suche mit direkten Treffern für SSH, Zertifikat, Terminal, DNS, Zeitzone und Sicherungen. Datum und Uhrzeit haben eine eigene Seite; Terminal und Konsolen stehen unter Zugang.
+- **Sicherungen an einem Ort:** Datensicherung, Systemkonfiguration und Wiederherstellung mit gemeinsamer Übersicht. Letzte erfolgreiche Sicherungen, nächster Lauf und Fehler sind direkt sichtbar.
+- **Klare Rückmeldungen:** Speichern, laufende Aktionen, Fehler und erneute Versuche werden angezeigt. Bei Verbindungsabbruch weist die Oberfläche auf möglicherweise veraltete Daten hin.
+- **Laufende Aufgaben:** gemeinsame Übersicht für Uploads, Dateiübertragungen, Backups, Update-Downloads, VM-Aufträge und Volume-Prüfungen. Fortschritte erscheinen nur, wenn Messwerte verfügbar sind.
+- **Direkte Meldungslinks:** relevante Seiten öffnen; Volumes und Backup-Aufträge werden gezielt angesprungen. SMART-Meldungen führen zur Speicher-Seite, ohne die einzelne Platte hervorzuheben.
+- **Übersichtliche VMs:** durchsuchbare Liste, getrennte CPU-/RAM-Angaben, Starten/Herunterfahren als Hauptaktion und ein Menü für weitere Aktionen.
+- **Desktop und Smartphone:** responsive Ansichten, anpassbare Schriftgröße, Dichte und Themes. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert; die neuen globalen Hinweise und Aufgaben erscheinen außerhalb der Docker-Seiten.
 
-- **WebUI für Desktop und Smartphone:** kompaktere Texte und Abstände, anpassbare Schriftgröße und Dichte, mobile Formulare und Dialoge sowie seitlich scrollbare Navigation und Tabellen.
-- **Apps mit passenden Icons und drei Zugriffswegen:** lokale WebUI, Tailscale-WebUI bei aktiver Verbindung und eine selbst hinterlegte öffentliche URL, etwa hinter Cloudflare. Protokoll, Port und Pfad gehören zur App-Vorlage. Das Eintragen einer URL richtet keinen Tunnel ein. [App-Links](docs/APP-LINKS.md).
-- **Eigener App-Katalog:** [TitanOS-Apps](https://github.com/ra5on/TitanOS-Apps) enthält auch 13 Storytold-/ArtCraft-Web-Apps als Docker-Pakete. Die Paketierung prüft regelmäßig neue stabile Upstream-Releases und veröffentlicht sie nach erfolgreichen Tests. Bereits installierte Container aktualisierst du über die Docker-Ansicht.
-- **Dateien in Storytold-Apps:** Diese Apps verarbeiten Dokumente im Browser. Eine NAS-Freigabe auf dem eigenen Rechner verbinden und Dateien dort öffnen bzw. exportieren; ein Container-Pfad allein gibt dem Browser keinen Zugriff auf NAS-Dateien.
-- **Beta 6:** erweiterte Backup-Zeitpläne und Ordnerauswahl, ein anderes TitanOS als Backup-Ziel über Tailscale sowie USB-Laufwerke, Hintergrundaufträge und Textbearbeitung im Dateimanager. Verfügbarkeit anhand der Release-Hinweise prüfen.
+Alle Änderungen: [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1) · [0.6.0](https://github.com/ra5on/TitanOS/releases/tag/v0.6.0).
 
-- **Beta 7 – USB-Kopie-Backups:** ausgewählte Freigaben nach Zeitplan auf eine externe Platte kopieren. Direkt lesbar und unverschlüsselt; gelöschte Quelldateien bleiben auf dem Ziel erhalten, geänderte werden ersetzt. [Ablauf und Grenzen](docs/USB-COPY-BACKUPS.md).
-- **Beta 7 – Stick-Zeitplan und Töne:** tägliche/wöchentliche Prüfung der Konfigurationssicherung zusätzlich zur Sicherung nach Änderungen. Fünf sanfte Benachrichtigungstöne mit Vorschau, Lautstärke und Auswahl pro Konto. [Einstellungen](docs/BETA7.md).
-
-## Was schon funktioniert
+## Funktionen
 
 - **Start vom Stick, Betrieb im RAM.** Das komprimierte Systemabbild wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Container, VM-Abbilder und Nutzdaten liegen auf Daten-Volumes. Größe und RAM-Bedarf hängen vom Release und den laufenden Diensten ab.
 - **Konfiguration auf dem Stick.** Systemeinstellungen, Konten und Schlüssel liegen im Ordner `config` auf dem Stick. Der Stick wird bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt. Eine automatische Sicherung auf einem Daten-Volume ermöglicht die Wiederherstellung nach einem Stick-Ausfall; die aktive Konfiguration bleibt auf dem Stick.
@@ -52,6 +52,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Netzwerk.** Feste Adresse, Bonding, VLAN und eine Bridge, über die VMs eine eigene Adresse im Heimnetz bekommen. Jede Änderung gilt erst auf Probe: Ohne Bestätigung innerhalb von zwei Minuten kehrt das NAS zur alten Einstellung zurück.
 - **Benachrichtigungen.** Fällt eine Platte aus, läuft ein Wiederaufbau oder wird ein Volume voll, steht das in der Weboberfläche und kommt auf Wunsch per E-Mail, ntfy, Telegram oder Discord.
 - **Backups.** Freigaben mit restic verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP), S3-Speicher oder einen restic-REST-Server sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Wiederherstellen in einen eigenen Ordner. Externe S3- und REST-Dienste müssen mit dem jeweiligen Ziel geprüft werden.
+- **Kopie-Backups.** Freigaben auf externe USB-Platten oder ein SMB-Ziel kopieren, sofort oder nach Zeitplan. Neue und geänderte Dateien werden übertragen; gelöschte Quelldateien bleiben am Ziel. Die Kopien sind direkt lesbar, ohne Versionierung. SMB-Ordnerkopie ist als Beta gekennzeichnet. [USB-Kopie](docs/USB-COPY-BACKUPS.md) · [SMB-Kopie](docs/SMB-COPY-BACKUPS.md).
 - **USV.** Per USB oder über das Netzwerk; bei Stromausfall fährt das NAS sauber herunter, bevor die Batterie leer ist, und kann den Zustand der USV an andere Geräte weitergeben.
 - **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
 - **Sicherung des Sticks.** Automatische Sicherung der Konfiguration auf ein verfügbares Volume, gebündelt nach Änderungen; zusätzlich Download und Wiederherstellung. Beim Ersatz eines Sticks lässt sich eine gefundene Sicherung in der Ersteinrichtung auswählen und zurückspielen.
@@ -63,77 +64,67 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
 - **Deutsch und Englisch.**
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/dashboard-bearbeiten.png" alt="Dashboard im Bearbeiten-Modus mit Griffen und Spaltenraster"></td>
-    <td width="50%"><img src="docs/screenshots/darstellung.png" alt="Einstellungen › Darstellung mit Theme-Auswahl und Vorschau"></td>
-  </tr>
-  <tr>
-    <td align="center">Dashboard bearbeiten</td>
-    <td align="center">Einstellungen › Darstellung</td>
-  </tr>
-</table>
+## Einblicke in die Oberfläche
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/speicher.png" alt="Speicher: zwei Volumes mit Mitgliedern und Belegung, darunter die Plattentabelle"></td>
-    <td width="50%"><img src="docs/screenshots/shares.png" alt="Shares: eine Freigabe mit Rechten und Adressen zum Verbinden"></td>
+    <td width="50%"><img src="docs/screenshots/v0.6.1/sicherungen.png" alt="TitanOS 0.6.1: Sicherungsübersicht mit Datensicherung, Systemkonfiguration und Wiederherstellung"></td>
+    <td width="50%"><img src="docs/screenshots/v0.6.1/wiederherstellung.png" alt="TitanOS 0.6.1: Dateien wiederherstellen und Ablauf zum Ersetzen des Bootsticks"></td>
   </tr>
+  <tr><td align="center">Sicherungen</td><td align="center">Wiederherstellung</td></tr>
   <tr>
-    <td align="center">Speicher</td>
-    <td align="center">Shares</td>
+    <td><img src="docs/screenshots/v0.6.1/vms.png" alt="TitanOS 0.6.1: VM-Liste mit Suche und Aktionen"></td>
+    <td><img src="docs/screenshots/v0.6.1/aufgaben.png" alt="TitanOS 0.6.1: Dialog mit laufenden Aufgaben und Fortschrittsanzeigen"></td>
   </tr>
+  <tr><td align="center">Virtuelle Maschinen</td><td align="center">Laufende Aufgaben</td></tr>
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/docker.png" alt="Docker: ein Compose-Stack mit zwei Diensten und ein einzelner Container als Karte, beide mit Update-Hinweis" width="900"><br>
+  <img src="docs/screenshots/v0.6.1/docker.png" alt="TitanOS 0.6.1: unveränderte Docker-Oberfläche mit einem Beispielcontainer" width="900"><br>
   Docker
 </p>
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/apps.png" alt="Apps: Katalog mit Kategorien und das Installationspanel einer App"></td>
-    <td width="50%"><img src="docs/screenshots/container-bearbeiten.png" alt="Container bearbeiten: Formular mit Image, Netzwerk, Ports und Variablen"></td>
-  </tr>
-  <tr>
-    <td align="center">App-Store</td>
-    <td align="center">Container bearbeiten</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/vms.png" alt="VMs: Liste links, rechts die laufende VM mit ihrem Bildschirm im Browser"></td>
-    <td width="50%"><img src="docs/screenshots/terminal.png" alt="Terminal-Panel am unteren Rand mit einer Shell auf dem NAS"></td>
-  </tr>
-  <tr>
-    <td align="center">Virtuelle Maschinen</td>
-    <td align="center">Terminal</td>
-  </tr>
-</table>
-
 <p align="center">
-  <img src="docs/screenshots/dateien.png" alt="Dateien: Freigaben links, Dateiliste und abgeschlossene Uploads" width="900"><br>
-  Dateimanager
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/einrichtung.png" alt="Ersteinrichtung: Besitzerkonto anlegen" width="600"><br>
-  Ersteinrichtung beim ersten Start
+  <img src="docs/screenshots/v0.6.1/sicherungen-mobil.png" alt="TitanOS 0.6.1: Sicherungsübersicht auf einem schmalen Bildschirm im hellen Theme" width="320"><br>
+  Sicherungen auf dem Smartphone
 </p>
 
 ## Speicher und Hardware
 
 - **Btrfs-Spiegel:** native RAID1-Spiegel aus genau zwei Platten, schreibgeschützte Snapshots, Wiederherstellung in einen neuen Ordner, Scrub und Ersatz eines fehlenden Mitglieds. [Btrfs-Anleitung](docs/BTRFS.md).
 - **Geräteauswahl für Container:** iGPU/GPU, NPU, NVIDIA und Coral USB im App-Installationsdialog und Container-Editor; gespeichert werden stabile Gerätekennungen. [Hardware und Plugins](docs/PLUGINS.md).
-- **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird noch nicht unterstützt.
+- **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird nicht unterstützt.
 - **Plugins direkt von GitHub:** Die Plugin-Seite zeigt den signierten Katalog des laufenden Releases. Pakete werden erst beim Installieren auf das Daten-Volume geladen und vor der Aktivierung geprüft. Die manuelle Installation aus einer Freigabe bleibt möglich. [Plugin-Installation](docs/PLUGINS.md#installation-der-zusätzlichen-plugins).
 - **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
-- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält. Das gilt für Updates, die aus v0.1.0-beta.3 oder einer späteren Version gestartet werden; der Updater in v0.1.0-beta.2 kann das noch nicht.
+- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält.
 
-## Noch geplant
+## Weitere Funktionen
 
-Volume-Verschlüsselung, weitere Fernzugriffsoptionen, Energiezeitpläne/Wake-on-LAN, Befehlspalette sowie dokumentierte API und CLI. Bootloader-Updates und Systemupdates aus einer hochgeladenen Datei stehen ebenfalls noch aus.
+- Getrennte CPU-/RAM-/Systemkacheln, kleinere VM-/Containerkacheln und Einstellungen für Kachelbreite, Höhe und Zusatzwerte; IPv6 im Netzwerk-Dashboard. [Monitoring](docs/MONITORING.md).
+- Einstellungen für den physischen [Ein-/Ausschalter](docs/POWER-BUTTON.md).
+- Fernzugriff über das [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
+- Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.
+
+### VM-Firmware
+
+Beim Anlegen einer VM kann zwischen **UEFI (OVMF)** und **Legacy-BIOS (SeaBIOS)**
+gewählt werden. UEFI bleibt Standard; vorhandene VMs behalten UEFI. Die Auswahl
+ist nach dem Anlegen fest, da sie zum installierten Gast passen muss. Für
+Windows 11 UEFI mit TPM und Secure Boot verwenden. TitanOS selbst benötigt
+weiterhin UEFI zum Starten.
+
+### Dateien bearbeiten und externe USB-Laufwerke
+
+Gängige UTF-8-Textdateien bis 512 KiB lassen sich direkt unter
+**Dateien → Bearbeiten** speichern, auch JSON/YAML auf beschreibbaren Freigaben,
+Volumes und USB-Geräten. Uploads auf externe exFAT-Laufwerke werden unterstützt.
+[Bedienung, Dateiformate und Grenzen](docs/FILE-EDITOR.md).
+
+### Windows meldet einen zu langen Zielpfad
+
+Bei tiefen Ordnerbäumen gelten zusätzlich Grenzen des Windows-Kopierprogramms.
+Siehe [Kopieren langer Pfade über SMB](docs/WINDOWS-SMB.md) für Robocopy und die
+Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Voraussetzungen und Prüfstand
 
@@ -141,21 +132,19 @@ Volume-Verschlüsselung, weitere Fernzugriffsoptionen, Energiezeitpläne/Wake-on
 - Für erste Tests 4 GB RAM einplanen, zusätzlich RAM für Container und VMs. Das ist eine Testempfehlung, keine auf echter Hardware geprüfte Mindestanforderung.
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
-- Echte USVs, S3-/REST-Backupziele, GPU-Durchreichung und eine vollständige Windows-Installation sind noch nicht abschließend geprüft. Die Beta ist für Tests im vertrauenswürdigen lokalen Netz gedacht.
-- Btrfs und automatische Plugin-Mitnahme sind ab v0.1.0-beta.3 enthalten. Beim ersten Update aus v0.1.0-beta.2 ein installiertes NVIDIA-Plugin vorher abschalten und danach passend zur neuen Version installieren; dessen alter Updater kann Plugins noch nicht vorbereiten. Volume-Verschlüsselung, Bootloader-Updates und Systemupdates aus einer Datei fehlen weiterhin. Let's Encrypt ist zurückgestellt; selbst signierte und importierte Zertifikate werden unterstützt.
+- Der Prüfstand deckt nicht jede USV, jedes externe Backupziel oder jede GPU ab. Die verfügbaren Hardwareberichte ersetzen keine Prüfung der eigenen Geräte und Rücksicherung. TitanOS im vertrauenswürdigen lokalen Netz betreiben.
+- Volume-Verschlüsselung, Bootloader-Aktualisierung und Systemupdates aus einer hochgeladenen Datei sind nicht enthalten. HTTPS unterstützt selbst signierte und importierte Zertifikate; eine automatische Let’s-Encrypt-Verwaltung ist nicht enthalten.
 
 ## Installation
 
-Downloads stehen auf den [Release-Seiten](https://github.com/ra5on/TitanOS/releases). Das gewünschte vollständig veröffentlichte Release auswählen. Für einen neuen Stick:
+Die Dateien für **0.6.1** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1). Für einen neuen Stick:
 
-1. `titanos-<version>.zip`, dessen `.minisig` und `.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.6.1.zip`, `titanos-0.6.1.zip.minisig` und `titanos-0.6.1.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
 
-Updates werden unter **Einstellungen › Updates** angeboten. Ab 0.5.0 gibt es nur noch den Stable-Kanal; bisherige Beta-Einstellungen werden automatisch umgestellt. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
-
-Während ein neues Release noch gebaut wird, kann dessen Tag bereits im GitHub-Feed stehen. Die Beta-Update-Suche kann dann vorübergehend einen Abruffehler melden, weil das signierte Manifest noch fehlt. Nach der vollständigen Veröffentlichung erneut nach Updates suchen.
+Updates werden unter **Einstellungen › Updates** angeboten. TitanOS verwendet den Stable-Kanal; frühere Beta-Kanaleinstellungen werden automatisch umgestellt. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
 
 ## USB-Stick ersetzen und Volumes weiterverwenden
 
@@ -163,15 +152,15 @@ Die aktive Konfiguration liegt auf dem Bootstick. TitanOS sichert sie standardm�
 
 Nach einem Stick-Ausfall einen neuen Stick vorbereiten und beim ersten Start **vor dem Anlegen eines neuen Kontos** die gefundene Konfigurationssicherung auswählen. TitanOS sucht dafür auf vorhandenen unterstützten Volumes lesend nach Sicherungen. Nach Wiederherstellung und Neustart werden die registrierten Volumes wieder eingebunden. Die vorhandenen Datenplatten dabei nicht als neue Volumes anlegen oder formatieren.
 
-Ohne Konfigurationssicherung bleiben die Daten erhalten, es gibt aber noch keinen geführten Import beliebiger vorhandener Volumes.
+Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import beliebiger vorhandener Volumes ist nicht enthalten.
 
 ## Tests und Funktionsstatus
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
-Der Projektinhaber bestätigt auf seinem Server mit **Beta 2** die Installation auf einem echten USB-Stick, Neustarts, RAID, Freigaben sowie funktionierendes USB und GPU. Das ist ein Hardwarebericht für diesen Stand und diesen Server; die genaue Versionsreihe und Gerätemodelle sind damit noch nicht dokumentiert. Neuere Funktionen benötigen eigene Abnahmetests, insbesondere die Wiederherstellung auf einem Ersatzstick, Backups samt Rücksicherung und der Zugriff über ein echtes Tailnet.
+Für **0.6.1** wurden Frontend- und Backend-Prüfungen sowie die Release-Prüfungen für das bootfähige ZIP und die Plugins erfolgreich ausgeführt. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
 
-Ab 0.5.0 erscheint das System als Stable. Neue optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, nicht einen zweiten Updatekanal. Frühere Releases behalten ihre Beta-Bezeichnung.
+Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
 
 ## Entwicklung
 
@@ -203,31 +192,3 @@ Maßgeblich ist der Lizenztext in [LICENSE.md](LICENSE.md). Fremdkomponenten (Li
 ## Mitmachen
 
 Beiträge sind willkommen – bitte lies zuerst [CONTRIBUTING.md](CONTRIBUTING.md) (auf Englisch). Sicherheitslücken bitte nicht öffentlich melden, sondern wie in [SECURITY.md](SECURITY.md) beschrieben.
-
-## Weitere Funktionen
-
-- Getrennte CPU-/RAM-/Systemkacheln, kleinere VM-/Containerkacheln und Einstellungen für Kachelbreite, Höhe und Zusatzwerte; IPv6 im Netzwerk-Dashboard. [Monitoring](docs/MONITORING.md).
-- Einstellungen für den physischen [Ein-/Ausschalter](docs/POWER-BUTTON.md).
-- Fernzugriff über das [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
-- Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.
-
-### VM-Firmware (ab Beta 9)
-
-Beim Anlegen einer VM kann zwischen **UEFI (OVMF)** und **Legacy-BIOS (SeaBIOS)**
-gewählt werden. UEFI bleibt Standard; vorhandene VMs behalten UEFI. Die Auswahl
-ist nach dem Anlegen fest, da sie zum installierten Gast passen muss. Für
-Windows 11 UEFI mit TPM und Secure Boot verwenden. TitanOS selbst benötigt
-weiterhin UEFI zum Starten. Die Auswahl ist ab Beta 9 verfügbar.
-
-### Dateien bearbeiten und externe USB-Laufwerke
-
-Ab Beta 9 lassen sich gängige UTF-8-Textdateien bis 512 KiB direkt unter
-**Dateien → Bearbeiten** speichern, auch JSON/YAML auf beschreibbaren Freigaben,
-Volumes und USB-Geräten. Der Upload auf externe exFAT-Laufwerke wurde korrigiert.
-[Bedienung, Dateiformate und Grenzen](docs/FILE-EDITOR.md).
-
-### Windows meldet einen zu langen Zielpfad
-
-Bei tiefen Ordnerbäumen gelten zusätzlich Grenzen des Windows-Kopierprogramms.
-Siehe [Kopieren langer Pfade über SMB](docs/WINDOWS-SMB.md) für Robocopy und die
-Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
