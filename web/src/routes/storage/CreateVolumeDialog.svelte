@@ -10,7 +10,7 @@
 	let { disks, taken, onclose, ondone }: Props = $props();
 
 	// Same rules as the backend (internal/storage); it checks again.
-	const NAME = /^[a-z][a-z0-9-]{0,11}$/;
+	const NAME = /^[A-Za-z][A-Za-z0-9-]{0,11}$/;
 	const LEVELS: { id: RaidLevel; min: number }[] = [
 		{ id: 'raid1', min: 2 },
 		{ id: 'raid5', min: 3 },
@@ -52,7 +52,7 @@
 	const nameError = $derived.by(() => {
 		if (name === '') return '';
 		if (!NAME.test(name)) return errorText('invalid_volume_name');
-		if (taken.includes(name)) return errorText('volume_exists');
+		if (taken.some(existing => existing.toLowerCase() === name.toLowerCase())) return errorText('volume_exists');
 		return '';
 	});
 	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && !working);

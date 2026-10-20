@@ -35,6 +35,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
 const (
@@ -239,7 +240,6 @@ func (m *Manager) save(jobs []Job) error {
 }
 
 var (
-	idForm     = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 	clockForm  = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 	bucketForm = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
 	hostForm   = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$|^\[[0-9a-fA-F:]+\]$`)
@@ -258,7 +258,7 @@ func webAddress(address string) bool {
 
 // check tells whether a job makes sense. shares and volumes are what exists.
 func check(job Job, shares []Source, volumes []string) error {
-	if !idForm.MatchString(job.ID) {
+	if !naming.ValidBackup(job.ID) {
 		return invalid("name")
 	}
 	if err := checkSelection(job); err != nil {
@@ -283,7 +283,7 @@ func check(job Job, shares []Source, volumes []string) error {
 	d := job.Destination
 	switch d.Type {
 	case "usb-copy", "smb-copy":
-		if (d.Type == "usb-copy" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb-copy" && !idForm.MatchString(d.TargetID)) || !relative(d.Folder) || len(job.Extras) != 0 {
+		if (d.Type == "usb-copy" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb-copy" && !naming.ValidBackup(d.TargetID)) || !relative(d.Folder) || len(job.Extras) != 0 {
 			return invalid("USB identity, folder or unsupported extra source")
 		}
 		for _, pattern := range job.Patterns {
@@ -360,6 +360,21 @@ func (m *Manager) List() []View {
 	return views
 }
 
+// USBProgress returns only cached run states, without accessing disks or /config.
+func (m *Manager) USBProgress() map[string]State {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[string]State)
+	for _, job := range m.jobs {
+		if job.Destination.Type == "usb-copy" {
+			if state := m.states[job.ID]; state != nil {
+				result[job.ID] = *state
+			}
+		}
+	}
+	return result
+}
+
 func (m *Manager) find(id string) (Job, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -399,7 +414,7 @@ func (m *Manager) Create(job Job, volumes []string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if slices.ContainsFunc(m.jobs, func(j Job) bool { return j.ID == job.ID }) {
+	if slices.ContainsFunc(m.jobs, func(j Job) bool { return strings.EqualFold(j.ID, job.ID) }) {
 		return ErrExists
 	}
 	if job.Destination.Type == "smb-copy" && !slices.ContainsFunc(m.smbTargets, func(t SMBTarget) bool { return t.ID == job.Destination.TargetID }) {

@@ -90,3 +90,73 @@ func TestUSBCopyValidation(t *testing.T) {
 		t.Fatal("plaintext config extra accepted")
 	}
 }
+
+// SMB and USB jobs share copyTo. Every user-chosen path component must survive
+// job persistence and the actual copy, including the default folder's job name.
+func TestCopyPreservesNamesAcrossPersistence(t *testing.T) {
+	for _, kind := range []string{"smb-copy", "usb-copy"} {
+		t.Run(kind, func(t *testing.T) {
+			source, target := t.TempDir(), t.TempDir()
+			if err := os.Mkdir(filepath.Join(source, "MeineFotos"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(source, "MeineFotos", "Urlaub.JPG"), []byte("photo"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			store := config.Open(t.TempDir())
+			m := NewManager(store)
+			m.mountRoot = t.TempDir()
+			m.Sources = func() []Source { return []Source{{Name: "Daten", Volume: "Backup", Path: source}} }
+			if err := m.Load(); err != nil {
+				t.Fatal(err)
+			}
+			m.smbTargets = []SMBTarget{{ID: "ExternesNAS"}}
+			job := Job{ID: "Backup", Sources: []string{"Daten"}, Time: "02:00", Destination: Destination{Type: kind, TargetID: "ExternesNAS", DeviceID: "ABCD-1234"}}
+			if err := m.Create(job, []string{"Backup"}); err != nil {
+				t.Fatal(err)
+			}
+			duplicate := job
+			duplicate.ID = "backup"
+			if err := m.Create(duplicate, []string{"Backup"}); !errors.Is(err, ErrExists) {
+				t.Fatalf("case duplicate: %v", err)
+			}
+			if err := m.Load(); err != nil {
+				t.Fatal(err)
+			}
+			saved, ok := m.find("Backup")
+			if !ok || saved.Destination.Folder != "backups/Backup" || saved.Sources[0] != "Daten" || saved.Destination.TargetID != "ExternesNAS" {
+				t.Fatalf("name changed: %+v", saved)
+			}
+			root, err := os.OpenRoot(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer root.Close()
+			if err := m.copyTo(context.Background(), saved, root); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(target, "backups", "Backup", "Daten", "MeineFotos", "Urlaub.JPG"))
+			if err != nil || string(data) != "photo" {
+				t.Fatalf("copy: %q %v", data, err)
+			}
+			if _, err := os.Stat(filepath.Join(target, "backups", "backup")); !os.IsNotExist(err) {
+				t.Fatalf("lowercase destination created: %v", err)
+			}
+		})
+	}
+}
+
+func TestUSBProgressOnlyUsesCachedStates(t *testing.T) {
+	// No store, source callback or mount root: this endpoint must only read RAM.
+	manager := &Manager{jobs: []Job{{ID: "Backup", Destination: Destination{Type: "usb-copy"}}, {ID: "Other", Destination: Destination{Type: "local"}}, {ID: "Unloaded", Destination: Destination{Type: "usb-copy"}}}, states: map[string]*State{"Backup": {Running: true, Percent: 25, BytesDone: 10, BytesTotal: 40}, "Other": {Running: true}}}
+	states := manager.USBProgress()
+	if len(states) != 1 || !states["Backup"].Running || states["Backup"].Percent != 25 {
+		t.Fatalf("states=%+v", states)
+	}
+	state := states["Backup"]
+	state.Percent = 100
+	states["Backup"] = state
+	if manager.USBProgress()["Backup"].Percent != 25 {
+		t.Fatal("caller changed cached state")
+	}
+}

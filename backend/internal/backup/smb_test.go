@@ -12,7 +12,7 @@ import (
 )
 
 func TestSMBValidationAndSecrets(t *testing.T) {
-	target := SMBTarget{ID: "second-nas", Host: "nas.example", Username: "backup", Password: "secret,=value", Share: "My backups", Folder: "titanos"}
+	target := SMBTarget{ID: "ExternesNAS", Host: "nas.example", Username: "backup", Password: "secret,=value", Share: "My backups", Folder: "MeineSicherung"}
 	if err := validateSMB(target, true); err != nil {
 		t.Fatal(err)
 	}

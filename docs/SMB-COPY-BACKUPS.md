@@ -55,3 +55,10 @@ anwendungsgerechte Sicherung; eine Dateikopie ist kein konsistenter Snapshot.
 **Beta** bezeichnet dieses neue optionale Verfahren. Der System-Updater bleibt
 im einzigen Stable-Kanal. Ein erfolgreicher Kopierlauf sollte durch eine eigene
 Rücksicherung auf der verwendeten Hardware ergänzt werden.
+
+
+## Schreibweise der Namen (Entwicklungsstand nach 0.6.1)
+
+Auftrags- und Zielnamen behalten die eingegebene Groß-/Kleinschreibung. Beispielsweise bleibt `Backup` auch im automatisch vorgeschlagenen Zielordner `backups/Backup` erhalten. Der feste Präfix `backups/` ist eine Ablagestruktur, keine zweite Fassung des Auftragsnamens. Freigaben, Unterordner und Dateien werden unverändert benannt, etwa `backups/Backup/Daten/MeineFotos/Urlaub.JPG`.
+
+Bestehende Aufträge und Pfade werden nicht umbenannt. Zwei neue Aufträge oder Zielbezeichnungen, die sich nur durch Groß-/Kleinschreibung unterscheiden, werden nicht parallel angelegt. Die Prüfungen verwenden isolierte Zielverzeichnisse für den gemeinsamen USB-/SMB-Kopierpfad; die Namensbehandlung des konkreten externen NAS muss dessen Dateisystem und SMB-Konfiguration ebenfalls unterstützen.

@@ -51,7 +51,7 @@ async function request<T>(method: string, path: string, body?: Body, signal?: Ab
 
 export const api = {
 	get: <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal),
-	post: <T>(path: string, body?: Body) => request<T>('POST', path, body),
+	post: <T>(path: string, body?: Body, signal?: AbortSignal) => request<T>('POST', path, body, signal),
 	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
 	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body)
 };
@@ -102,6 +102,7 @@ export type SystemInfo = {
 };
 
 export type Preferences = {
+	files: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
 	sound: Record<string, unknown> | null;
@@ -200,6 +201,9 @@ export type FileRoot = {
 };
 
 export type CopyJob = {
+ waiting?:boolean; paused?:boolean; priority?:number; rate?:number;
+ operation?: string;
+ retryable?: boolean;
 	id: string;
 	move: boolean;
 	state: 'running' | 'done' | 'failed' | 'cancelled';

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"mime"
@@ -9,6 +10,8 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
@@ -29,6 +32,8 @@ var fileErrors = []struct {
 	{files.ErrNotFound, http.StatusNotFound, "file_not_found"},
 	{files.ErrExists, http.StatusConflict, "file_exists"},
 	{files.ErrInvalid, http.StatusBadRequest, "invalid_path"},
+	{files.ErrScanLimit, http.StatusUnprocessableEntity, "file_scan_limit"},
+	{context.DeadlineExceeded, http.StatusRequestTimeout, "file_scan_timeout"},
 	{files.ErrReadOnly, http.StatusForbidden, "read_only_share"},
 	{files.ErrNoSpace, http.StatusInsufficientStorage, "no_space"},
 	{files.ErrMismatch, http.StatusConflict, "upload_mismatch"},
@@ -160,7 +165,8 @@ func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	undo := s.opts.Files.RecordUndo(currentUser(r).Name, "rename", []files.UndoMove{{CurrentRoot: root, OriginalRoot: root, Current: req.To, Original: req.From}})
+	writeJSON(w, http.StatusOK, map[string]string{"undo": undo})
 }
 
 func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
@@ -168,6 +174,7 @@ func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		Root      string
 		Paths     []string
 		Permanent bool
+		Versions  map[string]string
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -177,12 +184,19 @@ func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if err := s.opts.Files.Delete(root, req.Paths, user.Name, req.Permanent); err != nil {
+	if req.Versions != nil {
+		if err := s.opts.Files.CheckVersions(root, req.Paths, req.Versions); err != nil {
+			writeFileError(w, err)
+			return
+		}
+	}
+	undo, err := s.opts.Files.DeleteWithUndo(root, req.Paths, user.Name, req.Permanent)
+	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	slog.Info("files deleted", "root", root.ID, "paths", req.Paths, "permanent", req.Permanent || !root.Recycle, "user", user.Name, "ip", remoteIP(r))
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, map[string]string{"undo": undo})
 }
 
 func (s *Server) handleTrashList(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +205,17 @@ func (s *Server) handleTrashList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
+	if r.URL.Query().Get("flat") == "1" {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		entries, err := s.opts.Files.TrashFlat(ctx, root, user.Name, user.Role.CanAdminister())
+		if err != nil {
+			writeFileError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, entries)
+		return
+	}
 	entries, err := s.opts.Files.TrashList(root, r.URL.Query().Get("path"), user.Name, user.Role.CanAdminister())
 	if err != nil {
 		writeFileError(w, err)
@@ -217,6 +242,14 @@ func (s *Server) handleTrash(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	var err error
 	switch action {
+	case "preview":
+		preview, err := s.opts.Files.TrashPreview(root, req.Paths, user.Name, user.Role.CanAdminister())
+		if err != nil {
+			writeFileError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, preview)
+		return
 	case "restore":
 		err = s.opts.Files.TrashRestore(root, req.Paths, user.Name, user.UID, user.Role.CanAdminister())
 	case "delete":
@@ -253,6 +286,17 @@ func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 	attachment(w, info.Name())
 	w.Header().Set("Content-Type", "application/octet-stream")
+	if r.URL.Query().Get("media") == "1" {
+		mediaType := map[string]string{".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".flac": "audio/flac", ".mp4": "video/mp4", ".webm": "video/webm", ".ogv": "video/ogg"}[strings.ToLower(path.Ext(info.Name()))]
+		if mediaType == "" {
+			writeError(w, http.StatusBadRequest, "invalid_path", "unsupported media")
+			return
+		}
+		w.Header().Set("Content-Type", mediaType)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": info.Name()}))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	}
 	http.ServeContent(w, r, "", info.ModTime(), file)
 }
 
@@ -271,11 +315,20 @@ func (s *Server) handleFileZip(w http.ResponseWriter, r *http.Request) {
 	if len(paths) == 1 {
 		name = path.Base(paths[0])
 	}
-	attachment(w, name+".zip")
+	name += ".zip"
+	if chosen := r.URL.Query().Get("name"); chosen != "" {
+		if path.Base(chosen) != chosen || strings.ContainsAny(chosen, "\\\x00\r\n") || len(chosen) <= 4 || len(chosen) > 200 || !strings.HasSuffix(strings.ToLower(chosen), ".zip") {
+			writeFileError(w, files.ErrInvalid)
+			return
+		}
+		name = chosen
+	}
+	attachment(w, name)
 	w.Header().Set("Content-Type", "application/zip")
 	if err := s.opts.Files.Zip(w, root, paths); err != nil {
 		// The answer has started; all that is left is to end it early.
 		slog.Warn("zip download", "root", root.ID, "err", err)
+		panic(http.ErrAbortHandler)
 	}
 }
 
@@ -446,6 +499,7 @@ func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
 // handleFileCopy starts copying or moving files between roots.
 func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Choices                       map[string]files.CopyChoice
 		Root, ToRoot, ToDir, Conflict string
 		Paths                         []string
 		Move                          bool
@@ -462,7 +516,7 @@ func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	job, err := s.opts.Files.StartCopy(src, req.Paths, dst, req.ToDir, req.Move, req.Conflict, user.Name, user.UID)
+	job, err := s.opts.Files.StartCopyChoices(src, req.Paths, dst, req.ToDir, req.Move, req.Conflict, user.Name, user.UID, req.Choices)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -481,4 +535,89 @@ func (s *Server) handleFileJobCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleFileInspect(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Root, ToRoot, ToDir string
+		Paths               []string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	src, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	var dst *files.Root
+	if req.ToRoot != "" {
+		resolved, ok := s.fileRoot(w, r, req.ToRoot)
+		if !ok {
+			return
+		}
+		dst = &resolved
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	result, err := s.opts.Files.Inspect(ctx, src, req.Paths, dst, req.ToDir)
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleFileJobRetry(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r)
+	for _, job := range s.opts.Files.Jobs(user.Name) {
+		if job.ID == r.PathValue("id") {
+			src, ok := s.fileRoot(w, r, job.From)
+			if !ok {
+				return
+			}
+			dst, ok := s.fileRoot(w, r, job.To)
+			if !ok {
+				return
+			}
+			result, err := s.opts.Files.RetryCopy(user.Name, job.ID, src, dst, user.UID)
+			if err != nil {
+				writeFileError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusAccepted, result)
+			return
+		}
+	}
+	writeFileError(w, files.ErrNoJob)
+}
+
+func (s *Server) handleFileProperties(w http.ResponseWriter, r *http.Request) {
+	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	result, err := s.opts.Files.Properties(ctx, root, r.URL.Query().Get("path"), r.URL.Query().Get("checksum") == "sha256")
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleFileCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Root, Path string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	root, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	if err := s.opts.Files.CreateText(root, req.Path, currentUser(r).UID); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
 }

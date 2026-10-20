@@ -200,6 +200,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.opts.SSH.Kick()
 	}
 	if s.startSession(w, r, user) {
+		if user.Role.CanAdminister() && s.opts.Update != nil {
+			s.opts.Update.CheckAfterLogin()
+		}
 		writeJSON(w, http.StatusOK, userOf(user))
 	}
 }
