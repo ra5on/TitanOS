@@ -1121,7 +1121,13 @@ func TestSSHKeysAndAccess(t *testing.T) {
 
 func TestUpdatesAreForAdministrators(t *testing.T) {
 	ts := newTestServer(t)
+	if res, _ := ts.request("GET", "/api/v1/update/progress", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("progress without a login: %d", res.StatusCode)
+	}
 	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/update/progress", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"progress":`) || strings.Contains(string(body), `"slots":`) {
+		t.Errorf("progress: %d %s", res.StatusCode, body)
+	}
 	res, body := ts.request("GET", "/api/v1/update", nil)
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"version":"1.2.3"`) || !strings.Contains(string(body), `"channel":"stable"`) || !strings.Contains(string(body), `"canVerify":false`) {
 		t.Errorf("status: %d %s", res.StatusCode, body)
@@ -1145,7 +1151,7 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/update"}, {"PUT", "/api/v1/update/settings"}, {"POST", "/api/v1/update/check"}, {"POST", "/api/v1/update/install"}, {"POST", "/api/v1/update/rollback"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/update"}, {"GET", "/api/v1/update/progress"}, {"PUT", "/api/v1/update/settings"}, {"POST", "/api/v1/update/check"}, {"POST", "/api/v1/update/install"}, {"POST", "/api/v1/update/rollback"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

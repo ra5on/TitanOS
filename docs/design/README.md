@@ -44,7 +44,9 @@ filtert die alphabetischen Kacheln samt Zeitzone/Terminal. Die VM-Seite behält
 Liste links und Konsole rechts; CPU/RAM sind getrennte Werte, Start/Herunterfahren
 ist die Hauptaktion, seltene Aktionen liegen unter „Weitere Aktionen“.
 Meldungen verlinken bekannte lokale Ziele; asynchron geladene Ziele werden
-angesprungen. Aufgaben zeigen ausschließlich vorhandene API-Messwerte.
+angesprungen. Aufgaben zeigen ausschließlich vorhandene API-Messwerte. Der separate
+Administrator-Endpunkt `/api/v1/update/progress` liest nur RAM, damit die
+Übersicht keine regelmäßigen Zugriffe auf den Bootstick auslöst.
 
 Browserprüfung mit isolierten API-Daten: `scripts/test-ui-060.mjs` gegen einen
 lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über

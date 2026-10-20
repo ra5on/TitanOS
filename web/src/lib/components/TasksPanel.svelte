@@ -40,7 +40,7 @@
 						percent: taskPercent(view.state.bytesDone, view.state.bytesTotal)
 					}))],
 				['update', async () => {
-					const { progress } = await api.get<UpdateStatus>('/update', AbortSignal.timeout(10000));
+					const { progress } = await api.get<UpdateStatus>('/update/progress', AbortSignal.timeout(10000));
 					return ['download', 'switch'].includes(progress.phase) ? [{
 						id: 'system-update', title: progress.file, kind: 'ui.taskUpdate',
 						href: '/settings/updates', percent: progress.phase === 'download' ? taskPercent(progress.percent, 100) : undefined
