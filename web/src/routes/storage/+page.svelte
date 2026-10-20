@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { revealTarget } from '#lib/reveal-target.ts';
 	import { api, ApiError, type DiskSleepStatus, type StorageStatus, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -160,7 +161,7 @@
 			<tbody>
 				{#each disks as disk (disk.name)}
 					{@const status = diskStatus(disk)}
-					<tr class:building={disk.memberState === 'rebuilding'} class:faulty={disk.memberState === 'faulty'}>
+					<tr use:revealTarget id="disk-{disk.name}" class:building={disk.memberState === 'rebuilding'} class:faulty={disk.memberState === 'faulty'}>
 						<td><span class="status"><span class="dot {status.dot}" aria-hidden="true"></span><span class="status-text">{status.text}</span></span></td>
 						<td>
 							<span class="mono device">{disk.name}</span>

@@ -34,3 +34,21 @@ Name und Zustand und öffnet Details per Namensknopf. „Seite anpassen“ biete
 Sortieren per Griff/Pfeilen, Anzeigeoptionen, Speichern/Abbrechen/Standard.
 Kleine Bildschirme stapeln; Theme-Werte bleiben die aus `Appearance.dc.html`.
 Die ursprüngliche Entwurfsdatei dokumentiert weiterhin die Container-Aktionen.
+
+### Bedienung und Rückmeldungen (0.6.0)
+
+Auf Wunsch des Projektinhabers bleibt die gesamte Docker-Oberfläche auf dem
+Stand 0.5.9. Neue Aufgabenübersicht, Verbindungshinweise und Lesbarkeitsregeln
+sind ausdrücklich auf die übrigen Seiten begrenzt. Die Einstellungssuche
+filtert die alphabetischen Kacheln samt Zeitzone/Terminal. Die VM-Seite behält
+Liste links und Konsole rechts; CPU/RAM sind getrennte Werte, Start/Herunterfahren
+ist die Hauptaktion, seltene Aktionen liegen unter „Weitere Aktionen“.
+Meldungen verlinken bekannte lokale Ziele; asynchron geladene Ziele werden
+angesprungen. Aufgaben zeigen ausschließlich vorhandene API-Messwerte.
+
+Browserprüfung mit isolierten API-Daten: `scripts/test-ui-060.mjs` gegen einen
+lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
+`PLAYWRIGHT_MODULE` wählbar) und Chromium (`BROWSER_EXECUTABLE` optional).
+`UI_URL` wählt den Server, `UI_OUTPUT` den Screenshot-Ordner. `DOCKER_ONLY=1`
+erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
+Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
