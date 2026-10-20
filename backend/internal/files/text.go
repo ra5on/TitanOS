@@ -38,6 +38,9 @@ func textName(name string) bool {
 }
 
 func (m *Manager) openText(root Root, name string) (*os.Root, *os.File, os.FileInfo, []byte, error) {
+	return m.openTextVersion(root, name, false)
+}
+func (m *Manager) openTextVersion(root Root, name string, previous bool) (*os.Root, *os.File, os.FileInfo, []byte, error) {
 	if !root.Editable && !root.Writable {
 		return nil, nil, nil, nil, ErrReadOnly
 	}
@@ -53,6 +56,13 @@ func (m *Manager) openText(root Root, name string) (*os.Root, *os.File, os.FileI
 	}
 	if root.Kind != "stick" && m.Available != nil && !m.Available(root) {
 		return nil, nil, nil, nil, ErrVolumeChanged
+	}
+	originalName := name
+	if previous {
+		name += ".prev"
+		if root.secret(name) || m.protected(root, name) {
+			return nil, nil, nil, nil, ErrProtected
+		}
 	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
@@ -98,7 +108,7 @@ func (m *Manager) openText(root Root, name string) (*os.Root, *os.File, os.FileI
 		f.Close()
 		return fail(mapError(err))
 	}
-	if len(data) > maxText || !utf8.Valid(data) || strings.ContainsRune(string(data), 0) || !textName(name) {
+	if len(data) > maxText || !utf8.Valid(data) || strings.ContainsRune(string(data), 0) || !textName(originalName) {
 		f.Close()
 		return fail(ErrNotText)
 	}
@@ -224,4 +234,16 @@ func (m *Manager) SaveTextVersion(root Root, name, content, version string) (Tex
 		return TextFile{}, mapError(closeErr)
 	}
 	return TextFile{Content: content, Version: textVersion([]byte(content))}, nil
+}
+
+// ReadPreviousText uses the original file's type and authorization, but never
+// follows a .prev symlink. Restore goes through the normal versioned save.
+func (m *Manager) ReadPreviousText(root Root, name string) (TextFile, error) {
+	r, f, _, data, err := m.openTextVersion(root, name, true)
+	if err != nil {
+		return TextFile{}, err
+	}
+	defer r.Close()
+	defer f.Close()
+	return TextFile{Content: string(data), Version: textVersion(data)}, nil
 }

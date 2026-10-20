@@ -197,3 +197,7 @@ func (s *Server) handleSMBDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.handleBackups(w, r)
 }
+
+func (s *Server) handleUSBBackupProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.opts.Backup.USBProgress())
+}

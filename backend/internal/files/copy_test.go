@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -190,5 +191,218 @@ func TestCopyFullLengthFileName(t *testing.T) {
 	}
 	if read(t, filepath.Join(dst.Dir, "ziel", name)) != "long name" {
 		t.Fatal("wrong content")
+	}
+}
+
+func TestRestoreUSBCopyIntoSeparateFolder(t *testing.T) {
+	m, target, source := twoRoots(t)
+	if err := os.WriteFile(filepath.Join(source.Dir, "Backup.JPG"), []byte("saved-photo"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target.Dir, "Backup.JPG"), []byte("current-photo"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Mkdir(target, "Restore-Backup", os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Mkdir(target, "Restore-Backup", os.Getuid()); !errors.Is(err, ErrExists) {
+		t.Fatalf("existing folder accepted: %v", err)
+	}
+	job, err := m.StartCopy(source, []string{"Backup.JPG"}, target, "Restore-Backup", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := finish(t, m, job.ID); done.State != JobDone {
+		t.Fatalf("restore: %+v", done)
+	}
+	if read(t, filepath.Join(target.Dir, "Restore-Backup/Backup.JPG")) != "saved-photo" {
+		t.Fatal("restored content differs")
+	}
+	if read(t, filepath.Join(target.Dir, "Backup.JPG")) != "current-photo" {
+		t.Fatal("existing original changed")
+	}
+	if read(t, filepath.Join(source.Dir, "Backup.JPG")) != "saved-photo" {
+		t.Fatal("USB backup changed")
+	}
+}
+
+func TestSkippedConflictDuringCopyMoveKeepsSource(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	if err := os.WriteFile(filepath.Join(dst.Dir, "ziel/notiz.txt"), []byte("existing"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sr, err := os.OpenRoot(src.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sr.Close()
+	dr, err := os.OpenRoot(dst.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dr.Close()
+	// Exercise the copy path used across filesystems, without depending on a
+	// second filesystem on the test host.
+	job := &Job{Move: true, c: &counters{}}
+	err = m.copyEntry(context.Background(), job, sr, dr, "notiz.txt", "ziel/notiz.txt", ConflictSkip, os.Getuid())
+	if err == nil {
+		t.Fatal("skip allowed subsequent source removal")
+	}
+	if read(t, filepath.Join(src.Dir, "notiz.txt")) != "notiz" || read(t, filepath.Join(dst.Dir, "ziel/notiz.txt")) != "existing" {
+		t.Fatal("skip changed files")
+	}
+}
+
+func TestRetryCopySkipsCommittedFiles(t *testing.T) {
+	for _, move := range []bool{false, true} {
+		t.Run(map[bool]string{false: "copy", true: "move"}[move], func(t *testing.T) {
+			m, src, dst := twoRoots(t)
+			calls := 0
+			m.syncFile = func(f *os.File) error {
+				calls++
+				if calls == 2 {
+					return errors.New("injected disk failure")
+				}
+				return f.Sync()
+			}
+			job, err := m.StartCopy(src, []string{"notiz.txt", "urlaub"}, dst, "ziel", move, ConflictRename, "alex", os.Getuid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			job = finish(t, m, job.ID)
+			if job.State != JobFailed || job.Done != 1 || !job.Retryable {
+				t.Fatalf("failed job: %+v", job)
+			}
+			// A later target edit must not get replaced or duplicated by the retry.
+			os.WriteFile(filepath.Join(dst.Dir, "ziel/notiz.txt"), []byte("already committed"), 0600)
+			if _, err = m.RetryCopy("someone", job.ID, src, dst, os.Getuid()); err != ErrNoJob {
+				t.Fatalf("other user retry: %v", err)
+			}
+			readonly := dst
+			readonly.Writable = false
+			if _, err = m.RetryCopy("alex", job.ID, src, readonly, os.Getuid()); err != ErrReadOnly {
+				t.Fatalf("read-only retry: %v", err)
+			}
+			if _, err = m.RetryCopy("alex", job.ID, src, dst, os.Getuid()); err != nil {
+				t.Fatal(err)
+			}
+			job = finish(t, m, job.ID)
+			if job.State != JobDone || job.Done != 2 || job.Copied != job.Bytes {
+				t.Fatalf("retry: %+v", job)
+			}
+			if read(t, filepath.Join(dst.Dir, "ziel/notiz.txt")) != "already committed" {
+				t.Fatal("retried a committed file")
+			}
+			if read(t, filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")) != "strand" {
+				t.Fatal("remaining file not copied")
+			}
+			entries, _ := os.ReadDir(filepath.Join(dst.Dir, "ziel"))
+			if len(entries) != 2 {
+				t.Fatalf("duplicate entries: %v", entries)
+			}
+			if move {
+				if _, err = os.Stat(filepath.Join(src.Dir, "notiz.txt")); !os.IsNotExist(err) {
+					t.Fatal("completed move retained source")
+				}
+			}
+		})
+	}
+}
+
+func TestRetryWithinRenamedDirectory(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	os.WriteFile(filepath.Join(src.Dir, "urlaub/z.txt"), []byte("second"), 0600)
+	os.WriteFile(filepath.Join(dst.Dir, "ziel/urlaub"), []byte("existing file"), 0600)
+	calls := 0
+	m.syncFile = func(f *os.File) error {
+		calls++
+		if calls == 2 {
+			return errors.New("injected failure")
+		}
+		return f.Sync()
+	}
+	job, err := m.StartCopy(src, []string{"urlaub"}, dst, "ziel", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	job = finish(t, m, job.ID)
+	if job.State != JobFailed {
+		t.Fatal(job)
+	}
+	_, err = m.RetryCopy("alex", job.ID, src, dst, os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	job = finish(t, m, job.ID)
+	if job.State != JobDone || job.Done != 2 || job.Copied != job.Bytes {
+		t.Fatalf("retry: %+v", job)
+	}
+	entries, _ := os.ReadDir(filepath.Join(dst.Dir, "ziel"))
+	if len(entries) != 2 {
+		t.Fatalf("directory duplicated: %v", entries)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			children, _ := os.ReadDir(filepath.Join(dst.Dir, "ziel", e.Name()))
+			if len(children) != 2 {
+				t.Fatalf("retried completed child: %v", children)
+			}
+		}
+	}
+}
+
+func TestRetryMoveRetainsChangedSource(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	os.WriteFile(filepath.Join(src.Dir, "urlaub/z.txt"), []byte("second"), 0600)
+	calls := 0
+	m.syncFile = func(f *os.File) error {
+		calls++
+		if calls == 2 {
+			return errors.New("injected failure")
+		}
+		return f.Sync()
+	}
+	job, err := m.StartCopy(src, []string{"urlaub"}, dst, "ziel", true, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	job = finish(t, m, job.ID)
+	if job.State != JobFailed {
+		t.Fatal(job)
+	}
+	os.WriteFile(filepath.Join(src.Dir, "urlaub/strand.jpg"), []byte("changed since interrupted move"), 0600)
+	if _, err = m.RetryCopy("alex", job.ID, src, dst, os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	job = finish(t, m, job.ID)
+	if job.State != JobFailed {
+		t.Fatalf("changed source not detected: %+v", job)
+	}
+	if read(t, filepath.Join(src.Dir, "urlaub/strand.jpg")) != "changed since interrupted move" {
+		t.Fatal("modified source lost")
+	}
+}
+
+func TestCrossRootMoveKeepsUncopiedEntries(t *testing.T) {
+	for _, name := range []string{"link", ".upload.titanos-part"} {
+		t.Run(name, func(t *testing.T) {
+			m, src, dst := twoRoots(t)
+			if name == "link" {
+				os.Symlink("strand.jpg", filepath.Join(src.Dir, "urlaub", name))
+			} else {
+				os.WriteFile(filepath.Join(src.Dir, "urlaub", name), []byte("unfinished"), 0600)
+			}
+			job, err := m.StartCopy(src, []string{"urlaub"}, dst, "ziel", true, ConflictRename, "alex", os.Getuid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			job = finish(t, m, job.ID)
+			if job.State != JobFailed {
+				t.Fatalf("move silently skipped data: %+v", job)
+			}
+			if _, err = os.Lstat(filepath.Join(src.Dir, "urlaub", name)); err != nil {
+				t.Fatal("source entry lost", err)
+			}
+		})
 	}
 }

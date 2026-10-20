@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,7 +34,7 @@ type SMBTarget struct {
 }
 
 func validateSMB(t SMBTarget, requireShare bool) error {
-	if !idForm.MatchString(t.ID) || !hostForm.MatchString(t.Host) || !userForm.MatchString(t.Username) || len(t.Password) == 0 || len(t.Password) > 1024 || strings.ContainsAny(t.Password, "\x00\r\n") {
+	if !naming.ValidBackup(t.ID) || !hostForm.MatchString(t.Host) || !userForm.MatchString(t.Username) || len(t.Password) == 0 || len(t.Password) > 1024 || strings.ContainsAny(t.Password, "\x00\r\n") {
 		return invalid("SMB name, server or credentials")
 	}
 	if requireShare && (t.Share == "" || len(t.Share) > 255 || strings.ContainsAny(t.Share, "/\\\x00\r\n|,") || t.Share == "." || t.Share == ".." || t.Folder != "" && !relative(t.Folder)) {
@@ -290,6 +291,9 @@ func (m *Manager) SaveSMBTarget(ctx context.Context, target SMBTarget) error {
 	targets := slices.Clone(m.smbTargets)
 	at := slices.IndexFunc(targets, func(t SMBTarget) bool { return t.ID == target.ID })
 	if at < 0 {
+		if slices.ContainsFunc(targets, func(t SMBTarget) bool { return strings.EqualFold(t.ID, target.ID) }) {
+			return ErrExists
+		}
 		targets = append(targets, target)
 	} else {
 		targets[at] = target

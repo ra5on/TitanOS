@@ -629,3 +629,50 @@ func TestLegacyBetaMigratesToOneStableChannel(t *testing.T) {
 		t.Fatal("stable update not offered")
 	}
 }
+
+func TestLoginCheckIsAsyncDeduplicatedAndDoesNotInstall(t *testing.T) {
+	e := newEnv(t)
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	// Hold the release response to verify that login does not wait for it.
+	e.release.mu.Lock()
+	first := e.m.CheckAfterLogin()
+	second := e.m.CheckAfterLogin()
+	e.release.mu.Unlock()
+	if !first || second {
+		t.Fatalf("first=%v concurrent=%v", first, second)
+	}
+	if got := e.event(t); got != "update_available:1.1.0" {
+		t.Fatalf("notification=%q", got)
+	}
+	wait := func() {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			e.m.mu.Lock()
+			running := e.m.loginCheckRunning
+			e.m.mu.Unlock()
+			if !running {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatal("login check did not finish")
+	}
+	wait()
+	if status := e.m.Status(); status.Available == nil || status.Pending != nil || status.Progress.Phase != "" {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+	if !e.m.CheckAfterLogin() {
+		t.Fatal("later login did not check again")
+	}
+	wait()
+	select {
+	case event := <-e.events:
+		t.Fatalf("duplicate notification: %s", event)
+	case <-time.After(30 * time.Millisecond):
+	}
+	e.m.Disabled = true
+	if e.m.CheckAfterLogin() {
+		t.Fatal("development mode started a check")
+	}
+}
