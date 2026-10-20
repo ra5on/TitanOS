@@ -54,3 +54,35 @@ lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
 `UI_URL` wählt den Server, `UI_OUTPUT` den Screenshot-Ordner. `DOCKER_ONLY=1`
 erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
 Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
+
+### Einstellungen und Sicherungen (0.6.1)
+
+Vom Projektinhaber am 20. Oktober 2026 bestätigter Folgeentwurf: Die
+Einstellungsübersicht enthält ausschließlich kompakte, alphabetische
+Navigationskacheln. Datum und Uhrzeit erhalten eine eigene Seite, Terminal
+und Konsolen stehen unter Zugang. Suchtreffer führen gezielt zu SSH,
+Zertifikat, Terminal, DNS und den Sicherungsbereichen. Farben, Abstände,
+Schrift und Radien folgen weiterhin dem bestehenden Theme-System.
+
+„Sicherungen“ ist eine eigene Unterseite mit drei Bereichen: Datensicherung,
+Systemkonfiguration und Wiederherstellung. Darüber stehen die letzten
+Sicherungserfolge und der nächste geplante Lauf aus den vorhandenen APIs;
+Fehler, fehlende Werte und ausgeschaltete Konfigurationssicherung werden
+sichtbar angezeigt. Die Übersicht liest beim Öffnen und auf ausdrückliches
+Aktualisieren, nicht zyklisch aus Sicherungsarchiven. Datenaufträge und
+Konfigurationssicherungen behalten ihre bisherigen Funktionen. Wiederherstellen
+verwendet die bestehende Dateiwiederherstellung bzw. erklärt die
+Konfigurationswiederherstellung während der Ersteinrichtung eines Ersatzsticks.
+Es gibt keinen neuen Live-Import der Systemkonfiguration.
+
+Speicherbestätigungen bei Datum/Uhrzeit und Zugang stehen an der betreffenden
+Einstellung und verschwinden nach fünf Sekunden. Ladefehler bieten einen
+erneuten Abruf. Alle Texte liegen auf Deutsch und Englisch vor; mobile
+Ansichten stapeln die drei Bereiche. Alte Stick- und Backup-Auftragslinks
+werden weitergeleitet. Neue Links aus Meldungen und Aufgaben zeigen direkt
+auf die Unterseiten. Direkte Einstellungsaufrufe beachten die Kontorolle.
+
+`scripts/test-ui-061.mjs` prüft die Navigation, Fehler/Wiederholung, lokale
+Rückmeldungen, Wiederherstellungsdialog, alte Links, Rollen und ausbleibendes
+Archiv-Polling mit isolierten API-Testdaten. Screenshots entstehen bei 1440
+und 390 Pixeln in Graphit und Hell. Aufruf wie beim 0.6.0-Skript oben.

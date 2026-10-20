@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TerminalSettings from '#lib/components/TerminalSettings.svelte';
+	import { revealTarget } from '#lib/reveal-target.ts';
 	// SSH access and the certificate of the web UI.
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -19,6 +21,11 @@
 	let certPem = $state('');
 	let keyPem = $state('');
 	let saved = $state(false);
+	let sshError = $state('');
+	let sshBusy = $state(false);
+	let sshSaved = $state(false);
+	$effect(() => { if (saved) { const timer = setTimeout(() => saved = false, 5000); return () => clearTimeout(timer); } });
+	$effect(() => { if (sshSaved) { const timer = setTimeout(() => sshSaved = false, 5000); return () => clearTimeout(timer); } });
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -28,17 +35,17 @@
 	async function loadSsh() {
 		try {
 			ssh = await api.get<Ssh>('/system/ssh');
+			sshError = '';
 		} catch (err) {
-			if (!ssh) problem(err);
+			sshError = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 	}
-	$effect(() => {
-		loadSsh();
-		api.get<Certificate>('/system/certificate').then(
-			(res) => (certificate = res),
-			(err) => (err instanceof ApiError && err.code === 'read_only' ? (noTls = true) : problem(err))
-		);
-	});
+	async function loadCertificate() {
+		error = null;
+		try { certificate = await api.get<Certificate>('/system/certificate'); }
+		catch (err) { if (err instanceof ApiError && err.code === 'read_only') noTls = true; else problem(err); }
+	}
+	$effect(() => { loadSsh(); loadCertificate(); });
 	// The service follows the switch within a moment.
 	$effect(() => {
 		if (!ssh || ssh.enabled === ssh.running) return;
@@ -47,13 +54,11 @@
 	});
 
 	async function setSsh(enabled: boolean) {
-		error = null;
-		try {
-			ssh = await api.put<Ssh>('/system/ssh', { enabled });
-		} catch (err) {
-			problem(err);
-			loadSsh();
-		}
+		if (sshBusy) return;
+		sshBusy = true; sshSaved = false; sshError = '';
+		try { ssh = await api.put<Ssh>('/system/ssh', { enabled }); sshSaved = true; }
+		catch (err) { sshError = errorText(err instanceof ApiError ? err.code : 'internal'); }
+		finally { sshBusy = false; }
 	}
 
 	async function readFile(event: Event, into: 'cert' | 'key') {
@@ -86,6 +91,7 @@
 		saved = false;
 		try {
 			certificate = await api.delete<Certificate>('/system/certificate');
+			saved = true;
 		} catch (err) {
 			problem(err);
 		}
@@ -100,16 +106,16 @@
 
 <PageHead title={t('access.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
-{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
-{#if ssh}
-	<section class="tile" aria-labelledby="access-ssh">
+
+<section class="tile" aria-labelledby="access-ssh">
+		<h2 class="tile-title" id="access-ssh" use:revealTarget>{t('access.ssh')}</h2>
+		{#if ssh}
 		<div class="head">
-			<h2 class="tile-title" id="access-ssh">{t('access.ssh')}</h2>
 			<span class="chip {ssh.running ? 'ok' : ''}">{ssh.running ? t('access.sshRunning') : t('access.sshOff')}</span>
 		</div>
 		<label class="check">
-			<input type="checkbox" checked={ssh.enabled} onchange={(event) => setSsh(event.currentTarget.checked)} />
+			<input type="checkbox" checked={ssh.enabled} disabled={sshBusy} onchange={async event => { const field = event.currentTarget; await setSsh(field.checked); field.checked = ssh?.enabled ?? false; }} />
 			<span>{t('access.sshEnable')}</span>
 		</label>
 		<p class="muted">{t('access.sshText')}</p>
@@ -122,11 +128,14 @@
 			{#if ssh.accounts.length === 0}<p class="notice-warn">{t('access.sshNoKeys')} <a href="/account">{t('menu.account')}</a></p>{/if}
 			<p class="muted">{t('access.sshNote')}</p>
 		{/if}
+		{/if}
+		{#if sshBusy || sshSaved}<p role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
+		{#if sshError}<div class="notice-error" role="alert">{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button></div>{:else if !ssh}<p role="status">{t('common.loading')}</p>{/if}
 	</section>
-{/if}
 
 <section class="tile" aria-labelledby="access-cert">
-	<h2 class="tile-title" id="access-cert">{t('access.cert')}</h2>
+	<h2 class="tile-title" id="access-cert" use:revealTarget>{t('access.cert')}</h2>
+	{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}<button class="btn" onclick={loadCertificate}>{t('ui.retry')}</button></div>{/if}
 	{#if noTls}
 		<p class="muted">{t('access.certNone')}</p>
 	{:else if certificate}
@@ -168,6 +177,8 @@
 		{/if}
 	{/if}
 </section>
+
+<TerminalSettings />
 
 <style>
 	section {

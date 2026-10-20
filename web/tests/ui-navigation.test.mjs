@@ -6,8 +6,8 @@ import { taskPercent } from '../src/lib/task-progress.ts';
 
 test('notifications link to existing local destinations and encode untrusted subjects', () => {
  assert.equal(noticeLink('volume_full', 'data'), '/storage#volume-data');
- assert.equal(noticeLink('backup_failed', 'daily'), '/settings/backups#backup-daily');
- assert.equal(noticeLink('config_backup_failed', 'data'), '/settings/stick');
+ assert.equal(noticeLink('backup_failed', 'daily'), '/settings/backups/data#backup-daily');
+ assert.equal(noticeLink('config_backup_failed', 'data'), '/settings/backups/configuration');
  assert.equal(noticeLink('update_available', '0.6.0'), '/settings/updates');
  assert.equal(noticeLink('disk_test_failed', 'sda'), '/tools');
  assert.equal(noticeLink('volume_failed', 'x/#?"'), '/storage#volume-x%2F%23%3F%22');
@@ -29,4 +29,12 @@ test('task percentages preserve unknown totals and reject invalid measurements',
  assert.equal(taskPercent(25,100),25);
  assert.equal(taskPercent(-10,100),0);
  assert.equal(taskPercent(200,100),100);
+});
+
+test('settings sections resolve specific search terms to distinct destinations', async () => {
+ const { settingSections } = await import('../src/lib/settings-search.ts');
+ const cases = [['SSH','access','/settings/access#access-ssh'], ['Zertifikat','access','/settings/access#access-cert'], ['Terminal','access','/settings/access#access-terminal'], ['DNS','network','/settings/network#network-dns'], ['restic','backups','/settings/backups/data'], ['config','backups','/settings/backups/configuration'], ['ersetzen','backups','/settings/backups/restore']];
+ for (const [query, area, href] of cases) {
+  assert.deepEqual(settingSections[area].filter(s => matchesSetting(query, '', s.id)).map(s => s.href), [href]);
+ }
 });

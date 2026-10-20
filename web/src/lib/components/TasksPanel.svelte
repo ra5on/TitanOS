@@ -36,7 +36,7 @@
 				['backups', async () => (await api.get<BackupStatus>('/backups', AbortSignal.timeout(10000))).jobs
 					.filter(view => view.state.running).map(view => ({
 						id: `backup-${view.job.id}`, title: view.job.id, kind: 'ui.taskBackup',
-						href: `/settings/backups#backup-${encodeURIComponent(view.job.id)}`,
+						href: `/settings/backups/data#backup-${encodeURIComponent(view.job.id)}`,
 						percent: taskPercent(view.state.bytesDone, view.state.bytesTotal)
 					}))],
 				['update', async () => {

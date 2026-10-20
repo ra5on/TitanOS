@@ -15,7 +15,7 @@ import (
 // fakeRestic stands in for the program: it notes how it was called and
 // answers the way restic does.
 const fakeRestic = `#!/bin/sh
-# Handle cancellation even if it arrives before the slow child is spawned.
+# Handle cancellation even if it arrives before the slow command is execed.
 trap 'exit 130' INT
 dir=$(dirname "$0")
 echo "$* | repo=$RESTIC_REPOSITORY cache=$RESTIC_CACHE_DIR aws=$AWS_ACCESS_KEY_ID rest=$RESTIC_REST_USERNAME" >> "$dir/calls"
@@ -36,7 +36,9 @@ case "$command" in
   unlock|forget) ;;
   backup)
     echo '{"message_type":"status","percent_done":0.5,"total_bytes":2000,"bytes_done":1000}'
-    [ -e "$dir/slow" ] && sleep 5
+    # Replace the shell: a foreground child can inherit ignored SIGINT and
+    # defer the shell trap until its sleep ends. Real restic is one process.
+    [ -e "$dir/slow" ] && exec sleep 30
     if [ -e "$dir/broken" ]; then echo "Fatal: unable to save snapshot: server said no (password $RESTIC_PASSWORD)" >&2; exit 1; fi
     echo '{"message_type":"summary","total_bytes_processed":2000,"snapshot_id":"abcdef0123"}'
     if [ -e "$dir/unreadable" ]; then echo "error: open /mnt/tank/media/locked: permission denied" >&2; exit 3; fi ;;
