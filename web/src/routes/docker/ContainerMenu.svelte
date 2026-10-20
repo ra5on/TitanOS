@@ -9,10 +9,8 @@
 		/** Name for the button label: "Actions for …". */
 		name: string;
 		busy: boolean;
-		/** Further addresses of the web UI (Tailscale, public), shown at the top. */
-		links?: { label: string; href: string }[];
 	};
-	let { container, name, busy, links = [], onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
+	let { container, name, busy, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
 
 	const running = $derived(isRunning(container));
 	let open = $state(false);
@@ -55,10 +53,6 @@
 	</button>
 	{#if open}
 		<div class="menu" class:up role="menu" tabindex="-1" aria-label={t('docker.actionsFor', { name })} onkeydown={keys}>
-			{#each links as link (link.href)}
-				<a role="menuitem" href={link.href} target="_blank" rel="noreferrer" onclick={() => close()}>{link.label}</a>
-			{/each}
-			{#if links.length > 0}<hr />{/if}
 			<button type="button" role="menuitem" onclick={() => choose(onlogs)}>{t('docker.logs')}</button>
 			<button type="button" role="menuitem" onclick={() => choose(onconsole)} disabled={!running}>{t('docker.console')}</button>
 			{#if container.managed}

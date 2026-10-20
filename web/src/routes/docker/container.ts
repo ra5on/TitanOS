@@ -29,11 +29,14 @@ export const monogramHue = (name: string) => [...name].reduce((sum, char) => (su
 export const portLabels = (container: DockerContainer) =>
 	[...new Set(container.ports.map((port) => `${port.host}${port.protocol === 'udp' ? '/udp' : ''}`))];
 
-/** The web UI on the NAS address, and further addresses for the menu. */
-export function webLinks(container: DockerContainer, host: string, tailscaleHost: string) {
-	const extra = [
-		{ label: t('docker.tailscaleWebui'), href: appURL(container.webui, tailscaleHost, true) },
-		{ label: t('docker.publicWebui'), href: publicURL(container.publicUrl ?? '') }
-	].filter((link) => link.href);
-	return { main: appURL(container.webui, host), extra };
+export type WebLink = { icon: 'globe' | 'tailnet' | 'external'; text: string; label: string; href: string };
+
+/** The addresses of the web UI: on the NAS, over Tailscale and the public one. */
+export function webLinks(container: DockerContainer, host: string, tailscaleHost: string): WebLink[] {
+	const links: WebLink[] = [
+		{ icon: 'globe', text: t('docker.webui'), label: t('docker.webui'), href: appURL(container.webui, host) },
+		{ icon: 'tailnet', text: t('docker.tailscaleShort'), label: t('docker.tailscaleWebui'), href: appURL(container.webui, tailscaleHost, true) },
+		{ icon: 'external', text: t('docker.publicWebui'), label: t('docker.publicWebui'), href: publicURL(container.publicUrl ?? '') }
+	];
+	return links.filter((link) => link.href);
 }
