@@ -27,9 +27,9 @@
 		if (location.hash.startsWith('#backup-')) { void goto('/settings/backups/data' + location.hash, { replaceState: true }); return; }
 		void load();
 	});
-	const lastData = $derived(jobs?.jobs.map(v => v.state.lastOK).filter((v): v is string => !!v).sort().at(-1));
-	const lastConfig = $derived(config?.backup.backups.map(v => v.time).sort().at(-1));
-	const next = $derived([...jobs?.jobs.filter(v => v.job.enabled).map(v => v.next) ?? [], ...(config?.backup.settings.enabled ? [config.backup.next] : [])].filter((v): v is string => !!v).sort()[0]);
+	const lastData = $derived(jobs?.jobs.map(v => v.state.lastOK).filter((v): v is string => !!v).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1));
+	const lastConfig = $derived(config?.backup.backups.map(v => v.time).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1));
+	const next = $derived([...jobs?.jobs.filter(v => v.job.enabled).map(v => v.next) ?? [], ...(config?.backup.settings.enabled ? [config.backup.next] : [])].filter((v): v is string => !!v).sort((a, b) => Date.parse(a) - Date.parse(b))[0]);
 	const failures = $derived(jobs?.jobs.filter(v => v.state.lastError && v.state.lastError !== 'cancelled') ?? []);
 	const warnings = $derived(jobs?.jobs.filter(v => v.state.warning) ?? []);
 	const date = (value: string | undefined) => value ? formatDateTime(new Date(value)) : t('safeguard.none');

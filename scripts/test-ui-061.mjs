@@ -12,7 +12,7 @@ const time = '2026-10-20T09:00:00Z';
 const system = { hostname:'titan-test',version:'0.6.0',kernel:'test',uptimeSeconds:1000,cpu:{model:'Test CPU',threads:8,usagePercent:12},memory:{totalBytes:16e9,usedBytes:3e9,freeBytes:13e9,availableBytes:13e9},temperatures:[],accelerators:[],image:{slot:'a',sizeBytes:1e9,overlayUsedBytes:0,overlayTotalBytes:512e6},stick:{present:true,label:'TITANOS'},network:null,networks:[],networkPendingSeconds:0,notificationsLatest:1};
 const volume={name:'data',level:'raid1',filesystem:'ext4',mountPoint:'/mnt/data',mounted:true,state:'checking',sizeBytes:1e12,usedBytes:4e11,raidDisks:2,members:[],sync:{percent:32,speedBytesPerSecond:1e8,remainingSeconds:500},mismatches:0};
 const vm={name:'linux',displayName:'Linux Server',description:'Test VM',template:'linux',memoryMiB:2048,vcpus:2,volume:'data',disks:[],iso:'',autostart:true,cpuPin:[],exclusive:false,folders:[],tpm:false,secureBoot:false,pci:[],usb:[],network:'user',job:null,state:'stopped',available:true,cpuPercent:4,memoryBytes:1e9,since:time};
-const backup={job:{id:'daily',sources:['documents'],destination:{type:'local',volume:'data',folder:'backups'},enabled:true,every:'daily',weekday:0,time:'02:00',keep:{daily:7,weekly:2,monthly:1}},secretSet:{},state:{running:true,phase:'backup',percent:25,bytesDone:25,bytesTotal:100,lastRun:time,lastOK:time,lastError:'',warning:'',bytes:100,restoredTo:''},next:null};
+const backup={job:{id:'daily',sources:['documents'],destination:{type:'local',volume:'data',folder:'backups'},enabled:true,every:'daily',weekday:0,time:'02:00',keep:{daily:7,weekly:2,monthly:1}},secretSet:{},state:{running:true,phase:'backup',percent:25,bytesDone:25,bytesTotal:100,lastRun:time,lastOK:time,lastError:'',warning:'',bytes:100,restoredTo:''},next:'2026-10-21T05:30:00+03:00'};
 let failLoad=false, failTerminal=false, failConfig=false;
 let terminalValue={enabled:true,confirm:false};
 let offline=false, failVM=false, failZone=false, failTasks=false;
@@ -76,6 +76,8 @@ try {
  await page.clock.runFor(5100);assert.equal(await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).count(),0);
  await page.getByRole('checkbox',{name:'Passwort vor VM-Konsolen erneut abfragen',exact:true}).check();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();
  await page.goto(base+'/settings/backups');await page.locator('.groups').waitFor();await page.getByText('Noch keine Sicherung',{exact:true}).waitFor({state:'hidden'});await page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
+ const expectedNext=await page.evaluate(()=>new Intl.DateTimeFormat('de',{dateStyle:'medium',timeStyle:'short'}).format(new Date('2026-10-21T02:30:00Z')));
+ assert.equal(await page.locator('.summary > div').nth(2).locator('strong').innerText(),expectedNext,'next backup compares instants across time zone offsets');
  await page.screenshot({path:out+'/backups-desktop.png',fullPage:true});
  const configReads=requests.filter(([,method,path])=>method==='GET'&&path==='/config-backup').length;
  await page.clock.runFor(61000);assert.equal(requests.filter(([,method,path])=>method==='GET'&&path==='/config-backup').length,configReads,'hub must not poll backup archives');
