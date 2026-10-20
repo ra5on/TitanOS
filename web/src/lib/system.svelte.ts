@@ -4,18 +4,22 @@ import { sessionExpired } from './session.svelte.ts';
 const INTERVAL_MS = 2000;
 
 /** Live state of the NAS, refreshed while the shell is shown. */
-export const system = $state<{ info: SystemInfo | null; reachable: boolean }>({
+export const system = $state<{ info: SystemInfo | null; reachable: boolean; lastUpdated: number }>({
 	info: null,
-	reachable: true
+	reachable: true,
+	lastUpdated: 0
 });
 
 export const systemHistory = $state<{ cpu: number[]; memory: number[] }>({ cpu: [], memory: [] });
 let lastSample = 0;
-async function poll() {
-	if (document.hidden) return;
+let polling = false;
+export async function refreshSystem() {
+	if (document.hidden || polling) return;
+	polling = true;
 	try {
-		system.info = await api.get<SystemInfo>('/system');
+		system.info = await api.get<SystemInfo>('/system', AbortSignal.timeout(10000));
 		system.reachable = true;
+		system.lastUpdated = Date.now();
         const now = Date.now();
         if (now - lastSample > INTERVAL_MS * 3) { systemHistory.cpu = []; systemHistory.memory = []; }
         if (now - lastSample >= INTERVAL_MS * .8) {
@@ -27,16 +31,16 @@ async function poll() {
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 401) sessionExpired();
 		else system.reachable = false;
-	}
+	} finally { polling = false; }
 }
 
 /** Starts polling; returns the function that stops it. */
 export function watchSystem(): () => void {
-	poll();
-	const timer = setInterval(poll, INTERVAL_MS);
-	document.addEventListener('visibilitychange', poll);
+	refreshSystem();
+	const timer = setInterval(refreshSystem, INTERVAL_MS);
+	document.addEventListener('visibilitychange', refreshSystem);
 	return () => {
 		clearInterval(timer);
-		document.removeEventListener('visibilitychange', poll);
+		document.removeEventListener('visibilitychange', refreshSystem);
 	};
 }

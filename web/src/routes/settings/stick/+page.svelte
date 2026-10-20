@@ -14,6 +14,7 @@
 	let status = $state<State | null>(null);
 	let volumes = $state<string[]>([]);
 	let draft = $state<Settings | null>(null);
+	let saved = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state<'save' | 'run' | null>(null);
 	let ran = $state(false);
@@ -41,10 +42,10 @@
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft) return;
-		busy = 'save';
+		busy = 'save'; saved = false;
 		error = null;
 		try {
-			take(await api.put<Answer>('/config-backup', { ...draft, keep: Number(draft.keep) || 0 }));
+			take(await api.put<Answer>('/config-backup', { ...draft, keep: Number(draft.keep) || 0 })); saved = true;
 		} catch (err) {
 			problem(err);
 		}
@@ -143,7 +144,7 @@
 			</label>
 		</div>
 		<div class="actions">
-			<button type="submit" class="btn btn-primary" disabled={!changed || busy !== null}>{t('notify.save')}</button>
+			<button type="submit" class="btn btn-primary" disabled={!changed || busy !== null}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}
 		</div>
 	</form>
 
