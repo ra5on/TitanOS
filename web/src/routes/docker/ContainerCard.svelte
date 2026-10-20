@@ -1,357 +1,203 @@
 <script lang="ts">
-	import type { DockerView } from '#lib/docker-layout.ts';
-	import { dockerName } from '#lib/docker-name.ts';
-	import { appURL, publicURL } from '#lib/app-links.ts';
- import AppIcon from '#lib/components/AppIcon.svelte';
- import type { DockerContainer } from '#lib/api.ts';
+	// One container as a card of fixed shape: everything is visible at once,
+	// so nothing unfolds and the grid keeps its place.
+	import type { DockerContainer } from '#lib/api.ts';
+	import AppIcon from '#lib/components/AppIcon.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
+	import { dockerName } from '#lib/docker-name.ts';
+	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { isRunning, monogramHue, portLabels, stateAge, webLinks, type ContainerActions } from './container.ts';
+	import ContainerMenu from './ContainerMenu.svelte';
+	import CpuSpark from './CpuSpark.svelte';
 
-	type Props = {
+	type Props = ContainerActions & {
 		container: DockerContainer;
 		host: string;
- tailscaleHost?: string;
+		tailscaleHost: string;
 		busy: boolean;
-		/** One row inside a stack instead of a card of its own. */
-		compact?: boolean;
-		view?: DockerView;
-		details?: boolean;
-		onaction: (action: 'start' | 'stop' | 'restart') => void;
-		onlogs: () => void;
-		onremove: () => void;
-		onconsole: () => void;
-		onupdate: () => void;
+		details: boolean;
 	};
-	let { container, host, tailscaleHost = '', busy, compact = false, view = 'cards', details = true, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
+	let { container, host, tailscaleHost, busy, details, ...actions }: Props = $props();
 
-	const displayName = $derived(dockerName(container));
-	const running = $derived(container.state === 'running' || container.state === 'restarting');
-	let menu = $state(false);
-	let expanded = $state(false);
-	const showDetails = $derived(view !== 'minimal' || expanded);
-	let root: HTMLElement | undefined = $state();
-
-	// Without an icon from a template, an app gets a monogram in a color of
-	// its own, derived from its name so that it stays the same.
-	const hue = $derived([...container.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7));
-
-	const since = $derived.by(() => {
-		const time = new Date(container.since).getTime();
-		if (!time || time < 0) return '';
-		const seconds = Math.max(0, (Date.now() - time) / 1000);
-		return t(running ? 'docker.runningSince' : 'docker.stoppedSince', { time: formatDuration(seconds) });
-	});
-
-	/** The CPU history as points of a small line chart, scaled to its own peak. */
-	const spark = $derived.by(() => {
-		const values = container.cpuHistory;
-		if (values.length < 2) return '';
-		const peak = Math.max(...values, 1);
-		return values.map((value, index) => `${((index / (values.length - 1)) * 100).toFixed(1)},${(22 - (value / peak) * 20).toFixed(1)}`).join(' ');
-	});
-
- const webui = $derived(appURL(container.webui, host));
- const tailscaleURL = $derived(appURL(container.webui, tailscaleHost, true));
- const externalURL = $derived(publicURL(container.publicUrl ?? ''));
-
-	function choose(action: () => void) {
-		menu = false;
-		action();
-	}
+	const MAX_PORTS = 3;
+	const name = $derived(dockerName(container));
+	const running = $derived(isRunning(container));
+	const links = $derived(webLinks(container, host, tailscaleHost));
+	const ports = $derived(portLabels(container));
+	const age = $derived(stateAge(container));
 </script>
 
-<svelte:window onclick={(event) => menu && !root?.contains(event.target as Node) && (menu = false)} onkeydown={(event) => event.key === 'Escape' && (menu = false)} />
-
-{#snippet links()}
- {#if webui}<a class="btn small" href={webui} target="_blank" rel="noreferrer">{t('docker.webui')}</a>{/if}
- {#if tailscaleURL}<a class="btn small" href={tailscaleURL} target="_blank" rel="noreferrer">{t('docker.tailscaleWebui')}</a>{/if}
- {#if externalURL}<a class="btn small" href={externalURL} target="_blank" rel="noreferrer">{t('docker.publicWebui')}</a>{/if}
-{/snippet}
-{#snippet ports()}
-	{#each container.ports as port (`${port.host}/${port.protocol}`)}
-        <span class="chip mono">{port.host}{port.protocol === 'udp' ? '/udp' : ''}</span>
-	{/each}
-{/snippet}
-
-{#snippet actions()}
-	{#if menu}
-		<div class="menu" role="menu" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })}>
-			<button type="button" role="menuitem" onclick={() => choose(onlogs)}>{t('docker.logs')}</button>
-			<button type="button" role="menuitem" onclick={() => choose(onconsole)} disabled={!running}>{t('docker.console')}</button>
-			{#if container.managed}
-				<a role="menuitem" href="/docker/apps/{container.app}">{t('docker.edit')}</a>
-			{/if}
-			<button type="button" role="menuitem" onclick={() => choose(() => onaction('restart'))} disabled={busy}>{t('docker.restart')}</button>
-			{#if container.managed && container.updateAvailable}
-				<button type="button" role="menuitem" onclick={() => choose(onupdate)} disabled={busy}>{t('docker.updateNow')}</button>
-			{/if}
-			<hr />
-			<button type="button" role="menuitem" onclick={() => choose(onremove)}>{t('docker.remove')}</button>
+<article class="tile card" class:stopped={!running} aria-label={name}>
+	<div class="top">
+		<span class="icon" style:background="hsl({monogramHue(container.name)} 45% 42%)"><AppIcon src={container.icon} {name} /></span>
+		<div class="names">
+			<span class="line">
+				{#if container.managed}<a class="name" href="/docker/apps/{container.app}" title={container.name}>{name}</a>{:else}<span class="name" title={container.name}>{name}</span>{/if}
+				{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
+			</span>
+			{#if details}<span class="mono image" title={container.image}>{container.image}</span>{/if}
 		</div>
-	{/if}
-{/snippet}
-
-{#if compact}
-	<div class="member" class:menu-open={menu} bind:this={root}>
-		<span class="dot" class:ok={running} aria-hidden="true"></span>
-		<span class="names">
-			<span class="line"><span class="name">{dockerName(container, 'service')}</span><span class="state">{t(`docker.state.${container.state}`)}</span>{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}</span>
-			{#if details}<span class="mono image">{container.image}</span>{/if}
-		</span>
-		<span class="ports">{@render ports()}{@render links()}</span>
-		<span class="mono value">{running ? formatPercent(container.cpuPercent) : '–'}</span>
-		<span class="mono value">{running ? formatBytes(container.memoryBytes) : '–'}</span>
-		<button type="button" class="btn small" onclick={() => onaction(running ? 'stop' : 'start')} disabled={busy}>{t(running ? 'docker.stop' : 'docker.start')}</button>
-		<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>
-		{@render actions()}
+		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} links={links.extra} {...actions} />
 	</div>
-{:else}
-	<article class="tile" class:minimal={view === 'minimal'} class:list={view === 'list'} class:menu-open={menu} bind:this={root} aria-label={displayName}>
-		<div class="top">
-			{#if view !== 'minimal'}<button type="button" class="monogram" style:background="hsl({hue} 45% 42%)" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}><AppIcon src={container.icon} name={displayName} /> </button>{/if}
-			<div class="names">
-				<div class="line">
-					{#if view === 'minimal'}<button type="button" class="name expand" title={container.name} aria-expanded={expanded} onclick={() => { expanded = !expanded; menu = false; }}><span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {displayName}</button>{:else}<span class="name" title={container.name}>{displayName}</span>{/if}
-					<span class="state"><span class="dot" class:ok={running} aria-hidden="true"></span>{t(`docker.state.${container.state}`)}</span>
-					{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
-				</div>
-				{#if details && showDetails}<span class="mono image">{container.image}</span>{/if}
-			</div>
-			{#if showDetails}<button type="button" class="more" aria-label={t('docker.actionsFor', { name: dockerName(container, compact ? 'service' : 'app') })} aria-expanded={menu} onclick={() => (menu = !menu)}>…</button>{/if}
+
+	<div class="stats">
+		<div class="state" title={age ? t(running ? 'docker.runningSince' : 'docker.stoppedSince', { time: age }) : undefined}>
+			<span class="dot" class:ok={running} aria-hidden="true"></span>
+			<span>{t(`docker.state.${container.state}`)}</span>
+			<span class="age">{age}</span>
 		</div>
-		{#if showDetails}
-		<div class="stats">
-			<div><span class="label">{t('docker.cpu')}</span><span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span></div>
-			{#if details}<svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">{#if running && spark}<polyline points={spark} />{/if}</svg>{:else}<span></span>{/if}
-			<div><span class="label">{t('docker.ram')}</span><span class="mono">{running ? formatBytes(container.memoryBytes) : '–'}</span></div>
-		</div>
-		{#if container.ports.length > 0}
-			<div class="ports">{@render ports()}</div>
-		{/if}
-		<div class="bottom">
-			<span class="muted since">{since}</span>
-			{@render links()}
-			<button type="button" class="btn small" onclick={() => onaction(running ? 'stop' : 'start')} disabled={busy}>
-				<Icon name={running ? 'pause' : 'play'} size={14} />{t(running ? 'docker.stop' : 'docker.start')}
-			</button>
-		</div>
-		{@render actions()}
-		{/if}
-	</article>
-{/if}
+		<div class="value"><span class="label">{t('docker.cpu')}</span><span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span></div>
+		<div class="value"><span class="label">{t('docker.ram')}</span><span class="mono">{running ? formatBytes(container.memoryBytes) : '–'}</span></div>
+	</div>
+	{#if details}<div class="spark">{#if running}<CpuSpark values={container.cpuHistory} />{/if}</div>{/if}
+
+	<div class="bottom">
+		<span class="ports">
+			{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
+			{#if ports.length > MAX_PORTS}<span class="chip mono" title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span>{/if}
+		</span>
+		{#if links.main}<a class="btn small" href={links.main} target="_blank" rel="noreferrer"><Icon name="globe" size={14} />{t('docker.webui')}</a>{/if}
+		<button type="button" class="btn small" onclick={() => actions.onaction(running ? 'stop' : 'start')} disabled={busy}>
+			<Icon name={running ? 'stop' : 'play'} size={14} />{t(running ? 'docker.stop' : 'docker.start')}
+		</button>
+	</div>
+</article>
 
 <style>
-	.menu-open { z-index: 20; }
-	article {
+	.card {
 		position: relative;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 10px 12px;
+		gap: 10px;
+		padding: 12px 14px;
+		font-size: 0.875rem;
+	}
+	.card:has(:global(.menu-open)) {
+		z-index: 30;
 	}
 	.top {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 10px;
 	}
-	.monogram {
+	.icon {
 		width: 36px;
 		height: 36px;
 		flex: none;
-		border: 0;
+		overflow: hidden;
 		border-radius: var(--radius-ctl);
 		color: var(--on-monogram);
-		font: inherit;
-		font-size: 0.9375rem;
+		font-size: 0.875rem;
 		font-weight: 600;
-		cursor: pointer;
+	}
+	.stopped .icon {
+		opacity: 0.5;
 	}
 	.names {
 		flex: 1 1 auto;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 1px;
 	}
 	.line {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 10px;
+		gap: 8px;
+		min-width: 0;
 	}
 	.name {
-		font-size: 0.9375rem;
-		font-weight: 600;
-		overflow-wrap: anywhere;
-	}
-	.state {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 0.8125rem;
-		color: var(--muted);
-	}
-	.image {
-		font-size: 0.75rem;
-		color: var(--muted);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.more {
-		width: 36px;
-		height: 36px;
-		flex: none;
-		background: transparent;
-		border: 0;
-		border-radius: var(--radius-ctl);
-		color: var(--muted);
-		font: inherit;
-		font-size: 1.125rem;
-		cursor: pointer;
-	}
-	.more:hover {
-		background: var(--chip);
 		color: var(--text);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	a.name:hover {
+		text-decoration: underline;
+	}
+	.line .chip {
+		flex: none;
+		font-size: 0.6875rem;
+	}
+	.image {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--muted);
+		font-size: 0.75rem;
 	}
 	.stats {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
-		align-items: center;
+		grid-template-columns: minmax(0, 1fr) 4.5rem 5rem;
+		align-items: end;
 		gap: 12px;
-		font-size: 0.875rem;
 	}
-	.stats div {
+	.state {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		white-space: nowrap;
+	}
+	.age {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: var(--muted);
+		font-size: 0.75rem;
+	}
+	.value {
 		display: flex;
 		flex-direction: column;
+		text-align: right;
 	}
-	.label {
-		font-size: 0.6875rem;
+	.value .mono {
+		font-size: 0.8125rem;
+	}
+	.stopped .value .mono {
 		color: var(--muted);
 	}
-	svg {
-		width: 100%;
-		height: 24px;
+	.label {
+		color: var(--muted);
+		font-size: 0.6875rem;
 	}
-	polyline {
-		fill: none;
-		stroke: var(--accent);
-		stroke-width: 1.5;
-		vector-effect: non-scaling-stroke;
-	}
-	.ports {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.ports a {
-		color: var(--text);
-		text-decoration: none;
-	}
-	.ports a:hover {
-		border-color: var(--accent);
+	.spark {
+		height: 22px;
 	}
 	.bottom {
 		display: flex;
- flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
+		gap: 6px;
+		margin-top: auto;
+		padding-top: 10px;
+		border-top: 1px solid var(--panel-border);
 	}
-	.since {
-		margin-right: auto;
+	.ports {
+		flex: 1 1 auto;
+		display: flex;
+		gap: 4px;
+		min-width: 0;
+		overflow: hidden;
+	}
+	.ports .chip {
+		flex: none;
 		font-size: 0.75rem;
 	}
 	.small {
-		height: 2.125rem;
-		padding: 0 0.75rem;
+		flex: none;
+		min-height: 2rem;
+		height: 2rem;
+		padding: 0 0.625rem;
+		gap: 6px;
 		font-size: 0.8125rem;
-	}
-	.member {
-		position: relative;
-		display: grid;
-		grid-template-columns: 8px minmax(0, 1fr) auto 4.5rem 5.5rem auto 36px;
-		align-items: center;
-		gap: 12px;
-		padding: 10px 16px;
-		border-top: 1px solid var(--panel-border);
-		font-size: 0.875rem;
-	}
-	.value {
-		text-align: right;
-		font-size: 0.8125rem;
-	}
-	.menu {
-		position: absolute;
-		right: 12px;
-		top: 56px;
-		z-index: 10;
-		width: 200px;
-		display: flex;
-		flex-direction: column;
-		padding: 6px;
-		background: var(--menu-bg);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		-webkit-backdrop-filter: var(--panel-backdrop);
-		backdrop-filter: var(--panel-backdrop);
-		box-shadow: var(--shadow-menu);
-	}
-	.member .menu {
-		top: 44px;
-	}
-	.menu button,
-	.menu a {
-		display: flex;
-		align-items: center;
-		min-height: 38px;
-		padding: 0 10px;
-		background: transparent;
-		border: 0;
-		text-decoration: none;
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		font-size: 0.875rem;
-		text-align: left;
-		cursor: pointer;
-	}
-	.menu button:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.menu a:hover,
-	.menu button:hover:not(:disabled) {
-		background: var(--chip);
-	}
-	.menu hr {
-		height: 1px;
-		margin: 6px 4px;
-		border: 0;
-		background: var(--border);
-	}
-
-	.expand { background: none; border: 0; padding: 4px 0; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-	.minimal { padding: 10px 12px; }
-	.minimal .name { font-size: .875rem; }
-	.menu { max-width: calc(100% - 24px); }
-	@container (min-width: 900px) {
-		article.list { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 100px) 150px minmax(180px, auto); column-gap: 16px; align-items: center; }
-		.list .top { grid-column: 1; grid-row: 1; }
-		.list > .ports { grid-column: 2; grid-row: 1; }
-		.list .stats { grid-column: 3; grid-row: 1; }
-		.list .bottom { grid-column: 4; grid-row: 1; justify-content: flex-end; max-width: 30rem; }
-		.list .since { flex-basis: 100%; text-align: right; }
-	}
-	@container (max-width: 850px) {
-		.member { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
-		.member .ports { grid-column: 2 / -1; }
-		.member .value { text-align: left; grid-column: 2; }
-		.member > .more { grid-column: 3; grid-row: 1; }
-		.member > .btn { grid-column: 3; grid-row: 3 / 5; }
 	}
 	@media (max-width: 760px) {
-		.small, .more, .expand { min-height: 44px; }
+		.small {
+			min-height: 2.75rem;
+			height: 2.75rem;
+		}
 	}
 </style>
