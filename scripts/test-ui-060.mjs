@@ -62,10 +62,10 @@ try {
  const search=page.getByRole('searchbox',{name:'Einstellungen suchen'});await search.waitFor();
  await search.fill('SSH');assert.equal(await page.locator('.areas > a').count(),1);assert.match(await page.locator('.areas').innerText(),/Zugang/);
  await search.fill('DNS');assert.match(await page.locator('.areas').innerText(),/Netzwerk/);
- await search.fill('Zeitzone');await page.locator('select').selectOption('UTC');await page.getByText('Gespeichert',{exact:true}).waitFor();
+ await search.fill('Zeitzone');await page.locator('.areas > a').click();await page.locator('select').selectOption('UTC');await page.getByText('Gespeichert',{exact:true}).waitFor();
  failZone=true;await page.locator('select').selectOption('Europe/Berlin');await page.locator('[role=alert]').waitFor();assert.equal(await page.locator('select').inputValue(),'UTC');failZone=false;
- await search.fill('unknown-no-match');await page.getByText('Keine passenden Einstellungen gefunden.').waitFor();
- await search.fill('Zeitzone');await page.locator('select').selectOption('Europe/Berlin');await page.getByText('Gespeichert',{exact:true}).waitFor();await search.fill('');await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
+ await page.goto(base+'/settings');await search.fill('unknown-no-match');await page.getByText('Keine passenden Einstellungen gefunden.').waitFor();
+ await search.fill('Zeitzone');await page.locator('.areas > a').click();await page.locator('select').selectOption('Europe/Berlin');await page.getByText('Gespeichert',{exact:true}).waitFor();await page.goto(base+'/settings');await search.waitFor();await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
  await page.getByRole('button',{name:/Laufende Aufgaben/}).click();await page.getByRole('dialog').waitFor();
  assert.equal(await page.locator('dialog progress').count(),4);
  failTasks=true;await page.getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/).waitFor({timeout:15000});assert.equal(await page.locator('dialog progress').count(),4);
