@@ -1,5 +1,6 @@
 // Browser checks against isolated API fixtures. No NAS operations or real disks.
-// PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-060.mjs
+// PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-061.mjs
+// README_SCREENSHOTS=1 UI_OUTPUT=docs/screenshots/v0.6.1 captures the README gallery.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -54,6 +55,41 @@ async function context(role='owner',theme='graphit',width=1440) {
  return {ctx,page};
 }
 try {
+ if (process.env.README_SCREENSHOTS) {
+  system.version='0.6.1';
+  backup.state.bytesDone=256*1024**2;backup.state.bytesTotal=1024**3;backup.state.bytes=1024**3;
+  const {ctx,page}=await context();
+  async function capture(name) {
+   await page.evaluate(async()=>{
+    for(const font of ['400 14px "IBM Plex Sans"','500 14px "IBM Plex Sans"','600 14px "IBM Plex Sans"','400 14px "IBM Plex Mono"']) await document.fonts.load(font);
+    await document.fonts.ready;
+   });
+   await page.screenshot({path:out+'/'+name+'.png',fullPage:true});
+  }
+  for(const [path,selector,name] of [
+   ['/settings','.areas','einstellungen'],
+   ['/settings/backups','.summary strong','sicherungen'],
+   ['/settings/backups/restore','#stick-replace','wiederherstellung'],
+   ['/vms','#vm-title','vms'],
+   ['/docker','h1','docker']
+  ]) {
+   backup.state.running=path!=='/settings/backups/restore';
+   await page.goto(base+path);await page.locator(selector).first().waitFor();
+   if(path==='/settings/backups')await page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
+   if(path==='/docker')await page.getByText('media:latest',{exact:true}).waitFor();
+   await capture(name);
+  }
+  backup.state.running=true;
+  await page.goto(base+'/settings');await page.getByRole('searchbox').waitFor();
+  await page.getByRole('button',{name:/Laufende Aufgaben/}).click();await page.locator('dialog progress').nth(3).waitFor();await capture('aufgaben');
+  await ctx.close();
+  const mobile=await context('owner','hell',390);
+  await mobile.page.goto(base+'/settings/backups');await mobile.page.locator('.summary strong').first().waitFor();
+  await mobile.page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
+  await mobile.page.evaluate(()=>document.fonts.ready);
+  await mobile.page.screenshot({path:out+'/sicherungen-mobil.png',fullPage:true});await mobile.ctx.close();
+  assert.deepEqual(errors,[]);console.log('README screenshots captured from 0.6.1 with isolated example data.');
+ } else {
  const {ctx,page}=await context();
  await page.goto(base+'/settings');
  const search=page.getByRole('searchbox');await search.waitFor();
@@ -104,4 +140,5 @@ try {
  for(const path of ['backups','backups/data','backups/configuration','backups/restore','timezone','access']) { await user.page.goto(base+'/settings/'+path);await user.page.getByText('Dafür fehlen diesem Konto die Rechte.',{exact:true}).waitFor(); }
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/config-backup','/network','/system/ssh','/system/certificate'].includes(path)));
  await user.ctx.close();assert.deepEqual(errors,[]);console.log('UI 0.6.1 checks passed: grouping, deep links, legacy links, restore dialog, errors/retry, local feedback, no archive polling, roles and responsive themes.');
+ }
 } finally { await browser.close(); }
