@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import { noticeLink } from '#lib/notice-link.ts';
 	import { armSound } from '#lib/sound.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -82,6 +84,7 @@
 				<ul>
 					{#each notifications.list as notice (notice.id)}
 						{@const text = noticeText(notice)}
+						{@const href = noticeLink(notice.kind, notice.subject)}
 						<li class:fresh={Date.parse(notice.time) > newSince}>
 							<div class="line">
 								<span class="chip {CHIP[notice.severity]}">{t(SEVERITY[notice.severity])}</span>
@@ -90,6 +93,9 @@
 							</div>
 							<span class="what">{text.title}</span>
 							<span class="muted">{text.text}</span>
+							{#if href && !page.url.pathname.startsWith('/docker')}
+								<a class="notice-link" {href} onclick={() => open = false}>{t('ui.open')}</a>
+							{/if}
 						</li>
 					{/each}
 				</ul>

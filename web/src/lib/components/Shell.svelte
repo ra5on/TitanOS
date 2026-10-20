@@ -1,6 +1,9 @@
 <script lang="ts">
 	// The frame around every page once someone is logged in.
 	import type { Snippet } from 'svelte';
+	import { page } from '$app/state';
+	import ConnectionBanner from './ConnectionBanner.svelte';
+	import TasksPanel from './TasksPanel.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -15,6 +18,7 @@
 	let { children }: { children: Snippet } = $props();
 
 	// A shell is a way into the system: administrators only.
+	const dockerPage = $derived(page.url.pathname === '/docker' || page.url.pathname.startsWith('/docker/'));
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	function hotkey(event: KeyboardEvent) {
@@ -54,7 +58,10 @@
 {/if}
 <div class="shell" style:padding-bottom={admin && terminal.open && !terminal.full ? `${terminal.height}px` : undefined}>
 	<Header />
-	<main>{@render children()}</main>
+	<main class:readable={!dockerPage}>
+		{#if !dockerPage}<ConnectionBanner /><TasksPanel />{/if}
+		{@render children()}
+	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
 {#if admin}<TerminalPanel />{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { revealTarget } from '#lib/reveal-target.ts';
 	// Backups of shares to another volume, another server or the cloud.
 	import { api, ApiError } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
@@ -40,6 +41,9 @@
 	let overview = $state<Overview | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state(false);
+	let pending = $state<Record<string, string>>({});
+	let feedback = $state('');
+	let retry = $state<{ job: Job; action: 'run' | 'stop' } | null>(null);
 	// The job being created (isNew) or changed.
 	let draft = $state<Job | null>(null);
 	let isNew = $state(false);
@@ -228,6 +232,7 @@
 		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim().toLowerCase(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
 			overview = isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job);
+			feedback = t('ui.saved');
 			const created = isNew ? job : null;
 			draft = null;
 			// Without its password a backup is worthless: show it right away.
@@ -239,12 +244,15 @@
 	}
 
 	async function act(job: Job, action: 'run' | 'stop') {
+		if (pending[job.id]) return;
+		pending[job.id] = action; feedback = ''; retry = null;
 		error = null;
 		try {
 			overview = await api.post<Overview>(`/backups/${job.id}/${action}`);
+			feedback = t('ui.backupAccepted', { name: job.id });
 		} catch (err) {
-			problem(err);
-		}
+			problem(err); retry = { job, action };
+		} finally { delete pending[job.id]; }
 	}
 
 	async function remove() {
@@ -344,6 +352,9 @@
 
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
+{#if feedback}<p class="notice-ok" role="status">{feedback}</p>{/if}
+{#if retry && error}<button type="button" class="btn" onclick={() => retry && act(retry.job, retry.action)}>{t('ui.retry')}</button>{/if}
+
 {#if overview}
 	<SmbTargets targets={overview.smbTargets} onchange={load} />
 	<TargetPanel />
@@ -351,7 +362,7 @@
 		{@const job = view.job}
 		{@const state = view.state}
 		{@const next = view.next}
-		<section class="tile">
+		<section class="tile" use:revealTarget id="backup-{job.id}">
 			<div class="head">
 				<div>
 					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">Beta</span>{/if}
@@ -376,11 +387,12 @@
 			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre></div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">{t('backup.warning')}<pre>{state.warning}</pre></div>{/if}
 			{#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
+			{#if pending[job.id]}<p role="status">{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}</p>{/if}
 			<div class="row">
 				{#if state.running}
-					<button type="button" class="btn" onclick={() => act(job, 'stop')}>{t('backup.stop')}</button>
+					<button type="button" class="btn" disabled={!!pending[job.id]} onclick={() => act(job, 'stop')}>{t('backup.stop')}</button>
 				{:else}
-					<button type="button" class="btn btn-primary" onclick={() => act(job, 'run')}>{t('backup.run')}</button>
+					<button type="button" class="btn btn-primary" disabled={!!pending[job.id]} onclick={() => act(job, 'run')}>{t('backup.run')}</button>
 					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>

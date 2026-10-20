@@ -289,6 +289,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/ups", s.requireAdmin(s.handleUPSChange))
 	mux.HandleFunc("POST /api/v1/ups/scan", s.requireAdmin(s.handleUPSScan))
 	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
+	mux.HandleFunc("GET /api/v1/update/progress", s.requireAdmin(s.handleUpdateProgress))
 	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
 	mux.HandleFunc("GET /api/v1/system/ssh", s.requireAdmin(s.handleSSH))

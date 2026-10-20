@@ -28,6 +28,7 @@
 
 	let status = $state<Status | null>(null);
 	let draft = $state<Settings | null>(null);
+	let saved = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state<'' | 'check' | 'save' | 'action'>('');
 	let asking = $state<'' | 'install' | 'rollback'>('');
@@ -78,11 +79,11 @@
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft) return;
-		busy = 'save';
+		busy = 'save'; saved = false;
 		error = null;
 		try {
 			status = await api.put<Status>('/update/settings', draft);
-			draft = { ...status.settings };
+			draft = { ...status.settings }; saved = true;
 		} catch (err) {
 			problem(err);
 		}
@@ -191,7 +192,7 @@
 		{:else}
 			<p class="muted">{t('update.manualHint')}</p>
 		{/if}
-		<div class="actions"><button type="submit" class="btn btn-primary" disabled={!changed || busy !== ''}>{t('notify.save')}</button></div>
+		<div class="actions"><button type="submit" class="btn btn-primary" disabled={!changed || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}</div>
 	</form>
 {/if}
 
