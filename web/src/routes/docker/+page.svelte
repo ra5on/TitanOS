@@ -62,7 +62,7 @@
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
 		| { kind: 'remove'; container: DockerContainer }
-		| { kind: 'removeApp'; app: string; purge: boolean; typed: string }
+		| { kind: 'removeApp'; app: string; purge: boolean }
 		| null
 	>(null);
 	let draft = $state({ name: '', compose: '', enabled: true, volume: '' });
@@ -150,7 +150,7 @@
 	}
 
 	function askRemoveApp(app: string) {
-		dialog = { kind: 'removeApp', app, purge: false, typed: '' };
+		dialog = { kind: 'removeApp', app, purge: false };
 	}
 
 	function removeApp(app: string, purge: boolean) {
@@ -378,13 +378,10 @@
 		<label class="check"><input type="checkbox" bind:checked={dialog.purge} /><span>{t('docker.removeData', { path })}</span></label>
 		{#if dialog.purge}
 			<p class="notice-error">{t('docker.removeDataWarning')}</p>
-			<label class="confirm-name"><span>{t('docker.removeDataConfirm', { app })}</span>
-				<input class="field mono" type="text" bind:value={dialog.typed} autocomplete="off" autocapitalize="none" spellcheck="false" />
-			</label>
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}" disabled={dialog.purge && dialog.typed !== app}
+			<button type="button" class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
 				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
@@ -439,13 +436,6 @@
 	}
 	.job-actions {
 		margin-top: 10px;
-	}
-	.confirm-name {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		margin-top: 12px;
-		font-size: 0.875rem;
 	}
 	.link {
 		padding: 0;
