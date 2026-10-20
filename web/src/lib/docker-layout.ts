@@ -1,12 +1,11 @@
 import type { DockerContainer } from './api.ts';
 
-export type DockerView = 'cards' | 'list' | 'minimal';
-export type DockerWidth = 3 | 4 | 8;
-export type DockerLayout = { version: 1; view: DockerView; order: string[]; widths: Record<string, DockerWidth>; details: boolean };
+export type DockerView = 'list' | 'cards';
+export type DockerLayout = { version: 1; view: DockerView; order: string[]; details: boolean };
 export type DockerGroup = { id: string; name: string; members: DockerContainer[] };
 
 export function defaultDockerLayout(): DockerLayout {
-	return { version: 1, view: 'minimal', order: [], widths: {}, details: true };
+	return { version: 1, view: 'list', order: [], details: true };
 }
 
 /** Names survive container recreation during updates. Prefixes separate apps from standalone containers. */
@@ -29,14 +28,11 @@ export function sanitizeDockerLayout(value: unknown): DockerLayout {
 	const result = defaultDockerLayout();
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
 	const input = value as Record<string, unknown>;
-	if (input.view === 'cards' || input.view === 'list' || input.view === 'minimal') result.view = input.view;
+	// Earlier versions also had a "minimal" view that unfolded tiles on a
+	// click; the list replaces it. Saved tile widths are no longer used.
+	if (input.view === 'cards') result.view = 'cards';
 	if (typeof input.details === 'boolean') result.details = input.details;
 	if (Array.isArray(input.order)) result.order = [...new Set(input.order.filter(validID))].slice(0, 2000);
-	if (input.widths && typeof input.widths === 'object' && !Array.isArray(input.widths)) {
-		for (const [id, width] of Object.entries(input.widths).slice(0, 2000)) {
-			if (validID(id) && (width === 3 || width === 4 || width === 8)) result.widths[id] = width;
-		}
-	}
 	return result;
 }
 
