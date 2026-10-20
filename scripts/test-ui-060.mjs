@@ -13,7 +13,7 @@ const system = { hostname:'titan-test',version:'0.6.0',kernel:'test',uptimeSecon
 const volume={name:'data',level:'raid1',filesystem:'ext4',mountPoint:'/mnt/data',mounted:true,state:'checking',sizeBytes:1e12,usedBytes:4e11,raidDisks:2,members:[],sync:{percent:32,speedBytesPerSecond:1e8,remainingSeconds:500},mismatches:0};
 const vm={name:'linux',displayName:'Linux Server',description:'Test VM',template:'linux',memoryMiB:2048,vcpus:2,volume:'data',disks:[],iso:'',autostart:true,cpuPin:[],exclusive:false,folders:[],tpm:false,secureBoot:false,pci:[],usb:[],network:'user',job:null,state:'stopped',available:true,cpuPercent:4,memoryBytes:1e9,since:time};
 const backup={job:{id:'daily',sources:['documents'],destination:{type:'local',volume:'data',folder:'backups'},enabled:true,every:'daily',weekday:0,time:'02:00',keep:{daily:7,weekly:2,monthly:1}},secretSet:{},state:{running:true,phase:'backup',percent:25,bytesDone:25,bytesTotal:100,lastRun:time,lastOK:time,lastError:'',warning:'',bytes:100,restoredTo:''},next:null};
-let offline=false, failVM=false, failZone=false;
+let offline=false, failVM=false, failZone=false, failTasks=false;
 const requests=[];
 async function context(role='owner',theme='graphit',width=1440) {
  const ctx=await browser.newContext({locale:'de-DE',viewport:{width,height:1000}});
@@ -31,11 +31,12 @@ async function context(role='owner',theme='graphit',width=1440) {
   if(path==='/network')return json({timezone:'Europe/Berlin'});
   if(path==='/system/timezone'){await new Promise(r=>setTimeout(r,250));return failZone?fail():json({});}
   if(path==='/files/jobs')return json([{id:'copy1',move:false,state:'running',from:'share/documents',to:'volume/data',dir:'backup',names:['report.pdf'],files:1,done:0,bytes:200,copied:100,current:'report.pdf',error:''}]);
+  if(path==='/backups' && failTasks)return fail();
   if(path==='/backups')return json({smbTargets:[],jobs:[backup],shares:[{name:'documents',volume:'data'}],volumes:['data']});
   if(path==='/backups/daily/stop'){await new Promise(r=>setTimeout(r,500));backup.state.running=false;return json({smbTargets:[],jobs:[backup],shares:[],volumes:['data']});}
   if(path==='/backups/target')return json({target:{enabled:false,volume:'',port:0,sources:[],listening:[],problem:''},volumes:['data']});
   if(path==='/usb')return json([]);
-  if(path==='/update')return json({progress:{phase:'download',percent:40,file:'filesystem.squashfs'}});
+  if(path==='/update/progress')return json({progress:{phase:'download',percent:40,file:'filesystem.squashfs'}});
   if(path==='/vms')return json({kvm:true,bridge:true,host:{cpus:8,memoryBytes:16e9,usedMemoryBytes:3e9},vms:[vm]});
   if(path==='/vms/linux/start'){await new Promise(r=>setTimeout(r,700));return failVM?fail():json({});}
   if(path==='/vms/linux/snapshots')return json({snapshots:[],schedule:{enabled:false,time:'03:00',days:[],keep:3,memory:false,allowPause:false},pending:false,reason:'',job:null});
@@ -66,7 +67,9 @@ try {
  await search.fill('unknown-no-match');await page.getByText('Keine passenden Einstellungen gefunden.').waitFor();
  await search.fill('Zeitzone');await page.locator('select').selectOption('Europe/Berlin');await page.getByText('Gespeichert',{exact:true}).waitFor();await search.fill('');await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
  await page.getByRole('button',{name:/Laufende Aufgaben/}).click();await page.getByRole('dialog').waitFor();
- assert.equal(await page.locator('dialog progress').count(),4);await page.screenshot({path:out+'/tasks-desktop.png'});
+ assert.equal(await page.locator('dialog progress').count(),4);
+ failTasks=true;await page.getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/).waitFor({timeout:15000});assert.equal(await page.locator('dialog progress').count(),4);
+ failTasks=false;await page.getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/).waitFor({state:'hidden',timeout:15000});await page.screenshot({path:out+'/tasks-desktop.png'});
  await page.keyboard.press('Escape');
  await page.locator('.notifications > button').click();await page.getByRole('link',{name:'Details öffnen',exact:true}).click();
  await page.locator('#volume-data').waitFor();assert.equal(new URL(page.url()).hash,'#volume-data');
@@ -90,7 +93,7 @@ try {
  }
  const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();await user.page.getByRole('searchbox').fill('SSH');assert.equal(await user.page.locator('.areas > a').count(),0);
  await user.page.getByRole('button',{name:/Laufende Aufgaben/}).click();await user.page.getByRole('dialog').waitFor();assert.equal(await user.page.locator('dialog progress').count(),1);
- assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/update','/vms'].includes(path)));await user.ctx.close();
+ assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/update/progress','/vms'].includes(path)));await user.ctx.close();
  assert.deepEqual(errors,[]);console.log('UI 0.6.0 browser checks passed (desktop, 390px, Graphit/Hell, roles, errors, tasks, Docker isolation).');
 }
 } finally { await browser.close(); }
