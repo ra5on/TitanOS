@@ -233,7 +233,7 @@
 		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
 		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
 		const weekdays = [...(draft.weekdays ?? [])].sort();
-		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim().toLowerCase(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
+		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
 			overview = isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job);
 			feedback = t('ui.saved');
@@ -424,7 +424,7 @@
 		<h2 class="tile-title">{isNew ? t('backup.add') : t('backup.editTitle', { name: draft.id })}</h2>
 		{#if isNew}
 			<label class="narrow"><span>{t('backup.name')}</span>
-				<input class="field mono" type="text" bind:value={draft.id} pattern="[a-z][a-z0-9\-]*" maxlength="31" autocapitalize="none" spellcheck="false" required />
+				<input class="field mono" type="text" bind:value={draft.id} pattern="[A-Za-z][A-Za-z0-9\-]*" maxlength="31" autocapitalize="none" spellcheck="false" required />
 				<small>{t('backup.nameHint')}</small>
 			</label>
 		{/if}

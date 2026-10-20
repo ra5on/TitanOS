@@ -52,8 +52,8 @@
 		busy = true;
 		error = '';
 		try {
-			const res = await api.post<{ code: string }>('/backups/target/sources', { name: name.trim().toLowerCase() });
-			pairing = { name: name.trim().toLowerCase(), code: res.code };
+			const res = await api.post<{ code: string }>('/backups/target/sources', { name: name.trim() });
+			pairing = { name: name.trim(), code: res.code };
 			name = '';
 			copied = false;
 			await load();
@@ -121,7 +121,7 @@
 			<p class="muted">{t('backup.targetNoSources')}</p>
 		{/each}
 		<form class="row" onsubmit={pair}>
-			<label class="narrow"><span>{t('backup.targetName')}</span><input class="field mono" bind:value={name} pattern="[a-z][a-z0-9\-]*" maxlength="31" placeholder="keller" autocapitalize="none" spellcheck="false" required /></label>
+			<label class="narrow"><span>{t('backup.targetName')}</span><input class="field mono" bind:value={name} pattern="[A-Za-z][A-Za-z0-9\-]*" maxlength="31" placeholder="keller" autocapitalize="none" spellcheck="false" required /></label>
 			<button type="submit" class="btn" disabled={busy || !target.enabled || !!target.problem}>{t('backup.targetPair')}</button>
 		</form>
 		<p class="muted">{t('backup.targetPairHint')}</p>

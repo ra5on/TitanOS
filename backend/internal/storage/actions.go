@@ -7,10 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
 // Errors a request can be answered with. The API turns them into codes.
@@ -29,10 +30,6 @@ var (
 	ErrNotPossible     = errors.New("storage: not possible in the current state")
 	ErrReadOnly        = errors.New("storage: disks are not changed in development mode")
 )
-
-// The name is also the mount point, the array name and the filesystem label
-// (XFS allows 12 characters).
-var volumeNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
 
 // minDisks is the smallest number of disks per RAID level.
 var minDisks = map[string]int{"raid0": 1, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
@@ -170,10 +167,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if !loaded {
 		return ErrNotLoaded
 	}
-	if !volumeNameRE.MatchString(req.Name) {
+	if !naming.ValidVolume(req.Name) {
 		return ErrInvalidName
 	}
-	if _, exists := m.find(req.Name); exists {
+	if slices.ContainsFunc(m.configured(), func(v VolumeConfig) bool { return strings.EqualFold(v.Name, req.Name) }) {
 		return ErrExists
 	}
 	need, ok := minDisks[req.Level]

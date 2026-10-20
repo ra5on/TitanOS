@@ -230,6 +230,7 @@ func TestCreateValidation(t *testing.T) {
 	}{
 		{"bad name", CreateRequest{Name: "Meine Daten", Level: "raid1", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrInvalidName},
 		{"name too long for XFS", CreateRequest{Name: "abcdefghijklm", Level: "raid1", Filesystem: "xfs", Disks: three[:2], Erase: three[:2]}, ErrInvalidName},
+		{"name taken with different case", CreateRequest{Name: "Data", Level: "raid1", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrExists},
 		{"name taken", CreateRequest{Name: "data", Level: "raid1", Filesystem: "ext4", Disks: three[:2], Erase: three[:2]}, ErrExists},
 		{"unknown level", CreateRequest{Name: "new", Level: "raid7", Filesystem: "ext4", Disks: three, Erase: three}, ErrInvalidLevel},
 		{"unknown filesystem", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ntfs", Disks: three[:2], Erase: three[:2]}, ErrInvalidFS},
@@ -260,7 +261,7 @@ func TestCreateValidation(t *testing.T) {
 func TestCreate(t *testing.T) {
 	m, runner, store := newTestManager(t)
 	// sdf is the smallest disk (4 GiB): every member gets its size.
-	req := CreateRequest{Name: "media", Level: "raid5", Filesystem: "xfs", Disks: []string{"sdd", "sde", "sdf"}, Erase: []string{"sdf", "sde", "sdd"}}
+	req := CreateRequest{Name: "Backup", Level: "raid5", Filesystem: "xfs", Disks: []string{"sdd", "sde", "sdf"}, Erase: []string{"sdf", "sde", "sdd"}}
 	if err := m.Create(context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
@@ -270,9 +271,9 @@ func TestCreate(t *testing.T) {
 		"wipefs --all --force /dev/sdd1", // the old NTFS partition goes first …
 		"wipefs --all --force /dev/sdd",  // … then the disk itself
 		"sfdisk --quiet --wipe always --wipe-partitions always /dev/sde",
-		"mdadm --create /dev/md/media --run --quiet --metadata=1.2 --homehost=any --name=media --level=5 --raid-devices=3 --bitmap=internal /dev/sdd1 /dev/sde1 /dev/sdf1",
-		"mkfs.xfs -f -q -L media /dev/md/media",
-		"mount -t xfs -o noatime UUID=0f0f0f0f-aaaa-bbbb-cccc-121212121212 " + m.mountRoot + "/media",
+		"mdadm --create /dev/md/Backup --run --quiet --metadata=1.2 --homehost=any --name=Backup --level=5 --raid-devices=3 --bitmap=internal /dev/sdd1 /dev/sde1 /dev/sdf1",
+		"mkfs.xfs -f -q -L Backup /dev/md/Backup",
+		"mount -t xfs -o noatime UUID=0f0f0f0f-aaaa-bbbb-cccc-121212121212 " + m.mountRoot + "/Backup",
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing command %q in:\n%s", want, all)
@@ -287,7 +288,7 @@ func TestCreate(t *testing.T) {
 		}
 	}
 	// 4 GiB minus 1 MiB at the start and 128 MiB reserve.
-	wantTable := "label: gpt\nstart=1MiB, size=3967MiB, type=" + raidPartitionType + ", name=titanos-media\n"
+	wantTable := "label: gpt\nstart=1MiB, size=3967MiB, type=" + raidPartitionType + ", name=titanos-Backup\n"
 	if !slices.Contains(runner.stdin, wantTable) {
 		t.Errorf("partition table = %q, want %q", runner.stdin, wantTable)
 	}
@@ -296,7 +297,7 @@ func TestCreate(t *testing.T) {
 	if err := store.ReadJSON(configFile, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if len(saved) != 1 || saved[0].Name != "media" || saved[0].ArrayUUID != "99999999:88888888:77777777:66666666" || saved[0].FilesystemUUID != "0f0f0f0f-aaaa-bbbb-cccc-121212121212" {
+	if len(saved) != 1 || saved[0].Name != "Backup" || saved[0].ArrayUUID != "99999999:88888888:77777777:66666666" || saved[0].FilesystemUUID != "0f0f0f0f-aaaa-bbbb-cccc-121212121212" {
 		t.Errorf("saved = %+v", saved)
 	}
 }

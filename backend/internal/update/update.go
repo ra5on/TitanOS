@@ -232,17 +232,18 @@ type Manager struct {
 	// work serializes everything that writes to the stick.
 	work sync.Mutex
 
-	mu         sync.Mutex
-	loaded     bool
-	settings   Settings
-	available  *Manifest
-	announced  string
-	lastCheck  time.Time
-	checkError string
-	progress   Progress
-	pending    *Pending
-	slotCache  []Slot
-	slotTime   time.Time
+	mu                sync.Mutex
+	loaded            bool
+	settings          Settings
+	available         *Manifest
+	announced         string
+	loginCheckRunning bool
+	lastCheck         time.Time
+	checkError        string
+	progress          Progress
+	pending           *Pending
+	slotCache         []Slot
+	slotTime          time.Time
 }
 
 // NewManager returns a manager for the system that is running: its
@@ -771,6 +772,28 @@ func (m *Manager) latest(ctx context.Context, channel string) (Manifest, error) 
 		return Manifest{}, ErrSignature
 	}
 	return parseManifest(data)
+}
+
+// CheckAfterLogin starts a bounded check without delaying authentication.
+// Concurrent administrator logins share one check; ordinary page reloads do
+// not trigger it. Check emits the existing, version-deduplicated notification.
+func (m *Manager) CheckAfterLogin() bool {
+	m.mu.Lock()
+	if m.Disabled || !m.loaded || m.loginCheckRunning {
+		m.mu.Unlock()
+		return false
+	}
+	m.loginCheckRunning = true
+	m.mu.Unlock()
+	go func() {
+		defer func() { m.mu.Lock(); m.loginCheckRunning = false; m.mu.Unlock() }()
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if err := m.Check(ctx); err != nil {
+			slog.Warn("update check after login", "err", err)
+		}
+	}()
+	return true
 }
 
 // Check looks for a release that is newer than what is running.

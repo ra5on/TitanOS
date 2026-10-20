@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
 const (
@@ -49,15 +50,14 @@ const (
 )
 
 var (
-	ErrNotLoaded  = errors.New("backuptarget: settings not loaded from /config")
-	ErrInvalid    = errors.New("backuptarget: invalid request")
-	ErrExists     = errors.New("backuptarget: this name is used already")
-	ErrNotFound   = errors.New("backuptarget: no such source")
-	ErrTooMany    = errors.New("backuptarget: too many sources")
-	ErrNoNetwork  = errors.New("backuptarget: Tailscale is not connected")
-	ErrDisabled   = errors.New("backuptarget: not available in development mode")
-	nameForm      = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
-	volumeForm    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
+	ErrNotLoaded = errors.New("backuptarget: settings not loaded from /config")
+	ErrInvalid   = errors.New("backuptarget: invalid request")
+	ErrExists    = errors.New("backuptarget: this name is used already")
+	ErrNotFound  = errors.New("backuptarget: no such source")
+	ErrTooMany   = errors.New("backuptarget: too many sources")
+	ErrNoNetwork = errors.New("backuptarget: Tailscale is not connected")
+	ErrDisabled  = errors.New("backuptarget: not available in development mode")
+
 	blobForm      = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	repoTypes     = []string{"data", "index", "keys", "locks", "snapshots"}
 	repoTypesForm = regexp.MustCompile(`^(data|index|keys|locks|snapshots)$`)
@@ -169,7 +169,7 @@ func (m *Manager) Configure(enabled bool, volume string, mounted []string) error
 	if !m.loaded {
 		return ErrNotLoaded
 	}
-	if enabled && (!volumeForm.MatchString(volume) || !slices.Contains(mounted, volume)) {
+	if enabled && (!naming.ValidVolume(volume) || !slices.Contains(mounted, volume)) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
 	}
 	next := m.settings
@@ -192,13 +192,13 @@ func (m *Manager) Pair(name string) (string, error) {
 	if !m.loaded {
 		return "", ErrNotLoaded
 	}
-	if !nameForm.MatchString(name) {
+	if !naming.ValidBackup(name) {
 		return "", fmt.Errorf("%w: name", ErrInvalid)
 	}
 	if len(m.settings.Sources) >= maxSources {
 		return "", ErrTooMany
 	}
-	if slices.ContainsFunc(m.settings.Sources, func(s Source) bool { return s.Name == name }) {
+	if slices.ContainsFunc(m.settings.Sources, func(s Source) bool { return strings.EqualFold(s.Name, name) }) {
 		return "", ErrExists
 	}
 	host := ""

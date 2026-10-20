@@ -150,6 +150,7 @@ type Manager struct {
 	MountRoot string
 	syncFile  func(*os.File) error
 
+	undo    undoStore
 	jobs    jobs
 	mu      sync.Mutex
 	textMu  sync.Mutex
@@ -287,7 +288,7 @@ func (m *Manager) Rename(root Root, from, to string) error {
 	if _, err := r.Lstat(to); err == nil {
 		return ErrExists
 	}
-	return mapError(r.Rename(from, to))
+	return mapError(publishNewFile(r, from, to))
 }
 
 // Delete removes files and folders. In a root with a recycle bin they are
@@ -332,22 +333,28 @@ func (m *Manager) Delete(root Root, paths []string, user string, permanent bool)
 
 // recycle moves p to .recycle/<user>/<p>, the same place Samba uses.
 func (m *Manager) recycle(r *os.Root, p, user string) error {
+	_, err := m.recyclePath(r, p, user)
+	return err
+}
+
+func (m *Manager) recyclePath(r *os.Root, p, user string) (string, error) {
 	target := path.Join(RecycleDir, user, p)
 	if err := r.MkdirAll(path.Dir(target), 0o770); err != nil {
-		return err
+		return "", err
 	}
 	// Something with this name may already be in the bin.
 	if _, err := r.Lstat(target); err == nil {
 		ext := path.Ext(target)
 		target = fmt.Sprintf("%s (%s)%s", strings.TrimSuffix(target, ext), m.now().Format("2006-01-02 15.04.05"), ext)
 	}
-	if err := r.Rename(p, target); err != nil {
-		return err
+	if err := publishNewFile(r, p, target); err != nil {
+		return "", err
 	}
 	// The time of deletion decides when the bin drops the file.
 	now := m.now()
+	rememberTrash(r, target, p, now)
 	r.Chtimes(target, now, now)
-	return nil
+	return target, nil
 }
 
 // Open opens a file for download.
@@ -399,7 +406,7 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 			if err != nil {
 				return err
 			}
-			if hidden(entry.Name()) || root.secret(name) {
+			if hidden(entry.Name()) || root.secret(name) || m.protected(root, name) {
 				if entry.IsDir() {
 					return fs.SkipDir
 				}

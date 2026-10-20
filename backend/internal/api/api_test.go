@@ -2,17 +2,23 @@ package api
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -58,6 +64,7 @@ type testServer struct {
 	users  *auth.Users
 	power  fakePower
 	client *http.Client
+	update *update.Manager
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -68,12 +75,13 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatal(err)
 	}
 	power := fakePower{actions: make(chan string, 1)}
+	updater := disabledUpdate(store)
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
-	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power}
+	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power, update: updater}
 	ts.client = ts.newClient()
 	return ts
 }
@@ -101,7 +109,7 @@ func disabledEnergy(store *config.Store) *system.EnergyManager {
 
 func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts := newTestServer(t)
-	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/backups/progress"}, {"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("anonymous %s: %d", route.path, res.StatusCode)
 		}
@@ -432,7 +440,7 @@ func TestPreferences(t *testing.T) {
 	ts.setup()
 
 	_, body := ts.request("GET", "/api/v1/preferences", nil)
-	if strings.TrimSpace(string(body)) != `{"appearance":null,"dashboard":null,"docker":null,"sound":null,"vnc":null}` {
+	if strings.TrimSpace(string(body)) != `{"appearance":null,"dashboard":null,"docker":null,"files":null,"sound":null,"vnc":null}` {
 		t.Errorf("fresh preferences = %s", body)
 	}
 
@@ -445,6 +453,27 @@ func TestPreferences(t *testing.T) {
 	}
 	if stored, err := ts.store.Read("users/alex/appearance.json"); err != nil || !strings.Contains(string(stored), "hell") {
 		t.Errorf("not written to the store: %s %v", stored, err)
+	}
+
+	// File manager settings belong to the authenticated account and survive a
+	// new preference cache (as after restarting titand), not just a browser.
+	files := map[string]any{"view": "large", "sort": "modified", "descending": true,
+		"favorites": []map[string]string{{"root": "share/Backup", "path": "MeineFotos"}}}
+	if res, body := ts.request("PUT", "/api/v1/preferences/files", files); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("put files: %d %s", res.StatusCode, body)
+	}
+	reloaded := newPreferences(ts.store)
+	stored, err := reloaded.get("alex", "files")
+	if err != nil || !strings.Contains(string(stored), `"view":"large"`) || !strings.Contains(string(stored), "MeineFotos") {
+		t.Fatalf("files preferences not persisted: %s %v", stored, err)
+	}
+	other, err := reloaded.get("other", "files")
+	if err != nil || other != nil {
+		t.Fatalf("preferences leaked to another account: %s %v", other, err)
+	}
+	_, body = ts.request("GET", "/api/v1/preferences", nil)
+	if !strings.Contains(string(body), `"files":{"descending":true`) {
+		t.Fatalf("files missing from response: %s", body)
 	}
 
 	if res, _ := ts.request("PUT", "/api/v1/preferences/appearance", []byte(`["not", "an", "object"]`)); res.StatusCode != http.StatusBadRequest {
@@ -1498,5 +1527,215 @@ func TestTextEditorDoesNotExposeAdminRootsToUsers(t *testing.T) {
 	}
 	if res, body := ts.do(client, "PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "editor.json", "content": "{}", "version": "test"}); res.StatusCode != http.StatusNotFound {
 		t.Fatal(res.StatusCode, string(body))
+	}
+}
+
+func TestUpdateCheckOnlyAfterSuccessfulAdminLogin(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	// Explicit loopback source keeps the test independent of GitHub and keys
+	// installed on the host. A missing key or failed local fetch is recorded.
+	ts.update.Disabled = false
+	if err := ts.update.SetSettings(update.Settings{Channel: update.ChannelStable, InstallTime: "03:30", Source: "http://127.0.0.1:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ts.users.Create("gast", testPassword, auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "alex", "password": "wrong"})
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "gast", "password": testPassword})
+	if ts.update.Status().LastCheck != nil {
+		t.Fatal("failed or ordinary-user login triggered update check")
+	}
+	if res, body := ts.request("POST", "/api/v1/login", map[string]string{"name": "alex", "password": testPassword}); res.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: %d %s", res.StatusCode, body)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ts.update.Status().LastCheck != nil {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("successful owner login did not start update check")
+}
+
+func TestUSBBackupProgressRequiresAdministrator(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, body := ts.request("GET", "/api/v1/backups/progress", nil); res.StatusCode != 200 || strings.TrimSpace(string(body)) != "{}" {
+		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+	if _, err := ts.users.Create("guest", testPassword, auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "guest", "password": testPassword})
+	if res, _ := ts.request("GET", "/api/v1/backups/progress", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("user: %d", res.StatusCode)
+	}
+}
+
+func TestFileInspectionHonorsRootPermissions(t *testing.T) {
+	ts := newTestServer(t)
+	request := map[string]any{"root": "stick", "paths": []string{"users"}}
+	if res, _ := ts.request("POST", "/api/v1/files/inspect", request); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", res.StatusCode)
+	}
+	ts.setup()
+	if res, _ := ts.request("POST", "/api/v1/files/inspect", request); res.StatusCode == http.StatusOK {
+		t.Fatal("inspection exposed account directory")
+	}
+	ts.users.Create("guest", testPassword, auth.RoleUser)
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "guest", "password": testPassword})
+	if res, _ := ts.request("POST", "/api/v1/files/inspect", request); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("guest accessed stick: %d", res.StatusCode)
+	}
+}
+
+func TestFilePropertiesAndTrashPreviewKeepRootAuthorization(t *testing.T) {
+	ts := newTestServer(t)
+	for _, endpoint := range []string{"/api/v1/files/properties?root=stick&path=users&checksum=sha256", "/api/v1/files/trash?root=stick&flat=1"} {
+		if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("anonymous %s: %d", endpoint, res.StatusCode)
+		}
+	}
+	if res, _ := ts.request("POST", "/api/v1/files/jobs/missing/retry", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous retry: %d", res.StatusCode)
+	}
+	ts.setup()
+	if res, _ := ts.request("GET", "/api/v1/files/properties?root=stick&path=users&checksum=sha256", nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("secret properties: %d", res.StatusCode)
+	}
+	ts.users.Create("guest", testPassword, auth.RoleUser)
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "guest", "password": testPassword})
+	for _, endpoint := range []string{"/api/v1/files/properties?root=stick&path=users", "/api/v1/files/trash?root=stick&flat=1"} {
+		if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusNotFound {
+			t.Fatalf("guest %s: %d", endpoint, res.StatusCode)
+		}
+	}
+	if res, _ := ts.request("POST", "/api/v1/files/trash/preview", map[string]any{"root": "stick", "paths": []string{"owner/config.json"}}); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("guest restore preview: %d", res.StatusCode)
+	}
+}
+
+func TestAdvancedFileToolsRequireSessionAndRootAccess(t *testing.T) {
+	ts := newTestServer(t)
+	paths := []string{"duplicates", "usage", "search", "compare", "rename-preview", "rename-batch", "archive", "extract"}
+	request := map[string]any{"root": "stick", "path": "users", "toRoot": "stick", "toDir": "", "name": "out", "names": []string{"users"}, "digits": 1}
+	for _, action := range paths {
+		if res, _ := ts.request("POST", "/api/v1/files/"+action, request); res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("anonymous %s: %d", action, res.StatusCode)
+		}
+	}
+	ts.setup()
+	ts.users.Create("guest", testPassword, auth.RoleUser)
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "guest", "password": testPassword})
+	for _, action := range paths {
+		if res, _ := ts.request("POST", "/api/v1/files/"+action, request); res.StatusCode != http.StatusNotFound {
+			t.Fatalf("guest %s: %d", action, res.StatusCode)
+		}
+	}
+	if res, _ := ts.request("POST", "/api/v1/files/undo/unknown", nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown undo: %d", res.StatusCode)
+	}
+}
+
+func TestFileJobControlsRequireOwnJob(t *testing.T) {
+	ts := newTestServer(t)
+	req := map[string]any{"paused": false, "priority": 1, "rate": 1048576}
+	if res, _ := ts.request("POST", "/api/v1/files/jobs/unknown/control", req); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.StatusCode)
+	}
+	ts.setup()
+	if res, _ := ts.request("POST", "/api/v1/files/jobs/unknown/control", req); res.StatusCode != http.StatusNotFound {
+		t.Fatal(res.StatusCode)
+	}
+}
+
+func TestZipDownloadNameAndEmptyDirectory(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if err := os.Mkdir(filepath.Join(ts.store.Dir(), "Leer"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	q := url.Values{"root": {"stick"}, "path": {"Leer"}, "name": {"Meine-Sicherung.ZIP"}}
+	res, body := ts.request("GET", "/api/v1/files/zip?"+q.Encode(), nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	_, params, err := mime.ParseMediaType(res.Header.Get("Content-Disposition"))
+	if err != nil || params["filename"] != "Meine-Sicherung.ZIP" {
+		t.Fatalf("%v %v", params, err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil || len(z.File) != 1 || z.File[0].Name != "Leer/" {
+		t.Fatalf("%v %v", z, err)
+	}
+	for _, name := range []string{"../other.zip", "bad\\name.zip", "bad\nname.zip", "bad\x00name.zip", ".zip", "without-extension"} {
+		q.Set("name", name)
+		if res, _ := ts.request("GET", "/api/v1/files/zip?"+q.Encode(), nil); res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%q: %d", name, res.StatusCode)
+		}
+	}
+}
+
+func TestPreviousTextAccessAndRestoreVersions(t *testing.T) {
+	ts := newTestServer(t)
+	endpoint := "/api/v1/files/text/previous?root=stick&path=note.txt"
+	if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.StatusCode)
+	}
+	ts.setup()
+	os.WriteFile(filepath.Join(ts.store.Dir(), "note.txt"), []byte("current"), 0600)
+	os.WriteFile(filepath.Join(ts.store.Dir(), "note.txt.prev"), []byte("previous"), 0600)
+	res, body := ts.request("GET", endpoint, nil)
+	if res.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("previous")) {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "note.txt", "content": "previous", "version": "stale"}); res.StatusCode != http.StatusConflict {
+		t.Fatal(res.StatusCode)
+	}
+	ts.users.Create("guest", testPassword, auth.RoleUser)
+	ts.request("POST", "/api/v1/login", map[string]string{"name": "guest", "password": testPassword})
+	if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusNotFound {
+		t.Fatal(res.StatusCode)
+	}
+}
+
+func TestFileMediaStreamingIsAuthorizedTypedAndSupportsRanges(t *testing.T) {
+	ts := newTestServer(t)
+	endpoint := "/api/v1/files/download?root=stick&path=Clip.MP4&media=1"
+	if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.StatusCode)
+	}
+	ts.setup()
+	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "Clip.MP4"), []byte("0123456789"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("GET", ts.url+endpoint, nil)
+	req.Header.Set("Range", "bytes=2-5")
+	res, err := ts.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil || res.StatusCode != http.StatusPartialContent || string(body) != "2345" {
+		t.Fatalf("%d %q %v", res.StatusCode, body, err)
+	}
+	if res.Header.Get("Content-Type") != "video/mp4" || res.Header.Get("X-Content-Type-Options") != "nosniff" || res.Header.Get("Cache-Control") != "no-store" {
+		t.Fatal(res.Header)
+	}
+	if !strings.HasPrefix(res.Header.Get("Content-Disposition"), "inline;") {
+		t.Fatal(res.Header)
+	}
+	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "unsafe.html"), []byte("<script>alert(1)</script>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=unsafe.html&media=1", nil); res.StatusCode != http.StatusBadRequest {
+		t.Fatal(res.StatusCode)
+	}
+	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=unsafe.html", nil); !strings.HasPrefix(res.Header.Get("Content-Disposition"), "attachment;") {
+		t.Fatal(res.Header)
 	}
 }
