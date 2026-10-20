@@ -85,15 +85,15 @@ func TestPairingAndRepository(t *testing.T) {
 	defer srv.Close()
 	serverURL = srv.URL
 
-	text, err := m.Pair("keller")
+	text, err := m.Pair("Backup")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := decode(t, text)
-	if c.URL != "http://nas2.tail1234.ts.net:8750/keller" || c.User != "keller" || len(c.Password) != 64 {
+	if c.URL != "http://nas2.tail1234.ts.net:8750/Backup" || c.User != "Backup" || len(c.Password) != 64 {
 		t.Fatalf("code = %+v", c)
 	}
-	if _, err := m.Pair("keller"); !errors.Is(err, ErrExists) {
+	if _, err := m.Pair("backup"); !errors.Is(err, ErrExists) {
 		t.Errorf("same name twice: %v", err)
 	}
 	if _, err := m.Pair("Böse Name"); !errors.Is(err, ErrInvalid) {
@@ -106,54 +106,54 @@ func TestPairingAndRepository(t *testing.T) {
 	}
 
 	// The way restic uses it.
-	if res, _ := do(t, c, "HEAD", "/keller/config", ""); res.StatusCode != http.StatusNotFound {
+	if res, _ := do(t, c, "HEAD", "/Backup/config", ""); res.StatusCode != http.StatusNotFound {
 		t.Errorf("config before init: %d", res.StatusCode)
 	}
-	if res, _ := do(t, c, "POST", "/keller/?create=true", ""); res.StatusCode != http.StatusOK {
+	if res, _ := do(t, c, "POST", "/Backup/?create=true", ""); res.StatusCode != http.StatusOK {
 		t.Errorf("create: %d", res.StatusCode)
 	}
-	if res, _ := do(t, c, "POST", "/keller/config", "the config"); res.StatusCode != http.StatusOK {
+	if res, _ := do(t, c, "POST", "/Backup/config", "the config"); res.StatusCode != http.StatusOK {
 		t.Errorf("save config: %d", res.StatusCode)
 	}
-	if res, _ := do(t, c, "POST", "/keller/config", "again"); res.StatusCode != http.StatusForbidden {
+	if res, _ := do(t, c, "POST", "/Backup/config", "again"); res.StatusCode != http.StatusForbidden {
 		t.Errorf("config overwritten: %d", res.StatusCode)
 	}
-	if res, body := do(t, c, "GET", "/keller/config", ""); res.StatusCode != http.StatusOK || body != "the config" {
+	if res, body := do(t, c, "GET", "/Backup/config", ""); res.StatusCode != http.StatusOK || body != "the config" {
 		t.Errorf("config: %d %q", res.StatusCode, body)
 	}
-	if res, _ := do(t, c, "POST", "/keller/data/"+blob, "0123456789"); res.StatusCode != http.StatusOK {
+	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "0123456789"); res.StatusCode != http.StatusOK {
 		t.Errorf("save blob: %d", res.StatusCode)
 	}
-	if res, _ := do(t, c, "POST", "/keller/data/"+blob, "other"); res.StatusCode != http.StatusForbidden {
+	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "other"); res.StatusCode != http.StatusForbidden {
 		t.Errorf("blob overwritten: %d", res.StatusCode)
 	}
-	if _, err := os.Stat(filepath.Join(root, "mnt/tank/.titanos/backup-target/keller/data/01", blob)); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "mnt/tank/.titanos/backup-target/Backup/data/01", blob)); err != nil {
 		t.Errorf("blob is not where restic's layout puts it: %v", err)
 	}
-	if res, body := do(t, c, "GET", "/keller/data/"+blob, "", "Range", "bytes=2-4"); res.StatusCode != http.StatusPartialContent || body != "234" {
+	if res, body := do(t, c, "GET", "/Backup/data/"+blob, "", "Range", "bytes=2-4"); res.StatusCode != http.StatusPartialContent || body != "234" {
 		t.Errorf("range: %d %q", res.StatusCode, body)
 	}
-	if res, body := do(t, c, "GET", "/keller/data/", "", "Accept", "application/vnd.x.restic.rest.v2"); res.StatusCode != http.StatusOK || !strings.Contains(body, `"size":10`) || !strings.Contains(body, blob) {
+	if res, body := do(t, c, "GET", "/Backup/data/", "", "Accept", "application/vnd.x.restic.rest.v2"); res.StatusCode != http.StatusOK || !strings.Contains(body, `"size":10`) || !strings.Contains(body, blob) {
 		t.Errorf("list v2: %d %q", res.StatusCode, body)
 	}
-	if _, body := do(t, c, "GET", "/keller/data/", ""); strings.TrimSpace(body) != `["`+blob+`"]` {
+	if _, body := do(t, c, "GET", "/Backup/data/", ""); strings.TrimSpace(body) != `["`+blob+`"]` {
 		t.Errorf("list v1: %q", body)
 	}
-	if res, _ := do(t, c, "DELETE", "/keller/data/"+blob, ""); res.StatusCode != http.StatusOK {
+	if res, _ := do(t, c, "DELETE", "/Backup/data/"+blob, ""); res.StatusCode != http.StatusOK {
 		t.Errorf("delete blob: %d", res.StatusCode)
 	}
-	if res, _ := do(t, c, "DELETE", "/keller/config", ""); res.StatusCode != http.StatusForbidden {
+	if res, _ := do(t, c, "DELETE", "/Backup/config", ""); res.StatusCode != http.StatusForbidden {
 		t.Errorf("config deleted: %d", res.StatusCode)
 	}
 	// Nothing else goes through, and nothing leaves the folder.
-	for _, path := range []string{"/keller/data/../../x", "/keller/other/" + blob, "/keller/keys/not-a-hash", "/keller/data/..%2f..%2fconfig"} {
+	for _, path := range []string{"/Backup/data/../../x", "/Backup/other/" + blob, "/Backup/keys/not-a-hash", "/Backup/data/..%2f..%2fconfig"} {
 		if res, _ := do(t, c, "GET", path, ""); res.StatusCode == http.StatusOK {
 			t.Errorf("GET %s: %d", path, res.StatusCode)
 		}
 	}
 
 	view := m.View()
-	if len(view.Sources) != 1 || view.Sources[0].Name != "keller" || view.Sources[0].Bytes == 0 || view.Sources[0].Last == nil {
+	if len(view.Sources) != 1 || view.Sources[0].Name != "Backup" || view.Sources[0].Bytes == 0 || view.Sources[0].Last == nil {
 		t.Errorf("view = %+v", view)
 	}
 }

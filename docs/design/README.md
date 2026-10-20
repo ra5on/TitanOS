@@ -86,3 +86,320 @@ auf die Unterseiten. Direkte Einstellungsaufrufe beachten die Kontorolle.
 Rückmeldungen, Wiederherstellungsdialog, alte Links, Rollen und ausbleibendes
 Archiv-Polling mit isolierten API-Testdaten. Screenshots entstehen bei 1440
 und 390 Pixeln in Graphit und Hell. Aufruf wie beim 0.6.0-Skript oben.
+
+### Dateimanager (Entwicklungsstand nach 0.6.1)
+
+Vom Projektinhaber bestätigte Ergänzungen vom 20. Oktober 2026: Details,
+kleine Symbole und große Symbole als umschaltbare Ansichten. Farben, Flächen
+und Radien folgen `Appearance.dc.html`; die Docker-Oberfläche bleibt unverändert.
+Rasterbild-Miniaturen bis 2 MiB laden erst bei Sichtbarkeit. Größere Dateien
+behalten das Dateisymbol und lassen sich über die vorhandene Vorschau öffnen.
+
+Rechtsklick auf einen ausgewählten Eintrag erhält die Mehrfachauswahl und
+bietet gemeinsame Aktionen; Rechtsklick auf freie Fläche bietet Ordneranlage,
+Upload, Einfügen und Ansichten. Tastenkürzel Strg/Cmd+A/C/X/V, F2 und Entf
+beachten Eingabefelder, modale Dialoge und Schreibrechte. Einfügen öffnet den
+vorhandenen Kopier-/Verschiebedialog am Zielordner; Löschen bleibt bestätigt.
+Die Pfadzeile navigiert innerhalb des gewählten Speicherorts und kopiert
+relative Ordnerpfade; sie gewährt keinen zusätzlichen Zugriff auf Host-Pfade.
+
+Ansicht, Sortierung, Favoriten und letzter Freigabe-/Volume-Speicherort werden
+im Benutzerkonto auf dem NAS gespeichert (`files.json`, Preferences-API).
+Neue Browser und neue Anmeldungen laden diese Einstellungen. Schreibfehler
+werden mit einer Wiederholungsaktion angezeigt. Verlauf, Suche, Auswahl und
+zum Einfügen vorgemerkte Dateien gelten für den aktuellen Seitenbesuch.
+
+`scripts/test-files-ui.mjs` prüft Ansichten, neue Browserkontexte, Speicherfehler,
+Mehrfachauswahl, Zwischenablage-Aktionen, Tastenkürzel, Pfade und Rollen mit
+isolierten API-Testdaten. Backend-Tests prüfen persistente, kontogetrennte
+Einstellungen. Screenshots liegen unter `out/validation/files-names-trash/`.
+
+USB-Backups stehen als feste Einträge mit Zielpfad, letztem Sicherungserfolg,
+Laufstatus und freiem Speicher links im Dateimanager. Der Fortschrittsabruf
+liest nur RAM; unbekannte Gesamtgrößen erscheinen als unbestimmter Fortschritt.
+„Backup wiederherstellen“ kopiert den ganzen Backup-Ordner, „Auswahl
+wiederherstellen“ die markierten Einträge. Beide öffnen den vorhandenen
+Zielordnerdialog mit einem neuen, separaten Wiederherstellungsordner auf einer
+beschreibbaren Freigabe oder einem Volume. Bestehende Zielordner werden
+abgelehnt, Dateien nicht überschrieben und Sicherungsdateien nicht verschoben.
+
+Abschlussmeldungen verlinken den Zielordner; Fehler behalten den betroffenen
+Pfad. Die Auswahl zeigt ihre Dateigröße, ausgewählte Ordner werden nur auf
+Knopfdruck berechnet. Punktdateien lassen sich über eine im Konto gespeicherte
+Option anzeigen. Vor Kopierkonflikten zeigt der Dialog Quelle und Ziel mit
+Größe und Änderungszeit; Ersetzen benötigt eine zusätzliche Bestätigung.
+USB-Backup-Laufwerke sind in der Dateiseite zunächst gegen Änderungen
+geschützt. Ein Dialog schaltet Änderungen für den aktuellen Speicherort frei;
+Speicherortwechsel und Verlassen der Seite beenden diese Freischaltung.
+
+Fehlgeschlagene und abgebrochene Datei-Aufträge bieten „Offene Dateien erneut
+versuchen“. Bereits abgeschlossene Dateien und verschobene Teilbäume werden
+übersprungen; zuvor gewählte neue Zielordnernamen bleiben erhalten. Die
+Aufträge liegen im RAM und können bis zum Neustart von titand wiederholt
+werden. Aktuelle Rechte werden erneut geprüft; beim Verschieben werden nach
+Unterbrechung geänderte Quelldateien erhalten und als Fehler gemeldet.
+
+Der Papierkorb bietet zusätzlich eine flache Dateiliste und Sortierung nach
+Name, Größe, ursprünglichem Pfad oder Löschzeit. Vor der Wiederherstellung
+zeigt ein Dialog die Zielpfade und Namenskonflikte; vorhandene Dateien bleiben
+erhalten. Neue Löschungen speichern ursprünglichen Pfad und Zeitpunkt als
+Dateisystemattribut, auch für gelöschte Ordner. Bei älteren, über Samba
+abgelegten oder auf Dateisystemen ohne Attributunterstützung liegenden
+Einträgen dienen die vorhandenen Papierkorbpfade und Zeitstempel als Rückfall.
+
+„Zwei Ordner anzeigen“ öffnet eine zweite Ordnerliste neben der bisherigen;
+auf schmalen Bildschirmen stehen beide untereinander. Richtungsknöpfe öffnen
+den Kopier-/Verschiebedialog mit vorausgewähltem Ziel. Die Ansicht ist im
+Benutzerkonto gespeichert. Der Schutz für USB-Backups gilt auch für die
+zweite Liste und für wiederholte Aufträge.
+
+Uploads durchlaufen vor dem Anlegen von Ordnern und der Übertragung eine
+Prüfung von Ziel, Anzahl, Gesamtgröße, freiem Speicher und Namenskonflikten.
+Konflikte lassen sich einzeln überspringen, umbenennen oder nach zusätzlicher
+Bestätigung ersetzen. Später entstehende Konflikte prüft weiterhin die
+Upload-API. Eigenschaften zeigen den vollständigen Pfad innerhalb des
+Speicherorts, Dateityp, Größe, Dateisystemzeiten und Rechte. SHA-256 wird nur
+auf Anforderung berechnet; ein Vergleichswert lässt sich direkt einfügen.
+
+Die ausdrücklich gestartete Unterordnersuche ergänzt den lokalen Dateifilter.
+Sie filtert Namen, Endungen, Größe und Änderungszeit, zeigt vollständige
+relative Pfade und öffnet den zugehörigen Ordner. Sie verfolgt keine Symlinks
+und blendet interne, geheime und VM-geschützte Pfade aus. Pro Suche gelten
+30 Sekunden, 50.000 geprüfte Einträge und 1.000 Treffer; eine begrenzte
+Ergebnisliste wird ausdrücklich gekennzeichnet. Keine Hintergrundindexierung.
+
+„Mehrere umbenennen“ zeigt eine Vorschau für Textersetzung, Präfix, Suffix und
+Nummerierung. Dateiendungen und die nicht ausdrücklich geänderte Schreibweise
+bleiben erhalten. Ungültige, doppelte oder vorhandene Zielnamen blockieren die
+Anwendung. Die API prüft die Dateiversionen vor und während der Anwendung und
+veröffentlicht neue Namen ohne Überschreiben. Bei Teilfehlern bleiben bereits
+abgeschlossene Änderungen einzeln rückgängig machbar.
+
+„ZIP öffnen“ zeigt den Archivinhalt und erlaubt die Auswahl einzelner Dateien
+oder aller Inhalte. Die Zielprüfung nennt den neuen Zielordner, Umfang und
+freien Speicher. Vorhandene Zielnamen blockieren das Entpacken; Zusammenführen
+und Ersetzen sind hier nicht vorgesehen. Die Extraktion läuft als abbrechbarer
+Dateiauftrag, schreibt temporär auf das Zielvolume und veröffentlicht den neuen
+Ordner erst nach vollständiger Extraktion und CRC-Prüfung. Interne/absolute
+Pfade, Traversal, Symlinks, verschlüsselte Einträge, doppelte Namen und
+Datei-/Ordner-Kollisionen werden abgelehnt. Grenze: 20.000 Archiveinträge und
+1 TiB entpackter Gesamtumfang. Das Archiv wird nicht ausgeführt.
+
+Der Vergleich der beiden geöffneten Ordner zeigt nur links/rechts vorhandene
+und unterschiedliche Einträge sowie die Anzahl der Übereinstimmungen. Standard
+sind Größe und Änderungszeit; optional vergleicht SHA-256 gleich große Dateien
+inhaltlich. Keine automatische Synchronisation oder Löschung. Beide Scans sind
+auf je 50.000 Einträge und gemeinsam zwei Minuten begrenzt; unvollständige
+Scans liefern keine vermeintlich fehlenden Dateien.
+
+„Letzte Änderungen“ bietet kontogetrennt Rückgängig für Umbenennungen,
+Papierkorbaktionen und sicher umkehrbare Verschiebungen. Höchstens 20 Aktionen
+pro Konto bleiben 30 Minuten im RAM. Neustart beendet diesen Verlauf. Aktuelle
+Root-Rechte und -Zuordnung, Eintragsidentität, Größe, Änderungs-/Metadatenzeiten
+sowie der vollständige Verzeichnisbaum werden vor der Rücknahme geprüft.
+Neu belegte Originalnamen blockieren die Rücknahme. Dateien werden niemals
+überschrieben; über Dateisystemgrenzen wird erst vollständig in einen temporären
+Zielordner kopiert. Ersetzen, Zusammenführen, endgültiges Löschen und Bäume,
+deren Zustand nicht innerhalb der Prüfgrenzen erfasst werden kann, werden
+nicht als umkehrbar angeboten. Der USB-Bedienungsschutz gilt auch hier.
+
+### Dateimanager: Übertragungen, Download, Verbrauch und Aktualisierung
+
+Kopier- und Verschiebeaufträge laufen je Konto in einer Warteschlange. Bei gleicher
+Priorität gilt die Eingangsreihenfolge; höhere Priorität erhält am nächsten
+Dateiblock Vorrang. Pause hält temporäre Dateien offen und gibt die Warteschlange
+frei. Fortsetzen prüft den aktuellen Root-Zugriff. Ein optionales Limit von
+0–1024 MiB/s gilt je Auftrag (0 = unbegrenzt), mit höchstens einem 256-KiB-Block
+Vorlauf. Innerhalb desselben Dateisystems erfolgt Verschieben als Umbenennung;
+ein bereits laufender einzelner Dateisystemaufruf lässt sich nicht pausieren.
+Extraktion und Browser-Uploads behalten ihre eigenen Abläufe. Die Aufträge und
+ihre Einstellungen liegen ausschließlich im RAM und enden beim Dienstneustart.
+
+Mehrfachauswahl und Ordner öffnen vor dem ZIP-Download einen Prüfdialog mit
+Dateianzahl, unkomprimierter Größe und Archivnamen. Der Download bleibt ein
+Stream ohne ZIP-Zwischenspeicherung. Leere Ordner sind enthalten, Verknüpfungen,
+interne und geschützte Dateien ausgenommen. Die Vorschau ist keine Momentaufnahme:
+zwischen Prüfung und Download können sich Dateien ändern.
+
+„Speicherverbrauch analysieren“ prüft nur nach ausdrücklichem Start. Anzeige:
+Datei-/Ordneranzahl, logische Gesamtgröße, direkte Kinder nach Verbrauch und
+höchstens 50 größte Dateien aus allen Unterordnern. Keine Inhaltsabfragen,
+Symlink-Verfolgung oder Hintergrundindexierung. Die Sichtbarkeit versteckter
+Dateien gilt auch hier. Maximal 50.000 Einträge/30 Sekunden; bei Fehlern oder
+Erreichen der Grenze keine irreführenden Teilsummen.
+
+Eigenschaften zeigen die TitanOS-Lese-, Schreib- und Löschrechte des angemeldeten
+Kontos zusätzlich zu Unix-Modus/UID/GID. Ursachen unterscheiden Freigabe mit
+Leserechten, Systemstick, VM-Schutz und den USB-Backup-Bedienungsschutz. Die
+Anzeige ersetzt keine Prüfung beim tatsächlichen Zugriff und verspricht keine
+Schreibbarkeit eines möglicherweise schreibgeschützt eingebundenen Datenträgers.
+
+Beide geöffneten Ordner aktualisieren ihre unmittelbare Dateiliste alle zehn
+Sekunden, nur bei sichtbarer Seite und außerhalb geöffneter Dialoge oder
+Eingabefelder. Keine rekursiven Scans; der Systemstick bleibt ausgenommen.
+Vorhandene Auswahl, Suche und Scrollposition bleiben erhalten; weggefallene
+Namen werden aus der Auswahl entfernt. Veraltete Antworten nach Navigation oder
+zwischenzeitlicher Aktualisierung werden verworfen. Fehler behalten die letzte
+Liste sichtbar und werden angezeigt. Das ist kein Dateisystem-Snapshot.
+
+### Textfassungen, Upload-Warteschlange, Duplikate und gezieltes Kopieren
+
+Der Texteditor liest die vorhandene `.prev`-Fassung nur auf Anforderung, stellt
+sie der aktuellen gespeicherten Fassung gegenüber und stellt sie nach Bestätigung
+über den bestehenden versionierten Speichervorgang wieder her. Dadurch bleibt die
+ersetzte aktuelle Fassung als `.prev` erhalten. Keine unbegrenzte Versionshistorie.
+Ungespeicherte Änderungen müssen vorher gespeichert oder verworfen werden.
+Typ-/Größenprüfung, Root-Rechte, VM-/Stick-Schutz und Symlink-Ausschluss gelten
+auch für vorherige Fassungen; Änderungen an der aktuellen Datei blockieren eine
+Wiederherstellung aus einem veralteten Editor.
+
+Die Upload-Warteschlange bietet gemeinsame Pause/Fortsetzen-Knöpfe, Wiederholen
+nur fehlgeschlagener Dateien und einen Gesamtfortschritt. Die vorhandene
+Geschwindigkeit/Restzeit gilt für aktive und wartende Transfers. Pause wartet
+auf den laufenden Datenblock. Dateien und Entscheidungen bleiben beim Wechsel
+innerhalb der Web-UI erhalten, aber nicht nach Schließen des Tabs. Persistente
+Teiluploads können nach erneuter lokaler Dateiauswahl weiterhin geprüft und
+fortgesetzt werden. Fehlgeschlagene Einträge verschwinden nicht beim Entfernen
+abgeschlossener Uploads. Neue Uploads bleiben bei pausierter Gesamtwarteschlange
+zunächst pausiert.
+
+„Doppelte Dateien finden“ startet ausdrücklich einen Scan des geöffneten Ordners,
+begrenzt auf 50.000 Einträge und zwei Minuten. Erst nach Größenvergleich werden
+SHA-256-Prüfsummen gleicher Größen berechnet. Keine Symlinks oder geschützten
+Pfade; Punktdateien folgen der bestehenden Ansichtseinstellung. Ergebnisse zeigen
+vollständige relative Fundstellen und erlauben das Öffnen des jeweiligen Ordners.
+Keine automatische Auswahl. Löschen benötigt eine eigene Vorschau/Bestätigung,
+nutzt nach Möglichkeit den Papierkorb und prüft die Eintragsversionen erneut.
+Der Benutzer entscheidet, welche Kopie erhalten bleibt. Kein Hintergrundindex.
+
+Im Kopierdialog bietet „Für jede Datei entscheiden“ für die aufgelisteten
+Konflikte Überspringen, Ersetzen oder einen ausdrücklich eingegebenen anderen
+Namen. Größe/Datum beider Seiten bleiben sichtbar. Ersetzen braucht zusätzlich
+eine Bestätigung; bei abgeschnittener Vorschau sind Einzelentscheidungen und
+Ersetzen gesperrt. Ungeprüfte zusätzliche Konflikte werden übersprungen.
+Benannte neue Ziele werden ohne Überschreiben veröffentlicht. Versionen von
+Quelle und vorhandenem Ziel werden erneut geprüft; ein zwischenzeitlicher
+Zielwechsel stoppt die betroffene Kopie. Bei übersprungenen Untereinträgen einer
+Verschiebung bleibt der Quellordner erhalten.
+
+Aus dem Ordnervergleich können einzelne Dateien links → rechts oder rechts →
+links übernommen werden. Eine Vorschau zeigt Richtung und relative Pfade;
+Ersetzen verlangt Bestätigung. Fehlende Elternordner werden innerhalb des
+berechtigten Ziel-Roots angelegt, vorhandene Verzeichnisse behalten ihre Rechte.
+Datei-/Ordner-Typkonflikte sind nicht auswählbar. Dateiversionen aus dem Vergleich
+werden vor der Kopie und vor Veröffentlichung erneut geprüft. Die Auswahl läuft
+als normaler Kopierauftrag mit Fortschritt/Pause/Abbruch; keine automatische
+Synchronisation oder Löschung. Teilweise abgeschlossene Kopien bleiben bei einem
+späteren Fehler erhalten. Der USB-Bedienungsschutz gilt auch für Vergleichsziele
+und das Löschen von Duplikaten.
+
+### Ordnerbaum, Werkzeuge, Ziehen und große Ordner
+
+Die Werkzeugleiste bündelt Unterordnersuche, Speicheranalyse, Duplikatsuche und
+Ordnervergleich unter „Werkzeuge“. Richtungsknöpfe zwischen zwei Ansichten
+erscheinen bei vorhandener Auswahl. Häufige Aktionen bleiben direkt erreichbar.
+Der linke Ordnerbaum lädt unmittelbare Unterordner erst beim Aufklappen über die
+bestehende autorisierte Dateiliste. Aufklappen navigiert nicht; der Namensknopf
+öffnet den Ordner. Fehler lassen sich erneut versuchen, Einklappen bricht laufende
+Anfragen ab. Versteckte Ordner folgen der Kontoeinstellung. Große Unterordnerlisten
+zeigen zunächst 100 Namen und bieten weitere auf Knopfdruck. Volumes bleiben unter
+„Erweiterter Zugriff“; keine rekursiven Hintergrundabfragen.
+
+Interne Dateiauswahl lässt sich auf einen Ordner oder die andere Ansicht ziehen.
+Die Quelle wird ausschließlich im Speicher der geöffneten Seite gehalten, nicht
+als vertrauenswürdiger externer Drag-Payload eingelesen. Vor jeder Übertragung
+zeigt ein Dialog Quellpfade und Ziel, mit Kopieren/Verschieben/Abbrechen. Danach
+folgt der vorhandene Kopierdialog mit Konfliktprüfung. Schreibrechte, USB-Sperre
+und Systemstick-Ausschluss gelten weiterhin; externe Datei-Drops bleiben Uploads.
+
+Ab mehr als 200 Treffern rendern beide Ansichten nur den sichtbaren Ausschnitt
+plus einige Reservezeilen. Details und beide Symbolgrößen nutzen einen eigenen,
+per Tastatur scrollbar erreichbaren Bereich. Suche, Sortierung, Bereichsauswahl
+und „Alle auswählen“ arbeiten auf der vollständigen geladenen Liste. Namen bleiben
+unverändert; Auswahlprüfungen verwenden Mengen statt quadratischer Suchschleifen.
+Zurück/Vorwärts bewahrt auch die innere Scrollposition. Die API lädt weiterhin die
+vollständige unmittelbare Ordnerliste, es gibt keine serverseitige Seitennavigation.
+
+Der Textvergleich stellt vorherige und aktuelle Fassung mit Zeilennummern und
+Markierungen für hinzugefügte, entfernte und geänderte Zeilen gegenüber. Vertikales
+und horizontales Scrollen sind synchronisiert; Zeilennummern bleiben horizontal
+sichtbar. Große Vergleiche rendern nur einen Ausschnitt. Der Zeilenabgleich verwendet
+höchstens eine Million Vergleichszellen; größere zusammenhängende Änderungsblöcke
+werden ausdrücklich als positionsweiser Vergleich gekennzeichnet. Wiederherstellung
+und Versionsprüfung verwenden unverändert den vorhandenen sicheren Speicherweg.
+
+### Medien, Papierkorbfilter, Fortschritt und Tastatur
+
+Die Vorschau unterstützt PDF bis 20 MiB über den nativen PDF-Betrachter des
+Browsers sowie Audio (MP3, WAV, OGG, M4A, FLAC) und Video (MP4, WebM, OGV).
+Audio/Video verwenden native Bedienelemente ohne Autoplay und streamen über den
+berechtigten Download mit HTTP-Range. Der Server erlaubt dafür ausschließlich
+festgelegte Medien-MIME-Typen, setzt `nosniff`, `no-store` und eine Sandbox-CSP;
+HTML und andere Dateitypen bleiben Downloads. Bild-, Text- und PDF-Downloads
+in den Browser-RAM werden während des Lesens begrenzt und beim Schließen
+abgebrochen; Blob-URLs werden freigegeben. Die tatsächliche Medienwiedergabe
+hängt von den Browser-Codecs ab. Bei Fehlern bleibt ein Download möglich.
+Die Bildvorschau bietet Vor/Zurück und linke/rechte Pfeiltaste in der sichtbaren
+Sortierreihenfolge, ohne versteckte Dateien hinzuzufügen.
+
+Die flache Papierkorbansicht filtert nach ursprünglichem Ordner und inklusivem
+Löschdatumsbereich. Filter begrenzen auch Gesamtauswahl und Löschvorschau; keine
+automatische Löschung älterer Dateien. Sie zeigt Dateigrößen und belegte
+Datenblöcke der zugänglichen Dateien, Hardlinks je Geräte-/Inode-Paar einmal
+gezählt. Ordner-Metadaten sind ausgenommen; belegte Blöcke sind keine Zusage über
+den durch Löschen frei werdenden Speicher, etwa bei weiteren Hardlinks oder
+Snapshots. Ältere Papierkorbeinträge können weiterhin Änderungsdaten als Ersatz
+für fehlende Löschmetadaten verwenden. Die bisherigen Scan- und Rechtegrenzen
+gelten unverändert.
+
+Dateiaufträge zeigen Gesamtfortschritt, aktuellen Pfad und je aktivem Auftrag
+eine Geschwindigkeit aus den zuletzt beobachteten Zählerdifferenzen. Die Restzeit
+ist eine ausdrücklich ungefähre Minutenschätzung. Pause, Warteschlange, Neustart
+der Messung, rückläufige Zähler, Stillstand und lange Beobachtungslücken zeigen
+keine veraltete Schätzung; unbekannte Gesamtgrößen bleiben unbestimmt. Ausgefallene
+Statusabfragen werden angezeigt. Bekannte Fehler werden verständlich erklärt,
+der betroffene Pfad und technische Details bleiben verfügbar. Ein Auftrag stoppt
+weiterhin am ersten Fehler; die Anzeige behauptet keine vollständige Fehlerliste
+aller noch nicht verarbeiteten Dateien.
+
+Beide Dateilisten unterstützen Pfeiltasten, Home/End, Umschalt-Auswahl, Enter zum
+Öffnen und Leertaste zur Vorschau. Virtuelle Listen scrollen den Tastaturfokus in
+den gerenderten Bereich. Textfelder und native Bedienelemente behalten ihre
+Tasten; die rechte Ansicht löst keine Aktionen auf der linken Auswahl aus. F1
+und „Tastenkürzel“ erklären zusätzlich die vorhandenen Aktionen der linken Ansicht
+(Strg/Cmd+A/C/X/V, F2, Entf). Löschen öffnet weiterhin nur den Bestätigungsdialog.
+
+### Favoriten, Ordneransichten, neue Dateien und Auswahlhilfen
+
+Favoriten lassen sich über einen eigenen Dialog benennen, per Pfeilen sortieren
+und entfernen. Speichern übernimmt die geordnete Liste in die Kontoeinstellungen;
+Abbrechen lässt sie unverändert. Bis zu 50 Favoriten, Bezeichnungen bis 100 Zeichen.
+Die tatsächlichen Speicher- und Ordnernamen werden dadurch nicht verändert.
+
+„Ansicht für diesen Ordner merken“ speichert Ansicht, Sortierkriterium und Richtung
+je Root/Pfad im Benutzerkonto (höchstens 200 Ordner). Nicht individuell gespeicherte
+Ordner verwenden die gemeinsame Vorgabe. Entfernen einer Ordnerausnahme stellt
+diese Vorgabe wieder her. Kein Local-/Session-Storage und keine Schreibzugriffe
+beim bloßen Navigieren innerhalb derselben Freigabe.
+
+Neue Text-, Markdown- und JSON-Dateien erhalten den gewählten Namen mit passender
+Endung und öffnen den vorhandenen Editor. JSON beginnt mit einem leeren Objekt.
+Die Datei wird über ein temporäres Geschwister und RENAME_NOREPLACE veröffentlicht;
+vorhandene Namen und Symlinks werden nicht überschrieben. Zielverzeichnis pinnen,
+aufgelöste geschützte Pfade/Geheimnisse und aktuelle Root-Rechte prüfen. Kein
+Anlegen auf dem Systemstick. USB-Bedienungsschutz gilt weiterhin.
+
+Unter Werkzeuge stehen „Auswahl umkehren“ und eine Auswahl nach Bildern, Videos,
+Audio, Dokumenten, Ordnern oder sonstigen Dateien. Grundlage ist die vollständige
+gefilterte Liste, nicht nur der gerenderte Ausschnitt. Typgruppen basieren auf
+Endungen, nicht auf einer Inhaltsprüfung. Anzahl, Dateigrößen und ausdrücklich
+angeforderte Ordnergrößen verwenden die bestehende Auswahlzusammenfassung.
+
+Der Kopierdialog zeigt Quelle/Pfade, Ziel, Dateianzahl, logischen Umfang und den
+zuletzt ermittelten freien Zielspeicher schon vor dem Start. Die Umfangsprüfung
+läuft nur beim Öffnen oder geänderter Quelle und wird beim Schließen abgebrochen.
+Gleicher Root/Zielordner beim Verschieben und eigene Unterordner werden frühzeitig
+gesperrt; Kopien im gleichen Ordner weisen auf die benötigten neuen Namen hin.
+Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystems,
+Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
+Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.

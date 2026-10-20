@@ -9,13 +9,13 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.6.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1)** · Veröffentlicht am 20. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.7.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0)** · Veröffentlicht am 20. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
-  <img src="docs/screenshots/v0.6.1/einstellungen.png" alt="TitanOS 0.6.1: Einstellungen mit Suchfeld und alphabetisch sortierten Kacheln" width="900">
+  <img src="docs/screenshots/v0.7.0/dateien.png" alt="TitanOS 0.7.0: Dateimanager mit persönlichen Favoriten, Werkzeugen und Auswahlhilfen" width="900">
 </p>
 
-Die Screenshots zeigen die Weboberfläche von **0.6.1** mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
+Die Screenshots zeigen die Weboberfläche von **0.7.0** mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
 
 ## Was TitanOS ist
 
@@ -23,17 +23,17 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Weboberfläche in 0.6.1
+## Weboberfläche in 0.7.0
 
-- **Aufgeräumte Einstellungen:** alphabetische Kacheln und Suche mit direkten Treffern für SSH, Zertifikat, Terminal, DNS, Zeitzone und Sicherungen. Datum und Uhrzeit haben eine eigene Seite; Terminal und Konsolen stehen unter Zugang.
-- **Sicherungen an einem Ort:** Datensicherung, Systemkonfiguration und Wiederherstellung mit gemeinsamer Übersicht. Letzte erfolgreiche Sicherungen, nächster Lauf und Fehler sind direkt sichtbar.
-- **Klare Rückmeldungen:** Speichern, laufende Aktionen, Fehler und erneute Versuche werden angezeigt. Bei Verbindungsabbruch weist die Oberfläche auf möglicherweise veraltete Daten hin.
-- **Laufende Aufgaben:** gemeinsame Übersicht für Uploads, Dateiübertragungen, Backups, Update-Downloads, VM-Aufträge und Volume-Prüfungen. Fortschritte erscheinen nur, wenn Messwerte verfügbar sind.
-- **Direkte Meldungslinks:** relevante Seiten öffnen; Volumes und Backup-Aufträge werden gezielt angesprungen. SMART-Meldungen führen zur Speicher-Seite, ohne die einzelne Platte hervorzuheben.
-- **Übersichtliche VMs:** durchsuchbare Liste, getrennte CPU-/RAM-Angaben, Starten/Herunterfahren als Hauptaktion und ein Menü für weitere Aktionen.
-- **Desktop und Smartphone:** responsive Ansichten, anpassbare Schriftgröße, Dichte und Themes. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert; die neuen globalen Hinweise und Aufgaben erscheinen außerhalb der Docker-Seiten.
+- **Persönlicher Dateimanager:** benannte und sortierbare Favoriten, Ansichten und Sortierung je Ordner im Benutzerkonto, Ordnerbaum, zwei Ansichten, Suche und schnelle Darstellung großer Ordner.
+- **Sichere Dateiaktionen:** neue Text-/Markdown-/JSON-Dateien ohne Überschreiben, gezielte Auswahl nach Dateityp, Vorschau von Quelle, Ziel, Umfang und freiem Speicher vor Übertragungen. Ziehen zwischen Ansichten und einzelne Konfliktentscheidungen.
+- **Papierkorb und Rückgängig:** sichtbarer Papierkorb mit Originalpfaden, Datumsfiltern und Speicherbelegung; Wiederherstellungsvorschau und Rückgängig für unterstützte Aktionen innerhalb der Dienstlaufzeit.
+- **Vorschau und Werkzeuge:** Bilder, PDF, Audio/Video, Texteditor mit vorheriger Fassung und Zeilenvergleich. Unterordnersuche, Sammelumbenennen, ZIP-Inhalte, Ordnervergleich, Duplikatsuche und Speicheranalyse auf Anforderung.
+- **Übertragungen im Blick:** Warteschlange, Pause, Priorität und Geschwindigkeitslimit, gemessener Fortschritt, geschätzte Restzeit und verständliche Fehler. Uploads mit gemeinsamer Pause-/Fortsetzen-/Wiederholen-Steuerung.
+- **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
+- **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, VMs, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1) · [0.6.0](https://github.com/ra5on/TitanOS/releases/tag/v0.6.0).
+Alle Änderungen: [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -45,7 +45,7 @@ Alle Änderungen: [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1) 
 - **Darstellung nach Wunsch.** Themes, Akzentfarben, Glas-Effekt, Eckenradius, Schriftgröße, Dichte und Hintergrund, mit Vorschau und Export als Datei.
 - **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
 - **Freigaben.** SMB mit Rechten pro Konto, Gastzugriff nur lesend, Papierkorb und Time-Machine-Ziel; NFS für ausgewählte Rechner. Dazu fertige Adressen zum Verbinden.
-- **Dateimanager im Browser.** Dateien und ganze Ordner hochladen, auch per Drag-and-drop; große Uploads lassen sich pausieren und nach einer Unterbrechung fortsetzen. Dazu herunterladen (auch als Zip), umbenennen und löschen in den Papierkorb.
+- **Dateimanager im Browser.** Dateien und ganze Ordner hochladen, herunterladen (auch als ZIP), erstellen, kopieren, verschieben, umbenennen und in den Papierkorb oder endgültig löschen. Vorschauen, persönliche Ordneransichten und Werkzeuge sind oben beschrieben; Rechte des angemeldeten Kontos gelten bei jeder Aktion.
 - **Docker.** Die Engine speichert alles auf einem Volume deiner Wahl. Die Übersicht zeigt Container und Stacks mit CPU, RAM, Ports und Update-Hinweisen, dazu Start, Stopp, Logs und eine Konsole im Browser. Jede App lässt sich als Formular oder als Compose-Datei bearbeiten.
 - **App-Store.** Der separate [TitanOS-App-Store](https://github.com/ra5on/TitanOS-Apps), eingebaute Vorlagen und eigene Quellen (Repository, Archiv oder Compose-Datei), darunter CasaOS-kompatible Stores mit mehreren hundert Apps. Beim Installieren füllt TitanOS Zeitzone, Pfade, freie Ports und Geheimnisse selbst aus und zeigt bei jedem Feld, woher der Wert kommt.
 - **Virtuelle Maschinen.** KVM/QEMU mit UEFI: VMs anlegen, starten und stoppen, mit dem Bildschirm der VM direkt im Browser. Kerne festlegen, vorhandene Abbilder und ganze Platten nutzen, Grafikkarten und USB-Geräte durchreichen, NAS-Ordner in der VM einbinden, TPM 2.0 und Secure Boot.
@@ -67,27 +67,13 @@ Alle Änderungen: [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1) 
 ## Einblicke in die Oberfläche
 
 <table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/v0.6.1/sicherungen.png" alt="TitanOS 0.6.1: Sicherungsübersicht mit Datensicherung, Systemkonfiguration und Wiederherstellung"></td>
-    <td width="50%"><img src="docs/screenshots/v0.6.1/wiederherstellung.png" alt="TitanOS 0.6.1: Dateien wiederherstellen und Ablauf zum Ersetzen des Bootsticks"></td>
-  </tr>
-  <tr><td align="center">Sicherungen</td><td align="center">Wiederherstellung</td></tr>
-  <tr>
-    <td><img src="docs/screenshots/v0.6.1/vms.png" alt="TitanOS 0.6.1: VM-Liste mit Suche und Aktionen"></td>
-    <td><img src="docs/screenshots/v0.6.1/aufgaben.png" alt="TitanOS 0.6.1: Dialog mit laufenden Aufgaben und Fortschrittsanzeigen"></td>
-  </tr>
-  <tr><td align="center">Virtuelle Maschinen</td><td align="center">Laufende Aufgaben</td></tr>
+<tr><td width="50%"><img src="docs/screenshots/v0.7.0/uebertragung.png" alt="TitanOS 0.7.0: Übertragungsvorschau mit Quelle, Ziel und Umfang"></td><td width="50%"><img src="docs/screenshots/v0.7.0/papierkorb.png" alt="TitanOS 0.7.0: Papierkorbfilter und Bestätigung ausgewählter Dateien"></td></tr>
+<tr><td align="center">Übertragung prüfen</td><td align="center">Papierkorb</td></tr>
+<tr><td><img src="docs/screenshots/v0.7.0/textvergleich.png" alt="TitanOS 0.7.0: Textfassungen mit markierten Änderungen"></td><td><img src="docs/screenshots/v0.7.0/zwei-ordner.png" alt="TitanOS 0.7.0: zwei Ordneransichten"></td></tr>
+<tr><td align="center">Textvergleich</td><td align="center">Zwei Ordner</td></tr>
 </table>
 
-<p align="center">
-  <img src="docs/screenshots/v0.6.1/docker.png" alt="TitanOS 0.6.1: unveränderte Docker-Oberfläche mit einem Beispielcontainer" width="900"><br>
-  Docker
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/v0.6.1/sicherungen-mobil.png" alt="TitanOS 0.6.1: Sicherungsübersicht auf einem schmalen Bildschirm im hellen Theme" width="320"><br>
-  Sicherungen auf dem Smartphone
-</p>
+<p align="center"><img src="docs/screenshots/v0.7.0/dateien-mobil.png" alt="TitanOS 0.7.0: Dateimanager auf einem schmalen Bildschirm" width="320"></p>
 
 ## Speicher und Hardware
 
@@ -137,9 +123,9 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Installation
 
-Die Dateien für **0.6.1** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1). Für einen neuen Stick:
+Die Dateien für **0.7.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0). Für einen neuen Stick:
 
-1. `titanos-0.6.1.zip`, `titanos-0.6.1.zip.minisig` und `titanos-0.6.1.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.7.0.zip`, `titanos-0.7.0.zip.minisig` und `titanos-0.7.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
@@ -158,7 +144,7 @@ Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import b
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
-Für **0.6.1** wurden Frontend- und Backend-Prüfungen sowie die Release-Prüfungen für das bootfähige ZIP und die Plugins erfolgreich ausgeführt. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
+Für **0.7.0** wurden Frontend-, Backend-, Paketierungs- und Browserprüfungen ausgeführt. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
 
 Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
 

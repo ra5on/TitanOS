@@ -28,21 +28,23 @@ export type Upload = {
 	busy: boolean;
 };
 
-export const uploads = $state<{ items: Upload[]; finished: number }>({ items: [], finished: 0 });
+export const uploads = $state<{ items: Upload[]; finished: number; paused:boolean }>({ items: [], finished: 0,paused:false });
 
 let nextKey = 1;
 let running = false;
 
 /** Adds files to the queue. `dir` is the folder they go to inside the root. */
-export function enqueue(files: { file: File; dir: string }[], root: { id: string; name: string }) {
-	for (const { file, dir } of files) {
+export function enqueue(files: { file: File; dir: string; conflict?: '' | 'rename' | 'replace' }[], root: { id: string; name: string }) {
+	for (const { file, dir, conflict = '' } of files) {
 		uploads.items.push({
 			key: nextKey++, file, root: root.id, rootName: root.name, dir, name: file.name,
-			sent: 0, state: 'queued', speed: 0, error: '', conflict: '', id: '', busy: false
+			sent: 0, state: uploads.paused?'paused':'queued', speed: 0, error: '', conflict, id: '', busy: false
 		});
 	}
 	work();
 }
+
+function receivedOffset(item:Upload,value:number){if(!Number.isSafeInteger(value)||value<0||value>item.file.size)throw new ApiError(500,'internal','Invalid upload offset');return value;}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -73,7 +75,7 @@ async function transfer(item: Upload) {
         else {
             // A restarted daemon rediscovers persistent partial uploads here.
             await api.get<UploadStatus[]>(`/files/uploads?root=${encodeURIComponent(item.root)}&path=${encodeURIComponent(item.dir)}`);
-            item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+            item.sent = receivedOffset(item,(await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset);
         }
 		let failures = 0;
 		while (item.sent < item.file.size) {
@@ -86,21 +88,22 @@ async function transfer(item: Upload) {
 				});
 				const problem = !res.ok ? (await res.json().catch(() => null))?.error?.code ?? 'internal' : '';
                 if (problem === 'upload_memory_pressure') {
-                    if (stateOf(item) !== 'paused') item.state = 'pressure';
+                    if (stateOf(item) === 'uploading' || stateOf(item) === 'retrying') item.state = 'pressure';
                     item.speed = 0;
                     await sleep(3000);
-                    item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+                    item.sent = receivedOffset(item,(await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset);
                     continue;
                 }
                 if (problem === 'upload_mismatch') {
 					// The NAS has more or less than we think: ask and continue there.
 					const current = await api.get<UploadStatus>(`/files/uploads/${item.id}`);
-                    item.sent = current.offset;
+                    item.sent = receivedOffset(item,current.offset);
                     if (current.busy) await sleep(500);
 					continue;
 				}
 				if (!res.ok) throw new ApiError(res.status, problem, '');
 				const status: UploadStatus = await res.json();
+ receivedOffset(item,status.offset);
 				const seconds = (performance.now() - started) / 1000;
 				const rate = seconds > 0 ? (status.offset - item.sent) / seconds : 0;
 				item.speed = item.speed ? item.speed * 0.7 + rate * 0.3 : rate;
@@ -116,7 +119,7 @@ async function transfer(item: Upload) {
 				if (stateOf(item) === 'uploading') item.state = 'retrying';
 				await sleep(Math.min(2000 * failures, 15000));
 				try {
-					item.sent = (await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset;
+					item.sent = receivedOffset(item,(await api.get<UploadStatus>(`/files/uploads/${item.id}`)).offset);
 				} catch (statusErr) {
 					if (statusErr instanceof ApiError && statusErr.status === 404) throw statusErr;
 				}
@@ -127,6 +130,7 @@ async function transfer(item: Upload) {
 		item.name = done.name;
 		item.state = 'done';
 	} catch (err) {
+        if(stateOf(item)==='paused'){item.error=err instanceof ApiError?err.code:'unreachable';return;}
 		if (err instanceof ApiError && err.code === 'file_exists' && !item.id) {
 			item.state = 'conflict';
 			return;
@@ -146,7 +150,8 @@ export function pause(item: Upload) {
 
 export function resume(item: Upload) {
 	if (item.state !== 'paused' && item.state !== 'failed') return;
-	item.error = '';
+	if(item.error==='upload_not_found'){item.id='';item.sent=0;}
+ item.error = '';
 	// If the last request before the pause is still on its way, the loop
 	// that sent it simply carries on; otherwise the upload queues up again.
 	item.state = item.busy ? 'uploading' : 'queued';
@@ -197,7 +202,12 @@ function remove(item: Upload) {
 	if (index >= 0) uploads.items.splice(index, 1);
 }
 
-/** Drops finished and failed uploads from the list. */
+/** Drops completed uploads; failed items stay available for retry. */
 export function clearFinished() {
-	uploads.items = uploads.items.filter((item) => item.state !== 'done' && item.state !== 'failed');
+	uploads.items = uploads.items.filter((item) => item.state !== 'done');
 }
+
+/** Queue controls retain each File and confirmed conflict choice in this tab. */
+export function pauseAll(){uploads.paused=true;for(const item of uploads.items)pause(item);}
+export function resumeAll(){uploads.paused=false;for(const item of uploads.items)if(item.state==='paused')resume(item);}
+export function retryFailed(){for(const item of uploads.items)if(item.state==='failed')resume(item);}

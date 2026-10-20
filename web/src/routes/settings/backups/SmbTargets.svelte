@@ -41,7 +41,7 @@
  <Dialog title={t('backup.smb.title')} locked={busy} onclose={()=>{if(!busy)draft=null;}}>
  <form onsubmit={save}>
   <p class="muted">{t('backup.smb.setup')}</p>
-  <label>{t('backup.smb.name')}<input class="field" bind:value={draft.id} pattern="[a-z][a-z0-9\-]*" maxlength="31" required disabled={editing} /></label>
+  <label>{t('backup.smb.name')}<input class="field" bind:value={draft.id} pattern="[A-Za-z][A-Za-z0-9\-]*" maxlength="31" required disabled={editing} /></label>
   <label>{t('backup.smb.host')}<input class="field" bind:value={draft.host} oninput={()=>{shares=[];if(draft)draft.share='';}} required /></label>
   <label>{t('backup.smb.user')}<input class="field" bind:value={draft.username} oninput={()=>{shares=[];if(draft)draft.share='';}} required autocomplete="off" /></label>
   <label>{t('backup.smb.password')}<input class="field" type="password" bind:value={draft.password} autocomplete="new-password" placeholder={targets.some(t=>t.id===draft?.id)?t('backup.smb.keepPassword'):''} /></label>

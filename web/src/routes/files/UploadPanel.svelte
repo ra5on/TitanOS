@@ -2,9 +2,11 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { cancel, clearFinished, pause, resolve, resume, uploads, type Upload } from '#lib/uploads.svelte.ts';
+	import { pauseAll,resumeAll,retryFailed,cancel, clearFinished, pause, resolve, resume, uploads, type Upload } from '#lib/uploads.svelte.ts';
 
-	const done = $derived(uploads.items.filter((item) => item.state === 'done').length);
+	const totalBytes=$derived(uploads.items.reduce((sum,i)=>sum+i.file.size,0));
+ const sentBytes=$derived(uploads.items.reduce((sum,i)=>sum+Math.min(Number.isFinite(i.sent)?i.sent:0,i.file.size),0));
+ const done = $derived(uploads.items.filter((item) => item.state === 'done').length);
 	const active = $derived(uploads.items.find((item) => item.state === 'uploading' || item.state === 'retrying'));
 	const rate = $derived.by(() => {
 		if (!active || active.speed <= 0) return '';
@@ -22,9 +24,14 @@
 		<div class="head">
 			<span class="title">{t('uploads.title', { done, total: uploads.items.length })}</span>
 			<span class="mono muted">{rate}</span>
-			<button type="button" class="btn small" onclick={clearFinished}>{t('uploads.clear')}</button>
+			<button type="button" class="btn small" disabled={!uploads.items.some(i=>['queued','uploading','retrying','pressure'].includes(i.state))} onclick={pauseAll}>{t('uploads.pauseAll')}</button>
+ <button type="button" class="btn small" disabled={!uploads.items.some(i=>i.state==='paused')} onclick={resumeAll}>{t('uploads.resumeAll')}</button>
+ <button type="button" class="btn small" disabled={!uploads.items.some(i=>i.state==='failed')} onclick={retryFailed}>{t('uploads.retryFailed')}</button>
+ <button type="button" class="btn small" onclick={clearFinished}>{t('uploads.clear')}</button>
 		</div>
-		{#each uploads.items as item (item.key)}
+		<progress max={totalBytes||1} value={sentBytes} aria-label={t('uploads.totalProgress')}></progress><span class="mono muted">{formatBytes(sentBytes)} / {formatBytes(totalBytes)}</span>
+ <p class="muted">{t('uploads.queueLifetime')}</p>
+ {#each uploads.items as item (item.key)}
 			<div class="item">
 				<div class="line">
 					<span class="name">{item.name}</span>
@@ -67,6 +74,7 @@
 {/if}
 
 <style>
+ progress{width:100%;accent-color:var(--accent);height:.5rem;}
 	.panel {
 		display: flex;
 		flex-direction: column;

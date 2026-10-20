@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -22,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
@@ -30,7 +30,6 @@ const settingsFile = "plugins/tailscale/settings.json"
 var ErrInvalid = errors.New("invalid Tailscale settings")
 var ErrUnavailable = errors.New("Tailscale plugin is not active")
 var ErrPending = errors.New("confirm or undo the pending Tailscale settings first")
-var volumeRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
 
 type Settings struct {
 	Routes        []string `json:"routes"`
@@ -199,7 +198,7 @@ func (m *Manager) Prepare(name, volume string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.Disabled || !m.loaded || !volumeRE.MatchString(volume) {
+	if m.Disabled || !m.loaded || !naming.ValidVolume(volume) {
 		return ErrUnavailable
 	}
 	// Reject pre-seeded share directories before touching private node keys.
@@ -228,7 +227,7 @@ func (m *Manager) Prepare(name, volume string) error {
 	return m.writeRuntime(m.settings)
 }
 func (m *Manager) writeRuntime(s Settings) error {
-	if !volumeRE.MatchString(m.volume) {
+	if !naming.ValidVolume(m.volume) {
 		return ErrUnavailable
 	}
 	env := "TAILSCALE_STATE=" + filepath.Join(m.mountRoot, m.volume, ".titanos/tailscale/tailscaled.state") + "\n"
