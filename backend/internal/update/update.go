@@ -280,18 +280,18 @@ type Manager struct {
 	// work serializes everything that writes to the stick.
 	work sync.Mutex
 
-	mu                sync.Mutex
-	loaded            bool
-	settings          Settings
-	available         *Manifest
+	mu        sync.Mutex
+	loaded    bool
+	settings  Settings
+	available *Manifest
 	// availableRaw and availableSig are the signed manifest as it came:
 	// an app keeps them next to it on the stick.
 	availableRaw, availableSig []byte
 	// appTrial is set while the app of this slot is on trial; appCache is
 	// what was read from the stick about it.
-	appTrial  bool
-	appCache  *app.State
-	announced string
+	appTrial          bool
+	appCache          *app.State
+	announced         string
 	loginCheckRunning bool
 	lastCheck         time.Time
 	checkError        string

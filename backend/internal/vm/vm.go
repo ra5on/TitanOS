@@ -252,7 +252,7 @@ func NewManager(store *config.Store, gid int) *Manager {
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
 		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
 		snapshotJobs: map[string]*Job{}, autostartFile: "/run/titanos/vms-autostarted",
-		FreeDisks:    func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
+		FreeDisks: func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
 	}
 }
 
