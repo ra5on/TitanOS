@@ -194,6 +194,12 @@ func due(job Job, state State, now time.Time) bool {
 	return state.LastError != "" && now.Sub(*state.LastRun) >= retryAfter && (state.LastOK == nil || state.LastOK.Before(slot))
 }
 
+// Overdue reports whether a job has gone too long without a backup that
+// worked; see overdue.
+func (m *Manager) Overdue(view View) bool {
+	return overdue(view.Job, view.State, m.now())
+}
+
 // overdue reports whether a job has gone without a backup that worked for at
 // least two of its scheduled moments and at least overdueAfter. A job that has
 // never been tried is not overdue: it starts right away.
