@@ -4,8 +4,9 @@
 An app release replaces titand alone (see docs/APP-UPDATES.md). It is made
 on the system image of the newest full release before it (the base), and
 only if nothing but titand and its web UI changed since that release: the
-code under backend/ and web/, documentation and browser tests. Everything
-else, and a tag message with "[system]", makes a full release.
+code under backend/ and web/, documentation, browser tests and the example
+agent, which is an image of its own. Everything else, and a tag message
+with "[system]", makes a full release.
 
 Prints kind=app|system and base=<version> as lines for $GITHUB_OUTPUT.
 
@@ -28,6 +29,9 @@ ALLOWED = (
     "docs/",
     "scripts/test-ui-",
     "scripts/test-files-ui.mjs",
+    # The example agent is published as its own image, not in the system.
+    "examples/",
+    ".github/workflows/agent.yml",
     "README.md",
     "AGENTS.md",
     "CLAUDE.md",
