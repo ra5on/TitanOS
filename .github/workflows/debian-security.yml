@@ -1,0 +1,65 @@
+name: Debian security updates
+
+# App releases keep the system image of their base, with its Debian packages.
+# Once a week this compares the packages of the latest release with
+# trixie-security. If there are newer ones, it opens a pull request that adds
+# build/debian-security.txt: a change under build/ makes the next tag a full
+# release (scripts/release-kind.py), and mkosi installs the updates then.
+# Nothing is published without the owner; see docs/APP-UPDATES.md.
+#
+# The repository setting "Allow GitHub Actions to create and approve pull
+# requests" must be on. A pull request opened with the workflow's token does
+# not start other workflows.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Packages of the latest release against trixie-security
+        id: check
+        run: python3 scripts/debian-security.py --out build/debian-security.txt >> "$GITHUB_OUTPUT"
+
+      - name: Pull request for a full release
+        if: steps.check.outputs.updates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- build/debian-security.txt && git ls-files --error-unmatch build/debian-security.txt >/dev/null 2>&1; then
+            echo "already noted on main; the next full release brings the updates"
+            exit 0
+          fi
+          if [ "$(gh pr list --state open --label debian-security --json number --jq length)" != 0 ]; then
+            echo "a pull request for the updates is open already"
+            exit 0
+          fi
+          branch="debian-security/$(date -u +%Y-%m-%d)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add build/debian-security.txt
+          git commit -m 'Debian security updates: next release must be a full one'
+          git push origin "$branch"
+          gh label create debian-security --color B60205 --description 'Debian security updates need a full release' 2>/dev/null || true
+          {
+            echo 'Im Abbild des letzten Releases gibt es Pakete, für die trixie-security neuere Versionen hat:'
+            echo
+            echo '```'
+            cat build/debian-security.txt
+            echo '```'
+            echo
+            echo 'Nach dem Merge wird der nächste Tag ein volles Release (neues Systemabbild mit mkosi, Neustart des NAS). Veröffentlicht wird erst nach deiner Freigabe im Environment `release`.'
+          } > body.md
+          gh pr create --base main --head "$branch" --label debian-security \
+            --title 'Debian-Sicherheitsupdates: nächstes Release als volles Release' --body-file body.md

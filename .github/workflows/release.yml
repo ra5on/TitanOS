@@ -7,6 +7,10 @@ name: Release
 #
 # Pull requests rehearse only the image and its boot here; plugin changes are
 # tested by plugins.yml. Tags and manual runs build and test everything.
+#
+# A tag on which only titand changed since the last full release becomes an
+# app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
+# image of that release gets the new titand, without mkosi and new plugins.
 
 on:
   push:
@@ -23,6 +27,9 @@ on:
       - 'scripts/third-party-licenses.py'
       - 'scripts/licenses/**'
       - 'scripts/smoke-release.py'
+      - 'scripts/smoke-app-update.py'
+      - 'scripts/repack-release.py'
+      - 'scripts/release-kind.py'
       - 'scripts/smoke-storage.py'
       - 'scripts/files_usb_smoke.py'
       - 'scripts/smb_backup_smoke.py'
@@ -56,6 +63,8 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
+      kind: ${{ steps.kind.outputs.kind }}
+      base: ${{ steps.kind.outputs.base }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -82,6 +91,18 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
+      - name: App release or full release
+        id: kind
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/release-kind.py "$VERSION" --tag-message changelog.txt >> "$GITHUB_OUTPUT"
+          else
+            # Rehearsals build the full image and try app updates on it in QEMU.
+            printf 'kind=system\nbase=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/image-tools
 
       - name: Signing keys for the image
@@ -101,6 +122,7 @@ jobs:
         run: make build VERSION=${{ steps.version.outputs.version }}
 
       - name: Build the image
+        if: steps.kind.outputs.kind == 'system'
         # As root mkosi needs no user namespace, which the runner restricts.
         run: |
           # Generate app notices as the build user: Go's module cache is there.
@@ -108,21 +130,25 @@ jobs:
           VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
 
+      - name: The image of the base release with the new titand
+        if: steps.kind.outputs.kind == 'app'
+        run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
+
       - name: Build the matching NVIDIA plugin
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
         run: |
           sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
       - name: Test NVIDIA compilation in the NAS build environment
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
         run: |
           sdk="$PWD/out/plugins/nvidia-build-sdk.tar.zst"
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
       - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
@@ -131,6 +157,7 @@ jobs:
         env:
           # Only a pull request packs the system alone; it is never published.
           WITHOUT_PLUGINS: ${{ github.event_name == 'pull_request' && '1' || '' }}
+          BASE_VERSION: ${{ steps.kind.outputs.base }}
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
       - name: Exercise signing and verification with a disposable key
@@ -138,12 +165,19 @@ jobs:
         run: |
           scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
           python3 scripts/verify-release.py ${{ github.event_name == 'pull_request' && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
-          rm "$RUNNER_TEMP/rehearsal.key"
 
       - name: Boot the actual installation ZIP in UEFI QEMU
         run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
 
+      - name: App update, its failure and the way back in UEFI QEMU
+        if: github.event_name != 'push'
+        run: |
+          python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
+          rm "$RUNNER_TEMP/rehearsal.key"
+
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
+        # An app release keeps image and plugins of its base, which were tested then.
+        if: steps.kind.outputs.kind == 'system'
         run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
 
       - uses: actions/upload-artifact@v7
@@ -152,6 +186,7 @@ jobs:
           name: release-boot-log
           path: |
             out/release-smoke*.log
+            out/app-update-smoke*.log
             out/storage-smoke*.log
             out/network-smoke*.log
           if-no-files-found: ignore
@@ -208,9 +243,14 @@ jobs:
           CHANNEL: ${{ needs.build.outputs.channel }}
         run: |
           apache=$(date -u -d '+2 years' +%Y-%m-%d)
+          base=$(python3 -c 'import json; print(json.load(open("release/manifest.json"))["app"]["base"])')
           {
             python3 -c 'import json; print(json.load(open("release/manifest.json"))["changelog"])'
             echo
+            if [ "$base" != "$VERSION" ]; then
+              echo "**App update:** NAS running TitanOS $base or a later app update on it install \`titanos-$VERSION-titand\` alone, without restarting the NAS. Older systems install the full image as before."
+              echo
+            fi
             echo "---"
             echo
             echo "**Installing:** verify \`titanos-$VERSION.zip.minisig\`, then unpack \`titanos-$VERSION.zip\` onto a FAT32 stick named \`TITANOS\`. See the README for prerequisites. From 0.5.0 onward, Settings › Updates follows the single Stable channel; optional Beta features are marked in the interface."

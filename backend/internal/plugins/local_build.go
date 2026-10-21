@@ -429,3 +429,14 @@ func (m *Manager) runBuildJob(ctx context.Context, root, action string) (string,
 	}
 	return output, err
 }
+
+// Busy reports whether a driver is being downloaded or built right now.
+func (m *Manager) Busy() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch m.driverStatus.State {
+	case "checking", "downloading", "environment", "building":
+		return true
+	}
+	return false
+}

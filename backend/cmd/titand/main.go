@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
+	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -69,7 +70,24 @@ func main() {
 	flag.StringVar(&opts.devAddr, "dev-listen", "127.0.0.1:8080", "address in development mode")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
+	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")
 	flag.Parse()
+
+	if !opts.dev {
+		// The journal keeps the time itself.
+		log.SetFlags(0)
+		log.SetOutput(journalWriter{os.Stderr})
+	}
+
+	if *checkApp {
+		if slot := system.BootSlot(); slot != "" {
+			if err := checkAppUpdate(app.New("/efi", slot), opts.httpsAddr, 5*time.Minute); err != nil {
+				fmt.Fprintln(os.Stderr, "app update:", err)
+				os.Exit(1)
+			}
+		}
+		return
+	}
 
 	if *checkBoot {
 		// Only a system the boot loader started on trial has to prove itself.
@@ -93,6 +111,7 @@ func main() {
 		return
 	}
 
+	handOver(opts)
 	if err := run(opts); err != nil {
 		slog.Error("titand stopped", "err", err)
 		os.Exit(1)
@@ -120,12 +139,95 @@ func (w journalWriter) Write(line []byte) (int, error) {
 	return len(line), nil
 }
 
-func run(opts options) error {
-	if !opts.dev {
-		// The journal keeps the time itself.
-		log.SetFlags(0)
-		log.SetOutput(journalWriter{os.Stderr})
+// handOver starts the app update of the running slot in place of this
+// titand, if there is one that passes the checks. It returns only when the
+// titand of the system image itself is to run.
+func handOver(opts options) {
+	if opts.dev || os.Getenv(app.Env) != "" {
+		return
 	}
+	slot := system.BootSlot()
+	if slot == "" {
+		return
+	}
+	stick := app.New("/efi", slot)
+	if stick.Base == "" {
+		return
+	}
+	path, appVersion, err := stick.Launch()
+	if err != nil {
+		slog.Error("app update not started, running the titand of the system image", "err", err)
+		return
+	}
+	if path == "" {
+		return
+	}
+	slog.Info("handing over to the app update", "version", appVersion, "base", stick.Base)
+	err = syscall.Exec(path, os.Args, append(os.Environ(), app.Env+"="+appVersion))
+	slog.Error("app update could not be started, running the titand of the system image", "err", err)
+}
+
+// checkAppUpdate settles an app update on trial: once titand runs it and
+// is ready, it is kept; if not within five minutes, the app before it (or
+// the titand of the system image) runs again.
+func checkAppUpdate(stick *app.Stick, httpsAddr string, patience time.Duration) error {
+	state, err := stick.ReadState()
+	if err != nil || !state.Trial {
+		return err
+	}
+	err = waitApp(stick, state.Current, httpsAddr, patience)
+	// The base may have given up on the app in the meantime.
+	now, readErr := stick.ReadState()
+	if readErr != nil {
+		return readErr
+	}
+	if !now.Trial || now.Current != state.Current {
+		return nil
+	}
+	if err == nil {
+		_, err = stick.Confirm(true)
+		slog.Info("app update is ready and stays", "version", state.Current)
+		return err
+	}
+	slog.Error("app update did not become ready, going back", "version", state.Current, "err", err)
+	if _, confirmErr := stick.Confirm(false); confirmErr != nil {
+		return confirmErr
+	}
+	if restartErr := restartTitand(); restartErr != nil {
+		return restartErr
+	}
+	return err
+}
+
+// restartTitand starts titand anew, with whatever app is current now.
+var restartTitand = func() error {
+	_, err := (command.Exec{}).Run(context.Background(), "", "systemctl", "--no-block", "restart", "titand.service")
+	return err
+}
+
+// waitApp waits until titand runs the app and says it is ready.
+func waitApp(stick *app.Stick, appVersion, httpsAddr string, patience time.Duration) error {
+	deadline := time.Now().Add(patience)
+	for {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return errors.New("not ready in time")
+		}
+		if stick.Running() == appVersion {
+			if err := waitReady(httpsAddr, min(left, 20*time.Second)); err == nil && stick.Running() == appVersion {
+				return nil
+			}
+		} else {
+			// Started over and fell back, or still starting.
+			if state, err := stick.ReadState(); err == nil && (!state.Trial || state.Current != appVersion) {
+				return errors.New("the system image gave up on it")
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}
+}
+
+func run(opts options) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -135,6 +237,13 @@ func run(opts options) error {
 		// Not fatal: the web UI says that /config is missing and titand
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", opts.configDir, "err", err)
+	}
+
+	// The version of the system image; version.Version is newer when an
+	// app update runs on it.
+	base := app.ReadBase(app.BaseVersionFile)
+	if opts.dev {
+		base = ""
 	}
 
 	// Time zone and network first: everything after it relies on them.
@@ -238,7 +347,11 @@ func run(opts options) error {
 	extensions.PrepareRuntime = tailnet.Prepare
 	extensions.ActivateRuntime = tailnet.Activate
 	extensions.LocalBuilds = true
+	// Plugins are built for the system image, which an app update keeps.
 	extensions.Release = strings.TrimPrefix(version.Version, "v")
+	if base != "" {
+		extensions.Release = base
+	}
 	extensions.Disabled = opts.dev
 	if err := extensions.Load(); err != nil {
 		slog.Warn("plugin settings not readable from /config", "err", err)
@@ -328,6 +441,16 @@ func run(opts options) error {
 		return extensions.PrepareUpdate(ctx, version, kernel, base, assets, volumes.Mounted(), fetch, download)
 	}
 	updates.Reboot = power.Reboot
+	if !opts.dev && slot != "" && base != "" {
+		updates.Base, updates.Apps = base, app.New("/efi", slot)
+		// Both at once: the check waits for the new titand. From a unit of
+		// its own, which the restart of titand does not take down with it.
+		updates.Restart = func() error {
+			_, err := (command.Exec{}).Run(context.Background(), "", "systemd-run", "--no-block", "--collect", "--quiet",
+				"--description=TitanOS restart for an app update", "systemctl", "restart", "titand.service", "titanos-app-check.service")
+			return err
+		}
+	}
 	updates.OnEvent = func(kind, subject string) {
 		severity := notify.Info
 		if kind == "update_failed" {
@@ -442,6 +565,17 @@ func run(opts options) error {
 	if !opts.dev {
 		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
 	}
+	// An app update restarts titand: it waits for work that would break off.
+	updates.Working = func() bool {
+		return fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
+	}
+	// Logins outlive a restart of titand in RAM, as after an app update.
+	sessions := auth.NewSessions()
+	if !opts.dev {
+		if err := sessions.Persist("/run/titanos/sessions.json"); err != nil {
+			slog.Warn("logins of before not taken over", "err", err)
+		}
+	}
 	handler := api.New(api.Options{
 		UI:            webui.FS(),
 		Store:         store,
@@ -478,6 +612,7 @@ func run(opts options) error {
 		Version:       version.Version,
 		ShareDir:      shareDir,
 		SecureCookies: !opts.dev,
+		Sessions:      sessions,
 	})
 
 	var servers []*http.Server
@@ -513,6 +648,7 @@ func run(opts options) error {
 		slog.Info("shutting down")
 	}
 
+	sessions.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, srv := range servers {

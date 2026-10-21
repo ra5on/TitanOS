@@ -1,4 +1,6 @@
 """Release regressions use tiny real squashfs images and real minisign signatures."""
+import functools
+import http.server
 import importlib.util
 import hashlib
 import json
@@ -6,6 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -82,8 +85,14 @@ class ReleaseTest(unittest.TestCase):
         (self.repo / "out/stick/config").mkdir()
         (self.root / "usr/lib").mkdir(parents=True)
         (self.root / "usr/lib/os-release").write_text('ID=titanos\nVERSION_ID=0.1.0-beta.1\n')
+        (self.root / "usr/bin").mkdir(parents=True)
+        (self.root / "usr/bin/titand").write_bytes(b"titand 0.1.0-beta.1")
+        (self.root / "usr/share/titanos").mkdir(parents=True)
+        (self.root / "usr/share/titanos/base-version").write_text("0.1.0-beta.1\n")
+        (self.repo / "backend/bin").mkdir(parents=True)
+        (self.repo / "backend/bin/titand").write_bytes(b"titand 0.1.0-beta.1")
         notices = self.root / "usr/share/titanos"
-        (notices / "licenses").mkdir(parents=True)
+        (notices / "licenses").mkdir(parents=True, exist_ok=True)
         for name in ["LICENSE.md", "THIRD_PARTY_LICENSES", "licenses/NOTICE"]:
             (notices / name).write_text("Test notice\n")
         (notices / "components.json").write_text(json.dumps([
@@ -130,7 +139,11 @@ class ReleaseTest(unittest.TestCase):
         self.pack()
         self.sign()
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
-        for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz",
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        self.assertEqual(manifest["app"]["base"], "0.1.0-beta.1")
+        self.assertEqual(manifest["app"]["asset"], "titanos-0.1.0-beta.1-titand")
+        self.assertEqual((self.release / "titanos-0.1.0-beta.1-titand").read_bytes(), b"titand 0.1.0-beta.1")
+        for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz", "titanos-0.1.0-beta.1-titand",
                      "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt",
                      "nvidia-build-sdk.tar.zst", "nvidia-build-sdk-sources.txt", "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
@@ -243,6 +256,107 @@ class ReleaseTest(unittest.TestCase):
         (self.repo / "out/stick/config/account.json").write_text("private")
         output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
         self.assertIn("user configuration", output)
+
+    def test_titand_must_be_the_one_in_the_image(self):
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        (self.repo / "backend/bin/titand").write_bytes(b"another titand")
+        output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("not the titand inside the image", output)
+
+    def test_image_must_name_its_base_version(self):
+        (self.root / "usr/share/titanos/base-version").write_text("0.0.9\n")
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("base version", output)
+
+    def test_app_release_on_an_older_image(self):
+        # The image of 0.1.0-beta.1 with a newer titand, as repack-release.py makes it.
+        (self.root / "usr/bin/titand").write_bytes(b"titand 0.1.0-beta.2")
+        (self.repo / "backend/bin/titand").write_bytes(b"titand 0.1.0-beta.2")
+        (self.slot / "version").write_text("0.1.0-beta.2\n")
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        self.command("env", "BASE_VERSION=0.1.0-beta.1", "scripts/make-release.sh", "0.1.0-beta.2", "beta")
+        self.sign()
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        self.assertEqual((manifest["version"], manifest["app"]["base"]), ("0.1.0-beta.2", "0.1.0-beta.1"))
+        # The plugins and the SDK of the base come along unchanged.
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.2")
+
+    def test_repack_an_app_release_from_the_published_base(self):
+        self.pack()
+        self.sign()
+        # The base as GitHub serves it.
+        published = self.repo / "published/releases/download/v0.1.0-beta.1"
+        published.parent.mkdir(parents=True)
+        shutil.copytree(self.release, published)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(self.repo / "published"))
+        handler.log_message = lambda *args: None
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        for name in ["repack-release.py", "verify-release.py", "nvidia-update-release.py"]:
+            shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
+        # Notices without a Go toolchain: Go for the application, Debian from the image.
+        stub = self.repo / "licenses-stub.py"
+        stub.write_text("""import json, pathlib, sys
+mode, path = sys.argv[1], pathlib.Path(sys.argv[2])
+if mode == "application":
+    (path / "licenses/go").mkdir(parents=True, exist_ok=True)
+    (path / "licenses/go/NOTICE").write_text("go notice")
+    (path / "components.json").write_text(json.dumps([dict(ecosystem="Go", name="example", version="2", source="https://example.org/go", notices=["go/NOTICE"])]))
+else:
+    notices = path / "usr/share/titanos"
+    components = json.loads((notices / "components.json").read_text())
+    components.append(dict(ecosystem="Debian", name="example", version="1", source="https://example.org/source", notices=["NOTICE"]))
+    (notices / "components.json").write_text(json.dumps(components))
+""")
+        (self.repo / "backend/bin/titand").write_bytes(b"titand 0.1.0-beta.2")
+        shutil.rmtree(self.repo / "out/stick")
+        shutil.rmtree(self.repo / "out/plugins")
+        self.command("env", "REPACK_NO_SUDO=1", f"REPACK_LICENSES={stub}", "python3", "scripts/repack-release.py",
+                     "--base", "0.1.0-beta.1", "--version", "0.1.0-beta.2",
+                     "--source", f"http://127.0.0.1:{server.server_address[1]}", "--keys", str(self.keys))
+        self.command("env", "BASE_VERSION=0.1.0-beta.1", "scripts/make-release.sh", "0.1.0-beta.2", "beta")
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.2")
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        base = json.loads((published / "manifest.json").read_text())
+        self.assertEqual(manifest["app"]["base"], "0.1.0-beta.1")
+        # Kernel and initrd of the base, bit for bit; the image holds the new titand.
+        for name in ["vmlinuz", "initrd.img"]:
+            self.assertEqual(next(f["sha256"] for f in manifest["files"] if f["name"] == name),
+                             next(f["sha256"] for f in base["files"] if f["name"] == name))
+        image = self.release / "titanos-0.1.0-beta.2-filesystem.squashfs"
+        cat = lambda path: subprocess.run(["unsquashfs", "-cat", str(image), path], capture_output=True).stdout
+        self.assertEqual(cat("usr/bin/titand"), b"titand 0.1.0-beta.2")
+        self.assertEqual(cat("usr/share/titanos/base-version"), b"0.1.0-beta.1\n")
+        self.assertIn(b"https://example.org/go", cat("usr/share/titanos/components.json"))
+        # The plugins of the base came along.
+        self.assertEqual([p["name"] for p in manifest["plugins"]], ["nvidia"])
+        self.assertEqual(manifest["nvidiaBuildSDK"], base["nvidiaBuildSDK"])
+
+    def test_repack_refuses_a_base_with_a_foreign_signature(self):
+        self.pack()
+        self.sign()
+        published = self.repo / "published/releases/download/v0.1.0-beta.1"
+        published.parent.mkdir(parents=True)
+        shutil.copytree(self.release, published)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(self.repo / "published"))
+        handler.log_message = lambda *args: None
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        for name in ["repack-release.py", "verify-release.py", "nvidia-update-release.py"]:
+            shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
+        other = self.repo / "other-keys"
+        other.mkdir()
+        self.command("minisign", "-G", "-W", "-s", str(self.repo / "other.key"), "-p", str(other / "other.pub"))
+        output = self.command("env", "REPACK_NO_SUDO=1", "python3", "scripts/repack-release.py",
+                              "--base", "0.1.0-beta.1", "--version", "0.1.0-beta.2",
+                              "--source", f"http://127.0.0.1:{server.server_address[1]}", "--keys", str(other), success=False)
+        self.assertIn("trusted key", output)
 
     def test_beta_cannot_be_published_as_stable(self):
         self.pack()

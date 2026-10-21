@@ -5,6 +5,7 @@
 #   out/release/titanos-<version>-vmlinuz           \
 #   out/release/titanos-<version>-initrd.img         } one system slot, for updates
 #   out/release/titanos-<version>-filesystem.squashfs /
+#   out/release/titanos-<version>-titand            titand alone, for an app update without restart
 #   out/release/titanos-<version>-sources.txt       where the sources of the Debian packages are
 #   out/release/manifest.json                       what an update consists of
 #
@@ -15,6 +16,9 @@
 #   ALLOW_DEV=1         accept a development build; for tests only
 #   WITHOUT_PLUGINS=1   pack only the system (image rehearsals on pull requests);
 #                       verify-release.py rejects such a release unless told so
+#   BASE_VERSION=x.y.z  the system image the release was made on; set for an app
+#                       release (repack-release.py), else the version itself
+#   TITAND=path         titand of the release (default backend/bin/titand)
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
 set -eu
@@ -61,6 +65,15 @@ identity=$(unsquashfs -cat "$slot/filesystem.squashfs" usr/lib/os-release)
 if [ "${ALLOW_DEV:-}" != 1 ] && printf '%s\n' "$identity" | grep -q '^VARIANT_ID=dev$'; then
     echo "refusing to publish a development image" >&2; exit 1
 fi
+# An app update replaces titand on a system image of this version alone.
+base=${BASE_VERSION:-$version}
+titand=${TITAND:-backend/bin/titand}
+if [ "$(unsquashfs -cat "$slot/filesystem.squashfs" usr/share/titanos/base-version 2>/dev/null)" != "$base" ]; then
+    echo "the image does not name $base as its base version" >&2; exit 1
+fi
+if [ ! -f "$titand" ] || ! unsquashfs -cat "$slot/filesystem.squashfs" usr/bin/titand | cmp -s - "$titand"; then
+    echo "$titand is not the titand inside the image" >&2; exit 1
+fi
 
 release=out/release
 rm -rf "$release"
@@ -71,13 +84,14 @@ mkdir -p "$release"
 for file in vmlinuz initrd.img filesystem.squashfs; do
     cp "$slot/$file" "$release/titanos-$version-$file"
 done
+cp "$titand" "$release/titanos-$version-titand"
 
-VERSION=$version CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
+VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
 import datetime, hashlib, json, os, tarfile, shutil
 from pathlib import Path
 
-version, release, image = os.environ["VERSION"], os.environ["RELEASE"], os.environ["IMAGE"]
+version, base, release, image = os.environ["VERSION"], os.environ["BASE"], os.environ["RELEASE"], os.environ["IMAGE"]
 
 def sha256(path):
     digest = hashlib.sha256()
@@ -107,6 +121,11 @@ manifest = {
     "changelog": changelog,
     "cmdline": options[0],
     "files": files,
+    # titand alone, for systems running the image this release was made on.
+    # Older TitanOS ignore the field and install the files above.
+    "app": {"base": base, "asset": f"titanos-{version}-titand",
+            "sha256": sha256(os.path.join(release, f"titanos-{version}-titand")),
+            "size": os.path.getsize(os.path.join(release, f"titanos-{version}-titand"))},
 }
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
@@ -120,7 +139,8 @@ for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin
         raise ValueError("unrecognized official plugin")
     if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
         raise ValueError("plugin kernel mismatch: " + name)
-    expected = plugin["version"].endswith("-titanos-" + version) if name == "nvidia" else plugin["version"] == version
+    # Plugins belong to the system image: an app release brings those of its base.
+    expected = plugin["version"].endswith("-titanos-" + base) if name == "nvidia" else plugin["version"] == base
     if not expected or sha256(Path("out/plugins") / (name + ".raw")) != plugin["sha256"] or (Path("out/plugins") / (name + ".raw")).stat().st_size != plugin["size"]:
         raise ValueError("plugin version/checksum mismatch: " + name)
     assets = [name + ".raw", path.name, name + "-licenses.tar.gz"]
@@ -133,7 +153,7 @@ if not without_plugins:
     if not any(p["name"] == "nvidia" for p in manifest["plugins"]):
         raise ValueError("NVIDIA plugin missing")
     sdk = json.loads(Path("out/plugins/nvidia-build-sdk.json").read_text())
-    if sdk["version"] != version or sdk["kernel"] != manifest["kernel"] or sdk["asset"] != "nvidia-build-sdk.tar.zst":
+    if sdk["version"] != base or sdk["kernel"] != manifest["kernel"] or sdk["asset"] != "nvidia-build-sdk.tar.zst":
         raise ValueError("NVIDIA SDK target mismatch")
     if sha256(Path("out/plugins") / sdk["asset"]) != sdk["sha256"] or (Path("out/plugins") / sdk["asset"]).stat().st_size != sdk["size"]:
         raise ValueError("NVIDIA SDK integrity mismatch")

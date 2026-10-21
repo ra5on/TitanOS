@@ -24,6 +24,7 @@ var updateErrors = []struct {
 	{update.ErrTooOld, http.StatusConflict, "update_too_old"},
 	{update.ErrNoSpace, http.StatusConflict, "update_no_space"},
 	{update.ErrUnconfirmed, http.StatusConflict, "update_unconfirmed"},
+	{update.ErrWorking, http.StatusConflict, "update_working"},
 }
 
 func writeUpdateError(w http.ResponseWriter, err error) {
@@ -72,6 +73,8 @@ func (s *Server) handleUpdateAction(w http.ResponseWriter, r *http.Request) {
 		err = s.opts.Update.Rollback()
 	case "cancel":
 		err = s.opts.Update.Cancel()
+	case "app-rollback":
+		err = s.opts.Update.AppRollback()
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such action")
 		return

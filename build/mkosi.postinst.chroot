@@ -23,6 +23,10 @@ BUG_REPORT_URL="https://github.com/ra5on/TitanOS/issues"
 OSRELEASE
 sed -i '/^$/d' /usr/lib/os-release
 ln -s ../usr/lib/os-release /etc/os-release
+# The version of this system image. An app update (a newer titand alone)
+# only runs on the image it was made for; plugins belong to the image too.
+install -d /usr/share/titanos
+printf '%s\n' "$version" > /usr/share/titanos/base-version
 
 cat > /etc/issue <<'ISSUE'
 \S{PRETTY_NAME} – \n (\l)
@@ -80,6 +84,7 @@ chown -R libvirt-qemu /var/lib/swtpm-localca
 # directory.
 chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
     /usr/lib/systemd/system/titanos-boot-check.service \
+    /usr/lib/systemd/system/titanos-app-check.service \
     /usr/lib/systemd/system/titanos-firewall-open.service \
     /usr/lib/systemd/system/docker.service.d /usr/libexec/titanos-firewall-open \
     /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos

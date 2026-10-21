@@ -66,6 +66,7 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	m.pidDir = filepath.Join(root, "pids")
 	m.kvm = root // exists
 	m.runGid, m.runUid = os.Getgid(), os.Getuid()
+	m.autostartFile = filepath.Join(root, "run-titanos", "vms-autostarted")
 	runner := &fakeRunner{pidDir: m.pidDir}
 	m.runner = runner
 	for _, dir := range []string{m.pidDir, filepath.Join(m.mountRoot, "data", "media"), filepath.Join(m.mountRoot, "fast")} {
@@ -487,5 +488,33 @@ func TestCPUs(t *testing.T) {
 	// Not a hybrid CPU: no kinds.
 	if plain := m.CPUs(t.TempDir()); plain[0].Kind != "" || !slices.Equal(plain[0].Siblings, []int{0}) {
 		t.Errorf("plain CPU = %+v", plain[0])
+	}
+}
+
+func TestAutostartOncePerBootAlsoAcrossRestartsOfTitand(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	vm := VM{Name: "web", Template: "linux", Volume: "fast", Autostart: true, MemoryMiB: 512, VCPUs: 1}
+	if err := m.store.WriteJSON(configDir+"/web.json", vm); err != nil {
+		t.Fatal(err)
+	}
+	m.Load()
+	m.autostart(ctx, []string{"fast"})
+	if data, _ := os.ReadFile(m.autostartFile); strings.TrimSpace(string(data)) != "web" {
+		t.Fatalf("autostart not noted: %q", data)
+	}
+
+	// titand starts again (an app update); the NAS did not.
+	again := NewManager(m.store, os.Getgid())
+	again.mountRoot, again.runDir, again.pidDir, again.kvm, again.runner, again.autostartFile = m.mountRoot, m.runDir, m.pidDir, m.kvm, runner, m.autostartFile
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	runner.commands = nil
+	again.autostart(ctx, []string{"fast"})
+	for _, command := range runner.commands {
+		if strings.Contains(command, "virsh") {
+			t.Errorf("a VM was autostarted a second time in the same boot: %v", runner.commands)
+		}
 	}
 }

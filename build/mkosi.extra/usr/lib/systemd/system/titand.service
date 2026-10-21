@@ -2,6 +2,10 @@
 Description=TitanOS daemon (web UI and API)
 Documentation=https://github.com/ra5on/TitanOS
 After=network.target
+# An app update that does not start is given up on after three starts and
+# the one before it runs again: systemd must not stop trying before that.
+StartLimitIntervalSec=2min
+StartLimitBurst=10
 
 [Service]
 # HTTPS on 443 with a self-signed certificate kept in /config; port 80 redirects.

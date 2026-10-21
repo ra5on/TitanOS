@@ -542,3 +542,15 @@ func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string
 		}
 	}
 }
+
+// TestsRunning reports whether a disk test is at work.
+func (m *Manager) TestsRunning() bool {
+	m.testMu.Lock()
+	defer m.testMu.Unlock()
+	for _, test := range m.tests {
+		if test.Result == "" {
+			return true
+		}
+	}
+	return false
+}

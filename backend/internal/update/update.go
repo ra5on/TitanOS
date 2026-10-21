@@ -32,6 +32,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/minisign"
 )
@@ -85,6 +86,17 @@ var (
 	ErrNoSpace = errors.New("update: not enough room on the stick")
 	// ErrUnconfirmed means the running system was itself not confirmed yet.
 	ErrUnconfirmed = errors.New("update: the running system is not confirmed as good yet")
+	// ErrWorking means titand is at work that a restart would break off:
+	// an app update waits for it.
+	ErrWorking = errors.New("update: copies, backups or disk tests are running")
+)
+
+// Kinds of an update.
+const (
+	// KindApp replaces titand alone and restarts it, not the NAS.
+	KindApp = "app"
+	// KindSystem writes a whole system into the other slot.
+	KindSystem = "system"
 )
 
 // Settings is /config/system/update.json.
@@ -124,6 +136,10 @@ type Manifest struct {
 	// for the slot.
 	Cmdline string `json:"cmdline"`
 	Files   []File `json:"files"`
+	// App is titand of this release alone, for systems with the image it
+	// was made for. Older versions of TitanOS do not know the field and
+	// install Files as always.
+	App     *app.Info `json:"app,omitempty"`
 	Plugins []struct {
 		Name  string `json:"name"`
 		Asset string `json:"asset"`
@@ -199,6 +215,23 @@ type Status struct {
 	CanRollback bool `json:"canRollback"`
 	// Unconfirmed is set while the running system still has to be marked good.
 	Unconfirmed bool `json:"unconfirmed"`
+	// Base is the version of the system image; Version may be newer when
+	// an app update runs on it.
+	Base string `json:"base"`
+	// Kind is how Available would be installed: app or system.
+	Kind string `json:"kind"`
+	// App is what lies in the app folder of the running slot.
+	App AppStatus `json:"app"`
+}
+
+// AppStatus tells about the app updates of the running slot.
+type AppStatus struct {
+	Current  string `json:"current"`
+	Previous string `json:"previous"`
+	// Trial is set while a new app has to prove itself.
+	Trial bool `json:"trial"`
+	// CanRollback says whether there is an app or the base to go back to.
+	CanRollback bool `json:"canRollback"`
 }
 
 // Manager checks for, installs and takes back updates.
@@ -229,6 +262,21 @@ type Manager struct {
 	PreparePlugins func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
+	// Base is the version of the system image; "" for one that knows no
+	// app updates. Apps keeps the apps of the running slot; nil turns app
+	// updates off.
+	Base string
+	Apps *app.Stick
+	// Restart restarts titand after an app changed, together with the
+	// check that the app is ready.
+	Restart func() error
+	// Working tells whether titand is at work that a restart would break off.
+	Working func() bool
+	// appFor is where the app folder of a slot lies; tests replace it.
+	appFor func(slot string) *app.Stick
+	// restartDelay lets the last answers out before titand restarts.
+	restartDelay time.Duration
+
 	// work serializes everything that writes to the stick.
 	work sync.Mutex
 
@@ -236,7 +284,14 @@ type Manager struct {
 	loaded            bool
 	settings          Settings
 	available         *Manifest
-	announced         string
+	// availableRaw and availableSig are the signed manifest as it came:
+	// an app keeps them next to it on the stick.
+	availableRaw, availableSig []byte
+	// appTrial is set while the app of this slot is on trial; appCache is
+	// what was read from the stick about it.
+	appTrial  bool
+	appCache  *app.State
+	announced string
 	loginCheckRunning bool
 	lastCheck         time.Time
 	checkError        string
@@ -252,9 +307,17 @@ func NewManager(store *config.Store, version, slot string) *Manager {
 	bootID, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	return &Manager{
 		store: store, client: &http.Client{}, bootDir: "/efi", keyDir: "/usr/share/titanos/update-keys",
-		version: version, slot: slot, bootID: strings.TrimSpace(string(bootID)), now: time.Now, stall: 90 * time.Second, retryPause: 3 * time.Second,
+		version: version, slot: slot, bootID: strings.TrimSpace(string(bootID)), now: time.Now, stall: 90 * time.Second, retryPause: 3 * time.Second, restartDelay: 2 * time.Second,
 		settings: Settings{Channel: ChannelStable, InstallTime: "03:30"},
 	}
+}
+
+// stickFor returns the app folder of a slot.
+func (m *Manager) stickFor(slot string) *app.Stick {
+	if m.appFor != nil {
+		return m.appFor(slot)
+	}
+	return app.New(m.bootDir, slot)
 }
 
 // Load reads the settings and what was left pending before the restart.
@@ -280,7 +343,51 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	m.settings, m.pending, m.loaded = settings, pending, true
 	m.mu.Unlock()
+	m.settleApp()
 	return nil
+}
+
+// settleApp reads the app state of the running slot and tells once what
+// came of the last change of the app. While an app is on trial, Run calls
+// it every minute until the check after the restart has settled it; the
+// stick is not read otherwise.
+func (m *Manager) settleApp() {
+	if m.Apps == nil {
+		return
+	}
+	state, err := m.Apps.ReadState()
+	if err != nil {
+		slog.Warn("app state not readable from the stick", "err", err)
+		return
+	}
+	m.mu.Lock()
+	m.appTrial, m.appCache = state.Trial, &state
+	m.mu.Unlock()
+	if state.Trial || state.Result == "" {
+		return
+	}
+	result, version, err := m.Apps.TakeResult()
+	if err != nil {
+		slog.Warn("app result not cleared", "err", err)
+		return
+	}
+	state.Result, state.ResultVersion = "", ""
+	m.mu.Lock()
+	m.appCache = &state
+	m.mu.Unlock()
+	if version == "" {
+		version = m.Base
+	}
+	kind := map[string]string{app.ResultInstalled: "update_installed", app.ResultFailed: "update_failed", app.ResultRolledBack: "update_rolled_back"}[result]
+	slog.Info("app update settled", "outcome", result, "version", version, "running", m.version)
+	if kind != "" && m.OnEvent != nil {
+		m.OnEvent(kind, version)
+	}
+}
+
+// appKind tells whether a release can be installed as an app here.
+func (m *Manager) appKind(manifest *Manifest) bool {
+	return manifest != nil && manifest.App != nil && m.Apps != nil && m.Base != "" && manifest.App.Base == m.Base
 }
 
 var clockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -636,6 +743,17 @@ func (m *Manager) Status() Status {
 		at := m.lastCheck
 		status.LastCheck = &at
 	}
+	status.Base = m.Base
+	if m.available != nil {
+		status.Kind = KindSystem
+		if m.appKind(m.available) {
+			status.Kind = KindApp
+		}
+	}
+	if m.appCache != nil {
+		cache := *m.appCache
+		status.App = AppStatus{Current: cache.Current, Previous: cache.Previous, Trial: cache.Trial, CanRollback: !cache.Trial && (cache.Current != "" || cache.Previous != "")}
+	}
 	m.mu.Unlock()
 	status.Settings.Source = ""
 	_, status.Release = parseVersion(m.version)
@@ -740,10 +858,10 @@ func parseManifest(data []byte) (Manifest, error) {
 }
 
 // latest fetches and verifies the manifest of the newest release of the channel.
-func (m *Manager) latest(ctx context.Context, channel string) (Manifest, error) {
+func (m *Manager) latest(ctx context.Context, channel string) (Manifest, []byte, []byte, error) {
 	keys := minisign.LoadKeys(m.keyDir)
 	if len(keys) == 0 {
-		return Manifest{}, ErrNoKey
+		return Manifest{}, nil, nil, ErrNoKey
 	}
 	source := m.source()
 	base := source + "/releases/latest/download/"
@@ -752,26 +870,27 @@ func (m *Manager) latest(ctx context.Context, channel string) (Manifest, error) 
 		// the newest first.
 		feed, err := m.fetch(ctx, source+"/releases.atom", 2<<20)
 		if err != nil {
-			return Manifest{}, err
+			return Manifest{}, nil, nil, err
 		}
 		match := feedTag.FindSubmatch(feed)
 		if match == nil {
-			return Manifest{}, fmt.Errorf("%w: no release found", ErrNothing)
+			return Manifest{}, nil, nil, fmt.Errorf("%w: no release found", ErrNothing)
 		}
 		base = source + "/releases/download/" + string(match[1]) + "/"
 	}
 	data, err := m.fetch(ctx, base+"manifest.json", maxManifest)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, nil, err
 	}
 	signature, err := m.fetch(ctx, base+"manifest.json.minisig", 4096)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, nil, err
 	}
 	if minisign.Verify(keys, data, string(signature)) != nil {
-		return Manifest{}, ErrSignature
+		return Manifest{}, nil, nil, ErrSignature
 	}
-	return parseManifest(data)
+	manifest, err := parseManifest(data)
+	return manifest, data, signature, err
 }
 
 // CheckAfterLogin starts a bounded check without delaying authentication.
@@ -801,11 +920,11 @@ func (m *Manager) Check(ctx context.Context) error {
 	m.mu.Lock()
 	channel := m.settings.Channel
 	m.mu.Unlock()
-	manifest, err := m.latest(ctx, channel)
+	manifest, raw, signature, err := m.latest(ctx, channel)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.lastCheck, m.checkError, m.available = m.now(), "", nil
+	m.lastCheck, m.checkError, m.available, m.availableRaw, m.availableSig = m.now(), "", nil, nil, nil
 	if err != nil {
 		m.checkError = err.Error()
 		return err
@@ -815,7 +934,7 @@ func (m *Manager) Check(ctx context.Context) error {
 	if running, ok := parseVersion(m.version); ok && found.compare(running) <= 0 {
 		return nil
 	}
-	m.available = &manifest
+	m.available, m.availableRaw, m.availableSig = &manifest, raw, signature
 	if m.announced != manifest.Version && m.OnEvent != nil {
 		m.announced = manifest.Version
 		go m.OnEvent("update_available", manifest.Version)
@@ -838,13 +957,17 @@ func (m *Manager) Install(ctx context.Context) error {
 		return ErrDisabled
 	}
 	m.mu.Lock()
-	manifest, pending, phase := m.available, m.pending, m.progress.Phase
+	manifest, pending, phase, appTrial := m.available, m.pending, m.progress.Phase, m.appTrial
+	raw, signature := m.availableRaw, m.availableSig
 	m.mu.Unlock()
 	switch {
-	case phase == "download" || phase == "switch" || pending != nil:
+	case phase == "download" || phase == "switch" || phase == "restart" || pending != nil || appTrial:
 		return ErrBusy
 	case manifest == nil:
 		return ErrNothing
+	}
+	if m.appKind(manifest) {
+		return m.installApp(ctx, *manifest, raw, signature)
 	}
 	if manifest.MinVersion != "" {
 		minimum, _ := parseVersion(manifest.MinVersion)
@@ -868,6 +991,7 @@ func (m *Manager) Install(ctx context.Context) error {
 			free += info.Size() // goes away first
 		}
 	}
+	free += m.stickFor(target).Size()
 	if free < manifest.Size()+(8<<20) {
 		return fmt.Errorf("%w: %d MiB needed, %d MiB free", ErrNoSpace, manifest.Size()>>20, free>>20)
 	}
@@ -896,12 +1020,18 @@ func (m *Manager) Install(ctx context.Context) error {
 func (m *Manager) install(ctx context.Context, manifest Manifest, target string) error {
 	slog.Info("installing update", "version", manifest.Version, "slot", target)
 	base := m.source() + "/releases/download/" + manifest.Tag + "/"
+	// Plugins belong to the system image: a release that is an app on an
+	// older image brings that image's plugins.
+	release := manifest.Version
+	if manifest.App != nil && manifest.App.Base != "" {
+		release = manifest.App.Base
+	}
 	if m.PreparePlugins != nil {
 		assets := map[string]string{}
 		for _, plugin := range manifest.Plugins {
 			assets[plugin.Name] = plugin.Asset
 		}
-		if err := m.PreparePlugins(ctx, manifest.Version, manifest.Kernel, base, assets, m.fetch,
+		if err := m.PreparePlugins(ctx, release, manifest.Kernel, base, assets, m.fetch,
 			func(ctx context.Context, url, dest, sum string, size int64) error {
 				return m.download(ctx, url, dest, File{SHA256: sum, Size: size}, func(done int64, speed uint64) {
 					m.setProgress(func(p *Progress) { p.File = filepath.Base(dest); p.SpeedBytesPerSecond = speed })
@@ -915,6 +1045,10 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 	m.removeEntry(target)
 	for _, name := range append(slices.Clone(slotFiles), "version") {
 		os.Remove(filepath.Join(dir, name))
+	}
+	// The new image brings its own titand; apps of the old one do not fit it.
+	if err := m.stickFor(target).Clear(); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -1174,6 +1308,10 @@ func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	var checked time.Time
+	// waiting is since when a scheduled app update waits for work that a
+	// restart of titand would break off; it is tried again every minute,
+	// for up to six hours.
+	var waiting time.Time
 	for minute := 0; ; minute++ {
 		select {
 		case <-ctx.Done():
@@ -1181,6 +1319,9 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 		m.Confirm()
+		if m.appOnTrial() {
+			m.settleApp()
+		}
 		// The first look a while after the start, when the network is up.
 		if minute >= 5 && m.now().Sub(checked) >= 24*time.Hour {
 			checked = m.now()
@@ -1191,15 +1332,25 @@ func (m *Manager) Run(ctx context.Context) {
 		m.mu.Lock()
 		settings, available, phase, pending := m.settings, m.available, m.progress.Phase, m.pending
 		m.mu.Unlock()
-		if !settings.AutoInstall || m.now().Format("15:04") != settings.InstallTime {
+		retry := !waiting.IsZero() && m.now().Sub(waiting) < 6*time.Hour
+		if !settings.AutoInstall || (m.now().Format("15:04") != settings.InstallTime && !retry) {
 			continue
 		}
 		switch {
 		case available != nil && pending == nil && phase != "download" && phase != "switch":
 			if err := m.Install(ctx); err != nil {
+				if errors.Is(err, ErrWorking) {
+					if !retry {
+						slog.Info("scheduled app update waits until copies, backups and disk tests are done")
+						waiting = m.now()
+					}
+					continue
+				}
+				waiting = time.Time{}
 				slog.Warn("scheduled update not started", "err", err)
 				continue
 			}
+			waiting = time.Time{}
 			// Wait for it, then restart within the same night.
 			go func() {
 				for {

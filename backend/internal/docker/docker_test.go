@@ -494,3 +494,45 @@ func TestDismissJob(t *testing.T) {
 		t.Errorf("unknown job: %v, want ErrNotFound", err)
 	}
 }
+
+func TestRestartOfTitandKeepsTheEngineRunning(t *testing.T) {
+	m, runner, _ := newTestManager(t)
+	ctx := context.Background()
+	if err := m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.reconcile(ctx, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// titand starts again, as after an app update; the engine still runs.
+	again := NewManager(m.store, m.configDir)
+	again.runner, again.api, again.mountRoot, again.daemonConfig = runner, m.api, m.mountRoot, m.daemonConfig
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	runner.commands = nil
+	if err := again.reconcile(ctx, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range runner.commands {
+		if strings.Contains(command, "stop") || strings.Contains(command, "systemctl start") {
+			t.Errorf("the engine was restarted with titand: %v", runner.commands)
+		}
+	}
+	if !again.engineRunning() {
+		t.Error("the running engine was not taken over")
+	}
+
+	// An engine that is not running is started as before.
+	third := NewManager(m.store, m.configDir)
+	third.runner, third.api, third.mountRoot, third.daemonConfig = runner, m.api, m.mountRoot, m.daemonConfig
+	third.Load()
+	runner.commands, runner.fail = nil, "is-active"
+	if err := third.reconcile(ctx, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if last := runner.commands[len(runner.commands)-1]; last != "systemctl start docker.service" {
+		t.Errorf("a stopped engine was not started: %v", runner.commands)
+	}
+}

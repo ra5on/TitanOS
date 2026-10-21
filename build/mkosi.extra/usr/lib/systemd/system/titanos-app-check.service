@@ -1,0 +1,17 @@
+[Unit]
+Description=TitanOS app update came up
+Documentation=https://github.com/ra5on/TitanOS/blob/main/docs/APP-UPDATES.md
+After=titand.service
+# An app update replaces titand alone and starts on trial. This check runs
+# the titand of the system image: it waits until the new titand is ready
+# and keeps it, or goes back to the app before it (or to the titand of the
+# system image) and restarts titand. Without an app on trial it does nothing.
+# titand restarts this unit together with itself after installing an app.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/titand -check-app
+TimeoutStartSec=6min
+
+[Install]
+WantedBy=multi-user.target

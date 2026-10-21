@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.7.2 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2)** · Veröffentlicht am 21. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.8.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0)** · Veröffentlicht am 21. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -23,8 +23,9 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Weboberfläche in 0.7.2
+## Weboberfläche in 0.8.0
 
+- **Updates ohne Neustart (0.8.0):** Kleine Updates tauschen nur das Programm von TitanOS mit seiner Weboberfläche aus, ohne Neustart des NAS. Container, VMs und Freigaben laufen weiter, die Anmeldung bleibt. Eine neue Version läuft auf Probe; startet sie nicht, kehrt TitanOS von selbst zur vorigen zurück. Volle Updates mit Neustart bleiben für neue Systempakete und Kernel.
 - **Neue VM-Seite (0.7.2):** Reiter Übersicht, Bildschirm und Snapshots; Übersicht in Kacheln mit Auslastung, Hardware, Datenträgern, Netzwerk und Geräten. CD einlegen, wechseln und auswerfen auch bei laufender VM, Adresse der VM über den QEMU-Gastagent oder die Nachbartabelle des NAS. Liste mit Filter und Aktionen je VM, aufgeräumte Bildschirm-Leiste mit „Senden“ und „Anzeige“.
 - **Aufgeräumter Dateimanager (0.7.1):** zwei kompakte Leisten statt fünf, Pfadeingabe in den Brotkrumen, Sortieren über die Spaltenköpfe, schwebendes Kontextmenü (auch per Tastatur), Doppelklick für Vorschau und Editor, Symbole nach Dateityp und eine Aktionsleiste, die bei einer Auswahl am unteren Rand bleibt. Auf dem Smartphone ist die Ortsauswahl eingeklappt.
 - **Persönlicher Dateimanager:** benannte und sortierbare Favoriten, Ansichten und Sortierung je Ordner im Benutzerkonto, Ordnerbaum, zwei Ansichten, Suche und schnelle Darstellung großer Ordner.
@@ -35,7 +36,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
 - **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+Alle Änderungen: [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -56,7 +57,7 @@ Alle Änderungen: [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) 
 - **Backups.** Freigaben mit restic verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP), S3-Speicher oder einen restic-REST-Server sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Wiederherstellen in einen eigenen Ordner. Externe S3- und REST-Dienste müssen mit dem jeweiligen Ziel geprüft werden.
 - **Kopie-Backups.** Freigaben auf externe USB-Platten oder ein SMB-Ziel kopieren, sofort oder nach Zeitplan. Neue und geänderte Dateien werden übertragen; gelöschte Quelldateien bleiben am Ziel. Die Kopien sind direkt lesbar, ohne Versionierung. SMB-Ordnerkopie ist als Beta gekennzeichnet. [USB-Kopie](docs/USB-COPY-BACKUPS.md) · [SMB-Kopie](docs/SMB-COPY-BACKUPS.md).
 - **USV.** Per USB oder über das Netzwerk; bei Stromausfall fährt das NAS sauber herunter, bevor die Batterie leer ist, und kann den Zustand der USV an andere Geräte weitergeben.
-- **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
+- **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Kleine Updates ersetzen nur das Programm von TitanOS und kommen ohne Neustart, ebenfalls auf Probe. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
 - **Sicherung des Sticks.** Automatische Sicherung der Konfiguration auf ein verfügbares Volume, gebündelt nach Änderungen; zusätzlich Download und Wiederherstellung. Beim Ersatz eines Sticks lässt sich eine gefundene Sicherung in der Ersteinrichtung auswählen und zurückspielen.
 - **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
 - **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und filtert bekannte Adress-, Namens- und Geheimnisfelder. Das Paket vor dem Weitergeben prüfen; die Filter können unbekannte Formate übersehen.
@@ -131,9 +132,9 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Installation
 
-Die Dateien für **0.7.2** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2). Für einen neuen Stick:
+Die Dateien für **0.8.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0). Für einen neuen Stick:
 
-1. `titanos-0.7.2.zip`, `titanos-0.7.2.zip.minisig` und `titanos-0.7.2.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.8.0.zip`, `titanos-0.8.0.zip.minisig` und `titanos-0.8.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
@@ -152,7 +153,7 @@ Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import b
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
-Für **0.7.2** wurden Frontend-, Backend- und Browserprüfungen ausgeführt; die neue Browserprüfung der VM-Seite deckt Reiter, Menüs, Medienwechsel und Adressanzeige auf Desktop und Smartphone ab. Medienwechsel und Adressabfrage sind gegen nachgebildete `virsh`-Antworten geprüft, nicht mit einer laufenden VM. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
+Für **0.8.0** wurden Frontend-, Backend- und Browserprüfungen ausgeführt; dazu kommt ein QEMU-Test, der ein App-Update ohne Neustart, eine App, die nicht startet, und den Rückweg durchspielt. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
 
 Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
 
