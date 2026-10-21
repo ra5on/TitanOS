@@ -53,6 +53,15 @@ func firmware(vm VM) firmwareFiles {
 	return firmwareFiles{"/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd"}
 }
 
+// cdromTarget is the name of the CD drive of a VM. On SATA it must not
+// clash with the disks, which are on SATA too unless the VM has virtio.
+func cdromTarget(vm VM) string {
+	if vm.Template == "linux" {
+		return "sda"
+	}
+	return "sd" + string(rune('a'+len(vm.Disks)))
+}
+
 // domainXML describes a VM to libvirt.
 //
 // Every VM is a q35 machine with the chosen firmware and the CPU of the host. What
@@ -83,20 +92,14 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		))
 		letter++
 	}
+	// The CD drive is always there, empty without a medium: a medium can
+	// then be put in or taken out while the VM runs. Always on SATA, a
+	// drive every system and every firmware knows.
+	cdrom := el("disk", "type", "file", "device", "cdrom").with(el("driver", "name", "qemu", "type", "raw"))
 	if vm.ISO != "" {
-		// Always on SATA: a CD drive every system and every firmware knows.
-		// Its name must not clash with a SATA disk.
-		dev := "sda"
-		if !virtio {
-			dev = "sd" + string(letter)
-		}
-		devices = devices.with(el("disk", "type", "file", "device", "cdrom").with(
-			el("driver", "name", "qemu", "type", "raw"),
-			el("source", "file", vm.ISO),
-			el("target", "dev", dev, "bus", "sata"),
-			el("readonly"),
-		))
+		cdrom = cdrom.with(el("source", "file", vm.ISO))
 	}
+	devices = devices.with(cdrom.with(el("target", "dev", cdromTarget(vm), "bus", "sata"), el("readonly")))
 	for _, folder := range vm.Folders {
 		share := el("filesystem", "type", "mount", "accessmode", "passthrough").with(
 			el("driver", "type", "virtiofs"),
@@ -129,6 +132,9 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		// The serial port, for systems without a desktop; again a socket.
 		el("serial", "type", "unix").with(el("source", "mode", "bind", "path", serial), el("target", "port", "0")),
 		el("console", "type", "unix").with(el("source", "mode", "bind", "path", serial), el("target", "type", "serial", "port", "0")),
+		// For the guest agent, if the guest has one: it tells the addresses
+		// of the VM. A guest without it does not mind the channel.
+		el("channel", "type", "unix").with(el("target", "type", "virtio", "name", "org.qemu.guest_agent.0")),
 		el("rng", "model", "virtio").with(el("backend", "model", "random").text("/dev/urandom")),
 		el("memballoon", "model", "virtio"),
 	)

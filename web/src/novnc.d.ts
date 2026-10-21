@@ -10,6 +10,7 @@ declare module '@novnc/novnc' {
 		disconnect(): void;
 		focus(): void;
 		sendCtrlAltDel(): void;
+		sendKey(keysym: number, code: string | null, down?: boolean): void;
 		clipboardPasteFrom(text: string): void;
 		toDataURL(type?: string): string;
 	}
