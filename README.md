@@ -9,13 +9,13 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.7.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0)** · Veröffentlicht am 20. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.7.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1)** · Veröffentlicht am 21. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
-  <img src="docs/screenshots/v0.7.0/dateien.png" alt="TitanOS 0.7.0: Dateimanager mit persönlichen Favoriten, Werkzeugen und Auswahlhilfen" width="900">
+  <img src="docs/screenshots/v0.7.1/dateien.png" alt="TitanOS 0.7.1: Dateimanager mit kompakten Leisten, Spaltensortierung und Kontextmenü" width="900">
 </p>
 
-Die Screenshots zeigen die Weboberfläche von **0.7.0** mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
+Die Screenshots zeigen die Weboberfläche von **0.7.1** (Dateimanager) und **0.7.0** (Detailansichten) mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
 
 ## Was TitanOS ist
 
@@ -23,8 +23,9 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Weboberfläche in 0.7.0
+## Weboberfläche in 0.7.1
 
+- **Aufgeräumter Dateimanager (0.7.1):** zwei kompakte Leisten statt fünf, Pfadeingabe in den Brotkrumen, Sortieren über die Spaltenköpfe, schwebendes Kontextmenü (auch per Tastatur), Doppelklick für Vorschau und Editor, Symbole nach Dateityp und eine Aktionsleiste, die bei einer Auswahl am unteren Rand bleibt. Auf dem Smartphone ist die Ortsauswahl eingeklappt.
 - **Persönlicher Dateimanager:** benannte und sortierbare Favoriten, Ansichten und Sortierung je Ordner im Benutzerkonto, Ordnerbaum, zwei Ansichten, Suche und schnelle Darstellung großer Ordner.
 - **Sichere Dateiaktionen:** neue Text-/Markdown-/JSON-Dateien ohne Überschreiben, gezielte Auswahl nach Dateityp, Vorschau von Quelle, Ziel, Umfang und freiem Speicher vor Übertragungen. Ziehen zwischen Ansichten und einzelne Konfliktentscheidungen.
 - **Papierkorb und Rückgängig:** sichtbarer Papierkorb mit Originalpfaden, Datumsfiltern und Speicherbelegung; Wiederherstellungsvorschau und Rückgängig für unterstützte Aktionen innerhalb der Dienstlaufzeit.
@@ -33,7 +34,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
 - **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, VMs, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+Alle Änderungen: [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -73,7 +74,9 @@ Alle Änderungen: [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) 
 <tr><td align="center">Textvergleich</td><td align="center">Zwei Ordner</td></tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/v0.7.0/dateien-mobil.png" alt="TitanOS 0.7.0: Dateimanager auf einem schmalen Bildschirm" width="320"></p>
+<p align="center"><img src="docs/screenshots/v0.7.1/werkzeuge.png" alt="TitanOS 0.7.1: Menü Werkzeuge im Dateimanager" width="640"></p>
+
+<p align="center"><img src="docs/screenshots/v0.7.1/dateien-mobil.png" alt="TitanOS 0.7.1: Dateimanager auf einem schmalen Bildschirm mit Aktionsleiste" width="320"></p>
 
 ## Speicher und Hardware
 
@@ -123,9 +126,9 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Installation
 
-Die Dateien für **0.7.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0). Für einen neuen Stick:
+Die Dateien für **0.7.1** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1). Für einen neuen Stick:
 
-1. `titanos-0.7.0.zip`, `titanos-0.7.0.zip.minisig` und `titanos-0.7.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.7.1.zip`, `titanos-0.7.1.zip.minisig` und `titanos-0.7.1.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
@@ -144,7 +147,7 @@ Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import b
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
-Für **0.7.0** wurden Frontend-, Backend-, Paketierungs- und Browserprüfungen ausgeführt. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
+Für **0.7.1** wurden Frontend-, Backend- und Browserprüfungen ausgeführt; die Browserprüfung des Dateimanagers deckt die neue Bedienung auf Desktop und Smartphone ab. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
 
 Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
 
