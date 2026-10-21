@@ -272,6 +272,29 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 	if want != "" && m.Ready != nil && !m.Ready() {
 		return nil
 	}
+	daemon, _ := json.MarshalIndent(map[string]any{
+		"data-root":  want,
+		"log-driver": "json-file",
+		// Optional GPU plugins publish CDI descriptions in /run/cdi. Docker
+		// reads them at container start; enabling a plugin needs no restart.
+		"features": map[string]bool{"cdi": true},
+		// Logs live on the volume too; keep them from growing without end.
+		"log-opts": map[string]string{"max-size": "10m", "max-file": "3"},
+	}, "", "  ")
+	daemon = append(daemon, '\n')
+	// titand was restarted (an app update), the engine was not: it runs
+	// with exactly this configuration, and its containers keep running.
+	if applied == "" && want != "" {
+		if current, err := os.ReadFile(m.daemonConfig); err == nil && string(current) == string(daemon) {
+			if _, err := m.runner.Run(ctx, "", "systemctl", "is-active", "--quiet", "docker.service"); err == nil {
+				m.mu.Lock()
+				m.applied = want
+				m.mu.Unlock()
+				slog.Info("docker engine runs already", "data", want)
+				return nil
+			}
+		}
+	}
 	if want != "" && len(m.gpuLeases) > 0 {
 		return fmt.Errorf("%w: return VM GPUs before restarting Docker", ErrInvalid)
 	}
@@ -284,19 +307,10 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 		if err := os.MkdirAll(want, 0o710); err != nil {
 			return err
 		}
-		daemon, _ := json.MarshalIndent(map[string]any{
-			"data-root":  want,
-			"log-driver": "json-file",
-			// Optional GPU plugins publish CDI descriptions in /run/cdi. Docker
-			// reads them at container start; enabling a plugin needs no restart.
-			"features": map[string]bool{"cdi": true},
-			// Logs live on the volume too; keep them from growing without end.
-			"log-opts": map[string]string{"max-size": "10m", "max-file": "3"},
-		}, "", "  ")
 		if err := os.MkdirAll(filepath.Dir(m.daemonConfig), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(m.daemonConfig, append(daemon, '\n'), 0o644); err != nil {
+		if err := os.WriteFile(m.daemonConfig, daemon, 0o644); err != nil {
 			return err
 		}
 		if _, err := m.runner.Run(ctx, "", "systemctl", "start", "docker.service"); err != nil {

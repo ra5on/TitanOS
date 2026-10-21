@@ -1,6 +1,6 @@
-# Entwurf: App-Updates ohne Neustart
+# App-Updates ohne Neustart
 
-Stand: 21. Oktober 2026 · **Entwurf, vom Projektinhaber am 21. Oktober 2026 bestätigt. Noch nicht umgesetzt.**
+Stand: 21. Oktober 2026 · Entwurf vom Projektinhaber am 21. Oktober 2026 bestätigt, **umgesetzt für 0.8.0**. Was davon abweicht und wie es geprüft ist, steht unter „Stand der Umsetzung“ am Ende.
 
 ## Ziel
 
@@ -90,8 +90,10 @@ titanos/a/
 `state.json`:
 
 ```json
-{ "current": "0.8.2", "previous": "0.8.1", "trial": true, "tries": 1, "bootID": "…" }
+{ "current": "0.8.2", "previous": "0.8.1", "trial": true, "tries": 1, "change": "update" }
 ```
+
+`result` und `resultVersion` halten fest, was aus der letzten Änderung wurde (`installed`, `failed`, `rolled_back`), bis titand es einmal gemeldet hat.
 
 ## Start: titand im Abbild entscheidet
 
@@ -104,7 +106,7 @@ titanos/a/
    - SHA-256 der Datei.
    
    Schlägt etwas fehl: die vorige App nehmen, sonst die Basis. Das wird protokolliert und gemeldet.
-3. Die Datei nach `/run/titanos/app/titand` kopieren (tmpfs, 0700) und mit `exec` starten, mit `TITANOS_APP=<version>` in der Umgebung, damit sie sich nicht noch einmal selbst sucht.
+3. Die Datei nach `/var/lib/titanos/app/titand-<version>` kopieren (im RAM, auf dem Wurzeldateisystem: `/run` erlaubt keine Programme), die Kopie noch einmal prüfen und mit `exec` starten, mit `TITANOS_APP=<version>` in der Umgebung, damit sie sich nicht noch einmal selbst sucht. `/var/lib/titanos/app/running` nennt die gestartete Version.
 4. Läuft die App auf Probe, zählt die Basis vor dem `exec` `tries` hoch (ein Schreibzugriff auf den Stick, nur während der Probe). Ab drei Versuchen gilt die App als gescheitert. Dann wird `current` zu `previous`, und es wird zurückgewechselt.
 
 **Was das kostet:** ein Lesen vom Stick bei jedem Start von titand (Automount wie heute) und etwa 20 MB mehr RAM für die Kopie in `/run`. Die Prüfung gegen das Manifest schützt vor beschädigten Dateien. Schutz gegen jemanden mit Zugriff auf den Stick ist das nicht; der könnte das squashfs genauso tauschen.
@@ -117,8 +119,8 @@ Diesen Teil muss **eine volle Basis-Version** einführen, zum Beispiel 0.8.0. Er
 2. **Warten, bis titand frei ist** (siehe „Was ein Neustart von titand unterbricht“). Mit „von selbst installieren“ zur eingestellten Uhrzeit, sonst auf Knopfdruck. Laufende Aufträge werden angezeigt.
 3. **Laden** nach `titanos/<slot>/app/` in eine Teildatei, mit Fortsetzen wie bei den Slot-Dateien. Danach SHA-256 prüfen und umbenennen; Manifest und Signatur liegen daneben.
 4. **`state.json` schreiben:** `current` ist die neue Version, `previous` die alte, `trial` ist wahr, `tries` steht auf 0. Atomar über eine temporäre Datei und Umbenennen.
-5. **titand neu starten** (`systemctl restart titand`). Die Basis startet die neue App.
-6. **Probe:** Eine eigene Einheit `titanos-app-check.service` führt immer die Basis aus (`/usr/bin/titand -check-app`), wie heute `titanos-boot-check`. Sie wartet bis zu fünf Minuten, bis `/api/v1/health` „bereit“ meldet, mit denselben Kriterien wie nach einem System-Update: Konfiguration gelesen, Volumes versorgt, alles eingebunden, was vorher eingebunden war. Außerdem muss die gemeldete Version die neue sein.
+5. **titand neu starten**, zwei Sekunden später, damit die letzten Antworten noch hinausgehen: `systemd-run … systemctl restart titand.service titanos-app-check.service`. Der Aufruf läuft in einer eigenen Einheit, damit systemd ihn beim Beenden von titand nicht mit beendet. Die Basis startet die neue App.
+6. **Probe:** Eine eigene Einheit `titanos-app-check.service` führt immer die Basis aus (`/usr/bin/titand -check-app`), wie heute `titanos-boot-check`. Sie wartet bis zu fünf Minuten, bis `/api/v1/health` „bereit“ meldet, mit denselben Kriterien wie nach einem System-Update: Konfiguration gelesen, Volumes versorgt, alles eingebunden, was vorher eingebunden war. Außerdem muss `/var/lib/titanos/app/running` die neue Version nennen. (`/api/v1/health` gibt die Version bewusst nicht heraus, auch nicht an Anfragen vom NAS selbst: Ein lokaler Proxy wie Tailscale Serve würde sie sonst nach außen reichen.)
    - **Gelungen:** `trial` ist falsch, `tries` steht auf 0. Meldung „installiert“.
    - **Gescheitert:** zurück auf `previous`, titand neu starten, Meldung „fehlgeschlagen, zurückgewechselt“. Die gescheiterte Version wird nicht noch einmal von selbst angeboten.
 7. **„Auf vorherige Version zurück“** tauscht `current` und `previous` und startet titand neu, ebenfalls auf Probe. Gibt es keine vorige App, ist das Ziel die Basis.
@@ -127,7 +129,7 @@ Das ganze Update dauert für die Nutzer etwa 10 bis 30 Sekunden ohne Weboberflä
 
 ## Was ein Neustart von titand unterbricht
 
-Das muss vor der Umsetzung geprüft und, wo nötig, angepasst werden:
+Vor der Umsetzung geprüft; die Spalte „Vorschlag“ ist umgesetzt, siehe auch „Stand der Umsetzung“:
 
 | Betroffen | Heute | Vorschlag |
 |---|---|---|
@@ -164,11 +166,11 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
 
 - Anzeige: „TitanOS 0.8.2 · Basis 0.8.0 · Slot A“, dazu der Rückfall-Slot wie heute.
 - Angebot mit Art des Updates: „Update ohne Neustart (ca. 20 MB)“ oder „System-Update mit Neustart (ca. 700 MB)“.
-- Vor einem App-Update die Liste dessen, was es aufhält (Aufträge, Backups), mit „Installieren, sobald frei“.
+- Läuft etwas, das ein Neustart von titand abbrechen würde, lehnt TitanOS das App-Update mit einer Meldung ab (`update_working`). „Von selbst installieren“ wartet stattdessen bis zu sechs Stunden ab der eingestellten Uhrzeit.
 - Nach dem Neustart von titand verbindet sich die Seite selbst neu und zeigt das Ergebnis der Probe.
 - „Auf vorherige Version zurück“ getrennt für App und System.
 
-## Umsetzung in Schritten
+## Umsetzung in Schritten (Entwurf)
 
 1. **Basis vorbereiten (volles Release, zum Beispiel 0.8.0):**
    - `base-version` im Abbild,
@@ -191,3 +193,64 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
 3. **Von selbst installieren:** App-Updates laufen wie System-Updates zur eingestellten Uhrzeit und warten zusätzlich, bis keine Aufträge oder Backups mehr laufen.
 4. **Rückfall:** zuerst auf die vorige App, dann auf die Basis.
 5. **Debian-Sicherheitsupdates:** Ein wöchentlicher CI-Lauf vergleicht die Paketversionen der Basis. Gibt es Sicherheitsupdates, öffnet er einen PR für ein volles Release. Veröffentlicht wird erst nach Freigabe durch den Projektinhaber.
+
+## Stand der Umsetzung (0.8.0)
+
+**Backend**
+- Paket `app` (`backend/internal/app`): Ablage auf dem Stick, `state.json`, Prüfung (Signatur, Basis, SHA-256), Start (`Launch`), Installieren, Rückweg, Probe (`Confirm`) und das einmalige Melden des Ergebnisses.
+- `cmd/titand`: Übergabe an die App ganz am Anfang (`handOver`, nur ohne `-dev` und mit Basis-Version), `-check-app` für `titanos-app-check.service`.
+- Paket `update`: Manifest-Feld `app`, `Status.base`, `Status.kind` (`app` oder `system`), `Status.app`. App-Update installieren (`installApp`), `POST /api/v1/update/app-rollback`. Ein System-Update leert den `app`-Ordner des Ziel-Slots und bereitet die Plugins für die Basis des Releases vor.
+- Plugins richten sich nach der Basis-Version, nicht nach der Version von titand (Katalog, NVIDIA-Build-Umgebung, Treiber-Updates).
+- Was ein Neustart von titand nicht mehr anfasst:
+  - Anmeldungen bleiben in `/run/titanos/sessions.json`.
+  - Netzwerk: Unveränderte Dateien führen zu keinem `networkctl reload/reconfigure`.
+  - Docker: Läuft die Engine mit genau dieser `daemon.json`, wird sie übernommen statt neu gestartet. Die Container laufen weiter.
+  - NUT: Unveränderte Dateien und laufende Dienste bleiben, das Passwort von upsmon wird übernommen.
+  - VM-Autostart: Die Liste in `/run/titanos/vms-autostarted` verhindert, dass eine absichtlich ausgeschaltete VM nach einem App-Update wieder startet.
+  - Exklusiv reservierte Kerne werden beim Start abgeglichen.
+- Samba (`reload-or-restart`), NFS-Bind-Mounts und Plugins (`systemd-sysext refresh` mit unveränderter Menge) waren schon unkritisch.
+- Ein App-Update wartet auf Kopier- und Verschiebeaufträge, Backups, Plattenprüfungen, das Kopieren von VM-Platten, Snapshot-Vorgänge und NVIDIA-Treiber-Builds (`update.Working`).
+- `titand.service` erlaubt zehn Starts in zwei Minuten. So kommt der Rückfall nach drei Fehlstarts sicher vor der Startgrenze von systemd.
+
+**Abbild:** `/usr/share/titanos/base-version` (Postinst) und `titanos-app-check.service` (Preset).
+
+**Release und CI:**
+- `scripts/release-kind.py` entscheidet die Art des Releases.
+- `scripts/repack-release.py` packt das Abbild der Basis mit dem neuen titand neu.
+- `make-release.sh` legt `titanos-<version>-titand` und `app` ins Manifest. `verify-release.py` prüft beides; Plugins und das NVIDIA-SDK müssen zur Basis passen.
+- `debian-security.yml` (mit `scripts/debian-security.py`) läuft wöchentlich.
+- Siehe [RELEASING.md](RELEASING.md).
+
+**Geprüft**
+- Go-Tests:
+  - Paket `app`: Probe, drei Fehlstarts, beschädigte, fremd signierte und für ein anderes Abbild gebaute Apps, Rückweg zur vorigen App und zur Basis.
+  - Paket `update`: App-Update lädt nur titand, wartet auf Arbeit, meldet installiert/fehlgeschlagen/zurück. Ein Release für ein anderes Abbild ist ein System-Update, das den `app`-Ordner leert und die Plugins der Basis vorbereitet.
+  - `cmd/titand`: Probe gelungen und gescheitert.
+  - Anmeldungen über einen Neustart.
+  - Neustart von titand ohne Eingriff in Netzwerk, Docker und NUT.
+  - VM-Autostart einmal je Start des NAS.
+- Release-Tests:
+  - App-Release auf einem älteren Abbild,
+  - Neu-Packen gegen einen nachgebauten Release-Server,
+  - Ablehnen einer fremd signierten Basis,
+  - titand muss der im Abbild sein,
+  - Basis-Version im Abbild.
+- Tests für `release-kind.py` und `debian-security.py`.
+- Browserprüfung `scripts/test-ui-updates.mjs`: Angebot ohne Neustart, Neustart der Weboberfläche, Probe, Rückweg, System-Update auf dem Smartphone.
+- QEMU (`scripts/smoke-app-update.py`, in jedem Probelauf von `release.yml`):
+  - App-Update ohne Neustart des NAS, mit bestehender Anmeldung; bestätigt, gemeldet und nach einem Neustart des NAS noch da.
+  - Eine App, die nicht startet, wird nach drei Starts aufgegeben und gemeldet.
+  - Rückweg zum titand des Systemabbilds.
+- Lokal am 21. Oktober 2026 mit KVM bestanden, auf einer Testbasis „0.8.0“: das Abbild von 0.7.2 mit dem titand, den Einheiten und der Basis-Version dieses Stands und einem Wegwerf-Schlüssel, ohne Root umgepackt. Dabei gemessen:
+  - Die App übernimmt rund drei Sekunden nach dem Download und ist drei Sekunden später bestätigt.
+  - Eine App, die nicht startet, ist nach drei Fehlstarts in rund sieben Sekunden aufgegeben.
+- Dabei gefunden und behoben:
+  - `/run` erlaubt keine Programme; deshalb liegt die Kopie der App unter `/var/lib/titanos/app`.
+  - systemd beendete den Aufruf `systemctl restart` zusammen mit titand; jetzt läuft er über `systemd-run`.
+  - Bei schnellem Download war titand weg, bevor die Antwort auf „Installieren“ draußen war; jetzt startet titand zwei Sekunden später neu.
+
+**Grenzen**
+- Der QEMU-Test läuft nur in Probeläufen. Ein echtes App-Release-Tag startet sein ZIP in QEMU (mit Plugins), ein App-Update spielt es aber nicht durch: Dafür bräuchte die CI einen Testschlüssel im veröffentlichten Abbild.
+- Das erste echte App-Release ist erst nach 0.8.0 möglich.
+- Nicht auf echter Hardware geprüft.
+

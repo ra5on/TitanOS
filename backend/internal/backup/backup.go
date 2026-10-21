@@ -1068,3 +1068,15 @@ func (m *Manager) checkOverdue(job Job, state State) {
 }
 
 func plainCopy(kind string) bool { return kind == "usb-copy" || kind == "smb-copy" }
+
+// Busy reports whether a backup or a restore runs right now.
+func (m *Manager) Busy() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, state := range m.states {
+		if state.Running {
+			return true
+		}
+	}
+	return false
+}

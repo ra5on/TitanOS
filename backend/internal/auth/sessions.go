@@ -4,6 +4,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -32,13 +39,23 @@ type Session struct {
 // consoles and other sensitive actions.
 const ConfirmFor = 15 * time.Minute
 
-// Sessions keeps the logins in memory. They end with a restart of titand;
-// nothing about them is written to the stick.
+// Sessions keeps the logins in memory. Nothing about them is written to
+// the stick. With Persist they are also kept in a file in RAM (/run), so
+// that they outlive a restart of titand, as after an app update, but not
+// a restart of the NAS.
 type Sessions struct {
 	mu       sync.Mutex
 	sessions map[[sha256.Size]byte]*Session
 	now      func() time.Time
+	// file is where the sessions are kept between starts of titand; empty
+	// keeps them in memory only. saved is when it was last written.
+	file  string
+	saved time.Time
 }
+
+// saveEvery is how often a session that is only used, not changed, is
+// written: what the file misses is when it was last seen.
+const saveEvery = time.Minute
 
 // NewSessions returns an empty session store.
 func NewSessions() *Sessions {
@@ -61,6 +78,7 @@ func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
 	s.sessions[sha256.Sum256([]byte(token))] = &Session{
 		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent,
 	}
+	s.save()
 	return token, nil
 }
 
@@ -80,9 +98,13 @@ func (s *Sessions) Get(token string) (Session, bool) {
 	now := s.now()
 	if expired(session, now) {
 		delete(s.sessions, key)
+		s.save()
 		return Session{}, false
 	}
 	session.LastSeen = now
+	if now.Sub(s.saved) >= saveEvery {
+		s.save()
+	}
 	return *session, true
 }
 
@@ -91,6 +113,7 @@ func (s *Sessions) Delete(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.sessions, sha256.Sum256([]byte(token)))
+	s.save()
 }
 
 func expired(session *Session, now time.Time) bool {
@@ -117,6 +140,7 @@ func (s *Sessions) DeleteUser(user, exceptToken string) {
 			delete(s.sessions, key)
 		}
 	}
+	s.save()
 }
 
 // Confirm notes that the password was just entered again in this session.
@@ -125,6 +149,7 @@ func (s *Sessions) Confirm(token string) {
 	defer s.mu.Unlock()
 	if session, ok := s.sessions[sha256.Sum256([]byte(token))]; ok {
 		session.Confirmed = s.now()
+		s.save()
 	}
 }
 
@@ -179,8 +204,76 @@ func (s *Sessions) DeleteByID(user, id string) bool {
 	for key, session := range s.sessions {
 		if session.User == user && sessionID(key) == id {
 			delete(s.sessions, key)
+			s.save()
 			return true
 		}
 	}
 	return false
+}
+
+// Persist keeps the sessions in a file from now on and takes over those
+// that are in it already. The file holds only hashes of the tokens, and
+// belongs in RAM: a restart of the NAS ends every session as before.
+func (s *Sessions) Persist(path string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.file = path
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stored map[string]*Session
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	now := s.now()
+	for hash, session := range stored {
+		raw, err := hex.DecodeString(hash)
+		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || expired(session, now) {
+			continue
+		}
+		s.sessions[[sha256.Size]byte(raw)] = session
+	}
+	return nil
+}
+
+// Flush writes the sessions now, for a clean stop of titand.
+func (s *Sessions) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.save()
+}
+
+// save writes the sessions to the file, if there is one. The lock is held.
+func (s *Sessions) save() {
+	if s.file == "" {
+		return
+	}
+	s.saved = s.now()
+	stored := make(map[string]*Session, len(s.sessions))
+	for key, session := range s.sessions {
+		stored[hex.EncodeToString(key[:])] = session
+	}
+	data, err := json.Marshal(stored)
+	if err == nil {
+		err = writePrivate(s.file, data)
+	}
+	if err != nil {
+		slog.Warn("sessions not kept for the next start of titand", "err", err)
+	}
+}
+
+// writePrivate replaces a file only root may read.
+func writePrivate(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

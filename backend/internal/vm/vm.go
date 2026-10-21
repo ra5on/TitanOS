@@ -239,6 +239,10 @@ type Manager struct {
 	starting map[string]bool
 	// addresses are the last answers about the addresses of running VMs.
 	addresses map[string]cachedAddresses
+	// autostartFile keeps autostarted in RAM across restarts of titand
+	// (an app update): a VM someone shut down stays down until the NAS
+	// itself starts again.
+	autostartFile string
 }
 
 // NewManager returns a manager working on the real system. gid is the
@@ -247,7 +251,7 @@ func NewManager(store *config.Store, gid int) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
 		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
-		snapshotJobs: map[string]*Job{},
+		snapshotJobs: map[string]*Job{}, autostartFile: "/run/titanos/vms-autostarted",
 		FreeDisks:    func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
 	}
 }
@@ -274,7 +278,27 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.vms, m.loaded = vms, true
+	if data, err := os.ReadFile(m.autostartFile); err == nil {
+		for _, name := range strings.Fields(string(data)) {
+			m.autostarted[name] = true
+		}
+	}
 	return nil
+}
+
+// noteAutostarted writes down which VMs were autostarted. The lock is held.
+func (m *Manager) noteAutostarted() {
+	names := make([]string, 0, len(m.autostarted))
+	for name := range m.autostarted {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if err := os.MkdirAll(filepath.Dir(m.autostartFile), 0o700); err == nil {
+		err = os.WriteFile(m.autostartFile, []byte(strings.Join(names, "\n")+"\n"), 0o600)
+		if err != nil {
+			slog.Warn("autostarted VMs not noted", "err", err)
+		}
+	}
 }
 
 // HasKVM reports whether the machine can run VMs at a useful speed.
@@ -346,6 +370,12 @@ func (m *Manager) pid(name string) int {
 func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 	ticker := time.NewTicker(sampleInterval)
 	defer ticker.Stop()
+	// After a restart of titand (an app update) exclusive VMs may still
+	// run: what is reserved for them is taken up again, so that it is
+	// given back when they stop.
+	if !m.Disabled {
+		m.reserve(ctx)
+	}
 	for {
 		m.mu.Lock()
 		loaded := m.loaded
@@ -382,6 +412,9 @@ func (m *Manager) autostart(ctx context.Context, mounted []string) {
 			m.autostarted[name] = true
 			due = append(due, name)
 		}
+	}
+	if len(due) > 0 {
+		m.noteAutostarted()
 	}
 	m.mu.Unlock()
 	sort.Strings(due)
@@ -1192,4 +1225,22 @@ func (m *Manager) RunningNames() map[string]bool {
 		}
 	}
 	return result
+}
+
+// Busy reports whether disks of a VM are being copied or a snapshot is
+// being taken or restored. titand does that work itself.
+func (m *Manager) Busy() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if job.State == "running" {
+			return true
+		}
+	}
+	for _, job := range m.snapshotJobs {
+		if job.State == "running" {
+			return true
+		}
+	}
+	return false
 }

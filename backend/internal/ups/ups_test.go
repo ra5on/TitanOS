@@ -237,3 +237,29 @@ func TestDevelopmentMode(t *testing.T) {
 		t.Errorf("calls: %v", system.calls)
 	}
 }
+
+func TestRestartOfTitandKeepsWatchingTheUPS(t *testing.T) {
+	m, system, _ := newManager(t)
+	if err := m.SetSettings(Settings{Mode: "local", ShutdownAfter: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	users := read(t, m, "upsd.users")
+
+	// titand starts again, as after an app update; NUT runs.
+	again := NewManager(m.store)
+	again.runner, again.etcDir = system, m.etcDir
+	again.Load()
+	system.calls = nil
+	if err := again.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if system.ran("systemctl stop") || system.ran("systemctl start") {
+		t.Errorf("NUT was restarted with titand: %v", system.calls)
+	}
+	if read(t, m, "upsd.users") != users {
+		t.Error("the local password changed")
+	}
+}

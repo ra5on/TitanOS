@@ -65,10 +65,18 @@ def verify(release, keys, without_plugins=False):
         asset = f"titanos-{version}-{file['name']}"
         if file["asset"] != asset or checksums[asset] != file["sha256"] or (release / asset).stat().st_size != file["size"]:
             raise ValueError(f"manifest mismatch: {asset}")
+    # titand alone, for an app update on the image it was made on.
+    app = manifest.get("app")
+    if not isinstance(app, dict) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?", str(app.get("base", ""))):
+        raise ValueError("app of the release missing or without base version")
+    base = app["base"]
+    asset = f"titanos-{version}-titand"
+    if app.get("asset") != asset or checksums.get(asset) != app.get("sha256") or (release / asset).stat().st_size != app.get("size"):
+        raise ValueError("app mismatch: " + asset)
     for item in plugins:
         name = item["name"]
         plugin = json.loads((release / item["asset"]).read_text())
-        correct_version = plugin["version"].endswith("-titanos-" + version) if name == "nvidia" else plugin["version"] == version
+        correct_version = plugin["version"].endswith("-titanos-" + base) if name == "nvidia" else plugin["version"] == base
         if plugin["name"] != name or (plugin.get("kernel") != manifest["kernel"] if name == "nvidia" else plugin.get("kernel", "") not in ("", manifest["kernel"])) or not correct_version:
             raise ValueError("plugin kernel/version mismatch: " + name)
         if checksums[name + ".raw"] != plugin["sha256"] or (release / (name + ".raw")).stat().st_size != plugin["size"]:
@@ -79,7 +87,7 @@ def verify(release, keys, without_plugins=False):
         if not required <= checksums.keys():
             raise ValueError("plugin source/license archive missing: " + name)
     if sdk := manifest.get("nvidiaBuildSDK"):
-        if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != version or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
+        if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != base or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
             raise ValueError("SDK target mismatch")
         if checksums.get(sdk["asset"]) != sdk["sha256"] or (release / sdk["asset"]).stat().st_size != sdk["size"] or "nvidia-build-sdk-sources.txt" not in checksums:
             raise ValueError("SDK integrity/sources mismatch")
