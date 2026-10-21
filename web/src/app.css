@@ -405,3 +405,6 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 @media (max-width: 760px) {
  main.readable :is(.toolbar button, .toolbar .tool, summary.btn) { min-height: 44px; height: auto; }
 }
+
+/* Text for screen readers only. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

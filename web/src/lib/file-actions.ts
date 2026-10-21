@@ -51,3 +51,18 @@ export function selectionType(name:string):string {
  if(/^(pdf|txt|md|json|docx?|xlsx?|odt|csv)$/.test(ext))return 'documents';
  return 'other';
 }
+
+export type FileKind = 'folder' | 'image' | 'video' | 'audio' | 'archive' | 'disc' | 'text' | 'file';
+/** Picks the symbol of a list entry from its name; the contents are never read for this. */
+export function fileKind(name: string, dir: boolean): FileKind {
+ if (dir) return 'folder';
+ const ext = name.includes('.') ? name.split('.').at(-1)!.toLowerCase() : '';
+ if (/^(zip|tar|gz|tgz|bz2|xz|zst|7z|rar)$/.test(ext)) return 'archive';
+ if (/^(iso|img|qcow2|vmdk|vhdx|vdi|raw)$/.test(ext)) return 'disc';
+ const type = selectionType(name);
+ if (type === 'images') return 'image';
+ if (type === 'video') return 'video';
+ if (type === 'audio') return 'audio';
+ if (type === 'documents' || /^(log|conf|ini|ya?ml|toml|xml|html?|css|js|ts|sh|py|go|env)$/.test(ext)) return 'text';
+ return 'file';
+}
