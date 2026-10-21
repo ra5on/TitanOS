@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFavorites,rangeSelection,previewKind,filePreferences} from '../src/lib/file-actions.ts';
+import {readFavorites,rangeSelection,previewKind,filePreferences,fileKind} from '../src/lib/file-actions.ts';
 test('selection ranges respect displayed ordering in both directions',()=>{
  assert.deepEqual(rangeSelection(['B','A','C'],'C','B'),['B','A','C']);
  assert.deepEqual(rangeSelection(['A','B'],'gone','B'),['B']);
@@ -31,4 +31,17 @@ test('account preferences reject unknown settings without changing valid names',
 test('favorite labels and folder views survive account preference validation',()=>{
  const result=filePreferences({favorites:[{root:'share/Backup',path:'Fotos',label:'Urlaub'}],folders:[{root:'share/Backup',path:'Fotos',view:'large',sort:'modified',descending:true},{root:'share/Backup',path:'../bad',view:'list',sort:'name',descending:false}]});
  assert.equal(result.favorites[0].label,'Urlaub');assert.equal(result.folders.length,1);assert.equal(result.folders[0].view,'large');
+});
+
+test('file kinds come from the name only',()=>{
+ assert.equal(fileKind('Fotos', true), 'folder');
+ assert.equal(fileKind('Urlaub.JPG', false), 'image');
+ assert.equal(fileKind('film.mkv', false), 'video');
+ assert.equal(fileKind('lied.flac', false), 'audio');
+ assert.equal(fileKind('backup.tar.zst', false), 'archive');
+ assert.equal(fileKind('debian.iso', false), 'disc');
+ assert.equal(fileKind('notiz.md', false), 'text');
+ assert.equal(fileKind('compose.yaml', false), 'text');
+ assert.equal(fileKind('README', false), 'file');
+ assert.equal(fileKind('programm.exe', false), 'file');
 });

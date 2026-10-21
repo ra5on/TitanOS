@@ -73,7 +73,7 @@
 						<span class="chip">{t(`files.jobState.${job.state}` as 'files.jobState.done')}</span>
 					{/if}
 				</div>
-				{#if job.state==='running' && !job.operation}<div class="line">
+				{#if job.state==='running' && !job.operation}<div class="line controls">
  <button class="btn small" disabled={!!controlling||!!job.paused&&!canRetry(job)} onclick={()=>control(job,{paused:!job.paused})}>{t(job.paused?'files.transferResume':'files.transferPause')}</button>
  {#if job.waiting && !job.paused}<span class="chip">{t('files.transferWaiting')}</span>{/if}
  {#if job.paused}<span class="chip">{t('files.transferPaused')}</span>{/if}
@@ -95,7 +95,10 @@
 
 <style>
  .notice { display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px;margin-top:var(--gap);background:var(--chip);border:1px solid var(--border);border-radius:var(--radius-ctl); } .notice span{overflow-wrap:anywhere;}
-	.jobs { margin-top: var(--gap); }
+	.jobs { margin-top: var(--gap); padding: var(--tile-pad); }
+	.line.controls { justify-content: flex-start; margin-top: 0.4rem; }
+	.controls label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+	.controls input { width: 6rem; }
 	.job { padding: 0.5rem 0; border-top: 1px solid var(--border); }
 	.line { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
 	progress { width: 100%; height: 0.5rem; margin: 0.4rem 0 0.2rem; accent-color: var(--accent); }

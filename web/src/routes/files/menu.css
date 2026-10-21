@@ -1,0 +1,33 @@
+/* Items of the dropdowns and context menus of the file manager. */
+.dropdown-panel [role^='menuitem'] {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 2.25rem;
+	padding: 0 10px;
+	background: transparent;
+	border: 0;
+	border-radius: var(--radius-small);
+	color: var(--text);
+	font: inherit;
+	font-size: 0.875rem;
+	text-align: left;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.dropdown-panel [role^='menuitem'] > span:first-of-type { flex: 1; }
+.dropdown-panel [role^='menuitem'] kbd { color: var(--muted); font-family: inherit; font-size: 0.75rem; }
+.dropdown-panel [role^='menuitem']:disabled { opacity: 0.5; cursor: default; }
+.dropdown-panel [role^='menuitem']:hover:not(:disabled),
+.dropdown-panel [role^='menuitem']:focus-visible { background: var(--chip); outline: none; }
+.dropdown-panel [role^='menuitem'].danger { color: var(--error-text); }
+.dropdown-panel [role^='menuitem'][aria-checked='true']::after { content: '✓'; margin-left: auto; color: var(--accent); }
+.dropdown-panel hr { height: 1px; margin: 6px 4px; border: 0; background: var(--border); }
+.dropdown-panel .menu-title { padding: 6px 10px 8px; color: var(--muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropdown-panel.panel label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
+.dropdown-panel.panel label.stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.dropdown-panel.panel .btn { justify-content: flex-start; }
+@media (max-width: 760px) {
+	.dropdown-panel [role^='menuitem'] { min-height: 2.75rem; }
+}
