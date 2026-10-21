@@ -257,6 +257,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 **Agenten und API-Schlüssel** (Einstellungen › Zugang, Mein Konto; Entwurf `docs/AGENT-API.md`, Phase 1 umgesetzt)
 - Ein eigener KI-Agent (z. B. mit Ollama) liest den Zustand des NAS über MCP: `POST /api/v1/mcp`, zustandslos, JSON-RPC, nur Werkzeuge (Paket `mcp`, nur Standardbibliothek). Ab Werk aus (`/config/system/api.json`).
 - Schlüssel `titanos_ak_<id>_<geheimnis>` als `Authorization: Bearer`, nur für Besitzer und Administratoren, nur als SHA-256 in `/config/users/<konto>/api-keys.json`; Bereiche `status`, `storage`, `docker`, `vms`, `backups`, `logs`, Ablauf, erlaubte Netze. Rechte bei jeder Anfrage = Bereiche ∩ Rolle. Ein Schlüssel gilt **nur** am MCP-Endpunkt; alle anderen Routen lesen weiter nur den Cookie.
+- Beispiel-Agent in `examples/agent/` (Python, nur Standardbibliothek, Chat im Browser, Ollama + MCP, Zertifikat per Fingerabdruck), Image `ghcr.io/ra5on/titanos-agent` aus `.github/workflows/agent.yml`, App-Vorlage in `docs/apps-repo/titanos-agent/`.
 - Phase 1 liest nur. Protokolle laufen durch `diagnose.Redactor`. Aktionen (Phase 2) nur nach Bestätigung eines angemeldeten Menschen in der Weboberfläche, nie im Agenten; Löschen, Konten, Netzwerk, Updates, Plugins, Konsolen und Geheimnisse nie über einen Schlüssel.
 
 **Werkzeuge** (Reiter „Werkzeuge“, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
