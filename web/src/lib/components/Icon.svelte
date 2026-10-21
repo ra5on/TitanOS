@@ -47,6 +47,12 @@
 		select: 'M4 4h16v16H4ZM8 12l3 3 5-6',
 		paste: 'M9 3h6v3H9ZM7 4.5H5V21h14V4.5h-2',
 		refresh: 'M20 11a8 8 0 1 0-2.3 6.3M20 4v7h-7',
+		sidebar: 'M4 5h16v14H4ZM9 5v14',
+		maximize: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+		camera: 'M4 8h3l2-3h6l2 3h3v11H4ZM12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+		terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
+		keyboard: 'M3 7h18v10H3ZM7 10h.01M11 10h.01M15 10h.01M8 14h8',
+		monitor: 'M3 4h18v12H3ZM8 20h8M12 16v4',
 		eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'
 	} as const;
 

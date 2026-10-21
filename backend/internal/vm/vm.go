@@ -237,6 +237,8 @@ type Manager struct {
 	// starting are the VMs libvirt is bringing up right now. They do not
 	// count as stopped although their process is not there yet.
 	starting map[string]bool
+	// addresses are the last answers about the addresses of running VMs.
+	addresses map[string]cachedAddresses
 }
 
 // NewManager returns a manager working on the real system. gid is the

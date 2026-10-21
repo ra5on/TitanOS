@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TitanOS VM-Seite</title>
+<!-- Statische Skizze, ohne Entwurfslaufzeit direkt im Browser lesbar.
+     Farben: Theme Graphit aus Appearance.dc.html. Alle Daten sind Beispieldaten. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E1114;--surface:#161A1F;--header:#12161A;--border:#232A31;--text:#E6E9ED;--muted:#9AA3AD;--track:#232A31;--chip:#1E252C;--accent:#6CB6FF;--on-accent:#0B1622;--screen:#050607;--ok:#4CC38A;--warn:#F0B54A;--warn-bg:#2A2312;--radius-tile:14px;--radius-ctl:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 'IBM Plex Sans',sans-serif}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
+.muted{color:var(--muted)}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-tile)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;background:var(--chip);border:1px solid var(--border);border-radius:var(--radius-ctl);color:var(--text);font:inherit}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.btn.icon{width:38px;padding:0;justify-content:center}
+.chip{display:inline-flex;padding:2px 8px;background:var(--chip);border:1px solid var(--border);border-radius:6px;font-size:12px}
+.chip.ok{color:var(--ok);border-color:#1F4D37;background:#12261C}
+.chip.warn{color:var(--warn);border-color:#5A4718;background:var(--warn-bg)}
+.page{display:flex;gap:20px;align-items:flex-start;padding:24px;max-width:1440px;margin:0 auto}
+aside{flex:0 0 280px;overflow:hidden}
+.aside-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.tile-title{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.search{margin:12px 12px 8px;height:36px;width:calc(100% - 24px);padding:0 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-ctl);color:var(--muted);font:inherit}
+.filters{display:flex;gap:4px;padding:0 12px 10px}
+.filter{padding:4px 10px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+.filter.on{border-color:var(--accent);background:var(--chip);color:var(--text)}
+.vm{display:flex;align-items:center;padding:10px 8px 10px 11px;border-left:3px solid transparent}
+.vm.on{border-left-color:var(--accent);background:var(--chip)}
+.vm .info{flex:1;display:flex;flex-direction:column;gap:3px}
+.vm .name{font-weight:600;font-size:15px}
+.vm .state{font-size:12px;display:flex;gap:6px;align-items:center}
+.dot{width:7px;height:7px;border-radius:50%;background:#6B7580}.dot.ok{background:var(--ok)}
+.act{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+main{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:22px;font-weight:600}
+.notice{display:flex;gap:12px;align-items:center;padding:10px 14px;background:var(--warn-bg);border:1px solid #5A4718;border-radius:var(--radius-ctl);color:var(--warn)}
+.notice u{margin-left:auto}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--border)}
+.tabs span{padding:8px 2px;color:var(--muted);border-bottom:2px solid transparent;font-size:15px}
+.tabs .on{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}dt{color:var(--muted)}dd{margin:0}
+.row{display:flex;align-items:center;gap:10px}.row .grow{flex:1}
+.bar{flex:1;height:6px;background:var(--track);border-radius:3px}.bar span{display:block;height:6px;width:62%;background:var(--accent);border-radius:3px}
+.small{font-size:12px}
+.section-label{margin:18px 0 0;font-size:12px;color:var(--muted)}
+.toolbar{display:flex;align-items:center;gap:4px}
+.screen{height:220px;background:var(--screen);border:1px solid var(--border);border-radius:var(--radius-tile);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+@media (max-width:760px){.page{flex-direction:column;padding:16px}aside{flex:none;width:100%}}
+</style>
+</head>
+<body>
+<div class="page">
+	<aside class="tile">
+		<div class="aside-head"><h2 class="tile-title">Virtuelle Maschinen</h2><span class="btn icon">+</span></div>
+		<input class="search" placeholder="VM suchen">
+		<div class="filters"><span class="filter on">Alle 4</span><span class="filter">Laufen 2</span><span class="filter">Aus 2</span></div>
+		<div class="vm on"><div class="info"><span class="name">Windows 11</span><span class="state"><span class="dot ok"></span>läuft <span class="muted">· 2 Std. · ⏻</span></span><span class="mono muted small">4 vCPU · 8 GB · 18 %</span></div><span class="act">■</span><span class="act">⋯</span></div>
+		<div class="vm"><div class="info"><span class="name">Home Assistant</span><span class="state"><span class="dot ok"></span>läuft <span class="muted">· 6 Tage · ⏻</span></span><span class="mono muted small">2 vCPU · 4 GB · 6 %</span></div><span class="act">■</span><span class="act">⋯</span></div>
+		<div class="vm"><div class="info"><span class="name">Debian Test</span><span class="state"><span class="dot"></span>aus</span><span class="mono muted small">2 vCPU · 2 GB</span></div><span class="act">▷</span><span class="act">⋯</span></div>
+		<div class="vm"><div class="info"><span class="name">pfSense</span><span class="state"><span class="dot"></span>aus</span><span class="mono muted small">1 vCPU · 1 GB</span></div><span class="act">▷</span><span class="act">⋯</span></div>
+	</aside>
+
+	<main>
+		<div class="head">
+			<div><div class="row"><h1>Windows 11</h1><span class="chip ok">läuft</span><span class="chip">Autostart</span></div><span class="muted">Spiele und Office</span></div>
+			<div class="row"><span class="btn primary">Herunterfahren</span><span class="btn icon">✎</span><span class="btn icon">⋯</span></div>
+		</div>
+		<div class="notice">Wenig Platz auf tank. Wachsende VM-Abbilder können das Volume füllen. <u>+1 weitere</u></div>
+		<div class="tabs"><span class="on">Übersicht</span><span>Bildschirm</span><span>Snapshots</span></div>
+
+		<div class="tiles">
+			<section class="tile card"><h2 class="tile-title">Auslastung</h2>
+				<div class="row"><span style="width:40px">CPU</span><svg class="grow" height="24" viewBox="0 0 100 24" preserveAspectRatio="none"><polyline fill="none" stroke="#6CB6FF" stroke-width="1.5" vector-effect="non-scaling-stroke" points="0,19 10,17 20,18 30,12 40,14 50,9 60,15 70,13 80,17 90,10 100,14"/></svg><span class="mono">18 %</span></div>
+				<div class="row"><span style="width:40px">RAM</span><div class="bar"><span></span></div><span class="mono">5 GB / 8 GB</span></div>
+				<span class="muted small">läuft seit 2 Std.</span></section>
+			<section class="tile card"><h2 class="tile-title">Hardware</h2>
+				<dl><dt>Vorlage</dt><dd>Windows</dd><dt>Prozessor</dt><dd class="mono">4 vCPU · fest auf CPU 2, 3, 4, 5</dd><dt>Arbeitsspeicher</dt><dd class="mono">8 GB</dd><dt>Firmware</dt><dd>UEFI · Secure Boot · TPM 2.0</dd><dt>Autostart</dt><dd>Ja</dd></dl></section>
+			<section class="tile card"><h2 class="tile-title">Datenträger</h2>
+				<div class="row"><span>⛁</span><span class="mono grow">vdisk1.qcow2</span><span class="mono muted">64 GB</span><span class="chip warn">tank · 93 %</span></div>
+				<div class="row"><span>◎</span><span class="mono grow">virtio-win.iso</span><span class="btn" style="height:32px">Wechseln …</span><span class="btn" style="height:32px">Auswerfen</span></div>
+				<span class="muted small">Wechselt sofort, wie eine CD.</span></section>
+			<section class="tile card"><h2 class="tile-title">Netzwerk</h2>
+				<dl><dt>Verbindung</dt><dd>Eigene Adresse im Heimnetz (br0)</dd><dt>MAC</dt><dd class="mono">52:54:00:12:34:56</dd><dt>Adresse</dt><dd><span class="mono">192.168.1.42 ⧉</span> <span class="muted small">laut Gastagent</span></dd></dl></section>
+			<section class="tile card"><h2 class="tile-title">Geräte und Ordner</h2>
+				<div class="row"><span>▭</span><span class="grow">Grafikkarte · NVIDIA</span><span class="mono muted">01:00.0, 01:00.1</span></div>
+				<span class="muted small">Mit durchgereichter Grafikkarte erscheint das Bild am Monitor der Karte.</span></section>
+			<section class="tile card"><h2 class="tile-title">Snapshots</h2>
+				<dl><dt>Vorhanden</dt><dd>3</dd><dt>Neuester</dt><dd>21.10.2026, 03:00</dd><dt>Zeitplan</dt><dd>täglich um 03:00 Uhr</dd></dl>
+				<div><span class="btn" style="height:32px">Snapshots verwalten</span></div></section>
+		</div>
+
+		<p class="section-label">Reiter „Bildschirm“</p>
+		<div class="toolbar"><span class="btn icon">▯</span><span class="btn">⌨ Senden ▾</span><span class="btn">▭ Skalieren ▾</span><span style="flex:1"></span><span class="mono muted small">Gast 1920 × 1080 · angezeigt 1280 × 720</span><span class="btn icon">◉</span><span class="btn icon">&gt;_</span><span class="btn icon">↗</span><span class="btn icon">⛶</span></div>
+		<div class="screen">VNC-Bild (in jedem Theme dunkel)</div>
+	</main>
+</div>
+</body>
+</html>
