@@ -1,6 +1,7 @@
 // Browser checks of the VM page against isolated API fixtures. No VMs are started.
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-vms.mjs
 // UI_URL picks the dev server (default http://127.0.0.1:5179), UI_OUTPUT the screenshot folder.
+// README_SCREENSHOTS=docs/screenshots/v0.7.2 also captures the README pictures there.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -12,8 +13,8 @@ const errors = [];
 const time = '2026-10-21T10:00:00Z';
 const system = { hostname: 'titan-test', version: '0.7.1', kernel: 'test', uptimeSeconds: 1000, cpu: { model: 'Test CPU', threads: 8, usagePercent: 12 }, memory: { totalBytes: 32e9, usedBytes: 12e9, freeBytes: 20e9, availableBytes: 20e9 }, temperatures: [], accelerators: [], image: { slot: 'a', sizeBytes: 1e9, overlayUsedBytes: 0, overlayTotalBytes: 512e6 }, stick: { present: true, label: 'TITANOS' }, network: null, networks: [], networkPendingSeconds: 0, notificationsLatest: 0 };
 const volumes = [
-	{ name: 'tank', level: 'raid1', filesystem: 'ext4', mountPoint: '/mnt/tank', mounted: true, state: 'clean', sizeBytes: 4e12, usedBytes: 3.7e12, raidDisks: 2, members: [], sync: null, mismatches: 0 },
-	{ name: 'fast', level: 'raid1', filesystem: 'xfs', mountPoint: '/mnt/fast', mounted: true, state: 'clean', sizeBytes: 1e12, usedBytes: 2e11, raidDisks: 2, members: [], sync: null, mismatches: 0 }
+	{ name: 'tank', level: 'raid1', filesystem: 'ext4', mountPoint: '/mnt/tank', mounted: true, state: 'ok', sizeBytes: 4e12, usedBytes: 3.7e12, raidDisks: 2, members: [], sync: null, mismatches: 0 },
+	{ name: 'fast', level: 'raid1', filesystem: 'xfs', mountPoint: '/mnt/fast', mounted: true, state: 'ok', sizeBytes: 1e12, usedBytes: 2e11, raidDisks: 2, members: [], sync: null, mismatches: 0 }
 ];
 const common = { description: '', exclusive: false, folders: [], tpm: false, secureBoot: false, pci: [], usb: [], job: null, available: true, cpuPercent: 0, memoryBytes: 0, since: time, cpuPin: [], firmware: 'uefi' };
 const vms = [
@@ -151,6 +152,29 @@ try {
 		const { ctx, page } = await context('graphit', 1440, 'en');
 		await page.goto(`${base}/vms?vm=windows-11&tab=overview`);
 		await page.getByText('reported by the guest agent').waitFor();
+		await ctx.close();
+	}
+	if (process.env.README_SCREENSHOTS) {
+		const folder = process.env.README_SCREENSHOTS;
+		system.version = '0.7.2';
+		await mkdir(folder, { recursive: true });
+		const fonts = (page) => page.evaluate(async () => {
+			for (const font of ['400 14px "IBM Plex Sans"', '600 14px "IBM Plex Sans"', '400 14px "IBM Plex Mono"']) await document.fonts.load(font);
+			await document.fonts.ready;
+		});
+		for (const [theme, width, file] of [['graphit', 1440, 'vms.png'], ['hell', 390, 'vms-mobil.png']]) {
+			const { ctx, page } = await context(theme, width);
+			await page.goto(`${base}/vms?vm=windows-11&tab=overview`);
+			await page.getByText('192.168.1.42').waitFor();
+			await fonts(page);
+			await page.screenshot({ path: `${folder}/${file}`, fullPage: true });
+			await ctx.close();
+		}
+		const { ctx, page } = await context('graphit', 1440);
+		await page.goto(`${base}/vms?vm=home-assistant&tab=screen`);
+		await page.getByRole('button', { name: 'Senden' }).click();
+		await fonts(page);
+		await page.screenshot({ path: `${folder}/vms-bildschirm.png`, clip: { x: 300, y: 110, width: 1140, height: 600 } });
 		await ctx.close();
 	}
 	assert.deepEqual(errors, []);

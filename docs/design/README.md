@@ -405,7 +405,7 @@ Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystem
 Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
 Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.
 
-### VM-Seite (Entwicklungsstand nach 0.7.1)
+### VM-Seite (0.7.2)
 
 Vom Projektinhaber am 21. Oktober 2026 bestätigter Folgeentwurf `VmPage.html`
 (Screenshot `screenshots/VmPage.png`). Er ersetzt den Seitenaufbau aus
