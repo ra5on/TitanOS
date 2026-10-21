@@ -199,7 +199,7 @@ Ein Agent im Container erreicht das NAS über dessen LAN-Adresse; das selbst sig
 
 Ollama selbst spricht kein MCP. Das übernimmt der Agent: Er holt `tools/list`, gibt die Werkzeuge als Tool-Definitionen an `/api/chat` von Ollama, führt die Tool-Aufrufe des Modells per `tools/call` aus und reicht die Ergebnisse zurück. Modelle mit Tool-Unterstützung (zum Beispiel Qwen 3 oder Llama 3.1 und neuer) kommen mit den kurzen Textzusammenfassungen gut zurecht.
 
-Eine Vorlage „TitanOS-Agent“ für das App-Repo (kleines Python-Programm, Chat im Browser, verbunden mit Ollama und dem MCP-Endpunkt) wäre ein eigener Schritt nach Phase 1.
+Ein Beispiel dafür liegt in `examples/agent/`: ein Python-Programm (nur Standardbibliothek) mit Chat im Browser, verbunden mit Ollama und dem MCP-Endpunkt. Es vertraut dem selbst signierten Zertifikat über dessen Fingerabdruck und prüft ihn, bevor es den Schlüssel sendet. Das Image `ghcr.io/ra5on/titanos-agent` baut `.github/workflows/agent.yml` auf `main`; die App-Vorlage für `ra5on/TitanOS-Apps` liegt in `docs/apps-repo/titanos-agent/compose.yaml`.
 
 ## Umsetzung in titand
 
