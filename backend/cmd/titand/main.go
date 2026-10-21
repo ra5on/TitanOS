@@ -238,6 +238,13 @@ func run(opts options) error {
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", opts.configDir, "err", err)
 	}
+	// Keys for agents; read again on first use if the accounts were missing.
+	apiKeys := auth.NewAPIKeys(store, users)
+	if users.Loaded() {
+		if err := apiKeys.Load(); err != nil {
+			slog.Warn("API keys not readable from /config", "err", err)
+		}
+	}
 
 	// The version of the system image; version.Version is newer when an
 	// app update runs on it.
@@ -613,6 +620,7 @@ func run(opts options) error {
 		ShareDir:      shareDir,
 		SecureCookies: !opts.dev,
 		Sessions:      sessions,
+		APIKeys:       apiKeys,
 	})
 
 	var servers []*http.Server
