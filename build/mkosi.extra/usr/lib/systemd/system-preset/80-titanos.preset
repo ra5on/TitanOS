@@ -14,3 +14,4 @@ enable libvirt-guests.service
 # After an update the new system is on trial. This check marks it good
 # once titand is ready; see the unit.
 enable titanos-boot-check.service
+enable titanos-app-check.service
