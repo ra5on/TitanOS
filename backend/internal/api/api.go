@@ -90,6 +90,8 @@ type Options struct {
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
 	SecureCookies bool
+	// Sessions are the logins; nil starts with none, kept in memory only.
+	Sessions *auth.Sessions
 }
 
 // Server answers all HTTP requests.
@@ -108,9 +110,12 @@ type Server struct {
 func New(opts Options) *Server {
 	s := &Server{
 		opts:     opts,
-		sessions: auth.NewSessions(),
+		sessions: opts.Sessions,
 		limiter:  auth.NewLimiter(),
 		prefs:    newPreferences(opts.Store),
+	}
+	if s.sessions == nil {
+		s.sessions = auth.NewSessions()
 	}
 
 	mux := http.NewServeMux()

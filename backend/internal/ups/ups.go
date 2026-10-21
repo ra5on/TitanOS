@@ -346,10 +346,20 @@ func (m *Manager) Apply(ctx context.Context) error {
 	m.mu.Lock()
 	settings := m.settings
 	if m.localPassword == "" {
+		// titand was restarted (an app update), the NAS was not: NUT
+		// still runs with the password of before.
+		m.localPassword = currentPassword(m.etcDir)
+	}
+	if m.localPassword == "" {
 		m.localPassword = randomPassword()
 	}
 	localPassword := m.localPassword
 	m.mu.Unlock()
+
+	// Nothing changed and NUT runs: the watch over the UPS goes on without a gap.
+	if m.unchanged(m.files(settings, localPassword)) && m.running(ctx, settings.Mode) {
+		return nil
+	}
 
 	// Stopped first, so that nothing runs with half the new configuration.
 	m.runner.Run(ctx, "", "systemctl", "stop", "nut-monitor.service", "nut-server.service", "nut-driver.target", "nut-driver-enumerator.path")
@@ -389,6 +399,42 @@ func (m *Manager) Apply(ctx context.Context) error {
 	}
 	slog.Info("UPS settings put in place", "mode", settings.Mode)
 	return nil
+}
+
+// currentPassword returns the password upsmon on this NAS logs in with now.
+func currentPassword(etcDir string) string {
+	data, err := os.ReadFile(filepath.Join(etcDir, "upsd.users"))
+	if err != nil {
+		return ""
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if value, ok := strings.CutPrefix(strings.TrimSpace(line), "password = "); ok && value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// unchanged reports whether /etc/nut holds exactly these files already.
+func (m *Manager) unchanged(files map[string]string) bool {
+	for _, name := range []string{"ups.conf", "upsd.conf", "upsd.users", "upsmon.conf"} {
+		current, err := os.ReadFile(filepath.Join(m.etcDir, name))
+		want, wanted := files[name]
+		if wanted != (err == nil) || (wanted && string(current) != want) {
+			return false
+		}
+	}
+	return true
+}
+
+// running reports whether the services of a mode are up.
+func (m *Manager) running(ctx context.Context, mode string) bool {
+	units := map[string][]string{"local": {"nut-server.service", "nut-monitor.service"}, "network": {"nut-monitor.service"}}[mode]
+	if len(units) == 0 {
+		return false
+	}
+	_, err := m.runner.Run(ctx, "", "systemctl", append([]string{"is-active", "--quiet"}, units...)...)
+	return err == nil
 }
 
 // parse reads what upsc prints: one "name: value" per line.

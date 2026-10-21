@@ -358,8 +358,12 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 			delete(m.retired, name)
 		}
 	}
+	// Nothing new: a restart of titand (as for an app update) must not
+	// take the network down for a moment, nor the bridge of the VMs.
+	changed := len(m.retired) > 0
 	for _, entry := range old {
 		if name := entry.Name(); strings.HasPrefix(name, prefix) && files[name] == "" {
+			changed = true
 			if err := os.Remove(filepath.Join(m.dir, name)); err != nil {
 				return err
 			}
@@ -371,6 +375,11 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 	names := make([]string, 0, len(files))
 	for name, content := range files {
 		path := filepath.Join(m.dir, name)
+		names = append(names, name)
+		if current, err := os.ReadFile(path); err == nil && string(current) == content {
+			continue
+		}
+		changed = true
 		if err := os.WriteFile(path+".tmp", []byte(content), 0o644); err != nil {
 			return err
 		}
@@ -378,8 +387,26 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 			os.Remove(path + ".tmp")
 			return err
 		}
-		names = append(names, name)
 	}
+	if changed {
+		if err := m.reconfigure(ctx, files); err != nil {
+			return err
+		}
+	}
+	if current, _ := os.Hostname(); cfg.Hostname != "" && cfg.Hostname != current {
+		if _, err := m.runner.Run(ctx, "", "hostnamectl", "hostname", cfg.Hostname); err != nil {
+			slog.Warn("hostname not set", "err", err)
+		}
+		// What announces the NAS in the network does so by its name.
+		m.runner.Run(ctx, "", "systemctl", "try-restart", "avahi-daemon.service", "smbd.service", "nmbd.service", "wsdd2.service")
+	}
+	sort.Strings(names)
+	slog.Info("network configuration in place", "device", device(cfg), "dhcp", cfg.DHCP, "address", cfg.Address, "files", names, "changed", changed)
+	return nil
+}
+
+// reconfigure makes networkd take up changed files. The caller holds the lock.
+func (m *Manager) reconfigure(ctx context.Context, files map[string]string) error {
 	if _, err := m.runner.Run(ctx, "", "networkctl", "reload"); err != nil {
 		return err
 	}
@@ -414,15 +441,6 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 			return err
 		}
 	}
-	if current, _ := os.Hostname(); cfg.Hostname != "" && cfg.Hostname != current {
-		if _, err := m.runner.Run(ctx, "", "hostnamectl", "hostname", cfg.Hostname); err != nil {
-			slog.Warn("hostname not set", "err", err)
-		}
-		// What announces the NAS in the network does so by its name.
-		m.runner.Run(ctx, "", "systemctl", "try-restart", "avahi-daemon.service", "smbd.service", "nmbd.service", "wsdd2.service")
-	}
-	sort.Strings(names)
-	slog.Info("network configuration in place", "device", device(cfg), "dhcp", cfg.DHCP, "address", cfg.Address, "files", names)
 	return nil
 }
 

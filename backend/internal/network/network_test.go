@@ -400,3 +400,31 @@ func TestRollbackRetriesRetiredBridge(t *testing.T) {
 		t.Fatalf("retired bridge was forgotten on retry: %v", runner.commands)
 	}
 }
+
+func TestRestartOfTitandLeavesTheNetworkAlone(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	cfg := Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}
+	if err := m.store.WriteJSON(configFile, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "networkctl reload") {
+		t.Fatalf("the first start did not put the configuration in place: %v", runner.commands)
+	}
+
+	// titand starts again, as after an app update: the files are there.
+	again := NewManager(m.store)
+	again.dir, again.sys, again.runner = m.dir, m.sys, runner
+	runner.commands = nil
+	if err := again.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range runner.commands {
+		if strings.HasPrefix(command, "networkctl") {
+			t.Errorf("the network was reconfigured although nothing changed: %v", runner.commands)
+		}
+	}
+}

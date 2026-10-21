@@ -774,3 +774,16 @@ func verifyCopiedSource(ctx context.Context, job *Job, r *os.Root, rel string) e
 		return nil
 	})
 }
+
+// Busy reports whether a copy or move of any account is not finished yet.
+// A restart of titand would break it off.
+func (m *Manager) Busy() bool {
+	m.jobs.mu.Lock()
+	defer m.jobs.mu.Unlock()
+	for _, job := range m.jobs.list {
+		if job.State == JobRunning {
+			return true
+		}
+	}
+	return false
+}

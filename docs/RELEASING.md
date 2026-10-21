@@ -88,6 +88,55 @@ verwenden und den Ablauf unter „Schlüsselwechsel und Verlust“ beachten.
    nicht als Kommandozeilenargument setzen. Der Projektinhaber muss selbst
    bestätigen, dass beide Schlüssel und Passphrasen sicher verwahrt sind.
 
+## Ab 0.8.0: App-Releases und volle Releases
+
+Ein Tag wird entweder ein **volles Release** (neues Systemabbild mit mkosi,
+neue Plugins, Neustart des NAS) oder ein **App-Release** (nur titand mit der
+eingebauten Weboberfläche, ohne Neustart des NAS). Das entscheidet
+`scripts/release-kind.py` im Release-Workflow, nicht der Mensch:
+
+- Basis ist das Systemabbild des neuesten Releases davor (`app.base` in dessen
+  Manifest). Releases vor 0.8.0 kennen das Feld nicht; der erste Tag danach
+  wird deshalb immer voll.
+- Haben sich seit dem Tag der Basis nur `backend/`, `web/`, `docs/`, die
+  Browserprüfungen und die Projektdateien (README, AGENTS, CLAUDE, …)
+  geändert, wird es ein App-Release. Jede andere Änderung, etwa unter
+  `build/`, `boot/`, `scripts/` (außer Browserprüfungen), `.github/` oder am
+  `Makefile`, ergibt ein volles Release.
+- Eine Tag-Nachricht mit `[system]` erzwingt ein volles Release.
+
+Ein App-Release baut kein Abbild. `scripts/repack-release.py` lädt alle
+Dateien der Basis von GitHub, prüft sie wie der Publish-Job mit den
+öffentlichen Schlüsseln aus diesem Repository, entpackt das squashfs, setzt
+den neuen titand ein, erzeugt das Lizenzinventar für Go und npm neu (Debian
+wird aus dem Abbild gelesen) und packt mit denselben Optionen wie
+`mkosi.finalize` wieder. Kernel, initrd, Boot-Loader und Plugins sind die der
+Basis, Byte für Byte. Danach läuft alles wie gewohnt: `make-release.sh` mit
+`BASE_VERSION`, Signatur im geschützten Publish-Job, `smoke-release.py` mit
+Plugins. `smoke-storage.py` entfällt, weil Abbild und Plugins schon mit der
+Basis geprüft wurden.
+
+Jedes Release enthält zusätzlich `titanos-<version>-titand` und im Manifest
+das Feld `app` (`base`, `asset`, `sha256`, `size`). Ein NAS ab 0.8.0 mit
+passender Basis lädt nur diese Datei; ältere Versionen ignorieren das Feld und
+installieren wie bisher die drei Systemdateien. `make-release.sh` prüft, dass
+`titand` genau das im Abbild ist und das Abbild seine Basis-Version
+(`/usr/share/titanos/base-version`) nennt. Ablauf auf dem NAS: siehe
+[APP-UPDATES.md](APP-UPDATES.md).
+
+Der Probelauf auf Pull Requests baut immer das volle Abbild und spielt darauf
+mit dem Wegwerf-Schlüssel App-Updates durch (`scripts/smoke-app-update.py`):
+eines, das läuft (ohne Neustart, Anmeldung bleibt, nach einem Neustart des
+NAS noch da), eines, das nicht startet (nach drei Starts zurück), und den Weg
+zurück zum titand des Systemabbilds.
+
+**Debian-Sicherheitsupdates:** App-Releases behalten die Debian-Pakete ihrer
+Basis. `debian-security.yml` vergleicht jeden Montag die Pakete des neuesten
+Releases mit trixie-security und öffnet bei neueren Versionen einen Pull
+Request, der `build/debian-security.txt` anlegt oder ändert. Nach dem Merge
+wird der nächste Tag ein volles Release. In den Repository-Einstellungen muss
+dafür „Allow GitHub Actions to create and approve pull requests“ an sein.
+
 ## Probelauf ohne Veröffentlichung
 
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den

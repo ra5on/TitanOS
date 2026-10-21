@@ -9,7 +9,7 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Settings = { channel: 'stable' | 'beta'; autoInstall: boolean; installTime: string };
-	type Manifest = { version: string; channel: string; kernel: string; released: string; minVersion?: string; changelog: string; files: { size: number }[] };
+	type Manifest = { version: string; channel: string; kernel: string; released: string; minVersion?: string; changelog: string; files: { size: number }[]; app?: { base: string; size: number } };
 	type Slot = { name: string; version: string; running: boolean; complete: boolean; next: boolean; triesLeft: number | null };
 	type Status = {
 		version: string;
@@ -20,10 +20,15 @@
 		available: Manifest | null;
 		lastCheck: string | null;
 		checkError: string;
-		progress: { phase: '' | 'download' | 'switch' | 'done' | 'failed'; file: string; percent: number; speedBytesPerSecond: number; error: string };
+		progress: { phase: '' | 'download' | 'switch' | 'restart' | 'done' | 'failed'; file: string; percent: number; speedBytesPerSecond: number; error: string };
 		pending: { kind: 'update' | 'rollback'; version: string; slot: string } | null;
 		canRollback: boolean;
 		unconfirmed: boolean;
+		/** Version of the system image; version is newer while an app update runs on it. */
+		base: string;
+		/** How the available release would be installed: titand alone, or a whole system. */
+		kind: '' | 'app' | 'system';
+		app: { current: string; previous: string; trial: boolean; canRollback: boolean };
 	};
 
 	let status = $state<Status | null>(null);
@@ -31,7 +36,7 @@
 	let saved = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state<'' | 'check' | 'save' | 'action'>('');
-	let asking = $state<'' | 'install' | 'rollback'>('');
+	let asking = $state<'' | 'install' | 'rollback' | 'app-rollback'>('');
 	let restarting = $state(false);
 	let checked = $state(false);
 
@@ -45,26 +50,39 @@
 		if (!draft) draft = { ...res.settings };
 	}
 
+	// titand restarts for an app update: the page keeps asking until the new
+	// one answers, then says which version runs now.
+	let restartFrom = $state('');
+	let restartedTo = $state('');
 	async function load() {
 		try {
-			take(await api.get<Status>('/update'));
+			const next = await api.get<Status>('/update');
+			if (restartFrom && next.progress.phase !== 'restart') {
+				restartedTo = next.version;
+				restartFrom = '';
+			}
+			take(next);
 		} catch (err) {
 			if (!status) problem(err);
 		}
 	}
 
-	const working = $derived(status?.progress.phase === 'download' || status?.progress.phase === 'switch');
+	const working = $derived(status?.progress.phase === 'download' || status?.progress.phase === 'switch' || status?.progress.phase === 'restart' || !!restartFrom);
+	$effect(() => {
+		if (status?.progress.phase === 'restart' && !restartFrom) restartFrom = status.version;
+	});
 	$effect(() => {
 		load();
 		const timer = setInterval(() => !document.hidden && load(), working ? 1500 : 15_000);
 		return () => clearInterval(timer);
 	});
 
-	async function act(action: 'check' | 'install' | 'rollback' | 'cancel') {
+	async function act(action: 'check' | 'install' | 'rollback' | 'cancel' | 'app-rollback') {
 		busy = action === 'check' ? 'check' : 'action';
 		error = null;
 		asking = '';
 		checked = false;
+		restartedTo = '';
 		try {
 			take(await api.post<Status>(`/update/${action}`));
 			checked = action === 'check';
@@ -90,7 +108,10 @@
 		busy = '';
 	}
 
-	const size = $derived(status?.available?.files.reduce((sum, file) => sum + file.size, 0) ?? 0);
+	const appUpdate = $derived(status?.kind === 'app' && !!status.available?.app);
+	const size = $derived(appUpdate ? (status?.available?.app?.size ?? 0) : (status?.available?.files.reduce((sum, file) => sum + file.size, 0) ?? 0));
+	// Where going back from an app update leads: the app before, or the titand of the system image.
+	const appTarget = $derived(status?.app.previous || (status ? t('update.app.base', { version: status.base }) : ''));
 	const other = $derived(status?.slots.find((slot) => !slot.running));
 
 	function slotState(slot: Slot): string {
@@ -111,7 +132,9 @@
 			<h2 class="tile-title" id="upd-now">{t('update.installed')}</h2>
 			{#if !status.release}<span class="chip warn">{t('update.devBuild')}</span>{/if}
 		</div>
-		<p class="version mono">TitanOS {status.version}</p>
+		<p class="version"><span class="mono">TitanOS {status.version}</span>{#if status.base && status.base !== status.version}<span class="muted base">{t('update.app.onBase', { version: status.base })}</span>{/if}</p>
+		{#if restartedTo}<p class="notice-ok" role="status">{t('update.app.restarted', { version: restartedTo })}</p>{/if}
+		{#if status.app.trial}<p class="notice-warn" role="status">{t('update.app.trial')}</p>{/if}
 
 		{#if status.pending}
 			<div class="notice-ok" role="status">
@@ -133,6 +156,7 @@
 				<p class="muted">
 					{#if status.progress.phase === 'download'}
 						{t('update.downloading')}{' · '}<span class="mono">{status.progress.percent.toFixed(0)} % · {(status.progress.speedBytesPerSecond / 1e6).toFixed(1)} MB/s</span>
+					{:else if status.progress.phase === 'restart' || restartFrom}{t('update.app.restarting')}
 					{:else}{t('update.switching')}{/if}
 				</p>
 			</div>
@@ -144,11 +168,14 @@
 			<div class="available">
 				<div class="head">
 					<span class="name">TitanOS {status.available.version}</span>
-					<span class="chip info">{t(status.available.channel === 'beta' ? 'update.channel.beta' : 'update.channel.stable')}</span>
+					<span class="chips">
+						{#if appUpdate}<span class="chip ok">{t('update.app.noRestart')}</span>{/if}
+						<span class="chip info">{t(status.available.channel === 'beta' ? 'update.channel.beta' : 'update.channel.stable')}</span>
+					</span>
 				</div>
 				<p class="muted">{t('update.availableMeta', { date: formatDateTime(new Date(status.available.released)), kernel: status.available.kernel, size: formatBytes(size) })}</p>
 				{#if status.available.changelog}<pre class="changelog">{status.available.changelog}</pre>{/if}
-				<div><button type="button" class="btn btn-primary" disabled={busy !== '' || status.unconfirmed} onclick={() => (asking = 'install')}>{t('update.install')}</button></div>
+				<div><button type="button" class="btn btn-primary" disabled={busy !== '' || status.unconfirmed || status.app.trial} onclick={() => (asking = 'install')}>{t('update.install')}</button></div>
 			</div>
 		{:else if status.canVerify && !status.pending && !working}
 			<div class="row">
@@ -162,6 +189,20 @@
 			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
 		{/if}
 	</section>
+
+	{#if status.app.current || status.app.previous}
+		<section class="tile" aria-labelledby="upd-app">
+			<h2 class="tile-title" id="upd-app">{t('update.app.title')}</h2>
+			<p class="muted">{t('update.app.text', { version: status.base })}</p>
+			<ul class="slots">
+				<li><span class="name">{t('update.app.running')}</span><span class="mono">{status.app.current || t('update.app.base', { version: status.base })}</span></li>
+				{#if status.app.previous}<li><span class="name">{t('update.app.previous')}</span><span class="mono">{status.app.previous}</span></li>{/if}
+			</ul>
+			{#if status.app.canRollback && !status.pending}
+				<div><button type="button" class="btn" disabled={busy !== '' || working} onclick={() => (asking = 'app-rollback')}>{t('update.app.rollback', { target: appTarget })}</button></div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if status.slots.length > 0}
 	<section class="tile" aria-labelledby="upd-slots">
@@ -198,8 +239,8 @@
 
 {#if asking === 'install' && status?.available}
 	<Dialog title={t('update.confirmTitle', { version: status.available.version })} onclose={() => (asking = '')}>
-		<p>{t('update.confirmText', { size: formatBytes(size) })}</p>
-		<p class="muted">{t('update.confirmSafe')}</p>
+		<p>{t(appUpdate ? 'update.app.confirmText' : 'update.confirmText', { size: formatBytes(size) })}</p>
+		<p class="muted">{t(appUpdate ? 'update.app.confirmSafe' : 'update.confirmSafe')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => act('install')}>{t('update.install')}</button>
@@ -214,6 +255,17 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => act('rollback')}>{t('update.rollbackDo')}</button>
+		</div>
+	</Dialog>
+{/if}
+
+{#if asking === 'app-rollback' && status}
+	<Dialog title={t('update.app.rollbackTitle', { target: appTarget })} onclose={() => (asking = '')}>
+		<p>{t('update.app.rollbackText')}</p>
+		<p class="notice-warn">{t('update.rollbackWarn')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => act('app-rollback')}>{t('update.rollbackDo')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -249,7 +301,19 @@
 		margin-top: 10px;
 	}
 	.version {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 12px;
 		font-size: 1.125rem;
+	}
+	.base {
+		font-size: 0.875rem;
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
 	}
 	.available {
 		display: flex;
