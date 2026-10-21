@@ -254,6 +254,11 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Let's Encrypt per DNS-Challenge ist vorerst zurückgestellt; selbst signiertes Zertifikat und Import eigener Zertifikate reichen für den aktuellen Umfang.
 - Noch offen: Fingerabdrücke der Schlüssel im Protokoll einer Anmeldung, SSH nur aus bestimmten Netzen.
 
+**Agenten und API-Schlüssel** (Einstellungen › Zugang, Mein Konto; Entwurf `docs/AGENT-API.md`, Phase 1 umgesetzt)
+- Ein eigener KI-Agent (z. B. mit Ollama) liest den Zustand des NAS über MCP: `POST /api/v1/mcp`, zustandslos, JSON-RPC, nur Werkzeuge (Paket `mcp`, nur Standardbibliothek). Ab Werk aus (`/config/system/api.json`).
+- Schlüssel `titanos_ak_<id>_<geheimnis>` als `Authorization: Bearer`, nur für Besitzer und Administratoren, nur als SHA-256 in `/config/users/<konto>/api-keys.json`; Bereiche `status`, `storage`, `docker`, `vms`, `backups`, `logs`, Ablauf, erlaubte Netze. Rechte bei jeder Anfrage = Bereiche ∩ Rolle. Ein Schlüssel gilt **nur** am MCP-Endpunkt; alle anderen Routen lesen weiter nur den Cookie.
+- Phase 1 liest nur. Protokolle laufen durch `diagnose.Redactor`. Aktionen (Phase 2) nur nach Bestätigung eines angemeldeten Menschen in der Weboberfläche, nie im Agenten; Löschen, Konten, Netzwerk, Updates, Plugins, Konsolen und Geheimnisse nie über einen Schlüssel.
+
 **Werkzeuge** (Reiter „Werkzeuge“, nur für Besitzer und Administratoren; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `diagnose`.
 - **Protokoll:** Zeilen aus dem Journal (`journalctl -o json`), wählbar nach Quelle (alles, titand, Kernel, Platten und RAID, Freigaben, Docker, VMs, Netzwerk), Stufe und Suchtext; „Mitlaufen“ holt alle drei Sekunden nach, was seit dem letzten Stand dazukam (Cursor des Journals). Das Journal liegt im RAM (32 MB) und beginnt mit jedem Start neu.

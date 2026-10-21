@@ -13,7 +13,7 @@
 	const me = $derived(session.data?.user);
 	let accounts = $state<Account[] | null>(null);
 	let error = $state('');
-	let dialog = $state<{ kind: 'create' } | { kind: 'password' | 'delete'; name: string } | null>(null);
+	let dialog = $state<{ kind: 'create' } | { kind: 'password' | 'delete' | 'apiKeys'; name: string } | null>(null);
 
 	// The new account being typed in.
 	let draft = $state({ name: '', role: 'user' as Role, password: '', repeat: '' });
@@ -56,6 +56,18 @@
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
+		await load();
+	}
+
+	/** Takes all keys for agents from an account. */
+	async function removeApiKeys(name: string) {
+		error = '';
+		try {
+			await api.delete(`/users/${name}/api-keys`);
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+		dialog = null;
 		await load();
 	}
 
@@ -125,6 +137,7 @@
 								<span class="mono name">{account.name}</span>{#if account.name === me?.name}<span class="chip you">{t('users.you')}</span>{/if}
 								{#if !account.smbReady}<span class="sub">{t('users.smbPending')}</span>{/if}
 								{#if account.twoFactor}<span class="chip">{t('users.twoFactor')}</span>{/if}
+								{#if account.apiKeys}<span class="chip">{t('users.apiKeys', { count: account.apiKeys })}</span>{/if}
 							</span>
 						</span>
 					</td>
@@ -143,6 +156,9 @@
 							<button type="button" class="btn" onclick={() => (dialog = { kind: 'password', name: account.name })}>{t('users.changePassword')}</button>
 							{#if account.twoFactor && manageable && account.name !== me?.name}
 								<button type="button" class="btn" onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button>
+							{/if}
+							{#if account.apiKeys && manageable && account.name !== me?.name}
+								<button type="button" class="btn" onclick={() => (dialog = { kind: 'apiKeys', name: account.name })}>{t('users.removeApiKeys')}</button>
 							{/if}
 						{/if}
 						{#if manageable && account.name !== me?.name}
@@ -196,6 +212,15 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" onclick={() => remove(name)}>{t('users.delete')}</button>
+		</div>
+	</Dialog>
+{:else if dialog?.kind === 'apiKeys'}
+	{@const name = dialog.name}
+	<Dialog title={t('users.removeApiKeysTitle', { name })} onclose={() => (dialog = null)}>
+		<p class="text">{t('users.removeApiKeysText')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-danger" onclick={() => removeApiKeys(name)}>{t('users.removeApiKeys')}</button>
 		</div>
 	</Dialog>
 {/if}

@@ -8,6 +8,7 @@
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
+	import ApiKeys from './ApiKeys.svelte';
 	import SshKeys from './SshKeys.svelte';
 
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
@@ -156,6 +157,8 @@
 	</section>
 
 	<SshKeys />
+
+	{#if user?.role === 'owner' || user?.role === 'admin'}<ApiKeys />{/if}
 
 	<section class="tile" aria-labelledby="acc-devices">
 		<h2 class="tile-title" id="acc-devices">{t('account.devices')}</h2>

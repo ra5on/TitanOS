@@ -24,6 +24,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/mcp"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -92,6 +93,8 @@ type Options struct {
 	SecureCookies bool
 	// Sessions are the logins; nil starts with none, kept in memory only.
 	Sessions *auth.Sessions
+	// APIKeys let agents use the MCP endpoint; nil makes an empty set.
+	APIKeys *auth.APIKeys
 }
 
 // Server answers all HTTP requests.
@@ -101,6 +104,7 @@ type Server struct {
 	limiter  *auth.Limiter
 	prefs    *preferences
 	handler  http.Handler
+	mcp      *mcp.Server
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -117,6 +121,10 @@ func New(opts Options) *Server {
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
+	if s.opts.APIKeys == nil {
+		s.opts.APIKeys = auth.NewAPIKeys(opts.Store, opts.Users)
+	}
+	s.mcp = s.newMCP()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -170,6 +178,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeys))
 	mux.HandleFunc("POST /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeyAdd))
 	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", s.requireUser(s.handleAccountKeyRemove))
+	// Keys for agents. The tools show what only administrators see.
+	mux.HandleFunc("GET /api/v1/account/api-keys", s.requireAdmin(s.handleAccountAPIKeys))
+	mux.HandleFunc("POST /api/v1/account/api-keys", s.requireAdmin(s.handleAccountAPIKeyCreate))
+	mux.HandleFunc("DELETE /api/v1/account/api-keys/{id}", s.requireAdmin(s.handleAccountAPIKeyRemove))
+	mux.HandleFunc("DELETE /api/v1/users/{name}/api-keys", s.requireAdmin(s.handleUserAPIKeysRemove))
+	// The one route where an API key counts instead of the session cookie.
+	mux.HandleFunc("/api/v1/mcp", s.handleMCP)
 
 	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
@@ -323,6 +338,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
+	mux.HandleFunc("GET /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccess))
+	mux.HandleFunc("PUT /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccessChange))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))
