@@ -330,6 +330,7 @@ export type VM = {
 	usb: string[] | null;
 	/** "bridge" for an address of its own in the network, otherwise "user". */
 	network: 'user' | 'bridge';
+	mac: string;
 	/** Set while disks are copied, or if that failed. */
 	job: { state: 'running' | 'failed'; text: string } | null;
 	state: 'running' | 'stopped';

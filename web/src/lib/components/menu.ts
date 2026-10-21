@@ -1,4 +1,4 @@
-/** Keyboard handling shared by the dropdowns and the context menu of the file manager. */
+/** Keyboard handling shared by the dropdowns and the context menu of TitanOS. */
 const ITEMS = '[role^="menuitem"]:not(:disabled)';
 
 export function focusFirstItem(menu: HTMLElement | undefined) {

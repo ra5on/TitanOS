@@ -92,6 +92,14 @@
 		rfb?.focus();
 	}
 
+	/** Presses keys together, as X keysyms with their key codes, and lets go in reverse. */
+	export function sendKeys(keys: [number, string][]) {
+		if (!rfb) return;
+		for (const [keysym, code] of keys) rfb.sendKey(keysym, code, true);
+		for (const [keysym, code] of [...keys].reverse()) rfb.sendKey(keysym, code, false);
+		rfb.focus();
+	}
+
 	/** Types text into the VM, as the clipboard of the guest. */
 	export function paste(text: string) {
 		rfb?.clipboardPasteFrom(text);
