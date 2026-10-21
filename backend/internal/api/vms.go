@@ -169,6 +169,33 @@ func (s *Server) handleVMAction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleVMMedium puts an installation medium into the CD drive of a VM or,
+// with an empty path, takes it out; while the VM runs, too.
+func (s *Server) handleVMMedium(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.opts.VMs.SetMedium(r.Context(), name, req.Path); err != nil {
+		writeVMError(w, err)
+		return
+	}
+	slog.Info("VM medium changed", "vm", name, "medium", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleVMAddresses(w http.ResponseWriter, r *http.Request) {
+	addresses, err := s.opts.VMs.Addresses(r.Context(), r.PathValue("name"))
+	if err != nil {
+		writeVMError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, addresses)
+}
+
 func (s *Server) handleVMXML(w http.ResponseWriter, r *http.Request) {
 	description, err := s.opts.VMs.XML(r.PathValue("name"))
 	if err != nil {

@@ -18,6 +18,7 @@ Diese Dateien sind die Quelltexte der Entwürfe aus dem Design-Canvas „TitanOS
 | `AppStore.dc.html` | Apps: Quellen, Katalog, Installationspanel mit vorausgefüllten Feldern |
 | `Terminal.dc.html` | Terminal-Panel: NAS-Shell und Container-Konsolen als Tabs |
 | `VmConsole.dc.html` | VMs: VNC-Ansicht (größenveränderbar, drei Anzeigemodi, Vollbild), serielle Konsole |
+| `VmPage.html` | VMs: Liste, Kopfzeile, Reiter Übersicht/Bildschirm/Snapshots, Übersichtskacheln, Bildschirm-Werkzeugleiste (statische Skizze, ohne Entwurfslaufzeit lesbar) |
 | `Brand.dc.html` | Logo: Symbol und Schriftzug, Varianten, Regeln |
 | `VmCreate.dc.html` | VM erstellen: Vorlagen, Kernauswahl mit P-/E-Kernen (Pinning), Platten (qcow2/img, Größen, mehrere Platten), vorhandene Abbilder vom NAS, GPU/iGPU durchreichen, NAS-Ordner per virtiofs |
 | `Hardware.dc.html` | Einstellungen › Hardware: iGPU, NPU, NVIDIA, Verwendung Container/VM, USB-Geräte |
@@ -403,3 +404,40 @@ gesperrt; Kopien im gleichen Ordner weisen auf die benötigten neuen Namen hin.
 Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystems,
 Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
 Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.
+
+### VM-Seite (0.7.2)
+
+Vom Projektinhaber am 21. Oktober 2026 bestätigter Folgeentwurf `VmPage.html`
+(Screenshot `screenshots/VmPage.png`). Er ersetzt den Seitenaufbau aus
+`VmConsole.dc.html`; dessen Konsolenverhalten (ziehbare Höhe, drei Anzeigemodi,
+Vollbildleiste, dunkler Bildschirm in jedem Theme) bleibt gültig.
+
+- Liste links: Suche, Filter Alle/Laufen/Aus mit Anzahl, je Zeile Zustand,
+  Laufzeit, Autostart als Symbol, Start/Herunterfahren und „⋯“ (auch
+  Rechtsklick) mit Neustart, Bearbeiten, Snapshots, Ausschalten erzwingen bzw.
+  Entfernen. Auf dem Smartphone eingeklappt hinter dem Namen der gewählten VM.
+- Kopfzeile: Name, Zustand, Autostart, eine Hauptaktion (Starten bzw.
+  Herunterfahren), Bearbeiten als Symbol, „⋯“ mit Neustart, Ausschalten
+  erzwingen, serieller Konsole, XML und Entfernen (nur ausgeschaltet).
+- Meldungen: eine Zeile, die ernsteste zuerst, der Rest hinter „+N weitere“.
+  Die Rückmeldung „Aktion angenommen“ verschwindet nach fünf Sekunden.
+- Reiter Übersicht, Bildschirm und Snapshots (`?tab=`). Ohne Angabe öffnet eine
+  laufende VM den Bildschirm, eine ausgeschaltete die Übersicht.
+- Übersicht als Kacheln: Auslastung (CPU-Verlauf der letzten zwei Minuten aus
+  dem Abruf der Seite, nur im Browser), Hardware, Datenträger mit Belegung des
+  Volumes und CD-Laufwerk (Einlegen, Wechseln, Auswerfen, auch bei laufender
+  VM), Netzwerk mit Adresse (Gastagent oder Nachbartabelle des NAS), Geräte und
+  Ordner (Zusatzfunktionen einer Karte in derselben Zeile, Hinweis auf den
+  Monitor bei durchgereichter Grafikkarte), Snapshots.
+- Bildschirm: „Senden ▾“ (Strg+Alt+Entf, Strg+Alt+⌫, Strg+Alt+F1/F2/F3/F7,
+  Alt+Tab, Windows-Taste, Druck, Text einfügen), „Anzeige ▾“ mit den drei
+  Modi, rechts Screenshot, serielle Konsole, eigenes Fenster, Vollbild als
+  Symbole. Die Liste lässt sich nur hier ausblenden.
+- Snapshots: Liste und Zeitplan direkt im Reiter, Dialoge für Erstellen,
+  Planen, Wiederherstellen, Löschen und Abschließen; Wiederherstellen und
+  Löschen als gefährliche Aktion links.
+
+`scripts/test-ui-vms.mjs` prüft Reiter, Filter, Zeilen- und Kopfmenü,
+Medienwechsel, Adressanzeige, Meldungen, Snapshots, Englisch und die gefaltete
+Liste bei 390 Pixeln mit isolierten API-Testdaten; Screenshots in Graphit und
+Hell unter `out/validation/vms/`. Aufruf wie beim 0.6.0-Skript oben.

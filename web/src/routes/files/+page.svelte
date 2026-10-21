@@ -16,11 +16,11 @@
 	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
 	import ArchiveDialog from './ArchiveDialog.svelte';
 	import CompareDialog from './CompareDialog.svelte';
-	import ContextMenu from './ContextMenu.svelte';
+	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import CopyDialog from './CopyDialog.svelte';
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
-	import Dropdown from './Dropdown.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import DuplicatesDialog from './DuplicatesDialog.svelte';
 	import FavoritesDialog from './FavoritesDialog.svelte';
 	import FileIcon from './FileIcon.svelte';

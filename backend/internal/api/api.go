@@ -262,6 +262,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAdmin(s.handleVMUpdate))
 	mux.HandleFunc("DELETE /api/v1/vms/{name}", s.requireAdmin(s.handleVMDelete))
 	mux.HandleFunc("GET /api/v1/vms/{name}/xml", s.requireAdmin(s.handleVMXML))
+	mux.HandleFunc("GET /api/v1/vms/{name}/addresses", s.requireAdmin(s.handleVMAddresses))
+	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", s.requireAdmin(s.handleVMMedium))
 	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
 	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
 

@@ -1,4 +1,4 @@
-/* Items of the dropdowns and context menus of the file manager. */
+/* Items of the dropdowns and context menus of TitanOS. */
 .dropdown-panel [role^='menuitem'] {
 	display: flex;
 	align-items: center;
