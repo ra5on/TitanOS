@@ -2,7 +2,7 @@
 
 Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft – inspiriert von Unraid, aber mit klassischem RAID. Wird auf GitHub veröffentlicht.
 
-Stand: **0.12.1 Stable, 22. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
+Stand: **0.13.0, 23. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -165,10 +165,10 @@ titanos/
 - Tests auf echter Hardware gezielt ergänzen. Bestätigte frühere Tests gelten nur für den dokumentierten Umfang, nicht automatisch für neue Funktionen.
 - `make test`: Go vet/Tests, Webtests und Svelte-Prüfung. `make test-release`: Paketierungs-/Signaturtests mit echten Werkzeugen. UI-Prüfskripte in `scripts/test-ui-*.mjs`; ausschließlich isolierte Testdaten verwenden. Keine Host-Platten formatieren, keine Host-Sysctls für Tests ändern.
 
-## KI-Assistent und Agent (0.12.1)
+## KI-Assistent und Agent (0.13.0)
 
 - Maßgebliche aktuelle Beschreibung: `docs/ASSISTANT.md`. Alte Release-Notizen sind historische Berichte, keine widersprechenden Regeln.
-- Ab Werk aus, Ollama mit Werkzeugmodell; ausschließlich Seite `/assistant`. Kein externer MCP-Server, keine Bearer-API-Schlüssel, keine separate Agent-App.
+- Ab Werk aus, Ollama mit Werkzeugmodell; Seite `/assistant` mit Automationen unter `/assistant/automations`. Kein externer MCP-Server, keine Bearer-API-Schlüssel, keine separate Agent-App.
 - **Backend besitzt die Aufträge und führt Änderungen aus.** Browser nur Anzeige, Freigabe und Steuerung; Browserergebnisse niemals als Ausführungsnachweis übernehmen. Seite schließen beendet keinen Auftrag.
 - Standard „mit Bestätigung“: Karte, bei Gefahr Häkchen, bei Zerstörung Zielname. Ein genehmigter Plan erlaubt folgende nicht zerstörerische Aktionen. **Optional „Direkt ausführen“ ohne weitere Bestätigungen, auch für zerstörerische Änderungen.** Diese bewusste Entscheidung des Projektinhabers gilt innerhalb der Rollen-/Bereichsrechte; keine zusätzliche pauschale Bestätigungsschicht ergänzen. Fachlich unklare Ziele weiterhin klären.
 - Rollen, Freigaberechte und Bereiche werden serverseitig geprüft. Benutzer nur mit ausdrücklicher Freigabe und innerhalb ihrer Dateien. Konten/System/Updates ab Werk nur lesen. Feste API-Liste, keine Shell/Geheimnisrouten; Netzwerkbestätigung bleibt manuell außerhalb des Agenten. Prompt und Direktmodus erweitern keine Rechte.
@@ -179,6 +179,9 @@ titanos/
 - Dokumente und Dateioperationen wie beschrieben in `docs/ASSISTANT.md`; Probelauf führt keine Änderungen aus. Undo nur für die tatsächlich vom Dateimanager unterstützten Operationen.
 - Einstellungen atomar auf `/config`, im Betrieb aus RAM. Chats separat je Konto auf Daten-Volume (0700), niemals zyklisch auf den Stick. Ohne Volume/temporär nur RAM; laufende dauerhafte Aufträge bei Volume-Verlust blockieren. Höchstens 200 Chats/12 MiB je Chat, aktive/fortsetzbare nicht verdrängen. Optionale zeitbasierte Aufbewahrung nur für abgeschlossene/gestoppte Chats. Fremde Chats auch für Administratoren unzugänglich.
 - Werkzeughärtung seit 0.12.1: zentrale Schemaprüfung vor jedem Aufruf, fehlerhafte Argumente niemals in `{}` umwandeln; unvollständige Modellstreams nicht ausführen. Explizite Ollama-Tool-Parserfehler höchstens zweimal neu generieren, keine Wiederholung bereits ausgeführter Änderungen. Fehlerkategorien im Metadatenexport; identische ungültige/unbekannte Aufrufe zählen zur Schleifenerkennung. Details und Prüfgrenzen in `docs/ASSISTANT.md`.
+- Automationen je Konto auf dem Daten-Volume: einmalig, Intervall, täglich/wöchentlich mit Zeitzone sowie explizite Meldungs-/USB-/Volume-/Ordnerereignisse. Verwaltung in UI und über Agentenwerkzeuge mit derselben API. Erstbeobachtung setzt die Basis; keine rekursive Hintergrundindexierung. Ausführung übernimmt die globale Einstellung oder den ausdrücklich gewählten Modus. Rollen/Bereiche gelten weiterhin. Kein RAM-Ersatz für dauerhafte Automationen; atomare Reservierung einer Chat-ID samt Auftrag vor dem Start. Verpasste Termine/Überschneidungen haben ausdrückliche Regeln, Details und Beobachtungsgrenzen in `docs/ASSISTANT.md`.
+- Einstellungswechsel beendet laufende Modellaufrufe und reiht aktive Aufträge neu ein; globales Pausieren/Deaktivieren pausiert sie. Direktmodus übernimmt wartende Bestätigungen außer Probeläufen und ausdrücklich bestätigungspflichtigen Automationen. Keine Wiederholung unbekannter Mutationen. Sichtbare Laufphasen und Schrittzeiten; Fristen nur je Aufruf bzw. bei fehlendem Stream-Fortschritt.
+- Aktionskörper strukturell und ohne Ganzzahl-Präzisionsverlust vergleichen. Unausgeführte veraltete Vorschläge verfallen; Ausführungsprotokolle bleiben erhalten. Dokumentauftrag verwendet vorhandene Freigaben, legt nicht ohne Auftrag eine neue an. Gespeicherte Dokumentbytes gegen den Hash der Erzeugung prüfen; Word/Excel zusätzlich parsen. Fachliche Richtigkeit benötigt weiterhin echte Quellen.
 - Metadaten-Diagnoseexport, Inhalte nur ausdrücklich; Anhänge nicht als vollständig anonymisiert darstellen. Administrator-Meldungen ohne Chatinhalte. Websuche optional, SSRF-Prüfung bei jeder Verbindung/Weiterleitung beibehalten.
 - Prüfungen verwenden isolierte Daten und nachgebautes Ollama. Keine pauschale Abnahme echter Modelle, Hardware oder Crash-Verhalten behaupten; konkrete Prüfgrenzen in den Release-Notizen nennen.
 

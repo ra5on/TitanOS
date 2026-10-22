@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -378,7 +379,7 @@ func (s *Server) handleAssistantWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("file written by the assistant", "root", root.ID, "path", req.Path, "format", req.Format, "bytes", len(data), "by", user.Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusCreated, map[string]any{"root": root.ID, "path": req.Path, "bytes": len(data)})
+	writeJSON(w, http.StatusCreated, map[string]any{"root": root.ID, "path": req.Path, "bytes": len(data), "sha256": fmt.Sprintf("%x", sha256.Sum256(data))})
 }
 
 // handleAssistantMove moves many files within one root, creating missing

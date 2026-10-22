@@ -117,3 +117,98 @@ synthetische HTTP-/Stream-Parserfehler, abgebrochene Streams, begrenzte
 Wiederholung, Schleifenerkennung, Diagnose ohne Inhalte und Snapshot-Bestätigung.
 Dies ersetzt keinen echten Ollama-/Hardwaretest und garantiert keine fehlerfreien
 Modellentscheidungen oder Verfügbarkeit externer Dienste.
+
+## Automationen und Laufzeit (0.13.0)
+
+`/assistant/automations` verwaltet dauerhafte Aufträge je Konto; Link auf der
+Assistentenseite. Erstellen, bearbeiten, duplizieren (zunächst deaktiviert),
+Zeitplan pausieren, manuell starten, löschen und bis zu 50 Läufe mit Chat-Link.
+Der Agent verwendet dafür dieselben APIs über `automation_list`,
+`automation_save`, `automation_run` und `automation_delete`. Keine Zusage einer
+Automation ohne erfolgreichen API-Aufruf. `agent_wait` bleibt eine Wartefunktion
+für den bestehenden Auftrag. Keine automatische Anlage wiederkehrender Aufträge
+ohne entsprechenden Nutzerauftrag.
+
+- Einmalig mit absolutem Zeitpunkt; Intervall in Minuten; täglich/wöchentlich mit
+  IANA-Zeitzone. Nicht existierende Uhrzeiten beim Wechsel zur Sommerzeit werden
+  übersprungen, doppelte Uhrzeiten verwenden die erste Instanz. Nächste Starts
+  werden angezeigt. Verpasste Termine: letzten innerhalb 24 Stunden nachholen
+  (Standard) oder überspringen. Keine Aufholserie aller verpassten Termine.
+- Ereignisse: neuer Meldungstyp, USB-Dateisystem-UUID erscheint, Volume überschreitet
+  Prozentgrenze, Metadatenänderung im ausdrücklich ausgewählten Ordner. Die erste
+  Beobachtung setzt die Ausgangsbasis; Ereignisse werden zusammengefasst, mindestens
+  eine Minute zwischen Starts. Ordnerüberwachung ist nicht rekursiv und auf 5.000
+  Einträge begrenzt; keine Inhaltsindizierung. USB- und Speicherabfragen erfolgen
+  nur für konfigurierte Ereignisse/Bedingungen. Keine LLM-Aufrufe zur Ereigniserkennung.
+  Beobachtung ungefähr alle 15 Sekunden; kurzlebige Ereignisse zwischen zwei
+  Beobachtungen können entgehen. Meldungen bleiben an den bestehenden RAM-Verlauf
+  gebunden; keine lückenlose Ereignisquelle über NAS-Auszeiten hinweg.
+- Bedingungen: erforderliches eingebundenes Volume, optional Ende der Speicherwartung.
+  Bei fehlender Voraussetzung wird ein Lauf vorgemerkt. Überschneidungen überspringen
+  oder genau einen Folgelauf vormerken. Blockierte/pausierte/freizugebende Chats
+  gelten weiterhin als offen; zuerst im Chat beheben oder stoppen.
+- Ausführung übernimmt die globale Einstellung oder verwendet ausdrücklich
+  Bestätigung/Direktmodus. Konten- und Bereichsrechte gelten weiterhin und werden
+  vor Werkzeugen geprüft. Standardbenutzer dürfen nur eigene Datei-Ereignisse
+  nutzen. Ziele im Auftrag erweitern keine Rechte; freie Auftragsprosa ist keine
+  zusätzliche technische Begrenzung auf bestimmte Ressourcen.
+- Benachrichtigungen: nur Fehler (Standard), nach jedem abgeschlossenen Lauf oder
+  keine. Der bestehende Benachrichtigungskanal ist nur für Administratoren;
+  private Ergebnisse bleiben im jeweiligen Chat. Pausieren/Löschen betrifft
+  zukünftige Starts; bereits gestartete Chats werden separat gesteuert.
+- Definitionen und Zustände liegen unter
+  `/mnt/<volume>/.titanos/assistant/<konto>/automations/definitions.json`, atomar
+  gespeichert, Verzeichnisse 0700. Kein RAM-Ersatz ohne verfügbares Daten-Volume,
+  kein zyklischer Zugriff auf `/config`. Bearbeitung mit Revisionsprüfung.
+  Ein Lauf erhält vor dem Start eine dauerhaft gespeicherte Chat-ID und einen
+  Schnappschuss seines Auftrags/Modus. Wiederanlauf verwendet dieselbe ID; unbekannte
+  Aktionsausgänge behalten die vorhandene Mutationssperre. Betriebsdaten werden
+  auf dem Volume gelesen; unveränderte Definitionen werden nicht neu geschrieben.
+- Ein Downgrade auf 0.12.x kennt keine Automationszeitpläne. Dateien bleiben
+  erhalten; bestehende Chats behalten ihre bekannten Zustände. Für geplanten
+  Downgrade vorher Zeitpläne pausieren und aktive Aufträge stoppen.
+
+### Fehlerbehandlung und überprüfte Ergebnisse
+
+Aktionskörper werden strukturell statt nach JSON-Feldreihenfolge verglichen;
+große JSON-Ganzzahlen bleiben beim Speichern/Laden unverändert. Wirklich geänderte,
+noch nicht ausgeführte Vorschläge verfallen und können neu geplant werden.
+Bereits versuchte Änderungen und unklare Ergebnisse werden weiterhin nicht
+blind wiederholt. Ein Mehrfach-Werkzeugaufruf hält den Aktionsindex statt eines
+nach Slice-Vergrößerung veralteten Zeigers.
+
+Beim Speichern geänderter Einstellungen werden laufende Modellaufrufe beendet;
+aktive Aufträge werden mit der neuen Einstellung wieder eingereiht, globales
+Pausieren/Deaktivieren pausiert sie. Wechsel zu Direktmodus reiht wartende
+Bestätigungen ebenfalls ein, außer Probeläufen und expliziten
+Bestätigungs-Automationen. Explizit pausierte/gestoppte Aufträge bleiben so.
+Die Wiederaufnahme erfolgt mit dem nächsten Scheduler-Durchlauf.
+
+Sichtbare Laufphasen: Warteschlange, Modellprüfung, Modell, lesendes Werkzeug,
+Aktion, Verifikation und erneuter Versuch. Diagnosen enthalten Schrittzeiten.
+Modellprüfung: 30 Sekunden; Modellaufruf: höchstens zehn Minuten und zwei Minuten
+ohne Stream-Fortschritt. Vorübergehende Verbindungsfehler und HTTP 429/502/503/504
+werden höchstens zweimal mit Abstand erneut versucht, ausschließlich vor
+Werkzeugdispatch. Parserfehler behalten ihre gezielte Wiederholung. Abgeschnittene
+Streams und sonstige HTTP-500-Fehler werden nicht pauschal erneut ausgeführt.
+Die Gesamtauftragsdauer bleibt unbegrenzt.
+
+`shares_list` nennt exakte Root-IDs und Verfügbarkeit/Schreibbarkeit. Der
+Standardprompt verlangt vorhandene Freigaben für Dokumentaufträge; „erste“ meint
+die erste verfügbare beschreibbare Freigabe in der gelieferten Reihenfolge.
+Eigene gespeicherte Prompts bleiben erhalten; neue Vorlagen werden nicht
+ungefragt über persönliche Änderungen geschrieben.
+
+`file_write` liefert den Hash der tatsächlich gerenderten Datei. Die Verifikation
+liest anschließend die gespeicherten Bytes und vergleicht den Hash (bis 50 MiB),
+Word/Excel werden zusätzlich geparst. Eine gültige Datei beweist nicht die fachliche
+Richtigkeit erfundener Eingangsdaten; die Quellen müssen weiterhin beobachtet sein.
+
+Prüfungen: isolierte gespeicherte Word-Pläne mit Bestätigung und Direktmodus,
+Automationsanlage durch Werkzeug und anschließender Dokumentlauf, Wiederanlauf
+zwischen Reservierung und Chatanlage, Überschneidung, verpasste Termine, Sommerzeit,
+Ordnerereignisse, Voraussetzungen, Kontentrennung, geänderte Rechte, Revisionen,
+Volume-Verlust und Abbruch eines wartenden Modells beim Einstellungswechsel.
+Browserprüfungen verwenden API-Fixtures auf Desktop/Mobil. Kein Nachweis für
+jedes reale Ollama-Modell oder echte Hardware; insbesondere der konkrete
+`gpt-oss:20b`-Betrieb des Projektinhabers bleibt ein gesonderter Abnahmetest.

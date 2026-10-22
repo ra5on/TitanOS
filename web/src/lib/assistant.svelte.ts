@@ -44,7 +44,7 @@ export type ChatEntry = {
 	ok?: boolean;
 	action?: ChatAction;
 };
-export type AgentRun = { state: string; detail?: string; started: string; wake?: string };
+export type AgentRun = { stage?: string; tool?: string; since?: string; state: string; detail?: string; started: string; wake?: string };
 export type ModelProfile = { name: string; model: string; prompt: string; numCtx: number; temperature: number | null };
 export type ChatSummary = { run?: AgentRun; id: string; title: string; created: string; updated: string; messages: number };
 export type AssistantStatus = { available: boolean; enabled: boolean; model: string; web: boolean; persistent: boolean };
@@ -265,7 +265,8 @@ async function stream(path: string, body: Record<string, unknown>) {
 				const event = /^event: (.*)$/m.exec(raw)?.[1];
 				const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] ?? '{}');
 				if (event === 'snapshot') { assistant.messages = data.chat.messages; assistant.run = data.chat.run; assistant.archived = data.chat.archived ?? 0; }
-				else if (event === 'problem') assistant.error = data.code;
+				else if (event === 'progress') assistant.run = data;
+                else if (event === 'problem') assistant.error = data.code;
 				else if (event === 'delta') assistant.draft.content += data.text ?? '';
 				else if (event === 'thinking') assistant.draft.thinking += data.text ?? '';
 				else if (event === 'entry') {

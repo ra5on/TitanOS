@@ -2,7 +2,11 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/office"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -46,15 +50,40 @@ func (s *Server) verifyAgentAction(ctx context.Context, user auth.User, a *assis
 		return out
 	}
 	if a.Tool == "file_write" {
-		var args struct{ Root, Path string }
+		var args writeRequest
 		b, _ := json.Marshal(a.Body)
 		_ = json.Unmarshal(b, &args)
 		root, err := s.assistantRoot(user, args.Root)
 		if err == nil {
 			f, info, e := s.opts.Files.Open(root, args.Path)
 			if e == nil {
-				f.Close()
-				out["state"] = "verified"
+				defer f.Close()
+				out["state"] = "observed"
+				out["next"] = "File exists; content is not yet verified."
+				if info.Size() <= 50<<20 {
+					data, readErr := io.ReadAll(io.LimitReader(f, (50<<20)+1))
+					var receipt struct {
+						SHA256 string `json:"sha256"`
+					}
+					_ = json.Unmarshal([]byte(a.Result), &receipt)
+					if readErr == nil && receipt.SHA256 != "" {
+						digest := fmt.Sprintf("%x", sha256.Sum256(data))
+						matches := digest == receipt.SHA256
+						if args.Format == "docx" || args.Format == "xlsx" {
+							_, parseErr := office.Text(args.Path, data)
+							out["readable"] = parseErr == nil
+							matches = matches && parseErr == nil
+						}
+						out["sha256"] = digest
+						if matches {
+							out["state"] = "verified"
+							out["next"] = "Saved bytes match the document generated for this request. Factual correctness still depends on source observations."
+						} else {
+							out["state"] = "mismatch"
+							out["next"] = "Saved file does not match the generated document; inspect before reporting success."
+						}
+					}
+				}
 				out["bytes"] = info.Size()
 				out["root"] = args.Root
 				out["path"] = args.Path
