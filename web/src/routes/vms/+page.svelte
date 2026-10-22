@@ -14,7 +14,7 @@
 	import { storage } from '#lib/storage.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
-	import { vncHeight } from '#lib/vnc-size.ts';
+	import { fitHeight, VNC_HEIGHT, vncHeight, vncWidth } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Overview from './Overview.svelte';
@@ -49,27 +49,88 @@
 	let screen = $state<VncScreen>();
 	let frame = $state<HTMLElement>();
 	let height = $state(vncHeight(session.vnc));
+	let width = $state(vncWidth(session.vnc));
 	let sizeError = $state('');
+	// Room for the console when its toolbar sits right below the header,
+	// with the line below it: then all of the picture is in view at once.
+	let room = $state(0);
+	const fitted = $derived(fitHeight(height, room));
 
-	// The console is as wide as its column; its height is dragged at the
-	// corner. It is stored when the mouse lets go, not while dragging, so the
-	// stick is written once per change.
-	let dragFrom = 0;
+	// What lies between the top of the window and the console when the page
+	// is scrolled to its toolbar: the sticky header and the toolbar itself.
+	function above(element: HTMLElement): number {
+		const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
+		const toolbar = element.parentElement?.querySelector<HTMLElement>('.toolbar');
+		const fromToolbar = toolbar ? element.getBoundingClientRect().top - toolbar.getBoundingClientRect().top : 0;
+		return header + 8 + fromToolbar;
+	}
+
+	function measureRoom() {
+		if (!frame || fullscreen) return;
+		const below = frame.nextElementSibling instanceof HTMLElement ? frame.nextElementSibling.offsetHeight + 24 : 16;
+		room = window.innerHeight - above(frame) - below;
+	}
+
+	// Opening the screen of a VM brings all of it into view: if its bottom
+	// would be cut off, the page scrolls once so that the toolbar sits below
+	// the header. Scrolling by hand afterwards is left alone.
+	let shownFor = '';
+	$effect(() => {
+		const key = tab === 'screen' && current ? current.name : '';
+		if (!key || key === shownFor || !frame) return;
+		shownFor = key;
+		const element = frame;
+		requestAnimationFrame(() => {
+			const box = element.getBoundingClientRect();
+			if (box.bottom <= window.innerHeight) return;
+			const toolbar = element.parentElement?.querySelector<HTMLElement>('.toolbar') ?? element;
+			const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
+			window.scrollTo({ top: toolbar.getBoundingClientRect().top + window.scrollY - header - 8, behavior: 'smooth' });
+		});
+	});
+
+	$effect(() => {
+		if (!frame) return;
+		const element = frame;
+		measureRoom();
+		// Notices above the console move it down; the window may change too.
+		const sizes = new ResizeObserver(measureRoom);
+		if (element.parentElement) sizes.observe(element.parentElement);
+		window.addEventListener('resize', measureRoom);
+		return () => {
+			sizes.disconnect();
+			window.removeEventListener('resize', measureRoom);
+		};
+	});
+
+	// Width and height are dragged at the corner. They are stored when the
+	// mouse lets go, not while dragging, so the stick is written once per change.
+	let dragFrom: { width: number; height: number } | null = null;
 	function dragStart() {
-		dragFrom = frame?.getBoundingClientRect().height ?? 0;
+		const box = frame?.getBoundingClientRect();
+		dragFrom = box ? { width: box.width, height: box.height } : null;
 	}
 	async function dragEnd() {
 		if (!dragFrom || !frame || fullscreen) return;
-		const next = vncHeight({ height: frame.getBoundingClientRect().height });
-		const moved = Math.abs(next - dragFrom) >= 2;
-		dragFrom = 0;
-		if (!moved || next === height) return;
-		height = next;
+		const box = frame.getBoundingClientRect();
+		const moved = Math.abs(box.width - dragFrom.width) >= 2 || Math.abs(box.height - dragFrom.height) >= 2;
+		dragFrom = null;
+		if (!moved) return;
+		// Dragged to the full column again: follow the column from now on.
+		const column = frame.parentElement?.clientWidth ?? 0;
+		const nextWidth = box.width >= column - 2 ? null : vncWidth({ width: box.width });
+		// A height at the limit of the window keeps what was stored, so a
+		// larger window later shows more again.
+		const nextHeight = Math.abs(box.height - fitted) < 2 && fitted < height ? height : vncHeight({ height: box.height });
+		if (nextWidth === width && nextHeight === height) return;
+		height = nextHeight;
+		width = nextWidth;
+		const value = width === null ? { height } : { height, width };
 		const previous = session.vnc;
-		session.vnc = { height };
+		session.vnc = value;
 		sizeError = '';
 		try {
-			await api.put('/preferences/vnc', { height });
+			await api.put('/preferences/vnc', value);
 		} catch (err) {
 			session.vnc = previous;
 			sizeError = errorText(err instanceof ApiError ? err.code : 'internal');
@@ -422,7 +483,7 @@
 				</div>
 
 				{#if sizeError}<p class="notice-error" role="alert">{t('vms.size.failed')} {sizeError}</p>{/if}
-				<div class="frame" style:height={fullscreen ? null : `${height}px`} class:fullscreen bind:this={frame}>
+				<div class="frame" style:height={fullscreen ? null : `${fitted}px`} style:width={fullscreen || width === null ? null : `${width}px`} style:max-height={fullscreen || room <= 0 ? null : `${Math.max(VNC_HEIGHT.min, Math.floor(room))}px`} class:fullscreen bind:this={frame}>
 					{#if current.state === 'running'}
 						{#key current.name}
 							<VncScreen bind:this={screen} vm={current.name} {mode} resizable={current.template === 'linux'} />
@@ -781,18 +842,20 @@
 	.fsbar .strong {
 		border: 1px solid var(--border);
 	}
-	/* As wide as the column; the height is dragged at the bottom right
-	   corner and never taller than the window. */
+	/* Width and height are dragged at the bottom right corner; it is never
+	   wider than its column and never taller than the rest of the window
+	   (max-height is set from the page). */
 	.frame {
 		position: relative;
 		width: 100%;
+		max-width: 100%;
+		min-width: 320px;
 		min-height: 240px;
-		max-height: calc(100vh - 160px);
 		background: var(--screen-bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		overflow: hidden;
-		resize: vertical;
+		resize: both;
 	}
 	.frame.fullscreen {
 		width: 100%;

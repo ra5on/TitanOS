@@ -24,6 +24,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
+	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -237,6 +238,11 @@ func run(opts options) error {
 		// Not fatal: the web UI says that /config is missing and titand
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", opts.configDir, "err", err)
+	}
+	// The chat in the web UI talks to Ollama.
+	chat := assistant.NewManager(store)
+	if err := chat.Load(); err != nil {
+		slog.Warn("assistant settings not readable from /config", "err", err)
 	}
 	// Keys for agents; read again on first use if the accounts were missing.
 	apiKeys := auth.NewAPIKeys(store, users)
@@ -621,6 +627,7 @@ func run(opts options) error {
 		SecureCookies: !opts.dev,
 		Sessions:      sessions,
 		APIKeys:       apiKeys,
+		Assistant:     chat,
 	})
 
 	var servers []*http.Server

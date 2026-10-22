@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -95,6 +96,8 @@ type Options struct {
 	Sessions *auth.Sessions
 	// APIKeys let agents use the MCP endpoint; nil makes an empty set.
 	APIKeys *auth.APIKeys
+	// Assistant is the chat with a model from Ollama; nil makes one that is off.
+	Assistant *assistant.Manager
 }
 
 // Server answers all HTTP requests.
@@ -120,6 +123,9 @@ func New(opts Options) *Server {
 	}
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
+	}
+	if s.opts.Assistant == nil {
+		s.opts.Assistant = assistant.NewManager(opts.Store)
 	}
 	if s.opts.APIKeys == nil {
 		s.opts.APIKeys = auth.NewAPIKeys(opts.Store, opts.Users)
@@ -338,6 +344,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
+	// The chat in the web UI, with the same read-only tools as agents.
+	mux.HandleFunc("GET /api/v1/assistant", s.requireAdmin(s.handleAssistant))
+	mux.HandleFunc("PUT /api/v1/assistant", s.requireAdmin(s.handleAssistantChange))
+	mux.HandleFunc("POST /api/v1/assistant/models", s.requireAdmin(s.handleAssistantModels))
+	mux.HandleFunc("POST /api/v1/assistant/chat", s.requireAdmin(s.handleAssistantChat))
 	mux.HandleFunc("GET /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccess))
 	mux.HandleFunc("PUT /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccessChange))
 

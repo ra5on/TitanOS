@@ -14,6 +14,8 @@
 	import Header from './Header.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
+	import AssistantPanel from './AssistantPanel.svelte';
+	import { loadAssistant } from '#lib/assistant.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -43,6 +45,10 @@
 
 	$effect(() => watchSystem());
 	$effect(() => watchStorage());
+	// Whether the chat is on decides the button in the header.
+	$effect(() => {
+		if (admin) loadAssistant();
+	});
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -64,7 +70,7 @@
 	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
-{#if admin}<TerminalPanel />{/if}
+{#if admin}<TerminalPanel /><AssistantPanel />{/if}
 
 <style>
 	.trial {
