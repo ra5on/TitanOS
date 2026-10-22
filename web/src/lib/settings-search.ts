@@ -6,6 +6,7 @@ const keywords: Record<string, string> = {
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access api mcp agent agenten ki ai ollama',
+	assistant: 'ki ai assistent assistant chat ollama modell model llm sprachmodell',
 	backups: 'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
 	ups: 'usv ups batterie battery strom power',

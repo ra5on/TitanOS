@@ -11,6 +11,7 @@
 		{ href: 'notifications', label: 'notify.settingsTitle', admin: true },
 		{ href: 'updates', label: 'update.title', admin: true },
 		{ href: 'access', label: 'access.title', admin: true },
+		{ href: 'assistant', label: 'assistant.settingsTitle', admin: true },
 		{ href: 'backups', label: 'safeguard.title', admin: true },
 		{ href: 'timezone', label: 'settings.datetime', admin: true },
 		{ href: 'ups', label: 'ups.title', admin: true },
