@@ -778,6 +778,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 
 	limit := settings.MaxSteps
 	repeats := 0
+	failedSteps := 0
 	for round := 0; limit == 0 || round < limit; round++ {
 		entry, err := generate(true, "")
 		if err != nil {
@@ -873,6 +874,11 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			if !result.OK && result.ErrorCode == "" {
 				result.ErrorCode = "tool_failed"
 			}
+			if !result.OK {
+				failedSteps++
+			} else if result.Action == nil {
+				failedSteps = 0
+			}
 			result.DurationMS = time.Since(stepStarted).Milliseconds()
 			index := add(result)
 			if result.Action != nil {
@@ -894,6 +900,14 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			if err := save(); err != nil {
 				return err
 			}
+			if waiting.Action.State == ActionDone {
+				failedSteps = 0
+			} else {
+				failedSteps++
+			}
+			if failedSteps >= MaxRepeats+1 {
+				break
+			}
 			continue
 		}
 		if waiting != nil && chat.DryRun {
@@ -908,7 +922,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			turn.Emit(Event{Kind: "action", Index: len(chat.Messages) - 1, Entry: waiting})
 			return nil
 		}
-		if repeats >= MaxRepeats {
+		if repeats >= MaxRepeats || failedSteps >= MaxRepeats+1 {
 			break
 		}
 	}

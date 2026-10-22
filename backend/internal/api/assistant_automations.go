@@ -21,6 +21,11 @@ func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error 
 	if err := a.Validate(time.Now()); err != nil {
 		return err
 	}
+	// Disabling a definition must work even after its volume disappeared or
+	// access was revoked. Dispatch always validates an enabled copy below.
+	if !a.Enabled {
+		return nil
+	}
 	if (a.Conditions.Volume != "" || a.Conditions.NoRebuild) && s.opts.Assistant.Settings().Access(assistant.AreaStorage) == assistant.AccessOff {
 		return assistant.ErrOff
 	}
@@ -349,7 +354,9 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 				a.Detail = "previous_run_open"
 				continue
 			}
-			if err := s.validateAutomation(u, a); err != nil {
+			validation := *a
+			validation.Enabled = true
+			if err := s.validateAutomation(u, &validation); err != nil {
 				a.Detail = err.Error()
 				a.Pending = true
 				continue

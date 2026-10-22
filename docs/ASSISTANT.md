@@ -191,7 +191,10 @@ ohne Stream-Fortschritt. Vorübergehende Verbindungsfehler und HTTP 429/502/503/
 werden höchstens zweimal mit Abstand erneut versucht, ausschließlich vor
 Werkzeugdispatch. Parserfehler behalten ihre gezielte Wiederholung. Abgeschnittene
 Streams und sonstige HTTP-500-Fehler werden nicht pauschal erneut ausgeführt.
-Die Gesamtauftragsdauer bleibt unbegrenzt.
+Die Gesamtauftragsdauer bleibt unbegrenzt. Vier aufeinanderfolgende fehlgeschlagene
+Werkzeugschritte ohne Erfolg beenden die Werkzeugschleife mit einer Antwort zu
+den offenen Punkten, auch bei wechselnden ungültigen Argumenten. Erfolgreiche
+Schritte setzen diese Fehlerzählung zurück.
 
 `shares_list` nennt exakte Root-IDs und Verfügbarkeit/Schreibbarkeit. Der
 Standardprompt verlangt vorhandene Freigaben für Dokumentaufträge; „erste“ meint

@@ -395,3 +395,31 @@ func TestAutomationDismissedNotificationDoesNotReplay(t *testing.T) {
 		t.Fatal("new message not dispatched")
 	}
 }
+
+func TestAutomationCanPauseAfterAccessRevoked(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.withShare()
+	settings := ts.server.opts.Assistant.Settings()
+	settings.Enabled = true
+	ts.server.opts.Assistant.SetSettings(settings)
+	a, err := ts.server.automations.Put("alex", assistant.Automation{Name: "Folder", Prompt: "Inspect files", Enabled: true, Trigger: assistant.Trigger{Kind: "event", Event: "files", Root: "share/Docs"}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Areas = map[string]string{"files": "off"}
+	ts.server.opts.Assistant.SetSettings(settings)
+	a.Enabled = false
+	res, body := ts.request("POST", "/api/v1/assistant/automations", a)
+	if res.StatusCode != 200 {
+		t.Fatalf("cannot pause: %d %s", res.StatusCode, body)
+	}
+	// Run now still checks the current permissions even for a disabled schedule.
+	ts.request("POST", "/api/v1/assistant/automations/"+a.ID+"/run", nil)
+	u, _ := ts.users.Get("alex")
+	ts.server.scanAutomations(context.Background(), u, time.Now())
+	list, _ := ts.server.automations.List("alex")
+	if len(list[0].Runs) != 0 || list[0].Detail == "" {
+		t.Fatal("manual run bypassed access", list)
+	}
+}
