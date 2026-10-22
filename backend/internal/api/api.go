@@ -99,15 +99,16 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	opts       Options
-	sessions   *auth.Sessions
-	limiter    *auth.Limiter
-	prefs      *preferences
-	handler    http.Handler
-	chats      *assistant.Chats
-	agentMu    sync.Mutex
-	agentJobs  map[string]*agentJob
-	agentSlots chan struct{}
+	opts        Options
+	sessions    *auth.Sessions
+	limiter     *auth.Limiter
+	prefs       *preferences
+	handler     http.Handler
+	automations *assistant.Automations
+	chats       *assistant.Chats
+	agentMu     sync.Mutex
+	agentJobs   map[string]*agentJob
+	agentSlots  chan struct{}
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -134,6 +135,7 @@ func New(opts Options) *Server {
 		}
 	}
 	s.chats = assistant.NewChats(s.chatsDir)
+	s.automations = assistant.NewAutomations(s.chatsDir)
 	s.agentJobs = map[string]*agentJob{}
 	s.agentSlots = make(chan struct{}, 1)
 
@@ -344,6 +346,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 	// The chat in the web UI. Its settings are for administrators; who may
 	// chat says requireAssistant.
+	mux.HandleFunc("GET /api/v1/assistant/automations", s.requireAssistant(s.handleAutomations))
+	mux.HandleFunc("POST /api/v1/assistant/automations", s.requireAssistant(s.handleAutomationSave))
+	mux.HandleFunc("DELETE /api/v1/assistant/automations/{automation}", s.requireAssistant(s.handleAutomationDelete))
+	mux.HandleFunc("POST /api/v1/assistant/automations/{automation}/run", s.requireAssistant(s.handleAutomationRun))
 	mux.HandleFunc("GET /api/v1/assistant/status", s.requireUser(s.handleAssistantStatus))
 	mux.HandleFunc("GET /api/v1/assistant", s.requireAdmin(s.handleAssistant))
 	mux.HandleFunc("PUT /api/v1/assistant", s.requireAdmin(s.handleAssistantChange))

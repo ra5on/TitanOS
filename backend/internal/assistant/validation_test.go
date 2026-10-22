@@ -170,3 +170,24 @@ func TestParserRecoveryNeverRepeatsCompletedMutation(t *testing.T) {
 		t.Fatalf("err=%v requests=%d executed=%d", err, requests, executed)
 	}
 }
+
+func TestDifferentFailedCallsWithoutProgressStop(t *testing.T) {
+	fake := &fakeOllama{replies: [][]string{
+		{`{"tool_calls":[{"function":{"name":"missing_one","arguments":{}}}]}`},
+		{`{"tool_calls":[{"function":{"name":"missing_two","arguments":{}}}]}`},
+		{`{"tool_calls":[{"function":{"name":"missing_three","arguments":{}}}]}`},
+		{`{"tool_calls":[{"function":{"name":"missing_four","arguments":{}}}]}`},
+		{`{"content":"Unable to complete; all attempted tools were unknown."}`},
+	}}
+	m := manager(t, fake.serve(t))
+	c := newChat(t, "test")
+	if err := m.Answer(t.Context(), c, Turn{Model: "qwen3:8b", Emit: func(Event) {}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.got) != 5 {
+		t.Fatal(len(fake.got))
+	}
+	if _, hasTools := fake.got[4]["tools"]; hasTools {
+		t.Fatal("still offered tools after consecutive failures")
+	}
+}

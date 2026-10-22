@@ -183,6 +183,8 @@ func (s *Server) toolStorage(ctx context.Context) (any, error) {
 func (s *Server) toolShares(ctx context.Context) (any, error) {
 	mounted := s.opts.Storage.Mounted()
 	type share struct {
+		Root        string `json:"root"`
+		Writable    bool   `json:"writable"`
 		Name        string `json:"name"`
 		Volume      string `json:"volume"`
 		Path        string `json:"path"`
@@ -196,7 +198,7 @@ func (s *Server) toolShares(ctx context.Context) (any, error) {
 	// Who may open a share is left out: it names the accounts.
 	list := []share{}
 	for _, sh := range s.opts.Shares.List() {
-		list = append(list, share{Name: sh.Name, Volume: sh.Volume, Path: s.opts.Shares.Path(sh), Available: slices.Contains(mounted, sh.Volume),
+		list = append(list, share{Root: "share/" + sh.Name, Writable: slices.Contains(mounted, sh.Volume), Name: sh.Name, Volume: sh.Volume, Path: s.opts.Shares.Path(sh), Available: slices.Contains(mounted, sh.Volume),
 			SMB: sh.SMB, NFS: sh.NFS.Enabled, Guest: sh.Guest, Recycle: sh.Recycle.Enabled, TimeMachine: sh.TimeMachine.Enabled})
 	}
 	return map[string]any{"shares": list}, nil

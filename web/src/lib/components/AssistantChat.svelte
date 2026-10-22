@@ -218,7 +218,7 @@
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- escaped in chatMarkdown -->
 				<div class="msg answer text">{@html chatMarkdown(assistant.draft.content)}</div>
 			{:else}
-				<p class="muted working" role="status">{reading ? t('assistant.reading', { tool: reading }) : t('assistant.thinking')}</p>
+				<p class="muted working" role="status">{assistant.run?.state === 'queued' ? t('agent.state.queued') : assistant.run?.stage ? t(`agent.stage.${assistant.run.stage}` as MessageKey, {tool: assistant.run.tool ?? ''}) : reading ? t('assistant.reading', { tool: reading }) : t('assistant.thinking')}</p>
 			{/if}
 		{/if}
 		{#if assistant.error}<p class="notice-error" role="alert">{errorText(assistant.error)}</p>{/if}

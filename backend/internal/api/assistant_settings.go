@@ -43,7 +43,7 @@ func (s *Server) handleAgentDiagnostics(w http.ResponseWriter, r *http.Request) 
 	include := r.URL.Query().Get("content") == "true"
 	steps := []map[string]any{}
 	for _, e := range c.Messages {
-		step := map[string]any{"time": e.Time, "role": e.Role, "tool": e.Tool}
+		step := map[string]any{"time": e.Time, "role": e.Role, "tool": e.Tool, "durationMs": e.DurationMS}
 		if e.Role == "tool" {
 			step["ok"] = e.OK
 		}
@@ -84,6 +84,7 @@ func (s *Server) handleAgentDiagnostics(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) agentTools(user auth.User, r *http.Request, c *assistant.Chat, save func(*assistant.Chat) error) []assistant.Tool {
 	tools := s.assistantTools(user, r)
+	tools = append(tools, s.automationTools(user)...)
 	tools = append(tools, assistant.Tool{Name: "agent_wait", Description: "Wait before rechecking an observed unavailable dependency. Resumes without a browser; never use to delay a completed answer.", Parameters: schema(map[string]any{"seconds": map[string]any{"type": "integer", "minimum": 5, "maximum": 3600}, "reason": str("Observed dependency.")}, "seconds", "reason"), Read: func(ctx context.Context, args json.RawMessage) (assistant.Result, error) {
 		var req struct {
 			Seconds int

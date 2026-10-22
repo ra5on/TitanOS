@@ -76,7 +76,7 @@ func (m *Manager) request(ctx context.Context, method, base, path string, body a
 		if errors.As(err, &failed) {
 			err = failed.Err
 		}
-		return nil, fmt.Errorf("%w is not reachable at %s: %v", ErrUpstream, req.URL.Host, err)
+		return nil, fmt.Errorf("%w: %w is not reachable at %s: %v", ErrTransient, ErrUpstream, req.URL.Host, err)
 	}
 	if res.StatusCode != http.StatusOK {
 		defer res.Body.Close()
@@ -90,6 +90,9 @@ func (m *Manager) request(ctx context.Context, method, base, path string, body a
 		}
 		if res.StatusCode == http.StatusNotFound && strings.Contains(problem.Error, "not found") {
 			return nil, fmt.Errorf("%w: %s", ErrModelMissing, problem.Error)
+		}
+		if res.StatusCode == 429 || res.StatusCode == 502 || res.StatusCode == 503 || res.StatusCode == 504 {
+			return nil, fmt.Errorf("%w: %w: HTTP %d", ErrUpstream, ErrTransient, res.StatusCode)
 		}
 		return nil, modelResponseError(fmt.Sprintf("Ollama answered %d: %s", res.StatusCode, problem.Error))
 	}

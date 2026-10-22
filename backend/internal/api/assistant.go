@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -97,6 +98,7 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &settings) {
 		return
 	}
+	previous := s.opts.Assistant.Settings()
 	if err := s.opts.Assistant.SetSettings(settings); err != nil {
 		if errors.Is(err, assistant.ErrInvalid) {
 			writeAssistantError(w, err)
@@ -107,15 +109,46 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	saved := s.opts.Assistant.Settings()
-	if !saved.Enabled || saved.Paused {
+	if !reflect.DeepEqual(previous, saved) {
 		s.agentMu.Lock()
 		for _, j := range s.agentJobs {
 			j.mu.Lock()
-			j.control = "pause"
+			j.control = "restart"
+			if !saved.Enabled || saved.Paused {
+				j.control = "pause"
+			}
 			j.mu.Unlock()
 			j.cancel()
 		}
 		s.agentMu.Unlock()
+	}
+	if previous.Execution != "direct" && saved.Execution == "direct" && saved.Enabled && !saved.Paused {
+		// Only jobs waiting for confirmation adopt a newly selected direct
+		// policy. Explicitly paused/stopped jobs and dry runs remain untouched.
+		for _, u := range s.opts.Users.List() {
+			if !s.assistantAllowed(u) {
+				continue
+			}
+			list, err := s.chats.List(u.Name, "")
+			if err != nil {
+				continue
+			}
+			for _, item := range list {
+				if item.Run == nil || item.Run.State != "confirmation" {
+					continue
+				}
+				release, err := s.chats.Reserve(u.Name, item.ID)
+				if err != nil {
+					continue
+				}
+				c, err := s.chats.Get(u.Name, item.ID)
+				if err == nil && !c.DryRun && c.Run != nil && c.Run.State == "confirmation" && !(c.Automation != "" && c.Execution == "confirm") {
+					c.Run.State = "queued"
+					_ = s.chats.Save(u.Name, c)
+				}
+				release()
+			}
+		}
 	}
 	slog.Info("assistant settings changed", "enabled", saved.Enabled, "ollama", saved.Ollama, "model", saved.Model, "users", saved.Users, "web", saved.Web, "webUsers", saved.WebUsers, "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, saved)

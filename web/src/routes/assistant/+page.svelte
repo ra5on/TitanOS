@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The assistant on a page of its own: the chats on the left, the open
 	// one on the right. On a phone, the list folds away.
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { assistant, loadAssistant, loadChats, loadModels, openChat } from '#lib/assistant.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -19,6 +20,8 @@
 		if (!assistant.status?.available) return;
 		if (assistant.models.length === 0) loadModels();
 		await loadChats();
+        const requested = page.url.searchParams.get("chat");
+        if(requested) { await openChat(requested); return; }
 		// Continue the newest chat, unless one is being started right now.
 		if (!assistant.chatId && !assistant.busy && assistant.messages.length === 0 && assistant.chats.length > 0) await openChat(assistant.chats[0].id);
 	});
@@ -27,6 +30,7 @@
 <PageHead title={t('assistant.title')}>
 	{#snippet actions()}
 		{#if assistant.status?.available}
+			<a class="btn" href="/assistant/automations">{t("automation.title")}</a>
 			<button type="button" class="btn list-toggle" aria-pressed={showList} onclick={() => (showList = !showList)}><Icon name="list" size={14} />{t('assistant.chats')}</button>
 			{#if admin}<a class="btn" href="/settings/assistant"><Icon name="tool" size={14} />{t('assistant.settings')}</a>{/if}
 		{/if}

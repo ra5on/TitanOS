@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +31,9 @@ var (
 
 // Chat is one conversation of an account.
 type Run struct {
+	Stage   string    `json:"stage,omitempty"`
+	Tool    string    `json:"tool,omitempty"`
+	Since   time.Time `json:"since,omitempty"`
 	State   string    `json:"state"`
 	Detail  string    `json:"detail,omitempty"`
 	Started time.Time `json:"started"`
@@ -37,11 +41,14 @@ type Run struct {
 }
 
 type Chat struct {
-	Attempts map[string]bool `json:"attempts,omitempty"`
-	Run      *Run            `json:"run,omitempty"`
-	DryRun   bool            `json:"dryRun,omitempty"`
-	Summary  string          `json:"summary,omitempty"`
-	Archived int             `json:"archived,omitempty"`
+	Automation string          `json:"automation,omitempty"`
+	Execution  string          `json:"execution,omitempty"`
+	Notify     string          `json:"notify,omitempty"`
+	Attempts   map[string]bool `json:"attempts,omitempty"`
+	Run        *Run            `json:"run,omitempty"`
+	DryRun     bool            `json:"dryRun,omitempty"`
+	Summary    string          `json:"summary,omitempty"`
+	Archived   int             `json:"archived,omitempty"`
 
 	ID       string    `json:"id"`
 	Title    string    `json:"title"`
@@ -70,10 +77,11 @@ func (c *Chat) summary() Summary {
 // Entry is one message of a chat: of the person (user), of the model
 // (assistant) or the result of a tool the model called (tool).
 type Entry struct {
-	Role     string    `json:"role"`
-	Content  string    `json:"content"`
-	Time     time.Time `json:"time"`
-	Thinking string    `json:"thinking,omitempty"`
+	DurationMS int64     `json:"durationMs,omitempty"`
+	Role       string    `json:"role"`
+	Content    string    `json:"content"`
+	Time       time.Time `json:"time"`
+	Thinking   string    `json:"thinking,omitempty"`
 
 	// user
 	Attachments []Attachment `json:"attachments,omitempty"`
@@ -240,7 +248,7 @@ func readChat(path string) (*Chat, error) {
 		return nil, err
 	}
 	var chat Chat
-	if err := json.Unmarshal(data, &chat); err != nil {
+	if err := decodeChat(data, &chat); err != nil {
 		return nil, err
 	}
 	return &chat, nil
@@ -317,7 +325,7 @@ func (c *Chats) get(user, id string) (*Chat, error) {
 		// A copy: the caller changes it before Save.
 		data, _ := json.Marshal(chat)
 		var copied Chat
-		_ = json.Unmarshal(data, &copied)
+		_ = decodeChat(data, &copied)
 		return &copied, nil
 	}
 	return readChat(filepath.Join(dir, id+".json"))
@@ -347,7 +355,7 @@ func (c *Chats) Save(user string, chat *Chat) error {
 	}
 	if !persistent {
 		var copied Chat
-		_ = json.Unmarshal(data, &copied)
+		_ = decodeChat(data, &copied)
 		if c.mem[user] == nil {
 			c.mem[user] = map[string]*Chat{}
 		}
@@ -510,4 +518,10 @@ func (c *Chats) Usage(user string) (int64, error) {
 		return nil
 	})
 	return size, err
+}
+
+func decodeChat(data []byte, c *Chat) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.UseNumber()
+	return d.Decode(c)
 }
