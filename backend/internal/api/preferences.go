@@ -16,7 +16,7 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "assistant"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20

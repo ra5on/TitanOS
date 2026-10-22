@@ -108,6 +108,7 @@ export type Preferences = {
 	sound: Record<string, unknown> | null;
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
+	assistant: Record<string, unknown> | null;
 };
 
 export type Temperature = {
@@ -169,7 +170,7 @@ export type Volume = {
 export type DiskSleepStatus = { idleMinutes: number; available: boolean; errors: { disk: string; message: string }[] };
 export type StorageStatus = { disks: Disk[]; volumes: Volume[]; diskSleep: DiskSleepStatus };
 
-export type Account = { name: string; role: Role; created: string; smbReady: boolean; twoFactor: boolean; apiKeys: number };
+export type Account = { name: string; role: Role; created: string; smbReady: boolean; twoFactor: boolean };
 
 export type AccessLevel = 'ro' | 'rw';
 
