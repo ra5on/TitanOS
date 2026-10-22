@@ -17,6 +17,7 @@
 		const key = `assistant.action.${action.key}`;
 		return tOr(key, '') ? t(key as MessageKey, action.params ?? {}) : action.key;
 	});
+	const task = $derived(action.key === 'task');
 	const ready = $derived(action.level === 'normal' || (action.level === 'danger' && ticked) || (action.level === 'destroy' && typed === action.confirm));
 	const pending = $derived(action.state === 'pending');
 	const after = $derived((action.after ?? []).map((name) => (name === 'attachment' ? t('assistant.afterAttachment') : name)).join(', '));
@@ -24,13 +25,23 @@
 
 <div class="card" class:danger={action.level !== 'normal'} class:done={!pending} role="group" aria-labelledby="{id}-title">
 	<div class="head">
-		<Icon name={action.level === 'normal' ? 'play' : 'power'} size={16} />
+		<Icon name={task ? 'list' : action.level === 'normal' ? 'play' : 'power'} size={16} />
 		<strong id="{id}-title">{title}</strong>
 	</div>
-	{#if action.reason}<p class="reason"><span class="muted">{t('assistant.reason')}</span> {action.reason}</p>{/if}
+	{#if action.key === 'api.change'}<p class="mono small route">{action.params?.method} {action.params?.path}</p>{/if}
+	{#if task && action.steps?.length}
+		<ol class="steps">{#each action.steps as step, i (i)}<li>{step}</li>{/each}</ol>
+	{/if}
+	{#if action.params?.preview}
+		<details class="preview" open={action.key === 'files.move'}><summary>{t('assistant.preview')}</summary><pre class="mono">{action.params.preview}</pre></details>
+	{/if}
+	{#if action.reason && !task}<p class="reason"><span class="muted">{t('assistant.reason')}</span> {action.reason}</p>{/if}
 	{#if after && pending}<p class="notice-warn small" role="note">{t('assistant.after', { tools: after })}</p>{/if}
 
-	{#if pending}
+	{#if pending && action.auto && action.level !== 'destroy'}
+		<p class="state" role="status">{t('assistant.autoRunning')}</p>
+	{:else if pending}
+		{#if task}<p class="small muted">{t('assistant.taskNote')}</p>{/if}
 		{#if action.level === 'danger'}
 			<label class="tick">
 				<input type="checkbox" bind:checked={ticked} />
@@ -44,11 +55,11 @@
 		{/if}
 		<div class="buttons">
 			<button type="button" class="btn" onclick={() => rejectAction(index)} disabled={assistant.busy}>{t('assistant.reject')}</button>
-			<button type="button" class="btn {action.level === 'normal' ? 'btn-primary' : action.level === 'danger' ? 'btn-warn' : 'btn-danger'} go" onclick={() => runAction(index, typed)} disabled={!ready || assistant.busy}>{t('assistant.run')}</button>
+			<button type="button" class="btn {action.level === 'normal' ? 'btn-primary' : action.level === 'danger' ? 'btn-warn' : 'btn-danger'} go" onclick={() => runAction(index, typed)} disabled={!ready || assistant.busy}>{t(task ? 'assistant.approvePlan' : 'assistant.run')}</button>
 		</div>
 	{:else}
 		<p class="state state-{action.state}" role="status">
-			{t(`assistant.state.${action.state}` as MessageKey)}{#if action.state === 'failed' && action.result}: <span class="mono">{action.result}</span>{/if}
+			{t(task && action.state === 'done' ? 'assistant.planApproved' : (`assistant.state.${action.state}` as MessageKey))}{#if action.auto && action.state === 'done'} · {t('assistant.inTask')}{/if}{#if action.state === 'failed' && action.result}: <span class="mono">{action.result}</span>{/if}
 		</p>
 	{/if}
 </div>
@@ -100,6 +111,31 @@
 	/* The action stands left of "Reject". */
 	.go {
 		order: -1;
+	}
+	.route {
+		color: var(--muted);
+		overflow-wrap: anywhere;
+	}
+	.steps {
+		margin: 0;
+		padding-left: 20px;
+		font-size: 0.8125rem;
+	}
+	.preview summary {
+		cursor: pointer;
+		font-size: 0.75rem;
+		color: var(--muted);
+	}
+	.preview pre {
+		margin: 6px 0 0;
+		max-height: 220px;
+		overflow: auto;
+		padding: 8px;
+		background: var(--chip);
+		border-radius: var(--radius-small);
+		font-size: 0.75rem;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.state {
 		font-size: 0.8125rem;
