@@ -78,3 +78,15 @@ func TestPromptHistoryIsServerOwned(t *testing.T) {
 		t.Fatalf("context omitted config: %s", preview)
 	}
 }
+
+func TestUnknownAndDryRunResultsStayTruthful(t *testing.T) {
+	for _, state := range []string{ActionRunning, ActionUncertain} {
+		if text := actionText(&Action{State: state}); strings.Contains(text, "It was not run") || !strings.Contains(text, "unknown") {
+			t.Fatalf("false outcome: %s", text)
+		}
+	}
+	text := actionText(&Action{State: ActionRejected, Result: "Dry run: proposed only; nothing was changed."})
+	if !strings.Contains(text, "Dry run") || strings.Contains(text, "person rejected") {
+		t.Fatalf("dry run misrepresented: %s", text)
+	}
+}

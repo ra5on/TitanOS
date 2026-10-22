@@ -349,7 +349,12 @@ func actionText(a *Action) string {
 		return "The API request succeeded; verify the resulting state before claiming completion."
 	case ActionFailed:
 		return "FAILED. Do not claim success or absence of results. Reason: " + a.Result
+	case ActionRunning, ActionUncertain:
+		return "The action may have been dispatched but its outcome is unknown. Inspect the target; do not claim it was not run or repeat it. " + a.Result
 	case ActionRejected:
+		if a.Result == "Dry run: proposed only; nothing was changed." {
+			return a.Result + " Continue planning remaining steps without executing changes."
+		}
 		return "The person rejected it. Do not propose it again unless they ask."
 	default:
 		return "It was not run: the person wrote a new message instead."
