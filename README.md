@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.12.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0)** · Veröffentlicht am 22. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.12.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1)** · Veröffentlicht am 22. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -23,7 +23,7 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
-## Weboberfläche in 0.12.0
+## Weboberfläche in 0.12.1
 
 - **KI-Assistent (0.10.0, als Agent seit 0.11.0):** Ein Modell aus Ollama beantwortet im Chat Fragen zum NAS, schlägt in Volumes, Platten, Containern, VMs, Backups, Protokollen, Dateien und im Handbuch nach und – wenn eingeschaltet – im Web (DuckDuckGo). Änderungen führt das NAS nach Freigabe aus; optional erledigt der Direktmodus auch zerstörerische Schritte ohne weitere Nachfrage. Rollen und Bereichsrechte bleiben wirksam. Aufträge laufen unabhängig vom Browser, lassen sich pausieren und fortsetzen. Systemprompt, Modellprofile, Probelauf und Diagnose sind einstellbar. Antworten erscheinen Wort für Wort, Chats bleiben je Konto auf einem Volume gespeichert, eigene Seite und Strg+J. Als Agent erledigt er Aufträge nach einmal freigegebenem Plan, schreibt Word-, Excel-, PDF- und Textdateien, sortiert und verschiebt Dateien und nutzt die übrigen Funktionen der Oberfläche – je Bereich einstellbar, nie mit Zugriff auf Geheimnisse. Benutzer können ihn auf Wunsch eingeschränkt nutzen. Ab Werk aus (Einstellungen › KI-Assistent, [docs/ASSISTANT.md](docs/ASSISTANT.md)). Die Agenten-Schnittstelle aus 0.9.0 (MCP-Server, API-Schlüssel, App „TitanOS-Agent“) ist dafür entfallen.
 - **Updates ohne Neustart (0.8.0):** Kleine Updates tauschen nur das Programm von TitanOS mit seiner Weboberfläche aus, ohne Neustart des NAS. Container, VMs und Freigaben laufen weiter, die Anmeldung bleibt. Eine neue Version läuft auf Probe; startet sie nicht, kehrt TitanOS von selbst zur vorigen zurück. Volle Updates mit Neustart bleiben für neue Systempakete und Kernel.
@@ -37,7 +37,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
 - **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+Alle Änderungen: [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -133,9 +133,9 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Installation
 
-Die Dateien für **0.12.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0). Für einen neuen Stick:
+Die Dateien für **0.12.1** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1). Für einen neuen Stick:
 
-1. `titanos-0.12.0.zip`, `titanos-0.12.0.zip.minisig` und `titanos-0.12.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.12.1.zip`, `titanos-0.12.1.zip.minisig` und `titanos-0.12.1.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
@@ -154,7 +154,7 @@ Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import b
 
 Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
 
-Für **0.12.0** wurden Frontend- und Backend-Tests ausgeführt, dazu Agent-Tests gegen ein nachgebautes Ollama: Direktmodus, Probelauf, Browserabbruch, Rechte, Wiederaufnahme, mehr als 500 Runden, Fotosuche und Fehler von Updateprüfungen. Frühere Dokumenttests bleiben Teil der Suite; reale Modelle und NAS-Hardware wurden für diese Version nicht neu abgenommen. Seit 0.8.0 spielt ein QEMU-Test ein App-Update ohne Neustart, eine App, die nicht startet, und den Rückweg durch. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
+Für **0.12.1** wurden Frontend- und Backend-Tests ausgeführt, dazu Agent-Tests gegen ein nachgebautes Ollama: Direktmodus, Probelauf, Browserabbruch, Rechte, Wiederaufnahme, mehr als 500 Runden, Fotosuche und Fehler von Updateprüfungen. Frühere Dokumenttests bleiben Teil der Suite; reale Modelle und NAS-Hardware wurden für diese Version nicht neu abgenommen. Seit 0.8.0 spielt ein QEMU-Test ein App-Update ohne Neustart, eine App, die nicht startet, und den Rückweg durch. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
 
 Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
 

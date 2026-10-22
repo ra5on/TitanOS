@@ -72,3 +72,48 @@ Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckG
 `assistant` enthält Modellkommunikation, Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server, Bearer-API-Schlüssel und die Agent-App sind entfernt.
 
 Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Nicht abgenommen: echte Ollama-Modelle, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
+
+## Werkzeugprüfung seit 0.12.1
+
+Der gemeldete Fehler mit `gpt-oss:20b` (`error parsing tool call`, HTTP 500)
+war ein Fehler bei der Verarbeitung einer vom Modell erzeugten Antwort. Er
+belegt weder einen NAS-Ausfall noch das Fehlen von Fotos. Der damalige Export
+enthielt keine Ursache des vorherigen `files_search`-Fehlers; diese lässt sich
+rückwirkend nicht bestimmen.
+
+- Alle Werkzeugaufrufe werden vor Lesen oder Planen gegen das angebotene
+  Parameterschema geprüft: Objekt, Pflichtfelder, Typen, erlaubte Werte,
+  Zahlen-/Listengrenzen und unbekannte Felder. Keine Umwandlung fehlerhafter
+  Argumente in einen ausführbaren leeren Aufruf. Fachliche Prüfungen der
+  vorhandenen API bleiben zusätzlich wirksam.
+- Ein von Ollama ausdrücklich gemeldeter Tool-Parserfehler wird pro Modellrunde
+  höchstens zweimal neu generiert, mit Korrekturhinweis und gespeichertem
+  Diagnosecode. Aus der verworfenen Antwort wird kein Werkzeug ausgeführt.
+  Bereits abgeschlossene Änderungen werden nicht wiederholt. Netzwerkfehler,
+  Speicherfehler des Modells und unklare Ausführungsergebnisse lösen diese
+  Wiederholung nicht aus. Streams ohne Abschlussmarker gelten als Fehler.
+- Wiederholt identische ungültige oder unbekannte Aufrufe zählen zur bestehenden
+  Schleifenerkennung. Dies begrenzt Fehlerschleifen, nicht die Auftragsdauer.
+- Metadatenexporte enthalten Fehlerkategorien ohne Inhalte, unter anderem
+  `invalid_arguments`, `unknown_tool`, `root_not_found`, `invalid_path`,
+  `file_not_found`, `tool_timeout` und `model_tool_parse`. `ok` beschreibt nur
+  Werkzeugergebnisse, nicht normale Nutzer-/Assistentennachrichten.
+- Fotosuche: exakte Wurzel aus `files_list`, `extension: "images"`, kein
+  Namensfilter wie „Fotos“ für die Suche nach Bildtypen. Mehrere Wurzeln separat
+  durchsuchen; begrenzte oder fehlgeschlagene Suchen beweisen keine Abwesenheit.
+- Mutation von Dateien: absolute Pfade und `..` ablehnen, nicht auf einen anderen
+  relativen Zielpfad umschreiben; Leerzeichen in Dateinamen erhalten.
+- API-Katalog: Einstellungen nur mit dem jeweils dokumentierten Einstellungsobjekt
+  ändern, nicht mit dem gesamten Status. VM-Snapshot-Restore bestätigt die VM;
+  Löschen verwendet die Snapshot-ID im Pfad und den Snapshot-Namen zur Bestätigung.
+  Systemstatus und Meldungen beachten den Systembereich, eigene Shares den
+  Dateibereich. Ohne erlaubte Änderungen kein allgemeines Änderungswerkzeug
+  und kein leerer Änderungsplan.
+
+Prüfumfang: Katalogverträge aller angebotenen Werkzeuge für Besitzer,
+Administratoren und Benutzer einschließlich verschachtelter Dokument- und
+Verschiebeargumente; bestehende API-Routen-/Rechte-/Ausführungsprüfungen;
+synthetische HTTP-/Stream-Parserfehler, abgebrochene Streams, begrenzte
+Wiederholung, Schleifenerkennung, Diagnose ohne Inhalte und Snapshot-Bestätigung.
+Dies ersetzt keinen echten Ollama-/Hardwaretest und garantiert keine fehlerfreien
+Modellentscheidungen oder Verfügbarkeit externer Dienste.

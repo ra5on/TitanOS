@@ -16,6 +16,16 @@ import (
 	"time"
 )
 
+// ErrModelOutput distinguishes malformed generated calls from connectivity.
+var ErrModelOutput = errors.New("model generated an invalid tool call")
+
+func modelResponseError(message string) error {
+	if strings.Contains(strings.ToLower(message), "error parsing tool call") {
+		return fmt.Errorf("%w: %w: %s", ErrUpstream, ErrModelOutput, message)
+	}
+	return fmt.Errorf("%w: %s", ErrUpstream, message)
+}
+
 // What titand asks Ollama for. See https://github.com/ollama/ollama/blob/main/docs/api.md.
 
 type ollamaToolCall struct {
@@ -81,7 +91,7 @@ func (m *Manager) request(ctx context.Context, method, base, path string, body a
 		if res.StatusCode == http.StatusNotFound && strings.Contains(problem.Error, "not found") {
 			return nil, fmt.Errorf("%w: %s", ErrModelMissing, problem.Error)
 		}
-		return nil, fmt.Errorf("%w answered %d: %s", ErrUpstream, res.StatusCode, problem.Error)
+		return nil, modelResponseError(fmt.Sprintf("Ollama answered %d: %s", res.StatusCode, problem.Error))
 	}
 	return res, nil
 }

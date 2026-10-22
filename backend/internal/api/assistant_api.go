@@ -49,20 +49,20 @@ var apiRoutes = []apiRoute{
 	{"GET", "/ups", assistant.AreaSystem, "", "UPS settings and state."},
 	{"PUT", "/ups", assistant.AreaSystem, assistant.LevelNormal, "Change the UPS settings (body as GET › settings)."},
 	{"GET", "/system/energy", assistant.AreaSystem, "", "Energy settings (CPU governor and more)."},
-	{"PUT", "/system/energy", assistant.AreaSystem, assistant.LevelNormal, "Change the energy settings (body as GET)."},
+	{"PUT", "/system/energy", assistant.AreaSystem, assistant.LevelNormal, "Change the energy settings (body: GET /system/energy settings only: governor, preference, platform)."},
 	{"GET", "/system/memory", assistant.AreaSystem, "", "Memory policy."},
-	{"PUT", "/system/memory", assistant.AreaSystem, assistant.LevelNormal, "Change the memory policy (body as GET)."},
+	{"PUT", "/system/memory", assistant.AreaSystem, assistant.LevelNormal, "Change the memory policy (body: GET /system/memory settings only: cachePercent)."},
 	{"GET", "/system/power-button", assistant.AreaSystem, "", "What the power button does."},
-	{"PUT", "/system/power-button", assistant.AreaSystem, assistant.LevelNormal, "Change what the power button does (body as GET)."},
+	{"PUT", "/system/power-button", assistant.AreaSystem, assistant.LevelNormal, "Change what the power button does (body: GET /system/power-button settings only: action)."},
 	{"GET", "/terminal", assistant.AreaSystem, "", "Settings of terminals and consoles."},
-	{"PUT", "/terminal", assistant.AreaSystem, assistant.LevelDanger, "Change the settings of terminals and consoles (body as GET)."},
+	{"PUT", "/terminal", assistant.AreaSystem, assistant.LevelDanger, "Change terminals and consoles (body: enabled and confirm booleans from GET; omit read-only nasShell)."},
 	{"GET", "/hardware", assistant.AreaSystem, "", "PCI and USB devices and which VM uses them."},
 	{"GET", "/usb", assistant.AreaSystem, "", "USB drives that can be mounted."},
 	{"POST", "/usb/{id}/mount", assistant.AreaSystem, assistant.LevelNormal, "Mount a USB drive by its ID from GET /usb."},
 	{"POST", "/usb/{id}/eject", assistant.AreaSystem, assistant.LevelNormal, "Eject a USB drive."},
 	{"GET", "/plugins", assistant.AreaSystem, "", "Installed and available plugins."},
 	{"POST", "/plugins/catalog", assistant.AreaSystem, assistant.LevelNormal, "Load the list of official plugins for this version."},
-	{"POST", "/plugins", assistant.AreaSystem, assistant.LevelDanger, "Install a plugin (body as the web UI sends it: name and source from GET /plugins). A plugin becomes part of the system."},
+	{"POST", "/plugins", assistant.AreaSystem, assistant.LevelDanger, "Install an official plugin (body: name from GET /plugins, volume from storage_overview, optional activate boolean). A plugin becomes part of the system."},
 	{"POST", "/plugins/{name}/{action}", assistant.AreaSystem, assistant.LevelDanger, "Switch a plugin on or off (action enable or disable)."},
 	{"DELETE", "/plugins/{name}", assistant.AreaSystem, assistant.LevelDestroy, "Remove a plugin."},
 	{"GET", "/plugins/tailscale", assistant.AreaSystem, "", "Tailscale settings and state."},
@@ -106,11 +106,11 @@ var apiRoutes = []apiRoute{
 	{"POST", "/vms", assistant.AreaVMs, assistant.LevelNormal, "Create a VM (body as the configuration in GET /vms; see /vms/host)."},
 	{"PUT", "/vms/{name}", assistant.AreaVMs, assistant.LevelDanger, "Change a VM that is off (body: its whole configuration from GET /vms)."},
 	{"PUT", "/vms/{name}/medium", assistant.AreaVMs, assistant.LevelNormal, `Insert or eject the CD of a VM (body {"path": "/mnt/…iso"} or {"path": ""}).`},
-	{"POST", "/vms/{name}/grow", assistant.AreaVMs, assistant.LevelDanger, "Make a disk of a VM larger (body as the web UI sends it)."},
+	{"POST", "/vms/{name}/grow", assistant.AreaVMs, assistant.LevelDanger, "Make a VM disk larger (body: disk is the zero-based disk index; sizeBytes is the new total size in bytes)."},
 	{"GET", "/vms/{name}/snapshots", assistant.AreaVMs, "", "Snapshots of a VM."},
 	{"POST", "/vms/{name}/snapshots", assistant.AreaVMs, assistant.LevelNormal, `Take a snapshot of a VM (body {"name": "…"}).`},
-	{"POST", "/vms/{name}/snapshots/{snapshot}/restore", assistant.AreaVMs, assistant.LevelDestroy, "Go back to a snapshot; what changed since is lost."},
-	{"DELETE", "/vms/{name}/snapshots/{snapshot}", assistant.AreaVMs, assistant.LevelDestroy, "Delete a snapshot."},
+	{"POST", "/vms/{name}/snapshots/{snapshot}/restore", assistant.AreaVMs, assistant.LevelDestroy, "Go back to a snapshot; what changed since is lost. Optional body memory=true restores saved RAM. TitanOS supplies the VM confirmation."},
+	{"DELETE", "/vms/{name}/snapshots/{snapshot}", assistant.AreaVMs, assistant.LevelDestroy, "Delete a snapshot. Use its ID in the path and its exact name from GET snapshots in body.confirm."},
 	// backups
 	{"GET", "/backups", assistant.AreaBackups, "", "Backup jobs with schedule, sources, destination and state."},
 	{"GET", "/backups/{id}/snapshots", assistant.AreaBackups, "", "The saved states of a backup job."},
@@ -264,6 +264,17 @@ func (s *Server) apiTools(user auth.User, chat *http.Request) []assistant.Tool {
 						a.Level = assistant.LevelDanger
 					}
 				}
+				if route.Path == "/vms/{name}/snapshots/{snapshot}/restore" {
+					a.Confirm, a.ConfirmField = params["name"], "body:confirm"
+				}
+				if route.Path == "/vms/{name}/snapshots/{snapshot}" && route.Method == "DELETE" {
+					fields, _ := body.(map[string]any)
+					name, _ := fields["confirm"].(string)
+					if name == "" {
+						return nil, assistant.Errorf("read GET /vms/%s/snapshots first: use the snapshot ID in the path and its exact name in body.confirm", params["name"])
+					}
+					a.Confirm, a.ConfirmField = name, "body:confirm"
+				}
 				if a.Params["preview"] = previewBody(body); a.Params["preview"] == "" {
 					delete(a.Params, "preview")
 				}
@@ -299,7 +310,14 @@ func (s *Server) internalGet(ctx context.Context, chat *http.Request, p string) 
 	rec := httptest.NewRecorder()
 	s.handler.ServeHTTP(rec, req)
 	res := rec.Result()
-	data, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	defer res.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > 1<<20 {
+		return nil, assistant.CodedErrorf("result_too_large", "API response exceeds 1 MiB; use a narrower dedicated tool")
+	}
 	if res.StatusCode != http.StatusOK {
 		return nil, assistant.Errorf("the route answered %d: %s", res.StatusCode, strings.TrimSpace(string(data)))
 	}
