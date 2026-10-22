@@ -36,6 +36,8 @@ type Chat struct {
 	Updated  time.Time `json:"updated"`
 	Model    string    `json:"model,omitempty"`
 	Messages []Entry   `json:"messages"`
+	// Task is the approved job the model works on, if any.
+	Task *Task `json:"task,omitempty"`
 }
 
 // Summary is a chat in the list.
@@ -92,8 +94,12 @@ type Problem struct {
 
 // Attachment is a file the person gave the assistant: text or an image.
 type Attachment struct {
-	Name  string `json:"name"`
-	Kind  string `json:"kind"` // text, image
+	Name string `json:"name"`
+	Kind string `json:"kind"` // text, image; nas only from the browser
+	// Root and Path name a file on the NAS (kind nas); titand reads it with
+	// the rights of the account and turns it into text or an image.
+	Root  string `json:"root,omitempty"`
+	Path  string `json:"path,omitempty"`
 	Text  string `json:"text,omitempty"`
 	Image string `json:"image,omitempty"` // base64
 	Size  int    `json:"size"`

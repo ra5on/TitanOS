@@ -814,3 +814,7 @@ func (m *Manager) sweepRecycle(mounted []string, now time.Time) {
 		}
 	}
 }
+
+// UseMountRoot puts the volumes below root instead of /mnt. For tests of
+// other packages.
+func (m *Manager) UseMountRoot(root string) { m.mountRoot = root }

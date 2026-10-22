@@ -98,7 +98,7 @@
 		<Notifications />
 	{/if}
 	{#if assistant.status?.available}
-		<button type="button" class="terminal" aria-pressed={assistant.open} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
+		<button type="button" class="terminal" aria-current={page.url.pathname === '/assistant' ? 'page' : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
 			<Icon name="chat" size={18} />
 		</button>
 	{/if}

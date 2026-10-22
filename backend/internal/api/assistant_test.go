@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -136,7 +139,7 @@ func TestAssistantChat(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": "ftp://x", "model": "qwen3:8b"}); res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad address: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b"}); res.StatusCode != 200 {
+	if res, body := ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b", "areas": map[string]string{"updates": "write"}}); res.StatusCode != 200 {
 		t.Fatalf("settings: %d %s", res.StatusCode, body)
 	}
 	// The chat lists only models that call tools.
@@ -327,5 +330,227 @@ func TestHiddenPaths(t *testing.T) {
 		if hiddenPath(p) {
 			t.Errorf("%s hidden", p)
 		}
+	}
+}
+
+func TestAssistantAreas(t *testing.T) {
+	fake := &fakeChatOllama{next: func(n int, body map[string]any) []string {
+		return []string{`{"role":"assistant","content":"ok"}`}
+	}}
+	ollama := fake.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	if res, _ := ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b", "areas": map[string]string{"docker": "maybe"}}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("unknown access level accepted")
+	}
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b",
+		"areas": map[string]string{"docker": "off", "vms": "read", "files": "write", "system": "write"}})
+	id := ts.newChat(ts.client)
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "Hallo"})
+	names := toolNames(fake.seen[0])
+	for _, gone := range []string{"docker_list", "container_action", "app_action", "vm_action", "power_action", "update_action"} {
+		if slices.Contains(names, gone) {
+			t.Fatalf("%s offered: %v", gone, names)
+		}
+	}
+	for _, want := range []string{"vm_list", "file_write", "files_move", "start_task", "api_routes", "api_change", "update_status"} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("%s missing: %v", want, names)
+		}
+	}
+}
+
+func TestAssistantAPIRoutes(t *testing.T) {
+	source, err := os.ReadFile("api.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range apiRouteList() {
+		if !strings.Contains(string(source), `"`+route+`"`) {
+			t.Errorf("%s is not a route of the server", route)
+		}
+	}
+	for _, secret := range []string{"/backups/{id}/password", "/config-backup/download", "/network/confirm", "/system/certificate", "/terminal/shell", "/files/download", "/users"} {
+		for _, r := range apiRoutes {
+			if r.Path == secret && (secret != "/users" || r.Method != "GET") {
+				t.Errorf("%s %s is in the list", r.Method, r.Path)
+			}
+		}
+	}
+	r := apiRoute{"DELETE", "/vms/{name}/snapshots/{snapshot}", "", "", ""}
+	if params, ok := r.match("DELETE", "/vms/win11/snapshots/vor%20Update"); !ok || params["snapshot"] != "vor Update" {
+		t.Fatalf("match: %v %v", params, ok)
+	}
+	for _, bad := range []string{"/vms/win11/snapshots/..", "/vms/win11/snapshots/a%2Fb", "/vms/win11/snapshots"} {
+		if _, ok := r.match("DELETE", bad); ok {
+			t.Errorf("%s matched", bad)
+		}
+	}
+}
+
+func TestAssistantAPIRead(t *testing.T) {
+	var reads []string
+	fake := &fakeChatOllama{next: func(n int, body map[string]any) []string {
+		switch n {
+		case 1:
+			return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"api_read","arguments":{"path":"/about"}}},{"function":{"name":"api_read","arguments":{"path":"/backups/x/password"}}},{"function":{"name":"api_read","arguments":{"path":"https://evil/api/v1/about"}}}]}`}
+		default:
+			messages := body["messages"].([]any)
+			for _, m := range messages {
+				if m := m.(map[string]any); m["role"] == "tool" {
+					reads = append(reads, m["content"].(string))
+				}
+			}
+			return []string{`{"role":"assistant","content":"fertig"}`}
+		}
+	}}
+	ollama := fake.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b"})
+	id := ts.newChat(ts.client)
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "Version?"})
+	if len(reads) != 3 || !strings.Contains(reads[0], "1.2.3") || !strings.Contains(reads[1], "not in api_routes") || !strings.Contains(reads[2], "without host") {
+		t.Fatalf("reads: %q", reads)
+	}
+}
+
+func TestAssistantTask(t *testing.T) {
+	fake := &fakeChatOllama{next: func(n int, body map[string]any) []string {
+		switch n {
+		case 1:
+			return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"start_task","arguments":{"title":"Aufräumen","steps":["Zeitzone setzen","Benachrichtigung testen"],"reason":"mehrere Schritte"}}}]}`}
+		case 2:
+			return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"api_change","arguments":{"method":"PUT","path":"/system/timezone","body":{"timezone":"Europe/Berlin"},"summary":"Zeitzone Berlin","reason":"Plan"}}}]}`}
+		default:
+			return []string{`{"role":"assistant","content":"Erledigt."}`}
+		}
+	}}
+	ollama := fake.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b", "areas": map[string]string{"system": "write"}})
+	id := ts.newChat(ts.client)
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "Räum auf"})
+	chat := ts.chat(ts.client, id)
+	task := chat.Chat.Messages[len(chat.Chat.Messages)-1].Action
+	if task == nil || task.Key != "task" || task.Method != "" || task.Path != "" {
+		t.Fatalf("task card: %+v", task)
+	}
+	// Approving the plan runs nothing by itself; the next action is marked
+	// to run without asking.
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/actions/"+task.ID, map[string]string{"state": "done"})
+	chat = ts.chat(ts.client, id)
+	change := chat.Chat.Messages[len(chat.Chat.Messages)-1]
+	if change.Action == nil || change.Action.Key != "api.change" || change.Action.Path != "/api/v1/system/timezone" || change.Action.Body["timezone"] != "Europe/Berlin" {
+		t.Fatalf("change: %+v", change.Action)
+	}
+	var raw struct {
+		Chat struct {
+			Messages []struct{ Action *struct{ Auto bool } }
+			Task     *struct{ Approved bool }
+		}
+	}
+	_, body := ts.request("GET", "/api/v1/assistant/chats/"+id, nil)
+	json.Unmarshal(body, &raw)
+	if last := raw.Chat.Messages[len(raw.Chat.Messages)-1]; last.Action == nil || !last.Action.Auto || raw.Chat.Task == nil || !raw.Chat.Task.Approved {
+		t.Fatalf("not automatic: %s", body)
+	}
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/actions/"+change.Action.ID, map[string]string{"state": "done"})
+	_, body = ts.request("GET", "/api/v1/assistant/chats/"+id, nil)
+	raw.Chat.Task = nil
+	json.Unmarshal(body, &raw)
+	if raw.Chat.Task != nil {
+		t.Fatal("task still open after the final answer")
+	}
+}
+
+func TestAssistantDocuments(t *testing.T) {
+	var lastUser string
+	fake := &fakeChatOllama{next: func(n int, body map[string]any) []string {
+		messages := body["messages"].([]any)
+		for _, m := range messages {
+			if m := m.(map[string]any); m["role"] == "user" {
+				lastUser = m["content"].(string)
+			}
+		}
+		if n == 1 {
+			return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"file_write","arguments":{"root":"share/Docs","path":"Berichte/Plan","format":"docx","content":"# Plan\n\n- eins\n- zwei","reason":"gewünscht"}}}]}`}
+		}
+		return []string{`{"role":"assistant","content":"ok"}`}
+	}}
+	ollama := fake.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	dir := ts.withShare()
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b"})
+
+	// The model proposes; nothing is written until the card is confirmed.
+	id := ts.newChat(ts.client)
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "Schreib einen Plan"})
+	msgs := ts.chat(ts.client, id).Chat.Messages
+	card := msgs[len(msgs)-1].Action
+	if card == nil || card.Key != "file.write" || card.Path != "/api/v1/assistant/files/write" || card.Body["path"] != "Berichte/Plan.docx" {
+		t.Fatalf("card: %+v", card)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Berichte/Plan.docx")); err == nil {
+		t.Fatal("written before confirmation")
+	}
+	// The browser calls the route of the card.
+	if res, body := ts.request("POST", "/api/v1/assistant/files/write", card.Body); res.StatusCode != http.StatusCreated {
+		t.Fatalf("write: %d %s", res.StatusCode, body)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "Berichte/Plan.docx"))
+	if err != nil || !bytes.HasPrefix(data, []byte("PK")) {
+		t.Fatalf("docx: %v", err)
+	}
+	// Excel and PDF; a file that exists is only replaced when asked.
+	if res, body := ts.request("POST", "/api/v1/assistant/files/write", map[string]any{"root": "share/Docs", "path": "Liste.xlsx", "sheets": []map[string]any{{"name": "A", "rows": [][]any{{"x", 1}}}}}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("xlsx: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("POST", "/api/v1/assistant/files/write", map[string]any{"root": "share/Docs", "path": "Notiz.pdf", "content": "# Hallo"}); res.StatusCode != http.StatusCreated {
+		t.Fatal("pdf failed")
+	}
+	if res, _ := ts.request("POST", "/api/v1/assistant/files/write", map[string]any{"root": "share/Docs", "path": "Notiz.pdf", "content": "# Neu"}); res.StatusCode != http.StatusConflict {
+		t.Fatalf("replaced without asking: %d", res.StatusCode)
+	}
+	if res, _ := ts.request("POST", "/api/v1/assistant/files/write", map[string]any{"root": "share/Docs", "path": "Notiz.pdf", "content": "# Neu", "replace": true}); res.StatusCode != http.StatusCreated {
+		t.Fatal("replace failed")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Notiz.pdf.prev")); err != nil {
+		t.Fatal("old version not kept")
+	}
+	for _, bad := range []map[string]any{
+		{"root": "share/Docs", "path": "x.docx", "format": "pdf", "content": "a"},
+		{"root": "share/Docs", "path": "a.json", "content": "{nope"},
+		{"root": "share/Docs", "path": ".titanos/x.txt", "content": "a"},
+		{"root": "stick", "path": "x.txt", "content": "a"},
+		{"root": "share/Docs", "path": "../x.txt", "content": "a"},
+	} {
+		if res, _ := ts.request("POST", "/api/v1/assistant/files/write", bad); res.StatusCode < 400 {
+			t.Errorf("accepted %v", bad)
+		}
+	}
+
+	// Sorting: moves create missing folders and never replace.
+	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.jpg"), []byte("b"), 0o644)
+	if res, body := ts.request("POST", "/api/v1/assistant/files/move", map[string]any{"root": "share/Docs", "moves": []map[string]string{{"from": "a.jpg", "to": "Fotos/2024/a.jpg"}, {"from": "b.jpg", "to": "Fotos/2025/b.jpg"}}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("move: %d %s", res.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Fotos/2025/b.jpg")); err != nil {
+		t.Fatal("not moved")
+	}
+	if res, _ := ts.request("POST", "/api/v1/assistant/files/move", map[string]any{"root": "share/Docs", "moves": []map[string]string{{"from": "Liste.xlsx", "to": "Notiz.pdf"}}}); res.StatusCode != http.StatusConflict {
+		t.Fatal("move replaced a file")
+	}
+
+	// A Word file from the NAS arrives at the model as text.
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "Lies das", "attachments": []map[string]string{{"kind": "nas", "name": "x", "root": "share/Docs", "path": "Berichte/Plan.docx"}}})
+	if !strings.Contains(lastUser, "Lies das") || !strings.Contains(lastUser, "# Plan") || !strings.Contains(lastUser, "- eins") {
+		t.Fatalf("attachment: %q", lastUser)
+	}
+	if res, _ := ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "x", "attachments": []map[string]string{{"kind": "nas", "name": "x", "root": "stick", "path": "users/alex/account.json"}}}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("secret of the stick attached")
 	}
 }

@@ -504,3 +504,9 @@ func (m *Manager) readMounts() map[string]bool {
 	}
 	return readMounts()
 }
+
+// UseMounts makes the manager see volumes as mounted below root as mounted
+// says, instead of reading /proc. For tests of other packages.
+func (m *Manager) UseMounts(root string, mounted func() map[string]bool) {
+	m.mountRoot, m.mounts = root, mounted
+}

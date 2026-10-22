@@ -356,6 +356,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/messages", s.requireAssistant(s.handleAssistantMessage))
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/regenerate", s.requireAssistant(s.handleAssistantRegenerate))
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/actions/{action}", s.requireAssistant(s.handleAssistantAction))
+	// What the assistant writes and moves in the file manager, once confirmed.
+	mux.HandleFunc("POST /api/v1/assistant/files/write", s.requireAssistant(s.handleAssistantWrite))
+	mux.HandleFunc("POST /api/v1/assistant/files/move", s.requireAssistant(s.handleAssistantMove))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))

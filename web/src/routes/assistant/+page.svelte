@@ -15,14 +15,12 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	onMount(async () => {
-		// The panel is not needed while the page shows the chat.
-		assistant.open = false;
 		if (!assistant.status) await loadAssistant();
 		if (!assistant.status?.available) return;
 		if (assistant.models.length === 0) loadModels();
 		await loadChats();
-		if (!assistant.chatId && assistant.chats.length > 0) await openChat(assistant.chats[0].id);
-		assistant.view = 'chat';
+		// Continue the newest chat, unless one is being started right now.
+		if (!assistant.chatId && !assistant.busy && assistant.messages.length === 0 && assistant.chats.length > 0) await openChat(assistant.chats[0].id);
 	});
 </script>
 
