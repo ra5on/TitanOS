@@ -37,6 +37,8 @@ func writeAssistantError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "action_gone", err.Error())
 	case errors.Is(err, assistant.ErrModelMissing):
 		writeError(w, http.StatusNotFound, "model_missing", err.Error())
+	case errors.Is(err, assistant.ErrModelOutput):
+		writeError(w, http.StatusBadGateway, "model_tool_parse", err.Error())
 	case errors.Is(err, assistant.ErrUpstream):
 		writeError(w, http.StatusBadGateway, "ollama_failed", err.Error())
 	default:

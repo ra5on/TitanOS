@@ -110,7 +110,7 @@ func (s *Server) fileTools(user auth.User) []assistant.Tool {
 			"rows": map[string]any{"type": "array", "items": map[string]any{"type": "array"}},
 		}}}
 	return []assistant.Tool{
-		read("files_search", "Search for files and folders by name in a root of the file manager, also in subfolders.",
+		read("files_search", "Search files recursively inside one exact root returned by files_list. For photos use extension=images and omit query; query matches file names literally, not file types. Repeat for other accessible roots as needed.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."}}, "root"),
 			s.assistantFilesSearch(user)),
 		actionTool("file_write", "Propose to write a file: plain text, Markdown, CSV, JSON, or a Word (.docx), Excel (.xlsx) or PDF document. For docx and pdf, write the content as Markdown (headings, lists, tables, bold, italic). For xlsx, give sheets or CSV content.",
@@ -309,7 +309,7 @@ func (s *Server) assistantFilesSearch(user auth.User) func(context.Context, json
 		}
 		result, err := s.opts.Files.Search(ctx, root, opt)
 		if err != nil {
-			return nil, assistant.Errorf("%v", err)
+			return nil, assistantFileError(err)
 		}
 		found := []files.FoundEntry{}
 		for _, e := range result.Entries {

@@ -1711,6 +1711,7 @@
 	"assistant.action.api.change": "{summary}",
 	"error.assistant_off": "Der KI-Assistent ist ausgeschaltet (Einstellungen › KI-Assistent).",
 	"error.invalid_assistant": "Die Adresse von Ollama oder der Name des Modells ist ungültig.",
+	"error.model_tool_parse": "Das Modell hat wiederholt einen ungültigen Werkzeugaufruf erzeugt. Aus diesen Antworten wurde nichts ausgeführt. Auftrag fortsetzen oder ein anderes Werkzeugmodell wählen.",
 	"error.ollama_failed": "Ollama ist nicht erreichbar oder hat einen Fehler gemeldet.",
 	"error.assistant_no_model": "Es ist kein Modell gewählt. Wähle eines unten im Chat oder unter Einstellungen › KI-Assistent.",
 	"error.invalid_certificate": "Dieses Zertifikat lässt sich nicht verwenden:",

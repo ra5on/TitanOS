@@ -35,6 +35,9 @@ func actionTool(name, description string, properties map[string]any, required []
 		Name: name, Description: description + " Executed by TitanOS under the configured execution policy; never claim success before the result.",
 		Parameters: schema(props, append(slices.Clone(required), "reason")...),
 		Plan: func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			if err := assistant.ValidateArguments(schema(props, append(slices.Clone(required), "reason")...), args); err != nil {
+				return nil, err
+			}
 			var fields map[string]json.RawMessage
 			if err := json.Unmarshal(args, &fields); err != nil {
 				return nil, assistant.Errorf("invalid arguments: %v", err)
@@ -109,7 +112,7 @@ func (s *Server) assistantActions(user auth.User) []assistant.Tool {
 			s.planVolume),
 		actionTool("volume_create", "Propose to create a new volume from free disks. Everything on these disks is erased.",
 			map[string]any{
-				"name":       str("Name: lowercase letters, digits, -, at most 12 characters, starting with a letter."),
+				"name":       str("Name: ASCII letters (case preserved), digits, -, at most 12 characters, starting with a letter."),
 				"level":      enum("RAID level. A Btrfs volume is always raid1 with exactly two disks.", "raid0", "raid1", "raid5", "raid6", "raid10"),
 				"filesystem": enum("File system.", "ext4", "xfs", "btrfs"),
 				"disks":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Disk names such as sdb, as storage_overview shows them."},
@@ -407,7 +410,10 @@ func (s *Server) fileTarget(user auth.User, rootID, p string, write bool) (strin
 	if write && !root.Writable {
 		return "", assistant.Errorf("this account may not write in %s", root.Name)
 	}
-	clean := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(p)), "/")
+	if strings.HasPrefix(p, "/") || strings.ContainsRune(p, '\\') || slices.Contains(strings.Split(p, "/"), "..") {
+		return "", assistant.CodedErrorf("invalid_path", "use a relative path inside the selected root without ..")
+	}
+	clean := strings.TrimPrefix(path.Clean("/"+p), "/")
 	if clean == "" || hiddenPath(clean) {
 		return "", assistant.Errorf("invalid path %q", p)
 	}

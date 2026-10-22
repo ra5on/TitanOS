@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path"
 	"slices"
@@ -87,6 +88,7 @@ var toolAreas = map[string]string{
 	"files_list": assistant.AreaFiles, "file_read": assistant.AreaFiles, "file_jobs": assistant.AreaFiles, "files_search": assistant.AreaFiles,
 	"folder_create": assistant.AreaFiles, "file_rename": assistant.AreaFiles, "file_delete": assistant.AreaFiles,
 	"file_write": assistant.AreaFiles, "files_move": assistant.AreaFiles, "file_copy": assistant.AreaFiles,
+	"system_status": assistant.AreaSystem, "notifications": assistant.AreaSystem, "nas_info": assistant.AreaSystem, "my_shares": assistant.AreaFiles,
 	"network_status": assistant.AreaSystem, "hardware_status": assistant.AreaSystem, "logs_search": assistant.AreaSystem, "ups_status": assistant.AreaSystem,
 	"update_status": assistant.AreaUpdates, "update_action": assistant.AreaUpdates, "power_action": assistant.AreaUpdates,
 	"storage_overview": assistant.AreaStorage, "disk_tests": assistant.AreaStorage, "volume_action": assistant.AreaStorage,
@@ -107,6 +109,9 @@ func (s *Server) assistantTools(user auth.User, r *http.Request) []assistant.Too
 	var kept []assistant.Tool
 	writes := false
 	for _, tool := range s.allAssistantTools(user, r) {
+		if tool.Name == "api_change" && !slices.ContainsFunc(s.allowedRoutes(), func(route apiRoute) bool { return route.Method != http.MethodGet }) {
+			continue
+		}
 		if area := toolAreas[tool.Name]; area != "" {
 			tool.Area = area
 			switch settings.Access(area) {
@@ -249,6 +254,27 @@ func hiddenPath(p string) bool {
 	return false
 }
 
+// Preserve error categories without putting paths or file contents in the
+// default diagnostic export. The model still receives actionable details.
+func assistantFileError(err error) error {
+	code, next := "file_failed", "Inspect the target and its availability before retrying."
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		code, next = "tool_timeout", "Search a narrower subfolder; this is not evidence that no files exist."
+	case errors.Is(err, files.ErrNotFound):
+		code, next = "file_not_found", "Use files_list to discover an existing relative path."
+	case errors.Is(err, files.ErrInvalid):
+		code, next = "invalid_path", "Use a relative path inside the exact root ID from files_list."
+	case errors.Is(err, files.ErrReadOnly):
+		code, next = "file_read_only", "Choose an accessible writable root; do not bypass permissions."
+	case errors.Is(err, files.ErrProtected):
+		code, next = "file_protected", "This path is managed by a VM and cannot be accessed here."
+	case errors.Is(err, files.ErrNoSpace):
+		code = "file_no_space"
+	}
+	return assistant.CodedErrorf(code, "%v. %s", err, next)
+}
+
 // assistantRoot finds a root of the file manager for the assistant: the
 // same as the account has, without the stick.
 func (s *Server) assistantRoot(user auth.User, id string) (files.Root, error) {
@@ -263,7 +289,7 @@ func (s *Server) assistantRoot(user auth.User, id string) (files.Root, error) {
 			ids = append(ids, root.ID)
 		}
 	}
-	return files.Root{}, assistant.Errorf("no root %q; use an exact root ID from %v. Call files_list with {} first. A root such as volume/nvme is one value; do not split it into root=volume and path=nvme", id, ids)
+	return files.Root{}, assistant.CodedErrorf("root_not_found", "no root %q; use an exact root ID from %v. Call files_list with {} first. A root such as volume/nvme is one value; do not split it into root=volume and path=nvme", id, ids)
 }
 
 func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.RawMessage) (any, error) {
@@ -300,7 +326,7 @@ func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.R
 		}
 		entries, err := s.opts.Files.List(root, req.Path)
 		if err != nil {
-			return nil, assistant.Errorf("%v", err)
+			return nil, assistantFileError(err)
 		}
 		entries = slices.DeleteFunc(entries, func(e files.Entry) bool { return hiddenPath(e.Name) })
 		offset := max(0, min(req.Offset, len(entries)))
@@ -325,7 +351,7 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 		if ext := strings.ToLower(path.Ext(req.Path)); ext == ".docx" || ext == ".xlsx" {
 			text, err := s.readDocument(root, req.Path)
 			if err != nil {
-				return nil, assistant.Errorf("%v", err)
+				return nil, assistantFileError(err)
 			}
 			return map[string]any{"root": root.ID, "path": req.Path, "content": text}, nil
 		}
@@ -334,7 +360,7 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 		}
 		text, err := s.opts.Files.ReadText(root, req.Path)
 		if err != nil {
-			return nil, assistant.Errorf("%v", err)
+			return nil, assistantFileError(err)
 		}
 		return map[string]any{"root": root.ID, "path": req.Path, "content": text.Content}, nil
 	}
@@ -383,7 +409,7 @@ func (s *Server) webTools() []assistant.Tool {
 				}
 				results, err := web.Search(ctx, s.opts.Version, req.Query)
 				if err != nil {
-					return assistant.Result{}, assistant.Errorf("%v", err)
+					return assistant.Result{}, assistantFileError(err)
 				}
 				res, err := assistant.JSON(map[string]any{"query": req.Query, "results": results})
 				for _, r := range results[:min(len(results), 5)] {

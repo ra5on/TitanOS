@@ -2,7 +2,7 @@
 
 Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft – inspiriert von Unraid, aber mit klassischem RAID. Wird auf GitHub veröffentlicht.
 
-Stand: **0.12.0 Stable, 22. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
+Stand: **0.12.1 Stable, 22. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -165,7 +165,7 @@ titanos/
 - Tests auf echter Hardware gezielt ergänzen. Bestätigte frühere Tests gelten nur für den dokumentierten Umfang, nicht automatisch für neue Funktionen.
 - `make test`: Go vet/Tests, Webtests und Svelte-Prüfung. `make test-release`: Paketierungs-/Signaturtests mit echten Werkzeugen. UI-Prüfskripte in `scripts/test-ui-*.mjs`; ausschließlich isolierte Testdaten verwenden. Keine Host-Platten formatieren, keine Host-Sysctls für Tests ändern.
 
-## KI-Assistent und Agent (0.12.0)
+## KI-Assistent und Agent (0.12.1)
 
 - Maßgebliche aktuelle Beschreibung: `docs/ASSISTANT.md`. Alte Release-Notizen sind historische Berichte, keine widersprechenden Regeln.
 - Ab Werk aus, Ollama mit Werkzeugmodell; ausschließlich Seite `/assistant`. Kein externer MCP-Server, keine Bearer-API-Schlüssel, keine separate Agent-App.
@@ -178,6 +178,7 @@ titanos/
 - Docker liefert pro Image Erfolg/Fehler/unbekannt/fest gebunden und Prüfzeit. Fehler nie in „keine Updates“ umdeuten. Dateiwurzeln exakt entdecken, Liste/Suche mit Folgeseiten und Grenzen; Foto-Filter einschließlich HEIC/RAW. API-Erfolg und fachlich geprüfter Endzustand unterscheiden.
 - Dokumente und Dateioperationen wie beschrieben in `docs/ASSISTANT.md`; Probelauf führt keine Änderungen aus. Undo nur für die tatsächlich vom Dateimanager unterstützten Operationen.
 - Einstellungen atomar auf `/config`, im Betrieb aus RAM. Chats separat je Konto auf Daten-Volume (0700), niemals zyklisch auf den Stick. Ohne Volume/temporär nur RAM; laufende dauerhafte Aufträge bei Volume-Verlust blockieren. Höchstens 200 Chats/12 MiB je Chat, aktive/fortsetzbare nicht verdrängen. Optionale zeitbasierte Aufbewahrung nur für abgeschlossene/gestoppte Chats. Fremde Chats auch für Administratoren unzugänglich.
+- Werkzeughärtung seit 0.12.1: zentrale Schemaprüfung vor jedem Aufruf, fehlerhafte Argumente niemals in `{}` umwandeln; unvollständige Modellstreams nicht ausführen. Explizite Ollama-Tool-Parserfehler höchstens zweimal neu generieren, keine Wiederholung bereits ausgeführter Änderungen. Fehlerkategorien im Metadatenexport; identische ungültige/unbekannte Aufrufe zählen zur Schleifenerkennung. Details und Prüfgrenzen in `docs/ASSISTANT.md`.
 - Metadaten-Diagnoseexport, Inhalte nur ausdrücklich; Anhänge nicht als vollständig anonymisiert darstellen. Administrator-Meldungen ohne Chatinhalte. Websuche optional, SSRF-Prüfung bei jeder Verbindung/Weiterleitung beibehalten.
 - Prüfungen verwenden isolierte Daten und nachgebautes Ollama. Keine pauschale Abnahme echter Modelle, Hardware oder Crash-Verhalten behaupten; konkrete Prüfgrenzen in den Release-Notizen nennen.
 

@@ -1711,6 +1711,7 @@
 	"assistant.action.api.change": "{summary}",
 	"error.assistant_off": "The AI assistant is switched off (Settings › AI assistant).",
 	"error.invalid_assistant": "The Ollama address or the model name is not valid.",
+	"error.model_tool_parse": "The model repeatedly generated an invalid tool call. Nothing from these responses was executed. Resume the task or choose another tool-capable model.",
 	"error.ollama_failed": "Ollama is not reachable or reported an error.",
 	"error.assistant_no_model": "No model is chosen. Pick one at the bottom of the chat or under Settings › AI assistant.",
 	"error.invalid_certificate": "This certificate cannot be used:",
