@@ -5,6 +5,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import DiskTests from './DiskTests.svelte';
+	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	type Entry = { time: string; priority: number; source: string; message: string };
 	type Logs = { entries: Entry[]; cursor: string };
@@ -77,6 +78,20 @@
 	});
 
 	const clock = $derived(new Intl.DateTimeFormat(i18n.locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+	/** The lines as text for the assistant, oldest first. */
+	function logText(from: number, to: number): string {
+		return entries
+			.slice(Math.max(0, from), to)
+			.map((e) => `${e.time} ${e.source} ${e.priority <= 3 ? 'ERROR ' : e.priority === 4 ? 'WARNING ' : ''}${e.message}`)
+			.join('\n');
+	}
+	function askLog() {
+		askAbout(t('assistant.askLog'), [{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) }]);
+	}
+	function askLine(index: number) {
+		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) }]);
+	}
+
 	function level(priority: number): 'error' | 'warn' | '' {
 		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
 	}
@@ -140,6 +155,9 @@
 			<input class="field" type="search" bind:value={search} maxlength="200" spellcheck="false" />
 		</label>
 		<label class="check"><input type="checkbox" bind:checked={follow} /><span>{t('tools.follow')}</span></label>
+		{#if assistant.status?.available && entries.length > 0}
+			<button type="button" class="btn" onclick={askLog}>{t('assistant.askLogButton')}</button>
+		{/if}
 	</div>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<!-- A region that scrolls must be reachable with the keyboard. -->
@@ -150,6 +168,7 @@
 				<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
 				<span class="source">{entry.source}</span>
 				<span class="message">{#if level(entry.priority)}<span class="tag">{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span> {/if}{entry.message}</span>
+				{#if level(entry.priority) && assistant.status?.available}<button type="button" class="ask" title={t('assistant.ask')} aria-label={t('assistant.askLine')} onclick={() => askLine(index)}>?</button>{/if}
 			</div>
 		{:else}
 			<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
@@ -226,9 +245,23 @@
 	}
 	.line {
 		display: grid;
-		grid-template-columns: 9.5rem 9rem 1fr;
+		grid-template-columns: 9.5rem 9rem 1fr auto;
 		gap: 0 12px;
 		min-width: 720px;
+	}
+	.ask {
+		width: 20px;
+		height: 20px;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: 50%;
+		background: transparent;
+		color: var(--muted);
+		font-size: 0.6875rem;
+		cursor: pointer;
+	}
+	.ask:hover {
+		color: var(--text);
 	}
 	.line time,
 	.source {

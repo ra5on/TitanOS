@@ -5,8 +5,8 @@ const keywords: Record<string, string> = {
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
-	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access api mcp agent agenten ki ai ollama',
-	assistant: 'ki ai assistent assistant chat ollama modell model llm sprachmodell',
+	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access',
+	assistant: 'ki ai assistent assistant chat ollama modell model llm sprachmodell websuche web search duckduckgo',
 	backups: 'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
 	ups: 'usv ups batterie battery strom power',
@@ -38,7 +38,6 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	access: [
 		{ id: 'ssh', label: 'access.ssh', href: '/settings/access#access-ssh' },
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
-		{ id: 'agents', label: 'access.agents', href: '/settings/access#access-agents' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' }
 	],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],

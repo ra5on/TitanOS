@@ -6,11 +6,13 @@
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import FolderTree from './FolderTree.svelte';
 	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	type Kind = 'smb-copy' | 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
@@ -390,7 +392,7 @@
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
 				<div><dt>{t('backup.keeps')}</dt><dd>{plainCopy(job.destination.type) ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
 			</dl>
-			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre></div>{/if}
+			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre>{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askBackup', { job: job.id }), [{ name: `${job.id}-error.txt`, kind: 'text', text: state.lastError }])}><Icon name="chat" size={14} />{t('assistant.ask')}</button>{/if}</div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">{t('backup.warning')}<pre>{state.warning}</pre></div>{/if}
 			{#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
 			{#if pending[job.id]}<p role="status">{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}</p>{/if}
