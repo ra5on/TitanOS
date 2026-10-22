@@ -22,7 +22,6 @@ mkosi.builddir/
 /web/dist/
 /backend/internal/webui/dist/
 /web/.svelte-kit/
-/web/static/manual/
 
 # Test VMs and stick folders
 /test/stick/
