@@ -36,3 +36,14 @@ func TestRedact(t *testing.T) {
 		}
 	}
 }
+
+func TestSecretsKeepsJSONShape(t *testing.T) {
+	in := `{"secretSet":{"email":false},"passwordSet":true,"password":"hunter2","token": "abc","apiKey":12345}`
+	out := Secrets(in)
+	if !strings.Contains(out, `"secretSet":{"email":false}`) || !strings.Contains(out, `"passwordSet":true`) || strings.Contains(out, "hunter2") || strings.Contains(out, "abc") || strings.Contains(out, "12345") {
+		t.Fatalf("%s", out)
+	}
+	if got := Secrets("password=geheim user=alex"); strings.Contains(got, "geheim") || !strings.Contains(got, "user=alex") {
+		t.Fatalf("%s", got)
+	}
+}

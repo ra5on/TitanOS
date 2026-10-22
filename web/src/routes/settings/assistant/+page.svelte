@@ -4,7 +4,7 @@
 	// the model is told.
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import { loadAssistant, loadModels, type AssistantModel, type AssistantSettings } from '#lib/assistant.svelte.ts';
+	import { AREAS, loadAssistant, loadModels, type AssistantModel, type AssistantSettings } from '#lib/assistant.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -28,10 +28,18 @@
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
+	// What the assistant may do where, as titand decides it without a setting.
+	const DEFAULT_ACCESS: Record<string, 'off' | 'read' | 'write'> = {
+		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read'
+	};
+	const STEPS = [0, 10, 25, 50, 100, 200];
+
 	async function load() {
 		loadError = '';
 		try {
 			settings = await api.get<AssistantSettings>('/assistant');
+			settings.areas = Object.fromEntries(AREAS.map((a) => [a, settings!.areas?.[a] ?? DEFAULT_ACCESS[a]]));
+			settings.maxSteps ??= 0;
 			temperature = settings.temperature === null || settings.temperature === undefined ? '' : String(settings.temperature);
 			check();
 			api.get<{ apps: typeof found }>('/assistant/ollama-apps').then((res) => (found = res.apps)).catch(() => (found = []));
@@ -69,7 +77,9 @@
 		error = '';
 		try {
 			const value = temperature.trim() === '' ? null : Number(temperature.replace(',', '.'));
-			settings = await api.put<AssistantSettings>('/assistant', { ...settings, numCtx: Number(settings.numCtx) || 0, temperature: value });
+			const areas = settings.areas;
+			settings = await api.put<AssistantSettings>('/assistant', { ...settings, numCtx: Number(settings.numCtx) || 0, maxSteps: Number(settings.maxSteps) || 0, temperature: value });
+			settings.areas = { ...areas, ...settings.areas };
 			// The buttons in the header follow the new settings.
 			await loadAssistant();
 			loadModels();
@@ -207,6 +217,26 @@
 				<span>{t('assistant.webUsers')}</span>
 			</label>
 			<p class="muted">{t('assistant.actionsText')}</p>
+			<div class="table">
+				<table class="areas">
+					<thead><tr><th>{t('assistant.area')}</th><th>{t('assistant.areaAccess')}</th></tr></thead>
+					<tbody>
+						{#each AREAS as area (area)}
+							<tr>
+								<td><strong>{t(`assistant.area.${area}`)}</strong><br /><span class="muted small">{t(`assistant.areaText.${area}`)}</span></td>
+								<td>
+									<select class="field" bind:value={settings.areas[area]} aria-label={t(`assistant.area.${area}`)}>
+										<option value="off">{t('assistant.access.off')}</option>
+										<option value="read">{t('assistant.access.read')}</option>
+										<option value="write">{t('assistant.access.write')}</option>
+									</select>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="muted small">{t('assistant.areasHint')}</p>
 		</section>
 
 		<section class="tile">
@@ -228,6 +258,14 @@
 				<span>{t('assistant.prompt')}</span>
 				<textarea class="field" bind:value={settings.prompt} rows="4" maxlength="2000" placeholder={t('assistant.promptPlaceholder')}></textarea>
 				<span class="muted small">{t('assistant.promptHint')}</span>
+			</label>
+			<label>
+				<span>{t('assistant.maxSteps')}</span>
+				<select class="field" bind:value={settings.maxSteps}>
+					{#each STEPS as n (n)}<option value={n}>{n === 0 ? t('assistant.unlimited') : n}</option>{/each}
+					{#if !STEPS.includes(settings.maxSteps)}<option value={settings.maxSteps}>{settings.maxSteps}</option>{/if}
+				</select>
+				<span class="muted small">{t('assistant.maxStepsHint')}</span>
 			</label>
 			<div class="pair">
 				<label>
@@ -404,6 +442,9 @@
 		color: var(--muted);
 		font-weight: 500;
 		font-size: 0.75rem;
+	}
+	.areas td:last-child {
+		width: 13rem;
 	}
 	td .chip {
 		margin-right: 4px;

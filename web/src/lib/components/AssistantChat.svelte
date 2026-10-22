@@ -18,6 +18,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { page } from '$app/state';
 	import AssistantAction from './AssistantAction.svelte';
+	import NasFilePicker from './NasFilePicker.svelte';
 	import Icon from './Icon.svelte';
 
 	let input = $state('');
@@ -28,12 +29,13 @@
 	let log = $state<HTMLElement>();
 	let editing = $state<{ index: number; text: string } | null>(null);
 	let copied = $state(-1);
+	let picking = $state(false);
 
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const suggestions = $derived<MessageKey[]>(
 		admin
-			? ['assistant.suggest.disks', 'assistant.suggest.containers', 'assistant.suggest.backups', 'assistant.suggest.errors', 'assistant.suggest.howto']
-			: ['assistant.suggest.shares', 'assistant.suggest.howto', 'assistant.suggest.files']
+			? ['assistant.suggest.disks', 'assistant.suggest.backups', 'assistant.suggest.errors', 'assistant.suggest.howto', 'assistant.suggest.sort']
+			: ['assistant.suggest.shares', 'assistant.suggest.files', 'assistant.suggest.sort']
 	);
 	const chosen = $derived(chosenModel());
 	const models = $derived.by(() => {
@@ -47,7 +49,7 @@
 		const last = assistant.messages.at(-1);
 		return assistant.busy && last?.role === 'tool' && !last.action ? (last.tool ?? '') : '';
 	});
-	const currentPage = $derived(page.url.pathname.startsWith('/assistant') ? '' : page.url.pathname + page.url.search);
+	const currentPage = $derived(assistant.fromPage);
 
 	function submit() {
 		if (assistant.busy || !input.trim()) return;
@@ -128,7 +130,7 @@
 		editing = null;
 	});
 	$effect(() => {
-		if (assistant.open || page.url.pathname === '/assistant') field?.focus();
+		if (page.url.pathname === '/assistant') field?.focus();
 	});
 </script>
 
@@ -225,17 +227,18 @@
 			<div class="files pending">
 				{#each attachments as file, i (i)}
 					<span class="file">
-						<Icon name={file.kind === 'image' ? 'image' : 'fileText'} size={12} />{file.name}
+						<Icon name={file.kind === 'image' ? 'image' : file.kind === 'nas' ? 'folder' : 'fileText'} size={12} />{file.name}
 						<button type="button" class="mini" aria-label={t('assistant.removeAttachment', { name: file.name })} onclick={() => attachments.splice(i, 1)}><Icon name="close" size={11} /></button>
 					</span>
 				{/each}
 			</div>
-			{#if attachments.some((a) => a.kind === 'image') && !vision}<p class="muted small">{t('assistant.noVision')}</p>{/if}
+			{#if attachments.some((a) => a.kind === 'image' || (a.kind === 'nas' && /\.(png|jpe?g|webp|gif)$/i.test(a.name))) && !vision}<p class="muted small">{t('assistant.noVision')}</p>{/if}
 		{/if}
 		{#if attachError}<p class="notice-error small" role="alert">{attachError}</p>{/if}
 		<div class="compose">
 			<input bind:this={picker} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,.txt,.md,.json,.yaml,.yml,.log,.csv,.conf,.cfg,.ini,.toml,.xml,.sh,.py,.js,.ts" onchange={attach} />
 			<button type="button" class="icon" aria-label={t('assistant.attach')} title={t('assistant.attach')} onclick={() => picker?.click()} disabled={attachments.length >= 4}><Icon name="upload" size={16} /></button>
+			<button type="button" class="icon" aria-label={t('assistant.attachNas')} title={t('assistant.attachNas')} onclick={() => (picking = true)} disabled={attachments.length >= 4}><Icon name="folder" size={16} /></button>
 			<textarea bind:this={field} bind:value={input} class="field" rows="1" placeholder={t('assistant.placeholder')} aria-label={t('assistant.message')} onkeydown={keydown} oninput={grow}></textarea>
 			{#if assistant.busy}
 				<button type="button" class="btn send" aria-label={t('assistant.stop')} title={t('assistant.stop')} onclick={stop}><Icon name="stop" size={16} /></button>
@@ -260,6 +263,10 @@
 		<p class="note muted">{t(assistant.status?.persistent ? 'assistant.note' : 'assistant.noteMemory')}</p>
 	</form>
 </div>
+
+{#if picking}
+	<NasFilePicker max={4 - attachments.length} onclose={() => (picking = false)} onpick={(files) => { attachments.push(...files); picking = false; }} />
+{/if}
 
 <style>
 	.chat {

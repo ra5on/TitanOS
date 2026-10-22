@@ -65,6 +65,8 @@ type testServer struct {
 	power  fakePower
 	client *http.Client
 	update *update.Manager
+	disks  *storage.Manager
+	shares *shares.Manager
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -76,12 +78,14 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	power := fakePower{actions: make(chan string, 1)}
 	updater := disabledUpdate(store)
+	disks := loadedStorage(t, store)
+	shareManager := loadedShares(t, store)
 	srv := httptest.NewServer(New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
-		Storage: loadedStorage(t, store), Shares: loadedShares(t, store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	}))
 	t.Cleanup(srv.Close)
-	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power, update: updater}
+	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager}
 	ts.client = ts.newClient()
 	return ts
 }
@@ -1738,4 +1742,27 @@ func TestFileMediaStreamingIsAuthorizedTypedAndSupportsRanges(t *testing.T) {
 	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=unsafe.html", nil); !strings.HasPrefix(res.Header.Get("Content-Disposition"), "attachment;") {
 		t.Fatal(res.Header)
 	}
+}
+
+// withShare mounts a volume "tank" in a temporary folder and creates the
+// share Docs on it, readable and writable for the owner alex.
+func (ts *testServer) withShare() string {
+	ts.t.Helper()
+	mnt := ts.t.TempDir()
+	if err := ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"}}); err != nil {
+		ts.t.Fatal(err)
+	}
+	if err := ts.disks.Load(); err != nil {
+		ts.t.Fatal(err)
+	}
+	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true} })
+	ts.shares.UseMountRoot(mnt)
+	dir := filepath.Join(mnt, "tank", "Docs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		ts.t.Fatal(err)
+	}
+	if res, body := ts.request("POST", "/api/v1/shares", map[string]any{"name": "Docs", "volume": "tank", "smb": true}); res.StatusCode != http.StatusCreated {
+		ts.t.Fatalf("share: %d %s", res.StatusCode, body)
+	}
+	return dir
 }
