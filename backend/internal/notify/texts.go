@@ -6,6 +6,8 @@ import "strings"
 // a volume or a disk. The web UI has its own texts for the same kinds.
 var texts = map[string]map[string][2]string{
 	"de": {
+		"assistant_done":       {"Agentenantwort abgeschlossen", "Der Auftrag von {s} hat eine Antwort. Ergebnisse stehen im KI-Assistenten."},
+		"assistant_blocked":    {"Agent benötigt Aufmerksamkeit", "Ein Auftrag von {s} kann nicht weiterarbeiten. Einzelheiten stehen im KI-Assistenten."},
 		"test":                 {"Testnachricht", "Wenn du das liest, funktioniert dieser Weg für Benachrichtigungen."},
 		"volume_degraded":      {"Volume {s}: eine Platte fehlt", "Das Volume {s} läuft ohne Redundanz weiter. Ersetze die ausgefallene Platte bald; fällt eine weitere aus, sind die Daten verloren."},
 		"volume_failed":        {"Volume {s} ist ausgefallen", "Dem Volume {s} fehlen zu viele Platten. Es ist nicht mehr benutzbar."},
@@ -34,6 +36,8 @@ var texts = map[string]map[string][2]string{
 		"disk_hot":             {"Platte {s} ist sehr warm", "Die Platte {s} ist wärmer als 55 °C. Prüfe die Lüftung."},
 	},
 	"en": {
+		"assistant_done":       {"Agent answer complete", "The task from {s} has an answer. See the assistant for results."},
+		"assistant_blocked":    {"Agent needs attention", "A task from {s} cannot continue. See the assistant for details."},
 		"test":                 {"Test message", "If you can read this, this way of notifying works."},
 		"volume_degraded":      {"Volume {s}: a disk is missing", "The volume {s} goes on without redundancy. Replace the failed disk soon; if another one fails, the data is lost."},
 		"volume_failed":        {"Volume {s} has failed", "The volume {s} lacks too many disks. It cannot be used any more."},

@@ -79,17 +79,17 @@ const (
 
 // States of an action.
 const (
-	ActionPending  = "pending"
-	ActionDone     = "done"
-	ActionFailed   = "failed"
-	ActionRejected = "rejected"
-	ActionExpired  = "expired"
+	ActionPending   = "pending"
+	ActionRunning   = "running"
+	ActionUncertain = "uncertain"
+	ActionDone      = "done"
+	ActionFailed    = "failed"
+	ActionRejected  = "rejected"
+	ActionExpired   = "expired"
 )
 
-// Action is a change the model proposes. The browser shows it as a card
-// and, once the person confirms it, calls the API route itself with the
-// session of the account: rights, checks and the log are those of the
-// button in the UI.
+// Action is a stored proposal. The server revalidates and executes it with
+// current account rights and records the actual API outcome.
 type Action struct {
 	ID   string `json:"id"`
 	Tool string `json:"tool"`
@@ -100,7 +100,7 @@ type Action struct {
 	Reason string            `json:"reason"`
 	Level  string            `json:"level"`
 	// Confirm is what has to be typed for LevelDestroy. ConfirmField says
-	// where the browser puts it: "body:<field>" or "query:<parameter>";
+	// where the server puts it: "body:<field>" or "query:<parameter>";
 	// empty if the route itself does not ask for it.
 	Confirm      string `json:"confirm,omitempty"`
 	ConfirmField string `json:"confirmField,omitempty"`
@@ -114,10 +114,11 @@ type Action struct {
 	State  string   `json:"state"`
 	Result string   `json:"result,omitempty"`
 	// Steps are the plan of a task (Key "task"), which the person approves
-	// once. Auto marks an action inside an approved task: the browser runs
-	// it without asking again. Destroying actions are never Auto.
-	Steps []string `json:"steps,omitempty"`
-	Auto  bool     `json:"auto,omitempty"`
+	// once. Auto reflects the current execution policy; Approved records an
+	// explicit approval for this particular action.
+	Steps    []string `json:"steps,omitempty"`
+	Auto     bool     `json:"auto,omitempty"`
+	Approved bool     `json:"approved,omitempty"`
 }
 
 // Task is a job the person approved as a whole: until the model answers,

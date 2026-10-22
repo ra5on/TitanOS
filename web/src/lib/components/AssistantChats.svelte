@@ -46,13 +46,13 @@
 <div class="chats">
 	<div class="top">
 		<input class="field" type="search" value={assistant.search} oninput={search} placeholder={t('assistant.searchChats')} aria-label={t('assistant.searchChats')} />
-		<button type="button" class="btn btn-primary" onclick={() => { newChat(); onopen?.(); }} disabled={assistant.busy}><Icon name="plus" size={14} />{t('assistant.new')}</button>
+		<button type="button" class="btn btn-primary" onclick={() => { newChat(); onopen?.(); }}><Icon name="plus" size={14} />{t('assistant.new')}</button>
 	</div>
 	{#if !assistant.status?.persistent}<p class="notice-warn small" role="note">{t('assistant.memoryOnly')}</p>{/if}
 	<ul>
 		{#each assistant.chats as chat (chat.id)}
 			<li class:current={chat.id === assistant.chatId}>
-				<button type="button" class="open" onclick={() => open(chat.id)} disabled={assistant.busy}>
+				<button type="button" class="open" onclick={() => open(chat.id)}>
 					<span class="title">{chat.title || t('assistant.untitled')}</span>
 					<span class="muted small">{when(chat.updated)}</span>
 				</button>

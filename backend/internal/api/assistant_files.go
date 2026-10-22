@@ -111,7 +111,7 @@ func (s *Server) fileTools(user auth.User) []assistant.Tool {
 		}}}
 	return []assistant.Tool{
 		read("files_search", "Search for files and folders by name in a root of the file manager, also in subfolders.",
-			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("Only this file type, e.g. pdf.")}, "root"),
+			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."}}, "root"),
 			s.assistantFilesSearch(user)),
 		actionTool("file_write", "Propose to write a file: plain text, Markdown, CSV, JSON, or a Word (.docx), Excel (.xlsx) or PDF document. For docx and pdf, write the content as Markdown (headings, lists, tables, bold, italic). For xlsx, give sheets or CSV content.",
 			map[string]any{"root": str("Root ID such as share/Documents."), "path": str("Path of the file inside the root; missing folders are created."),
@@ -280,7 +280,10 @@ func (s *Server) planCopy(user auth.User) plan {
 
 func (s *Server) assistantFilesSearch(user auth.User) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
-		var req struct{ Root, Query, Path, Extension string }
+		var req struct {
+			Root, Query, Path, Extension string
+			Offset                       int
+		}
 		if err := assistant.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
@@ -293,17 +296,37 @@ func (s *Server) assistantFilesSearch(user auth.User) func(context.Context, json
 		}
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		result, err := s.opts.Files.Search(ctx, root, files.SearchOptions{Path: req.Path, Query: req.Query, Extension: strings.TrimPrefix(req.Extension, ".")})
+		if req.Offset < 0 {
+			return nil, assistant.ErrInvalid
+		}
+		extension := strings.ToLower(strings.TrimSpace(req.Extension))
+		if extension == "images" || extension == "photos" {
+			extension = "jpg,jpeg,png,gif,webp,heic,heif,avif,tif,tiff,bmp,dng,cr2,cr3,nef,arw,orf,rw2,raf,pef"
+		}
+		opt := files.SearchOptions{Path: req.Path, Query: req.Query}
+		if extension != "" {
+			opt.Extensions = strings.Split(extension, ",")
+		}
+		result, err := s.opts.Files.Search(ctx, root, opt)
 		if err != nil {
 			return nil, assistant.Errorf("%v", err)
 		}
 		found := []files.FoundEntry{}
 		for _, e := range result.Entries {
-			if !hiddenPath(e.Path) && len(found) < 300 {
+			if !hiddenPath(e.Path) {
 				found = append(found, e)
 			}
 		}
-		return map[string]any{"root": root.ID, "entries": found, "truncated": result.Truncated || len(found) < len(result.Entries)}, nil
+		start := min(req.Offset, len(found))
+		end := min(start+100, len(found))
+		out := map[string]any{"root": root.ID, "entries": found[start:end], "total": len(found), "scanned": result.Scanned, "truncated": result.Truncated, "observedAt": time.Now()}
+		if end < len(found) {
+			out["nextOffset"] = end
+		}
+		if result.Truncated {
+			out["next"] = "Search narrower subfolders; this scan is incomplete. Do not infer absence of other photos/files."
+		}
+		return out, nil
 	}
 }
 

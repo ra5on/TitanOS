@@ -99,12 +99,15 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	opts     Options
-	sessions *auth.Sessions
-	limiter  *auth.Limiter
-	prefs    *preferences
-	handler  http.Handler
-	chats    *assistant.Chats
+	opts       Options
+	sessions   *auth.Sessions
+	limiter    *auth.Limiter
+	prefs      *preferences
+	handler    http.Handler
+	chats      *assistant.Chats
+	agentMu    sync.Mutex
+	agentJobs  map[string]*agentJob
+	agentSlots chan struct{}
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -131,6 +134,8 @@ func New(opts Options) *Server {
 		}
 	}
 	s.chats = assistant.NewChats(s.chatsDir)
+	s.agentJobs = map[string]*agentJob{}
+	s.agentSlots = make(chan struct{}, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -342,6 +347,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/assistant/status", s.requireUser(s.handleAssistantStatus))
 	mux.HandleFunc("GET /api/v1/assistant", s.requireAdmin(s.handleAssistant))
 	mux.HandleFunc("PUT /api/v1/assistant", s.requireAdmin(s.handleAssistantChange))
+	mux.HandleFunc("GET /api/v1/assistant/prompt", s.requireAdmin(s.handleAgentPrompt))
+	mux.HandleFunc("POST /api/v1/assistant/probe", s.requireAdmin(s.handleAgentProbe))
+	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/control", s.requireAssistant(s.handleAgentControl))
+	mux.HandleFunc("GET /api/v1/assistant/chats/{id}/diagnostics", s.requireAssistant(s.handleAgentDiagnostics))
 	mux.HandleFunc("POST /api/v1/assistant/models", s.requireAdmin(s.handleAssistantModels))
 	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
 	mux.HandleFunc("POST /api/v1/assistant/models/delete", s.requireAdmin(s.handleAssistantModelDelete))
@@ -474,6 +483,10 @@ func currentUser(r *http.Request) auth.User {
 
 // authenticate returns the account behind the session cookie.
 func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
+	// Only in-process requests can carry this unexported context key.
+	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
+		return s.opts.Users.Get(name)
+	}
 	cookie, err := r.Cookie(s.cookieName())
 	if err != nil {
 		return auth.User{}, false

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { controlRun } from '#lib/assistant.svelte.ts';
 	// The open chat: messages, what the model read, cards for actions, and
 	// the field for the next question. Used in the side panel and on the
 	// page /assistant.
@@ -22,6 +23,7 @@
 	import Icon from './Icon.svelte';
 
 	let input = $state('');
+ let diagnosticContent=$state(false);
 	let attachments = $state<ChatAttachment[]>([]);
 	let attachError = $state('');
 	let field = $state<HTMLTextAreaElement>();
@@ -52,7 +54,7 @@
 	const currentPage = $derived(assistant.fromPage);
 
 	function submit() {
-		if (assistant.busy || !input.trim()) return;
+		if (!input.trim()) return;
 		const text = input;
 		const files = attachments;
 		input = '';
@@ -222,6 +224,19 @@
 		{#if assistant.error}<p class="notice-error" role="alert">{errorText(assistant.error)}</p>{/if}
 	</div>
 
+	<div class="agent-controls">
+		{#if assistant.run}
+			<span role="status">{t(`agent.state.${assistant.run.state}` as MessageKey)}</span>
+			{#if assistant.run.detail}<span class="muted small">{assistant.run.detail}</span>{/if}
+			{#if assistant.busy}<button class="btn" onclick={() => controlRun('pause')}>{t('agent.pause')}</button>
+			{:else if assistant.messages.some(m=>m.action && ['running','uncertain'].includes(m.action.state))}<button class="btn" onclick={() => controlRun('reconcile')}>{t('agent.reconcile')}</button>
+ {:else if ['paused','waiting','blocked','stopped'].includes(assistant.run.state)}<button class="btn" onclick={() => controlRun('resume')}>{t('agent.resume')}</button>{/if}
+		{/if}
+		<label><input type="checkbox" bind:checked={assistant.dryRun} disabled={assistant.busy || !!assistant.run && ['paused','waiting','blocked','confirmation','queued','running'].includes(assistant.run.state)} /> {t('agent.dryRun')}</label>
+		{#if assistant.archived}<span class="muted small">{t('agent.compacted', {count:assistant.archived})}</span>{/if}
+		{#if assistant.chatId}<label><input type="checkbox" bind:checked={diagnosticContent}/>{t('agent.diagnosticContent')}</label><a class="btn" href={`/api/v1/assistant/chats/${assistant.chatId}/diagnostics${diagnosticContent?'?content=true':''}`} download>{t('agent.diagnostics')}</a>{/if}
+	</div>
+
 	<form onsubmit={(event) => { event.preventDefault(); submit(); }}>
 		{#if attachments.length}
 			<div class="files pending">
@@ -237,10 +252,11 @@
 		{#if attachError}<p class="notice-error small" role="alert">{attachError}</p>{/if}
 		<div class="compose">
 			<input bind:this={picker} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,.txt,.md,.json,.yaml,.yml,.log,.csv,.conf,.cfg,.ini,.toml,.xml,.sh,.py,.js,.ts" onchange={attach} />
-			<button type="button" class="icon" aria-label={t('assistant.attach')} title={t('assistant.attach')} onclick={() => picker?.click()} disabled={attachments.length >= 4}><Icon name="upload" size={16} /></button>
-			<button type="button" class="icon" aria-label={t('assistant.attachNas')} title={t('assistant.attachNas')} onclick={() => (picking = true)} disabled={attachments.length >= 4}><Icon name="folder" size={16} /></button>
+			<button type="button" class="icon" aria-label={t('assistant.attach')} title={t('assistant.attach')} onclick={() => picker?.click()} disabled={assistant.busy || attachments.length >= 4}><Icon name="upload" size={16} /></button>
+			<button type="button" class="icon" aria-label={t('assistant.attachNas')} title={t('assistant.attachNas')} onclick={() => (picking = true)} disabled={assistant.busy || attachments.length >= 4}><Icon name="folder" size={16} /></button>
 			<textarea bind:this={field} bind:value={input} class="field" rows="1" placeholder={t('assistant.placeholder')} aria-label={t('assistant.message')} onkeydown={keydown} oninput={grow}></textarea>
 			{#if assistant.busy}
+				<button type="submit" class="btn" disabled={!input.trim()}>{t('agent.steer')}</button>
 				<button type="button" class="btn send" aria-label={t('assistant.stop')} title={t('assistant.stop')} onclick={stop}><Icon name="stop" size={16} /></button>
 			{:else}
 				<button type="submit" class="btn btn-primary send" aria-label={t('assistant.send')} title={t('assistant.send')} disabled={!input.trim()}><Icon name="send" size={16} /></button>
@@ -269,6 +285,7 @@
 {/if}
 
 <style>
+	.agent-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:8px 14px; border-top:1px solid var(--border); font-size:0.8125rem; }
 	.chat {
 		flex: 1;
 		min-height: 0;

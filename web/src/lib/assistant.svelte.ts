@@ -1,7 +1,6 @@
 // The chat with the assistant: open or closed, the chats of the account
 // and the one that is open. Chats are kept by the NAS (on a volume); the
-// browser only shows them. Actions the assistant proposes run here, with
-// the session of the account, once the person confirms them.
+// browser observes background jobs; only the server executes stored actions.
 import { goto } from '$app/navigation';
 import { api, ApiError } from '#lib/api.ts';
 
@@ -20,7 +19,7 @@ export type ChatAction = {
 	body?: Record<string, unknown>;
 	/** Tools from outside TitanOS the model read before it proposed this. */
 	after?: string[];
-	state: 'pending' | 'done' | 'failed' | 'rejected' | 'expired';
+	state: 'pending' | 'running' | 'uncertain' | 'done' | 'failed' | 'rejected' | 'expired';
 	result?: string;
 	/** The plan of a task (key "task"). */
 	steps?: string[];
@@ -45,11 +44,22 @@ export type ChatEntry = {
 	ok?: boolean;
 	action?: ChatAction;
 };
-export type ChatSummary = { id: string; title: string; created: string; updated: string; messages: number };
+export type AgentRun = { state: string; detail?: string; started: string; wake?: string };
+export type ModelProfile = { name: string; model: string; prompt: string; numCtx: number; temperature: number | null };
+export type ChatSummary = { run?: AgentRun; id: string; title: string; created: string; updated: string; messages: number };
 export type AssistantStatus = { available: boolean; enabled: boolean; model: string; web: boolean; persistent: boolean };
 export type AssistantModel = { name: string; sizeBytes: number; parameters?: string; quantization?: string; capabilities: string[]; contextLength?: number };
 export type AssistantSettings = {
 	enabled: boolean;
+	execution?: 'confirm' | 'direct';
+	paused?: boolean;
+	systemPrompt?: string;
+	promptVersion?: string;
+	promptHistory?: string[];
+	profiles?: ModelProfile[];
+	memory?: string;
+	retentionDays?: number;
+	ephemeral?: boolean;
 	ollama: string;
 	model: string;
 	users: boolean;
@@ -81,6 +91,9 @@ export const assistant = $state({
 	title: '',
 	messages: [] as ChatEntry[],
 	busy: false,
+	run: null as AgentRun | null,
+	dryRun: false,
+	archived: 0,
 	/** The answer that is being written right now. */
 	draft: { content: '', thinking: '' },
 	error: '',
@@ -88,6 +101,8 @@ export const assistant = $state({
 });
 
 let controller: AbortController | null = null;
+let viewGeneration = 0;
+function detach() { viewGeneration++; controller?.abort(); controller=null; assistant.busy=false; assistant.draft={content:'',thinking:''}; }
 
 export function useAssistantPrefs(value: Record<string, unknown> | null) {
 	const v = value ?? {};
@@ -159,12 +174,18 @@ export function toggleAssistant() {
 }
 
 export async function openChat(id: string) {
-	if (assistant.busy) return;
+ detach(); const view=viewGeneration;
 	try {
-		const res = await api.get<{ chat: { id: string; title: string; messages: ChatEntry[] }; busy: boolean }>(`/assistant/chats/${id}`);
+		const res = await api.get<{ chat: { id: string; title: string; messages: ChatEntry[]; run?: AgentRun; dryRun?: boolean; archived?: number }; busy: boolean }>(`/assistant/chats/${id}`);
+ if(view!==viewGeneration) return;
 		assistant.chatId = res.chat.id;
 		assistant.title = res.chat.title;
 		assistant.messages = res.chat.messages;
+		assistant.run = res.chat.run ?? null;
+		assistant.busy = res.busy;
+		assistant.dryRun = res.chat.dryRun ?? false;
+		assistant.archived = res.chat.archived ?? 0;
+		watchChat();
 		assistant.error = '';
 	} catch (err) {
 		assistant.error = problemOf(err);
@@ -173,8 +194,10 @@ export async function openChat(id: string) {
 
 /** Starts an empty chat; the NAS creates it with the first message. */
 export function newChat() {
-	if (assistant.busy) return;
+ detach();
 	assistant.chatId = '';
+	assistant.run = null;
+	assistant.archived = 0;
 	assistant.title = '';
 	assistant.messages = [];
 	assistant.error = '';
@@ -209,14 +232,15 @@ async function stream(path: string, body: Record<string, unknown>) {
 	assistant.busy = true;
 	assistant.draft = { content: '', thinking: '' };
 	assistant.error = '';
-	controller = new AbortController();
+	const active = new AbortController();
+ controller=active; const view=viewGeneration;
 	try {
 		const res = await fetch('/api/v1' + path, {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(body),
-			signal: controller.signal
+			signal: active.signal
 		});
 		if (!res.ok || !res.body) {
 			let code = 'internal';
@@ -232,6 +256,7 @@ async function stream(path: string, body: Record<string, unknown>) {
 		let buffer = '';
 		for (;;) {
 			const { done, value } = await reader.read();
+			if(controller!==active || view!==viewGeneration) return;
 			buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 			let cut;
 			while ((cut = buffer.indexOf('\n\n')) >= 0) {
@@ -239,7 +264,9 @@ async function stream(path: string, body: Record<string, unknown>) {
 				buffer = buffer.slice(cut + 2);
 				const event = /^event: (.*)$/m.exec(raw)?.[1];
 				const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] ?? '{}');
-				if (event === 'delta') assistant.draft.content += data.text ?? '';
+				if (event === 'snapshot') { assistant.messages = data.chat.messages; assistant.run = data.chat.run; assistant.archived = data.chat.archived ?? 0; }
+				else if (event === 'problem') assistant.error = data.code;
+				else if (event === 'delta') assistant.draft.content += data.text ?? '';
 				else if (event === 'thinking') assistant.draft.thinking += data.text ?? '';
 				else if (event === 'entry') {
 					assistant.messages[data.index] = data.entry;
@@ -250,6 +277,7 @@ async function stream(path: string, body: Record<string, unknown>) {
 			if (done) break;
 		}
 	} catch (err) {
+ if(controller!==active || view!==viewGeneration) return;
 		if (err instanceof DOMException && err.name === 'AbortError') {
 			// Stopped: keep what came, as the NAS does.
 			if (assistant.draft.content || assistant.draft.thinking) {
@@ -259,21 +287,23 @@ async function stream(path: string, body: Record<string, unknown>) {
 			assistant.messages.push({ role: 'assistant', content: '', problem: { code: problemOf(err) } });
 		}
 	} finally {
+ if(controller===active && view===viewGeneration) {
 		assistant.draft = { content: '', thinking: '' };
 		assistant.busy = false;
 		controller = null;
+ }
 	}
+ if(view!==viewGeneration) return;
 	loadChats();
-	// Inside an approved task the next action runs without asking.
-	const last = assistant.messages.length - 1;
-	const action = assistant.messages[last]?.action;
-	if (action?.state === 'pending' && action.auto && action.level !== 'destroy') await runAction(last);
+	await refreshChat();
+	watchChat();
 }
 
 /** Asks the assistant; with edit, replaces the question at that index. */
 export async function send(text: string, attachments: ChatAttachment[] = [], edit?: number) {
 	const question = text.trim();
-	if (!question || assistant.busy) return;
+	if (!question) return;
+	if (assistant.busy) { detach(); await stream(`/assistant/chats/${assistant.chatId}/control`, {action: 'steer', text: question}); return; }
 	if (!assistant.chatId) {
 		// Busy already, so that the page does not open another chat meanwhile.
 		assistant.busy = true;
@@ -292,7 +322,7 @@ export async function send(text: string, attachments: ChatAttachment[] = [], edi
 	if (edit !== undefined) assistant.messages.length = edit;
 	assistant.messages.push({ role: 'user', content: question, attachments, page });
 	if (!assistant.title) assistant.title = question.slice(0, 60);
-	await stream(`/assistant/chats/${assistant.chatId}/messages`, { text: question, page, model: chosenModel(), attachments, ...(edit !== undefined ? { edit } : {}) });
+	await stream(`/assistant/chats/${assistant.chatId}/messages`, { dryRun: assistant.dryRun, text: question, page, model: chosenModel(), attachments, ...(edit !== undefined ? { edit } : {}) });
 }
 
 export async function regenerate() {
@@ -304,56 +334,47 @@ export async function regenerate() {
 }
 
 export function stop() {
-	controller?.abort();
+ detach();
+	if (assistant.chatId) api.post(`/assistant/chats/${assistant.chatId}/control`, {action:'stop'}).then(refreshChat).catch(err => assistant.error = problemOf(err));
+}
+export async function controlRun(action: 'pause' | 'resume' | 'reconcile') {
+ detach();
+ try {
+	if (action === 'resume' || action === 'reconcile') await stream(`/assistant/chats/${assistant.chatId}/control`, {action});
+	else { await api.post(`/assistant/chats/${assistant.chatId}/control`, {action}); await refreshChat(); }
+ } catch(err) {assistant.error=problemOf(err);}
+}
+let poll: ReturnType<typeof setTimeout> | undefined;
+export async function refreshChat() {
+	const id=assistant.chatId; if (!id) return;
+	try {
+		const res=await api.get<{chat:{messages:ChatEntry[];run?:AgentRun;archived?:number};busy:boolean}>(`/assistant/chats/${id}`);
+		if (id!==assistant.chatId) return;
+		assistant.messages=res.chat.messages; assistant.run=res.chat.run??null; assistant.archived=res.chat.archived??0;
+		if (!controller) assistant.busy=res.busy;
+	} catch(err) {assistant.error=problemOf(err);}
+}
+function watchChat() {
+	clearTimeout(poll);
+	if (typeof window === 'undefined' || !assistant.chatId) return;
+	poll=setTimeout(async()=>{if (!controller) await refreshChat(); watchChat();},3000);
 }
 
-/** Opens a new chat with a question, e.g. from "Ask the assistant" on a message. */
 /** Opens a new chat with a question, e.g. from "Ask the assistant" on a message. */
 export async function askAbout(question: string, attachments: ChatAttachment[] = []) {
 	if (!assistant.status?.available) return;
 	if (assistant.models.length === 0) loadModels();
-	stop();
+	detach();
 	openAssistant();
 	newChat();
 	await send(question, attachments);
 }
 
-function short(value: unknown): string {
-	if (value === undefined || value === null) return '';
-	const text = typeof value === 'string' ? value : JSON.stringify(value);
-	return text.length > 1500 ? text.slice(0, 1500) + ' …' : text;
-}
-
-/** Runs a confirmed action with the session of this account and tells the assistant. */
+/** Approval is bound to a stored action. The NAS executes and records it. */
 export async function runAction(index: number, typed = '') {
-	const action = assistant.messages[index]?.action;
-	if (!action || action.state !== 'pending' || assistant.busy) return;
-	if (action.level === 'destroy' && typed !== action.confirm) return;
-	let path = action.path.replace(/^\/api\/v1/, '');
-	let body: Record<string, unknown> | undefined = action.body ? { ...action.body } : undefined;
-	if (action.level === 'destroy' && action.confirmField) {
-		const [where, field] = action.confirmField.split(':');
-		if (where === 'query') path += (path.includes('?') ? '&' : '?') + encodeURIComponent(field) + '=' + encodeURIComponent(typed);
-		else body = { ...(body ?? {}), [field]: typed };
-	}
-	let state: 'done' | 'failed' = 'done';
-	let result = '';
-	assistant.busy = true;
-	try {
-		// A task card only approves the plan; there is nothing to call.
-		if (action.method) {
-			const method = action.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
-			const answer = method === 'get' ? await api.get(path) : await api[method](path, body);
-			result = short(answer);
-		}
-	} catch (err) {
-		state = 'failed';
-		result = err instanceof ApiError ? `${err.code}: ${err.message}` : String(err);
-	}
-	assistant.busy = false;
-	action.state = state;
-	action.result = result;
-	await stream(`/assistant/chats/${assistant.chatId}/actions/${action.id}`, { state, result, model: chosenModel() });
+	const action=assistant.messages[index]?.action;
+	if (!action || action.state!=='pending' || assistant.busy) return;
+	await stream(`/assistant/chats/${assistant.chatId}/actions/${action.id}`, {state:'approved',typed,confirmed:true,model:chosenModel()});
 }
 
 export async function rejectAction(index: number) {
