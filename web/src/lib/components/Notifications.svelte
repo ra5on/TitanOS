@@ -8,6 +8,7 @@
 	import { dismissNotifications, loadNotifications, markSeen, notifications, noticeText, unreadCount } from '#lib/notifications.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
+	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	let open = $state(false);
 	let busy = $state(false);
@@ -96,6 +97,9 @@
 							{#if href && !page.url.pathname.startsWith('/docker')}
 								<a class="notice-link" {href} onclick={() => open = false}>{t('ui.open')}</a>
 							{/if}
+							{#if assistant.status?.available}
+								<button type="button" class="notice-link ask" onclick={() => { open = false; askAbout(t('assistant.askNotice', { title: text.title, text: text.text, time: formatDateTime(new Date(notice.time)) })); }}>{t('assistant.ask')}</button>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -106,6 +110,16 @@
 </div>
 
 <style>
+	.ask {
+		width: fit-content;
+		padding: 0;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		font: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
 	.clear { margin: 0 16px 8px; }
 	.dismiss { margin-left: auto; padding: 5px; min-height: 28px; }
 	.notifications {
