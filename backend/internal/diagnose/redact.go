@@ -66,12 +66,26 @@ var (
 )
 
 // Text returns s with everything private replaced.
-func (r *Redactor) Text(s string) string {
+// Secrets removes only secrets (keys, passwords, tokens, logins in
+// addresses) and leaves names and addresses as they are.
+func Secrets(s string) string {
 	s = pemBlock.ReplaceAllString(s, "<key removed>")
 	s = sshKey.ReplaceAllString(s, "$1 <key removed>")
 	s = urlLogin.ReplaceAllString(s, "$1<removed>@")
 	s = bearer.ReplaceAllString(s, "$1 <removed>")
-	s = secretPair.ReplaceAllString(s, "$1<removed>")
+	return secretPair.ReplaceAllStringFunc(s, func(found string) string {
+		m := secretPair.FindStringSubmatch(found)
+		// JSON flags such as "secretSet": true or an object are no secret.
+		switch value := m[2]; {
+		case strings.HasPrefix(value, "{"), strings.HasPrefix(value, "["), value == "true", value == "false", value == "null":
+			return found
+		}
+		return m[1] + "<removed>"
+	})
+}
+
+func (r *Redactor) Text(s string) string {
+	s = Secrets(s)
 	s = email.ReplaceAllStringFunc(s, func(found string) string {
 		// Units of systemd look alike: getty@tty1.service.
 		if unitName.MatchString(found) {

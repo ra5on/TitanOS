@@ -14,7 +14,6 @@
 	import Header from './Header.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
-	import AssistantPanel from './AssistantPanel.svelte';
 	import Icon from './Icon.svelte';
 	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 
@@ -55,7 +54,7 @@
 	$effect(() => {
 		if (session.data?.user?.name) loadAssistant();
 	});
-	const fab = $derived(!!assistant.status?.available && assistant.prefs.floating && !assistant.open && page.url.pathname !== '/assistant');
+	const fab = $derived(!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant');
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -78,7 +77,6 @@
 	<StatusBar note={shell.statusNote} />
 </div>
 {#if admin}<TerminalPanel />{/if}
-{#if assistant.status?.available}<AssistantPanel />{/if}
 {#if fab}
 	<button type="button" class="fab" style:bottom={admin && terminal.open && !terminal.full ? `${terminal.height + 16}px` : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
 		<Icon name="chat" size={22} />

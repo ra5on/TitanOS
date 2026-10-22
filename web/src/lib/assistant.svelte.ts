@@ -2,6 +2,7 @@
 // and the one that is open. Chats are kept by the NAS (on a volume); the
 // browser only shows them. Actions the assistant proposes run here, with
 // the session of the account, once the person confirms them.
+import { goto } from '$app/navigation';
 import { api, ApiError } from '#lib/api.ts';
 
 export type ChatAction = {
@@ -21,8 +22,12 @@ export type ChatAction = {
 	after?: string[];
 	state: 'pending' | 'done' | 'failed' | 'rejected' | 'expired';
 	result?: string;
+	/** The plan of a task (key "task"). */
+	steps?: string[];
+	/** Inside an approved task: runs without asking again. */
+	auto?: boolean;
 };
-export type ChatAttachment = { name: string; kind: 'text' | 'image'; text?: string; image?: string; size?: number };
+export type ChatAttachment = { name: string; kind: 'text' | 'image' | 'nas'; text?: string; image?: string; size?: number; root?: string; path?: string };
 export type ChatSource = { title: string; url: string };
 export type ChatEntry = {
 	role: 'user' | 'assistant' | 'tool';
@@ -54,15 +59,19 @@ export type AssistantSettings = {
 	prompt: string;
 	numCtx: number;
 	temperature: number | null;
+	maxSteps: number;
+	areas: Record<string, 'off' | 'read' | 'write'>;
 };
-export type AssistantPrefs = { floating: boolean; width: number; pageContext: boolean; model: string };
+export type AssistantPrefs = { floating: boolean; pageContext: boolean; model: string };
 
-const DEFAULT_PREFS: AssistantPrefs = { floating: true, width: 440, pageContext: true, model: '' };
+const DEFAULT_PREFS: AssistantPrefs = { floating: true, pageContext: true, model: '' };
+
+/** Areas of the NAS, in the order of the settings page. */
+export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates'] as const;
 
 export const assistant = $state({
-	open: false,
-	/** The panel shows the open chat or the list of chats. */
-	view: 'chat' as 'chat' | 'list',
+	/** The page the chat was opened from, sent along as context. */
+	fromPage: '',
 	/** null until read: whether this account may chat at all. */
 	status: null as AssistantStatus | null,
 	models: [] as AssistantModel[],
@@ -84,7 +93,6 @@ export function useAssistantPrefs(value: Record<string, unknown> | null) {
 	const v = value ?? {};
 	assistant.prefs = {
 		floating: typeof v.floating === 'boolean' ? v.floating : DEFAULT_PREFS.floating,
-		width: typeof v.width === 'number' && v.width >= 320 && v.width <= 1200 ? v.width : DEFAULT_PREFS.width,
 		pageContext: typeof v.pageContext === 'boolean' ? v.pageContext : DEFAULT_PREFS.pageContext,
 		model: typeof v.model === 'string' ? v.model : ''
 	};
@@ -109,7 +117,6 @@ export async function loadAssistant() {
 	} catch {
 		assistant.status = { available: false, enabled: false, model: '', web: false, persistent: false };
 	}
-	if (!assistant.status.available) assistant.open = false;
 }
 
 export async function loadModels() {
@@ -137,23 +144,18 @@ export async function loadChats() {
 	}
 }
 
+/** Opens the chat page, remembering where it was opened from. */
 export function openAssistant() {
-	if (!assistant.status?.available) return;
-	assistant.open = true;
-	if (assistant.models.length === 0) loadModels();
-	if (!assistant.chatId) {
-		assistant.view = 'list';
-		loadChats().then(() => {
-			// Start where the newest chat is, or with an empty one.
-			if (assistant.chats.length > 0) openChat(assistant.chats[0].id);
-			else newChat();
-		});
+	if (!assistant.status?.available || typeof location === 'undefined') return;
+	if (location.pathname !== '/assistant') {
+		assistant.fromPage = location.pathname + location.search;
+		goto('/assistant');
 	}
 }
 
+/** The same, for the button in the header, the round button and Ctrl+J. */
 export function toggleAssistant() {
-	if (assistant.open) assistant.open = false;
-	else openAssistant();
+	openAssistant();
 }
 
 export async function openChat(id: string) {
@@ -163,7 +165,6 @@ export async function openChat(id: string) {
 		assistant.chatId = res.chat.id;
 		assistant.title = res.chat.title;
 		assistant.messages = res.chat.messages;
-		assistant.view = 'chat';
 		assistant.error = '';
 	} catch (err) {
 		assistant.error = problemOf(err);
@@ -176,7 +177,6 @@ export function newChat() {
 	assistant.chatId = '';
 	assistant.title = '';
 	assistant.messages = [];
-	assistant.view = 'chat';
 	assistant.error = '';
 }
 
@@ -199,8 +199,8 @@ export async function deleteAllChats() {
 }
 
 function currentPage(): string {
-	if (!assistant.prefs.pageContext || typeof location === 'undefined') return '';
-	const page = location.pathname + location.search;
+	if (!assistant.prefs.pageContext) return '';
+	const page = assistant.fromPage;
 	return /^\/[A-Za-z0-9/_.~?=&%+-]{0,199}$/.test(page) && !page.startsWith('/assistant') ? page : '';
 }
 
@@ -264,6 +264,10 @@ async function stream(path: string, body: Record<string, unknown>) {
 		controller = null;
 	}
 	loadChats();
+	// Inside an approved task the next action runs without asking.
+	const last = assistant.messages.length - 1;
+	const action = assistant.messages[last]?.action;
+	if (action?.state === 'pending' && action.auto && action.level !== 'destroy') await runAction(last);
 }
 
 /** Asks the assistant; with edit, replaces the question at that index. */
@@ -271,12 +275,17 @@ export async function send(text: string, attachments: ChatAttachment[] = [], edi
 	const question = text.trim();
 	if (!question || assistant.busy) return;
 	if (!assistant.chatId) {
+		// Busy already, so that the page does not open another chat meanwhile.
+		assistant.busy = true;
 		try {
 			const chat = await api.post<{ id: string }>('/assistant/chats');
 			assistant.chatId = chat.id;
 		} catch (err) {
 			assistant.error = problemOf(err);
+			assistant.busy = false;
 			return;
+		} finally {
+			assistant.busy = false;
 		}
 	}
 	const page = currentPage();
@@ -299,11 +308,12 @@ export function stop() {
 }
 
 /** Opens a new chat with a question, e.g. from "Ask the assistant" on a message. */
+/** Opens a new chat with a question, e.g. from "Ask the assistant" on a message. */
 export async function askAbout(question: string, attachments: ChatAttachment[] = []) {
 	if (!assistant.status?.available) return;
-	assistant.open = true;
 	if (assistant.models.length === 0) loadModels();
 	stop();
+	openAssistant();
 	newChat();
 	await send(question, attachments);
 }
@@ -330,9 +340,12 @@ export async function runAction(index: number, typed = '') {
 	let result = '';
 	assistant.busy = true;
 	try {
-		const method = action.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
-		const answer = method === 'get' ? await api.get(path) : await api[method](path, body);
-		result = short(answer);
+		// A task card only approves the plan; there is nothing to call.
+		if (action.method) {
+			const method = action.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+			const answer = method === 'get' ? await api.get(path) : await api[method](path, body);
+			result = short(answer);
+		}
 	} catch (err) {
 		state = 'failed';
 		result = err instanceof ApiError ? `${err.code}: ${err.message}` : String(err);

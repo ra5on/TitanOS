@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -545,5 +546,92 @@ func TestSourcesInReadingOrder(t *testing.T) {
 	}
 	if strings.Join(urls, " ") != "https://a https://b https://c" {
 		t.Fatalf("sources: %v", urls)
+	}
+}
+
+func TestRoundLimitEndsWithAnAnswer(t *testing.T) {
+	call := func(n int) []string {
+		return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"storage_overview","arguments":{"n":` + strconv.Itoa(n) + `}}}]}`}
+	}
+	fake := &fakeOllama{replies: [][]string{call(1), call(2), {`{"role":"assistant","content":"Mehr weiß ich nicht."}`}}}
+	m := manager(t, fake.serve(t))
+	s := m.Settings()
+	s.MaxSteps = 2
+	if err := m.SetSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	chat := newChat(t, "Alles?")
+	if err := m.Answer(context.Background(), chat, Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}}); err != nil {
+		t.Fatal(err)
+	}
+	last := chat.Messages[len(chat.Messages)-1]
+	if last.Content != "Mehr weiß ich nicht." || last.Problem != nil || len(calls) != 2 {
+		t.Fatalf("last: %+v calls %v", last, calls)
+	}
+	// The last round has no tools and says why.
+	final := fake.got[2]
+	if _, ok := final["tools"]; ok {
+		t.Fatal("tools offered in the final round")
+	}
+	messages := final["messages"].([]any)
+	if !strings.Contains(messages[len(messages)-1].(map[string]any)["content"].(string), "No more tools") {
+		t.Fatal("final round not explained")
+	}
+}
+
+func TestRepeatedCallsEndTheRounds(t *testing.T) {
+	same := []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"storage_overview","arguments":{}}}]}`}
+	fake := &fakeOllama{replies: [][]string{same, same, same, same, {`{"role":"assistant","content":"Das Volume ist beeinträchtigt."}`}}}
+	m := manager(t, fake.serve(t))
+	var calls []string
+	chat := newChat(t, "Alles?")
+	if err := m.Answer(context.Background(), chat, Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || len(fake.got) != 5 {
+		t.Fatalf("calls %v, rounds %d", calls, len(fake.got))
+	}
+	if chat.Messages[len(chat.Messages)-1].Content != "Das Volume ist beeinträchtigt." {
+		t.Fatal("no answer after the repetitions")
+	}
+}
+
+func TestStepsSettingAndAreas(t *testing.T) {
+	m := NewManager(config.Open(t.TempDir()))
+	if err := m.SetSettings(Settings{MaxSteps: -1}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("negative rounds accepted")
+	}
+	if err := m.SetSettings(Settings{Areas: map[string]string{"docker": "all"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unknown level accepted")
+	}
+	if err := m.SetSettings(Settings{Areas: map[string]string{"garden": "read"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unknown area accepted")
+	}
+	if err := m.SetSettings(Settings{MaxSteps: 0, Areas: map[string]string{AreaDocker: AccessOff}}); err != nil {
+		t.Fatal(err)
+	}
+	s := m.Settings()
+	if s.Access(AreaDocker) != AccessOff || s.Access(AreaFiles) != AccessWrite || s.Access(AreaAccounts) != AccessRead || s.Access("garden") != AccessOff {
+		t.Fatalf("access: %+v", s)
+	}
+}
+
+func TestTaskMakesActionsAutomatic(t *testing.T) {
+	plan := []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"power_action","arguments":{}}}]}`}
+	fake := &fakeOllama{replies: [][]string{plan}}
+	m := manager(t, fake.serve(t))
+	var calls []string
+	chat := newChat(t, "Neustart")
+	chat.Task = &Task{Title: "Wartung", Approved: true}
+	if err := m.Answer(context.Background(), chat, Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}}); err != nil {
+		t.Fatal(err)
+	}
+	if a := Pending(chat); a == nil || !a.Auto {
+		t.Fatalf("not automatic: %+v", a)
+	}
+	// A new message ends the task.
+	if err := NewMessage(chat, "Doch nicht", "", nil, time.Now()); err != nil || chat.Task != nil {
+		t.Fatal("task survived a new message")
 	}
 }

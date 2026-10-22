@@ -15,6 +15,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 )
 
 // The chat in the web UI. Owners and administrators chat when it is on;
@@ -314,7 +315,7 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request, user auth.User, 
 	err := s.opts.Assistant.Answer(r.Context(), chat, assistant.Turn{
 		Person: assistant.Person{Name: user.Name, Role: string(user.Role)},
 		Model:  model,
-		Tools:  s.assistantTools(user),
+		Tools:  s.assistantTools(user, r),
 		Page:   page,
 		Web:    s.assistantWeb(user),
 		Save:   save,
@@ -395,6 +396,18 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 		writeAssistantError(w, assistant.ErrInvalid)
 		return
 	}
+	user := currentUser(r)
+	for i, a := range req.Attachments {
+		if a.Kind != "nas" {
+			continue
+		}
+		resolved, err := s.nasAttachment(user, a)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "attachment_unreadable", err.Error())
+			return
+		}
+		req.Attachments[i] = resolved
+	}
 	user, chat, release, ok := s.reserved(w, r)
 	if !ok {
 		return
@@ -463,7 +476,9 @@ func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	action := assistant.Pending(chat)
-	if err := assistant.Resolve(chat, r.PathValue("action"), req.State, req.Result); err != nil {
+	// What a route answered may hold a secret (a new backup job answers
+	// with its password); the model never sees it.
+	if err := assistant.Resolve(chat, r.PathValue("action"), req.State, diagnose.Secrets(req.Result)); err != nil {
 		writeAssistantError(w, err)
 		return
 	}

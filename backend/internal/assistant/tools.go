@@ -17,8 +17,11 @@ type Tool struct {
 	// Untrusted tools return text that comes from outside TitanOS (logs,
 	// files, web pages). An action proposed after reading it says so.
 	Untrusted bool
-	Read      func(ctx context.Context, args json.RawMessage) (Result, error)
-	Plan      func(ctx context.Context, args json.RawMessage) (*Action, error)
+	// Area is the part of the NAS the tool belongs to, for the settings of
+	// what the assistant may do; empty for tools that are always there.
+	Area string
+	Read func(ctx context.Context, args json.RawMessage) (Result, error)
+	Plan func(ctx context.Context, args json.RawMessage) (*Action, error)
 }
 
 // Result is what a reading tool returns: the text for the model and, for
@@ -110,4 +113,17 @@ type Action struct {
 	After  []string `json:"after,omitempty"`
 	State  string   `json:"state"`
 	Result string   `json:"result,omitempty"`
+	// Steps are the plan of a task (Key "task"), which the person approves
+	// once. Auto marks an action inside an approved task: the browser runs
+	// it without asking again. Destroying actions are never Auto.
+	Steps []string `json:"steps,omitempty"`
+	Auto  bool     `json:"auto,omitempty"`
+}
+
+// Task is a job the person approved as a whole: until the model answers,
+// its actions run without asking for each one.
+type Task struct {
+	Title    string   `json:"title"`
+	Steps    []string `json:"steps"`
+	Approved bool     `json:"approved"`
 }

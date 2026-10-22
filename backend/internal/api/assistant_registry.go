@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"path"
 	"slices"
 	"strings"
@@ -80,8 +81,53 @@ func (s *Server) assistantWeb(user auth.User) bool {
 	return settings.Web && (user.Role.CanAdminister() || settings.WebUsers)
 }
 
-// assistantTools are the tools of an account.
-func (s *Server) assistantTools(user auth.User) []assistant.Tool {
+// toolAreas says which part of the NAS a tool belongs to, for the settings
+// of what the assistant may do there. Tools not listed are always there.
+var toolAreas = map[string]string{
+	"files_list": assistant.AreaFiles, "file_read": assistant.AreaFiles, "file_jobs": assistant.AreaFiles, "files_search": assistant.AreaFiles,
+	"folder_create": assistant.AreaFiles, "file_rename": assistant.AreaFiles, "file_delete": assistant.AreaFiles,
+	"file_write": assistant.AreaFiles, "files_move": assistant.AreaFiles, "file_copy": assistant.AreaFiles,
+	"network_status": assistant.AreaSystem, "hardware_status": assistant.AreaSystem, "logs_search": assistant.AreaSystem, "ups_status": assistant.AreaSystem,
+	"update_status": assistant.AreaUpdates, "update_action": assistant.AreaUpdates, "power_action": assistant.AreaUpdates,
+	"storage_overview": assistant.AreaStorage, "disk_tests": assistant.AreaStorage, "volume_action": assistant.AreaStorage,
+	"volume_create": assistant.AreaStorage, "disk_test": assistant.AreaStorage,
+	"shares_list": assistant.AreaShares, "share_create": assistant.AreaShares, "share_delete": assistant.AreaShares,
+	"docker_list": assistant.AreaDocker, "container_logs": assistant.AreaDocker, "container_action": assistant.AreaDocker,
+	"app_action": assistant.AreaDocker, "apps_update_all": assistant.AreaDocker, "docker_check_updates": assistant.AreaDocker,
+	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
+	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
+	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
+}
+
+// assistantTools are the tools of an account: those of its role, in the
+// areas the settings allow, and only reading ones where they allow reading.
+// r is the request of the chat, whose login api_read uses.
+func (s *Server) assistantTools(user auth.User, r *http.Request) []assistant.Tool {
+	settings := s.opts.Assistant.Settings()
+	var kept []assistant.Tool
+	writes := false
+	for _, tool := range s.allAssistantTools(user, r) {
+		if area := toolAreas[tool.Name]; area != "" {
+			tool.Area = area
+			switch settings.Access(area) {
+			case assistant.AccessOff:
+				continue
+			case assistant.AccessRead:
+				if tool.Plan != nil {
+					continue
+				}
+			}
+		}
+		writes = writes || tool.Plan != nil
+		kept = append(kept, tool)
+	}
+	if writes {
+		kept = append(kept, s.taskTool())
+	}
+	return kept
+}
+
+func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.Tool {
 	tools := []assistant.Tool{
 		reading("docs_search", "Search the TitanOS manual (README and documentation) for how something works or is set up. Returns the best matching sections.",
 			schema(map[string]any{"query": str("Words to look for, in English or German.")}, "query"), false, s.toolDocsSearch),
@@ -89,7 +135,7 @@ func (s *Server) assistantTools(user auth.User) []assistant.Tool {
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
 			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top.")}), true, s.assistantFilesList(user)),
-		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) from the file manager, with the rights of this account.",
+		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) or Excel (.xlsx) document from the file manager, with the rights of this account.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.assistantFileRead(user)),
 		reading("file_jobs", "Copy and move jobs of this account in the file manager, with progress.",
 			nil, false, noArgs(func(ctx context.Context) (any, error) {
@@ -128,6 +174,18 @@ func (s *Server) assistantTools(user auth.User) []assistant.Tool {
 					}
 					return map[string]any{"hardware": s.opts.Hardware.Status(), "usedBy": used}, nil
 				})),
+			reading("accounts_list", "The accounts of the NAS with their role and whether they use two-factor login.", nil, false, noArgs(func(ctx context.Context) (any, error) {
+				type account struct {
+					Name      string `json:"name"`
+					Role      string `json:"role"`
+					TwoFactor bool   `json:"twoFactor"`
+				}
+				list := []account{}
+				for _, u := range s.opts.Users.List() {
+					list = append(list, account{u.Name, string(u.Role), u.TOTPSecret != ""})
+				}
+				return map[string]any{"accounts": list}, nil
+			})),
 			reading("logs_search", "Lines of the system log since the last start, oldest first. Addresses, account names and secrets are replaced by placeholders.",
 				schema(map[string]any{
 					"source":   enum("Part of the system, all if left out.", "all", "titand", "kernel", "storage", "shares", "docker", "vms", "network"),
@@ -148,6 +206,10 @@ func (s *Server) assistantTools(user auth.User) []assistant.Tool {
 	}
 	if s.assistantWeb(user) {
 		tools = append(tools, s.webTools()...)
+	}
+	tools = append(tools, s.fileTools(user)...)
+	if user.Role.CanAdminister() {
+		tools = append(tools, s.apiTools(user, r)...)
 	}
 	return append(tools, s.assistantActions(user)...)
 }
@@ -249,6 +311,16 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 		}
 		if hiddenPath(req.Path) {
 			return nil, assistant.Errorf("this file is not shown to the assistant")
+		}
+		if ext := strings.ToLower(path.Ext(req.Path)); ext == ".docx" || ext == ".xlsx" {
+			text, err := s.readDocument(root, req.Path)
+			if err != nil {
+				return nil, assistant.Errorf("%v", err)
+			}
+			return map[string]any{"root": root.ID, "path": req.Path, "content": text}, nil
+		}
+		if strings.EqualFold(path.Ext(req.Path), ".pdf") {
+			return nil, assistant.Errorf("PDF files cannot be read; Word, Excel and text files can")
 		}
 		text, err := s.opts.Files.ReadText(root, req.Path)
 		if err != nil {
