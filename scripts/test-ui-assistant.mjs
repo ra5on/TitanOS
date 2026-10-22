@@ -9,7 +9,7 @@ const errors=[];
 const stamp='2026-10-22T10:00:00Z';
 let settings={enabled:true,execution:'confirm',ollama:'http://127.0.0.1:11434',model:'test:8b',users:false,web:false,webUsers:false,volume:'',prompt:'',numCtx:8192,temperature:null,maxSteps:0,areas:{},systemPrompt:'Test system prompt',promptHistory:[],profiles:[],memory:'',retentionDays:0,ephemeral:false};
 const chat={id:'0123456789abcdef',title:'Prüfung',created:stamp,updated:stamp,model:'test:8b',messages:[{role:'user',content:'Prüfe Docker',time:stamp},{role:'tool',tool:'docker_list',content:'{"updateState":"failed","error":"registry unavailable"}',ok:false,time:stamp}],run:{state:'running',started:stamp}};
-let busy=true,controls=[];
+let busy=true,controls=[];let automations=[];
 const ctx=await browser.newContext({locale:'de-DE',viewport:{width:1440,height:1000}});
 await ctx.addInitScript(()=>localStorage.setItem('titanos.locale','de'));
 await ctx.route('**/api/v1/**',async route=>{
@@ -19,6 +19,9 @@ await ctx.route('**/api/v1/**',async route=>{
  if(path==='/system')return json({hostname:'test-nas',version:'0.12.0',kernel:'test',uptimeSeconds:1000,cpu:{model:'Test',threads:8,usagePercent:0},memory:{totalBytes:16e9,usedBytes:3e9,freeBytes:13e9,availableBytes:13e9},temperatures:[],accelerators:[],image:{slot:'a'},stick:{present:true,label:'TITANOS'},networks:[],notificationsLatest:0});
  if(path==='/storage')return json({volumes:[],disks:[],diskSleep:{idleMinutes:0,available:false,errors:[]}});
  if(path==='/notifications')return json({messages:[]});
+ if(path==='/assistant/automations') {if(method==='POST'){const a=route.request().postDataJSON();a.id ||= 'fedcba9876543210';a.revision=(a.revision??0)+1;a.runs??=[];automations=automations.filter(v=>v.id!==a.id);automations.push(a);return json(a);}return json({automations});}
+ if(path==='/assistant/automations/fedcba9876543210'&&method==='DELETE'){automations=[];return route.fulfill({status:204});}
+ if(path==='/assistant/automations/fedcba9876543210/run')return route.fulfill({status:202});
  if(path==='/assistant'){if(method==='PUT')settings=route.request().postDataJSON();return json(settings)}
  if(path==='/assistant/status')return json({available:true,enabled:true,model:'test:8b',web:false,persistent:true});
  if(path==='/assistant/models')return json({models:[{name:'test:8b',sizeBytes:5e9,capabilities:['tools'],contextLength:32768}]});
@@ -56,5 +59,27 @@ try{
  await page.goto(base+'/settings/assistant');await page.getByLabel('Systemprompt',{exact:true}).waitFor();
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'settings mobile overflow');
  await page.screenshot({path:out+'/settings-mobile.png',fullPage:true});
+ await page.goto(base+'/assistant/automations');
+ await page.getByRole('button',{name:'Automation erstellen',exact:true}).click();
+ await page.getByLabel('Name',{exact:true}).fill('Wochenbericht');
+ await page.getByLabel('Auftrag und Zielorte').fill('Erstelle eine Übersicht in share/Docs.');
+ await page.getByLabel('Auslöser').selectOption('weekly');
+ await page.getByLabel('Wochentag').selectOption('1');
+ await page.getByLabel('Ausführung').selectOption('direct');
+ await page.getByRole('button',{name:'Speichern',exact:true}).click();
+ await page.getByRole('heading',{name:'Wochenbericht'}).waitFor();
+ assert.equal(automations[0].trigger.weekday,1);assert.equal(automations[0].execution,'direct');
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'automation mobile overflow');
+ await page.screenshot({path:out+'/automations-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'Bearbeiten',exact:true}).click();
+ await page.screenshot({path:out+'/automation-edit-desktop.png',fullPage:true});
+ await page.getByRole('button',{name:'Abbrechen',exact:true}).click();
+ await page.getByRole('button',{name:'Zeitplan pausieren',exact:true}).click();
+ await page.getByRole('button',{name:'Aktivieren',exact:true}).waitFor();assert.equal(automations[0].enabled,false);
+ await page.getByRole('button',{name:'Jetzt starten',exact:true}).click();
+ await page.getByRole('button',{name:'Löschen',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Löschen',exact:true}).click();
+ await page.getByText('Noch keine Automationen',{exact:true}).waitFor();
  assert.deepEqual(errors,[]);console.log('Assistant UI checks passed: settings, direct mode, prompt, probe, pause, dry run, mobile.');
 }finally{await browser.close()}

@@ -59,6 +59,10 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 	s.agentMu.Unlock()
 	base, persistent := s.chatsDir()
 	policy := s.opts.Assistant.Settings()
+	execution := policy.Execution
+	if chat.Automation != "" && chat.Execution != "" && chat.Execution != "inherit" {
+		execution = chat.Execution
+	}
 	go func() {
 		defer cancel()
 		defer close(j.done)
@@ -76,6 +80,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			}
 			return s.chats.Save(user.Name, c)
 		}
+		j.emit("progress", chat.Run)
 		if err := save(chat); err != nil {
 			j.emit("problem", map[string]string{"code": "internal", "detail": err.Error()})
 			return
@@ -141,6 +146,8 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			return s.executeAgentAction(ctx, user, c, a, request, save)
 		}
 		chat.Run.State = "running"
+		_ = save(chat)
+		j.emit("progress", chat.Run)
 		err := before(ctx, chat)
 		if err == nil {
 			for i := range chat.Messages {
@@ -156,7 +163,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 		}
 		if err == nil {
 			if a := assistant.Pending(chat); a != nil {
-				a.Auto = policy.Execution == "direct" || a.Approved || (chat.Task != nil && chat.Task.Approved && a.Level != assistant.LevelDestroy && a.Key != "task")
+				a.Auto = execution == "direct" || a.Approved || (chat.Task != nil && chat.Task.Approved && a.Level != assistant.LevelDestroy && a.Key != "task")
 				if a.Auto {
 					err = execute(ctx, chat, a)
 				} else {
@@ -166,6 +173,14 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 		}
 		if err == nil {
 			err = s.opts.Assistant.Answer(ctx, chat, assistant.Turn{
+				Execution: execution,
+				Progress: func(stage, tool string) {
+					chat.Run.Stage, chat.Run.Tool, chat.Run.Since = stage, tool, time.Now()
+					j.emit("progress", chat.Run)
+					if err := save(chat); err != nil {
+						cancel()
+					}
+				},
 				Person: assistant.Person{Name: user.Name, Role: string(user.Role)}, Model: model, Page: page, Web: s.assistantWeb(user),
 				Tools: s.agentTools(user, request, chat, save), Save: save, Before: before, Execute: execute,
 				Extra: fmt.Sprintf("TitanOS version %s. Job %s. Dry run: %v. Background execution; browser availability is irrelevant. Original user instructions remain binding.", s.opts.Version, chat.ID, chat.DryRun),
@@ -224,7 +239,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 		}
 		// The existing notification channel is administrator-visible; never include
 		// a user's private chat title, filenames or content in it.
-		if user.Role.CanAdminister() && s.opts.Notify != nil && (chat.Run.State == "done" || chat.Run.State == "blocked") {
+		if (chat.Automation == "" || chat.Notify == "always" || chat.Notify != "never" && chat.Run.State == "blocked") && user.Role.CanAdminister() && s.opts.Notify != nil && (chat.Run.State == "done" || chat.Run.State == "blocked") {
 			severity := "info"
 			if chat.Run.State == "blocked" {
 				severity = "warning"
@@ -240,6 +255,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 // executeAgentAction re-plans from stored arguments with current rights before
 // dispatching the exact existing API route. The browser never supplies results.
 func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assistant.Chat, a *assistant.Action, r *http.Request, save func(*assistant.Chat) error) error {
+	started := time.Now()
 	if c.DryRun {
 		return fmt.Errorf("dry run cannot execute actions")
 	}
@@ -258,6 +274,14 @@ func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assi
 		if tool.Name == a.Tool && tool.Plan != nil {
 			v, err := tool.Plan(ctx, entry.Args)
 			if err != nil {
+				var invalid *assistant.ToolError
+				if errors.As(err, &invalid) {
+					a.State = assistant.ActionExpired
+					a.Result = "Proposal no longer valid before dispatch; nothing executed. Inspect current state: " + err.Error()
+					entry.OK = false
+					entry.ErrorCode = "action_changed"
+					return save(c)
+				}
 				return err
 			}
 			fresh = v
@@ -269,8 +293,14 @@ func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assi
 	}
 	oldBody, _ := json.Marshal(a.Body)
 	newBody, _ := json.Marshal(fresh.Body)
-	if fresh.Method != a.Method || fresh.Path != a.Path || fresh.Level != a.Level || fresh.Confirm != a.Confirm || fresh.ConfirmField != a.ConfirmField || !bytes.Equal(oldBody, newBody) {
-		return fmt.Errorf("target or action changed; inspect it and make a new plan")
+	if fresh.Method != a.Method || fresh.Path != a.Path || fresh.Level != a.Level || fresh.Confirm != a.Confirm || fresh.ConfirmField != a.ConfirmField || !sameJSON(oldBody, newBody) {
+		// Nothing was dispatched: expire only this proposal so the model can
+		// inspect and replan, without clearing receipts or mutation attempts.
+		a.State = assistant.ActionExpired
+		a.Result = "Target or action changed before dispatch. Nothing executed. Inspect current state and make a new plan."
+		entry.OK = false
+		entry.ErrorCode = "action_changed"
+		return save(c)
 	}
 	if a.Key == "task" {
 		return assistant.Resolve(c, a.ID, assistant.ActionDone, "Plan accepted under the configured execution policy.")
@@ -328,7 +358,9 @@ func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assi
 	raw := a.Path
 	body := map[string]any{}
 	if len(oldBody) > 0 && string(oldBody) != "null" {
-		_ = json.Unmarshal(oldBody, &body)
+		decoder := json.NewDecoder(bytes.NewReader(oldBody))
+		decoder.UseNumber()
+		_ = decoder.Decode(&body)
 	}
 	if a.ConfirmField != "" {
 		where, field, _ := strings.Cut(a.ConfirmField, ":")
@@ -370,6 +402,10 @@ func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assi
 	}
 	a.Result = result
 	if a.State == assistant.ActionDone {
+		if c.Run != nil {
+			c.Run.Stage, c.Run.Tool, c.Run.Since = "verify", a.Tool, time.Now()
+		}
+		_ = save(c)
 		verification := s.verifyAgentAction(ctx, user, a, r)
 		if verification != nil {
 			out, _ := json.Marshal(map[string]any{"requestStatus": "succeeded", "response": json.RawMessage(validJSONResult(result)), "verification": verification})
@@ -381,6 +417,7 @@ func (s *Server) executeAgentAction(ctx context.Context, user auth.User, c *assi
 		a.State = assistant.ActionUncertain
 		entry.OK = false
 	}
+	entry.DurationMS = time.Since(started).Milliseconds()
 	receipt.State, receipt.Result = a.State, diagnose.Secrets(a.Result)
 	if err := journal(); err != nil {
 		return err
@@ -519,6 +556,7 @@ func (s *Server) RunAssistant(ctx context.Context) {
 			if !s.assistantAllowed(user) {
 				continue
 			}
+			s.scanAutomations(ctx, user, time.Now())
 			list, err := s.chats.List(user.Name, "")
 			if err != nil {
 				continue
@@ -599,4 +637,18 @@ func (s *Server) restoreAgentReceipt(user, chat string, e *assistant.Entry) bool
 	e.Action.Result = receipt.Result
 	e.OK = receipt.State == assistant.ActionDone
 	return true
+}
+
+// Compare JSON structurally, preserving integer precision across save/reload.
+func sameJSON(a, b []byte) bool {
+	decode := func(raw []byte) (any, error) {
+		var v any
+		d := json.NewDecoder(bytes.NewReader(raw))
+		d.UseNumber()
+		err := d.Decode(&v)
+		return v, err
+	}
+	av, ae := decode(a)
+	bv, be := decode(b)
+	return ae == nil && be == nil && reflect.DeepEqual(av, bv)
 }

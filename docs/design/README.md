@@ -441,3 +441,14 @@ Vollbildleiste, dunkler Bildschirm in jedem Theme) bleibt gültig.
 Medienwechsel, Adressanzeige, Meldungen, Snapshots, Englisch und die gefaltete
 Liste bei 390 Pixeln mit isolierten API-Testdaten; Screenshots in Graphit und
 Hell unter `out/validation/vms/`. Aufruf wie beim 0.6.0-Skript oben.
+
+### Agent und Automationen (0.13.0)
+
+Freigegebener Ausbau: eigener Bereich unter `/assistant/automations`, erreichbar
+über die Assistentenseite. Gemeinsame PageHead-/EmptyState-/Dialog-Komponenten,
+Theme-Variablen und auf Mobil gestapelte Felder. Karten zeigen Auftrag, Auslöser,
+Zeitplan, Modus und Laufverlauf mit Chat-Link. Erstellen/Bearbeiten im Dialog;
+Bedingungen und Verhalten bei verpassten/überlappenden Läufen aufklappbar.
+Pausieren betrifft den Zeitplan; bereits gestartete Aufträge im Chat steuern.
+Löschen erhält die Chats. Aktive Chat-Anzeige zeigt die tatsächliche Laufphase
+statt ausschließlich „Gedanken“. Keine Änderung der Docker-Oberfläche.
