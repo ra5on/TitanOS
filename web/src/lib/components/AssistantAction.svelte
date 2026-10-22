@@ -38,7 +38,7 @@
 	{#if action.reason && !task}<p class="reason"><span class="muted">{t('assistant.reason')}</span> {action.reason}</p>{/if}
 	{#if after && pending}<p class="notice-warn small" role="note">{t('assistant.after', { tools: after })}</p>{/if}
 
-	{#if pending && action.auto && action.level !== 'destroy'}
+	{#if action.state === 'running'}
 		<p class="state" role="status">{t('assistant.autoRunning')}</p>
 	{:else if pending}
 		{#if task}<p class="small muted">{t('assistant.taskNote')}</p>{/if}

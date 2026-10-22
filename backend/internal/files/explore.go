@@ -22,6 +22,7 @@ type FoundEntry struct {
 }
 type SearchOptions struct {
 	Path, Query, Extension string
+	Extensions             []string
 	MinSize, MaxSize       int64
 	After, Before          time.Time
 	ShowHidden             bool
@@ -84,12 +85,19 @@ func (m *Manager) Search(ctx context.Context, root Root, opt SearchOptions) (Sea
 	}
 	query := strings.ToLower(opt.Query)
 	extension := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(opt.Extension), "."))
+	extensions := map[string]bool{}
+	if extension != "" {
+		extensions[extension] = true
+	}
+	for _, ext := range opt.Extensions {
+		extensions[strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ext), "."))] = true
+	}
 	err := m.scan(ctx, root, opt.Path, opt.ShowHidden, func(p string, info fs.FileInfo) error {
 		result.Scanned++
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.Contains(strings.ToLower(info.Name()), query) || extension != "" && strings.ToLower(strings.TrimPrefix(path.Ext(p), ".")) != extension || info.Size() < opt.MinSize || opt.MaxSize > 0 && info.Size() > opt.MaxSize || !opt.After.IsZero() && info.ModTime().Before(opt.After) || !opt.Before.IsZero() && info.ModTime().After(opt.Before) {
+		if !strings.Contains(strings.ToLower(info.Name()), query) || len(extensions) > 0 && !extensions[strings.ToLower(strings.TrimPrefix(path.Ext(p), "."))] || info.Size() < opt.MinSize || opt.MaxSize > 0 && info.Size() > opt.MaxSize || !opt.After.IsZero() && info.ModTime().Before(opt.After) || !opt.Before.IsZero() && info.ModTime().After(opt.Before) {
 			return nil
 		}
 		if len(result.Entries) >= 1000 {

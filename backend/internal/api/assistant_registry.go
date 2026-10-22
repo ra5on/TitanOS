@@ -134,7 +134,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 		reading("docs_read", "Read one document of the TitanOS manual, or only its sections whose heading contains the given text.",
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
-			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top.")}), true, s.assistantFilesList(user)),
+			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.assistantFilesList(user)),
 		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) or Excel (.xlsx) document from the file manager, with the rights of this account.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.assistantFileRead(user)),
 		reading("file_jobs", "Copy and move jobs of this account in the file manager, with progress.",
@@ -257,12 +257,21 @@ func (s *Server) assistantRoot(user auth.User, id string) (files.Root, error) {
 			return root, nil
 		}
 	}
-	return files.Root{}, assistant.Errorf("no root %q; call files_list without root to see them", id)
+	ids := []string{}
+	for _, root := range s.fileRoots(user) {
+		if root.Kind != "stick" {
+			ids = append(ids, root.ID)
+		}
+	}
+	return files.Root{}, assistant.Errorf("no root %q; use an exact root ID from %v. Call files_list with {} first. A root such as volume/nvme is one value; do not split it into root=volume and path=nvme", id, ids)
 }
 
 func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
-		var req struct{ Root, Path string }
+		var req struct {
+			Root, Path string
+			Offset     int
+		}
 		if err := assistant.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
@@ -294,8 +303,9 @@ func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.R
 			return nil, assistant.Errorf("%v", err)
 		}
 		entries = slices.DeleteFunc(entries, func(e files.Entry) bool { return hiddenPath(e.Name) })
-		cut := len(entries) > 300
-		return map[string]any{"root": root.ID, "path": req.Path, "entries": entries[:min(len(entries), 300)], "cut": cut}, nil
+		offset := max(0, min(req.Offset, len(entries)))
+		end := min(offset+100, len(entries))
+		return map[string]any{"root": root.ID, "path": req.Path, "entries": entries[offset:end], "total": len(entries), "nextOffset": end, "cut": end < len(entries)}, nil
 	}
 }
 

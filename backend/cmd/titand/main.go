@@ -622,6 +622,9 @@ func run(opts options) error {
 		Assistant:     chat,
 	})
 
+	agentDone := make(chan struct{})
+	go func() { defer close(agentDone); handler.RunAssistant(ctx) }()
+
 	var servers []*http.Server
 	errc := make(chan error, 2)
 	serve := func(srv *http.Server, useTLS bool) {
@@ -655,6 +658,7 @@ func run(opts options) error {
 		slog.Info("shutting down")
 	}
 
+	stop()
 	sessions.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -662,6 +666,10 @@ func run(opts options) error {
 		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil && err == nil {
 			err = shutdownErr
 		}
+	}
+	select {
+	case <-agentDone:
+	case <-shutdownCtx.Done():
 	}
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil

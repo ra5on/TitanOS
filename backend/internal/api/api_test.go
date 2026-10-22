@@ -58,6 +58,7 @@ func (p fakePower) Reboot() error   { p.actions <- "reboot"; return nil }
 func (p fakePower) Poweroff() error { p.actions <- "poweroff"; return nil }
 
 type testServer struct {
+	server *Server
 	t      *testing.T
 	url    string
 	store  *config.Store
@@ -80,12 +81,13 @@ func newTestServer(t *testing.T) *testServer {
 	updater := disabledUpdate(store)
 	disks := loadedStorage(t, store)
 	shareManager := loadedShares(t, store)
-	srv := httptest.NewServer(New(Options{
+	handler := New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
 		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
-	}))
+	})
+	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	ts := &testServer{t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager}
+	ts := &testServer{server: handler, t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager}
 	ts.client = ts.newClient()
 	return ts
 }

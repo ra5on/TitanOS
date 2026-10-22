@@ -295,7 +295,7 @@ func TestSettingsAreChecked(t *testing.T) {
 	hot, cold := 3.0, 0.2
 	for _, bad := range []Settings{
 		{Ollama: "ftp://x"}, {Ollama: "http://u:p@x"}, {Ollama: "http://x/path"}, {Model: "bad name"},
-		{Volume: "Tank"}, {Prompt: strings.Repeat("x", MaxPrompt+1)}, {NumCtx: 100}, {Temperature: &hot},
+		{Volume: "bad/name"}, {Prompt: strings.Repeat("x", MaxPrompt+1)}, {NumCtx: 100}, {Temperature: &hot},
 	} {
 		if err := m.SetSettings(bad); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("accepted %+v", bad)

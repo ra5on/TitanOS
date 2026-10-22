@@ -29,7 +29,20 @@ var (
 )
 
 // Chat is one conversation of an account.
+type Run struct {
+	State   string    `json:"state"`
+	Detail  string    `json:"detail,omitempty"`
+	Started time.Time `json:"started"`
+	Wake    time.Time `json:"wake,omitempty"`
+}
+
 type Chat struct {
+	Attempts map[string]bool `json:"attempts,omitempty"`
+	Run      *Run            `json:"run,omitempty"`
+	DryRun   bool            `json:"dryRun,omitempty"`
+	Summary  string          `json:"summary,omitempty"`
+	Archived int             `json:"archived,omitempty"`
+
 	ID       string    `json:"id"`
 	Title    string    `json:"title"`
 	Created  time.Time `json:"created"`
@@ -42,6 +55,7 @@ type Chat struct {
 
 // Summary is a chat in the list.
 type Summary struct {
+	Run      *Run      `json:"run,omitempty"`
 	ID       string    `json:"id"`
 	Title    string    `json:"title"`
 	Created  time.Time `json:"created"`
@@ -50,7 +64,7 @@ type Summary struct {
 }
 
 func (c *Chat) summary() Summary {
-	return Summary{ID: c.ID, Title: c.Title, Created: c.Created, Updated: c.Updated, Messages: len(c.Messages)}
+	return Summary{Run: c.Run, ID: c.ID, Title: c.Title, Created: c.Created, Updated: c.Updated, Messages: len(c.Messages)}
 }
 
 // Entry is one message of a chat: of the person (user), of the model
@@ -178,7 +192,15 @@ func writeFileAtomic(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func (c *Chats) readIndex(dir string) map[string]Summary {
@@ -332,9 +354,15 @@ func (c *Chats) Save(user string, chat *Chat) error {
 		for len(c.mem[user]) > MaxChats {
 			oldest := ""
 			for id, other := range c.mem[user] {
+				if c.busy[user+"/"+id] || resumable(other.Run) {
+					continue
+				}
 				if oldest == "" || other.Updated.Before(c.mem[user][oldest].Updated) {
 					oldest = id
 				}
+			}
+			if oldest == "" {
+				break
 			}
 			delete(c.mem[user], oldest)
 		}
@@ -348,11 +376,18 @@ func (c *Chats) Save(user string, chat *Chat) error {
 	for len(index) > MaxChats {
 		oldest := ""
 		for id, other := range index {
+			if c.busy[user+"/"+id] || resumable(other.Run) {
+				continue
+			}
 			if oldest == "" || other.Updated.Before(index[oldest].Updated) {
 				oldest = id
 			}
 		}
+		if oldest == "" {
+			break
+		}
 		os.Remove(filepath.Join(dir, oldest+".json"))
+		os.RemoveAll(filepath.Join(dir, "receipts", oldest))
 		delete(index, oldest)
 	}
 	return c.writeIndex(dir, index)
@@ -387,6 +422,7 @@ func (c *Chats) Delete(user, id string) error {
 	}
 	index := c.readIndex(dir)
 	delete(index, id)
+	_ = os.RemoveAll(filepath.Join(dir, "receipts", id))
 	return c.writeIndex(dir, index)
 }
 
@@ -394,6 +430,11 @@ func (c *Chats) Delete(user, id string) error {
 func (c *Chats) ForgetUser(user string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for key, busy := range c.busy {
+		if busy && strings.HasPrefix(key, user+"/") {
+			return ErrBusy
+		}
+	}
 	delete(c.mem, user)
 	dir, persistent, err := c.userDir(user)
 	if err != nil || !persistent {
@@ -433,4 +474,39 @@ func titleOf(text string) string {
 		return strings.TrimSpace(string(r[:60])) + " …"
 	}
 	return text
+}
+
+// Usage is read on demand and includes this account's chat and receipt files.
+func (c *Chats) Usage(user string) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	dir, persistent, err := c.userDir(user)
+	if err != nil {
+		return 0, err
+	}
+	var size int64
+	if !persistent {
+		for _, chat := range c.mem[user] {
+			b, _ := json.Marshal(chat)
+			size += int64(len(b))
+		}
+		return size, nil
+	}
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if d.Type().IsRegular() {
+			info, e := d.Info()
+			if e != nil {
+				return e
+			}
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
 }

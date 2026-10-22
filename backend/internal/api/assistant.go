@@ -15,7 +15,6 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
-	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 )
 
 // The chat in the web UI. Owners and administrators chat when it is on;
@@ -49,6 +48,9 @@ func writeAssistantError(w http.ResponseWriter, err error) {
 // chatsDir is where chats are kept: on the volume of the settings, or the
 // first mounted one. Without it, chats stay in memory.
 func (s *Server) chatsDir() (string, bool) {
+	if s.opts.Assistant.Settings().Ephemeral {
+		return "", false
+	}
 	mounted := s.opts.Storage.Mounted()
 	volume := s.opts.Assistant.Settings().Volume
 	if volume == "" && len(mounted) > 0 {
@@ -103,6 +105,16 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	saved := s.opts.Assistant.Settings()
+	if !saved.Enabled || saved.Paused {
+		s.agentMu.Lock()
+		for _, j := range s.agentJobs {
+			j.mu.Lock()
+			j.control = "pause"
+			j.mu.Unlock()
+			j.cancel()
+		}
+		s.agentMu.Unlock()
+	}
 	slog.Info("assistant settings changed", "enabled", saved.Enabled, "ollama", saved.Ollama, "model", saved.Model, "users", saved.Users, "web", saved.Web, "webUsers", saved.WebUsers, "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, saved)
 }
@@ -309,56 +321,22 @@ func (s *Server) handleAssistantChatsDelete(w http.ResponseWriter, r *http.Reque
 // browser about it as server-sent events: delta and thinking for the text
 // as it comes, entry for every message that is added or final, action
 // when a card waits for the person, problem, and done at the end.
-func (s *Server) answer(w http.ResponseWriter, r *http.Request, user auth.User, chat *assistant.Chat, model, page string) {
+// answer attaches this response to a server-owned job. Disconnecting only
+// detaches the observer; stop/pause are explicit authenticated requests.
+func (s *Server) answer(w http.ResponseWriter, r *http.Request, user auth.User, chat *assistant.Chat, model, page string, release func()) {
+	job := s.startAgent(user, chat, model, page, release)
 	send := startEvents(w)
-	save := func(c *assistant.Chat) error { return s.chats.Save(user.Name, c) }
-	err := s.opts.Assistant.Answer(r.Context(), chat, assistant.Turn{
-		Person: assistant.Person{Name: user.Name, Role: string(user.Role)},
-		Model:  model,
-		Tools:  s.assistantTools(user, r),
-		Page:   page,
-		Web:    s.assistantWeb(user),
-		Save:   save,
-		Emit: func(e assistant.Event) {
-			switch e.Kind {
-			case "delta", "thinking":
-				send(e.Kind, map[string]string{"text": e.Text})
-			case "entry":
-				send("entry", map[string]any{"index": e.Index, "entry": e.Entry})
-			case "action":
-				send("action", map[string]any{"index": e.Index})
+	for {
+		select {
+		case e, ok := <-job.events:
+			if !ok {
+				return
 			}
-		},
-	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		problem := assistant.Problem{Code: "internal"}
-		switch {
-		case errors.Is(err, assistant.ErrNoModel):
-			problem.Code = "assistant_no_model"
-		case errors.Is(err, assistant.ErrNoTools):
-			problem.Code = "assistant_no_tools"
-		case errors.Is(err, assistant.ErrModelMissing):
-			problem = assistant.Problem{Code: "model_missing", Detail: err.Error()}
-		case errors.Is(err, assistant.ErrUpstream):
-			problem = assistant.Problem{Code: "ollama_failed", Detail: err.Error()}
-		case errors.Is(err, assistant.ErrOff):
-			problem.Code = "assistant_off"
-		case errors.Is(err, assistant.ErrChatFull):
-			problem.Code = "chat_full"
-		default:
-			slog.Error("assistant chat failed", "user", user.Name, "err", err)
+			send(e.kind, e.data)
+		case <-r.Context().Done():
+			return
 		}
-		// The problem stays in the chat, so that it is there after a reload.
-		chat.Messages = append(chat.Messages, assistant.Entry{Role: "assistant", Problem: &problem, Time: time.Now()})
-		if !errors.Is(err, assistant.ErrChatFull) {
-			_ = save(chat)
-		}
-		send("entry", map[string]any{"index": len(chat.Messages) - 1, "entry": chat.Messages[len(chat.Messages)-1]})
 	}
-	if errors.Is(err, context.Canceled) {
-		return
-	}
-	send("done", map[string]string{})
 }
 
 // reserved gets a chat for a change and marks it as answering.
@@ -386,6 +364,7 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 		Page        string                 `json:"page"`
 		Model       string                 `json:"model"`
 		Attachments []assistant.Attachment `json:"attachments"`
+		DryRun      bool                   `json:"dryRun"`
 		Edit        *int                   `json:"edit"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4*assistant.MaxImageAttachment*4/3+(1<<20))
@@ -412,13 +391,19 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	defer release()
+	owned := true
+	defer func() {
+		if owned {
+			release()
+		}
+	}()
 	if req.Edit != nil {
 		if err := assistant.CutBefore(chat, *req.Edit); err != nil {
 			writeAssistantError(w, err)
 			return
 		}
 	}
+	chat.DryRun = req.DryRun
 	if err := assistant.NewMessage(chat, req.Text, req.Page, req.Attachments, time.Now()); err != nil {
 		writeAssistantError(w, err)
 		return
@@ -427,7 +412,8 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 		writeAssistantError(w, err)
 		return
 	}
-	s.answer(w, r, user, chat, req.Model, req.Page)
+	owned = false
+	s.answer(w, r, user, chat, req.Model, req.Page, release)
 }
 
 // handleAssistantRegenerate answers the newest message of the person again.
@@ -446,22 +432,30 @@ func (s *Server) handleAssistantRegenerate(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	defer release()
+	owned := true
+	defer func() {
+		if owned {
+			release()
+		}
+	}()
 	page, err := assistant.LastQuestion(chat)
 	if err != nil {
 		writeAssistantError(w, err)
 		return
 	}
-	s.answer(w, r, user, chat, req.Model, page)
+	owned = false
+	s.answer(w, r, user, chat, req.Model, page, release)
 }
 
 // handleAssistantAction records what happened to a card in the browser
 // and lets the model go on.
 func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		State  string `json:"state"`
-		Result string `json:"result"`
-		Model  string `json:"model"`
+		State     string `json:"state"`
+		Result    string `json:"result"`
+		Typed     string `json:"typed"`
+		Confirmed bool   `json:"confirmed"`
+		Model     string `json:"model"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -474,15 +468,32 @@ func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	defer release()
+	owned := true
+	defer func() {
+		if owned {
+			release()
+		}
+	}()
 	action := assistant.Pending(chat)
-	// What a route answered may hold a secret (a new backup job answers
-	// with its password); the model never sees it.
-	if err := assistant.Resolve(chat, r.PathValue("action"), req.State, diagnose.Secrets(req.Result)); err != nil {
-		writeAssistantError(w, err)
+	if action == nil || action.ID != r.PathValue("action") {
+		writeAssistantError(w, assistant.ErrNoAction)
 		return
 	}
-	slog.Info("assistant action "+req.State, "action", action.Key, "params", action.Params, "chat", chat.ID, "user", user.Name, "ip", remoteIP(r))
+	if req.State == "rejected" {
+		if err := assistant.Resolve(chat, action.ID, "rejected", ""); err != nil {
+			writeAssistantError(w, err)
+			return
+		}
+	} else {
+		if action.Level == assistant.LevelDestroy && req.Typed != action.Confirm || action.Level == assistant.LevelDanger && !req.Confirmed {
+			writeAssistantError(w, assistant.ErrInvalid)
+			return
+		}
+		// Executed by the worker after a durable checkpoint, never by the client.
+		action.Auto = true
+		action.Approved = true
+	}
+	slog.Info("assistant action "+req.State, "action", action.Key, "chat", chat.ID, "user", user.Name, "ip", remoteIP(r))
 	if err := s.chats.Save(user.Name, chat); err != nil {
 		writeAssistantError(w, err)
 		return
@@ -494,5 +505,6 @@ func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	s.answer(w, r, user, chat, req.Model, page)
+	owned = false
+	s.answer(w, r, user, chat, req.Model, page, release)
 }

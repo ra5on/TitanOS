@@ -214,11 +214,13 @@ func (s *Server) toolDocker(ctx context.Context) (any, error) {
 		MemoryBytes     uint64    `json:"memoryBytes"`
 		Ports           any       `json:"ports"`
 		UpdateAvailable bool      `json:"updateAvailable"`
+		UpdateState     string    `json:"updateState"`
+		UpdateError     string    `json:"updateError,omitempty"`
 	}
 	list := []container{}
 	for _, c := range status.Containers {
 		list = append(list, container{Name: c.Name, Image: c.Image, State: c.State, Since: c.Since, App: c.App,
-			CPUPercent: math.Round(c.CPUPercent*10) / 10, MemoryBytes: c.MemoryBytes, Ports: c.Ports, UpdateAvailable: c.UpdateAvailable})
+			CPUPercent: math.Round(c.CPUPercent*10) / 10, MemoryBytes: c.MemoryBytes, Ports: c.Ports, UpdateAvailable: c.UpdateAvailable, UpdateState: c.UpdateState, UpdateError: c.UpdateError})
 	}
 	failed := []string{}
 	for name, job := range status.Jobs {
@@ -227,7 +229,7 @@ func (s *Server) toolDocker(ctx context.Context) (any, error) {
 		}
 	}
 	slices.Sort(failed)
-	res := map[string]any{"engineRunning": status.Running, "enabled": status.Settings.Enabled, "containers": list, "failedAppSetups": failed}
+	res := map[string]any{"observedAt": time.Now(), "updateConclusion": "Only current/available entries were checked successfully; failed/not_checked/pinned are not evidence of no updates.", "engineRunning": status.Running, "enabled": status.Settings.Enabled, "containers": list, "failedAppSetups": failed}
 	if !status.UpdatesChecked.IsZero() {
 		res["updatesChecked"] = status.UpdatesChecked
 	}
