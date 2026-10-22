@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 )
 
 // Tool is something the model may call: either it reads (Read) or it
@@ -39,7 +41,10 @@ type Source struct {
 
 // ToolError is a mistake of the model, such as a wrong argument. Its
 // message is shown to the model as is, so that it can try again.
-type ToolError struct{ Message string }
+type ToolError struct {
+	Message string
+	Code    string
+}
 
 func (e *ToolError) Error() string { return e.Message }
 
@@ -48,12 +53,33 @@ func Errorf(format string, args ...any) error {
 	return &ToolError{Message: fmt.Sprintf(format, args...)}
 }
 
+// CodedErrorf exposes a content-free diagnostic category separately from details.
+func CodedErrorf(code, format string, args ...any) error {
+	return &ToolError{Code: code, Message: fmt.Sprintf(format, args...)}
+}
+func ToolErrorCode(err error) string {
+	var problem *ToolError
+	if errors.As(err, &problem) && problem.Code != "" {
+		return problem.Code
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "tool_timeout"
+	}
+	return "tool_failed"
+}
+
 // DecodeArgs reads the arguments of a call strictly.
 func DecodeArgs(args json.RawMessage, v any) error {
+	if len(bytes.TrimSpace(args)) == 0 || bytes.TrimSpace(args)[0] != '{' {
+		return Errorf("invalid arguments: expected a JSON object")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(args))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {
 		return Errorf("invalid arguments: %v", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return Errorf("invalid arguments: expected exactly one JSON object")
 	}
 	return nil
 }

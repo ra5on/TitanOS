@@ -390,6 +390,9 @@ func history(chat *Chat, vision bool) []ollamaMessage {
 			}
 			msg.Role, msg.Content = "user", content
 		case "assistant":
+			if e.ErrorCode == "model_tool_parse" {
+				continue
+			}
 			if e.Content == "" && len(e.Calls) == 0 {
 				continue
 			}
@@ -397,6 +400,12 @@ func history(chat *Chat, vision bool) []ollamaMessage {
 			for _, call := range e.Calls {
 				var tc ollamaToolCall
 				tc.Function.Name, tc.Function.Arguments = call.Name, call.Args
+				// Ollama's history expects objects even when the model emitted
+				// invalid arguments. Keep the actual rejected input in the chat;
+				// the following tool result explains why it was not dispatched.
+				if ValidateArguments(nil, call.Args) != nil {
+					tc.Function.Arguments = json.RawMessage("{}")
+				}
 				msg.ToolCalls = append(msg.ToolCalls, tc)
 			}
 		case "tool":
@@ -485,20 +494,19 @@ func (s *thinkSplitter) flush(answer, thought func(string)) {
 	}
 }
 
-// argumentsOf takes the arguments as an object, or as a string holding one,
-// as some models send them; anything else becomes no arguments.
+// argumentsOf unwraps string-encoded JSON, without replacing malformed input
+// with an empty (potentially valid and executable) argument object.
 func argumentsOf(raw json.RawMessage) json.RawMessage {
-	trimmed := []byte(strings.TrimSpace(string(raw)))
-	if len(trimmed) > 0 && trimmed[0] == '"' {
-		var text string
-		if json.Unmarshal(trimmed, &text) == nil && json.Valid([]byte(text)) {
-			trimmed = []byte(text)
-		}
+	trimmed := strings.TrimSpace(string(raw))
+	var text string
+	if json.Unmarshal(raw, &text) == nil && json.Valid([]byte(text)) {
+		return json.RawMessage(text)
 	}
-	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
-		return json.RawMessage("{}")
+	if json.Valid(raw) {
+		return raw
 	}
-	return json.RawMessage(trimmed)
+	encoded, _ := json.Marshal(trimmed)
+	return encoded
 }
 
 // Turn is one run of the assistant on a chat: answering a new message, or
@@ -610,7 +618,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 	}
 
 	// One round with the model: it writes and may call tools.
-	generate := func(withTools bool, extra string) (Entry, error) {
+	generateOnce := func(withTools bool, extra string) (Entry, error) {
 		if turn.Before != nil {
 			if err := turn.Before(ctx, chat); err != nil {
 				return Entry{}, err
@@ -637,6 +645,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		}
 		var answer, thought strings.Builder
 		received := 0
+		completed := false
 		var calls []ollamaToolCall
 		var splitter thinkSplitter
 		onAnswer := func(s string) {
@@ -665,7 +674,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 					return fmt.Errorf("%w sent something unexpected: %v", ErrUpstream, err)
 				}
 				if chunk.Error != "" {
-					return fmt.Errorf("%w: %s", ErrUpstream, chunk.Error)
+					return modelResponseError(chunk.Error)
 				}
 				if answer.Len()+thought.Len()+len(chunk.Message.Content)+len(chunk.Message.Thinking) > 2<<20 {
 					return fmt.Errorf("%w: model response too large", ErrUpstream)
@@ -673,8 +682,12 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 				onThought(chunk.Message.Thinking)
 				splitter.feed(chunk.Message.Content, onAnswer, onThought)
 				calls = append(calls, chunk.Message.ToolCalls...)
+				completed = completed || chunk.Done
 				return nil
 			})
+		}
+		if err == nil && !completed {
+			err = fmt.Errorf("%w: stream ended before completion; no tools were executed", ErrUpstream)
 		}
 		splitter.flush(onAnswer, onThought)
 		entry := Entry{Role: "assistant", Content: strings.TrimSpace(answer.String()), Thinking: strings.TrimSpace(thought.String())}
@@ -694,6 +707,21 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			}
 		}
 		return entry, nil
+	}
+	// Only regenerate rejected model output. No tool from the failed response
+	// has been dispatched. Connection errors and executed mutations are not retried.
+	generate := func(withTools bool, extra string) (Entry, error) {
+		for attempt := 0; ; attempt++ {
+			entry, err := generateOnce(withTools, extra)
+			if !errors.Is(err, ErrModelOutput) || attempt >= 2 || ctx.Err() != nil {
+				return entry, err
+			}
+			add(Entry{Role: "assistant", Stopped: true, ErrorCode: "model_tool_parse", Content: entry.Content, Thinking: entry.Thinking})
+			if err := save(); err != nil {
+				return Entry{}, err
+			}
+			extra += "\nYour previous tool call was rejected before execution because its JSON was malformed. Generate a valid JSON object matching the tool schema. Do not invent parameters or repeat completed actions."
+		}
 	}
 	// finish ends the answer: with what the model writes, which web pages
 	// it is based on, and the end of a task.
@@ -729,22 +757,28 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			}
 			tool, known := byName[call.Name]
 			result := Entry{Role: "tool", Tool: call.Name, CallID: call.ID, Args: call.Args}
+			validation := ValidateArguments(tool.Parameters, call.Args)
 			switch {
+			case calledBefore(chat, call):
+				repeats++
+				result.Content = "Do not repeat this call. You already called " + call.Name + " with exactly these arguments for this question; its result is above. Use it, try something else, or answer."
 			case !known:
 				names := make([]string, 0, len(byName))
 				for name := range byName {
 					names = append(names, name)
 				}
 				sort.Strings(names)
+				result.ErrorCode = "unknown_tool"
 				result.Content = fmt.Sprintf("There is no tool %q. Available: %s.", call.Name, strings.Join(names, ", "))
+			case validation != nil:
+				result.ErrorCode = "invalid_arguments"
+				result.Content = validation.Error()
 			case tool.Plan != nil && waiting != nil:
 				result.Content = "Only one action at a time. Propose this one again after the first has a result."
-			case calledBefore(chat, call):
-				repeats++
-				result.Content = "Do not repeat this call. You already called " + call.Name + " with exactly these arguments for this question; its result is above. Use it, try something else, or answer."
 			case tool.Plan != nil:
 				action, err := tool.Plan(ctx, call.Args)
 				if err != nil {
+					result.ErrorCode = ToolErrorCode(err)
 					result.Content = toolErrorText(err)
 					break
 				}
@@ -779,6 +813,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 						_ = save()
 						return ctx.Err()
 					}
+					result.ErrorCode = ToolErrorCode(err)
 					result.Content = toolErrorText(err)
 					break
 				}
@@ -788,6 +823,9 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 					result.Content = string(b)
 				}
 				result.Sources = res.Sources
+			}
+			if !result.OK && result.ErrorCode == "" {
+				result.ErrorCode = "tool_failed"
 			}
 			index := add(result)
 			if result.Action != nil {

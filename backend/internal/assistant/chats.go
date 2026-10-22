@@ -86,11 +86,12 @@ type Entry struct {
 	Sources []Source `json:"sources,omitempty"`
 
 	// tool
-	Tool   string          `json:"tool,omitempty"`
-	CallID string          `json:"callId,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
-	OK     bool            `json:"ok,omitempty"`
-	Action *Action         `json:"action,omitempty"`
+	Tool      string          `json:"tool,omitempty"`
+	CallID    string          `json:"callId,omitempty"`
+	Args      json.RawMessage `json:"args,omitempty"`
+	ErrorCode string          `json:"errorCode,omitempty"`
+	OK        bool            `json:"ok,omitempty"`
+	Action    *Action         `json:"action,omitempty"`
 }
 
 // Call is a tool call of the model.

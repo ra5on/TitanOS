@@ -43,7 +43,13 @@ func (s *Server) handleAgentDiagnostics(w http.ResponseWriter, r *http.Request) 
 	include := r.URL.Query().Get("content") == "true"
 	steps := []map[string]any{}
 	for _, e := range c.Messages {
-		step := map[string]any{"time": e.Time, "role": e.Role, "tool": e.Tool, "ok": e.OK}
+		step := map[string]any{"time": e.Time, "role": e.Role, "tool": e.Tool}
+		if e.Role == "tool" {
+			step["ok"] = e.OK
+		}
+		if e.ErrorCode != "" {
+			step["errorCode"] = e.ErrorCode
+		}
 		if e.Action != nil {
 			step["actionId"] = e.Action.ID
 			step["state"] = e.Action.State
