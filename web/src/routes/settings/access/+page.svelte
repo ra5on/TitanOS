@@ -24,9 +24,6 @@
 	let sshError = $state('');
 	let sshBusy = $state(false);
 	let sshSaved = $state(false);
-	let agents = $state<boolean | null>(null);
-	let agentsError = $state('');
-	let agentsBusy = $state(false);
 	$effect(() => { if (saved) { const timer = setTimeout(() => saved = false, 5000); return () => clearTimeout(timer); } });
 	$effect(() => { if (sshSaved) { const timer = setTimeout(() => sshSaved = false, 5000); return () => clearTimeout(timer); } });
 
@@ -48,18 +45,7 @@
 		try { certificate = await api.get<Certificate>('/system/certificate'); }
 		catch (err) { if (err instanceof ApiError && err.code === 'read_only') noTls = true; else problem(err); }
 	}
-	async function loadAgents() {
-		try { agents = (await api.get<{ enabled: boolean }>('/system/api-access')).enabled; agentsError = ''; }
-		catch (err) { agentsError = errorText(err instanceof ApiError ? err.code : 'internal'); }
-	}
-	async function setAgents(enabled: boolean) {
-		if (agentsBusy) return;
-		agentsBusy = true; agentsError = '';
-		try { agents = (await api.put<{ enabled: boolean }>('/system/api-access', { enabled })).enabled; }
-		catch (err) { agentsError = errorText(err instanceof ApiError ? err.code : 'internal'); }
-		finally { agentsBusy = false; }
-	}
-	$effect(() => { loadSsh(); loadCertificate(); loadAgents(); });
+	$effect(() => { loadSsh(); loadCertificate(); });
 	// The service follows the switch within a moment.
 	$effect(() => {
 		if (!ssh || ssh.enabled === ssh.running) return;
@@ -192,19 +178,6 @@
 	{/if}
 </section>
 
-<section class="tile" aria-labelledby="access-agents">
-	<h2 class="tile-title" id="access-agents" use:revealTarget>{t('access.agents')}</h2>
-	{#if agents !== null}
-		<label class="check">
-			<input type="checkbox" checked={agents} disabled={agentsBusy} onchange={async event => { const field = event.currentTarget; await setAgents(field.checked); field.checked = agents ?? false; }} />
-			<span>{t('access.agentsEnable')}</span>
-		</label>
-		<p class="muted">{t('access.agentsText')}</p>
-		<p class="muted">{t('access.agentsNever')}</p>
-		{#if agents}<p class="muted">{t('access.agentsKeys')} <a href="/account">{t('menu.account')}</a></p>{/if}
-	{/if}
-	{#if agentsError}<div class="notice-error" role="alert">{agentsError}<button class="btn" onclick={loadAgents}>{t('ui.retry')}</button></div>{:else if agents === null}<p role="status">{t('common.loading')}</p>{/if}
-</section>
 
 <TerminalSettings />
 

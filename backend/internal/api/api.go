@@ -25,7 +25,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
-	"github.com/ra5on/TitanOS/backend/internal/mcp"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -94,8 +93,6 @@ type Options struct {
 	SecureCookies bool
 	// Sessions are the logins; nil starts with none, kept in memory only.
 	Sessions *auth.Sessions
-	// APIKeys let agents use the MCP endpoint; nil makes an empty set.
-	APIKeys *auth.APIKeys
 	// Assistant is the chat with a model from Ollama; nil makes one that is off.
 	Assistant *assistant.Manager
 }
@@ -107,7 +104,7 @@ type Server struct {
 	limiter  *auth.Limiter
 	prefs    *preferences
 	handler  http.Handler
-	mcp      *mcp.Server
+	chats    *assistant.Chats
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -127,10 +124,13 @@ func New(opts Options) *Server {
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
 	}
-	if s.opts.APIKeys == nil {
-		s.opts.APIKeys = auth.NewAPIKeys(opts.Store, opts.Users)
+	if s.opts.UI != nil {
+		// The manual is built into the web UI (see web/vite.config.ts).
+		if manual, err := fs.Sub(s.opts.UI, "manual"); err == nil {
+			s.opts.Assistant.Manual = assistant.NewManual(manual)
+		}
 	}
-	s.mcp = s.newMCP()
+	s.chats = assistant.NewChats(s.chatsDir)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -184,13 +184,6 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeys))
 	mux.HandleFunc("POST /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeyAdd))
 	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", s.requireUser(s.handleAccountKeyRemove))
-	// Keys for agents. The tools show what only administrators see.
-	mux.HandleFunc("GET /api/v1/account/api-keys", s.requireAdmin(s.handleAccountAPIKeys))
-	mux.HandleFunc("POST /api/v1/account/api-keys", s.requireAdmin(s.handleAccountAPIKeyCreate))
-	mux.HandleFunc("DELETE /api/v1/account/api-keys/{id}", s.requireAdmin(s.handleAccountAPIKeyRemove))
-	mux.HandleFunc("DELETE /api/v1/users/{name}/api-keys", s.requireAdmin(s.handleUserAPIKeysRemove))
-	// The one route where an API key counts instead of the session cookie.
-	mux.HandleFunc("/api/v1/mcp", s.handleMCP)
 
 	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
@@ -344,13 +337,25 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
-	// The chat in the web UI, with the same read-only tools as agents.
+	// The chat in the web UI. Its settings are for administrators; who may
+	// chat says requireAssistant.
+	mux.HandleFunc("GET /api/v1/assistant/status", s.requireUser(s.handleAssistantStatus))
 	mux.HandleFunc("GET /api/v1/assistant", s.requireAdmin(s.handleAssistant))
 	mux.HandleFunc("PUT /api/v1/assistant", s.requireAdmin(s.handleAssistantChange))
 	mux.HandleFunc("POST /api/v1/assistant/models", s.requireAdmin(s.handleAssistantModels))
-	mux.HandleFunc("POST /api/v1/assistant/chat", s.requireAdmin(s.handleAssistantChat))
-	mux.HandleFunc("GET /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccess))
-	mux.HandleFunc("PUT /api/v1/system/api-access", s.requireAdmin(s.handleAPIAccessChange))
+	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
+	mux.HandleFunc("POST /api/v1/assistant/models/delete", s.requireAdmin(s.handleAssistantModelDelete))
+	mux.HandleFunc("GET /api/v1/assistant/ollama-apps", s.requireAdmin(s.handleAssistantOllamaApps))
+	mux.HandleFunc("GET /api/v1/assistant/models", s.requireAssistant(s.handleAssistantChatModels))
+	mux.HandleFunc("GET /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChats))
+	mux.HandleFunc("POST /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatCreate))
+	mux.HandleFunc("DELETE /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatsDelete))
+	mux.HandleFunc("GET /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatGet))
+	mux.HandleFunc("PUT /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatRename))
+	mux.HandleFunc("DELETE /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatDelete))
+	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/messages", s.requireAssistant(s.handleAssistantMessage))
+	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/regenerate", s.requireAssistant(s.handleAssistantRegenerate))
+	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/actions/{action}", s.requireAssistant(s.handleAssistantAction))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))

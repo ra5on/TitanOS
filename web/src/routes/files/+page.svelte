@@ -41,6 +41,7 @@
 	import VirtualEntries from './VirtualEntries.svelte';
 	import WindowsPath from './WindowsPath.svelte';
 	import { backupFolder, type BackupState, type USBBackup } from './usb-backup.ts';
+	import { askAbout, assistant, readAttachment } from '#lib/assistant.svelte.ts';
 
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 	const join = (...parts: string[]) => parts.filter(Boolean).join('/');
@@ -761,6 +762,19 @@
 
 	// --- Actions --------------------------------------------------------------
 
+	/** Gives a text file or an image to the assistant with a question about it. */
+	async function showAssistant(name: string) {
+		try {
+			const res = await fetch('/api/v1/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) }), { credentials: 'same-origin' });
+			if (!res.ok) throw new Error(String(res.status));
+			const blob = await res.blob();
+			const file = new File([blob], name, { type: previewKind(name, blob.size) === 'image' ? blob.type || 'image/png' : 'text/plain' });
+			await askAbout(t('assistant.askFile', { name }), [await readAttachment(file)]);
+		} catch {
+			error = t('assistant.askFileFailed');
+		}
+	}
+
 	function download() {
 		if (!entries || selected.length === 0) return;
 		const single = selected.length === 1 ? entries.find((entry) => entry.name === selected[0]) : undefined;
@@ -1192,6 +1206,9 @@
 		{#if one && entry.dir}<button type="button" role="menuitem" onclick={() => choose(() => open(rootId, join(dir, entry.name)))}><Icon name="folder" size={16} /><span>{t('files.openFolder')}</span><kbd aria-hidden="true">Enter</kbd></button>
 		{:else if one && previewKind(entry.name, entry.size)}<button type="button" role="menuitem" onclick={() => choose(() => (preview = entry))}><Icon name="search" size={16} /><span>{t('files.preview')}</span><kbd aria-hidden="true">Space</kbd></button>{/if}
 		{#if editable}<button type="button" role="menuitem" onclick={() => choose(() => (editing = join(dir, selected[0])))}><Icon name="edit" size={16} /><span>{t('files.edit')}</span></button>{/if}
+		{#if one && !entry.dir && root.kind !== 'stick' && assistant.status?.available && ((previewKind(entry.name, entry.size) === 'text' && entry.size <= 256 << 10) || (previewKind(entry.name, entry.size) === 'image' && entry.size <= 4 << 20))}
+			<button type="button" role="menuitem" onclick={() => choose(() => showAssistant(entry.name))}><Icon name="chat" size={16} /><span>{t('assistant.askFileMenu')}</span></button>
+		{/if}
 		<button type="button" role="menuitem" onclick={() => choose(download)}><Icon name="download" size={16} /><span>{t('files.download')}</span></button>
 		{#if one && !entry.dir && /\.zip$/i.test(entry.name)}<button type="button" role="menuitem" onclick={() => choose(() => (archive = join(dir, entry.name)))}><Icon name="archive" size={16} /><span>{t('files.archiveTitle')}</span></button>{/if}
 		{#if root.kind !== 'stick'}

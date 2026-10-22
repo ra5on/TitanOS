@@ -9,6 +9,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
@@ -280,6 +281,7 @@
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
 					<button type="button" class="btn" disabled={busy} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
 					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.delete(`/docker/apps/${app}/job`))}>{t('docker.jobDismiss')}</button>
+					{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askAppSetup', { app }), job.output ? [{ name: `${app}-setup.log`, kind: 'text', text: job.output.slice(-200000) }] : [])}>{t('assistant.ask')}</button>{/if}
 				</div>
 			{/if}
 		</div>

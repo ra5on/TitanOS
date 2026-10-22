@@ -15,7 +15,8 @@
 	import StatusBar from './StatusBar.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import AssistantPanel from './AssistantPanel.svelte';
-	import { loadAssistant } from '#lib/assistant.svelte.ts';
+	import Icon from './Icon.svelte';
+	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -28,6 +29,11 @@
 		if (admin && event.ctrlKey && !event.altKey && !event.metaKey && (event.key === '`' || event.code === 'Backquote')) {
 			event.preventDefault();
 			toggleTerminal();
+		}
+		// Ctrl+J opens and closes the chat with the assistant.
+		if (assistant.status?.available && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.code === 'KeyJ') {
+			event.preventDefault();
+			toggleAssistant();
 		}
 	}
 
@@ -45,10 +51,11 @@
 
 	$effect(() => watchSystem());
 	$effect(() => watchStorage());
-	// Whether the chat is on decides the button in the header.
+	// Whether this account may chat decides the buttons for the assistant.
 	$effect(() => {
-		if (admin) loadAssistant();
+		if (session.data?.user?.name) loadAssistant();
 	});
+	const fab = $derived(!!assistant.status?.available && assistant.prefs.floating && !assistant.open && page.url.pathname !== '/assistant');
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -70,7 +77,13 @@
 	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
-{#if admin}<TerminalPanel /><AssistantPanel />{/if}
+{#if admin}<TerminalPanel />{/if}
+{#if assistant.status?.available}<AssistantPanel />{/if}
+{#if fab}
+	<button type="button" class="fab" style:bottom={admin && terminal.open && !terminal.full ? `${terminal.height + 16}px` : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
+		<Icon name="chat" size={22} />
+	</button>
+{/if}
 
 <style>
 	.trial {
@@ -105,7 +118,36 @@
 		flex-direction: column;
 		gap: var(--gap);
 	}
+	.fab {
+		position: fixed;
+		right: 20px;
+		bottom: 44px;
+		z-index: 29;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 52px;
+		height: 52px;
+		padding: 0;
+		border: 0;
+		border-radius: 50%;
+		background: var(--accent);
+		color: var(--on-accent);
+		box-shadow: var(--shadow-menu);
+		cursor: pointer;
+	}
+	.fab:hover {
+		filter: brightness(1.08);
+	}
+	.fab:focus-visible {
+		outline: 2px solid var(--text);
+		outline-offset: 2px;
+	}
 	@media (max-width: 760px) {
+		.fab {
+			right: 14px;
+			bottom: 40px;
+		}
 		main {
 			padding: 16px var(--page-pad) 24px;
 		}

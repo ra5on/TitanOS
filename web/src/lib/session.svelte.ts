@@ -3,6 +3,7 @@ import { sound, resetSound } from './sound.svelte.ts';
 import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
+import { useAssistantPrefs } from './assistant.svelte.ts';
 
 export const session = $state<{
 	status: 'loading' | 'ready' | 'unreachable';
@@ -21,6 +22,7 @@ async function loadPreferences() {
 		session.vnc = prefs.vnc;
 		sound.settings = sanitizeSound(prefs.sound);
 		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
+		useAssistantPrefs(prefs.assistant);
 	} catch {
 		// The UI works with defaults; saving will report the problem.
 		session.dashboard = null;

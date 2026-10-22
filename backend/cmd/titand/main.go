@@ -244,13 +244,6 @@ func run(opts options) error {
 	if err := chat.Load(); err != nil {
 		slog.Warn("assistant settings not readable from /config", "err", err)
 	}
-	// Keys for agents; read again on first use if the accounts were missing.
-	apiKeys := auth.NewAPIKeys(store, users)
-	if users.Loaded() {
-		if err := apiKeys.Load(); err != nil {
-			slog.Warn("API keys not readable from /config", "err", err)
-		}
-	}
 
 	// The version of the system image; version.Version is newer when an
 	// app update runs on it.
@@ -626,7 +619,6 @@ func run(opts options) error {
 		ShareDir:      shareDir,
 		SecureCookies: !opts.dev,
 		Sessions:      sessions,
-		APIKeys:       apiKeys,
 		Assistant:     chat,
 	})
 

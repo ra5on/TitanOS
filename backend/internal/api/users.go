@@ -18,8 +18,6 @@ type accountResponse struct {
 	SMBReady bool `json:"smbReady"`
 	// TwoFactor says whether the account logs in with a second factor.
 	TwoFactor bool `json:"twoFactor"`
-	// APIKeys is how many keys for agents the account has.
-	APIKeys int `json:"apiKeys"`
 }
 
 func accountOf(user auth.User) accountResponse {
@@ -61,9 +59,7 @@ func writeAccountError(w http.ResponseWriter, err error) {
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	accounts := []accountResponse{}
 	for _, user := range s.opts.Users.List() {
-		account := accountOf(user)
-		account.APIKeys = s.opts.APIKeys.Count(user.Name)
-		accounts = append(accounts, account)
+		accounts = append(accounts, accountOf(user))
 	}
 	writeJSON(w, http.StatusOK, accounts)
 }
@@ -208,7 +204,9 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessions.DeleteUser(target.Name, "")
 	s.prefs.forget(target.Name)
-	s.opts.APIKeys.Forget(target.Name)
+	if err := s.chats.ForgetUser(target.Name); err != nil {
+		slog.Error("remove chats of the account", "user", target.Name, "err", err)
+	}
 	if err := s.opts.Shares.ForgetUser(target.Name); err != nil {
 		slog.Error("remove account from shares", "user", target.Name, "err", err)
 	}

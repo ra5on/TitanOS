@@ -51,8 +51,3 @@ jobs:
 ```
 
 Die Skripte sind hier nur abgelegt und werden von TitanOS nicht ausgeführt.
-
-## Vorlage TitanOS-Agent
-
-`titanos-agent/compose.yaml` ist die App-Vorlage für den Beispiel-Agenten aus `examples/agent` (Chat mit einem Ollama-Modell über die MCP-Werkzeuge von TitanOS). Sie gehört nach `titanos-agent/compose.yaml` im Apps-Repo, sobald das Image `ghcr.io/ra5on/titanos-agent` veröffentlicht und öffentlich sichtbar ist.
-
