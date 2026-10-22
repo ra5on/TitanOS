@@ -733,8 +733,8 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		}
 		return entry, nil
 	}
-	// Only regenerate rejected model output. No tool from the failed response
-	// has been dispatched. Connection errors and executed mutations are not retried.
+	// Retry malformed output or explicitly transient failures before dispatch.
+	// No tool from the failed response, and no completed mutation, is repeated.
 	generate := func(withTools bool, extra string) (Entry, error) {
 		for attempt := 0; ; attempt++ {
 			entry, err := generateOnce(withTools, extra)

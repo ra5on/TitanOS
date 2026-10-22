@@ -165,16 +165,14 @@ func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.T
 		if s.opts.Notify == nil {
 			return "", false, nil
 		}
-		fingerprint := ""
+		// Messages returns newest first. Fixed-width timestamps/IDs allow a
+		// high-water mark so dismissing a message cannot replay an older one.
 		for _, m := range s.opts.Notify.Messages() {
 			if m.Kind == t.Target {
-				v := fmt.Sprintf("%s/%d", m.Time.UTC().Format(time.RFC3339Nano), m.ID)
-				if v > fingerprint {
-					fingerprint = v
-				}
+				return fmt.Sprintf("%s/%020d", m.Time.UTC().Format("2006-01-02T15:04:05.000000000Z"), m.ID), true, nil
 			}
 		}
-		return fingerprint, fingerprint != "", nil
+		return "", false, nil
 	case "usb":
 		if s.opts.USB == nil {
 			return "", false, nil
@@ -316,11 +314,17 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 					a.Detail = e.Error()
 					continue
 				}
-				if a.EventReady && fingerprint != a.LastEvent && match {
+				changed := fingerprint != a.LastEvent
+				if a.Trigger.Event == "notification" {
+					changed = fingerprint > a.LastEvent
+				}
+				if a.EventReady && changed && match {
 					a.Pending = true
 					due = true
 				}
-				a.LastEvent = fingerprint
+				if a.Trigger.Event != "notification" || fingerprint > a.LastEvent {
+					a.LastEvent = fingerprint
+				}
 				a.EventReady = true
 				if now.Sub(a.LastStart) < time.Minute {
 					continue

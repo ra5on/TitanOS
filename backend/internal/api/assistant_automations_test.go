@@ -364,3 +364,34 @@ func TestDirectModeQueuesOnlyWaitingConfirmations(t *testing.T) {
 		}
 	}
 }
+
+func TestAutomationDismissedNotificationDoesNotReplay(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.withShare()
+	u, _ := ts.users.Get("alex")
+	settings := ts.server.opts.Assistant.Settings()
+	settings.Enabled = true
+	ts.server.opts.Assistant.SetSettings(settings)
+	now := time.Now()
+	_, err := ts.server.automations.Put("alex", assistant.Automation{Name: "Backup failures", Prompt: "Inspect backups", Enabled: true, Trigger: assistant.Trigger{Kind: "event", Event: "notification", Target: "backup_failed"}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts.server.opts.Notify.Notify("error", "backup_failed", "first")
+	ts.server.opts.Notify.Notify("error", "backup_failed", "second")
+	ts.server.scanAutomations(context.Background(), u, now)
+	newest := ts.server.opts.Notify.Messages()[0]
+	ts.server.opts.Notify.Dismiss([]int{newest.ID})
+	ts.server.scanAutomations(context.Background(), u, now.Add(time.Minute))
+	list, _ := ts.server.automations.List("alex")
+	if len(list[0].Runs) != 0 {
+		t.Fatal("dismissal triggered older message")
+	}
+	ts.server.opts.Notify.Notify("error", "backup_failed", "third")
+	ts.server.scanAutomations(context.Background(), u, now.Add(2*time.Minute))
+	list, _ = ts.server.automations.List("alex")
+	if len(list[0].Runs) != 1 {
+		t.Fatal("new message not dispatched")
+	}
+}
