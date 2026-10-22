@@ -7,6 +7,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { horizontalNav } from '#lib/horizontal-nav.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
+	import { assistant, toggleAssistant } from '#lib/assistant.svelte.ts';
+	import Icon from './Icon.svelte';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
 	import Notifications from './Notifications.svelte';
@@ -93,6 +95,11 @@
 		<button type="button" class="terminal" aria-pressed={terminal.open} aria-label={t('terminal.title')} title={t('terminal.shortcut')} onclick={toggleTerminal}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
 		</button>
+		{#if assistant.settings?.enabled}
+			<button type="button" class="terminal" aria-pressed={assistant.open} aria-label={t('assistant.title')} title={t('assistant.title')} onclick={toggleAssistant}>
+				<Icon name="chat" size={18} />
+			</button>
+		{/if}
 		<Notifications />
 	{/if}
 	<AccountMenu />

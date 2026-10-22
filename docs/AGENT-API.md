@@ -221,7 +221,7 @@ Ein Beispiel dafür liegt in `examples/agent/`: ein Python-Programm (nur Standar
 
 1. **Schlüssel und Lesen**: alles aus „API-Schlüssel“ und die Werkzeuge aus Phase 1, Seite unter „Mein Konto“, Schalter unter „Zugang“.
 2. **Aktionen mit Bestätigung**: Anfragen, Glocke, Leiste, Dialog, die Werkzeuge aus Phase 2.
-3. **Später**: je Schlüssel „ohne Rückfrage“ für harmlose Aktionen (Container starten oder neu starten, Backup jetzt); Bereich `files:read` für einzelne Freigaben; Chat mit dem eigenen Modell direkt in der Weboberfläche; Vorlage „TitanOS-Agent“ im App-Repo; dokumentierte REST-API mit denselben Schlüsseln.
+3. **Später**: je Schlüssel „ohne Rückfrage“ für harmlose Aktionen (Container starten oder neu starten, Backup jetzt); Bereich `files:read` für einzelne Freigaben; dokumentierte REST-API mit denselben Schlüsseln. Chat in der Weboberfläche und Vorlage „TitanOS-Agent“ sind umgesetzt.
 
 ## Offene Entscheidungen
 
@@ -230,6 +230,17 @@ Ein Beispiel dafür liegt in `examples/agent/`: ein Python-Programm (nur Standar
 3. **Anfragen per Push:** Stufe Warnung, damit sie ab Werk verschickt werden (Vorschlag), oder Hinweis?
 4. **Bestätigen vom Smartphone:** reicht die Weboberfläche, oder soll eine Push-Nachricht einen Link enthalten, der direkt zum Dialog führt (nach Anmeldung)?
 5. **Phase 3 „ohne Rückfrage“:** überhaupt anbieten oder grundsätzlich jede Aktion bestätigen?
+
+## Chat in der Weboberfläche
+
+Vom Projektinhaber am 22. Oktober 2026 beauftragt und am selben Tag umgesetzt (Paket `assistant`, `api/assistant.go`, `AssistantPanel.svelte`, Einstellungen › KI-Assistent). Geprüft mit Go-Tests gegen eine nachgebaute Ollama (Werkzeugaufrufe, unbekannte Werkzeuge, Schrittgrenze, Fehler, Einstellungen, Rechte, Systemtext aus dem Browser wird verworfen), Tests für die Markdown-Darstellung und im Entwicklungsserver mit nachgebauter Ollama. Nicht geprüft: ein echtes Modell.
+
+- **Kein Schlüssel, keine App:** titand spricht selbst mit Ollama. Wer angemeldet ist, chattet mit den Rechten seines Kontos; nur Besitzer und Administratoren, weil die Werkzeuge zeigen, was nur sie sehen.
+- **Dieselben Werkzeuge** wie der MCP-Server, direkt aufgerufen (kein Umweg über HTTP oder einen Schlüssel), alle nur lesend. Protokolle bleiben geschwärzt. Kommen in Phase 2 Aktionen dazu, erscheint die Bestätigung im Chat selbst.
+- **Einstellungen › KI-Assistent** (`/config/system/assistant.json`): ein- und ausschalten (ab Werk aus), Adresse von Ollama (ab Werk `http://127.0.0.1:11434`, also die Ollama-App auf diesem NAS), voreingestelltes Modell aus der Liste von Ollama, „Verbindung prüfen“.
+- **Bedienung:** Knopf mit Sprechblase in der Kopfzeile neben dem Terminal; der Chat öffnet sich als Seitenleiste rechts und bleibt beim Seitenwechsel offen. Modell wählbar, „Neuer Chat“, Vorschläge für den Anfang, je Antwort die benutzten Werkzeuge.
+- **Verlauf** nur im Browser (sessionStorage dieses Tabs), nie im RAM des NAS oder auf dem Stick. Höchstens die letzten 20 Nachrichten gehen an das Modell.
+- **Ablauf** wie beim Beispiel-Agenten: höchstens acht Schritte, Werkzeugergebnisse auf 12 000 Zeichen gekürzt, Antwort per Server-Sent Events (`POST /api/v1/assistant/chat`). Jeder Werkzeugaufruf steht als `assistant tool call` mit Konto im Protokoll.
 
 ## Stand der Umsetzung (Phase 1)
 
