@@ -32,7 +32,7 @@ func actionTool(name, description string, properties map[string]any, required []
 		props[k] = v
 	}
 	return assistant.Tool{
-		Name: name, Description: description + " Does not run anything: the person confirms a card first.",
+		Name: name, Description: description + " Executed by TitanOS under the configured execution policy; never claim success before the result.",
 		Parameters: schema(props, append(slices.Clone(required), "reason")...),
 		Plan: func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
 			var fields map[string]json.RawMessage

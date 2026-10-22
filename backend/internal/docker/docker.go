@@ -95,7 +95,9 @@ type Container struct {
 	Icon      string `json:"icon"`
 	// UpdateAvailable is true when the registry has a newer image for the
 	// container's tag than the one it runs.
-	UpdateAvailable bool `json:"updateAvailable"`
+	UpdateAvailable bool   `json:"updateAvailable"`
+	UpdateState     string `json:"updateState"`
+	UpdateError     string `json:"updateError,omitempty"`
 }
 
 // WebUILabel tells TitanOS where the web interface of a container is.
@@ -158,6 +160,7 @@ type Manager struct {
 	remote         map[string]string   // image reference → digest
 	local          map[string][]string // image ID → digests it is known under
 	updatesChecked time.Time
+	updateErrors   map[string]string
 }
 
 // NewManager returns a manager working on the real system.
@@ -428,9 +431,21 @@ func (m *Manager) Status(ctx context.Context) Status {
 		container.WebUI = c.Labels[WebUILabel]
 		container.PublicURL = c.Labels["titanos.public-url"]
 		container.Icon = c.Labels["titanos.icon"]
+		container.UpdateState = "not_checked"
+		if strings.HasPrefix(c.Image, "sha256:") || strings.Contains(c.Image, "@") {
+			container.UpdateState = "pinned"
+		}
+		if problem := m.updateErrors[c.Image]; problem != "" {
+			container.UpdateState = "failed"
+			container.UpdateError = problem
+		}
 		if remote := m.remote[c.Image]; remote != "" {
-			if digests, known := m.local[c.ImageID]; known && !slices.Contains(digests, remote) {
-				container.UpdateAvailable = true
+			if digests, known := m.local[c.ImageID]; known && len(digests) > 0 && container.UpdateError == "" {
+				container.UpdateState = "current"
+				if !slices.Contains(digests, remote) {
+					container.UpdateAvailable = true
+					container.UpdateState = "available"
+				}
 			}
 		}
 		for _, p := range c.Ports {
@@ -536,24 +551,34 @@ func (m *Manager) CheckUpdates(ctx context.Context) error {
 	}
 	remote := map[string]string{}
 	local := map[string][]string{}
+	problems := map[string]string{}
 	for _, c := range containers {
 		// An image named by its ID or digest has no tag that could move.
 		if strings.HasPrefix(c.Image, "sha256:") || strings.Contains(c.Image, "@") {
 			continue
 		}
 		if _, done := local[c.ImageID]; !done {
-			local[c.ImageID], _ = m.api.imageDigests(ctx, c.ImageID)
+			digests, err := m.api.imageDigests(ctx, c.ImageID)
+			local[c.ImageID] = digests
+			if err != nil {
+				problems[c.Image] = "local image digest: " + err.Error()
+			}
 		}
 		if _, done := remote[c.Image]; !done {
 			digest, err := m.api.remoteDigest(ctx, c.Image)
 			if err != nil {
 				slog.Debug("update check", "image", c.Image, "err", err)
+				problems[c.Image] = "registry: " + err.Error()
 			}
 			remote[c.Image] = digest
+		}
+		if len(local[c.ImageID]) == 0 && problems[c.Image] == "" {
+			problems[c.Image] = "local image has no comparable digest"
 		}
 	}
 	m.mu.Lock()
 	m.remote, m.local, m.updatesChecked = remote, local, time.Now()
+	m.updateErrors = problems
 	m.mu.Unlock()
 	return nil
 }

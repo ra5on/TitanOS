@@ -536,3 +536,36 @@ func TestRestartOfTitandKeepsTheEngineRunning(t *testing.T) {
 		t.Errorf("a stopped engine was not started: %v", runner.commands)
 	}
 }
+
+// A registry error must never become a false "all current" result.
+func TestUpdateFailureRemainsUnknown(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	m.applied = "/somewhere"
+	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
+	original := m.api.http.Transport
+	m.api.http.Transport = updateFailTransport{base: original}
+	if err := m.CheckUpdates(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state := m.Status(context.Background())
+	if len(state.Containers) != 2 {
+		t.Fatalf("no containers: %+v", state)
+	}
+	for _, c := range state.Containers {
+		if c.UpdateState != "failed" || c.UpdateError == "" || c.UpdateAvailable {
+			t.Fatalf("false result: %+v", c)
+		}
+	}
+	if state.UpdatesChecked.IsZero() {
+		t.Fatal("missing check time")
+	}
+}
+
+type updateFailTransport struct{ base http.RoundTripper }
+
+func (r updateFailTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.Contains(req.URL.Path, "/distribution/") {
+		return nil, errors.New("registry unavailable")
+	}
+	return r.base.RoundTrip(req)
+}

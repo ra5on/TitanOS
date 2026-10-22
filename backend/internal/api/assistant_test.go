@@ -437,32 +437,27 @@ func TestAssistantTask(t *testing.T) {
 	if task == nil || task.Key != "task" || task.Method != "" || task.Path != "" {
 		t.Fatalf("task card: %+v", task)
 	}
-	// Approving the plan runs nothing by itself; the next action is marked
-	// to run without asking.
-	ts.request("POST", "/api/v1/assistant/chats/"+id+"/actions/"+task.ID, map[string]string{"state": "done"})
+	// Approval transfers execution to the server, including the next step.
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/actions/"+task.ID, map[string]string{"state": "approved", "result": "untrusted browser result"})
 	chat = ts.chat(ts.client, id)
-	change := chat.Chat.Messages[len(chat.Chat.Messages)-1]
-	if change.Action == nil || change.Action.Key != "api.change" || change.Action.Path != "/api/v1/system/timezone" || change.Action.Body["timezone"] != "Europe/Berlin" {
-		t.Fatalf("change: %+v", change.Action)
-	}
-	var raw struct {
-		Chat struct {
-			Messages []struct{ Action *struct{ Auto bool } }
-			Task     *struct{ Approved bool }
+	done := false
+	for _, e := range chat.Chat.Messages {
+		if e.Action != nil && e.Action.Key == "api.change" {
+			done = e.Action.State == "done" && e.Action.Path == "/api/v1/system/timezone"
 		}
 	}
-	_, body := ts.request("GET", "/api/v1/assistant/chats/"+id, nil)
-	json.Unmarshal(body, &raw)
-	if last := raw.Chat.Messages[len(raw.Chat.Messages)-1]; last.Action == nil || !last.Action.Auto || raw.Chat.Task == nil || !raw.Chat.Task.Approved {
-		t.Fatalf("not automatic: %s", body)
+	if !done || chat.Chat.Messages[len(chat.Chat.Messages)-1].Content != "Erledigt." {
+		t.Fatalf("server did not finish: %+v", chat)
 	}
-	ts.request("POST", "/api/v1/assistant/chats/"+id+"/actions/"+change.Action.ID, map[string]string{"state": "done"})
-	_, body = ts.request("GET", "/api/v1/assistant/chats/"+id, nil)
-	raw.Chat.Task = nil
-	json.Unmarshal(body, &raw)
-	if raw.Chat.Task != nil {
-		t.Fatal("task still open after the final answer")
+	body, _ := ts.store.Read("system/settings.json")
+	if !strings.Contains(string(body), "Europe/Berlin") {
+		t.Fatalf("timezone not applied: %s", body)
 	}
+	res, _ := ts.request("POST", "/api/v1/assistant/chats/"+id+"/regenerate", map[string]string{})
+	if res.StatusCode != 400 {
+		t.Fatalf("regeneration could repeat changes: %d", res.StatusCode)
+	}
+
 }
 
 func TestAssistantDocuments(t *testing.T) {

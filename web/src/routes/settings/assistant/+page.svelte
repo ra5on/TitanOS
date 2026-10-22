@@ -6,6 +6,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { AREAS, loadAssistant, loadModels, type AssistantModel, type AssistantSettings } from '#lib/assistant.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import AgentSettings from '#lib/components/AgentSettings.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -24,7 +25,6 @@
 	let pulling = $state<{ status: string; total: number; completed: number } | null>(null);
 	let pullError = $state('');
 	let removing = $state<string | null>(null);
-	let temperature = $state('');
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
@@ -32,7 +32,7 @@
 	const DEFAULT_ACCESS: Record<string, 'off' | 'read' | 'write'> = {
 		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read'
 	};
-	const STEPS = [0, 10, 25, 50, 100, 200];
+
 
 	async function load() {
 		loadError = '';
@@ -40,7 +40,6 @@
 			settings = await api.get<AssistantSettings>('/assistant');
 			settings.areas = Object.fromEntries(AREAS.map((a) => [a, settings!.areas?.[a] ?? DEFAULT_ACCESS[a]]));
 			settings.maxSteps ??= 0;
-			temperature = settings.temperature === null || settings.temperature === undefined ? '' : String(settings.temperature);
 			check();
 			api.get<{ apps: typeof found }>('/assistant/ollama-apps').then((res) => (found = res.apps)).catch(() => (found = []));
 		} catch (err) {
@@ -76,9 +75,9 @@
 		saved = false;
 		error = '';
 		try {
-			const value = temperature.trim() === '' ? null : Number(temperature.replace(',', '.'));
+			const value = settings.temperature;
 			const areas = settings.areas;
-			settings = await api.put<AssistantSettings>('/assistant', { ...settings, numCtx: Number(settings.numCtx) || 0, maxSteps: Number(settings.maxSteps) || 0, temperature: value });
+			settings = await api.put<AssistantSettings>('/assistant', { ...settings, numCtx: Number(settings.numCtx) || 0, maxSteps: 0, temperature: value });
 			settings.areas = { ...areas, ...settings.areas };
 			// The buttons in the header follow the new settings.
 			await loadAssistant();
@@ -256,16 +255,8 @@
 			<h2 class="tile-title">{t('assistant.advanced')}</h2>
 			<label>
 				<span>{t('assistant.prompt')}</span>
-				<textarea class="field" bind:value={settings.prompt} rows="4" maxlength="2000" placeholder={t('assistant.promptPlaceholder')}></textarea>
+				<textarea class="field" bind:value={settings.prompt} rows="4" maxlength="24000" placeholder={t('assistant.promptPlaceholder')}></textarea>
 				<span class="muted small">{t('assistant.promptHint')}</span>
-			</label>
-			<label>
-				<span>{t('assistant.maxSteps')}</span>
-				<select class="field" bind:value={settings.maxSteps}>
-					{#each STEPS as n (n)}<option value={n}>{n === 0 ? t('assistant.unlimited') : n}</option>{/each}
-					{#if !STEPS.includes(settings.maxSteps)}<option value={settings.maxSteps}>{settings.maxSteps}</option>{/if}
-				</select>
-				<span class="muted small">{t('assistant.maxStepsHint')}</span>
 			</label>
 			<div class="pair">
 				<label>
@@ -275,11 +266,13 @@
 				</label>
 				<label>
 					<span>{t('assistant.temperature')}</span>
-					<input class="field mono" inputmode="decimal" bind:value={temperature} placeholder="–" />
+					<input class="field mono" type="number" min="0" max="2" step="0.1" bind:value={settings.temperature} placeholder="–" />
 					<span class="muted small">{t('assistant.temperatureHint')}</span>
 				</label>
 			</div>
 		</section>
+
+		<AgentSettings bind:settings />
 
 		<div class="actions">
 			<button type="submit" class="btn btn-primary" disabled={saving}>{t('assistant.save')}</button>
