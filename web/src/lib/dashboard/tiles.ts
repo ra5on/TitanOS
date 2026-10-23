@@ -8,7 +8,7 @@ export const COLUMNS = 12;
 export const ROW_HEIGHT = 72;
 export const GAP = 16;
 
-export const TILE_IDS = ['cpu', 'memory', 'system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia', 'temperatures'] as const;
+export const TILE_IDS = ['cpu', 'memory', 'system', 'volumes', 'network', 'disks', 'igpu', 'npu', 'nvidia', 'temperatures', 'assistant'] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type TileId = StaticTileId | `vm:${string}` | `container:${string}`;
 
@@ -24,7 +24,8 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	temperatures: { title: 'temperatures.title', minW: 2, minH: 2 },
 	igpu: { title: 'tile.igpu', minW: 2, minH: 2 },
 	npu: { title: 'tile.npu', minW: 2, minH: 2 },
-	nvidia: { title: 'tile.nvidia', minW: 2, minH: 2 }
+	nvidia: { title: 'tile.nvidia', minW: 2, minH: 2 },
+	assistant: { title: 'tile.assistant', minW: 3, minH: 3 }
 };
 
 export function workload(id: TileId): { kind: 'vm' | 'container'; name: string } | undefined {

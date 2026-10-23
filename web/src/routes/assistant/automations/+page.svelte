@@ -6,6 +6,7 @@
  import PageHead from '#lib/components/PageHead.svelte';
  import EmptyState from '#lib/components/EmptyState.svelte';
  import Dialog from '#lib/components/Dialog.svelte';
+ import { templatesFor, type AutomationTemplate } from '#lib/automation-templates.ts';
  type Trigger = { kind: string; at?: string; minutes?: number; time?: string; timezone?: string; weekday?: number; event?: string; target?: string; root?: string; path?: string; percent?: number; from?: string; to?: string; above?: number|null; below?: number|null };
  type Automation = { id?: string; revision?: number; name:string; prompt:string; enabled:boolean; trigger:Trigger; conditions:{volume?:string;noRebuild?:boolean}; execution:string; notify:string; catchUp:string; overlap:string; next?:string; detail?:string; runs?:{chat:string;scheduled:string;state:string;detail?:string}[] };
  let items=$state<Automation[]>([]), editing=$state<Automation|null>(null), removing=$state<Automation|null>(null);
@@ -26,11 +27,20 @@
  async function load(){try{items=(await api.get<{automations:Automation[]}>('/assistant/automations')).automations;loaded=true;error='';}catch(e){error=failure(e);}}
  onMount(()=>{load();const timer=setInterval(()=>{if(!editing&&!removing&&!busy&&document.visibilityState==='visible')load();},15000);return()=>clearInterval(timer);});
  function edit(a?:Automation,duplicate=false){
-  catalog();error='';editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
+  catalog();error='';template='';editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
   if(duplicate){delete editing.id;delete editing.revision;editing.enabled=false;delete editing.runs;delete editing.next;}
   const at=editing.trigger.at?new Date(editing.trigger.at):new Date(Date.now()+3600000);once=new Date(at.getTime()-at.getTimezoneOffset()*60000).toISOString().slice(0,16);
  }
  function changeKind(){if(!editing)return;editing.trigger={kind:editing.trigger.kind,time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,minutes:60,event:admin?'notification':'files',target:admin?'backup_failed':'',root:'',path:'',percent:85};}
+ let template=$state('');
+ const templates=$derived(templatesFor(admin,entities.length>0));
+ function useTemplate(id:string){
+  const tpl=templates.find(v=>v.id===id) as AutomationTemplate|undefined;
+  if(!tpl||!editing)return;
+  editing.name=t(`automation.tpl.${tpl.id}.name` as MessageKey);editing.prompt=t(`automation.tpl.${tpl.id}.prompt` as MessageKey);
+  editing.trigger={timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,...tpl.trigger};
+  editing.execution=tpl.execution;editing.notify=tpl.notify;
+ }
  async function save(){if(!editing)return;busy=true;try{const a=structuredClone($state.snapshot(editing));for(const k of ['above','below'] as const)if(typeof a.trigger[k]!=='number')delete a.trigger[k];if(a.trigger.kind==='once')a.trigger.at=new Date(once).toISOString();await api.post('/assistant/automations',a);editing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function toggle(a:Automation){busy=true;try{await api.post('/assistant/automations',{...a,enabled:!a.enabled});await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function run(a:Automation){busy=true;try{await api.post(`/assistant/automations/${a.id}/run`);await load();}catch(e){error=failure(e);}finally{busy=false;}}
@@ -58,6 +68,7 @@
 {#if editing}
  <Dialog title={label(editing.id?'edit':'create')} wide locked={busy} onclose={()=>{editing=null;error='';}}>
   <form onsubmit={(e)=>{e.preventDefault();save();}}>
+   {#if !editing.id && templates.length}<label>{label('fromTemplate')}<select class="field" bind:value={template} onchange={()=>useTemplate(template)} disabled={busy}><option value="">{label('noTemplate')}</option>{#each templates as tpl (tpl.id)}<option value={tpl.id}>{t(`automation.tpl.${tpl.id}.name` as MessageKey)}</option>{/each}</select></label>{#if template}<p class="muted small">{label('templateHint')}</p>{/if}{/if}
    <label>{label('name')}<input class="field" bind:value={editing.name} maxlength="120" required disabled={busy}/></label>
    <label>{label('prompt')}<textarea class="field" bind:value={editing.prompt} rows="5" maxlength="8000" required disabled={busy}></textarea></label>
    <label>{label('trigger')}<select class="field" bind:value={editing.trigger.kind} onchange={changeKind} disabled={busy}>{#each ['once','interval','daily','weekly','event'] as kind}<option value={kind}>{label(kind)}</option>{/each}</select></label>

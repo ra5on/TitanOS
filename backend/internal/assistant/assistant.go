@@ -670,6 +670,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		received := 0
 		completed := false
 		var calls []ollamaToolCall
+		var counts ollamaChunk
 		var splitter thinkSplitter
 		onAnswer := func(s string) {
 			if s != "" {
@@ -709,6 +710,9 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 				onThought(chunk.Message.Thinking)
 				splitter.feed(chunk.Message.Content, onAnswer, onThought)
 				calls = append(calls, chunk.Message.ToolCalls...)
+				if chunk.Done {
+					counts = chunk
+				}
 				completed = completed || chunk.Done
 				return nil
 			})
@@ -720,6 +724,17 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 			err = fmt.Errorf("%w: stream ended before completion; no tools were executed", ErrUpstream)
 		}
 		splitter.flush(onAnswer, onThought)
+		if chat.Stats == nil {
+			chat.Stats = &Stats{}
+		}
+		chat.Stats.Rounds++
+		chat.Stats.Prompt += counts.PromptEvalCount
+		chat.Stats.Generated += counts.EvalCount
+		if counts.TotalDuration > 0 {
+			chat.Stats.ModelMS += counts.TotalDuration / int64(time.Millisecond)
+		} else {
+			chat.Stats.ModelMS += time.Since(started).Milliseconds()
+		}
 		entry := Entry{DurationMS: time.Since(started).Milliseconds(), Role: "assistant", Content: strings.TrimSpace(answer.String()), Thinking: strings.TrimSpace(thought.String())}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -885,6 +900,10 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 				failedSteps = 0
 			}
 			result.DurationMS = time.Since(stepStarted).Milliseconds()
+			if chat.Stats != nil {
+				chat.Stats.Tools++
+				chat.Stats.ToolMS += result.DurationMS
+			}
 			index := add(result)
 			if result.Action != nil {
 				waitingIndex = index
