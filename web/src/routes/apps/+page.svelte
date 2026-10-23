@@ -58,9 +58,6 @@
 	const installed = (app: CatalogApp) => docker?.apps.includes(app.id) ?? false;
 	const ready = $derived(!!docker?.settings.enabled && docker.running);
 
-	const monogram = (app: CatalogApp) => app.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).replace(/^./, (c) => c.toUpperCase()) || '?';
-	const hue = (app: CatalogApp) => [...app.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
-
 	function checked(source: AppSource): string {
 		if (source.error) return tOr(`apps.sourceError.${source.error}`, source.error);
 		const time = new Date(source.updated).getTime();
@@ -185,7 +182,7 @@
 				{#each visible as app (`${app.source}/${app.id}`)}
 					<button type="button" class="tile card" aria-pressed={selected?.id === app.id && selected.source === app.source} onclick={() => (selected = app)}>
 						<span class="card-head">
-							<span class="monogram" style:background="hsl({hue(app)} 45% 42%)" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
+							<span class="monogram" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
 							<span class="names"><span class="name">{app.name}</span><span class="muted category">{categoryLabel(categoryOf(app))}</span></span>
 						</span>
 						<span class="description">{describe(app)}</span>
@@ -201,7 +198,7 @@
 
 		{#if selected}
 			{#key `${selected.source}/${selected.id}`}
-				<InstallPanel app={selected} source={sourceName(selected.source)} description={describe(selected)} monogram={monogram(selected)} hue={hue(selected)} {docker} {shares} onclose={() => (selected = null)} />
+				<InstallPanel app={selected} source={sourceName(selected.source)} description={describe(selected)} {docker} {shares} onclose={() => (selected = null)} />
 			{/key}
 		{/if}
 	</div>
@@ -397,7 +394,7 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: var(--radius-ctl);
-		color: var(--on-monogram);
+		color: var(--text);
 		font-size: 1.0625rem;
 		font-weight: 600;
 	}
