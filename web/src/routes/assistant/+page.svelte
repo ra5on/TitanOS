@@ -30,6 +30,8 @@
 <PageHead title={t('assistant.title')}>
 	{#snippet actions()}
 		{#if assistant.status?.available}
+			<a class="btn" href="/assistant/tasks">{t("tasksAI.title")}</a>
+			<a class="btn" href="/assistant/knowledge">{t("knowledge.title")}</a>
 			<a class="btn" href="/assistant/automations">{t("automation.title")}</a>
 			<button type="button" class="btn list-toggle" aria-pressed={showList} onclick={() => (showList = !showList)}><Icon name="list" size={14} />{t('assistant.chats')}</button>
 			{#if admin}<a class="btn" href="/settings/assistant"><Icon name="tool" size={14} />{t('assistant.settings')}</a>{/if}

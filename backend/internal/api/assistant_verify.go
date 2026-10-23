@@ -8,6 +8,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/office"
 	"io"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -27,6 +28,30 @@ func validJSONResult(s string) []byte {
 // complete. The model receives the distinction and the next status tool.
 func (s *Server) verifyAgentAction(ctx context.Context, user auth.User, a *assistant.Action, r *http.Request) any {
 	out := map[string]any{"observedAt": time.Now(), "state": "not_verified", "next": "Read the relevant status before claiming the requested outcome."}
+	if a.Tool == "ha_call" && s.opts.HomeAssistant != nil {
+		var call haCall
+		b, _ := json.Marshal(a.Body)
+		if err := json.Unmarshal(b, &call); err != nil {
+			return out
+		}
+		observations := s.opts.HomeAssistant.Verify(ctx, call.Domain, call.Service, call.Entities, call.Data, 8*time.Second)
+		verified := 0
+		for _, observation := range observations {
+			if observation.Status == "verified" {
+				verified++
+			}
+		}
+		out["entities"] = observations
+		out["state"] = "not_verified"
+		if verified > 0 {
+			out["state"] = "partial"
+		}
+		if verified == len(observations) && verified > 0 {
+			out["state"] = "verified"
+		}
+		out["next"] = "Report only observed postconditions. A confirmed setpoint is not a confirmed physical outcome. Never repeat an unverified mutation automatically."
+		return out
+	}
 	if strings.HasPrefix(a.Key, "container.") {
 		status := s.opts.Docker.Status(ctx)
 		for _, c := range status.Containers {
@@ -49,7 +74,7 @@ func (s *Server) verifyAgentAction(ctx context.Context, user auth.User, a *assis
 		}
 		return out
 	}
-	if a.Tool == "file_write" {
+	if a.Tool == "file_write" || a.Tool == "document_edit" {
 		var args writeRequest
 		b, _ := json.Marshal(a.Body)
 		_ = json.Unmarshal(b, &args)
@@ -69,7 +94,7 @@ func (s *Server) verifyAgentAction(ctx context.Context, user auth.User, a *assis
 					if readErr == nil && receipt.SHA256 != "" {
 						digest := fmt.Sprintf("%x", sha256.Sum256(data))
 						matches := digest == receipt.SHA256
-						if args.Format == "docx" || args.Format == "xlsx" {
+						if args.Format == "docx" || args.Format == "xlsx" || path.Ext(args.Path) == ".docx" || path.Ext(args.Path) == ".xlsx" {
 							_, parseErr := office.Text(args.Path, data)
 							out["readable"] = parseErr == nil
 							matches = matches && parseErr == nil

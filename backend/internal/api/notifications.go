@@ -91,7 +91,7 @@ func (s *Server) handleAccountNotify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	general, _ := s.opts.Notify.Settings()
-	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "secretSet": set, "mailServer": general.Email.Host != ""})
+	writeJSON(w, http.StatusOK, map[string]any{"delivery": s.opts.Notify.Deliveries(currentUser(r).Name), "settings": settings, "secretSet": set, "mailServer": general.Email.Host != ""})
 }
 
 func (s *Server) handleAccountNotifyChange(w http.ResponseWriter, r *http.Request) {

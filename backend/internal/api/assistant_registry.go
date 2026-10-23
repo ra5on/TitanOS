@@ -13,6 +13,9 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/office"
+	"io"
+	"time"
 )
 
 // Which tools the model gets is decided for every question from the role
@@ -85,9 +88,9 @@ func (s *Server) assistantWeb(user auth.User) bool {
 // toolAreas says which part of the NAS a tool belongs to, for the settings
 // of what the assistant may do there. Tools not listed are always there.
 var toolAreas = map[string]string{
-	"files_list": assistant.AreaFiles, "file_read": assistant.AreaFiles, "file_jobs": assistant.AreaFiles, "files_search": assistant.AreaFiles,
+	"knowledge_list": assistant.AreaFiles, "knowledge_save": assistant.AreaFiles, "knowledge_delete": assistant.AreaFiles, "knowledge_search": assistant.AreaFiles, "files_list": assistant.AreaFiles, "document_read": assistant.AreaFiles, "file_read": assistant.AreaFiles, "file_jobs": assistant.AreaFiles, "files_search": assistant.AreaFiles,
 	"folder_create": assistant.AreaFiles, "file_rename": assistant.AreaFiles, "file_delete": assistant.AreaFiles,
-	"file_write": assistant.AreaFiles, "files_move": assistant.AreaFiles, "file_copy": assistant.AreaFiles,
+	"document_edit": assistant.AreaFiles, "file_write": assistant.AreaFiles, "files_move": assistant.AreaFiles, "file_copy": assistant.AreaFiles,
 	"system_status": assistant.AreaSystem, "notifications": assistant.AreaSystem, "nas_info": assistant.AreaSystem, "my_shares": assistant.AreaFiles,
 	"network_status": assistant.AreaSystem, "hardware_status": assistant.AreaSystem, "logs_search": assistant.AreaSystem, "ups_status": assistant.AreaSystem,
 	"update_status": assistant.AreaUpdates, "update_action": assistant.AreaUpdates, "power_action": assistant.AreaUpdates,
@@ -99,7 +102,7 @@ var toolAreas = map[string]string{
 	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
 	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
 	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
-	"ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
+	"ha_diagnostics": assistant.AreaHome, "ha_capabilities": assistant.AreaHome, "ha_undo": assistant.AreaHome, "ha_history": assistant.AreaHome, "ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
 }
 
 // assistantTools are the tools of an account: those of its role, in the
@@ -141,7 +144,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
 			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.assistantFilesList(user)),
-		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) or Excel (.xlsx) document from the file manager, with the rights of this account.",
+		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) Excel (.xlsx) or PDF document (first 20 pages; document_read for further pages) from the file manager, with the rights of this account.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.assistantFileRead(user)),
 		reading("file_jobs", "Copy and move jobs of this account in the file manager, with progress.",
 			nil, false, noArgs(func(ctx context.Context) (any, error) {
@@ -218,6 +221,8 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 		tools = append(tools, s.apiTools(user, r)...)
 	}
 	tools = append(tools, s.haTools(user)...)
+	tools = append(tools, s.knowledgeTools(user)...)
+	tools = append(tools, s.documentEditTool(user))
 	return append(tools, s.assistantActions(user)...)
 }
 
@@ -358,7 +363,7 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 			return map[string]any{"root": root.ID, "path": req.Path, "content": text}, nil
 		}
 		if strings.EqualFold(path.Ext(req.Path), ".pdf") {
-			return nil, assistant.Errorf("PDF files cannot be read; Word, Excel and text files can")
+			return s.readPDF(ctx, root, req.Path, 1, 20)
 		}
 		text, err := s.opts.Files.ReadText(root, req.Path)
 		if err != nil {
@@ -444,4 +449,32 @@ func (s *Server) webTools() []assistant.Tool {
 			},
 		},
 	}
+}
+
+func (s *Server) readPDF(ctx context.Context, root files.Root, path string, first, last int, ocr ...bool) (any, error) {
+	f, info, err := s.opts.Files.Open(root, path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info.Size() > 50<<20 {
+		return nil, assistant.Errorf("PDF exceeds 50 MiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, (50<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	var result office.PDFReading
+	if len(ocr) > 0 && ocr[0] {
+		if !s.opts.Assistant.Settings().OCR {
+			return nil, assistant.Errorf("OCR is disabled")
+		}
+		result, err = office.OCRPDF(ctx, data, first, last)
+	} else {
+		result, err = office.ReadPDF(ctx, data, first, last)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"root": root.ID, "path": path, "document": result, "observedAt": time.Now()}, nil
 }

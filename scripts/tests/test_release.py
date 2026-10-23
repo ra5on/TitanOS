@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -158,6 +159,24 @@ class ReleaseTest(unittest.TestCase):
                 path.write_bytes(original)
         (self.release / "unexpected.txt").write_text("unexpected")
         with self.assertRaisesRegex(ValueError, "inventory"):
+            verify.verify(self.release, self.keys)
+
+    def test_homeassistant_component_is_versioned_and_signed(self):
+        component = self.repo / "docs/homeassistant/custom_components/titanos"
+        shutil.copytree(REPO / "docs/homeassistant/custom_components/titanos", component)
+        (component / "__pycache__").mkdir(exist_ok=True)
+        (component / "__pycache__/ignored.pyc").write_bytes(b"cache")
+        self.pack()
+        archive = self.release / "titanos-0.1.0-beta.1-homeassistant.zip"
+        with zipfile.ZipFile(archive) as bundle:
+            self.assertTrue(all(name.startswith("custom_components/titanos/") for name in bundle.namelist()))
+            self.assertFalse(any("__pycache__" in name for name in bundle.namelist()))
+            manifest = json.loads(bundle.read("custom_components/titanos/manifest.json"))
+            self.assertEqual(manifest["version"], "0.1.0-beta.1")
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        archive.write_bytes(archive.read_bytes() + b"tamper")
+        with self.assertRaises(ValueError):
             verify.verify(self.release, self.keys)
 
     def test_multiple_plugins_signed_and_verified(self):

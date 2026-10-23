@@ -38,14 +38,17 @@ type Transition struct {
 const keepTransitions = 20
 
 type watchState struct {
-	mu          sync.Mutex
-	entities    []string
-	events      map[string][]func(json.RawMessage)
-	transitions map[string][]Transition
-	boot        int64
-	counter     int64
-	connected   bool
-	lastError   string
+	mu               sync.Mutex
+	entities         []string
+	events           map[string][]func(json.RawMessage)
+	transitions      map[string][]Transition
+	boot             int64
+	counter          int64
+	connected        bool
+	lastError        string
+	lastConnected    time.Time
+	lastDisconnected time.Time
+	dropped          uint64
 	// MQTT publisher state, kept here for one lock.
 	mqttConnected bool
 	mqttError     string
@@ -125,6 +128,7 @@ func (m *Manager) record(entity, from, to string) {
 	t := Transition{Mark: fmt.Sprintf("%020d/%020d", m.watch.boot, m.watch.counter), Entity: entity, From: from, To: to, Time: time.Now()}
 	list := append(m.watch.transitions[entity], t)
 	if len(list) > keepTransitions {
+		m.watch.dropped++
 		list = list[len(list)-keepTransitions:]
 	}
 	m.watch.transitions[entity] = list
@@ -186,6 +190,12 @@ func errorText(err error) string {
 func (m *Manager) setConnected(connected bool, lastError string) {
 	m.watch.mu.Lock()
 	defer m.watch.mu.Unlock()
+	if connected && !m.watch.connected {
+		m.watch.lastConnected = time.Now()
+	}
+	if !connected && m.watch.connected {
+		m.watch.lastDisconnected = time.Now()
+	}
 	m.watch.connected, m.watch.lastError = connected, lastError
 }
 
@@ -400,4 +410,12 @@ func Match(t Transition, from, to string, above, below *float64) bool {
 		}
 	}
 	return true
+}
+
+// Diagnostics contains no entity contents or credentials. Dropped counts ring
+// buffer eviction, not necessarily missed events; clients must distinguish it.
+func (m *Manager) Diagnostics() map[string]any {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	return map[string]any{"connected": m.watch.connected, "lastConnected": m.watch.lastConnected, "lastDisconnected": m.watch.lastDisconnected, "evictedTransitions": m.watch.dropped, "watchedEntities": len(m.watch.entities), "replaysOutages": false}
 }

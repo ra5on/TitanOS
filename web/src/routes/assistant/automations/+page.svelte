@@ -7,8 +7,9 @@
  import EmptyState from '#lib/components/EmptyState.svelte';
  import Dialog from '#lib/components/Dialog.svelte';
  import { templatesFor, type AutomationTemplate } from '#lib/automation-templates.ts';
- type Trigger = { kind: string; at?: string; minutes?: number; time?: string; timezone?: string; weekday?: number; event?: string; target?: string; root?: string; path?: string; percent?: number; from?: string; to?: string; above?: number|null; below?: number|null };
- type Automation = { id?: string; revision?: number; name:string; prompt:string; enabled:boolean; trigger:Trigger; conditions:{volume?:string;noRebuild?:boolean}; execution:string; notify:string; catchUp:string; overlap:string; next?:string; detail?:string; runs?:{chat:string;scheduled:string;state:string;detail?:string}[] };
+ type Trigger = {hysteresis?:number; kind: string; at?: string; minutes?: number; time?: string; timezone?: string; weekday?: number; event?: string; target?: string; root?: string; path?: string; percent?: number; from?: string; to?: string; above?: number|null; below?: number|null };
+ type StateCondition = {entity:string;operator:string;value?:string;forSeconds?:number};
+ type Automation = {extraTriggers?:Trigger[];cooldownSeconds?:number;versions?: Omit<Automation,'versions'>[]; id?: string; revision?: number; name:string; prompt:string; enabled:boolean; trigger:Trigger; conditions:{volume?:string;noRebuild?:boolean;states?:StateCondition[];anyState?:boolean;window?:{start:string;end:string;timezone:string;weekdays?:number[]}}; execution:string; notify:string; catchUp:string; overlap:string; next?:string; detail?:string; runs?:{chat:string;scheduled:string;state:string;detail?:string}[] };
  let items=$state<Automation[]>([]), editing=$state<Automation|null>(null), removing=$state<Automation|null>(null);
  let entities=$state<{id:string;name:string;area?:string}[]>([]);
  let roots=$state<{id:string;name:string;kind:string}[]>([]), volumes=$state<{name:string}[]>([]), drives=$state<{id:string;label:string;name:string;model:string}[]>([]);
@@ -27,11 +28,13 @@
  async function load(){try{items=(await api.get<{automations:Automation[]}>('/assistant/automations')).automations;loaded=true;error='';}catch(e){error=failure(e);}}
  onMount(()=>{load();const timer=setInterval(()=>{if(!editing&&!removing&&!busy&&document.visibilityState==='visible')load();},15000);return()=>clearInterval(timer);});
  function edit(a?:Automation,duplicate=false){
-  catalog();error='';template='';editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
+  catalog();error='';template='';preview=null;editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
   if(duplicate){delete editing.id;delete editing.revision;editing.enabled=false;delete editing.runs;delete editing.next;}
   const at=editing.trigger.at?new Date(editing.trigger.at):new Date(Date.now()+3600000);once=new Date(at.getTime()-at.getTimezoneOffset()*60000).toISOString().slice(0,16);
  }
  function changeKind(){if(!editing)return;editing.trigger={kind:editing.trigger.kind,time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,minutes:60,event:admin?'notification':'files',target:admin?'backup_failed':'',root:'',path:'',percent:85};}
+ let preview=$state<{conditionsMet:boolean;reason:string;next:string}|null>(null);
+ async function checkConditions(){if(!editing)return;busy=true;preview=null;try{preview=await api.post('/assistant/automations/preview',editing);}catch(e){error=failure(e);}finally{busy=false;}}
  let template=$state('');
  const templates=$derived(templatesFor(admin,entities.length>0));
  function useTemplate(id:string){
@@ -41,7 +44,7 @@
   editing.trigger={timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,...tpl.trigger};
   editing.execution=tpl.execution;editing.notify=tpl.notify;
  }
- async function save(){if(!editing)return;busy=true;try{const a=structuredClone($state.snapshot(editing));for(const k of ['above','below'] as const)if(typeof a.trigger[k]!=='number')delete a.trigger[k];if(a.trigger.kind==='once')a.trigger.at=new Date(once).toISOString();await api.post('/assistant/automations',a);editing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
+ async function save(){if(!editing)return;busy=true;try{const a=structuredClone($state.snapshot(editing));for(const trigger of [a.trigger,...(a.extraTriggers??[])])for(const k of ['above','below','hysteresis'] as const)if(typeof trigger[k]!=='number')delete trigger[k];if(a.trigger.kind==='once')a.trigger.at=new Date(once).toISOString();await api.post('/assistant/automations',a);editing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function toggle(a:Automation){busy=true;try{await api.post('/assistant/automations',{...a,enabled:!a.enabled});await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function run(a:Automation){busy=true;try{await api.post(`/assistant/automations/${a.id}/run`);await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function remove(){if(!removing)return;busy=true;try{await api.delete(`/assistant/automations/${removing.id}`);removing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
@@ -82,18 +85,38 @@
     {:else if editing.trigger.event==='usb'}<label>{label('usbDevice')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!drives.some(d=>d.id===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each drives as drive (drive.id)}<option value={drive.id}>{drive.label||drive.model||drive.name} ({drive.id})</option>{/each}</select></label>
     {:else if editing.trigger.event==='homeassistant'}<label>{label('haEntity')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!entities.some(e=>e.id===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each entities as entity (entity.id)}<option value={entity.id}>{entity.name} ({entity.id}){entity.area?` · ${entity.area}`:''}</option>{/each}</select></label>
      <label>{label('haTo')}<input class="field mono" bind:value={editing.trigger.to} placeholder="not_home" disabled={busy}/></label><label>{label('haFrom')}<input class="field mono" bind:value={editing.trigger.from} disabled={busy}/></label>
-     <label>{label('haAbove')}<input class="field" type="number" step="any" bind:value={editing.trigger.above} disabled={busy}/></label><label>{label('haBelow')}<input class="field" type="number" step="any" bind:value={editing.trigger.below} disabled={busy}/></label><p class="muted small">{label('haHelp')}</p>
+     <label>{label('haAbove')}<input class="field" type="number" step="any" bind:value={editing.trigger.above} disabled={busy}/></label><label>{label('haBelow')}<input class="field" type="number" step="any" bind:value={editing.trigger.below} disabled={busy}/></label><label>{label('hysteresis')}<input class="field" type="number" step="any" min="0" bind:value={editing.trigger.hysteresis}/></label><p class="muted small">{label('haHelp')}</p>
     {:else if editing.trigger.event==='volume'}<label>{label('volumeName')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!volumes.some(v=>v.name===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each volumes as volume}<option value={volume.name}>{volume.name}</option>{/each}</select></label>
     {:else}<label>{label('eventKind')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}>{#if editing.trigger.target&&!['backup_failed','config_backup_failed','volume_degraded','disk_unhealthy','disk_hot','update_available'].includes(editing.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each ['backup_failed','config_backup_failed','volume_degraded','disk_unhealthy','disk_hot','update_available'] as kind}<option value={kind}>{label(`event_${kind}`)}</option>{/each}</select></label>{/if}
     {#if editing.trigger.event==='volume'}<label>{label('percent')}<input class="field" type="number" min="1" max="100" bind:value={editing.trigger.percent} required disabled={busy}/></label>{/if}
     <p class="muted small">{label('eventHelp')}</p>
    {/if}
+   {#if admin}<details><summary>{label('extraTriggers')}</summary><div class="advanced">
+   <p class="muted">{label('extraHelp')}</p>
+   {#each editing.extraTriggers??[] as trigger,i}<label>{label('haEntity')}<select class="field" bind:value={trigger.target} required><option value="">{label('choose')}</option>{#each entities as entity}<option value={entity.id}>{entity.name} ({entity.id})</option>{/each}</select></label>
+   <div class="fields"><label>{label('haFrom')}<input class="field" bind:value={trigger.from}/></label><label>{label('haTo')}<input class="field" bind:value={trigger.to}/></label><label>{label('haAbove')}<input type="number" step="any" class="field" bind:value={trigger.above}/></label><label>{label('haBelow')}<input type="number" step="any" class="field" bind:value={trigger.below}/></label><label>{label('hysteresis')}<input class="field" type="number" step="any" min="0" bind:value={trigger.hysteresis}/></label></div>
+   <button type="button" class="btn" onclick={()=>editing&&(editing.extraTriggers=editing.extraTriggers?.filter((_,n)=>n!==i))}>{label('removeCondition')}</button>{/each}
+   <button type="button" class="btn" disabled={(editing.extraTriggers?.length??0)>=10} onclick={()=>editing&&(editing.extraTriggers=[...(editing.extraTriggers??[]),{kind:'event',event:'homeassistant',target:''}])}>{label('addTrigger')}</button></div></details>{/if}
    <div class="fields"><label>{label('execution')}<select class="field" bind:value={editing.execution} disabled={busy}>{#each ['inherit','confirm','direct'] as mode}<option value={mode}>{label(mode)}</option>{/each}</select></label><label>{label('notify')}<select class="field" bind:value={editing.notify} disabled={busy}>{#each ['errors','always','never'] as mode}<option value={mode}>{label(mode)}</option>{/each}</select></label></div>
    <details><summary>{label('conditions')}</summary><div class="advanced">
     {#if admin}<label>{label('requiredVolume')}<input class="field" bind:value={editing.conditions.volume} disabled={busy}/></label><label class="check"><input type="checkbox" bind:checked={editing.conditions.noRebuild} disabled={busy}/>{label('noRebuild')}</label>{/if}
+    <label>{label('cooldown')}<input class="field" type="number" min="0" max="604800" bind:value={editing.cooldownSeconds}/></label>
+    {#if admin}<button type="button" class="btn" onclick={()=>editing&&(editing.conditions.states=[...(editing.conditions.states??[]),{entity:'',operator:'eq',value:''}])} disabled={(editing.conditions.states?.length??0)>=20}>{label('addCondition')}</button>
+    {#each editing.conditions.states??[] as condition,i}
+     <div class="fields"><label>{label('haEntity')}<select class="field" bind:value={condition.entity} required><option value="">{label('choose')}</option>{#each entities as entity}<option value={entity.id}>{entity.name} ({entity.id})</option>{/each}</select></label>
+     <label>{label('comparison')}<select class="field" bind:value={condition.operator}>{#each ['eq','neq','above','below','available'] as operator}<option value={operator}>{label(operator)}</option>{/each}</select></label>
+     <label>{label('value')}<input class="field" bind:value={condition.value}/></label><label>{label('stableSeconds')}<input class="field" type="number" min="0" max="604800" bind:value={condition.forSeconds}/></label></div>
+     <button type="button" class="btn" onclick={()=>editing&&(editing.conditions.states=editing.conditions.states?.filter((_,n)=>n!==i))}>{label('removeCondition')}</button>
+    {/each}
+    {#if editing.conditions.states?.length}<label class="check"><input type="checkbox" bind:checked={editing.conditions.anyState}/>{label('anyCondition')}</label>{/if}{/if}
+    <label class="check"><input type="checkbox" checked={!!editing.conditions.window} onchange={(e)=>editing&&(editing.conditions.window=e.currentTarget.checked?{start:'08:00',end:'22:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}:undefined)}/>{label('timeWindow')}</label>
+    {#if editing.conditions.window}<div class="fields"><label>{label('windowStart')}<input class="field" type="time" bind:value={editing.conditions.window.start}/></label><label>{label('windowEnd')}<input class="field" type="time" bind:value={editing.conditions.window.end}/></label></div><label>{label('timezone')}<input class="field" bind:value={editing.conditions.window.timezone}/></label>{/if}
+    <button type="button" class="btn" onclick={checkConditions} disabled={busy}>{label('preview')}</button>
+    {#if preview}<p role="status" class={preview.conditionsMet?'notice-ok':'notice-warn'}>{label(preview.conditionsMet?'conditionsMet':'conditionsPending')}{#if preview.reason} · {tOr(`automation.detail.${preview.reason}`,preview.reason)}{/if}</p>{/if}
     <label>{label('catchUp')}<select class="field" bind:value={editing.catchUp} disabled={busy}><option value="latest">{label('latest')}</option><option value="skip">{label('skip')}</option></select></label>
     <label>{label('overlap')}<select class="field" bind:value={editing.overlap} disabled={busy}><option value="skip">{label('skip')}</option><option value="queue">{label('queue')}</option></select></label>
    </div></details>
+   {#if editing.versions?.length}<details><summary>{label('versions')}</summary>{#each editing.versions as version}<button class="btn" type="button" onclick={()=>{if(editing)editing={...editing,...structuredClone($state.snapshot(version)),id:editing.id,revision:editing.revision,versions:editing.versions};preview=null;}}>{label('restoreVersion')} {version.revision} · {version.name}</button>{/each}</details>{/if}
    <label class="check"><input type="checkbox" bind:checked={editing.enabled} disabled={busy}/>{label('enabled')}</label>
    {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
    <div class="dialog-actions"><button type="button" class="btn" onclick={()=>{editing=null;error='';}} disabled={busy}>{label('cancel')}</button><button class="btn btn-primary" type="submit" disabled={busy}>{label('save')}</button></div>

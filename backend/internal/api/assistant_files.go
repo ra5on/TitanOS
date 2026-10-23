@@ -111,6 +111,24 @@ func (s *Server) fileTools(user auth.User) []assistant.Tool {
 			"rows": map[string]any{"type": "array", "items": map[string]any{"type": "array"}},
 		}}}
 	return []assistant.Tool{
+		read("document_read", "Read a PDF page range with source page numbers. Up to 20 pages and 50 MiB per call. Empty/scanned pages need OCR; missing text is not proof of missing content.", schema(map[string]any{"root": str("Exact file root"), "path": str("PDF path"), "ocr": map[string]any{"type": "boolean", "description": "Explicit OCR for scans, at most five pages; requires OCR setting"}, "first": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}, "last": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}}, "root", "path", "first", "last"), func(ctx context.Context, args json.RawMessage) (any, error) {
+			var q struct {
+				Root, Path  string
+				OCR         bool
+				First, Last int
+			}
+			if err := assistant.DecodeArgs(args, &q); err != nil {
+				return nil, err
+			}
+			root, err := s.assistantRoot(user, q.Root)
+			if err != nil {
+				return nil, err
+			}
+			if hiddenPath(q.Path) {
+				return nil, assistant.ErrInvalid
+			}
+			return s.readPDF(ctx, root, q.Path, q.First, q.Last, q.OCR)
+		}),
 		read("files_search", "Search files recursively inside one exact root returned by files_list. For photos use extension=images and omit query; query matches file names literally, not file types. Repeat for other accessible roots as needed.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."}}, "root"),
 			s.assistantFilesSearch(user)),
@@ -436,6 +454,16 @@ func (s *Server) nasAttachment(user auth.User, a assistant.Attachment) (assistan
 	name := path.Base(a.Path)
 	ext := strings.ToLower(path.Ext(name))
 	switch ext {
+	case ".pdf":
+		reading, err := s.readPDF(context.Background(), root, a.Path, 1, 20, false)
+		if err != nil {
+			return a, err
+		}
+		data, _ := json.Marshal(reading)
+		if len(data) > assistant.MaxTextAttachment {
+			return a, errors.New("PDF excerpt too large; use document_read for smaller page ranges")
+		}
+		return assistant.Attachment{Name: name, Kind: "text", Text: string(data)}, nil
 	case ".docx", ".xlsx":
 		text, err := s.readDocument(root, a.Path)
 		if err != nil {
@@ -462,7 +490,7 @@ func (s *Server) nasAttachment(user auth.User, a assistant.Attachment) (assistan
 	}
 	text, err := s.opts.Files.ReadText(root, a.Path)
 	if err != nil {
-		return a, fmt.Errorf("only text, Word, Excel and image files can be attached: %w", err)
+		return a, fmt.Errorf("only text, PDF, Word, Excel and image files can be attached: %w", err)
 	}
 	if len(text.Content) > assistant.MaxTextAttachment {
 		return a, errors.New("the file is larger than 256 KiB")

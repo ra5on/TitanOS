@@ -9,13 +9,14 @@
  let direct=$state(false);
  let profileName=$state('');
  let question=$state('');
+ let scenario=$state('failure');
  let testing=$state(false);
  let result=$state('');
  let error=$state('');
  onMount(async()=>{try{prompt=await api.get('/assistant/prompt');settings.systemPrompt ||= prompt!.defaultPrompt;settings.execution ||= 'confirm';}catch{error=errorText('internal')}});
  function mode(e:Event){const value=(e.currentTarget as HTMLSelectElement).value; if(value==='direct' && settings.execution!=='direct'){direct=true;(e.currentTarget as HTMLSelectElement).value=settings.execution||'confirm'}else settings.execution=value as 'confirm'|'direct';}
  function saveProfile(){if(!profileName.trim())return;settings.profiles=[...(settings.profiles??[]).filter((p:ModelProfile)=>p.name!==profileName.trim()),{name:profileName.trim(),model:settings.model,prompt:settings.systemPrompt??'',numCtx:settings.numCtx,temperature:settings.temperature}].slice(-20);profileName='';}
- async function probe(){testing=true;result='';error='';try{const answer=await api.post<{toolCalled:boolean;answer:string;note:string}>('/assistant/probe',{settings,question});result=`${t(answer.toolCalled?'agent.probeCalled':'agent.probeMissing')}\n\n${answer.answer}\n\n${t('agent.probeNote')}`;}catch(e){error=e instanceof Error?e.message:errorText('internal')}finally{testing=false}}
+ async function probe(){testing=true;result='';error='';try{const answer=await api.post<{toolCalled:boolean;answer:string;note:string;saved?:boolean;durationMs?:number}>('/assistant/probe',{settings,question,scenario});result=`${t(answer.toolCalled?'agent.probeCalled':'agent.probeMissing')}\n\n${answer.answer}\n\n${t('agent.probeNote')}\n${t(answer.saved?'agent.probeSaved':'agent.probeUnsaved')}\n${answer.durationMs??0} ms`;}catch(e){error=e instanceof Error?e.message:errorText('internal')}finally{testing=false}}
 </script>
 <section class="tile">
  <h2>{t('agent.execution')}</h2>
@@ -37,8 +38,12 @@
  <h3>{t('agent.profiles')}</h3>
  {#each settings.profiles??[] as p,i (i)}<div class="row"><span>{p.name} · {p.model}</span><button type="button" class="btn" onclick={()=>{settings.model=p.model;settings.systemPrompt=p.prompt;settings.numCtx=p.numCtx;settings.temperature=p.temperature}}>{t('agent.apply')}</button><button type="button" class="btn" onclick={()=>settings.profiles=settings.profiles?.filter((_:ModelProfile,n:number)=>n!==i)}>{t('agent.removeProfile')}</button></div>{/each}
  <div class="row"><input class="field" bind:value={profileName} maxlength="80" aria-label={t('agent.profileName')} placeholder={t('agent.profileName')}/><button type="button" class="btn" onclick={saveProfile} disabled={!profileName.trim()}>{t('agent.saveProfile')}</button></div>
+ <h3>{t('agent.taskModels')}</h3><p class="muted">{t('agent.taskModelsHint')}</p>
+ <label>{t('agent.voiceModel')}<input class="field mono" bind:value={settings.voiceModel}/></label><label>{t('agent.documentModel')}<input class="field mono" bind:value={settings.documentModel}/></label><label>{t('agent.planningModel')}<input class="field mono" bind:value={settings.planningModel}/></label>
+ <label class="check"><input type="checkbox" bind:checked={settings.ocr}/>{t('agent.ocr')}</label><p class="muted">{t('agent.ocrHint')}</p>
  <h3>{t('agent.probe')}</h3>
  <p class="muted">{t('agent.probeHint')}</p>
+ <label>{t('agent.probeScenario')}<select class="field" bind:value={scenario}><option value="failure">{t('agent.probeFailure')}</option><option value="ambiguous">{t('agent.probeAmbiguous')}</option><option value="partial">{t('agent.probePartial')}</option><option value="untrusted">{t('agent.probeUntrusted')}</option></select></label>
  <textarea class="field" rows="2" bind:value={question} aria-label={t('agent.testQuestion')} placeholder={t('agent.testQuestion')}></textarea>
  <button type="button" class="btn" onclick={probe} disabled={testing||!settings.model}>{t(testing?'agent.testing':'agent.test')}</button>
  {#if result}<pre role="status">{result}</pre>{/if}

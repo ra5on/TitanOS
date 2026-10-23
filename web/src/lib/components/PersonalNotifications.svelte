@@ -6,7 +6,7 @@
 
 	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord' | 'homeAssistant';
 	type Event = 'confirmation' | 'done' | 'blocked' | 'agent';
-	type Personal = {
+	type Personal = {persistQuiet?:boolean;fallback?:string;
 		language: 'de' | 'en';
 		email: { enabled: boolean; to: string };
 		ntfy: { enabled: boolean; url: string; token?: string };
@@ -18,11 +18,12 @@
 		quiet: { enabled: boolean; from: string; to: string };
 		origin: string;
 	};
-	type Answer = { settings: Personal; secretSet: Partial<Record<Channel, boolean>>; mailServer: boolean };
+	type Answer = {delivery?:Record<string,{time:string;ok:boolean;attempts:number}>; settings: Personal; secretSet: Partial<Record<Channel, boolean>>; mailServer: boolean };
 
 	const events: Event[] = ['confirmation', 'done', 'blocked', 'agent'];
 	const channels: Channel[] = ['email', 'ntfy', 'telegram', 'discord', 'homeAssistant'];
 
+	let delivery=$state<Answer['delivery']>({});
 	let draft = $state<Personal | null>(null);
 	let secretSet = $state<Partial<Record<Channel, boolean>>>({});
 	let mailServer = $state(false);
@@ -48,6 +49,7 @@
 			quiet: { enabled: res.settings.quiet.enabled, from: res.settings.quiet.from || '22:00', to: res.settings.quiet.to || '07:00' }
 		};
 		secretSet = res.secretSet;
+ delivery=res.delivery??{};
 		mailServer = res.mailServer;
 		clear = [];
 	}
@@ -197,7 +199,10 @@
 				</div>
 			{/each}
 
-			<div class="actions">
+			<label class="check"><input type="checkbox" bind:checked={draft.persistQuiet}/>{t('personal.persistQuiet')}</label><p class="muted small">{t('personal.persistHint')}</p>
+            <label>{t('personal.fallback')}<select class="field" bind:value={draft.fallback}><option value="">{t('personal.noFallback')}</option>{#each channels.filter(c=>draft?.[c].enabled) as channel}<option value={channel==='homeAssistant'?'homeassistant':channel}>{channel}</option>{/each}</select></label>
+            <details><summary>{t('personal.delivery')}</summary>{#each Object.entries(delivery??{}) as [channel,status]}<p class={status.ok?'notice-ok':'notice-error'}>{channel}: {t(status.ok?'personal.delivered':'personal.failed')} · {new Date(status.time).toLocaleString()} ({status.attempts})</p>{/each}<button type="button" class="btn" onclick={async()=>{try{const response=await api.get<Answer>('/account/notifications');delivery=response.delivery??{}}catch(e){problem(e)}}}>{t('personal.refreshDelivery')}</button></details>
+            <div class="actions">
 				{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
 				<button type="submit" class="btn btn-primary" disabled={busy !== null}>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button>
 			</div>

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,7 +52,7 @@ func (s *Server) handleHASettings(w http.ResponseWriter, r *http.Request) {
 	watching, watchError := s.opts.HomeAssistant.WatchStatus()
 	publishing, mqttError := s.opts.HomeAssistant.MQTTStatus()
 	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(),
-		"sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups,
+		"diagnostics": s.opts.HomeAssistant.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups,
 		"status": map[string]any{"watching": watching, "watchError": watchError, "mqtt": publishing, "mqttError": mqttError}})
 }
 
@@ -151,6 +152,7 @@ func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	before := s.beforeHAUndo(r.Context(), req)
 	changed, err := s.opts.HomeAssistant.Call(r.Context(), req.Domain, req.Service, req.Entities, req.Data)
 	if err != nil {
 		writeHAError(w, err)
@@ -163,9 +165,12 @@ func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
 	}
 	list := []entity{}
 	for _, st := range changed {
+		if !slices.Contains(req.Entities, st.EntityID) {
+			continue
+		}
 		list = append(list, entity{st.EntityID, st.State})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"changed": list})
+	writeJSON(w, http.StatusOK, map[string]any{"changed": list, "undoReceipt": s.afterHAUndo(r.Context(), currentUser(r), req, before)})
 }
 
 // haTools are the assistant's tools for Home Assistant, only for owners and
@@ -176,6 +181,15 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 		return nil
 	}
 	return []assistant.Tool{
+		s.haUndoTool(user),
+		reading("ha_diagnostics", "Read the HA observer connection timeline and lost-buffer counters. Gaps are not replayed; use ha_history for bounded recorder evidence and never infer a cause from correlation alone.", nil, false, noArgs(func(ctx context.Context) (any, error) { return ha.Diagnostics(), nil })),
+		reading("ha_capabilities", "Inspect actual service schemas, device features, units and limits of one released entity before changing it.", schema(map[string]any{"entity": str("Released entity ID")}, "entity"), true, func(ctx context.Context, args json.RawMessage) (any, error) {
+			var q struct{ Entity string }
+			if err := assistant.DecodeArgs(args, &q); err != nil {
+				return nil, err
+			}
+			return ha.Capabilities(ctx, q.Entity)
+		}),
 		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors …) with state and area. Only released ones are visible. Pages of 100.",
 			schema(map[string]any{
 				"domain": str("Only this domain, e.g. light."),
@@ -196,22 +210,25 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 					return nil, err
 				}
 				type entity struct {
-					ID    string `json:"id"`
-					Name  string `json:"name"`
-					State string `json:"state"`
-					Area  string `json:"area,omitempty"`
-					Unit  string `json:"unit,omitempty"`
+					Policy      homeassistant.EntityPolicy `json:"policy"`
+					Attributes  map[string]any             `json:"attributes"`
+					LastChanged time.Time                  `json:"lastChanged"`
+					ID          string                     `json:"id"`
+					Name        string                     `json:"name"`
+					State       string                     `json:"state"`
+					Area        string                     `json:"area,omitempty"`
+					Unit        string                     `json:"unit,omitempty"`
 				}
 				var list []entity
 				for _, st := range states {
 					domain, _, _ := strings.Cut(st.EntityID, ".")
 					search := strings.ToLower(q.Search)
 					if q.Domain != "" && domain != q.Domain || q.Area != "" && !strings.Contains(strings.ToLower(st.Area), strings.ToLower(q.Area)) ||
-						search != "" && !strings.Contains(strings.ToLower(st.EntityID+" "+st.Name()), search) {
+						search != "" && !strings.Contains(strings.ToLower(st.EntityID+" "+st.Name()+" "+strings.Join(ha.Policy(st.EntityID).Aliases, " ")), search) {
 						continue
 					}
 					unit, _ := st.Attributes["unit_of_measurement"].(string)
-					list = append(list, entity{st.EntityID, st.Name(), st.State, st.Area, unit})
+					list = append(list, entity{ha.Policy(st.EntityID), st.Attributes, st.LastChanged, st.EntityID, st.Name(), st.State, st.Area, unit})
 				}
 				total := len(list)
 				start := min(q.Offset, total)
@@ -234,6 +251,19 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 				}
 				return ha.State(ctx, q.Entity)
 			}),
+		reading("ha_history", "Read up to 24 hours of recorded states for one released entity. Returns source and timestamps, pages of 200. Recorder retention and outages can leave gaps; absence does not prove no activity.",
+			schema(map[string]any{"entity": str("Exact released entity ID"), "start": str("RFC3339 start"), "end": str("RFC3339 end"), "offset": map[string]any{"type": "integer", "minimum": 0, "maximum": 100000}}, "entity", "start", "end"), true,
+			func(ctx context.Context, args json.RawMessage) (any, error) {
+				var q struct {
+					Entity     string
+					Start, End time.Time
+					Offset     int
+				}
+				if err := assistant.DecodeArgs(args, &q); err != nil {
+					return nil, err
+				}
+				return ha.History(ctx, q.Entity, q.Start, q.End, q.Offset)
+			}),
 		actionTool("ha_call", "Propose to call a Home Assistant service for released entities, e.g. light.turn_on with data {\"brightness_pct\": 50}, switch.turn_off, scene.turn_on, climate.set_temperature. All entities must belong to the service's domain.",
 			map[string]any{
 				"domain":   str("Domain of the service and the entities, e.g. light."),
@@ -255,7 +285,7 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 					return nil, homeassistant.ErrNotAllowed
 				}
 				for _, e := range q.Entities {
-					if !strings.HasPrefix(e, q.Domain+".") || !ha.Allowed(e) {
+					if !strings.HasPrefix(e, q.Domain+".") || !ha.CanCall(e, q.Service) {
 						return nil, homeassistant.ErrNotAllowed
 					}
 				}
