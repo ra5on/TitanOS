@@ -5,7 +5,7 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { ApiError } from '#lib/api.ts';
-	import { dismissNotifications, loadNotifications, markSeen, notifications, noticeText, unreadCount } from '#lib/notifications.svelte.ts';
+	import { dismissNotifications, loadNotifications, markSeen, notifications, noticeText, unreadCount, visibleNotices } from '#lib/notifications.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
@@ -31,8 +31,10 @@
 	});
 
 	const unread = $derived(unreadCount());
+	const shown = $derived(visibleNotices());
+	const hidden = $derived(notifications.list.length - shown.length);
 	const worst = $derived.by(() => {
-		const fresh = notifications.list.filter((notice) => Date.parse(notice.time) > notifications.seen);
+		const fresh = shown.filter((notice) => Date.parse(notice.time) > notifications.seen);
 		if (fresh.some((notice) => notice.severity === 'error')) return 'error';
 		return fresh.some((notice) => notice.severity === 'warning') ? 'warning' : 'info';
 	});
@@ -76,14 +78,17 @@
 				<a href="/settings/notifications" onclick={() => (open = false)}>{t('notify.configure')}</a>
 			</div>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			{#if notifications.list.length > 0}
-				<button class="btn clear" type="button" disabled={busy} onclick={() => dismiss(notifications.list.map((notice) => notice.id))}>{t('notify.deleteAll')}</button>
+			{#if shown.length > 0}
+				<button class="btn clear" type="button" disabled={busy} onclick={() => dismiss(shown.map((notice) => notice.id))}>{t('notify.deleteAll')}</button>
 			{/if}
-			{#if notifications.list.length === 0}
+			{#if hidden > 0}
+				<a class="hidden-note muted" href="/account#bell" onclick={() => (open = false)}>{t('notify.hidden', { count: hidden })}</a>
+			{/if}
+			{#if shown.length === 0}
 				<p class="empty muted">{t('notify.empty')}</p>
 			{:else}
 				<ul>
-					{#each notifications.list as notice (notice.id)}
+					{#each shown as notice (notice.id)}
 						{@const text = noticeText(notice)}
 						{@const href = noticeLink(notice.kind, notice.subject)}
 						<li class:fresh={Date.parse(notice.time) > newSince}>
@@ -110,6 +115,11 @@
 </div>
 
 <style>
+	.hidden-note {
+		display: block;
+		font-size: 0.85em;
+		margin-block: 0.25rem;
+	}
 	.ask {
 		width: fit-content;
 		padding: 0;
