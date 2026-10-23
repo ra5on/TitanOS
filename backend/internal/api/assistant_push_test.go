@@ -13,6 +13,22 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 )
 
+// waitAgentsIdle waits until no assistant task runs, so that none still
+// writes into the test's folders while they are removed.
+func waitAgentsIdle(t *testing.T, ts *testServer) {
+	t.Helper()
+	for range 1000 {
+		ts.server.agentMu.Lock()
+		running := len(ts.server.agentJobs)
+		ts.server.agentMu.Unlock()
+		if running == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("assistant tasks still running")
+}
+
 var pushURL = regexp.MustCompile(`https://nas\.local(/api/v1/assistant/push/[0-9a-f]{64})/approve`)
 
 func TestApproveFromNotification(t *testing.T) {
@@ -65,6 +81,7 @@ func TestApproveFromNotification(t *testing.T) {
 	if res, _ := ts.do(anonymous, "POST", match[1]+"/approve", nil); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("token used twice: %d", res.StatusCode)
 	}
+	waitAgentsIdle(t, ts)
 	expired := ts.server.push.add(pushToken{user: "alex", chat: id, action: "x", expires: time.Now().Add(-time.Second)})
 	if res, _ := ts.do(anonymous, "POST", "/api/v1/assistant/push/"+expired+"/approve", nil); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("expired token: %d", res.StatusCode)
@@ -154,6 +171,7 @@ func TestHomeAssistantAssistAndAppButtons(t *testing.T) {
 	if c, _ := ts.server.chats.Get("alex", waiting.ID); assistant.Pending(c) != nil {
 		t.Fatal("still waiting after reject")
 	}
+	waitAgentsIdle(t, ts)
 	if _, err := os.Stat(filepath.Join(dir, "x.txt")); err == nil {
 		t.Fatal("rejected action was executed")
 	}
