@@ -41,6 +41,10 @@ var ErrNoJob = errors.New("files: no such job")
 
 // Job is a copy or move that runs or ran.
 type Job struct {
+	Durable   bool `json:"durable"`
+	Blocked   bool `json:"blocked"`
+	durable   *transfer
+	finishing bool
 	Waiting   bool   `json:"waiting"`
 	Paused    bool   `json:"paused"`
 	Priority  int    `json:"priority"`
@@ -55,22 +59,23 @@ type Job struct {
 	Dir   string   `json:"dir"`
 	Names []string `json:"names"`
 	// Files and Bytes are what the job found to do; Done and Copied what is done.
-	Files                     int64     `json:"files"`
-	Done                      int64     `json:"done"`
-	Bytes                     int64     `json:"bytes"`
-	Copied                    int64     `json:"copied"`
-	Current                   string    `json:"current"`
-	Error                     string    `json:"error"`
-	Started                   time.Time `json:"started"`
-	Finished                  time.Time `json:"finished"`
-	Retryable                 bool      `json:"retryable"`
-	choices                   map[string]CopyChoice
-	completed                 map[string]bool
-	completedTop              map[string]bool
-	targets                   map[string]string
-	conflict                  string
-	sourceDir, destinationDir string
-	completedSource           map[string]fs.FileInfo
+	Files                       int64     `json:"files"`
+	Done                        int64     `json:"done"`
+	Bytes                       int64     `json:"bytes"`
+	Copied                      int64     `json:"copied"`
+	Current                     string    `json:"current"`
+	Error                       string    `json:"error"`
+	Started                     time.Time `json:"started"`
+	Finished                    time.Time `json:"finished"`
+	Retryable                   bool      `json:"retryable"`
+	choices                     map[string]CopyChoice
+	completed                   map[string]bool
+	completedTop                map[string]bool
+	targets                     map[string]string
+	conflict                    string
+	sourceRoot, destinationRoot Root
+	sourceDir, destinationDir   string
+	completedSource             map[string]fs.FileInfo
 
 	pendingUndo  []UndoMove
 	undoEligible map[string]bool
@@ -107,6 +112,9 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 	}
 	choices = copiedChoices
 
+	if m.Available != nil && (!m.Available(src) || !m.Available(dst)) {
+		return Job{}, ErrNotFound
+	}
 	if !dst.Writable || move && !src.Writable {
 		return Job{}, ErrReadOnly
 	}
@@ -175,17 +183,39 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 	raw := make([]byte, 8)
 	rand.Read(raw)
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &Job{choices: choices, ID: hex.EncodeToString(raw), Move: move, State: JobRunning, From: src.ID, To: dst.ID, Dir: dir, Names: rels,
+	job := &Job{sourceRoot: src, destinationRoot: dst, choices: choices, ID: hex.EncodeToString(raw), Move: move, State: JobRunning, From: src.ID, To: dst.ID, Dir: dir, Names: rels,
 		Files: p.files, Bytes: p.bytes, Started: m.now(), user: user, cancel: cancel, c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}, conflict: conflict, sourceDir: src.Dir, destinationDir: dst.Dir, completedSource: map[string]fs.FileInfo{}, undoEligible: map[string]bool{}}
+	m.transferMu.Lock()
+	if err := m.prepareTransfer(job, src, dst, sr); err != nil {
+		m.transferMu.Unlock()
+		closeRoots()
+		cancel()
+		return Job{}, err
+	}
 	m.jobs.mu.Lock()
 	m.jobs.list = append(m.jobs.list, job)
 	m.jobs.mu.Unlock()
+	m.transferMu.Unlock()
 	go func() {
 		defer closeRoots()
 		err := m.runCopy(ctx, job, sr, dr, src, dst, rels, dir, move, conflict, uid)
 		m.rememberMoveUndo(job)
 		m.jobs.mu.Lock()
-		defer m.jobs.mu.Unlock()
+		defer func() {
+			job.finishing = true
+			m.jobs.mu.Unlock()
+			if job.durable != nil {
+				if err := m.saveTransfer(job, job.durable.Pending); err != nil {
+					m.jobs.mu.Lock()
+					job.Error = "Could not persist transfer outcome: " + err.Error()
+					job.Blocked = true
+					m.jobs.mu.Unlock()
+				}
+			}
+			m.jobs.mu.Lock()
+			job.finishing = false
+			m.jobs.mu.Unlock()
+		}()
 		job.Finished = m.now()
 		switch {
 		case ctx.Err() != nil:
@@ -266,6 +296,9 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 		if job.choices[rel].Action == "skip" {
 			m.countTree(job, sr, rel)
 			job.completedTop[rel] = true
+			if err := m.transferTop(job, rel); err != nil {
+				return err
+			}
 			continue
 		}
 		if len(job.choices) > 0 && src.Dir == dst.Dir && (target == rel || strings.HasPrefix(target, rel+"/")) {
@@ -294,11 +327,25 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 			if err := m.copyCheckpoint(ctx, job, 0); err != nil {
 				return err
 			}
+			if err := m.saveTransfer(job, "rename "+rel+" to "+target); err != nil {
+				return err
+			}
 			if err := sr.Rename(rel, target); err != nil {
 				return mapError(err)
 			}
+			if job.durable != nil {
+				if err := syncTransferParent(sr, rel); err != nil {
+					return err
+				}
+				if err := syncTransferParent(dr, target); err != nil {
+					return err
+				}
+			}
 			m.countTree(job, sr, target)
 			job.completedTop[rel] = true
+			if err := m.finishTransfer(job, dr, rel, target); err != nil {
+				return err
+			}
 			if job.undoEligible[rel] {
 				job.pendingUndo = append(job.pendingUndo, UndoMove{CurrentRoot: dst, OriginalRoot: src, Current: target, Original: rel})
 			}
@@ -323,11 +370,22 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 			m.jobs.mu.Lock()
 			job.Current = rel
 			m.jobs.mu.Unlock()
+			if err := m.saveTransfer(job, "remove copied source "+rel); err != nil {
+				return err
+			}
 			if err := sr.RemoveAll(rel); err != nil {
 				return mapError(err)
 			}
+			if job.durable != nil {
+				if err := syncTransferParent(sr, rel); err != nil {
+					return err
+				}
+			}
 		}
 		job.completedTop[rel] = true
+		if err := m.transferTop(job, rel); err != nil {
+			return err
+		}
 		if move && job.undoEligible[rel] {
 			actual := job.targets[rel]
 			if actual == "" {
@@ -388,6 +446,16 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		return err
 	}
 	if job.completed[rel] {
+		if job.durable != nil {
+			if job.durable.Skipped[rel] {
+				return nil
+			}
+			current, err := sr.Lstat(rel)
+			if err != nil || job.durable.Sources[rel] != entryVersion(current) {
+				return ErrTextConflict
+			}
+			return nil
+		}
 		if job.Move {
 			current, err := sr.Lstat(rel)
 			previous := job.completedSource[rel]
@@ -408,7 +476,7 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 			}
 			m.countTree(job, sr, rel)
 			job.completed[rel] = true
-			return nil
+			return m.transferSkipped(job, rel)
 		}
 		if choice.SourceVersion != "" {
 			if err := checkChoice(sr, rel, choice.SourceVersion); err != nil {
@@ -448,6 +516,9 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 	if err != nil {
 		return mapError(err)
 	}
+	if job.durable != nil && info.Mode().IsRegular() && job.durable.Sources[rel] != entryVersion(info) {
+		return ErrTextConflict
+	}
 	switch {
 	case info.IsDir():
 		// A folder that exists is merged into, whatever the conflict rule.
@@ -467,6 +538,9 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		}
 		if job.targets != nil {
 			job.targets[rel] = target
+			if err := m.transferTarget(job, rel, target); err != nil {
+				return err
+			}
 		}
 		dir, err := sr.Open(rel)
 		if err != nil {
@@ -511,7 +585,7 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		if job.completed != nil {
 			job.completed[rel] = true
 		}
-		return nil
+		return m.transferSkipped(job, rel)
 	}
 	return m.copyFile(ctx, job, sr, dr, rel, final, info, uid)
 }
@@ -531,6 +605,11 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	out, err := dr.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o660)
 	if err != nil {
 		return mapError(err)
+	}
+	if err := m.transferPart(job, out, part); err != nil {
+		out.Close()
+		dr.Remove(part)
+		return err
 	}
 	done := false
 	defer func() {
@@ -580,6 +659,9 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	m.own(dr, part, uid, false)
 	// The modification time is kept, so that photos stay in order.
 	dr.Chtimes(part, info.ModTime(), info.ModTime())
+	if err := m.saveTransfer(job, "publish "+final); err != nil {
+		return err
+	}
 	var publishErr error
 	if choice, ok := job.choices[rel]; ok {
 		if choice.TargetVersion != "" {
@@ -610,7 +692,7 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 			job.completedSource[rel] = info
 		}
 	}
-	return nil
+	return m.finishTransfer(job, dr, rel, final)
 }
 
 // snapshot returns a copy of a job with its counters filled in.
@@ -621,11 +703,12 @@ func (m *Manager) snapshot(job *Job) Job {
 }
 
 func snapshotLocked(job *Job) Job {
-	return Job{Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: job.Operation == "" && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
+	return Job{Durable: job.Durable, Blocked: job.Blocked, Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: !job.finishing && !job.Blocked && (job.durable == nil || job.durable.Pending == "") && job.Operation == "" && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
 }
 
 // Jobs returns the copy jobs of a user, the newest first.
 func (m *Manager) Jobs(user string) []Job {
+	m.loadTransfers(user)
 	m.jobs.mu.Lock()
 	defer m.jobs.mu.Unlock()
 	out := []Job{}
@@ -653,19 +736,22 @@ func (m *Manager) CancelJob(user, id string) error {
 
 // prune drops the oldest finished jobs. The caller holds the lock.
 func (m *Manager) pruneJobs() {
-	finished := 0
-	for _, job := range m.jobs.list {
-		if job.State != JobRunning {
-			finished++
+	finished := map[string]int{}
+	eligible := func(j *Job) bool {
+		return j.State != JobRunning && !j.Blocked && !j.finishing && (j.durable == nil || j.durable.Pending == "")
+	}
+	for _, j := range m.jobs.list {
+		if eligible(j) {
+			finished[j.user]++
 		}
 	}
-	for finished > maxJobs {
-		for i, job := range m.jobs.list {
-			if job.State != JobRunning {
-				m.jobs.list = append(m.jobs.list[:i], m.jobs.list[i+1:]...)
-				finished--
-				break
-			}
+	for i := 0; i < len(m.jobs.list); {
+		j := m.jobs.list[i]
+		if finished[j.user] > maxJobs && eligible(j) {
+			m.jobs.list = append(m.jobs.list[:i], m.jobs.list[i+1:]...)
+			finished[j.user]--
+		} else {
+			i++
 		}
 	}
 }
@@ -673,6 +759,7 @@ func (m *Manager) pruneJobs() {
 // RetryCopy resumes the same in-memory job. Committed files and completed
 // top-level moves are skipped; current root permissions are checked again.
 func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error) {
+	m.loadTransfers(user)
 	m.jobs.mu.Lock()
 	var job *Job
 	for _, candidate := range m.jobs.list {
@@ -681,7 +768,7 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 			break
 		}
 	}
-	if job == nil || job.Operation != "" || (job.State != JobFailed && job.State != JobCancelled) || job.From != src.ID || job.To != dst.ID || job.sourceDir != src.Dir || job.destinationDir != dst.Dir {
+	if job == nil || job.finishing || job.Operation != "" || (job.State != JobFailed && job.State != JobCancelled) || job.From != src.ID || job.To != dst.ID || job.sourceDir != src.Dir || job.destinationDir != dst.Dir {
 		m.jobs.mu.Unlock()
 		return Job{}, ErrNoJob
 	}
@@ -712,7 +799,15 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 		m.jobs.mu.Unlock()
 		return Job{}, ErrNotFound
 	}
+	if err := m.verifyTransfer(job, src, dst, dr); err != nil {
+		sr.Close()
+		dr.Close()
+		m.jobs.mu.Unlock()
+		return Job{}, err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
+	job.sourceRoot = src
+	job.destinationRoot = dst
 	job.cancel = cancel
 	job.State = JobRunning
 	job.Paused = false
@@ -726,7 +821,21 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 		err := m.runCopy(ctx, job, sr, dr, src, dst, job.Names, job.Dir, job.Move, job.conflict, uid)
 		m.rememberMoveUndo(job)
 		m.jobs.mu.Lock()
-		defer m.jobs.mu.Unlock()
+		defer func() {
+			job.finishing = true
+			m.jobs.mu.Unlock()
+			if job.durable != nil {
+				if err := m.saveTransfer(job, job.durable.Pending); err != nil {
+					m.jobs.mu.Lock()
+					job.Error = "Could not persist transfer outcome: " + err.Error()
+					job.Blocked = true
+					m.jobs.mu.Unlock()
+				}
+			}
+			m.jobs.mu.Lock()
+			job.finishing = false
+			m.jobs.mu.Unlock()
+		}()
 		job.Finished = m.now()
 		switch {
 		case ctx.Err() != nil:
@@ -763,6 +872,12 @@ func verifyCopiedSource(ctx context.Context, job *Job, r *os.Root, rel string) e
 		}
 		if info.IsDir() {
 			if _, ok := job.targets[p]; !ok {
+				return ErrTextConflict
+			}
+			return nil
+		}
+		if job.durable != nil {
+			if !info.Mode().IsRegular() || job.durable.Sources[p] != entryVersion(info) {
 				return ErrTextConflict
 			}
 			return nil

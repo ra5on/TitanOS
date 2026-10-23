@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.12.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1)** · Veröffentlicht am 22. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.16.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0)** · Veröffentlicht am 23. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -22,6 +22,19 @@ Die Screenshots zeigen die Weboberfläche von **0.7.2** (VMs), **0.7.1** (Dateim
 TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
+
+## Neu in 0.16.0
+
+- **Kompakte Shares und Docker-Stacks:** filterbare Freigabenliste, Details auf Klick, erhaltene Formulare; zunächst geschlossene Stacks mit WebUI-, Tailscale- und öffentlichen Links des Hauptdienstes. Befehlspalette per Strg/⌘+K.
+- **Speicher übernehmen und erweitern:** lesende Vorschau unterstützter mdadm-/Btrfs-Volumes, Registrierung ohne Formatieren; RAID5/6 um eine Platte erweitern, mit separatem Rettungs-Volume und geprüftem Wiederanlauf.
+- **Wartung und Snapshots:** gemeinsame Zeitfenster, Prüfungen, SMART-Langtests, Wiederherstellungsproben und Btrfs-Zeitpläne mit Aufbewahrung; einzelne Snapshot-Dateien in neue Ordner zurückholen.
+- **Sicherungen für Anwendungen:** ausgewählte Container/VMs sauber anhalten und wieder starten, optional PostgreSQL exportieren; unterbrochene Vorgänge ausdrücklich prüfen. Backups durch echte Wiederherstellungsproben testen.
+- **Verläufe und Aufträge:** optionale Monitoring-Daten für 7/30 Tage auf einem Volume, Speicherverbrauch auf Anforderung, Fehler und nächste Arbeit zentral auf Dashboard und Auftragsseite.
+- **VMs und Dateien:** unabhängige Klone ausgeschalteter VMs mit neuen Kennungen; Kopier-/Verschiebeaufträge auf Daten-Volumes nach titand-Neustart geprüft fortsetzen.
+
+App-Update auf Basis 0.15.0. [Bedienung und Grenzen](docs/WORKFLOWS.md),
+[Änderungen und Prüfstand](docs/releases/v0.16.0.md). LUKS-Volume-Verschlüsselung
+ist nicht vorgesehen.
 
 ## Neu in 0.15.0
 
@@ -53,7 +66,7 @@ Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist
 - **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
 - **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+Alle Änderungen: [0.16.0](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0) · [0.15.0](https://github.com/ra5on/TitanOS/releases/tag/v0.15.0) · [0.14.0](https://github.com/ra5on/TitanOS/releases/tag/v0.14.0) · [0.13.0](https://github.com/ra5on/TitanOS/releases/tag/v0.13.0) · [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -147,13 +160,13 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 - USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
 - Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
 - Der Prüfstand deckt nicht jede USV, jedes externe Backupziel oder jede GPU ab. Die verfügbaren Hardwareberichte ersetzen keine Prüfung der eigenen Geräte und Rücksicherung. TitanOS im vertrauenswürdigen lokalen Netz betreiben.
-- Volume-Verschlüsselung, Bootloader-Aktualisierung und Systemupdates aus einer hochgeladenen Datei sind nicht enthalten. HTTPS unterstützt selbst signierte und importierte Zertifikate; eine automatische Let’s-Encrypt-Verwaltung ist nicht enthalten.
+- Bootloader-Aktualisierung und Systemupdates aus einer hochgeladenen Datei sind nicht enthalten. HTTPS unterstützt selbst signierte und importierte Zertifikate; eine automatische Let’s-Encrypt-Verwaltung ist nicht enthalten.
 
 ## Installation
 
-Die Dateien für **0.12.1** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1). Für einen neuen Stick:
+Die Dateien für **0.16.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0). Für einen neuen Stick:
 
-1. `titanos-0.12.1.zip`, `titanos-0.12.1.zip.minisig` und `titanos-0.12.1.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.16.0.zip`, `titanos-0.16.0.zip.minisig` und `titanos-0.16.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.

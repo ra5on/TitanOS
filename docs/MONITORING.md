@@ -77,3 +77,13 @@ RAM-Limit oder allein die Anwendungen im Gast. Deshalb kann eine VM mit 8 GiB
 zugewiesenem Speicher beispielsweise 3,12 GiB resident belegen. Die NAS-Summe
 bleibt `MemTotal − MemFree` und zählt das laufende System mit. Die zugewiesenen
 8 GiB dürfen nicht zusätzlich auf diese Summe addiert werden.
+
+## Optionale längere Verläufe ab 0.16.0
+
+Werkzeuge › Monitoring ergänzt Minutenwerte auf einem Daten-Volume: CPU, RAM,
+Netzwerk, Volume-Belegung sowie physische I/O-Zähler und mittlere Latenz. Ab Werk
+aus, 7/30 Tage und 8–256 MiB. Kein periodisches Schreiben auf den Bootstick.
+Beobachtungslücken/Zählerrücklauf bleiben erkennbar; Speicherung kann ruhende
+Datenplatten wecken. Die kurzen RAM-Verläufe des Dashboards bleiben erhalten.
+Einzelheiten, Fehler-/Aufbewahrungsregeln und Prüfgrenzen in
+[WORKFLOWS.md](WORKFLOWS.md#längere-monitoring-verläufe).

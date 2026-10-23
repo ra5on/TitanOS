@@ -1,4 +1,6 @@
 <script lang="ts">
+ import { untrack } from 'svelte';
+ import { beforeNavigate, goto } from '$app/navigation';
 	import { api, ApiError, type AccessLevel, type Account, type Share } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -16,6 +18,7 @@
 
 	// As shares.ValidName: letters, digits, blanks, - _ and ., up to 32 characters,
 	// no blank or dot at the start or end, no double blank, no name Samba reserves.
+	const formID = $props.id();
 	const NAME = /^(?![ .])(?!.*[ .]$)(?!.*  )[\p{L}\p{N} ._-]{1,32}$/u;
 	const RESERVED = ['global', 'homes', 'printers', 'print', 'ipc'];
 	const validName = (name: string) => NAME.test(name) && !RESERVED.includes(name.toLowerCase());
@@ -39,6 +42,19 @@
 	});
 	let working = $state(false);
 	let error = $state('');
+ let tab = $state<'general'|'access'|'options'>('general');
+ const tabs = ['general','access','options'] as const;
+ const initial = JSON.stringify(untrack(() => $state.snapshot(draft)));
+ const dirty = $derived(JSON.stringify(draft) !== initial);
+ let confirmClose = $state(false), pendingURL = '', allowNavigation = false;
+ const closeNow = () => { allowNavigation=true; onclose(); if(pendingURL) void goto(pendingURL); };
+ function requestClose() { if(working)return; if(dirty)confirmClose=true; else closeNow(); }
+ beforeNavigate(navigation => {
+  if(!dirty||allowNavigation)return;
+  navigation.cancel();
+  if(navigation.willUnload)return;
+  pendingURL=navigation.to?.url.href ?? ''; confirmClose=true;
+ });
 
 	const nameError = $derived(draft.name !== '' && !validName(draft.name) ? errorText('invalid_share_name') : '');
 	const nobody = $derived(draft.smb && !draft.guest && Object.keys(draft.access).length === 0);
@@ -67,7 +83,9 @@
 		try {
 			if (share) await api.put(`/shares/${encodeURIComponent(share.name)}`, body);
 			else await api.post('/shares', body);
+   allowNavigation=true;
 			ondone();
+   if(pendingURL) void goto(pendingURL);
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			working = false;
@@ -75,8 +93,13 @@
 	}
 </script>
 
-<Dialog title={share ? t('share.editTitle', { name: share.name }) : t('share.createTitle')} wide locked={working} {onclose}>
-	<form onsubmit={submit}>
+<Dialog title={share ? t('share.editTitle', { name: share.name }) : t('share.createTitle')} wide locked={working} onrequestclose={requestClose} {onclose}>
+	<div class="tabs" role="tablist" aria-label={t('shares.details')}>
+ {#each tabs as id}<button type="button" role="tab" aria-selected={tab===id} onclick={()=>tab=id}>{t(`shares.tab.${id}`)}</button>{/each}
+ </div>
+ {#if confirmClose}<div class="notice-warn" role="alert"><p>{t('shares.unsaved')}</p><div class="close-options dialog-actions"><button class="btn" type="button" onclick={()=>{confirmClose=false;pendingURL='';}}>{t('shares.keepEditing')}</button><button class="btn btn-warn" type="button" onclick={closeNow}>{t('shares.discard')}</button><button class="btn btn-primary" type="button" onclick={()=>{confirmClose=false;(document.getElementById(formID) as HTMLFormElement | null)?.requestSubmit();}}>{t('common.save')}</button></div></div>{/if}
+ <form id={formID} onsubmit={submit}>
+		<div class="general" hidden={tab!=='general'}>
 		<div class="two">
 			<label class="field-row">
 				<span class="label">{t('share.name')}</span>
@@ -106,8 +129,9 @@
 			{/if}
 		</fieldset>
 
+ </div>
 		{#if draft.smb}
-			<fieldset>
+			<fieldset hidden={tab!=='access'}>
 				<legend>{t('share.accessTitle')}</legend>
 				{#each accounts as account (account.name)}
 					<div class="access">
@@ -127,7 +151,7 @@
 				{#if nobody}<p class="notice-warn" role="alert">{t('share.nobodyWarning')}</p>{/if}
 			</fieldset>
 
-			<fieldset>
+			<fieldset hidden={tab!=='options'}>
 				<label class="check"><input type="checkbox" bind:checked={draft.browseable} /><span>{t('share.browseable')}</span></label>
 				<label class="check"><input type="checkbox" bind:checked={draft.recycle} /><span>{t('share.recycle')}</span></label>
 				{#if draft.recycle}
@@ -138,17 +162,20 @@
 					<label class="inline indent"><span>{t('share.timeMachineSize')}</span><input class="field number" type="number" min="0" bind:value={draft.sizeGB} /></label>
 				{/if}
 			</fieldset>
+		{:else if tab!=='general'}<p class="muted">{t('shares.smbOptions')}</p>
 		{/if}
 
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
+			<button type="button" class="btn" onclick={requestClose} disabled={working}>{t('common.cancel')}</button>
 			<button type="submit" class="btn btn-primary" disabled={working || !draft.volume}>{t(share ? 'share.save' : 'share.create')}</button>
 		</div>
 	</form>
 </Dialog>
 
 <style>
+ [hidden]{display:none!important}.general{display:flex;flex-direction:column;gap:18px}.tabs{display:flex;gap:20px;border-bottom:1px solid var(--panel-border)}.tabs button{font:inherit;background:none;color:var(--muted);border:0;border-bottom:2px solid transparent;padding:8px 0;cursor:pointer}.tabs button[aria-selected=true]{color:var(--accent);border-color:var(--accent)}.close-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+
 	form {
 		display: flex;
 		flex-direction: column;

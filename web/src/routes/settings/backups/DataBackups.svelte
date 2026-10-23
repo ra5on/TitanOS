@@ -1,4 +1,8 @@
 <script lang="ts">
+ import ApplicationSelection,{type Application} from '#lib/operations/ApplicationSelection.svelte';
+ import ProbeDialog from '#lib/operations/ProbeDialog.svelte';
+ import RecoveryPanel from '#lib/operations/RecoveryPanel.svelte';
+ let probing=$state('');
 	import { revealTarget } from '#lib/reveal-target.ts';
 	let { restoreOnly = false }: { restoreOnly?: boolean } = $props();
 	// Backups of shares to another volume, another server or the cloud.
@@ -35,8 +39,8 @@
 		username?: string;
 		password?: string;
 	};
-	type Job = { id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
-	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
+	type Job = { applications?:Application[];allowStop?:boolean; id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
+	type State = { probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
 	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
@@ -192,7 +196,7 @@
 	function setKind(kind: Kind) {
 		if (!draft) return;
 		draft.destination.type = kind;
-		if (plainCopy(kind)) { draft.extras = []; draft.keep = {daily: 0, weekly: 0, monthly: 0}; }
+		if (plainCopy(kind)) { draft.applications=[];draft.allowStop=false;draft.extras = []; draft.keep = {daily: 0, weekly: 0, monthly: 0}; }
 		if (kind === 'sftp') showKey();
 		if (kind === 'titanos') pairCode = '';
 	}
@@ -381,7 +385,8 @@
 {#if retry && error}<button type="button" class="btn" onclick={() => retry && act(retry.job, retry.action)}>{t('ui.retry')}</button>{/if}
 
 {#if overview}
-	{#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /></div>{/if}
+	{#if !restoreOnly}<RecoveryPanel/>{/if}
+ {#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /></div>{/if}
 	{#if !restoreOnly}<h2 id="backup-history" use:revealTarget>{t('safeguard.history')}</h2>{/if}
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
@@ -391,7 +396,7 @@
 			<div class="head">
 				<div>
 					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">Beta</span>{/if}
-					<p class="muted">{job.sources.join(', ')} → <span class="mono">{where(job.destination)}</span></p>
+					<p class="muted">{[...job.sources,...(job.applications??[]).map(a=>a.name)].join(', ')} → <span class="mono">{where(job.destination)}</span></p>
 				</div>
 				{#if state.running}<span class="chip info">{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span>
 				{:else if state.lastError && state.lastError !== 'cancelled'}<span class="chip error">{t('backup.failed')}</span>
@@ -416,7 +421,8 @@
 				{#if state.checkError}<div class="notice-error">{t('backup.checkFailed')}<pre>{state.checkError}</pre></div>
 				{:else}<p class="muted">{t('backup.checkOk', { at: formatDateTime(new Date(state.lastCheck)) })}</p>{/if}
 			{/if}
-			{#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
+			{#if state.probe}<p class={state.probe.error?'notice-warn':'muted'}>{t('ops.probe')} · {formatDateTime(new Date(state.probe.at))} · {state.probe.files} · {formatBytes(state.probe.bytes)}{#if state.probe.error}<span>{state.probe.error}</span>{/if}{#if state.probe.truncated}<span> · {t('ops.truncated')}</span>{/if}</p>{/if}
+ {#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
 			{#if pending[job.id]}<p role="status">{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}</p>{/if}
 			<div class="row">
 				{#if state.running}
@@ -424,7 +430,8 @@
 				{:else}
 					{#if !restoreOnly}<button type="button" class="btn btn-primary" disabled={!!pending[job.id]} onclick={() => act(job, 'run')}>{t('backup.run')}</button>{/if}
 					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
-					<button type="button" class="btn" onclick={() => (checking = { job, readData: 0 })}>{t('backup.check')}</button>
+					<button type="button" class="btn" onclick={()=>probing=job.id}>{t('ops.probe')}</button>
+ <button type="button" class="btn" onclick={() => (checking = { job, readData: 0 })}>{t('backup.check')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					{#if !restoreOnly}<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>
 					<button type="button" class="btn" onclick={() => (removing = job)}>{t('backup.remove')}</button>{/if}
@@ -479,7 +486,7 @@
 					<label class="check"><input type="checkbox" checked={draft.extras?.includes(extra)} onchange={() => toggleExtra(extra)} /><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label>
 				{/each}
 			</div>
-			{/if}{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
+			{/if}{#if !plainCopy(draft.destination.type)}<ApplicationSelection bind:applications={draft.applications} bind:allowStop={draft.allowStop}/>{/if}{#if draft.extras?.includes('config')}<p class="notice-warn">{t('backup.extra.configHint')}</p>{/if}
 			<label class="block"><span>{t('backup.patterns')}</span>
 				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
 			</label>
@@ -622,7 +629,7 @@
 		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 		<div class="actions">
 			<button type="button" class="btn" onclick={() => ((draft = null), (error = null))} disabled={busy}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={busy || (draft.sources.length === 0 && !draft.extras?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || (draft.sources.length === 0 && !draft.extras?.length && !draft.applications?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button>
 		</div>
 	</form>
 {/if}
@@ -708,6 +715,7 @@
 	</Dialog>
 {/if}
 
+{#if probing}<ProbeDialog job={probing} onclose={()=>probing=''} onstarted={()=>{probing='';load();}}/>{/if}
 <style>
 	.mode { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; border: 0; }
 	.mode .check { flex-direction: row; align-items: center; gap: 8px; }

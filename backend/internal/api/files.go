@@ -498,6 +498,14 @@ func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
 
 // handleFileCopy starts copying or moving files between roots.
 func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Maintenance != nil {
+		leave, err := s.opts.Maintenance.Enter()
+		if err != nil {
+			writeError(w, http.StatusLocked, "maintenance_running", err.Error())
+			return
+		}
+		defer leave()
+	}
 	var req struct {
 		Choices                       map[string]files.CopyChoice
 		Root, ToRoot, ToDir, Conflict string

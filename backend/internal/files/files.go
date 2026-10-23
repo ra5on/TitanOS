@@ -142,10 +142,13 @@ func mapError(err error) error {
 // Manager carries out file operations and keeps track of running uploads.
 type Manager struct {
 	// GID is the group files and folders are given ("users").
-	Protected func(string) bool
-	GID       int
-	Available func(Root) bool
-	Acquire   func(context.Context) (int64, func(), error)
+	Mounted        func() []string
+	transferMu     sync.Mutex
+	transferLoaded map[string]bool
+	Protected      func(string) bool
+	GID            int
+	Available      func(Root) bool
+	Acquire        func(context.Context) (int64, func(), error)
 	// MountRoot is where volumes are mounted ("/mnt" if empty).
 	MountRoot string
 	syncFile  func(*os.File) error
