@@ -336,7 +336,7 @@ export type VM = {
 	network: 'user' | 'bridge';
 	mac: string;
 	/** Set while disks are copied, or if that failed. */
-	job: { state: 'running' | 'failed'; text: string } | null;
+	job: { operation?: string; state: 'running' | 'failed'; text: string } | null;
 	state: 'running' | 'stopped';
 	/** False while a volume of the VM is not mounted. */
 	available: boolean;

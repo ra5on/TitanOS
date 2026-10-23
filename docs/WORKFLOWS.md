@@ -21,6 +21,12 @@ bleiben Eigentum des jeweiligen Kontos. LUKS-Verschlüsselung ist nicht vorgeseh
 - **Werkzeuge › Aufträge:** laufende Datei-, Backup-, Speicher-, Docker- und
   VM-Arbeit, Fehler, nächste Termine sowie Prüfung unterbrochener Vorgänge.
   Das Dashboard zeigt dieselben handlungsrelevanten Zustände in kompakter Form.
+  Seit 0.17.0: Alle/Aktiv/Geplant/Abgeschlossen/Fehler, Suche, eigene KI-Aufträge
+  und aktivierte Automationen, registrierte Uploads und unterstützte direkte
+  Steuerung. Ereignis-Automationen ohne Termin bleiben wartend. Angezeigt werden
+  die je Fachbereich vorhandenen Ergebnisse (Wartung 100, Datei-Aufträge begrenzt,
+  sonst letzte bekannte Zustände), kein unbegrenztes neues Gesamtarchiv. Eigene
+  Uploads benötigen zum Fortsetzen weiterhin die Browser-Dateiobjekte.
 
 ## Vorhandenen Speicher übernehmen
 
@@ -47,7 +53,8 @@ werden nicht durch eine automatische Reparatur übergangen.
 **Speicher › Volume › Kapazität erweitern** fügt einem gesunden, untätigen
 RAID5/6 mit ext4 oder XFS genau eine ausreichend große Platte hinzu.
 Andere RAID-Level, Levelwechsel und Verkleinerungen gehören nicht zu diesem
-Ablauf. Die neue Platte braucht eine eindeutige Seriennummer; die Anfrage
+Ablauf. Die Vorschau zeigt aktuelle und geschätzte künftige Nutzkapazität aus der
+Array-Geometrie; Dateisystemreserve und Formatierung beeinflussen den Endwert. Die neue Platte braucht eine eindeutige Seriennummer; die Anfrage
 enthält zusätzlich den aktuellen Gerätefingerabdruck und die Löschbestätigung.
 
 Voraussetzung ist ein gesundes, eingebundenes Rettungs-Volume auf anderen
@@ -85,12 +92,15 @@ Symlinks und blendet `.titanos`, Papierkorb und interne Teilkopien aus. Bis zu
 Ordner unter `restored/` eines gemounteten Volumes kopieren. Veröffentlichte
 Dateien überschreiben nichts; Quelle und Ziel bleiben über Dateideskriptoren
 festgehalten. Die bisherige Wiederherstellung als neue beschreibbare
-Btrfs-Untervolume-Kopie bleibt erhalten.
+Btrfs-Untervolume-Kopie bleibt erhalten. Vor dem Start zeigt eine Vorschau
+Dateien/Gesamtgröße/Ziel; der Start prüft die Snapshot-UUID erneut.
 
 Geplante Snapshots stehen unter **Werkzeuge › Wartung**. Die Aufbewahrung löscht
 nur Snapshots, die dieser Zeitplan selbst erzeugt und in seinem privaten
-Inventar unter `.titanos/snapplans/` registriert hat. Manuelle Snapshots bleiben
-auch bei automatisch aussehendem Namen erhalten. Nach einem Fehler beim Speichern
+Inventar unter `.titanos/snapplans/<auftrag>.v2.json` mit Btrfs-UUID registriert
+hat. UUID-Prüfung und Löschung teilen dieselbe Speichersperre. Manuelle Ersatzkopien
+gleichen Namens bleiben erhalten. Alte reine Namensinventare werden geleert und
+ihre vorhandenen Kopien erhalten; sie begründen keine Löschrechte. Nach einem Fehler beim Speichern
 des Inventars bleibt eine bereits erzeugte Kopie erhalten und der Fehler sichtbar.
 
 **Speicherverbrauch** scannt nur auf ausdrücklichen Start: höchstens 30 Sekunden
@@ -100,6 +110,7 @@ zugeordnet; Papierkorbdaten werden aus den jeweiligen laufenden Ordnersummen
 herausgelöst. Interne Betriebsdaten sind ausgenommen. Fehler und Begrenzungen
 kennzeichnen Teilergebnisse. Logische Größen und belegte Blöcke versprechen
 bei Hardlinks, Reflinks und Snapshots keinen entsprechend frei werdenden Speicher.
+Die grafische Übersicht zeigt Anteile der erfassten logischen Daten.
 
 ## Gemeinsame Wartungsplanung
 
@@ -110,8 +121,16 @@ oder monatliche Termine (Monatstag 1–28). Gleiche Fenstergrenzen erlauben den
 ganzen Tag. Verpasste Läufe werden je Auftrag entweder im nächsten Fenster
 nachgeholt oder übersprungen. Es wird höchstens der letzte fällige Termin nachgeholt.
 
+Ein optionaler Vorgänger bildet Auftragsketten: Er muss im aktuellen Termin
+bestanden haben, ohne neueren Fehler oder ungeklärten Ausgang. Zyklen und fehlende
+Vorgänger werden abgelehnt. Für ältere Apps werden solche Aufträge mit deaktiviertem
+altem `enabled`-Feld gespeichert; die aktuelle Version stellt die bewusste Auswahl
+aus `dependencyEnabled` wieder her. Optional haben fällige bzw. in fünf Minuten
+geplante Backups Vorrang vor neuen Wartungsläufen. Laufende Wartung wird nicht
+unterbrochen. Wartegründe stehen an den Aufträgen.
+
 Genau **ein Wartungsauftrag** läuft zur Zeit. Die Planung wartet auf bekannte
-TitanOS-Backups, Datei-, Speicher-, VM- und Plugin-Arbeit. Die Aufnahme neuer
+TitanOS-Backups, Datei-, Speicher-, Docker-App-, VM- und Plugin-Arbeit. Die Aufnahme neuer
 schwerer API-Aufträge und automatischer Backup-/VM-Snapshot-Läufe wird mit dem
 Wartungsstart abgestimmt. Normale SMB-/NFS-Zugriffe und laufende Gäste sind keine
 pauschal angehaltenen Dienste. Eine RAID-Prüfung prüft zusätzlich den echten
@@ -123,7 +142,10 @@ unter `.titanos/maintenance/`. Ohne dieses Volume gibt es keine ersatzweise
 RAM-Ausführung. Nach Prozessabsturz bleibt ein unbekannter Ausgang gesperrt,
 bis der Administrator den Zielzustand geprüft und die Kennung bestätigt hat.
 Entfernen oder Umwidmen eines gesperrten Auftrags umgeht diese Prüfung nicht.
-Freigeben führt den Auftrag nicht sofort aus. Fehler erscheinen auch als
+Freigeben führt den Auftrag nicht sofort aus. Bei fehlendem Daten-Volume lässt
+sich eine sonst unveränderte Konfiguration deaktivieren; ungeklärte Zustände
+bleiben gesperrt. Abbrechen im Auftragsdialog verwirft auch die dortige Volume-Wahl.
+Globale ungespeicherte Einstellungen werden beim Navigieren geschützt. Fehler erscheinen auch als
 Administrator-Benachrichtigung ohne Chatinhalte.
 
 Ein SMART-Langtest wird nur als bestanden gemeldet, wenn sein Lauf zuerst
@@ -150,7 +172,10 @@ In einem versionierten Backup lassen sich Anwendungen auswählen:
 - **Docker sauber anhalten:** tatsächliche beschreibbare Bind-/Docker-Volumes
   auf eingebundenen Daten-Volumes sichern; erzwungener Kill bzw. OOM wird nicht
   als saubere Sicherung akzeptiert. Weitere laufende Container, die ausgewählte
-  Rohdaten beschreiben, blockieren diesen Ablauf.
+  Rohdaten beschreiben, blockieren diesen Ablauf auch bei reinen VM-Aufträgen.
+  Ein deaktivierter Docker-Dienst wird unter Lease geprüft und nicht vorschnell
+  als bereits beendet behandelt. Beschreibbare virtiofs-Host-Ordner anderer
+  laufender VMs gehören ebenfalls zur Prüfung.
 - **VM sauber anhalten:** unterstützte Gäste ohne durchgereichte Geräte,
   Host-Ordner, Blockplatten oder vorbereitete/externe Abbilder. Der Gast erhält
   ein normales Herunterfahren, höchstens fünf Minuten, keinen erzwungenen Abbruch.
@@ -168,7 +193,8 @@ gesperrt. App-Updates warten ebenfalls auf diesen Abschluss. Nur vorher laufende
 gestartet; Fehler dabei bleiben Fehler des Gesamtauftrags. Ein titand-Absturz
 führt nicht zum blinden Neustart oder zur Wiederholung des Backups. Unter
 **Werkzeuge › Aufträge** kann der Zustand geprüft und der Wiederanlauf ausdrücklich
-beauftragt werden. Ein Journal lässt sich auch nach manueller Prüfung ohne
+beauftragt werden. Die sichtbare Seite aktualisiert neue Vorgänge und lädt
+ursprüngliche Mitglieder/Laufzustände/Phasen bei ausdrücklicher Prüfung. Ein Journal lässt sich auch nach manueller Prüfung ohne
 Neustart der Anwendungen abschließen.
 
 Gesichert werden die ausgewählten persistenten Daten, VM-Platten/Firmware und
@@ -183,6 +209,30 @@ Live-Kopie aus. Die aktuelle Version stellt die Auswahl beim Laden wieder her.
 Andere Aufträge und vorhandene Archivpasswörter bleiben unverändert.
 
 Siehe [restic-Wiederherstellung](https://restic.readthedocs.io/en/stable/050_restore.html).
+
+## Abdeckung und Anwendungswiederherstellung
+
+**Einstellungen › Sicherungen › Sicherungsabdeckung** ordnet ausdrücklich gewählte
+Shares und Anwendungen ihren Aufträgen zu. Teilauswahl, manuelle Zeitpläne,
+fehlende Quellen/lokale Ziele und getrennte Zeitpunkte für Erfolg, Prüfung und
+Probe bleiben sichtbar. Konfigurierte, inzwischen fehlende Quellen bleiben in
+der Übersicht. Rohordnerkopien begründen keine koordinierte App-Zuordnung.
+Entfernte Ziele werden erst bei tatsächlichem Zugriff geprüft.
+
+**Anwendungswiederherstellung** zeigt Stand/Pfade/Umfang/Ziel vor einer neuen Kopie.
+Neue koordinierte Sicherungen nehmen ihr ursprüngliches Anwendungsprotokoll mit
+auf, soweit die Auswahlfilter es nicht ausschließen. Die Vorschau liest dieses
+mit höchstens 1 MiB/30 Sekunden; fehlt es, wird die aktuelle Zuordnung ausdrücklich
+als solche gekennzeichnet. Keine automatische App-Registrierung oder Ausführung
+und kein Live-Import der NAS-Konfiguration. Eine getrennte Testinstanz folgt als
+manueller fachlicher Prüfschritt nach der Datenkopie.
+
+Ganze, ausgewählte und Anwendungs-Restores verwenden privates Volume-Staging,
+einen geerbten Verzeichnisdeskriptor, `--verify --overwrite never` und eine atomare
+Veröffentlichung ohne Überschreiben unter einem eindeutigen neuen Namen in
+`restored/`. Der veröffentlichte Zielbaum ist zunächst 0700. Bei Volume-Verlust
+kein Ausweichen auf das RAM-Overlay. Das Anwendungs-Restore-Ergebnis besitzt einen
+eigenen Zeitpunkt/Fehler/Verifiziert-Status, getrennt vom letzten Backup-Erfolg.
 
 ## Längere Monitoring-Verläufe
 
@@ -199,6 +249,15 @@ nicht übergangen. Anzeige über 24 Stunden, sieben oder 30 Tage, ausgedünnt mi
 erhaltenen Beobachtungslücken. Bei zu vielen Lücken fordert die API einen kürzeren
 Bereich. Daten liegen unter `.titanos/monitoring/`, niemals zyklisch auf dem Stick.
 Dies kann ruhende Datenplatten wecken; die Einstellung erklärt das ausdrücklich.
+CSV/JSON exportieren den gewählten Zeitraum einschließlich Lücken; CSV höchstens
+250.000 Messzeilen. Textwerte dürfen keine Tabellenformeln auslösen.
+
+Kapazitätsentwicklung verwendet mindestens 24 stündliche Werte aus dem letzten
+zusammenhängenden Abschnitt, stabile Kapazität und höchstens zwei Stunden alte
+Werte. Große Lücken, Kapazitätswechsel und stark schwankende Daten ergeben keine
+Prognose. Die lineare Schätzung zeigt grobe Tage bis 90 % und voll. Bei 90 % oder
+höchstens sieben projizierten Tagen bis dahin erscheint auf der geladenen Seite
+ein Hinweis. Kein zusätzliches Push-Ereignis, keine Wachstumsgarantie.
 
 ## Unabhängige VM-Kopien
 
@@ -255,5 +314,5 @@ haben weiterhin ihre eigenen, in der Dateimanager-Dokumentation beschriebenen Gr
   Anwendungssicherung und unterbrochene/fortgesetzte Vorgänge.
 
 Der genaue Release-Prüfstand und verbleibende Hardware-/Stromausfallgrenzen stehen
-in [v0.16.0](releases/v0.16.0.md). Diese Prüfungen ersetzen keine Abnahme aller
+in [v0.17.0](releases/v0.17.0.md). Diese Prüfungen ersetzen keine Abnahme aller
 NAS-Platten, Controller, PostgreSQL-Images oder Gastsysteme.

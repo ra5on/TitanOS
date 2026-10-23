@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"syscall"
 )
 
 type BackupLease struct {
@@ -41,6 +42,9 @@ func (l *BackupLease) Close() {
 func (l *BackupLease) Containers(ctx context.Context) ([]Container, error) {
 	items, err := l.manager.api.containers(ctx)
 	if err != nil {
+		if !l.manager.current().Enabled && (errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)) {
+			return []Container{}, nil
+		}
 		return nil, err
 	}
 	out := []Container{}

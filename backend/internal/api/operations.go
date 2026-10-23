@@ -4,8 +4,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -15,14 +16,16 @@ import (
 )
 
 func (s *Server) operationsRoutes(mux *http.ServeMux) {
-	admin := func(route string, fn http.HandlerFunc) {
-		mux.HandleFunc(route, s.requireAdmin(func(w http.ResponseWriter, r *http.Request) {
+	register := func(route string, fn http.HandlerFunc, guard func(http.HandlerFunc) http.HandlerFunc) {
+		mux.HandleFunc(route, guard(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet {
 				slog.Info("workflow change requested", "method", r.Method, "path", r.URL.Path, "user", currentUser(r).Name, "ip", remoteIP(r))
 			}
 			fn(w, r)
 		}))
 	}
+	admin := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireAdmin) }
+	heavy := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAdmin) }
 	admin("GET /api/v1/operations", s.handleOperations)
 	admin("GET /api/v1/maintenance", s.handleMaintenance)
 	admin("PUT /api/v1/maintenance", s.handleMaintenanceSet)
@@ -30,23 +33,28 @@ func (s *Server) operationsRoutes(mux *http.ServeMux) {
 	admin("GET /api/v1/monitoring", s.handleMonitoring)
 	admin("PUT /api/v1/monitoring", s.handleMonitoringSet)
 	admin("GET /api/v1/monitoring/history", s.handleMonitoringHistory)
+	admin("GET /api/v1/monitoring/export", s.handleMonitoringExport)
+	admin("GET /api/v1/monitoring/trends", s.handleCapacityTrends)
 	admin("GET /api/v1/storage/import", s.handleImportCandidates)
-	admin("POST /api/v1/storage/import/preview", s.handleImportPreview)
-	admin("POST /api/v1/storage/import", s.handleImport)
+	heavy("POST /api/v1/storage/import/preview", s.handleImportPreview)
+	heavy("POST /api/v1/storage/import", s.handleImport)
 	admin("GET /api/v1/storage/growth", s.handleGrowth)
-	admin("POST /api/v1/storage/growth/recover", s.handleGrowthRecover)
-	admin("POST /api/v1/storage/growth/cancel", s.handleGrowthCancel)
-	admin("POST /api/v1/storage/volumes/{name}/growth/preview", s.handleGrowthPreview)
-	admin("POST /api/v1/storage/volumes/{name}/growth", s.handleGrowthStart)
+	heavy("POST /api/v1/storage/growth/recover", s.handleGrowthRecover)
+	heavy("POST /api/v1/storage/growth/cancel", s.handleGrowthCancel)
+	heavy("POST /api/v1/storage/volumes/{name}/growth/preview", s.handleGrowthPreview)
+	heavy("POST /api/v1/storage/volumes/{name}/growth", s.handleGrowthStart)
 	admin("GET /api/v1/storage/volumes/{name}/usage", s.handleVolumeUsage)
 	admin("GET /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files", s.handleSnapshotFiles)
-	admin("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/restore", s.handleSnapshotFilesRestore)
-	admin("POST /api/v1/backups/{id}/probe", s.handleBackupProbe)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/restore", s.handleSnapshotFilesRestore)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/preview", s.handleSnapshotRestorePreview)
+	heavy("POST /api/v1/backups/{id}/probe", s.handleBackupProbe)
+	admin("GET /api/v1/backups/coverage", s.handleBackupCoverage)
+	heavy("POST /api/v1/backups/{id}/applications/{step}", s.handleApplicationRestore)
 	admin("GET /api/v1/backups/application-recovery", s.handleApplicationRecovery)
 	admin("POST /api/v1/backups/application-recovery", s.handleApplicationRecover)
-	admin("POST /api/v1/vms/{name}/clone", s.handleVMClone)
+	heavy("POST /api/v1/vms/{name}/clone", s.handleVMClone)
 	admin("GET /api/v1/vm-clones/{volume}", s.handleVMClones)
-	admin("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
+	heavy("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
 	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.handleTransferForget))
 }
 func featureError(w http.ResponseWriter, err error) {
@@ -72,6 +80,9 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, j := range req.Jobs {
+		if !req.Enabled {
+			continue
+		}
 		switch j.Kind {
 		case "raid-check", "snapshot":
 			status, err := s.opts.Storage.Status(r.Context())
@@ -332,7 +343,16 @@ func (s *Server) handleApplicationRecovery(w http.ResponseWriter, r *http.Reques
 		featureError(w, errors.New("application recovery state could not be loaded; inspect the system log"))
 		return
 	}
-	writeJSON(w, 200, map[string]any{"operation": op, "active": active})
+	message := ""
+	if r.URL.Query().Get("details") == "1" {
+		review, _, err := s.opts.ApplicationBackups.Review()
+		if err != nil {
+			message = err.Error()
+		} else {
+			op = review
+		}
+	}
+	writeJSON(w, 200, map[string]any{"operation": op, "active": active, "error": message})
 }
 func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request) {
 	if s.opts.ApplicationBackups == nil {
@@ -400,7 +420,63 @@ func (s *Server) handleTransferForget(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
-	out := map[string]any{"transfers": s.opts.Files.Jobs(currentUser(r).Name)}
+	user := currentUser(r)
+	out := map[string]any{"transfers": s.opts.Files.Jobs(user.Name), "uploads": s.opts.Files.UploadTasks(user.Name)}
+	problems := []string{}
+	if s.chats != nil {
+		list, err := s.chats.List(user.Name, "")
+		if err == nil {
+			out["assistant"] = list
+		} else {
+			problems = append(problems, "assistant")
+		}
+	}
+	if s.automations != nil && s.chats != nil && s.chats.Persistent() {
+		list, err := s.automations.List(user.Name)
+		if err == nil {
+			type automationSummary struct {
+				ID      string     `json:"id"`
+				Name    string     `json:"name"`
+				Enabled bool       `json:"enabled"`
+				Pending bool       `json:"pending"`
+				Detail  string     `json:"detail,omitempty"`
+				Kind    string     `json:"kind"`
+				Next    *time.Time `json:"next,omitempty"`
+			}
+			summaries := []automationSummary{}
+			for _, a := range list {
+				item := automationSummary{ID: a.ID, Name: a.Name, Enabled: a.Enabled, Pending: a.Pending, Detail: a.Detail, Kind: a.Trigger.Kind}
+				if !a.Next.IsZero() {
+					next := a.Next
+					item.Next = &next
+				}
+				summaries = append(summaries, item)
+			}
+			out["automations"] = summaries
+		} else {
+			problems = append(problems, "automations")
+		}
+	}
+	if s.opts.ApplicationBackups != nil {
+		op, active := s.opts.ApplicationBackups.Status()
+		out["applicationRecovery"] = map[string]any{"operation": op, "active": active}
+		if op == nil && s.opts.ApplicationBackups.Busy() && !active {
+			problems = append(problems, "application-recovery")
+		}
+	}
+	if s.opts.VMs != nil && s.opts.Storage != nil {
+		clones := []vm.CloneOperation{}
+		mounted := s.opts.Storage.Mounted()
+		for _, volume := range mounted {
+			ops, err := s.opts.VMs.CloneOperations(volume, mounted)
+			if err != nil {
+				problems = append(problems, "vm-clones")
+			} else {
+				clones = append(clones, ops...)
+			}
+		}
+		out["clones"] = clones
+	}
 	if s.opts.Maintenance != nil {
 		out["maintenance"] = s.opts.Maintenance.Status()
 	}
@@ -408,7 +484,11 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 		out["backups"] = s.opts.Backup.CachedViews()
 	}
 	if s.opts.Docker != nil {
-		out["docker"] = s.opts.Docker.Status(r.Context()).Jobs
+		status := s.opts.Docker.Status(r.Context())
+		out["docker"] = status.Jobs
+		if status.Settings.Enabled && !status.Running {
+			problems = append(problems, "docker")
+		}
 	}
 	if s.opts.VMs != nil {
 		out["vms"] = s.opts.VMs.List(s.opts.Storage.Mounted())
@@ -420,7 +500,10 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 			out["growthError"] = err.Error()
 		}
 		out["diskTests"] = s.opts.Storage.Tests()
+		out["storageActive"] = s.opts.Storage.ActionsRunning()
 	}
+	slices.Sort(problems)
+	out["unavailable"] = slices.Compact(problems)
 	writeJSON(w, 200, out)
 }
 
@@ -438,19 +521,15 @@ func (s *Server) handleGrowthCancel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
-func heavyOperation(r *http.Request) bool {
-	if r.Method == http.MethodGet {
-		return false
+func (s *Server) handleSnapshotRestorePreview(w http.ResponseWriter, r *http.Request) {
+	var req storage.SnapshotRestore
+	if !readJSON(w, r, &req) {
+		return
 	}
-	p := r.URL.Path
-	if strings.HasPrefix(p, "/api/v1/storage/volumes") || p == "/api/v1/storage/import" || p == "/api/v1/storage/import/preview" || p == "/api/v1/storage/growth/recover" || p == "/api/v1/storage/growth/cancel" {
-		return true
+	out, err := s.opts.Storage.PreviewSnapshotRestore(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
+	if err != nil {
+		writeStorageError(w, r, "snapshot restore preview", err)
+		return
 	}
-	if strings.HasPrefix(p, "/api/v1/vms/") && strings.HasSuffix(p, "/clone") {
-		return true
-	}
-	if strings.HasPrefix(p, "/api/v1/backups/") && (strings.HasSuffix(p, "/run") || strings.HasSuffix(p, "/check") || strings.HasSuffix(p, "/probe") || strings.HasSuffix(p, "/restore")) {
-		return true
-	}
-	return false
+	writeJSON(w, 200, out)
 }

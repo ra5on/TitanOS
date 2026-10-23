@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,29 +23,32 @@ import (
 const settingsFile = "system/maintenance.json"
 
 type Job struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	Target     string `json:"target"`
-	Enabled    bool   `json:"enabled"`
-	Every      string `json:"every"`
-	Weekdays   []int  `json:"weekdays"`
-	MonthDay   int    `json:"monthDay"`
-	Time       string `json:"time"`
-	Missed     string `json:"missed"`
-	ReadData   int    `json:"readData"`
-	MaxBytes   uint64 `json:"maxBytes"`
-	MaxFiles   int    `json:"maxFiles"`
-	Keep       int    `json:"keep"`
-	AllowPrune bool   `json:"allowPrune"`
+	DependsOn         string `json:"dependsOn,omitempty"`
+	DependencyEnabled *bool  `json:"dependencyEnabled,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Kind              string `json:"kind"`
+	Target            string `json:"target"`
+	Enabled           bool   `json:"enabled"`
+	Every             string `json:"every"`
+	Weekdays          []int  `json:"weekdays"`
+	MonthDay          int    `json:"monthDay"`
+	Time              string `json:"time"`
+	Missed            string `json:"missed"`
+	ReadData          int    `json:"readData"`
+	MaxBytes          uint64 `json:"maxBytes"`
+	MaxFiles          int    `json:"maxFiles"`
+	Keep              int    `json:"keep"`
+	AllowPrune        bool   `json:"allowPrune"`
 }
 type Settings struct {
-	Enabled    bool   `json:"enabled"`
-	Volume     string `json:"volume"`
-	Timezone   string `json:"timezone"`
-	WindowFrom string `json:"windowFrom"`
-	WindowTo   string `json:"windowTo"`
-	Jobs       []Job  `json:"jobs"`
+	BackupsFirst bool   `json:"backupsFirst,omitempty"`
+	Enabled      bool   `json:"enabled"`
+	Volume       string `json:"volume"`
+	Timezone     string `json:"timezone"`
+	WindowFrom   string `json:"windowFrom"`
+	WindowTo     string `json:"windowTo"`
+	Jobs         []Job  `json:"jobs"`
 }
 type State struct {
 	Running     bool       `json:"running"`
@@ -68,6 +72,7 @@ type persisted struct {
 	History []Result         `json:"history"`
 }
 type View struct {
+	Wait  string     `json:"wait,omitempty"`
 	Job   Job        `json:"job"`
 	State State      `json:"state"`
 	Next  *time.Time `json:"next"`
@@ -85,6 +90,7 @@ type Manager struct {
 	Mounted      func() []string
 	Execute      func(context.Context, Job) error
 	ExternalBusy func(Job) bool
+	Conflict     func(Job) string
 	OnResult     func(Result)
 	Disabled     bool
 	mu           sync.Mutex
@@ -106,6 +112,12 @@ func (m *Manager) Load() error {
 		return nil
 	} else if err != nil {
 		return err
+	}
+	for i := range s.Jobs {
+		if value := s.Jobs[i].DependencyEnabled; value != nil {
+			s.Jobs[i].Enabled = *value
+			s.Jobs[i].DependencyEnabled = nil
+		}
 	}
 	if err := validate(s); err != nil {
 		return err
@@ -165,6 +177,20 @@ func validate(s Settings) error {
 			return errors.New("snapshot retention must be confirmed")
 		}
 	}
+	for _, j := range s.Jobs {
+		seen := map[string]bool{j.ID: true}
+		for parent := j.DependsOn; parent != ""; {
+			if seen[parent] {
+				return errors.New("maintenance dependency cycle")
+			}
+			seen[parent] = true
+			i := slices.IndexFunc(s.Jobs, func(candidate Job) bool { return candidate.ID == parent })
+			if i < 0 {
+				return errors.New("maintenance dependency is missing")
+			}
+			parent = s.Jobs[i].DependsOn
+		}
+	}
 	return nil
 }
 func (m *Manager) Set(s Settings) error {
@@ -183,7 +209,11 @@ func (m *Manager) Set(s Settings) error {
 	previous := m.Status().Settings
 	if previous.Volume != "" {
 		if err := m.loadState(); err != nil {
-			return err
+			disabled := previous
+			disabled.Enabled = false
+			if s.Enabled || !reflect.DeepEqual(s, disabled) {
+				return err
+			}
 		}
 	}
 	m.ioMu.Lock()
@@ -202,7 +232,17 @@ func (m *Manager) Set(s Settings) error {
 			return errors.New("maintenance is running")
 		}
 	}
-	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+	persistedSettings := s
+	persistedSettings.Jobs = slices.Clone(s.Jobs)
+	for i := range persistedSettings.Jobs {
+		j := &persistedSettings.Jobs[i]
+		if j.DependsOn != "" {
+			enabled := j.Enabled
+			j.DependencyEnabled = &enabled
+			j.Enabled = false
+		}
+	}
+	if err := m.store.WriteJSON(settingsFile, persistedSettings); err != nil {
 		return err
 	}
 	if m.settings.Volume != s.Volume {
@@ -241,7 +281,6 @@ func slots(j Job, now time.Time, loc *time.Location) (previous, next *time.Time)
 }
 func (m *Manager) Status() Status {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	loc, err := time.LoadLocation(m.settings.Timezone)
 	if err != nil {
 		loc = time.UTC
@@ -250,7 +289,31 @@ func (m *Manager) Status() Status {
 	out.Settings.Jobs = slices.Clone(m.settings.Jobs)
 	for _, j := range m.settings.Jobs {
 		_, next := slots(j, time.Now(), loc)
-		out.Jobs = append(out.Jobs, View{j, m.state.States[j.ID], next})
+		wait := m.dependencyWaitLocked(j, time.Now())
+		if !m.settings.Enabled || !j.Enabled {
+			wait = "disabled"
+		} else if m.state.States[j.ID].Blocked {
+			wait = "review"
+		} else if m.loadedVolume == "" {
+			wait = "volume"
+		} else if !inWindow(m.settings, time.Now()) {
+			wait = "window"
+		}
+		out.Jobs = append(out.Jobs, View{Job: j, State: m.state.States[j.ID], Next: next, Wait: wait})
+	}
+	m.mu.Unlock()
+	externalBusy := out.Settings.Enabled && len(out.Jobs) > 0 && m.ExternalBusy != nil && m.ExternalBusy(out.Jobs[0].Job)
+	for i := range out.Jobs {
+		v := &out.Jobs[i]
+		if v.Wait != "" || v.State.Running {
+			continue
+		}
+		if out.Settings.BackupsFirst && m.Conflict != nil {
+			v.Wait = m.Conflict(v.Job)
+		}
+		if v.Wait == "" && externalBusy {
+			v.Wait = "other-work"
+		}
 	}
 	return out
 }
@@ -365,6 +428,14 @@ func (m *Manager) Start(id string) error {
 	st := m.state.States[id]
 	if st.Blocked {
 		return errors.New(st.Error)
+	}
+	if reason := m.dependencyWaitLocked(job, time.Now()); reason != "" {
+		return fmt.Errorf("waiting: %s", reason)
+	}
+	if m.settings.BackupsFirst && m.Conflict != nil {
+		if reason := m.Conflict(job); reason != "" {
+			return fmt.Errorf("waiting: %s", reason)
+		}
 	}
 	if m.ExternalBusy != nil && m.ExternalBusy(job) {
 		return errors.New("waiting for other NAS work")
@@ -499,6 +570,9 @@ func (m *Manager) Tick(now time.Time) error {
 		if j.Missed == "skip" && now.Sub(*due) > time.Minute {
 			continue
 		}
+		if v.Wait != "" || (status.Settings.BackupsFirst && m.Conflict != nil && m.Conflict(j) != "") || (m.ExternalBusy != nil && m.ExternalBusy(j)) {
+			continue
+		}
 		if err := m.Start(j.ID); err != nil {
 			return err
 		}
@@ -537,4 +611,27 @@ func (m *Manager) Enter() (func(), error) {
 		return nil, errors.New("maintenance is running")
 	}
 	return m.admission.RUnlock, nil
+}
+
+// Caller holds mu. A dependency must have succeeded in its current schedule slot,
+// and no newer failed/running attempt may be hidden by an older success.
+func (m *Manager) dependencyWaitLocked(job Job, now time.Time) string {
+	if job.DependsOn == "" {
+		return ""
+	}
+	i := slices.IndexFunc(m.settings.Jobs, func(j Job) bool { return j.ID == job.DependsOn })
+	if i < 0 {
+		return "dependency"
+	}
+	parent := m.settings.Jobs[i]
+	st := m.state.States[parent.ID]
+	loc, _ := time.LoadLocation(m.settings.Timezone)
+	if loc == nil {
+		return "dependency"
+	}
+	due, _ := slots(parent, now, loc)
+	if st.Running || st.Blocked || st.Error != "" || st.LastOK == nil || (due != nil && st.LastOK.Before(*due)) || (st.LastAttempt != nil && st.LastOK.Before(*st.LastAttempt)) {
+		return "dependency"
+	}
+	return ""
 }

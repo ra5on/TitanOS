@@ -510,3 +510,14 @@ Volume-Speicherung und getrennte Kurven; Lücken verbinden sich nicht zu erfunde
 Messwerten. Mobile Ansichten stapeln; Tabellen bleiben seitlich scrollbar.
 VM-Klonen und Backup-Anwendungsauswahl ergänzen die jeweiligen vorhandenen Dialoge.
 `scripts/test-ui-operations.mjs` prüft diese Abläufe auf Desktop/Mobil, Graphit/Hell.
+
+### Abschluss und Korrekturen (0.17.0)
+
+Auftragsfilter/Ergebnisse und eigene KI-/Upload-Einträge, gemeinsame Zustände mit
+dem Dashboard, Wartegründe/Abhängigkeiten/Backup-Vorrang, historische
+Wiederanlaufdetails, CSV/JSON, Kapazitäts-/Restore-Vorschau und grafische
+Speicheranteile ergänzen den Entwurf. Sicherungsabdeckung und die geführte
+Anwendungs-Rückkopie liegen unter Einstellungen › Sicherungen. Globale
+Wartungseinstellungen und Dialogentwürfe sind getrennt. Genaue Regeln und Grenzen:
+[WORKFLOWS.md](../WORKFLOWS.md), Prüfstand [0.17.0](../releases/v0.17.0.md).
+VM-Gastagent-/Freeze-Sicherung bleibt ein eigener späterer Ausbau.
