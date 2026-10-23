@@ -676,7 +676,7 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
 	}
 	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)

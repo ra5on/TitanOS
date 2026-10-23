@@ -503,6 +503,16 @@ func (m *Manager) MountPoint(volume string) string {
 	return m.mountRoot + "/" + volume
 }
 
+// ActionsRunning includes synchronous storage work, such as restoring snapshot
+// files, which is not represented by a disk-test or background reshape job.
+func (m *Manager) ActionsRunning() bool {
+	if !m.actions.TryLock() {
+		return true
+	}
+	m.actions.Unlock()
+	return false
+}
+
 func (m *Manager) readMounts() map[string]bool {
 	if m.mounts != nil {
 		return m.mounts()

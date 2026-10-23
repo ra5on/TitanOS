@@ -46,6 +46,18 @@ func TestApplicationRecoveryFencesLifecycleAfterReload(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatal("recovery remains accessible", res.StatusCode)
 	}
+	if err := ts.store.WriteJSON("backup/application-pending.json", map[string]string{"id": "invalid"}); err != nil {
+		t.Fatal(err)
+	}
+	broken := &appbackup.Manager{Store: ts.store}
+	if err := broken.Load(); err == nil {
+		t.Fatal("invalid recovery pointer accepted")
+	}
+	ts.server.opts.ApplicationBackups = broken
+	res, _ = ts.request("GET", "/api/v1/backups/application-recovery", nil)
+	if res.StatusCode != http.StatusConflict {
+		t.Fatal("unreadable recovery state was hidden", res.StatusCode)
+	}
 }
 func TestOperationsUnavailableAndLifecycleGate(t *testing.T) {
 	ts := newTestServer(t)
