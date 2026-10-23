@@ -88,10 +88,24 @@ cp "$titand" "$release/titanos-$version-titand"
 
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
-import datetime, hashlib, json, os, tarfile, shutil
+import datetime, hashlib, json, os, tarfile, shutil, zipfile
 from pathlib import Path
 
 version, base, release, image = os.environ["VERSION"], os.environ["BASE"], os.environ["RELEASE"], os.environ["IMAGE"]
+
+# Optional integration is installed into Home Assistant, never into the NAS.
+component = Path("docs/homeassistant/custom_components/titanos")
+if component.is_dir():
+    with zipfile.ZipFile(Path(release) / f"titanos-{version}-homeassistant.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+        for source in sorted(component.rglob("*")):
+            if source.is_file() and source.suffix in (".py", ".json"):
+                content = source.read_bytes()
+                if source.name == "manifest.json":
+                    manifest = json.loads(content)
+                    manifest["version"] = version
+                    content = (json.dumps(manifest, indent=2) + "\n").encode()
+                archive.writestr("custom_components/titanos/" + source.relative_to(component).as_posix(), content)
+
 
 def sha256(path):
     digest = hashlib.sha256()

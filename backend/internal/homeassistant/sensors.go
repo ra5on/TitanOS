@@ -16,7 +16,23 @@ import (
 // titand keeps in memory anyway; publishing reads neither /config nor disks.
 
 // Snapshot is what the NAS reports, gathered by the caller.
+type BackupValues struct {
+	Known        bool
+	Name         string
+	Running      bool
+	Percent      float64
+	LastOK, Next *time.Time
+	Problem      bool
+}
+type WorkValues struct {
+	Busy   bool
+	Copies int
+	Agents int
+}
+
 type Snapshot struct {
+	Backups []BackupValues
+	Work    *WorkValues
 	Host    string
 	Version string
 	System  *SystemValues
@@ -139,6 +155,29 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 			}
 		}
 	}
+	if slices.Contains(q.Groups, "backups") {
+		for _, b := range snap.Backups {
+			k := key("backup", b.Name)
+			if b.Known {
+				add("binary_sensor", k+"_running", "Backup "+b.Name+" running", onOff(b.Running), map[string]any{"device_class": "running"})
+				add("binary_sensor", k+"_problem", "Backup "+b.Name+" problem", onOff(b.Problem), map[string]any{"device_class": "problem"})
+			}
+			if b.Running {
+				sensor(k+"_progress", "Backup "+b.Name+" progress", number(b.Percent), "%", "")
+			}
+			if b.LastOK != nil {
+				add("sensor", k+"_last_success", "Backup "+b.Name+" last success", b.LastOK.UTC().Format(time.RFC3339), map[string]any{"device_class": "timestamp"})
+			}
+			if b.Next != nil {
+				add("sensor", k+"_next", "Backup "+b.Name+" next run", b.Next.UTC().Format(time.RFC3339), map[string]any{"device_class": "timestamp"})
+			}
+		}
+	}
+	if w := snap.Work; w != nil && slices.Contains(q.Groups, "work") {
+		add("binary_sensor", "work_busy", "NAS busy", onOff(w.Busy), nil)
+		sensor("work_copies", "Account file transfers", fmt.Sprint(w.Copies), "", "")
+		sensor("work_agents", "Account active assistant tasks", fmt.Sprint(w.Agents), "", "")
+	}
 	commandTopic := func(kind, name string) string { return base + "/cmd/" + kind + "/" + key(name) }
 	for _, group := range []struct {
 		name  string
@@ -167,6 +206,11 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 		add("sensor", "ups_status", "UPS status", u.Status, nil)
 		if u.Charge != nil {
 			sensor("ups_charge", "UPS charge", number(*u.Charge), "%", "battery")
+		}
+	}
+	if slices.Contains(q.Commands, "backups") {
+		for _, b := range snap.Backups {
+			list = append(list, entity{component: "button", key: key("backup", b.Name) + "_run", kind: "backup", name: b.Name, config: map[string]any{"name": "Run backup " + b.Name, "command_topic": commandTopic("backup", b.Name), "payload_press": "run"}})
 		}
 	}
 	if slices.Contains(q.Commands, "updates") {
@@ -362,6 +406,8 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 // actions TitanOS offers count.
 func allowedCommand(q MQTT, kind, name, action string) bool {
 	switch kind {
+	case "backup":
+		return slices.Contains(q.Commands, "backups") && action == "run"
 	case "container":
 		return slices.Contains(q.Commands, "containers") && slices.Contains([]string{"start", "stop", "restart"}, action)
 	case "vm":

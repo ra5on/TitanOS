@@ -23,6 +23,15 @@ TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird b
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
 
+## Neu in 0.15.0
+
+- **KI-Arbeitsplatz:** eigene Auftragszentrale mit Prioritäten und Abhängigkeiten; persönliches Wissen, Vorlagen und Quellordner mit gezielter Inhaltssuche.
+- **Dokumente:** PDF-Text und optionale OCR, genaue Word-/Textänderungen sowie Excel-Wertzellen als neue, geprüfte Kopie.
+- **Home Assistant:** feinere Gerätefreigaben, Aliasnamen, Fähigkeiten, Zielzustandsprüfung, begrenzte Schalter-Rücknahme und Recorder-Historie. Mehr Auslöser, Bedingungen, Zeitfenster, Hysterese und Versionsverlauf für Automationen.
+- **Assist und Meldungen:** optionale native HA-Gespräche, weitere MQTT-Werte und Backup-Startknöpfe, Ersatzkanal und optionale dauerhafte Ruhezeitmeldungen, aufgabenbezogene Modelle und erweiterte Modelltests.
+
+[Funktionsumfang und Grenzen](docs/ASSISTANT-EXPANSION.md). Volles Systemupdate mit Neustart wegen PDF-/OCR-Paketen; keine energieabhängige Auftragsplanung.
+
 ## Neu in 0.14.0
 
 - **Benachrichtigungen des KI-Assistenten pro Konto:** eigene Wege (E-Mail, ntfy, Telegram, Discord, Home-Assistant-App), Meldung bei wartender Freigabe, Zusammenfassung, Ruhezeiten, Nachrichten des Agenten aus Automationen und auf Wunsch „Freigeben“/„Ablehnen“ direkt in der Benachrichtigung. Die Glocke lässt sich pro Konto filtern.

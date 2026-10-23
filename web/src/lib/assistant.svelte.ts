@@ -50,6 +50,7 @@ export type ChatSummary = { run?: AgentRun; id: string; title: string; created: 
 export type AssistantStatus = { available: boolean; enabled: boolean; model: string; web: boolean; persistent: boolean };
 export type AssistantModel = { name: string; sizeBytes: number; parameters?: string; quantization?: string; capabilities: string[]; contextLength?: number };
 export type AssistantSettings = {
+ ocr?:boolean;voiceModel?:string;documentModel?:string;planningModel?:string;
 	enabled: boolean;
 	execution?: 'confirm' | 'direct';
 	paused?: boolean;
@@ -331,7 +332,7 @@ export async function send(text: string, attachments: ChatAttachment[] = [], edi
 	if (edit !== undefined) assistant.messages.length = edit;
 	assistant.messages.push({ role: 'user', content: question, attachments, page });
 	if (!assistant.title) assistant.title = question.slice(0, 60);
-	await stream(`/assistant/chats/${assistant.chatId}/messages`, { dryRun: assistant.dryRun, text: question, page, model: chosenModel(), attachments, ...(edit !== undefined ? { edit } : {}) });
+	await stream(`/assistant/chats/${assistant.chatId}/messages`, { dryRun: assistant.dryRun, text: question, page, model: assistant.prefs.model, attachments, ...(edit !== undefined ? { edit } : {}) });
 }
 
 export async function regenerate() {

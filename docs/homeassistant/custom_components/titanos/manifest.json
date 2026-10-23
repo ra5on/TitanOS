@@ -1,0 +1,13 @@
+{
+  "domain": "titanos",
+  "name": "TitanOS",
+  "version": "0.15.0",
+  "config_flow": true,
+  "documentation": "https://github.com/ra5on/TitanOS/blob/main/docs/HOME-ASSISTANT.md",
+  "issue_tracker": "https://github.com/ra5on/TitanOS/issues",
+  "codeowners": ["@ra5on"],
+  "dependencies": ["conversation"],
+  "iot_class": "local_push",
+  "integration_type": "service",
+  "requirements": []
+}

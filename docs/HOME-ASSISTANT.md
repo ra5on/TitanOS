@@ -10,6 +10,8 @@ Seit 0.14.0 arbeitet TitanOS mit [Home Assistant](https://www.home-assistant.io/
 
 Alles ist ab Werk aus. Einrichten können es nur Besitzer und Administratoren unter **Einstellungen › Home Assistant**.
 
+Details zum [Ausbau in 0.15.0](ASSISTANT-EXPANSION.md): einzelne Dienstefreigaben und Aliasnamen, Gerätefähigkeiten, Zielzustandsprüfung, begrenzte Rücknahme, Historien, zusätzliche Automationsbedingungen und MQTT-Backupwerte.
+
 ## Verbindung
 
 1. In Home Assistant unter *Profil › Sicherheit › Langlebige Zugriffstoken* ein Token erstellen. Für Assist und für die Knöpfe der App-Benachrichtigungen muss das Profil ein **Administrator** in Home Assistant sein. Nur dann darf die Verbindung diese Ereignisse abonnieren.
@@ -73,7 +75,7 @@ Die Werte kommen alle 30 Sekunden. TitanOS fragt dafür keine Platten zusätzlic
 
 ### Knöpfe und Schalter
 
-Wahlweise und je Gruppe einzeln: Container starten, stoppen und neu starten; VMs starten und herunterfahren; nach Updates suchen; das NAS neu starten oder herunterfahren.
+Wahlweise und je Gruppe einzeln: Container starten, stoppen und neu starten; VMs starten und herunterfahren; eingerichtete Backup-Aufträge starten; nach Updates suchen; das NAS neu starten oder herunterfahren.
 
 - Die Knöpfe handeln im Namen des Kontos, das unter **Konto für Home Assistant** gewählt ist. Es gelten dessen Rechte, und jeder Druck steht im Protokoll. Ohne gewähltes Konto legt TitanOS keine Knöpfe an.
 - Neustart und Herunterfahren lehnt TitanOS ab, solange kopiert, gesichert, geprüft oder ein Volume wiederhergestellt wird, und meldet das.
@@ -87,6 +89,32 @@ Für Wake-on-LAN aus Home Assistant zeigt *Einstellungen › Energie* die MAC-Ad
 2. In Home Assistant die Blueprint [`titanos-assist.yaml`](homeassistant/titanos-assist.yaml) importieren: *Einstellungen › Automationen & Szenen › Blueprints › Blueprint importieren*, mit der Adresse der Datei auf GitHub. Danach daraus eine Automation anlegen.
 
 Die Blueprint feuert `titanos_ask` mit einer Kennung und der Frage. TitanOS beantwortet die Frage als das gewählte Konto in einem eigenen Chat und feuert `titanos_answer`. Braucht eine Änderung eine Freigabe, antwortet TitanOS „Dafür brauche ich deine Freigabe in TitanOS“ und schickt, wenn eingerichtet, die Benachrichtigung mit den Knöpfen.
+
+## Native Assist-Integration (optional)
+
+Die Blueprint bleibt verwendbar. Für Gespräche mit Rückfragen:
+
+1. `titanos-0.15.0-homeassistant.zip` aus dem Release entpacken und den Ordner
+   `custom_components/titanos` in das Konfigurationsverzeichnis von Home Assistant
+   kopieren. Alternativ die Dateien aus [custom_components/titanos](homeassistant/custom_components/titanos) verwenden.
+2. Home Assistant neu starten. Unter *Einstellungen › Geräte & Dienste ›
+   Integration hinzufügen* **TitanOS** wählen.
+3. Die NAS-Kennung aus *TitanOS › Einstellungen › Home Assistant* eintragen.
+   Diese Kennung ist kein Geheimnis. Verbindung, HA-Konto und Assist-Freigabe in
+   TitanOS müssen bereits eingerichtet sein.
+4. In der Assist-Sprachpipeline **TitanOS** als Gesprächsagent auswählen.
+
+Die Integration sendet Fragen über den HA-Ereignisbus und wartet auf die Antwort
+mit passender Request- und NAS-Kennung. Gesprächszusammenhang bleibt im NAS-Chat;
+keine separate Modellverbindung und kein NAS-Passwort in Home Assistant. Nach
+30 Minuten ohne Verwendung oder einem titand-Neustart beginnt ein neues Gespräch.
+Freigaben erfolgen über die bestehenden NAS-Karten bzw. persönliche Meldungen.
+Lange Aufträge laufen im NAS weiter; ihre Ergebnismeldungen werden in *Mein Konto*
+eingerichtet. Doppelte Ereignisse lösen innerhalb des RAM-Zeitfensters keine
+zweite Ausführung aus.
+
+Die Integration ist mit der aktuellen Conversation-Entity-Schnittstelle
+implementiert, aber noch nicht in einer echten HA-Installation abgenommen.
 
 ## Prüfstand
 

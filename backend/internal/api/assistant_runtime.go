@@ -29,6 +29,10 @@ type agentEvent struct {
 	data any
 }
 type agentJob struct {
+	priority int
+	queuedAt time.Time
+	eligible bool
+	started  bool
 	cancel   context.CancelFunc
 	done     chan struct{}
 	events   chan agentEvent
@@ -53,7 +57,7 @@ var errAgentWaiting = assistant.ErrWaiting
 
 func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page string, release func()) *agentJob {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), agentIdentity{}, user.Name))
-	j := &agentJob{cancel: cancel, done: make(chan struct{}), events: make(chan agentEvent, 256)}
+	j := &agentJob{priority: chat.Priority, queuedAt: time.Now(), cancel: cancel, done: make(chan struct{}), events: make(chan agentEvent, 256)}
 	key := user.Name + "/" + chat.ID
 	s.agentMu.Lock()
 	s.agentJobs[key] = j
@@ -86,15 +90,32 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			j.emit("problem", map[string]string{"code": "internal", "detail": err.Error()})
 			return
 		}
-		select {
-		case s.agentSlots <- struct{}{}:
-			defer func() { <-s.agentSlots }()
-		case <-ctx.Done():
+		acquired := false
+		for ctx.Err() == nil && !acquired {
+			ready, detail := s.dependenciesReady(user.Name, chat)
+			j.mu.Lock()
+			j.eligible = ready
+			j.mu.Unlock()
+			if chat.Run.Detail != detail {
+				chat.Run.Detail = detail
+				if err := save(chat); err != nil {
+					return
+				}
+			}
+			acquired = s.claimAgent(key, j)
+			if !acquired {
+				select {
+				case <-ctx.Done():
+				case <-time.After(time.Second):
+				}
+			}
+		}
+		if !acquired {
 			j.mu.Lock()
 			control := j.control
 			j.mu.Unlock()
 			chat.Run.State = "paused"
-			if control == "restart" {
+			if control == "restart" || control == "requeue" {
 				chat.Run.State = "queued"
 			} else if control == "stop" {
 				chat.Run.State = "stopped"
@@ -103,6 +124,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			_ = save(chat)
 			return
 		}
+		defer func() { <-s.agentSlots }()
 		request, _ := http.NewRequestWithContext(ctx, "GET", "/api/v1/assistant", nil)
 		before := func(ctx context.Context, c *assistant.Chat) error {
 			if err := ctx.Err(); err != nil {
@@ -182,7 +204,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 						cancel()
 					}
 				},
-				Person: assistant.Person{Name: user.Name, Role: string(user.Role)}, Model: model, Page: page, Web: s.assistantWeb(user),
+				Person: assistant.Person{Name: user.Name, Role: string(user.Role), Knowledge: s.personalKnowledge(user)}, Model: model, Page: page, Web: s.assistantWeb(user),
 				Tools: s.agentTools(user, request, chat, save), Save: save, Before: before, Execute: execute,
 				Extra: fmt.Sprintf("TitanOS version %s. Job %s. Dry run: %v. Background execution; browser availability is irrelevant. Original user instructions remain binding.", s.opts.Version, chat.ID, chat.DryRun),
 				Emit: func(e assistant.Event) {
@@ -550,12 +572,19 @@ func (s *Server) RunAssistant(ctx context.Context) {
 	tick := time.NewTicker(15 * time.Second)
 	defer tick.Stop()
 	scan := func() {
+		users := s.opts.Users.List()
+		if s.opts.Notify != nil {
+			names := make([]string, 0, len(users))
+			for _, u := range users {
+				names = append(names, u.Name)
+			}
+			s.opts.Notify.ResumePersonal(names)
+		}
 		settings := s.opts.Assistant.Settings()
 		if !settings.Enabled || settings.Paused {
 			s.watchHomeAssistant(nil)
 			return
 		}
-		users := s.opts.Users.List()
 		s.watchHomeAssistant(users)
 		for _, user := range users {
 			if !s.assistantAllowed(user) {

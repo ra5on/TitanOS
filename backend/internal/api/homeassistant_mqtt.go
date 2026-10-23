@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
 
@@ -89,6 +90,30 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			snap.UPS = values
 		}
 	}
+	if s.opts.Backup != nil {
+		for _, b := range s.opts.Backup.CachedViews() {
+			snap.Backups = append(snap.Backups, homeassistant.BackupValues{Known: b.StateKnown, Name: b.Job.ID, Running: b.State.Running, Percent: b.State.Percent, LastOK: b.State.LastOK, Next: b.Next, Problem: b.State.LastError != "" || b.State.Warning != ""})
+		}
+	}
+	settings, _ := s.opts.HomeAssistant.Settings()
+	if user, ok := s.opts.Users.Get(settings.Account); ok && user.Role.CanAdminister() {
+		work := &homeassistant.WorkValues{Busy: s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() || s.storageBusy(ctx)}
+		if s.opts.Files != nil {
+			for _, job := range s.opts.Files.Jobs(user.Name) {
+				if job.State == files.JobRunning {
+					work.Copies++
+				}
+			}
+		}
+		s.agentMu.Lock()
+		for key := range s.agentJobs {
+			if strings.HasPrefix(key, user.Name+"/") {
+				work.Agents++
+			}
+		}
+		s.agentMu.Unlock()
+		snap.Work = work
+	}
 	return snap
 }
 
@@ -104,6 +129,11 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 	var method, route string
 	var body any
 	switch kind {
+	case "backup":
+		if action != "run" || s.opts.Backup == nil {
+			return fmt.Errorf("unknown backup command")
+		}
+		method, route = http.MethodPost, "/api/v1/backups/"+url.PathEscape(name)+"/run"
 	case "container":
 		id := ""
 		for _, c := range s.opts.Docker.Status(ctx).Containers {

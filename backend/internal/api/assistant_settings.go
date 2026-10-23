@@ -18,22 +18,28 @@ import (
 func (s *Server) handleAgentPrompt(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	usage, _ := s.chats.Usage(u.Name)
-	writeJSON(w, http.StatusOK, map[string]any{"historyBytes": usage, "persistent": s.chats.Persistent(), "defaultPrompt": assistant.DefaultSystemPrompt, "version": assistant.PromptVersion, "context": s.opts.Assistant.ContextPreview(assistant.Person{Name: u.Name, Role: string(u.Role)}, ""), "nasVersion": s.opts.Version})
+	writeJSON(w, http.StatusOK, map[string]any{"historyBytes": usage, "persistent": s.chats.Persistent(), "defaultPrompt": assistant.DefaultSystemPrompt, "version": assistant.PromptVersion, "context": s.opts.Assistant.ContextPreview(assistant.Person{Name: u.Name, Role: string(u.Role), Knowledge: s.personalKnowledge(u)}, ""), "nasVersion": s.opts.Version})
 }
 func (s *Server) handleAgentProbe(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Settings assistant.Settings `json:"settings"`
 		Question string             `json:"question"`
+		Scenario string             `json:"scenario"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
-	result, err := s.opts.Assistant.Probe(ctx, req.Settings, req.Question)
+	result, err := s.opts.Assistant.ProbeScenario(ctx, req.Settings, req.Question, req.Scenario)
 	if err != nil {
 		writeAssistantError(w, err)
 		return
+	}
+	// Explicitly requested test reports are saved as reports, never facts in a prompt.
+	if data, e := json.Marshal(result); e == nil && len(data) <= 8000 {
+		_, saveErr := s.knowledge.Put(currentUser(r).Name, assistant.KnowledgeEntry{Kind: "model_test", Title: req.Settings.Model + " · " + req.Scenario, Content: string(data), Origin: "synthetic model test"})
+		result["saved"] = saveErr == nil
 	}
 	writeJSON(w, http.StatusOK, result)
 }

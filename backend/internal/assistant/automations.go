@@ -3,8 +3,10 @@ package assistant
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,17 +17,18 @@ import (
 // Automations are account-owned durable definitions and dispatch records on a
 // data volume. They never fall back to RAM or write the boot stick on a tick.
 type Trigger struct {
-	Kind     string    `json:"kind"` // once, interval, daily, weekly, event
-	At       time.Time `json:"at,omitempty"`
-	Minutes  int       `json:"minutes,omitempty"`
-	Time     string    `json:"time,omitempty"`
-	Timezone string    `json:"timezone,omitempty"`
-	Weekday  int       `json:"weekday,omitempty"`
-	Event    string    `json:"event,omitempty"`  // notification, usb, volume, files, homeassistant
-	Target   string    `json:"target,omitempty"` // notification kind, USB UUID, volume name, entity ID
-	Root     string    `json:"root,omitempty"`
-	Path     string    `json:"path,omitempty"`
-	Percent  int       `json:"percent,omitempty"`
+	Hysteresis float64   `json:"hysteresis,omitempty"`
+	Kind       string    `json:"kind"` // once, interval, daily, weekly, event
+	At         time.Time `json:"at,omitempty"`
+	Minutes    int       `json:"minutes,omitempty"`
+	Time       string    `json:"time,omitempty"`
+	Timezone   string    `json:"timezone,omitempty"`
+	Weekday    int       `json:"weekday,omitempty"`
+	Event      string    `json:"event,omitempty"`  // notification, usb, volume, files, homeassistant
+	Target     string    `json:"target,omitempty"` // notification kind, USB UUID, volume name, entity ID
+	Root       string    `json:"root,omitempty"`
+	Path       string    `json:"path,omitempty"`
+	Percent    int       `json:"percent,omitempty"`
 	// From, To, Above and Below narrow a Home Assistant state change.
 	From  string   `json:"from,omitempty"`
 	To    string   `json:"to,omitempty"`
@@ -33,8 +36,11 @@ type Trigger struct {
 	Below *float64 `json:"below,omitempty"`
 }
 type Conditions struct {
-	Volume    string `json:"volume,omitempty"`
-	NoRebuild bool   `json:"noRebuild,omitempty"`
+	States    []StateCondition `json:"states,omitempty"`
+	AnyState  bool             `json:"anyState,omitempty"`
+	Window    *TimeWindow      `json:"window,omitempty"`
+	Volume    string           `json:"volume,omitempty"`
+	NoRebuild bool             `json:"noRebuild,omitempty"`
 }
 type AutomationRun struct {
 	Instruction string    `json:"instruction,omitempty"`
@@ -46,25 +52,36 @@ type AutomationRun struct {
 	State       string    `json:"state"`
 	Detail      string    `json:"detail,omitempty"`
 }
+type EventCursor struct {
+	Mark    string `json:"mark"`
+	Ready   bool   `json:"ready"`
+	Latched bool   `json:"latched"`
+}
+
 type Automation struct {
-	ID         string          `json:"id"`
-	Revision   int             `json:"revision"`
-	Name       string          `json:"name"`
-	Prompt     string          `json:"prompt"`
-	Enabled    bool            `json:"enabled"`
-	Trigger    Trigger         `json:"trigger"`
-	Conditions Conditions      `json:"conditions"`
-	Execution  string          `json:"execution"` // inherit, confirm, direct
-	Notify     string          `json:"notify"`    // errors, always, never
-	CatchUp    string          `json:"catchUp"`   // latest or skip
-	Overlap    string          `json:"overlap"`   // skip or queue
-	Next       time.Time       `json:"next,omitempty"`
-	LastEvent  string          `json:"lastEvent,omitempty"`
-	EventReady bool            `json:"eventReady,omitempty"`
-	LastStart  time.Time       `json:"lastStart,omitempty"`
-	Pending    bool            `json:"pending,omitempty"`
-	Detail     string          `json:"detail,omitempty"`
-	Runs       []AutomationRun `json:"runs"`
+	ExtraTriggers   []Trigger              `json:"extraTriggers,omitempty"`
+	ExtraEvents     map[string]EventCursor `json:"extraEvents,omitempty"`
+	Latched         bool                   `json:"latched,omitempty"`
+	CooldownSeconds int                    `json:"cooldownSeconds,omitempty"`
+	Versions        []AutomationDefinition `json:"versions,omitempty"`
+	ID              string                 `json:"id"`
+	Revision        int                    `json:"revision"`
+	Name            string                 `json:"name"`
+	Prompt          string                 `json:"prompt"`
+	Enabled         bool                   `json:"enabled"`
+	Trigger         Trigger                `json:"trigger"`
+	Conditions      Conditions             `json:"conditions"`
+	Execution       string                 `json:"execution"` // inherit, confirm, direct
+	Notify          string                 `json:"notify"`    // errors, always, never
+	CatchUp         string                 `json:"catchUp"`   // latest or skip
+	Overlap         string                 `json:"overlap"`   // skip or queue
+	Next            time.Time              `json:"next,omitempty"`
+	LastEvent       string                 `json:"lastEvent,omitempty"`
+	EventReady      bool                   `json:"eventReady,omitempty"`
+	LastStart       time.Time              `json:"lastStart,omitempty"`
+	Pending         bool                   `json:"pending,omitempty"`
+	Detail          string                 `json:"detail,omitempty"`
+	Runs            []AutomationRun        `json:"runs"`
 }
 
 func (a *Automation) Validate(now time.Time) error {
@@ -86,7 +103,33 @@ func (a *Automation) Validate(now time.Time) error {
 	if !slices.Contains([]string{"inherit", "confirm", "direct"}, a.Execution) || !slices.Contains([]string{"errors", "always", "never"}, a.Notify) || !slices.Contains([]string{"latest", "skip"}, a.CatchUp) || !slices.Contains([]string{"skip", "queue"}, a.Overlap) {
 		return ErrInvalid
 	}
+	if err := a.Conditions.Validate(); err != nil {
+		return err
+	}
+	if a.CooldownSeconds < 0 || a.CooldownSeconds > 604800 {
+		return ErrInvalid
+	}
+	if len(a.ExtraTriggers) > 10 {
+		return ErrInvalid
+	}
+	for _, trigger := range a.ExtraTriggers {
+		if trigger.Kind != "event" {
+			return ErrInvalid
+		}
+		copy := *a
+		copy.ExtraTriggers = nil
+		copy.Trigger = trigger
+		if err := copy.Validate(now); err != nil {
+			return err
+		}
+	}
 	t := a.Trigger
+	if math.IsNaN(t.Hysteresis) || math.IsInf(t.Hysteresis, 0) || t.Hysteresis < 0 || t.Hysteresis > 1e9 {
+		return ErrInvalid
+	}
+	if t.Hysteresis > 0 && (t.Event != "homeassistant" || (t.Above == nil) == (t.Below == nil)) {
+		return ErrInvalid
+	}
 	switch t.Kind {
 	case "once":
 		if t.At.IsZero() {
@@ -251,6 +294,9 @@ func (s *Automations) Put(user string, a Automation, now time.Time) (Automation,
 			a.Detail = ""
 			a.ID = newID()
 			a.Revision = 1
+			a.Versions = nil
+			a.ExtraEvents = nil
+			a.Latched = false
 			a.Runs = []AutomationRun{}
 			a.Next = a.Trigger.NextAfter(now)
 			if a.Trigger.Kind == "once" {
@@ -265,6 +311,10 @@ func (s *Automations) Put(user string, a Automation, now time.Time) (Automation,
 					return fmt.Errorf("%w: automation changed; reload before editing", ErrInvalid)
 				}
 				a.Revision++
+				a.Versions = append(old.Versions, old.Definition())
+				if len(a.Versions) > 5 {
+					a.Versions = a.Versions[len(a.Versions)-5:]
+				}
 				a.Runs = old.Runs
 				a.LastStart = old.LastStart
 				a.Next = old.Next
@@ -272,8 +322,12 @@ func (s *Automations) Put(user string, a Automation, now time.Time) (Automation,
 				a.EventReady = old.EventReady
 				a.Pending = old.Pending
 				a.Detail = old.Detail
-				if old.Trigger != a.Trigger || !old.Enabled && a.Enabled {
+				a.ExtraEvents = old.ExtraEvents
+				a.Latched = old.Latched
+				if !reflect.DeepEqual(old.Trigger, a.Trigger) || !reflect.DeepEqual(old.ExtraTriggers, a.ExtraTriggers) || !old.Enabled && a.Enabled {
 					a.Next = a.Trigger.NextAfter(now)
+					a.ExtraEvents = nil
+					a.Latched = false
 					a.LastEvent = ""
 					a.EventReady = false
 					a.Pending = false
