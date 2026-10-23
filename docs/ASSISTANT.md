@@ -215,3 +215,56 @@ Volume-Verlust und Abbruch eines wartenden Modells beim Einstellungswechsel.
 Browserprüfungen verwenden API-Fixtures auf Desktop/Mobil. Kein Nachweis für
 jedes reale Ollama-Modell oder echte Hardware; insbesondere der konkrete
 `gpt-oss:20b`-Betrieb des Projektinhabers bleibt ein gesonderter Abnahmetest.
+
+## Benachrichtigungen, Home Assistant und Statistik (0.14.0)
+
+### Persönliche Benachrichtigungen
+
+Jedes Konto richtet unter *Mein Konto › Meine Benachrichtigungen* eigene Wege ein. Die Einstellungen liegen in `/config/users/<konto>/notify.json`.
+
+- **Wege:** E-Mail über den gemeinsamen Mailserver an die eigene Adresse, ntfy, Telegram, Discord und die Home-Assistant-App.
+- **Ereignisse:**
+  - `confirmation`: ein Auftrag wartet auf eine Freigabe
+  - `done`: ein Auftrag ist fertig
+  - `blocked`: ein Auftrag kommt nicht weiter
+  - `agent`: Nachricht über das Werkzeug `notify_me`
+- **Inhalt:** `summary` (bis 300 Zeichen der letzten Antwort bzw. der Begründung der wartenden Aktion) oder `none`. Anhänge und Werkzeugdaten stehen nie in einer Nachricht.
+- **Ruhezeit:** Nachrichten werden im RAM zurückgehalten und danach gesammelt geschickt; Fehler und Nachrichten mit `priority: high` kommen sofort.
+- **Einmal je Ereignis:** Je Auftrag, Ereignis und Aktion geht höchstens eine Nachricht hinaus.
+- Bei Automationen gilt ihre Einstellung: `errors` meldet `blocked` und `confirmation`, `always` alles, `never` nichts.
+
+Der gemeinsame Admin-Kanal bleibt wie bisher ohne Chatinhalte.
+
+`notify_me` schreibt nur an den Besitzer des Chats. Es gilt höchstens eine Nachricht pro Minute und 20 pro Stunde. Im Probelauf geht nichts hinaus. Das Werkzeug wird nur angeboten, wenn das Konto einen Weg eingerichtet und das Ereignis `agent` eingeschaltet hat. Es ist keine Aktion und braucht keine Bestätigung, weil es am NAS nichts ändert.
+
+### Freigeben aus Benachrichtigungen
+
+Die Einstellung `pushApproval` ist ab Werk aus. Ist sie an, tragen Nachrichten über wartende Aktionen Knöpfe:
+
+- **ntfy:** `http`-Aktionen, die `POST /api/v1/assistant/push/{token}/{approve|reject}` aufrufen.
+- **Home-Assistant-App:** Aktionen `TITANOS_APPROVE_<token>` und `TITANOS_REJECT_<token>`. Die App meldet sie als `mobile_app_notification_action` über die WebSocket-Verbindung.
+
+Das Token hat 256 Bit, liegt nur im RAM, gilt einmal und 15 Minuten lang und ist an Konto, Chat und Aktion gebunden. Danach geht die Freigabe denselben Weg wie in der Oberfläche. Rechte, Zustand und Stufe werden dabei neu geprüft. Aktionen der Stufe `destroy` bekommen nie Knöpfe.
+
+Wer die Nachricht lesen kann, kann damit freigeben. Ein ntfy-Thema sollte deshalb geschützt sein.
+
+### Home Assistant
+
+Der Bereich `home` ist ab Werk aus und steht nur Besitzern und Administratoren zur Verfügung.
+
+- `ha_entities` und `ha_state` lesen freigegebene Entitäten. Ihre Antworten gelten als nicht vertrauenswürdig.
+- Die Aktion `ha_call` geht über `POST /api/v1/homeassistant/call`.
+- Automationen können auf Zustandswechsel freigegebener Entitäten reagieren (Ereignis `homeassistant` mit `to`, `from`, `above`, `below`).
+- Assist-Fragen laufen als Chat des in den Home-Assistant-Einstellungen gewählten Kontos.
+
+Einzelheiten stehen in [HOME-ASSISTANT.md](HOME-ASSISTANT.md).
+
+### Statistik, Vorlagen, Dashboard
+
+- **`stats`** je Chat: Runden, gelesene (`prompt`) und geschriebene (`generated`) Token aus dem letzten Ollama-Chunk, Modell- und Werkzeugzeit. Die Felder stehen unter dem Chat und im Metadatenexport.
+- **Vorlagen** füllen im Automationseditor nur das Formular aus. Die Vorlage für die USB-Kopie läuft mit Bestätigung.
+- **Dashboard-Kachel „KI-Assistent“:** die letzten fünf eigenen Aufträge und die nächsten drei Automationen.
+
+### Prüfgrenzen
+
+Geprüft mit nachgebautem Ollama, ntfy, Home Assistant (REST und WebSocket) und MQTT-Broker. Nicht geprüft sind echte Smartphones, Apps, ein echtes Home Assistant und ein echter Broker.

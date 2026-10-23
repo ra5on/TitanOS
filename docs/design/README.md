@@ -452,3 +452,23 @@ Bedingungen und Verhalten bei verpassten/überlappenden Läufen aufklappbar.
 Pausieren betrifft den Zeitplan; bereits gestartete Aufträge im Chat steuern.
 Löschen erhält die Chats. Aktive Chat-Anzeige zeigt die tatsächliche Laufphase
 statt ausschließlich „Gedanken“. Keine Änderung der Docker-Oberfläche.
+
+### Benachrichtigungen, Home Assistant, Energie (0.14.0)
+
+Vom Projektinhaber freigegeben, ohne eigene Entwurfsseite. Alle Teile nutzen die vorhandenen Kachel-, Formular- und Dialogmuster.
+
+- **Mein Konto** bekommt die Kacheln „Meine Benachrichtigungen“ und „Glocke“ (nur für Besitzer und Administratoren). Der Aufbau folgt *Einstellungen › Benachrichtigungen*:
+  - Wege untereinander, getrennt durch eine Linie, jeweils mit „Testnachricht“.
+  - Ereignisse als Häkchen.
+  - Geheimnisse nur als „gespeichert“.
+- Die **Glocke** zeigt „N ausgeblendet – Filter ändern“ als Link auf `/account#bell`.
+- **Einstellungen › Home Assistant** hat die Kacheln Verbindung, Freigaben, Konto und Sensoren (MQTT):
+  - Domänen als Raster mit einem Chip für die Stufe.
+  - Geräte erst nach „Geräte laden“, mit Suche und höchstens 200 Zeilen.
+  - Warnungen zu Knöpfen stehen direkt bei den Häkchen.
+- **Energie:** Kachel „Zeitplan und Wake-on-LAN“ mit Wochentagsknöpfen (Montag zuerst), dem nächsten Termin und den Anschlüssen samt MAC-Adresse.
+- **Sicherungen:**
+  - Knopf „Prüfen“ mit einem kleinen Dialog für den Umfang.
+  - Im Wiederherstellen-Dialog die Wahl „Ganzer Stand“ oder „Einzelne Dateien“; Letzteres öffnet einen Ordnerbrowser mit Häkchen.
+- **Automationseditor:** Auswahl „Aus Vorlage“ beim Anlegen und das Ereignis „Home Assistant“ mit Geräteauswahl und optionalen Filtern.
+- **Chat:** Statistikzeile unter dem letzten Eintrag, wenn kein Auftrag läuft.
