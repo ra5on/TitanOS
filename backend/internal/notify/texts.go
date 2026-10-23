@@ -76,7 +76,9 @@ var texts = map[string]map[string][2]string{
 }
 
 // Wording returns title and text of an event in a language.
-func Wording(language, kind, subject string) (string, string) { return wording(language, kind, subject) }
+func Wording(language, kind, subject string) (string, string) {
+	return wording(language, kind, subject)
+}
 
 // wording returns title and text of an event in a language.
 func wording(language, kind, subject string) (string, string) {
