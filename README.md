@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.16.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0)** · Veröffentlicht am 23. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.16.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.16.1)** · Veröffentlicht am 23. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -22,6 +22,11 @@ Die Screenshots zeigen die Weboberfläche von **0.7.2** (VMs), **0.7.1** (Dateim
 TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
+
+## Neu in 0.16.1
+
+- **Transparente App-Symbole:** keine eingefärbten Flächen hinter den Icons im App-Katalog und Installationspanel. Fehlende Bilder zeigen weiterhin lesbare Namenskürzel im hellen und dunklen Theme.
+- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen und Prüfstand](docs/releases/v0.16.1.md).
 
 ## Neu in 0.16.0
 
