@@ -183,7 +183,7 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
    Ein App-Update gibt es da noch nicht.
 2. **Updater:** Manifest-Feld `app`, Laden in `app/`, `state.json`, Probe und Rückfall, Meldungen, Oberfläche. Go-Tests mit nachgebautem Release-Server wie bei den heutigen Updates.
 3. **CI:** Basis bestimmen, erlaubte Änderungen prüfen, Abbild neu packen, QEMU-Szenarien, Plugins übernehmen, Prüflauf für Debian-Pakete.
-4. **Doku:** `RELEASING.md`, Release-Notizen mit der Art des Updates, `CLAUDE.md` (Abschnitt „Updates über GitHub“).
+4. **Doku:** `RELEASING.md`, Release-Notizen mit der Art des Updates, `AGENTS.md` (Abschnitt „Build, Releases und Updates“).
 5. **Abnahme:** in QEMU wie beim Beta-Update am 14. Oktober 2026, danach auf echter Hardware.
 
 ## Entscheidungen (21. Oktober 2026)
