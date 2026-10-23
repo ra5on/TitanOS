@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,14 @@ func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error 
 	if err := a.Validate(time.Now()); err != nil {
 		return err
 	}
+	for _, trigger := range a.ExtraTriggers {
+		copy := *a
+		copy.ExtraTriggers = nil
+		copy.Trigger = trigger
+		if err := s.validateAutomation(u, &copy); err != nil {
+			return err
+		}
+	}
 	// Disabling a definition must work even after its volume disappeared or
 	// access was revoked. Dispatch always validates an enabled copy below.
 	if !a.Enabled {
@@ -33,6 +43,16 @@ func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error 
 	if a.Conditions.Volume != "" || a.Conditions.NoRebuild || a.Trigger.Kind == "event" && a.Trigger.Event != "files" {
 		if !u.Role.CanAdminister() {
 			return assistant.ErrInvalid
+		}
+	}
+	if len(a.Conditions.States) > 0 {
+		if !u.Role.CanAdminister() || s.opts.Assistant.Settings().Access(assistant.AreaHome) == assistant.AccessOff || s.opts.HomeAssistant == nil {
+			return homeassistant.ErrNotAllowed
+		}
+		for _, condition := range a.Conditions.States {
+			if !s.opts.HomeAssistant.Allowed(condition.Entity) {
+				return homeassistant.ErrNotAllowed
+			}
 		}
 	}
 	if a.Trigger.Kind == "event" {
@@ -111,9 +131,14 @@ func (s *Server) automationTools(u auth.User) []assistant.Tool {
 	definition := schema(map[string]any{
 		"id": str("Existing ID for editing; omit to create."), "revision": map[string]any{"type": "integer"}, "name": str("Name"), "prompt": str("Complete user-authorized instruction. Use existing exact targets; do not create unrelated resources."), "enabled": map[string]any{"type": "boolean"},
 		"execution": enum("Execution policy", "inherit", "confirm", "direct"), "notify": enum("Administrator notifications (private results remain in chat)", "errors", "always", "never"), "catchUp": enum("Missed schedule: latest within 24h, or skip", "latest", "skip"), "overlap": enum("While previous run is open", "skip", "queue"),
-		"conditions": schema(map[string]any{"volume": str("Required mounted volume name"), "noRebuild": map[string]any{"type": "boolean"}}),
-		"trigger":    schema(map[string]any{"kind": enum("Trigger type", "once", "interval", "daily", "weekly", "event"), "at": str("RFC3339 date for once"), "minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 525600}, "time": str("HH:MM for daily/weekly"), "timezone": str("IANA timezone, e.g. Europe/Berlin"), "weekday": map[string]any{"type": "integer", "minimum": 0, "maximum": 6, "description": "Sunday=0"}, "event": enum("Event type", "notification", "usb", "volume", "files", "homeassistant"), "target": str("Notification kind, USB filesystem UUID, volume name or Home Assistant entity ID (released ones from ha_entities)"), "from": str("Home Assistant: only changes from this state"), "to": str("Home Assistant: only changes to this state, e.g. not_home"), "above": map[string]any{"type": "number", "description": "Home Assistant: numeric state rises above this"}, "below": map[string]any{"type": "number", "description": "Home Assistant: numeric state falls below this"}, "root": str("Exact accessible root for folder changes"), "path": str("Relative folder (non-recursive)"), "percent": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "kind"),
+		"cooldownSeconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 604800},
+		"conditions":      schema(map[string]any{"volume": str("Required mounted volume name"), "noRebuild": map[string]any{"type": "boolean"}, "anyState": map[string]any{"type": "boolean"}, "states": map[string]any{"type": "array", "maxItems": 20, "items": schema(map[string]any{"entity": str("Released entity ID"), "operator": enum("Comparison", "eq", "neq", "above", "below", "available"), "value": str("Expected state or number"), "forSeconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 604800, "description": "Require an unchanged state for this duration"}}, "entity", "operator")}, "window": schema(map[string]any{"start": str("HH:MM inclusive"), "end": str("HH:MM exclusive"), "timezone": str("IANA timezone"), "weekdays": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0, "maximum": 6}}}, "start", "end", "timezone")}),
+		"trigger":         schema(map[string]any{"kind": enum("Trigger type", "once", "interval", "daily", "weekly", "event"), "at": str("RFC3339 date for once"), "minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 525600}, "time": str("HH:MM for daily/weekly"), "timezone": str("IANA timezone, e.g. Europe/Berlin"), "weekday": map[string]any{"type": "integer", "minimum": 0, "maximum": 6, "description": "Sunday=0"}, "event": enum("Event type", "notification", "usb", "volume", "files", "homeassistant"), "target": str("Notification kind, USB filesystem UUID, volume name or Home Assistant entity ID (released ones from ha_entities)"), "from": str("Home Assistant: only changes from this state"), "to": str("Home Assistant: only changes to this state, e.g. not_home"), "above": map[string]any{"type": "number", "description": "Home Assistant: numeric state rises above this"}, "below": map[string]any{"type": "number", "description": "Home Assistant: numeric state falls below this"}, "root": str("Exact accessible root for folder changes"), "path": str("Relative folder (non-recursive)"), "percent": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "kind"),
 	}, "name", "prompt", "enabled", "trigger")
+	properties := definition["properties"].(map[string]any)
+	triggerSchema := properties["trigger"].(map[string]any)
+	triggerSchema["properties"].(map[string]any)["hysteresis"] = map[string]any{"type": "number", "minimum": 0, "maximum": 1e9, "description": "Rearm distance for a single numeric HA threshold"}
+	properties["extraTriggers"] = map[string]any{"type": "array", "maxItems": 10, "items": triggerSchema, "description": "Additional event triggers (kind must be event); any trigger can start the task"}
 	return []assistant.Tool{
 		reading("automation_list", "List this account's saved automations, next starts and run history. No access to other accounts.", nil, false, noArgs(func(ctx context.Context) (any, error) { return s.automations.List(u.Name) })),
 		actionTool("automation_save", "Create or edit a persistent automation ONLY when the person requests recurring/scheduled/event work. Read automation_list before editing and preserve its revision. Pausing sets enabled=false; duplication omits id and revision.", map[string]any{"automation": definition}, []string{"automation"}, func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
@@ -168,7 +193,7 @@ func (s *Server) automationCard(u auth.User, args json.RawMessage, method, suffi
 
 // Snapshot event sources without an LLM. No recursive indexing, /config polling
 // or event instructions from files. Initial observations establish a baseline.
-func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.Trigger, last string) (string, bool, error) {
+func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.Trigger, last string, latch ...*bool) (string, bool, error) {
 	switch t.Event {
 	case "homeassistant":
 		ha := s.opts.HomeAssistant
@@ -184,10 +209,33 @@ func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.T
 		if newest < last {
 			newest = last
 		}
+		matched := false
 		for _, tr := range since {
-			if homeassistant.Match(tr, t.From, t.To, t.Above, t.Below) {
-				return newest, true, nil
+			if t.Hysteresis > 0 && len(latch) > 0 {
+				value, e := strconv.ParseFloat(tr.To, 64)
+				_, beforeErr := strconv.ParseFloat(tr.From, 64)
+				if e != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+					continue
+				}
+				beyond := t.Above != nil && value > *t.Above || t.Below != nil && value < *t.Below
+				if beforeErr != nil {
+					*latch[0] = beyond
+					continue
+				}
+				reset := t.Above != nil && value <= *t.Above-t.Hysteresis || t.Below != nil && value >= *t.Below+t.Hysteresis
+				if reset {
+					*latch[0] = false
+				}
+				if !*latch[0] && homeassistant.Match(tr, t.From, t.To, t.Above, t.Below) {
+					matched = true
+					*latch[0] = true
+				}
+			} else if homeassistant.Match(tr, t.From, t.To, t.Above, t.Below) {
+				matched = true
 			}
+		}
+		if matched {
+			return newest, true, nil
 		}
 		return newest, false, nil
 	case "notification":
@@ -248,6 +296,44 @@ func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.T
 	return "", false, assistant.ErrInvalid
 }
 func (s *Server) automationConditions(ctx context.Context, a assistant.Automation) error {
+	if w := a.Conditions.Window; w != nil && !w.Contains(time.Now()) {
+		return fmt.Errorf("outside_time_window")
+	}
+	if len(a.Conditions.States) > 0 {
+		matched := 0
+		for _, c := range a.Conditions.States {
+			if s.opts.HomeAssistant == nil || !s.opts.HomeAssistant.Allowed(c.Entity) {
+				return homeassistant.ErrNotAllowed
+			}
+			st, err := s.opts.HomeAssistant.State(ctx, c.Entity)
+			if err != nil {
+				return err
+			}
+			valid := st.State != "unknown" && st.State != "unavailable"
+			ok := false
+			switch c.Operator {
+			case "eq":
+				ok = valid && st.State == c.Value
+			case "neq":
+				ok = valid && st.State != c.Value
+			case "available":
+				ok = valid
+			case "above", "below":
+				n, e := strconv.ParseFloat(st.State, 64)
+				v, ve := strconv.ParseFloat(c.Value, 64)
+				ok = valid && e == nil && ve == nil && !math.IsNaN(n) && !math.IsInf(n, 0) && !math.IsNaN(v) && !math.IsInf(v, 0) && (c.Operator == "above" && n > v || c.Operator == "below" && n < v)
+			}
+			if c.ForSeconds > 0 {
+				ok = ok && !st.LastChanged.IsZero() && time.Since(st.LastChanged) >= time.Duration(c.ForSeconds)*time.Second
+			}
+			if ok {
+				matched++
+			}
+		}
+		if matched == 0 || !a.Conditions.AnyState && matched != len(a.Conditions.States) {
+			return fmt.Errorf("home_conditions_pending")
+		}
+	}
 	if a.Conditions.Volume != "" && !slices.Contains(s.opts.Storage.Mounted(), a.Conditions.Volume) {
 		return fmt.Errorf("required volume unavailable")
 	}
@@ -283,7 +369,7 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 				}
 				c, e := s.chats.Get(u.Name, run.Chat)
 				if errors.Is(e, assistant.ErrChatNotFound) {
-					c = &assistant.Chat{ID: run.Chat, Title: run.Name, Created: now, Updated: now, Automation: a.ID, Execution: run.Execution, Notify: run.Notify, Run: &assistant.Run{State: "queued", Started: now}, Messages: []assistant.Entry{{Role: "user", Content: run.Instruction, Time: now}}}
+					c = &assistant.Chat{ID: run.Chat, Title: run.Name, Model: s.opts.Assistant.Settings().PlanningModel, Created: now, Updated: now, Automation: a.ID, Execution: run.Execution, Notify: run.Notify, Run: &assistant.Run{State: "queued", Started: now}, Messages: []assistant.Entry{{Role: "user", Content: run.Instruction, Time: now}}}
 					e = s.chats.Save(u.Name, c)
 				}
 				release()
@@ -338,28 +424,26 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 				}
 				// Explicit event monitoring only, with one-minute cooldown. Fingerprints
 				// survive restarts. Preserve the baseline on read errors.
-				fingerprint, match, e := s.automationEvent(ctx, u, a.Trigger, a.LastEvent)
+				fingerprint, match, e := s.automationEvent(ctx, u, a.Trigger, a.LastEvent, &a.Latched)
 				if e != nil {
 					a.Detail = e.Error()
-					continue
+				} else {
+					// High-water marks: older entries never count again.
+					highWater := a.Trigger.Event == "notification" || a.Trigger.Event == "homeassistant"
+					changed := fingerprint != a.LastEvent
+					if highWater {
+						changed = fingerprint > a.LastEvent
+					}
+					if a.EventReady && changed && match {
+						a.Pending = true
+						due = true
+					}
+					if !highWater || fingerprint > a.LastEvent {
+						a.LastEvent = fingerprint
+					}
+					a.EventReady = true
 				}
-				// High-water marks: older entries never count again.
-				highWater := a.Trigger.Event == "notification" || a.Trigger.Event == "homeassistant"
-				changed := fingerprint != a.LastEvent
-				if highWater {
-					changed = fingerprint > a.LastEvent
-				}
-				if a.EventReady && changed && match {
-					a.Pending = true
-					due = true
-				}
-				if !highWater || fingerprint > a.LastEvent {
-					a.LastEvent = fingerprint
-				}
-				a.EventReady = true
-				if now.Sub(a.LastStart) < time.Minute {
-					continue
-				}
+
 			} else if a.Enabled && !a.Next.IsZero() && !a.Next.After(now) {
 				scheduled = a.Next
 				late := now.Sub(a.Next)
@@ -371,6 +455,47 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 				if a.Trigger.Kind == "once" {
 					a.Enabled = false
 				}
+			}
+			if a.Enabled {
+				if a.ExtraEvents == nil {
+					a.ExtraEvents = map[string]assistant.EventCursor{}
+				}
+				for index, trigger := range a.ExtraTriggers {
+					key := strconv.Itoa(index)
+					cursor := a.ExtraEvents[key]
+					copy := *a
+					copy.ExtraTriggers = nil
+					copy.Trigger = trigger
+					if err := s.validateAutomation(u, &copy); err != nil {
+						a.Detail = err.Error()
+						continue
+					}
+					mark, match, err := s.automationEvent(ctx, u, trigger, cursor.Mark, &cursor.Latched)
+					if err != nil {
+						a.Detail = err.Error()
+						continue
+					}
+					high := trigger.Event == "homeassistant" || trigger.Event == "notification"
+					changed := mark != cursor.Mark
+					if high {
+						changed = mark > cursor.Mark
+					}
+					if cursor.Ready && changed && match {
+						a.Pending = true
+						due = true
+					}
+					if !high || mark > cursor.Mark {
+						cursor.Mark = mark
+					}
+					cursor.Ready = true
+					a.ExtraEvents[key] = cursor
+				}
+			}
+			if (a.Trigger.Kind == "event" || len(a.ExtraTriggers) > 0) && now.Sub(a.LastStart) < time.Duration(max(60, a.CooldownSeconds))*time.Second {
+				if due {
+					a.Pending = true
+				}
+				continue
 			}
 			if !due {
 				continue
@@ -423,10 +548,33 @@ func (s *Server) watchHomeAssistant(users []auth.User) {
 			continue
 		}
 		for _, a := range list {
-			if a.Enabled && a.Trigger.Kind == "event" && a.Trigger.Event == "homeassistant" {
-				entities = append(entities, a.Trigger.Target)
+			if a.Enabled {
+				for _, trigger := range append([]assistant.Trigger{a.Trigger}, a.ExtraTriggers...) {
+					if trigger.Kind == "event" && trigger.Event == "homeassistant" && s.opts.HomeAssistant.Allowed(trigger.Target) {
+						entities = append(entities, trigger.Target)
+					}
+				}
 			}
 		}
 	}
 	s.opts.HomeAssistant.SetWatched(entities)
+}
+
+func (s *Server) handleAutomationPreview(w http.ResponseWriter, r *http.Request) {
+	var a assistant.Automation
+	if !readJSON(w, r, &a) {
+		return
+	}
+	a.Enabled = true
+	if err := s.validateAutomation(currentUser(r), &a); err != nil {
+		writeAssistantError(w, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	reason := ""
+	if err := s.automationConditions(ctx, a); err != nil {
+		reason = err.Error()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"conditionsMet": reason == "", "reason": reason, "next": a.Trigger.NextAfter(time.Now()), "observedAt": time.Now(), "executed": false})
 }

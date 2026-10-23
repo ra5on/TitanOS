@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TitanOS",
+        "description": "Enter the NAS ID from TitanOS → Settings → Home Assistant. Questions act as the account selected on the NAS, not as an identified speaker.",
+        "data": {
+          "nas_id": "NAS ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_id": "Invalid NAS ID"
+    },
+    "abort": {
+      "already_configured": "Already configured"
+    }
+  }
+}

@@ -109,13 +109,17 @@ type Server struct {
 	limiter     *auth.Limiter
 	prefs       *preferences
 	handler     http.Handler
+	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
 	chats       *assistant.Chats
 	agentMu     sync.Mutex
+	scheduleMu  sync.Mutex
 	agentJobs   map[string]*agentJob
 	agentSlots  chan struct{}
 	// push holds the one-time tokens of buttons in notifications.
-	push pushTokens
+	push           pushTokens
+	assistSessions assistSessions
+	haUndo         haUndoStore
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -143,6 +147,10 @@ func New(opts Options) *Server {
 	}
 	s.chats = assistant.NewChats(s.chatsDir)
 	s.automations = assistant.NewAutomations(s.chatsDir)
+	s.knowledge = assistant.NewKnowledge(s.chatsDir)
+	if s.opts.Notify != nil {
+		s.opts.Notify.SetPersonalDataDir(s.chatsDir)
+	}
 	s.agentJobs = map[string]*agentJob{}
 	s.agentSlots = make(chan struct{}, 1)
 	if s.opts.HomeAssistant != nil {
@@ -323,6 +331,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/homeassistant/settings", s.requireAdmin(s.handleHASettingsChange))
 	mux.HandleFunc("POST /api/v1/homeassistant/check", s.requireAdmin(s.handleHACheck))
 	mux.HandleFunc("GET /api/v1/homeassistant/entities", s.requireAdmin(s.handleHAEntities))
+	mux.HandleFunc("POST /api/v1/homeassistant/undo", s.requireAdmin(s.handleHAUndo))
 	mux.HandleFunc("POST /api/v1/homeassistant/call", s.requireAdmin(s.handleHACall))
 	mux.HandleFunc("GET /api/v1/homeassistant/notify-services", s.requireUser(s.handleHANotifyServices))
 	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
@@ -371,7 +380,12 @@ func New(opts Options) *Server {
 	// The chat in the web UI. Its settings are for administrators; who may
 	// chat says requireAssistant.
 	mux.HandleFunc("GET /api/v1/assistant/automations", s.requireAssistant(s.handleAutomations))
+	mux.HandleFunc("GET /api/v1/assistant/knowledge", s.requireAssistant(s.handleKnowledge))
+	mux.HandleFunc("POST /api/v1/assistant/knowledge", s.requireAssistant(s.handleKnowledgeSave))
+	mux.HandleFunc("POST /api/v1/assistant/knowledge/search", s.requireAssistant(s.handleKnowledgeSearch))
+	mux.HandleFunc("POST /api/v1/assistant/knowledge/delete", s.requireAssistant(s.handleKnowledgeDelete))
 	mux.HandleFunc("POST /api/v1/assistant/automations", s.requireAssistant(s.handleAutomationSave))
+	mux.HandleFunc("POST /api/v1/assistant/automations/preview", s.requireAssistant(s.handleAutomationPreview))
 	mux.HandleFunc("DELETE /api/v1/assistant/automations/{automation}", s.requireAssistant(s.handleAutomationDelete))
 	mux.HandleFunc("POST /api/v1/assistant/automations/{automation}/run", s.requireAssistant(s.handleAutomationRun))
 	mux.HandleFunc("GET /api/v1/assistant/status", s.requireUser(s.handleAssistantStatus))
@@ -380,6 +394,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/assistant/prompt", s.requireAdmin(s.handleAgentPrompt))
 	mux.HandleFunc("POST /api/v1/assistant/probe", s.requireAdmin(s.handleAgentProbe))
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/control", s.requireAssistant(s.handleAgentControl))
+	mux.HandleFunc("PUT /api/v1/assistant/chats/{id}/schedule", s.requireAssistant(s.handleAgentSchedule))
 	mux.HandleFunc("GET /api/v1/assistant/chats/{id}/diagnostics", s.requireAssistant(s.handleAgentDiagnostics))
 	mux.HandleFunc("POST /api/v1/assistant/models", s.requireAdmin(s.handleAssistantModels))
 	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
@@ -398,6 +413,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/regenerate", s.requireAssistant(s.handleAssistantRegenerate))
 	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/actions/{action}", s.requireAssistant(s.handleAssistantAction))
 	// What the assistant writes and moves in the file manager, once confirmed.
+	mux.HandleFunc("POST /api/v1/assistant/files/edit", s.requireAssistant(s.handleDocumentEdit))
 	mux.HandleFunc("POST /api/v1/assistant/files/write", s.requireAssistant(s.handleAssistantWrite))
 	mux.HandleFunc("POST /api/v1/assistant/files/move", s.requireAssistant(s.handleAssistantMove))
 

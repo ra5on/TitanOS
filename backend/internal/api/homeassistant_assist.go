@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
@@ -23,21 +24,45 @@ const assistWait = 50 * time.Second
 
 func (s *Server) handleAssist(data json.RawMessage) {
 	var q struct {
-		ID   string `json:"id"`
-		Text string `json:"text"`
+		ID           string `json:"id"`
+		Text         string `json:"text"`
+		Conversation string `json:"conversation_id"`
+		NAS          string `json:"nas_id"`
 	}
-	if json.Unmarshal(data, &q) != nil || len(q.ID) > 100 {
+	if json.Unmarshal(data, &q) != nil || len(q.ID) > 100 || q.ID == "" || len(q.Conversation) > 100 {
+		return
+	}
+	settings, _ := s.opts.HomeAssistant.Settings()
+	if q.NAS != "" && q.NAS != settings.MQTT.ID {
 		return
 	}
 	q.Text = strings.TrimSpace(q.Text)
 	if q.Text == "" || len(q.Text) > assistant.MaxMessage {
 		return
 	}
+	// Duplicate event IDs must not start another physical action.
+	s.assistSessions.mu.Lock()
+	if s.assistSessions.requests == nil {
+		s.assistSessions.requests = map[string]time.Time{}
+	}
+	now := time.Now()
+	for key, at := range s.assistSessions.requests {
+		if now.Sub(at) > 30*time.Minute {
+			delete(s.assistSessions.requests, key)
+		}
+	}
+	requestKey := settings.URL + "/" + settings.Account + "/" + q.ID
+	if _, seen := s.assistSessions.requests[requestKey]; seen || len(s.assistSessions.requests) >= 1000 {
+		s.assistSessions.mu.Unlock()
+		return
+	}
+	s.assistSessions.requests[requestKey] = now
+	s.assistSessions.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), assistWait+15*time.Second)
 		defer cancel()
-		answer := s.assist(ctx, q.Text)
-		if err := s.opts.HomeAssistant.FireEvent(ctx, "titanos_answer", map[string]string{"id": q.ID, "text": answer}); err != nil {
+		answer := s.assistConversation(ctx, q.Text, q.Conversation)
+		if err := s.opts.HomeAssistant.FireEvent(ctx, "titanos_answer", map[string]string{"id": q.ID, "text": answer, "conversation_id": q.Conversation, "nas_id": settings.MQTT.ID}); err != nil {
 			slog.Warn("answer to Home Assistant not delivered", "err", err)
 		}
 	}()
@@ -45,6 +70,10 @@ func (s *Server) handleAssist(data json.RawMessage) {
 
 // assist runs a question and returns what Home Assistant should say.
 func (s *Server) assist(ctx context.Context, text string) string {
+	return s.assistConversation(ctx, text, "")
+}
+
+func (s *Server) assistConversation(ctx context.Context, text, conversation string) string {
 	settings, _ := s.opts.HomeAssistant.Settings()
 	user, ok := s.opts.Users.Get(settings.Account)
 	german := true
@@ -62,14 +91,64 @@ func (s *Server) assist(ctx context.Context, text string) string {
 	if !settings.Assist || !ok || !user.Role.CanAdminister() || !s.assistantAllowed(user) {
 		return say("TitanOS beantwortet keine Fragen aus Home Assistant. Das lässt sich unter Einstellungen › Home Assistant einschalten.", "TitanOS does not answer questions from Home Assistant. Switch it on under Settings › Home Assistant.")
 	}
-	code, body := s.internalAs(ctx, user, http.MethodPost, "/api/v1/assistant/chats", nil)
+	// Only conversation keys map to chat IDs. Never accept a chat ID from HA.
 	var created struct{ ID string }
-	if code != http.StatusCreated || json.Unmarshal([]byte(body), &created) != nil || created.ID == "" {
-		return say("Der KI-Assistent ist gerade nicht erreichbar.", "The AI assistant cannot be reached right now.")
+	sessionKey := settings.URL + "/" + user.Name + "/" + conversation
+	if conversation != "" {
+		s.assistSessions.mu.Lock()
+		if s.assistSessions.busy == nil {
+			s.assistSessions.busy = map[string]bool{}
+		}
+		if s.assistSessions.busy[sessionKey] {
+			s.assistSessions.mu.Unlock()
+			return say("Die vorige Frage wird noch bearbeitet.", "The previous question is still being processed.")
+		}
+		s.assistSessions.busy[sessionKey] = true
+		s.assistSessions.mu.Unlock()
+		defer func() {
+			s.assistSessions.mu.Lock()
+			delete(s.assistSessions.busy, sessionKey)
+			s.assistSessions.mu.Unlock()
+		}()
+		s.assistSessions.mu.Lock()
+		if entry, ok := s.assistSessions.entries[sessionKey]; ok && time.Since(entry.Used) < 30*time.Minute {
+			created.ID = entry.Chat
+		}
+		s.assistSessions.mu.Unlock()
+		if created.ID != "" {
+			if _, err := s.chats.Get(user.Name, created.ID); err != nil {
+				created.ID = ""
+			}
+		}
+	}
+	if created.ID == "" {
+		code, body := s.internalAs(ctx, user, http.MethodPost, "/api/v1/assistant/chats", nil)
+		if code != http.StatusCreated || json.Unmarshal([]byte(body), &created) != nil || created.ID == "" {
+			return say("Der KI-Assistent ist gerade nicht erreichbar.", "The AI assistant cannot be reached right now.")
+		}
+	}
+	if conversation != "" {
+		s.assistSessions.mu.Lock()
+		if s.assistSessions.entries == nil {
+			s.assistSessions.entries = map[string]assistSession{}
+		}
+		for key, entry := range s.assistSessions.entries {
+			if time.Since(entry.Used) >= 30*time.Minute {
+				delete(s.assistSessions.entries, key)
+			}
+		}
+		_, exists := s.assistSessions.entries[sessionKey]
+		if exists || len(s.assistSessions.entries) < 200 {
+			s.assistSessions.entries[sessionKey] = assistSession{created.ID, time.Now()}
+		}
+		s.assistSessions.mu.Unlock()
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, assistWait)
-	s.internalAs(waitCtx, user, http.MethodPost, "/api/v1/assistant/chats/"+url.PathEscape(created.ID)+"/messages", map[string]string{"text": text, "page": "/assistant"})
+	code, _ := s.internalAs(waitCtx, user, http.MethodPost, "/api/v1/assistant/chats/"+url.PathEscape(created.ID)+"/messages", map[string]string{"text": text, "page": "/assistant", "model": s.opts.Assistant.Settings().VoiceModel})
 	cancel()
+	if code >= 400 {
+		return say("Die Nachricht wurde nicht angenommen. Prüfe den laufenden Auftrag im KI-Assistenten.", "The message was not accepted. Check the current task in the assistant.")
+	}
 	chat, err := s.chats.Get(user.Name, created.ID)
 	if err != nil || chat.Run == nil {
 		return say("Der KI-Assistent ist gerade nicht erreichbar.", "The AI assistant cannot be reached right now.")
@@ -98,8 +177,19 @@ func (s *Server) assist(ctx context.Context, text string) string {
 func speakable(text string) string {
 	text = strings.NewReplacer("**", "", "__", "", "`", "", "#", "").Replace(text)
 	runes := []rune(strings.TrimSpace(text))
-	if len(runes) > 1500 {
-		return string(runes[:1500]) + " …"
+	if len(runes) > 600 {
+		return string(runes[:600]) + " …"
 	}
 	return string(runes)
+}
+
+type assistSession struct {
+	Chat string
+	Used time.Time
+}
+type assistSessions struct {
+	mu       sync.Mutex
+	entries  map[string]assistSession
+	requests map[string]time.Time
+	busy     map[string]bool
 }

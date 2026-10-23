@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TitanOS",
+        "description": "NAS-ID aus TitanOS → Einstellungen → Home Assistant eingeben. Fragen laufen als das dort ausgewählte Konto, nicht als erkannte sprechende Person.",
+        "data": {
+          "nas_id": "NAS-ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_id": "Ungültige NAS-ID"
+    },
+    "abort": {
+      "already_configured": "Bereits eingerichtet"
+    }
+  }
+}

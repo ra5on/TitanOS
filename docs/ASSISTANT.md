@@ -1,6 +1,8 @@
 # KI-Assistent und Hintergrundagent
 
-Geltender Stand: 0.12.0. Diese Seite ersetzt die früheren Entwürfe mit browsergesteuerter Ausführung. Historische Unterschiede stehen in den Release-Notizen.
+Geltender Stand: 0.15.0. Diese Seite ersetzt die früheren Entwürfe mit browsergesteuerter Ausführung. Historische Unterschiede stehen in den Release-Notizen.
+
+Der Ausbau von 0.15.0 mit Auftragszentrale, persönlichem Wissen, Dokumentbearbeitung, Modelltests und Home Assistant ist in [ASSISTANT-EXPANSION.md](ASSISTANT-EXPANSION.md) mit Grenzen und Datenablage beschrieben.
 
 ## Einrichtung und Rechte
 
@@ -45,7 +47,7 @@ Der vollständige mitgelieferte Systemprompt ist bearbeitbar (bis 24.000 Zeichen
 
 Explizit eingetragene dauerhafte Präferenzen ergänzen den Prompt; es gibt kein heimliches Lernen aus Chats. Bis zu 20 benannte Profile speichern Modell, Prompt, Kontextgröße und Temperatur. Ein Profil wird bewusst auf die Einstellungen angewendet und gespeichert.
 
-Der Modelltest kann schon vor dem Speichern mit einer eigenen Frage laufen. Er bietet ausschließlich ein synthetisches Werkzeug an, das einen fehlgeschlagenen Updatecheck zurückgibt. Er zeigt, ob das Modell das Werkzeug tatsächlich aufgerufen hat, und dessen Antwort zur Prüfung der Fehlerinterpretation. Der Test verändert nichts am NAS und ist keine allgemeine Qualitätszertifizierung des Modells.
+Der Modelltest kann schon vor dem Speichern mit einer eigenen Frage laufen. Er bietet ausschließlich ein synthetisches Werkzeug an. Wählbare Szenarien behandeln fehlgeschlagene Prüfungen, Mehrdeutigkeit, Teilergebnisse und fremde Anweisungen. Er zeigt, ob das Modell das Werkzeug tatsächlich aufgerufen hat, und dessen Antwort zur Prüfung der Fehlerinterpretation. Der Test verändert nichts am NAS und ist keine allgemeine Qualitätszertifizierung des Modells.
 
 ## Oberfläche und Datenschutz
 
