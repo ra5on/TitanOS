@@ -95,6 +95,9 @@ type Settings struct {
 	Memory        string            `json:"memory,omitempty"` // explicit owner-authored preferences, never inferred
 	RetentionDays int               `json:"retentionDays,omitempty"`
 	Ephemeral     bool              `json:"ephemeral,omitempty"`
+	// PushApproval lets accounts approve or reject waiting actions from the
+	// buttons of a notification (ntfy, Home Assistant app). Off by default.
+	PushApproval bool `json:"pushApproval,omitempty"`
 }
 
 type Profile struct {

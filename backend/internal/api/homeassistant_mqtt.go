@@ -134,6 +134,9 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 		return fmt.Errorf("unknown command")
 	}
 	code, answer := s.internalAs(ctx, user, method, route, body)
+	if len(answer) > 300 {
+		answer = answer[:300]
+	}
 	slog.Info("command from Home Assistant", "kind", kind, "name", name, "action", action, "as", user.Name, "status", code)
 	if code < 200 || code > 299 {
 		return fmt.Errorf("%d: %s", code, answer)
@@ -168,9 +171,5 @@ func (s *Server) internalAs(ctx context.Context, user auth.User, method, route s
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.handler.ServeHTTP(rec, req)
-	answer := rec.Body.String()
-	if len(answer) > 300 {
-		answer = answer[:300]
-	}
-	return rec.Code, answer
+	return rec.Code, rec.Body.String()
 }

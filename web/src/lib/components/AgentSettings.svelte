@@ -47,6 +47,8 @@
 <section class="tile">
  <h2>{t('agent.notifications')}</h2>
  <p class="muted">{t('agent.notificationsHint')} <a href="/account#personal-notifications">{t('agent.notificationsLink')}</a></p>
+ <label class="check"><input type="checkbox" bind:checked={settings.pushApproval}/>{t('agent.pushApproval')}</label>
+ <p class="muted">{t('agent.pushApprovalHint')}</p>
 </section>
 <section class="tile">
  <h2>{t('agent.privacy')}</h2>
