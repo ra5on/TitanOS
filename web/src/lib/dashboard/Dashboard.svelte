@@ -24,8 +24,9 @@
 	import SystemTile from './tiles/SystemTile.svelte';
 	import VolumesTile from './tiles/VolumesTile.svelte';
 	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
+	import AssistantTile from './tiles/AssistantTile.svelte';
 
-	const CONTENT: Partial<Record<StaticTileId, Component>> = { system: SystemTile, volumes: VolumesTile, disks: DisksTile, temperatures: TemperaturesTile };
+	const CONTENT: Partial<Record<StaticTileId, Component>> = { system: SystemTile, volumes: VolumesTile, disks: DisksTile, temperatures: TemperaturesTile, assistant: AssistantTile };
 
 	/** Below this width the tiles are stacked and cannot be arranged. */
 	const STACK_BELOW = 760;
