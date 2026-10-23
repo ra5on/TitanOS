@@ -10,6 +10,7 @@ const keywords: Record<string, string> = {
 	backups: 'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
 	ups: 'usv ups batterie battery strom power',
+	homeassistant: 'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation',
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
@@ -41,6 +42,10 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' }
 	],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	homeassistant: [
+		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
+		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' }
+	],
 	backups: [
 		{ id: 'data-backup', label: 'safeguard.data', href: '/settings/backups/data' },
 		{ id: 'stick', label: 'safeguard.config', href: '/settings/backups/configuration' },

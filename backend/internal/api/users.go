@@ -204,6 +204,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessions.DeleteUser(target.Name, "")
 	s.prefs.forget(target.Name)
+	s.opts.Notify.ForgetPersonal(target.Name)
 	if err := s.chats.ForgetUser(target.Name); err != nil {
 		slog.Error("remove chats of the account", "user", target.Name, "err", err)
 	}

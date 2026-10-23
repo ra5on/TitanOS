@@ -1,6 +1,8 @@
 <script lang="ts">
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
+	import PersonalNotifications from '#lib/components/PersonalNotifications.svelte';
+	import BellSettings from '#lib/components/BellSettings.svelte';
 	// One's own account: password, second factor, logged-in devices.
 	import qrcode from 'qrcode-generator';
 	import { api, ApiError } from '#lib/api.ts';
@@ -109,6 +111,8 @@
 
 
 <PageHead title={t('account.title')} />
+<PersonalNotifications />
+{#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
 <SoundSettings />
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 

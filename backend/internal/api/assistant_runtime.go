@@ -20,6 +20,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 )
 
 type agentIdentity struct{}
@@ -246,6 +247,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			}
 			s.opts.Notify.Notify(severity, "assistant_"+chat.Run.State, user.Name)
 		}
+		s.notifyOwner(user, chat)
 		j.emit("snapshot", map[string]any{"chat": chat})
 		j.emit("done", map[string]string{})
 	}()
@@ -651,4 +653,64 @@ func sameJSON(a, b []byte) bool {
 	av, ae := decode(a)
 	bv, be := decode(b)
 	return ae == nil && be == nil && reflect.DeepEqual(av, bv)
+}
+
+// notifyOwner tells the account that owns a task about it through its own
+// channels. Unlike the shared channel this may carry the chat title and a
+// short summary: nobody else reads it.
+func (s *Server) notifyOwner(user auth.User, chat *assistant.Chat) {
+	if s.opts.Notify == nil || chat.Run == nil {
+		return
+	}
+	event := map[string]string{"confirmation": notify.EventConfirmation, "done": notify.EventDone, "blocked": notify.EventBlocked}[chat.Run.State]
+	if event == "" {
+		return
+	}
+	if chat.Automation != "" {
+		// The automation decides; errors also covers a waiting approval,
+		// without which the run cannot finish.
+		switch chat.Notify {
+		case "never":
+			return
+		case "always":
+		default:
+			if event == notify.EventDone {
+				return
+			}
+		}
+	}
+	settings, _, err := s.opts.Notify.PersonalSettings(user.Name)
+	if err != nil {
+		return
+	}
+	key := fmt.Sprint(chat.ID, "/", event, "/", len(chat.Messages))
+	text := ""
+	severity := notify.Info
+	switch event {
+	case notify.EventConfirmation:
+		if a := assistant.Pending(chat); a != nil {
+			key = chat.ID + "/" + event + "/" + a.ID
+			text = a.Reason
+		}
+	case notify.EventBlocked:
+		severity = notify.Warning
+		text = chat.Run.Detail
+	}
+	if text == "" {
+		for i := len(chat.Messages) - 1; i >= 0; i-- {
+			if e := chat.Messages[i]; e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
+				text = e.Content
+				break
+			}
+		}
+	}
+	title := chat.Title
+	if title == "" {
+		title = map[bool]string{true: "KI-Assistent", false: "AI assistant"}[settings.Language == "de"]
+	}
+	heading, _ := notify.Wording(settings.Language, "personal_"+event, title)
+	message := notify.PersonalMessage{Event: event, Severity: severity, Title: heading, Text: settings.Summary(text), Path: "/assistant?chat=" + url.QueryEscape(chat.ID)}
+	if err := s.opts.Notify.SendPersonal(user.Name, key, message); err != nil && !errors.Is(err, notify.ErrUnreachable) {
+		slog.Warn("personal notification", "user", user.Name, "err", err)
+	}
 }

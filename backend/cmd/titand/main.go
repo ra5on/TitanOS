@@ -35,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -378,6 +379,13 @@ func run(opts options) error {
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
+	// Home Assistant: the assistant switches entities released to it, and
+	// messages can go to the Home Assistant app.
+	home := homeassistant.NewManager(store)
+	if err := home.Load(); err != nil {
+		slog.Warn("Home Assistant settings not readable from /config", "err", err)
+	}
+	notifier.SetHomeAssistant(home)
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
 	volumes.OnTestDone = func(test storage.DiskTest) {
 		disk := test.Disk
@@ -601,6 +609,7 @@ func run(opts options) error {
 		Tailscale:     tailnet,
 		Network:       connection,
 		Notify:        notifier,
+		HomeAssistant: home,
 		ConfigBackup:  stickBackup,
 		USB:           drives,
 		BackupTarget:  backupTarget,
