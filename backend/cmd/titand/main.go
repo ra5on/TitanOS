@@ -504,6 +504,11 @@ func run(opts options) error {
 			notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	backups.OnCheck = func(job string, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "backup_check_failed", job)
+		}
+	}
 	backups.OnOverdue = func(job string) {
 		notifier.Notify(notify.Warning, "backup_overdue", job)
 	}
@@ -566,6 +571,14 @@ func run(opts options) error {
 	if err := energy.Load(); err != nil {
 		slog.Warn("energy settings unavailable", "err", err)
 	}
+	// Shutting down and waking on a schedule, and Wake-on-LAN.
+	schedule := system.NewPowerScheduler(store)
+	schedule.Disabled = opts.dev
+	schedule.Poweroff = power.Poweroff
+	schedule.Notify = notifier.Notify
+	if err := schedule.Load(); err != nil {
+		slog.Warn("power schedule unavailable", "err", err)
+	}
 	monitor := system.NewMonitor(ctx)
 	memoryPolicy := system.NewMemoryPolicy(store, system.ReadMemory)
 	memoryPolicy.Disabled = opts.dev
@@ -622,6 +635,7 @@ func run(opts options) error {
 		Certificate:   certs,
 		Settings:      settings,
 		Energy:        energy,
+		PowerSchedule: schedule,
 		PowerButton:   powerButton,
 		MemoryPolicy:  memoryPolicy,
 		Power:         power,
@@ -635,6 +649,8 @@ func run(opts options) error {
 	agentDone := make(chan struct{})
 	go func() { defer close(agentDone); handler.RunAssistant(ctx) }()
 	go home.RunMQTT(ctx, handler.HASnapshot, handler.HACommand)
+	schedule.Busy = handler.PowerBusy
+	go schedule.Run(ctx)
 
 	var servers []*http.Server
 	errc := make(chan error, 2)

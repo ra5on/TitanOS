@@ -83,13 +83,15 @@ type Options struct {
 	// USB lists and mounts drives plugged in over USB; nil if there is none.
 	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
-	UPS          *ups.Manager
-	Settings     *system.Settings
-	Energy       *system.EnergyManager
-	PowerButton  *system.PowerButtonManager
-	MemoryPolicy *system.MemoryPolicy
-	Power        system.Power
-	Version      string
+	UPS      *ups.Manager
+	Settings *system.Settings
+	Energy   *system.EnergyManager
+	// PowerSchedule is optional; nil leaves the schedule out.
+	PowerSchedule *system.PowerScheduler
+	PowerButton   *system.PowerButtonManager
+	MemoryPolicy  *system.MemoryPolicy
+	Power         system.Power
+	Version       string
 	// ShareDir holds the texts of the licenses.
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -286,6 +288,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/system/power-button", s.requireAdmin(s.handlePowerButtonChange))
 	mux.HandleFunc("GET /api/v1/system/energy", s.requireAdmin(s.handleEnergy))
 	mux.HandleFunc("PUT /api/v1/system/energy", s.requireAdmin(s.handleEnergyChange))
+	mux.HandleFunc("GET /api/v1/system/power-schedule", s.requireAdmin(s.handlePowerSchedule))
+	mux.HandleFunc("PUT /api/v1/system/power-schedule", s.requireAdmin(s.handlePowerScheduleChange))
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
 	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
@@ -347,6 +351,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots", s.requireAdmin(s.handleBackupSnapshots))
 	mux.HandleFunc("GET /api/v1/backups/{id}/password", s.requireAdmin(s.handleBackupPassword))
 	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireAdmin(s.handleBackupRestore))
+	mux.HandleFunc("POST /api/v1/backups/{id}/check", s.requireAdmin(s.handleBackupCheck))
+	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots/{snapshot}/files", s.requireAdmin(s.handleBackupFiles))
 	mux.HandleFunc("POST /api/v1/backups/{id}/{action}", s.requireAdmin(s.handleBackupAction))
 	mux.HandleFunc("GET /api/v1/ups", s.requireAdmin(s.handleUPS))
 	mux.HandleFunc("PUT /api/v1/ups", s.requireAdmin(s.handleUPSChange))
