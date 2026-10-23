@@ -70,6 +70,9 @@ func (s *Server) renderEdit(u auth.User, q documentEdit) ([]byte, string, error)
 		}
 		result, err = office.EditText(q.Source, data, q.Edits)
 	}
+	if err == nil && (ext == ".docx" || ext == ".xlsx") {
+		_, err = office.Text(q.Path, result)
+	}
 	if err == nil && ext == ".json" && !json.Valid(result) {
 		err = assistant.Errorf("edited JSON is invalid")
 	}
