@@ -2,7 +2,7 @@
 
 Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft – inspiriert von Unraid, aber mit klassischem RAID. Wird auf GitHub veröffentlicht.
 
-Stand: **0.16.0, 23. Oktober 2026** (App-Update auf Systembasis 0.15.0; Release-Prüfstand siehe docs/releases/v0.16.0.md). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
+Stand: **0.16.1, 23. Oktober 2026** (App-Update auf Systembasis 0.15.0; Release-Prüfstand siehe docs/releases/v0.16.1.md). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -400,7 +400,7 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
   - `/DATA/AppData/$AppID/…` → Datenordner der App (`./…`), andere Ordner unter `/DATA` → Vorschlag einer Freigabe (`suggest: media|share`), sonst ebenfalls im Datenordner. Nichts landet unter `/DATA` im RAM.
   - `$AppID`, `$PUID`, `$PGID`, `$TZ` und Platzhalter wie `[CASAOS_IP]` werden ersetzt; offene Platzhalter (`[EUFY_USERNAME]`) werden zu Pflichtfeldern.
   - `port_map`/`scheme`/`index` → Label `titanos.webui`; Hinweise des Autors werden im Panel angezeigt.
-  - App-Symbole aus `x-titanos.icon` bzw. CasaOS werden ohne Referrer geladen, mit Monogramm als Rückfall; neue Installationen speichern `titanos.icon`. Siehe `docs/APP-LINKS.md`.
+  - App-Symbole aus `x-titanos.icon` bzw. CasaOS werden ohne Referrer geladen, mit Monogramm als Rückfall. Im App-Katalog und Installationspanel bleibt der Hintergrund der Symbole transparent; keine eingefärbten Kacheln hinter den Bildern, Rückfallkürzel nutzen die Theme-Textfarbe. Neue Installationen speichern `titanos.icon`. Siehe `docs/APP-LINKS.md`.
 - Die beiden Stores stehen in der Quellenliste als Vorschlag mit „Hinzufügen“. Sie werden nie von selbst eingetragen: Ihre Apps sind von TitanOS nicht geprüft, und der offizielle Store lädt beim ersten Abruf rund 240 MB.
 - Für alle Vorlagen gilt: Das Panel nennt erweiterte Rechte (privilegiert, Host-Netzwerk, Docker-Socket, Wurzelverzeichnis, Capabilities) und warnt bei Pfaden außerhalb der Volumes. Geräte, die es auf dem NAS nicht gibt (z. B. `/dev/dri` ohne GPU, Raspberry-Pi-Geräte), werden weggelassen – mit ihnen startet der Container nicht.
 - Große Quellen: tar.gz-Archive werden beim Laden durchgereicht und nur die YAML-Dateien behalten (der offizielle CasaOS-Store ist wegen der Screenshots rund 240 MB groß). Beim täglichen Abgleich schickt titand das ETag mit; ein unverändertes Archiv wird nicht erneut geladen.
