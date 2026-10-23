@@ -6,7 +6,7 @@
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	type MQTT = { enabled: boolean; host: string; port: number; username: string; password?: string; tls: boolean; prefix: string; groups: string[]; commands: string[]; id?: string };
-	type Settings = { enabled: boolean; url: string; token?: string; fingerprint: string; domains: string[]; entities: string[]; account?: string; mqtt: MQTT };
+	type Settings = { enabled: boolean; url: string; token?: string; fingerprint: string; domains: string[]; entities: string[]; account?: string; assist?: boolean; mqtt: MQTT };
 	type Status = { watching: boolean; watchError: string; mqtt: boolean; mqttError: string };
 	type Answer = { settings: Settings; tokenSet: boolean; mqttPasswordSet: boolean; domains: string[]; sensorGroups: string[]; commandGroups: string[]; status: Status };
 	type Entity = { id: string; name: string; area?: string; state: string; domain: string };
@@ -192,6 +192,8 @@
 					{#each accounts as account (account.name)}<option value={account.name}>{account.name}</option>{/each}
 				</select>
 			</label>
+			<label class="check"><input type="checkbox" bind:checked={draft.assist} disabled={!draft.account} /><span>{t('ha.assist')}</span></label>
+			<p class="muted small">{t('ha.assistHint')} <a href="https://github.com/ra5on/TitanOS/blob/main/docs/homeassistant/titanos-assist.yaml" target="_blank" rel="noopener noreferrer">{t('ha.assistBlueprint')}</a></p>
 			{#if status?.watching}<p class="muted small">{t('ha.watching')}</p>{:else if status?.watchError}<p class="notice-warn">{t('ha.watchError')} <span class="mono">{status.watchError}</span></p>{/if}
 		</section>
 

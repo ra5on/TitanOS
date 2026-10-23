@@ -11,9 +11,10 @@ import (
 )
 
 type pushSink struct {
-	mu     sync.Mutex
-	bodies []string
-	click  []string
+	mu      sync.Mutex
+	bodies  []string
+	click   []string
+	actions []string
 }
 
 func (p *pushSink) start(t *testing.T) *httptest.Server {
@@ -22,6 +23,7 @@ func (p *pushSink) start(t *testing.T) *httptest.Server {
 		p.mu.Lock()
 		p.bodies = append(p.bodies, r.Header.Get("Title")+"|"+string(body))
 		p.click = append(p.click, r.Header.Get("Click"))
+		p.actions = append(p.actions, r.Header.Get("Actions"))
 		p.mu.Unlock()
 	}))
 	t.Cleanup(srv.Close)

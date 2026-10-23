@@ -3187,5 +3187,11 @@
 	"ha.commandsWarning": "Anyone allowed to write to your MQTT broker can press these buttons. Protect the broker with users and access rules. TitanOS refuses to restart or shut down while copies, backups, disk tests or a volume rebuild are running.",
 	"ha.commandsNoAccount": "Choose an account above; without one TitanOS creates no buttons.",
 	"ha.mqttConnected": "Connected to the broker; values are sent every 30 seconds.",
-	"ha.mqttFailed": "No connection to the broker:"
+	"ha.mqttFailed": "No connection to the broker:",
+	"agent.pushApproval": "Allow approving and rejecting from notifications",
+	"agent.pushApprovalHint": "Messages about waiting actions then carry the buttons “Approve” and “Reject” (ntfy and the Home Assistant app). Each button works once, for 15 minutes and only until TitanOS restarts. Whoever can read the message can approve with it, so use a protected ntfy topic. Actions that need a typed name are never approved from a message.",
+	"ha.assist": "Answer questions from Home Assistant (Assist)",
+	"ha.assistHint": "With the blueprint for Home Assistant you ask by voice or text “Ask the NAS …”. TitanOS answers as the chosen account; changes still need approval as in the AI assistant. The token must belong to an administrator in Home Assistant.",
+	"ha.assistBlueprint": "Open blueprint",
+	"error.push_token": "This button has expired or was already used."
 }

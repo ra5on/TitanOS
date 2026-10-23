@@ -63,6 +63,8 @@ type Settings struct {
 	// Account is the TitanOS account that buttons in Home Assistant and
 	// questions from Home Assistant Assist act for. Its rights apply.
 	Account string `json:"account,omitempty"`
+	// Assist answers questions from Home Assistant Assist (event titanos_ask).
+	Assist bool `json:"assist,omitempty"`
 	// MQTT publishes sensors of the NAS to Home Assistant.
 	MQTT MQTT `json:"mqtt"`
 }

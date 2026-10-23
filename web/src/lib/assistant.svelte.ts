@@ -60,6 +60,7 @@ export type AssistantSettings = {
 	memory?: string;
 	retentionDays?: number;
 	ephemeral?: boolean;
+	pushApproval?: boolean;
 	ollama: string;
 	model: string;
 	users: boolean;

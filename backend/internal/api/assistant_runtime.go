@@ -713,6 +713,9 @@ func (s *Server) notifyOwner(user auth.User, chat *assistant.Chat) {
 	}
 	heading, _ := notify.Wording(settings.Language, "personal_"+event, title)
 	message := notify.PersonalMessage{Event: event, Severity: severity, Title: heading, Text: settings.Summary(text), Path: "/assistant?chat=" + url.QueryEscape(chat.ID)}
+	if event == notify.EventConfirmation {
+		message.Actions = s.pushActions(user, chat, assistant.Pending(chat), settings.Origin, settings.Language)
+	}
 	if err := s.opts.Notify.SendPersonal(user.Name, key, message); err != nil && !errors.Is(err, notify.ErrUnreachable) {
 		slog.Warn("personal notification", "user", user.Name, "err", err)
 	}
