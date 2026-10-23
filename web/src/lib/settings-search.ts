@@ -14,7 +14,7 @@ const keywords: Record<string, string> = {
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
-	energy: 'energie energy governor cpu strom',
+	energy: 'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc',
 	temperatures: 'temperatur temperature sensor wärme heat',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',
@@ -44,7 +44,8 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
-		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' }
+		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
+		{ id: 'mqtt', label: 'ha.mqtt', href: '/settings/homeassistant#mqtt' }
 	],
 	backups: [
 		{ id: 'data-backup', label: 'safeguard.data', href: '/settings/backups/data' },

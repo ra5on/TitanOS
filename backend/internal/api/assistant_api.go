@@ -115,7 +115,9 @@ var apiRoutes = []apiRoute{
 	{"GET", "/backups", assistant.AreaBackups, "", "Backup jobs with schedule, sources, destination and state."},
 	{"GET", "/backups/{id}/snapshots", assistant.AreaBackups, "", "The saved states of a backup job."},
 	{"PUT", "/backups/{id}", assistant.AreaBackups, assistant.LevelNormal, "Change a backup job (body: the job from GET /backups)."},
-	{"POST", "/backups/{id}/restore", assistant.AreaBackups, assistant.LevelNormal, `Restore a saved state into a new folder (body {"snapshot": "…", "volume": "…"}); nothing is overwritten.`},
+	{"POST", "/backups/{id}/restore", assistant.AreaBackups, assistant.LevelNormal, `Restore a saved state, or with "paths" only those files and folders, into a new folder (body {"snapshot": "…", "volume": "…", "paths": ["/mnt/…"]}); nothing is overwritten.`},
+	{"GET", "/backups/{id}/snapshots/{snapshot}/files", assistant.AreaBackups, "", "One folder of a saved state (?path=/mnt/volume/share/folder&offset=N), folders first, pages of 500."},
+	{"POST", "/backups/{id}/check", assistant.AreaBackups, assistant.LevelNormal, `Check the repository of a backup job in the background (body {"readData": 0-100}, percent of the data to read back); the result is lastCheck/checkError in GET /backups.`},
 	{"DELETE", "/backups/{id}", assistant.AreaBackups, assistant.LevelDestroy, "Delete a backup job (the saved data stays at the destination)."},
 	// accounts
 	{"GET", "/users", assistant.AreaAccounts, "", "Accounts with role and two-factor login."},
