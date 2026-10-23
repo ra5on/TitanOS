@@ -1,4 +1,6 @@
 <script lang="ts">
+ import { beforeNavigate, goto } from '$app/navigation';
+ import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
  import { publicURL } from '#lib/app-links.ts';
@@ -83,6 +85,14 @@
 	});
 	const problems = $derived(form ? check(form, taken, t) : null);
 	const changed = $derived(text !== original);
+ let leaving=$state(false),pendingURL='',allowNavigation=false;
+ beforeNavigate(navigation=>{
+  if(!changed||applying||allowNavigation)return;
+  navigation.cancel();
+  if(!navigation.willUnload){pendingURL=navigation.to?.url.href??'';leaving=true;}
+ });
+ function discard(){allowNavigation=true;leaving=false;if(pendingURL)void goto(pendingURL);}
+
 	const blocked = $derived(applying || !changed || (view === 'form' ? !!problems?.any : false));
 
 	async function apply() {
@@ -100,6 +110,7 @@
 				if (job.state === 'done') {
 					original = text;
 					result = { ok: true, text: t('editor.applied'), detail: '' };
+     if(pendingURL){allowNavigation=true;leaving=false;void goto(pendingURL);}
 				} else {
 					result = { ok: false, text: t('editor.failed'), detail: job.output };
 				}
@@ -220,6 +231,10 @@
 	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}</div>
 {/if}
 
+{#if leaving}<Dialog title={t('shares.unsaved')} locked={applying} onclose={()=>{leaving=false;pendingURL='';}}>
+ <p>{t('editor.unsavedHint')}</p><div class="dialog-actions"><button class="btn" disabled={applying} onclick={()=>{leaving=false;pendingURL='';}}>{t('shares.keepEditing')}</button><button class="btn btn-warn" disabled={applying} onclick={discard}>{t('shares.discard')}</button><button class="btn btn-primary" disabled={blocked} onclick={apply}>{t('editor.apply')}</button></div>
+ {#if result&&!result.ok}<p class="notice-error" role="alert">{result.text}</p>{/if}
+</Dialog>{/if}
 <style>
 	.location {
 		font-size: 0.8125rem;

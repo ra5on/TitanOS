@@ -6,6 +6,8 @@ import "strings"
 // a volume or a disk. The web UI has its own texts for the same kinds.
 var texts = map[string]map[string][2]string{
 	"de": {
+		"maintenance_failed":    {"Wartung {s} fehlgeschlagen", "Der Wartungsauftrag benötigt Aufmerksamkeit. Einzelheiten stehen unter Werkzeuge › Wartung."},
+		"backup_probe_failed":   {"Wiederherstellungsprobe für {s} fehlgeschlagen", "Die Probe konnte nicht vollständig geprüft werden. Einzelheiten stehen unter Einstellungen › Sicherungen."},
 		"backup_check_failed":   {"Prüfung des Backups {s} fehlgeschlagen", "restic hat im Speicherort des Backups {s} Fehler gefunden. Einzelheiten stehen unter Einstellungen › Sicherungen."},
 		"power_postponed":       {"Herunterfahren verschoben", "Das geplante Herunterfahren wartet, bis die laufende Arbeit fertig ist ({s}); höchstens sechs Stunden."},
 		"power_skipped":         {"Herunterfahren ausgelassen", "Das geplante Herunterfahren wurde ausgelassen, weil seit sechs Stunden gearbeitet wird ({s})."},
@@ -44,6 +46,8 @@ var texts = map[string]map[string][2]string{
 		"disk_hot":              {"Platte {s} ist sehr warm", "Die Platte {s} ist wärmer als 55 °C. Prüfe die Lüftung."},
 	},
 	"en": {
+		"maintenance_failed":    {"Maintenance {s} failed", "The maintenance job needs attention. Details are under Tools › Maintenance."},
+		"backup_probe_failed":   {"Restore probe for {s} failed", "The probe could not be fully verified. Details are under Settings › Backups."},
 		"backup_check_failed":   {"Check of backup {s} failed", "restic found errors in the destination of the backup {s}. Details are under Settings › Backups."},
 		"power_postponed":       {"Shutdown postponed", "The scheduled shutdown waits until the running work is done ({s}); at most six hours."},
 		"power_skipped":         {"Shutdown skipped", "The scheduled shutdown was skipped because work has been running for six hours ({s})."},

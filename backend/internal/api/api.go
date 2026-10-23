@@ -11,9 +11,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -26,6 +28,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/maintenance"
+	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -45,15 +49,18 @@ import (
 // Options are the parts the API works with.
 type Options struct {
 	// UI holds the files of the web UI with index.html at its root.
-	UI      fs.FS
-	Store   *config.Store
-	Users   *auth.Users
-	Monitor *system.Monitor
-	Storage *storage.Manager
-	Shares  *shares.Manager
-	Files   *files.Manager
-	Docker  *docker.Manager
-	Catalog *catalog.Manager
+	UI                 fs.FS
+	Store              *config.Store
+	Users              *auth.Users
+	Monitoring         *monitoring.Manager
+	Maintenance        *maintenance.Manager
+	ApplicationBackups *appbackup.Manager
+	Monitor            *system.Monitor
+	Storage            *storage.Manager
+	Shares             *shares.Manager
+	Files              *files.Manager
+	Docker             *docker.Manager
+	Catalog            *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
 	Terminal     *terminal.Manager
 	VMs          *vm.Manager
@@ -179,6 +186,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
 
 	// Everyone may see the volumes; only administrators may change disks.
+	s.operationsRoutes(mux)
 	mux.HandleFunc("GET /api/v1/storage", s.requireUser(s.handleStorage))
 	mux.HandleFunc("GET /api/v1/storage/disk-sleep", s.requireAdmin(s.handleDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
@@ -563,6 +571,25 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		if !currentUser(r).Role.CanAdminister() {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner or administrator")
 			return
+		}
+		if s.opts.Maintenance != nil && heavyOperation(r) {
+			leave, err := s.opts.Maintenance.Enter()
+			if err != nil {
+				writeError(w, http.StatusLocked, "maintenance_running", err.Error())
+				return
+			}
+			defer leave()
+		}
+		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
+			if !gate.Gate.TryRLock() {
+				writeError(w, http.StatusLocked, "application_backup_running", "application backup owns the application lifecycle")
+				return
+			}
+			defer gate.Gate.RUnlock()
+			if gate.Busy() {
+				writeError(w, http.StatusLocked, "application_backup_running", "review the pending application backup before changing applications")
+				return
+			}
 		}
 		next(w, r)
 	})

@@ -1,4 +1,6 @@
 <script lang="ts">
+ import CloneDialog from './CloneDialog.svelte';
+ let cloning=$state<VM|null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
 	// Overview, Screen and Snapshots.
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
@@ -410,6 +412,7 @@
 							{/if}
 							<button type="button" role="menuitem" onclick={() => { close(); showXML(); }}><Icon name="fileText" size={16} /><span>{t('vms.showXml')}</span></button>
 							{#if current.state !== 'running'}
+ <button type="button" role="menuitem" disabled={busy||!!current.job} onclick={()=>{close();cloning=current;}}>{t('ops.clone')}</button>
 								<hr />
 								<button type="button" role="menuitem" class="danger" disabled={busy} onclick={() => { close(); open('remove'); }}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button>
 							{/if}
@@ -522,7 +525,8 @@
 			<button type="button" role="menuitem" disabled={busy || !canStart(vm)} onclick={() => { rowMenu = null; act(vm, 'start'); }}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button>
 		{/if}
 		<button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`); }}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button>
-		<button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(link(vm, 'snapshots')); }}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button>
+		{#if vm.state==='stopped'}<button type="button" role="menuitem" disabled={busy||!!vm.job} onclick={()=>{rowMenu=null;cloning=vm;}}>{t('ops.clone')}</button>{/if}
+ <button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(link(vm, 'snapshots')); }}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button>
 		<hr />
 		{#if vm.state === 'running'}
 			<button type="button" role="menuitem" class="danger" disabled={busy} onclick={() => { rowMenu = null; open('poweroff', vm); }}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button>
@@ -567,6 +571,7 @@
 	</Dialog>
 {/if}
 
+{#if cloning}<CloneDialog source={cloning} onclose={()=>cloning=null} onstarted={()=>{cloning=null;load();}}/>{/if}
 <style>
 	.layout {
 		display: flex;

@@ -1,4 +1,7 @@
 <script lang="ts">
+ import Dialog from '#lib/components/Dialog.svelte';
+ let forgetting=$state<CopyJob|null>(null),confirm=$state('');
+ async function forget(){if(!forgetting)return;retrying=forgetting.id;try{await api.delete(`/files/transfers/${forgetting.id}`,{confirm});forgetting=null;confirm='';await poll();}catch(err){retryError=err instanceof Error?err.message:String(err);}finally{retrying='';}}
  import {transferSample,transferProblem,type TransferSample} from '#lib/transfer-progress.ts';
 	import { api, ApiError, type CopyJob } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
@@ -86,13 +89,16 @@
 				</div>
 				{#if job.state==='running'&&!job.paused&&!job.waiting}<p class="small muted">{#if samples[job.id]?.speed>0}{formatBytes(samples[job.id].speed)}/s{#if job.bytes>job.copied} · {t('files.remainingMinutes',{minutes:Math.max(1,Math.ceil((job.bytes-job.copied)/samples[job.id].speed/60))})}{/if}{:else}{t('files.speedPending')}{/if}</p>{/if}
                 {#if job.error}<div class="notice-warn"><strong>{t(`files.transferProblem.${transferProblem(job.error)}`)}</strong>{#if job.current}<p class="mono">{job.current}</p>{/if}<details><summary>{t('files.technicalDetails')}</summary><p>{job.error}</p></details></div>{/if}
-                {#if job.retryable}<button class="btn" disabled={retrying!==''||!canRetry(job)} onclick={()=>retry(job)}>{t('files.retryRemaining')}</button><p class="muted small">{t('files.retryHint')}</p>{/if}
-                {#if job.state!=='running'}<button class="btn" onclick={()=>onopen(job.to,job.dir)}>{t('files.openDestination')}</button>{/if}
+                {#if job.durable}<p class="muted small">{t('ops.durable')}</p>{/if}{#if job.blocked}<p class="notice-warn">{t('ops.transferBlocked')}</p>{/if}
+ {#if job.retryable}<button class="btn" disabled={retrying!==''||!canRetry(job)} onclick={()=>retry(job)}>{t('files.retryRemaining')}</button><p class="muted small">{t('files.retryHint')}</p>{/if}
+                {#if job.state!=='running'&&job.durable}<button class="btn" onclick={()=>{forgetting=job;confirm='';}}>{t('ops.forget')}</button>{/if}
+ {#if job.state!=='running'}<button class="btn" onclick={()=>onopen(job.to,job.dir)}>{t('files.openDestination')}</button>{/if}
 			</div>
 		{/each}
 	</section>
 {/if}
 
+{#if forgetting}<Dialog title={t('ops.forget')} locked={!!retrying} onclose={()=>forgetting=null}><p>{t('ops.forgetHint')}</p><label>{t('ops.confirmID',{id:forgetting.id})}<input class="field mono" bind:value={confirm}/></label>{#if retryError}<p class="notice-error">{retryError}</p>{/if}<div class="dialog-actions"><button class="btn" disabled={!!retrying} onclick={()=>forgetting=null}>{t('common.cancel')}</button><button class="btn btn-warn" disabled={!!retrying||confirm!==forgetting.id} onclick={forget}>{t('ops.forget')}</button></div></Dialog>{/if}
 <style>
  .notice { display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px;margin-top:var(--gap);background:var(--chip);border:1px solid var(--border);border-radius:var(--radius-ctl); } .notice span{overflow-wrap:anywhere;}
 	.jobs { margin-top: var(--gap); padding: var(--tile-pad); }

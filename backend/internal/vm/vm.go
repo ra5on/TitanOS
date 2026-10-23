@@ -154,8 +154,9 @@ type VM struct {
 
 // Job is the preparation of a VM's disks, which can take a while.
 type Job struct {
-	State string `json:"state"` // running, failed
-	Text  string `json:"text"`
+	Operation string `json:"operation,omitempty"`
+	State     string `json:"state"` // running, failed
+	Text      string `json:"text"`
 }
 
 // Status is a VM with what it is doing right now.
@@ -184,10 +185,11 @@ type sample struct {
 
 // Manager keeps the VMs and talks to libvirt.
 type Manager struct {
-	AutoReady   func() bool
-	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
-	AfterPoll   func(context.Context, map[string]bool) error
-	Timezone    func() string
+	ScheduleAdmission func() (func(), error)
+	AutoReady         func() bool
+	BeforeStart       func(context.Context, string, []string, []string, bool) (func(bool), error)
+	AfterPoll         func(context.Context, map[string]bool) error
+	Timezone          func() string
 
 	store  *config.Store
 	runner run.Runner
@@ -507,6 +509,10 @@ func (m *Manager) List(mounted []string) []Status {
 			copied := *job
 			status.Job = &copied
 		}
+		if job := m.snapshotJobs[name]; job != nil {
+			copied := *job
+			status.Job = &copied
+		}
 		if !m.Disabled && m.pid(name) != 0 {
 			status.State = "running"
 			if s := m.samples[name]; s != nil {
@@ -738,7 +744,9 @@ func newMAC() string {
 
 // Create makes a new VM with its disks. It does not start it.
 func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
-	m.createMu.Lock()
+	if !m.createMu.TryLock() {
+		return ErrSnapshotBusy
+	}
 	defer m.createMu.Unlock()
 	if m.Disabled {
 		return ErrDisabled

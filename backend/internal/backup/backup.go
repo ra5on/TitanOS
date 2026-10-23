@@ -100,7 +100,24 @@ type Keep struct {
 }
 
 // Job is one backup: what, where to, when.
+type Application struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Method string `json:"method"`
+}
+
+type CoordinatedSelection struct {
+	Sources  []string            `json:"sources"`
+	Extras   []string            `json:"extras"`
+	Folders  map[string][]string `json:"folders,omitempty"`
+	Skip     []string            `json:"skip,omitempty"`
+	Patterns []string            `json:"patterns,omitempty"`
+}
+
 type Job struct {
+	CoordinatedSelection *CoordinatedSelection `json:"coordinatedSelection,omitempty"`
+	Applications         []Application         `json:"applications,omitempty"`
+	AllowStop            bool                  `json:"allowStop,omitempty"`
 	// ID is the name; it also names the job's files.
 	ID string `json:"id"`
 	// Sources are shares, by name; see selection.go for what else picks
@@ -131,7 +148,8 @@ type Job struct {
 
 // State is what is known about the runs of a job.
 type State struct {
-	Running bool `json:"running"`
+	Probe   *ProbeResult `json:"probe,omitempty"`
+	Running bool         `json:"running"`
 	// Phase is backup, cleanup or restore while Running.
 	Phase      string  `json:"phase"`
 	Percent    float64 `json:"percent"`
@@ -185,17 +203,20 @@ type Manager struct {
 	// developer's own machine.
 	Disabled bool
 	// Sources returns the shares whose volume is mounted right now.
-	Sources func() []Source
+	Sources             func() []Source
+	PrepareApplications func(context.Context, Job, string, []string) ([]string, func() error, error)
 	// WithUSB pins a mounted filesystem for the complete copy operation.
 	WithUSB func(context.Context, string, func(*os.Root) error) error
 	// OnResult is told how each scheduled or started backup ended.
 	OnResult func(job string, err error)
 	// OnCheck hears how a check of a repository ended.
 	OnCheck func(job string, err error)
+	OnProbe func(job string, err error)
 	// OnOverdue is told once when a job has gone without a backup that
 	// worked for too long (see overdue); again only after one worked.
-	OnOverdue func(job string)
-	overdue   map[string]bool
+	OnOverdue      func(job string)
+	ScheduledStart func(string) error
+	overdue        map[string]bool
 
 	// queue lets one job work at a time.
 	queue sync.Mutex
@@ -220,6 +241,20 @@ func (m *Manager) Load() error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	for i := range jobs {
+		job := &jobs[i]
+		if saved := job.CoordinatedSelection; saved != nil {
+			if len(job.Applications) == 0 {
+				return invalid("coordinated selection has no applications")
+			}
+			job.Sources = saved.Sources
+			job.Extras = saved.Extras
+			job.Folders = saved.Folders
+			job.Skip = saved.Skip
+			job.Patterns = saved.Patterns
+			job.CoordinatedSelection = nil
+		}
+	}
 	targets, err := m.loadSMBTargets()
 	if err != nil {
 		return err
@@ -238,7 +273,19 @@ func (m *Manager) save(jobs []Job) error {
 	if jobs == nil {
 		jobs = []Job{}
 	}
-	if err := m.store.WriteJSON(jobsFile, jobs); err != nil {
+	stored := slices.Clone(jobs)
+	for i := range stored {
+		job := &stored[i]
+		if len(job.Applications) > 0 {
+			job.CoordinatedSelection = &CoordinatedSelection{job.Sources, job.Extras, job.Folders, job.Skip, job.Patterns}
+			job.Sources = nil
+			job.Extras = nil
+			job.Folders = nil
+			job.Skip = nil
+			job.Patterns = nil
+		}
+	}
+	if err := m.store.WriteJSON(jobsFile, stored); err != nil {
 		return err
 	}
 	m.jobs = jobs
@@ -264,8 +311,21 @@ func webAddress(address string) bool {
 
 // check tells whether a job makes sense. shares and volumes are what exists.
 func check(job Job, shares []Source, volumes []string) error {
+	if job.CoordinatedSelection != nil {
+		return invalid("coordinatedSelection is reserved for persisted state")
+	}
 	if !naming.ValidBackup(job.ID) {
 		return invalid("name")
+	}
+	if len(job.Applications) > 50 {
+		return invalid("too many applications")
+	}
+	seenApps := map[string]bool{}
+	for _, app := range job.Applications {
+		if !slices.Contains([]string{"docker", "vm"}, app.Kind) || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`).MatchString(app.Name) || !slices.Contains([]string{"stop", "postgres-export"}, app.Method) || (app.Kind == "vm" && app.Method != "stop") || (!job.AllowStop && app.Method == "stop") || seenApps[app.Kind+":"+app.Name] || plainCopy(job.Destination.Type) {
+			return invalid("application backup configuration or stop consent")
+		}
+		seenApps[app.Kind+":"+app.Name] = true
 	}
 	if err := checkSelection(job); err != nil {
 		return err
@@ -692,8 +752,12 @@ func (m *Manager) mounted() []string {
 // restic runs the program and hands each line it prints to line. It
 // returns what it wrote as errors.
 func (m *Manager) run(ctx context.Context, env, args []string, line func(string)) (string, error) {
+	return m.runFiles(ctx, env, args, line, nil)
+}
+func (m *Manager) runFiles(ctx context.Context, env, args []string, line func(string), files []*os.File) (string, error) {
 	cmd := exec.CommandContext(ctx, m.restic, args...)
 	cmd.Env = env
+	cmd.ExtraFiles = files
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
@@ -790,7 +854,7 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 			s.Running, s.Phase, s.Percent = false, "", 0
 			if phase != "backup" {
 				// A failed check is kept as CheckError, not as a failed backup.
-				if err != nil && !cancelled && phase != "check" {
+				if err != nil && !cancelled && phase != "check" && phase != "probe" {
 					s.LastError = err.Error()
 				}
 				return
@@ -827,7 +891,7 @@ func (m *Manager) Stop(id string) error {
 	return nil
 }
 
-func (m *Manager) backup(ctx context.Context, job Job) error {
+func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	if plainCopy(job.Destination.Type) {
 		if job.Destination.Type == "smb-copy" {
 			target, err := m.smbTarget(job.Destination.TargetID)
@@ -839,6 +903,17 @@ func (m *Manager) backup(ctx context.Context, job Job) error {
 		return m.copyUSB(ctx, job)
 	}
 	sel := m.selection(job)
+	if len(job.Applications) > 0 {
+		if m.PrepareApplications == nil {
+			return invalid("application backups unavailable")
+		}
+		extra, finish, err := m.PrepareApplications(ctx, job, m.homeVolume(job), sel.paths)
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, finish()) }()
+		sel.paths = append(sel.paths, extra...)
+	}
 	paths := sel.paths
 	if len(paths) == 0 {
 		return ErrSources
@@ -1047,7 +1122,11 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 			state := m.state(job)
 			if due(job, state, m.now()) {
-				if err := m.Start(job.ID); err != nil && !errors.Is(err, ErrRunning) {
+				start := m.Start
+				if m.ScheduledStart != nil {
+					start = m.ScheduledStart
+				}
+				if err := start(job.ID); err != nil && !errors.Is(err, ErrRunning) {
 					slog.Warn("backup not started", "job", job.ID, "err", err)
 				}
 			}

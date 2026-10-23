@@ -1,5 +1,6 @@
 <script lang="ts">
 	import PageHead from '#lib/components/PageHead.svelte';
+ import ActionSummary from '#lib/operations/ActionSummary.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import 'gridstack/dist/gridstack.min.css';
@@ -220,6 +221,8 @@
 		{/if}
 	{/snippet}
 </PageHead>
+{#if admin && !editing}<ActionSummary compact/>{/if}
+
 
 {#if editing}
 	<div class="editbar">

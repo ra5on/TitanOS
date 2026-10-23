@@ -135,9 +135,7 @@ Speicherortwechsel und Verlassen der Seite beenden diese Freischaltung.
 
 Fehlgeschlagene und abgebrochene Datei-Aufträge bieten „Offene Dateien erneut
 versuchen“. Bereits abgeschlossene Dateien und verschobene Teilbäume werden
-übersprungen; zuvor gewählte neue Zielordnernamen bleiben erhalten. Die
-Aufträge liegen im RAM und können bis zum Neustart von titand wiederholt
-werden. Aktuelle Rechte werden erneut geprüft; beim Verschieben werden nach
+übersprungen; zuvor gewählte neue Zielordnernamen bleiben erhalten. Seit 0.16.0 liegen Aufträge mit Ziel auf einem Daten-Volume zusätzlich als Plan und Ereignisjournal dort und können nach titand-Neustart geprüft fortgesetzt werden. Andere Ziele bleiben im RAM. Aktuelle Rechte werden erneut geprüft; beim Verschieben werden nach
 Unterbrechung geänderte Quelldateien erhalten und als Fehler gemeldet.
 
 Der Papierkorb bietet zusätzlich eine flache Dateiliste und Sortierung nach
@@ -213,8 +211,7 @@ frei. Fortsetzen prüft den aktuellen Root-Zugriff. Ein optionales Limit von
 0–1024 MiB/s gilt je Auftrag (0 = unbegrenzt), mit höchstens einem 256-KiB-Block
 Vorlauf. Innerhalb desselben Dateisystems erfolgt Verschieben als Umbenennung;
 ein bereits laufender einzelner Dateisystemaufruf lässt sich nicht pausieren.
-Extraktion und Browser-Uploads behalten ihre eigenen Abläufe. Die Aufträge und
-ihre Einstellungen liegen ausschließlich im RAM und enden beim Dienstneustart.
+Extraktion und Browser-Uploads behalten ihre eigenen Abläufe. Seit 0.16.0 erhalten Kopier-/Verschiebeaufträge mit Ziel auf einem Daten-Volume dauerhafte Checkpoints; andere Ziele bleiben im RAM. Siehe `../WORKFLOWS.md`.
 
 Mehrfachauswahl und Ordner öffnen vor dem ZIP-Download einen Prüfdialog mit
 Dateianzahl, unkomprimierter Größe und Archivnamen. Der Download bleibt ein
@@ -472,3 +469,44 @@ Vom Projektinhaber freigegeben, ohne eigene Entwurfsseite. Alle Teile nutzen die
   - Im Wiederherstellen-Dialog die Wahl „Ganzer Stand“ oder „Einzelne Dateien“; Letzteres öffnet einen Ordnerbrowser mit Häkchen.
 - **Automationseditor:** Auswahl „Aus Vorlage“ beim Anlegen und das Ereignis „Home Assistant“ mit Geräteauswahl und optionalen Filtern.
 - **Chat:** Statistikzeile unter dem letzten Eintrag, wenn kein Auftrag läuft.
+
+### Shares und Docker-Abläufe (0.16.0)
+
+Am 23. Oktober 2026 vom Projektinhaber beauftragter Ausbau aus dem interaktiven
+Gesamtentwurf: kompakte Freigabentabelle mit Suche, Volume-/Protokollfilter und
+Dichte; Details auf Klick, Verbindungshilfe separat, „In Dateien öffnen“.
+Pfad und vollständige Kontorechte stehen in den Details. Fehlendes Volume,
+Gastzugriff und fehlende SMB-Kontorechte bleiben sichtbar. Formularreiter erhalten
+den Entwurf; bei Schließen mit Änderungen Speichern/Verwerfen/Weiterbearbeiten.
+
+Docker behält seine bestehende Listen-/Kartenansicht, Stacks starten geschlossen.
+Direkte Links übernehmen die vorhandenen WebUI-/Tailscale-/öffentlichen Adressen
+des automatisch oder ausdrücklich zugeordneten Hauptdienstes. Auswahl je Konto
+und Compose-Dienstname; kein stiller Ersatz bei fehlendem Dienst. Suche und
+Statusfilter finden Dienste im Stack, Problemhinweis öffnet die betroffenen Dienste.
+Fehlgeschlagene Aktualisierung zeigt den letzten Stand als veraltet.
+
+Die Befehlspalette führt ausschließlich zu autorisierten Seiten/Objekten.
+Der beauftragte Gesamtentwurf umfasst außerdem die implementierten Speicher-, Wartungs-, Backup-, Monitoring-, Klon- und Wiederanlaufseiten; genaue Grenzen in `../WORKFLOWS.md`.
+Prüfung: `scripts/test-ui-workflows.mjs`, wie die übrigen Browserprüfungen mit
+`PLAYWRIGHT_MODULE`, `BROWSER_EXECUTABLE`, `UI_URL` und `UI_OUTPUT`.
+
+### Speicher, Wartung und Aufträge (0.16.0)
+
+Der bestätigte Gesamtentwurf wird mit gemeinsamen PageHead-/Dialog-/Kachelmustern
+und Theme-Variablen umgesetzt. Werkzeuge verlinkt Aufträge, Wartung, Monitoring und
+Speicherübernahme. Aufträge bündelt aktuelle Arbeit, Fehler, nächste Termine und
+Wiederanlauf. Das Dashboard zeigt denselben kompakten Handlungsbereich.
+
+Speicherübernahme trennt Erkennung, lesende Vorschau und ausdrücklich bestätigte
+Registrierung. Die Volume-Seite verlinkt Verbrauch, Erweiterung und Snapshot-Dateien.
+Erweiterung zeigt Platte/Seriennummer, Rettungs-Volume und Mitgliederzahl vor der
+Löschbestätigung. Offene Vorgänge bleiben sichtbar. Snapshot-Dateien werden in
+neue Ordner kopiert; keine Wiederherstellung über laufende Daten.
+
+Wartung zeigt gemeinsame Fenster/Zeitzone, Zeitpläne und letzte Ergebnisse.
+Unterbrochene Vorgänge bieten Prüfung mit Kennung. Monitoring zeigt abschaltbare
+Volume-Speicherung und getrennte Kurven; Lücken verbinden sich nicht zu erfundenen
+Messwerten. Mobile Ansichten stapeln; Tabellen bleiben seitlich scrollbar.
+VM-Klonen und Backup-Anwendungsauswahl ergänzen die jeweiligen vorhandenen Dialoge.
+`scripts/test-ui-operations.mjs` prüft diese Abläufe auf Desktop/Mobil, Graphit/Hell.

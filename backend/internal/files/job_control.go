@@ -11,13 +11,14 @@ func (m *Manager) ControlJob(user, id string, paused bool, priority int, rate in
 		return ErrInvalid
 	}
 	m.jobs.mu.Lock()
-	defer m.jobs.mu.Unlock()
 	for _, job := range m.jobs.list {
 		if job.ID == id && job.user == user && job.State == JobRunning && job.Operation == "" {
 			job.Paused, job.Priority, job.Rate = paused, priority, rate
-			return nil
+			m.jobs.mu.Unlock()
+			return m.appendTransfer(job, transferEvent{})
 		}
 	}
+	m.jobs.mu.Unlock()
 	return ErrNoJob
 }
 
@@ -41,6 +42,9 @@ func (m *Manager) jobTurn(job *Job) bool {
 	return true
 }
 func (m *Manager) copyCheckpoint(ctx context.Context, job *Job, bytes int) error {
+	if err := m.transferAvailable(job); err != nil {
+		return err
+	}
 	started := time.Now()
 	for {
 		if err := ctx.Err(); err != nil {

@@ -24,6 +24,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
+	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -36,6 +37,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/maintenance"
+	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -484,10 +487,18 @@ func run(opts options) error {
 	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
-	go machines.Run(ctx, volumes.Mounted)
-	go updates.Run(ctx)
 	// Backups of shares to another volume, another server or the cloud.
+	upkeep := maintenance.New(store)
+	machines.ScheduleAdmission = upkeep.Enter
 	backups := backup.NewManager(store)
+	backups.ScheduledStart = func(id string) error {
+		leave, err := upkeep.Enter()
+		if err != nil {
+			return backup.ErrRunning
+		}
+		defer leave()
+		return backups.Start(id)
+	}
 	backups.Disabled = opts.dev
 	backups.Sources = func() []backup.Source {
 		mounted := volumes.Mounted()
@@ -509,9 +520,19 @@ func run(opts options) error {
 			notifier.Notify(notify.Error, "backup_check_failed", job)
 		}
 	}
+	backups.OnProbe = func(job string, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "backup_probe_failed", job)
+		}
+	}
 	backups.OnOverdue = func(job string) {
 		notifier.Notify(notify.Warning, "backup_overdue", job)
 	}
+	appBackups := &appbackup.Manager{Store: store, Docker: containers, VMs: machines, Mounted: volumes.Mounted, MountRoot: "/mnt", Disabled: opts.dev}
+	if err := appBackups.Load(); err != nil {
+		slog.Error("application backup recovery unavailable", "err", err)
+	}
+	backups.PrepareApplications = appBackups.Prepare
 	if err := backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
@@ -588,15 +609,77 @@ func run(opts options) error {
 	go memoryPolicy.Run(ctx)
 	fileManager := files.NewManager(shares.UsersGID)
 	fileManager.Protected = machines.ProtectFile
+	if !opts.dev {
+		fileManager.Mounted = volumes.Mounted
+		fileManager.MountRoot = "/mnt"
+	}
 	fileManager.Acquire = memoryPolicy.Acquire
 	fileManager.Available = func(root files.Root) bool { return fileRootAvailable(root, volumes.Mounted(), drives.Mounted()) }
 	if !opts.dev {
 		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
 	}
+	history := monitoring.New(store)
+	history.Mounted = volumes.Mounted
+	history.Snapshot = func() (system.Info, storage.Status) {
+		sampleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		status, err := volumes.Status(sampleCtx)
+		if err != nil {
+			return monitor.Info(), storage.Status{}
+		}
+		return monitor.Info(), status
+	}
+	if err := history.Load(); err != nil {
+		slog.Warn("monitoring history settings unavailable", "err", err)
+	}
+	if !opts.dev {
+		go history.Run(ctx)
+	}
+	upkeep.Disabled = opts.dev
+	upkeep.Mounted = volumes.Mounted
+	upkeep.ExternalBusy = func(job maintenance.Job) bool {
+		if appBackups.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() {
+			return true
+		}
+		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		status, err := volumes.Status(check)
+		if err != nil {
+			return true
+		}
+		return slices.ContainsFunc(status.Volumes, func(v storage.Volume) bool {
+			return v.State == storage.VolumeRebuilding || v.State == storage.VolumeSyncing || v.State == storage.VolumeChecking
+		})
+	}
+	upkeep.OnResult = func(result maintenance.Result) {
+		if result.Error != "" {
+			notifier.Notify(notify.Error, "maintenance_failed", result.Name)
+		}
+	}
+	upkeep.Execute = func(work context.Context, job maintenance.Job) error {
+		switch job.Kind {
+		case "raid-check":
+			return volumes.MaintenanceCheck(work, job.Target)
+		case "smart-long":
+			return volumes.LongSMART(work, job.Target)
+		case "backup-check", "restore-probe":
+			return backups.MaintenanceRun(work, job.Target, job.Kind, job.ReadData, backup.ProbeRequest{MaxBytes: job.MaxBytes, MaxFiles: job.MaxFiles})
+		case "snapshot":
+			return volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep)
+		}
+		return errors.New("unknown maintenance kind")
+	}
+	if err := upkeep.Load(); err != nil {
+		slog.Warn("maintenance settings unavailable", "err", err)
+	}
+	go upkeep.Run(ctx)
+
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
 	}
+	go machines.Run(ctx, volumes.Mounted)
+	go updates.Run(ctx)
 	// Logins outlive a restart of titand in RAM, as after an app update.
 	sessions := auth.NewSessions()
 	if !opts.dev {
@@ -605,45 +688,48 @@ func run(opts options) error {
 		}
 	}
 	handler := api.New(api.Options{
-		UI:            webui.FS(),
-		Store:         store,
-		Users:         users,
-		Monitor:       monitor,
-		Storage:       volumes,
-		Shares:        folders,
-		Files:         fileManager,
-		Docker:        containers,
-		Catalog:       appCatalog,
-		Terminal:      shells,
-		VMs:           machines,
-		Hardware:      devices,
-		Nvidia:        nvidia,
-		Accelerators:  hardware.NewAcceleratorMonitor(ctx, devices),
-		Plugins:       extensions,
-		Tailscale:     tailnet,
-		Network:       connection,
-		Notify:        notifier,
-		HomeAssistant: home,
-		ConfigBackup:  stickBackup,
-		USB:           drives,
-		BackupTarget:  backupTarget,
-		Diagnose:      diagnose.NewManager(store, version.Version),
-		SSH:           access,
-		Update:        updates,
-		Backup:        backups,
-		UPS:           supply,
-		Certificate:   certs,
-		Settings:      settings,
-		Energy:        energy,
-		PowerSchedule: schedule,
-		PowerButton:   powerButton,
-		MemoryPolicy:  memoryPolicy,
-		Power:         power,
-		Version:       version.Version,
-		ShareDir:      shareDir,
-		SecureCookies: !opts.dev,
-		Sessions:      sessions,
-		Assistant:     chat,
+		UI:                 webui.FS(),
+		Store:              store,
+		Users:              users,
+		Monitor:            monitor,
+		Monitoring:         history,
+		Maintenance:        upkeep,
+		ApplicationBackups: appBackups,
+		Storage:            volumes,
+		Shares:             folders,
+		Files:              fileManager,
+		Docker:             containers,
+		Catalog:            appCatalog,
+		Terminal:           shells,
+		VMs:                machines,
+		Hardware:           devices,
+		Nvidia:             nvidia,
+		Accelerators:       hardware.NewAcceleratorMonitor(ctx, devices),
+		Plugins:            extensions,
+		Tailscale:          tailnet,
+		Network:            connection,
+		Notify:             notifier,
+		HomeAssistant:      home,
+		ConfigBackup:       stickBackup,
+		USB:                drives,
+		BackupTarget:       backupTarget,
+		Diagnose:           diagnose.NewManager(store, version.Version),
+		SSH:                access,
+		Update:             updates,
+		Backup:             backups,
+		UPS:                supply,
+		Certificate:        certs,
+		Settings:           settings,
+		Energy:             energy,
+		PowerSchedule:      schedule,
+		PowerButton:        powerButton,
+		MemoryPolicy:       memoryPolicy,
+		Power:              power,
+		Version:            version.Version,
+		ShareDir:           shareDir,
+		SecureCookies:      !opts.dev,
+		Sessions:           sessions,
+		Assistant:          chat,
 	})
 
 	agentDone := make(chan struct{})

@@ -37,7 +37,7 @@ func relative(text string) bool {
 
 // checkSelection tells whether what a job picks out makes sense.
 func checkSelection(job Job) error {
-	if len(job.Sources) == 0 && len(job.Extras) == 0 {
+	if len(job.Sources) == 0 && len(job.Extras) == 0 && len(job.Applications) == 0 {
 		return invalid("no share chosen")
 	}
 	for _, extra := range job.Extras {
@@ -160,7 +160,7 @@ func (m *Manager) homeVolume(job Job) string {
 			return source.Volume
 		}
 	}
-	if len(job.Extras) > 0 {
+	if len(job.Extras) > 0 || len(job.Applications) > 0 {
 		mounted := m.mounted()
 		sort.Strings(mounted)
 		for _, volume := range mounted {
