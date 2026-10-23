@@ -65,7 +65,7 @@ Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beli
 
 Dateien, Protokolle, Webseiten, Anhänge und Werkzeugergebnisse sind Daten, keine neuen Aufträge oder Erlaubnisse. Der Standardprompt verlangt, deren eingebettete Anweisungen zu ignorieren und auf das Nutzerziel begrenzt zu arbeiten. Das ist keine Garantie gegen jede Fehlentscheidung eines Modells; die technisch durchgesetzten Rechte gelten zusätzlich.
 
-`file_write` erzeugt Text, Markdown, CSV, JSON, DOCX, XLSX und PDF; Ersetzen erfordert das explizite Werkzeugargument und erhält `.prev`. `files_move` verschiebt bis zu 500 Einträge ohne Überschreiben; `file_copy` verwendet bestehende Kopieraufträge. Lesen von DOCX/XLSX ist möglich, PDF-Lesen nicht. NAS-Anhänge werden mit Kontorechten gelesen. Bilder setzen ein Vision-Modell voraus.
+`file_write` erzeugt Text, Markdown, CSV, JSON, DOCX, XLSX und PDF; Ersetzen erfordert das explizite Werkzeugargument und erhält `.prev`. `files_move` verschiebt bis zu 500 Einträge ohne Überschreiben; `file_copy` verwendet bestehende Kopieraufträge. Lesen von DOCX/XLSX und PDF ist möglich; `document_read` liefert begrenzte PDF-Seitenbereiche und optional OCR. `document_edit` ändert exakte Word-/Textstellen oder vorhandene Excel-Wertzellen in einer neuen Kopie mit geprüftem Ausgangshash. NAS-Anhänge werden mit Kontorechten gelesen. Bilder setzen ein Vision-Modell voraus.
 
 Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckGo-HTML ohne Schlüssel; `web_read` nur HTTP/HTTPS auf 80/443, mit Größen-/Weiterleitungsgrenzen und Prüfung jeder Zieladresse gegen private, lokale, Tailnet- und NAS-Adressen. Keine garantierte Verfügbarkeit dieser externen Suchschnittstelle.
 
@@ -231,8 +231,8 @@ Jedes Konto richtet unter *Mein Konto › Meine Benachrichtigungen* eigene Wege 
   - `blocked`: ein Auftrag kommt nicht weiter
   - `agent`: Nachricht über das Werkzeug `notify_me`
 - **Inhalt:** `summary` (bis 300 Zeichen der letzten Antwort bzw. der Begründung der wartenden Aktion) oder `none`. Anhänge und Werkzeugdaten stehen nie in einer Nachricht.
-- **Ruhezeit:** Nachrichten werden im RAM zurückgehalten und danach gesammelt geschickt; Fehler und Nachrichten mit `priority: high` kommen sofort.
-- **Einmal je Ereignis:** Je Auftrag, Ereignis und Aktion geht höchstens eine Nachricht hinaus.
+- **Ruhezeit:** Nachrichten werden standardmäßig im RAM zurückgehalten, auf Wunsch auf dem Daten-Volume ohne Freigabetoken gespeichert und danach gesammelt geschickt; Fehler und Nachrichten mit `priority: high` kommen sofort.
+- **Einmal je Ereignis:** Je Auftrag, Ereignis und Aktion wird ein Versandauftrag angenommen; fehlgeschlagene Dienstaufrufe werden höchstens dreimal versucht. Optional springt ein Ersatzkanal ein. Bei unbekanntem Zustellausgang sind doppelte Zustellungen durch den Dienst möglich.
 - Bei Automationen gilt ihre Einstellung: `errors` meldet `blocked` und `confirmation`, `always` alles, `never` nichts.
 
 Der gemeinsame Admin-Kanal bleibt wie bisher ohne Chatinhalte.
