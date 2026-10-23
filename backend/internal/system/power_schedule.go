@@ -74,13 +74,13 @@ type PowerScheduler struct {
 	Poweroff func() error
 	Notify   func(severity, kind, subject string)
 
-	sys  string
-	now  func() time.Time
+	sys string
+	now func() time.Time
 	// wolGet and wolSet reach the network card; tests replace them.
 	wolGet func(name string) (supported, enabled bool, err error)
 	wolSet func(name string, enable bool) error
-	mu   sync.Mutex
-	set  PowerSchedule
+	mu     sync.Mutex
+	set    PowerSchedule
 	// postponedSince is when a due shutdown started to wait.
 	postponedSince time.Time
 	postponedFor   string
