@@ -1,6 +1,7 @@
 import { soundForNotices } from './sound.svelte.ts';
 import { api } from './api.ts';
 import { tOr } from './i18n/index.svelte.ts';
+import { bellShows, sanitizeBell, type BellSettings } from './notify-groups.ts';
 
 export type Notice = {
 	id: number;
@@ -26,13 +27,21 @@ function readSeen(): number {
 /** What happened on the NAS, the newest first; `seen` is the time up to which it was looked at in this browser. */
 export const notifications = $state<{ list: Notice[]; seen: number }>({ list: [], seen: readSeen() });
 
+/** What this account wants to see in its bell; the NAS keeps every message. */
+export const bell = $state<{ settings: BellSettings }>({ settings: sanitizeBell(null) });
+
+/** The messages the bell shows under the account's filter. */
+export function visibleNotices(): Notice[] {
+	return notifications.list.filter((notice) => bellShows(bell.settings, notice));
+}
+
 let generation = 0;
 
 export async function loadNotifications() {
 	const request = ++generation;
 	try {
 		const result = await api.get<{ messages: Notice[] }>('/notifications');
-		if (request === generation) { notifications.list = result.messages; soundForNotices(result.messages); }
+		if (request === generation) { notifications.list = result.messages; soundForNotices(result.messages.filter((notice) => bellShows(bell.settings, notice))); }
 	} catch {
 		// The list stays as it is; the next change brings it again.
 	}
@@ -47,7 +56,7 @@ export async function dismissNotifications(ids: number[]) {
 }
 
 export function unreadCount(): number {
-	return notifications.list.filter((notice) => Date.parse(notice.time) > notifications.seen).length;
+	return visibleNotices().filter((notice) => Date.parse(notice.time) > notifications.seen).length;
 }
 
 /** Marks everything in the list as looked at. */

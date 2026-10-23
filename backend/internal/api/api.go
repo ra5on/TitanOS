@@ -191,6 +191,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeys))
 	mux.HandleFunc("POST /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeyAdd))
 	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", s.requireUser(s.handleAccountKeyRemove))
+	mux.HandleFunc("GET /api/v1/account/notifications", s.requireUser(s.handleAccountNotify))
+	mux.HandleFunc("PUT /api/v1/account/notifications", s.requireUser(s.handleAccountNotifyChange))
+	mux.HandleFunc("POST /api/v1/account/notifications/test", s.requireUser(s.handleAccountNotifyTest))
 
 	mux.HandleFunc("GET /api/v1/shares", s.requireUser(s.handleListShares))
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))

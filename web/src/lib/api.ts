@@ -109,6 +109,7 @@ export type Preferences = {
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
 	assistant: Record<string, unknown> | null;
+	bell: Record<string, unknown> | null;
 };
 
 export type Temperature = {

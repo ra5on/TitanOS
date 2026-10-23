@@ -45,6 +45,10 @@
  {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 </section>
 <section class="tile">
+ <h2>{t('agent.notifications')}</h2>
+ <p class="muted">{t('agent.notificationsHint')} <a href="/account#personal-notifications">{t('agent.notificationsLink')}</a></p>
+</section>
+<section class="tile">
  <h2>{t('agent.privacy')}</h2>
  <p class="muted">{t('agent.historyUsage',{size:((prompt?.historyBytes??0)/1048576).toFixed(2)})}</p>
  <label class="check"><input type="checkbox" bind:checked={settings.ephemeral}/>{t('agent.ephemeral')}</label>
