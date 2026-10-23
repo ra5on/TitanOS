@@ -552,9 +552,12 @@ func (s *Server) RunAssistant(ctx context.Context) {
 	scan := func() {
 		settings := s.opts.Assistant.Settings()
 		if !settings.Enabled || settings.Paused {
+			s.watchHomeAssistant(nil)
 			return
 		}
-		for _, user := range s.opts.Users.List() {
+		users := s.opts.Users.List()
+		s.watchHomeAssistant(users)
+		for _, user := range users {
 			if !s.assistantAllowed(user) {
 				continue
 			}

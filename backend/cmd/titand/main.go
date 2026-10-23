@@ -386,6 +386,7 @@ func run(opts options) error {
 		slog.Warn("Home Assistant settings not readable from /config", "err", err)
 	}
 	notifier.SetHomeAssistant(home)
+	go home.Run(ctx)
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
 	volumes.OnTestDone = func(test storage.DiskTest) {
 		disk := test.Disk
@@ -633,6 +634,7 @@ func run(opts options) error {
 
 	agentDone := make(chan struct{})
 	go func() { defer close(agentDone); handler.RunAssistant(ctx) }()
+	go home.RunMQTT(ctx, handler.HASnapshot, handler.HACommand)
 
 	var servers []*http.Server
 	errc := make(chan error, 2)
