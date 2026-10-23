@@ -58,8 +58,9 @@ type Settings struct {
 	// it, a self-signed certificate is accepted, but only that one.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	// Domains and Entities are what the assistant may see and switch.
-	Domains  []string `json:"domains"`
-	Entities []string `json:"entities"`
+	Domains  []string                `json:"domains"`
+	Entities []string                `json:"entities"`
+	Policies map[string]EntityPolicy `json:"policies,omitempty"`
 	// Account is the TitanOS account that buttons in Home Assistant and
 	// questions from Home Assistant Assist act for. Its rights apply.
 	Account string `json:"account,omitempty"`
@@ -91,8 +92,8 @@ type MQTT struct {
 
 // SensorGroups and CommandGroups are the choices in MQTT.
 var (
-	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups"}
-	CommandGroups = []string{"containers", "vms", "updates", "power"}
+	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
+	CommandGroups = []string{"containers", "vms", "backups", "updates", "power"}
 )
 
 // Levels of a service call, as the assistant's actions know them.
@@ -194,6 +195,7 @@ func (m *Manager) Settings() (Settings, map[string]bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.settings
+	s.Policies = clonePolicies(s.Policies)
 	set := map[string]bool{"token": s.Token != "", "mqtt": s.MQTT.Password != ""}
 	s.Token, s.MQTT.Password = "", ""
 	s.MQTT.Groups, s.MQTT.Commands = append([]string{}, s.MQTT.Groups...), append([]string{}, s.MQTT.Commands...)
@@ -274,6 +276,10 @@ func (m *Manager) SetSettings(s Settings, clear ...string) error {
 			return invalid("entity %q: its domain cannot be released", e)
 		}
 	}
+	if err := validatePolicies(s.Policies); err != nil {
+		return err
+	}
+	s.Policies = clonePolicies(s.Policies)
 	if err := m.store.WriteJSON(settingsFile, s); err != nil {
 		return err
 	}
@@ -577,7 +583,7 @@ func (m *Manager) Call(ctx context.Context, domain, service string, entities []s
 	settings := m.settings
 	m.mu.Unlock()
 	for _, e := range entities {
-		if domainOf(e) != domain || !allowed(settings, e) {
+		if domainOf(e) != domain || !callAllowed(settings, e, service) {
 			return nil, fmt.Errorf("%w: %s", ErrNotAllowed, e)
 		}
 	}

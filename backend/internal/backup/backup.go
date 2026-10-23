@@ -342,9 +342,10 @@ func withoutSecrets(job Job) (Job, map[string]bool) {
 
 // View is a job with its state, for the web UI.
 type View struct {
-	Job       Job             `json:"job"`
-	SecretSet map[string]bool `json:"secretSet"`
-	State     State           `json:"state"`
+	StateKnown bool            `json:"stateKnown"`
+	Job        Job             `json:"job"`
+	SecretSet  map[string]bool `json:"secretSet"`
+	State      State           `json:"state"`
 	// Next is when the job runs next; empty if it is off.
 	Next *time.Time `json:"next"`
 }
@@ -357,7 +358,7 @@ func (m *Manager) List() []View {
 	views := []View{}
 	for _, job := range jobs {
 		shown, set := withoutSecrets(job)
-		view := View{Job: shown, SecretSet: set, State: m.state(job)}
+		view := View{StateKnown: true, Job: shown, SecretSet: set, State: m.state(job)}
 		if next, ok := job.NextRun(m.now()); ok {
 			view.Next = &next
 		}
@@ -1086,4 +1087,25 @@ func (m *Manager) Busy() bool {
 		}
 	}
 	return false
+}
+
+// CachedViews exposes only known RAM states for telemetry. A nil state is
+// deliberately unknown; this method never opens an archive or wakes a disk.
+func (m *Manager) CachedViews() []View {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]View, 0, len(m.jobs))
+	for _, job := range m.jobs {
+		shown, set := withoutSecrets(job)
+		v := View{Job: shown, SecretSet: set}
+		if state := m.states[job.ID]; state != nil {
+			v.State = *state
+			v.StateKnown = true
+		}
+		if next, ok := job.NextRun(m.now()); ok {
+			v.Next = &next
+		}
+		out = append(out, v)
+	}
+	return out
 }

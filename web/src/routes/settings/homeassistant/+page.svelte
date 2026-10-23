@@ -6,9 +6,10 @@
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	type MQTT = { enabled: boolean; host: string; port: number; username: string; password?: string; tls: boolean; prefix: string; groups: string[]; commands: string[]; id?: string };
-	type Settings = { enabled: boolean; url: string; token?: string; fingerprint: string; domains: string[]; entities: string[]; account?: string; assist?: boolean; mqtt: MQTT };
+	type Policy = { aliases?: string[]; readOnly?: boolean; services: string[] | null; description?: string };
+	type Settings = { policies?: Record<string, Policy>; enabled: boolean; url: string; token?: string; fingerprint: string; domains: string[]; entities: string[]; account?: string; assist?: boolean; mqtt: MQTT };
 	type Status = { watching: boolean; watchError: string; mqtt: boolean; mqttError: string };
-	type Answer = { settings: Settings; tokenSet: boolean; mqttPasswordSet: boolean; domains: string[]; sensorGroups: string[]; commandGroups: string[]; status: Status };
+	type Answer = { diagnostics?: {lastConnected:string;lastDisconnected:string;evictedTransitions:number;watchedEntities:number}; settings: Settings; tokenSet: boolean; mqttPasswordSet: boolean; domains: string[]; sensorGroups: string[]; commandGroups: string[]; status: Status };
 	type Entity = { id: string; name: string; area?: string; state: string; domain: string };
 
 	// Domains whose calls need the ticked confirmation; the rest switch
@@ -32,6 +33,9 @@
 	let checkError = $state('');
 	let entities = $state<Entity[] | null>(null);
 	let search = $state('');
+ let diagnostics = $state<Answer['diagnostics']>();
+ function policy(id: string): Policy { return draft?.policies?.[id] ?? {services:null}; }
+ function setPolicy(id: string, update: Partial<Policy>) { if(draft) draft.policies={...draft.policies,[id]:{...policy(id),...update}}; }
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -46,6 +50,7 @@
 		sensorGroups = res.sensorGroups;
 		commandGroups = res.commandGroups;
 		status = res.status;
+ diagnostics=res.diagnostics;
 		clear = [];
 	}
 
@@ -174,6 +179,12 @@
 									<span><span class="name">{entity.name}</span> <span class="mono muted">{entity.id}</span>{#if entity.area}<span class="muted">&nbsp;· {entity.area}</span>{/if}</span>
 								</label>
 								<span class="mono muted">{entity.state}</span>
+                                <details><summary>{t('ha.policy')}</summary>
+                                <label>{t('ha.aliases')}<input class="field" value={(policy(entity.id).aliases??[]).join(', ')} onchange={(e)=>setPolicy(entity.id,{aliases:e.currentTarget.value.split(',').map(v=>v.trim()).filter(Boolean)})}/></label>
+                                <label class="check"><input type="checkbox" checked={policy(entity.id).readOnly??false} onchange={(e)=>setPolicy(entity.id,{readOnly:e.currentTarget.checked})}/>{t('ha.readOnly')}</label>
+                                <label>{t('ha.services')}<input class="field mono" value={policy(entity.id).services?.join(', ')??''} onchange={(e)=>setPolicy(entity.id,{services:e.currentTarget.value.trim()?e.currentTarget.value.split(',').map(v=>v.trim()).filter(Boolean):null})}/></label>
+                                <label>{t('ha.description')}<input class="field" maxlength="1000" value={policy(entity.id).description??''} onchange={(e)=>setPolicy(entity.id,{description:e.currentTarget.value})}/></label>
+                                </details>
 							</li>
 						{:else}
 							<li class="muted">{t('ha.noEntities')}</li>
@@ -185,6 +196,7 @@
 
 		<section class="tile" id="account">
 			<h2 class="tile-title">{t('ha.account')}</h2>
+ <p>{t('ha.nasID')}: <span class="mono">{draft.mqtt.id??'—'}</span></p>
 			<p class="muted">{t('ha.accountIntro')}</p>
 			<label class="narrow"><span>{t('ha.accountLabel')}</span>
 				<select class="field" bind:value={draft.account}>
@@ -197,7 +209,11 @@
 			{#if status?.watching}<p class="muted small">{t('ha.watching')}</p>{:else if status?.watchError}<p class="notice-warn">{t('ha.watchError')} <span class="mono">{status.watchError}</span></p>{/if}
 		</section>
 
-		<section class="tile" id="mqtt">
+		{#if diagnostics}<section class="tile"><h2 class="tile-title">{t('ha.diagnostics')}</h2>
+            <p>{t('ha.lastConnected')}: {diagnostics.lastConnected&&!diagnostics.lastConnected.startsWith('0001-')?new Date(diagnostics.lastConnected).toLocaleString():'—'}</p>
+            <p>{t('ha.lastDisconnected')}: {diagnostics.lastDisconnected&&!diagnostics.lastDisconnected.startsWith('0001-')?new Date(diagnostics.lastDisconnected).toLocaleString():'—'}</p>
+            <p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p><p class="muted">{t('ha.gaps')}</p></section>{/if}
+        <section class="tile" id="mqtt">
 			<div class="head">
 				<h2 class="tile-title">{t('ha.mqtt')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.mqtt.enabled} /><span>{t('notify.enabled')}</span></label>

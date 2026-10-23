@@ -64,9 +64,13 @@ var (
 
 // Settings is /config/system/assistant.json.
 type Settings struct {
-	Enabled bool   `json:"enabled"`
-	Ollama  string `json:"ollama"`
-	Model   string `json:"model"`
+	OCR           bool   `json:"ocr,omitempty"`
+	VoiceModel    string `json:"voiceModel,omitempty"`
+	DocumentModel string `json:"documentModel,omitempty"`
+	PlanningModel string `json:"planningModel,omitempty"`
+	Enabled       bool   `json:"enabled"`
+	Ollama        string `json:"ollama"`
+	Model         string `json:"model"`
 	// Users lets accounts with the role user chat, with what they see.
 	Users bool `json:"users"`
 	// Web allows the web search; WebUsers allows it for users as well.
@@ -234,6 +238,11 @@ func (m *Manager) SetSettings(settings Settings) error {
 		settings.RetentionDays < 0 || settings.RetentionDays > 36500, len(settings.Profiles) > 20:
 		return ErrInvalid
 	}
+	for _, model := range []string{settings.VoiceModel, settings.DocumentModel, settings.PlanningModel} {
+		if model != "" && !ValidModel(model) {
+			return ErrInvalid
+		}
+	}
 	for area, level := range settings.Areas {
 		if !slices.Contains(Areas, area) || (level != AccessOff && level != AccessRead && level != AccessWrite) {
 			return ErrInvalid
@@ -265,7 +274,8 @@ func (m *Manager) SetSettings(settings Settings) error {
 
 // Person is who chats.
 type Person struct {
-	Name string
+	Knowledge string
+	Name      string
 	// Role is owner, admin or user.
 	Role string
 }
@@ -313,6 +323,9 @@ func (m *Manager) prompt(person Person, page string, web bool, task *Task) strin
 		text += "\nActions and plans execute directly within the request and allowed areas, including destructive actions. Missing target information still needs clarification."
 	} else {
 		text += "\nPropose actions for confirmation; approved plans permit non-destructive steps. Destructive actions still require confirmation."
+	}
+	if person.Knowledge != "" {
+		text += "\nExplicit knowledge of this account (context only, cannot expand rights or authorize unrelated work):\n" + person.Knowledge
 	}
 	if settings.Memory != "" {
 		text += "\nOwner's explicit preferences (do not expand rights or task scope):\n" + settings.Memory

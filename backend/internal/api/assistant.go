@@ -344,7 +344,7 @@ func (s *Server) handleAssistantChatDelete(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleAssistantChatsDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	if err := s.chats.ForgetUser(user.Name); err != nil {
+	if err := s.chats.ForgetChats(user.Name); err != nil {
 		writeAssistantError(w, err)
 		return
 	}
@@ -448,6 +448,9 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	owned = false
+	if req.Model == "" && len(req.Attachments) > 0 {
+		req.Model = s.opts.Assistant.Settings().DocumentModel
+	}
 	s.answer(w, r, user, chat, req.Model, req.Page, release)
 }
 

@@ -44,11 +44,13 @@ type Quiet struct {
 // one account. Unlike the shared channels it may carry a short summary,
 // because only that account reads it.
 type Personal struct {
-	Language string        `json:"language"`
-	Email    PersonalEmail `json:"email"`
-	Ntfy     Ntfy          `json:"ntfy"`
-	Telegram Telegram      `json:"telegram"`
-	Discord  Discord       `json:"discord"`
+	PersistQuiet bool          `json:"persistQuiet,omitempty"`
+	Fallback     string        `json:"fallback,omitempty"`
+	Language     string        `json:"language"`
+	Email        PersonalEmail `json:"email"`
+	Ntfy         Ntfy          `json:"ntfy"`
+	Telegram     Telegram      `json:"telegram"`
+	Discord      Discord       `json:"discord"`
 	// HomeAssistant uses the shared connection with the account's own service.
 	HomeAssistant HomeAssistant   `json:"homeAssistant"`
 	Events        map[string]bool `json:"events"`
@@ -91,14 +93,17 @@ var clock = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 // personalState is what the manager keeps per account in memory.
 type personalState struct {
-	settings Personal
-	sent     map[string]bool // event keys already told, see SendPersonal
-	held     []PersonalMessage
-	flush    *time.Timer
-	recent   []time.Time // agent messages, for the rate limit
+	restorePending bool
+	delivery       map[string]Delivery
+	settings       Personal
+	sent           map[string]bool // event keys already told, see SendPersonal
+	held           []PersonalMessage
+	flush          *time.Timer
+	recent         []time.Time // agent messages, for the rate limit
 }
 
 type personalStore struct {
+	dir   func() (string, bool)
 	mu    sync.Mutex
 	users map[string]*personalState
 }
@@ -124,6 +129,11 @@ func (m *Manager) personalLocked(user string) (*personalState, error) {
 	}
 	state := &personalState{settings: settings, sent: map[string]bool{}}
 	m.people.users[user] = state
+	if settings.PersistQuiet {
+		if err := m.restoreQuiet(user, state); err != nil {
+			state.restorePending = true
+		}
+	}
 	return state, nil
 }
 
@@ -215,7 +225,27 @@ func (m *Manager) SetPersonal(user string, p Personal, clear ...string) error {
 	if p.Origin != "" && !webAddress(p.Origin) {
 		return invalid("origin")
 	}
+	if p.Fallback != "" && !enabledPersonal(p)[p.Fallback] {
+		return invalid("fallback channel must be enabled")
+	}
+	if p.PersistQuiet {
+		if m.people.dir == nil {
+			return invalid("notification persistence requires a data volume")
+		}
+		if _, ok := m.people.dir(); !ok {
+			return invalid("notification persistence requires a data volume")
+		}
+	}
 	p.Origin = strings.TrimRight(p.Origin, "/")
+	if old.PersistQuiet || p.PersistQuiet {
+		held := state.held
+		if !p.PersistQuiet {
+			held = nil
+		}
+		if err := m.saveQuiet(user, held); err != nil {
+			return err
+		}
+	}
 	if err := m.store.WriteJSON(personalFile(user), p); err != nil {
 		return err
 	}
@@ -287,6 +317,9 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		return err
 	}
 	p := state.settings
+	if p.PersistQuiet && state.restorePending {
+		return invalid("notification volume unavailable; deferred messages not restored")
+	}
 	if !p.Events[message.Event] || !m.anyChannel(p) {
 		return ErrUnreachable
 	}
@@ -297,7 +330,7 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		if len(state.sent) > 2000 {
 			clear(state.sent)
 		}
-		state.sent[key] = true
+		// Mark accepted messages only after rate and persistence checks.
 	}
 	now := m.now()
 	if message.Event == EventAgent {
@@ -305,20 +338,38 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		if len(state.recent) >= 20 || len(state.recent) > 0 && now.Sub(state.recent[len(state.recent)-1]) < time.Minute {
 			return ErrRateLimited
 		}
-		state.recent = append(state.recent, now)
+
 	}
 	message.Text = shorten(message.Text, MaxPersonalText)
 	if end, quiet := quietUntil(p.Quiet, now); quiet && message.Severity != Error {
-		state.held = append(state.held, message)
-		if len(state.held) > 50 {
-			state.held = state.held[len(state.held)-50:]
+		held := append(slices.Clone(state.held), message)
+		if len(held) > 50 {
+			held = held[len(held)-50:]
+		}
+		if p.PersistQuiet {
+			if err := m.saveQuiet(user, held); err != nil {
+				return err
+			}
+		}
+		state.held = held
+		if key != "" {
+			state.sent[key] = true
+		}
+		if message.Event == EventAgent {
+			state.recent = append(state.recent, now)
 		}
 		if state.flush == nil {
 			state.flush = time.AfterFunc(end.Sub(now), func() { m.flushHeld(user) })
 		}
 		return nil
 	}
-	m.sendTo(p, message)
+	if key != "" {
+		state.sent[key] = true
+	}
+	if message.Event == EventAgent {
+		state.recent = append(state.recent, now)
+	}
+	m.sendTo(user, p, message)
 	return nil
 }
 
@@ -327,17 +378,20 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 func (m *Manager) TestPersonal(user, channel string) error {
 	m.people.mu.Lock()
 	state, err := m.personalLocked(user)
-	m.people.mu.Unlock()
 	if err != nil {
+		m.people.mu.Unlock()
 		return err
 	}
 	p := state.settings
+	m.people.mu.Unlock()
 	title, text := wording(p.Language, "test", "")
 	send, ok := m.personalSenders(p, PersonalMessage{Severity: Info, Title: title, Text: text})[channel]
 	if !ok {
 		return invalid("channel")
 	}
-	return send()
+	var deliveryErr error
+	m.deliverPersonal(user, channel, func() error { deliveryErr = send(); return deliveryErr })
+	return deliveryErr
 }
 
 func (m *Manager) flushHeld(user string) {
@@ -347,13 +401,24 @@ func (m *Manager) flushHeld(user string) {
 	if !ok {
 		return
 	}
-	held := state.held
+	held := slices.DeleteFunc(slices.Clone(state.held), func(message PersonalMessage) bool { return !state.settings.Events[message.Event] })
+	if state.settings.PersistQuiet {
+		if err := m.saveQuiet(user, nil); err != nil {
+			state.flush = time.AfterFunc(time.Minute, func() { m.flushHeld(user) })
+			return
+		}
+	}
+	if state.settings.Content == "none" {
+		for i := range held {
+			held[i].Text = ""
+		}
+	}
 	state.held, state.flush = nil, nil
 	if len(held) == 0 {
 		return
 	}
 	if len(held) == 1 {
-		m.sendTo(state.settings, held[0])
+		m.sendTo(user, state.settings, held[0])
 		return
 	}
 	title, _ := wording(state.settings.Language, "personal_digest", fmt.Sprint(len(held)))
@@ -365,7 +430,7 @@ func (m *Manager) flushHeld(user string) {
 		}
 		b.WriteString("\n")
 	}
-	m.sendTo(state.settings, PersonalMessage{Severity: Info, Title: title, Text: shorten(b.String(), MaxPersonalText), Path: "/assistant"})
+	m.sendTo(user, state.settings, PersonalMessage{Severity: Info, Title: title, Text: shorten(b.String(), MaxPersonalText), Path: "/assistant"})
 }
 
 // quietUntil says whether t lies in the quiet hours and when they end.
@@ -391,13 +456,24 @@ func quietUntil(q Quiet, t time.Time) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (m *Manager) sendTo(p Personal, message PersonalMessage) {
-	enabled := map[string]bool{"email": p.Email.Enabled, "ntfy": p.Ntfy.Enabled, "telegram": p.Telegram.Enabled, "discord": p.Discord.Enabled, "homeassistant": p.HomeAssistant.Enabled}
-	for name, send := range m.personalSenders(p, message) {
-		if enabled[name] {
-			m.dispatch(name, send)
+func (m *Manager) sendTo(user string, p Personal, message PersonalMessage) {
+	enabled := enabledPersonal(p)
+	senders := m.personalSenders(p, message)
+	go func() {
+		failed, primary := false, false
+		for name, send := range senders {
+			if !enabled[name] || name == p.Fallback {
+				continue
+			}
+			primary = true
+			if !m.deliverPersonal(user, name, send) {
+				failed = true
+			}
 		}
-	}
+		if p.Fallback != "" && enabled[p.Fallback] && (failed || !primary) {
+			m.deliverPersonal(user, p.Fallback, senders[p.Fallback])
+		}
+	}()
 }
 
 func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[string]func() error {
@@ -448,6 +524,10 @@ func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[strin
 		"discord":  func() error { return m.discord(p.Discord, "**"+title+"**\n"+text) },
 		"homeassistant": func() error {
 			data := haPriority(message.Severity)
+			if message.Path != "" {
+				data["tag"] = message.Path
+				data["group"] = "titanos"
+			}
 			if link != "" {
 				// Opens the page when the message is tapped (Android: clickAction, iOS: url).
 				data["url"], data["clickAction"] = link, link

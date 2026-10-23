@@ -52,6 +52,8 @@ type Stats struct {
 }
 
 type Chat struct {
+	Priority   int             `json:"priority,omitempty"`
+	DependsOn  []string        `json:"dependsOn,omitempty"`
 	Stats      *Stats          `json:"stats,omitempty"`
 	Automation string          `json:"automation,omitempty"`
 	Execution  string          `json:"execution,omitempty"`
@@ -74,16 +76,18 @@ type Chat struct {
 
 // Summary is a chat in the list.
 type Summary struct {
-	Run      *Run      `json:"run,omitempty"`
-	ID       string    `json:"id"`
-	Title    string    `json:"title"`
-	Created  time.Time `json:"created"`
-	Updated  time.Time `json:"updated"`
-	Messages int       `json:"messages"`
+	Priority  int       `json:"priority,omitempty"`
+	DependsOn []string  `json:"dependsOn,omitempty"`
+	Run       *Run      `json:"run,omitempty"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Created   time.Time `json:"created"`
+	Updated   time.Time `json:"updated"`
+	Messages  int       `json:"messages"`
 }
 
 func (c *Chat) summary() Summary {
-	return Summary{Run: c.Run, ID: c.ID, Title: c.Title, Created: c.Created, Updated: c.Updated, Messages: len(c.Messages)}
+	return Summary{Priority: c.Priority, DependsOn: slices.Clone(c.DependsOn), Run: c.Run, ID: c.ID, Title: c.Title, Created: c.Created, Updated: c.Updated, Messages: len(c.Messages)}
 }
 
 // Entry is one message of a chat: of the person (user), of the model
@@ -462,6 +466,40 @@ func (c *Chats) ForgetUser(user string) error {
 		return err
 	}
 	return os.RemoveAll(dir)
+}
+
+// ForgetChats leaves explicitly saved knowledge and notification queues intact.
+func (c *Chats) ForgetChats(user string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, busy := range c.busy {
+		if busy && strings.HasPrefix(key, user+"/") {
+			return ErrBusy
+		}
+	}
+	dir, persistent, err := c.userDir(user)
+	if err != nil {
+		return err
+	}
+	delete(c.mem, user)
+	if !persistent {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && (entry.Name() == "index.json" || chatIDRE.MatchString(strings.TrimSuffix(entry.Name(), ".json")) && strings.HasSuffix(entry.Name(), ".json")) {
+			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return os.RemoveAll(filepath.Join(dir, "receipts"))
 }
 
 // Reserve marks a chat as answering, so that two answers never run at

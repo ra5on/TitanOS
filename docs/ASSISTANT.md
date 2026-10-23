@@ -1,6 +1,8 @@
 # KI-Assistent und Hintergrundagent
 
-Geltender Stand: 0.12.0. Diese Seite ersetzt die früheren Entwürfe mit browsergesteuerter Ausführung. Historische Unterschiede stehen in den Release-Notizen.
+Geltender Stand: 0.15.0. Diese Seite ersetzt die früheren Entwürfe mit browsergesteuerter Ausführung. Historische Unterschiede stehen in den Release-Notizen.
+
+Der Ausbau von 0.15.0 mit Auftragszentrale, persönlichem Wissen, Dokumentbearbeitung, Modelltests und Home Assistant ist in [ASSISTANT-EXPANSION.md](ASSISTANT-EXPANSION.md) mit Grenzen und Datenablage beschrieben.
 
 ## Einrichtung und Rechte
 
@@ -45,7 +47,7 @@ Der vollständige mitgelieferte Systemprompt ist bearbeitbar (bis 24.000 Zeichen
 
 Explizit eingetragene dauerhafte Präferenzen ergänzen den Prompt; es gibt kein heimliches Lernen aus Chats. Bis zu 20 benannte Profile speichern Modell, Prompt, Kontextgröße und Temperatur. Ein Profil wird bewusst auf die Einstellungen angewendet und gespeichert.
 
-Der Modelltest kann schon vor dem Speichern mit einer eigenen Frage laufen. Er bietet ausschließlich ein synthetisches Werkzeug an, das einen fehlgeschlagenen Updatecheck zurückgibt. Er zeigt, ob das Modell das Werkzeug tatsächlich aufgerufen hat, und dessen Antwort zur Prüfung der Fehlerinterpretation. Der Test verändert nichts am NAS und ist keine allgemeine Qualitätszertifizierung des Modells.
+Der Modelltest kann schon vor dem Speichern mit einer eigenen Frage laufen. Er bietet ausschließlich ein synthetisches Werkzeug an. Wählbare Szenarien behandeln fehlgeschlagene Prüfungen, Mehrdeutigkeit, Teilergebnisse und fremde Anweisungen. Er zeigt, ob das Modell das Werkzeug tatsächlich aufgerufen hat, und dessen Antwort zur Prüfung der Fehlerinterpretation. Der Test verändert nichts am NAS und ist keine allgemeine Qualitätszertifizierung des Modells.
 
 ## Oberfläche und Datenschutz
 
@@ -63,7 +65,7 @@ Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beli
 
 Dateien, Protokolle, Webseiten, Anhänge und Werkzeugergebnisse sind Daten, keine neuen Aufträge oder Erlaubnisse. Der Standardprompt verlangt, deren eingebettete Anweisungen zu ignorieren und auf das Nutzerziel begrenzt zu arbeiten. Das ist keine Garantie gegen jede Fehlentscheidung eines Modells; die technisch durchgesetzten Rechte gelten zusätzlich.
 
-`file_write` erzeugt Text, Markdown, CSV, JSON, DOCX, XLSX und PDF; Ersetzen erfordert das explizite Werkzeugargument und erhält `.prev`. `files_move` verschiebt bis zu 500 Einträge ohne Überschreiben; `file_copy` verwendet bestehende Kopieraufträge. Lesen von DOCX/XLSX ist möglich, PDF-Lesen nicht. NAS-Anhänge werden mit Kontorechten gelesen. Bilder setzen ein Vision-Modell voraus.
+`file_write` erzeugt Text, Markdown, CSV, JSON, DOCX, XLSX und PDF; Ersetzen erfordert das explizite Werkzeugargument und erhält `.prev`. `files_move` verschiebt bis zu 500 Einträge ohne Überschreiben; `file_copy` verwendet bestehende Kopieraufträge. Lesen von DOCX/XLSX und PDF ist möglich; `document_read` liefert begrenzte PDF-Seitenbereiche und optional OCR. `document_edit` ändert exakte Word-/Textstellen oder vorhandene Excel-Wertzellen in einer neuen Kopie mit geprüftem Ausgangshash. NAS-Anhänge werden mit Kontorechten gelesen. Bilder setzen ein Vision-Modell voraus.
 
 Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckGo-HTML ohne Schlüssel; `web_read` nur HTTP/HTTPS auf 80/443, mit Größen-/Weiterleitungsgrenzen und Prüfung jeder Zieladresse gegen private, lokale, Tailnet- und NAS-Adressen. Keine garantierte Verfügbarkeit dieser externen Suchschnittstelle.
 
@@ -229,8 +231,8 @@ Jedes Konto richtet unter *Mein Konto › Meine Benachrichtigungen* eigene Wege 
   - `blocked`: ein Auftrag kommt nicht weiter
   - `agent`: Nachricht über das Werkzeug `notify_me`
 - **Inhalt:** `summary` (bis 300 Zeichen der letzten Antwort bzw. der Begründung der wartenden Aktion) oder `none`. Anhänge und Werkzeugdaten stehen nie in einer Nachricht.
-- **Ruhezeit:** Nachrichten werden im RAM zurückgehalten und danach gesammelt geschickt; Fehler und Nachrichten mit `priority: high` kommen sofort.
-- **Einmal je Ereignis:** Je Auftrag, Ereignis und Aktion geht höchstens eine Nachricht hinaus.
+- **Ruhezeit:** Nachrichten werden standardmäßig im RAM zurückgehalten, auf Wunsch auf dem Daten-Volume ohne Freigabetoken gespeichert und danach gesammelt geschickt; Fehler und Nachrichten mit `priority: high` kommen sofort.
+- **Einmal je Ereignis:** Je Auftrag, Ereignis und Aktion wird ein Versandauftrag angenommen; fehlgeschlagene Dienstaufrufe werden höchstens dreimal versucht. Optional springt ein Ersatzkanal ein. Bei unbekanntem Zustellausgang sind doppelte Zustellungen durch den Dienst möglich.
 - Bei Automationen gilt ihre Einstellung: `errors` meldet `blocked` und `confirmation`, `always` alles, `never` nichts.
 
 Der gemeinsame Admin-Kanal bleibt wie bisher ohne Chatinhalte.
