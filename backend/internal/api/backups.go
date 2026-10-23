@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 )
@@ -113,11 +116,21 @@ func (s *Server) handleBackupSnapshots(w http.ResponseWriter, r *http.Request) {
 
 // handleBackupRestore copies a backup back into a new folder on a volume.
 func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Snapshot, Volume string }
+	var req struct {
+		Snapshot, Volume string
+		// Paths restores only these files and folders of the saved state.
+		Paths []string
+	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	target, err := s.opts.Backup.Restore(r.PathValue("id"), req.Snapshot, req.Volume)
+	var target string
+	var err error
+	if len(req.Paths) > 0 {
+		target, err = s.opts.Backup.RestoreFiles(r.PathValue("id"), req.Snapshot, req.Volume, req.Paths)
+	} else {
+		target, err = s.opts.Backup.Restore(r.PathValue("id"), req.Snapshot, req.Volume)
+	}
 	if err != nil {
 		writeBackupJobError(w, err)
 		return
@@ -200,4 +213,40 @@ func (s *Server) handleSMBDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUSBBackupProgress(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Backup.USBProgress())
+}
+
+// handleBackupCheck lets restic check a job's repository in the background.
+func (s *Server) handleBackupCheck(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ReadData int `json:"readData"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Backup.Check(r.PathValue("id"), req.ReadData); err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	slog.Info("backup check started", "job", r.PathValue("id"), "readData", req.ReadData, "by", currentUser(r).Name)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// handleBackupFiles lists one folder of a saved state.
+func (s *Server) handleBackupFiles(w http.ResponseWriter, r *http.Request) {
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	entries, total, cut, err := s.opts.Backup.Files(ctx, r.PathValue("id"), r.PathValue("snapshot"), r.URL.Query().Get("path"), offset)
+	if err != nil {
+		writeBackupJobError(w, err)
+		return
+	}
+	if entries == nil {
+		entries = []backup.Entry{}
+	}
+	res := map[string]any{"entries": entries, "total": total, "cut": cut}
+	if next := offset + len(entries); next < total {
+		res["nextOffset"] = next
+	}
+	writeJSON(w, http.StatusOK, res)
 }

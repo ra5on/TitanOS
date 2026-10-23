@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import PowerSchedule from '#lib/components/PowerSchedule.svelte';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	type Settings = { governor: string; preference: string; platform: string };
 	type Control = { key: keyof Settings; choices: string[]; current: string; mixed: boolean };
@@ -51,6 +52,7 @@
 		</form>
 	{/if}
 {:else if !error}<p>{t('common.loading')}</p>{/if}
+<PowerSchedule />
 
 <style>
 	form { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
