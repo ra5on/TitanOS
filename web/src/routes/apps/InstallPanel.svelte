@@ -18,13 +18,11 @@
 		app: CatalogApp;
 		source: string;
 		description: string;
-		monogram: string;
-		hue: number;
 		docker: DockerStatus | null;
 		shares: Share[];
 		onclose: () => void;
 	};
-	let { app, source, description, monogram, hue, docker, shares, onclose }: Props = $props();
+	let { app, source, description, docker, shares, onclose }: Props = $props();
 
 	let tpl = $state<Template | null>(null);
 	let form = $state<InstallForm | null>(null);
@@ -145,7 +143,7 @@
 
 <aside class="tile" aria-labelledby="install-title" bind:this={panel}>
 	<div class="top">
-		<span class="monogram" style:background="hsl({hue} 45% 42%)" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
+		<span class="monogram" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
 		<div class="about">
 			<h2 id="install-title">{t('apps.panelTitle', { name: app.name })}</h2>
 			<span class="muted text">{description}</span>
@@ -349,7 +347,7 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: var(--radius-ctl);
-		color: var(--on-monogram);
+		color: var(--text);
 		font-size: 1.25rem;
 		font-weight: 600;
 	}
