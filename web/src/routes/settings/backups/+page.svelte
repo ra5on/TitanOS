@@ -9,7 +9,8 @@
 	type Jobs = {
 		jobs: {
 			job: { id: string; enabled: boolean };
-			state: { lastOK: string | null; lastError: string; warning: string };
+			stateKnown?: boolean;
+			state: { lastOK: string | null; lastError: string; warning: string; statusError?: string };
 			next: string | null;
 		}[];
 	};
@@ -86,6 +87,9 @@
 	const failures = $derived(
 		jobs?.jobs.filter((v) => v.state.lastError && v.state.lastError !== 'cancelled') ?? [],
 	);
+	const unknown = $derived(
+		jobs?.jobs.filter((v) => v.stateKnown === false || v.state.statusError) ?? [],
+	);
 	const warnings = $derived(jobs?.jobs.filter((v) => v.state.warning) ?? []);
 	const date = (value: string | undefined) =>
 		value ? formatDateTime(new Date(value)) : t('safeguard.none');
@@ -101,7 +105,11 @@
 <div class="tile summary" aria-busy={loading}>
 	<div>
 		<span>{t('safeguard.lastData')}</span><strong
-			>{jobs ? date(lastData) : t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
+			>{unknown.length
+				? t('safeguard.unknown')
+				: jobs
+					? date(lastData)
+					: t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
 		>
 	</div>
 	<div>
@@ -130,6 +138,11 @@
 				href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a
 			>{/each}
 	</div>{/if}
+{#each unknown as view}<p class="notice-warn">
+		<a href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a>: {t(
+			'coverage.stateUnknown',
+		)}
+	</p>{/each}
 {#each warnings as view}<p class="notice-warn">
 		<a href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a>: {view
 			.state.warning}
