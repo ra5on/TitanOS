@@ -2,7 +2,7 @@
 
 Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft – inspiriert von Unraid, aber mit klassischem RAID. Wird auf GitHub veröffentlicht.
 
-Stand: **0.13.0, 23. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
+Stand: **0.14.0, 23. Oktober 2026** (Systembasis 0.9.0). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -43,8 +43,8 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 - Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, Plugins, Netzwerk mit Rückfall, Backups, USV, Benachrichtigungen, Diagnose, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
 - Ersteinrichtung: frei gewähltes Besitzerkonto, danach `/welcome` mit Sprache, Hostname, Zeitzone, Netzwerkhinweis und nächsten Schritten. Das erste Volume wird auf der Speicher-Seite angelegt.
 - Deutsch und Englisch; alle Oberflächentexte über Übersetzungsdateien.
-- Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten. Einzelheiten in den eigenen Abschnitten.
-- Zurückgestellt bzw. offen: LUKS-Volume-Verschlüsselung, ZFS, Energie-Zeitplan/Wake-on-LAN, Befehlspalette, dokumentierte öffentliche API/CLI, Let's Encrypt und weitere Fernzugriffsarten. **Tailscale und kurze Monitoring-Verläufe sind bereits umgesetzt**, siehe `docs/TAILSCALE.md` und `docs/MONITORING.md`.
+- Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. Einzelheiten in den eigenen Abschnitten.
+- Zurückgestellt bzw. offen: LUKS-Volume-Verschlüsselung, ZFS, Befehlspalette, dokumentierte öffentliche API/CLI, Let's Encrypt und weitere Fernzugriffsarten. **Tailscale und kurze Monitoring-Verläufe sind bereits umgesetzt**, siehe `docs/TAILSCALE.md` und `docs/MONITORING.md`.
 - Bereits umgesetzte Funktionen nicht erneut als unentworfene Release-Voraussetzung behandeln. Für UI-Arbeiten gelten die aktuellen Entwürfe und Folgeentscheidungen unten.
 
 ## Stick-Layout
@@ -105,6 +105,7 @@ titanos/
 │       ├── office/         # Word-, Excel-, PDF-Erzeugung und Dokumentlesen
 │       ├── files/, backup/, configbackup/, backuptarget/
 │       ├── plugins/, hardware/, tailscale/, usb/, ups/
+│       ├── homeassistant/  # REST, WebSocket-Beobachter, MQTT-Sensoren
 │       └── system/, network/ # Systemeinstellungen, Netzwerk, Dienste
 ├── web/                    # Svelte + TypeScript
 ├── scripts/
@@ -165,7 +166,7 @@ titanos/
 - Tests auf echter Hardware gezielt ergänzen. Bestätigte frühere Tests gelten nur für den dokumentierten Umfang, nicht automatisch für neue Funktionen.
 - `make test`: Go vet/Tests, Webtests und Svelte-Prüfung. `make test-release`: Paketierungs-/Signaturtests mit echten Werkzeugen. UI-Prüfskripte in `scripts/test-ui-*.mjs`; ausschließlich isolierte Testdaten verwenden. Keine Host-Platten formatieren, keine Host-Sysctls für Tests ändern.
 
-## KI-Assistent und Agent (0.13.0)
+## KI-Assistent und Agent (0.14.0)
 
 - Maßgebliche aktuelle Beschreibung: `docs/ASSISTANT.md`. Alte Release-Notizen sind historische Berichte, keine widersprechenden Regeln.
 - Ab Werk aus, Ollama mit Werkzeugmodell; Seite `/assistant` mit Automationen unter `/assistant/automations`. Kein externer MCP-Server, keine Bearer-API-Schlüssel, keine separate Agent-App.
@@ -182,6 +183,11 @@ titanos/
 - Automationen je Konto auf dem Daten-Volume: einmalig, Intervall, täglich/wöchentlich mit Zeitzone sowie explizite Meldungs-/USB-/Volume-/Ordnerereignisse. Verwaltung in UI und über Agentenwerkzeuge mit derselben API. Erstbeobachtung setzt die Basis; keine rekursive Hintergrundindexierung. Ausführung übernimmt die globale Einstellung oder den ausdrücklich gewählten Modus. Rollen/Bereiche gelten weiterhin. Kein RAM-Ersatz für dauerhafte Automationen; atomare Reservierung einer Chat-ID samt Auftrag vor dem Start. Verpasste Termine/Überschneidungen haben ausdrückliche Regeln, Details und Beobachtungsgrenzen in `docs/ASSISTANT.md`.
 - Einstellungswechsel beendet laufende Modellaufrufe und reiht aktive Aufträge neu ein; globales Pausieren/Deaktivieren pausiert sie. Direktmodus übernimmt wartende Bestätigungen außer Probeläufen und ausdrücklich bestätigungspflichtigen Automationen. Keine Wiederholung unbekannter Mutationen. Sichtbare Laufphasen und Schrittzeiten; Fristen nur je Aufruf bzw. bei fehlendem Stream-Fortschritt.
 - Aktionskörper strukturell und ohne Ganzzahl-Präzisionsverlust vergleichen. Unausgeführte veraltete Vorschläge verfallen; Ausführungsprotokolle bleiben erhalten. Dokumentauftrag verwendet vorhandene Freigaben, legt nicht ohne Auftrag eine neue an. Gespeicherte Dokumentbytes gegen den Hash der Erzeugung prüfen; Word/Excel zusätzlich parsen. Fachliche Richtigkeit benötigt weiterhin echte Quellen.
+- **Benachrichtigungen pro Konto (0.14.0):** eigene Wege je Konto in `/config/users/<konto>/notify.json` (E-Mail über den gemeinsamen SMTP-Server an die eigene Adresse, ntfy, Telegram, Discord, Home-Assistant-App), Ereignisse `confirmation`/`done`/`blocked`/`agent`, Inhalt `summary` (höchstens 300 Zeichen der letzten Antwort bzw. der Begründung einer Aktion) oder `none`, Ruhezeiten mit Sammelnachricht (nur RAM). Je Auftrag/Ereignis/Aktion eine Meldung. Geheimnisse nur „ist gesetzt“. Der gemeinsame Admin-Kanal bleibt ohne Chatinhalte. Automationen `errors` melden auch wartende Freigaben.
+- Werkzeug `notify_me`: nur an den Besitzer des Chats, 1/min und 20/h, im Probelauf nichts senden, nur angeboten, wenn das Konto einen Weg und das Ereignis `agent` hat. Keine Aktion (ändert nichts am NAS).
+- **Freigabe aus Benachrichtigungen** (Einstellung `pushApproval`, ab Werk aus): ntfy-`http`-Aktionen bzw. Aktionen der HA-App (`mobile_app_notification_action`). Einmal-Token 256 Bit nur im RAM, 15 Minuten, an Konto/Chat/Aktion gebunden; `POST /api/v1/assistant/push/{token}/{approve|reject}` ohne Anmeldung, danach derselbe Freigabeweg wie in der Oberfläche. Nie für `destroy`.
+- Statistik je Chat (`stats`: Runden, gelesene/geschriebene Token, Modell-/Werkzeugzeit) unter dem Chat und im Metadatenexport. Feldnamen ohne „token“, sonst schwärzt der Diagnose-Redaktor sie.
+- Vorlagen für Automationen (`web/src/lib/automation-templates.ts`) füllen nur das Formular. Dashboard-Kachel `assistant` mit letzten Aufträgen und nächsten Automationen.
 - Metadaten-Diagnoseexport, Inhalte nur ausdrücklich; Anhänge nicht als vollständig anonymisiert darstellen. Administrator-Meldungen ohne Chatinhalte. Websuche optional, SSRF-Prüfung bei jeder Verbindung/Weiterleitung beibehalten.
 - Prüfungen verwenden isolierte Daten und nachgebautes Ollama. Keine pauschale Abnahme echter Modelle, Hardware oder Crash-Verhalten behaupten; konkrete Prüfgrenzen in den Release-Notizen nennen.
 
@@ -243,6 +249,13 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Die Wahl „Nicht beim Start setzen“ beendet die Verwaltung dieses Werts; der aktuelle Wert bleibt bis zu einer anderen Änderung oder zum Neustart erhalten. Governor und EPP hängen vom CPU-Treiber ab: `intel_pstate` erlaubt bei `performance` keine stromsparende EPP.
 - Schnittstellen: [CPUFreq](https://docs.kernel.org/admin-guide/pm/cpufreq.html), [Intel P-state](https://docs.kernel.org/admin-guide/pm/intel_pstate.html), [Plattformprofile](https://docs.kernel.org/userspace-api/sysfs-platform_profile.html). Tests nutzen künstliche sysfs-Dateien; die Wirkung auf echte NAS-Hardware bleibt zu prüfen.
 
+**Zeitplan und Wake-on-LAN** (Einstellungen › Energie, 0.14.0, Paket `system`, `power_schedule.go`)
+- Eigene Datei `/config/system/power-schedule.json` (Herunterfahren/Einschalten je Wochentage und Uhrzeit, Wake-on-LAN), Route `/api/v1/system/power-schedule`. Energieprofile bleiben unverändert in `energy.json`.
+- Herunterfahren wartet auf laufende Arbeit (`update.Working`, Wiederaufbau/Prüfung, Agentenauftrag) bis zu sechs Stunden (Meldung `power_postponed`), danach wird dieser Termin ausgelassen (`power_skipped`).
+- Einschalten über `/sys/class/rtc/rtc0/wakealarm` (zuerst `0`, dann Unix-Zeit), gesetzt beim Start, bei Änderung und direkt vor dem geplanten Herunterfahren. Ohne RTC nicht anbietbar.
+- Wake-on-LAN per ethtool-ioctl (`ETHTOOL_GWOL`/`SWOL`, `WAKE_MAGIC`) auf physischen Anschlüssen, bei jedem Start und jeder Änderung. **Keine `.link`-Datei:** sie würde `99-default.link` und damit die Namensregeln von udev ersetzen.
+- Entwicklungsmodus: speichert, verändert aber weder Hardware noch schaltet aus. Echte RTC-/WoL-Wirkung ist hardwareabhängig und nicht geprüft.
+
 **Festplatten-Ruhemodus** (Speicher › Ruhemodus für Festplatten, nur Besitzer und Administratoren)
 - Eine gemeinsame Leerlaufzeit für alle unterstützten HDDs: Aus (Standard), 5, 10, 15 oder 30 Minuten sowie 1, 2 oder 3 Stunden. Jede Platte wird getrennt beobachtet und wacht beim nächsten Zugriff wieder auf. Aus beendet die automatische Steuerung, weckt bereits schlafende Platten aber nicht auf.
 - Einstellung in `/config/storage/disk-sleep.json`; nur die Dauer wird gespeichert, niemals Gerätenamen. Der Zustand und die Zeitmessung liegen im RAM. Änderungen werden atomar gespeichert; nach Neustart, geänderter Einstellung oder einer Beobachtungslücke beginnt eine volle neue Ruhezeit.
@@ -264,7 +277,10 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - **Auswahl** (`backup/selection.go`): je Freigabe ganz, „alles außer …“ (`skip`: `freigabe/ordner`) oder „nur ausgewählte Ordner“ (`folders`), dazu Muster (`patterns`, zum Beispiel `*.tmp`) und eigene Bereiche (`extras`): `appdata` (`/mnt/<volume>/appdata` jedes eingebundenen Volumes), `vms` (`/mnt/<volume>/vms`) und `config` (`/config` des Sticks, mit Konten und Geheimnissen – das Backup ist verschlüsselt). Ordner werden relativ zur Freigabe gespeichert, nie als Gerätename. Die Ordnerliste der Seite kommt aus `GET /api/v1/backups/folders` (nur Ordner, ohne `.recycle` und ohne Links, über `os.Root`). Ein gewählter Ordner, der fehlt, ergibt eine Warnung, nicht einen Fehler. Auf ein lokales Ziel wird dessen eigenes Volume nie gesichert. Laufende VMs werden nur absturzkonsistent gesichert.
 - **Ziel „Anderes TitanOS“** (Paket `backuptarget`, Einstellungen › Sicherungen › Datensicherung › „Backups anderer TitanOS annehmen“): Das NAS betreibt einen kleinen Server nach dem REST-Protokoll von restic (Version 2, ohne weiteres Debian-Paket) und lauscht **nur auf seinen Tailscale-Adressen** (100.64.0.0/10, `fd7a:115c:a1e0::/48`), Port 8750; ohne Tailscale oder ohne eingebundenes Volume lauscht es nirgends. Jede Quelle hat einen Namen (`[A-Za-z][A-Za-z0-9-]{0,30}`) und einen zufälligen Token (32 Byte, nur als SHA-256 in `/config/backup/target.json`) und erreicht nur ihren Ordner `/mnt/<volume>/.titanos/backup-target/<name>/`. Die Seite erzeugt einen Kopplungscode (`titanos-backup:` + base64url-JSON mit Adresse, Name und Token), der **einmal** angezeigt wird. Auf dem sendenden NAS wählt man „Anderes TitanOS“ und fügt ihn ein; das ergibt ein ganz gewöhnliches Ziel `rest` (Adresse, Name und Token landen wie dort im Auftrag). Daten sind mit dem Passwort des Auftrags verschlüsselt; das Ziel kann sie nicht lesen. Blobs werden unter einem versteckten Namen geschrieben und erst am Ende umbenannt, Vorhandenes wird nie überschrieben (403), die Konfiguration des Repositorys nie gelöscht. Entfernen einer Quelle löscht ihre Daten nur auf ausdrücklichen Wunsch. Getestet mit einem Go-Client gegen das Protokoll und mit Zugriffsversuchen anderer Quellen; zusätzlich mit echtem restic geprüft: Initialisieren, Sichern, Datenprüfung und identische Wiederherstellung gegen den lokalen Testserver. Zwei echte NAS über Tailscale bleiben zu prüfen.
 - **Überfällig** (`overdue` in `backup/schedule.go`): Ist für einen eingeschalteten Auftrag seit mindestens zwei geplanten Terminen und mindestens 48 Stunden kein Backup gelungen, gibt es einmal die Warnung `backup_overdue`; erneut erst, nachdem eines gelungen ist (gemerkt im RAM, nach einem Neustart von titand also höchstens einmal neu). Ein Auftrag, der nie versucht wurde, ist nicht überfällig. Geprüft wird jede Minute aus dem Zustand im Speicher, ohne Zugriff auf `/config`.
-- Noch offen: einzelne Dateien statt ganzer Stände wiederherstellen, Prüfen eines Repositorys (`restic check`), Bandbreite begrenzen.
+- **Prüfen** (0.14.0): `restic check`, optional `--read-data-subset=N%`; Ergebnis als `lastCheck`/`checkError` im Zustand des Auftrags, Fehler als Meldung `backup_check_failed`. Ein fehlgeschlagener Check ist kein fehlgeschlagenes Backup.
+- **Einzelne Dateien** (0.14.0): `GET /api/v1/backups/{id}/snapshots/{snapshot}/files?path=` listet einen Ordner (`restic ls` ohne `--recursive`, Ordner zuerst, Seiten zu 500, Grenze 50.000); `POST …/restore` mit `paths` (höchstens 200, absolute Pfade ohne `..`) stellt per `--include` in einen neuen Ordner wieder her, nie über die Freigabe. Beide Routen im API-Katalog des Assistenten.
+- Getestet mit nachgebautem restic; echtes restic für `check`/`ls`/`--include` noch zu prüfen.
+- Noch offen: Bandbreite begrenzen.
 
 **USV** (Einstellungen › USV; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Paket `ups`, Debian-Pakete `nut-server` und `nut-client` (NUT 2.8). Drei Arten: keine USV, USV am Kabel dieses NAS (Treiber `usbhid-ups` für die meisten USB-Geräte, dazu `nutdrv_qx`, `blazer_usb`, `blazer_ser`, `apcsmart`; „Nach USV am USB suchen“ mit `nut-scanner`), oder eine USV, die ein anderes Gerät per NUT im Netz teilt. Einstellungen in `/config/system/ups.json`.
@@ -318,6 +334,8 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Einstellungen in `/config/notify/settings.json`. Passwörter, Tokens und die Webhook-Adresse verlassen das NAS nie über die API (nur „ist gesetzt“); ein leeres Feld behält den gespeicherten Wert, Entfernen ist ausdrücklich (`clearSecrets`). „Testnachricht senden“ speichert erst und zeigt die Antwort der Gegenseite.
 - Neue Meldungen aus anderen Paketen: `notify.Manager.Notify(stufe, art, betreff)` aufrufen und die Texte in `texts.go` sowie `notify.kind.<art>.title/.text` in beiden Sprachdateien ergänzen.
 - Gelesen/ungelesen merkt sich der Browser, nicht das NAS.
+- **Glockenfilter pro Konto** (0.14.0, Preference `bell`): Mindeststufe und Gruppen (Volumes, Platten, Backups, Updates, USV, USB, Assistent, System; Zuordnung nach Präfix der Art in `web/src/lib/notify-groups.ts`). Gefiltert wird nur im Browser, Ton und Zähler folgen dem Filter, ausgeblendete werden gezählt. Fehler an Volumes und Platten lassen sich nicht ausblenden.
+- Weg „Home Assistant“ (Dienst `notify.<name>`) gemeinsam und persönlich, über die Verbindung aus Einstellungen › Home Assistant; Fehler mit hoher Priorität.
 
 **Netzwerk** (Einstellungen › Netzwerk; umgesetzt ohne Entwurfsseite, Aufbau selbst gewählt)
 - Konfiguration in `/config/network/network.json`: Name des NAS, Anschlüsse (keiner gewählt = jeder Anschluss per DHCP, wie ab Werk; mehrere = Bond mit wählbarer Art), VLAN-Nummer, Bridge `br0`, DHCP oder feste Adresse mit Gateway, Nameserver. Daraus schreibt das Paket `network` bei jedem Start und jeder Änderung die Dateien für systemd-networkd (`/etc/systemd/network/10-titanos-*`); Schichtung: Anschlüsse → Bond → VLAN → Bridge → Adresse.
@@ -483,6 +501,17 @@ Die Einstellungsübersicht zeigt kompakte Kacheln ohne Beschreibung, alphabetisc
 - Plugin-Mitnahme: signierte Manifeste und Images vor dem Slot-Wechsel prüfen; pro Systembasis `/mnt/<volume>/.titanos/plugins/releases/<version>/` und `/config/plugins/releases/<version>.json`. Legacy-Dateien und Einstellungen bleiben für den Rückfall erhalten. Aktivierte Plugins gehören zum Update-Healthcheck; Mutationen während Download/ausstehendem Neustart sind gesperrt. Noch keine Bereinigung alter Plugin-Sätze. Der erste Übergang aus beta.2 benötigt bei einem Kernelwechsel das Abschalten und anschließende Neuinstallieren des NVIDIA-Plugins, siehe `docs/PLUGINS.md`.
 - Weitere Plugins: `scripts/make-tools-plugins.sh` baut Intel GPU Tools aus Debian (Zusatzbibliotheken, originale Lizenztexte und Quellpaketlinks) sowie den eigenen Coral-USB-Helfer. Coral-Runtime/Firmware werden nicht verteilt; die Container-App bringt sie mit. USB-Bus-Zugriff ist in der Oberfläche ausdrücklich gekennzeichnet. PCIe-/M.2-Coral, ZFS, Lüftersteuerung, NVIDIA-Persistenz-Einstellungen, weitere Plugin-Einstellungen, Fortschritt in Schritten und reale Hardwaretests bleiben offen.
 - Btrfs: RAID1 für Daten und Metadaten auf genau zwei GPT-Partitionen; UUID-basiertes Einbinden einschließlich degradiertem Start. Snapshots schreibgeschützt in `.titanos/snapshots`, Wiederherstellung als neue beschreibbare Kopie unter `restored`, nie über laufende Daten. Verschachtelte Subvolumes sind nicht enthalten. Scrub, Ersatz eines fehlenden Mitglieds, geschützte Snapshot-Pfade und Konfigurationssuche ohne Log-Replay umgesetzt. `scripts/smoke-storage.py` testet vier QEMU-Boots, Daten/Snapshots/Restore, fehlendes Mitglied, Ersatz und Intel-/Coral-Plugin-Aktivierung.
+
+## Home Assistant (0.14.0)
+
+- Paket `homeassistant`, Einstellungen › Home Assistant (nur Besitzer/Administratoren), `/config/homeassistant/settings.json`. Details: `docs/HOME-ASSISTANT.md`.
+- REST nur zur eingetragenen Adresse, keine Weiterleitungen, kein Proxy; selbst signiertes Zertifikat nur mit SHA-256-Fingerabdruck. Long-Lived Token und MQTT-Passwort nur „ist gesetzt“; nie im Agenten-Katalog.
+- **Agent:** Bereich `home` (ab Werk aus), nur Besitzer/Administratoren. Freigabe je Domäne oder Entität; nicht freigebbare Domänen werden nie angeboten. `ha_entities`/`ha_state` (Daten, keine Anweisungen), Aktion `ha_call` → `POST /api/v1/homeassistant/call` mit erneuter Prüfung. `lock`, `cover`, `alarm_control_panel`, `vacuum`, `button`, `valve`, `water_heater` mit Häkchen; Zielangaben im `data` abgelehnt.
+- **Auslöser:** WebSocket-Beobachter (`subscribe_trigger`, Plattform `state`) nur für Entitäten eingeschalteter Automationen; Zustandswechsel als Ringpuffer (20 je Entität) im RAM mit Marken aus Startzeit und Zähler, ausgewertet wie Meldungen per Hochwassermarke. Nur freigegebene Entitäten. Bei Unterbrechung nichts nachgeholt.
+- **MQTT:** eigener MQTT-3.1.1-Client (Standardbibliothek, QoS 0, Last Will), Discovery unter `<prefix>/<component>/titanos_<id>/…`, Zustände unter `titanos/<id>/state/…`. `id` wird einmal zufällig erzeugt und gespeichert (die Machine-ID eines RAM-Systems ändert sich je Start). Werte nur aus dem RAM von titand, Platten über Seriennummer und ohne Weckabfragen.
+- **Knöpfe/Schalter** (je Gruppe ab Werk aus): handeln als gewähltes Besitzer-/Administratorkonto über die normalen Routen (`internalAs`), protokolliert. Neustart/Herunterfahren abgelehnt, solange gearbeitet wird (`ha_power_refused`). Ohne Konto keine Knöpfe.
+- **Assist:** Blueprint `docs/homeassistant/titanos-assist.yaml` feuert `titanos_ask`, Antwort als `titanos_answer`; als gewähltes Konto über die normalen Chat-Routen, ab Werk aus.
+- Geprüft mit nachgebauten HA-REST-/WebSocket-Servern und MQTT-Broker; echtes Home Assistant, Mosquitto und die Apps noch zu prüfen.
 
 ## Arbeitsweise
 
