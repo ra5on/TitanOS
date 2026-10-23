@@ -9,6 +9,7 @@
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import { assistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 	import Icon from './Icon.svelte';
+ import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
 	import Notifications from './Notifications.svelte';
@@ -102,6 +103,7 @@
 			<Icon name="chat" size={18} />
 		</button>
 	{/if}
+ <button class="terminal" type="button" onclick={togglePalette} aria-label={t('palette.title')} title={t('palette.shortcut')}><Icon name="search" size={18}/></button>
 	<AccountMenu />
 </header>
 

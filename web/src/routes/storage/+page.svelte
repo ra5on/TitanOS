@@ -84,7 +84,9 @@
 	{#if storage.status}<p class="muted">{summary}</p>{/if}
 	{#snippet actions()}
 		{#if canAdminister}
-			<button type="button" class="btn" onclick={rescan} disabled={busy}>{t('storage.rescan')}</button>
+			<a class="btn" href="/storage/import">{t('ops.import')}</a>
+ <a class="btn" href="/tools/maintenance">{t('ops.maintenance')}</a>
+ <button type="button" class="btn" onclick={rescan} disabled={busy}>{t('storage.rescan')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })}>{t('storage.newVolume')}</button>
 		{/if}
 	{/snippet}

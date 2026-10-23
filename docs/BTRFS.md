@@ -50,3 +50,11 @@ sein. Ein fehlendes Mitglied wird dabei nicht stillschweigend vergessen.
 Der Test `scripts/smoke-storage.py` prüft diesen Ablauf in QEMU einschließlich
 Neustarts, Plattenausfall und Ersatz. Echte Platten, Stromausfälle und defekte
 Sektoren sind damit noch nicht geprüft.
+
+## Erweiterte Abläufe ab 0.16.0
+
+Native Spiegel lassen sich nach lesender Vorschau registrieren. Der neue
+Snapshot-Dateibrowser kopiert ausgewählte reguläre Dateien in neue Ordner;
+Symlinks und interne Betriebsdaten bleiben ausgenommen. Wartungszeitpläne
+erzeugen und inventarisieren eigene Snapshots; ihre bestätigte Aufbewahrung
+löscht keine manuellen Kopien. Siehe [WORKFLOWS.md](WORKFLOWS.md).

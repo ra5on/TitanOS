@@ -367,8 +367,11 @@ func (m *Manager) readSnapshot(v VM, id string) (Snapshot, error) {
 	return s, nil
 }
 func (m *Manager) snapshotJob(name string, work func() error, lock *sync.Mutex) {
+	m.operationJob(name, "snapshot", work, lock)
+}
+func (m *Manager) operationJob(name, kind string, work func() error, lock *sync.Mutex) {
 	m.mu.Lock()
-	m.snapshotJobs[name] = &Job{State: "running"}
+	m.snapshotJobs[name] = &Job{State: "running", Operation: kind}
 	m.mu.Unlock()
 	go func() {
 		defer lock.Unlock()
@@ -381,7 +384,7 @@ func (m *Manager) snapshotJob(name string, work func() error, lock *sync.Mutex) 
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if err != nil {
-			m.snapshotJobs[name] = &Job{State: "failed", Text: err.Error()}
+			m.snapshotJobs[name] = &Job{State: "failed", Text: err.Error(), Operation: kind}
 		} else {
 			delete(m.snapshotJobs, name)
 		}
@@ -1081,6 +1084,13 @@ func (m *Manager) SetSnapshotSchedule(name string, s SnapshotSchedule) error {
 	return nil
 }
 func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, now time.Time) {
+	if m.ScheduleAdmission != nil {
+		leave, err := m.ScheduleAdmission()
+		if err != nil {
+			return
+		}
+		defer leave()
+	}
 	// Go caches time.Local. Use the current NAS setting explicitly so changing
 	// the time zone does not require a daemon restart for these schedules.
 	if m.Timezone != nil {

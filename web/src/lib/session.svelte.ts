@@ -11,14 +11,16 @@ export const session = $state<{
 	status: 'loading' | 'ready' | 'unreachable';
 	data: Session | null;
 	/** The dashboard layout stored for the account, as sent by the NAS. */
+	shares: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
-}>({ status: 'loading', data: null, dashboard: null, docker: null, vnc: null });
+}>({ status: 'loading', data: null, shares: null, dashboard: null, docker: null, vnc: null });
 
 async function loadPreferences() {
 	try {
 		const prefs = await api.get<Preferences>('/preferences');
+		session.shares = prefs.shares ?? null;
 		session.dashboard = prefs.dashboard;
 		session.docker = prefs.docker;
 		session.vnc = prefs.vnc;
@@ -28,6 +30,7 @@ async function loadPreferences() {
 		useAssistantPrefs(prefs.assistant);
 	} catch {
 		// The UI works with defaults; saving will report the problem.
+		session.shares = null;
 		session.dashboard = null;
 		session.docker = null;
 		session.vnc = null;

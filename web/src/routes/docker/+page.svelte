@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { tick, onMount } from 'svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { session } from '#lib/session.svelte.ts';
-	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, type DockerGroup, type DockerView } from '#lib/docker-layout.ts';
+	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, stackPrimary, type DockerGroup, type DockerView } from '#lib/docker-layout.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
@@ -17,7 +18,7 @@
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContainerCard from './ContainerCard.svelte';
 	import ContainerRow from './ContainerRow.svelte';
-	import { isRunning, monogramHue, type ContainerActions } from './container.ts';
+	import { isRunning, monogramHue, webLinks, type ContainerActions } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
  const tailscaleHost = $derived(tailnetHost(tailnet));
@@ -37,8 +38,11 @@
 	let busy = $state(false);
 	let search = $state('');
 	let filter = $state<'all' | 'running' | 'stopped' | 'updates'>('all');
-	// Stacks the user folded; all others show their services.
-	let folded = $state<Record<string, boolean>>({});
+	// A stack is closed until the user opens it; filters reveal matching services.
+	let expanded = $state<Record<string, boolean>>({});
+	const stackOpen = (id: string) => expanded[id] ?? (search.trim() !== '' || filter !== 'all');
+	let linkGroup = $state<DockerGroup | null>(null), primaryService = $state('');
+	let refreshError = $state(''), lastRefresh = $state(''), refreshing = $state(false);
 	let layout = $state(sanitizeDockerLayout(session.docker));
 	let savedLayout = $state(sanitizeDockerLayout(session.docker));
 	let editing = $state(false);
@@ -108,6 +112,7 @@
 	const visibleIDs = $derived(new Set(visible.map(container => container.id)));
 	const shownGroups = $derived(groups.filter(group => group.members.some(container => visibleIDs.has(container.id))));
 	const shownMembers = (group: DockerGroup) => group.members.filter((container) => visibleIDs.has(container.id));
+	const isStack = (group: DockerGroup) => group.members.length > 1 || !!layout.primaryServices[group.id];
 	const sum = (group: DockerGroup, value: (container: DockerContainer) => number) =>
 		group.members.filter(isRunning).reduce((total, container) => total + value(container), 0);
 	const updateCount = $derived(containers.filter((container) => container.updateAvailable).length);
@@ -129,15 +134,34 @@
 	}
 
 	async function load() {
-		if (document.hidden) return;
+		if (document.hidden || refreshing) return;
+		refreshing = true;
 		try {
 			status = await api.get<DockerStatus>('/docker');
+			refreshError = '';
+			lastRefresh = new Date().toISOString();
 		} catch (err) {
-			if (!status) error = problem(err);
-		}
+			refreshError = problem(err).text;
+		} finally { refreshing = false; }
 	}
-	$effect(() => {
-		load();
+	function editLinks(group: DockerGroup) { linkGroup=group; primaryService=savedLayout.primaryServices[group.id] ?? ''; layoutError=''; }
+	async function saveLinks() {
+		if (!linkGroup || savingLayout) return;
+		const primaryServices={...savedLayout.primaryServices};
+		if(primaryService) primaryServices[linkGroup.id]=primaryService; else delete primaryServices[linkGroup.id];
+		const value=sanitizeDockerLayout({...savedLayout,primaryServices});
+		savingLayout=true;layoutError='';
+		try { await api.put('/preferences/docker',value);session.docker=value;savedLayout=value;layout=value;linkGroup=null; }
+		catch(err) { layoutError=problem(err).text; }
+		finally { savingLayout=false; }
+	}
+	async function showProblems(group: DockerGroup) {
+		search='';filter='all';expanded[group.id]=true;await tick();
+		const container=group.members.find(c=>!isRunning(c)||c.state==='restarting');
+		if(container) document.getElementById(`docker-container-${encodeURIComponent(container.name)}`)?.scrollIntoView({block:'nearest'});
+	}
+	onMount(() => {
+		void load();
 		const timer = setInterval(load, 3000);
 		return () => clearInterval(timer);
 	});
@@ -164,28 +188,31 @@
 		}
 	}
 
-	function remove(container: DockerContainer) {
-		dialog = null;
-		run(() => api.delete(`/docker/containers/${container.id}`));
+	async function remove(container: DockerContainer) {
+  busy=true;dialogError=null;
+  try {await api.delete(`/docker/containers/${encodeURIComponent(container.id)}`);dialog=null;await load();}
+  catch(err){dialogError=problem(err);}finally{busy=false;}
 	}
 
 	function actionsFor(container: DockerContainer): ContainerActions {
 		return {
 			onaction: (action) => run(() => api.post(`/docker/containers/${container.id}/${action}`)),
 			onlogs: () => showLogs(container),
-			onremove: () => (container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container })),
+			onremove: () => {dialogError=null;container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });},
 			onconsole: () => addContainerConsole(container.id, dockerName(container, 'distinct')),
 			onupdate: () => run(() => api.post(`/docker/apps/${container.app}/update`))
 		};
 	}
 
 	function askRemoveApp(app: string) {
+  dialogError=null;
 		dialog = { kind: 'removeApp', app, purge: false };
 	}
 
-	function removeApp(app: string, purge: boolean) {
-		dialog = null;
-		run(() => api.delete(`/docker/apps/${app}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`));
+	async function removeApp(app: string, purge: boolean) {
+  busy=true;dialogError=null;
+  try {await api.delete(`/docker/apps/${encodeURIComponent(app)}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`);dialog=null;await load();}
+  catch(err){dialogError=problem(err);}finally{busy=false;}
 	}
 
 	function open(kind: 'import' | 'settings') {
@@ -249,6 +276,8 @@
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 {/if}
 
+{#if refreshError}<div class="notice-warn" role="alert"><span>{refreshError} {lastRefresh?t('docker.stale',{time:new Date(lastRefresh).toLocaleTimeString()}):t('docker.noCurrentData')}</span><button class="btn" disabled={refreshing} onclick={load}>{t('common.retry')}</button></div>{/if}
+{#if !status&&!refreshError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
 {#if status && !status.settings.enabled}
 	<section class="tile setup">
 		<h2>{t('docker.setupTitle')}</h2>
@@ -300,10 +329,10 @@
 
 	{#if containers.length > 0}
 		<div class="controls">
-			<input class="field search" type="search" disabled={editing} bind:value={search} placeholder={t('docker.search')} aria-label={t('docker.search')} />
+			<input class="field search" type="search" disabled={editing} bind:value={search} oninput={() => expanded={}} placeholder={t('docker.search')} aria-label={t('docker.search')} />
 			<div class="segmented" role="group" aria-label={t('docker.filter')}>
 				{#each [['all', containers.length], ['running', runCount], ['stopped', containers.length - runCount], ['updates', updateCount]] as [id, count] (id)}
-					<button type="button" aria-pressed={filter === id} disabled={editing} onclick={() => (filter = id as typeof filter)}>
+					<button type="button" aria-pressed={filter === id} disabled={editing} onclick={() => {filter = id as typeof filter;expanded={};}}>
 						{t(id === 'all' ? 'docker.filterAll' : id === 'running' ? 'docker.filterRunning' : id === 'stopped' ? 'docker.filterStopped' : 'docker.filterUpdates')}<span class="mono count">{count}</span>
 					</button>
 				{/each}
@@ -335,7 +364,7 @@
 						<button type="button" class="btn grip" draggable={!savingLayout} disabled={savingLayout} aria-label={t('dashboard.move', { tile: group.name })}
 							ondragstart={(event) => { dragged = group.id; event.dataTransfer?.setData('text/plain', group.id); }} ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button>
 						<span class="order-name">{group.name}</span>
-						{#if group.members.length > 1}<span class="chip">{t('docker.stack')}</span>{/if}
+						{#if isStack(group)}<span class="chip">{t('docker.stack')}</span>{/if}
 						<button type="button" class="btn arrow" disabled={savingLayout || index === 0} aria-label={t('docker.layout.before', { name: group.name })} onclick={() => moveBy(group.id, -1)}>↑</button>
 						<button type="button" class="btn arrow" disabled={savingLayout || index === groups.length - 1} aria-label={t('docker.layout.after', { name: group.name })} onclick={() => moveBy(group.id, 1)}>↓</button>
 					</li>
@@ -359,10 +388,10 @@
 						<span>{t('docker.column.name')}</span><span>{t('docker.column.state')}</span><span>{t('docker.cpu')}</span><span>{t('docker.ram')}</span><span>{t('docker.column.ports')}</span><span></span>
 					</div>
 					{#each shownGroups as group (group.id)}
-						{#if group.members.length > 1}
+						{#if isStack(group)}
 							<div class="stack" role="listitem" aria-label="{t('docker.stack')} {group.name}">
 								{@render stackHead(group)}
-								{#if !folded[group.id]}
+								{#if stackOpen(group.id)}
 									<div class="members" role="list">
 										{#each shownMembers(group) as container (container.name)}
 											{@render row(container, true)}
@@ -379,12 +408,12 @@
 		{:else}
 			<div class="cards">
 				{#each shownGroups as group (group.id)}
-					{#if group.members.length > 1}
+					{#if isStack(group)}
 						<section class="tile stack-card" aria-label="{t('docker.stack')} {group.name}">
 							<div class="list-wrap">
 								<div class="list">
 									{@render stackHead(group)}
-									{#if !folded[group.id]}
+									{#if stackOpen(group.id)}
 										<div class="members" role="list">
 											{#each shownMembers(group) as container (container.name)}
 												{@render row(container, true)}
@@ -415,20 +444,42 @@
 
 {#snippet stackHead(group: DockerGroup)}
 	{@const running = group.members.filter(isRunning).length}
+ {@const primary = stackPrimary(group,layout.primaryServices)}
+ {@const links = primary ? webLinks(primary,host,tailscaleHost) : []}
+ {@const problemCount = group.members.filter(c=>!isRunning(c)||c.state==='restarting').length}
 	<div class="stack-head">
-		<button type="button" class="stack-toggle" aria-expanded={!folded[group.id]} onclick={() => (folded[group.id] = !folded[group.id])}>
+		<button type="button" class="stack-toggle" aria-expanded={stackOpen(group.id)} onclick={() => (expanded[group.id] = !stackOpen(group.id))}>
 			<span class="stack-icon" style:background="hsl({monogramHue(group.name)} 45% 42%)"><AppIcon src={group.members.find((container) => container.icon)?.icon ?? ''} name={group.name} /></span>
 			<span class="stack-names">
-				<span class="stack-line"><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn">{t('docker.update')}</span>{/if}<span class="chevron" class:folded={folded[group.id]}><Icon name="chevronDown" size={16} /></span></span>
+				<span class="stack-line"><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn">{t('docker.update')}</span>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}><Icon name="chevronDown" size={16} /></span></span>
 				<span class="stack-sub">{t('docker.stackServices', { count: group.members.length })}</span>
 			</span>
 		</button>
 		<span class="stack-state"><span class="dot" class:ok={running === group.members.length} class:warn={running > 0 && running < group.members.length} aria-hidden="true"></span>{t('docker.stackSummary', { running, total: group.members.length })}</span>
 		<span class="mono stack-value"><span class="label">{t('docker.cpu')}</span>{running ? formatPercent(sum(group, (container) => container.cpuPercent)) : '–'}</span>
 		<span class="mono stack-value"><span class="label">{t('docker.ram')}</span>{running ? formatBytes(sum(group, (container) => container.memoryBytes)) : '–'}</span>
+  <div class="stack-links">
+   {#if problemCount}<button class="link stack-problems" onclick={()=>showProblems(group)}>{t('docker.stackProblems',{count:problemCount})}</button>{/if}
+   {#if search.trim()||filter!=='all'}<span class="muted matches">{t('docker.stackMatches',{count:shownMembers(group).length,total:group.members.length})}</span>{/if}
+   {#each links as link(link.label)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14}/>{link.text}</a>{/each}
+   {#if layout.primaryServices[group.id]&&!primary}<span class="notice-warn missing-primary">{t('docker.primaryMissing',{service:layout.primaryServices[group.id]})}</span>{/if}
+   <button class="btn small" disabled={editing||savingLayout} onclick={()=>editLinks(group)}>{t('docker.stackLinks')}</button>
+  </div>
 	</div>
 {/snippet}
 
+{#if linkGroup}
+ <Dialog title={t('docker.stackLinksTitle',{name:linkGroup.name})} locked={savingLayout} onclose={()=>linkGroup=null}>
+  <p class="text">{t('docker.stackLinksHint')}</p>
+  <label class="field-row"><span>{t('docker.primaryService')}</span><select class="field" bind:value={primaryService} disabled={savingLayout}>
+   <option value="">{t('docker.primaryAuto')}</option>
+   {#if primaryService&&!linkGroup.members.some(c=>c.service===primaryService)}<option value={primaryService}>{primaryService} · {t('docker.primaryUnavailable')}</option>{/if}
+   {#each [...new Set(linkGroup.members.map(c=>c.service).filter(Boolean))] as service}<option value={service}>{service}</option>{/each}
+  </select></label>
+  {#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
+  <div class="dialog-actions"><button class="btn" disabled={savingLayout} onclick={()=>linkGroup=null}>{t('common.cancel')}</button><button class="btn btn-primary" disabled={savingLayout} onclick={saveLinks}>{t('common.save')}</button></div>
+ </Dialog>
+{/if}
 {#if dialog?.kind === 'logs'}
 	{@const container = dialog.container}
 	<Dialog title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })} wide onclose={() => (dialog = null)}>
@@ -440,25 +491,27 @@
 	</Dialog>
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
-	<Dialog title={t('docker.removeTitle', { name: container.name })} onclose={() => (dialog = null)}>
+	<Dialog title={t('docker.removeTitle', { name: container.name })} locked={busy} onclose={() => (dialog = null)}>
 		<p class="text">{t('docker.removeContainer')}</p>
+ {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={busy} onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'removeApp'}
 	{@const app = dialog.app}
-	<Dialog title={t('docker.removeTitle', { name: app })} onclose={() => (dialog = null)}>
+	<Dialog title={t('docker.removeTitle', { name: app })} locked={busy} onclose={() => (dialog = null)}>
 		{@const path = `/mnt/${status?.settings.volume}/appdata/${app}`}
 		<p class="text">{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}</p>
-		<label class="check"><input type="checkbox" bind:checked={dialog.purge} /><span>{t('docker.removeData', { path })}</span></label>
+ {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
+		<label class="check"><input type="checkbox" bind:checked={dialog.purge} disabled={busy} /><span>{t('docker.removeData', { path })}</span></label>
 		{#if dialog.purge}
 			<p class="notice-error">{t('docker.removeDataWarning')}</p>
 		{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
+			<button type="button" class="btn" disabled={busy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" disabled={busy} class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
 				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
@@ -495,6 +548,8 @@
 {/if}
 
 <style>
+ .stack-links{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px}.stack-links .small{min-height:30px;padding:4px 8px;font-size:.75rem}.stack-problems{color:var(--warn-text)}.missing-primary{font-size:.75rem;padding:3px 6px}.matches{font-size:.75rem}.field-row{display:flex;flex-direction:column;gap:6px}.notice-warn{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+
 	.summary {
 		display: flex;
 		flex-wrap: wrap;

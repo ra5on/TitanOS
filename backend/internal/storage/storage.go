@@ -172,9 +172,11 @@ type Manager struct {
 	testMu sync.Mutex
 	tests  map[string]*DiskTest
 
-	mu      sync.RWMutex
-	volumes []VolumeConfig
-	loaded  bool
+	mu           sync.RWMutex
+	volumes      []VolumeConfig
+	growth       *GrowthPointer
+	growthActive bool
+	loaded       bool
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
 	settled         bool
@@ -198,6 +200,9 @@ func (m *Manager) Load() error {
 	var volumes []VolumeConfig
 	err := m.store.ReadJSON(configFile, &volumes)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := m.loadGrowth(); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -496,6 +501,16 @@ func (m *Manager) Mounted() []string {
 // MountPoint returns where a volume is mounted.
 func (m *Manager) MountPoint(volume string) string {
 	return m.mountRoot + "/" + volume
+}
+
+// ActionsRunning includes synchronous storage work, such as restoring snapshot
+// files, which is not represented by a disk-test or background reshape job.
+func (m *Manager) ActionsRunning() bool {
+	if !m.actions.TryLock() {
+		return true
+	}
+	m.actions.Unlock()
+	return false
 }
 
 func (m *Manager) readMounts() map[string]bool {

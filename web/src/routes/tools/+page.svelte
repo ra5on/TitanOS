@@ -121,6 +121,7 @@
 
 <PageHead title={t('nav.tools')} />
 
+<nav class="operation-links">{#each [['tasks','/tools/tasks'],['maintenance','/tools/maintenance'],['monitoring','/tools/monitoring'],['import','/storage/import']] as [key,href](key)}<a class="tile" {href}>{t(`ops.${key}` as 'ops.tasks')} →</a>{/each}</nav>
 <DiskTests />
 
 <section class="tile" aria-labelledby="tools-bundle">
@@ -178,6 +179,8 @@
 </section>
 
 <style>
+ .operation-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--gap);margin-bottom:var(--gap)}.operation-links a{padding:18px;color:var(--text);text-decoration:none;font-weight:600}
+
 	section {
 		display: flex;
 		flex-direction: column;

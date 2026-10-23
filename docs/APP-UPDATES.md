@@ -254,3 +254,23 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
 - Das erste echte App-Release ist erst nach 0.8.0 möglich.
 - Nicht auf echter Hardware geprüft.
 
+
+## Ergänzungen ab 0.16.0
+
+Vor einem App-Update wartet titand zusätzlich auf Wartungsaufträge, offene
+RAID-Erweiterungen, VM-Kopien und ungeklärte Anwendungssicherungen. Eine
+unterbrochene koordinierte Sicherung muss ausdrücklich wiederhergestellt werden;
+ein Dienstneustart hebt ihre Sperre nicht auf.
+
+Dateiübertragungen auf Daten-Volumes besitzen nun dauerhafte Pläne und
+Ereignisjournale. Nach einem unerwarteten Dienstneustart prüft die ausdrückliche
+Fortsetzung aktuelle Rechte sowie Quell- und Zielidentitäten; unbekannte
+Veröffentlichungen oder Quellentfernungen werden nicht wiederholt. Das reguläre
+App-Update wartet weiterhin auf laufende Übertragungen. Nach einem NAS-Neustart
+werden alte Übertragungspläne nicht ungeprüft übernommen.
+
+Koordinierte Backup-Aufträge speichern ihre Quellauswahl in einem zusätzlichen
+Feld und halten die bisherigen Quellfelder leer. Unterstützende Versionen
+stellen die Auswahl beim Laden wieder her. Beim Rückwechsel lehnen ältere
+Versionen den Auftrag ohne Quellen ab, statt eine kalte Sicherung unbemerkt
+als Live-Kopie auszuführen. Details: [WORKFLOWS.md](WORKFLOWS.md).

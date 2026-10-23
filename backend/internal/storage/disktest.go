@@ -160,6 +160,9 @@ func (m *Manager) StartTest(ctx context.Context, name, mode, confirm string) err
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 	if mode != TestRead && mode != TestWrite {
 		return fmt.Errorf("%w: unknown kind of test", ErrNotPossible)
 	}

@@ -1,11 +1,11 @@
 import type { DockerContainer } from './api.ts';
 
 export type DockerView = 'list' | 'cards';
-export type DockerLayout = { version: 1; view: DockerView; order: string[]; details: boolean };
+export type DockerLayout = { version: 1; view: DockerView; order: string[]; details: boolean; primaryServices: Record<string, string> };
 export type DockerGroup = { id: string; name: string; members: DockerContainer[] };
 
 export function defaultDockerLayout(): DockerLayout {
-	return { version: 1, view: 'list', order: [], details: true };
+	return { version: 1, view: 'list', order: [], details: true, primaryServices: {} };
 }
 
 /** Names survive container recreation during updates. Prefixes separate apps from standalone containers. */
@@ -33,6 +33,11 @@ export function sanitizeDockerLayout(value: unknown): DockerLayout {
 	if (input.view === 'cards') result.view = 'cards';
 	if (typeof input.details === 'boolean') result.details = input.details;
 	if (Array.isArray(input.order)) result.order = [...new Set(input.order.filter(validID))].slice(0, 2000);
+	if (input.primaryServices && typeof input.primaryServices === 'object' && !Array.isArray(input.primaryServices)) {
+  for (const [id, service] of Object.entries(input.primaryServices).slice(0,2000)) {
+   if (validID(id) && typeof service === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(service)) result.primaryServices[id] = service;
+  }
+ }
 	return result;
 }
 
@@ -49,4 +54,11 @@ export function moveDockerGroup(order: string[], groups: DockerGroup[], from: st
 	ids.splice(ids.indexOf(from), 1);
 	ids.splice(target, 0, from);
 	return ids;
+}
+
+/** An explicit missing service never silently selects a different application. */
+export function stackPrimary(group: DockerGroup, services: Record<string,string>): DockerContainer | undefined {
+ const chosen = services[group.id];
+ if (chosen) return group.members.find(c => c.service === chosen);
+ return group.members.find(c => c.webui?.trim()) ?? group.members.find(c => c.publicUrl?.trim());
 }
