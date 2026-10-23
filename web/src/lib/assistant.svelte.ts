@@ -77,7 +77,7 @@ export type AssistantPrefs = { floating: boolean; pageContext: boolean; model: s
 const DEFAULT_PREFS: AssistantPrefs = { floating: true, pageContext: true, model: '' };
 
 /** Areas of the NAS, in the order of the settings page. */
-export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates'] as const;
+export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home'] as const;
 
 export const assistant = $state({
 	/** The page the chat was opened from, sent along as context. */

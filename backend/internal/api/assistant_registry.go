@@ -99,6 +99,7 @@ var toolAreas = map[string]string{
 	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
 	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
 	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
+	"ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
 }
 
 // assistantTools are the tools of an account: those of its role, in the
@@ -216,6 +217,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 	if user.Role.CanAdminister() {
 		tools = append(tools, s.apiTools(user, r)...)
 	}
+	tools = append(tools, s.haTools(user)...)
 	return append(tools, s.assistantActions(user)...)
 }
 
