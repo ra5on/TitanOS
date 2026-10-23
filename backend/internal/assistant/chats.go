@@ -40,7 +40,19 @@ type Run struct {
 	Wake    time.Time `json:"wake,omitempty"`
 }
 
+// Stats add up what the work of a chat cost, for the person to see. Older
+// versions ignore them.
+type Stats struct {
+	Rounds    int   `json:"rounds"`
+	Prompt    int   `json:"prompt"`    // tokens read by the model
+	Generated int   `json:"generated"` // tokens written by the model
+	ModelMS   int64 `json:"modelMs"`
+	ToolMS    int64 `json:"toolMs"`
+	Tools     int   `json:"tools"`
+}
+
 type Chat struct {
+	Stats      *Stats          `json:"stats,omitempty"`
 	Automation string          `json:"automation,omitempty"`
 	Execution  string          `json:"execution,omitempty"`
 	Notify     string          `json:"notify,omitempty"`

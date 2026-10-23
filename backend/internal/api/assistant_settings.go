@@ -78,7 +78,7 @@ func (s *Server) handleAgentDiagnostics(w http.ResponseWriter, r *http.Request) 
 		copy.Detail = ""
 		run = &copy
 	}
-	report := map[string]any{"version": s.opts.Version, "model": c.Model, "run": run, "steps": steps, "contentIncluded": include}
+	report := map[string]any{"version": s.opts.Version, "model": c.Model, "run": run, "steps": steps, "contentIncluded": include, "stats": c.Stats}
 	data, _ := json.MarshalIndent(report, "", "  ")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="assistant-diagnostics.json"`)

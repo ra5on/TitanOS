@@ -6,16 +6,19 @@
  import PageHead from '#lib/components/PageHead.svelte';
  import EmptyState from '#lib/components/EmptyState.svelte';
  import Dialog from '#lib/components/Dialog.svelte';
- type Trigger = { kind: string; at?: string; minutes?: number; time?: string; timezone?: string; weekday?: number; event?: string; target?: string; root?: string; path?: string; percent?: number };
+ import { templatesFor, type AutomationTemplate } from '#lib/automation-templates.ts';
+ type Trigger = { kind: string; at?: string; minutes?: number; time?: string; timezone?: string; weekday?: number; event?: string; target?: string; root?: string; path?: string; percent?: number; from?: string; to?: string; above?: number|null; below?: number|null };
  type Automation = { id?: string; revision?: number; name:string; prompt:string; enabled:boolean; trigger:Trigger; conditions:{volume?:string;noRebuild?:boolean}; execution:string; notify:string; catchUp:string; overlap:string; next?:string; detail?:string; runs?:{chat:string;scheduled:string;state:string;detail?:string}[] };
  let items=$state<Automation[]>([]), editing=$state<Automation|null>(null), removing=$state<Automation|null>(null);
+ let entities=$state<{id:string;name:string;area?:string}[]>([]);
  let roots=$state<{id:string;name:string;kind:string}[]>([]), volumes=$state<{name:string}[]>([]), drives=$state<{id:string;label:string;name:string;model:string}[]>([]);
  const admin=$derived(['owner','admin'].includes(session.data?.user?.role??''));
  async function catalog(){
-  const calls=await Promise.allSettled([api.get<{id:string;name:string;kind:string}[]>('/files/roots'),...(admin?[api.get<{volumes:{name:string}[]}>('/storage'),api.get<{id:string;label:string;name:string;model:string}[]>('/usb')]:[])]);
+  const calls=await Promise.allSettled([api.get<{id:string;name:string;kind:string}[]>('/files/roots'),...(admin?[api.get<{volumes:{name:string}[]}>('/storage'),api.get<{id:string;label:string;name:string;model:string}[]>('/usb'),api.get<{entities:{id:string;name:string;area?:string}[]}>('/homeassistant/entities?released=1')]:[])]);
   const r=calls[0];if(r.status==='fulfilled'&&Array.isArray(r.value))roots=r.value.filter(v=>v.kind!=='stick');
   const v=calls[1];if(v?.status==='fulfilled'&&!Array.isArray(v.value)&&'volumes' in v.value)volumes=v.value.volumes;
   const d=calls[2];if(d?.status==='fulfilled'&&Array.isArray(d.value))drives=d.value as typeof drives;
+  const h=calls[3];entities=h?.status==='fulfilled'&&h.value&&'entities' in h.value?h.value.entities:[];
  }
  let busy=$state(false), error=$state(''), loaded=$state(false), once=$state('');
  const label=(name:string)=>t(`automation.${name}` as MessageKey);
@@ -24,12 +27,21 @@
  async function load(){try{items=(await api.get<{automations:Automation[]}>('/assistant/automations')).automations;loaded=true;error='';}catch(e){error=failure(e);}}
  onMount(()=>{load();const timer=setInterval(()=>{if(!editing&&!removing&&!busy&&document.visibilityState==='visible')load();},15000);return()=>clearInterval(timer);});
  function edit(a?:Automation,duplicate=false){
-  catalog();error='';editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
+  catalog();error='';template='';editing=a?structuredClone($state.snapshot(a)):{name:'',prompt:'',enabled:true,trigger:{kind:'daily',time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0},conditions:{},execution:'inherit',notify:'errors',catchUp:'latest',overlap:'skip'};
   if(duplicate){delete editing.id;delete editing.revision;editing.enabled=false;delete editing.runs;delete editing.next;}
   const at=editing.trigger.at?new Date(editing.trigger.at):new Date(Date.now()+3600000);once=new Date(at.getTime()-at.getTimezoneOffset()*60000).toISOString().slice(0,16);
  }
  function changeKind(){if(!editing)return;editing.trigger={kind:editing.trigger.kind,time:'18:00',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,minutes:60,event:admin?'notification':'files',target:admin?'backup_failed':'',root:'',path:'',percent:85};}
- async function save(){if(!editing)return;busy=true;try{const a=structuredClone($state.snapshot(editing));if(a.trigger.kind==='once')a.trigger.at=new Date(once).toISOString();await api.post('/assistant/automations',a);editing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
+ let template=$state('');
+ const templates=$derived(templatesFor(admin,entities.length>0));
+ function useTemplate(id:string){
+  const tpl=templates.find(v=>v.id===id) as AutomationTemplate|undefined;
+  if(!tpl||!editing)return;
+  editing.name=t(`automation.tpl.${tpl.id}.name` as MessageKey);editing.prompt=t(`automation.tpl.${tpl.id}.prompt` as MessageKey);
+  editing.trigger={timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,weekday:0,...tpl.trigger};
+  editing.execution=tpl.execution;editing.notify=tpl.notify;
+ }
+ async function save(){if(!editing)return;busy=true;try{const a=structuredClone($state.snapshot(editing));for(const k of ['above','below'] as const)if(typeof a.trigger[k]!=='number')delete a.trigger[k];if(a.trigger.kind==='once')a.trigger.at=new Date(once).toISOString();await api.post('/assistant/automations',a);editing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function toggle(a:Automation){busy=true;try{await api.post('/assistant/automations',{...a,enabled:!a.enabled});await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function run(a:Automation){busy=true;try{await api.post(`/assistant/automations/${a.id}/run`);await load();}catch(e){error=failure(e);}finally{busy=false;}}
  async function remove(){if(!removing)return;busy=true;try{await api.delete(`/assistant/automations/${removing.id}`);removing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
@@ -56,6 +68,7 @@
 {#if editing}
  <Dialog title={label(editing.id?'edit':'create')} wide locked={busy} onclose={()=>{editing=null;error='';}}>
   <form onsubmit={(e)=>{e.preventDefault();save();}}>
+   {#if !editing.id && templates.length}<label>{label('fromTemplate')}<select class="field" bind:value={template} onchange={()=>useTemplate(template)} disabled={busy}><option value="">{label('noTemplate')}</option>{#each templates as tpl (tpl.id)}<option value={tpl.id}>{t(`automation.tpl.${tpl.id}.name` as MessageKey)}</option>{/each}</select></label>{#if template}<p class="muted small">{label('templateHint')}</p>{/if}{/if}
    <label>{label('name')}<input class="field" bind:value={editing.name} maxlength="120" required disabled={busy}/></label>
    <label>{label('prompt')}<textarea class="field" bind:value={editing.prompt} rows="5" maxlength="8000" required disabled={busy}></textarea></label>
    <label>{label('trigger')}<select class="field" bind:value={editing.trigger.kind} onchange={changeKind} disabled={busy}>{#each ['once','interval','daily','weekly','event'] as kind}<option value={kind}>{label(kind)}</option>{/each}</select></label>
@@ -64,9 +77,12 @@
    {#if ['daily','weekly'].includes(editing.trigger.kind)}<div class="fields"><label>{label('time')}<input class="field" type="time" bind:value={editing.trigger.time} required disabled={busy}/></label><label>{label('timezone')}<input class="field" bind:value={editing.trigger.timezone} required disabled={busy}/></label></div>{/if}
    {#if editing.trigger.kind==='weekly'}<label>{label('weekday')}<select class="field" bind:value={editing.trigger.weekday} disabled={busy}>{#each [0,1,2,3,4,5,6] as day}<option value={day}>{label(`day${day}`)}</option>{/each}</select></label>{/if}
    {#if editing.trigger.kind==='event'}
-    <label>{label('event')}<select class="field" bind:value={editing.trigger.event} disabled={busy}>{#each (admin?['notification','usb','volume','files']:['files']) as event}<option value={event}>{label(event)}</option>{/each}</select></label>
+    <label>{label('event')}<select class="field" bind:value={editing.trigger.event} disabled={busy}>{#each (admin?['notification','usb','volume','files',...(entities.length||editing.trigger.event==='homeassistant'?['homeassistant']:[])]:['files']) as event}<option value={event}>{label(event)}</option>{/each}</select></label>
     {#if editing.trigger.event==='files'}<label>{label('root')}<select class="field" bind:value={editing.trigger.root} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.root&&!roots.some(r=>r.id===editing?.trigger.root)}<option value={editing.trigger.root}>{editing.trigger.root}</option>{/if}{#each roots as root (root.id)}<option value={root.id}>{root.name} ({root.kind})</option>{/each}</select></label><label>{label('path')}<input class="field" bind:value={editing.trigger.path} disabled={busy}/></label><p class="muted small">{label('filesHelp')}</p>
     {:else if editing.trigger.event==='usb'}<label>{label('usbDevice')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!drives.some(d=>d.id===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each drives as drive (drive.id)}<option value={drive.id}>{drive.label||drive.model||drive.name} ({drive.id})</option>{/each}</select></label>
+    {:else if editing.trigger.event==='homeassistant'}<label>{label('haEntity')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!entities.some(e=>e.id===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each entities as entity (entity.id)}<option value={entity.id}>{entity.name} ({entity.id}){entity.area?` · ${entity.area}`:''}</option>{/each}</select></label>
+     <label>{label('haTo')}<input class="field mono" bind:value={editing.trigger.to} placeholder="not_home" disabled={busy}/></label><label>{label('haFrom')}<input class="field mono" bind:value={editing.trigger.from} disabled={busy}/></label>
+     <label>{label('haAbove')}<input class="field" type="number" step="any" bind:value={editing.trigger.above} disabled={busy}/></label><label>{label('haBelow')}<input class="field" type="number" step="any" bind:value={editing.trigger.below} disabled={busy}/></label><p class="muted small">{label('haHelp')}</p>
     {:else if editing.trigger.event==='volume'}<label>{label('volumeName')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}><option value="">{label('choose')}</option>{#if editing.trigger.target&&!volumes.some(v=>v.name===editing?.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each volumes as volume}<option value={volume.name}>{volume.name}</option>{/each}</select></label>
     {:else}<label>{label('eventKind')}<select class="field" bind:value={editing.trigger.target} required disabled={busy}>{#if editing.trigger.target&&!['backup_failed','config_backup_failed','volume_degraded','disk_unhealthy','disk_hot','update_available'].includes(editing.trigger.target)}<option value={editing.trigger.target}>{editing.trigger.target}</option>{/if}{#each ['backup_failed','config_backup_failed','volume_degraded','disk_unhealthy','disk_hot','update_available'] as kind}<option value={kind}>{label(`event_${kind}`)}</option>{/each}</select></label>{/if}
     {#if editing.trigger.event==='volume'}<label>{label('percent')}<input class="field" type="number" min="1" max="100" bind:value={editing.trigger.percent} required disabled={busy}/></label>{/if}

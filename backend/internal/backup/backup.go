@@ -147,6 +147,10 @@ type State struct {
 	Bytes uint64 `json:"bytes"`
 	// RestoredTo is the folder of the last restore.
 	RestoredTo string `json:"restoredTo"`
+	// LastCheck is when the repository was last checked; CheckError what
+	// restic found then, empty if all was well.
+	LastCheck  *time.Time `json:"lastCheck,omitempty"`
+	CheckError string     `json:"checkError,omitempty"`
 }
 
 // Source is a share that can be backed up.
@@ -186,6 +190,8 @@ type Manager struct {
 	WithUSB func(context.Context, string, func(*os.Root) error) error
 	// OnResult is told how each scheduled or started backup ended.
 	OnResult func(job string, err error)
+	// OnCheck hears how a check of a repository ended.
+	OnCheck func(job string, err error)
 	// OnOverdue is told once when a job has gone without a backup that
 	// worked for too long (see overdue); again only after one worked.
 	OnOverdue func(job string)
@@ -782,7 +788,8 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		m.update(job, func(s *State) {
 			s.Running, s.Phase, s.Percent = false, "", 0
 			if phase != "backup" {
-				if err != nil && !cancelled {
+				// A failed check is kept as CheckError, not as a failed backup.
+				if err != nil && !cancelled && phase != "check" {
 					s.LastError = err.Error()
 				}
 				return

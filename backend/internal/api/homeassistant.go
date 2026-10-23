@@ -47,8 +47,12 @@ func (s *Server) handleHASettings(w http.ResponseWriter, r *http.Request) {
 	if !s.haReady(w) {
 		return
 	}
-	settings, tokenSet := s.opts.HomeAssistant.Settings()
-	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": tokenSet, "domains": homeassistant.Domains()})
+	settings, set := s.opts.HomeAssistant.Settings()
+	watching, watchError := s.opts.HomeAssistant.WatchStatus()
+	publishing, mqttError := s.opts.HomeAssistant.MQTTStatus()
+	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(),
+		"sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups,
+		"status": map[string]any{"watching": watching, "watchError": watchError, "mqtt": publishing, "mqttError": mqttError}})
 }
 
 func (s *Server) handleHASettingsChange(w http.ResponseWriter, r *http.Request) {
@@ -57,12 +61,19 @@ func (s *Server) handleHASettingsChange(w http.ResponseWriter, r *http.Request) 
 	}
 	var req struct {
 		homeassistant.Settings
-		ClearToken bool `json:"clearToken"`
+		ClearSecrets []string `json:"clearSecrets"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.HomeAssistant.SetSettings(req.Settings, req.ClearToken); err != nil {
+	// Buttons and Assist act for an owner or administrator only.
+	if req.Account != "" {
+		if u, ok := s.opts.Users.Get(req.Account); !ok || !u.Role.CanAdminister() {
+			writeError(w, http.StatusBadRequest, "invalid_ha_settings", "the account must be an owner or administrator")
+			return
+		}
+	}
+	if err := s.opts.HomeAssistant.SetSettings(req.Settings, req.ClearSecrets...); err != nil {
 		writeHAError(w, err)
 		return
 	}
@@ -84,12 +95,13 @@ func (s *Server) handleHACheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-// handleHAEntities lists every entity for choosing what to release.
+// handleHAEntities lists every entity for choosing what to release, or with
+// ?released=1 only the released ones (for automations).
 func (s *Server) handleHAEntities(w http.ResponseWriter, r *http.Request) {
 	if !s.haReady(w) {
 		return
 	}
-	states, err := s.opts.HomeAssistant.States(r.Context(), false)
+	states, err := s.opts.HomeAssistant.States(r.Context(), r.URL.Query().Get("released") == "1")
 	if err != nil {
 		writeHAError(w, err)
 		return

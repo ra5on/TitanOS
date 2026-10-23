@@ -15,6 +15,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
 
 func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error {
@@ -35,9 +36,12 @@ func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error 
 		}
 	}
 	if a.Trigger.Kind == "event" {
-		area := map[string]string{"notification": "system", "usb": "files", "volume": "storage", "files": "files"}[a.Trigger.Event]
+		area := assistant.EventAreas[a.Trigger.Event]
 		if s.opts.Assistant.Settings().Access(area) == assistant.AccessOff {
 			return assistant.ErrOff
+		}
+		if a.Trigger.Event == "homeassistant" && (s.opts.HomeAssistant == nil || !s.opts.HomeAssistant.Allowed(a.Trigger.Target)) {
+			return homeassistant.ErrNotAllowed
 		}
 		if a.Trigger.Event == "files" {
 			root, err := s.assistantRoot(u, a.Trigger.Root)
@@ -108,7 +112,7 @@ func (s *Server) automationTools(u auth.User) []assistant.Tool {
 		"id": str("Existing ID for editing; omit to create."), "revision": map[string]any{"type": "integer"}, "name": str("Name"), "prompt": str("Complete user-authorized instruction. Use existing exact targets; do not create unrelated resources."), "enabled": map[string]any{"type": "boolean"},
 		"execution": enum("Execution policy", "inherit", "confirm", "direct"), "notify": enum("Administrator notifications (private results remain in chat)", "errors", "always", "never"), "catchUp": enum("Missed schedule: latest within 24h, or skip", "latest", "skip"), "overlap": enum("While previous run is open", "skip", "queue"),
 		"conditions": schema(map[string]any{"volume": str("Required mounted volume name"), "noRebuild": map[string]any{"type": "boolean"}}),
-		"trigger":    schema(map[string]any{"kind": enum("Trigger type", "once", "interval", "daily", "weekly", "event"), "at": str("RFC3339 date for once"), "minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 525600}, "time": str("HH:MM for daily/weekly"), "timezone": str("IANA timezone, e.g. Europe/Berlin"), "weekday": map[string]any{"type": "integer", "minimum": 0, "maximum": 6, "description": "Sunday=0"}, "event": enum("Event type", "notification", "usb", "volume", "files"), "target": str("Notification kind, USB filesystem UUID or volume name"), "root": str("Exact accessible root for folder changes"), "path": str("Relative folder (non-recursive)"), "percent": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "kind"),
+		"trigger":    schema(map[string]any{"kind": enum("Trigger type", "once", "interval", "daily", "weekly", "event"), "at": str("RFC3339 date for once"), "minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 525600}, "time": str("HH:MM for daily/weekly"), "timezone": str("IANA timezone, e.g. Europe/Berlin"), "weekday": map[string]any{"type": "integer", "minimum": 0, "maximum": 6, "description": "Sunday=0"}, "event": enum("Event type", "notification", "usb", "volume", "files", "homeassistant"), "target": str("Notification kind, USB filesystem UUID, volume name or Home Assistant entity ID (released ones from ha_entities)"), "from": str("Home Assistant: only changes from this state"), "to": str("Home Assistant: only changes to this state, e.g. not_home"), "above": map[string]any{"type": "number", "description": "Home Assistant: numeric state rises above this"}, "below": map[string]any{"type": "number", "description": "Home Assistant: numeric state falls below this"}, "root": str("Exact accessible root for folder changes"), "path": str("Relative folder (non-recursive)"), "percent": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "kind"),
 	}, "name", "prompt", "enabled", "trigger")
 	return []assistant.Tool{
 		reading("automation_list", "List this account's saved automations, next starts and run history. No access to other accounts.", nil, false, noArgs(func(ctx context.Context) (any, error) { return s.automations.List(u.Name) })),
@@ -164,8 +168,28 @@ func (s *Server) automationCard(u auth.User, args json.RawMessage, method, suffi
 
 // Snapshot event sources without an LLM. No recursive indexing, /config polling
 // or event instructions from files. Initial observations establish a baseline.
-func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.Trigger) (string, bool, error) {
+func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.Trigger, last string) (string, bool, error) {
 	switch t.Event {
+	case "homeassistant":
+		ha := s.opts.HomeAssistant
+		if ha == nil || !ha.Active() {
+			return "", false, fmt.Errorf("Home Assistant is not connected")
+		}
+		if !ha.Allowed(t.Target) {
+			return "", false, homeassistant.ErrNotAllowed
+		}
+		// Recorded transitions since the last look, so that a short change in
+		// between still counts. Marks only grow, also across restarts.
+		since, newest := ha.Transitions(t.Target, last)
+		if newest < last {
+			newest = last
+		}
+		for _, tr := range since {
+			if homeassistant.Match(tr, t.From, t.To, t.Above, t.Below) {
+				return newest, true, nil
+			}
+		}
+		return newest, false, nil
 	case "notification":
 		if s.opts.Notify == nil {
 			return "", false, nil
@@ -307,27 +331,29 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 			due := a.Pending
 			scheduled := now
 			if a.Enabled && a.Trigger.Kind == "event" {
-				area := map[string]string{"notification": "system", "usb": "files", "volume": "storage", "files": "files"}[a.Trigger.Event]
+				area := assistant.EventAreas[a.Trigger.Event]
 				if s.opts.Assistant.Settings().Access(area) == assistant.AccessOff || !u.Role.CanAdminister() && a.Trigger.Event != "files" {
 					a.Detail = "event_access_denied"
 					continue
 				}
 				// Explicit event monitoring only, with one-minute cooldown. Fingerprints
 				// survive restarts. Preserve the baseline on read errors.
-				fingerprint, match, e := s.automationEvent(ctx, u, a.Trigger)
+				fingerprint, match, e := s.automationEvent(ctx, u, a.Trigger, a.LastEvent)
 				if e != nil {
 					a.Detail = e.Error()
 					continue
 				}
+				// High-water marks: older entries never count again.
+				highWater := a.Trigger.Event == "notification" || a.Trigger.Event == "homeassistant"
 				changed := fingerprint != a.LastEvent
-				if a.Trigger.Event == "notification" {
+				if highWater {
 					changed = fingerprint > a.LastEvent
 				}
 				if a.EventReady && changed && match {
 					a.Pending = true
 					due = true
 				}
-				if a.Trigger.Event != "notification" || fingerprint > a.LastEvent {
+				if !highWater || fingerprint > a.LastEvent {
 					a.LastEvent = fingerprint
 				}
 				a.EventReady = true
@@ -379,4 +405,28 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 	if err != nil {
 		slog.Error("automation scheduler failed", "user", u.Name, "err", err)
 	}
+}
+
+// watchHomeAssistant tells the Home Assistant watcher which entities enabled
+// automations wait for; their state changes are then recorded.
+func (s *Server) watchHomeAssistant(users []auth.User) {
+	if s.opts.HomeAssistant == nil {
+		return
+	}
+	var entities []string
+	for _, u := range users {
+		if !s.assistantAllowed(u) || !u.Role.CanAdminister() {
+			continue
+		}
+		list, err := s.automations.List(u.Name)
+		if err != nil {
+			continue
+		}
+		for _, a := range list {
+			if a.Enabled && a.Trigger.Kind == "event" && a.Trigger.Event == "homeassistant" {
+				entities = append(entities, a.Trigger.Target)
+			}
+		}
+	}
+	s.opts.HomeAssistant.SetWatched(entities)
 }

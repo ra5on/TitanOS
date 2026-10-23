@@ -6,6 +6,10 @@ import "strings"
 // a volume or a disk. The web UI has its own texts for the same kinds.
 var texts = map[string]map[string][2]string{
 	"de": {
+		"backup_check_failed":   {"Prüfung des Backups {s} fehlgeschlagen", "restic hat im Speicherort des Backups {s} Fehler gefunden. Einzelheiten stehen unter Einstellungen › Sicherungen."},
+		"power_postponed":       {"Herunterfahren verschoben", "Das geplante Herunterfahren wartet, bis die laufende Arbeit fertig ist ({s}); höchstens sechs Stunden."},
+		"power_skipped":         {"Herunterfahren ausgelassen", "Das geplante Herunterfahren wurde ausgelassen, weil seit sechs Stunden gearbeitet wird ({s})."},
+		"ha_power_refused":      {"Home Assistant: Ausschalten abgelehnt", "Home Assistant wollte das NAS ausschalten oder neu starten ({s}). TitanOS hat abgelehnt, weil gerade kopiert, gesichert, geprüft oder ein Volume wiederhergestellt wird."},
 		"personal_digest":       {"{s} Meldungen während der Ruhezeit", ""},
 		"personal_confirmation": {"Freigabe nötig: {s}", ""},
 		"personal_done":         {"Erledigt: {s}", ""},
@@ -40,6 +44,10 @@ var texts = map[string]map[string][2]string{
 		"disk_hot":              {"Platte {s} ist sehr warm", "Die Platte {s} ist wärmer als 55 °C. Prüfe die Lüftung."},
 	},
 	"en": {
+		"backup_check_failed":   {"Check of backup {s} failed", "restic found errors in the destination of the backup {s}. Details are under Settings › Backups."},
+		"power_postponed":       {"Shutdown postponed", "The scheduled shutdown waits until the running work is done ({s}); at most six hours."},
+		"power_skipped":         {"Shutdown skipped", "The scheduled shutdown was skipped because work has been running for six hours ({s})."},
+		"ha_power_refused":      {"Home Assistant: power action refused", "Home Assistant asked the NAS to {s}. TitanOS refused because copies, backups, disk tests or a volume rebuild are running."},
 		"personal_digest":       {"{s} messages during quiet hours", ""},
 		"personal_confirmation": {"Approval needed: {s}", ""},
 		"personal_done":         {"Done: {s}", ""},

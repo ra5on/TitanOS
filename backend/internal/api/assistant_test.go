@@ -48,7 +48,7 @@ func (f *fakeChatOllama) start(t *testing.T) *httptest.Server {
 		for _, chunk := range f.next(n, body) {
 			w.Write([]byte(`{"message":` + chunk + `,"done":false}` + "\n"))
 		}
-		w.Write([]byte(`{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
+		w.Write([]byte(`{"message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":120,"eval_count":30,"total_duration":2500000000}` + "\n"))
 	}))
 	t.Cleanup(srv.Close)
 	return srv

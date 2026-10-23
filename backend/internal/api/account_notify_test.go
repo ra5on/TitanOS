@@ -11,9 +11,10 @@ import (
 )
 
 type pushSink struct {
-	mu     sync.Mutex
-	bodies []string
-	click  []string
+	mu      sync.Mutex
+	bodies  []string
+	click   []string
+	actions []string
 }
 
 func (p *pushSink) start(t *testing.T) *httptest.Server {
@@ -22,6 +23,7 @@ func (p *pushSink) start(t *testing.T) *httptest.Server {
 		p.mu.Lock()
 		p.bodies = append(p.bodies, r.Header.Get("Title")+"|"+string(body))
 		p.click = append(p.click, r.Header.Get("Click"))
+		p.actions = append(p.actions, r.Header.Get("Actions"))
 		p.mu.Unlock()
 	}))
 	t.Cleanup(srv.Close)
@@ -103,5 +105,30 @@ func TestAccountNotificationsNeedLogin(t *testing.T) {
 	res, _ := ts.do(&http.Client{}, "GET", "/api/v1/account/notifications", nil)
 	if res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("without login: %d", res.StatusCode)
+	}
+}
+
+func TestRunStatisticsAddUp(t *testing.T) {
+	fake := &fakeChatOllama{next: func(n int, body map[string]any) []string {
+		if n == 1 {
+			return []string{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"system_status","arguments":{}}}]}`}
+		}
+		return []string{`{"role":"assistant","content":"ok"}`}
+	}}
+	ollama := fake.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "ollama": ollama.URL, "model": "qwen3:8b"})
+	id := ts.newChat(ts.client)
+	ts.request("POST", "/api/v1/assistant/chats/"+id+"/messages", map[string]any{"text": "status?"})
+	c, err := ts.server.chats.Get("alex", id)
+	if err != nil || c.Stats == nil {
+		t.Fatalf("%v %+v", err, c)
+	}
+	if s := c.Stats; s.Rounds != 2 || s.Prompt != 240 || s.Generated != 60 || s.ModelMS != 5000 || s.Tools != 1 {
+		t.Fatalf("%+v", s)
+	}
+	if _, body := ts.request("GET", "/api/v1/assistant/chats/"+id+"/diagnostics", nil); !strings.Contains(string(body), `"prompt": 240`) {
+		t.Fatalf("not in the export: %s", body)
 	}
 }

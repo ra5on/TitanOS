@@ -60,6 +60,7 @@ export type AssistantSettings = {
 	memory?: string;
 	retentionDays?: number;
 	ephemeral?: boolean;
+	pushApproval?: boolean;
 	ollama: string;
 	model: string;
 	users: boolean;
@@ -79,6 +80,9 @@ const DEFAULT_PREFS: AssistantPrefs = { floating: true, pageContext: true, model
 /** Areas of the NAS, in the order of the settings page. */
 export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home'] as const;
 
+/** Statistics of a chat: rounds with the model, tokens, time. */
+export type RunStats = { rounds: number; prompt: number; generated: number; modelMs: number; toolMs: number; tools: number };
+
 export const assistant = $state({
 	/** The page the chat was opened from, sent along as context. */
 	fromPage: '',
@@ -92,6 +96,8 @@ export const assistant = $state({
 	messages: [] as ChatEntry[],
 	busy: false,
 	run: null as AgentRun | null,
+	/** What the work of the chat cost, as the NAS adds it up. */
+	stats: null as RunStats | null,
 	dryRun: false,
 	archived: 0,
 	/** The answer that is being written right now. */
@@ -176,12 +182,13 @@ export function toggleAssistant() {
 export async function openChat(id: string) {
  detach(); const view=viewGeneration;
 	try {
-		const res = await api.get<{ chat: { id: string; title: string; messages: ChatEntry[]; run?: AgentRun; dryRun?: boolean; archived?: number }; busy: boolean }>(`/assistant/chats/${id}`);
+		const res = await api.get<{ chat: { id: string; title: string; messages: ChatEntry[]; run?: AgentRun; dryRun?: boolean; archived?: number; stats?: RunStats }; busy: boolean }>(`/assistant/chats/${id}`);
  if(view!==viewGeneration) return;
 		assistant.chatId = res.chat.id;
 		assistant.title = res.chat.title;
 		assistant.messages = res.chat.messages;
 		assistant.run = res.chat.run ?? null;
+		assistant.stats = res.chat.stats ?? null;
 		assistant.busy = res.busy;
 		assistant.dryRun = res.chat.dryRun ?? false;
 		assistant.archived = res.chat.archived ?? 0;
@@ -197,6 +204,7 @@ export function newChat() {
  detach();
 	assistant.chatId = '';
 	assistant.run = null;
+	assistant.stats = null;
 	assistant.archived = 0;
 	assistant.title = '';
 	assistant.messages = [];
@@ -264,7 +272,7 @@ async function stream(path: string, body: Record<string, unknown>) {
 				buffer = buffer.slice(cut + 2);
 				const event = /^event: (.*)$/m.exec(raw)?.[1];
 				const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] ?? '{}');
-				if (event === 'snapshot') { assistant.messages = data.chat.messages; assistant.run = data.chat.run; assistant.archived = data.chat.archived ?? 0; }
+				if (event === 'snapshot') { assistant.messages = data.chat.messages; assistant.run = data.chat.run; assistant.stats = data.chat.stats ?? null; assistant.archived = data.chat.archived ?? 0; }
 				else if (event === 'progress') assistant.run = data;
                 else if (event === 'problem') assistant.error = data.code;
 				else if (event === 'delta') assistant.draft.content += data.text ?? '';
@@ -349,9 +357,9 @@ let poll: ReturnType<typeof setTimeout> | undefined;
 export async function refreshChat() {
 	const id=assistant.chatId; if (!id) return;
 	try {
-		const res=await api.get<{chat:{messages:ChatEntry[];run?:AgentRun;archived?:number};busy:boolean}>(`/assistant/chats/${id}`);
+		const res=await api.get<{chat:{messages:ChatEntry[];run?:AgentRun;archived?:number;stats?:RunStats};busy:boolean}>(`/assistant/chats/${id}`);
 		if (id!==assistant.chatId) return;
-		assistant.messages=res.chat.messages; assistant.run=res.chat.run??null; assistant.archived=res.chat.archived??0;
+		assistant.messages=res.chat.messages; assistant.run=res.chat.run??null; assistant.stats=res.chat.stats??null; assistant.archived=res.chat.archived??0;
 		if (!controller) assistant.busy=res.busy;
 	} catch(err) {assistant.error=problemOf(err);}
 }

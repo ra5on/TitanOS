@@ -9,6 +9,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import FolderTree from './FolderTree.svelte';
+	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -35,7 +36,7 @@
 		password?: string;
 	};
 	type Job = { id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
-	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string };
+	type State = { running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
 	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
@@ -55,7 +56,8 @@
 	let secretSet = $state<Record<string, boolean>>({});
 	let publicKey = $state('');
 	let removing = $state<Job | null>(null);
-	let restoring = $state<{ job: Job; snapshots: Snapshot[] | null; snapshot: string; volume: string; target: string } | null>(null);
+	let restoring = $state<{ job: Job; snapshots: Snapshot[] | null; snapshot: string; volume: string; target: string; mode: 'all' | 'files'; paths: string[] } | null>(null);
+	let checking = $state<{ job: Job; readData: number } | null>(null);
 	let secret = $state<{ job: Job; password: string; asking: boolean } | null>(null);
 
 	function problem(err: unknown) {
@@ -285,7 +287,7 @@
 
 	async function openRestore(job: Job) {
 		error = null;
-		restoring = { job, snapshots: null, snapshot: '', volume: volumes[0] ?? '', target: '' };
+		restoring = { job, snapshots: null, snapshot: '', volume: volumes[0] ?? '', target: '', mode: 'all', paths: [] };
 		try {
 			const res = await api.get<{ snapshots: Snapshot[] }>(`/backups/${job.id}/snapshots`);
 			if (restoring) {
@@ -304,12 +306,28 @@
 		busy = true;
 		error = null;
 		try {
-			const res = await api.post<{ target: string }>(`/backups/${restoring.job.id}/restore`, { snapshot: restoring.snapshot, volume: restoring.volume });
+			const res = await api.post<{ target: string }>(`/backups/${restoring.job.id}/restore`, { snapshot: restoring.snapshot, volume: restoring.volume, paths: restoring.mode === 'files' ? restoring.paths : undefined });
 			restoring.target = res.target;
 			load();
 		} catch (err) {
 			problem(err);
 			restoring = null;
+		}
+		busy = false;
+	}
+
+	async function check(event: SubmitEvent) {
+		event.preventDefault();
+		if (!checking) return;
+		busy = true;
+		error = null;
+		try {
+			await api.post(`/backups/${checking.job.id}/check`, { readData: Number(checking.readData) });
+			checking = null;
+			load();
+		} catch (err) {
+			problem(err);
+			checking = null;
 		}
 		busy = false;
 	}
@@ -394,6 +412,10 @@
 			</dl>
 			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre>{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askBackup', { job: job.id }), [{ name: `${job.id}-error.txt`, kind: 'text', text: state.lastError }])}><Icon name="chat" size={14} />{t('assistant.ask')}</button>{/if}</div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">{t('backup.warning')}<pre>{state.warning}</pre></div>{/if}
+			{#if !state.running && state.lastCheck}
+				{#if state.checkError}<div class="notice-error">{t('backup.checkFailed')}<pre>{state.checkError}</pre></div>
+				{:else}<p class="muted">{t('backup.checkOk', { at: formatDateTime(new Date(state.lastCheck)) })}</p>{/if}
+			{/if}
 			{#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
 			{#if pending[job.id]}<p role="status">{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}</p>{/if}
 			<div class="row">
@@ -402,6 +424,7 @@
 				{:else}
 					{#if !restoreOnly}<button type="button" class="btn btn-primary" disabled={!!pending[job.id]} onclick={() => act(job, 'run')}>{t('backup.run')}</button>{/if}
 					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
+					<button type="button" class="btn" onclick={() => (checking = { job, readData: 0 })}>{t('backup.check')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					{#if !restoreOnly}<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>
 					<button type="button" class="btn" onclick={() => (removing = job)}>{t('backup.remove')}</button>{/if}
@@ -646,6 +669,13 @@
 						{#each r.snapshots as snapshot (snapshot.id)}<option value={snapshot.id}>{formatDateTime(new Date(snapshot.time))}{snapshot.bytes ? ` · ${formatBytes(snapshot.bytes)}` : ''}</option>{/each}
 					</select>
 				</label>
+				<fieldset class="mode">
+					<label class="check"><input type="radio" bind:group={r.mode} value="all" /><span>{t('backup.restoreAll')}</span></label>
+					<label class="check"><input type="radio" bind:group={r.mode} value="files" /><span>{t('backup.restoreFiles')}</span></label>
+				</fieldset>
+				{#if r.mode === 'files'}
+					<SnapshotFiles job={r.job.id} snapshot={r.snapshot} start={r.snapshots.find((s) => s.id === r.snapshot)?.paths?.[0] ?? '/'} bind:selected={r.paths} />
+				{/if}
 				<label><span>{t('backup.restoreVolume')}</span>
 					<select class="field" bind:value={r.volume} required>
 						{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
@@ -653,14 +683,34 @@
 				</label>
 				<div class="dialog-actions">
 					<button type="button" class="btn" onclick={() => (restoring = null)} disabled={busy}>{t('common.cancel')}</button>
-					<button type="submit" class="btn btn-primary" disabled={busy || !r.volume}>{t('backup.restoreDo')}</button>
+					<button type="submit" class="btn btn-primary" disabled={busy || !r.volume || (r.mode === 'files' && r.paths.length === 0)}>{t('backup.restoreDo')}</button>
 				</div>
 			</form>
 		{/if}
 	</Dialog>
 {/if}
 
+{#if checking}
+	{@const c = checking}
+	<Dialog title={t('backup.checkTitle', { name: c.job.id })} locked={busy} onclose={() => (checking = null)}>
+		<form class="plain" onsubmit={check}>
+			<p class="muted">{t('backup.checkText')}</p>
+			<label><span>{t('backup.checkRead')}</span>
+				<select class="field" bind:value={c.readData}>
+					{#each [0, 5, 25, 100] as share}<option value={share}>{t(share === 0 ? 'backup.checkStructure' : 'backup.checkShare', { share })}</option>{/each}
+				</select>
+			</label>
+			<div class="dialog-actions">
+				<button type="button" class="btn" onclick={() => (checking = null)} disabled={busy}>{t('common.cancel')}</button>
+				<button type="submit" class="btn btn-primary" disabled={busy}>{t('backup.checkDo')}</button>
+			</div>
+		</form>
+	</Dialog>
+{/if}
+
 <style>
+	.mode { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; border: 0; }
+	.mode .check { flex-direction: row; align-items: center; gap: 8px; }
 	.targets { display: grid; gap: 16px; }
 	section,
 	form.tile {

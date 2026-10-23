@@ -1,0 +1,60 @@
+# Home Assistant blueprint: ask the TitanOS AI assistant through Assist.
+# Import in Home Assistant: Settings › Automations & scenes › Blueprints ›
+# Import blueprint, with the address of this file on GitHub. On TitanOS,
+# switch on "Answer questions from Home Assistant" under Settings › Home
+# Assistant and choose the account that answers.
+blueprint:
+  name: TitanOS fragen / Ask TitanOS
+  description: >-
+    Sends a question from Assist to the AI assistant of a TitanOS NAS and
+    speaks its answer. TitanOS answers as the account chosen under
+    Settings › Home Assistant; changes still need approval as configured there.
+  domain: automation
+  source_url: https://github.com/ra5on/TitanOS/blob/main/docs/homeassistant/titanos-assist.yaml
+  input:
+    sentences:
+      name: Sentences
+      description: "What you say; {question} is passed on to TitanOS."
+      default:
+        - "Frag das NAS {question}"
+        - "Frage TitanOS {question}"
+        - "Ask the NAS {question}"
+      selector:
+        text:
+          multiple: true
+    timeout:
+      name: Timeout
+      description: How long to wait for the answer.
+      default: 60
+      selector:
+        number:
+          min: 10
+          max: 120
+          unit_of_measurement: s
+
+mode: parallel
+max: 5
+
+trigger:
+  - platform: conversation
+    command: !input sentences
+
+variables:
+  timeout: !input timeout
+  question_id: "{{ now().timestamp() | round(3) }}-{{ range(100000, 999999) | random }}"
+
+action:
+  - event: titanos_ask
+    event_data:
+      id: "{{ question_id }}"
+      text: "{{ trigger.slots.question }}"
+  - wait_for_trigger:
+      - platform: event
+        event_type: titanos_answer
+        event_data:
+          id: "{{ question_id }}"
+    timeout:
+      seconds: "{{ timeout }}"
+    continue_on_timeout: true
+  - set_conversation_response: >-
+      {% if wait.trigger %}{{ wait.trigger.event.data.text }}{% else %}TitanOS did not answer in time.{% endif %}

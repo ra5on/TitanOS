@@ -552,9 +552,12 @@ func (s *Server) RunAssistant(ctx context.Context) {
 	scan := func() {
 		settings := s.opts.Assistant.Settings()
 		if !settings.Enabled || settings.Paused {
+			s.watchHomeAssistant(nil)
 			return
 		}
-		for _, user := range s.opts.Users.List() {
+		users := s.opts.Users.List()
+		s.watchHomeAssistant(users)
+		for _, user := range users {
 			if !s.assistantAllowed(user) {
 				continue
 			}
@@ -710,6 +713,9 @@ func (s *Server) notifyOwner(user auth.User, chat *assistant.Chat) {
 	}
 	heading, _ := notify.Wording(settings.Language, "personal_"+event, title)
 	message := notify.PersonalMessage{Event: event, Severity: severity, Title: heading, Text: settings.Summary(text), Path: "/assistant?chat=" + url.QueryEscape(chat.ID)}
+	if event == notify.EventConfirmation {
+		message.Actions = s.pushActions(user, chat, assistant.Pending(chat), settings.Origin, settings.Language)
+	}
 	if err := s.opts.Notify.SendPersonal(user.Name, key, message); err != nil && !errors.Is(err, notify.ErrUnreachable) {
 		slog.Warn("personal notification", "user", user.Name, "err", err)
 	}
