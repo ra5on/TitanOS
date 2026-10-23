@@ -221,6 +221,10 @@
 				<p class="muted working" role="status">{assistant.run?.state === 'queued' ? t('agent.state.queued') : assistant.run?.stage ? t(`agent.stage.${assistant.run.stage}` as MessageKey, {tool: assistant.run.tool ?? ''}) : reading ? t('assistant.reading', { tool: reading }) : t('assistant.thinking')}</p>
 			{/if}
 		{/if}
+		{#if assistant.stats && !assistant.busy}
+			{@const st = assistant.stats}
+			<p class="muted stats">{t('assistant.stats', { rounds: st.rounds, prompt: st.prompt.toLocaleString(), generated: st.generated.toLocaleString(), model: (st.modelMs / 1000).toFixed(1), tools: st.tools, toolTime: (st.toolMs / 1000).toFixed(1) })}</p>
+		{/if}
 		{#if assistant.error}<p class="notice-error" role="alert">{errorText(assistant.error)}</p>{/if}
 	</div>
 
@@ -285,6 +289,11 @@
 {/if}
 
 <style>
+	.stats {
+		margin: 0;
+		font-size: 0.75rem;
+		text-align: end;
+	}
 	.agent-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:8px 14px; border-top:1px solid var(--border); font-size:0.8125rem; }
 	.chat {
 		flex: 1;

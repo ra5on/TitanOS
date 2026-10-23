@@ -48,6 +48,10 @@ type ollamaChunk struct {
 	Message ollamaMessage `json:"message"`
 	Done    bool          `json:"done"`
 	Error   string        `json:"error"`
+	// Counts of the last chunk: tokens read and written, time in nanoseconds.
+	PromptEvalCount int   `json:"prompt_eval_count"`
+	EvalCount       int   `json:"eval_count"`
+	TotalDuration   int64 `json:"total_duration"`
 }
 
 func (m *Manager) request(ctx context.Context, method, base, path string, body any) (*http.Response, error) {
