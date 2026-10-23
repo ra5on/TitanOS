@@ -184,6 +184,21 @@ try {
       state: { running: false, phase: "" },
     },
   ];
+  Object.assign(data.backups[0].job, {
+    sources: [], enabled: false, every: "daily", time: "03:00",
+    keep: {daily: 1, weekly: 0, monthly: 0},
+    destination: {type: "local", volume: "Safe", folder: "repository"},
+  });
+  data.backups[0].stateKnown = false;
+  data.backups[0].state.statusError = "fixture unreadable state";
+  await page.goto(base + "/settings/backups/data");
+  await page.getByText("Zustand unbekannt", {exact: true}).waitFor();
+  await page.getByText("Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden.", {exact: true}).waitFor();
+  data.backups[0].stateKnown = true;
+  data.backups[0].state = {running: true, phase: "application-restore", percent: 0, bytesDone: 0, bytesTotal: 0};
+  await page.reload();
+  await page.getByText("Anwendungswiederherstellung", {exact: true}).waitFor();
+  data.backups[0].state = {running: false, phase: ""};
   await page.goto(base + "/settings/backups/applications");
   await page
     .getByRole("combobox", { name: "Anwendungssicherung", exact: true })

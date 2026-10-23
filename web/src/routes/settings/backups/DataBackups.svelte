@@ -40,8 +40,8 @@
 		password?: string;
 	};
 	type Job = { applications?:Application[];allowStop?:boolean; id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
-	type State = { probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
-	type View = { job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
+	type State = { statusError?: string; probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
+	type View = { stateKnown?: boolean; job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
 
@@ -399,6 +399,7 @@
 					<p class="muted">{[...job.sources,...(job.applications??[]).map(a=>a.name)].join(', ')} → <span class="mono">{where(job.destination)}</span></p>
 				</div>
 				{#if state.running}<span class="chip info">{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span>
+				{:else if view.stateKnown === false || state.statusError}<span class="chip warn">{t('tasks.state.unknown')}</span>
 				{:else if state.lastError && state.lastError !== 'cancelled'}<span class="chip error">{t('backup.failed')}</span>
 				{:else if state.warning}<span class="chip warn">{t('backup.withWarning')}</span>
 				{:else if state.lastOK}<span class="chip ok">{t('backup.ok')}</span>
@@ -408,6 +409,7 @@
 				<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(state.percent)} aria-label={t(`backup.phase.${state.phase}` as 'backup.phase.backup')}><span style:width="{state.percent}%"></span></div>
 				<p class="muted mono">{#if state.bytesTotal > 0}{state.percent.toFixed(0)} %{' · '}{formatBytes(state.bytesDone)} / {formatBytes(state.bytesTotal)}{:else}{formatBytes(state.bytesDone)}{/if}</p>
 			{/if}
+			{#if view.stateKnown === false || state.statusError}<p class="notice-warn">{t('coverage.stateUnknown')}</p>{/if}
 			<dl>
 				<div><dt>{t('backup.schedule')}</dt><dd>{when(job)}</dd></div>
 				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>{/if}
