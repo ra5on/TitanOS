@@ -494,7 +494,7 @@ export function fixtureFactory(browser, errors) {
       )
         return json([]);
       if (path === "/backups")
-        return json({ jobs: data.backups, shares: [], volumes: [] });
+        return json({ jobs: data.backups, shares: [], volumes: [], smbTargets: [] });
       if (path.endsWith("/snapshots") && path.startsWith("/vms/"))
         return json({
           snapshots: [],

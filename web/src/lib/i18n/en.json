@@ -3543,6 +3543,7 @@
 	"ops.allClear": "No pending errors in the loaded task states.",
 	"ops.stale": "Refresh failed. The last known state remains visible.",
 	"backup.phase.probe": "Restore probe",
+	"backup.phase.application-restore": "Application restore",
 	"ops.failed": "The operation could not be completed.",
 	"ops.cancelGrowth": "Cancel preparation",
 	"ops.cancelGrowthHint": "Cancels only an expansion that has not started and removes its new spare if present. Erased data on the new disk is not restored.",

@@ -3543,6 +3543,7 @@
 	"ops.allClear": "Keine offenen Fehler in den geladenen Auftragszuständen.",
 	"ops.stale": "Abruf fehlgeschlagen. Der letzte Stand bleibt sichtbar.",
 	"backup.phase.probe": "Wiederherstellungsprobe",
+	"backup.phase.application-restore": "Anwendungswiederherstellung",
 	"ops.failed": "Der Vorgang konnte nicht abgeschlossen werden.",
 	"ops.cancelGrowth": "Vorbereitung beenden",
 	"ops.cancelGrowthHint": "Beendet nur eine noch nicht gestartete Erweiterung und entfernt gegebenenfalls die neue Spare-Platte aus dem Array. Bereits gelöschte Daten der neuen Platte werden nicht wiederhergestellt.",
