@@ -191,6 +191,8 @@ try {
   });
   data.backups[0].stateKnown = false;
   data.backups[0].state.statusError = "fixture unreadable state";
+  await page.goto(base + "/settings/backups");
+  await page.getByText(/Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden/).waitFor();
   await page.goto(base + "/settings/backups/data");
   await page.getByText("Zustand unbekannt", {exact: true}).waitFor();
   await page.getByText("Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden.", {exact: true}).waitFor();

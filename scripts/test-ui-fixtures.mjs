@@ -493,6 +493,8 @@ export function fixtureFactory(browser, errors) {
         path === "/usb"
       )
         return json([]);
+      if (path === "/config-backup")
+        return json({backup: {settings: {enabled: false}, target: "", lastError: "", backups: [], next: null}});
       if (path === "/backups")
         return json({ jobs: data.backups, shares: [], volumes: [], smbTargets: [] });
       if (path.endsWith("/snapshots") && path.startsWith("/vms/"))
