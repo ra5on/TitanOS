@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -20,11 +21,16 @@ type Trigger struct {
 	Time     string    `json:"time,omitempty"`
 	Timezone string    `json:"timezone,omitempty"`
 	Weekday  int       `json:"weekday,omitempty"`
-	Event    string    `json:"event,omitempty"`  // notification, usb, volume, files
-	Target   string    `json:"target,omitempty"` // notification kind, USB UUID, volume name
+	Event    string    `json:"event,omitempty"`  // notification, usb, volume, files, homeassistant
+	Target   string    `json:"target,omitempty"` // notification kind, USB UUID, volume name, entity ID
 	Root     string    `json:"root,omitempty"`
 	Path     string    `json:"path,omitempty"`
 	Percent  int       `json:"percent,omitempty"`
+	// From, To, Above and Below narrow a Home Assistant state change.
+	From  string   `json:"from,omitempty"`
+	To    string   `json:"to,omitempty"`
+	Above *float64 `json:"above,omitempty"`
+	Below *float64 `json:"below,omitempty"`
 }
 type Conditions struct {
 	Volume    string `json:"volume,omitempty"`
@@ -101,8 +107,11 @@ func (a *Automation) Validate(now time.Time) error {
 			return ErrInvalid
 		}
 	case "event":
-		if !slices.Contains([]string{"notification", "usb", "volume", "files"}, t.Event) {
+		if !slices.Contains([]string{"notification", "usb", "volume", "files", "homeassistant"}, t.Event) {
 			return ErrInvalid
+		}
+		if t.Event == "homeassistant" && (!haEntity.MatchString(t.Target) || len(t.From) > 255 || len(t.To) > 255) {
+			return fmt.Errorf("%w: Home Assistant entity", ErrInvalid)
 		}
 		if t.Event == "files" {
 			if t.Root == "" {
@@ -119,6 +128,11 @@ func (a *Automation) Validate(now time.Time) error {
 	}
 	return nil
 }
+
+var haEntity = regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`)
+
+// EventAreas says which area of the assistant an event source belongs to.
+var EventAreas = map[string]string{"notification": AreaSystem, "usb": AreaFiles, "volume": AreaStorage, "files": AreaFiles, "homeassistant": AreaHome}
 
 // NextAfter runs once per local calendar date (including the repeated autumn
 // hour). A nonexistent spring clock time is skipped, never shifted silently.

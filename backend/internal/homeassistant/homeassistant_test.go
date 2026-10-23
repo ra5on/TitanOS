@@ -67,7 +67,7 @@ func newManager(t *testing.T, s Settings) (*Manager, *fakeHA, *httptest.Server) 
 	if s.URL == "" {
 		s.URL = srv.URL
 	}
-	if err := m.SetSettings(s, false); err != nil {
+	if err := m.SetSettings(s); err != nil {
 		t.Fatal(err)
 	}
 	return m, fake, srv
@@ -80,22 +80,22 @@ func TestCheckAndTokenStaysOnTheNAS(t *testing.T) {
 		t.Fatalf("%+v %v", status, err)
 	}
 	s, set := m.Settings()
-	if s.Token != "" || !set {
+	if s.Token != "" || !set["token"] {
 		t.Fatal("token returned")
 	}
 	// Saving without a token keeps it; a wrong one is reported.
-	if err := m.SetSettings(s, false); err != nil {
+	if err := m.SetSettings(s); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Check(context.Background()); err != nil {
 		t.Fatalf("stored token lost: %v", err)
 	}
 	s.Token = "bad"
-	m.SetSettings(s, false)
+	m.SetSettings(s)
 	if _, err := m.Check(context.Background()); !errors.Is(err, ErrUnreachable) || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("wrong token: %v", err)
 	}
-	if err := m.SetSettings(Settings{URL: s.URL}, true); err != nil {
+	if err := m.SetSettings(Settings{URL: s.URL}, "token"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Check(context.Background()); !errors.Is(err, ErrOff) {
@@ -184,7 +184,7 @@ func TestFingerprintPinsTheCertificate(t *testing.T) {
 	m := NewManager(config.Open(t.TempDir()))
 	m.Load()
 	// Without a fingerprint the self-signed certificate is refused.
-	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token"}, false); err != nil {
+	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Check(context.Background()); err == nil {
@@ -192,14 +192,14 @@ func TestFingerprintPinsTheCertificate(t *testing.T) {
 	}
 	// The right one in colon notation works, another does not.
 	colons := strings.ToUpper(good[:2]) + ":" + good[2:]
-	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Fingerprint: colons}, false); err != nil {
+	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Fingerprint: colons}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Check(context.Background()); err != nil {
 		t.Fatalf("pinned: %v", err)
 	}
 	other := strings.Repeat("ab", 32)
-	m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Fingerprint: other}, false)
+	m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Fingerprint: other})
 	if _, err := m.Check(context.Background()); err == nil || !strings.Contains(err.Error(), "fingerprint") {
 		t.Fatalf("wrong fingerprint: %v", err)
 	}
@@ -220,11 +220,11 @@ func TestSettingsAreChecked(t *testing.T) {
 		{URL: "http://ha:8123", Fingerprint: "1234"},                 // fingerprint
 		{URL: "http://ha:8123", Token: "two words"},                  // token
 	} {
-		if err := m.SetSettings(s, false); !errors.Is(err, ErrInvalid) {
+		if err := m.SetSettings(s); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v accepted: %v", s, err)
 		}
 	}
-	if err := m.SetSettings(Settings{URL: "http://ha:8123/", Domains: []string{"light", "light"}}, false); err != nil {
+	if err := m.SetSettings(Settings{URL: "http://ha:8123/", Domains: []string{"light", "light"}}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, settingsFile))
@@ -238,7 +238,7 @@ func TestSettingsAreChecked(t *testing.T) {
 func TestChangedIsSignalled(t *testing.T) {
 	m, _, srv := newManager(t, Settings{Enabled: true, Token: "good-token"})
 	changed := m.Changed()
-	m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Domains: []string{"light"}}, false)
+	m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token", Domains: []string{"light"}})
 	select {
 	case <-changed:
 	default:

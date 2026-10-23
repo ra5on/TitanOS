@@ -44,7 +44,8 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
-		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' }
+		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
+		{ id: 'mqtt', label: 'ha.mqtt', href: '/settings/homeassistant#mqtt' }
 	],
 	backups: [
 		{ id: 'data-backup', label: 'safeguard.data', href: '/settings/backups/data' },

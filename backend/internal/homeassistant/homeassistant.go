@@ -11,6 +11,7 @@ package homeassistant
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -59,7 +60,38 @@ type Settings struct {
 	// Domains and Entities are what the assistant may see and switch.
 	Domains  []string `json:"domains"`
 	Entities []string `json:"entities"`
+	// Account is the TitanOS account that buttons in Home Assistant and
+	// questions from Home Assistant Assist act for. Its rights apply.
+	Account string `json:"account,omitempty"`
+	// MQTT publishes sensors of the NAS to Home Assistant.
+	MQTT MQTT `json:"mqtt"`
 }
+
+// MQTT is the broker Home Assistant's MQTT integration uses.
+type MQTT struct {
+	Enabled  bool   `json:"enabled"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	TLS      bool   `json:"tls"`
+	// Prefix is Home Assistant's discovery prefix, homeassistant by default.
+	Prefix string `json:"prefix"`
+	// Groups of sensors: system, volumes, disks, containers, vms, ups.
+	Groups []string `json:"groups"`
+	// Commands are groups of buttons and switches in Home Assistant:
+	// containers, vms, updates, power. None by default.
+	Commands []string `json:"commands"`
+	// ID names this NAS in topics and unique IDs. It is made once and kept,
+	// because the machine ID of a system in RAM changes with every start.
+	ID string `json:"id,omitempty"`
+}
+
+// SensorGroups and CommandGroups are the choices in MQTT.
+var (
+	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups"}
+	CommandGroups = []string{"containers", "vms", "updates", "power"}
+)
 
 // Levels of a service call, as the assistant's actions know them.
 const (
@@ -118,6 +150,8 @@ type Manager struct {
 	client   *http.Client
 	// changed is closed and replaced when the settings change, for watchers.
 	changed chan struct{}
+
+	watch watchState
 }
 
 // NewManager returns a manager without a server.
@@ -131,6 +165,7 @@ func (m *Manager) Load() error {
 	if err := m.store.ReadJSON(settingsFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	mqttDefaults(&settings.MQTT)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
@@ -151,13 +186,15 @@ func (m *Manager) Changed() <-chan struct{} {
 	return m.changed
 }
 
-// Settings returns the settings without the token, and whether one is set.
-func (m *Manager) Settings() (Settings, bool) {
+// Settings returns the settings without the token and the MQTT password;
+// the map says which of them are set.
+func (m *Manager) Settings() (Settings, map[string]bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.settings
-	set := s.Token != ""
-	s.Token = ""
+	set := map[string]bool{"token": s.Token != "", "mqtt": s.MQTT.Password != ""}
+	s.Token, s.MQTT.Password = "", ""
+	s.MQTT.Groups, s.MQTT.Commands = append([]string{}, s.MQTT.Groups...), append([]string{}, s.MQTT.Commands...)
 	s.Domains, s.Entities = append([]string{}, s.Domains...), append([]string{}, s.Entities...)
 	return s, set
 }
@@ -173,16 +210,25 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }
 
-// SetSettings stores new settings. An empty token keeps the stored one;
-// clearToken drops it.
-func (m *Manager) SetSettings(s Settings, clearToken bool) error {
+// SetSettings stores new settings. An empty token or MQTT password keeps
+// the stored one; clear names those to drop: token, mqtt.
+func (m *Manager) SetSettings(s Settings, clear ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
 		return ErrNotLoaded
 	}
-	if s.Token == "" && !clearToken {
+	if s.Token == "" && !slices.Contains(clear, "token") {
 		s.Token = m.settings.Token
+	}
+	if s.MQTT.Password == "" && !slices.Contains(clear, "mqtt") {
+		s.MQTT.Password = m.settings.MQTT.Password
+	}
+	if err := checkMQTT(&s.MQTT, m.settings.MQTT.ID); err != nil {
+		return err
+	}
+	if s.Account != "" && !accountName.MatchString(s.Account) {
+		return invalid("account")
 	}
 	s.Token = strings.TrimSpace(s.Token)
 	s.URL = strings.TrimRight(strings.TrimSpace(s.URL), "/")
@@ -232,6 +278,66 @@ func (m *Manager) SetSettings(s Settings, clearToken bool) error {
 	m.settings = s
 	m.client = newClient(s)
 	m.notifyChange()
+	return nil
+}
+
+var (
+	mqttHost    = regexp.MustCompile(`^[A-Za-z0-9.\-:\[\]]{1,253}$`)
+	mqttPrefix  = regexp.MustCompile(`^[A-Za-z0-9_\-]{1,64}(/[A-Za-z0-9_\-]{1,64})*$`)
+	accountName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	mqttID      = regexp.MustCompile(`^[a-z0-9]{4,32}$`)
+)
+
+// mqttDefaults fills what files of older versions leave out.
+func mqttDefaults(q *MQTT) {
+	if q.Prefix == "" {
+		q.Prefix = "homeassistant"
+	}
+	if q.Port == 0 {
+		q.Port = map[bool]int{false: 1883, true: 8883}[q.TLS]
+	}
+	if q.Groups == nil {
+		q.Groups = []string{}
+	}
+	if q.Commands == nil {
+		q.Commands = []string{}
+	}
+}
+
+func checkMQTT(q *MQTT, old string) error {
+	mqttDefaults(q)
+	if q.ID == "" {
+		q.ID = old
+	}
+	if q.ID == "" {
+		b := make([]byte, 6)
+		rand.Read(b)
+		q.ID = hex.EncodeToString(b)
+	}
+	if !mqttID.MatchString(q.ID) {
+		return invalid("MQTT ID")
+	}
+	q.Groups = slices.Compact(slices.Sorted(slices.Values(q.Groups)))
+	q.Commands = slices.Compact(slices.Sorted(slices.Values(q.Commands)))
+	for _, g := range q.Groups {
+		if !slices.Contains(SensorGroups, g) {
+			return invalid("sensor group %q", g)
+		}
+	}
+	for _, g := range q.Commands {
+		if !slices.Contains(CommandGroups, g) {
+			return invalid("command group %q", g)
+		}
+	}
+	if !mqttPrefix.MatchString(q.Prefix) {
+		return invalid("discovery prefix")
+	}
+	if q.Port < 1 || q.Port > 65535 || len(q.Username) > 200 || len(q.Password) > 200 || strings.ContainsAny(q.Username+q.Password, "\r\n") {
+		return invalid("MQTT port, user or password")
+	}
+	if q.Enabled && !mqttHost.MatchString(q.Host) {
+		return invalid("MQTT broker address: host name or IP address")
+	}
 	return nil
 }
 
