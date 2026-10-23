@@ -14,7 +14,7 @@ const keywords: Record<string, string> = {
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
-	energy: 'energie energy governor cpu strom',
+	energy: 'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc',
 	temperatures: 'temperatur temperature sensor wärme heat',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',

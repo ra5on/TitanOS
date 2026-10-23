@@ -49,6 +49,20 @@ case "$command" in
     while [ $# -gt 0 ]; do [ "$1" = "--target" ] && target=$2; shift; done
     echo '{"message_type":"status","percent_done":1,"total_bytes":2000,"bytes_restored":2000}'
     mkdir -p "$target/mnt/tank/media" && echo restored > "$target/mnt/tank/media/file" ;;
+  check)
+    if [ -e "$dir/corrupt" ]; then echo "error: pack 1234abcd: data damaged" >&2; exit 1; fi
+    echo "no errors were found" ;;
+  ls)
+    for last in "$@"; do :; done
+    echo '{"time":"2026-10-13T02:30:00Z","paths":["/mnt/tank/media"],"struct_type":"snapshot"}'
+    case "$last" in
+      /mnt/tank/media)
+        echo '{"name":"media","type":"dir","path":"/mnt/tank/media","struct_type":"node"}'
+        echo '{"name":"zebra.jpg","type":"file","path":"/mnt/tank/media/zebra.jpg","size":2048,"mtime":"2026-10-01T10:00:00Z","struct_type":"node"}'
+        echo '{"name":"Alben","type":"dir","path":"/mnt/tank/media/Alben","struct_type":"node"}'
+        echo '{"name":"apfel.png","type":"file","path":"/mnt/tank/media/apfel.png","size":10,"struct_type":"node"}' ;;
+      *) echo '{"name":"mnt","type":"dir","path":"/mnt","struct_type":"node"}' ;;
+    esac ;;
   *) echo "unknown command $command" >&2; exit 1 ;;
 esac
 `
