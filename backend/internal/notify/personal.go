@@ -44,12 +44,14 @@ type Quiet struct {
 // one account. Unlike the shared channels it may carry a short summary,
 // because only that account reads it.
 type Personal struct {
-	Language string          `json:"language"`
-	Email    PersonalEmail   `json:"email"`
-	Ntfy     Ntfy            `json:"ntfy"`
-	Telegram Telegram        `json:"telegram"`
-	Discord  Discord         `json:"discord"`
-	Events   map[string]bool `json:"events"`
+	Language string        `json:"language"`
+	Email    PersonalEmail `json:"email"`
+	Ntfy     Ntfy          `json:"ntfy"`
+	Telegram Telegram      `json:"telegram"`
+	Discord  Discord       `json:"discord"`
+	// HomeAssistant uses the shared connection with the account's own service.
+	HomeAssistant HomeAssistant   `json:"homeAssistant"`
+	Events        map[string]bool `json:"events"`
 	// Content is summary (a short excerpt of the answer) or none.
 	Content string `json:"content"`
 	Quiet   Quiet  `json:"quiet"`
@@ -193,6 +195,9 @@ func (m *Manager) SetPersonal(user string, p Personal, clear ...string) error {
 	if p.Discord.Enabled && !webAddress(p.Discord.Webhook) {
 		return invalid("Discord webhook")
 	}
+	if p.HomeAssistant.Enabled && !haService.MatchString(p.HomeAssistant.Service) {
+		return invalid("Home Assistant service, e.g. notify.mobile_app_phone")
+	}
 	if p.Quiet.Enabled && (!clock.MatchString(p.Quiet.From) || !clock.MatchString(p.Quiet.To) || p.Quiet.From == p.Quiet.To) {
 		return invalid("quiet hours")
 	}
@@ -232,8 +237,10 @@ func (m *Manager) Reachable(user, event string) bool {
 func (m *Manager) anyChannel(p Personal) bool {
 	m.mu.Lock()
 	mailServer := m.settings.Email.Host != ""
+	ha := m.ha
 	m.mu.Unlock()
-	return p.Email.Enabled && mailServer || p.Ntfy.Enabled || p.Telegram.Enabled || p.Discord.Enabled
+	haReady := p.HomeAssistant.Enabled && ha != nil && ha.Active()
+	return p.Email.Enabled && mailServer || p.Ntfy.Enabled || p.Telegram.Enabled || p.Discord.Enabled || haReady
 }
 
 // Summary shortens an answer for a personal message, or leaves it out.
@@ -374,7 +381,7 @@ func quietUntil(q Quiet, t time.Time) (time.Time, bool) {
 }
 
 func (m *Manager) sendTo(p Personal, message PersonalMessage) {
-	enabled := map[string]bool{"email": p.Email.Enabled, "ntfy": p.Ntfy.Enabled, "telegram": p.Telegram.Enabled, "discord": p.Discord.Enabled}
+	enabled := map[string]bool{"email": p.Email.Enabled, "ntfy": p.Ntfy.Enabled, "telegram": p.Telegram.Enabled, "discord": p.Discord.Enabled, "homeassistant": p.HomeAssistant.Enabled}
 	for name, send := range m.personalSenders(p, message) {
 		if enabled[name] {
 			m.dispatch(name, send)
@@ -419,5 +426,17 @@ func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[strin
 		},
 		"telegram": func() error { return m.telegram(p.Telegram, title+"\n\n"+text) },
 		"discord":  func() error { return m.discord(p.Discord, "**"+title+"**\n"+text) },
+		"homeassistant": func() error {
+			data := haPriority(message.Severity)
+			if link != "" {
+				// Opens the page when the message is tapped (Android: clickAction, iOS: url).
+				data["url"], data["clickAction"] = link, link
+			}
+			body := message.Text
+			if body == "" {
+				body = message.Title
+			}
+			return m.haSend(p.HomeAssistant, title, body, data)
+		},
 	}
 }

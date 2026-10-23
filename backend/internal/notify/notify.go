@@ -8,6 +8,7 @@ package notify
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,7 @@ import (
 	"net/smtp"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -101,6 +103,19 @@ type Discord struct {
 	Webhook string `json:"webhook,omitempty"`
 }
 
+// HomeAssistant sends through a notify service of Home Assistant, such as
+// notify.mobile_app_pixel; the connection is the one under Settings › Home Assistant.
+type HomeAssistant struct {
+	Enabled bool   `json:"enabled"`
+	Service string `json:"service"`
+}
+
+// HASender is the Home Assistant connection, see package homeassistant.
+type HASender interface {
+	Active() bool
+	Notify(ctx context.Context, service, title, message string, data map[string]any) error
+}
+
 // Settings is /config/notify/settings.json.
 type Settings struct {
 	// Language of what is sent out: de or en.
@@ -112,6 +127,8 @@ type Settings struct {
 	Ntfy        Ntfy     `json:"ntfy"`
 	Telegram    Telegram `json:"telegram"`
 	Discord     Discord  `json:"discord"`
+	// HomeAssistant is missing in files of older versions: off.
+	HomeAssistant HomeAssistant `json:"homeAssistant"`
 }
 
 // Manager keeps the messages and sends them out.
@@ -124,6 +141,8 @@ type Manager struct {
 	sendMail   func(Email, []byte) error
 	retryPause time.Duration
 
+	// ha reaches Home Assistant; nil without one.
+	ha HASender
 	// now is the clock; tests replace it.
 	now    func() time.Time
 	people personalStore
@@ -142,6 +161,28 @@ func NewManager(store *config.Store) *Manager {
 		sendMail: sendMail, retryPause: 10 * time.Second, now: time.Now, settings: Settings{Language: "en", MinSeverity: Warning}, nextID: 1,
 	}
 }
+
+// SetHomeAssistant connects the Home Assistant channel.
+func (m *Manager) SetHomeAssistant(ha HASender) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ha = ha
+}
+
+// haSend sends through Home Assistant.
+func (m *Manager) haSend(cfg HomeAssistant, title, text string, data map[string]any) error {
+	m.mu.Lock()
+	ha := m.ha
+	m.mu.Unlock()
+	if ha == nil || !ha.Active() {
+		return invalid("Home Assistant is not set up under Settings › Home Assistant")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return ha.Notify(ctx, cfg.Service, title, text, data)
+}
+
+var haService = regexp.MustCompile(`^notify\.[a-z0-9_]{1,64}$`)
 
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
@@ -239,6 +280,9 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 	if settings.Discord.Enabled && !webAddress(settings.Discord.Webhook) {
 		return invalid("Discord webhook")
 	}
+	if settings.HomeAssistant.Enabled && !haService.MatchString(settings.HomeAssistant.Service) {
+		return invalid("Home Assistant service, e.g. notify.mobile_app_phone")
+	}
 	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
 		return err
 	}
@@ -324,8 +368,11 @@ func (m *Manager) deliver(settings Settings, message Message, only *string) erro
 		"ntfy":     func() error { return m.ntfy(settings.Ntfy, title, message) },
 		"telegram": func() error { return m.telegram(settings.Telegram, title+"\n\n"+message.Text) },
 		"discord":  func() error { return m.discord(settings.Discord, "**"+title+"**\n"+message.Text) },
+		"homeassistant": func() error {
+			return m.haSend(settings.HomeAssistant, title, message.Text, haPriority(message.Severity))
+		},
 	}
-	enabled := map[string]bool{"email": settings.Email.Enabled, "ntfy": settings.Ntfy.Enabled, "telegram": settings.Telegram.Enabled, "discord": settings.Discord.Enabled}
+	enabled := map[string]bool{"email": settings.Email.Enabled, "ntfy": settings.Ntfy.Enabled, "telegram": settings.Telegram.Enabled, "discord": settings.Discord.Enabled, "homeassistant": settings.HomeAssistant.Enabled}
 	if only != nil {
 		send, known := channels[*only]
 		if !known {
@@ -354,6 +401,14 @@ func (m *Manager) dispatch(name string, send func() error) {
 		}
 		slog.Error("notification not delivered", "channel", name, "err", err)
 	}()
+}
+
+// haPriority makes errors arrive at once on phones of the Home Assistant app.
+func haPriority(severity string) map[string]any {
+	if severity != Error {
+		return map[string]any{}
+	}
+	return map[string]any{"priority": "high", "ttl": 0, "push": map[string]any{"interruption-level": "time-sensitive"}}
 }
 
 // post sends a request and treats every answer but a success as an error.

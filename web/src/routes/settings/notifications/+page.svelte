@@ -4,7 +4,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord';
+	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord' | 'homeassistant';
 	type Settings = {
 		language: 'de' | 'en';
 		minSeverity: 'info' | 'warning' | 'error';
@@ -12,11 +12,13 @@
 		ntfy: { enabled: boolean; url: string; token?: string };
 		telegram: { enabled: boolean; token?: string; chatID: string };
 		discord: { enabled: boolean; webhook?: string };
+		homeAssistant: { enabled: boolean; service: string };
 	};
 	type Answer = { settings: Settings; secretSet: Record<Channel, boolean> };
 
 	let draft = $state<Settings | null>(null);
-	let secretSet = $state<Record<Channel, boolean>>({ email: false, ntfy: false, telegram: false, discord: false });
+	let secretSet = $state<Partial<Record<Channel, boolean>>>({});
+	let haServices = $state<string[] | null>(null);
 	// Stored secrets that go away with the next save.
 	let clear = $state<Channel[]>([]);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -36,7 +38,8 @@
 			email: { ...res.settings.email, port: res.settings.email.port || 587, security: res.settings.email.security || 'starttls', password: '' },
 			ntfy: { ...res.settings.ntfy, token: '' },
 			telegram: { ...res.settings.telegram, token: '' },
-			discord: { ...res.settings.discord, webhook: '' }
+			discord: { ...res.settings.discord, webhook: '' },
+			homeAssistant: res.settings.homeAssistant ?? { enabled: false, service: '' }
 		};
 		secretSet = res.secretSet;
 		clear = [];
@@ -44,6 +47,7 @@
 
 	$effect(() => {
 		api.get<Answer>('/notifications/settings').then(take, problem);
+		api.get<{ services: string[] }>('/homeassistant/notify-services').then((res) => (haServices = res.services), () => (haServices = []));
 	});
 
 	async function store(): Promise<boolean> {
@@ -212,6 +216,24 @@
 				</label>
 			</div>
 			{@render testRow('discord')}
+		</section>
+
+		<section class="tile">
+			<div class="head">
+				<h2 class="tile-title">{t('notify.homeassistant')}</h2>
+				<label class="check"><input type="checkbox" bind:checked={draft.homeAssistant.enabled} disabled={!haServices?.length && !draft.homeAssistant.enabled} /><span>{t('notify.enabled')}</span></label>
+			</div>
+			<p class="muted">{t('notify.haHint')}</p>
+			{#if haServices && haServices.length === 0}<p class="muted">{t('notify.haNotSetUp')} <a href="/settings/homeassistant">{t('ha.title')}</a></p>{/if}
+			<div class="row">
+				<label class="narrow"><span>{t('notify.haService')}</span>
+					<select class="field mono" bind:value={draft.homeAssistant.service} required={draft.homeAssistant.enabled}>
+						<option value=""></option>
+						{#each new Set([...(haServices ?? []), draft.homeAssistant.service].filter(Boolean)) as service}<option value={service}>{service}</option>{/each}
+					</select>
+				</label>
+			</div>
+			{@render testRow('homeassistant')}
 		</section>
 
 		<div class="actions">

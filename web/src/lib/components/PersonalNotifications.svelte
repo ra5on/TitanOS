@@ -4,7 +4,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord';
+	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord' | 'homeAssistant';
 	type Event = 'confirmation' | 'done' | 'blocked' | 'agent';
 	type Personal = {
 		language: 'de' | 'en';
@@ -12,6 +12,7 @@
 		ntfy: { enabled: boolean; url: string; token?: string };
 		telegram: { enabled: boolean; token?: string; chatID: string };
 		discord: { enabled: boolean; webhook?: string };
+		homeAssistant: { enabled: boolean; service: string };
 		events: Record<Event, boolean>;
 		content: 'summary' | 'none';
 		quiet: { enabled: boolean; from: string; to: string };
@@ -20,11 +21,12 @@
 	type Answer = { settings: Personal; secretSet: Partial<Record<Channel, boolean>>; mailServer: boolean };
 
 	const events: Event[] = ['confirmation', 'done', 'blocked', 'agent'];
-	const channels: Channel[] = ['email', 'ntfy', 'telegram', 'discord'];
+	const channels: Channel[] = ['email', 'ntfy', 'telegram', 'discord', 'homeAssistant'];
 
 	let draft = $state<Personal | null>(null);
 	let secretSet = $state<Partial<Record<Channel, boolean>>>({});
 	let mailServer = $state(false);
+	let haServices = $state<string[]>([]);
 	let clear = $state<Channel[]>([]);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let saved = $state(false);
@@ -42,6 +44,7 @@
 			ntfy: { ...res.settings.ntfy, token: '' },
 			telegram: { ...res.settings.telegram, token: '' },
 			discord: { ...res.settings.discord, webhook: '' },
+			homeAssistant: res.settings.homeAssistant ?? { enabled: false, service: '' },
 			quiet: { enabled: res.settings.quiet.enabled, from: res.settings.quiet.from || '22:00', to: res.settings.quiet.to || '07:00' }
 		};
 		secretSet = res.secretSet;
@@ -51,6 +54,7 @@
 
 	$effect(() => {
 		api.get<Answer>('/account/notifications').then(take, problem);
+		api.get<{ services: string[] }>('/homeassistant/notify-services').then((res) => (haServices = res.services), () => (haServices = []));
 	});
 
 	async function store(): Promise<boolean> {
@@ -80,7 +84,7 @@
 		tested = null;
 		if (await store()) {
 			try {
-				await api.post('/account/notifications/test', { channel });
+				await api.post('/account/notifications/test', { channel: channel === 'homeAssistant' ? 'homeassistant' : channel });
 				tested = { channel, ok: true, detail: '' };
 			} catch (err) {
 				tested = { channel, ok: false, detail: err instanceof ApiError ? err.message : '' };
@@ -149,7 +153,7 @@
 
 			{#each channels as channel}
 				<div class="channel">
-					<label class="check"><input type="checkbox" bind:checked={draft[channel].enabled} disabled={channel === 'email' && !mailServer} /><span class="name">{t(`notify.${channel}`)}</span></label>
+					<label class="check"><input type="checkbox" bind:checked={draft[channel].enabled} disabled={(channel === 'email' && !mailServer) || (channel === 'homeAssistant' && !haServices.length && !draft.homeAssistant.enabled)} /><span class="name">{t(channel === 'homeAssistant' ? 'notify.homeassistant' : `notify.${channel}`)}</span></label>
 					{#if channel === 'email'}
 						{#if !mailServer}<p class="muted small">{t('personalNotify.noMailServer')}</p>{/if}
 						<div class="row">
@@ -170,6 +174,16 @@
 								{@render secretNote('telegram')}
 							</label>
 							<label class="narrow"><span>{t('notify.chatId')}</span><input class="field mono" type="text" bind:value={draft.telegram.chatID} spellcheck="false" required={draft.telegram.enabled} /></label>
+						</div>
+					{:else if channel === 'homeAssistant'}
+						{#if !haServices.length}<p class="muted small">{t('notify.haNotSetUp')}</p>{/if}
+						<div class="row">
+							<label class="narrow"><span>{t('notify.haService')}</span>
+								<select class="field mono" bind:value={draft.homeAssistant.service} required={draft.homeAssistant.enabled}>
+									<option value=""></option>
+									{#each new Set([...haServices, draft.homeAssistant.service].filter(Boolean)) as service}<option value={service}>{service}</option>{/each}
+								</select>
+							</label>
 						</div>
 					{:else}
 						<div class="row">
