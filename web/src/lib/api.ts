@@ -102,6 +102,7 @@ export type SystemInfo = {
 };
 
 export type Preferences = {
+	shares: Record<string, unknown> | null;
 	files: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
@@ -203,6 +204,7 @@ export type FileRoot = {
 };
 
 export type CopyJob = {
+ durable?:boolean;blocked?:boolean;
  waiting?:boolean; paused?:boolean; priority?:number; rate?:number;
  operation?: string;
  retryable?: boolean;

@@ -160,6 +160,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 
 	m.mu.RLock()
 	loaded := m.loaded
@@ -367,6 +370,9 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 
 	volume, ok := m.find(name)
 	if !ok {
@@ -441,6 +447,9 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 
 	volume, ok := m.find(name)
 	if !ok {
@@ -496,6 +505,9 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 
 	volume, ok := m.find(name)
 	if !ok {
@@ -541,6 +553,9 @@ func (m *Manager) Check(ctx context.Context, name string, start bool) error {
 	defer m.actions.Unlock()
 	if m.ReadOnly {
 		return ErrReadOnly
+	}
+	if m.GrowthPending() {
+		return ErrBusy
 	}
 
 	volume, ok := m.find(name)

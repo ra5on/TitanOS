@@ -2,8 +2,8 @@
 	// A modal window. Escape and "Cancel" close it unless `locked` (work in progress).
 	import type { Snippet } from 'svelte';
 
-	type Props = { title: string; locked?: boolean; wide?: boolean; onclose: () => void; children: Snippet };
-	let { title, locked = false, wide = false, onclose, children }: Props = $props();
+	type Props = { title: string; locked?: boolean; wide?: boolean; onrequestclose?: () => void; onclose: () => void; children: Snippet };
+	let { title, locked = false, wide = false, onrequestclose, onclose, children }: Props = $props();
 
 	let dialog: HTMLDialogElement;
 	const id = $props.id();
@@ -14,6 +14,7 @@
 
 	function cancel(event: Event) {
 		if (locked) event.preventDefault();
+		else if (onrequestclose) { event.preventDefault(); onrequestclose(); }
 	}
 </script>
 

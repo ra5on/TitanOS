@@ -275,6 +275,9 @@ func (m *Manager) SnapshotAction(ctx context.Context, volume, name, action, conf
 	if m.ReadOnly {
 		return ErrReadOnly
 	}
+	if m.GrowthPending() {
+		return ErrBusy
+	}
 	if !snapshotName.MatchString(name) {
 		return ErrInvalidName
 	}

@@ -30,7 +30,7 @@
 	const age = $derived(stateAge(container));
 </script>
 
-<div class="row" class:member class:stopped={!running} role="listitem" aria-label={name}>
+<div id={`docker-container-${encodeURIComponent(container.name)}`} class="row" class:member class:stopped={!running} role="listitem" aria-label={name}>
 	<div class="who">
 		{#if !member}
 			<span class="icon" style:background="hsl({monogramHue(container.name)} 45% 42%)"><AppIcon src={container.icon} {name} /></span>

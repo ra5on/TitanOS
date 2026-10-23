@@ -98,7 +98,9 @@
 
 	{#if canAdminister}
 		<div class="actions">
-			{#if canCheck}
+			<a class="btn" href={'/storage/manage?'+new URLSearchParams({volume:volume.name,mode:'usage'})}>{t('ops.usage')}</a>
+ {#if ['raid5','raid6'].includes(volume.level)}<a class="btn" href={'/storage/manage?'+new URLSearchParams({volume:volume.name,mode:'grow'})}>{t('ops.grow')}</a>{/if}
+ {#if canCheck}
 				<button type="button" class="btn" onclick={() => oncheck(volume.state !== 'checking')} disabled={busy}>
 					{t(volume.state === 'checking' ? 'storage.checkStop' : 'storage.checkStart')}
 				</button>

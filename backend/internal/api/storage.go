@@ -104,6 +104,31 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
+	if (s.opts.Files != nil && s.opts.Files.Busy()) || (s.opts.Backup != nil && s.opts.Backup.Busy()) || (s.opts.VMs != nil && s.opts.VMs.Busy()) {
+		writeError(w, 409, "volume_work_running", "wait for file, backup and VM operations")
+		return
+	}
+	if s.opts.Monitoring != nil {
+		cfg := s.opts.Monitoring.Status().Settings
+		if cfg.Enabled && cfg.Volume == name {
+			writeError(w, 409, "volume_has_monitoring", "disable monitoring on this volume first")
+			return
+		}
+	}
+	if s.opts.Maintenance != nil {
+		cfg := s.opts.Maintenance.Status().Settings
+		if cfg.Enabled && cfg.Volume == name {
+			writeError(w, 409, "volume_has_maintenance", "disable maintenance on this volume first")
+			return
+		}
+	}
+	if s.opts.ApplicationBackups != nil {
+		op, _ := s.opts.ApplicationBackups.Status()
+		if op != nil && op.Volume == name {
+			writeError(w, 409, "volume_has_recovery", "review the pending application backup first")
+			return
+		}
+	}
 	for _, share := range s.opts.Shares.List() {
 		if share.Volume == name {
 			writeError(w, http.StatusConflict, "volume_has_shares", "the volume still holds the share "+share.Name)

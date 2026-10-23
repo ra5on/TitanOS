@@ -26,6 +26,8 @@
  <Dialog title={t('snapshot.title')} locked={busy} onclose={() => open = false}>
   <div class="snapshots">
    <p class="notice-warn">{t('snapshot.note')}</p>
+ <a class="btn" href={'/storage/manage?'+new URLSearchParams({volume,mode:'snapshots'})}>{t('ops.browse')}</a>
+ <a class="btn" href="/tools/maintenance">{t('ops.maintenance')}</a>
    <form onsubmit={(event) => { event.preventDefault(); act('create', name); }}>
     <label>{t('snapshot.name')} <input class="field" bind:value={name} pattern={'[a-zA-Z0-9][a-zA-Z0-9_\\-]{0,63}'} maxlength="64" required /></label>
     <button class="btn btn-primary" disabled={busy}>{t('snapshot.create')}</button>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack, tick, onMount } from 'svelte';
+ import { page } from '$app/state';
 	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -61,6 +62,20 @@
 	let placesOpen = $state(false);
 
 	const root = $derived(roots?.find((candidate) => candidate.id === rootId));
+ let appliedLocation = '';
+ $effect(() => {
+  const requested=page.url.searchParams.get('root') ?? '';
+  const requestedPath=folderPath(page.url.searchParams.get('path')??'');
+  const location=JSON.stringify([requested,requestedPath]);
+  const available=roots;
+  if(!requested) { appliedLocation='';return; }
+  if(available&&location!==appliedLocation){
+   appliedLocation=location;
+   if(requestedPath===null)error=t('files.invalidPath');
+   else if(available.some(r=>r.id===requested)) untrack(()=>open(requested,requestedPath));
+   else error=t('files.requestedRootUnavailable');
+  }
+ });
 	const crumbs = $derived(dir ? dir.split('/') : []);
 	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }));
 

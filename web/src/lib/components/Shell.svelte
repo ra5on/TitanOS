@@ -12,6 +12,8 @@
 	import { system, watchSystem } from '#lib/system.svelte.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import Header from './Header.svelte';
+ import CommandPalette from './CommandPalette.svelte';
+ import { palette, togglePalette } from '#lib/palette.svelte.ts';
 	import StatusBar from './StatusBar.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import Icon from './Icon.svelte';
@@ -24,6 +26,10 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	function hotkey(event: KeyboardEvent) {
+  if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyK'){
+   if(!palette.open&&document.querySelector('dialog[open]'))return;
+   event.preventDefault();togglePalette();return;
+  }
 		// Ctrl+` wherever the key is; layouts differ in what it types.
 		if (admin && event.ctrlKey && !event.altKey && !event.metaKey && (event.key === '`' || event.code === 'Backquote')) {
 			event.preventDefault();
@@ -77,6 +83,7 @@
 	<StatusBar note={shell.statusNote} />
 </div>
 {#if admin}<TerminalPanel />{/if}
+{#if palette.open}<CommandPalette onclose={()=>palette.open=false}/>{/if}
 {#if fab}
 	<button type="button" class="fab" style:bottom={admin && terminal.open && !terminal.full ? `${terminal.height + 16}px` : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
 		<Icon name="chat" size={22} />
