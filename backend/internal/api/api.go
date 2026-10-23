@@ -112,6 +112,8 @@ type Server struct {
 	agentMu     sync.Mutex
 	agentJobs   map[string]*agentJob
 	agentSlots  chan struct{}
+	// push holds the one-time tokens of buttons in notifications.
+	push pushTokens
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -141,6 +143,10 @@ func New(opts Options) *Server {
 	s.automations = assistant.NewAutomations(s.chatsDir)
 	s.agentJobs = map[string]*agentJob{}
 	s.agentSlots = make(chan struct{}, 1)
+	if s.opts.HomeAssistant != nil {
+		s.opts.HomeAssistant.OnEvent("mobile_app_notification_action", s.handleHANotificationAction)
+		s.opts.HomeAssistant.OnEvent("titanos_ask", s.handleAssist)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -376,6 +382,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/assistant/models", s.requireAssistant(s.handleAssistantChatModels))
 	mux.HandleFunc("GET /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChats))
 	mux.HandleFunc("POST /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatCreate))
+	// The buttons of a notification: the one-time token is the permission.
+	mux.HandleFunc("POST /api/v1/assistant/push/{token}/{decision}", s.handlePushDecision)
 	mux.HandleFunc("DELETE /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatsDelete))
 	mux.HandleFunc("GET /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatGet))
 	mux.HandleFunc("PUT /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatRename))

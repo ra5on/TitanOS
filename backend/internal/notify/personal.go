@@ -68,6 +68,17 @@ type PersonalMessage struct {
 	Text     string
 	// Path is a page of the web UI the message links to, e.g. /assistant?chat=…
 	Path string
+	// Actions are buttons in the message, where the channel has them
+	// (ntfy, the Home Assistant app).
+	Actions []PushAction
+}
+
+// PushAction is a button in a message: ntfy posts to URL, the Home
+// Assistant app fires mobile_app_notification_action with HAAction.
+type PushAction struct {
+	Label    string
+	URL      string
+	HAAction string
 }
 
 func personalFile(user string) string { return "users/" + user + "/notify.json" }
@@ -418,6 +429,15 @@ func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[strin
 			if link != "" {
 				header["Click"] = link
 			}
+			var actions []string
+			for _, a := range message.Actions {
+				if a.URL != "" && !strings.ContainsAny(a.Label+a.URL, ",;\r\n") {
+					actions = append(actions, "http, "+a.Label+", "+a.URL+", method=POST, clear=true")
+				}
+			}
+			if len(actions) > 0 {
+				header["Actions"] = encodeHeader(strings.Join(actions, "; "))
+			}
 			body := message.Text
 			if body == "" {
 				body = message.Title
@@ -431,6 +451,15 @@ func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[strin
 			if link != "" {
 				// Opens the page when the message is tapped (Android: clickAction, iOS: url).
 				data["url"], data["clickAction"] = link, link
+			}
+			var actions []map[string]string
+			for _, a := range message.Actions {
+				if a.HAAction != "" {
+					actions = append(actions, map[string]string{"action": a.HAAction, "title": a.Label})
+				}
+			}
+			if len(actions) > 0 {
+				data["actions"] = actions
 			}
 			body := message.Text
 			if body == "" {

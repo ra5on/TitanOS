@@ -3187,5 +3187,11 @@
 	"ha.commandsWarning": "Jeder, der auf deinem MQTT-Broker schreiben darf, kann diese Knöpfe drücken. Schütze den Broker mit Benutzern und Zugriffsregeln. Neustart und Herunterfahren lehnt TitanOS ab, solange kopiert, gesichert, geprüft oder ein Volume wiederhergestellt wird.",
 	"ha.commandsNoAccount": "Wähle oben ein Konto; ohne Konto legt TitanOS keine Knöpfe an.",
 	"ha.mqttConnected": "Mit dem Broker verbunden, Werte werden alle 30 Sekunden gesendet.",
-	"ha.mqttFailed": "Keine Verbindung zum Broker:"
+	"ha.mqttFailed": "Keine Verbindung zum Broker:",
+	"agent.pushApproval": "Freigeben und Ablehnen aus Benachrichtigungen erlauben",
+	"agent.pushApprovalHint": "Nachrichten über wartende Aktionen bekommen dann die Knöpfe „Freigeben“ und „Ablehnen“ (ntfy und die Home-Assistant-App). Jeder Knopf gilt einmal, 15 Minuten lang und nur bis zum nächsten Neustart von TitanOS. Wer die Nachricht lesen kann, kann damit freigeben; nutze deshalb ein geschütztes ntfy-Thema. Aktionen, für die man einen Namen eintippen muss, werden nie aus einer Nachricht freigegeben.",
+	"ha.assist": "Fragen aus Home Assistant beantworten (Assist)",
+	"ha.assistHint": "Mit der Blueprint für Home Assistant fragst du per Sprache oder Text „Frag das NAS …“. TitanOS antwortet als das gewählte Konto; Änderungen brauchen weiterhin die Freigabe wie im KI-Assistenten. Dafür muss das Token von einem Administrator in Home Assistant stammen.",
+	"ha.assistBlueprint": "Blueprint öffnen",
+	"error.push_token": "Dieser Knopf ist abgelaufen oder wurde schon benutzt."
 }
