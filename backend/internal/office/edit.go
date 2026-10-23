@@ -112,12 +112,15 @@ func replaceText(data []byte, edits []TextEdit) ([]byte, error) {
 func replacePart(z *zip.Reader, name string, data []byte) ([]byte, error) {
 	var out bytes.Buffer
 	writer := zip.NewWriter(&out)
-	total := int64(0)
+	total := uint64(0)
 	if len(z.File) > 5000 {
 		return nil, ErrTooLarge
 	}
 	for _, f := range z.File {
-		total += int64(f.UncompressedSize64)
+		if f.UncompressedSize64 > 100<<20 || total > 100<<20-f.UncompressedSize64 {
+			return nil, ErrTooLarge
+		}
+		total += f.UncompressedSize64
 		if total > 100<<20 {
 			return nil, ErrTooLarge
 		}

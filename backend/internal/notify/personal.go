@@ -389,7 +389,9 @@ func (m *Manager) TestPersonal(user, channel string) error {
 	if !ok {
 		return invalid("channel")
 	}
-	return send()
+	var deliveryErr error
+	m.deliverPersonal(user, channel, func() error { deliveryErr = send(); return deliveryErr })
+	return deliveryErr
 }
 
 func (m *Manager) flushHeld(user string) {
@@ -399,7 +401,7 @@ func (m *Manager) flushHeld(user string) {
 	if !ok {
 		return
 	}
-	held := state.held
+	held := slices.DeleteFunc(slices.Clone(state.held), func(message PersonalMessage) bool { return !state.settings.Events[message.Event] })
 	if state.settings.PersistQuiet {
 		if err := m.saveQuiet(user, nil); err != nil {
 			state.flush = time.AfterFunc(time.Minute, func() { m.flushHeld(user) })
