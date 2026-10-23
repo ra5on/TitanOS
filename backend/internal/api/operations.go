@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,7 +15,14 @@ import (
 )
 
 func (s *Server) operationsRoutes(mux *http.ServeMux) {
-	admin := func(route string, fn http.HandlerFunc) { mux.HandleFunc(route, s.requireAdmin(fn)) }
+	admin := func(route string, fn http.HandlerFunc) {
+		mux.HandleFunc(route, s.requireAdmin(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				slog.Info("workflow change requested", "method", r.Method, "path", r.URL.Path, "user", currentUser(r).Name, "ip", remoteIP(r))
+			}
+			fn(w, r)
+		}))
+	}
 	admin("GET /api/v1/operations", s.handleOperations)
 	admin("GET /api/v1/maintenance", s.handleMaintenance)
 	admin("PUT /api/v1/maintenance", s.handleMaintenanceSet)
@@ -380,6 +388,7 @@ func (s *Server) handleTransferForget(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	slog.Info("forget transfer requested", "id", r.PathValue("id"), "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Files.ForgetTransfer(currentUser(r).Name, r.PathValue("id"), req.Confirm); err != nil {
 		writeFileError(w, err)
 		return

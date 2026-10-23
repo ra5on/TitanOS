@@ -163,8 +163,9 @@ In einem versionierten Backup lassen sich Anwendungen auswählen:
 Stoppen muss in der Auftragskonfiguration ausdrücklich erlaubt sein. Die
 ursprünglichen Container-IDs/VM-UUIDs und Laufzustände werden **vor** dem Stopp
 in einem privaten Volume-Journal gespeichert. Lebenszyklusänderungen sind
-währenddessen gesperrt. Nur vorher laufende Originalinstanzen werden wieder
- gestartet; Fehler dabei bleiben Fehler des Gesamtauftrags. Ein titand-Absturz
+währenddessen und bis zum ausdrücklichen Abschluss einer Wiederherstellung
+gesperrt. App-Updates warten ebenfalls auf diesen Abschluss. Nur vorher laufende Originalinstanzen werden wieder
+gestartet; Fehler dabei bleiben Fehler des Gesamtauftrags. Ein titand-Absturz
 führt nicht zum blinden Neustart oder zur Wiederholung des Backups. Unter
 **Werkzeuge › Aufträge** kann der Zustand geprüft und der Wiederanlauf ausdrücklich
 beauftragt werden. Ein Journal lässt sich auch nach manueller Prüfung ohne

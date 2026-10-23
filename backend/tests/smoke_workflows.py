@@ -44,17 +44,25 @@ def smoke(archive,binary,log,timeout):
         for index in range(1,8):helper.command('qemu-img','create','-q','-f','qcow2',str(directory/f'data{index}.qcow2'),'2G')
         helper.command('ssh-keygen','-q','-t','ed25519','-N','','-f',str(directory/'key'))
         port,ssh_port=helper.free_port(),helper.free_port();url=f'https://127.0.0.1:{port}'
-        opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+        cookies=http.cookiejar.CookieJar();tls=ssl._create_unverified_context()
         def request(path,data=None,method=None):
             req=urllib.request.Request(url+'/api/v1'+path,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json','Origin':url},method=method)
+            # Keep the guest side open until the full body is read. urllib
+            # forces Connection: close; QEMU user networking can truncate that
+            # final response (also documented in smoke-app-update.py).
+            # Never retry a mutation whose response was interrupted.
+            cookies.add_cookie_header(req)
+            connection=http.client.HTTPSConnection('127.0.0.1',port,timeout=180,context=tls)
             try:
-                with opener.open(req,timeout=180) as response:
-                    try:data=response.read()
-                    except http.client.IncompleteRead as error:
-                        print('Incomplete HTTP response:',path,str(response.headers),repr(error.partial),flush=True)
-                        raise
-                    return json.loads(data) if data else None
-            except urllib.error.HTTPError as error:raise RuntimeError(f'{path}: {error.code} {error.read().decode()}') from error
+                connection.request(req.get_method(),req.selector,body=req.data,headers=dict(req.header_items()))
+                response=connection.getresponse();cookies.extract_cookies(response,req)
+                try:body=response.read()
+                except http.client.IncompleteRead as error:
+                    print('Incomplete HTTP response:',path,str(response.headers),repr(error.partial),flush=True)
+                    raise
+                if response.status>=400:raise RuntimeError(f'{path}: {response.status} {body.decode()}')
+                return json.loads(body) if body else None
+            finally:connection.close()
         ssh=['ssh','-i',str(directory/'key'),'-o','IdentitiesOnly=yes','-o','BatchMode=yes','-o','StrictHostKeyChecking=accept-new','-o',f'UserKnownHostsFile={directory}/known_hosts','-o','ConnectTimeout=3','-p',str(ssh_port),'storagetester@127.0.0.1']
         def remote(command,limit=180):return subprocess.check_output([*ssh,'sudo sh -ec '+shlex.quote(command)],text=True,timeout=limit).strip()
         def wait(predicate,label,limit=120):
