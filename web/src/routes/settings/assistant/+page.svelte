@@ -30,7 +30,7 @@
 
 	// What the assistant may do where, as titand decides it without a setting.
 	const DEFAULT_ACCESS: Record<string, 'off' | 'read' | 'write'> = {
-		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read'
+		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read', home: 'off'
 	};
 
 

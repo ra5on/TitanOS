@@ -30,6 +30,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -68,6 +69,7 @@ type testServer struct {
 	update *update.Manager
 	disks  *storage.Manager
 	shares *shares.Manager
+	home   *homeassistant.Manager
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -81,13 +83,17 @@ func newTestServer(t *testing.T) *testServer {
 	updater := disabledUpdate(store)
 	disks := loadedStorage(t, store)
 	shareManager := loadedShares(t, store)
+	home := homeassistant.NewManager(store)
+	home.Load()
+	notifier := loadedNotify(store)
+	notifier.SetHomeAssistant(home)
 	handler := New(Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
-		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
+		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	ts := &testServer{server: handler, t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager}
+	ts := &testServer{server: handler, t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager, home: home}
 	ts.client = ts.newClient()
 	return ts
 }

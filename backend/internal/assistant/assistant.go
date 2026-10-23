@@ -106,7 +106,7 @@ type Profile struct {
 }
 
 // Areas of the NAS and what the assistant may do there by default.
-var Areas = []string{AreaFiles, AreaDocker, AreaVMs, AreaStorage, AreaShares, AreaBackups, AreaAccounts, AreaSystem, AreaUpdates}
+var Areas = []string{AreaFiles, AreaDocker, AreaVMs, AreaStorage, AreaShares, AreaBackups, AreaAccounts, AreaSystem, AreaUpdates, AreaHome}
 
 const (
 	AreaFiles    = "files"
@@ -118,6 +118,8 @@ const (
 	AreaAccounts = "accounts"
 	AreaSystem   = "system"
 	AreaUpdates  = "updates"
+	// AreaHome is Home Assistant; off unless switched on.
+	AreaHome = "home"
 
 	AccessOff   = "off"
 	AccessRead  = "read"
@@ -126,7 +128,7 @@ const (
 
 var defaultAccess = map[string]string{
 	AreaFiles: AccessWrite, AreaDocker: AccessWrite, AreaVMs: AccessWrite, AreaStorage: AccessWrite, AreaShares: AccessWrite,
-	AreaBackups: AccessWrite, AreaAccounts: AccessRead, AreaSystem: AccessRead, AreaUpdates: AccessRead,
+	AreaBackups: AccessWrite, AreaAccounts: AccessRead, AreaSystem: AccessRead, AreaUpdates: AccessRead, AreaHome: AccessOff,
 }
 
 // Access says what the assistant may do in an area.
