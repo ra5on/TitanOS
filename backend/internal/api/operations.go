@@ -328,6 +328,10 @@ func (s *Server) handleApplicationRecovery(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	op, active := s.opts.ApplicationBackups.Status()
+	if op == nil && !active && s.opts.ApplicationBackups.Busy() {
+		featureError(w, errors.New("application recovery state could not be loaded; inspect the system log"))
+		return
+	}
 	writeJSON(w, 200, map[string]any{"operation": op, "active": active})
 }
 func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request) {

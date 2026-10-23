@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestGrowthJournalFencesOtherMutationsAfterRestart(t *testing.T) {
@@ -80,6 +82,47 @@ func TestSnapshotBrowseRestoreExcludesPrivateTreesAndNeverOverwrites(t *testing.
 	}
 	if _, err := m.RestoreSnapshotFiles(ctx, "data", "manual", SnapshotRestore{Paths: []string{".titanos/assistant/private"}, TargetVolume: "safe"}); err == nil {
 		t.Fatal("private chat restored")
+	}
+}
+
+type gatedRestoreContext struct {
+	context.Context
+	once            sync.Once
+	started, resume chan struct{}
+}
+
+func (c *gatedRestoreContext) Err() error {
+	c.once.Do(func() { close(c.started) })
+	<-c.resume
+	return nil
+}
+
+func TestSnapshotFileRestoreKeepsAppUpdateWaiting(t *testing.T) {
+	m, _ := snapshotFilesFixture(t)
+	ctx := &gatedRestoreContext{Context: context.Background(), started: make(chan struct{}), resume: make(chan struct{})}
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(ctx.resume) }) }
+	done := make(chan struct{})
+	var result error
+	go func() {
+		defer close(done)
+		_, result = m.RestoreSnapshotFiles(ctx, "data", "manual", SnapshotRestore{Paths: []string{"photos/a.jpg"}, TargetVolume: "safe"})
+	}()
+	t.Cleanup(func() { unblock(); <-done })
+	select {
+	case <-ctx.started:
+	case <-done:
+		t.Fatalf("restore stopped before copying: %v", result)
+	case <-time.After(3 * time.Second):
+		t.Fatal("restore did not start")
+	}
+	if !m.ActionsRunning() {
+		t.Fatal("app update would interrupt an active snapshot-file restore")
+	}
+	unblock()
+	<-done
+	if result != nil || m.ActionsRunning() {
+		t.Fatal("restore did not release app update", result)
 	}
 }
 func TestUsageIsBoundedAndDoesNotFollowLinksOrExposePrivateState(t *testing.T) {
