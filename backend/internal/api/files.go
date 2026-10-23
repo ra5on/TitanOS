@@ -499,9 +499,8 @@ func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
 // handleFileCopy starts copying or moving files between roots.
 func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Maintenance != nil {
-		leave, err := s.opts.Maintenance.Enter()
-		if err != nil {
-			writeError(w, http.StatusLocked, "maintenance_running", err.Error())
+		leave, ok := s.admitOperation(w)
+		if !ok {
 			return
 		}
 		defer leave()
@@ -576,6 +575,13 @@ func (s *Server) handleFileInspect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFileJobRetry(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Maintenance != nil {
+		leave, ok := s.admitOperation(w)
+		if !ok {
+			return
+		}
+		defer leave()
+	}
 	user := currentUser(r)
 	for _, job := range s.opts.Files.Jobs(user.Name) {
 		if job.ID == r.PathValue("id") {

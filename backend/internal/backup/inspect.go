@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -173,55 +172,16 @@ func (m *Manager) RestoreFiles(id, snapshot, volume string, paths []string) (str
 	if !ok {
 		return "", ErrNotFound
 	}
-	if !snapshotForm.MatchString(snapshot) {
-		return "", invalid("backup")
+	if !snapshotForm.MatchString(snapshot) || len(paths) == 0 || len(paths) > maxIncludes || !slices.Contains(m.mounted(), volume) {
+		return "", invalid("backup snapshot, paths or volume")
 	}
-	if len(paths) == 0 || len(paths) > maxIncludes {
-		return "", invalid("choose 1 to %d files or folders", maxIncludes)
-	}
-	var includes []string
+	includes := []string{}
 	for _, p := range paths {
 		clean, err := cleanPath(p)
 		if err != nil || clean == "/" {
 			return "", invalid("path %q", p)
 		}
-		includes = append(includes, "--include", clean)
+		includes = append(includes, "--include", probePattern(clean))
 	}
-	if !slices.Contains(m.mounted(), volume) {
-		return "", invalid("volume")
-	}
-	target := filepath.Join(m.mountRoot, volume, "restored", job.ID+"-"+m.now().Format("20060102-150405"))
-	err := m.begin(job, "restore", func(ctx context.Context) error {
-		_, base, env, cleanup, err := m.repository(job)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-		if err := os.MkdirAll(target, 0o770); err != nil {
-			return err
-		}
-		args := append(append(slices.Clone(base), "restore", snapshot, "--target", target, "--json"), includes...)
-		out, err := m.run(ctx, env, args, func(line string) {
-			var message struct {
-				Type    string  `json:"message_type"`
-				Percent float64 `json:"percent_done"`
-				Done    uint64  `json:"bytes_restored"`
-				Total   uint64  `json:"total_bytes"`
-			}
-			if json.Unmarshal([]byte(line), &message) == nil && message.Type == "status" {
-				m.update(job, func(s *State) {
-					s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
-				})
-			}
-		})
-		if err != nil && ctx.Err() == nil {
-			return errors.New(lastLines(out, job.Password))
-		}
-		if err == nil {
-			m.update(job, func(s *State) { s.RestoredTo = target })
-			slog.Info("backup files restored", "job", job.ID, "snapshot", snapshot, "count", len(paths), "to", target)
-		}
-		return err
-	})
-	return target, err
+	return m.restoreVerifiedCopy(job, snapshot, volume, includes, false)
 }

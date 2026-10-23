@@ -91,6 +91,11 @@ func (s *Server) handleBackupAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.PathValue("action") {
 	case "run":
+		leave, ok := s.admitOperation(w)
+		if !ok {
+			return
+		}
+		defer leave()
 		err = s.opts.Backup.Start(id)
 	case "stop":
 		err = s.opts.Backup.Stop(id)

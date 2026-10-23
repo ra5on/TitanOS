@@ -1,22 +1,136 @@
 <script lang="ts">
- import {onMount} from 'svelte';import {api} from '#lib/api.ts';import {t} from '#lib/i18n/index.svelte.ts';import {operationError,type Operations} from '#lib/operations.ts';
- let {compact=false}:{compact?:boolean}=$props();let data=$state<Operations|null>(null),error=$state('');let inflight=false;
- async function load(){if(inflight)return;inflight=true;try{data=await api.get('/operations');error='';}catch(e){error=operationError(e,t);}finally{inflight=false;}}
- onMount(()=>{load();const timer=setInterval(()=>{if(!document.hidden)load();},15000);return()=>clearInterval(timer);});
- const problems=$derived([...(data?.maintenance?.jobs??[]).filter(v=>v.state.blocked||v.state.error).map(v=>({name:v.job.name,text:v.state.error,href:'/tools/maintenance'})),...(data?.backups??[]).filter(v=>v.state.lastError||v.state.checkError||v.state.probe?.error).map(v=>({name:v.job.id,text:v.state.lastError||v.state.checkError||v.state.probe?.error||'',href:'/settings/backups/data'})),...(data?.growth?.pending?[{name:data.growth.operation.volume,text:data.growth.operation.error||t('ops.growthPending'),href:'/storage/manage?mode=grow'}]:[]),...(data?.transfers??[]).filter(j=>j.state==='failed'||j.blocked).map(j=>({name:j.from+' → '+j.to,text:j.error,href:'/files'}))]);
- const upcoming=$derived([...(data?.maintenance?.settings.enabled?data.maintenance.jobs.filter(v=>v.job.enabled&&v.next).map(v=>({name:v.job.name,at:v.next!,href:'/tools/maintenance'})):[]),...(data?.backups??[]).filter(v=>v.next).map(v=>({name:v.job.id,at:v.next!,href:'/settings/backups/data'}))].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(0,compact?3:10));
+	import { onMount } from 'svelte';
+	import { api } from '#lib/api.ts';
+	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { operationError, type Operations } from '#lib/operations.ts';
+	import { taskItems, needsAttention, isActive, type TaskAction } from './tasks.ts';
+	import TaskRow from './TaskRow.svelte';
+	let { compact = false }: { compact?: boolean } = $props();
+	let data = $state<Operations | null>(null),
+		error = $state(''),
+		filter = $state('all'),
+		search = $state(''),
+		busy = $state(false);
+	let inflight = false;
+	const tasks = $derived(data ? taskItems(data) : []);
+	const problems = $derived(tasks.filter(needsAttention));
+	const upcoming = $derived(
+		tasks
+			.filter((task) => task.state === 'scheduled' || (task.state === 'waiting' && task.at))
+			.sort((a, b) => Date.parse(a.at ?? '') - Date.parse(b.at ?? '')),
+	);
+	const shown = $derived(
+		tasks.filter((task) => {
+			if (!task.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())) return false;
+			if (filter === 'active') return isActive(task);
+			if (filter === 'scheduled') return task.state === 'scheduled';
+			if (filter === 'done') return task.state === 'done' || task.state === 'cancelled';
+			if (filter === 'failed') return needsAttention(task);
+			return true;
+		}),
+	);
+	async function load() {
+		if (inflight) return;
+		inflight = true;
+		try {
+			data = await api.get('/operations');
+			error = '';
+		} catch (e) {
+			error = operationError(e, t);
+		} finally {
+			inflight = false;
+		}
+	}
+	async function act(action: TaskAction) {
+		busy = true;
+		error = '';
+		try {
+			await api.post(action.path, action.body);
+			await load();
+		} catch (e) {
+			error = operationError(e, t);
+		} finally {
+			busy = false;
+		}
+	}
+	onMount(() => {
+		load();
+		const timer = setInterval(() => {
+			if (!document.hidden && !busy) load();
+		}, 15000);
+		return () => clearInterval(timer);
+	});
 </script>
-<section class="tile summary"><div class="head"><h2 class="tile-title">{t('ops.attention')}</h2><a href="/tools/tasks">{t('ops.openTasks')}</a></div>{#if error}<div class="notice-warn" role="status">{t('ops.stale')} <button class="btn" onclick={load}>{t('common.retry')}</button><details><summary>{t('ops.error')}</summary>{error}</details></div>{/if}
- {#each problems.slice(0,compact?3:50) as p,i(i)}<a class="problem" href={p.href}><strong>{p.name}</strong><span>{p.text}</span><span aria-hidden="true">›</span></a>{:else}{#if data}<p class="muted">{t('ops.allClear')}</p>{/if}{/each}
- {#if upcoming.length}<h3>{t('ops.next')}</h3>{#each upcoming as job,i(i)}<a class="upcoming" href={job.href}><span>{job.name}</span><time datetime={job.at}>{new Date(job.at).toLocaleString()}</time></a>{/each}{/if}
+
+<section class="tile summary">
+	<div class="head">
+		<h2 class="tile-title">{t('ops.attention')}</h2>
+		<div class="actions">
+			<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button>{#if compact}<a
+					href="/tools/tasks">{t('ops.openTasks')}</a
+				>{/if}
+		</div>
+	</div>
+	{#if error}<p class="notice-warn" role="alert">{t('ops.stale')} {error}</p>{/if}
+	{#each problems.slice(0, compact ? 3 : 50) as task (task.id)}<TaskRow
+			{task}
+		/>{:else}{#if data && !error}<p class="muted">{t('ops.allClear')}</p>{/if}{/each}
+	{#if compact && upcoming.length}<h3>{t('ops.next')}</h3>
+		{#each upcoming.slice(0, 3) as task (task.id)}<TaskRow {task} />{/each}{/if}
 </section>
-{#if !compact&&data}<section class="tile summary"><h2 class="tile-title">{t('ops.running')}</h2>
- {#each data.maintenance?.jobs.filter(v=>v.state.running)??[] as v(v.job.id)}<a class="upcoming" href="/tools/maintenance"><span>{v.job.name} · {v.job.target}</span><span>{v.state.phase}</span></a>{/each}
- {#each data.backups?.filter(v=>v.state.running)??[] as v(v.job.id)}<a class="upcoming" href="/settings/backups/data"><span>{v.job.id}</span><span>{v.state.phase}</span></a>{/each}
- {#each (data.transfers??[]).filter(j=>j.state==='running') as job(job.id)}<a class="upcoming" href="/files"><span>{job.from} → {job.to}</span><progress max={job.bytes} value={job.bytes?job.copied:undefined} aria-label={job.id}></progress></a>{/each}
- {#each Object.entries(data.docker??{}).filter(([,j])=>j.state==='running') as [name,job](name)}<a class="upcoming" href="/docker"><span>{name}</span><span>{job.state}</span></a>{/each}
- {#each data.vms?.filter(v=>v.job)??[] as machine(machine.name)}<a class="upcoming" href={'/vms?vm='+encodeURIComponent(machine.name)}><span>{machine.displayName||machine.name}</span><span>{machine.job?.state} {machine.job?.text}</span></a>{/each}
- {#each data.diskTests?.filter(j=>!j.result)??[] as job(job.disk)}<a class="upcoming" href="/tools"><span>{job.disk} · {job.phase}</span><span>{job.percent.toFixed(1)} %</span></a>{/each}
- <div class="links"><a href="/files">{t('nav.files')}</a><a href="/vms">{t('nav.vms')}</a><a href="/docker">{t('nav.docker')}</a><a href="/tools/maintenance">{t('ops.maintenance')}</a></div>
-</section>{/if}
-<style>.summary{padding:var(--tile-pad);margin-bottom:var(--gap);min-width:0}.head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}.summary a{color:var(--text);text-decoration:none}.head>a,.links a{color:var(--accent)}.problem,.upcoming{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);font-size:.85rem}.problem span{overflow-wrap:anywhere;flex:1 1 200px;color:var(--warn-text)}h3{font-size:.85rem;margin:18px 0 0}.upcoming time{color:var(--muted)}.links{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px}progress{max-width:200px;accent-color:var(--accent)}</style>
+{#if !compact}
+	<section class="tile summary">
+		<div class="toolbar" aria-label={t('ops.tasks')}>
+			{#each ['all', 'active', 'scheduled', 'done', 'failed'] as value (value)}<button
+					class="btn"
+					class:btn-primary={filter === value}
+					aria-pressed={filter === value}
+					onclick={() => (filter = value)}>{t(`tasks.filter.${value}` as MessageKey)}</button
+				>{/each}
+			<input
+				class="field"
+				aria-label={t('tasks.search')}
+				placeholder={t('tasks.search')}
+				bind:value={search}
+			/>
+		</div>
+		{#each shown as task (task.id)}<TaskRow {task} {busy} onaction={act} />{:else}<p class="muted">
+				{t('ops.none')}
+			</p>{/each}
+	</section>
+{/if}
+
+<style>
+	.summary {
+		padding: var(--tile-pad);
+		margin-bottom: var(--gap);
+		min-width: 0;
+	}
+	.head,
+	.actions,
+	.toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+	}
+	.head {
+		justify-content: space-between;
+	}
+	.head a {
+		color: var(--accent);
+		font-size: 0.875rem;
+	}
+	.toolbar {
+		margin-bottom: 12px;
+	}
+	.toolbar input {
+		flex: 1;
+		min-width: 160px;
+		max-width: 300px;
+	}
+	h3 {
+		font-size: 0.85rem;
+		margin-top: 18px;
+	}
+</style>

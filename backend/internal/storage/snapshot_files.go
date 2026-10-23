@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -31,6 +32,7 @@ type SnapshotListing struct {
 	Next    int             `json:"next"`
 }
 type SnapshotRestore struct {
+	UUID         string   `json:"uuid,omitempty"`
 	Paths        []string `json:"paths"`
 	TargetVolume string   `json:"targetVolume"`
 }
@@ -156,6 +158,15 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 	defer m.actions.Unlock()
 	if len(req.Paths) == 0 || len(req.Paths) > 200 {
 		return out, ErrNotPossible
+	}
+	if req.UUID != "" {
+		identity, err := m.snapshotIdentity(ctx, volume, name)
+		if err != nil {
+			return out, err
+		}
+		if identity != req.UUID {
+			return out, errors.New("snapshot identity changed; preview again")
+		}
 	}
 	source, err := m.openSnapshot(volume, name)
 	if err != nil {
@@ -305,9 +316,42 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 	return out, nil
 }
 
-// Retention owns only names recorded after this schedule created them. A manual
-// snapshot with an automatic-looking name is never enrolled by discovery.
+// Snapshot inventory version 2 records Btrfs UUIDs. The legacy name-only file
+// stays empty, including on downgrade, so it cannot grant ownership of a replacement.
+type scheduledSnapshot struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid"`
+}
+
+func (m *Manager) snapshotIdentity(ctx context.Context, volume, name string) (string, error) {
+	dir, err := m.snapshotDir(volume)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", ErrNotPossible
+	}
+	out, err := m.runner.Run(ctx, "", "btrfs", "subvolume", "show", path)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if ok && key == "UUID" && regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`).MatchString(strings.TrimSpace(value)) {
+			return strings.ToLower(strings.TrimSpace(value)), nil
+		}
+	}
+	return "", errors.New("snapshot UUID is unavailable")
+}
+
 func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep int) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
 	if !regexp.MustCompile(`^[A-Za-z0-9-]{1,32}$`).MatchString(id) || keep < 1 || keep > 100 {
 		return ErrNotPossible
 	}
@@ -316,37 +360,112 @@ func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep
 		return err
 	}
 	defer root.Close()
-	names := []string{}
-	if err := volumedata.ReadJSON(root, id+".json", &names, 128<<10); err != nil && !errors.Is(err, os.ErrNotExist) {
+	copies := []scheduledSnapshot{}
+	inventory := id + ".v2.json"
+	if err := volumedata.ReadJSON(root, inventory, &copies, 128<<10); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if len(names) > 1000 {
+	if len(copies) > 1000 {
 		return errors.New("snapshot schedule inventory exceeds limit")
 	}
 	prefix := "auto-" + id + "-"
-	for _, name := range names {
-		if !strings.HasPrefix(name, prefix) || !snapshotName.MatchString(name) {
+	for _, copy := range copies {
+		if !strings.HasPrefix(copy.Name, prefix) || !snapshotName.MatchString(copy.Name) || copy.UUID == "" {
 			return errors.New("invalid scheduled snapshot inventory")
 		}
 	}
-	now := time.Now().UTC()
-	name := prefix + now.Format("20060102T150405") + fmt.Sprintf("-%09d", now.Nanosecond())
-	if err := m.SnapshotAction(ctx, volume, name, "create", ""); err != nil {
+	// Unknown legacy copies are retained; names alone never establish identity.
+	if err := volumedata.WriteJSON(root, id+".json", []string{}); err != nil {
 		return err
 	}
-	names = append(names, name)
-	if err := volumedata.WriteJSON(root, id+".json", names); err != nil {
+	now := time.Now().UTC()
+	name := prefix + now.Format("20060102T150405") + fmt.Sprintf("-%09d", now.Nanosecond())
+	if err := m.snapshotAction(ctx, volume, name, "create", ""); err != nil {
+		return err
+	}
+	uuid, err := m.snapshotIdentity(ctx, volume, name)
+	if err != nil {
+		return fmt.Errorf("snapshot %s retained without pruning: %w", name, err)
+	}
+	copies = append(copies, scheduledSnapshot{Name: name, UUID: uuid})
+	if err := volumedata.WriteJSON(root, inventory, copies); err != nil {
 		return fmt.Errorf("snapshot %s created, inventory could not be saved: %w", name, err)
 	}
-	for len(names) > keep {
-		old := names[0]
-		if err := m.SnapshotAction(ctx, volume, old, "delete", old); err != nil && !errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("snapshot created, retention failed: %w", err)
+	for len(copies) > keep {
+		old := copies[0]
+		identity, err := m.snapshotIdentity(ctx, volume, old.Name)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
-		names = names[1:]
-		if err := volumedata.WriteJSON(root, id+".json", names); err != nil {
+		if err == nil && identity == old.UUID {
+			if err := m.snapshotAction(ctx, volume, old.Name, "delete", old.Name); err != nil && !errors.Is(err, ErrNotFound) {
+				return fmt.Errorf("snapshot created, retention failed: %w", err)
+			}
+		}
+		copies = copies[1:]
+		if err := volumedata.WriteJSON(root, inventory, copies); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+type SnapshotRestorePreview struct {
+	UUID  string `json:"uuid"`
+	Files int    `json:"files"`
+	Bytes int64  `json:"bytes"`
+}
+
+// PreviewSnapshotRestore validates a bounded regular-file selection without
+// creating a directory. Restore rechecks identity and file access before copying.
+func (m *Manager) PreviewSnapshotRestore(ctx context.Context, volume, name string, req SnapshotRestore) (SnapshotRestorePreview, error) {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	out := SnapshotRestorePreview{}
+	if len(req.Paths) == 0 || len(req.Paths) > 200 || !slices.Contains(m.Mounted(), req.TargetVolume) {
+		return out, ErrNotPossible
+	}
+	uuid, err := m.snapshotIdentity(ctx, volume, name)
+	if err != nil {
+		return out, err
+	}
+	out.UUID = uuid
+	root, err := m.openSnapshot(volume, name)
+	if err != nil {
+		return out, err
+	}
+	defer root.Close()
+	seen := map[string]bool{}
+	for _, p := range req.Paths {
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		if seen[p] {
+			return out, ErrNotPossible
+		}
+		seen[p] = true
+		if err := noSnapshotLinks(root, p); err != nil {
+			return out, err
+		}
+		st, err := root.Stat(p)
+		if err != nil {
+			return out, err
+		}
+		if !st.Mode().IsRegular() {
+			return out, ErrNotPossible
+		}
+		out.Files++
+		out.Bytes += st.Size()
+		if out.Bytes > 10<<30 {
+			return out, ErrNotPossible
+		}
+	}
+	var target syscall.Statfs_t
+	if err := syscall.Statfs(m.MountPoint(req.TargetVolume), &target); err != nil {
+		return out, err
+	}
+	if uint64(out.Bytes) > target.Bavail*uint64(target.Bsize) {
+		return out, errors.New("insufficient restore space")
+	}
+	return out, nil
 }

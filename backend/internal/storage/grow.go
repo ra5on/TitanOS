@@ -28,6 +28,8 @@ type GrowthPointer struct {
 	RecoveryVolume string `json:"recoveryVolume"`
 }
 type Growth struct {
+	CurrentBytes uint64 `json:"currentBytes,omitempty"`
+	PlannedBytes uint64 `json:"plannedBytes,omitempty"`
 	GrowthPointer
 	ArrayUUID     string    `json:"arrayUUID"`
 	DiskSerial    string    `json:"diskSerial"`
@@ -168,7 +170,21 @@ func (m *Manager) GrowthPreview(ctx context.Context, name string, req GrowthRequ
 	if space.Bavail*uint64(space.Bsize) < 256<<20 {
 		return Growth{}, errors.New("recovery volume needs 256 MiB free")
 	}
-	return Growth{GrowthPointer: GrowthPointer{Volume: name, RecoveryVolume: req.RecoveryVolume}, ArrayUUID: v.ArrayUUID, DiskSerial: disk.Serial, OriginalDisks: a.disks, TargetDisks: a.disks + 1, Phase: "preview", Started: time.Now().UTC()}, nil
+	var current uint64
+	for _, item := range status.Volumes {
+		if item.Name == name {
+			current = item.SizeBytes
+		}
+	}
+	parity := 1
+	if v.Level == "raid6" {
+		parity = 2
+	}
+	planned := uint64(0)
+	if a.disks > parity {
+		planned = current / uint64(a.disks-parity) * uint64(a.disks+1-parity)
+	}
+	return Growth{GrowthPointer: GrowthPointer{Volume: name, RecoveryVolume: req.RecoveryVolume}, CurrentBytes: current, PlannedBytes: planned, ArrayUUID: v.ArrayUUID, DiskSerial: disk.Serial, OriginalDisks: a.disks, TargetDisks: a.disks + 1, Phase: "preview", Started: time.Now().UTC()}, nil
 }
 func (m *Manager) StartGrowth(ctx context.Context, name string, req GrowthRequest) error {
 	m.actions.Lock()
