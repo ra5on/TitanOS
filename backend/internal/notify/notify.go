@@ -124,6 +124,10 @@ type Manager struct {
 	sendMail   func(Email, []byte) error
 	retryPause time.Duration
 
+	// now is the clock; tests replace it.
+	now    func() time.Time
+	people personalStore
+
 	mu       sync.Mutex
 	loaded   bool
 	settings Settings
@@ -135,7 +139,7 @@ type Manager struct {
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
 		store: store, http: &http.Client{Timeout: 20 * time.Second}, telegramAPI: "https://api.telegram.org",
-		sendMail: sendMail, retryPause: 10 * time.Second, settings: Settings{Language: "en", MinSeverity: Warning}, nextID: 1,
+		sendMail: sendMail, retryPause: 10 * time.Second, now: time.Now, settings: Settings{Language: "en", MinSeverity: Warning}, nextID: 1,
 	}
 }
 
@@ -330,22 +334,26 @@ func (m *Manager) deliver(settings Settings, message Message, only *string) erro
 		return send()
 	}
 	for name, send := range channels {
-		if !enabled[name] {
-			continue
+		if enabled[name] {
+			m.dispatch(name, send)
 		}
-		// Each channel on its own: one that hangs does not hold up the others.
-		go func() {
-			var err error
-			for attempt := range 3 {
-				if err = send(); err == nil {
-					return
-				}
-				time.Sleep(time.Duration(attempt+1) * m.retryPause)
-			}
-			slog.Error("notification not delivered", "channel", name, "err", err)
-		}()
 	}
 	return nil
+}
+
+// dispatch sends through one channel in the background, three attempts.
+// Each channel on its own: one that hangs does not hold up the others.
+func (m *Manager) dispatch(name string, send func() error) {
+	go func() {
+		var err error
+		for attempt := range 3 {
+			if err = send(); err == nil {
+				return
+			}
+			time.Sleep(time.Duration(attempt+1) * m.retryPause)
+		}
+		slog.Error("notification not delivered", "channel", name, "err", err)
+	}()
 }
 
 // post sends a request and treats every answer but a success as an error.
@@ -375,11 +383,19 @@ func (m *Manager) post(address string, header map[string]string, body []byte) er
 }
 
 func (m *Manager) ntfy(cfg Ntfy, title string, message Message) error {
-	header := map[string]string{"Title": title, "Priority": map[string]string{Info: "default", Warning: "high", Error: "urgent"}[message.Severity], "Tags": "floppy_disk"}
+	return m.ntfyPost(cfg, title, message.Severity, message.Text, nil)
+}
+
+// ntfyPost publishes to a topic; extra adds headers such as Click or Actions.
+func (m *Manager) ntfyPost(cfg Ntfy, title, severity, text string, extra map[string]string) error {
+	header := map[string]string{"Title": title, "Priority": map[string]string{Info: "default", Warning: "high", Error: "urgent"}[severity], "Tags": "floppy_disk"}
+	for name, value := range extra {
+		header[name] = value
+	}
 	if cfg.Token != "" {
 		header["Authorization"] = "Bearer " + cfg.Token
 	}
-	return m.post(cfg.URL, header, []byte(message.Text))
+	return m.post(cfg.URL, header, []byte(text))
 }
 
 func (m *Manager) telegram(cfg Telegram, text string) error {

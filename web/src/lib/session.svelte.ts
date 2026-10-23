@@ -4,6 +4,8 @@ import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
 import { useAssistantPrefs } from './assistant.svelte.ts';
+import { bell } from './notifications.svelte.ts';
+import { sanitizeBell } from './notify-groups.ts';
 
 export const session = $state<{
 	status: 'loading' | 'ready' | 'unreachable';
@@ -21,6 +23,7 @@ async function loadPreferences() {
 		session.docker = prefs.docker;
 		session.vnc = prefs.vnc;
 		sound.settings = sanitizeSound(prefs.sound);
+		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
 		useAssistantPrefs(prefs.assistant);
 	} catch {

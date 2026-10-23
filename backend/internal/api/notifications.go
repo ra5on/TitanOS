@@ -82,3 +82,49 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleAccountNotify shows where the assistant reaches one's own account.
+func (s *Server) handleAccountNotify(w http.ResponseWriter, r *http.Request) {
+	settings, set, err := s.opts.Notify.PersonalSettings(currentUser(r).Name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+		return
+	}
+	general, _ := s.opts.Notify.Settings()
+	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "secretSet": set, "mailServer": general.Email.Host != ""})
+}
+
+func (s *Server) handleAccountNotifyChange(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		notify.Personal
+		ClearSecrets []string `json:"clearSecrets"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Notify.SetPersonal(currentUser(r).Name, req.Personal, req.ClearSecrets...); err != nil {
+		if errors.Is(err, notify.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+		return
+	}
+	s.handleAccountNotify(w, r)
+}
+
+func (s *Server) handleAccountNotifyTest(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Channel string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Notify.TestPersonal(currentUser(r).Name, req.Channel); err != nil {
+		if errors.Is(err, notify.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
+			return
+		}
+		writeError(w, http.StatusBadGateway, "notify_test_failed", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

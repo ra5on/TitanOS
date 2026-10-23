@@ -3,13 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 )
 
 func (s *Server) handleAgentPrompt(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +103,9 @@ func (s *Server) agentTools(user auth.User, r *http.Request, c *assistant.Chat, 
 		c.Run.Detail = diagnose.Secrets(req.Reason)
 		return assistant.Result{}, assistant.ErrWaiting
 	}})
+	if s.opts.Notify != nil && s.opts.Notify.Reachable(user.Name, notify.EventAgent) {
+		tools = append(tools, s.notifyMeTool(user, c))
+	}
 	if s.opts.Assistant.Settings().Access(assistant.AreaFiles) != "off" {
 		tools = append(tools, reading("file_undo_list", "Supported reversible file operations of this account. Expire after 30 minutes or service restart.", nil, false, func(ctx context.Context, args json.RawMessage) (any, error) {
 			data, err := s.internalGet(ctx, r, "/files/undo")
@@ -119,4 +125,44 @@ func (s *Server) agentTools(user auth.User, r *http.Request, c *assistant.Chat, 
 		}
 	}
 	return tools
+}
+
+// notifyMeTool lets the agent write to the account that owns the chat, through
+// that account's own channels and nobody else's. It changes nothing on the NAS.
+func (s *Server) notifyMeTool(user auth.User, c *assistant.Chat) assistant.Tool {
+	return reading("notify_me", "Send a short push message to the person who owns this chat, through the channels they set up (phone, mail). Use it when they asked to be told something, e.g. in an automation (\"send me …\", \"tell me when …\"). At most one per minute and 20 per hour.",
+		schema(map[string]any{
+			"title":    map[string]any{"type": "string", "maxLength": 120, "description": "Short headline."},
+			"text":     map[string]any{"type": "string", "maxLength": notify.MaxPersonalText, "description": "The message itself."},
+			"priority": enum("high only for problems that need attention soon; high is sent even in quiet hours.", "normal", "high"),
+		}, "title", "text"), false,
+		func(ctx context.Context, args json.RawMessage) (any, error) {
+			var req struct {
+				Title, Text, Priority string
+			}
+			if err := assistant.DecodeArgs(args, &req); err != nil {
+				return nil, err
+			}
+			req.Title, req.Text = strings.TrimSpace(req.Title), strings.TrimSpace(req.Text)
+			if req.Title == "" || req.Text == "" || len([]rune(req.Title)) > 120 || len([]rune(req.Text)) > notify.MaxPersonalText {
+				return nil, assistant.ErrInvalid
+			}
+			if c.DryRun {
+				return map[string]any{"sent": false, "reason": "dry run: no message was sent"}, nil
+			}
+			severity := notify.Info
+			if req.Priority == "high" {
+				severity = notify.Error
+			}
+			err := s.opts.Notify.SendPersonal(user.Name, "", notify.PersonalMessage{Event: notify.EventAgent, Severity: severity, Title: req.Title, Text: req.Text, Path: "/assistant?chat=" + url.QueryEscape(c.ID)})
+			switch {
+			case errors.Is(err, notify.ErrRateLimited):
+				return map[string]any{"sent": false, "reason": "rate limited: wait a minute, at most 20 per hour"}, nil
+			case errors.Is(err, notify.ErrUnreachable):
+				return map[string]any{"sent": false, "reason": "the person has no channel for agent messages"}, nil
+			case err != nil:
+				return nil, err
+			}
+			return map[string]any{"sent": true}, nil
+		})
 }
