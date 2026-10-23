@@ -34,7 +34,9 @@ func TestCheckRepository(t *testing.T) {
 	e := newEnv(t)
 	id := localJob(t, e)
 	var heard []string
-	e.m.OnCheck = func(job string, err error) { heard = append(heard, job+":"+map[bool]string{true: "ok", false: "failed"}[err == nil]) }
+	e.m.OnCheck = func(job string, err error) {
+		heard = append(heard, job+":"+map[bool]string{true: "ok", false: "failed"}[err == nil])
+	}
 	if err := e.m.Check(id, 5); err != nil {
 		t.Fatal(err)
 	}
