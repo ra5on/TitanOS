@@ -1,5 +1,5 @@
 {
-  "source": "a6f4bbe0bbc8653da042f2114258af663dbef755",
+  "source": "1012d6fd3285d06b6cec242720542f8e36a5fed8",
   "version": "0.20.0",
   "captured": "2026-10-24",
   "demoData": true,
@@ -81,8 +81,8 @@
       "file": "einstellungen.png",
       "width": 1600,
       "height": 1013,
-      "bytes": 326646,
-      "sha256": "dd3495acbdb50ff4b664d6efc74f1585853a09d25c2ed7b60fdae10cc6d87076"
+      "bytes": 326649,
+      "sha256": "8cd3842ba8761f74eb87f5cd9f63689d7773904d2bd37533ef55eada5ba72814"
     },
     {
       "file": "dateien-mobil.png",
