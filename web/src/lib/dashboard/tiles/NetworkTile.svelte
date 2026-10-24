@@ -34,10 +34,10 @@
 			</div>
 		</div>
 	{/if}
-	<dl>
+	<dl class:compact={!options.details && !options.link}>
 		<div>
 			<dt>{t('dashboard.interface')}</dt>
-			<dd class="mono">{network.interface}</dd>
+			<dd class="mono">{network.interface || '–'}</dd>
 		</div>
 		{#if options.ipv4}
 			<div>
@@ -81,6 +81,15 @@
 	</p>{/if}
 
 <style>
+	dl.compact {
+		gap: 5px;
+	}
+	dl.compact > div:first-child {
+		display: none;
+	}
+	dl.compact dt {
+		font-size: 11px;
+	}
 	.rates {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));

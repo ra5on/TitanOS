@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, type Account, type Share } from '#lib/api.ts';
@@ -31,6 +31,17 @@
 	let selected = $state(page.url.searchParams.get('share') ?? navigation.selected);
 	let tab = $state<'general' | 'access' | 'options'>('general');
 	const detailTabs = ['general', 'access', 'options'] as const;
+	$effect(() => {
+		const name = page.url.searchParams.get('share'),
+			requested = page.url.searchParams.get('tab');
+		if (name !== null)
+			untrack(() => {
+				selected = name;
+				query = '';
+				view = { ...view, volume: '', protocol: 'all' };
+				tab = detailTabs.includes(requested as typeof tab) ? (requested as typeof tab) : 'general';
+			});
+	});
 	let shares = $state<Share[] | null>(null),
 		accounts = $state<Account[]>([]);
 	let loading = $state(false),

@@ -72,7 +72,7 @@ try {
   telemetry(data);
   await page.goto(base + "/");
   await tile(page, "docker")
-    .getByRole("button", { name: "photos", exact: true })
+    .getByRole("button", { name: "photos: Container anzeigen", exact: true })
     .waitFor();
   assert.equal(
     await page
@@ -82,12 +82,12 @@ try {
   );
   assert.equal(
     await tile(page, "docker")
-      .getByRole("button", { name: "photos", exact: true })
+      .getByRole("button", { name: "photos: Container anzeigen", exact: true })
       .getAttribute("aria-expanded"),
     "false",
   );
   await tile(page, "docker")
-    .getByRole("button", { name: "photos", exact: true })
+    .getByRole("button", { name: "photos: Container anzeigen", exact: true })
     .click();
   await tile(page, "docker")
     .getByText("photos-web-1", { exact: true })
@@ -105,7 +105,9 @@ try {
     "–%",
   );
   await page.screenshot({ path: out + "/dashboard.png", fullPage: true });
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await tile(page, "docker").locator(".identity .entry-name").first().click();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(
@@ -115,7 +117,7 @@ try {
     "value",
   );
   await tile(page, "cpu")
-    .getByRole("button", { name: "Kachel anpassen: CPU", exact: true })
+    .getByRole("button", { name: "Kachel anpassen: Prozessor", exact: true })
     .click();
   await inspector(page)
     .getByRole("combobox", { name: "Ausgewähltes Element", exact: true })
@@ -175,8 +177,10 @@ try {
   );
   await page.screenshot({ path: out + "/editor.png", fullPage: true });
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
-  assert.equal(data.prefs.dashboard.version, 5);
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
+  assert.equal(data.prefs.dashboard.version, 6);
   assert.equal(data.prefs.dashboard.tileOptions.cpu.valueSize, 56);
   assert.equal(data.prefs.dashboard.tiles.find((t) => t.id === "cpu").h, 4);
   assert.equal(
@@ -195,9 +199,13 @@ try {
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   );
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
   assert.deepEqual(
     data.prefs.dashboard.tiles,
     saved.tiles,
@@ -205,7 +213,9 @@ try {
   );
   await page.screenshot({ path: out + "/mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await tile(page, "cpu")
     .getByRole("button", { name: "Kachel anpassen: Meine CPU", exact: true })
     .click();
@@ -223,7 +233,9 @@ try {
     1,
   );
   // Save errors keep the editable draft and allow a real retry.
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   data.failSave = true;
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await page.getByRole("alert").waitFor();
@@ -231,7 +243,9 @@ try {
   await page
     .getByRole("button", { name: "Erneut versuchen", exact: true })
     .click();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
   await page.goto(base + "/storage");
   await page.getByRole("button", { name: "Data", exact: true }).click();
   await page.locator(".storage-layout aside").waitFor();
@@ -325,7 +339,9 @@ try {
   };
   await regular.page.goto(base + "/");
   await tile(regular.page, "network").waitFor();
-  await regular.page.getByRole("button", { name: "Edit", exact: true }).click();
+  await regular.page
+    .getByRole("button", { name: "Edit dashboard", exact: true })
+    .click();
   await regular.page.getByRole("button", { name: "Save", exact: true }).click();
   assert.equal(regular.data.prefs.dashboard.tileOptions.network.ipv6, false);
   assert.equal(regular.data.prefs.dashboard.tiles[0].id, "network");

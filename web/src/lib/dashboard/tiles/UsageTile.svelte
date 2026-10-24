@@ -5,7 +5,11 @@
 	import type { TileOptions } from '../options.ts';
 	import Metric from './Metric.svelte';
 	import History from './History.svelte';
-	let { kind, options }: { kind: 'cpu' | 'memory'; options: TileOptions } = $props();
+	let {
+		kind,
+		options,
+		ondetails,
+	}: { kind: 'cpu' | 'memory'; options: TileOptions; ondetails: () => void } = $props();
 	const info = $derived(system.info);
 	const percent = $derived(
 		info
@@ -26,11 +30,21 @@
 </script>
 
 {#if info}
+	{#if kind === 'cpu' && options.details}<p class="cpu-model">
+			{info.cpu.model} · {t('system.threads', { count: info.cpu.threads })}
+		</p>{/if}
 	{#each options.parts as part}
 		{#if part === 'value'}<div data-part="value">
 				<Metric
 					value={percent}
-					label={t(kind === 'cpu' ? 'system.cpu' : 'system.memory')}
+					label={kind === 'cpu'
+						? t('dashboard.totalUsage')
+						: t('dashboard.memoryUsed', {
+								used: formatBytes(info.memory.usedBytes),
+								total: formatBytes(info.memory.totalBytes),
+							})}
+					compact={kind === 'cpu'}
+					showCompactLabel
 					{options}
 					history={systemHistory[kind]}
 				/>
@@ -40,7 +54,7 @@
 			>
 				<History values={systemHistory[kind]} />
 			</div>
-		{:else if part === 'temperature' && kind === 'cpu' && options.temperature}<div
+		{:else if part === 'temperature' && kind === 'cpu' && options.temperature && !options.showSummary}<div
 				class="detail"
 				data-part="temperature"
 				data-edit-part="labels"
@@ -49,23 +63,27 @@
 					>{temperature?.celsius == null ? '–' : `${temperature.celsius.toFixed(1)} °C`}</b
 				>
 			</div>
-		{:else if part === 'details' && options.details}<div
-				class="detail"
+		{:else if part === 'details' && options.details && kind === 'memory'}<div
+				class="detail memory-details"
 				data-part="details"
 				data-edit-part="labels"
 			>
-				{#if kind === 'cpu'}<span>{info.cpu.model}</span><b>{info.cpu.threads} Threads</b
-					>{:else}<span
-						>{t('system.memoryAvailable', { value: formatBytes(info.memory.availableBytes) })}</span
-					><b>{formatBytes(info.memory.usedBytes)} / {formatBytes(info.memory.totalBytes)}</b><span
-						>{t('system.memoryCache', { value: formatBytes(info.memory.cacheBytes ?? 0) })}</span
-					>{/if}
+				<div>
+					<span>{t('dashboard.memoryAvailable')}</span><b
+						>{formatBytes(info.memory.availableBytes)}</b
+					>
+				</div>
+				<div>
+					<span>{t('dashboard.memoryCache')}</span><b
+						>{info.memory.cacheBytes == null ? '–' : formatBytes(info.memory.cacheBytes)}</b
+					>
+				</div>
 			</div>{/if}
 		{#if part === 'details' && kind === 'cpu' && options.details && info.cpu.threadUsage?.length}<div
 				class="core-grid"
 			>
 				{#each info.cpu.threadUsage as core (core.id)}<div class="core">
-						<span>{core.id.toUpperCase()}</span>
+						<span>{core.id.toUpperCase().replace(/^CPU(?=\d)/, 'CPU ')}</span>
 						<div class="track"><span style:width="{core.usagePercent ?? 0}%"></span></div>
 						<span class="mono"
 							>{core.usagePercent === null ? '–' : Math.round(core.usagePercent) + '%'}</span
@@ -73,9 +91,20 @@
 					</div>{/each}
 			</div>{/if}
 	{/each}
+	{#if kind === 'cpu' && info.cpu.threadUsage?.length}<button
+			class="link thread-toggle"
+			onclick={ondetails}
+			>{t(options.details ? 'dashboard.hideThreads' : 'dashboard.showThreads')}</button
+		>{/if}
 {/if}
 
 <style>
+	.cpu-model {
+		margin: 0;
+		color: var(--tile-label-color);
+		font-size: var(--tile-label-size);
+		overflow-wrap: anywhere;
+	}
 	.core-grid {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -83,11 +112,31 @@
 	}
 	.core {
 		display: grid;
-		grid-template-columns: 50px minmax(0, 1fr) 38px;
+		grid-template-columns: minmax(0, max-content) minmax(12px, 1fr) max-content;
 		align-items: center;
 		gap: 7px;
 		font-size: var(--tile-label-size, 12px);
 		min-width: 0;
+	}
+	.core > span:first-child {
+		overflow-wrap: anywhere;
+	}
+	.memory-details > div {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		flex: 1;
+		min-width: 0;
+	}
+	.thread-toggle {
+		border: 0;
+		background: none;
+		padding: 0;
+		color: var(--muted);
+		font: inherit;
+		cursor: pointer;
+		align-self: flex-start;
+		font-size: var(--tile-label-size);
 	}
 	.core .mono {
 		text-align: right;
@@ -102,7 +151,7 @@
 		height: 100%;
 		background: var(--accent);
 	}
-	@media (max-width: 450px) {
+	@container (max-width: 500px) {
 		.core-grid {
 			grid-template-columns: minmax(0, 1fr);
 		}
