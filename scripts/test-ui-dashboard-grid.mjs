@@ -300,6 +300,12 @@ try {
     .getByText("192.168.1.50", { exact: true })
     .waitFor();
   await ready(page);
+  assert.ok(
+    await tile(page, "vms")
+      .locator(".vm-inline dt,.vm-inline dd")
+      .evaluateAll((es) => es.every((e) => e.scrollWidth <= e.clientWidth + 1)),
+    "inline VM details overflow",
+  );
   assert.equal(await tile(page, "vms").locator(".vm-inline").count(), 1);
   assert.equal(
     await tile(page, "vms")
