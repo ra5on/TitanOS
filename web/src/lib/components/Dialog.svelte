@@ -2,8 +2,24 @@
 	// A modal window. Escape and "Cancel" close it unless `locked` (work in progress).
 	import type { Snippet } from 'svelte';
 
-	type Props = { title: string; locked?: boolean; wide?: boolean; onrequestclose?: () => void; onclose: () => void; children: Snippet };
-	let { title, locked = false, wide = false, onrequestclose, onclose, children }: Props = $props();
+	type Props = {
+		title: string;
+		locked?: boolean;
+		wide?: boolean;
+		maxWidth?: number;
+		onrequestclose?: () => void;
+		onclose: () => void;
+		children: Snippet;
+	};
+	let {
+		title,
+		locked = false,
+		wide = false,
+		maxWidth,
+		onrequestclose,
+		onclose,
+		children,
+	}: Props = $props();
 
 	let dialog: HTMLDialogElement;
 	const id = $props.id();
@@ -14,11 +30,22 @@
 
 	function cancel(event: Event) {
 		if (locked) event.preventDefault();
-		else if (onrequestclose) { event.preventDefault(); onrequestclose(); }
+		else if (onrequestclose) {
+			event.preventDefault();
+			onrequestclose();
+		}
 	}
 </script>
 
-<dialog bind:this={dialog} class="tile" class:wide aria-labelledby="{id}-title" {onclose} oncancel={cancel}>
+<dialog
+	bind:this={dialog}
+	class="tile"
+	class:wide
+	style:max-width={maxWidth ? `${Math.max(320, Math.min(1400, maxWidth))}px` : undefined}
+	aria-labelledby="{id}-title"
+	{onclose}
+	oncancel={cancel}
+>
 	<h2 id="{id}-title">{title}</h2>
 	{@render children()}
 </dialog>
@@ -76,9 +103,17 @@
 		flex: none;
 		margin: 2px 0 0;
 	}
- @media (max-width: 760px) {
- dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); overflow-x: hidden; }
- dialog :global(.dialog-actions) { flex-wrap: wrap; }
- dialog :global(.dialog-actions > *) { flex: 1 1 auto; }
- }
+	@media (max-width: 760px) {
+		dialog {
+			width: calc(100% - 16px);
+			max-height: calc(100dvh - 16px);
+			overflow-x: hidden;
+		}
+		dialog :global(.dialog-actions) {
+			flex-wrap: wrap;
+		}
+		dialog :global(.dialog-actions > *) {
+			flex: 1 1 auto;
+		}
+	}
 </style>

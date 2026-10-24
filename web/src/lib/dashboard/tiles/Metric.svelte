@@ -19,7 +19,8 @@
 		showCompactLabel?: boolean;
 	} = $props();
 	const mode = $derived(options.display === 'auto' ? 'bar' : options.display);
-	const bounded = $derived(value === null ? 0 : Math.max(0, Math.min(100, value)));
+	const known = $derived(value !== null && Number.isFinite(value));
+	const bounded = $derived(!known ? 0 : Math.max(0, Math.min(100, value!)));
 </script>
 
 <div
@@ -29,8 +30,8 @@
 	class:compact-label={showCompactLabel}
 >
 	{#if mode === 'ring'}<svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true"
-			><circle class="track" cx="50" cy="50" r="43" />{#if value !== null}<circle
-					class="level"
+			><circle class="track" cx="50" cy="50" r="43" />{#if known}<circle
+					class="level metric-ring-level"
 					cx="50"
 					cy="50"
 					r="43"
@@ -39,7 +40,7 @@
 				/>{/if}</svg
 		>{/if}
 	<div class="reading" data-edit-part="value">
-		<span>{value === null ? '–' : Math.round(value)}</span><small>{unit}</small>
+		<span>{!known ? '–' : Math.round(value!)}</span><small>{unit}</small>
 	</div>
 	<span class="label" data-edit-part="labels">{label}</span>
 	{#if compact && mode === 'bar'}<div
@@ -48,9 +49,9 @@
 			aria-label={label}
 			aria-valuemin="0"
 			aria-valuemax="100"
-			aria-valuenow={value === null ? undefined : bounded}
+			aria-valuenow={!known ? undefined : bounded}
 		>
-			<span style:width="{bounded}%"></span>
+			<span class="metric-level" class:unknown={!known} style:width="{bounded}%"></span>
 		</div>{/if}
 </div>
 {#if mode === 'bar' && !compact}<div
@@ -58,10 +59,10 @@
 		role="progressbar"
 		aria-valuemin="0"
 		aria-valuemax="100"
-		aria-valuenow={value === null ? undefined : bounded}
+		aria-valuenow={!known ? undefined : bounded}
 		aria-label={label}
 	>
-		<span style:width="{bounded}%"></span>
+		<span class="metric-level" class:unknown={!known} style:width="{bounded}%"></span>
 	</div>{/if}
 {#if mode === 'history'}<History values={history} />{/if}
 

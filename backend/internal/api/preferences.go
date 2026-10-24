@@ -115,6 +115,10 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var value json.RawMessage
+	if kind == "dashboard" && isMultipartImageUpload(r) {
+		s.handlePutDashboardImages(w, r)
+		return
+	}
 	if kind == "dashboard" {
 		r.Body = http.MaxBytesReader(w, r.Body, maxDashboardPreferences)
 		if !readJSONBody(w, r, &value) {
@@ -125,6 +129,10 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isJSONObject(value) {
 		writeError(w, http.StatusBadRequest, "bad_request", "preferences must be a JSON object")
+		return
+	}
+	if kind == "dashboard" {
+		s.saveDashboard(w, r, value, nil)
 		return
 	}
 	user := currentUser(r).Name

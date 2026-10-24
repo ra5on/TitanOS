@@ -522,9 +522,11 @@ Wartungseinstellungen und Dialogentwürfe sind getrennt. Genaue Regeln und Grenz
 [WORKFLOWS.md](../WORKFLOWS.md), Prüfstand [0.17.0](../releases/v0.17.0.md).
 VM-Gastagent-/Freeze-Sicherung bleibt ein eigener späterer Ausbau.
 
-### Persönliche Startseite, Speicher und Einstellungen (0.18.0)
+### Persönliche Startseite, Speicher und Einstellungen (0.20.0)
 
 [Bestätigter Folgeentwurf](PersonalDashboard.md): eine anpassbare Startseite mit
-visuellem Editor, kompakte Speicherlisten und thematisch gruppierte Einstellungen.
+visuellem Editor, globalen Glasreglern und persönlicher Hintergrundgalerie,
+kompakte Speicherlisten und thematisch gruppierte Einstellungen. Die zehn lokalen
+Motive und ihre Herkunft stehen in [DashboardBackgrounds.md](DashboardBackgrounds.md).
 Er ersetzt die älteren Dashboard-/Editor- und Übersichtsregeln einschließlich
 der Aufmerksamkeit-/Auftragsfläche auf der Startseite.

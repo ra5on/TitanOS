@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
 	import TasksPanel from './TasksPanel.svelte';
+	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -85,6 +86,7 @@
 	const fab = $derived(
 		!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant',
 	);
+	const motion = $derived(dashboardVisual(session.dashboard?.visual));
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -107,6 +109,7 @@
 {/if}
 <div
 	class="shell"
+	style:--metric-duration={`${motion.motion ? motion.duration : 0}ms`}
 	style:padding-bottom={admin && terminal.open && !terminal.full
 		? `${terminal.height}px`
 		: undefined}
@@ -168,7 +171,9 @@
 		flex-direction: column;
 		gap: var(--gap);
 	}
-	main.dashboard { padding-top:12px; }
+	main.dashboard {
+		padding-top: 12px;
+	}
 	.fab {
 		position: fixed;
 		right: 20px;
@@ -195,8 +200,10 @@
 		outline-offset: 2px;
 	}
 	@media (max-width: 760px) {
-		main.dashboard { padding-top:12px; }
-	.fab {
+		main.dashboard {
+			padding-top: 12px;
+		}
+		.fab {
 			right: 14px;
 			bottom: 40px;
 		}

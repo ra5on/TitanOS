@@ -40,13 +40,17 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Ein frei gestaltbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
 - **Anpassbare Aufteilung:** ein bis vier Spalten und eine Mindestbreite festlegen. Bei schmaleren Fenstern wandern die Inhalte in ihrer Lesereihenfolge nach unten; Kacheln können automatisch wachsen oder eine feste Höhe mit scrollbarem Inhalt bekommen.
 - **Gestaltung je Kachel:** Schriftgrößen für Titel, Werte und Beschriftungen, Messwertdarstellung, Farben, Hintergrund, Rahmen, Ecken, Schatten und Abstände. Bei Apps zusätzlich Symbolgröße, Eintragsbreite und Namenszeilen. Stile lassen sich übertragen.
+- **Hintergrund und Glas selbst gestalten:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto. Das ganze Bild anzeigen oder Ausschnitt, Position und Zoom wählen. Globale Schieberegler für Transparenz, Blur, Glow mit Farbe und Abdunklung; einzelne Kacheln können eigene Werte behalten.
+- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe; die Bewegungsreduktion des Browsers wird berücksichtigt.
 - **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
 - **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
 - **Visueller Editor mit Vorschau:** Änderungen direkt sehen, rückgängig machen, wiederholen, speichern oder verwerfen.
 
-[![Dashboard-Editor mit ausgewählter Docker-Kachel und Einstellungen für deren Darstellung](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
+[![Dashboard-Editor mit globalen Schiebereglern für Transparenz, Blur und Glow](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
 
-[VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
+[![Hintergrundgalerie mit zehn lokalen Motiven und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
+
+[Eigene Bilder hinzufügen und auswählen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
 
 ### Speicher und Laufwerke
 

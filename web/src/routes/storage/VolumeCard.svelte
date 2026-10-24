@@ -58,7 +58,7 @@
 				<span>{syncTitle}</span>
 				<span class="mono percent">{formatPercent(volume.sync.percent)}</span>
 			</div>
-			<div class="track"><span style:width="{volume.sync.percent}%"></span></div>
+			<div class="track"><span class="metric-level" style:width="{volume.sync.percent}%"></span></div>
 			<div class="sync-bottom">
 				<span class="mono">{syncRate}</span>
 				<span>{syncNote}</span>
@@ -89,7 +89,7 @@
 				<span class="label">{t('storage.used')}</span>
 				<span class="mono">{t('storage.usedOf', { used: formatDiskBytes(volume.usedBytes), total: formatDiskBytes(volume.sizeBytes) })}</span>
 			</div>
-			<div class="bar"><span style:width="{usedPercent}%"></span></div>
+			<div class="bar"><span class="metric-level" style:width="{usedPercent}%"></span></div>
 		</div>
 	{/if}
 	{#if volume.mismatches > 0}

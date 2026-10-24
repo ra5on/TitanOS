@@ -1,15 +1,15 @@
-# Persönliche Startseite, Speicher und Einstellungen (0.19.1)
+# Persönliche Startseite, Speicher und Einstellungen (0.20.0)
 
 Dieser bestätigte Folgeentwurf ersetzt die älteren Dashboard-, Speicherübersichts-
 und Einstellungsübersichtsregeln. Es gibt **eine** Startseite pro Konto, keine
 Ansichten, Profile oder wechselnden Dashboards. Shares, Dateien und Nutzer
 behalten ihre bestehende Gestaltung. Keine LUKS-Verschlüsselung.
 
-## Dashboard (bestätigter Folgeentwurf 0.19.1)
+## Dashboard (bestätigter Folgeentwurf 0.20.0)
 
 ### Aufbau
 
-Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger Hintergrund, schmale Abschnittsköpfe, kompakte Zeilen und Anwendungsraster. Keine dekorativen großen Messwerte, leeren Karten oder Hintergrundlichter. TitanOS behält Marke, Navigation, IBM Plex und eigene Symbole. Eine persönliche Startseite, keine Ansichten/Profile. Keine Aufmerksamkeit-/Auftragsfläche.
+Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger Hintergrund, schmale Abschnittsköpfe, kompakte Zeilen und Anwendungsraster. Keine dekorativen großen Messwerte oder leeren Karten. Hintergrund und dezenter Glow sind persönlich einstellbar. TitanOS behält Marke, Navigation, IBM Plex und eigene Symbole. Eine persönliche Startseite, keine Ansichten/Profile. Keine Aufmerksamkeit-/Auftragsfläche.
 
 ### Reihenfolge und Spalten
 
@@ -33,6 +33,39 @@ Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger H
 Der Startseitenkopf entfällt; der Editor-Knopf liegt in der Hauptnavigation. Abschnittsköpfe zeigen optional eine aktuelle Zusammenfassung; Kacheln lassen sich einklappen. Eintragsbegrenzungen zeigen Anzahl und „Alle anzeigen“. Laufend-Filter und CPU-Threads sind direkt bedienbar. App-Symbolgröße, Eintragsbreite und Namenszeilen sind pro Kachel einstellbar.
 
 Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
+
+
+### Globale Darstellung, Hintergrund und Bewegung
+
+Der Editor öffnet „Gesamtes Dashboard“ mit den Reitern Oberfläche, Hintergrund
+und Animationen. Transparenz (0–90 %), Blur (0–40 px), Glow (0–100 %, eigene
+Farbe) und Abdunklung (0–80 %) haben Schieberegler und sichtbare Werte. Nur die
+Kachelflächen werden transparent; Schrift und Icons bleiben deckend. Einzelne
+Kacheln können diese Flächenwerte ausdrücklich überschreiben. Eine komplette
+Reglerbewegung zählt als ein Rückgängig-Schritt.
+
+Zehn lokal ausgelieferte Originalmotive stehen in einer Galerie bereit; Herkunft
+und Prompts in [DashboardBackgrounds.md](DashboardBackgrounds.md). Bis zu fünf
+eigene Bilder je Konto lassen sich per Dateiauswahl oder Drag-and-drop ergänzen
+(JPEG/PNG/WebP, je maximal 10 MiB). Bildvorschau, Auswahl und Entfernen sind
+zunächst Entwürfe. „Hintergrund verwenden“ übernimmt die Galerie in die
+Dashboard-Vorschau; erst „Speichern“ überträgt neue Bilder und übernimmt die
+Auswahl atomar. Fehler erhalten den vorherigen gespeicherten Stand. Abbrechen
+verwirft die Vorschau. Andere Konten erhalten keinen Zugriff auf eigene Bilder.
+
+Das ganze Bild bleibt standardmäßig sichtbar (Einpassen); Füllen, Position,
+Zoom und feststehender oder mitlaufender Hintergrund sind optional. Vorhandene
+Darstellungseinstellungen können übernommen werden. Der Hintergrund reicht
+über die Dashboard-Fläche zwischen Navigation und Statusleiste; keine deckende
+Dashboard-Unterlage verdeckt ihn. Ohne Blur-Unterstützung und bei reduzierter
+Transparenz bleiben Kacheln deckend.
+
+Balken, Ringe und Verläufe wechseln in 450 ms weich zum neuen echten Messwert;
+der Übergang ist zwischen 150 und 1000 ms einstellbar oder abschaltbar.
+Bewegungsreduktion des Browsers gilt zusätzlich. Die Erfassungsintervalle bleiben
+unverändert, unbekannte Werte bleiben Lücken. Verlaufspunkte haben feste Plätze;
+Docker-Verläufe verwenden eine während der Anzeige stabile, bei Bedarf weich
+wachsende Skala. Verdeckte Seiten benötigen keine laufende Animationsschleife.
 
 
 Bestehende Layouts werden einmal nach Zeile und Spalte in die Lesereihenfolge übernommen.
@@ -61,6 +94,6 @@ Suche behält Abschnittsziele, Rollen und bestehende Weiterleitungen.
 
 ## Prüfungen
 
-`scripts/test-ui-dashboard-grid.mjs`, `scripts/test-ui-dashboard-flow.mjs` und `scripts/test-ui-personal-dashboard.mjs` prüfen echte Browserbedienung gegen
+`scripts/test-ui-dashboard-visual.mjs`, `scripts/test-ui-dashboard-grid.mjs`, `scripts/test-ui-dashboard-flow.mjs` und `scripts/test-ui-personal-dashboard.mjs` prüfen echte Browserbedienung gegen
 isolierte API-Daten; Ergebnisse und Hardwaregrenzen stehen in den Release-Notizen.
 Beispieldaten der Entwürfe und Tests gehören niemals ins Produkt.

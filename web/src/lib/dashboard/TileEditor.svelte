@@ -55,7 +55,9 @@
 	const ranges = [
 		['padding', 8, 40],
 		['radius', 0, 40],
-		['opacity', 35, 100],
+		['opacity', 10, 100],
+		['blur', 0, 40],
+		['glow', 0, 100],
 		['borderWidth', 0, 4],
 		['shadow', 0, 40],
 		['gap', 2, 30],
@@ -185,7 +187,13 @@
 					>
 				</fieldset>{/if}
 			<fieldset>
-				<legend>{t('dashboard.editor.surface')}</legend>
+				<legend>{t('dashboard.editor.surface')}</legend><label
+					><input
+						type="checkbox"
+						checked={settings.surfaceOverride}
+						onchange={(e) => onchange('surfaceOverride', e.currentTarget.checked)}
+					/>{t('dashboard.visual.override')}</label
+				>
 				<label
 					>{t('dashboard.editor.density')}<select
 						class="field"
@@ -198,13 +206,14 @@
 				>
 				{#each ranges as [key, min, max]}<label
 						>{t(`dashboard.editor.${key}` as MessageKey)}<output
-							>{settings[key]} {key === 'opacity' ? '%' : 'px'}</output
+							>{settings[key]} {['opacity', 'glow'].includes(key) ? '%' : 'px'}</output
 						><input
 							type="range"
 							aria-label={t(`dashboard.editor.${key}` as MessageKey)}
 							{min}
 							{max}
 							value={settings[key]}
+							disabled={['opacity', 'blur', 'glow'].includes(key) && !settings.surfaceOverride}
 							oninput={(e) => onchange(key, Number(e.currentTarget.value))}
 						/></label
 					>{/each}
