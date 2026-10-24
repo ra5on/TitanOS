@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.16.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.16.1)** · Veröffentlicht am 23. Oktober 2026. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.17.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.17.0)** · Veröffentlichungsdatum auf der Release-Seite. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -22,6 +22,15 @@ Die Screenshots zeigen die Weboberfläche von **0.7.2** (VMs), **0.7.1** (Dateim
 TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
+
+## Neu in 0.17.0
+
+- **Datenkorrekturen:** Snapshot-Aufbewahrung prüft Btrfs-UUIDs, Anwendungssicherungen erkennen weitere Schreiber auch bei VM-Aufträgen. Alle restic-Wiederherstellungen verwenden geprüfte neue Kopien und Veröffentlichung ohne Überschreiben.
+- **Auftragszentrale:** Filter, bekannte abgeschlossene Ergebnisse, eigene KI-Aufträge/Automationen und Upload-Fortschritt; gemeinsame Fehlerbewertung mit dem Dashboard und direkte unterstützte Steuerung.
+- **Wartung:** erfolgreiche Vorgänger, optionaler Backup-Vorrang, sichtbare Wartegründe und vollständigere Sperren. Abbrechen und Wiederanlaufdetails korrigiert.
+- **Sicherungen:** Abdeckung ausdrücklich ausgewählter Shares, Container und VMs; geführte Anwendungswiederherstellung in einen neuen Ordner mit historischen Anwendungsdaten, soweit im Archiv vorhanden.
+- **Monitoring und Übersicht:** CSV/JSON, vorsichtige Kapazitätsprognose, RAID-/Restore-Vorschau und grafische Speicheranteile. Betroffene Seiten und Backend-Abläufe aufgeräumt.
+- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen, genaue Grenzen und Prüfstand](docs/releases/v0.17.0.md).
 
 ## Neu in 0.16.1
 
@@ -71,7 +80,7 @@ ist nicht vorgesehen.
 - **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
 - **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
 
-Alle Änderungen: [0.16.0](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0) · [0.15.0](https://github.com/ra5on/TitanOS/releases/tag/v0.15.0) · [0.14.0](https://github.com/ra5on/TitanOS/releases/tag/v0.14.0) · [0.13.0](https://github.com/ra5on/TitanOS/releases/tag/v0.13.0) · [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+Alle Änderungen: [0.17.0](https://github.com/ra5on/TitanOS/releases/tag/v0.17.0) · [0.16.1](https://github.com/ra5on/TitanOS/releases/tag/v0.16.1) · [0.16.0](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0) · [0.15.0](https://github.com/ra5on/TitanOS/releases/tag/v0.15.0) · [0.14.0](https://github.com/ra5on/TitanOS/releases/tag/v0.14.0) · [0.13.0](https://github.com/ra5on/TitanOS/releases/tag/v0.13.0) · [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
 
 ## Funktionen
 
@@ -169,9 +178,9 @@ Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
 
 ## Installation
 
-Die Dateien für **0.16.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0). Für einen neuen Stick:
+Die Dateien für **0.17.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.17.0). Für einen neuen Stick:
 
-1. `titanos-0.16.0.zip`, `titanos-0.16.0.zip.minisig` und `titanos-0.16.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
+1. `titanos-0.17.0.zip`, `titanos-0.17.0.zip.minisig` und `titanos-0.17.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
 2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
 3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
 4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.

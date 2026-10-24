@@ -191,15 +191,15 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage/disk-sleep", s.requireAdmin(s.handleDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
 	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
-	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireAdmin(s.handleCreateVolume))
-	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireAdmin(s.handleDeleteVolume))
-	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireAdmin(s.handleAddVolumeDisk))
-	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireAdmin(s.handleRemoveVolumeDisk))
-	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireAdmin(s.handleCheckVolume))
+	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireHeavyAdmin(s.handleCreateVolume))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireHeavyAdmin(s.handleAddVolumeDisk))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireHeavyAdmin(s.handleRemoveVolumeDisk))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireHeavyAdmin(s.handleCheckVolume))
 	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshots))
-	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshotAction))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireHeavyAdmin(s.handleSnapshotAction))
 	mux.HandleFunc("GET /api/v1/storage/tests", s.requireAdmin(s.handleDiskTests))
-	mux.HandleFunc("POST /api/v1/storage/tests", s.requireAdmin(s.handleDiskTestStart))
+	mux.HandleFunc("POST /api/v1/storage/tests", s.requireHeavyAdmin(s.handleDiskTestStart))
 	mux.HandleFunc("DELETE /api/v1/storage/tests/{disk}", s.requireAdmin(s.handleDiskTestStop))
 
 	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
@@ -275,14 +275,14 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAdmin(s.handleContainerAction))
 	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAdmin(s.handleContainerRemove))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", s.requireAdmin(s.handleContainerLogs))
-	mux.HandleFunc("POST /api/v1/docker/apps", s.requireAdmin(s.handleAppCreate))
+	mux.HandleFunc("POST /api/v1/docker/apps", s.requireHeavyAdmin(s.handleAppCreate))
 	mux.HandleFunc("GET /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppCompose))
 	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppRemove))
 	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppSetCompose))
-	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireAdmin(s.handleAppUpdate))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireHeavyAdmin(s.handleAppUpdate))
 	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/job", s.requireAdmin(s.handleAppJobDismiss))
 	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
-	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireAdmin(s.handleUpdatesApply))
+	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
 
 	// The app store: templates to install as Docker apps.
@@ -294,7 +294,7 @@ func New(opts Options) *Server {
 
 	// Virtual machines. Like containers: administrators only.
 	mux.HandleFunc("GET /api/v1/vms", s.requireAdmin(s.handleVMs))
-	mux.HandleFunc("POST /api/v1/vms", s.requireAdmin(s.handleVMCreate))
+	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
@@ -310,12 +310,12 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
 	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshots))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshotCreate))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAdmin(s.handleVMSnapshotCreate))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAdmin(s.handleVMSnapshotSchedule))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", s.requireAdmin(s.handleVMSnapshotRecover))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", s.requireAdmin(s.handleVMSnapshotRestore))
-	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", s.requireAdmin(s.handleVMSnapshotDelete))
-	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireAdmin(s.handleVMGrow))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", s.requireHeavyAdmin(s.handleVMSnapshotRecover))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", s.requireHeavyAdmin(s.handleVMSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", s.requireHeavyAdmin(s.handleVMSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireHeavyAdmin(s.handleVMGrow))
 	mux.HandleFunc("GET /api/v1/vms/{name}/serial", s.requireAdmin(s.handleVMSerial))
 	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAdmin(s.handleVMUpdate))
 	mux.HandleFunc("DELETE /api/v1/vms/{name}", s.requireAdmin(s.handleVMDelete))
@@ -367,8 +367,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireAdmin(s.handleBackupDelete))
 	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots", s.requireAdmin(s.handleBackupSnapshots))
 	mux.HandleFunc("GET /api/v1/backups/{id}/password", s.requireAdmin(s.handleBackupPassword))
-	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireAdmin(s.handleBackupRestore))
-	mux.HandleFunc("POST /api/v1/backups/{id}/check", s.requireAdmin(s.handleBackupCheck))
+	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireHeavyAdmin(s.handleBackupRestore))
+	mux.HandleFunc("POST /api/v1/backups/{id}/check", s.requireHeavyAdmin(s.handleBackupCheck))
 	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots/{snapshot}/files", s.requireAdmin(s.handleBackupFiles))
 	mux.HandleFunc("POST /api/v1/backups/{id}/{action}", s.requireAdmin(s.handleBackupAction))
 	mux.HandleFunc("GET /api/v1/ups", s.requireAdmin(s.handleUPS))
@@ -432,7 +432,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
-	mux.HandleFunc("POST /api/v1/plugins", s.requireAdmin(s.handlePluginInstall))
+	mux.HandleFunc("POST /api/v1/plugins", s.requireHeavyAdmin(s.handlePluginInstall))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))
 	mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.requireAdmin(s.handlePluginRemove))
 
@@ -571,14 +571,6 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		if !currentUser(r).Role.CanAdminister() {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner or administrator")
 			return
-		}
-		if s.opts.Maintenance != nil && heavyOperation(r) {
-			leave, err := s.opts.Maintenance.Enter()
-			if err != nil {
-				writeError(w, http.StatusLocked, "maintenance_running", err.Error())
-				return
-			}
-			defer leave()
 		}
 		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
 			if !gate.Gate.TryRLock() {

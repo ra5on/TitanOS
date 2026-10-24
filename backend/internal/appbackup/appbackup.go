@@ -163,110 +163,19 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 		op.Members = append(op.Members, Member{Kind: a.Kind, Name: a.Name, Identity: l.Identity(), Running: l.Running, Method: a.Method, Phase: "planned"})
 		paths = append(paths, l.Paths()...)
 	}
-	needDocker := slices.ContainsFunc(job.Applications, func(a backup.Application) bool { return a.Kind == "docker" })
-	if needDocker {
-		dl, err = m.Docker.BackupLease(ctx)
-		if err != nil {
-			return fail(err)
-		}
-		containers, err := dl.Containers(ctx)
-		if err != nil {
-			return fail(err)
-		}
-		selected := map[string]bool{}
-		for _, a := range job.Applications {
-			if a.Kind != "docker" {
-				continue
-			}
-			i := slices.IndexFunc(containers, func(c docker.Container) bool { return c.Name == a.Name })
-			if i < 0 {
-				return fail(errors.New("selected container is unavailable"))
-			}
-			c := containers[i]
-			if c.State != "running" && c.State != "exited" && c.State != "created" {
-				return fail(errors.New("container is not in a stable state"))
-			}
-			if a.Method == "postgres-export" && c.State != "running" {
-				return fail(errors.New("PostgreSQL export requires a running container"))
-			}
-			selected[c.ID] = a.Method == "stop"
-			op.Members = append(op.Members, Member{Kind: a.Kind, Name: a.Name, Identity: c.ID, Running: c.State == "running", Method: a.Method, Phase: "planned"})
-			if a.Method == "stop" {
-				mounts, err := dl.Mounts(ctx, c.ID)
-				if err != nil {
-					return fail(err)
-				}
-				for _, mount := range mounts {
-					if mount.Writable {
-						paths = append(paths, mount.Source)
-					}
-				}
-			}
-		}
-		// A running unselected writer would invalidate a cold volume backup.
-		for _, c := range containers {
-			if c.State != "running" || selected[c.ID] {
-				continue
-			}
-			mounts, err := dl.Mounts(ctx, c.ID)
-			if err != nil {
-				return fail(err)
-			}
-			for _, mount := range mounts {
-				if !mount.Writable {
-					continue
-				}
-				for _, p := range append(slices.Clone(rawPaths), paths...) {
-					if within(mount.Source, p) || within(p, mount.Source) {
-						return fail(errors.New("another running container writes a selected backup path"))
-					}
-				}
-			}
-		}
+	var dockerMembers []Member
+	var dockerPaths []string
+	dl, dockerMembers, dockerPaths, err = m.prepareDocker(ctx, job.Applications, append(slices.Clone(rawPaths), paths...))
+	if err != nil {
+		return fail(err)
 	}
-	for _, machine := range m.VMs.List(m.Mounted()) {
-		if machine.State != "running" || leases[machine.Name] != nil {
-			continue
-		}
-		folder := machine.Directory
-		if folder == "" {
-			folder = machine.Name
-		}
-		vmPaths := []string{filepath.Join(m.MountRoot, machine.Volume, "vms", folder)}
-		for _, d := range machine.Disks {
-			p := d.Path
-			if p == "" {
-				volume := d.Volume
-				if volume == "" {
-					volume = machine.Volume
-				}
-				p = filepath.Join(m.MountRoot, volume, "vms", folder, d.File)
-			}
-			vmPaths = append(vmPaths, p)
-		}
-		for _, live := range vmPaths {
-			for _, p := range append(slices.Clone(rawPaths), paths...) {
-				if within(live, p) || within(p, live) {
-					return fail(errors.New("another running VM writes a selected backup path"))
-				}
-			}
-		}
+	op.Members = append(op.Members, dockerMembers...)
+	paths = append(paths, dockerPaths...)
+	if err := m.checkVMWriters(leases, append(slices.Clone(rawPaths), paths...)); err != nil {
+		return fail(err)
 	}
-
-	for _, p := range paths {
-		rel, err := filepath.Rel(m.MountRoot, p)
-		parts := strings.Split(rel, string(filepath.Separator))
-		if err != nil || len(parts) < 2 || strings.HasPrefix(rel, "..") || !slices.Contains(m.Mounted(), parts[0]) || (job.Destination.Type == "local" && parts[0] == job.Destination.Volume) {
-			return fail(errors.New("application data must be on a mounted source volume separate from the backup destination"))
-		}
-		current := m.MountRoot
-		for _, part := range parts {
-			current = filepath.Join(current, part)
-			info, err := os.Lstat(current)
-			if err != nil || info.Mode()&os.ModeSymlink != 0 {
-				return fail(errors.New("application data path changed or is a symlink"))
-			}
-		}
+	if err := m.validateApplicationPaths(job, paths); err != nil {
+		return fail(err)
 	}
 	if err := root.Mkdir(op.ID, 0700); err != nil {
 		return fail(err)
@@ -367,6 +276,9 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 			}
 		}
 	}
+	// Include the captured application identities and pre-backup states in new
+	// archives so a restored copy can be reviewed independently of live settings.
+	paths = append(paths, filepath.Join(m.MountRoot, volume, ".titanos", "appbackups", op.ID, "operation.json"))
 	return paths, finish, nil
 }
 func within(p, parent string) bool {
@@ -407,6 +319,31 @@ func dumpPostgres(ctx context.Context, id, target string) error {
 	}
 	return file.Sync()
 }
+
+// Review reads the execution journal only on an explicit authorized request.
+func (m *Manager) Review() (*Operation, bool, error) {
+	op, active := m.Status()
+	if op == nil || active {
+		return op, active, nil
+	}
+	if m.Mounted == nil {
+		return op, active, volumedata.ErrUnavailable
+	}
+	root, err := volumedata.Open(m.MountRoot, op.Volume, "appbackups", m.Mounted())
+	if err != nil {
+		return op, active, err
+	}
+	defer root.Close()
+	var saved Operation
+	if err := volumedata.ReadJSON(root, op.ID+"/operation.json", &saved, 1<<20); err != nil {
+		return op, active, err
+	}
+	if saved.ID != op.ID || saved.Volume != op.Volume || saved.Job != op.Job {
+		return op, active, errors.New("application recovery identity mismatch")
+	}
+	return &saved, active, nil
+}
+
 func (m *Manager) Recover(ctx context.Context, confirm string, restart bool) error {
 	if m.Disabled {
 		return backup.ErrDisabled

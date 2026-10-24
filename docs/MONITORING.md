@@ -87,3 +87,9 @@ Beobachtungslücken/Zählerrücklauf bleiben erkennbar; Speicherung kann ruhende
 Datenplatten wecken. Die kurzen RAM-Verläufe des Dashboards bleiben erhalten.
 Einzelheiten, Fehler-/Aufbewahrungsregeln und Prüfgrenzen in
 [WORKFLOWS.md](WORKFLOWS.md#längere-monitoring-verläufe).
+
+Seit 0.17.0 können die Werte mit Messlücken als CSV/JSON exportiert werden.
+Die optionale Kapazitätsentwicklung auf derselben Seite verwendet nur ausreichend
+lange, frische zusammenhängende Messungen. Fehlende oder stark schwankende Daten
+bleiben unbekannt. Hinweise sind auf der geladenen Seite sichtbar; es gibt dafür
+keine zusätzlichen Push-Meldungen. Genaue Grenzen in [WORKFLOWS.md](WORKFLOWS.md).

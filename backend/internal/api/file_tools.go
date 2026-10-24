@@ -192,6 +192,13 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !req.Paused {
+		if s.opts.Maintenance != nil {
+			leave, ok := s.admitOperation(w)
+			if !ok {
+				return
+			}
+			defer leave()
+		}
 		src, ok := s.fileRoot(w, r, job.From)
 		if !ok {
 			return

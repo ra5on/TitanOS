@@ -628,3 +628,15 @@ func (m *Manager) AppsWithUpdates(ctx context.Context) []string {
 	}
 	return apps
 }
+
+// Busy reports known backend-owned app work without querying the engine.
+func (m *Manager) Busy() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if job.State == "running" {
+			return true
+		}
+	}
+	return false
+}

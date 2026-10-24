@@ -219,3 +219,26 @@ func overdue(job Job, state State, now time.Time) bool {
 	}
 	return len(job.slots(from, now)) >= 2
 }
+
+// DueSoon lets maintenance yield before a scheduled backup without interrupting
+// already running work. It only inspects in-memory settings and states.
+func (m *Manager) DueSoon(now time.Time, ahead time.Duration) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if !job.Enabled {
+			continue
+		}
+		state := State{}
+		if st := m.states[job.ID]; st != nil {
+			state = *st
+		}
+		if due(job, state, now) {
+			return true
+		}
+		if next, ok := job.NextRun(now); ok && !next.After(now.Add(ahead)) {
+			return true
+		}
+	}
+	return false
+}
