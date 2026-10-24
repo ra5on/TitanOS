@@ -72,13 +72,16 @@ type Settings struct {
 
 // MQTT is the broker Home Assistant's MQTT integration uses.
 type MQTT struct {
-	Devices  map[string][]string `json:"devices,omitempty"`
-	Enabled  bool                `json:"enabled"`
-	Host     string              `json:"host"`
-	Port     int                 `json:"port"`
-	Username string              `json:"username"`
-	Password string              `json:"password,omitempty"`
-	TLS      bool                `json:"tls"`
+	// ExtraGroups is a storage compatibility field. The live/API Groups contains
+	// every selected group; older apps only see their known Groups on disk.
+	ExtraGroups []string            `json:"extraGroups,omitempty"`
+	Devices     map[string][]string `json:"devices,omitempty"`
+	Enabled     bool                `json:"enabled"`
+	Host        string              `json:"host"`
+	Port        int                 `json:"port"`
+	Username    string              `json:"username"`
+	Password    string              `json:"password,omitempty"`
+	TLS         bool                `json:"tls"`
 	// Prefix is Home Assistant's discovery prefix, homeassistant by default.
 	Prefix string `json:"prefix"`
 	// Groups of sensors: system, volumes, disks, containers, vms, ups.
@@ -93,8 +96,9 @@ type MQTT struct {
 
 // SensorGroups and CommandGroups are the choices in MQTT.
 var (
-	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work", "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity"}
-	CommandGroups = []string{"containers", "vms", "backups", "updates", "power"}
+	legacySensorGroups = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
+	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity")
+	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power"}
 )
 
 // Levels of a service call, as the assistant's actions know them.
@@ -170,6 +174,13 @@ func (m *Manager) Load() error {
 		return err
 	}
 	mqttDefaults(&settings.MQTT)
+	for _, group := range settings.MQTT.ExtraGroups {
+		if slices.Contains(SensorGroups, group) {
+			settings.MQTT.Groups = append(settings.MQTT.Groups, group)
+		}
+	}
+	settings.MQTT.Groups = slices.Compact(slices.Sorted(slices.Values(settings.MQTT.Groups)))
+	settings.MQTT.ExtraGroups = nil
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
@@ -236,6 +247,7 @@ func (m *Manager) SetSettings(s Settings, clear ...string) error {
 	if s.MQTT.Password == "" && !slices.Contains(clear, "mqtt") {
 		s.MQTT.Password = m.settings.MQTT.Password
 	}
+	s.MQTT.ExtraGroups = nil // only Load interprets the on-disk compatibility field
 	if err := checkMQTT(&s.MQTT, m.settings.MQTT.ID); err != nil {
 		return err
 	}
@@ -288,7 +300,16 @@ func (m *Manager) SetSettings(s Settings, clear ...string) error {
 		return err
 	}
 	s.Policies = clonePolicies(s.Policies)
-	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+	persisted := s
+	persisted.MQTT.Groups = []string{}
+	for _, group := range s.MQTT.Groups {
+		if slices.Contains(legacySensorGroups, group) {
+			persisted.MQTT.Groups = append(persisted.MQTT.Groups, group)
+		} else {
+			persisted.MQTT.ExtraGroups = append(persisted.MQTT.ExtraGroups, group)
+		}
+	}
+	if err := m.store.WriteJSON(settingsFile, persisted); err != nil {
 		return err
 	}
 	m.settings = s

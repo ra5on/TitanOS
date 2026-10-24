@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -236,4 +237,44 @@ func TestMQTTFilteredReconnectKeepsSelectedUnavailableDiscovery(t *testing.T) {
 	unavailable = false
 	mu.Unlock()
 	eventually(t, "confirmed removal after recovery", func() bool { return b.get(func(b *fakeBroker) bool { return b.retained[selected] == "" }) })
+}
+
+func TestNewMQTTGroupsRemainEditableByPreviousApp(t *testing.T) {
+	store := config.Open(t.TempDir())
+	m := NewManager(store)
+	m.Load()
+	if err := m.SetSettings(Settings{MQTT: MQTT{Groups: []string{"system", "gpu", "network"}, Devices: map[string][]string{"gpu": {"card"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	// Decode precisely the fields known to the previous app and apply its enum
+	// validation. New telemetry must not make its settings form unsaveable.
+	var old struct {
+		MQTT struct {
+			Groups []string `json:"groups"`
+		} `json:"mqtt"`
+	}
+	if err := store.ReadJSON(settingsFile, &old); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(old.MQTT.Groups, []string{"system"}) {
+		t.Fatalf("old app sees unknown group: %v", old.MQTT.Groups)
+	}
+	again := NewManager(store)
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	settings, _ := again.Settings()
+	if !slices.Equal(settings.MQTT.Groups, []string{"gpu", "network", "system"}) || settings.MQTT.ExtraGroups != nil || !slices.Equal(settings.MQTT.Devices["gpu"], []string{"card"}) {
+		t.Fatalf("new settings did not round trip: %+v", settings.MQTT)
+	}
+	settings.MQTT.Groups = []string{"system"}
+	if err := again.SetSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	third := NewManager(store)
+	third.Load()
+	final, _ := third.Settings()
+	if !slices.Equal(final.MQTT.Groups, []string{"system"}) {
+		t.Fatal("deselected groups reappeared from storage")
+	}
 }
