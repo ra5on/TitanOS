@@ -90,6 +90,7 @@ export function fixtureFactory(browser, errors) {
       { theme, locale },
     );
     const data = {
+      system: structuredClone(system),
       maintenance: {
         settings: {
           enabled: false,
@@ -385,9 +386,18 @@ export function fixtureFactory(browser, errors) {
         data.putDocker.push(data.prefs.docker);
         return route.fulfill({ status: 204 });
       }
+      if (path === "/preferences/dashboard") {
+        if (data.failSave) return fail();
+        data.prefs.dashboard = route.request().postDataJSON();
+        return route.fulfill({ status: 204 });
+      }
+      if (path === "/homeassistant/settings") {
+        if (method === "PUT") data.ha.settings = route.request().postDataJSON();
+        return json(data.ha ?? {});
+      }
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
-      if (path === "/system") return json(system);
+      if (path === "/system") return json(data.system);
       if (path === "/storage")
         return json({
           volumes: [
@@ -494,9 +504,22 @@ export function fixtureFactory(browser, errors) {
       )
         return json([]);
       if (path === "/config-backup")
-        return json({backup: {settings: {enabled: false}, target: "", lastError: "", backups: [], next: null}});
+        return json({
+          backup: {
+            settings: { enabled: false },
+            target: "",
+            lastError: "",
+            backups: [],
+            next: null,
+          },
+        });
       if (path === "/backups")
-        return json({ jobs: data.backups, shares: [], volumes: [], smbTargets: [] });
+        return json({
+          jobs: data.backups,
+          shares: [],
+          volumes: [],
+          smbTargets: [],
+        });
       if (path.endsWith("/snapshots") && path.startsWith("/vms/"))
         return json({
           snapshots: [],

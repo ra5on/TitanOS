@@ -32,3 +32,33 @@ func TestCapacityTrendsRequireRecentContinuousStableObservations(t *testing.T) {
 		t.Fatal("predicted with stale observations")
 	}
 }
+
+func TestCachedTrendsBoundedGapAndVolumeSwitch(t *testing.T) {
+	now := time.Now().Truncate(time.Hour)
+	m := &Manager{settings: Settings{Enabled: true, Volume: "Data"}}
+	var samples []Sample
+	for i := 0; i < 800; i++ {
+		samples = append(samples, Sample{At: now.Add(time.Duration(i-799) * time.Hour), Volumes: []Volume{{Name: "Data", Total: 100000, Used: uint64(1000 + i)}}})
+	}
+	m.remember(samples, "Data")
+	if len(m.cachedSamples) != 721 || !m.CachedTrends(now)[0].Known {
+		t.Fatal("bounded cache did not produce a trend")
+	}
+	// A gap earlier in the same hour cannot disappear behind a later sample.
+	m.remember([]Sample{{At: now.Add(-30 * time.Minute), Gap: true, Volumes: []Volume{{Name: "Data", Total: 100000, Used: 1798}}}}, "Data")
+	if m.CachedTrends(now)[0].Known {
+		t.Fatal("gap was hidden by hourly aggregation")
+	}
+	m.mu.Lock()
+	m.settings.Volume = "Other"
+	m.cachedSamples = nil
+	m.mu.Unlock()
+	m.remember(samples, "Data")
+	if len(m.CachedTrends(now)) != 0 {
+		t.Fatal("old volume warmed new cache")
+	}
+	m.remember(samples, "Other")
+	if m.CachedTrends(now.Add(3 * time.Hour))[0].Known {
+		t.Fatal("stale forecast considered valid")
+	}
+}

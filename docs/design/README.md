@@ -496,7 +496,7 @@ Prüfung: `scripts/test-ui-workflows.mjs`, wie die übrigen Browserprüfungen mi
 Der bestätigte Gesamtentwurf wird mit gemeinsamen PageHead-/Dialog-/Kachelmustern
 und Theme-Variablen umgesetzt. Werkzeuge verlinkt Aufträge, Wartung, Monitoring und
 Speicherübernahme. Aufträge bündelt aktuelle Arbeit, Fehler, nächste Termine und
-Wiederanlauf. Das Dashboard zeigt denselben kompakten Handlungsbereich.
+Wiederanlauf. Seit 0.18.0 liegt dieser Handlungsbereich ausschließlich auf der Auftragsseite.
 
 Speicherübernahme trennt Erkennung, lesende Vorschau und ausdrücklich bestätigte
 Registrierung. Die Volume-Seite verlinkt Verbrauch, Erweiterung und Snapshot-Dateien.
@@ -513,11 +513,18 @@ VM-Klonen und Backup-Anwendungsauswahl ergänzen die jeweiligen vorhandenen Dial
 
 ### Abschluss und Korrekturen (0.17.0)
 
-Auftragsfilter/Ergebnisse und eigene KI-/Upload-Einträge, gemeinsame Zustände mit
-dem Dashboard, Wartegründe/Abhängigkeiten/Backup-Vorrang, historische
+Auftragsfilter/Ergebnisse und eigene KI-/Upload-Einträge, gemeinsame Zustände der
+Fachbereiche, Wartegründe/Abhängigkeiten/Backup-Vorrang, historische
 Wiederanlaufdetails, CSV/JSON, Kapazitäts-/Restore-Vorschau und grafische
 Speicheranteile ergänzen den Entwurf. Sicherungsabdeckung und die geführte
 Anwendungs-Rückkopie liegen unter Einstellungen › Sicherungen. Globale
 Wartungseinstellungen und Dialogentwürfe sind getrennt. Genaue Regeln und Grenzen:
 [WORKFLOWS.md](../WORKFLOWS.md), Prüfstand [0.17.0](../releases/v0.17.0.md).
 VM-Gastagent-/Freeze-Sicherung bleibt ein eigener späterer Ausbau.
+
+### Persönliche Startseite, Speicher und Einstellungen (0.18.0)
+
+[Bestätigter Folgeentwurf](PersonalDashboard.md): eine anpassbare Startseite mit
+visuellem Editor, kompakte Speicherlisten und thematisch gruppierte Einstellungen.
+Er ersetzt die älteren Dashboard-/Editor- und Übersichtsregeln einschließlich
+der Aufmerksamkeit-/Auftragsfläche auf der Startseite.
