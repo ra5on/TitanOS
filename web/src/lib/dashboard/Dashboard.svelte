@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick, untrack, type Component } from 'svelte';
+	import { tick, untrack, onDestroy, type Component } from 'svelte';
 	import {
 		api,
 		ApiError,
@@ -10,7 +10,7 @@
 		type Share,
 	} from '#lib/api.ts';
 	import { t, errorText, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { formatDuration } from '#lib/format.ts';
+
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -18,7 +18,11 @@
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { dockerGroups } from '#lib/docker-layout.ts';
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
-	import PageHead from '#lib/components/PageHead.svelte';
+	import { dashboardControl } from './control.svelte.ts';
+	import { positionGrid } from './position-grid.svelte.ts';
+	import { positions, type Rect } from './positions.ts';
+	import { formatBytes } from '#lib/format.ts';
+	import { temperatureSelection } from './temperatures.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
@@ -111,7 +115,6 @@
 	let editing = $state(false),
 		saving = $state(false),
 		error = $state(''),
-		revision = $state(0),
 		customize = $state<TileId | null>(null),
 		part = $state<EditPart>('tile'),
 		selection = $state('');
@@ -126,22 +129,39 @@
 	let availableWidth = $state(1200);
 	const actualColumns = $derived(visibleColumns(availableWidth, columns, minimumWidth));
 	let moving = $state<TileId | null>(null);
+	let cancelPointer: (() => void) | null = null;
+	onDestroy(() => cancelPointer?.());
+	let board: HTMLElement | undefined;
+	let boardRects: Record<string, Rect> = {};
 	function attachGrid(element: HTMLElement) {
-		let frame = 0;
-		const observer = new ResizeObserver((entries) => {
-			const width = Math.floor(entries[0].contentRect.width);
-			cancelAnimationFrame(frame);
-			frame = requestAnimationFrame(() => {
+		board = element;
+		const cleanup = positionGrid(element, () => ({
+			items: mountedLayout,
+			columns: actualColumns,
+			explicit: actualColumns === columns,
+			onlayout: (rects, width) => {
+				boardRects = rects;
 				if (availableWidth !== width) availableWidth = width;
-			});
-		});
-		observer.observe(element);
+			},
+		}));
 		return () => {
-			observer.disconnect();
-			cancelAnimationFrame(frame);
+			cleanup();
+			board = undefined;
 		};
 	}
-	let refreshSerial = $state(0);
+	$effect(() => {
+		dashboardControl.edit = startEditing;
+		return () => {
+			dashboardControl.edit = null;
+			dashboardControl.editing = false;
+		};
+	});
+	$effect(() => {
+		dashboardControl.editing = editing;
+	});
+	let ghost = $state<{ left: number; top: number; width: number; height: number } | null>(null);
+	let refreshSerial = $state(0),
+		kvm = $state(false);
 	let containers = $state<DockerContainer[]>([]),
 		vms = $state<VM[]>([]),
 		shares = $state<Share[]>([]),
@@ -167,11 +187,6 @@
 				columns !== savedColumns ||
 				minimumWidth !== savedMinimumWidth),
 	);
-	const subtitle = $derived(
-		system.info
-			? `${system.info.hostname} · ${t('dashboard.uptime', { uptime: formatDuration(system.info.uptimeSeconds) })} · TitanOS ${system.info.version}`
-			: '',
-	);
 	const watched = $derived(
 		admin &&
 			(editing || shown.some((p) => workload(p.id) || ['docker', 'vms'].includes(sourceId(p.id)))),
@@ -193,6 +208,7 @@
 				const [machines, docker, tailscale] = results;
 				if (machines.status === 'fulfilled') {
 					vms = machines.value.vms;
+					kvm = machines.value.kvm;
 					vmsReady = true;
 					vmError = '';
 				} else vmError = fail(machines.reason);
@@ -219,6 +235,7 @@
 	const watchesShares = $derived(editing || shown.some((p) => sourceId(p.id) === 'shares'));
 	$effect(() => {
 		if (!watchesShares) return;
+		void refreshSerial;
 		let disposed = false,
 			inflight = false;
 		async function refresh() {
@@ -289,7 +306,6 @@
 	function rebuild(layout: TilePlacement[]) {
 		shown = layout;
 		mountedLayout = layout;
-		revision++;
 	}
 	function restore(value: string) {
 		const state = JSON.parse(value);
@@ -338,7 +354,7 @@
 		const allOptions = Object.fromEntries(layout.map((p) => [p.id, tileOptions(options, p.id)]));
 		const preferences = {
 			...session.dashboard,
-			version: 5,
+			version: 6,
 			columns,
 			minimumWidth,
 			tiles: layout,
@@ -373,8 +389,8 @@
 			[customize]: tileOptions({ [customize]: { ...currentSettings, [key]: value } }, customize),
 		};
 	}
-	function size(w: number, h: number, autoHeight?: boolean) {
-		if (!customize) return;
+	function size(w: number, h: number, autoHeight?: boolean, pixels?: number) {
+		if (!customize || currentPlacement?.locked) return;
 		checkpoint();
 		rebuild(
 			sanitizeLayout({
@@ -384,6 +400,7 @@
 								...p,
 								span: Math.max(1, Math.min(4, w)),
 								h,
+								height: pixels ?? (h === p.h && autoHeight === undefined ? p.height : h * 40),
 								...(autoHeight === undefined ? {} : { autoHeight }),
 							}
 						: p,
@@ -403,7 +420,18 @@
 		checkpoint();
 		const id = duplicateId(customize);
 		options = { ...options, [id]: structuredClone($state.snapshot(currentSettings)) };
-		rebuild([...readGrid(), { ...currentPlacement!, id, x: undefined, y: undefined }]);
+		rebuild([
+			...readGrid(),
+			{
+				...currentPlacement!,
+				id,
+				x: undefined,
+				y: undefined,
+				column: undefined,
+				offset: undefined,
+				locked: false,
+			},
+		]);
 		customize = id;
 	}
 	function hide(id: TileId) {
@@ -444,10 +472,14 @@
 		checkpoint();
 		const [item] = layout.splice(from, 1);
 		layout.splice(to, 0, item);
-		rebuild(layout);
+		rebuild(layout.map((p) => ({ ...p, column: undefined, offset: undefined })));
 	}
 	async function keyboardMove(e: KeyboardEvent, id: TileId) {
-		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+		if (
+			shown.find((p) => p.id === id)?.locked ||
+			!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
+		)
+			return;
 		e.preventDefault();
 		const direction = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
 		if (e.shiftKey) {
@@ -470,57 +502,207 @@
 			?.focus({ preventScroll: true });
 	}
 	function pointerMove(event: PointerEvent, id: TileId, resize = false) {
-		if (!editing || event.button !== 0) return;
+		const current = shown.find((p) => p.id === id)!;
+		if (!editing || saving || current.locked || event.button !== 0 || !board) return;
 		const handle = event.currentTarget as HTMLElement;
+		const start = { x: event.clientX, y: event.clientY },
+			r = boardRects[id];
+		const cell = (availableWidth + 12) / actualColumns;
+		const original = structuredClone($state.snapshot(shown));
+		const base = Object.fromEntries(Object.entries(boardRects).map(([id, r]) => [id, { ...r }]));
+		const history = snapshot();
+		let changed = false;
 		handle.setPointerCapture(event.pointerId);
-		const x = event.clientX,
-			y = event.clientY,
-			current = shown.find((p) => p.id === id)!;
-		let target = id;
 		moving = id;
-		const move = (e: PointerEvent) => {
-			if (resize) return;
-			const hit = document
-				.elementsFromPoint(e.clientX, e.clientY)
-				.map((el) => el.closest<HTMLElement>('[gs-id]'))
-				.find(Boolean);
-			if (hit) target = hit.getAttribute('gs-id') as TileId;
-		};
-		const baseHeight = current.autoHeight === false ? current.h : heightRows(current);
-		const end = (e: PointerEvent) => {
-			handle.removeEventListener('pointermove', move);
-			handle.removeEventListener('pointerup', end);
-			handle.removeEventListener('pointercancel', cancelMove);
-			moving = null;
+		function move(e: PointerEvent) {
+			const dx = e.clientX - start.x,
+				dy = e.clientY - start.y;
+			if (Math.abs(dx) + Math.abs(dy) < 5 && !changed) return;
+			changed = true;
+			const span = resize
+				? Math.max(1, Math.min(actualColumns, r.span + Math.round(dx / cell)))
+				: r.span;
+			const column = resize
+				? Math.min(r.column, actualColumns - span)
+				: Math.max(0, Math.min(actualColumns - span, Math.round(r.column + dx / cell)));
+			const top = Math.max(0, Math.round((r.top + dy) / 8) * 8);
+			const height = resize
+				? Math.max(80, Math.min(1600, Math.round((r.height + dy) / 8) * 8))
+				: r.height;
+			ghost = { left: column * cell, top: resize ? r.top : top, width: span * cell - 12, height };
 			if (resize) {
-				checkpoint();
-				const dx = Math.round((e.clientX - x) / (availableWidth / actualColumns));
-				const span = dx
-					? Math.max(1, Math.min(4, Math.min(current.span ?? 1, actualColumns) + dx))
-					: (current.span ?? 1);
-				const h = Math.max(2, Math.min(40, baseHeight + Math.round((e.clientY - y) / 40)));
 				rebuild(
-					shown.map((p) =>
+					original.map((p) =>
 						p.id === id
-							? { ...p, span, h, autoHeight: Math.abs(e.clientY - y) > 20 ? false : p.autoHeight }
+							? {
+									...p,
+									span: Math.round(dx / cell) === 0 ? current.span : span,
+									h: Math.max(2, Math.ceil(height / 40)),
+									height,
+									autoHeight: Math.abs(dy) > 4 ? false : p.autoHeight,
+								}
 							: p,
 					),
 				);
-			} else if (Math.abs(e.clientX - x) + Math.abs(e.clientY - y) > 5)
-				moveTile(
-					id,
-					shown.findIndex((p) => p.id === target),
-				);
-		};
-		const cancelMove = () => {
-			moving = null;
+			}
+		}
+		function cleanup() {
 			handle.removeEventListener('pointermove', move);
 			handle.removeEventListener('pointerup', end);
-			handle.removeEventListener('pointercancel', cancelMove);
-		};
+			handle.removeEventListener('pointercancel', abort);
+			document.removeEventListener('keydown', escapeMove);
+			if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+			moving = null;
+			ghost = null;
+			cancelPointer = null;
+		}
+		function end() {
+			if (changed && ghost) {
+				if (!resize) {
+					const g = ghost;
+					const col = Math.round(g.left / cell);
+					const rest = original
+						.filter((p) => p.id !== id)
+						.map((p) => ({ ...p, column: base[p.id].column }));
+					let index = rest.findIndex(
+						(p) =>
+							base[p.id].top > g.top + 8 ||
+							(Math.abs(base[p.id].top - g.top) <= 8 && base[p.id].column >= col),
+					);
+					if (index < 0) index = rest.length;
+					const before = rest.slice(0, index);
+					const packed = positions(
+						before,
+						actualColumns,
+						Object.fromEntries(Object.entries(base).map(([id, r]) => [id, r.height])),
+					);
+					const end = Math.max(
+						0,
+						...before
+							.filter((p) => {
+								const b = packed.rects[p.id];
+								return b.column < col + r.span && b.column + b.span > col;
+							})
+							.map((p) => packed.rects[p.id].top + packed.rects[p.id].height + 12),
+					);
+					rest.splice(index, 0, {
+						...current,
+						column: col,
+						offset: Math.min(8000, Math.max(0, g.top - end)),
+					});
+					rebuild(
+						actualColumns === columns
+							? rest
+							: rest.map((p) => {
+									const old = original.find((t) => t.id === p.id)!;
+									return { ...p, column: old.column, offset: old.offset };
+								}),
+					);
+				}
+				undo = [...undo.slice(-39), history];
+				redo = [];
+			}
+			cleanup();
+		}
+		function abort() {
+			if (resize && changed) rebuild(original);
+			cleanup();
+		}
 		handle.addEventListener('pointermove', move);
 		handle.addEventListener('pointerup', end);
-		handle.addEventListener('pointercancel', cancelMove);
+		handle.addEventListener('pointercancel', abort);
+		cancelPointer = abort;
+		function escapeMove(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				abort();
+			}
+		}
+		document.addEventListener('keydown', escapeMove);
+	}
+	async function runtimeOption(id: TileId, key: keyof TileOptions, value: unknown) {
+		if (saving) return;
+		checkpoint();
+		options = {
+			...options,
+			[id]: tileOptions({ [id]: { ...tileOptions(options, id), [key]: value } }, id),
+		};
+		if (!editing) await finish();
+	}
+	function summary(id: TileId) {
+		const kind = sourceId(id),
+			info = system.info;
+		if (kind === 'system') return info ? t('dashboard.online') : '–';
+		if (kind === 'docker' || kind.startsWith('app:')) {
+			if (!containersReady || dockerError) return '–';
+			const cs = kind.startsWith('app:')
+				? containers.filter((c) => c.app === kind.slice(4))
+				: containers;
+			const gs = dockerGroups(cs);
+			return t('dashboard.appSummary', {
+				count: gs.length,
+				running: gs.filter((g) => g.members.some((c) => c.state === 'running')).length,
+			});
+		}
+		if (kind === 'vms')
+			return vmsReady && !vmError
+				? t('dashboard.runningSummary', {
+						running: vms.filter((v) => v.state === 'running').length,
+						count: vms.length,
+					})
+				: '–';
+		if (kind === 'cpu') {
+			if (!tileOptions(options, id).temperature) return '';
+			const temp = info?.temperatures.find(
+				(s) =>
+					(s.chip === 'coretemp' && s.label === 'Package id 0') ||
+					(s.chip === 'k10temp' && s.label === 'Tctl'),
+			);
+			return temp?.celsius == null ? '' : `${temp.celsius.toFixed(0)} °C`;
+		}
+		if (kind === 'memory') return info ? formatBytes(info.memory.totalBytes) : '–';
+		if (kind === 'volumes')
+			return storage.status
+				? t('dashboard.mountedSummary', {
+						count: storage.status.volumes.filter((v) => v.mounted).length,
+					})
+				: '–';
+		if (kind === 'shares')
+			return sharesReady && !sharesError
+				? t('dashboard.shareSummary', { count: shares.length })
+				: '–';
+		if (kind === 'disks')
+			return storage.status
+				? t('dashboard.deviceSummary', {
+						count: storage.status.disks.filter((d) => d.role !== 'stick').length,
+					})
+				: '–';
+		if (['accelerators', 'igpu', 'nvidia', 'npu'].includes(kind))
+			return info
+				? t('dashboard.deviceSummary', {
+						count: info.accelerators.filter(
+							(d) =>
+								kind === 'accelerators' ||
+								(kind === 'npu'
+									? d.kind === 'npu'
+									: kind === 'nvidia'
+										? d.vendor === 'NVIDIA' && d.kind !== 'npu'
+										: d.kind !== 'npu' && d.vendor !== 'NVIDIA'),
+						).length,
+					})
+				: '–';
+		if (kind === 'temperatures')
+			return t('dashboard.sensorSummary', {
+				count: temperatureSelection(session.dashboard).length,
+			});
+		if (kind === 'network') {
+			const o = tileOptions(options, id),
+				n = o.interface ? info?.networks.find((n) => n.interface === o.interface) : info?.network;
+			return n
+				? `${n.interface || '–'}${n.speedMbps > 0 ? ' · ' + n.speedMbps + ' Mbit/s' : ''}`
+				: '–';
+		}
+		return '';
 	}
 
 	function keys(e: KeyboardEvent) {
@@ -579,26 +761,23 @@
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
 <div class="dashboard-page">
-	<PageHead title={t('dashboard.title')}>
-		{#if subtitle}<p class="muted">{subtitle}</p>{/if}
-		{#snippet actions()}{#if editing}<button
-					class="btn"
-					disabled={!undo.length || saving}
-					aria-label={t('dashboard.editor.undo')}
-					onclick={() => step('undo')}><Icon name="restart" size={15} /></button
-				><button
-					class="btn"
-					disabled={!redo.length || saving}
-					aria-label={t('dashboard.editor.redo')}
-					onclick={() => step('redo')}><Icon name="restart" size={15} /></button
-				><button class="btn" disabled={saving} onclick={cancel}>{t('common.cancel')}</button><button
-					class="btn btn-primary"
-					disabled={saving}
-					onclick={finish}>{t('dashboard.editor.save')}</button
-				>{:else}<button class="btn" onclick={startEditing}
-					><Icon name="edit" size={16} />{t('dashboard.edit')}</button
-				>{/if}{/snippet}
-	</PageHead>
+	{#if editing}<div class="editor-actions">
+			<button
+				class="btn"
+				disabled={!undo.length || saving}
+				aria-label={t('dashboard.editor.undo')}
+				onclick={() => step('undo')}><Icon name="restart" size={15} /></button
+			><button
+				class="btn"
+				disabled={!redo.length || saving}
+				aria-label={t('dashboard.editor.redo')}
+				onclick={() => step('redo')}><Icon name="restart" size={15} /></button
+			><button class="btn" disabled={saving} onclick={cancel}>{t('common.cancel')}</button><button
+				class="btn btn-primary"
+				disabled={saving}
+				onclick={finish}>{t('dashboard.editor.save')}</button
+			>
+		</div>{/if}
 	{#if error}<div class="notice-error" role="alert">
 			{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
 		</div>{/if}
@@ -643,51 +822,80 @@
 		</div>{/if}
 	<div class="dashboard-workspace" class:editing class:with-inspector={editing && !!customize}>
 		<div class="area">
-			{#key revision}<div
-					class="dashboard-grid"
-					style:grid-template-columns={`repeat(${actualColumns},minmax(0,1fr))`}
-					{@attach attachGrid}
-				>
-					{#each mountedLayout as tile (tile.id)}
-						{@const source = sourceId(tile.id)}{@const target = workload(tile.id)}{@const spec =
-							tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
-						<div
-							class="grid-stack-item"
-							style:grid-column={`span ${Math.min(tile.span ?? 1, actualColumns)}`}
-							class:moving={moving === tile.id}
-							gs-id={tile.id}
-							gs-x={tile.x}
-							gs-y={tile.y}
-							gs-w={tile.w}
-							gs-h={tile.h}
-							gs-min-w={spec.minW}
-							gs-min-h={spec.minH}
-							gs-auto-position={tile.x === undefined ? 'true' : undefined}
+			<div class="dashboard-grid" {@attach attachGrid}>
+				{#each mountedLayout as tile (tile.id)}
+					{@const source = sourceId(tile.id)}{@const target = workload(tile.id)}{@const spec =
+						tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
+					<div
+						class="grid-stack-item"
+						data-position={tile.id}
+						class:moving={moving === tile.id}
+						gs-id={tile.id}
+						gs-x={tile.x}
+						gs-y={tile.y}
+						gs-w={tile.w}
+						gs-h={tile.h}
+						gs-min-w={spec.minW}
+						gs-min-h={spec.minH}
+						gs-auto-position={tile.x === undefined ? 'true' : undefined}
+					>
+						<section
+							class="tile dashboard-tile"
+							style:min-height={tile.autoHeight === false && (!settings.collapsed || editing)
+								? `${tile.height ?? tile.h * 40}px`
+								: undefined}
+							style:height={tile.autoHeight === false && (!settings.collapsed || editing)
+								? `${tile.height ?? tile.h * 40}px`
+								: undefined}
+							{@attach (element) => interceptLinks(element, tile.id)}
+							class:selected={editing && customize === tile.id}
+							style={tileStyle(settings)}
+							aria-label={titleOf(tile.id)}
+							onpointerdown={(e) => selectPart(e, tile.id)}
 						>
-							<section
-								class="tile dashboard-tile"
-								style:min-height={tile.autoHeight === false ? `${tile.h * 40}px` : undefined}
-								style:height={tile.autoHeight === false ? `${tile.h * 40}px` : undefined}
-								{@attach (element) => interceptLinks(element, tile.id)}
-								class:selected={editing && customize === tile.id}
-								style={tileStyle(settings)}
-								aria-label={titleOf(tile.id)}
-								onpointerdown={(e) => selectPart(e, tile.id)}
-							>
-								{#if settings.showTitle || editing}<div class="tile-head">
-										{#if editing}<button
-												class="grip"
-												aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
-												onkeydown={(e) => keyboardMove(e, tile.id)}
-												onpointerdown={(e) => pointerMove(e, tile.id)}
-												><Icon name="grip" size={16} /></button
-											>{/if}
-										{#if settings.showIcon}<span class="tile-symbol"
-												><Icon name={settings.icon} size={settings.titleSize + 3} /></span
-											>{/if}
-										<h2 class="tile-title" data-edit-part="heading">
-											{settings.showTitle ? titleOf(tile.id) : ''}
-										</h2>
+							{#if settings.showTitle || settings.collapsed || editing}<div class="tile-head">
+									{#if editing}<button
+											disabled={tile.locked}
+											class="grip"
+											aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
+											onkeydown={(e) => keyboardMove(e, tile.id)}
+											onpointerdown={(e) => pointerMove(e, tile.id)}
+											><Icon name="grip" size={16} /></button
+										>{/if}
+									{#if settings.showIcon}<span class="tile-symbol"
+											><Icon name={settings.icon} size={settings.titleSize + 3} /></span
+										>{/if}
+									<h2 class="tile-title" data-edit-part="heading">
+										{settings.showTitle ? titleOf(tile.id) : ''}
+									</h2>
+									{#if settings.showSummary}<span class="tile-summary">{summary(tile.id)}</span
+										>{/if}
+									{#if editing}<button
+											class="tile-action"
+											aria-label={t('dashboard.lockPosition')}
+											aria-pressed={!!tile.locked}
+											onclick={() => {
+												checkpoint();
+												rebuild(
+													shown.map((p) => (p.id === tile.id ? { ...p, locked: !p.locked } : p)),
+												);
+											}}><Icon name="key" size={13} /></button
+										>{/if}
+									{#if !editing}<button
+											class="tile-action"
+											disabled={saving}
+											aria-label={t(
+												settings.collapsed ? 'dashboard.expandTile' : 'dashboard.collapseTile',
+												{ name: titleOf(tile.id) },
+											)}
+											aria-expanded={!settings.collapsed}
+											onclick={() => runtimeOption(tile.id, 'collapsed', !settings.collapsed)}
+											><Icon
+												name={settings.collapsed ? 'chevronDown' : 'arrowUp'}
+												size={12}
+											/></button
+										>{/if}
+									{#if editing}
 										<button
 											class="tile-action"
 											aria-label={`${t('dashboard.tileOptions')}: ${titleOf(tile.id)}`}
@@ -699,11 +907,21 @@
 												class="tile-action"
 												aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
 												onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
-											>{/if}
-									</div>{/if}
-								<div class="tile-body" data-edit-part="labels">
+											>{/if}{/if}
+								</div>{/if}
+							{#if !settings.collapsed || editing}<!-- svelte-ignore a11y_no_noninteractive_tabindex (fixed-height content is keyboard scrollable) -->
+								<div
+									class="tile-body"
+									data-edit-part="labels"
+									tabindex={tile.autoHeight === false ? 0 : undefined}
+									role="region"
+									aria-label={titleOf(tile.id)}
+								>
 									{#if target?.kind === 'app'}<CollectionTile
 											kind="docker"
+											{kvm}
+											onoption={(key, value) => runtimeOption(tile.id, key, value)}
+											disabled={saving}
 											options={settings}
 											containers={containers.filter((c) => c.app === target.name)}
 											ready={containersReady}
@@ -720,6 +938,10 @@
 									{:else if target}<WorkloadTile
 											kind={target.kind}
 											name={target.name}
+											options={settings}
+											{editing}
+											{kvm}
+											tailscaleHost={tailnetHost(tailnet)}
 											vm={vms.find((v) => v.name === target.name)}
 											container={containers.find((c) => c.name === target.name)}
 											onrefresh={() => refreshSerial++}
@@ -730,6 +952,7 @@
 									{:else if source === 'cpu' || source === 'memory'}<UsageTile
 											kind={source}
 											options={settings}
+											ondetails={() => runtimeOption(tile.id, 'details', !settings.details)}
 										/>
 									{:else if source === 'network'}<NetworkTile options={settings} />
 									{:else if source === 'system'}<SystemTile options={settings} />
@@ -739,6 +962,9 @@
 										/>
 									{:else if source === 'docker' || source === 'vms' || source === 'shares'}<CollectionTile
 											kind={source}
+											{kvm}
+											onoption={(key, value) => runtimeOption(tile.id, key, value)}
+											disabled={saving}
 											options={settings}
 											{containers}
 											{vms}
@@ -765,17 +991,25 @@
 									{:else}{@const Content = CONTENT[source as StaticTileId]}{#if Content}<Content
 												options={settings}
 											/>{/if}{/if}
-								</div>
-								{#if editing}<button
-										class="resize-handle"
-										aria-label={t('dashboard.resize', { tile: titleOf(tile.id) })}
-										onpointerdown={(e) => pointerMove(e, tile.id, true)}
-										><Icon name="resize" size={13} /></button
-									>{/if}
-							</section>
-						</div>
-					{/each}
-				</div>{/key}
+								</div>{/if}
+							{#if editing}<button
+									disabled={tile.locked}
+									class="resize-handle"
+									aria-label={t('dashboard.resize', { tile: titleOf(tile.id) })}
+									onpointerdown={(e) => pointerMove(e, tile.id, true)}
+									><Icon name="resize" size={13} /></button
+								>{/if}
+						</section>
+					</div>
+				{/each}
+				{#if editing && ghost}<div
+						class="placement-placeholder"
+						style:left={`${ghost.left}px`}
+						style:top={`${ghost.top}px`}
+						style:width={`${ghost.width}px`}
+						style:height={`${ghost.height}px`}
+					></div>{/if}
+			</div>
 			{#if editing}<section class="tile add-tiles">
 					<h2 class="tile-title">{t('dashboard.hidden')}</h2>
 					<div class="tile-choices">
@@ -814,6 +1048,7 @@
 				settings={currentSettings}
 				placement={currentPlacement}
 				onauto={(value) => {
+					if (currentPlacement?.locked) return;
 					checkpoint();
 					const current = document
 						.querySelector<HTMLElement>(`[gs-id="${CSS.escape(customize!)}"] .dashboard-tile`)
@@ -824,6 +1059,10 @@
 								? {
 										...p,
 										autoHeight: value,
+										height:
+											!value && current
+												? Math.max(80, Math.min(1600, Math.round(current / 8) * 8))
+												: p.height,
 										h: !value && current ? Math.max(2, Math.min(40, Math.ceil(current / 40))) : p.h,
 									}
 								: p,
@@ -880,14 +1119,44 @@
 		flex: 1;
 		min-width: 0;
 	}
+	.editor-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+	.tile-summary {
+		color: var(--muted);
+		font-size: 11px;
+		min-width: 0;
+		overflow-wrap: anywhere;
+		text-align: right;
+	}
+	.editing .dashboard-grid {
+		background-image:
+			linear-gradient(var(--border) 1px, transparent 1px),
+			linear-gradient(90deg, var(--border) 1px, transparent 1px);
+		background-size: 8px 8px;
+	}
+	.placement-placeholder {
+		position: absolute;
+		z-index: 3;
+		pointer-events: none;
+		border: 2px dashed var(--accent);
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		border-radius: 4px;
+	}
+	.grip:disabled,
+	.resize-handle:disabled {
+		cursor: default;
+		opacity: 0.35;
+	}
 	.dashboard-page {
 		background: var(--bg);
 		box-shadow: 0 0 0 24px var(--bg);
 	}
 	.dashboard-grid {
-		display: grid;
-		gap: 12px;
-		align-items: start;
+		position: relative;
 		min-width: 0;
 	}
 	.grid-stack-item {
@@ -924,6 +1193,7 @@
 		outline: 2px dashed var(--accent);
 	}
 	.dashboard-tile {
+		container-type: inline-size;
 		padding: 0;
 		border: var(--tile-border, 1px) solid var(--tile-border-color, var(--border));
 		border-radius: var(--tile-radius, 12px);
@@ -984,7 +1254,7 @@
 		min-width: 0;
 		flex: 1;
 		overflow-y: auto;
-		overflow-x: hidden;
+		overflow-x: auto;
 		scrollbar-gutter: auto;
 		padding: var(--tile-padding, 12px);
 		display: flex;
@@ -1095,6 +1365,7 @@
 			font-size: 0.75rem;
 		}
 		.dashboard-tile {
+			container-type: inline-size;
 			max-width: 100%;
 		}
 		.tile-body :global(.reading) {
@@ -1104,6 +1375,7 @@
 	}
 	@media (prefers-reduced-transparency: reduce) {
 		.dashboard-tile {
+			container-type: inline-size;
 			background: var(--surface);
 		}
 	}

@@ -6,15 +6,14 @@
 	import { storage } from '#lib/storage.svelte.ts';
 
 	// The boot stick is not a data disk; it has its own line in the system tile.
+	let showAll = $state(false);
 	const disks = $derived(
-		(storage.status?.disks ?? [])
-			.filter(
-				(disk) =>
-					disk.role !== 'stick' &&
-					(options.items === null ||
-						options.items.includes(disk.identity || disk.serial || disk.name)),
-			)
-			.slice(0, options.rows),
+		(storage.status?.disks ?? []).filter(
+			(disk) =>
+				disk.role !== 'stick' &&
+				(options.items === null ||
+					options.items.includes(disk.identity || disk.serial || disk.name)),
+		),
 	);
 
 	function dot(disk: (typeof disks)[number]): string {
@@ -33,10 +32,14 @@
 </script>
 
 <div class="collection" class:grid={options.list === 'grid'}>
-	{#each disks as disk (disk.name)}
+	{#each disks.slice(0, showAll ? disks.length : options.rows) as disk (disk.name)}
 		<div class="disk">
 			<span class="dot {dot(disk)}" aria-hidden="true"></span>
-			<span class="mono dev" data-edit-part="value">{disk.name}</span>
+			<a
+				class="mono dev"
+				href="/storage#disk-{encodeURIComponent(disk.name)}"
+				data-edit-part="value">{disk.name}</a
+			>
 			{#if options.details}<span class="muted what">{label(disk)}</span>{/if}
 			<span class="mono temp" data-edit-part="value"
 				>{disk.smart && disk.smart.temperatureC > 0 ? `${disk.smart.temperatureC} °C` : ''}</span
@@ -47,7 +50,27 @@
 	{/each}
 </div>
 
+<div class="collection-footer">
+	<span
+		>{t('dashboard.visibleItems', {
+			count: Math.min(disks.length, showAll ? disks.length : options.rows),
+			total: disks.length,
+		})}</span
+	>{#if !showAll && disks.length > options.rows}<button
+			class="link"
+			onclick={() => (showAll = true)}>{t('dashboard.showAll')}</button
+		>{/if}
+</div>
+
 <style>
+	.collection-footer {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+		color: var(--muted);
+		font-size: 11px;
+		margin-top: 10px;
+	}
 	.collection {
 		display: flex;
 		flex-direction: column;

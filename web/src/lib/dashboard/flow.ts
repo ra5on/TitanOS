@@ -16,7 +16,7 @@ export function visibleColumns(width: number, wanted: number, minimum: number): 
 		Math.max(1, Math.floor((width + 12) / (columnWidth(minimum) + 12))),
 	);
 }
-/** Older layouts stored positions; new layouts store reading order independently of viewport. */
+/** Reading order stays independent of viewport; v6 additionally retains optional lane positions. */
 export function flowLayout(input: unknown): TilePlacement[] {
 	const v = input as { version?: number } | null;
 	const layout = sanitizeLayout(input);

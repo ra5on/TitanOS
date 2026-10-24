@@ -9,7 +9,7 @@
 
 ---
 
-> **Aktuelle Version: [TitanOS 0.19.0 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.19.0)** · Veröffentlichungsdatum auf der Release-Seite. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+> **Aktuelle Version: [TitanOS 0.19.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.19.1)** · Veröffentlichungsdatum auf der Release-Seite. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
 
 <p align="center">
   <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
@@ -22,6 +22,13 @@ Die Screenshots zeigen die Weboberfläche von **0.7.2** (VMs), **0.7.1** (Dateim
 TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
 
 Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
+
+## Neu in 0.19.1
+
+- **Dashboard mit Positionsraster:** unabhängig wachsende Spalten, Ziehvorschau, Größenänderung und Positionssperre. Kompakte Köpfe, einklappbare Kacheln und Editor direkt in der Hauptnavigation.
+- **Docker mit App-Icons:** auch bei Einzelcontainern, Stack-Mitgliedern und Menüs. Entfernen zeigt den tatsächlichen Umfang einer verwalteten Anwendung; Updateprüfungen liefern sichtbare Ergebnisse.
+- **VM-Details am Eintrag:** nur die ausgewählte VM klappt direkt darunter auf. App-Symbolgröße, Eintragsbreite und Namenszeilen individuell einstellen.
+- Menüziele, große Schriften, mobile Darstellung und Eintragsbegrenzungen korrigiert. App-Update auf Basis **0.15.0**. [Änderungen und Prüfstand](docs/releases/v0.19.1.md).
 
 ## Neu in 0.19.0
 
