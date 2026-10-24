@@ -36,9 +36,9 @@
 	{#each disks as disk (disk.name)}
 		<div class="disk">
 			<span class="dot {dot(disk)}" aria-hidden="true"></span>
-			<span class="mono dev">{disk.name}</span>
+			<span class="mono dev" data-edit-part="value">{disk.name}</span>
 			{#if options.details}<span class="muted what">{label(disk)}</span>{/if}
-			<span class="mono temp"
+			<span class="mono temp" data-edit-part="value"
 				>{disk.smart && disk.smart.temperatureC > 0 ? `${disk.smart.temperatureC} °C` : ''}</span
 			>
 		</div>
@@ -71,7 +71,13 @@
 		padding-top: 0;
 	}
 	.dev {
-		width: 4.75rem;
+		width: auto;
+		min-width: 4rem;
+		max-width: 35%;
+		overflow-wrap: anywhere;
+		font-size: var(--tile-value-size, 16px);
+		font-family: var(--tile-value-font);
+		font-weight: var(--tile-value-weight);
 		flex: none;
 		font-weight: 500;
 	}
@@ -83,7 +89,7 @@
 		text-overflow: ellipsis;
 	}
 	.temp {
-		font-size: 0.8125rem;
+		font-size: var(--tile-value-size, 16px);
 	}
 	p {
 		font-size: 0.875rem;

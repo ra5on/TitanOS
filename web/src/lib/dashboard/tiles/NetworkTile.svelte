@@ -15,14 +15,18 @@
 	{#if options.rates}
 		<div class="rates">
 			<div>
-				<span class="label">{t('network.received')}</span><span class="mono value"
+				<span class="label">{t('network.received')}</span><span
+					class="mono value"
+					data-edit-part="value"
 					>{Number.isFinite(network.rxBytesPerSecond)
 						? formatMegabytesPerSecond(network.rxBytesPerSecond)
 						: '–'}</span
 				><span class="label">{t('network.unit')}</span>
 			</div>
 			<div>
-				<span class="label">{t('network.sent')}</span><span class="mono value"
+				<span class="label">{t('network.sent')}</span><span
+					class="mono value"
+					data-edit-part="value"
 					>{Number.isFinite(network.txBytesPerSecond)
 						? formatMegabytesPerSecond(network.txBytesPerSecond)
 						: '–'}</span

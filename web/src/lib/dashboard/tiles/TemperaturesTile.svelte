@@ -25,7 +25,7 @@
 								: ''}</span
 						>{/if}
 				</dt>
-				<dd class="mono">
+				<dd class="mono" data-edit-part="value">
 					{sensor?.celsius == null ? '–' : `${sensor.celsius.toFixed(1)} °C`}{#if hot}<span
 							class="critical">{t('temperatures.critical')}</span
 						>{/if}
@@ -62,6 +62,9 @@
 		font-size: 0.875rem;
 	}
 	dd {
+		font-size: var(--tile-value-size, 16px);
+		font-family: var(--tile-value-font);
+		font-weight: var(--tile-value-weight);
 		margin: 0;
 		white-space: nowrap;
 		text-align: right;
@@ -76,6 +79,9 @@
 		display: block;
 	}
 	.hot dd {
+		font-size: var(--tile-value-size, 16px);
+		font-family: var(--tile-value-font);
+		font-weight: var(--tile-value-weight);
 		color: var(--warn-text);
 	}
 	p {

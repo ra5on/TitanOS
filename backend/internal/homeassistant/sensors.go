@@ -243,7 +243,7 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 			}
 		}
 	}
-	if u := snap.UPS; u != nil && slices.Contains(q.Groups, "ups") {
+	if u := snap.UPS; u != nil && slices.Contains(q.Groups, "ups") && SelectedDevice(q, "ups", "ups") {
 		add("sensor", "ups_status", "UPS status", u.Status, nil)
 		sensor("ups_charge", "UPS charge", "None", "%", "battery")
 		unknown(u.Charge != nil)
@@ -394,6 +394,9 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 				e.available = &known
 			}
 			cfg := e.config
+			if cfg["device_class"] == "" {
+				delete(cfg, "device_class")
+			}
 			cfg["unique_id"] = "titanos_" + id + "_" + e.key
 			cfg["default_entity_id"] = e.component + ".titanos_" + e.key
 			cfg["availability_topic"] = availability

@@ -98,62 +98,63 @@
 					></select
 				></label
 			>
-			<fieldset>
-				<legend>{t('dashboard.editor.font')}</legend>
-				<label
-					>{t('dashboard.editor.fontSize')}<output>{settings[sizeKey]} px</output><input
-						type="range"
-						aria-label={t('dashboard.editor.fontSize')}
-						min={prefix === 'value' ? 16 : 11}
-						max={prefix === 'value' ? 96 : prefix === 'title' ? 36 : 28}
-						value={Number(settings[sizeKey])}
-						oninput={(e) => onchange(sizeKey, Number(e.currentTarget.value))}
-					/></label
-				>
-				<div class="pair">
+			{#if part !== 'tile'}<fieldset>
+					<legend>{t('dashboard.editor.font')}</legend>
 					<label
-						>{t('dashboard.editor.weight')}<select
+						>{t('dashboard.editor.fontSize')}<output>{settings[sizeKey]} px</output><input
+							type="range"
+							aria-label={t('dashboard.editor.fontSize')}
+							min={prefix === 'value' ? 16 : 11}
+							max={prefix === 'value' ? 96 : prefix === 'title' ? 36 : 28}
+							value={Number(settings[sizeKey])}
+							oninput={(e) => onchange(sizeKey, Number(e.currentTarget.value))}
+						/></label
+					>
+					<div class="pair">
+						<label
+							>{t('dashboard.editor.weight')}<select
+								class="field"
+								value={String(settings[weightKey])}
+								onchange={(e) => onchange(weightKey, Number(e.currentTarget.value))}
+								>{#each [400, 500, 600] as weight}<option value={weight}>{weight}</option
+									>{/each}</select
+							></label
+						><label
+							>{t('dashboard.editor.font')}<select
+								class="field"
+								value={String(settings[fontKey])}
+								onchange={(e) => onchange(fontKey, e.currentTarget.value)}
+								><option value="sans">IBM Plex Sans</option><option value="mono"
+									>IBM Plex Mono</option
+								></select
+							></label
+						>
+					</div>
+					<label
+						>{t('dashboard.editor.alignment')}<select
 							class="field"
-							value={String(settings[weightKey])}
-							onchange={(e) => onchange(weightKey, Number(e.currentTarget.value))}
-							>{#each [400, 500, 600] as weight}<option value={weight}>{weight}</option
+							value={settings[alignKey]}
+							onchange={(e) => onchange(alignKey, e.currentTarget.value)}
+							>{#each ['left', 'center', 'right'] as a}<option value={a}
+									>{t(`dashboard.editor.${a}` as MessageKey)}</option
 								>{/each}</select
 						></label
-					><label
-						>{t('dashboard.editor.font')}<select
-							class="field"
-							value={String(settings[fontKey])}
-							onchange={(e) => onchange(fontKey, e.currentTarget.value)}
-							><option value="sans">IBM Plex Sans</option><option value="mono">IBM Plex Mono</option
-							></select
-						></label
 					>
-				</div>
-				<label
-					>{t('dashboard.editor.alignment')}<select
-						class="field"
-						value={settings[alignKey]}
-						onchange={(e) => onchange(alignKey, e.currentTarget.value)}
-						>{#each ['left', 'center', 'right'] as a}<option value={a}
-								>{t(`dashboard.editor.${a}` as MessageKey)}</option
-							>{/each}</select
-					></label
-				>
-				<div class="color-row">
-					<label
+					<div class="color-row">
+						<label
+							><input
+								type="checkbox"
+								checked={!settings[colorKey]}
+								onchange={(e) => onchange(colorKey, e.currentTarget.checked ? '' : '#6CB6FF')}
+							/>{t('dashboard.editor.themeColor')}</label
 						><input
-							type="checkbox"
-							checked={!settings[colorKey]}
-							onchange={(e) => onchange(colorKey, e.currentTarget.checked ? '' : '#6CB6FF')}
-						/>{t('dashboard.editor.themeColor')}</label
-					><input
-						aria-label={t('dashboard.editor.textColor')}
-						type="color"
-						value={String(settings[colorKey] || '#6CB6FF')}
-						oninput={(e) => onchange(colorKey, e.currentTarget.value)}
-					/>
-				</div>
-			</fieldset>
+							aria-label={t('dashboard.editor.textColor')}
+							type="color"
+							value={String(settings[colorKey] || '#6CB6FF')}
+							oninput={(e) => onchange(colorKey, e.currentTarget.value)}
+						/>
+					</div>
+				</fieldset>{/if}
 			{#if metric}<fieldset>
 					<legend>{t('dashboard.editor.visual')}</legend><select
 						class="field"
@@ -345,7 +346,7 @@
 							onchange={(e) => onchange('runningOnly', e.currentTarget.checked)}
 						/>{t('dashboard.editor.runningOnly')}</label
 					>{/if}
-				{#if items.length}<label class="check"
+				{#if items.length || settings.items !== null}<label class="check"
 						><input
 							type="checkbox"
 							checked={settings.items === null}
