@@ -373,17 +373,31 @@
 			[customize]: tileOptions({ [customize]: { ...currentSettings, [key]: value } }, customize),
 		};
 	}
-	function size(w: number, h: number) {
+	function size(w: number, h: number, autoHeight?: boolean) {
 		if (!customize) return;
 		checkpoint();
 		rebuild(
 			sanitizeLayout({
 				tiles: readGrid().map((p) =>
-					p.id === customize ? { ...p, span: Math.max(1, Math.min(4, w)), h } : p,
+					p.id === customize
+						? {
+								...p,
+								span: Math.max(1, Math.min(4, w)),
+								h,
+								...(autoHeight === undefined ? {} : { autoHeight }),
+							}
+						: p,
 				),
 			}),
 		);
 	}
+	function heightRows(p: TilePlacement) {
+		const height = document
+			.querySelector<HTMLElement>(`[gs-id="${CSS.escape(p.id)}"] .dashboard-tile`)
+			?.getBoundingClientRect().height;
+		return height ? Math.max(2, Math.min(40, Math.ceil(height / 40))) : p.h;
+	}
+
 	function duplicate() {
 		if (!customize || shown.length >= 100) return;
 		checkpoint();
@@ -440,8 +454,14 @@
 			customize = id;
 			const p = shown.find((p) => p.id === id)!;
 			size(
-				(p.span ?? 1) + (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ? direction : 0),
-				Math.max(2, p.h + (e.key === 'ArrowUp' || e.key === 'ArrowDown' ? direction : 0)),
+				Math.min(p.span ?? 1, actualColumns) +
+					(e.key === 'ArrowLeft' || e.key === 'ArrowRight' ? direction : 0),
+				Math.max(
+					2,
+					(p.autoHeight === false ? p.h : heightRows(p)) +
+						(e.key === 'ArrowUp' || e.key === 'ArrowDown' ? direction : 0),
+				),
+				e.key === 'ArrowUp' || e.key === 'ArrowDown' ? false : undefined,
 			);
 		} else moveTile(id, shown.findIndex((p) => p.id === id) + direction);
 		await tick();
@@ -466,6 +486,7 @@
 				.find(Boolean);
 			if (hit) target = hit.getAttribute('gs-id') as TileId;
 		};
+		const baseHeight = current.autoHeight === false ? current.h : heightRows(current);
 		const end = (e: PointerEvent) => {
 			handle.removeEventListener('pointermove', move);
 			handle.removeEventListener('pointerup', end);
@@ -473,18 +494,15 @@
 			moving = null;
 			if (resize) {
 				checkpoint();
-				const span = Math.max(
-					1,
-					Math.min(
-						4,
-						(current.span ?? 1) + Math.round((e.clientX - x) / (availableWidth / actualColumns)),
-					),
-				);
-				const h = Math.max(2, Math.min(40, current.h + Math.round((e.clientY - y) / 40)));
+				const dx = Math.round((e.clientX - x) / (availableWidth / actualColumns));
+				const span = dx
+					? Math.max(1, Math.min(4, Math.min(current.span ?? 1, actualColumns) + dx))
+					: (current.span ?? 1);
+				const h = Math.max(2, Math.min(40, baseHeight + Math.round((e.clientY - y) / 40)));
 				rebuild(
 					shown.map((p) =>
 						p.id === id
-							? { ...p, span, h, autoHeight: e.clientY - y > 20 ? false : p.autoHeight }
+							? { ...p, span, h, autoHeight: Math.abs(e.clientY - y) > 20 ? false : p.autoHeight }
 							: p,
 					),
 				);
@@ -797,7 +815,20 @@
 				placement={currentPlacement}
 				onauto={(value) => {
 					checkpoint();
-					rebuild(shown.map((p) => (p.id === customize ? { ...p, autoHeight: value } : p)));
+					const current = document
+						.querySelector<HTMLElement>(`[gs-id="${CSS.escape(customize!)}"] .dashboard-tile`)
+						?.getBoundingClientRect().height;
+					rebuild(
+						shown.map((p) =>
+							p.id === customize
+								? {
+										...p,
+										autoHeight: value,
+										h: !value && current ? Math.max(2, Math.min(40, Math.ceil(current / 40))) : p.h,
+									}
+								: p,
+						),
+					);
 				}}
 				{part}
 				networks={system.info?.networks?.map((n) => n.interface) ?? []}

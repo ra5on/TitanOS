@@ -15,7 +15,7 @@
 	);
 </script>
 
-<table>
+<table class:grid={options.list === 'grid'}>
 	<thead
 		><tr
 			><th>{t('dashboard.name')}</th><th>{t('dashboard.volumeState')}</th><th
@@ -79,6 +79,49 @@
 	>{/if}
 
 <style>
+	table.grid {
+		display: block;
+	}
+	table.grid thead {
+		position: absolute;
+		clip-path: inset(50%);
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+	}
+	table.grid tbody {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+		gap: 12px;
+	}
+	table.grid tr {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 10px;
+		min-width: 0;
+	}
+	table.grid td {
+		border: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	table.grid td:first-child {
+		flex-basis: 100%;
+	}
+	table.grid td:nth-child(2) {
+		flex-basis: 100%;
+		color: var(--muted);
+	}
+	table.grid td:nth-child(3) {
+		flex: 1;
+	}
+	table.grid td:last-child {
+		margin-left: auto;
+	}
+
 	table {
 		width: 100%;
 		border-collapse: collapse;

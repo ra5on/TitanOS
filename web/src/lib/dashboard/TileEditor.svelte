@@ -3,7 +3,7 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { EDITOR_ICONS, type TileOptions } from './options.ts';
 	import type { TileId, TilePlacement } from './tiles.ts';
-	import { sourceId, tileSpec } from './tiles.ts';
+	import { sourceId } from './tiles.ts';
 	import { SYSTEM_FIELDS } from './system-fields.ts';
 	export type EditPart = 'tile' | 'heading' | 'value' | 'labels';
 	let {
@@ -32,7 +32,7 @@
 		devices: { address: string; name: string }[];
 		items: { id: string; name: string }[];
 		onchange: (key: keyof TileOptions, value: unknown) => void;
-		onsize: (w: number, h: number) => void;
+		onsize: (w: number, h: number, autoHeight?: boolean) => void;
 		onauto: (value: boolean) => void;
 		onduplicate: () => void;
 		onreset: () => void;
@@ -246,7 +246,8 @@
 							>{/each}</select
 					></label
 				>{/if}
-			{#if !source.startsWith('vm:') && !source.startsWith('container:')}<label class="check"
+			{#if !source.startsWith('vm:') && !source.startsWith('container:') && !['system', 'vms'].includes(source)}<label
+					class="check"
 					><input
 						type="checkbox"
 						checked={settings.details}
@@ -460,13 +461,15 @@
 						onchange={(e) => onsize(Number(e.currentTarget.value), placement.h)}
 					/></label
 				><label
-					>{t('dashboard.height')}<input
+					>{t('dashboard.heightPixels')}<input
 						class="field"
 						type="number"
-						min={tileSpec(id).minH}
-						max="40"
-						value={placement.h}
-						onchange={(e) => onsize(placement.span ?? 1, Number(e.currentTarget.value))}
+						min="80"
+						max="1600"
+						step="40"
+						value={placement.h * 40}
+						onchange={(e) =>
+							onsize(placement.span ?? 1, Math.round(Number(e.currentTarget.value) / 40), false)}
 					/></label
 				>
 			</div>
