@@ -8,10 +8,11 @@
 	import type { Volume } from '#lib/api.ts';
 	let { options = tileOptions(null, 'volumes') }: { options?: TileOptions } = $props();
 	let menu = $state<{ volume: Volume; x: number; y: number } | null>(null);
+	let showAll = $state(false);
 	const volumes = $derived(
-		(storage.status?.volumes ?? [])
-			.filter((v) => options.items === null || options.items.includes(v.name))
-			.slice(0, options.rows),
+		(storage.status?.volumes ?? []).filter(
+			(v) => options.items === null || options.items.includes(v.name),
+		),
 	);
 </script>
 
@@ -23,7 +24,7 @@
 			>{#if options.details}<th>{t('dashboard.used')}</th>{/if}</tr
 		></thead
 	><tbody
-		>{#each volumes as v (v.name)}{@const percent =
+		>{#each volumes.slice(0, showAll ? volumes.length : options.rows) as v (v.name)}{@const percent =
 				v.sizeBytes > 0 ? (100 * v.usedBytes) / v.sizeBytes : 0}<tr
 				><td
 					><button
@@ -63,6 +64,17 @@
 			>{/each}</tbody
 	>
 </table>
+<div class="collection-footer">
+	<span
+		>{t('dashboard.visibleItems', {
+			count: Math.min(volumes.length, showAll ? volumes.length : options.rows),
+			total: volumes.length,
+		})}</span
+	>{#if !showAll && volumes.length > options.rows}<button
+			class="link"
+			onclick={() => (showAll = true)}>{t('dashboard.showAll')}</button
+		>{/if}
+</div>
 {#if menu}{@const v = menu.volume}<ContextMenu
 		label={t('dashboard.menu', { name: v.name })}
 		x={menu.x}
@@ -71,7 +83,7 @@
 		><div class="menu-title">{v.name}</div>
 		<a role="menuitem" href="/storage#volume-{encodeURIComponent(v.name)}"
 			><Icon name="disk" size={16} /><span>{t('dashboard.showDetails')}</span></a
-		><a role="menuitem" href="/storage?tab=disks#volume-{encodeURIComponent(v.name)}"
+		><a role="menuitem" href="/storage?tab=disks&volume={encodeURIComponent(v.name)}"
 			><Icon name="list" size={16} /><span>{t('dashboard.volumeDrives')}</span></a
 		><a role="menuitem" href="/tools/maintenance"
 			><Icon name="tool" size={16} /><span>{t('nav.tools')}</span></a
@@ -79,6 +91,14 @@
 	>{/if}
 
 <style>
+	.collection-footer {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+		color: var(--muted);
+		font-size: 11px;
+		margin-top: 10px;
+	}
 	table.grid {
 		display: block;
 	}

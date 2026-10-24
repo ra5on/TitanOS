@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { page } from '$app/state';
 	import { beforeNavigate } from '$app/navigation';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -105,20 +106,48 @@
 			scroll: window.scrollY,
 		}),
 	);
-	onMount(() => {
-		const hash = decodeURIComponent(location.hash.slice(1));
-		if (hash.startsWith('volume-')) {
-			tab = 'volumes';
-			selected = hash.slice(7);
-		}
-		if (hash.startsWith('disk-')) {
-			tab = 'disks';
-			pendingDisk = hash.slice(5);
-		}
-		requestAnimationFrame(() => {
-			if (!hash) window.scrollTo({ top: navigation.scroll });
+	$effect(() => {
+		const url = page.url;
+		untrack(() => {
+			const requested = url.searchParams.get('tab');
+			const volume = url.searchParams.get('volume');
+			let hash = '';
+			try {
+				hash = decodeURIComponent(url.hash.slice(1));
+			} catch {
+				return;
+			}
+			if (requested === 'disks' || requested === 'volumes') {
+				tab = requested;
+				query = '';
+				filter = 'all';
+			}
+			if (volume !== null) {
+				volumeFilter = volume;
+				query = '';
+				filter = 'all';
+				selectedDisk = '';
+			}
+			if (hash.startsWith('volume-') && requested !== 'disks') {
+				tab = 'volumes';
+				selected = hash.slice(7);
+				query = '';
+				filter = 'all';
+			}
+			if (hash.startsWith('disk-')) {
+				tab = 'disks';
+				pendingDisk = hash.slice(5);
+				query = '';
+				filter = 'all';
+				volumeFilter = '';
+			}
 		});
 	});
+	onMount(() => {
+		if (!location.hash && !location.search)
+			requestAnimationFrame(() => window.scrollTo({ top: navigation.scroll }));
+	});
+
 	$effect(() => {
 		if (!pendingDisk) return;
 		const disk = disks.find((d) => d.name === pendingDisk);

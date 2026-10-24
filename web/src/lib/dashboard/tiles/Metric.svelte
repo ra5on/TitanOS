@@ -8,6 +8,7 @@
 		options,
 		history = [],
 		compact = false,
+		showCompactLabel = false,
 	}: {
 		value: number | null;
 		label: string;
@@ -15,12 +16,18 @@
 		options: TileOptions;
 		history?: (number | null)[];
 		compact?: boolean;
+		showCompactLabel?: boolean;
 	} = $props();
 	const mode = $derived(options.display === 'auto' ? 'bar' : options.display);
 	const bounded = $derived(value === null ? 0 : Math.max(0, Math.min(100, value)));
 </script>
 
-<div class="metric" class:ring={mode === 'ring'} class:compact={compact && mode === 'bar'}>
+<div
+	class="metric"
+	class:ring={mode === 'ring'}
+	class:compact={compact && mode === 'bar'}
+	class:compact-label={showCompactLabel}
+>
 	{#if mode === 'ring'}<svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true"
 			><circle class="track" cx="50" cy="50" r="43" />{#if value !== null}<circle
 					class="level"
@@ -144,6 +151,11 @@
 	}
 	.compact .reading {
 		font-size: min(var(--tile-value-size, 18px), 27cqi);
+	}
+	.compact-label.compact .label {
+		display: block;
+		max-width: 35%;
+		flex: none;
 	}
 	.compact .label {
 		display: none;

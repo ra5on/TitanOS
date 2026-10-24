@@ -32,7 +32,7 @@
 		devices: { address: string; name: string }[];
 		items: { id: string; name: string }[];
 		onchange: (key: keyof TileOptions, value: unknown) => void;
-		onsize: (w: number, h: number, autoHeight?: boolean) => void;
+		onsize: (w: number, h: number, autoHeight?: boolean, pixels?: number) => void;
 		onauto: (value: boolean) => void;
 		onduplicate: () => void;
 		onreset: () => void;
@@ -160,6 +160,19 @@
 						/>
 					</div>
 				</fieldset>{/if}
+			{#if ['docker', 'vms'].includes(source) || /^(app|container|vm):/.test(source)}<fieldset>
+					<legend>{t('dashboard.entries')}</legend>
+					{#each [['iconSize', 20, 64], ['entryWidth', 120, 320], ['nameLines', 1, 2]] as [key, min, max]}<label
+							>{t(`dashboard.${key}` as MessageKey)}<input
+								class="field"
+								type="number"
+								min={Number(min)}
+								max={Number(max)}
+								value={Number(settings[key as keyof TileOptions])}
+								onchange={(e) => onchange(key as keyof TileOptions, Number(e.currentTarget.value))}
+							/></label
+						>{/each}
+				</fieldset>{/if}
 			{#if metric}<fieldset>
 					<legend>{t('dashboard.editor.visual')}</legend><select
 						class="field"
@@ -228,6 +241,12 @@
 					checked={settings.showTitle}
 					onchange={(e) => onchange('showTitle', e.currentTarget.checked)}
 				/>{t('dashboard.editor.showTitle')}</label
+			><label class="check"
+				><input
+					type="checkbox"
+					checked={settings.showSummary}
+					onchange={(e) => onchange('showSummary', e.currentTarget.checked)}
+				/>{t('dashboard.showSummary')}</label
 			>
 			<label class="check"
 				><input
@@ -383,8 +402,8 @@
 						)}</label
 					>{/each}
 			{/if}
-			{#if ['docker', 'vms', 'shares', 'disks', 'volumes'].includes(source)}
-				{#if ['docker', 'vms', 'shares', 'volumes', 'disks'].includes(source)}<label
+			{#if ['docker', 'vms', 'shares', 'disks', 'volumes', 'temperatures'].includes(source)}
+				{#if ['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures'].includes(source)}<label
 						>{t('dashboard.editor.list')}<select
 							class="field"
 							value={settings.list}
@@ -432,6 +451,19 @@
 								/>{items.find((i) => i.id === item)?.name ?? item}</label
 							>{/each}{/if}{/if}
 			{/if}
+			{#if ['docker', 'vms'].includes(source) || /^(app|container|vm):/.test(source)}<fieldset>
+					<legend>{t('dashboard.entries')}</legend>
+					{#each [['iconSize', 20, 64], ['entryWidth', 120, 320], ['nameLines', 1, 2]] as [key, min, max]}<label
+							>{t(`dashboard.${key}` as MessageKey)}<input
+								class="field"
+								type="number"
+								min={Number(min)}
+								max={Number(max)}
+								value={Number(settings[key as keyof TileOptions])}
+								onchange={(e) => onchange(key as keyof TileOptions, Number(e.currentTarget.value))}
+							/></label
+						>{/each}
+				</fieldset>{/if}
 			{#if metric}<fieldset>
 					<legend>{t('dashboard.editor.order')}</legend>{#each settings.parts as key, index}<div
 							class="part-order"
@@ -457,6 +489,7 @@
 						type="number"
 						min="1"
 						max="4"
+						disabled={placement.locked}
 						value={placement.span ?? 1}
 						onchange={(e) => onsize(Number(e.currentTarget.value), placement.h)}
 					/></label
@@ -466,16 +499,23 @@
 						type="number"
 						min="80"
 						max="1600"
-						step="40"
-						value={placement.h * 40}
+						step="8"
+						disabled={placement.locked}
+						value={placement.height ?? placement.h * 40}
 						onchange={(e) =>
-							onsize(placement.span ?? 1, Math.round(Number(e.currentTarget.value) / 40), false)}
+							onsize(
+								placement.span ?? 1,
+								Math.ceil(Number(e.currentTarget.value) / 40),
+								false,
+								Number(e.currentTarget.value),
+							)}
 					/></label
 				>
 			</div>
 			<label class="check"
 				><input
 					type="checkbox"
+					disabled={placement.locked}
 					checked={placement.autoHeight !== false}
 					onchange={(e) => onauto(e.currentTarget.checked)}
 				/>{t('dashboard.autoHeight')}</label

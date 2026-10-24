@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { api, type VM } from '#lib/api.ts';
 	import { onMount } from 'svelte';
-	import Dialog from '#lib/components/Dialog.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
-	let { vms, onclose }: { vms: VM[]; onclose: () => void } = $props();
+	let { vm, onclose }: { vm: VM; onclose: () => void } = $props();
 	let addresses = $state<Record<string, string[]>>({});
 	onMount(() => {
 		const controller = new AbortController(),
-			queue = vms.filter((vm) => vm.state === 'running');
+			queue = [vm].filter((vm) => vm.state === 'running');
 		async function worker() {
 			while (queue.length && !controller.signal.aborted) {
 				const vm = queue.shift()!;
@@ -30,67 +30,68 @@
 	});
 </script>
 
-<Dialog title={t('dashboard.allVmDetails')} wide {onclose}>
-	<div class="vm-details-grid">
-		{#each vms as vm (vm.name)}<section>
-				<header>
-					<strong>{vmLabel(vm)}</strong><span class="state"
-						>{tOr(`vms.state.${vm.state}`, vm.state)}</span
-					>
-				</header>
-				<dl>
-					<dt>{t('dashboard.name')}</dt>
-					<dd>{vm.name}</dd>
-					<dt>{t('dashboard.guest')}</dt>
-					<dd>
-						{vm.template === 'windows'
-							? 'Windows'
-							: vm.template === 'linux'
-								? 'Linux'
-								: t('dashboard.other')}
-					</dd>
-					<dt>{t('dashboard.field.cpu')}</dt>
-					<dd>{vm.vcpus} vCPU</dd>
-					<dt>{t('dashboard.field.memory')}</dt>
-					<dd>{formatBytes(vm.memoryMiB * 1024 * 1024)}</dd>
-					<dt>{t('dashboard.vmUsage')}</dt>
-					<dd>
-						{vm.state === 'running'
-							? formatPercent(vm.cpuPercent) + ' · ' + formatBytes(vm.memoryBytes)
-							: '–'}
-					</dd>
-					<dt>{t('nav.storage')}</dt>
-					<dd>
-						{vm.volume || '–'}{#each vm.disks ?? [] as disk}<div>
-								{formatBytes(disk.sizeBytes)} · {disk.format}
-							</div>{/each}
-					</dd>
-					<dt>{t('tile.network')}</dt>
-					<dd>{vm.network === 'bridge' ? 'Bridge' : 'NAT'} · {vm.mac || '–'}</dd>
-					<dt>{t('dashboard.ipAddresses')}</dt>
-					<dd>{addresses[vm.name]?.join(', ') || '–'}</dd>
-					<dt>{t('dashboard.vmBoot')}</dt>
-					<dd>
-						{vm.firmware || 'UEFI'} · {t(
-							vm.autostart ? 'dashboard.autostartOn' : 'dashboard.autostartOff',
-						)}
-					</dd>
-					<dt>{t('dashboard.vmAvailable')}</dt>
-					<dd>{t(vm.available ? 'dashboard.yes' : 'dashboard.no')}</dd>
-				</dl>
-				<a href="/vms?vm={encodeURIComponent(vm.name)}">{t('dashboard.showDetails')} →</a>
-			</section>{:else}<p class="muted">{t('dashboard.vmDetailsEmpty')}</p>{/each}
-	</div>
-	<div class="dialog-actions">
-		<button class="btn btn-primary" onclick={onclose}>{t('common.done')}</button>
-	</div>
-</Dialog>
+<section class="vm-inline" aria-label={t('dashboard.detailsFor', { name: vmLabel(vm) })}>
+	<header>
+		<strong>{t('dashboard.showDetails')}</strong><button
+			class="close-details"
+			aria-label={t('dashboard.closeVmDetails')}
+			onclick={onclose}><Icon name="close" size={14} /></button
+		><span class="state">{tOr(`vms.state.${vm.state}`, vm.state)}</span>
+	</header>
+	<dl>
+		<dt>{t('dashboard.name')}</dt>
+		<dd>{vm.name}</dd>
+		<dt>{t('dashboard.guest')}</dt>
+		<dd>
+			{vm.template === 'windows'
+				? 'Windows'
+				: vm.template === 'linux'
+					? 'Linux'
+					: t('dashboard.other')}
+		</dd>
+		<dt>{t('dashboard.field.cpu')}</dt>
+		<dd>{vm.vcpus} vCPU</dd>
+		<dt>{t('dashboard.field.memory')}</dt>
+		<dd>{formatBytes(vm.memoryMiB * 1024 * 1024)}</dd>
+		<dt>{t('dashboard.vmUsage')}</dt>
+		<dd>
+			{vm.state === 'running'
+				? formatPercent(vm.cpuPercent) + ' · ' + formatBytes(vm.memoryBytes)
+				: '–'}
+		</dd>
+		<dt>{t('nav.storage')}</dt>
+		<dd>
+			{vm.volume || '–'}{#each vm.disks ?? [] as disk}<div>
+					{formatBytes(disk.sizeBytes)} · {disk.format}
+				</div>{/each}
+		</dd>
+		<dt>{t('tile.network')}</dt>
+		<dd>{vm.network === 'bridge' ? 'Bridge' : 'NAT'} · {vm.mac || '–'}</dd>
+		<dt>{t('dashboard.ipAddresses')}</dt>
+		<dd>{addresses[vm.name]?.join(', ') || '–'}</dd>
+		<dt>{t('dashboard.vmBoot')}</dt>
+		<dd>
+			{vm.firmware || 'UEFI'} · {t(
+				vm.autostart ? 'dashboard.autostartOn' : 'dashboard.autostartOff',
+			)}
+		</dd>
+		<dt>{t('dashboard.vmAvailable')}</dt>
+		<dd>{t(vm.available ? 'dashboard.yes' : 'dashboard.no')}</dd>
+	</dl>
+	<a href="/vms?vm={encodeURIComponent(vm.name)}">{t('dashboard.showDetails')} →</a>
+</section>
 
 <style>
-	.vm-details-grid {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 14px;
+	.close-details {
+		border: 0;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
+		padding: 3px;
+		margin-left: auto;
+	}
+	.vm-inline {
+		margin-top: 8px;
 	}
 	section {
 		border: 1px solid var(--border);
@@ -118,13 +119,16 @@
 	}
 	dl {
 		display: grid;
-		grid-template-columns: 100px minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
 		gap: 7px 12px;
 		margin: 0;
 		padding: 12px;
 		font-size: 0.75rem;
 	}
 	dt {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		hyphens: auto;
 		color: var(--muted);
 	}
 	dd {
@@ -136,10 +140,5 @@
 		display: block;
 		padding: 0 12px 12px;
 		font-size: 0.75rem;
-	}
-	@media (max-width: 600px) {
-		.vm-details-grid {
-			grid-template-columns: minmax(0, 1fr);
-		}
 	}
 </style>
