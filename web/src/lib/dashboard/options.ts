@@ -1,4 +1,5 @@
 import { sourceId, type TileId } from './tiles.ts';
+import { systemFields, type SystemField } from './system-fields.ts';
 export const PARTS = ['value', 'history', 'temperature', 'details', 'engines'] as const;
 export const STYLE_KEYS = [
 	'titleSize',
@@ -90,6 +91,9 @@ export type TileOptions = {
 	items: string[] | null;
 	runningOnly: boolean;
 	rows: number;
+	systemFields: SystemField[];
+	systemLayout: 'rows' | 'stacked';
+	showLabels: boolean;
 };
 const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '');
 export function tileOptions(input: unknown, id: TileId): TileOptions {
@@ -120,9 +124,9 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 	return {
 		details: bool(
 			'details',
-			!['cpu', 'network', 'system', 'igpu', 'npu', 'nvidia'].includes(idSource),
+			!['network', 'system', 'igpu', 'npu', 'nvidia', 'accelerators'].includes(idSource),
 		),
-		history: bool('history', ['cpu', 'npu'].includes(idSource)),
+		history: bool('history', false),
 		temperature: bool('temperature', true),
 		ipv4: bool('ipv4', true),
 		ipv6: bool('ipv6', true),
@@ -134,17 +138,39 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 			: '',
 		title: text('title', 80),
 		showTitle: bool('showTitle', true),
-		showIcon: bool('showIcon', false),
-		icon: choice('icon', EDITOR_ICONS, 'chip'),
-		titleSize: number('titleSize', 13, 11, 36),
+		showIcon: bool('showIcon', true),
+		icon: choice(
+			'icon',
+			EDITOR_ICONS,
+			(
+				{
+					system: 'monitor',
+					docker: 'grid',
+					vms: 'monitor',
+					memory: 'chip',
+					volumes: 'disk',
+					shares: 'folder',
+					network: 'globe',
+					temperatures: 'activity',
+				} as Record<string, (typeof EDITOR_ICONS)[number]>
+			)[idSource] ?? 'chip',
+		),
+		titleSize: number('titleSize', 12, 11, 36),
 		valueSize: number(
 			'valueSize',
-			['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures', 'assistant'].includes(
-				idSource,
-			)
-				? 16
-				: 36,
-			16,
+			[
+				'system',
+				'docker',
+				'vms',
+				'shares',
+				'volumes',
+				'disks',
+				'temperatures',
+				'assistant',
+			].includes(idSource)
+				? 14
+				: 18,
+			11,
 			96,
 		),
 		labelSize: number('labelSize', 12, 11, 28),
@@ -158,8 +184,8 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		background: color('background'),
 		borderColor: color('borderColor'),
 		opacity: number('opacity', 100, 35, 100),
-		radius: number('radius', 12, 0, 40),
-		padding: number('padding', 18, 8, 40),
+		radius: number('radius', 4, 0, 40),
+		padding: number('padding', 12, 8, 40),
 		gap: number('gap', 10, 2, 30),
 		borderWidth: number('borderWidth', 1, 0, 4),
 		shadow: number('shadow', 0, 0, 40),
@@ -168,7 +194,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		labelAlign: choice('labelAlign', align, 'left'),
 		density: choice('density', ['compact', 'normal', 'comfortable'], 'normal'),
 		display: choice('display', ['auto', 'value', 'bar', 'ring', 'history'], 'auto'),
-		list: choice('list', ['list', 'grid'], idSource === 'docker' ? 'grid' : 'list'),
+		list: choice('list', ['list', 'grid'], ['docker', 'vms'].includes(idSource) ? 'grid' : 'list'),
 		valueFont: choice(
 			'valueFont',
 			['mono', 'sans'],
@@ -198,6 +224,9 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 			: null,
 		runningOnly: bool('runningOnly', false),
 		rows: number('rows', 12, 1, 100),
+		systemFields: systemFields(v.systemFields),
+		systemLayout: choice('systemLayout', ['rows', 'stacked'], 'rows'),
+		showLabels: bool('showLabels', true),
 	};
 }
 export function tileStyle(o: TileOptions): string {
