@@ -1,4 +1,4 @@
-# RAM, Beschleuniger und Temperaturen
+# RAM, Netzwerk, Beschleuniger und Temperaturen
 
 ## RAM
 
@@ -8,6 +8,31 @@ Kernel, Dateicache und tmpfs einschließlich des TitanOS-Abbilds bereits enthalt
 Sie werden nicht noch einmal addiert. `MemAvailable` wird separat als verfügbar
 angezeigt; dieser Wert berücksichtigt wieder freigebbaren Cache. Installierter,
 von Firmware oder Geräten reservierter Speicher ist nicht Teil von `MemTotal`.
+
+## Netzwerkgeschwindigkeit
+
+Die Linkgeschwindigkeit kommt vom ausgehandelten physischen Anschluss hinter
+der ausgewählten Schnittstelle. Bei einer Bridge werden virtuelle VM-/Container-
+Ports ausgelassen; VLANs folgen ihrem unteren Gerät. Linux 6.12 meldet für veth
+10.000 Mbit/s und für eine Bridge den höchsten Wert ihrer aktiven Mitglieder.
+Dieser Bridge-Wert ist daher kein verlässliches Tempo des NAS-Anschlusses.
+
+Eine Bridge mit genau einem physischen Uplink zeigt dessen Linktempo. Bei
+mehreren unabhängigen physischen Uplinks bleibt der gemeinsame Wert unbekannt;
+die einzelnen Anschlüsse sind weiterhin auswählbar. Für Bonds bleibt der vom
+Kernel anhand aktiver Mitglieder und Betriebsart ermittelte Gesamtwert erhalten.
+Fehlender Carrier, unbekannte Geschwindigkeit und reine virtuelle Netze ergeben
+keinen erfundenen Messwert. Die Topologie wird aus sysfs gelesen, ohne Netzwerk-
+oder Stickkonfiguration zu verändern. Schnittstellenname, IP-Adressen und
+Traffic-Zähler bleiben die der ausgewählten Schnittstelle.
+
+Die Regressionstests bilden Bridge mit 2.500-Mbit/s-Anschluss und virtuellem
+10.000-Mbit/s-Port, VLANs, Bonds, Mehrdeutigkeit und fehlende Werte in temporärem
+sysfs nach. Eine Prüfung am Anschluss des Besitzers steht noch aus.
+
+Quellen: [Bridge in Linux 6.12](https://github.com/torvalds/linux/blob/v6.12/net/bridge/br_device.c),
+[veth](https://github.com/torvalds/linux/blob/v6.12/drivers/net/veth.c),
+[Bonding](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_main.c).
 
 ## iGPU und NPU
 

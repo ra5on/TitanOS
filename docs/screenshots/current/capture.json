@@ -1,6 +1,6 @@
 {
-  "source": "9d364a5affee503ed9f922b13c9d8b2acade73d2",
-  "version": "0.20.1",
+  "source": "6e555a30dfdfd7234f5361020322f3fe9c5c1530",
+  "version": "0.20.2",
   "captured": "2026-10-24",
   "demoData": true,
   "theme": "Graphit / Blau / Glas",
@@ -11,92 +11,92 @@
       "file": "dashboard.png",
       "width": 1600,
       "height": 1366,
-      "bytes": 650591,
-      "sha256": "8e164bd99dce0e8576f8a8f83fbf2890bed6b907d7a55196ff3e99d50a007743"
+      "bytes": 652067,
+      "sha256": "1a20e222b1d4591ffd5a51ea697d7acb1201895c984f044526acdcb4cbbf46df"
     },
     {
       "file": "dashboard-editor.png",
       "width": 1600,
       "height": 1810,
-      "bytes": 735003,
-      "sha256": "b734f0c07d6e5e13d4b2a7b93d092ad3c0ef9915ac04dcb48f80fa283345c2ad"
+      "bytes": 736174,
+      "sha256": "5a892b6c3f8b84f6c102f8ac8354e75ee4b0667529801ad8e72262775bc4c083"
     },
     {
       "file": "dashboard-hintergruende.png",
       "width": 1600,
       "height": 1810,
-      "bytes": 617934,
-      "sha256": "1f447d048cf85e1874cefab8a68996356c3446da19818a21a710e1c7342c09d1"
+      "bytes": 618013,
+      "sha256": "6c6c9515a7c8bad87e35da7363b0d37d442b1580bbceda45b472c6917944c7df"
     },
     {
       "file": "dashboard-bild-upload.png",
       "width": 1600,
       "height": 1810,
-      "bytes": 397212,
-      "sha256": "7dc79e00b1f72555aa60f3e025c6490cd21c50967d843912af1b52e6f787d3f5"
+      "bytes": 397340,
+      "sha256": "cc5a4f81a71ce95c839787cbd622200ec1e2d90a0eea8882f1abbde8b7bbee00"
     },
     {
       "file": "dashboard-vm-details.png",
       "width": 1600,
       "height": 1733,
-      "bytes": 680338,
-      "sha256": "976547da1990ba97c45c4a03692ea44da5621b4561bf2ecd0528b8283129540c"
+      "bytes": 681778,
+      "sha256": "6270124f7cbcdd6d3e15a8dbbb96ca9cb12e1cfa3767fb538e86036c51269537"
     },
     {
       "file": "speicher.png",
       "width": 1600,
       "height": 780,
-      "bytes": 288002,
-      "sha256": "a136b904e6431d099183521bbdfb90cf96e047a579643af631018991cc8783eb"
+      "bytes": 288358,
+      "sha256": "c1756baf1fc5e75d7d1c57882fa0312087152b4b4c8c8f9db45bd323b41de7e6"
     },
     {
       "file": "shares.png",
       "width": 1600,
       "height": 780,
-      "bytes": 251132,
-      "sha256": "c47b5dc6c6c5323fedb986e279cf5c85904a06084300e730fde78b2c1f52c7ed"
+      "bytes": 251512,
+      "sha256": "1c7aa2c6c9c326238b95670933673b480d44ff734844fa04982cdcf948251ec4"
     },
     {
       "file": "dateien.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 300592,
-      "sha256": "c8ea44833204768590ef56a08ec50295f9a36c432c8bb042d085f1a37633b551"
+      "bytes": 300882,
+      "sha256": "a0830db523f0f47220cf73a9b93f810c1f276610d3a65382a5b2f046c7326d8c"
     },
     {
       "file": "docker.png",
       "width": 1600,
       "height": 1175,
-      "bytes": 395469,
-      "sha256": "4a0a29e71ac594463325a796e6df1302919ef871f1d6f19f3126763000ea1e95"
+      "bytes": 395820,
+      "sha256": "6d27e885d6af592d6273159d038b8fe3ae8c3a013620c35090ba9a8f023a61c6"
     },
     {
       "file": "vms.png",
       "width": 1600,
       "height": 815,
-      "bytes": 316015,
-      "sha256": "5174877b8f2bd4c00167db59608484ae0a124121b992216d6d7f446fa16f81a3"
+      "bytes": 316374,
+      "sha256": "709de3ccc9bc4a11a848c3461733fe107d7824a845cc45839b42cfa2572c4781"
     },
     {
       "file": "einstellungen.png",
       "width": 1600,
       "height": 1013,
-      "bytes": 326707,
-      "sha256": "71263f04038c3c99a258e8b4b29cc0d64fbbb3d3ac7ef6c1027f8f35a862ba82"
+      "bytes": 327073,
+      "sha256": "02d42f52562158693517130242f50b0c3e8e003769f4987f17d14f5cfdb38106"
     },
     {
       "file": "dateien-mobil.png",
       "width": 390,
       "height": 844,
-      "bytes": 112283,
-      "sha256": "6267deeb014a92bade77255ea8b77b7c6480e0842025633713f8af983b6cdbb6"
+      "bytes": 112253,
+      "sha256": "d37d0167064a0044091440e5ee9be34aa0ca68c301666bf0d71f302c67fd6e08"
     },
     {
       "file": "dashboard-mobil.png",
       "width": 390,
       "height": 844,
-      "bytes": 102590,
-      "sha256": "6322183130ebf68a265e03c88b117dba30706d60394a6ae09d89c9df513f48eb"
+      "bytes": 102930,
+      "sha256": "ed7042990d942b1dba5243f36ecb9931f1e3b230d8afcca8bdb721245b4ab7d6"
     }
   ]
 }

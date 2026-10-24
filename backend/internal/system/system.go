@@ -458,11 +458,7 @@ func readNetBytes(iface string) (rx, tx uint64) {
 }
 
 func readSpeed(iface string) int {
-	speed, err := strconv.Atoi(readTrimmed("/sys/class/net/" + iface + "/speed"))
-	if err != nil || speed < 0 {
-		return 0
-	}
-	return speed
+	return readLinkSpeed("/sys/class/net", iface)
 }
 
 func readImage() *Image {
