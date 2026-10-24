@@ -5,20 +5,33 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { ApiError } from '#lib/api.ts';
-	import { dismissNotifications, loadNotifications, markSeen, notifications, noticeText, unreadCount, visibleNotices } from '#lib/notifications.svelte.ts';
+	import {
+		dismissNotifications,
+		loadNotifications,
+		markSeen,
+		notifications,
+		noticeText,
+		unreadCount,
+		visibleNotices,
+	} from '#lib/notifications.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
+	let { compact = false }: { compact?: boolean } = $props();
 	let open = $state(false);
 	let busy = $state(false);
 	let error = $state('');
 	async function dismiss(ids: number[]) {
 		busy = true;
 		error = '';
-		try { await dismissNotifications(ids); }
-		catch (err) { error = errorText(err instanceof ApiError ? err.code : 'internal'); }
-		finally { busy = false; }
+		try {
+			await dismissNotifications(ids);
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		} finally {
+			busy = false;
+		}
 	}
 	let root = $state<HTMLElement>();
 	// What was new when the list was opened stays marked while it is open.
@@ -55,19 +68,39 @@
 		if (event.key === 'Escape') open = false;
 	}
 
-	const SEVERITY = { info: 'notify.severity.info', warning: 'notify.severity.warning', error: 'notify.severity.error' } as const;
+	const SEVERITY = {
+		info: 'notify.severity.info',
+		warning: 'notify.severity.warning',
+		error: 'notify.severity.error',
+	} as const;
 	const CHIP = { info: 'info', warning: 'warn', error: 'error' } as const;
 </script>
 
+<svelte:window
+	onclick={onWindowClick}
+	onpointerdown={() => void armSound()}
+	onkeydown={(event) => {
+		void armSound();
+		onKeydown(event);
+	}}
+/>
 
-<svelte:window onclick={onWindowClick} onpointerdown={() => void armSound()} onkeydown={(event) => { void armSound(); onKeydown(event); }} />
-
-<div class="notifications" bind:this={root}>
-	<button type="button" class="trigger" class:open aria-haspopup="dialog" aria-expanded={open} title={t('notify.title')} onclick={toggle}>
+<div class="notifications" class:compact bind:this={root}>
+	<button
+		type="button"
+		class="trigger"
+		class:open
+		aria-haspopup="dialog"
+		aria-expanded={open}
+		title={t('notify.title')}
+		onclick={toggle}
+	>
 		<Icon name="bell" />
 		<span class="sr-only">{t('notify.title')}</span>
 		{#if unread > 0}
-			<span class="count {worst}" aria-label={t('notify.unread', { count: unread })}>{unread > 9 ? '9+' : unread}</span>
+			<span class="count {worst}" aria-label={t('notify.unread', { count: unread })}
+				>{unread > 9 ? '9+' : unread}</span
+			>
 		{/if}
 	</button>
 
@@ -79,10 +112,17 @@
 			</div>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if shown.length > 0}
-				<button class="btn clear" type="button" disabled={busy} onclick={() => dismiss(shown.map((notice) => notice.id))}>{t('notify.deleteAll')}</button>
+				<button
+					class="btn clear"
+					type="button"
+					disabled={busy}
+					onclick={() => dismiss(shown.map((notice) => notice.id))}>{t('notify.deleteAll')}</button
+				>
 			{/if}
 			{#if hidden > 0}
-				<a class="hidden-note muted" href="/account#bell" onclick={() => (open = false)}>{t('notify.hidden', { count: hidden })}</a>
+				<a class="hidden-note muted" href="/account#bell" onclick={() => (open = false)}
+					>{t('notify.hidden', { count: hidden })}</a
+				>
 			{/if}
 			{#if shown.length === 0}
 				<p class="empty muted">{t('notify.empty')}</p>
@@ -94,16 +134,38 @@
 						<li class:fresh={Date.parse(notice.time) > newSince}>
 							<div class="line">
 								<span class="chip {CHIP[notice.severity]}">{t(SEVERITY[notice.severity])}</span>
-								<time class="muted" datetime={notice.time}>{formatDateTime(new Date(notice.time))}</time>
-								<button class="btn dismiss" type="button" disabled={busy} aria-label={t('notify.deleteOne', { title: text.title })} title={t('common.delete')} onclick={() => dismiss([notice.id])}><Icon name="trash" size={14} /></button>
+								<time class="muted" datetime={notice.time}
+									>{formatDateTime(new Date(notice.time))}</time
+								>
+								<button
+									class="btn dismiss"
+									type="button"
+									disabled={busy}
+									aria-label={t('notify.deleteOne', { title: text.title })}
+									title={t('common.delete')}
+									onclick={() => dismiss([notice.id])}><Icon name="trash" size={14} /></button
+								>
 							</div>
 							<span class="what">{text.title}</span>
 							<span class="muted">{text.text}</span>
 							{#if href && !page.url.pathname.startsWith('/docker')}
-								<a class="notice-link" {href} onclick={() => open = false}>{t('ui.open')}</a>
+								<a class="notice-link" {href} onclick={() => (open = false)}>{t('ui.open')}</a>
 							{/if}
 							{#if assistant.status?.available}
-								<button type="button" class="notice-link ask" onclick={() => { open = false; askAbout(t('assistant.askNotice', { title: text.title, text: text.text, time: formatDateTime(new Date(notice.time)) })); }}>{t('assistant.ask')}</button>
+								<button
+									type="button"
+									class="notice-link ask"
+									onclick={() => {
+										open = false;
+										askAbout(
+											t('assistant.askNotice', {
+												title: text.title,
+												text: text.text,
+												time: formatDateTime(new Date(notice.time)),
+											}),
+										);
+									}}>{t('assistant.ask')}</button
+								>
 							{/if}
 						</li>
 					{/each}
@@ -130,8 +192,14 @@
 		text-decoration: underline;
 		cursor: pointer;
 	}
-	.clear { margin: 0 16px 8px; }
-	.dismiss { margin-left: auto; padding: 5px; min-height: 28px; }
+	.clear {
+		margin: 0 16px 8px;
+	}
+	.dismiss {
+		margin-left: auto;
+		padding: 5px;
+		min-height: 28px;
+	}
 	.notifications {
 		position: relative;
 	}
@@ -147,6 +215,24 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		cursor: pointer;
+	}
+	.compact .trigger {
+		width: var(--quick-button-size, 36px);
+		height: 36px;
+		border: 0;
+		border-radius: 6px;
+	}
+	.compact .trigger:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.compact .count {
+		top: 0;
+		right: 0;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 3px;
+		font-size: 10px;
 	}
 	.trigger.open,
 	.trigger:hover {
@@ -256,8 +342,8 @@
 			position: fixed;
 			top: 60px;
 			right: 12px;
- max-width: calc(100vw - 24px);
- max-height: calc(100dvh - 76px);
+			max-width: calc(100vw - 24px);
+			max-height: calc(100dvh - 76px);
 		}
 	}
 </style>

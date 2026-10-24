@@ -30,7 +30,7 @@ Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger H
 
 ### Editor
 
-Der Startseitenkopf entfällt; der Editor-Knopf liegt in der Hauptnavigation. Abschnittsköpfe zeigen optional eine aktuelle Zusammenfassung; Kacheln lassen sich einklappen. Eintragsbegrenzungen zeigen Anzahl und „Alle anzeigen“. Laufend-Filter und CPU-Threads sind direkt bedienbar. App-Symbolgröße, Eintragsbreite und Namenszeilen sind pro Kachel einstellbar.
+Der Startseitenkopf entfällt. Oben rechts liegt eine gemeinsame kompakte Fläche in der Reihenfolge Suche, Terminal, Assistent, Benachrichtigungen, Bearbeiten. Der Editor-Knopf steht damit ganz rechts in dieser Fläche und erscheint nur auf der Startseite. Das Konto-Menü bleibt daneben separat. Nicht berechtigte bzw. nicht verfügbare Funktionen entfallen ohne leere Plätze. Einzelne Funktionen behalten eigene Fokus-, Hover- und Aktivzustände; der Meldungszähler bleibt sichtbar. Abschnittsköpfe zeigen optional eine aktuelle Zusammenfassung; Kacheln lassen sich einklappen. Eintragsbegrenzungen zeigen Anzahl und „Alle anzeigen“. Laufend-Filter und CPU-Threads sind direkt bedienbar. App-Symbolgröße, Eintragsbreite und Namenszeilen sind pro Kachel einstellbar.
 
 Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
 

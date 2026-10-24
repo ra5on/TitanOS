@@ -10,7 +10,7 @@
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import { assistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 	import Icon from './Icon.svelte';
- import { togglePalette } from '#lib/palette.svelte.ts';
+	import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
 	import Notifications from './Notifications.svelte';
@@ -27,7 +27,7 @@
 		{ href: '/apps', label: 'nav.apps', roles: ['owner', 'admin'] },
 		{ href: '/plugins', label: 'nav.plugins', roles: ['owner', 'admin'] },
 		{ href: '/settings', label: 'nav.settings' },
-		{ href: '/tools', label: 'nav.tools', roles: ['owner', 'admin'] }
+		{ href: '/tools', label: 'nav.tools', roles: ['owner', 'admin'] },
 	];
 
 	const role = $derived(session.data?.user?.role ?? 'user');
@@ -39,7 +39,9 @@
 	afterNavigate(() => mobileMenu?.hidePopover());
 	onMount(() => {
 		const desktop = matchMedia('(min-width: 761px)');
-		const close = () => { if (desktop.matches) mobileMenu?.hidePopover(); };
+		const close = () => {
+			if (desktop.matches) mobileMenu?.hidePopover();
+		};
 		desktop.addEventListener('change', close);
 		return () => desktop.removeEventListener('change', close);
 	});
@@ -49,7 +51,10 @@
 	let canScrollRight = $state(false);
 
 	function scrollNav(direction: number) {
-		nav?.scrollBy({ left: direction * nav.clientWidth * 0.8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+		nav?.scrollBy({
+			left: direction * nav.clientWidth * 0.8,
+			behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+		});
 	}
 
 	// The navigation scrolls sideways when it does not fit; keep the current tab in view.
@@ -66,46 +71,159 @@
 
 <header>
 	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
-	<button class="mobile-nav-trigger" type="button" popovertarget="mobile-navigation" aria-expanded={mobileOpen} aria-controls="mobile-navigation" aria-label={t('nav.openMenu', { page: t(currentLabel) })}>
-		<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+	<button
+		class="mobile-nav-trigger"
+		type="button"
+		popovertarget="mobile-navigation"
+		aria-expanded={mobileOpen}
+		aria-controls="mobile-navigation"
+		aria-label={t('nav.openMenu', { page: t(currentLabel) })}
+	>
+		<svg
+			width="20"
+			height="20"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg
+		>
 		<span>{t(currentLabel)}</span>
 	</button>
-	<div id="mobile-navigation" class="mobile-navigation" popover="auto" bind:this={mobileMenu} ontoggle={() => mobileOpen = mobileMenu?.matches(':popover-open') ?? false}>
-		<div class="mobile-nav-heading"><strong>{t('nav.label')}</strong><button class="mobile-nav-close" type="button" popovertarget="mobile-navigation" popovertargetaction="hide" aria-label={t('nav.closeMenu')}>✕</button></div>
+	<div
+		id="mobile-navigation"
+		class="mobile-navigation"
+		popover="auto"
+		bind:this={mobileMenu}
+		ontoggle={() => (mobileOpen = mobileMenu?.matches(':popover-open') ?? false)}
+	>
+		<div class="mobile-nav-heading">
+			<strong>{t('nav.label')}</strong><button
+				class="mobile-nav-close"
+				type="button"
+				popovertarget="mobile-navigation"
+				popovertargetaction="hide"
+				aria-label={t('nav.closeMenu')}>✕</button
+			>
+		</div>
 		<nav class="mobile-links" aria-label={t('nav.label')}>
 			{#each items as item (item.href)}
-				<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined} onclick={() => mobileMenu?.hidePopover()}>{t(item.label)}</a>
+				<a
+					href={item.href}
+					aria-current={isCurrent(item.href) ? 'page' : undefined}
+					onclick={() => mobileMenu?.hidePopover()}>{t(item.label)}</a
+				>
 			{/each}
 		</nav>
 	</div>
-	<div class="nav-shell" use:horizontalNav={(state) => { overflow = state.overflow; canScrollLeft = state.left; canScrollRight = state.right; }}>
-		<button class="nav-arrow" type="button" hidden={!overflow} disabled={!canScrollLeft} aria-label={t('nav.scrollLeft')} onclick={() => scrollNav(-1)}>
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+	<div
+		class="nav-shell"
+		use:horizontalNav={(state) => {
+			overflow = state.overflow;
+			canScrollLeft = state.left;
+			canScrollRight = state.right;
+		}}
+	>
+		<button
+			class="nav-arrow"
+			type="button"
+			hidden={!overflow}
+			disabled={!canScrollLeft}
+			aria-label={t('nav.scrollLeft')}
+			onclick={() => scrollNav(-1)}
+		>
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg
+			>
 		</button>
 		<nav bind:this={nav} aria-label={t('nav.label')}>
 			<div class="nav-items">
 				{#each items as item (item.href)}
-					<a href={item.href} draggable="false" aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a>
+					<a
+						href={item.href}
+						draggable="false"
+						aria-current={isCurrent(item.href) ? 'page' : undefined}>{t(item.label)}</a
+					>
 				{/each}
 			</div>
 		</nav>
-		<button class="nav-arrow" type="button" hidden={!overflow} disabled={!canScrollRight} aria-label={t('nav.scrollRight')} onclick={() => scrollNav(1)}>
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+		<button
+			class="nav-arrow"
+			type="button"
+			hidden={!overflow}
+			disabled={!canScrollRight}
+			aria-label={t('nav.scrollRight')}
+			onclick={() => scrollNav(1)}
+		>
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg
+			>
 		</button>
 	</div>
-	{#if page.url.pathname === '/' && dashboardControl.edit}<button class="terminal" type="button" aria-label={t('dashboard.editTitle')} aria-pressed={dashboardControl.editing} disabled={dashboardControl.editing} onclick={() => dashboardControl.edit?.()}><Icon name="edit" size={18}/></button>{/if}
-	{#if role !== 'user'}
-		<button type="button" class="terminal" aria-pressed={terminal.open} aria-label={t('terminal.title')} title={t('terminal.shortcut')} onclick={toggleTerminal}>
-			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
-		</button>
-		<Notifications />
-	{/if}
-	{#if assistant.status?.available}
-		<button type="button" class="terminal" aria-current={page.url.pathname === '/assistant' ? 'page' : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
-			<Icon name="chat" size={18} />
-		</button>
-	{/if}
- <button class="terminal" type="button" onclick={togglePalette} aria-label={t('palette.title')} title={t('palette.shortcut')}><Icon name="search" size={18}/></button>
+	<div class="quick-access" role="group" aria-label={t('nav.quickActions')}>
+		<button
+			class="terminal"
+			type="button"
+			onclick={togglePalette}
+			aria-label={t('palette.title')}
+			title={t('palette.shortcut')}><Icon name="search" size={18} /></button
+		>
+		{#if role !== 'user'}
+			<button
+				type="button"
+				class="terminal"
+				aria-pressed={terminal.open}
+				aria-label={t('terminal.title')}
+				title={t('terminal.shortcut')}
+				onclick={toggleTerminal}
+			>
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg
+				>
+			</button>
+		{/if}
+		{#if assistant.status?.available}
+			<button
+				type="button"
+				class="terminal"
+				aria-current={page.url.pathname === '/assistant' ? 'page' : undefined}
+				aria-label={t('assistant.title')}
+				title={t('assistant.shortcut')}
+				onclick={toggleAssistant}
+			>
+				<Icon name="chat" size={18} />
+			</button>
+		{/if}
+		{#if role !== 'user'}<Notifications compact />{/if}
+		{#if page.url.pathname === '/' && dashboardControl.edit}<button
+				class="terminal"
+				type="button"
+				aria-label={t('dashboard.editTitle')}
+				aria-pressed={dashboardControl.editing}
+				disabled={dashboardControl.editing}
+				onclick={() => dashboardControl.edit?.()}><Icon name="edit" size={18} /></button
+			>{/if}
+	</div>
 	<AccountMenu />
 </header>
 
@@ -128,6 +246,31 @@
 	}
 	.brand {
 		display: flex;
+	}
+	.quick-access {
+		display: flex;
+		align-items: center;
+		gap: 0;
+		height: 44px;
+		padding: 3px 4px;
+		box-sizing: border-box;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--chip);
+		--quick-button-size: 36px;
+	}
+	.quick-access .terminal {
+		width: var(--quick-button-size);
+		height: 36px;
+		border: 0;
+		border-radius: 6px;
+	}
+	.quick-access .terminal:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.quick-access .terminal:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.terminal {
 		width: 44px;
@@ -172,9 +315,17 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.nav-arrow[hidden] { display: none; }
-	.nav-arrow:disabled { opacity: 0.35; cursor: default; }
-	.nav-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+	.nav-arrow[hidden] {
+		display: none;
+	}
+	.nav-arrow:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+	.nav-arrow:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
 	.nav-items {
 		display: flex;
 		width: max-content;
@@ -189,7 +340,10 @@
 		overscroll-behavior-x: contain;
 		user-select: none;
 	}
-	nav:global(.dragging), nav:global(.dragging) a { cursor: grabbing; }
+	nav:global(.dragging),
+	nav:global(.dragging) a {
+		cursor: grabbing;
+	}
 	.nav-shell nav a {
 		flex: none;
 		padding: 10px 14px;
@@ -208,24 +362,91 @@
 		font-weight: 500;
 	}
 
-	.mobile-nav-trigger { display: none; }
-	.mobile-navigation {
-		position: fixed; inset: 68px 8px auto; margin: 0; width: auto;
-		max-height: calc(100dvh - 84px - env(safe-area-inset-bottom)); overflow-y: auto;
-		padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-tile);
-		background: var(--header); color: var(--text);
+	.mobile-nav-trigger {
+		display: none;
 	}
-	.mobile-nav-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-	.mobile-nav-close { width: 44px; height: 44px; border: 1px solid var(--border); border-radius: var(--radius-ctl); background: var(--chip); color: var(--text); font: inherit; cursor: pointer; }
-	.mobile-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-	.mobile-links a { display: flex; align-items: center; min-height: 44px; padding: 10px; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: var(--radius-ctl); color: var(--text); text-decoration: none; }
-	.mobile-links a[aria-current='page'] { border-color: var(--accent); }
-	.mobile-links a:focus-visible, .mobile-nav-trigger:focus-visible, .mobile-nav-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.mobile-navigation {
+		position: fixed;
+		inset: 68px 8px auto;
+		margin: 0;
+		width: auto;
+		max-height: calc(100dvh - 84px - env(safe-area-inset-bottom));
+		overflow-y: auto;
+		padding: 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--header);
+		color: var(--text);
+	}
+	.mobile-nav-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+	.mobile-nav-close {
+		width: 44px;
+		height: 44px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--chip);
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
+	}
+	.mobile-links {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+	.mobile-links a {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
+		padding: 10px;
+		overflow-wrap: anywhere;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		color: var(--text);
+		text-decoration: none;
+	}
+	.mobile-links a[aria-current='page'] {
+		border-color: var(--accent);
+	}
+	.mobile-links a:focus-visible,
+	.mobile-nav-trigger:focus-visible,
+	.mobile-nav-close:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
 	@media (max-width: 760px) {
-		header > .nav-shell { display: none; }
-		header > .mobile-nav-trigger { display: flex; flex: 1 1 auto; min-width: 0; height: 44px; align-items: center; gap: 8px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-ctl); background: var(--chip); color: var(--text); font: inherit; cursor: pointer; }
-		.mobile-nav-trigger svg { flex: none; }
-		.mobile-nav-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		header > .nav-shell {
+			display: none;
+		}
+		header > .mobile-nav-trigger {
+			display: flex;
+			flex: 1 1 auto;
+			min-width: 0;
+			height: 44px;
+			align-items: center;
+			gap: 8px;
+			padding: 0 8px;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-ctl);
+			background: var(--chip);
+			color: var(--text);
+			font: inherit;
+			cursor: pointer;
+		}
+		.mobile-nav-trigger svg {
+			flex: none;
+		}
+		.mobile-nav-trigger span {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
 
 		header {
 			gap: 10px;
@@ -236,11 +457,31 @@
 		}
 	}
 	@media (max-width: 480px) {
-		header { gap: 4px; padding: 8px; }
-		.terminal { padding: 0; width:36px; }
-		.nav-arrow { width: 28px; }
-		.nav-shell, .nav-items { gap: 2px; }
-		.nav-shell nav a { padding-inline: 10px; }
+		header {
+			gap: 4px;
+			padding: 8px;
+		}
+		.quick-access {
+			--quick-button-size: 32px;
+		}
+		.nav-arrow {
+			width: 28px;
+		}
+		.nav-shell,
+		.nav-items {
+			gap: 2px;
+		}
+		.nav-shell nav a {
+			padding-inline: 10px;
+		}
 	}
- @media (max-width:360px) { header {gap:2px;padding-inline:6px;} .terminal {width:28px;} }
+	@media (max-width: 360px) {
+		header {
+			gap: 2px;
+			padding-inline: 6px;
+		}
+		.quick-access {
+			--quick-button-size: 28px;
+		}
+	}
 </style>

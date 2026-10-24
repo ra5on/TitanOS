@@ -36,6 +36,7 @@
 	"config.missingText": "TitanOS cannot read its configuration. Is the USB stick named TITANOS plugged in? Without it nobody can sign in and nothing is saved.",
 	"unreachable.title": "NAS not reachable",
 	"unreachable.text": "The web UI gets no answer from the NAS. Is it running and on the network?",
+	"nav.quickActions": "Quick actions",
 	"nav.label": "Main navigation",
 	"nav.scrollLeft": "Scroll navigation left",
 	"nav.scrollRight": "Scroll navigation right",
