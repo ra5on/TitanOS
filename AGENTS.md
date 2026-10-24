@@ -46,6 +46,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 - Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. Einzelheiten in den eigenen Abschnitten.
 - Zurückgestellt bzw. offen: ZFS, dokumentierte öffentliche API/CLI, Let's Encrypt und weitere Fernzugriffsarten. **Tailscale sowie kurze und optionale längere Monitoring-Verläufe sind umgesetzt**, siehe `docs/TAILSCALE.md` und `docs/MONITORING.md`.
 - LUKS-Volume-Verschlüsselung ist auf Entscheidung des Projektinhabers nicht vorgesehen. Die Befehlspalette (Strg/⌘+K) ist seit 0.16.0 umgesetzt: nur Navigation, rollenabhängig, keine Mutationen.
+- README: den aktuellen Gesamtumfang nach Funktionsbereichen beschreiben, keine „Neu in Version …“-Abschnitte anhängen. Aktuelle echte WebUI-Screenshots mit isolierten Beispieldaten unter `docs/screenshots/current/` pflegen; Herkunft und Aufnahme in `docs/screenshots/README.md` dokumentieren. Versionshistorie und Prüfberichte bleiben in den Releases.
 - Bereits umgesetzte Funktionen nicht erneut als unentworfene Release-Voraussetzung behandeln. Für UI-Arbeiten gelten die aktuellen Entwürfe und Folgeentscheidungen unten.
 
 ## Stick-Layout

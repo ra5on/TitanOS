@@ -5,252 +5,254 @@
   </picture>
 </p>
 
-<p align="center"><strong>Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft.</strong></p>
-
----
-
-> **Aktuelle Version: [TitanOS 0.19.1 Stable](https://github.com/ra5on/TitanOS/releases/tag/v0.19.1)** · Veröffentlichungsdatum auf der Release-Seite. Diese README beschreibt den Funktionsumfang dieser Version. Updates verwenden den gemeinsamen Stable-Kanal; einzelne optionale Funktionen sind als Beta gekennzeichnet.
+<p align="center"><strong>Deine Daten. Deine Anwendungen. Deine Startseite.</strong><br>Ein NAS-Betriebssystem für den eigenen Server – vom USB-Stick gestartet, im RAM betrieben, im Browser verwaltet.</p>
 
 <p align="center">
-  <img src="docs/screenshots/v0.7.2/vms.png" alt="TitanOS 0.7.2: VM-Seite mit Liste, Reitern und Übersichtskacheln" width="900">
+  <a href="https://github.com/ra5on/TitanOS/releases/latest">Stable herunterladen</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#funktionen">Alle Funktionen</a> ·
+  <a href="#dokumentation">Dokumentation</a> ·
+  <a href="LICENSE.md">Fair Source</a>
 </p>
 
-Die Screenshots zeigen die Weboberfläche von **0.7.2** (VMs), **0.7.1** (Dateimanager) und **0.7.0** (Detailansichten) mit isolierten Beispieldaten, keine Messwerte eines produktiven NAS. Desktop: Graphit; Smartphone: Hell.
+[![TitanOS: persönlich gestaltbares Dashboard mit Systeminformationen, Docker-Apps, VMs, Speicher und Messwerten](docs/screenshots/current/dashboard.png)](docs/screenshots/current/dashboard.png)
 
-## Was TitanOS ist
+## Ein Server für Dateien, Apps und virtuelle Maschinen
 
-TitanOS macht aus einem PC ein NAS. Das System liegt auf einem USB-Stick, wird beim Start komplett in den Arbeitsspeicher geladen und läuft von dort. Der Stick wird danach nur noch angefasst, wenn sich die Konfiguration ändert oder ein Update kommt. Bedient wird alles im Browser.
+TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant und ein optionaler KI-Assistent.
 
-Die Idee ist von Unraid inspiriert, setzt aber auf klassisches RAID. TitanOS ist ein eigenständiges Projekt und steht in keiner Verbindung zu Lime Technology. Es basiert auf Debian 13 (trixie) für x86-64.
+Die Startseite passt du an deinen Alltag an: Welche Informationen du siehst, wie viel Platz sie bekommen und wie sie aussehen, bestimmst du selbst. Jede Person hat ihr eigenes Dashboard und ihre eigenen Darstellungseinstellungen.
 
-## Neu in 0.19.1
+Das System basiert auf **Debian 13**, startet per UEFI von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
 
-- **Dashboard mit Positionsraster:** unabhängig wachsende Spalten, Ziehvorschau, Größenänderung und Positionssperre. Kompakte Köpfe, einklappbare Kacheln und Editor direkt in der Hauptnavigation.
-- **Docker mit App-Icons:** auch bei Einzelcontainern, Stack-Mitgliedern und Menüs. Entfernen zeigt den tatsächlichen Umfang einer verwalteten Anwendung; Updateprüfungen liefern sichtbare Ergebnisse.
-- **VM-Details am Eintrag:** nur die ausgewählte VM klappt direkt darunter auf. App-Symbolgröße, Eintragsbreite und Namenszeilen individuell einstellen.
-- Menüziele, große Schriften, mobile Darstellung und Eintragsbegrenzungen korrigiert. App-Update auf Basis **0.15.0**. [Änderungen und Prüfstand](docs/releases/v0.19.1.md).
+Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
 
-## Neu in 0.19.0
-
-- **Kompaktes Dashboard:** 1–4 einstellbare Spalten, gleichbleibende Lesereihenfolge und automatischer Umbruch. Schmale Abschnittsköpfe, kompakte Tabellen und Messwerte; eigene Gestaltung und vorhandene Geräteauswahl bleiben erhalten.
-- **Systeminformationen auswählen:** Felder ein-/ausblenden und sortieren, einschließlich Mainboard/BIOS und CPU-Thread-Auslastung. Werte stammen vom NAS; fehlende Daten bleiben unbekannt.
-- **Klickmenüs:** Docker, VMs, Shares und Volumes bieten passende Funktionen direkt am Eintrag. VM-Raster ohne CPU/RAM; ein Details-Button öffnet die ausführlichen Informationen aller VMs.
-- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen und Prüfstand](docs/releases/v0.19.0.md).
-
-## Neu in 0.18.0
-
-- **Persönliches Dashboard:** ein visueller Editor für eine frei gestaltbare Startseite je Konto. Schrift, Farben, Flächen, Inhalte, Größe und Anordnung je Kachel; zusätzliche Geräteinstanzen, Rückgängig und Vorschau. Keine Aufmerksamkeit-/Auftragsfläche.
-- **Speicher und Einstellungen:** kompakte Volume-/Laufwerkslisten mit ausgewählten Details; fünf übersichtliche Einstellungsgruppen mit gezielter Suche.
-- **Home Assistant per MQTT:** mehr RAID-, Backup-, Netzwerk-, Anwendungs-, USV-, Wartungs- und Systemwerte sowie GPU/iGPU/NPU. Geräteauswahl, unbekannte Werte und robuste Discovery.
-- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen und Prüfstand](docs/releases/v0.18.0.md).
-
-## Neu in 0.17.0
-
-- **Datenkorrekturen:** Snapshot-Aufbewahrung prüft Btrfs-UUIDs, Anwendungssicherungen erkennen weitere Schreiber auch bei VM-Aufträgen. Alle restic-Wiederherstellungen verwenden geprüfte neue Kopien und Veröffentlichung ohne Überschreiben.
-- **Auftragszentrale:** Filter, bekannte abgeschlossene Ergebnisse, eigene KI-Aufträge/Automationen und Upload-Fortschritt; gemeinsame Fehlerbewertung mit dem Dashboard und direkte unterstützte Steuerung.
-- **Wartung:** erfolgreiche Vorgänger, optionaler Backup-Vorrang, sichtbare Wartegründe und vollständigere Sperren. Abbrechen und Wiederanlaufdetails korrigiert.
-- **Sicherungen:** Abdeckung ausdrücklich ausgewählter Shares, Container und VMs; geführte Anwendungswiederherstellung in einen neuen Ordner mit historischen Anwendungsdaten, soweit im Archiv vorhanden.
-- **Monitoring und Übersicht:** CSV/JSON, vorsichtige Kapazitätsprognose, RAID-/Restore-Vorschau und grafische Speicheranteile. Betroffene Seiten und Backend-Abläufe aufgeräumt.
-- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen, genaue Grenzen und Prüfstand](docs/releases/v0.17.0.md).
-
-## Neu in 0.16.1
-
-- **Transparente App-Symbole:** keine eingefärbten Flächen hinter den Icons im App-Katalog und Installationspanel. Fehlende Bilder zeigen weiterhin lesbare Namenskürzel im hellen und dunklen Theme.
-- App-Update auf Basis **0.15.0**, bei passender Basis ohne NAS-Neustart. [Änderungen und Prüfstand](docs/releases/v0.16.1.md).
-
-## Neu in 0.16.0
-
-- **Kompakte Shares und Docker-Stacks:** filterbare Freigabenliste, Details auf Klick, erhaltene Formulare; zunächst geschlossene Stacks mit WebUI-, Tailscale- und öffentlichen Links des Hauptdienstes. Befehlspalette per Strg/⌘+K.
-- **Speicher übernehmen und erweitern:** lesende Vorschau unterstützter mdadm-/Btrfs-Volumes, Registrierung ohne Formatieren; RAID5/6 um eine Platte erweitern, mit separatem Rettungs-Volume und geprüftem Wiederanlauf.
-- **Wartung und Snapshots:** gemeinsame Zeitfenster, Prüfungen, SMART-Langtests, Wiederherstellungsproben und Btrfs-Zeitpläne mit Aufbewahrung; einzelne Snapshot-Dateien in neue Ordner zurückholen.
-- **Sicherungen für Anwendungen:** ausgewählte Container/VMs sauber anhalten und wieder starten, optional PostgreSQL exportieren; unterbrochene Vorgänge ausdrücklich prüfen. Backups durch echte Wiederherstellungsproben testen.
-- **Verläufe und Aufträge:** optionale Monitoring-Daten für 7/30 Tage auf einem Volume, Speicherverbrauch auf Anforderung, Fehler und nächste Arbeit zentral auf Dashboard und Auftragsseite.
-- **VMs und Dateien:** unabhängige Klone ausgeschalteter VMs mit neuen Kennungen; Kopier-/Verschiebeaufträge auf Daten-Volumes nach titand-Neustart geprüft fortsetzen.
-
-App-Update auf Basis 0.15.0. [Bedienung und Grenzen](docs/WORKFLOWS.md),
-[Änderungen und Prüfstand](docs/releases/v0.16.0.md). LUKS-Volume-Verschlüsselung
-ist nicht vorgesehen.
-
-## Neu in 0.15.0
-
-- **KI-Arbeitsplatz:** eigene Auftragszentrale mit Prioritäten und Abhängigkeiten; persönliches Wissen, Vorlagen und Quellordner mit gezielter Inhaltssuche.
-- **Dokumente:** PDF-Text und optionale OCR, genaue Word-/Textänderungen sowie Excel-Wertzellen als neue, geprüfte Kopie.
-- **Home Assistant:** feinere Gerätefreigaben, Aliasnamen, Fähigkeiten, Zielzustandsprüfung, begrenzte Schalter-Rücknahme und Recorder-Historie. Mehr Auslöser, Bedingungen, Zeitfenster, Hysterese und Versionsverlauf für Automationen.
-- **Assist und Meldungen:** optionale native HA-Gespräche, weitere MQTT-Werte und Backup-Startknöpfe, Ersatzkanal und optionale dauerhafte Ruhezeitmeldungen, aufgabenbezogene Modelle und erweiterte Modelltests.
-
-[Funktionsumfang und Grenzen](docs/ASSISTANT-EXPANSION.md). Volles Systemupdate mit Neustart wegen PDF-/OCR-Paketen; keine energieabhängige Auftragsplanung.
-
-## Neu in 0.14.0
-
-- **Benachrichtigungen des KI-Assistenten pro Konto:** eigene Wege (E-Mail, ntfy, Telegram, Discord, Home-Assistant-App), Meldung bei wartender Freigabe, Zusammenfassung, Ruhezeiten, Nachrichten des Agenten aus Automationen und auf Wunsch „Freigeben“/„Ablehnen“ direkt in der Benachrichtigung. Die Glocke lässt sich pro Konto filtern.
-- **Home Assistant:** Der Assistent schaltet freigegebene Geräte, Zustände starten Automationen, Werte des NAS erscheinen per MQTT in Home Assistant (optional mit Knöpfen), und Assist beantwortet „Frag das NAS …“. [Anleitung](docs/HOME-ASSISTANT.md).
-- **Energie und Backups:** Herunterfahren und Einschalten nach Zeitplan, Wake-on-LAN; Backups prüfen und einzelne Dateien wiederherstellen.
-- **Assistent:** Vorlagen für Automationen, Statistik je Auftrag, Dashboard-Kachel.
-
-## Weboberfläche bis 0.13.0
-
-- **KI-Assistent (0.10.0, als Agent seit 0.11.0):** Ein Modell aus Ollama beantwortet im Chat Fragen zum NAS, schlägt in Volumes, Platten, Containern, VMs, Backups, Protokollen, Dateien und im Handbuch nach und – wenn eingeschaltet – im Web (DuckDuckGo). Änderungen führt das NAS nach Freigabe aus; optional erledigt der Direktmodus auch zerstörerische Schritte ohne weitere Nachfrage. Rollen und Bereichsrechte bleiben wirksam. Aufträge laufen unabhängig vom Browser, lassen sich pausieren und fortsetzen. Systemprompt, Modellprofile, Probelauf und Diagnose sind einstellbar. Antworten erscheinen Wort für Wort, Chats bleiben je Konto auf einem Volume gespeichert, eigene Seite und Strg+J. Als Agent erledigt er Aufträge nach einmal freigegebenem Plan, schreibt Word-, Excel-, PDF- und Textdateien, sortiert und verschiebt Dateien und nutzt die übrigen Funktionen der Oberfläche – je Bereich einstellbar, nie mit Zugriff auf Geheimnisse. Benutzer können ihn auf Wunsch eingeschränkt nutzen. Ab Werk aus (Einstellungen › KI-Assistent, [docs/ASSISTANT.md](docs/ASSISTANT.md)). Die Agenten-Schnittstelle aus 0.9.0 (MCP-Server, API-Schlüssel, App „TitanOS-Agent“) ist dafür entfallen.
-- **Updates ohne Neustart (0.8.0):** Kleine Updates tauschen nur das Programm von TitanOS mit seiner Weboberfläche aus, ohne Neustart des NAS. Container, VMs und Freigaben laufen weiter, die Anmeldung bleibt. Eine neue Version läuft auf Probe; startet sie nicht, kehrt TitanOS von selbst zur vorigen zurück. Volle Updates mit Neustart bleiben für neue Systempakete und Kernel.
-- **Neue VM-Seite (0.7.2):** Reiter Übersicht, Bildschirm und Snapshots; Übersicht in Kacheln mit Auslastung, Hardware, Datenträgern, Netzwerk und Geräten. CD einlegen, wechseln und auswerfen auch bei laufender VM, Adresse der VM über den QEMU-Gastagent oder die Nachbartabelle des NAS. Liste mit Filter und Aktionen je VM, aufgeräumte Bildschirm-Leiste mit „Senden“ und „Anzeige“.
-- **Aufgeräumter Dateimanager (0.7.1):** zwei kompakte Leisten statt fünf, Pfadeingabe in den Brotkrumen, Sortieren über die Spaltenköpfe, schwebendes Kontextmenü (auch per Tastatur), Doppelklick für Vorschau und Editor, Symbole nach Dateityp und eine Aktionsleiste, die bei einer Auswahl am unteren Rand bleibt. Auf dem Smartphone ist die Ortsauswahl eingeklappt.
-- **Persönlicher Dateimanager:** benannte und sortierbare Favoriten, Ansichten und Sortierung je Ordner im Benutzerkonto, Ordnerbaum, zwei Ansichten, Suche und schnelle Darstellung großer Ordner.
-- **Sichere Dateiaktionen:** neue Text-/Markdown-/JSON-Dateien ohne Überschreiben, gezielte Auswahl nach Dateityp, Vorschau von Quelle, Ziel, Umfang und freiem Speicher vor Übertragungen. Ziehen zwischen Ansichten und einzelne Konfliktentscheidungen.
-- **Papierkorb und Rückgängig:** sichtbarer Papierkorb mit Originalpfaden, Datumsfiltern und Speicherbelegung; Wiederherstellungsvorschau und Rückgängig für unterstützte Aktionen innerhalb der Dienstlaufzeit.
-- **Vorschau und Werkzeuge:** Bilder, PDF, Audio/Video, Texteditor mit vorheriger Fassung und Zeilenvergleich. Unterordnersuche, Sammelumbenennen, ZIP-Inhalte, Ordnervergleich, Duplikatsuche und Speicheranalyse auf Anforderung.
-- **Übertragungen im Blick:** Warteschlange, Pause, Priorität und Geschwindigkeitslimit, gemessener Fortschritt, geschätzte Restzeit und verständliche Fehler. Uploads mit gemeinsamer Pause-/Fortsetzen-/Wiederholen-Steuerung.
-- **Namen und Updates:** Schreibweise benutzergewählter Volume-/Backup-Namen bleibt erhalten. Nach der Besitzer-/Administrator-Anmeldung läuft eine signierte Updateprüfung im Hintergrund; Meldungen führen zur Update-Seite.
-- **Bestehende Oberfläche:** Einstellungen, Sicherungsübersicht, Themes und mobile Ansichten bleiben erhalten. Die Docker-Oberfläche ist gegenüber 0.5.9 unverändert.
-
-Alle Änderungen: [0.19.0](https://github.com/ra5on/TitanOS/releases/tag/v0.19.0) · [0.18.0](https://github.com/ra5on/TitanOS/releases/tag/v0.18.0) · [0.17.0](https://github.com/ra5on/TitanOS/releases/tag/v0.17.0) · [0.16.1](https://github.com/ra5on/TitanOS/releases/tag/v0.16.1) · [0.16.0](https://github.com/ra5on/TitanOS/releases/tag/v0.16.0) · [0.15.0](https://github.com/ra5on/TitanOS/releases/tag/v0.15.0) · [0.14.0](https://github.com/ra5on/TitanOS/releases/tag/v0.14.0) · [0.13.0](https://github.com/ra5on/TitanOS/releases/tag/v0.13.0) · [0.12.1](https://github.com/ra5on/TitanOS/releases/tag/v0.12.1) · [0.12.0](https://github.com/ra5on/TitanOS/releases/tag/v0.12.0) · [0.11.0](https://github.com/ra5on/TitanOS/releases/tag/v0.11.0) · [0.10.0](https://github.com/ra5on/TitanOS/releases/tag/v0.10.0) · [0.9.1](https://github.com/ra5on/TitanOS/releases/tag/v0.9.1) · [0.9.0](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0) · [0.8.0](https://github.com/ra5on/TitanOS/releases/tag/v0.8.0) · [0.7.2](https://github.com/ra5on/TitanOS/releases/tag/v0.7.2) · [0.7.1](https://github.com/ra5on/TitanOS/releases/tag/v0.7.1) · [0.7.0](https://github.com/ra5on/TitanOS/releases/tag/v0.7.0) · [0.6.1](https://github.com/ra5on/TitanOS/releases/tag/v0.6.1).
+**Die Bilder zeigen die echte Weboberfläche mit isolierten Beispieldaten.** Es sind keine Messungen eines produktiven NAS und keine Design-Mockups. Ein Klick öffnet die volle Auflösung. [Aufnahmestand und Erstellung](docs/screenshots/README.md).
 
 ## Funktionen
 
-- **Start vom Stick, Betrieb im RAM.** Das komprimierte Systemabbild wird beim Booten in den Arbeitsspeicher kopiert, darüber liegt eine auf 512 MB begrenzte Schreibschicht. Container, VM-Abbilder und Nutzdaten liegen auf Daten-Volumes. Größe und RAM-Bedarf hängen vom Release und den laufenden Diensten ab.
-- **Konfiguration auf dem Stick.** Systemeinstellungen, Konten und Schlüssel liegen im Ordner `config` auf dem Stick. Der Stick wird bei Bedarf eingebunden und nach 30 Sekunden ohne Zugriff wieder ausgehängt. Eine automatische Sicherung auf einem Daten-Volume ermöglicht die Wiederherstellung nach einem Stick-Ausfall; die aktive Konfiguration bleibt auf dem Stick.
-- **Ersteinrichtung und Anmeldung.** Beim ersten Start legst du das Besitzerkonto mit frei gewähltem Namen an; ein kurzer Assistent fragt danach Name und Zeitzone ab. Es gibt kein festes „admin“ und keinen Login als root. Wiederholte Fehlversuche werden ausgebremst, und jedes Konto lässt sich mit einem zweiten Faktor (Code aus einer Authenticator-App) schützen.
-- **HTTPS von Anfang an.** Die Weboberfläche läuft über HTTPS mit einem selbst signierten Zertifikat, das über Neustarts gleich bleibt. Ein eigenes Zertifikat mit Schlüssel und Zertifikatskette lässt sich als PEM importieren und ohne Neustart verwenden.
-- **Dashboard mit frei anordenbaren Kacheln.** Spaltenzahl und Reihenfolge sind einstellbar. Kacheln lassen sich verschieben, in der Größe ändern und ausblenden; bei weniger Platz fließen sie in derselben Reihenfolge nach unten. Das Layout wird pro Konto gespeichert.
-- **Darstellung nach Wunsch.** Themes, Akzentfarben, Glas-Effekt, Eckenradius, Schriftgröße, Dichte und Hintergrund, mit Vorschau und Export als Datei.
-- **Klassisches RAID.** Volumes mit RAID 0, 1, 5, 6 und 10 über Linux-Software-RAID (mdadm) mit ext4 oder XFS. Fällt eine Platte aus, lässt sie sich in der Oberfläche entfernen und ersetzen; Wiederaufbau und Prüfung zeigen ihren Fortschritt.
-- **Freigaben.** SMB mit Rechten pro Konto, Gastzugriff nur lesend, Papierkorb und Time-Machine-Ziel; NFS für ausgewählte Rechner. Dazu fertige Adressen zum Verbinden.
-- **Dateimanager im Browser.** Dateien und ganze Ordner hochladen, herunterladen (auch als ZIP), erstellen, kopieren, verschieben, umbenennen und in den Papierkorb oder endgültig löschen. Vorschauen, persönliche Ordneransichten und Werkzeuge sind oben beschrieben; Rechte des angemeldeten Kontos gelten bei jeder Aktion.
-- **Docker.** Die Engine speichert alles auf einem Volume deiner Wahl. Die Übersicht zeigt Container und Stacks mit CPU, RAM, Ports und Update-Hinweisen, dazu Start, Stopp, Logs und eine Konsole im Browser. Jede App lässt sich als Formular oder als Compose-Datei bearbeiten.
-- **App-Store.** Der separate [TitanOS-App-Store](https://github.com/ra5on/TitanOS-Apps), eingebaute Vorlagen und eigene Quellen (Repository, Archiv oder Compose-Datei), darunter CasaOS-kompatible Stores mit mehreren hundert Apps. Beim Installieren füllt TitanOS Zeitzone, Pfade, freie Ports und Geheimnisse selbst aus und zeigt bei jedem Feld, woher der Wert kommt.
-- **Virtuelle Maschinen.** KVM/QEMU mit UEFI: VMs anlegen, starten und stoppen, mit dem Bildschirm der VM direkt im Browser und einer Übersicht samt Adresse im Netz; CDs lassen sich im laufenden Betrieb wechseln. Kerne festlegen, vorhandene Abbilder und ganze Platten nutzen, Grafikkarten und USB-Geräte durchreichen, NAS-Ordner in der VM einbinden, TPM 2.0 und Secure Boot.
-- **Netzwerk.** Feste Adresse, Bonding, VLAN und eine Bridge, über die VMs eine eigene Adresse im Heimnetz bekommen. Jede Änderung gilt erst auf Probe: Ohne Bestätigung innerhalb von zwei Minuten kehrt das NAS zur alten Einstellung zurück.
-- **Benachrichtigungen.** Fällt eine Platte aus, läuft ein Wiederaufbau oder wird ein Volume voll, steht das in der Weboberfläche und kommt auf Wunsch per E-Mail, ntfy, Telegram, Discord oder über die Home-Assistant-App. Jedes Konto hat zusätzlich eigene Wege für Nachrichten des KI-Assistenten und filtert seine Glocke selbst.
-- **Home Assistant.** Geräte für den KI-Assistenten freigeben, Automationen per Zustandswechsel auslösen, NAS-Werte per MQTT-Discovery, Fragen über Assist. [Anleitung](docs/HOME-ASSISTANT.md).
-- **Energie.** CPU-Profile, Herunterfahren und Einschalten nach Zeitplan (RTC) und Wake-on-LAN.
-- **Backups.** Freigaben mit restic verschlüsselt auf ein anderes Volume, einen anderen Server (SFTP), S3-Speicher oder einen restic-REST-Server sichern, nach Zeitplan und mit Ständen der letzten Tage, Wochen und Monate; Speicherort prüfen; ganze Stände oder einzelne Dateien in einen eigenen Ordner wiederherstellen. Externe S3- und REST-Dienste müssen mit dem jeweiligen Ziel geprüft werden.
-- **Kopie-Backups.** Freigaben auf externe USB-Platten oder ein SMB-Ziel kopieren, sofort oder nach Zeitplan. Neue und geänderte Dateien werden übertragen; gelöschte Quelldateien bleiben am Ziel. Die Kopien sind direkt lesbar, ohne Versionierung. SMB-Ordnerkopie ist als Beta gekennzeichnet. [USB-Kopie](docs/USB-COPY-BACKUPS.md) · [SMB-Kopie](docs/SMB-COPY-BACKUPS.md).
-- **USV.** Per USB oder über das Netzwerk; bei Stromausfall fährt das NAS sauber herunter, bevor die Batterie leer ist, und kann den Zustand der USV an andere Geräte weitergeben.
-- **Updates mit Rückfall.** Der Stick hält zwei Systeme. Eine neue Version kommt in das, das gerade nicht läuft, und startet auf Probe; kommt sie nicht hoch, startet das NAS von selbst wieder die vorherige. Kleine Updates ersetzen nur das Programm von TitanOS und kommen ohne Neustart, ebenfalls auf Probe. Installiert wird nur, was mit dem Schlüssel des Projekts signiert ist.
-- **Sicherung des Sticks.** Automatische Sicherung der Konfiguration auf ein verfügbares Volume, gebündelt nach Änderungen; zusätzlich Download und Wiederherstellung. Beim Ersatz eines Sticks lässt sich eine gefundene Sicherung in der Ersteinrichtung auswählen und zurückspielen.
-- **Platten vorbereiten.** Neue Platten lassen sich vor dem Einbau prüfen: ganz lesen oder überschreiben und zurücklesen, danach der lange Selbsttest der Platte.
-- **Protokoll und Diagnosepaket.** Die Meldungen des Systems im Browser, nach Quelle und Stufe gefiltert. Für Fehlerberichte packt TitanOS Protokolle und Systemzustand in eine Zip-Datei und filtert bekannte Adress-, Namens- und Geheimnisfelder. Das Paket vor dem Weitergeben prüfen; die Filter können unbekannte Formate übersehen.
-- **Plugins.** Systemerweiterungen für Treiber und Werkzeuge, die auf einem Volume liegen und sich ein- und ausschalten lassen. Das NVIDIA-Plugin wird separat mit passendem Kernel und signiertem Manifest ausgeliefert; siehe [Anleitung](docs/NVIDIA.md).
-- **Terminal.** Eine Shell auf dem NAS und Konsolen in Containern als Tabs am unteren Rand jeder Seite – nur für Besitzer und Administratoren. Die NAS-Shell verwendet die bestehende Anmeldung; Gastkonsolen haben eigene Bestätigungsregeln.
-- **SSH und eigenes Zertifikat.** SSH ist ab Werk aus; eingeschaltet melden sich Administratoren mit Schlüssel unter ihrem eigenen Namen an, nie als root. Die Weboberfläche nimmt ein eigenes Zertifikat an.
-- **Konten mit Rollen.** Besitzer, Administratoren und Benutzer; jedes Konto gilt für die Weboberfläche und für SMB.
-- **Deutsch und Englisch.**
+### Deine persönliche Startseite
 
-## Einblicke in die Oberfläche
+- **Ein frei gestaltbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
+- **Anpassbare Aufteilung:** ein bis vier Spalten und eine Mindestbreite festlegen. Bei schmaleren Fenstern wandern die Inhalte in ihrer Lesereihenfolge nach unten; Kacheln können automatisch wachsen oder eine feste Höhe mit scrollbarem Inhalt bekommen.
+- **Gestaltung je Kachel:** Schriftgrößen für Titel, Werte und Beschriftungen, Messwertdarstellung, Farben, Hintergrund, Rahmen, Ecken, Schatten und Abstände. Bei Apps zusätzlich Symbolgröße, Eintragsbreite und Namenszeilen. Stile lassen sich übertragen.
+- **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
+- **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
+- **Visueller Editor mit Vorschau:** Änderungen direkt sehen, rückgängig machen, wiederholen, speichern oder verwerfen.
 
-<table>
-<tr><td width="50%"><img src="docs/screenshots/v0.7.0/uebertragung.png" alt="TitanOS 0.7.0: Übertragungsvorschau mit Quelle, Ziel und Umfang"></td><td width="50%"><img src="docs/screenshots/v0.7.0/papierkorb.png" alt="TitanOS 0.7.0: Papierkorbfilter und Bestätigung ausgewählter Dateien"></td></tr>
-<tr><td align="center">Übertragung prüfen</td><td align="center">Papierkorb</td></tr>
-<tr><td><img src="docs/screenshots/v0.7.0/textvergleich.png" alt="TitanOS 0.7.0: Textfassungen mit markierten Änderungen"></td><td><img src="docs/screenshots/v0.7.0/zwei-ordner.png" alt="TitanOS 0.7.0: zwei Ordneransichten"></td></tr>
-<tr><td align="center">Textvergleich</td><td align="center">Zwei Ordner</td></tr>
-</table>
+[![Dashboard-Editor mit ausgewählter Docker-Kachel und Einstellungen für deren Darstellung](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
 
-<p align="center"><img src="docs/screenshots/v0.7.2/vms-bildschirm.png" alt="TitanOS 0.7.2: Bildschirm einer VM mit dem Menü Senden" width="760"></p>
+[VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
 
-<p align="center"><img src="docs/screenshots/v0.7.1/dateien.png" alt="TitanOS 0.7.1: Dateimanager mit kompakten Leisten, Spaltensortierung und Kontextmenü" width="760"></p>
+### Speicher und Laufwerke
 
-<p align="center"><img src="docs/screenshots/v0.7.1/werkzeuge.png" alt="TitanOS 0.7.1: Menü Werkzeuge im Dateimanager" width="640"></p>
+- **Klassisches RAID:** mdadm mit RAID 0, 1, 5, 6 und 10; Dateisysteme ext4 und XFS. Volumes anlegen, Zustand und Belegung sehen, Mitglieder ersetzen und Wiederaufbau oder Konsistenzprüfung verfolgen.
+- **Btrfs-Spiegel:** native RAID1-Volumes aus genau zwei Platten, schreibgeschützte Snapshots, Scrub und Plattenersatz. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots oder einzelner Dateien in neue Ordner.
+- **Vorhandenen Speicher übernehmen:** lesende Vorschau unterstützter mdadm- und Btrfs-Volumes, danach Registrierung ohne Formatierung. RAID5/6 lässt sich um eine Platte erweitern; dafür ist ein separates Rettungs-Volume erforderlich.
+- **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Einstellbarer Laufwerksruhezustand.
+- **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
-<p align="center"><img src="docs/screenshots/v0.7.2/vms-mobil.png" alt="TitanOS 0.7.2: VM-Übersicht auf einem schmalen Bildschirm" width="320"> <img src="docs/screenshots/v0.7.1/dateien-mobil.png" alt="TitanOS 0.7.1: Dateimanager auf einem schmalen Bildschirm mit Aktionsleiste" width="320"></p>
+[![Speicherübersicht mit drei Volumes und den Details eines RAID5-Volumes](docs/screenshots/current/speicher.png)](docs/screenshots/current/speicher.png)
 
-## Speicher und Hardware
+[Btrfs](docs/BTRFS.md) · [Übernahme, Erweiterung und Speicheranalyse](docs/WORKFLOWS.md)
 
-- **Btrfs-Spiegel:** native RAID1-Spiegel aus genau zwei Platten, schreibgeschützte Snapshots, Wiederherstellung in einen neuen Ordner, Scrub und Ersatz eines fehlenden Mitglieds. [Btrfs-Anleitung](docs/BTRFS.md).
-- **Geräteauswahl für Container:** iGPU/GPU, NPU, NVIDIA und Coral USB im App-Installationsdialog und Container-Editor; gespeichert werden stabile Gerätekennungen. [Hardware und Plugins](docs/PLUGINS.md).
-- **Weitere Plugins:** Intel GPU Tools aus Debian und Coral-USB-Erkennung mit Diagnose. Die Coral-Laufzeit bringt die jeweilige Container-App mit; PCIe/M.2-Coral wird nicht unterstützt.
-- **Plugins direkt von GitHub:** Die Plugin-Seite zeigt den signierten Katalog des laufenden Releases. Pakete werden erst beim Installieren auf das Daten-Volume geladen und vor der Aktivierung geprüft. Die manuelle Installation aus einer Freigabe bleibt möglich. [Plugin-Installation](docs/PLUGINS.md#installation-der-zusätzlichen-plugins).
-- **NVIDIA:** Leistungslimit innerhalb der Kartengrenzen und optionaler Wechsel zwischen VM und zuvor laufenden GPU-Containern. [Bedienung und Grenzen](docs/PLUGINS.md#nvidia-zwischen-vm-und-containern).
-- **Plugins bei Systemupdates:** signierte passende Versionen werden vor dem Slot-Wechsel vorbereitet. Dateien und Aktivierungseinstellungen bleiben je Systemversion getrennt, damit ein Rollback seine ursprünglichen Plugins erhält.
+### Freigaben und Konten
 
-## Weitere Funktionen
+- **SMB:** Rechte je Konto, lesender Gastzugriff, Papierkorb mit Aufbewahrung und Time-Machine-Ziele. **NFS:** Freigaben für ausgewählte Clients.
+- **Übersichtliche Shares:** suchen, filtern und sortieren; Details, Verbindungsadressen und Dateimanager direkt an der Freigabe öffnen.
+- **Besitzer, Administratoren und Benutzer:** das erste Besitzerkonto hat einen frei gewählten Namen. Benutzer sehen ihre freigegebenen Dateien; Systemverwaltung, Docker und VMs bleiben den Verwaltungsrollen vorbehalten.
+- **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner Sitzungen. Konten gelten auch für SMB.
 
-- Getrennte CPU-/RAM-/Systemkacheln, kleinere VM-/Containerkacheln und Einstellungen für Kachelbreite, Höhe und Zusatzwerte; IPv6 im Netzwerk-Dashboard. [Monitoring](docs/MONITORING.md).
-- Einstellungen für den physischen [Ein-/Ausschalter](docs/POWER-BUTTON.md).
-- Fernzugriff über das [Tailscale-Plugin](docs/TAILSCALE.md) mit Subnet-Routing und beiden Exit-Node-Rollen.
-- Öffentliche [NVIDIA-Treiber auf dem NAS vorbereiten](docs/NVIDIA-LOCAL-BUILD.md), anschließend ausdrücklich beim Neustart aktivieren.
+[![Shares mit kompakter Freigabenliste, Diensten und Zugriffsrechten](docs/screenshots/current/shares.png)](docs/screenshots/current/shares.png)
 
-### VM-Firmware
+### Dateien direkt im Browser verwalten
 
-Beim Anlegen einer VM kann zwischen **UEFI (OVMF)** und **Legacy-BIOS (SeaBIOS)**
-gewählt werden. UEFI bleibt Standard; vorhandene VMs behalten UEFI. Die Auswahl
-ist nach dem Anlegen fest, da sie zum installierten Gast passen muss. Für
-Windows 11 UEFI mit TPM und Secure Boot verwenden. TitanOS selbst benötigt
-weiterhin UEFI zum Starten.
+- **Persönlicher Arbeitsplatz:** Ordnerbaum, benannte und sortierbare Favoriten, Ansichten und Sortierung je Ordner, zwei Ordner nebeneinander und eine Pfadeingabe in den Brotkrumen.
+- **Dateien und Ordner bearbeiten:** erstellen, hochladen, herunterladen, als ZIP laden, kopieren, verschieben, umbenennen und löschen. Ziehen zwischen Ansichten, Übertragungsvorschau und Entscheidungen bei Namenskonflikten.
+- **Vorschau und Texteditor:** Bilder, PDF, Audio und Video ansehen; UTF-8-Textdateien bis 512 KiB bearbeiten, einschließlich Markdown, JSON und YAML. Vorige Fassung vergleichen und wiederherstellen.
+- **Werkzeuge:** Unterordnersuche, Sammelumbenennen, ZIP-Inhalte, Ordnervergleich, gezielte Übernahme von Unterschieden, Duplikatsuche und Speicheranalyse auf Anforderung.
+- **Papierkorb:** Originalpfad, Datum und Belegung sehen, filtern und vor der Wiederherstellung prüfen. Unterstützte Aktionen lassen sich innerhalb der Dienstlaufzeit rückgängig machen.
+- **Übertragungen steuern:** Warteschlange, Pause, Priorität, Geschwindigkeitslimit, Fortschritt und Restzeitschätzung. Dauerhaft gespeicherte Kopier-/Verschiebeaufträge auf Daten-Volumes lassen sich nach einem Dienstneustart geprüft fortsetzen. Unfertige Uploads können nach erneuter Dateiauswahl fortgesetzt werden.
+- **Externe Datenträger:** eingebundene USB-Laufwerke im Dateimanager nutzen, einschließlich Uploads auf exFAT. Jede Aktion berücksichtigt die Rechte des angemeldeten Kontos.
 
-### Dateien bearbeiten und externe USB-Laufwerke
+[![Dateimanager mit Ortsauswahl, Ordnern, Dokumenten und Werkzeugleiste](docs/screenshots/current/dateien.png)](docs/screenshots/current/dateien.png)
 
-Gängige UTF-8-Textdateien bis 512 KiB lassen sich direkt unter
-**Dateien → Bearbeiten** speichern, auch JSON/YAML auf beschreibbaren Freigaben,
-Volumes und USB-Geräten. Uploads auf externe exFAT-Laufwerke werden unterstützt.
-[Bedienung, Dateiformate und Grenzen](docs/FILE-EDITOR.md).
+[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
 
-### Windows meldet einen zu langen Zielpfad
+### Docker und App-Store
 
-Bei tiefen Ordnerbäumen gelten zusätzlich Grenzen des Windows-Kopierprogramms.
-Siehe [Kopieren langer Pfade über SMB](docs/WINDOWS-SMB.md) für Robocopy und die
-Unterscheidung zwischen Gesamtpfad und einzelnem Dateinamen.
+- **Container und Compose-Stacks:** Start, Stopp, Neustart, Logs und Browserkonsole; CPU, RAM, Ports und geprüfte Updatezustände im Blick. Suche, Filter sowie anpassbare Reihenfolge und Ansicht.
+- **Anwendungen schnell öffnen:** eigene App-Icons und Links zur WebUI, zur Tailscale-Adresse und zur öffentlichen Adresse. Bei Stacks bestimmt ein Hauptdienst die gemeinsamen Links.
+- **Apps als Formular oder Compose bearbeiten:** Ports, Datenpfade, Umgebungswerte und Hardware je Dienst zuweisen. Die Docker-Daten liegen auf einem ausgewählten Daten-Volume.
+- **App-Store mit eigenen Quellen:** offizieller [TitanOS-App-Katalog](https://github.com/ra5on/TitanOS-Apps), zusätzliche Repositories, Archive und Compose-Dateien; Unterstützung für CasaOS-kompatible Stores.
+- **Installationshilfe:** freie Ports, Zeitzone, Pfade und Geheimnisse vorbereiten und die Herkunft der Feldwerte anzeigen. Eigene Vorlagen für Immich sowie Ollama mit Open WebUI; Container-Abbilder und Modelle werden erst bei Nutzung heruntergeladen.
 
-## Voraussetzungen und Prüfstand
+[![Docker-Übersicht mit geschlossenen Stacks und einzelnen Anwendungen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
 
-- PC mit x86-64-Prozessor und UEFI; Secure Boot für das NAS ausgeschaltet. Legacy-BIOS und ARM werden nicht unterstützt. Secure Boot innerhalb einer VM ist davon unabhängig.
-- Für erste Tests 4 GB RAM einplanen, zusätzlich RAM für Container und VMs. Das ist eine Testempfehlung, keine auf echter Hardware geprüfte Mindestanforderung.
-- USB-Stick mit 8–32 GB, FAT32 und Label `TITANOS`; separate Datenplatten. Anlegen eines Volumes löscht die ausgewählten Platten. RAID ersetzt kein Backup.
-- Kabelgebundenes Netzwerk; zunächst DHCP. Netzwerkänderungen sind anschließend in der Weboberfläche möglich. Firmware für ausgewählte Realtek-/Broadcom-Netzwerkkarten, QLogic-Adapter sowie Intel- und AMD-Grafik ist enthalten, einschließlich Intel GuC/HuC und NPU-Firmware. Unterstützung hängt zusätzlich vom Debian-Kernel und dem konkreten Gerät ab.
-- Der Prüfstand deckt nicht jede USV, jedes externe Backupziel oder jede GPU ab. Die verfügbaren Hardwareberichte ersetzen keine Prüfung der eigenen Geräte und Rücksicherung. TitanOS im vertrauenswürdigen lokalen Netz betreiben.
-- Bootloader-Aktualisierung und Systemupdates aus einer hochgeladenen Datei sind nicht enthalten. HTTPS unterstützt selbst signierte und importierte Zertifikate; eine automatische Let’s-Encrypt-Verwaltung ist nicht enthalten.
+[App-Links](docs/APP-LINKS.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
+
+### Virtuelle Maschinen
+
+- **KVM/QEMU und libvirt:** VMs anlegen, starten, sauber herunterfahren und automatisch starten. UEFI als Standard, optional Legacy-BIOS für passende Gäste; Windows 11 mit TPM 2.0 und Secure Boot im Gast.
+- **Ressourcen und Datenträger:** CPU-Kerne zuweisen oder reservieren, qcow2/raw und vorhandene Abbilder nutzen, physische Platten einbinden und ausgeschaltete VMs mit neuen Kennungen klonen.
+- **Browserkonsolen:** VM-Bildschirm und serielle Konsole, Tastenkombinationen, Text senden, Vollbild und Bildschirmfoto. ISOs lassen sich auch während des Betriebs wechseln.
+- **Netzwerk und Geräte:** Bridge mit eigener Gast-IP oder QEMU-User-Networking; erkannte IP-Adressen, PCI/GPU-/USB-Passthrough und Ordnerfreigaben per virtiofs.
+- **Snapshots:** VM-Datenträger, Konfiguration und bei unterstützten Gästen RAM-Zustand, UEFI und TPM sichern und zurücksetzen. Zeitpläne, Aufbewahrung und Wiederherstellungsstatus; Voraussetzungen und Ausschlüsse werden angezeigt.
+
+[![VM-Verwaltung mit Maschinenliste und Übersicht der ausgewählten Home-Assistant-VM](docs/screenshots/current/vms.png)](docs/screenshots/current/vms.png)
+
+[VM-Snapshots und Grenzen](docs/VM-SNAPSHOTS.md) · [Bridge-Netzwerk](docs/NETWORKING.md)
+
+### Sicherungen und Wiederherstellung
+
+- **Versionierte Backups mit restic:** Freigaben verschlüsselt auf ein anderes Volume, per SFTP, zu S3 oder zu einem restic-REST-Server sichern. Zeitpläne, Aufbewahrung, Zielprüfung und Fortschritt.
+- **Wiederherstellung prüfen:** Archivprüfungen und echte Wiederherstellungsproben; ganze Stände oder einzelne Dateien als neue Kopie in einen eigenen Ordner zurückholen.
+- **Anwendungen mit sichern:** ausgewählte Container und VMs sauber anhalten und anschließend wieder starten; optional PostgreSQL exportieren. Sicherungsabdeckung zeigt, welche ausgewählten Shares, Container und VMs berücksichtigt werden.
+- **Geführte Anwendungswiederherstellung:** Daten zuerst in einen neuen Ordner holen, vorhandene historische Anwendungsinformationen prüfen und die Übernahme ausdrücklich abschließen. Ungeklärte unterbrochene Vorgänge werden zur Prüfung angezeigt.
+- **Direkt lesbare Kopie-Backups:** neue und geänderte Dateien auf USB oder ein SMB-Ziel übertragen, sofort oder nach Zeitplan. Keine Versionierung; am Ursprung gelöschte Dateien bleiben am Ziel. Die SMB-Ordnerkopie trägt ein Beta-Label.
+- **Systemkonfiguration sichern:** automatische gebündelte Sicherung auf einem Daten-Volume, Download und Wiederherstellung bei der Ersteinrichtung eines Ersatzsticks. Die Konfigurationssicherung enthält keine Nutzdaten.
+
+[Backup- und Wiederherstellungsabläufe](docs/WORKFLOWS.md) · [USB-Kopie](docs/USB-COPY-BACKUPS.md) · [SMB-Kopie](docs/SMB-COPY-BACKUPS.md)
+
+### Wartung, Monitoring und Diagnose
+
+- **Wartungspläne:** gemeinsame Zeitfenster mit Zeitzone; RAID-Prüfungen, Btrfs-Scrub, SMART-Langtests, Backup-Prüfungen, Wiederherstellungsproben und Snapshot-Aufbewahrung. Abhängigkeiten, optionaler Backup-Vorrang und sichtbare Wartegründe.
+- **Auftragsübersicht:** laufende und bekannte abgeschlossene Vorgänge filtern, Fehler prüfen und unterstützte Aufträge pausieren, abbrechen oder fortsetzen. Eigene KI-Aufträge, Automationen und Uploads einsehen.
+- **Live-Monitoring:** CPU und Threads, RAM, Netzverkehr, Volumes, Laufwerke, Temperaturen und Beschleuniger. Kurze Verläufe im RAM; optional sieben oder 30 Tage auf einem Daten-Volume, mit CSV-/JSON-Export. Fehlende Werte bleiben unbekannt.
+- **RAM-Verwaltung:** einstellbares Writeback-Budget und begrenzte Upload-Fenster, die sich an verfügbarem Arbeitsspeicher und einer Systemreserve orientieren.
+- **Protokolle und Diagnose:** Systemjournal im Browser nach Quelle und Stufe filtern; ein Diagnosepaket mit Systemzustand und Filterung bekannter sensibler Felder erstellen. Vor dem Weitergeben bleibt eine eigene Prüfung sinnvoll.
+
+[Monitoring](docs/MONITORING.md) · [Wartung und Aufträge](docs/WORKFLOWS.md) · [RAM-Verwaltung](docs/MEMORY.md)
+
+### GPU, iGPU, NPU und Plugins
+
+- **Hardware für Apps auswählen:** stabile Gerätekennungen für Intel-/AMD-Grafik, NVIDIA, NPU und Coral USB; Zuordnung je Container-Dienst.
+- **Treiber und Werkzeuge als Plugins:** signierter Katalog, Installation auf einem Daten-Volume und zur Systembasis passende Pakete. Plugin-Dateien und Einstellungen bleiben beim System-Rückfall getrennt erhalten.
+- **Beschleuniger beobachten:** Auslastung, Temperatur, Leistung, Speicher, Takt und Engines, soweit Gerät und Treiber diese Werte liefern. Nicht verfügbare Messwerte werden nicht als null ausgegeben.
+- **NVIDIA:** passendes Treiber-Plugin, Leistungslimit und optionaler geregelter Wechsel zwischen VM und GPU-Containern. Öffentliche Treiber lassen sich auf dem NAS vorbereiten und ausdrücklich beim Neustart aktivieren.
+- **Intel GPU Tools und Coral USB:** zusätzliche Diagnose und Geräteerkennung. Die Coral-Laufzeit stellt die jeweilige Container-App bereit; PCIe-/M.2-Coral ist nicht unterstützt.
+
+[Plugins und Gerätezuordnung](docs/PLUGINS.md) · [NVIDIA](docs/NVIDIA.md) · [Lokaler NVIDIA-Bau](docs/NVIDIA-LOCAL-BUILD.md)
+
+### Home Assistant und MQTT
+
+- **NAS-Werte per MQTT-Discovery:** System, Volumes/RAID, Laufwerke, Container, Stacks, VMs, Netzwerk, Backups, Wartung, Kapazitätsprognosen und USV sowie GPU, iGPU und NPU.
+- **Gezielt veröffentlichen:** Gruppen und einzelne Geräte auswählen. Stabile Kennungen, Verfügbarkeit, Ablaufzeiten und Bereinigung entfernter Entitäten; keine zusätzlichen SMART-Abfragen zum Aufwecken schlafender Platten.
+- **Optionale Knöpfe:** Container, VMs und eingerichtete Backups steuern, Updates prüfen sowie NAS-Neustart und Herunterfahren auslösen. Die Rechte des ausgewählten Kontos gelten auch hier.
+- **Freigegebene HA-Geräte im Assistenten:** ganze Bereiche oder einzelne Geräte mit Aliasnamen und Fähigkeiten erlauben, Zustände lesen, erlaubte Dienste aufrufen und Zielzustände prüfen; begrenzte Rücknahme unterstützter Schaltvorgänge.
+- **Automationen und Assist:** Zustandswechsel, Schwellwerte und Bedingungen als Auslöser; Recorder-Historie, Fragen per Assist und optionale native Gesprächsintegration. Benachrichtigungen über die Home-Assistant-App mit passenden Aktionen.
+
+[Home-Assistant-Anleitung, Einrichtung und Prüfgrenzen](docs/HOME-ASSISTANT.md)
+
+### Optionaler KI-Assistent
+
+- **Ollama anbinden:** ein eigenes oder selbst gehostetes Werkzeugmodell nutzen; ab Werk ausgeschaltet. Chats mit laufender Antwortausgabe, persönliche Verläufe auf einem Daten-Volume und Schnellzugriff per Strg+J.
+- **Das NAS befragen und verwalten:** Systemzustand, Speicher, Freigaben, Docker, VMs, Backups, Protokolle, Dateien und Handbuch einbeziehen; optional Websuche. Lese- und Änderungsrechte pro Bereich festlegen.
+- **Aufträge laufen auf dem NAS:** Änderungen nach Freigabe, optional ausdrücklich im Direktmodus; Probelauf, Pause, Stopp, Fortsetzen, Prioritäten, Abhängigkeiten und Checkpoints. Das Schließen des Browsers beendet den Auftrag nicht. Unbekannte Änderungsausgänge werden nicht automatisch wiederholt.
+- **Persönliches Wissen:** explizite Notizen, Vorlagen, Projekte und ausgewählte Quellordner mit gezielter Suche. Systemprompt, Modellprofile, Kontextvorschau, Modelltests und Statistik je Chat.
+- **Dokumente:** Word-, Excel-, PDF- und Textdateien erzeugen; PDF-Text und optionale OCR lesen. Unterstützte Word-/Textänderungen und Excel-Wertzellen als neue geprüfte Kopien speichern; Formeln bleiben geschützt.
+- **Automationen:** einmalig, nach Intervall, täglich oder wöchentlich mit Zeitzone sowie durch Meldungen, USB-, Volume-, Ordner- und Home-Assistant-Ereignisse. Vorlagen, Bedingungen, Zeitfenster, Hysterese und Versionsverlauf.
+- **Private Benachrichtigungen:** je Konto Freigaben, Ergebnisse oder Blockierungen melden, mit Zusammenfassung, Ruhezeiten und optionalem Ersatzkanal. Optional Freigeben/Ablehnen über ntfy oder die HA-App; zerstörerische Aktionen bleiben davon ausgeschlossen.
+
+[KI-Assistent: Bedienung, Rechte und Grenzen](docs/ASSISTANT.md) · [Wissen, Dokumente und Automationen](docs/ASSISTANT-EXPANSION.md)
+
+### Netzwerk, Energie und Systemzugang
+
+- **Netzwerk:** DHCP oder feste Adressen, IPv4/IPv6, Bonding, VLAN und VM-Bridge. Änderungen laufen auf Probe und werden ohne Bestätigung innerhalb von zwei Minuten zurückgesetzt.
+- **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall.
+- **Energie und USV:** CPU-Profile, Herunterfahren und Einschalten per RTC-Zeitplan, Wake-on-LAN und Verhalten des physischen Ein-/Ausschalters. USB- oder Netzwerk-USV über NUT, Abschalten bei Stromausfall und Weitergabe des USV-Status.
+- **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start oder eigene PEM-Zertifikate samt Schlüssel und Kette importieren.
+- **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt.
+- **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse.
+
+[Netzwerk](docs/NETWORKING.md) · [Tailscale](docs/TAILSCALE.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
+
+### Einstellungen, Darstellung und mobile Bedienung
+
+- **Geordnete Einstellungen:** fünf Themenbereiche, kompakte alphabetisch sortierte Kacheln und gezielte Suche. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
+- **Themes:** Graphit, Schwarz, Mitternacht, Hell, Automatik und eigene Farben; Akzent, Hintergrund, Transparenz, Glas-Effekt, Unschärfe, Eckenradius, Dichte und Schriftgröße einstellen. Darstellung exportieren und importieren.
+- **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung, mobile Navigation und rollenabhängige Befehlspalette per Strg/⌘+K.
+
+[![Einstellungen mit fünf übersichtlichen Gruppen und kompakten Kacheln](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+
+<p align="center">
+  <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="300"></a>
+  <a href="docs/screenshots/current/dateien-mobil.png"><img src="docs/screenshots/current/dateien-mobil.png" alt="Dateimanager auf einem Smartphone" width="300"></a>
+</p>
+
+### Updates mit geprüftem Rückfall
+
+TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert Updates manuell oder nach Zeitplan; nach einer Verwaltungsanmeldung kann eine Prüfung im Hintergrund erfolgen.
+
+- **Kompatible App-Updates** ersetzen nur TitanOS mit seiner Weboberfläche, ohne Neustart des NAS. Container, VMs und Freigaben laufen weiter; die Anmeldung bleibt erhalten. Bei fehlgeschlagenem Probestart folgt der Rückfall zur vorigen App oder Systembasis.
+- **Volle Systemupdates** erneuern auch Kernel und Systempakete. Sie werden in den inaktiven A/B-Slot geschrieben und starten auf Probe. Scheitert die Startprüfung wiederholt, bootet der vorherige Slot.
+- **Signatur und Integrität sind Pflicht:** nur gültig signierte Manifeste und passende Datei-Prüfsummen werden angenommen. Laufende relevante Daten- und Wartungsvorgänge blockieren die Installation bis zu ihrem Abschluss.
+
+[App-Updates](docs/APP-UPDATES.md) · [Release-Dateien, Signaturen und Prüfung](docs/RELEASING.md)
+
+## Voraussetzungen und aktuelle Grenzen
+
+| Bereich | Voraussetzung |
+|---|---|
+| Rechner | x86-64/amd64 mit UEFI; Secure Boot für das NAS ausgeschaltet |
+| Arbeitsspeicher | Für erste Tests 4 GB einplanen, zusätzlich RAM für Apps und VMs; keine pauschal abgenommene Hardware-Mindestgröße |
+| Bootmedium | USB-Stick mit 8–32 GB, FAT32, Label `TITANOS` |
+| Nutzdaten | Separate Laufwerke; ein neues Volume löscht die ausgewählten Platten |
+| Netzwerk | Kabelgebunden, beim ersten Start DHCP |
+| Virtualisierung | Für VMs aktivierte Hardware-Virtualisierung; Passthrough benötigt passende IOMMU-/Geräteunterstützung |
+
+RAID ersetzt kein Backup. Unterstützung und Messwerte hängen von Kernel, Firmware und konkreter Hardware ab; das gilt auch für GPUs, NPUs, USVs und externe Backupziele. Die Release-Prüfungen umfassen automatisierte Tests und virtuelle NAS-Systeme, keine vollständige Abnahme aller Geräte und Dienste. Die genauen Ergebnisse stehen in den [Release-Berichten](docs/releases/).
+
+ARM, ZFS, LUKS-Volume-Verschlüsselung, automatische Let's-Encrypt-Zertifikate und eine dokumentierte öffentliche API/CLI sind nicht enthalten. Der Bootloader wird bei Updates nicht automatisch ersetzt; volle Systemupdates aus einer hochgeladenen Datei sind nicht umgesetzt. TitanOS ist für ein vertrauenswürdiges lokales Netz gedacht; eine konfigurierbare Paketfilter-Firewall ist derzeit nicht enthalten. [Netzwerkverhalten](docs/NETWORKING.md#firewall-derzeit-ausgeschaltet).
 
 ## Installation
 
-Die Dateien für **0.19.0** stehen auf der [Release-Seite](https://github.com/ra5on/TitanOS/releases/tag/v0.19.0). Für einen neuen Stick:
+1. Auf der [aktuellen Stable-Release-Seite](https://github.com/ra5on/TitanOS/releases/latest) das Stick-ZIP `titanos-<version>.zip` sowie dessen `.minisig` und `.sha256` herunterladen. Die Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen. [Download-Prüfung](docs/RELEASING.md#downloads-prüfen).
+2. Einen leeren USB-Stick als **FAT32** mit dem Label **`TITANOS`** formatieren. Das ZIP direkt ins Stammverzeichnis entpacken. Dort liegen anschließend `EFI`, `loader`, `titanos` und `config`.
+3. Per **UEFI, Secure Boot aus**, vom Stick starten. Die DHCP-Adresse steht auf der Konsole oder im Router. Im Browser **`https://<nas-ip>`** öffnen; das selbst signierte Zertifikat erzeugt zunächst eine Browserwarnung.
+4. Bei einer Neuinstallation das Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Unter **Speicher** ein Volume anlegen und unter **Shares** eine Freigabe erstellen. Konfigurationssicherung und Zwei-Faktor-Anmeldung einrichten.
 
-1. `titanos-0.19.0.zip`, `titanos-0.19.0.zip.minisig` und `titanos-0.19.0.zip.sha256` laden. Signatur mit [minisign](https://jedisct1.github.io/minisign/) und einem vertrauenswürdig bezogenen öffentlichen [Release-Schlüssel](build/mkosi.extra/usr/share/titanos/update-keys/) prüfen; der Prüfablauf steht in [RELEASING.md](docs/RELEASING.md#downloads-prüfen). Die Prüfsumme allein bestätigt nicht die Herkunft.
-2. Einen leeren USB-Stick als FAT32 mit dem Label `TITANOS` formatieren. Das ZIP direkt ins Stammverzeichnis entpacken: Dort müssen `EFI`, `loader`, `titanos` und `config` liegen, ohne zusätzlichen Unterordner.
-3. Das NAS vom Stick starten (UEFI, Secure Boot aus). Die per DHCP vergebene IP steht auf der Konsole oder im Router. Im Browser `https://<nas-ip>` öffnen; das selbst signierte Zertifikat verursacht zunächst eine Browserwarnung.
-4. Bei einem Ersatzstick zuerst die angebotene Konfigurationssicherung wiederherstellen (siehe unten). Bei einer Neuinstallation: Besitzerkonto anlegen, Sprache, Hostname und Zeitzone einstellen. Danach unter „Speicher“ ein Volume anlegen und unter „Shares“ eine Freigabe einrichten. Konfigurationssicherung und gegebenenfalls 2FA einrichten.
+Ein vorhandenes NAS unter **Einstellungen › Updates** aktualisieren. Den eingerichteten Stick dafür nicht neu formatieren.
 
-Updates werden unter **Einstellungen › Updates** angeboten. TitanOS verwendet den Stable-Kanal; frühere Beta-Kanaleinstellungen werden automatisch umgestellt. Für ein Update einer vorhandenen Installation die Update-Seite verwenden; den Stick mit bestehender Konfiguration nicht neu formatieren.
+### Einen ausgefallenen Stick ersetzen
 
-## USB-Stick ersetzen und Volumes weiterverwenden
+Einen neuen Stick wie oben vorbereiten und beim ersten Start **vor dem Anlegen eines neuen Kontos** die gefundene Konfigurationssicherung wiederherstellen. TitanOS sucht lesend auf unterstützten Volumes nach Sicherungen unter `.titanos/backups/`. Nach Wiederherstellung und Neustart werden die registrierten Volumes wieder eingebunden.
 
-Die aktive Konfiguration liegt auf dem Bootstick. TitanOS sichert sie standardmäßig automatisch auf ein verfügbares Daten-Volume unter `.titanos/backups/`. Die Sicherung enthält unter anderem Konten, Freigaben und die UUID-Zuordnung der Volumes; sie ersetzt kein Backup der Nutzdaten.
+Die Datenplatten nicht als neue Volumes anlegen oder formatieren. Ohne Konfigurationssicherung können unterstützte bestehende mdadm-/Btrfs-Volumes über **Speicher › Weitere Optionen › Speicher übernehmen** registriert werden; Konten, Freigaben und sonstige Einstellungen müssen neu eingerichtet werden. Das ist kein Import beliebiger fremder Speichersysteme. [Voraussetzungen zur Übernahme](docs/WORKFLOWS.md).
 
-Nach einem Stick-Ausfall einen neuen Stick vorbereiten und beim ersten Start **vor dem Anlegen eines neuen Kontos** die gefundene Konfigurationssicherung auswählen. TitanOS sucht dafür auf vorhandenen unterstützten Volumes lesend nach Sicherungen. Nach Wiederherstellung und Neustart werden die registrierten Volumes wieder eingebunden. Die vorhandenen Datenplatten dabei nicht als neue Volumes anlegen oder formatieren.
+## Dokumentation
 
-Ohne Konfigurationssicherung bleiben die Daten erhalten, ein geführter Import beliebiger vorhandener Volumes ist nicht enthalten.
-
-## Tests und Funktionsstatus
-
-Die automatisierten Prüfungen umfassen Backend und WebUI, signierte Release-Dateien, virtuelle UEFI-Starts und Update-/Rollback-Abläufe. Funktionen wie RAID, Btrfs, Plugins und VM-Snapshots haben zusätzliche Tests in isolierten virtuellen NAS-Systemen.
-
-Für **0.12.1** wurden Frontend- und Backend-Tests ausgeführt, dazu Agent-Tests gegen ein nachgebautes Ollama: Direktmodus, Probelauf, Browserabbruch, Rechte, Wiederaufnahme, mehr als 500 Runden, Fotosuche und Fehler von Updateprüfungen. Frühere Dokumenttests bleiben Teil der Suite; reale Modelle und NAS-Hardware wurden für diese Version nicht neu abgenommen. Seit 0.8.0 spielt ein QEMU-Test ein App-Update ohne Neustart, eine App, die nicht startet, und den Rückweg durch. Die Release-Pipeline baut und prüft das bootfähige ZIP und die Plugins vor der Veröffentlichung in QEMU. Browserprüfungen verwenden isolierte Testdaten und decken unter anderem Suche, direkte Links, Fehler/Wiederholung, Kontorollen und mobile Ansichten ab. Das ist keine vollständige Hardware-Abnahme. Der öffentliche Update- und Rückwechselpfad **0.5.9 → 0.6.0 → 0.5.9** wurde in QEMU mit erhaltenem Besitzerkonto, Zertifikat und Zeitzone geprüft.
-
-Optionale Funktionen wie die SMB-Ordnerkopie tragen ein eigenes Beta-Label. Das Label beschreibt die Funktion, keinen zweiten Updatekanal.
+| Thema | Einstieg |
+|---|---|
+| Speicher, Sicherungen und Wartung | [Abläufe und Grenzen](docs/WORKFLOWS.md), [Btrfs](docs/BTRFS.md), [VM-Snapshots](docs/VM-SNAPSHOTS.md) |
+| Dateien und Übertragungen | [Dateieditor](docs/FILE-EDITOR.md), [RAM/Uploads](docs/MEMORY.md), [Windows-SMB](docs/WINDOWS-SMB.md) |
+| Hardware und Fernzugriff | [Plugins](docs/PLUGINS.md), [NVIDIA](docs/NVIDIA.md), [Tailscale](docs/TAILSCALE.md), [Netzwerk](docs/NETWORKING.md) |
+| Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [KI-Assistent](docs/ASSISTANT.md) |
+| Entwicklung und Veröffentlichung | [Release-Ablauf](docs/RELEASING.md), [UI-Entwürfe](docs/design/README.md), [Screenshots](docs/screenshots/README.md) |
+| Änderungen und Prüfstand | [GitHub Releases](https://github.com/ra5on/TitanOS/releases), [detaillierte Release-Berichte](docs/releases/) |
 
 ## Entwicklung
 
-Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`.
-Für das Systemabbild zusätzlich (Debian 13): mkosi **25.3**, `debian-archive-keyring squashfs-tools zstd zip systemd-container`. Für Release-Tests außerdem `minisign`; für den NVIDIA-Plugin-Bau `kmod`, Netzwerkzugang und einen isolierten Debian-Build als root bzw. in einem Benutzer-Namespace; für den QEMU-Test `qemu-system-x86 ovmf mtools fdisk`. Unprivilegierte Builds benötigen funktionierende Benutzer-Namespaces, `newuidmap`/`newgidmap` und Einträge in `/etc/subuid` und `/etc/subgid`. Alternativ baut `MKOSI_SUDO=1 make zip` das Abbild mit sudo; Weboberfläche und Backend werden weiterhin als normaler Benutzer gebaut.
+Backend: **Go**, ein statisches `titand`-Binary. Oberfläche: **Svelte + TypeScript**, im Release in das Binary eingebettet. Das Systemabbild entsteht mit mkosi auf Debian 13.
 
-| Befehl | Was er tut |
+Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`. Für Systemabbilder zusätzlich mkosi 25.3, `debian-archive-keyring squashfs-tools zstd zip systemd-container`; für Release-Prüfungen `minisign`, für virtuelle Starts `qemu-system-x86 ovmf mtools fdisk`. Details zu isolierten Builds und Signierung: [RELEASING.md](docs/RELEASING.md).
+
+| Befehl | Ergebnis |
 |---|---|
-| `make build` | Baut die Weboberfläche und `backend/bin/titand` mit eingebetteter Oberfläche |
-| `make test` | Führt die Go-Tests und die Typprüfung der Weboberfläche aus |
-| `make test-release` | Prüft Verpackung, Lizenzinventar und Manipulationserkennung mit kleinen echten squashfs-Abbildern und Minisign-Schlüsseln |
-| `make dev` | Startet `titand` im Entwicklungsmodus auf `127.0.0.1:8080` (ohne HTTPS, Konfiguration in `test/config/`) und den Vite-Server mit automatischem Neuladen |
-| `make zip` | Baut das Systemabbild und packt den Stick-Inhalt: `out/stick/` und `out/titanos-<version>.zip` |
-| `make zip-dev` | Dasselbe als Entwicklungsvariante, bei der root an der Konsole automatisch angemeldet ist |
-| `make qemu` | Startet `out/stick/` in QEMU (UEFI) von einem emulierten USB-Stick; Weboberfläche unter `https://127.0.0.1:8443`. Mit `DISKS=4 make qemu` kommen vier leere Testplatten dazu. |
+| `make build` | Weboberfläche und `backend/bin/titand` mit eingebetteter UI bauen |
+| `make test` | Go vet/Tests, Webtests und Svelte-/TypeScript-Prüfung ausführen |
+| `make test-release` | Paketierung, Lizenzinventar, Signaturen und Manipulationserkennung prüfen |
+| `make dev` | Backend im Entwicklungsmodus und Vite mit automatischem Neuladen starten |
+| `make zip` | Systemabbild und bootfähigen Stick-Inhalt unter `out/` bauen |
+| `make zip-dev` | Entwicklungsabbild mit automatischer root-Anmeldung an der lokalen Konsole bauen |
+| `make qemu` | UEFI-Testsystem starten; `DISKS=4 make qemu` fügt vier leere virtuelle Testplatten hinzu |
 
-Das Backend (`backend/`, Go) und die Weboberfläche (`web/`, Svelte + TypeScript) liegen in diesem Repository. In `backend/` funktionieren `go build ./cmd/titand` und `go test ./...` ohne Node.js; ohne das Build-Tag `embedui` wird eine Platzhalterseite statt der Weboberfläche ausgeliefert. Release-Bau und Signierung sind in [RELEASING.md](docs/RELEASING.md) beschrieben.
+Der Entwicklungsmodus verändert keine Host-Platten. In `backend/` funktionieren `go build ./cmd/titand` und `go test ./...` ohne Node.js; ohne Build-Tag `embedui` wird eine Platzhalterseite ausgeliefert. Für Abbild-Builds sind funktionierende Benutzer-Namespaces mit `newuidmap`/`newgidmap` und passenden `/etc/subuid`-/`/etc/subgid`-Einträgen nötig, alternativ `MKOSI_SUDO=1 make zip`.
 
-## Lizenz
+## Lizenz und Beiträge
 
-TitanOS ist **Fair Source** unter der [Functional Source License 1.1 (FSL-1.1-ALv2)](LICENSE.md):
+TitanOS ist **Fair Source** unter der [Functional Source License 1.1 (FSL-1.1-ALv2)](LICENSE.md). Nutzen, Ändern und Weitergeben ist privat, im Unternehmen, für Lehre und Forschung erlaubt. Ausgenommen ist das Anbieten eines konkurrierenden kommerziellen Produkts oder Dienstes. Jede Version wechselt zwei Jahre nach ihrem Erscheinen zur **Apache License 2.0**. Maßgeblich ist der unveränderte Lizenztext.
 
-- Nutzen, Ändern und Weitergeben ist frei – privat, im Unternehmen, für Lehre und Forschung.
-- Nicht erlaubt: TitanOS oder ein wesentlich darauf beruhendes Produkt als konkurrierendes kommerzielles Produkt oder als Dienst anzubieten.
-- Jede Version steht zwei Jahre nach ihrem Erscheinen unter der **Apache License 2.0**.
+Fremdkomponenten behalten ihre eigenen Lizenzen. Jedes Release enthält ein Lizenzinventar und Quellpaketverweise; die Übersicht steht in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES). Abgebildete App-Namen und Logos gehören den jeweiligen Projekten.
 
-Maßgeblich ist der Lizenztext in [LICENSE.md](LICENSE.md). Fremdkomponenten (Linux-Kernel, Debian-Pakete und andere) behalten ihre eigenen Lizenzen, siehe [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
-
-## Mitmachen
-
-Beiträge sind willkommen – bitte lies zuerst [CONTRIBUTING.md](CONTRIBUTING.md) (auf Englisch). Sicherheitslücken bitte nicht öffentlich melden, sondern wie in [SECURITY.md](SECURITY.md) beschrieben.
+Beiträge sind willkommen: [CONTRIBUTING.md](CONTRIBUTING.md) erklärt den Ablauf und das Contributor License Agreement. Sicherheitslücken bitte wie in [SECURITY.md](SECURITY.md) beschrieben privat melden.
