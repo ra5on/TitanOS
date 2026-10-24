@@ -242,4 +242,5 @@
 		.nav-shell, .nav-items { gap: 2px; }
 		.nav-shell nav a { padding-inline: 10px; }
 	}
+ @media (max-width:360px) { header {gap:2px;padding-inline:6px;} .terminal {width:28px;} }
 </style>
