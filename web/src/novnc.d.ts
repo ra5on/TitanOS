@@ -8,7 +8,7 @@ declare module '@novnc/novnc' {
 		focusOnClick: boolean;
 		background: string;
 		disconnect(): void;
-		focus(): void;
+		focus(options?: FocusOptions): void;
 		sendCtrlAltDel(): void;
 		sendKey(keysym: number, code: string | null, down?: boolean): void;
 		clipboardPasteFrom(text: string): void;

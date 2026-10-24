@@ -207,7 +207,7 @@ data.shares = ["Dokumente", "Medien", "Fotos", "Projekte"].map((name, i) => ({
 data.system = {
   ...data.system,
   hostname: "titan-nas",
-  version: "0.20.0",
+  version: "0.20.1",
   kernel: "6.12.113+deb13-amd64",
   uptimeSeconds: 20 * 3600 + 41 * 60,
   inventory: { mainboard: "ASRock B560M Pro4", bios: "P2.30 · 12.09.2025" },
