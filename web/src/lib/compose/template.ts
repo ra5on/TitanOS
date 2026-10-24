@@ -4,6 +4,7 @@ import { publicURL } from '../app-links.ts';
 
 import { isScalar, isSeq, parseDocument } from 'yaml';
 import { readService, serviceNames, WEBUI_LABEL, writeService, type Pair } from './service.ts';
+import { validImage } from './image.ts';
 
 /** A text a template gives either once or per language. */
 export type Localized = string | Record<string, string> | null | undefined;
@@ -82,7 +83,8 @@ export type OwnPort = { host: string; container: string; protocol: 'tcp' | 'udp'
 export type Risk = 'privileged' | 'hostNetwork' | 'dockerSocket' | 'rootMount' | 'capabilities';
 
 export type InstallForm = {
- publicUrl: string;
+	images: { service: string; image: string }[];
+	publicUrl: string;
 	name: string;
 	/** What the template's author wants read before the installation. */
 	tips: Localized;
@@ -100,23 +102,55 @@ export type InstallForm = {
 type Meta = {
 	main: unknown;
 	tips: Localized;
-	variables: Record<string, { label?: Localized; help?: Localized; placeholder?: unknown; required?: unknown; secret?: unknown; fill?: unknown; from?: unknown } | undefined>;
+	variables: Record<
+		string,
+		| {
+				label?: Localized;
+				help?: Localized;
+				placeholder?: unknown;
+				required?: unknown;
+				secret?: unknown;
+				fill?: unknown;
+				from?: unknown;
+		  }
+		| undefined
+	>;
 	paths: Record<string, { label?: Localized; suggest?: unknown } | undefined>;
 	icon?: string;
- ports: Record<string, { label?: Localized; webui?: unknown } | undefined>;
+	ports: Record<string, { label?: Localized; webui?: unknown } | undefined>;
 };
 
 function record(value: unknown): Record<string, never> {
-	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, never>) : ({} as Record<string, never>);
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, never>)
+		: ({} as Record<string, never>);
 }
 
 function readMeta(compose: string): Meta {
 	const meta = record((parseDocument(compose).toJS() ?? {})['x-titanos']);
-	return { icon: meta.icon, main: meta.main, tips: meta.tips, variables: record(meta.variables), paths: record(meta.paths), ports: record(meta.ports) };
+	return {
+		icon: meta.icon,
+		main: meta.main,
+		tips: meta.tips,
+		variables: record(meta.variables),
+		paths: record(meta.paths),
+		ports: record(meta.ports),
+	};
 }
 
 const FILLED: Record<string, VarField['fill']> = { TZ: 'timezone', PUID: 'uid', PGID: 'gid' };
-const MEDIA_SHARES = ['media', 'medien', 'video', 'videos', 'filme', 'movies', 'musik', 'music', 'fotos', 'photos'];
+const MEDIA_SHARES = [
+	'media',
+	'medien',
+	'video',
+	'videos',
+	'filme',
+	'movies',
+	'musik',
+	'music',
+	'fotos',
+	'photos',
+];
 
 export const isRelative = (path: string) => path.startsWith('./') || path === '.';
 
@@ -151,16 +185,38 @@ export function generateSecret(length = 32): string {
  * "port/protocol" to who has it: a container's name, or '' for the system.
  * Throws if the template is not a compose file.
  */
-export function readTemplate(tpl: Template, name: string, shares: ShareRef[], used: Map<string, string>): InstallForm {
-	const doc = parseDocument(tpl.compose);
+export function readTemplate(
+	tpl: Template,
+	name: string,
+	shares: ShareRef[],
+	used: Map<string, string>,
+	editedEnv?: Record<string, string>,
+): InstallForm {
+	const doc = parseDocument(tpl.compose, { merge: true });
 	if (doc.errors.length > 0) throw new Error(doc.errors[0].message);
 	const services = serviceNames(doc);
 	if (services.length === 0) throw new Error('no services');
 	const meta = readMeta(tpl.compose);
 	const filled = { timezone: tpl.timezone, uid: String(tpl.uid), gid: String(tpl.gid) };
 
-	const main = typeof meta.main === 'string' && services.includes(meta.main) ? meta.main : services[0];
-	const form: InstallForm = { publicUrl: readService(doc, main).publicUrl, name, tips: meta.tips, risks: [], missingDevices: [], main, vars: [], paths: [], ports: [], own: { vars: [], paths: [], ports: [] } };
+	const main =
+		typeof meta.main === 'string' && services.includes(meta.main) ? meta.main : services[0];
+	const form: InstallForm = {
+		images: services.flatMap((service) => {
+			const image = readService(doc, service).image;
+			return image ? [{ service, image }] : [];
+		}),
+		publicUrl: readService(doc, main).publicUrl,
+		name,
+		tips: meta.tips,
+		risks: [],
+		missingDevices: [],
+		main,
+		vars: [],
+		paths: [],
+		ports: [],
+		own: { vars: [], paths: [], ports: [] },
+	};
 	const reserved = new Set<string>();
 	const risks = new Set<Risk>();
 	const content = record(doc.toJS().services);
@@ -177,14 +233,24 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 		}
 		for (const device of Array.isArray(plain.devices) ? plain.devices : []) {
 			const host = typeof device === 'string' ? device.split(':')[0] : '';
-			if (tpl.missingDevices.includes(host) && !form.missingDevices.includes(host)) form.missingDevices.push(host);
+			if (tpl.missingDevices.includes(host) && !form.missingDevices.includes(host))
+				form.missingDevices.push(host);
 		}
 
 		for (const pair of entries.env) {
 			const info = meta.variables[pair.name] ?? {};
 			// A dependent service uses the same generated secret, without a second editable copy.
-			if (typeof info.from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(info.from)) continue;
-			const fill = (['timezone', 'uid', 'gid'].includes(String(info.fill)) ? String(info.fill) : (FILLED[pair.name] ?? '')) as VarField['fill'];
+			if (
+				typeof info.from === 'string' &&
+				/^[A-Za-z_][A-Za-z0-9_]*$/.test(info.from) &&
+				(editedEnv === undefined || pair.value === '${' + info.from + '}')
+			)
+				continue;
+			const fill = (
+				['timezone', 'uid', 'gid'].includes(String(info.fill))
+					? String(info.fill)
+					: (FILLED[pair.name] ?? '')
+			) as VarField['fill'];
 			const field: VarField = {
 				service,
 				name: pair.name,
@@ -195,9 +261,17 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 				origin: 'template',
 				secret: info.secret === 'generate',
 				required: info.required === true,
-				fill
+				fill,
 			};
-			if (field.secret) {
+			if (editedEnv !== undefined) {
+				// YAML edits are authoritative: no regenerated secrets, suggested paths,
+				// timezone replacement or silent movement of an explicitly chosen port.
+				field.secret =
+					field.secret &&
+					Object.hasOwn(editedEnv, pair.name) &&
+					pair.value === '${' + pair.name + '}';
+				if (field.secret) field.value = editedEnv[pair.name];
+			} else if (field.secret) {
 				field.value = generateSecret();
 				field.origin = 'generated';
 			} else if (fill) {
@@ -214,24 +288,58 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 			if (row.raw !== undefined) return;
 			const info = meta.paths[row.container] ?? {};
 			let share: ShareRef | null = null;
-			if (info.suggest === 'media') share = shares.find((candidate) => MEDIA_SHARES.includes(candidate.name.toLowerCase())) ?? null;
-			if ((info.suggest === 'media' || info.suggest === 'share') && !share && shares.length === 1) share = shares[0];
+			if (editedEnv === undefined && info.suggest === 'media')
+				share =
+					shares.find((candidate) => MEDIA_SHARES.includes(candidate.name.toLowerCase())) ?? null;
+			if (
+				editedEnv === undefined &&
+				(info.suggest === 'media' || info.suggest === 'share') &&
+				!share &&
+				shares.length === 1
+			)
+				share = shares[0];
 			const wanted = info.suggest === 'media' || info.suggest === 'share';
-			const field: PathField = { service, index, container: row.container, label: info.label, template: row.host, share, wanted, host: '', touched: false };
+			const field: PathField = {
+				service,
+				index,
+				container: row.container,
+				label: info.label,
+				template: row.host,
+				share,
+				wanted,
+				host: '',
+				touched: false,
+			};
 			field.host = defaultHost(field, name, tpl.appdata);
 			form.paths.push(field);
 		});
 
 		entries.ports.forEach((row, index) => {
 			if (row.raw !== undefined || row.host === '') return;
-			const info = meta.ports[row.protocol === 'udp' ? `${row.container}/udp` : row.container] ?? {};
+			const info =
+				meta.ports[row.protocol === 'udp' ? `${row.container}/udp` : row.container] ?? {};
 			const key = (port: number) => `${port}/${row.protocol}`;
 			let port = Number(row.host);
 			const blockedBy = used.get(key(port)) ?? null;
 			// The next port nothing listens on and no other field of this app took.
-			while (port < 65535 && (used.has(key(port)) || reserved.has(key(port)))) port++;
+			while (
+				editedEnv === undefined &&
+				port < 65535 &&
+				(used.has(key(port)) || reserved.has(key(port)))
+			)
+				port++;
 			reserved.add(key(port));
-			form.ports.push({ service, index, container: row.container, protocol: row.protocol, label: info.label, webui: info.webui === true, templateHost: row.host, blockedBy: port === Number(row.host) ? null : (blockedBy ?? ''), host: String(port) });
+			form.ports.push({
+				service,
+				index,
+				container: row.container,
+				protocol: row.protocol,
+				label: info.label,
+				webui: info.webui === true,
+				templateHost: row.host,
+				blockedBy: port === Number(row.host) ? null : (blockedBy ?? ''),
+				host: String(port),
+			});
 			if (info.webui === true && typeof meta.main !== 'string') form.main = service;
 		});
 	}
@@ -240,6 +348,7 @@ export function readTemplate(tpl: Template, name: string, shares: ShareRef[], us
 }
 
 export type Problems = {
+	images: boolean[];
 	name: '' | 'invalid' | 'exists';
 	vars: ('' | 'required')[];
 	/** "volatile" is a warning: the folder is not on a volume and is lost with a restart. */
@@ -257,9 +366,11 @@ export type Problems = {
 const APP_NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Folders outside the volumes a container may well be given.
-const SYSTEM_PATHS = /^\/(dev|run|sys|proc|var\/run|etc\/localtime$|etc\/timezone$|lib\/modules)(\/|$)/;
+const SYSTEM_PATHS =
+	/^\/(dev|run|sys|proc|var\/run|etc\/localtime$|etc\/timezone$|lib\/modules)(\/|$)/;
 
-const validPort = (value: string) => /^\d{1,5}$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
+const validPort = (value: string) =>
+	/^\d{1,5}$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
 
 function pathProblem(host: string, container: string): '' | 'invalid' | 'volatile' {
 	if (!host.trim() || !container.trim().startsWith('/')) return 'invalid';
@@ -269,7 +380,9 @@ function pathProblem(host: string, container: string): '' | 'invalid' | 'volatil
 
 /** Checks the form as it is typed. */
 export function check(form: InstallForm, installed: string[], used: Map<string, string>): Problems {
-	const all = [...form.ports, ...form.own.ports].map((port) => (validPort(port.host) ? `${Number(port.host)}/${port.protocol}` : ''));
+	const all = [...form.ports, ...form.own.ports].map((port) =>
+		validPort(port.host) ? `${Number(port.host)}/${port.protocol}` : '',
+	);
 	const portProblem = (host: string, container: string, at: number) => {
 		if (!validPort(host) || !validPort(container)) return 'invalid';
 		if (all.some((key, other) => other !== at && key === all[at])) return 'duplicate';
@@ -278,6 +391,7 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 	const names = form.vars.map((field) => field.name);
 
 	const problems: Problems = {
+		images: form.images.map((field) => !validImage(field.image)),
 		name: !APP_NAME.test(form.name) ? 'invalid' : installed.includes(form.name) ? 'exists' : '',
 		vars: form.vars.map((field) => (field.required && field.value.trim() === '' ? 'required' : '')),
 		paths: form.paths.map((field) => pathProblem(field.host, field.container)),
@@ -285,16 +399,22 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 		ownVars: form.own.vars.map((pair, at) => {
 			if (pair.name === '') return 'empty';
 			if (!ENV_NAME.test(pair.name)) return 'invalid';
-			if (form.own.vars.some((other, index) => index !== at && other.name === pair.name)) return 'duplicate';
+			if (form.own.vars.some((other, index) => index !== at && other.name === pair.name))
+				return 'duplicate';
 			return names.includes(pair.name) ? 'replaces' : '';
 		}),
 		ownPaths: form.own.paths.map((row) => pathProblem(row.host, row.container)),
-		ownPorts: form.own.ports.map((row, at) => (row.host === '' && row.container === '' ? 'empty' : portProblem(row.host, row.container, form.ports.length + at))),
+		ownPorts: form.own.ports.map((row, at) =>
+			row.host === '' && row.container === ''
+				? 'empty'
+				: portProblem(row.host, row.container, form.ports.length + at),
+		),
 		missing: 0,
-		blocking: false
+		blocking: false,
 	};
 	problems.missing = problems.vars.filter(Boolean).length;
 	problems.blocking =
+		problems.images.some(Boolean) ||
 		(!!form.publicUrl.trim() && !publicURL(form.publicUrl)) ||
 		problems.name !== '' ||
 		problems.missing > 0 ||
@@ -308,26 +428,34 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
  * Writes what was entered into the template. Secrets are returned apart:
  * the compose file only refers to them as ${NAME}.
  */
-export function build(tpl: Template, form: InstallForm): { compose: string; env: Record<string, string> } {
-	const doc = parseDocument(tpl.compose);
+export function build(
+	tpl: Template,
+	form: InstallForm,
+): { compose: string; env: Record<string, string> } {
+	const doc = parseDocument(tpl.compose, { merge: true });
 	const env: Record<string, string> = {};
 	const meta = readMeta(tpl.compose);
 	const own = new Map(form.own.vars.map((pair) => [pair.name, pair.value]));
 
 	for (const service of serviceNames(doc)) {
 		const entries = readService(doc, service);
-  if (service === form.main) entries.publicUrl = form.publicUrl;
-  if (service === form.main && typeof meta.icon === 'string') {
-   entries.labels = entries.labels.filter(pair => pair.name !== 'titanos.icon');
-   entries.labels.push({ name: 'titanos.icon', value: meta.icon });
-  }
-  const templatePorts = entries.ports.map((row) => row.host);
+		const image = form.images.find((field) => field.service === service);
+		if (image) entries.image = image.image;
+		if (service === form.main) entries.publicUrl = form.publicUrl;
+		if (service === form.main && typeof meta.icon === 'string') {
+			entries.labels = entries.labels.filter((pair) => pair.name !== 'titanos.icon');
+			entries.labels.push({ name: 'titanos.icon', value: meta.icon });
+		}
+		const templatePorts = entries.ports.map((row) => row.host);
 
 		for (const pair of entries.env) {
-			const field = form.vars.find((candidate) => candidate.service === service && candidate.name === pair.name);
+			const field = form.vars.find(
+				(candidate) => candidate.service === service && candidate.name === pair.name,
+			);
 			if (!field) {
 				const from = meta.variables[pair.name]?.from;
-				if (typeof from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(from)) pair.value = '${' + from + '}';
+				if (typeof from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(from))
+					pair.value = '${' + from + '}';
 				continue;
 			}
 			if (field.secret && field.value !== '') {
@@ -350,7 +478,8 @@ export function build(tpl: Template, form: InstallForm): { compose: string; env:
 			entries.paths[field.index].host = unchanged ? field.template : field.host.trim();
 		}
 		for (const field of form.ports) {
-			if (field.service === service && entries.ports[field.index]) entries.ports[field.index].host = String(Number(field.host));
+			if (field.service === service && entries.ports[field.index])
+				entries.ports[field.index].host = String(Number(field.host));
 		}
 
 		// The address of the web interface follows its port. It is a port
@@ -359,24 +488,40 @@ export function build(tpl: Template, form: InstallForm): { compose: string; env:
 		const address = /^(https?:\/\/\[host\]:)?(\d+)(.*)$/.exec(entries.webui);
 		if (webui && entries.webui === '') entries.webui = String(Number(webui.host));
 		else if (address) {
-			const moved = form.ports.find((field) => field.service === service && field.index === templatePorts.indexOf(address[2]));
+			const moved = form.ports.find(
+				(field) => field.service === service && field.index === templatePorts.indexOf(address[2]),
+			);
 			if (moved) entries.webui = (address[1] ?? '') + String(Number(moved.host)) + address[3];
 		}
 
 		// A device the NAS does not have would keep the container from starting.
 		const devices = doc.getIn(['services', service, 'devices']);
 		if (isSeq(devices) && form.missingDevices.length > 0) {
-			devices.items = devices.items.filter((item) => !(isScalar(item) && form.missingDevices.includes(String(item.value).split(':')[0])));
+			devices.items = devices.items.filter(
+				(item) =>
+					!(isScalar(item) && form.missingDevices.includes(String(item.value).split(':')[0])),
+			);
 			if (devices.items.length === 0) doc.deleteIn(['services', service, 'devices']);
 		}
 
 		if (service === form.main) {
 			for (const pair of form.own.vars) {
-				if (pair.name !== '' && !entries.env.some((existing) => existing.name === pair.name)) entries.env.push({ name: pair.name, value: pair.value });
+				if (pair.name !== '' && !entries.env.some((existing) => existing.name === pair.name))
+					entries.env.push({ name: pair.name, value: pair.value });
 			}
-			for (const row of form.own.paths) entries.paths.push({ host: row.host.trim(), container: row.container.trim(), readOnly: false });
+			for (const row of form.own.paths)
+				entries.paths.push({
+					host: row.host.trim(),
+					container: row.container.trim(),
+					readOnly: false,
+				});
 			for (const row of form.own.ports) {
-				if (row.host !== '' || row.container !== '') entries.ports.push({ host: String(Number(row.host)), container: String(Number(row.container)), protocol: row.protocol });
+				if (row.host !== '' || row.container !== '')
+					entries.ports.push({
+						host: String(Number(row.host)),
+						container: String(Number(row.container)),
+						protocol: row.protocol,
+					});
 			}
 		}
 		writeService(doc, service, entries);

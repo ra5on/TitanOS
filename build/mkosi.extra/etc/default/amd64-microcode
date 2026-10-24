@@ -1,0 +1,2 @@
+# A release image must include AMD microcode even when built on Intel.
+AMD64UCODE_INITRAMFS=early

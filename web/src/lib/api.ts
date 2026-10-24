@@ -142,6 +142,9 @@ export type SystemInfo = {
 		cacheBytes?: number;
 		dirtyBytes?: number;
 		writebackBytes?: number;
+		reserveBytes?: number;
+		lowAvailable?: boolean;
+		pressure?: { someAvg10: number; fullAvg10: number };
 	};
 	temperatures: Temperature[];
 	image: {

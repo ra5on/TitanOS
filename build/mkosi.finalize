@@ -6,14 +6,6 @@ set -eu
 python3 "$BUILDROOT/usr/share/titanos/build-licenses.py" image "$BUILDROOT"
 rm "$BUILDROOT/usr/share/titanos/build-licenses.py"
 
-# These must survive package selection and any future firmware pruning.
-for pattern in 'i915/*guc*.bin*' 'i915/*huc*.bin*' 'intel/vpu/*.bin*'; do
-    if ! find "$BUILDROOT/usr/lib/firmware" -path "*/$pattern" -print | grep -q .; then
-        echo "required Intel firmware missing: $pattern" >&2
-        exit 1
-    fi
-done
-
 set -- "$BUILDROOT"/boot/vmlinuz-*
 if [ $# -ne 1 ] || [ ! -e "$1" ]; then
     echo "expected exactly one kernel in /boot, found: $*" >&2
@@ -25,6 +17,10 @@ if [ ! -s "$BUILDROOT/boot/initrd.img-$kernel" ]; then
     echo "no initrd for kernel $kernel in /boot" >&2
     exit 1
 fi
+
+# Check the packaged initrd, not the build CPU or just the installed packages.
+python3 "$BUILDROOT/usr/share/titanos/check-image-hardware.py" "$BUILDROOT" "$kernel"
+rm "$BUILDROOT/usr/share/titanos/check-image-hardware.py"
 
 cp "$BUILDROOT/boot/vmlinuz-$kernel" "$OUTPUTDIR/vmlinuz"
 cp "$BUILDROOT/boot/initrd.img-$kernel" "$OUTPUTDIR/initrd.img"
