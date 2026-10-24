@@ -23,6 +23,8 @@ const writes = [],
 await ctx.route("**/api/v1/preferences/dashboard", async (r) => {
   if (r.request().method() !== "PUT") return r.fallback();
   writes.push(r.request());
+  if (data.saveDelay)
+    await new Promise((resolve) => setTimeout(resolve, data.saveDelay));
   if (data.failSave)
     return r.fulfill({
       status: 500,
@@ -205,10 +207,17 @@ try {
     "redo must retain the staged image",
   );
   data.failSave = true;
+  data.saveDelay = 500;
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  assert.equal(
+    await page.locator(".dashboard-page").getAttribute("inert"),
+    "",
+    "editing must pause while its snapshot is being saved",
+  );
   await page.getByRole("alert").waitFor();
   assert.equal(data.prefs.dashboard.visual.background.id, "nordlicht");
   data.failSave = false;
+  data.saveDelay = 0;
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await page
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
