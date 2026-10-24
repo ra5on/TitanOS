@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The assistant after the first start: name of the NAS and time zone,
 	// a look at the network, and what to do next. Every step can be skipped.
+	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -52,12 +53,25 @@
 			<form onsubmit={saveBasics}>
 				<h2>{t('welcome.basics')}</h2>
 				<p class="muted">{t('welcome.intro')}</p>
-				<label><span>{t('welcome.hostname')}</span>
-					<input class="field mono" type="text" bind:value={hostname} maxlength="63" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" autocapitalize="none" spellcheck="false" required />
+				<label
+					><span>{t('welcome.hostname')}</span>
+					<input
+						class="field mono"
+						type="text"
+						bind:value={hostname}
+						maxlength="63"
+						pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?"
+						autocapitalize="none"
+						spellcheck="false"
+						required
+					/>
 					<small>{t('welcome.hostnameHint')}</small>
 				</label>
-				<label><span>{t('welcome.timezone')}</span>
-					<select class="field" bind:value={timezone}>{#each zones as zone (zone)}<option value={zone}>{zone}</option>{/each}</select>
+				<label
+					><span>{t('welcome.timezone')}</span>
+					<select class="field" bind:value={timezone}
+						>{#each zones as zone (zone)}<option value={zone}>{zone}</option>{/each}</select
+					>
 					<small>{t('welcome.timezoneHint')}</small>
 				</label>
 				{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
@@ -71,10 +85,13 @@
 				<h2>{t('welcome.network')}</h2>
 				<p>{t('welcome.networkNow', { address })}</p>
 				<p class="muted">{t('welcome.networkHint')}</p>
+				<NetworkBridgeSetup auto />
 				<a href="/settings/network">{t('welcome.networkSettings')}</a>
 				<div class="actions">
 					<button type="button" class="btn" onclick={() => (step = 1)}>{t('welcome.back')}</button>
-					<button type="button" class="btn btn-primary" onclick={() => (step = 3)}>{t('welcome.next')}</button>
+					<button type="button" class="btn btn-primary" onclick={() => (step = 3)}
+						>{t('welcome.next')}</button
+					>
 				</div>
 			</div>
 		{:else}
@@ -83,7 +100,9 @@
 				<p class="muted">{t('welcome.doneText')}</p>
 				<div class="todos">
 					{#each [['/storage', 'welcome.todoVolume'], ['/shares', 'welcome.todoShare'], ['/account', 'welcome.todoTwoFactor'], ['/docker', 'welcome.todoApps']] as const as [href, key] (href)}
-						<a class="todo" {href}><span class="name">{t(key)}</span><span class="muted">{t(`${key}Text`)}</span></a>
+						<a class="todo" {href}
+							><span class="name">{t(key)}</span><span class="muted">{t(`${key}Text`)}</span></a
+						>
 					{/each}
 				</div>
 				<div class="actions">

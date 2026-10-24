@@ -187,9 +187,11 @@ type sample struct {
 type Manager struct {
 	ScheduleAdmission func() (func(), error)
 	AutoReady         func() bool
-	BeforeStart       func(context.Context, string, []string, []string, bool) (func(bool), error)
-	AfterPoll         func(context.Context, map[string]bool) error
-	Timezone          func() string
+	// BridgeReady rejects creation/start until the network trial is confirmed.
+	BridgeReady func() bool
+	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
+	AfterPoll   func(context.Context, map[string]bool) error
+	Timezone    func() string
 
 	store  *config.Store
 	runner run.Runner
@@ -751,6 +753,9 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
+	if vm.Network == "bridge" && m.BridgeReady != nil && !m.BridgeReady() {
+		return ErrNoBridge
+	}
 	if err := m.prepare(ctx, &vm, mounted); err != nil {
 		return err
 	}
@@ -959,6 +964,9 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 		return ErrPreparing
 	}
 	if vm.Network == "bridge" {
+		if m.BridgeReady != nil && !m.BridgeReady() {
+			return ErrNoBridge
+		}
 		if _, err := os.Stat(filepath.Join(m.sysDir, "class/net", bridge)); err != nil {
 			return ErrNoBridge
 		}

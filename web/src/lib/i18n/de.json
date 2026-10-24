@@ -3952,5 +3952,22 @@
 	"dashboard.bg.wellen": "Abstrakte Wellen",
 	"dashboard.bg.geometrie": "Geometrische Formen",
 	"dashboard.editor.blur": "Unschärfe",
-	"dashboard.editor.glow": "Glow"
+	"dashboard.editor.glow": "Glow",
+	"bridge.ready": "Heimnetz aktiv · br0",
+	"bridge.connecting": "Heimnetz wird eingerichtet. Die Verbindung kann kurz unterbrochen werden. Deine Eingaben bleiben erhalten.",
+	"bridge.hint": "Heimnetz über br0 aktivieren. Die vorhandenen Netzwerkeinstellungen werden übernommen; bestätige anschließend die Verbindung innerhalb von zwei Minuten.",
+	"bridge.port": "Ethernet-Anschluss für das Heimnetz",
+	"bridge.choosePort": "Anschluss auswählen …",
+	"bridge.enable": "Heimnetz aktivieren",
+	"vms.form.installation": "Installation & Start",
+	"vms.form.connections": "Netzwerk & Erweiterungen",
+	"error.network_bridge_port": "Wähle den Ethernet-Anschluss für das Heimnetz.",
+	"error.invalid_response": "Der Server hat eine ungültige Antwort geliefert. Bitte erneut versuchen.",
+	"vms.template.linux.brief": "Linux-Distributionen",
+	"vms.template.windows.brief": "Mit TPM und Secure Boot",
+	"vms.template.other.brief": "Eigene Konfiguration",
+	"vms.form.general": "Allgemein",
+	"vms.form.autoBrief": "Linux verteilt die vCPUs auf die verfügbaren Kerne.",
+	"vms.form.diskHelp": "Hinweise zu Datenträgern",
+	"vms.form.sizePresets": "Größe auswählen"
 }
