@@ -1,0 +1,88 @@
+{
+  "source": "d16fb79ba60dd5ff0174850f9289c41ca5add1c4",
+  "version": "0.19.1",
+  "captured": "2026-10-24",
+  "demoData": true,
+  "theme": "Graphit / Blau / Glas",
+  "browserErrors": [],
+  "loadedAppLogos": 13,
+  "images": [
+    {
+      "file": "dashboard.png",
+      "width": 1600,
+      "height": 1366,
+      "bytes": 197486,
+      "sha256": "eca827b0d49edab26401a94886fd5fdea4209655a2f6e5b3d933fe56c655b35d"
+    },
+    {
+      "file": "dashboard-editor.png",
+      "width": 1600,
+      "height": 1810,
+      "bytes": 292009,
+      "sha256": "155580b8c2f1a3432b4c114c9bb10aad1b322ab6ca24135e60703ae57a43e898"
+    },
+    {
+      "file": "dashboard-vm-details.png",
+      "width": 1600,
+      "height": 1733,
+      "bytes": 224925,
+      "sha256": "af4f6a56e5f2e33c8636d0df61bd86246b2c4bf7635d232cec7aa95269496657"
+    },
+    {
+      "file": "speicher.png",
+      "width": 1600,
+      "height": 780,
+      "bytes": 287938,
+      "sha256": "9a05ab147d81907c135bbeba675884aedcbf095c12fb1d2381d4c9144de24949"
+    },
+    {
+      "file": "shares.png",
+      "width": 1600,
+      "height": 780,
+      "bytes": 251070,
+      "sha256": "8262b929219e193e10d1bc98d611b13404a2b241b4a9121d48462f3fa7902f8a"
+    },
+    {
+      "file": "dateien.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 300533,
+      "sha256": "bb7e0f7841cc09db6ccbb57743ece5b943e8d17d6d7650580c445b40c2e1e658"
+    },
+    {
+      "file": "docker.png",
+      "width": 1600,
+      "height": 1175,
+      "bytes": 402354,
+      "sha256": "3026eda4552c5692995b8de008f7c926b18e9720ec9da6b76e81b3afdd079f4b"
+    },
+    {
+      "file": "vms.png",
+      "width": 1600,
+      "height": 800,
+      "bytes": 342079,
+      "sha256": "a8cec591e9b3cb0ae4d77a97b7d1a607b246a344f0d83f4177416f384601a6ba"
+    },
+    {
+      "file": "einstellungen.png",
+      "width": 1600,
+      "height": 1013,
+      "bytes": 326650,
+      "sha256": "455629b1056c79ccc7dfe980a36b1d51ea5b0066373833a039933a1a019e603d"
+    },
+    {
+      "file": "dateien-mobil.png",
+      "width": 390,
+      "height": 844,
+      "bytes": 112283,
+      "sha256": "6267deeb014a92bade77255ea8b77b7c6480e0842025633713f8af983b6cdbb6"
+    },
+    {
+      "file": "dashboard-mobil.png",
+      "width": 390,
+      "height": 844,
+      "bytes": 53252,
+      "sha256": "d3566fc2c2734ac6c20af7db6bf1862fc6511605223143b8b184ac4e1c7aea84"
+    }
+  ]
+}

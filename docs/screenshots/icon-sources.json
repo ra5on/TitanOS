@@ -1,0 +1,80 @@
+[
+  {
+    "name": "Immich",
+    "file": "immich.svg",
+    "source": "https://raw.githubusercontent.com/immich-app/immich/main/design/immich-logo.svg",
+    "sha256": "dfa5ef704d07854914306c0c224173bda2710f8fc0dffeb7d78690f58f9811a6"
+  },
+  {
+    "name": "AdGuard Home",
+    "file": "adguard-home.png",
+    "source": "https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/client/public/assets/apple-touch-icon-180x180.png",
+    "sha256": "141932ff7054ccdf5e14a61db9e1be76b179414a227e6b2b24a66fc2b7a0852b"
+  },
+  {
+    "name": "Jellyfin",
+    "file": "jellyfin.svg",
+    "source": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
+    "sha256": "817c25b47442b192250448fe48cd5f265fe9183bc75aa12030bbe335495255d1"
+  },
+  {
+    "name": "Home Assistant",
+    "file": "home-assistant.svg",
+    "source": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/home-assistant.svg",
+    "sha256": "146b366b8c09502742025c4bca4e029e8e4a1b277db837d59a23b93940ebe0e0"
+  },
+  {
+    "name": "Paperless",
+    "file": "paperless.svg",
+    "source": "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg",
+    "sha256": "27a6a4519fa481a1181a3b9b52513763740dce9d0eb073bc874a1a4ae3d7d759"
+  },
+  {
+    "name": "Nextcloud",
+    "file": "nextcloud.png",
+    "source": "https://raw.githubusercontent.com/nextcloud/server/master/core/img/favicon-touch.png",
+    "sha256": "88ee0ec5e6b1ca971772e0904297258e31dbfaa5dd3d540aeefc2009ab37b7fd"
+  },
+  {
+    "name": "Grafana",
+    "file": "grafana.svg",
+    "source": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/grafana.svg",
+    "sha256": "8f32897073ee93594ab2339482ef21ca3767044055da89e2baf9066d25592df7"
+  },
+  {
+    "name": "Gitea",
+    "file": "gitea.svg",
+    "source": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/gitea.svg",
+    "sha256": "6e2da0b8fbd4e0eec778714f5009361eb0a339967e06d265f3d7d0d50418d7c7"
+  },
+  {
+    "name": "Uptime Kuma",
+    "file": "uptime-kuma.svg",
+    "source": "https://raw.githubusercontent.com/louislam/uptime-kuma/master/public/icon.svg",
+    "sha256": "1f7b4df28ef01c74e334382dab159d96b2ff145ac835b5d2febbbc4166857831"
+  },
+  {
+    "name": "MQTT",
+    "file": "mqtt.svg",
+    "source": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/mosquitto.svg",
+    "sha256": "f339cedd619dc2a39a8153cc687fd0272e219108a3b86456543553f6531ea0d5"
+  },
+  {
+    "name": "Syncthing",
+    "file": "syncthing.png",
+    "source": "https://raw.githubusercontent.com/syncthing/syncthing/main/assets/logo-128.png",
+    "sha256": "5f87b5a2208458674e2eac57e16b14db23e75fbb23534f0ebc48737c35c0af59"
+  },
+  {
+    "name": "Vaultwarden",
+    "file": "vaultwarden.svg",
+    "source": "https://raw.githubusercontent.com/dani-garcia/vaultwarden/main/resources/vaultwarden-icon.svg",
+    "sha256": "c58fe91554bda6e1be51bd0cf56ac84ab63f798d5173e41e71e1aa1de515c7ef"
+  },
+  {
+    "name": "SFTPGo",
+    "file": "sftpgo.png",
+    "source": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/sftpgo.png",
+    "sha256": "be2262798717354ae27bc3bcdabcd11617dad5ab4c0d9a08fb8eea5dd96f10a5"
+  }
+]
