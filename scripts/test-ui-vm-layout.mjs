@@ -247,7 +247,7 @@ async function context(theme = "graphit", width = 1600, locale = "de") {
     }
     window.WebSocket = RfbPeer;
   });
-  return result;
+  return { ...result, vms };
 }
 
 async function connected(page) {
@@ -281,7 +281,7 @@ async function noOverflow(page) {
 
 try {
   {
-    const { ctx, page, data } = await context();
+    const { ctx, page, data, vms } = await context();
     await page.goto(base + "/vms?vm=vm2&tab=screen");
     await connected(page);
     await page.evaluate(() => document.fonts.ready);
@@ -318,6 +318,20 @@ try {
       path: out + "/screen-graphit-1600.png",
       fullPage: true,
     });
+    // A notice above the command bar must leave room for the fitted console.
+    await page.setViewportSize({ width: 1600, height: 750 });
+    vms[2].available = false;
+    await page.locator(".vm-page>.notices").waitFor();
+    await page.waitForFunction(() => {
+      const frame = document.querySelector(".frame").getBoundingClientRect();
+      const footer = document
+        .querySelector(".screen-footer")
+        .getBoundingClientRect();
+      return frame.bottom + footer.height <= innerHeight;
+    });
+    vms[2].available = true;
+    await page.locator(".vm-page>.notices").waitFor({ state: "hidden" });
+    await page.setViewportSize({ width: 1600, height: 1000 });
     await page.getByRole("button", { name: "Senden", exact: true }).click();
     await page
       .getByRole("menuitem", { name: "Strg+Alt+Entf", exact: true })

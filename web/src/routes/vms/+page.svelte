@@ -115,6 +115,8 @@
 		// Notices above the console move it down; the window may change too.
 		const sizes = new ResizeObserver(measureRoom);
 		if (element.parentElement) sizes.observe(element.parentElement);
+		const workspace = element.closest('.vm-page');
+		if (workspace) sizes.observe(workspace);
 		window.addEventListener('resize', measureRoom);
 		return () => {
 			sizes.disconnect();
