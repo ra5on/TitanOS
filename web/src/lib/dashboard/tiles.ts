@@ -15,6 +15,7 @@ export const TILE_IDS = [
 	'volumes',
 	'network',
 	'disks',
+	'accelerators',
 	'igpu',
 	'npu',
 	'nvidia',
@@ -25,7 +26,7 @@ export const TILE_IDS = [
 	'shares',
 ] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
-export type SourceId = StaticTileId | `vm:${string}` | `container:${string}`;
+export type SourceId = StaticTileId | `vm:${string}` | `container:${string}` | `app:${string}`;
 export type TileId = SourceId | `${SourceId}@${string}`;
 export const sourceId = (id: TileId): SourceId => id.replace(/@[a-f0-9]{8}$/, '') as SourceId;
 
@@ -39,6 +40,7 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	network: { title: 'tile.network', minW: 2, minH: 2 },
 	disks: { title: 'tile.disks', minW: 3, minH: 2 },
 	temperatures: { title: 'temperatures.title', minW: 2, minH: 2 },
+	accelerators: { title: 'dashboard.accelerators', minW: 2, minH: 2 },
 	igpu: { title: 'tile.igpu', minW: 2, minH: 2 },
 	npu: { title: 'tile.npu', minW: 2, minH: 2 },
 	nvidia: { title: 'tile.nvidia', minW: 2, minH: 2 },
@@ -48,20 +50,39 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	shares: { title: 'nav.shares', minW: 3, minH: 2 },
 };
 
-export function workload(id: TileId): { kind: 'vm' | 'container'; name: string } | undefined {
-	const match = /^(vm|container):([a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})$/.exec(sourceId(id));
-	return match ? { kind: match[1] as 'vm' | 'container', name: match[2] } : undefined;
+export function workload(
+	id: TileId,
+): { kind: 'vm' | 'container' | 'app'; name: string } | undefined {
+	const match = /^(vm|container|app):([a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})$/.exec(sourceId(id));
+	return match ? { kind: match[1] as 'vm' | 'container' | 'app', name: match[2] } : undefined;
 }
 
 export function tileSpec(id: TileId): TileSpec {
 	const target = workload(id);
 	return target
-		? { title: target.kind === 'vm' ? 'tile.vm' : 'tile.container', minW: 2, minH: 2 }
+		? {
+				title:
+					target.kind === 'vm'
+						? 'tile.vm'
+						: target.kind === 'app'
+							? 'nav.docker'
+							: 'tile.container',
+				minW: 2,
+				minH: 2,
+			}
 		: TILES[sourceId(id) as StaticTileId];
 }
 
 /** Position and size of a tile in grid cells. Without x/y it goes to the first free place. */
-export type TilePlacement = { id: TileId; x?: number; y?: number; w: number; h: number };
+export type TilePlacement = {
+	id: TileId;
+	x?: number;
+	y?: number;
+	w: number;
+	h: number;
+	span?: number;
+	autoHeight?: boolean;
+};
 
 export function defaultLayout(): TilePlacement[] {
 	return [
@@ -139,6 +160,8 @@ export function sanitizeLayout(input: unknown): TilePlacement[] {
 			y: cells(v.y, 0, 1000),
 			w,
 			h: cells(v.h, tileSpec(id).minH, 40) ?? fallback.h,
+			...(v.span !== undefined ? { span: cells(v.span, 1, 4) ?? 1 } : {}),
+			...(typeof v.autoHeight === 'boolean' ? { autoHeight: v.autoHeight } : {}),
 		});
 	}
 	return layout;

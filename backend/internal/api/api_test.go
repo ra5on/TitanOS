@@ -494,8 +494,19 @@ func TestPreferences(t *testing.T) {
 	if res, _ := ts.request("PUT", "/api/v1/preferences/account", map[string]any{"role": "owner"}); res.StatusCode != http.StatusNotFound {
 		t.Errorf("unknown kind accepted: %d", res.StatusCode)
 	}
-	if res, _ := ts.request("PUT", "/api/v1/preferences/dashboard", []byte(`{"x":"`+strings.Repeat("a", maxJSONBody)+`"}`)); res.StatusCode != http.StatusRequestEntityTooLarge {
+	if res, _ := ts.request("PUT", "/api/v1/preferences/dashboard", []byte(`{"x":"`+strings.Repeat("a", maxDashboardPreferences)+`"}`)); res.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Errorf("oversized body: %d", res.StatusCode)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/preferences/appearance", []byte(`{"x":"`+strings.Repeat("a", maxJSONBody)+`"}`)); res.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("appearance bound changed: %d", res.StatusCode)
+	}
+	large := []byte(`{"version":5,"tileOptions":{"system":{"title":"` + strings.Repeat("a", maxJSONBody) + `"}}}`)
+	if res, _ := ts.request("PUT", "/api/v1/preferences/dashboard", large); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("large dashboard rejected: %d", res.StatusCode)
+	}
+	_, largeStored := ts.request("GET", "/api/v1/preferences", nil)
+	if !bytes.Contains(largeStored, large) {
+		t.Fatal("large dashboard not retained")
 	}
 }
 

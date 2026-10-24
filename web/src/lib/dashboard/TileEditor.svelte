@@ -3,7 +3,8 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { EDITOR_ICONS, type TileOptions } from './options.ts';
 	import type { TileId, TilePlacement } from './tiles.ts';
-	import { sourceId, tileSpec } from './tiles.ts';
+	import { sourceId } from './tiles.ts';
+	import { SYSTEM_FIELDS } from './system-fields.ts';
 	export type EditPart = 'tile' | 'heading' | 'value' | 'labels';
 	let {
 		id,
@@ -16,6 +17,7 @@
 		items = [],
 		onchange,
 		onsize,
+		onauto,
 		onduplicate,
 		onreset,
 		ontransfer,
@@ -30,7 +32,8 @@
 		devices: { address: string; name: string }[];
 		items: { id: string; name: string }[];
 		onchange: (key: keyof TileOptions, value: unknown) => void;
-		onsize: (w: number, h: number) => void;
+		onsize: (w: number, h: number, autoHeight?: boolean) => void;
+		onauto: (value: boolean) => void;
 		onduplicate: () => void;
 		onreset: () => void;
 		ontransfer: () => void;
@@ -38,7 +41,9 @@
 	} = $props();
 	let tab = $state<'content' | 'appearance' | 'size'>('appearance');
 	const source = $derived(sourceId(id));
-	const metric = $derived(['cpu', 'memory', 'igpu', 'npu', 'nvidia'].includes(source));
+	const metric = $derived(
+		['cpu', 'memory', 'igpu', 'npu', 'nvidia', 'accelerators'].includes(source),
+	);
 	const prefix = $derived(part === 'heading' ? 'title' : part === 'labels' ? 'label' : 'value');
 	const sizeKey = $derived((prefix + 'Size') as keyof TileOptions),
 		weightKey = $derived((prefix + 'Weight') as keyof TileOptions),
@@ -104,7 +109,7 @@
 						>{t('dashboard.editor.fontSize')}<output>{settings[sizeKey]} px</output><input
 							type="range"
 							aria-label={t('dashboard.editor.fontSize')}
-							min={prefix === 'value' ? 16 : 11}
+							min="11"
 							max={prefix === 'value' ? 96 : prefix === 'title' ? 36 : 28}
 							value={Number(settings[sizeKey])}
 							oninput={(e) => onchange(sizeKey, Number(e.currentTarget.value))}
@@ -241,7 +246,8 @@
 							>{/each}</select
 					></label
 				>{/if}
-			{#if !source.startsWith('vm:') && !source.startsWith('container:')}<label class="check"
+			{#if !source.startsWith('vm:') && !source.startsWith('container:') && !['system', 'vms'].includes(source)}<label
+					class="check"
 					><input
 						type="checkbox"
 						checked={settings.details}
@@ -262,6 +268,64 @@
 						onchange={(e) => onchange('temperature', e.currentTarget.checked)}
 					/>{t('dashboard.cpuTemperature')}</label
 				>{/if}
+			{#if source === 'system'}
+				<fieldset>
+					<legend>{t('dashboard.systemFields')}</legend>
+					{#each [...settings.systemFields, ...SYSTEM_FIELDS.filter((f) => !settings.systemFields.includes(f))] as field, index}
+						<div class="part-order">
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={settings.systemFields.includes(field)}
+									onchange={() =>
+										onchange(
+											'systemFields',
+											settings.systemFields.includes(field)
+												? settings.systemFields.filter((f) => f !== field)
+												: [...settings.systemFields, field],
+										)}
+								/>{t(`dashboard.field.${field}`)}</label
+							>
+							{#if settings.systemFields.includes(field)}<button
+									class="btn"
+									aria-label={`${t(`dashboard.field.${field}`)}: ${t('dashboard.editor.moveUp')}`}
+									disabled={index === 0}
+									onclick={() => {
+										const fields = [...settings.systemFields];
+										[fields[index], fields[index - 1]] = [fields[index - 1], fields[index]];
+										onchange('systemFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								><button
+									class="btn"
+									aria-label={`${t(`dashboard.field.${field}`)}: ${t('dashboard.editor.moveDown')}`}
+									disabled={index === settings.systemFields.length - 1}
+									onclick={() => {
+										const fields = [...settings.systemFields];
+										[fields[index], fields[index + 1]] = [fields[index + 1], fields[index]];
+										onchange('systemFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								>{/if}
+						</div>
+					{/each}
+				</fieldset>
+				<label
+					>{t('dashboard.systemLayout')}<select
+						class="field"
+						value={settings.systemLayout}
+						onchange={(e) => onchange('systemLayout', e.currentTarget.value)}
+						><option value="rows">{t('dashboard.systemRows')}</option><option value="stacked"
+							>{t('dashboard.systemStacked')}</option
+						></select
+					></label
+				>
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={settings.showLabels}
+						onchange={(e) => onchange('showLabels', e.currentTarget.checked)}
+					/>{t('dashboard.showLabels')}</label
+				>
+			{/if}
 			{#if source === 'network'}
 				<label
 					>{t('dashboard.interface')}<select
@@ -286,7 +350,7 @@
 						)}</label
 					>{/each}
 			{/if}
-			{#if ['igpu', 'npu', 'nvidia'].includes(source)}<label
+			{#if ['igpu', 'npu', 'nvidia', 'accelerators'].includes(source)}<label
 					>{t('dashboard.editor.device')}<select
 						class="field"
 						value={settings.device}
@@ -388,25 +452,34 @@
 		{:else}
 			<div class="pair">
 				<label
-					>{t('dashboard.width')}<input
+					>{t('dashboard.span')}<input
 						class="field"
 						type="number"
-						min={tileSpec(id).minW}
-						max="12"
-						value={placement.w}
+						min="1"
+						max="4"
+						value={placement.span ?? 1}
 						onchange={(e) => onsize(Number(e.currentTarget.value), placement.h)}
 					/></label
 				><label
-					>{t('dashboard.height')}<input
+					>{t('dashboard.heightPixels')}<input
 						class="field"
 						type="number"
-						min={tileSpec(id).minH}
-						max="40"
-						value={placement.h}
-						onchange={(e) => onsize(placement.w, Number(e.currentTarget.value))}
+						min="80"
+						max="1600"
+						step="40"
+						value={placement.h * 40}
+						onchange={(e) =>
+							onsize(placement.span ?? 1, Math.round(Number(e.currentTarget.value) / 40), false)}
 					/></label
 				>
 			</div>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={placement.autoHeight !== false}
+					onchange={(e) => onauto(e.currentTarget.checked)}
+				/>{t('dashboard.autoHeight')}</label
+			>
 			<p class="muted hint">{t('dashboard.editor.keyboardHint')}</p>
 			<button class="btn" onclick={onduplicate}
 				><Icon name="copy" size={14} />{t('dashboard.editor.duplicate')}</button

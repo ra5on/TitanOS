@@ -21,6 +21,10 @@ var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vn
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
 
+// Up to 100 individually configured dashboard tiles no longer fit 64 KiB.
+// Keep this exception per preference kind; other JSON endpoints stay bounded.
+const maxDashboardPreferences = 512 << 10
+
 var backgroundTypes = []string{"image/jpeg", "image/png", "image/webp"}
 
 // preferences reads and writes /config/users/<name>/<kind>.json and keeps
@@ -111,7 +115,12 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var value json.RawMessage
-	if !readJSON(w, r, &value) {
+	if kind == "dashboard" {
+		r.Body = http.MaxBytesReader(w, r.Body, maxDashboardPreferences)
+		if !readJSONBody(w, r, &value) {
+			return
+		}
+	} else if !readJSON(w, r, &value) {
 		return
 	}
 	if !isJSONObject(value) {
