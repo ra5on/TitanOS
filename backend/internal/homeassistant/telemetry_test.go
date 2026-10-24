@@ -178,3 +178,62 @@ func TestNormalizedNamesCannotAliasCommands(t *testing.T) {
 		t.Fatal("non-colliding historical ID changed")
 	}
 }
+
+func TestRetainedDiscoveryRespectsExplicitSelectionDuringOutage(t *testing.T) {
+	q := MQTT{Devices: map[string][]string{"gpu": {"selected"}, "containers": {"photos"}, "ups": {}}}
+	devices := []DeviceValues{{Group: "gpu", ID: "selected", Metrics: []MetricValue{{Key: "temperature"}}}, {Group: "gpu", ID: "other", Metrics: []MetricValue{{Key: "temperature"}}}}
+	list := telemetryEntities(devices, MQTT{Groups: []string{"gpu"}})
+	if !retainedSelected(q, "gpu", list[0].key) || retainedSelected(q, "gpu", list[1].key) {
+		t.Fatal("filtered device was removed or unrelated device kept")
+	}
+	if !retainedSelected(q, "containers", "container_photos") || retainedSelected(q, "containers", "container_photos_database") || retainedSelected(q, "ups", "ups_charge") {
+		t.Fatal("legacy selection has a prefix or empty-selection leak")
+	}
+	if !retainedSelected(MQTT{}, "gpu", list[1].key) {
+		t.Fatal("old settings stopped selecting all devices")
+	}
+}
+
+func TestMQTTFilteredReconnectKeepsSelectedUnavailableDiscovery(t *testing.T) {
+	b := startBroker(t)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	q := MQTT{Enabled: true, Host: "127.0.0.1", Port: b.port(), ID: "filtered", Groups: []string{"gpu"}, Devices: map[string][]string{"gpu": {"selected"}}}
+	if err := m.SetSettings(Settings{MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	mu := sync.Mutex{}
+	unavailable := true
+	source := func(context.Context) Snapshot {
+		mu.Lock()
+		defer mu.Unlock()
+		if unavailable {
+			return Snapshot{UnavailableGroups: []string{"gpu"}}
+		}
+		return Snapshot{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	old := mqttInterval
+	mqttInterval = 40 * time.Millisecond
+	defer func() { mqttInterval = old }()
+	go m.RunMQTT(ctx, source, nil)
+	eventually(t, "discovery subscription", func() bool { return b.get(func(b *fakeBroker) bool { return len(b.subs) == 2 }) })
+	devices := []DeviceValues{{Group: "gpu", ID: "selected", Metrics: []MetricValue{{Key: "load"}}}, {Group: "gpu", ID: "other", Metrics: []MetricValue{{Key: "load"}}}}
+	list := telemetryEntities(devices, MQTT{Groups: []string{"gpu"}})
+	for _, e := range list {
+		b.send("homeassistant/sensor/titanos_filtered/"+e.key+"/config", `{"unique_id":"titanos_filtered_`+e.key+`","name":"GPU load"}`)
+	}
+	selected := "homeassistant/sensor/titanos_filtered/" + list[0].key + "/config"
+	other := "homeassistant/sensor/titanos_filtered/" + list[1].key + "/config"
+	eventually(t, "filtered outage reconciliation", func() bool {
+		return b.get(func(b *fakeBroker) bool {
+			_, seen := b.retained[other]
+			return b.retained[selected] != "" && b.retained["titanos/filtered/available/"+list[0].key] == "offline" && seen && b.retained[other] == ""
+		})
+	})
+	mu.Lock()
+	unavailable = false
+	mu.Unlock()
+	eventually(t, "confirmed removal after recovery", func() bool { return b.get(func(b *fakeBroker) bool { return b.retained[selected] == "" }) })
+}
