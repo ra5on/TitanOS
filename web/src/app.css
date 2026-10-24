@@ -408,3 +408,9 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 
 /* Text for screen readers only. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* A received target is real data; only the visual transition is interpolated. */
+.metric-level { transition:width var(--metric-duration,450ms) cubic-bezier(.22,.65,.32,1); }
+.metric-ring-level { transition:stroke-dasharray var(--metric-duration,450ms) cubic-bezier(.22,.65,.32,1); }
+.metric-level.unknown { visibility:hidden;transition:none; }
+@media(prefers-reduced-motion:reduce) { .metric-level,.metric-ring-level { transition:none!important; } }

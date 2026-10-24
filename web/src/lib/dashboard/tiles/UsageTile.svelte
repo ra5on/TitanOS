@@ -12,7 +12,7 @@
 	}: { kind: 'cpu' | 'memory'; options: TileOptions; ondetails: () => void } = $props();
 	const info = $derived(system.info);
 	const percent = $derived(
-		info
+		info && system.reachable
 			? kind === 'cpu'
 				? info.cpu.usagePercent
 				: info.memory.totalBytes > 0
@@ -84,9 +84,17 @@
 			>
 				{#each info.cpu.threadUsage as core (core.id)}<div class="core">
 						<span>{core.id.toUpperCase().replace(/^CPU(?=\d)/, 'CPU ')}</span>
-						<div class="track"><span style:width="{core.usagePercent ?? 0}%"></span></div>
+						<div class="track">
+							<span
+								class="metric-level"
+								class:unknown={core.usagePercent === null || !system.reachable}
+								style:width="{core.usagePercent ?? 0}%"
+							></span>
+						</div>
 						<span class="mono"
-							>{core.usagePercent === null ? '–' : Math.round(core.usagePercent) + '%'}</span
+							>{core.usagePercent === null || !system.reachable
+								? '–'
+								: Math.round(core.usagePercent) + '%'}</span
 						>
 					</div>{/each}
 			</div>{/if}

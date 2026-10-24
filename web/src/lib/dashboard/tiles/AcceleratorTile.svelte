@@ -56,7 +56,7 @@
 		{#each options.parts as part}
 			{#if part === 'value'}<div data-part="value">
 					<Metric
-						value={device.usagePercent}
+						value={system.reachable ? device.usagePercent : null}
 						label={t('accelerator.usage')}
 						options={{ ...options, display: options.display === 'auto' ? 'bar' : options.display }}
 						history={device.history}
@@ -111,7 +111,8 @@
 										: engine.name}</span
 							><b>{formatPercent(engine.usagePercent)}</b>
 							<div class="bar">
-								<span style:width="{Math.min(100, engine.usagePercent)}%"></span>
+								<span class="metric-level" style:width="{Math.min(100, engine.usagePercent)}%"
+								></span>
 							</div>
 						</div>{/each}
 				</div>{/if}

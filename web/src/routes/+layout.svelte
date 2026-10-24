@@ -7,6 +7,10 @@
 	import '../app.css';
 
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
+	import { dashboardVisual } from '#lib/dashboard/visual.ts';
+	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -32,7 +36,11 @@
 	<title>{session.data?.hostname ? `${session.data.hostname} – TitanOS` : 'TitanOS'}</title>
 </svelte:head>
 
-<Backdrop appearance={appearance.current} />
+{#if page.url.pathname === '/' && session.data?.user}<DashboardBackground
+		visual={dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual)}
+		inherited={appearance.current}
+		urls={dashboardScene.urls}
+	/>{:else}<Backdrop appearance={appearance.current} />{/if}
 
 {#if session.status === 'unreachable'}
 	<Problem title={t('unreachable.title')} text={t('unreachable.text')} />
