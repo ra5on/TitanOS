@@ -126,6 +126,9 @@
 		font-size: 0.75rem;
 	}
 	dt {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		hyphens: auto;
 		color: var(--muted);
 	}
 	dd {
