@@ -1015,6 +1015,9 @@ func TestNetworkIsForAdministrators(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/network", map[string]any{"hostname": "nas", "dhcp": true}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
 		t.Errorf("change in development mode: %d %s", res.StatusCode, body)
 	}
+	if res, body := ts.request("POST", "/api/v1/network/bridge", map[string]any{}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Errorf("bridge changed network in development: %d %s", res.StatusCode, body)
+	}
 	if res, body := ts.request("POST", "/api/v1/network/confirm", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "network_not_pending" {
 		t.Errorf("confirm without a change: %d %s", res.StatusCode, body)
 	}
@@ -1027,7 +1030,7 @@ func TestNetworkIsForAdministrators(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/network"}, {"PUT", "/api/v1/network"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/network/revert"}, {"PUT", "/api/v1/system/timezone"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/network"}, {"PUT", "/api/v1/network"}, {"POST", "/api/v1/network/bridge"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/network/revert"}, {"PUT", "/api/v1/system/timezone"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

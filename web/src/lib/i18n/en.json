@@ -3952,5 +3952,22 @@
 	"dashboard.bg.wellen": "Abstract waves",
 	"dashboard.bg.geometrie": "Geometric shapes",
 	"dashboard.editor.blur": "Blur",
-	"dashboard.editor.glow": "Glow"
+	"dashboard.editor.glow": "Glow",
+	"bridge.ready": "Home network active · br0",
+	"bridge.connecting": "Setting up the home network. The connection may briefly drop. Your inputs are kept.",
+	"bridge.hint": "Enable the home network using br0. Your existing network settings are preserved; confirm the connection within two minutes afterwards.",
+	"bridge.port": "Ethernet port for the home network",
+	"bridge.choosePort": "Select a port…",
+	"bridge.enable": "Enable home network",
+	"vms.form.installation": "Installation & startup",
+	"vms.form.connections": "Network & extensions",
+	"error.network_bridge_port": "Select the Ethernet port for the home network.",
+	"error.invalid_response": "The server returned an invalid response. Please retry.",
+	"vms.template.linux.brief": "Linux distributions",
+	"vms.template.windows.brief": "With TPM and Secure Boot",
+	"vms.template.other.brief": "Custom configuration",
+	"vms.form.general": "General",
+	"vms.form.autoBrief": "Linux schedules vCPUs across the available cores.",
+	"vms.form.diskHelp": "About disks",
+	"vms.form.sizePresets": "Choose a size"
 }

@@ -329,6 +329,7 @@ func New(opts Options) *Server {
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
 	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
+	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
 	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))

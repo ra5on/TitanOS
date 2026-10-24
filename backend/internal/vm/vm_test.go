@@ -518,3 +518,32 @@ func TestAutostartOncePerBootAlsoAcrossRestartsOfTitand(t *testing.T) {
 		}
 	}
 }
+
+func TestBridgeTrialBlocksCreationAndStart(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	spec := VM{Name: "bridge-test", Template: "linux", MemoryMiB: 512, VCPUs: 1, Network: "bridge", Disks: []Disk{{Volume: "fast", Format: "qcow2", SizeBytes: 8 * gib}}}
+	m.BridgeReady = func() bool { return false }
+	if err := m.Create(ctx, spec, []string{"fast"}); !errors.Is(err, ErrNoBridge) {
+		t.Fatalf("created on unconfirmed bridge: %v", err)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatal("creation performed work before network confirmation")
+	}
+	m.BridgeReady = func() bool { return true }
+	if err := m.Create(ctx, spec, []string{"fast"}); err != nil {
+		t.Fatal(err)
+	}
+	m.sysDir = t.TempDir()
+	if err := os.MkdirAll(filepath.Join(m.sysDir, "class/net/br0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m.BridgeReady = func() bool { return false }
+	before := len(runner.commands)
+	if err := m.Start(ctx, spec.Name, []string{"fast"}); !errors.Is(err, ErrNoBridge) {
+		t.Fatalf("started on unconfirmed bridge: %v", err)
+	}
+	if len(runner.commands) != before {
+		t.Fatal("start performed work before network confirmation")
+	}
+}

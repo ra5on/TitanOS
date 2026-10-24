@@ -395,6 +395,14 @@
 		allNotices = false;
 	});
 
+	// Snapshot before closing: the template's reactive @const becomes undefined
+	// immediately when rowMenu is cleared.
+	function rowAction(action: (vm: VM) => void) {
+		const vm = rowMenu?.vm;
+		rowMenu = null;
+		if (vm) action(vm);
+	}
+
 	function rowContext(vm: VM, event: MouseEvent) {
 		event.preventDefault();
 		rowMenu = { vm, x: event.clientX, y: event.clientY };
@@ -823,63 +831,63 @@
 				type="button"
 				role="menuitem"
 				disabled={busy}
-				onclick={() => {
-					rowMenu = null;
-					act(vm, 'shutdown');
-				}}><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						act(vm, 'shutdown');
+					})}><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button
 			>
 			<button
 				type="button"
 				role="menuitem"
 				disabled={busy}
-				onclick={() => {
-					rowMenu = null;
-					act(vm, 'reboot');
-				}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						act(vm, 'reboot');
+					})}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
 			>
 			<button
 				type="button"
 				role="menuitem"
-				onclick={() => {
-					rowMenu = null;
-					goto(link(vm, 'screen'));
-				}}><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						goto(link(vm, 'screen'));
+					})}><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></button
 			>
 		{:else}
 			<button
 				type="button"
 				role="menuitem"
 				disabled={busy || !canStart(vm)}
-				onclick={() => {
-					rowMenu = null;
-					act(vm, 'start');
-				}}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						act(vm, 'start');
+					})}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button
 			>
 		{/if}
 		<button
 			type="button"
 			role="menuitem"
-			onclick={() => {
-				rowMenu = null;
-				goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
-			}}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button
+			onclick={() =>
+				rowAction((vm) => {
+					goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
+				})}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button
 		>
 		{#if vm.state === 'stopped'}<button
 				type="button"
 				role="menuitem"
 				disabled={busy || !!vm.job}
-				onclick={() => {
-					rowMenu = null;
-					cloning = vm;
-				}}>{t('ops.clone')}</button
+				onclick={() =>
+					rowAction((vm) => {
+						cloning = vm;
+					})}>{t('ops.clone')}</button
 			>{/if}
 		<button
 			type="button"
 			role="menuitem"
-			onclick={() => {
-				rowMenu = null;
-				goto(link(vm, 'snapshots'));
-			}}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button
+			onclick={() =>
+				rowAction((vm) => {
+					goto(link(vm, 'snapshots'));
+				})}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button
 		>
 		<hr />
 		{#if vm.state === 'running'}
@@ -888,10 +896,10 @@
 				role="menuitem"
 				class="danger"
 				disabled={busy}
-				onclick={() => {
-					rowMenu = null;
-					open('poweroff', vm);
-				}}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						open('poweroff', vm);
+					})}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
 			>
 		{:else}
 			<button
@@ -899,10 +907,10 @@
 				role="menuitem"
 				class="danger"
 				disabled={busy}
-				onclick={() => {
-					rowMenu = null;
-					open('remove', vm);
-				}}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
+				onclick={() =>
+					rowAction((vm) => {
+						open('remove', vm);
+					})}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
 			>
 		{/if}
 	</ContextMenu>

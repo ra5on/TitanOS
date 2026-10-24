@@ -14,6 +14,28 @@ NAS ist er keine gesicherte Erklärung für jede langsame Verbindung.
 
 ## Bridge einrichten
 
+Im Netzwerkschritt der Ersteinrichtung richtet TitanOS `br0` automatisch ein,
+sofern noch keine ausdrückliche Netzwerkkonfiguration besteht. Bei bestehenden
+NAS bietet die VM-Einrichtung **Heimnetz aktivieren**. Bestätigung und Rückfall
+stehen direkt dort bereit, während die Eingaben für die VM erhalten bleiben.
+
+`POST /api/v1/network/bridge` nimmt `{"port":"","onlyUnconfigured":false}` entgegen
+und liefert denselben Status wie `GET /api/v1/network`. Nur Besitzer und
+Administratoren dürfen die Route aufrufen. Gespeicherte Anschlüsse, Bond, VLAN,
+DHCP/feste Adresse, Gateway und DNS werden übernommen. Ohne gespeicherten
+Anschluss wird genau ein physischer Ethernet-Uplink aus der Standardroute
+gewählt; uneindeutige oder fremde virtuelle Uplinks verlangen eine ausdrückliche
+Anschlussauswahl (`network_bridge_port`). Zusätzliche Anschlüsse werden nicht
+verbunden. `onlyUnconfigured:true` schützt die automatische Ersteinrichtung
+vor dem Überschreiben bestehender Einstellungen.
+
+Der Status ergänzt `configured` (ausdrückliche Konfiguration geladen/bestätigt)
+und `bridgeReady` (bestätigte Konfiguration und vorhandene Bridge, kein Probelauf).
+Neue VMs bevorzugen die bestätigte Bridge. Auch das Backend blockiert die
+Anlage bzw. den Start einer Heimnetz-VM während eines Probelaufs. Eine bereits
+bestätigte vorhandene Bridge wird ohne erneute Umstellung wiederverwendet.
+Der Entwicklungsmodus führt keine Netzwerkänderungen aus.
+
 Die Schichtung ist Anschluss → optional Bond → optional VLAN → `br0`.
 Nur die oberste Schnittstelle trägt NAS-Adresse, Gateway und DNS. Untere
 Schnittstellen haben weder DHCP noch IPv6-Router-Advertisements oder
@@ -90,3 +112,10 @@ Erhalt eines laufenden Gast-Ports und Verkehr nach echtem Docker-Neustart sowie
 nach Erstellen eines Docker-Netzes. Diese Test-VM verwendet nur Wegwerf-Medien.
 Bonding/VLAN auf echter Hardware und der neue Stand auf dem NAS mit
 Home Assistant bleiben gesonderte Hardwaretests.
+
+Der ergänzende Test `scripts/test-vm-bridge-qemu.py --zip <lokales-installations-zip>`
+bootet neue Wegwerf-Medien zweimal mit UEFI/TCG und injiziert das aktuelle
+`backend/bin/titand` je Boot ausschließlich in den RAM des Gasts. Er prüft den
+neuen Endpunkt, echte Zwei-Minuten-Rücknahme, Gast-DHCP, Dienst- und NAS-Neustart.
+Er ändert weder Host-Netzwerk noch Host-Laufwerke und ersetzt keine Prüfung eines
+neu gepackten Release-ZIPs. Einzelheiten: [Prüfbericht](VM-CREATE-VALIDATION.md).

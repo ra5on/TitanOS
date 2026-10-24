@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { page } from '$app/state';
+	import { parseLogs, type LogEntry as Entry } from '#lib/logs.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -7,21 +9,35 @@
 	import DiskTests from './DiskTests.svelte';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
-	type Entry = { time: string; priority: number; source: string; message: string };
-	type Logs = { entries: Entry[]; cursor: string };
-
-	const SOURCES = ['', 'titand', 'kernel', 'storage', 'shares', 'docker', 'vms', 'network'] as const;
+	const SOURCES = [
+		'',
+		'titand',
+		'kernel',
+		'storage',
+		'shares',
+		'docker',
+		'vms',
+		'network',
+	] as const;
 	const KEEP = 2000;
 
-	let source = $state<(typeof SOURCES)[number]>('');
-	let priority = $state(6);
-	let search = $state('');
+	const askedSource = untrack(() => page.url.searchParams.get('source') ?? '');
+	let source = $state<(typeof SOURCES)[number]>(
+		SOURCES.includes(askedSource as (typeof SOURCES)[number])
+			? (askedSource as (typeof SOURCES)[number])
+			: '',
+	);
+	const askedPriority = Number(untrack(() => page.url.searchParams.get('priority') ?? '6'));
+	let priority = $state([3, 4, 6, 7].includes(askedPriority) ? askedPriority : 6);
+	let search = $state(untrack(() => page.url.searchParams.get('search') ?? ''));
 	let follow = $state(true);
 	let entries = $state<Entry[]>([]);
 	let cursor = '';
 	let error = $state('');
 	let loading = $state(true);
 	let list = $state<HTMLElement>();
+	let generation = 0;
+	let fetchingMore = false;
 
 	function query(after = ''): string {
 		const params = new URLSearchParams({ source, priority: String(priority), lines: '500' });
@@ -31,30 +47,40 @@
 	}
 
 	async function load() {
+		const request = ++generation;
 		loading = true;
 		error = '';
 		try {
-			const res = await api.get<Logs>(query());
+			const res = parseLogs(await api.get<unknown>(query()));
+			if (request !== generation) return;
 			entries = res.entries;
 			cursor = res.cursor;
 			toEnd();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			if (request !== generation) return;
+			error = errorText(err instanceof ApiError ? err.code : 'logs_failed');
 		}
-		loading = false;
+		if (request === generation) loading = false;
 	}
 
 	async function more() {
-		if (!cursor || document.hidden) return;
+		if (!cursor || document.hidden || loading || fetchingMore) return;
+		const request = generation;
+		fetchingMore = true;
 		try {
-			const res = await api.get<Logs>(query(cursor));
+			const res = parseLogs(await api.get<unknown>(query(cursor)));
+			if (request !== generation) return;
+			error = '';
 			cursor = res.cursor;
 			if (res.entries.length > 0) {
 				entries = [...entries, ...res.entries].slice(-KEEP);
 				toEnd();
 			}
-		} catch {
-			// The next round tries again.
+		} catch (err) {
+			if (request === generation)
+				error = errorText(err instanceof ApiError ? err.code : 'logs_failed');
+		} finally {
+			fetchingMore = false;
 		}
 	}
 
@@ -67,6 +93,9 @@
 		source;
 		priority;
 		search;
+		untrack(() => {
+			generation++;
+		});
 		const timer = setTimeout(() => untrack(load), 250);
 		return () => clearTimeout(timer);
 	});
@@ -77,19 +106,34 @@
 		return () => clearInterval(timer);
 	});
 
-	const clock = $derived(new Intl.DateTimeFormat(i18n.locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+	const clock = $derived(
+		new Intl.DateTimeFormat(i18n.locale, {
+			day: '2-digit',
+			month: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		}),
+	);
 	/** The lines as text for the assistant, oldest first. */
 	function logText(from: number, to: number): string {
 		return entries
 			.slice(Math.max(0, from), to)
-			.map((e) => `${e.time} ${e.source} ${e.priority <= 3 ? 'ERROR ' : e.priority === 4 ? 'WARNING ' : ''}${e.message}`)
+			.map(
+				(e) =>
+					`${e.time} ${e.source} ${e.priority <= 3 ? 'ERROR ' : e.priority === 4 ? 'WARNING ' : ''}${e.message}`,
+			)
 			.join('\n');
 	}
 	function askLog() {
-		askAbout(t('assistant.askLog'), [{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) }]);
+		askAbout(t('assistant.askLog'), [
+			{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) },
+		]);
 	}
 	function askLine(index: number) {
-		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) }]);
+		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [
+			{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) },
+		]);
 	}
 
 	function level(priority: number): 'error' | 'warn' | '' {
@@ -106,7 +150,9 @@
 			const res = await fetch('/api/v1/diagnostics/bundle', { credentials: 'same-origin' });
 			if (!res.ok) throw new Error(String(res.status));
 			const blob = await res.blob();
-			const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'titanos-diagnose.zip';
+			const name =
+				/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ??
+				'titanos-diagnose.zip';
 			const link = document.createElement('a');
 			link.href = URL.createObjectURL(blob);
 			link.download = name;
@@ -121,30 +167,49 @@
 
 <PageHead title={t('nav.tools')} />
 
-<nav class="operation-links">{#each [['tasks','/tools/tasks'],['maintenance','/tools/maintenance'],['monitoring','/tools/monitoring'],['import','/storage/import']] as [key,href](key)}<a class="tile" {href}>{t(`ops.${key}` as 'ops.tasks')} →</a>{/each}</nav>
+<nav class="operation-links">
+	{#each [['tasks', '/tools/tasks'], ['maintenance', '/tools/maintenance'], ['monitoring', '/tools/monitoring'], ['import', '/storage/import']] as [key, href] (key)}<a
+			class="tile"
+			{href}>{t(`ops.${key}` as 'ops.tasks')} →</a
+		>{/each}
+</nav>
 <DiskTests />
 
 <section class="tile" aria-labelledby="tools-bundle">
 	<h2 class="tile-title" id="tools-bundle">{t('tools.bundle')}</h2>
 	<p class="muted">{t('tools.bundleText')}</p>
 	<div class="lists">
-		<div><p class="name">{t('tools.bundleIn')}</p><p class="muted">{t('tools.bundleInText')}</p></div>
-		<div><p class="name">{t('tools.bundleOut')}</p><p class="muted">{t('tools.bundleOutText')}</p></div>
+		<div>
+			<p class="name">{t('tools.bundleIn')}</p>
+			<p class="muted">{t('tools.bundleInText')}</p>
+		</div>
+		<div>
+			<p class="name">{t('tools.bundleOut')}</p>
+			<p class="muted">{t('tools.bundleOutText')}</p>
+		</div>
 	</div>
 	<p class="notice-warn">{t('tools.bundleCheck')}</p>
 	{#if packError}<p class="notice-error" role="alert">{packError}</p>{/if}
-	<div><button type="button" class="btn btn-primary" disabled={packing} onclick={pack}>{t(packing ? 'tools.bundlePacking' : 'tools.bundleMake')}</button></div>
+	<div>
+		<button type="button" class="btn btn-primary" disabled={packing} onclick={pack}
+			>{t(packing ? 'tools.bundlePacking' : 'tools.bundleMake')}</button
+		>
+	</div>
 </section>
 
 <section class="tile logs" aria-labelledby="tools-logs">
 	<h2 class="tile-title" id="tools-logs">{t('tools.logs')}</h2>
 	<div class="filters">
-		<label><span>{t('tools.source')}</span>
+		<label
+			><span>{t('tools.source')}</span>
 			<select class="field" bind:value={source}>
-				{#each SOURCES as name (name)}<option value={name}>{t(`tools.source.${name || 'all'}`)}</option>{/each}
+				{#each SOURCES as name (name)}<option value={name}
+						>{t(`tools.source.${name || 'all'}`)}</option
+					>{/each}
 			</select>
 		</label>
-		<label><span>{t('tools.level')}</span>
+		<label
+			><span>{t('tools.level')}</span>
 			<select class="field" bind:value={priority}>
 				<option value={3}>{t('tools.level.error')}</option>
 				<option value={4}>{t('tools.level.warning')}</option>
@@ -152,15 +217,23 @@
 				<option value={7}>{t('tools.level.debug')}</option>
 			</select>
 		</label>
-		<label class="grow"><span>{t('tools.search')}</span>
+		<label class="grow"
+			><span>{t('tools.search')}</span>
 			<input class="field" type="search" bind:value={search} maxlength="200" spellcheck="false" />
 		</label>
-		<label class="check"><input type="checkbox" bind:checked={follow} /><span>{t('tools.follow')}</span></label>
+		<label class="check"
+			><input type="checkbox" bind:checked={follow} /><span>{t('tools.follow')}</span></label
+		>
 		{#if assistant.status?.available && entries.length > 0}
 			<button type="button" class="btn" onclick={askLog}>{t('assistant.askLogButton')}</button>
 		{/if}
 	</div>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if error}<p class="notice-error" role="alert">
+			{error}
+			<button type="button" class="btn small" onclick={load} disabled={loading}
+				>{t('ui.retry')}</button
+			>
+		</p>{/if}
 	<!-- A region that scrolls must be reachable with the keyboard. -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div class="lines mono" bind:this={list} role="log" aria-label={t('tools.logs')} tabindex="0">
@@ -168,8 +241,19 @@
 			<div class="line {level(entry.priority)}">
 				<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
 				<span class="source">{entry.source}</span>
-				<span class="message">{#if level(entry.priority)}<span class="tag">{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span> {/if}{entry.message}</span>
-				{#if level(entry.priority) && assistant.status?.available}<button type="button" class="ask" title={t('assistant.ask')} aria-label={t('assistant.askLine')} onclick={() => askLine(index)}>?</button>{/if}
+				<span class="message"
+					>{#if level(entry.priority)}<span class="tag"
+							>{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span
+						>
+					{/if}{entry.message}</span
+				>
+				{#if level(entry.priority) && assistant.status?.available}<button
+						type="button"
+						class="ask"
+						title={t('assistant.ask')}
+						aria-label={t('assistant.askLine')}
+						onclick={() => askLine(index)}>?</button
+					>{/if}
 			</div>
 		{:else}
 			<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
@@ -179,7 +263,18 @@
 </section>
 
 <style>
- .operation-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--gap);margin-bottom:var(--gap)}.operation-links a{padding:18px;color:var(--text);text-decoration:none;font-weight:600}
+	.operation-links {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: var(--gap);
+		margin-bottom: var(--gap);
+	}
+	.operation-links a {
+		padding: 18px;
+		color: var(--text);
+		text-decoration: none;
+		font-weight: 600;
+	}
 
 	section {
 		display: flex;
