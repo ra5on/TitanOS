@@ -402,6 +402,7 @@
 		rebuild(structuredClone($state.snapshot(saved)));
 	}
 	async function finish() {
+		if (saving) return;
 		saving = true;
 		error = '';
 		const layout = legacyPositions(readGrid(), columns);
@@ -775,6 +776,7 @@
 	function keys(e: KeyboardEvent) {
 		if (
 			!editing ||
+			saving ||
 			!(e.ctrlKey || e.metaKey) ||
 			e.key.toLowerCase() !== 'z' ||
 			(e.target instanceof HTMLElement && e.target.closest('input,textarea,select'))
@@ -827,7 +829,7 @@
 
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
-<div class="dashboard-page" style={visualStyle(effectiveVisual)}>
+<div class="dashboard-page" inert={saving} style={visualStyle(effectiveVisual)}>
 	{#if editing}<div class="editor-actions">
 			<button
 				class="btn"
