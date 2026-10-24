@@ -3847,5 +3847,6 @@
 	"dashboard.guest": "Gast",
 	"dashboard.other": "Andere",
 	"dashboard.ipAddresses": "IP-Adressen",
-	"dashboard.showDetails": "Details anzeigen"
+	"dashboard.showDetails": "Details anzeigen",
+	"dashboard.heightPixels": "Höhe (px)"
 }

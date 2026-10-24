@@ -243,6 +243,61 @@ try {
     0,
   );
   await page.screenshot({ path: out + "/editor.png", fullPage: true });
+
+  for (const id of ["volumes", "shares"]) {
+    await tile(page, id).locator(".tile-action").first().click();
+    await inspector(page)
+      .getByRole("button", { name: "Inhalt", exact: true })
+      .click();
+    await inspector(page)
+      .getByRole("combobox", { name: "Liste", exact: true })
+      .selectOption("grid");
+    const cells = await tile(page, id)
+      .locator("tbody tr")
+      .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().toJSON()));
+    assert.equal(cells.length, 3);
+    assert.ok(
+      cells[1].x > cells[0].x && Math.abs(cells[1].y - cells[0].y) < 2,
+      "grid option did not create columns",
+    );
+    await inspector(page)
+      .getByRole("combobox", { name: "Liste", exact: true })
+      .selectOption("list");
+  }
+  await inspector(page)
+    .getByRole("checkbox", { name: "Zusatzwerte anzeigen", exact: true })
+    .uncheck();
+  assert.equal(await tile(page, "shares").locator("thead th").count(), 2);
+  await inspector(page)
+    .getByRole("checkbox", { name: "Zusatzwerte anzeigen", exact: true })
+    .check();
+  await inspector(page)
+    .getByRole("button", { name: "Größe", exact: true })
+    .click();
+  await inspector(page)
+    .getByRole("spinbutton", { name: "Höhe (px)", exact: true })
+    .fill("280");
+  await inspector(page)
+    .getByRole("spinbutton", { name: "Höhe (px)", exact: true })
+    .press("Tab");
+  assert.equal(
+    await inspector(page)
+      .getByRole("checkbox", {
+        name: "Höhe automatisch an Inhalt anpassen",
+        exact: true,
+      })
+      .isChecked(),
+    false,
+  );
+  assert.ok(
+    Math.abs((await tile(page, "shares").boundingBox()).height - 280) < 1,
+  );
+  await inspector(page)
+    .getByRole("checkbox", {
+      name: "Höhe automatisch an Inhalt anpassen",
+      exact: true,
+    })
+    .check();
   // Editing content selects styling and never starts operations or opens runtime menus.
   await tile(page, "vms")
     .getByRole("button", { name: "Aktionen: Windows 11", exact: true })

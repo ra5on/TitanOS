@@ -161,10 +161,10 @@ try {
     .getByRole("button", { name: "Größe", exact: true })
     .click();
   await inspector(page)
-    .getByRole("spinbutton", { name: "Höhe (Zeilen)", exact: true })
-    .fill("4");
+    .getByRole("spinbutton", { name: "Höhe (px)", exact: true })
+    .fill("160");
   await inspector(page)
-    .getByRole("spinbutton", { name: "Höhe (Zeilen)", exact: true })
+    .getByRole("spinbutton", { name: "Höhe (px)", exact: true })
     .press("Tab");
   await inspector(page)
     .getByRole("button", { name: "Kachel duplizieren", exact: true })
@@ -179,6 +179,10 @@ try {
   assert.equal(data.prefs.dashboard.version, 5);
   assert.equal(data.prefs.dashboard.tileOptions.cpu.valueSize, 56);
   assert.equal(data.prefs.dashboard.tiles.find((t) => t.id === "cpu").h, 4);
+  assert.equal(
+    data.prefs.dashboard.tiles.find((t) => t.id === "cpu").autoHeight,
+    false,
+  );
   const saved = structuredClone(data.prefs.dashboard);
   await page.reload();
   await tile(page, "cpu")

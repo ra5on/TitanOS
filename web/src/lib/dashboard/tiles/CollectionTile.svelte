@@ -95,15 +95,17 @@
 {:else if !ready}<p class="muted">{t('common.loading')}</p>
 {:else}
 	{#if kind === 'shares'}
-		<table>
+		<table class:grid={options.list === 'grid'}>
 			<thead
 				><tr
-					><th>{t('dashboard.name')}</th><th>{t('nav.storage')}</th><th
-						>{t('dashboard.services')}</th
-					></tr
+					><th>{t('dashboard.name')}</th><th>{t('nav.storage')}</th>{#if options.details}<th
+							>{t('dashboard.services')}</th
+						>{/if}</tr
 				></thead
-			><tbody
-				>{#each folders.slice(0, options.rows) as share (share.name)}<tr
+			>
+			<tbody
+				>{#each folders.slice(0, options.rows) as share (share.name)}
+					<tr
 						><td
 							><button
 								class="entry-name"
@@ -116,12 +118,15 @@
 									shareMenu = { share, x: r.left, y: r.bottom };
 								}}>{share.name}<Icon name="chevronDown" size={11} /></button
 							></td
-						><td>{share.available ? share.volume : t('storage.notMounted')}</td><td
-							>{[share.smb ? 'SMB' : '', share.nfs?.enabled ? 'NFS' : '']
-								.filter(Boolean)
-								.join(' / ') || '–'}</td
-						></tr
-					>{:else}<tr><td colspan="3">{t('shares.empty')}</td></tr>{/each}</tbody
+						>
+						<td>{share.available ? share.volume : t('storage.notMounted')}</td>
+						{#if options.details}<td
+								>{[share.smb ? 'SMB' : '', share.nfs?.enabled ? 'NFS' : '']
+									.filter(Boolean)
+									.join(' / ') || '–'}</td
+							>{/if}</tr
+					>
+				{:else}<tr><td colspan={options.details ? 3 : 2}>{t('shares.empty')}</td></tr>{/each}</tbody
 			>
 		</table>
 	{:else}
@@ -143,9 +148,14 @@
 									><span class="entry-name" data-edit-part="value"
 										>{stack ? group.name : dockerName(group.members[0], 'distinct')}</span
 									><span class="state" data-edit-part="labels"
-										><i class:ok={running === group.members.length}></i>{stack
+										><i class:ok={running === group.members.length}></i>{stack && options.details
 											? `${running} / ${group.members.length} ${t('dashboard.servicesRunning')}`
-											: tOr(`docker.state.${group.members[0].state}`, group.members[0].state)}</span
+											: stack
+												? t(running > 0 ? 'docker.state.running' : 'docker.state.exited')
+												: tOr(
+														`docker.state.${group.members[0].state}`,
+														group.members[0].state,
+													)}</span
 									></span
 								></button
 							>
@@ -233,6 +243,49 @@
 	>{/if}
 
 <style>
+	table.grid {
+		display: block;
+	}
+	table.grid thead {
+		position: absolute;
+		clip-path: inset(50%);
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+	}
+	table.grid tbody {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+		gap: 12px;
+	}
+	table.grid tr {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 10px;
+		min-width: 0;
+	}
+	table.grid td {
+		border: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	table.grid td:first-child {
+		flex-basis: 100%;
+	}
+	table.grid td:nth-child(2) {
+		flex-basis: 100%;
+		color: var(--muted);
+	}
+	table.grid td:nth-child(3) {
+		flex: 1;
+	}
+	table.grid td:last-child {
+		margin-left: auto;
+	}
+
 	.collection {
 		display: flex;
 		flex-direction: column;
