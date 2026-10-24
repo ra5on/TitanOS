@@ -28,6 +28,9 @@ func TestTelemetryUnknownSelectionAndIdentity(t *testing.T) {
 	if len(telemetryEntities(devices, q)) != 0 {
 		t.Fatal("empty selection became all")
 	}
+	if len(entities(Snapshot{UPS: &UPSValues{}}, MQTT{Groups: []string{"ups"}, Devices: map[string][]string{"ups": {}}}, "base")) != 0 {
+		t.Fatal("legacy UPS ignored device filter")
+	}
 	// Older settings have no device restrictions. Unknown legacy values retain
 	// discovery with unavailable state instead of claiming that a disk is healthy.
 	legacy := entities(Snapshot{Disks: []DiskValues{{ID: "serial", Name: "disk"}}, Volumes: []VolumeValues{{Name: "data"}}, Backups: []BackupValues{{Name: "archive"}}, UPS: &UPSValues{}}, MQTT{Groups: []string{"disks", "volumes", "backups", "ups"}}, "base")

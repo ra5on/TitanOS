@@ -25,7 +25,7 @@
 		{@const percent = volume.sizeBytes > 0 ? (100 * volume.usedBytes) / volume.sizeBytes : 0}
 		<div class="volume">
 			<div class="line">
-				<span class="mono name">{volume.name}</span>
+				<span class="mono name" data-edit-part="value">{volume.name}</span>
 				<span class="chip">{t(`level.${volume.level}`)}</span>
 				<span class="chip {tone(volume.state)}"
 					>{t(`state.${volume.state}`)}{volume.sync
@@ -86,7 +86,9 @@
 		gap: 8px 10px;
 	}
 	.name {
-		font-size: 1rem;
+		font-size: var(--tile-value-size, 16px);
+		font-family: var(--tile-value-font);
+		font-weight: var(--tile-value-weight);
 		font-weight: 500;
 	}
 	.detail {

@@ -84,7 +84,9 @@
 						>{/if}
 					<span class="app-icon"><AppIcon name={group.name} src={primary?.icon} /></span>
 					<div class="identity">
-						<a href={stack ? `/docker/apps/${encodeURIComponent(group.name)}` : '/docker'}
+						<a
+							data-edit-part="value"
+							href={stack ? `/docker/apps/${encodeURIComponent(group.name)}` : '/docker'}
 							>{stack ? group.name : dockerName(group.members[0], 'distinct')}</a
 						><span class="state" data-edit-part="labels"
 							><i class:ok={running === group.members.length}></i>{stack
@@ -112,9 +114,8 @@
 			{#each machines.slice(0, options.rows) as vm (vm.name)}<div class="workload">
 					<span class="app-icon"><Icon name="monitor" /></span>
 					<div class="identity">
-						<a href="/vms?vm={encodeURIComponent(vm.name)}">{vmLabel(vm)}</a><span
-							class="state"
-							data-edit-part="labels"
+						<a data-edit-part="value" href="/vms?vm={encodeURIComponent(vm.name)}">{vmLabel(vm)}</a
+						><span class="state" data-edit-part="labels"
 							><i class:ok={vm.state === 'running'}></i>{tOr(
 								`vms.state.${vm.state}`,
 								vm.state,
@@ -130,9 +131,9 @@
 			{#each folders.slice(0, options.rows) as share (share.name)}<div class="workload">
 					<span class="app-icon"><Icon name="folder" /></span>
 					<div class="identity">
-						<a href="/shares?share={encodeURIComponent(share.name)}">{share.name}</a><span
-							class="state"
-							data-edit-part="labels"
+						<a data-edit-part="value" href="/shares?share={encodeURIComponent(share.name)}"
+							>{share.name}</a
+						><span class="state" data-edit-part="labels"
 							>{share.available ? share.volume : t('storage.notMounted')}</span
 						>
 					</div>
@@ -197,8 +198,10 @@
 	}
 	.identity a {
 		color: var(--tile-value-color, var(--text));
-		font-size: var(--tile-label-size, 12px);
-		font-weight: 500;
+		font-size: var(--tile-value-size, 16px);
+		font-weight: var(--tile-value-weight, 500);
+		font-family: var(--tile-value-font);
+		text-align: var(--tile-align);
 		overflow-wrap: anywhere;
 	}
 	.identity a:hover {

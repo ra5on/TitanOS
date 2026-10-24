@@ -137,7 +137,16 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		showIcon: bool('showIcon', false),
 		icon: choice('icon', EDITOR_ICONS, 'chip'),
 		titleSize: number('titleSize', 13, 11, 36),
-		valueSize: number('valueSize', 36, 16, 96),
+		valueSize: number(
+			'valueSize',
+			['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures', 'assistant'].includes(
+				idSource,
+			)
+				? 16
+				: 36,
+			16,
+			96,
+		),
 		labelSize: number('labelSize', 12, 11, 28),
 		titleWeight: number('titleWeight', 500, 400, 600),
 		valueWeight: number('valueWeight', 400, 400, 600),
@@ -160,7 +169,11 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		density: choice('density', ['compact', 'normal', 'comfortable'], 'normal'),
 		display: choice('display', ['auto', 'value', 'bar', 'ring', 'history'], 'auto'),
 		list: choice('list', ['list', 'grid'], idSource === 'docker' ? 'grid' : 'list'),
-		valueFont: choice('valueFont', ['mono', 'sans'], 'mono'),
+		valueFont: choice(
+			'valueFont',
+			['mono', 'sans'],
+			['docker', 'vms', 'shares', 'assistant'].includes(idSource) ? 'sans' : 'mono',
+		),
 		titleFont: choice('titleFont', ['mono', 'sans'], 'sans'),
 		labelFont: choice('labelFont', ['mono', 'sans'], 'sans'),
 		parts,
@@ -190,7 +203,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 export function tileStyle(o: TileOptions): string {
 	const font = (v: string) =>
 		v === 'mono' ? "'IBM Plex Mono',monospace" : "'IBM Plex Sans',sans-serif";
-	return `--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.opacity}%,transparent);--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
+	return `--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.opacity}%,transparent);--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
 }
 export function transferStyle(from: TileOptions, to: TileOptions): TileOptions {
 	const next = { ...to };

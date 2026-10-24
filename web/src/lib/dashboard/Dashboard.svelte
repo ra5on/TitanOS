@@ -439,6 +439,17 @@
 		e.preventDefault();
 		step(e.shiftKey ? 'redo' : 'undo');
 	}
+	function interceptLinks(element: HTMLElement, id: TileId) {
+		const click = (event: MouseEvent) => {
+			if (!editing || !(event.target instanceof Element) || !event.target.closest('a')) return;
+			event.preventDefault();
+			const selected = event.target.closest<HTMLElement>('[data-edit-part]');
+			configure(id, (selected?.dataset.editPart as EditPart) || 'labels');
+		};
+		element.addEventListener('click', click);
+		return () => element.removeEventListener('click', click);
+	}
+
 	function selectPart(e: PointerEvent, id: TileId) {
 		if (!editing) return;
 		const target = e.target as HTMLElement;
@@ -522,6 +533,7 @@
 					>
 						<section
 							class="grid-stack-item-content tile dashboard-tile"
+							{@attach (element) => interceptLinks(element, tile.id)}
 							class:selected={editing && customize === tile.id}
 							style={tileStyle(settings)}
 							aria-label={titleOf(tile.id)}
@@ -783,6 +795,13 @@
 		color: var(--tile-value-color, var(--text));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
+	}
+	.tile-body :global([data-edit-part='value']) {
+		font-size: var(--tile-value-size);
+		font-family: var(--tile-value-font);
+		font-weight: var(--tile-value-weight);
+		color: var(--tile-value-color);
+		text-align: var(--tile-align);
 	}
 	.editing .tile-body :global([data-edit-part]):hover {
 		outline: 1px dashed var(--accent);

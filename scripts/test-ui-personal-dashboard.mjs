@@ -96,6 +96,14 @@ try {
   assert.equal(await tile(page, "npu").locator(".reading").innerText(), "–%");
   await page.screenshot({ path: out + "/dashboard.png", fullPage: true });
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await tile(page, "docker").locator(".identity a").first().click();
+  assert.equal(new URL(page.url()).pathname, "/");
+  assert.equal(
+    await inspector(page)
+      .getByRole("combobox", { name: "Ausgewähltes Element", exact: true })
+      .inputValue(),
+    "value",
+  );
   await tile(page, "cpu")
     .getByRole("button", { name: "Kachel anpassen: CPU", exact: true })
     .click();
