@@ -109,7 +109,7 @@ type Monitor struct {
 
 // NewMonitor starts sampling until ctx is done.
 func NewMonitor(ctx context.Context) *Monitor {
-	m := &Monitor{memory: ReadMemory()}
+	m := &Monitor{memory: readMemorySample()}
 	go m.run(ctx)
 	return m
 }
@@ -165,7 +165,7 @@ func (m *Monitor) run(ctx context.Context) {
 				}
 			}
 			previous = current
-			memory := ReadMemory()
+			memory := readMemorySample()
 			memory.LowAvailable = memoryWarning.observe(memory, now)
 
 			m.mu.Lock()
@@ -257,12 +257,19 @@ func cpuModel(cpuinfo string) string {
 	return ""
 }
 
+// ReadMemory reads fresh capacity for managed transfer reservations. PSI is
+// sampled separately by Monitor at its regular interval, never per upload.
 // Used includes all occupied RAM, including caches, kernel memory and tmpfs.
 // Available is the kernel's separate estimate of capacity for new workloads.
 // Do not add the RAM image, VM allocations or Shmem: they are already counted.
 func ReadMemory() Memory {
 	mem := parseMeminfo(readString("/proc/meminfo"))
 	mem.ReserveBytes = memoryReserve(mem.TotalBytes)
+	return mem
+}
+
+func readMemorySample() Memory {
+	mem := ReadMemory()
 	mem.Pressure = parseMemoryPressure(readString("/proc/pressure/memory"))
 	return mem
 }
