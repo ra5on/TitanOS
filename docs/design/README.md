@@ -402,25 +402,34 @@ Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystem
 Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
 Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.
 
-### VM-Seite (0.7.2)
+### VM-Seite (0.20.1)
 
-Vom Projektinhaber am 21. Oktober 2026 bestätigter Folgeentwurf `VmPage.html`
-(Screenshot `screenshots/VmPage.png`). Er ersetzt den Seitenaufbau aus
-`VmConsole.dc.html`; dessen Konsolenverhalten (ziehbare Höhe, drei Anzeigemodi,
-Vollbildleiste, dunkler Bildschirm in jedem Theme) bleibt gültig.
+Der am 24. Oktober 2026 bestätigte kompakte Folgeentwurf baut auf `VmPage.html`
+auf und ersetzt dessen Anordnung von Kopfzeile, Reitern und Konsolenwerkzeugen.
+TitanOS-Glasflächen, Schrift, Farben und Funktionen bleiben erhalten. Ziehbare
+Breite/Höhe, drei Anzeigemodi und dunkle Gastfläche gelten weiterhin; TitanOS
+zeigt keinerlei Einblendungen innerhalb der VNC-Bildfläche, auch im Vollbild
+und im eigenen Fenster. Verbindungszustände stehen außerhalb; Escape verlässt
+das Vollbild. Der VNC-Fokus verschiebt die Seite nicht.
 
 - Liste links: Suche, Filter Alle/Laufen/Aus mit Anzahl, je Zeile Zustand,
-  Laufzeit, Autostart als Symbol, Start/Herunterfahren und „⋯“ (auch
-  Rechtsklick) mit Neustart, Bearbeiten, Snapshots, Ausschalten erzwingen bzw.
+  Autostart als Symbol und „⋯“ (auch Rechtsklick) mit Start/Herunterfahren,
+  Neustart, Bearbeiten, Snapshots, Ausschalten erzwingen bzw.
   Entfernen. Auf dem Smartphone eingeklappt hinter dem Namen der gewählten VM.
-- Kopfzeile: Name, Zustand, Autostart, eine Hauptaktion (Starten bzw.
+- Kopfzeile über beiden Spalten: Name, Zustand, Autostart, kompakter
+  Aufgabenzugang und eine Hauptaktion (Starten bzw.
   Herunterfahren), Bearbeiten als Symbol, „⋯“ mit Neustart, Ausschalten
   erzwingen, serieller Konsole, XML und Entfernen (nur ausgeschaltet).
 - Meldungen: eine Zeile, die ernsteste zuerst, der Rest hinter „+N weitere“.
   Die Rückmeldung „Aktion angenommen“ verschwindet nach fünf Sekunden.
-- Reiter Übersicht, Bildschirm und Snapshots (`?tab=`). Ohne Angabe öffnet eine
+- Gemeinsame Leiste darunter: Übersicht, Bildschirm und Snapshots (`?tab=`);
+  im Bildschirm-Reiter schließen Senden und Skalieren direkt an. Die übrigen
+  Konsolensymbole stehen rechts in derselben Leiste. VM-Liste und Reiterinhalt
+  beginnen bündig unter dieser Leiste. Schmale Flächen umbrechen geordnet.
+  Ohne Angabe öffnet eine
   laufende VM den Bildschirm, eine ausgeschaltete die Übersicht.
-- Übersicht als Kacheln: Auslastung (CPU-Verlauf der letzten zwei Minuten aus
+- Übersicht mit zwei Kachelspalten (schmal eine) und breiter Snapshot-Zeile:
+  Auslastung (CPU-Verlauf der letzten zwei Minuten aus
   dem Abruf der Seite, nur im Browser), Hardware, Datenträger mit Belegung des
   Volumes und CD-Laufwerk (Einlegen, Wechseln, Auswerfen, auch bei laufender
   VM), Netzwerk mit Adresse (Gastagent oder Nachbartabelle des NAS), Geräte und
@@ -438,6 +447,10 @@ Vollbildleiste, dunkler Bildschirm in jedem Theme) bleibt gültig.
 Medienwechsel, Adressanzeige, Meldungen, Snapshots, Englisch und die gefaltete
 Liste bei 390 Pixeln mit isolierten API-Testdaten; Screenshots in Graphit und
 Hell unter `out/validation/vms/`. Aufruf wie beim 0.6.0-Skript oben.
+`scripts/test-ui-vm-layout.mjs` prüft zusätzlich bündige Spalten, gemeinsame
+Bedienleiste, einmaligen Aufgabenzugang, DE/EN, fünf Breiten und echtes noVNC
+gegen einen simulierten RFB-Gast einschließlich Größenwechsel, Wiederverbindung,
+Tastenkombinationen, Vollbild und separatem Fenster. Kein Test realer Gastgrafik.
 
 ### Agent und Automationen (0.13.0)
 

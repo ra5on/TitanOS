@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError, type VMStatus } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import VncScreen, { type ScaleMode } from '../VncScreen.svelte';
+	import VncScreen, { type ScaleMode, type ConnectionPhase } from '../VncScreen.svelte';
 
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
 	let running = $state<boolean | null>(null);
@@ -13,6 +13,7 @@
 	let error = $state('');
 	let mode = $state<ScaleMode>('scale');
 	let screen = $state<VncScreen>();
+	let connectionPhase = $state<ConnectionPhase>('connecting');
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 
 	$effect(() => {
@@ -36,7 +37,10 @@
 		};
 		check();
 		const timer = setInterval(check, 3000);
-		return () => { disposed = true; clearInterval(timer); };
+		return () => {
+			disposed = true;
+			clearInterval(timer);
+		};
 	});
 </script>
 
@@ -45,21 +49,39 @@
 <div class="window">
 	<div class="frame">
 		{#if running}
-			{#key name}<VncScreen bind:this={screen} vm={name} {mode} {resizable} />{/key}
-		{:else if error}
-			<p class="muted off" role="alert">{error}</p>
-		{:else if running === null}
-			<p class="muted off" role="status">{t('common.loading')}</p>
-		{:else if running === false}
-			<p class="muted off">{t('vms.off', { name: displayName || name })}</p>
+			{#key name}<VncScreen
+					bind:this={screen}
+					vm={name}
+					{mode}
+					{resizable}
+					onstatus={(phase) => (connectionPhase = phase)}
+				/>{/key}
 		{/if}
 	</div>
 	<div class="bar">
 		<span class="mono">{displayName || name}</span>
+		{#if error}<span class="muted" role="alert">{error}</span>
+		{:else if running === null}<span class="muted" role="status">{t('common.loading')}</span>
+		{:else if !running}<span class="muted">{t('vms.off', { name: displayName || name })}</span>
+		{:else if connectionPhase !== 'connected'}<span class="muted" role="status"
+				>{t(connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</span
+			>{/if}
 		<span class="grow"></span>
-		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}>{t('vms.ctrlAltDel')}</button>
+		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}
+			>{t('vms.ctrlAltDel')}</button
+		>
 		{#each MODES as entry (entry)}
-			<button type="button" aria-pressed={mode === entry} disabled={entry === 'remote' && !resizable} title={t(entry === 'remote' && !resizable ? 'vms.mode.remote.unsupported' : `vms.mode.${entry}.hint`)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
+			<button
+				type="button"
+				aria-pressed={mode === entry}
+				disabled={entry === 'remote' && !resizable}
+				title={t(
+					entry === 'remote' && !resizable
+						? 'vms.mode.remote.unsupported'
+						: `vms.mode.${entry}.hint`,
+				)}
+				onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button
+			>
 		{/each}
 	</div>
 </div>
@@ -105,12 +127,5 @@
 		position: relative;
 		flex: 1 1 auto;
 		min-height: 0;
-	}
-	.off {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
 	}
 </style>

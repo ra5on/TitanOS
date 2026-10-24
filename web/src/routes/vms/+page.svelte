@@ -1,6 +1,6 @@
 <script lang="ts">
- import CloneDialog from './CloneDialog.svelte';
- let cloning=$state<VM|null>(null);
+	import CloneDialog from './CloneDialog.svelte';
+	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
 	// Overview, Screen and Snapshots.
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
@@ -9,8 +9,8 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import TasksPanel from '#lib/components/TasksPanel.svelte';
 	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
-	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -21,7 +21,7 @@
 	import { page } from '$app/state';
 	import Overview from './Overview.svelte';
 	import Snapshots from './Snapshots.svelte';
-	import VncScreen, { type ScaleMode } from './VncScreen.svelte';
+	import VncScreen, { type ScaleMode, type ConnectionPhase } from './VncScreen.svelte';
 
 	type Tab = 'overview' | 'screen' | 'snapshots';
 	type Filter = 'all' | 'running' | 'stopped';
@@ -45,10 +45,16 @@
 	let mode = $state<ScaleMode>('scale');
 	let sidebar = $state(true);
 	let fullscreen = $state(false);
-	let dialog = $state<{ kind: 'remove' | 'poweroff'; vm: string } | { kind: 'paste' } | { kind: 'xml'; text: string } | null>(null);
+	let dialog = $state<
+		| { kind: 'remove' | 'poweroff'; vm: string }
+		| { kind: 'paste' }
+		| { kind: 'xml'; text: string }
+		| null
+	>(null);
 	let draft = $state({ deleteDisks: false, confirm: '', text: '' });
 	let dialogError = $state<Problem | null>(null);
 	let screen = $state<VncScreen>();
+	let connectionPhase = $state<ConnectionPhase>('connecting');
 	let frame = $state<HTMLElement>();
 	let height = $state(vncHeight(session.vnc));
 	let width = $state(vncWidth(session.vnc));
@@ -62,15 +68,22 @@
 	// is scrolled to its toolbar: the sticky header and the toolbar itself.
 	function above(element: HTMLElement): number {
 		const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-		const toolbar = element.parentElement?.querySelector<HTMLElement>('.toolbar');
-		const fromToolbar = toolbar ? element.getBoundingClientRect().top - toolbar.getBoundingClientRect().top : 0;
+		const toolbar = element.closest('.vm-page')?.querySelector<HTMLElement>('.command-bar');
+		const fromToolbar = toolbar
+			? element.getBoundingClientRect().top - toolbar.getBoundingClientRect().top
+			: 0;
 		return header + 8 + fromToolbar;
 	}
 
 	function measureRoom() {
 		if (!frame || fullscreen) return;
-		const below = frame.nextElementSibling instanceof HTMLElement ? frame.nextElementSibling.offsetHeight + 24 : 16;
-		room = window.innerHeight - above(frame) - below;
+		const below =
+			frame.nextElementSibling instanceof HTMLElement
+				? frame.nextElementSibling.offsetHeight + 24
+				: 16;
+		// Fit where the frame actually starts, keeping the heading and tabs visible.
+		const top = Math.max(above(frame), frame.getBoundingClientRect().top);
+		room = Math.max(1, window.innerHeight - top - below);
 	}
 
 	// Opening the screen of a VM brings all of it into view: if its bottom
@@ -85,9 +98,13 @@
 		requestAnimationFrame(() => {
 			const box = element.getBoundingClientRect();
 			if (box.bottom <= window.innerHeight) return;
-			const toolbar = element.parentElement?.querySelector<HTMLElement>('.toolbar') ?? element;
+			const toolbar =
+				element.closest('.vm-page')?.querySelector<HTMLElement>('.command-bar') ?? element;
 			const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-			window.scrollTo({ top: toolbar.getBoundingClientRect().top + window.scrollY - header - 8, behavior: 'smooth' });
+			window.scrollTo({
+				top: toolbar.getBoundingClientRect().top + window.scrollY - header - 8,
+				behavior: 'smooth',
+			});
 		});
 	});
 
@@ -98,6 +115,8 @@
 		// Notices above the console move it down; the window may change too.
 		const sizes = new ResizeObserver(measureRoom);
 		if (element.parentElement) sizes.observe(element.parentElement);
+		const workspace = element.closest('.vm-page');
+		if (workspace) sizes.observe(workspace);
 		window.addEventListener('resize', measureRoom);
 		return () => {
 			sizes.disconnect();
@@ -115,7 +134,8 @@
 	async function dragEnd() {
 		if (!dragFrom || !frame || fullscreen) return;
 		const box = frame.getBoundingClientRect();
-		const moved = Math.abs(box.width - dragFrom.width) >= 2 || Math.abs(box.height - dragFrom.height) >= 2;
+		const moved =
+			Math.abs(box.width - dragFrom.width) >= 2 || Math.abs(box.height - dragFrom.height) >= 2;
 		dragFrom = null;
 		if (!moved) return;
 		// Dragged to the full column again: follow the column from now on.
@@ -123,7 +143,10 @@
 		const nextWidth = box.width >= column - 2 ? null : vncWidth({ width: box.width });
 		// A height at the limit of the window keeps what was stored, so a
 		// larger window later shows more again.
-		const nextHeight = Math.abs(box.height - fitted) < 2 && fitted < height ? height : vncHeight({ height: box.height });
+		const nextHeight =
+			Math.abs(box.height - fitted) < 2 && fitted < height
+				? height
+				: vncHeight({ height: box.height });
 		if (nextWidth === width && nextHeight === height) return;
 		height = nextHeight;
 		width = nextWidth;
@@ -140,9 +163,17 @@
 	}
 
 	const vms = $derived(status?.vms ?? []);
-	const counts = $derived({ all: vms.length, running: vms.filter((vm) => vm.state === 'running').length, stopped: vms.filter((vm) => vm.state !== 'running').length });
+	const counts = $derived({
+		all: vms.length,
+		running: vms.filter((vm) => vm.state === 'running').length,
+		stopped: vms.filter((vm) => vm.state !== 'running').length,
+	});
 	const shown = $derived(
-		vms.filter((vm) => (filter === 'all' || (filter === 'running') === (vm.state === 'running')) && `${vmLabel(vm)} ${vm.name}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+		vms.filter(
+			(vm) =>
+				(filter === 'all' || (filter === 'running') === (vm.state === 'running')) &&
+				`${vmLabel(vm)} ${vm.name}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+		),
 	);
 	const current = $derived(vms.find((vm) => vm.name === page.url.searchParams.get('vm')) ?? vms[0]);
 	const tab = $derived.by<Tab>(() => {
@@ -150,18 +181,30 @@
 		if (asked === 'overview' || asked === 'screen' || asked === 'snapshots') return asked;
 		return current?.state === 'running' ? 'screen' : 'overview';
 	});
-	const link = (vm: VM, next?: Tab) => `/vms?vm=${encodeURIComponent(vm.name)}${next ? `&tab=${next}` : ''}`;
+	const link = (vm: VM, next?: Tab) =>
+		`/vms?vm=${encodeURIComponent(vm.name)}${next ? `&tab=${next}` : ''}`;
 	const canStart = (vm: VM) => vm.available && !!status?.kvm && !vm.job;
 
 	const lowSpace = $derived(
 		(storage.status?.volumes ?? [])
-			.filter((volume) => volume.mounted && volume.sizeBytes > 0 && volume.usedBytes / volume.sizeBytes >= 0.9 && current?.disks.some((disk) => disk.volume === volume.name || disk.path?.startsWith(`/mnt/${volume.name}/`)))
-			.map((volume) => volume.name)
+			.filter(
+				(volume) =>
+					volume.mounted &&
+					volume.sizeBytes > 0 &&
+					volume.usedBytes / volume.sizeBytes >= 0.9 &&
+					current?.disks.some(
+						(disk) => disk.volume === volume.name || disk.path?.startsWith(`/mnt/${volume.name}/`),
+					),
+			)
+			.map((volume) => volume.name),
 	);
 
 	function problem(err: unknown): Problem {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		return { text: errorText(code), detail: code === 'vm_failed' && err instanceof ApiError ? err.message : '' };
+		return {
+			text: errorText(code),
+			detail: code === 'vm_failed' && err instanceof ApiError ? err.message : '',
+		};
 	}
 
 	async function load() {
@@ -169,7 +212,9 @@
 		try {
 			status = await api.get<VMStatus>('/vms');
 			const next: Record<string, number[]> = {};
-			for (const vm of status.vms) if (vm.state === 'running') next[vm.name] = [...(history[vm.name] ?? []), vm.cpuPercent].slice(-40);
+			for (const vm of status.vms)
+				if (vm.state === 'running')
+					next[vm.name] = [...(history[vm.name] ?? []), vm.cpuPercent].slice(-40);
 			history = next;
 		} catch (err) {
 			if (!status) error = problem(err);
@@ -203,25 +248,44 @@
 			busy = false;
 		}
 	}
-	const pendingText = (action: string) => t(action === 'start' ? 'ui.starting' : action === 'shutdown' ? 'ui.stopping' : 'ui.rebooting');
+	const pendingText = (action: string) =>
+		t(action === 'start' ? 'ui.starting' : action === 'shutdown' ? 'ui.stopping' : 'ui.rebooting');
 
 	// One line of notices above the tabs; the most serious first, the rest
 	// behind "+N more".
-	type Notice = { level: 'error' | 'warn' | 'info' | 'ok'; text: string; detail?: string; retry?: boolean };
+	type Notice = {
+		level: 'error' | 'warn' | 'info' | 'ok';
+		text: string;
+		detail?: string;
+		retry?: boolean;
+	};
 	const notices = $derived.by<Notice[]>(() => {
 		if (!current) return [];
 		const list: Notice[] = [];
-		if (error) list.push({ level: 'error', text: error.text, detail: error.detail, retry: !!retry });
-		if (current.job?.state === 'failed') list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
+		if (error)
+			list.push({ level: 'error', text: error.text, detail: error.detail, retry: !!retry });
+		if (current.job?.state === 'failed')
+			list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
 		if (status && !status.kvm) list.push({ level: 'warn', text: t('vms.noKvm') });
 		if (!current.available) list.push({ level: 'warn', text: t('vms.unavailable') });
-		if (current.job?.state === 'running') list.push({ level: 'warn', text: t('vms.jobRunning', { file: current.job.text }) });
-		if (lowSpace.length) list.push({ level: 'warn', text: t('vms.lowSpace', { volumes: lowSpace.join(', ') }) });
-		if (pending) list.push({ level: 'info', text: `${vmLabel(vms.find((vm) => vm.name === pending?.name) ?? current)}: ${pendingText(pending.action)}` });
+		if (current.job?.state === 'running')
+			list.push({ level: 'warn', text: t('vms.jobRunning', { file: current.job.text }) });
+		if (lowSpace.length)
+			list.push({ level: 'warn', text: t('vms.lowSpace', { volumes: lowSpace.join(', ') }) });
+		if (pending)
+			list.push({
+				level: 'info',
+				text: `${vmLabel(vms.find((vm) => vm.name === pending?.name) ?? current)}: ${pendingText(pending.action)}`,
+			});
 		if (feedback) list.push({ level: 'ok', text: feedback });
 		return list;
 	});
-	const noticeClass = { error: 'notice-error', warn: 'notice-warn', info: 'notice-info', ok: 'notice-ok' } as const;
+	const noticeClass = {
+		error: 'notice-error',
+		warn: 'notice-warn',
+		info: 'notice-info',
+		ok: 'notice-ok',
+	} as const;
 
 	function open(kind: 'remove' | 'poweroff' | 'paste', vm = current) {
 		if (!vm) return;
@@ -237,7 +301,10 @@
 	async function showXML(vm = current) {
 		if (!vm) return;
 		try {
-			dialog = { kind: 'xml', text: (await api.get<{ xml: string }>(`/vms/${encodeURIComponent(vm.name)}/xml`)).xml };
+			dialog = {
+				kind: 'xml',
+				text: (await api.get<{ xml: string }>(`/vms/${encodeURIComponent(vm.name)}/xml`)).xml,
+			};
 		} catch (err) {
 			error = problem(err);
 		}
@@ -251,7 +318,10 @@
 		dialogError = null;
 		try {
 			if (dialog.kind === 'remove') {
-				await api.delete(`/vms/${encodeURIComponent(vm.name)}`, { deleteDisks: draft.deleteDisks, confirm: draft.confirm });
+				await api.delete(`/vms/${encodeURIComponent(vm.name)}`, {
+					deleteDisks: draft.deleteDisks,
+					confirm: draft.confirm,
+				});
 				await goto('/vms', { replaceState: true });
 			} else if (dialog.kind === 'poweroff') {
 				await api.post(`/vms/${encodeURIComponent(vm.name)}/poweroff`);
@@ -279,7 +349,11 @@
 	function ownWindow(event: MouseEvent) {
 		if (!current) return;
 		event.preventDefault();
-		window.open(`/vms/screen?vm=${encodeURIComponent(current.name)}`, `vm-${current.name}`, 'popup,width=1296,height=860');
+		window.open(
+			`/vms/screen?vm=${encodeURIComponent(current.name)}`,
+			`vm-${current.name}`,
+			'popup,width=1296,height=860',
+		);
 	}
 
 	// Key combinations the browser or the NAS's own desktop would keep for
@@ -289,17 +363,28 @@
 	const KEYS: { label: string; keys: [number, string][] }[] = [
 		{ label: 'Strg+Alt+Entf', keys: [CTRL, ALT, [0xffff, 'Delete']] },
 		{ label: 'Strg+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
-		...[1, 2, 3, 7].map((n) => ({ label: `Strg+Alt+F${n}`, keys: [CTRL, ALT, [0xffbd + n, `F${n}`]] as [number, string][] })),
+		...[1, 2, 3, 7].map((n) => ({
+			label: `Strg+Alt+F${n}`,
+			keys: [CTRL, ALT, [0xffbd + n, `F${n}`]] as [number, string][],
+		})),
 		{ label: 'Alt+Tab', keys: [ALT, [0xff09, 'Tab']] },
 		{ label: 'Win', keys: [[0xffeb, 'MetaLeft']] },
-		{ label: 'Druck', keys: [[0xff61, 'PrintScreen']] }
+		{ label: 'Druck', keys: [[0xff61, 'PrintScreen']] },
 	];
-	const keyLabel = (label: string) => (i18n.locale === 'en' ? label.replace('Strg', 'Ctrl').replace('Entf', 'Del').replace('Druck', 'Print') : label);
+	const keyLabel = (label: string) =>
+		i18n.locale === 'en'
+			? label.replace('Strg', 'Ctrl').replace('Entf', 'Del').replace('Druck', 'Print')
+			: label;
 
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 	// Only the virtio graphics of the Linux template can take a resolution
 	// from the browser.
-	const modeHint = (entry: ScaleMode) => t(entry === 'remote' && current?.template !== 'linux' ? 'vms.mode.remote.unsupported' : `vms.mode.${entry}.hint`);
+	const modeHint = (entry: ScaleMode) =>
+		t(
+			entry === 'remote' && current?.template !== 'linux'
+				? 'vms.mode.remote.unsupported'
+				: `vms.mode.${entry}.hint`,
+		);
 	// A VM that cannot change its resolution falls back to scaling.
 	$effect(() => {
 		if (mode === 'remote' && current && current.template !== 'linux') mode = 'scale';
@@ -318,220 +403,507 @@
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		rowMenu = { vm, x: rect.left, y: rect.bottom + 4 };
 	}
-	const uptime = (vm: VM) => {
-		const since = new Date(vm.since).getTime();
-		return vm.state === 'running' && since > 0 ? formatDuration(Math.max(0, (Date.now() - since) / 1000)) : '';
-	};
 </script>
 
 <svelte:document onfullscreenchange={() => (fullscreen = document.fullscreenElement === frame)} />
 <!-- The corner belongs to the frame itself; clicks into the picture land on noVNC's canvas. -->
-<svelte:window onpointerdown={(event) => { if (event.target === frame) dragStart(); }} onpointerup={dragEnd} />
+<svelte:window
+	onpointerdown={(event) => {
+		if (event.target === frame) dragStart();
+	}}
+	onpointerup={dragEnd}
+/>
 
 {#if !status && error}
-	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+	<div class="notice-error" role="alert">
+		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>
 {/if}
 
 {#if status && vms.length === 0}
 	{#if !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
 	<PageHead title={t('vms.title')}>
 		{#snippet actions()}
+			<TasksPanel compact />
 			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
 		{/snippet}
 	</PageHead>
 	<EmptyState title={t('vms.empty')} />
 {:else if status && current}
-	<div class="layout">
-		{#if sidebar || tab !== 'screen'}
-			<aside class="tile" class:open={listOpen} aria-labelledby="vms-title">
-				<div class="aside-head">
-					<h2 class="tile-title" id="vms-title">{t('vms.title')}</h2>
-					<button type="button" class="btn picker" aria-expanded={listOpen} onclick={() => (listOpen = !listOpen)}>
-						<span>{vmLabel(current)}</span><Icon name="chevronDown" size={14} />
-					</button>
-					<a class="btn add" href="/vms/new" aria-label={t('vms.create')} title={t('vms.create')}><Icon name="plus" size={16} /></a>
+	<div class="vm-page">
+		<div class="head">
+			<div class="title">
+				<div class="name-row">
+					<h1 id="vm-title">{vmLabel(current)}</h1>
+					<span class="chip" class:ok={current.state === 'running'}
+						>{t(`vms.state.${current.state}`)}</span
+					>
+					{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
 				</div>
-				<div class="list-body">
-					<label class="vm-search"><span class="sr-only">{t('ui.vmSearch')}</span><input class="field" type="search" bind:value={search} placeholder={t('ui.vmSearch')} /></label>
-					<div class="filters" role="group" aria-label={t('vms.filter')}>
-						{#each ['all', 'running', 'stopped'] as const as entry (entry)}
-							<button type="button" class="filter" aria-pressed={filter === entry} onclick={() => (filter = entry)}>{t(`vms.filter.${entry}`)} <span class="count">{counts[entry]}</span></button>
-						{/each}
-					</div>
-					{#if shown.length === 0}<p class="vm-empty muted">{t('ui.vmNoResults')}</p>{/if}
-					{#each shown as vm (vm.name)}
-						{@const selected = vm.name === current.name}
-						<div class="vm" class:selected oncontextmenu={(event) => rowContext(vm, event)} role="presentation">
-							<a class="vm-link" href={link(vm)} aria-current={selected ? 'page' : undefined}>
-								<span class="vm-name">{vmLabel(vm)}</span>
-								<span class="vm-state">
-									<span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"></span>{t(`vms.state.${vm.state}`)}
-									{#if uptime(vm)}<span class="muted">{' · '}{uptime(vm)}</span>{/if}
-									{#if vm.autostart}<span class="autostart" title={t('vms.autostart')}><Icon name="power" size={12} /><span class="sr-only">{t('vms.autostart')}</span></span>{/if}
-								</span>
-								<span class="vm-metrics mono muted">{t('vms.specs', { vcpus: vm.vcpus, memory: formatBytes(vm.memoryMiB * 1024 * 1024) })}{#if vm.state === 'running'}{' · '}{formatPercent(vm.cpuPercent)}{/if}</span>
-							</a>
-							<div class="vm-actions">
-								{#if vm.state === 'running'}
-									<button type="button" class="icon" aria-label={t('vms.shutdownVm', { name: vmLabel(vm) })} title={t('vms.shutdown')} disabled={busy} onclick={() => act(vm, 'shutdown')}><Icon name="stop" size={15} /></button>
-								{:else}
-									<button type="button" class="icon" aria-label={t('vms.startVmNamed', { name: vmLabel(vm) })} title={t('vms.start')} disabled={busy || !canStart(vm)} onclick={() => act(vm, 'start')}><Icon name="play" size={15} /></button>
-								{/if}
-								<button type="button" class="icon" aria-label={t('vms.actionsFor', { name: vmLabel(vm) })} title={t('ui.more')} aria-haspopup="menu" onclick={(event) => rowButton(vm, event)}><Icon name="more" size={15} /></button>
-							</div>
+				{#if current.description}<span class="description muted">{current.description}</span>{/if}
+			</div>
+			<div class="buttons">
+				<TasksPanel compact />
+				{#if current.state === 'running'}
+					<button
+						type="button"
+						class="btn btn-primary"
+						onclick={() => act(current, 'shutdown')}
+						disabled={busy}>{t('vms.shutdown')}</button
+					>
+				{:else}
+					<button
+						type="button"
+						class="btn btn-primary"
+						onclick={() => act(current, 'start')}
+						disabled={busy || !canStart(current)}>{t('vms.start')}</button
+					>
+				{/if}
+				<a
+					class="btn icon-btn"
+					href="/vms/edit?vm={encodeURIComponent(current.name)}"
+					aria-label={t('vms.edit')}
+					title={t('vms.edit')}><Icon name="edit" size={16} /></a
+				>
+				<Dropdown label={t('ui.more')} icon="more" align="right">
+					{#snippet children(close)}
+						{#if current.state === 'running'}
+							<button
+								type="button"
+								role="menuitem"
+								disabled={busy}
+								onclick={() => {
+									close();
+									act(current, 'reboot');
+								}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+							>
+							<button
+								type="button"
+								role="menuitem"
+								disabled={busy}
+								onclick={() => {
+									close();
+									open('poweroff');
+								}}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
+							>
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									addVmConsole(current.name, vmLabel(current));
+								}}><Icon name="terminal" size={16} /><span>{t('vms.serial')}</span></button
+							>
+							<hr />
+						{/if}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								showXML();
+							}}><Icon name="fileText" size={16} /><span>{t('vms.showXml')}</span></button
+						>
+						{#if current.state !== 'running'}
+							<button
+								type="button"
+								role="menuitem"
+								disabled={busy || !!current.job}
+								onclick={() => {
+									close();
+									cloning = current;
+								}}>{t('ops.clone')}</button
+							>
+							<hr />
+							<button
+								type="button"
+								role="menuitem"
+								class="danger"
+								disabled={busy}
+								onclick={() => {
+									close();
+									open('remove');
+								}}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
+							>
+						{/if}
+					{/snippet}
+				</Dropdown>
+			</div>
+		</div>
+
+		{#if notices.length}
+			<div class="notices">
+				{#each allNotices ? notices : notices.slice(0, 1) as notice, index (index)}
+					<div
+						class={noticeClass[notice.level]}
+						role={notice.level === 'error' ? 'alert' : 'status'}
+					>
+						<div class="notice-line">
+							<span class="notice-text">{notice.text}</span>
+							{#if notice.retry && retry}<button
+									type="button"
+									class="btn small"
+									disabled={busy}
+									onclick={() => retry && act(retry.vm, retry.action)}>{t('ui.retry')}</button
+								>{/if}
+							{#if index === 0 && notices.length > 1}
+								<button
+									type="button"
+									class="more-notices"
+									aria-expanded={allNotices}
+									onclick={() => (allNotices = !allNotices)}
+									>{allNotices
+										? t('vms.noticesLess')
+										: t('vms.noticesMore', { count: notices.length - 1 })}</button
+								>
+							{/if}
 						</div>
-					{/each}
-				</div>
-			</aside>
+						{#if notice.detail}<pre>{notice.detail}</pre>{/if}
+					</div>
+				{/each}
+			</div>
 		{/if}
 
-		<section class="main" aria-labelledby="vm-title">
-			<div class="head">
-				<div class="title">
-					<div class="name-row">
-						<h1 id="vm-title">{vmLabel(current)}</h1>
-						<span class="chip" class:ok={current.state === 'running'}>{t(`vms.state.${current.state}`)}</span>
-						{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
-					</div>
-					{#if current.description}<span class="description muted">{current.description}</span>{/if}
-				</div>
-				<div class="buttons">
-					{#if current.state === 'running'}
-						<button type="button" class="btn btn-primary" onclick={() => act(current, 'shutdown')} disabled={busy}>{t('vms.shutdown')}</button>
-					{:else}
-						<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !canStart(current)}>{t('vms.start')}</button>
-					{/if}
-					<a class="btn icon-btn" href="/vms/edit?vm={encodeURIComponent(current.name)}" aria-label={t('vms.edit')} title={t('vms.edit')}><Icon name="edit" size={16} /></a>
-					<Dropdown label={t('ui.more')} icon="more" align="right">
-						{#snippet children(close)}
-							{#if current.state === 'running'}
-								<button type="button" role="menuitem" disabled={busy} onclick={() => { close(); act(current, 'reboot'); }}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button>
-								<button type="button" role="menuitem" disabled={busy} onclick={() => { close(); open('poweroff'); }}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button>
-								<button type="button" role="menuitem" onclick={() => { close(); addVmConsole(current.name, vmLabel(current)); }}><Icon name="terminal" size={16} /><span>{t('vms.serial')}</span></button>
-								<hr />
-							{/if}
-							<button type="button" role="menuitem" onclick={() => { close(); showXML(); }}><Icon name="fileText" size={16} /><span>{t('vms.showXml')}</span></button>
-							{#if current.state !== 'running'}
- <button type="button" role="menuitem" disabled={busy||!!current.job} onclick={()=>{close();cloning=current;}}>{t('ops.clone')}</button>
-								<hr />
-								<button type="button" role="menuitem" class="danger" disabled={busy} onclick={() => { close(); open('remove'); }}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button>
-							{/if}
-						{/snippet}
-					</Dropdown>
-				</div>
-			</div>
-
-			{#if notices.length}
-				<div class="notices">
-					{#each allNotices ? notices : notices.slice(0, 1) as notice, index (index)}
-						<div class={noticeClass[notice.level]} role={notice.level === 'error' ? 'alert' : 'status'}>
-							<div class="notice-line">
-								<span class="notice-text">{notice.text}</span>
-								{#if notice.retry && retry}<button type="button" class="btn small" disabled={busy} onclick={() => retry && act(retry.vm, retry.action)}>{t('ui.retry')}</button>{/if}
-								{#if index === 0 && notices.length > 1}
-									<button type="button" class="more-notices" aria-expanded={allNotices} onclick={() => (allNotices = !allNotices)}>{allNotices ? t('vms.noticesLess') : t('vms.noticesMore', { count: notices.length - 1 })}</button>
-								{/if}
-							</div>
-							{#if notice.detail}<pre>{notice.detail}</pre>{/if}
-						</div>
-					{/each}
-				</div>
-			{/if}
-
+		<div class="command-bar">
 			<nav class="tabs" aria-label={t('vms.tabs')}>
 				{#each ['overview', 'screen', 'snapshots'] as const as entry (entry)}
-					<a href={link(current, entry)} aria-current={tab === entry ? 'page' : undefined} data-sveltekit-replacestate data-sveltekit-noscroll>{t(`vms.tab.${entry}`)}</a>
+					<a
+						href={link(current, entry)}
+						aria-current={tab === entry ? 'page' : undefined}
+						data-sveltekit-replacestate
+						data-sveltekit-noscroll>{t(`vms.tab.${entry}`)}</a
+					>
 				{/each}
 			</nav>
 
-			{#if tab === 'overview'}
-				<Overview
-					vm={current}
-					history={history[current.name] ?? []}
-					volumes={storage.status?.volumes ?? []}
-					canStart={canStart(current)}
-					{busy}
-					onstart={() => act(current, 'start')}
-					onchanged={load}
-					onsnapshots={() => goto(link(current, 'snapshots'), { replaceState: true })}
-				/>
-			{:else if tab === 'snapshots'}
-				<Snapshots vm={current} />
-			{:else}
+			{#if tab === 'screen'}
 				<div class="toolbar" role="toolbar" aria-label={t('vms.screen')}>
-					<button type="button" class="tool icon-tool" aria-pressed={sidebar} aria-label={t('vms.sidebar')} title={t('vms.sidebar')} onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button>
 					{#if current.state === 'running'}
 						<Dropdown label={t('vms.send')} text={t('vms.send')} icon="keyboard" compact>
 							{#snippet children(close)}
 								{#each KEYS as entry (entry.label)}
-									<button type="button" role="menuitem" onclick={() => { close(); screen?.sendKeys(entry.keys); }}><span>{keyLabel(entry.label)}</span></button>
+									<button
+										type="button"
+										role="menuitem"
+										onclick={() => {
+											close();
+											screen?.sendKeys(entry.keys);
+										}}><span>{keyLabel(entry.label)}</span></button
+									>
 								{/each}
 								<hr />
-								<button type="button" role="menuitem" onclick={() => { close(); open('paste'); }}><Icon name="paste" size={16} /><span>{t('vms.clipboard')} …</span></button>
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										close();
+										open('paste');
+									}}><Icon name="paste" size={16} /><span>{t('vms.clipboard')} …</span></button
+								>
 							{/snippet}
 						</Dropdown>
 						<Dropdown label={t('vms.display')} text={t(`vms.mode.${mode}`)} icon="monitor" compact>
 							{#snippet children(close)}
 								{#each MODES as entry (entry)}
-									<button type="button" role="menuitemradio" aria-checked={mode === entry} disabled={entry === 'remote' && current.template !== 'linux'} title={modeHint(entry)} onclick={() => { close(); mode = entry; }}><span>{t(`vms.mode.${entry}`)}</span></button>
+									<button
+										type="button"
+										role="menuitemradio"
+										aria-checked={mode === entry}
+										disabled={entry === 'remote' && current.template !== 'linux'}
+										title={modeHint(entry)}
+										onclick={() => {
+											close();
+											mode = entry;
+										}}><span>{t(`vms.mode.${entry}`)}</span></button
+									>
 								{/each}
 							{/snippet}
 						</Dropdown>
 						<span class="grow"></span>
-						<button type="button" class="tool icon-tool" aria-label={t('vms.screenshot')} title={t('vms.screenshot')} onclick={saveScreenshot}><Icon name="camera" size={16} /></button>
-						<button type="button" class="tool icon-tool" aria-label={t('vms.serial')} title={t('vms.serial')} onclick={() => addVmConsole(current.name, vmLabel(current))}><Icon name="terminal" size={16} /></button>
-						<a class="tool icon-tool" href="/vms/screen?vm={encodeURIComponent(current.name)}" target="_blank" rel="noopener" aria-label={t('vms.ownWindow')} title={t('vms.ownWindow')} onclick={ownWindow}><Icon name="external" size={16} /></a>
-						<button type="button" class="tool icon-tool strong" aria-label={t('vms.fullscreen')} title={t('vms.fullscreen')} onclick={() => frame?.requestFullscreen()}><Icon name="maximize" size={16} /></button>
+						<button
+							type="button"
+							class="tool icon-tool"
+							aria-pressed={sidebar}
+							aria-label={t('vms.sidebar')}
+							title={t('vms.sidebar')}
+							onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
+						>
+						<button
+							type="button"
+							class="tool icon-tool"
+							aria-label={t('vms.screenshot')}
+							title={t('vms.screenshot')}
+							onclick={saveScreenshot}><Icon name="camera" size={16} /></button
+						>
+						<button
+							type="button"
+							class="tool icon-tool"
+							aria-label={t('vms.serial')}
+							title={t('vms.serial')}
+							onclick={() => addVmConsole(current.name, vmLabel(current))}
+							><Icon name="terminal" size={16} /></button
+						>
+						<a
+							class="tool icon-tool"
+							href="/vms/screen?vm={encodeURIComponent(current.name)}"
+							target="_blank"
+							rel="noopener"
+							aria-label={t('vms.ownWindow')}
+							title={t('vms.ownWindow')}
+							onclick={ownWindow}><Icon name="external" size={16} /></a
+						>
+						<button
+							type="button"
+							class="tool icon-tool strong"
+							aria-label={t('vms.fullscreen')}
+							title={t('vms.fullscreen')}
+							onclick={() => frame?.requestFullscreen()}><Icon name="maximize" size={16} /></button
+						>
+					{:else}<span class="grow"></span>
+						<button
+							type="button"
+							class="tool icon-tool"
+							aria-pressed={sidebar}
+							aria-label={t('vms.sidebar')}
+							title={t('vms.sidebar')}
+							onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
+						>
 					{/if}
 				</div>
-
-				{#if sizeError}<p class="notice-error" role="alert">{t('vms.size.failed')} {sizeError}</p>{/if}
-				<div class="frame" style:height={fullscreen ? null : `${fitted}px`} style:width={fullscreen || width === null ? null : `${width}px`} style:max-height={fullscreen || room <= 0 ? null : `${Math.max(VNC_HEIGHT.min, Math.floor(room))}px`} class:fullscreen bind:this={frame}>
-					{#if current.state === 'running'}
-						{#key current.name}
-							<VncScreen bind:this={screen} vm={current.name} {mode} resizable={current.template === 'linux'} />
-						{/key}
-						{#if fullscreen}
-							<div class="fsbar">
-								<span class="mono">{vmLabel(current)}</span>
-								<button type="button" onclick={() => screen?.ctrlAltDel()}>{keyLabel('Strg+Alt+Entf')}</button>
-								{#each MODES as entry (entry)}
-									<button type="button" aria-pressed={mode === entry} disabled={entry === 'remote' && current.template !== 'linux'} title={modeHint(entry)} onclick={() => (mode = entry)}>{t(`vms.mode.${entry}`)}</button>
-								{/each}
-								<button type="button" class="strong" onclick={() => document.exitFullscreen()}>{t('vms.exitFullscreen')}</button>
-							</div>
-						{/if}
-					{:else}
-						<div class="off">
-							<span>{t('vms.off', { name: vmLabel(current) })}</span>
-							<button type="button" class="btn btn-primary" onclick={() => act(current, 'start')} disabled={busy || !canStart(current)}>{t('vms.startVm')}</button>
-						</div>
-					{/if}
-				</div>
-				<p class="muted hint">{t('vms.hint')}</p>
 			{/if}
-		</section>
+		</div>
+		<div class="layout">
+			{#if sidebar || tab !== 'screen'}
+				<aside class="tile" class:open={listOpen} aria-labelledby="vms-title">
+					<div class="aside-head">
+						<h2 class="tile-title" id="vms-title">{t('vms.title')}</h2>
+						<button
+							type="button"
+							class="btn picker"
+							aria-expanded={listOpen}
+							onclick={() => (listOpen = !listOpen)}
+						>
+							<span>{vmLabel(current)}</span><Icon name="chevronDown" size={14} />
+						</button>
+						<a class="btn add" href="/vms/new" aria-label={t('vms.create')} title={t('vms.create')}
+							><Icon name="plus" size={16} /></a
+						>
+					</div>
+					<div class="list-body">
+						<label class="vm-search"
+							><span class="sr-only">{t('ui.vmSearch')}</span><input
+								class="field"
+								type="search"
+								bind:value={search}
+								placeholder={t('ui.vmSearch')}
+							/></label
+						>
+						<div class="filters" role="group" aria-label={t('vms.filter')}>
+							{#each ['all', 'running', 'stopped'] as const as entry (entry)}
+								<button
+									type="button"
+									class="filter"
+									aria-pressed={filter === entry}
+									onclick={() => (filter = entry)}
+									>{t(`vms.filter.${entry}`)} <span class="count">{counts[entry]}</span></button
+								>
+							{/each}
+						</div>
+						{#if shown.length === 0}<p class="vm-empty muted">{t('ui.vmNoResults')}</p>{/if}
+						{#each shown as vm (vm.name)}
+							{@const selected = vm.name === current.name}
+							<div
+								class="vm"
+								class:selected
+								oncontextmenu={(event) => rowContext(vm, event)}
+								role="presentation"
+							>
+								<a class="vm-link" href={link(vm)} aria-current={selected ? 'page' : undefined}>
+									<span class="vm-name">{vmLabel(vm)}</span>
+									<span class="vm-state">
+										<span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"
+										></span>{t(`vms.state.${vm.state}`)}
+										{#if vm.autostart}<span class="autostart" title={t('vms.autostart')}
+												><Icon name="power" size={12} /><span class="sr-only"
+													>{t('vms.autostart')}</span
+												></span
+											>{/if}
+									</span>
+								</a>
+								<div class="vm-actions">
+									<button
+										type="button"
+										class="icon"
+										aria-label={t('vms.actionsFor', { name: vmLabel(vm) })}
+										title={t('ui.more')}
+										aria-haspopup="menu"
+										onclick={(event) => rowButton(vm, event)}><Icon name="more" size={15} /></button
+									>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</aside>
+			{/if}
+
+			<section class="main" aria-labelledby="vm-title">
+				{#if tab === 'overview'}
+					<Overview
+						vm={current}
+						history={history[current.name] ?? []}
+						volumes={storage.status?.volumes ?? []}
+						canStart={canStart(current)}
+						{busy}
+						onstart={() => act(current, 'start')}
+						onchanged={load}
+						onsnapshots={() => goto(link(current, 'snapshots'), { replaceState: true })}
+					/>
+				{:else if tab === 'snapshots'}
+					<Snapshots vm={current} />
+				{:else}
+					{#if sizeError}<p class="notice-error" role="alert">
+							{t('vms.size.failed')}
+							{sizeError}
+						</p>{/if}
+					<div
+						class="frame"
+						style:height={fullscreen ? null : `${fitted}px`}
+						style:width={fullscreen || width === null ? null : `${width}px`}
+						style:max-height={fullscreen || room <= 0
+							? null
+							: `${Math.max(VNC_HEIGHT.min, Math.floor(room))}px`}
+						class:fullscreen
+						bind:this={frame}
+					>
+						{#if current.state === 'running'}
+							{#key current.name}
+								<VncScreen
+									bind:this={screen}
+									vm={current.name}
+									{mode}
+									resizable={current.template === 'linux'}
+									onstatus={(phase) => (connectionPhase = phase)}
+								/>
+							{/key}
+						{/if}
+					</div>
+					<div class="screen-footer">
+						{#if current.state !== 'running'}
+							<div class="screen-state">
+								<span class="muted">{t('vms.off', { name: vmLabel(current) })}</span><button
+									type="button"
+									class="btn btn-primary"
+									onclick={() => act(current, 'start')}
+									disabled={busy || !canStart(current)}>{t('vms.startVm')}</button
+								>
+							</div>
+						{:else if connectionPhase !== 'connected'}
+							<p class="muted hint" role="status">
+								{t(connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}
+							</p>
+						{/if}
+						<p class="muted hint">{t('vms.hint')}</p>
+					</div>
+				{/if}
+			</section>
+		</div>
 	</div>
 {/if}
 
 {#if rowMenu}
 	{@const vm = rowMenu.vm}
-	<ContextMenu label={t('vms.actionsFor', { name: vmLabel(vm) })} x={rowMenu.x} y={rowMenu.y} onclose={() => (rowMenu = null)}>
+	<ContextMenu
+		label={t('vms.actionsFor', { name: vmLabel(vm) })}
+		x={rowMenu.x}
+		y={rowMenu.y}
+		onclose={() => (rowMenu = null)}
+	>
 		{#if vm.state === 'running'}
-			<button type="button" role="menuitem" disabled={busy} onclick={() => { rowMenu = null; act(vm, 'shutdown'); }}><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button>
-			<button type="button" role="menuitem" disabled={busy} onclick={() => { rowMenu = null; act(vm, 'reboot'); }}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button>
-			<button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(link(vm, 'screen')); }}><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></button>
+			<button
+				type="button"
+				role="menuitem"
+				disabled={busy}
+				onclick={() => {
+					rowMenu = null;
+					act(vm, 'shutdown');
+				}}><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				disabled={busy}
+				onclick={() => {
+					rowMenu = null;
+					act(vm, 'reboot');
+				}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					rowMenu = null;
+					goto(link(vm, 'screen'));
+				}}><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></button
+			>
 		{:else}
-			<button type="button" role="menuitem" disabled={busy || !canStart(vm)} onclick={() => { rowMenu = null; act(vm, 'start'); }}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button>
+			<button
+				type="button"
+				role="menuitem"
+				disabled={busy || !canStart(vm)}
+				onclick={() => {
+					rowMenu = null;
+					act(vm, 'start');
+				}}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button
+			>
 		{/if}
-		<button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`); }}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button>
-		{#if vm.state==='stopped'}<button type="button" role="menuitem" disabled={busy||!!vm.job} onclick={()=>{rowMenu=null;cloning=vm;}}>{t('ops.clone')}</button>{/if}
- <button type="button" role="menuitem" onclick={() => { rowMenu = null; goto(link(vm, 'snapshots')); }}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button>
+		<button
+			type="button"
+			role="menuitem"
+			onclick={() => {
+				rowMenu = null;
+				goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
+			}}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button
+		>
+		{#if vm.state === 'stopped'}<button
+				type="button"
+				role="menuitem"
+				disabled={busy || !!vm.job}
+				onclick={() => {
+					rowMenu = null;
+					cloning = vm;
+				}}>{t('ops.clone')}</button
+			>{/if}
+		<button
+			type="button"
+			role="menuitem"
+			onclick={() => {
+				rowMenu = null;
+				goto(link(vm, 'snapshots'));
+			}}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button
+		>
 		<hr />
 		{#if vm.state === 'running'}
-			<button type="button" role="menuitem" class="danger" disabled={busy} onclick={() => { rowMenu = null; open('poweroff', vm); }}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button>
+			<button
+				type="button"
+				role="menuitem"
+				class="danger"
+				disabled={busy}
+				onclick={() => {
+					rowMenu = null;
+					open('poweroff', vm);
+				}}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
+			>
 		{:else}
-			<button type="button" role="menuitem" class="danger" disabled={busy} onclick={() => { rowMenu = null; open('remove', vm); }}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button>
+			<button
+				type="button"
+				role="menuitem"
+				class="danger"
+				disabled={busy}
+				onclick={() => {
+					rowMenu = null;
+					open('remove', vm);
+				}}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
+			>
 		{/if}
 	</ContextMenu>
 {/if}
@@ -539,7 +911,11 @@
 {#if dialog?.kind === 'xml'}
 	<Dialog title={t('vms.showXml')} wide onclose={() => (dialog = null)}>
 		<pre class="xml">{dialog.text}</pre>
-		<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={() => (dialog = null)}>{t('common.done')}</button></div>
+		<div class="dialog-actions">
+			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}
+				>{t('common.done')}</button
+			>
+		</div>
 	</Dialog>
 {:else if dialog && dialogVM}
 	{@const kind = dialog.kind}
@@ -548,39 +924,93 @@
 		<form onsubmit={submit}>
 			{#if kind === 'remove'}
 				<p class="text">{t('vms.removeText')}</p>
-				<label class="check"><input type="checkbox" bind:checked={draft.deleteDisks} /><span>{t('vms.deleteDisks')}</span></label>
+				<label class="check"
+					><input type="checkbox" bind:checked={draft.deleteDisks} /><span
+						>{t('vms.deleteDisks')}</span
+					></label
+				>
 				{#if draft.deleteDisks}
-					<p class="notice-error">{t('vms.deleteDisksWarning', { disks: vm.disks.filter((disk) => !disk.path).map((disk) => disk.file).join(', ') || '–' })}</p>
-					<label><span>{t('vms.confirmName', { name: vmLabel(vm) })}</span><input class="field mono" type="text" bind:value={draft.confirm} autocapitalize="none" spellcheck="false" /></label>
+					<p class="notice-error">
+						{t('vms.deleteDisksWarning', {
+							disks:
+								vm.disks
+									.filter((disk) => !disk.path)
+									.map((disk) => disk.file)
+									.join(', ') || '–',
+						})}
+					</p>
+					<label
+						><span>{t('vms.confirmName', { name: vmLabel(vm) })}</span><input
+							class="field mono"
+							type="text"
+							bind:value={draft.confirm}
+							autocapitalize="none"
+							spellcheck="false"
+						/></label
+					>
 				{/if}
 			{:else if kind === 'poweroff'}
 				<p class="text">{t('vms.poweroffText')}</p>
 			{:else if kind === 'paste'}
 				<p class="text">{t('vms.pasteText')}</p>
 				<!-- svelte-ignore a11y_autofocus -->
-				<textarea class="field mono" rows="5" bind:value={draft.text} spellcheck="false" autofocus></textarea>
+				<textarea class="field mono" rows="5" bind:value={draft.text} spellcheck="false" autofocus
+				></textarea>
 			{/if}
 			{#if dialogError}
-				<div class="notice-error" role="alert">{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}</div>
+				<div class="notice-error" role="alert">
+					{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}
+				</div>
 			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-				<button type="submit" class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}" disabled={busy || (kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(vm))}>{t(`vms.submit.${kind}`)}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)}
+					>{t('common.cancel')}</button
+				>
+				<button
+					type="submit"
+					class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}"
+					disabled={busy ||
+						(kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(vm))}
+					>{t(`vms.submit.${kind}`)}</button
+				>
 			</div>
 		</form>
 	</Dialog>
 {/if}
 
-{#if cloning}<CloneDialog source={cloning} onclose={()=>cloning=null} onstarted={()=>{cloning=null;load();}}/>{/if}
+{#if cloning}<CloneDialog
+		source={cloning}
+		onclose={() => (cloning = null)}
+		onstarted={() => {
+			cloning = null;
+			load();
+		}}
+	/>{/if}
+
 <style>
+	.vm-page {
+		width: 100%;
+		max-width: 1480px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.command-bar {
+		display: flex;
+		align-items: center;
+		gap: 24px;
+		min-height: 48px;
+		border-bottom: 1px solid var(--border);
+	}
 	.layout {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 20px;
+		gap: 24px;
 	}
 	aside {
-		flex: 0 1 280px;
+		flex: 0 0 260px;
 		min-width: 220px;
 		display: flex;
 		flex-direction: column;
@@ -590,7 +1020,8 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 12px 14px;
+		min-height: 50px;
+		padding: 14px;
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.aside-head h2 {
@@ -647,6 +1078,7 @@
 		gap: 4px;
 		padding-right: 8px;
 		border-left: 3px solid transparent;
+		min-height: 74px;
 	}
 	.vm:hover {
 		background: var(--chip);
@@ -659,16 +1091,16 @@
 		display: flex;
 		flex: 1;
 		flex-direction: column;
-		gap: 3px;
+		gap: 8px;
 		min-width: 0;
-		padding: 10px 6px 10px 11px;
+		padding: 14px 6px 14px 14px;
 		color: var(--text);
 		text-decoration: none;
 	}
 	.vm-name {
 		overflow: hidden;
-		font-size: 0.9375rem;
-		font-weight: 600;
+		font-size: 0.875rem;
+		font-weight: 500;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -677,9 +1109,6 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px 6px;
-		font-size: 0.75rem;
-	}
-	.vm-metrics {
 		font-size: 0.75rem;
 	}
 	.autostart {
@@ -719,12 +1148,13 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
+		gap: 12px;
 	}
 	.head {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: flex-end;
+		align-items: center;
+		min-height: 58px;
 		justify-content: space-between;
 		gap: 12px;
 	}
@@ -789,16 +1219,19 @@
 	}
 	.tabs {
 		display: flex;
-		gap: 22px;
-		border-bottom: 1px solid var(--border);
-		overflow-x: auto;
+		gap: 26px;
+		align-self: stretch;
+		align-items: center;
+		flex: none;
 	}
 	.tabs a {
-		padding: 8px 2px;
-		margin-bottom: -1px;
+		display: flex;
+		align-items: center;
+		align-self: stretch;
+		padding: 0 2px;
 		border-bottom: 2px solid transparent;
 		color: var(--muted);
-		font-size: 0.9375rem;
+		font-size: 0.875rem;
 		text-decoration: none;
 		white-space: nowrap;
 	}
@@ -810,42 +1243,33 @@
 		color: var(--text);
 		font-weight: 600;
 	}
-	.toolbar,
-	.fsbar {
+	.toolbar {
 		display: flex;
-		flex-wrap: wrap;
+		flex: 1;
+		min-width: 0;
 		align-items: center;
-		gap: 4px;
+		gap: 6px;
 		font-size: 0.8125rem;
+	}
+	.toolbar::before {
+		content: '';
+		height: 22px;
+		width: 1px;
+		background: var(--border);
+		margin-right: 10px;
 	}
 	.grow {
 		flex: 1 1 auto;
 	}
 	.icon-tool {
-		width: 2.375rem;
-		height: 2.375rem;
+		width: 34px;
+		height: 34px;
 		color: var(--text);
 		text-decoration: none;
 	}
 	.icon-tool.strong {
-		border: 1px solid var(--border);
-	}
-	.fsbar button {
-		height: 2.25rem;
-		padding: 0 10px;
-		background: transparent;
-		border: 0;
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		cursor: pointer;
-	}
-	.fsbar button:hover,
-	.fsbar button[aria-pressed='true'] {
 		background: var(--chip);
-	}
-	.fsbar .strong {
-		border: 1px solid var(--border);
+		color: var(--accent);
 	}
 	/* Width and height are dragged at the bottom right corner; it is never
 	   wider than its column and never taller than the rest of the window
@@ -854,7 +1278,7 @@
 		position: relative;
 		width: 100%;
 		max-width: 100%;
-		min-width: 320px;
+		min-width: min(320px, 100%);
 		min-height: 240px;
 		background: var(--screen-bg);
 		border: 1px solid var(--border);
@@ -870,37 +1294,19 @@
 		border-radius: 0;
 		resize: none;
 	}
-	/* On top, as in the design; faint until the mouse comes near. */
-	.fsbar {
-		position: absolute;
-		top: 10px;
-		left: 50%;
-		transform: translateX(-50%);
-		padding: 4px 10px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		box-shadow: var(--shadow-menu);
-		opacity: 0.55;
-		transition: opacity 0.15s ease;
-	}
-	.fsbar:hover,
-	.fsbar:focus-within {
-		opacity: 1;
-	}
-	.off {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 14px;
-		color: var(--screen-muted);
-		font-size: 0.9375rem;
-	}
 	.hint {
 		font-size: 0.75rem;
+	}
+	.screen-footer {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.screen-state {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 12px;
 	}
 	form {
 		display: flex;
@@ -953,6 +1359,23 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
+	}
+	@media (max-width: 1100px) {
+		.command-bar {
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+		.tabs {
+			min-height: 44px;
+		}
+		.toolbar {
+			flex: 1 1 100%;
+			padding-bottom: 8px;
+			flex-wrap: wrap;
+		}
+		.toolbar::before {
+			display: none;
+		}
 	}
 	/* On a phone the list folds away behind the name of the chosen VM. */
 	@media (max-width: 760px) {
