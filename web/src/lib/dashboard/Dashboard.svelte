@@ -126,9 +126,28 @@
 	});
 	onDestroy(() => {
 		dashboardScene.preview = null;
+		clearImages();
+	});
+	function clearImages() {
+		pendingImages.clear();
 		for (const url of Object.values(dashboardScene.urls)) URL.revokeObjectURL(url);
 		dashboardScene.urls = {};
-	});
+	}
+	function pruneImages() {
+		const retained = new Set(visual.images.map((image) => image.id));
+		for (const snapshot of [...undo, ...redo]) {
+			for (const image of dashboardVisual(JSON.parse(snapshot).visual).images)
+				retained.add(image.id);
+		}
+		const urls = { ...dashboardScene.urls };
+		for (const [id, url] of Object.entries(urls)) {
+			if (retained.has(id)) continue;
+			URL.revokeObjectURL(url);
+			pendingImages.delete(id);
+			delete urls[id];
+		}
+		dashboardScene.urls = urls;
+	}
 	function registerImage(id: string, file: File, url: string) {
 		const previous = dashboardScene.urls[id];
 		if (previous) URL.revokeObjectURL(previous);
@@ -376,6 +395,9 @@
 		minimumWidth = savedMinimumWidth;
 		editing = false;
 		customize = null;
+		undo = [];
+		redo = [];
+		clearImages();
 		options = structuredClone($state.snapshot(savedOptions));
 		rebuild(structuredClone($state.snapshot(saved)));
 	}
@@ -402,7 +424,9 @@
 				await api.put('/preferences/dashboard', form);
 			} else await api.put('/preferences/dashboard', preferences);
 			savedVisual = structuredClone($state.snapshot(visual));
-			pendingImages.clear();
+			clearImages();
+			undo = [];
+			redo = [];
 			galleryVisual = null;
 			globalOpen = false;
 			session.dashboard = preferences;
@@ -1103,7 +1127,10 @@
 				urls={dashboardScene.urls}
 				onbegin={checkpoint}
 				onchange={(v) => (visual = v)}
-				onpreview={(v) => (galleryVisual = v)}
+				onpreview={(v) => {
+					galleryVisual = v;
+					if (!v) pruneImages();
+				}}
 				onupload={registerImage}
 				onclose={() => (globalOpen = false)}
 			/>{/if}

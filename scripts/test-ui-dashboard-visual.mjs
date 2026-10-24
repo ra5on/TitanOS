@@ -193,6 +193,17 @@ try {
   await page
     .getByRole("button", { name: "Hintergrund verwenden", exact: true })
     .click();
+  await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
+  assert.match(
+    await page.locator(".dashboard-background .picture").getAttribute("style"),
+    /nordlicht/,
+  );
+  await page.getByRole("button", { name: "Wiederholen", exact: true }).click();
+  assert.match(
+    await page.locator(".dashboard-background .picture").getAttribute("style"),
+    /blob:/,
+    "redo must retain the staged image",
+  );
   data.failSave = true;
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await page.getByRole("alert").waitFor();
