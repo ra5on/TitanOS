@@ -1,5 +1,5 @@
 {
-  "source": "140bf6170dcef59f6b302cc6dec189e359cf1691",
+  "source": "9d364a5affee503ed9f922b13c9d8b2acade73d2",
   "version": "0.20.1",
   "captured": "2026-10-24",
   "demoData": true,
@@ -67,8 +67,8 @@
       "file": "docker.png",
       "width": 1600,
       "height": 1175,
-      "bytes": 395466,
-      "sha256": "aad3793456258af17247fa059f6e93240758320440e9d17626ab7c77b4084241"
+      "bytes": 395469,
+      "sha256": "4a0a29e71ac594463325a796e6df1302919ef871f1d6f19f3126763000ea1e95"
     },
     {
       "file": "vms.png",
