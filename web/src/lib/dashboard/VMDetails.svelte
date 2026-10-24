@@ -24,7 +24,8 @@
 				}
 			}
 		}
-		for (let i = 0; i < Math.min(4, queue.length); i++) void worker();
+		const workers = Math.min(4, queue.length);
+		for (let i = 0; i < workers; i++) void worker();
 		return () => controller.abort();
 	});
 </script>

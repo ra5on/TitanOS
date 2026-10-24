@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { api, ApiError, type DockerContainer, type VM } from '#lib/api.ts';
 	import { t, errorText } from '#lib/i18n/index.svelte.ts';
-	import { goto } from '$app/navigation';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
-	import { webLinks, type WebLink } from '../../routes/docker/container.ts';
+	import { webLinks } from '../../routes/docker/container.ts';
 	import VMDetails from './VMDetails.svelte';
 	import type { TileId } from './tiles.ts';
 	export type WorkloadTarget =
@@ -54,6 +53,7 @@
 			? target.vm.state === 'running'
 			: target.members.some((c) => ['running', 'restarting', 'paused'].includes(c.state)),
 	);
+	const managed = $derived(target.kind === 'docker' && target.members.some((c) => c.managed));
 	const links = $derived(
 		target.kind === 'docker' && target.primary ? webLinks(target.primary, host, tailscaleHost) : [],
 	);
@@ -100,7 +100,7 @@
 	}
 	async function showLogs(c: DockerContainer) {
 		pick(() => (dialog = 'logs'));
-		logs = '';
+		logs = t('common.loading');
 		error = '';
 		try {
 			logs = (
@@ -109,6 +109,7 @@
 				)
 			).logs;
 		} catch (e) {
+			logs = '';
 			error = errorText(e instanceof ApiError ? e.code : 'internal');
 		}
 	}
@@ -185,7 +186,7 @@
 				>{/each}
 			<a
 				role="menuitem"
-				href={target.stack
+				href={target.stack && managed
 					? `/docker/apps/${encodeURIComponent(target.members[0].app || target.name)}`
 					: '/docker'}><Icon name="list" size={16} /><span>{t('dashboard.showDetails')}</span></a
 			>
@@ -221,7 +222,7 @@
 		<hr />
 		{#if target.kind === 'docker'}<button role="menuitem" onclick={() => run('check')}
 				><Icon name="restart" size={16} /><span>{t('docker.checkUpdates')}</span></button
-			>{#if target.stack || target.members[0].managed}<a
+			>{#if managed}<a
 					role="menuitem"
 					href="/docker/apps/{encodeURIComponent(target.members[0].app)}"
 					><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
@@ -234,7 +235,7 @@
 		<button role="menuitem" onclick={pin}
 			><Icon name="plus" size={16} /><span>{t('dashboard.pin')}</span></button
 		>
-		{#if target.kind === 'docker' || !running}<hr />
+		{#if target.kind === 'docker' ? !target.stack || managed : !running}<hr />
 			<button role="menuitem" class="danger" onclick={() => pick(() => (dialog = 'remove'))}
 				><Icon name="trash" size={16} /><span
 					>{t(target.kind === 'docker' ? 'docker.remove' : 'vms.remove')}</span
