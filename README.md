@@ -112,6 +112,8 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 [VM-Snapshots und Grenzen](docs/VM-SNAPSHOTS.md) · [Bridge-Netzwerk](docs/NETWORKING.md)
 
+Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung. Die Heimnetz-Bridge `br0` wird bei der Ersteinrichtung automatisch vorbereitet und nach Verbindungsbestätigung dauerhaft übernommen; bestehende NAS aktivieren sie direkt aus der VM-Einrichtung.
+
 ### Sicherungen und Wiederherstellung
 
 - **Versionierte Backups mit restic:** Freigaben verschlüsselt auf ein anderes Volume, per SFTP, zu S3 oder zu einem restic-REST-Server sichern. Zeitpläne, Aufbewahrung, Zielprüfung und Fortschritt.
