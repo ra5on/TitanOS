@@ -6,6 +6,7 @@ Eigene Buchstabenformen (keine Schriftart), daher frei von Fremdlizenzen. Gehör
 |---|---|
 | `titanos-mark-dark-bg.svg` / `-light-bg.svg` | Symbol: Sechseck mit „T“ |
 | `titanos-wordmark-dark-bg.svg` / `-light-bg.svg` | Schriftzug „TITANOS“ |
+| `download-stable.svg` | Download-Button der Projekt-README, verlinkt auf das neueste Stable-Release |
 | `favicon.svg` | Browser-Tab, App-Symbol (unter 24 px nur das „T“) |
 
 Regeln:
