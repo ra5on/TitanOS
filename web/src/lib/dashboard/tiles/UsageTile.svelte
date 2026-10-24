@@ -153,6 +153,8 @@
 	.track {
 		height: 6px;
 		background: var(--track);
+		border-radius: var(--radius-bar);
+		overflow: hidden;
 	}
 	.track span {
 		display: block;
