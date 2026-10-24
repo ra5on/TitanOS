@@ -8,7 +8,11 @@
 <p align="center"><strong>Deine Daten. Deine Anwendungen. Deine Startseite.</strong><br>Ein NAS-Betriebssystem für den eigenen Server – vom USB-Stick gestartet, im RAM betrieben, im Browser verwaltet.</p>
 
 <p align="center">
-  <a href="https://github.com/ra5on/TitanOS/releases/latest">Stable herunterladen</a> ·
+  <a href="https://github.com/ra5on/TitanOS/releases/latest"><img src="docs/brand/download-stable.svg" alt="Aktuelle TitanOS-Version herunterladen" width="350" height="54"></a><br>
+  <sub>Stick-ZIP, Prüfsummen und Signaturen der jeweils aktuellen Stable-Version.</sub>
+</p>
+
+<p align="center">
   <a href="#installation">Installation</a> ·
   <a href="#funktionen">Alle Funktionen</a> ·
   <a href="#dokumentation">Dokumentation</a> ·
