@@ -16,27 +16,30 @@ Alle Backend-Pakete werden von Vet und den vorhandenen Pakettests erfasst.
 Die folgende Matrix ordnet die Funktionsbereiche den zentralen Prüfpunkten zu;
 die zusätzlichen Browser-/Race-/QEMU-Prüfungen nennt der Releasebericht.
 
-| Funktionsbereich | Schnittstelle/Rechte und Zustandsgrenze | Regressionen |
-|---|---|---|
-| Einrichtung, Konten, Rollen, 2FA | Sitzungen, eigenes Konto, Administrator-/Besitzerrechte | `auth`, `api` |
-| Konfiguration | atomare seltene Stickschreibzugriffe, RAM-Abfragen | `config`, `configbackup`, `api` |
-| mdadm, Btrfs, SMART, Standby | bestätigte stabile Geräteidentität, Entwicklungsmodus, Mounts | `storage`, `api`, Storage-Smoke |
-| SMB/NFS und Shares | Kontorechte, ausgewähltes Volume | `shares`, `api`, Browser-Workflows |
-| Dateien, Papierkorb, Uploads | autorisierte Roots, Symlinks, Konflikte, Auftragszustände | `files`, `volumedata`, `api` |
-| Docker und Apps | Administratoren, Compose-Dienste, Hintergrundfehler, Volume | `docker`, `catalog`, `api`, neue Browserprüfung |
-| VMs und Snapshots/Klone | Administratoren, Ressourcen-/Lifecycle-Sperren | `vm`, `api`, Storage-Smoke |
-| Hardware und Plugins | stabile IDs, exakter Kernel, Signaturen, Durchreichung | `hardware`, `plugins`, `minisign`, Hardware-Buildgate |
-| RAM und Monitoring | physische Belegung, verfügbarer RAM, Writeback, Beobachtungslücken | `system`, `monitoring`, neue Browserprüfung |
-| Netzwerk und Fernzugriff | bestätigter Wechsel/Rückfall, bestehende Firewallentscheidung | `network`, `tailscale`, `api` |
-| Backups, Ziele, App-Sicherungen | Quell-/Zielidentität, Writer-Sperren, Restore als neue Kopie | `backup`, `backuptarget`, `appbackup`, `api` |
-| Wartung und Aufträge | Aufnahme, Abhängigkeiten, unbekannte Ausgänge | `maintenance`, `api`, Browser-Operations |
-| Assistent und Dokumente | Schema, Konto/Bereich, Bestätigung/Direktmodus, Journal | `assistant`, `office`, `api` |
-| Meldungen und Integrationen | persönliche Inhalte, SMTP/HA, externe Verbindungen | `notify`, `homeassistant`, `api` |
-| SSH, Terminal und TLS | bestehende Admin-Anmeldung, Origin, Sitzungsgrenzen | `sshd`, `terminal`, `tlscert`, `api` |
-| USV, Energie und USB | erkannte Hardware, Entwicklungsmodus, explizite Mounts | `ups`, `usb`, `system`, `api` |
-| System-/App-Updates und Boot | Signaturen, A/B, Healthcheck, Rückfallkompatibilität | `update`, `app`, `cmd/titand`, Release-Smoke |
-| WebUI, Navigation und Darstellung | Rollen, DE/EN, gemeinsame Komponenten, Mobilansicht | Webtests, Svelte, Browserprüfungen |
-| Hilfspakete | Befehlsausführung, Namen, Version, eingebettete Dateien | Compiler/Vet, Aufrufer-/Erreichbarkeitsprüfung |
+| Bereich | Oberfläche / API | Rechte | Speicherung | Hintergrundarbeit | Fehlerbehandlung | Neustart / Rückfall |
+|---|---|---|---|---|---|---|
+| Einrichtung, Konten, 2FA | Setup, Konto, Sitzungen; `auth`/`api` | Besitzer, Administrator, eigenes Konto | atomare Kontokonfiguration | Sitzungsablauf, TOTP | Anmelde-/Schemaprüfung | App-Sitzung erhalten, NAS-Sitzung verwerfen |
+| Konfiguration und Restore | Einstellungen/Import; `config`/`configbackup` | Administration | atomare seltene Stickschreibzugriffe, RAM-Lesen | kein zyklischer Stickzugriff | fehlgeschlagene Ablage/Rücknahme | vorhandene Felder kompatibel |
+| mdadm, Btrfs, SMART, Standby | Speicher; `storage`/`api`, Browser | bestätigte stabile Geräteidentität | UUIDs und Volume-Zuordnung | Wiederaufbau, Prüfungen, Mounts | degradierte Arrays, Entwicklungsmodus | Mount-/Recovery-Prüfungen im Storage-Smoke |
+| SMB/NFS und Shares | Shares; `shares`/`api`, Browser | Konten, Freigaberechte | Konfiguration, gewähltes Volume | Dienste und Wiederabgleich | Dienst-/Pfadfehler | Konfiguration bei Start erzeugen |
+| Dateien, Papierkorb, Uploads | Dateien/Aufträge; `files`/`api`, Browser | Roots, Symlinks, Konfliktfreigabe | Nutzdaten auf Volume, Upload-Metadaten | Kopieren, Prüfen, Speicherreservierung | Abbruch, konkurrierende Ziele, veraltete Vorschau | dauerhafte Uploads fortsetzen; RAM-Aufträge nicht als dauerhaft behandeln |
+| Docker und Apps | Store/Stack-Editor; `docker`/`catalog`/`api` | Administration, Geräteauswahl | Compose, private `.env` auf Volume | Pull/Start, Updateprüfung | Pull- und Validierungsfehler sichtbar | gespeicherte Images/Tags erhalten |
+| VMs und Snapshots | VMs; `vm`/`api`, Storage-Smoke | Administration, Ressourcensperren | Images/Snapshots auf Volume | Kopieren, Klonen, Snapshot | unbekannte Ausgänge, Writer-Sperren | Autostart-Marker, Snapshot-/Recovery-Prüfung |
+| Hardware und Plugins | Geräte/Plugins; `hardware`/`plugins`/`api` | stabile IDs, explizite Durchreichung | signierte Dateien auf Volume, Basis-Version | Treiberbau, Aktivierung | Kernel-/Signaturfehler, fehlende GPU | erneute Aktivierung, Rückfall; Hardware-Buildgate |
+| RAM und Monitoring | Dashboard/Einstellungen; `system`/`monitoring` | Status lesen, Einstellungen administrieren | Einstellungen kompatibel; Messwerte im RAM | gemeinsamer Takt, Warnhysterese, Upload-Budget | fehlende PSI, Abfragelücken, Sysctl-Rücknahme | Einstellung neu anwenden, keine historischen RAM-Warnungen übernehmen |
+| Netzwerk und Fernzugriff | Netzwerk/Zugang; `network`/`tailscale`/`api` | explizite Bestätigung | bestätigte Konfiguration | Rückfallfrist, Dienstabgleich | fehlende Verbindung/Bridge | bestätigte Bridge erhalten, unbestätigte zurücknehmen |
+| Backups und Ziele | Sicherungen; `backup`/`backuptarget`/`appbackup`/`api` | Quelle/Ziel, Writer-Sperren | Volume, Restore als neue Kopie | Zeitplan, Prüfung, Wiederherstellung | Zielverlust, ungeklärte App-Sicherung | dauerhafte Zustände abgleichen |
+| Wartung und Aufträge | Auftragsanzeige; `maintenance`/`api`, Browser | Bereich und Aktionsrecht | unterstützte Journale auf Volume | Aufnahme, Abhängigkeiten | unbekannte Ausgänge blockieren | nur ausdrücklich dauerhafte Aufträge fortsetzen |
+| Assistent und Dokumente | Chat/Aufträge; `assistant`/`office`/`api` | Konto/Bereich, Freigabe/Direktmodus | getrennte Chats, Journal, neue Dokumentkopien | genau eine Ausführung, Checkpoints | Schema, Modell-/Werkzeugfehler, Schleifen | unbekannte Mutationen nicht wiederholen |
+| Meldungen und Integrationen | Meldungen/HA; `notify`/`homeassistant`/`api` | persönliche Inhalte, Admin-Systemmeldungen | private Einstellungen | Zustellversuche, HA-Beobachter | Ersatzwege, externe Verbindungsfehler | keine Freigabetoken persistieren |
+| SSH, Terminal, TLS | Zugang/Terminal; `sshd`/`terminal`/`tlscert`/`api` | Admin, Origin, Sitzungsgrenze | atomare Schlüssel/Zertifikate | Dienst- und Verbindungslebensdauer | Abbruch, ungültige Herkunft | Zertifikat erhalten, Dienst gemäß Einstellung starten |
+| USV, Energie, USB | Integrationen/Geräte; `ups`/`usb`/`system`/`api` | erkannte Geräte, explizite Aktionen | Konfiguration | Ereignisse, Zeitplan | Entwicklungsmodus, Geräteverlust | Dienste neu erzeugen, Mounts ausdrücklich behandeln |
+| System-/App-Updates | Updates; `update`/`app`/`cmd/titand`, QEMU | Administration, Signaturen | A/B-Slots und App-Zustand | Download, Healthcheck, Auftragswartezeit | Hash-/Signaturfehler, Fehlstarts | Bootzähler, App-/Systemrückfall |
+| WebUI und Hilfspakete | Navigation, DE/EN, gemeinsame Komponenten | rollenabhängige Funktionen | vorhandene Einstellungen | Sichtbarkeit, Polling, Aufräumen | Wiederholen, feldbezogene Fehler | erneutes Öffnen und gespeicherte Werte; Compiler/Vet/Erreichbarkeit |
+
+Die Zellen nennen die jeweils geprüfte Grenze und den zugehörigen Quell- bzw.
+Regressionseinstieg. Sie sind keine Zusicherung einer praktischen Abnahme jedes
+Einzelablaufs; ergänzende Browser-, Race- und QEMU-Ergebnisse sind versionsbezogen.
 
 ## Belegte Befunde und Korrekturen
 
