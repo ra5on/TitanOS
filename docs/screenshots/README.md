@@ -1,6 +1,6 @@
 # Screenshots der Weboberfläche
 
-`current/` enthält die aktuellen Aufnahmen für die Projekt-README. Die Bilder stammen aus der **gebauten Svelte-WebUI von TitanOS 0.20.0**, Quellstand [`a6f4bbe`](https://github.com/ra5on/TitanOS/commit/a6f4bbe0bbc8653da042f2114258af663dbef755), aufgenommen am **24. Oktober 2026** mit Chromium.
+`current/` enthält die aktuellen Aufnahmen für die Projekt-README. Die Bilder stammen aus der **gebauten Svelte-WebUI von TitanOS 0.20.0**, Quellstand [`1012d6f`](https://github.com/ra5on/TitanOS/commit/1012d6fd3285d06b6cec242720542f8e36a5fed8), aufgenommen am **24. Oktober 2026** mit Chromium.
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten.
 
