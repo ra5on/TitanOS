@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // DeviceValues contains only already sampled values. Nil values are unavailable,
@@ -93,4 +94,33 @@ func legacyIdentity(snap Snapshot) func(string, string) string {
 		}
 		return k
 	}
+}
+
+// A reconnect may begin while an inventory source is unavailable. Retained
+// discovery can still be matched against an explicit selection by its stable
+// identity, without treating the source failure as removal of selected devices.
+func retainedSelected(q MQTT, group, entityKey string) bool {
+	ids, restricted := q.Devices[group]
+	if !restricted {
+		return true
+	}
+	kinds := map[string]string{"volumes": "volume", "disks": "disk", "backups": "backup", "containers": "container", "vms": "vm"}
+	suffixes := map[string][]string{"volumes": {"_state", "_used", "_free"}, "disks": {"_temperature", "_problem"}, "backups": {"_running", "_problem", "_progress", "_last_success", "_next", "_run"}, "containers": {"", "_restart"}, "vms": {""}, "ups": {"_status", "_charge"}}
+	for _, id := range ids {
+		sum := sha256.Sum256([]byte(group + "\x00" + id))
+		if strings.HasPrefix(entityKey, fmt.Sprintf("%s_%x_", key(group), sum[:6])) {
+			return true
+		}
+		legacy := key(kinds[group], id)
+		if group == "ups" {
+			legacy = "ups"
+		}
+		rawHash := sha256.Sum256([]byte(id))
+		for _, suffix := range suffixes[group] {
+			if entityKey == legacy+suffix || entityKey == fmt.Sprintf("%s_%x%s", legacy, rawHash[:6], suffix) {
+				return true
+			}
+		}
+	}
+	return false
 }

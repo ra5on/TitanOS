@@ -545,8 +545,7 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 				if strings.HasPrefix(parts[2], "backup_") {
 					group = "backups"
 				}
-				_, restricted := q.Devices[group]
-				if slices.Contains(snapUnavailable, group) && slices.Contains(q.Groups, group) && !restricted && len(published) < 2048 {
+				if slices.Contains(snapUnavailable, group) && slices.Contains(q.Groups, group) && retainedSelected(q, group, parts[2]) && len(published) < 2048 {
 					delete(cfg, "availability_topic")
 					cfg["availability"] = []map[string]string{{"topic": availability}, {"topic": base + "/available/" + parts[2]}}
 					cfg["availability_mode"] = "all"
