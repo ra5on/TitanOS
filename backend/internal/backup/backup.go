@@ -1155,7 +1155,7 @@ func (m *Manager) CachedViews() []View {
 		v := View{Job: shown, SecretSet: set}
 		if state := m.states[job.ID]; state != nil {
 			v.State = *state
-			v.StateKnown = true
+			v.StateKnown = state.StatusError == ""
 		}
 		if next, ok := job.NextRun(m.now()); ok {
 			v.Next = &next

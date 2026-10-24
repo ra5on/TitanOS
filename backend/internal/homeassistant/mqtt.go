@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -49,9 +50,12 @@ type mqttClient struct {
 
 	wmu sync.Mutex
 	// incoming gets PUBLISH packets for subscriptions.
-	incoming chan mqttMessage
-	errs     chan error
-	packetID uint16
+	incoming  chan mqttMessage
+	errs      chan error
+	packetID  uint16
+	ignored   sync.Map // own live discovery echoes never occupy the input queue
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type mqttMessage struct {
@@ -99,7 +103,7 @@ func dialMQTT(ctx context.Context, o MQTTOptions) (*mqttClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &mqttClient{conn: conn, r: bufio.NewReader(conn), incoming: make(chan mqttMessage, 32), errs: make(chan error, 1)}
+	c := &mqttClient{conn: conn, r: bufio.NewReader(conn), incoming: make(chan mqttMessage, 32), errs: make(chan error, 1), done: make(chan struct{})}
 
 	flags := byte(0x02) // clean session
 	var payload []byte
@@ -197,6 +201,22 @@ func (c *mqttClient) readLoop() {
 				}
 				rest = rest[2:] // packet ID; subscriptions are QoS 0, so no answer is owed
 			}
+			if strings.HasSuffix(topic, "/config") {
+				if len(rest) == 0 {
+					continue
+				}
+				if _, own := c.ignored.Load(topic); own {
+					continue
+				}
+				// Retained discovery must not be lost in a burst. Ordinary
+				// commands retain their bounded, non-blocking queue below.
+				select {
+				case c.incoming <- mqttMessage{topic, rest}:
+				case <-c.done:
+					return
+				}
+				continue
+			}
 			select {
 			case c.incoming <- mqttMessage{topic, rest}:
 			default: // a flood of commands is dropped, not queued
@@ -240,6 +260,5 @@ func (c *mqttClient) Ping() error { return c.write([]byte{mqttPingreq << 4, 0}) 
 
 // Close says goodbye; the broker then does not send the last will.
 func (c *mqttClient) Close() {
-	c.write([]byte{mqttDisconnect << 4, 0})
-	c.conn.Close()
+	c.closeOnce.Do(func() { close(c.done); c.write([]byte{mqttDisconnect << 4, 0}); c.conn.Close() })
 }

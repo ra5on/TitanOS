@@ -1,10 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
+	import Dropdown from '#lib/components/Dropdown.svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	import { storageNavigation } from '#lib/storage-view.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
-	import { api, ApiError, type DiskSleepStatus, type StorageStatus, type Volume } from '#lib/api.ts';
+	import {
+		api,
+		ApiError,
+		type DiskSleepStatus,
+		type StorageStatus,
+		type Volume,
+	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { formatDiskBytes } from '#lib/format.ts';
+	import { formatDiskBytes, formatPercent } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { refreshStorage, storage } from '#lib/storage.svelte.ts';
@@ -14,17 +25,112 @@
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
 
-	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
+	const canAdminister = $derived(
+		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
+	);
 	const disks = $derived(storage.status?.disks ?? []);
 	const volumes = $derived(storage.status?.volumes ?? []);
 	const free = $derived(disks.filter((disk) => disk.role === 'free' && !disk.testing));
 
-	let dialog = $state<{ kind: 'create' } | { kind: 'add' | 'delete'; volume: string } | { kind: 'remove'; volume: string; disk: string } | null>(null);
+	let dialog = $state<
+		| { kind: 'create' }
+		| { kind: 'add' | 'delete'; volume: string }
+		| { kind: 'remove'; volume: string; disk: string }
+		| null
+	>(null);
 	let busy = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let sleepChoice = $state<number | null>(null);
 	const diskSleep = $derived(storage.status?.diskSleep);
 	const idleMinutes = [0, 5, 10, 15, 30, 60, 120, 180];
+
+	const navigation = storageNavigation(session.data?.user?.name ?? '');
+	let tab = $state(navigation.tab),
+		query = $state(navigation.query),
+		filter = $state(navigation.filter),
+		volumeFilter = $state(navigation.volume),
+		sort = $state(navigation.sort);
+	let pendingDisk = $state('');
+	let selected = $state(navigation.selected),
+		selectedDisk = $state(navigation.disk),
+		sleepOpen = $state(false);
+	const detail = $derived(volumes.find((v) => v.name === selected));
+	const diskDetail = $derived(
+		disks.find((d) => (d.identity || d.serial || d.name) === selectedDisk),
+	);
+	const visibleVolumes = $derived(
+		volumes
+			.filter(
+				(v) =>
+					`${v.name} ${v.level} ${v.filesystem}`
+						.toLocaleLowerCase()
+						.includes(query.toLocaleLowerCase()) &&
+					(filter !== 'problems' || !['ok', 'syncing'].includes(v.state)),
+			)
+			.toSorted((a, b) =>
+				sort === 'size' ? b.sizeBytes - a.sizeBytes : a.name.localeCompare(b.name, i18n.locale),
+			),
+	);
+	const visibleDisks = $derived(
+		disks
+			.filter(
+				(d) =>
+					`${d.name} ${d.model} ${d.serial}`
+						.toLocaleLowerCase()
+						.includes(query.toLocaleLowerCase()) &&
+					(!volumeFilter || d.volume === volumeFilter) &&
+					(filter === 'all' ||
+						(filter === 'free' && d.role === 'free') ||
+						(filter === 'assigned' && !!d.volume) ||
+						(filter === 'problems' && (d.memberState === 'faulty' || d.smart?.healthy === false)) ||
+						d.kind === filter),
+			)
+			.toSorted((a, b) =>
+				sort === 'size'
+					? b.sizeBytes - a.sizeBytes
+					: sort === 'temperature'
+						? (b.smart?.temperatureC ?? -1) - (a.smart?.temperatureC ?? -1)
+						: a.name.localeCompare(b.name, i18n.locale, { numeric: true }),
+			),
+	);
+	beforeNavigate(() =>
+		Object.assign(navigation, {
+			tab,
+			query,
+			filter,
+			volume: volumeFilter,
+			sort,
+			selected,
+			disk: selectedDisk,
+			scroll: window.scrollY,
+		}),
+	);
+	onMount(() => {
+		const hash = decodeURIComponent(location.hash.slice(1));
+		if (hash.startsWith('volume-')) {
+			tab = 'volumes';
+			selected = hash.slice(7);
+		}
+		if (hash.startsWith('disk-')) {
+			tab = 'disks';
+			pendingDisk = hash.slice(5);
+		}
+		requestAnimationFrame(() => {
+			if (!hash) window.scrollTo({ top: navigation.scroll });
+		});
+	});
+	$effect(() => {
+		if (!pendingDisk) return;
+		const disk = disks.find((d) => d.name === pendingDisk);
+		if (disk) {
+			selectedDisk = disk.identity || disk.serial || disk.name;
+			pendingDisk = '';
+		}
+	});
+	function switchTab(value: 'volumes' | 'disks') {
+		tab = value;
+		filter = 'all';
+	}
 
 	// Dialogs work on the live volume, so that they follow its state.
 	const dialogVolume = $derived.by(() => {
@@ -35,8 +141,12 @@
 
 	const summary = $derived.by(() => {
 		const parts = [
-			volumes.length === 1 ? t('storage.summaryVolume') : t('storage.summaryVolumes', { count: volumes.length }),
-			disks.length === 1 ? t('storage.summaryDisk') : t('storage.summaryDisks', { count: disks.length })
+			volumes.length === 1
+				? t('storage.summaryVolume')
+				: t('storage.summaryVolumes', { count: volumes.length }),
+			disks.length === 1
+				? t('storage.summaryDisk')
+				: t('storage.summaryDisks', { count: disks.length }),
 		];
 		if (free.length > 0) parts.push(t('storage.summaryFree', { count: free.length }));
 		return parts.join(' · ');
@@ -52,20 +162,30 @@
 			await action();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = { text: errorText(code), detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '' };
+			error = {
+				text: errorText(code),
+				detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '',
+			};
 		}
 		await refreshStorage();
 		busy = false;
 	}
 
-	const rescan = () => run(async () => (storage.status = await api.post<StorageStatus>('/storage/rescan')));
-	const check = (volume: Volume, start: boolean) => run(() => api.post(`/storage/volumes/${volume.name}/check`, { action: start ? 'start' : 'stop' }));
-	const saveDiskSleep = () => run(async () => {
-		if (sleepChoice === null) return;
-		const updated = await api.put<DiskSleepStatus>('/storage/disk-sleep', { idleMinutes: sleepChoice });
-		if (storage.status) storage.status.diskSleep = updated;
-		sleepChoice = null;
-	});
+	const rescan = () =>
+		run(async () => (storage.status = await api.post<StorageStatus>('/storage/rescan')));
+	const check = (volume: Volume, start: boolean) =>
+		run(() =>
+			api.post(`/storage/volumes/${volume.name}/check`, { action: start ? 'start' : 'stop' }),
+		);
+	const saveDiskSleep = () =>
+		run(async () => {
+			if (sleepChoice === null) return;
+			const updated = await api.put<DiskSleepStatus>('/storage/disk-sleep', {
+				idleMinutes: sleepChoice,
+			});
+			if (storage.status) storage.status.diskSleep = updated;
+			sleepChoice = null;
+		});
 
 	function removeDisk() {
 		if (dialog?.kind !== 'remove') return;
@@ -82,269 +202,500 @@
 
 <PageHead title={t('storage.title')}>
 	{#if storage.status}<p class="muted">{summary}</p>{/if}
-	{#snippet actions()}
-		{#if canAdminister}
-			<a class="btn" href="/storage/import">{t('ops.import')}</a>
- <a class="btn" href="/tools/maintenance">{t('ops.maintenance')}</a>
- <button type="button" class="btn" onclick={rescan} disabled={busy}>{t('storage.rescan')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })}>{t('storage.newVolume')}</button>
-		{/if}
-	{/snippet}
+	{#snippet actions()}{#if canAdminister}
+			<Dropdown label={t('storage.options')} text={t('storage.options')} icon="more" align="right">
+				{#snippet children(close)}
+					<a role="menuitem" href="/storage/import">{t('ops.import')}</a>
+					<a role="menuitem" href="/tools/maintenance">{t('ops.maintenance')}</a>
+					<button
+						role="menuitem"
+						disabled={busy}
+						onclick={() => {
+							close();
+							rescan();
+						}}>{t('storage.rescan')}</button
+					>
+					<button
+						role="menuitem"
+						onclick={() => {
+							close();
+							sleepOpen = true;
+						}}>{t('storage.sleepTitle')}</button
+					>
+				{/snippet}
+			</Dropdown>
+			<button class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })}
+				>{t('storage.newVolume')}</button
+			>
+		{/if}{/snippet}
 </PageHead>
-
-{#if error}
-	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
-{/if}
-
-<section aria-labelledby="volumes-title">
-	<h2 class="tile-title" id="volumes-title">{t('storage.volumes')}</h2>
-	<div class="volumes">
-		{#each volumes as volume (volume.name)}
+{#if error}<div class="notice-error" role="alert">
+		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>{/if}
+<div class="storage-toolbar">
+	<div class="tabs" role="group" aria-label={t('storage.title')}>
+		<button
+			class:chosen={tab === 'volumes'}
+			aria-pressed={tab === 'volumes'}
+			onclick={() => switchTab('volumes')}
+			>{t('storage.tabVolumes')} <span>{volumes.length}</span></button
+		>
+		<button
+			class:chosen={tab === 'disks'}
+			aria-pressed={tab === 'disks'}
+			onclick={() => switchTab('disks')}>{t('storage.tabDisks')} <span>{disks.length}</span></button
+		>
+	</div>
+	<input
+		class="field search"
+		type="search"
+		aria-label={t('storage.search')}
+		placeholder={t('storage.search')}
+		bind:value={query}
+	/>
+	<select class="field" aria-label={t('disk.status')} bind:value={filter}>
+		<option value="all">{t('storage.all')}</option><option value="problems"
+			>{t('storage.problems')}</option
+		>
+		{#if tab === 'disks'}<option value="free">{t('storage.unassigned')}</option><option
+				value="assigned">{t('storage.assigned')}</option
+			><option value="hdd">HDD</option><option value="ssd">SSD</option><option value="nvme"
+				>NVMe</option
+			>{/if}
+	</select>
+	{#if tab === 'disks'}<select class="field" aria-label={t('disk.volume')} bind:value={volumeFilter}
+			><option value="">{t('storage.all')}</option>{#each volumes as v}<option value={v.name}
+					>{v.name}</option
+				>{/each}</select
+		>{/if}
+	<select class="field" aria-label={t('storage.sort')} bind:value={sort}
+		><option value="name">{t('disk.device')}</option><option value="size">{t('disk.size')}</option
+		>{#if tab === 'disks'}<option value="temperature">{t('disk.temp')}</option>{/if}</select
+	>
+</div>
+<div class="storage-layout" class:with-detail={tab === 'volumes' ? !!detail : !!diskDetail}>
+	<div class="tile table">
+		{#if tab === 'volumes'}
+			<table>
+				<thead
+					><tr
+						><th>{t('storage.volumes')}</th><th>{t('disk.status')}</th><th
+							>RAID / {t('storage.filesystem')}</th
+						><th>{t('storage.used')}</th><th class="num">{t('storage.disks')}</th></tr
+					></thead
+				><tbody>
+					{#each visibleVolumes as volume (volume.name)}
+						<tr class:selected={selected === volume.name}>
+							<td
+								><button
+									class="row-name mono"
+									onclick={() => (selected = selected === volume.name ? '' : volume.name)}
+									>{volume.name}</button
+								></td
+							>
+							<td
+								><span class="chip" class:warn={!['ok'].includes(volume.state)}
+									>{t(`state.${volume.state}`)}</span
+								>{#if volume.sync}<div class="sync-inline">
+										<progress max="100" value={volume.sync.percent}></progress><span class="mono"
+											>{formatPercent(volume.sync.percent)}</span
+										>
+									</div>{/if}</td
+							>
+							<td
+								><span>{t(`level.${volume.level}`)}</span><span class="sub"
+									>{t(`fs.${volume.filesystem}`)}</span
+								></td
+							>
+							<td
+								>{#if volume.mounted && volume.sizeBytes > 0}<span class="mono"
+										>{formatDiskBytes(volume.usedBytes)} / {formatDiskBytes(volume.sizeBytes)}</span
+									>
+									<div class="bar">
+										<span
+											style:width="{Math.min(100, (volume.usedBytes / volume.sizeBytes) * 100)}%"
+										></span>
+									</div>{:else}<span class="muted">{t('storage.notMounted')}</span>{/if}</td
+							>
+							<td class="num mono">{volume.members.length}</td>
+						</tr>
+					{:else}<tr
+							><td colspan="5"
+								><EmptyState
+									inline
+									title={t(volumes.length ? 'ui.noResults' : 'storage.noVolumes')}
+								/></td
+							></tr
+						>{/each}
+				</tbody>
+			</table>
+		{:else}
+			<table>
+				<thead
+					><tr
+						><th>{t('disk.device')}</th><th>{t('disk.status')}</th><th class="num"
+							>{t('disk.size')}</th
+						><th class="num">{t('disk.temp')}</th><th>{t('disk.smart')}</th><th
+							>{t('disk.volume')}</th
+						></tr
+					></thead
+				><tbody>
+					{#each visibleDisks as disk (disk.identity || disk.serial || disk.name)}{@const status =
+							diskStatus(disk)}
+						<tr class:selected={selectedDisk === (disk.identity || disk.serial || disk.name)}>
+							<td
+								><button
+									class="row-name mono"
+									onclick={() =>
+										(selectedDisk =
+											selectedDisk === (disk.identity || disk.serial || disk.name)
+												? ''
+												: disk.identity || disk.serial || disk.name)}>{disk.name}</button
+								><span class="sub">{disk.model || diskType(disk)}</span></td
+							>
+							<td
+								><span class="status"><span class="dot {status.dot}"></span>{status.text}</span></td
+							><td class="mono num">{formatDiskBytes(disk.sizeBytes)}</td><td class="mono num"
+								>{disk.smart?.temperatureC ? `${disk.smart.temperatureC} °C` : '–'}</td
+							><td class:bad={disk.smart?.healthy === false}>{smartText(disk)}</td><td class="mono"
+								>{disk.volume ||
+									(disk.role === 'free'
+										? t('storage.unassigned')
+										: disk.contents?.join(', ') || '–')}</td
+							>
+						</tr>
+					{:else}<tr
+							><td colspan="6"
+								><EmptyState
+									inline
+									title={t(disks.length ? 'ui.noResults' : 'storage.noDisks')}
+								/></td
+							></tr
+						>{/each}
+				</tbody>
+			</table>
+		{/if}
+	</div>
+	{#if tab === 'volumes' && detail}
+		<aside>
+			<div class="detail-heading">
+				<h2>{t('storage.details')}</h2>
+				<button class="btn" aria-label={t('common.close')} onclick={() => (selected = '')}
+					><Icon name="close" size={16} /></button
+				>
+			</div>
 			<VolumeCard
-				{volume}
+				volume={detail}
 				{canAdminister}
 				{busy}
-				oncheck={(start) => check(volume, start)}
-				onadd={() => (dialog = { kind: 'add', volume: volume.name })}
-				ondelete={() => (dialog = { kind: 'delete', volume: volume.name })}
-				onremove={(disk) => (dialog = { kind: 'remove', volume: volume.name, disk })}
+				oncheck={(start) => check(detail, start)}
+				onadd={() => (dialog = { kind: 'add', volume: detail.name })}
+				ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
+				onremove={(disk) => (dialog = { kind: 'remove', volume: detail.name, disk })}
 			/>
-		{:else}
-			{#if storage.status}
-				<EmptyState title={t('storage.noVolumes')} text={t('storage.noVolumesHint')} />
-			{/if}
-		{/each}
-	</div>
-</section>
-
-{#if canAdminister}
-	<section class="tile disk-sleep" aria-labelledby="disk-sleep-title">
-		<div class="sleep-copy">
-			<h2 class="tile-title" id="disk-sleep-title">{t('storage.sleepTitle')}</h2>
-			<p class="muted">{t('storage.sleepHint')}</p>
-		</div>
-		<div class="sleep-controls">
-			<label for="disk-sleep-time">{t('storage.sleepAfter')}</label>
-			<select class="field" id="disk-sleep-time" value={sleepChoice ?? diskSleep?.idleMinutes ?? 0} onchange={(event) => (sleepChoice = Number(event.currentTarget.value))} disabled={busy || !diskSleep?.available}>
-				{#each idleMinutes as minutes}
-					<option value={minutes}>{minutes === 0 ? t('storage.sleepOff') : minutes < 60 ? t('storage.sleepMinutes', { count: minutes }) : minutes === 60 ? t('storage.sleepHour') : t('storage.sleepHours', { count: minutes / 60 })}</option>
-				{/each}
-			</select>
-			<button type="button" class="btn btn-primary" onclick={saveDiskSleep} disabled={busy || !diskSleep?.available || sleepChoice === null || sleepChoice === diskSleep.idleMinutes}>{t('common.save')}</button>
-		</div>
-		<p class="muted sleep-detail">{t('storage.sleepDetails')}</p>
-		{#if diskSleep && !diskSleep.available}<p class="notice-error" role="alert">{t('storage.sleepUnavailable')}</p>{/if}
-		{#if diskSleep?.errors.length}
-			<div class="notice-error" role="alert">
-				<p>{t('storage.sleepFailed')}</p>
-				{#each diskSleep.errors as problem}<p><strong class="mono">{problem.disk}</strong>: {problem.message}</p>{/each}
+		</aside>
+	{:else if tab === 'disks' && diskDetail}
+		<aside class="tile disk-details" use:revealTarget id="disk-{diskDetail.name}">
+			<div class="detail-heading">
+				<h2 class="mono">{diskDetail.name}</h2>
+				<button class="btn" aria-label={t('common.close')} onclick={() => (selectedDisk = '')}
+					><Icon name="close" size={16} /></button
+				>
 			</div>
-		{/if}
-	</section>
-{/if}
-
-<section aria-labelledby="disks-title">
-	<h2 class="tile-title" id="disks-title">{t('storage.disks')}</h2>
-	<div class="tile table">
-		<table>
-			<thead>
-				<tr>
-					<th scope="col">{t('disk.status')}</th>
-					<th scope="col">{t('disk.device')}</th>
-					<th scope="col">{t('disk.type')}</th>
-					<th scope="col" class="num">{t('disk.size')}</th>
-					<th scope="col" class="num">{t('disk.temp')}</th>
-					<th scope="col">{t('disk.volume')}</th>
-					<th scope="col">{t('disk.smart')}</th>
-					<th scope="col" class="num">{t('disk.errors')}</th>
-					<th scope="col" class="num">{t('disk.hours')}</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each disks as disk (disk.name)}
-					{@const status = diskStatus(disk)}
-					<tr use:revealTarget id="disk-{disk.name}" class:building={disk.memberState === 'rebuilding'} class:faulty={disk.memberState === 'faulty'}>
-						<td><span class="status"><span class="dot {status.dot}" aria-hidden="true"></span><span class="status-text">{status.text}</span></span></td>
-						<td>
-							<span class="mono device">{disk.name}</span>
-							<span class="sub">{[disk.model, disk.serial].filter(Boolean).join(' · ')}</span>
-						</td>
-						<td class="muted">{diskType(disk)}</td>
-						<td class="mono num">{formatDiskBytes(disk.sizeBytes)}</td>
-						<td class="mono num">{disk.smart && disk.smart.temperatureC > 0 ? `${disk.smart.temperatureC} °C` : '–'}</td>
-						<td>
-							{#if disk.volume}<span class="mono">{disk.volume}</span>
-							{:else if disk.role === 'used' && disk.contents?.length}<span class="muted">{t('disk.contents', { contents: disk.contents.join(', ') })}</span>
-							{:else if disk.role === 'stick'}<span class="muted">–</span>
-							{:else}<span class="muted">{t('disk.unassigned')}</span>{/if}
-						</td>
-						<td class:bad={disk.smart && !disk.smart.healthy}>{smartText(disk)}</td>
-						<td class="mono num">{disk.smart ? disk.smart.errors : '–'}</td>
-						<td class="mono num">{disk.smart ? hours.format(disk.smart.powerOnHours) : '–'}</td>
-					</tr>
-				{:else}
-					{#if storage.status}<tr><td colspan="9" class="muted">{t('storage.noDisks')}</td></tr>{/if}
-				{/each}
-			</tbody>
-		</table>
-	</div>
-</section>
-
-{#if free.length > 0}
-	<section class="tile free" aria-labelledby="free-title">
-		<div class="free-text">
-			<h2 id="free-title">
-				{free.length === 1 ? t('storage.freeOne', { disk: free[0].name, size: formatDiskBytes(free[0].sizeBytes) }) : t('storage.freeMany', { count: free.length })}
-			</h2>
-			<p class="muted">{t('storage.freeHint')}</p>
+			<dl>
+				<div>
+					<dt>{t('disk.device')}</dt>
+					<dd>{diskDetail.model}</dd>
+				</div>
+				<div>
+					<dt>{t('disk.serial')}</dt>
+					<dd class="mono">{diskDetail.serial || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('disk.type')}</dt>
+					<dd>{diskType(diskDetail)}</dd>
+				</div>
+				<div>
+					<dt>{t('disk.hours')}</dt>
+					<dd>{diskDetail.smart ? hours.format(diskDetail.smart.powerOnHours) : '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('disk.errors')}</dt>
+					<dd>{diskDetail.smart?.errors ?? '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('disk.wear')}</dt>
+					<dd>
+						{diskDetail.smart && diskDetail.smart.wearPercent >= 0
+							? `${diskDetail.smart.wearPercent} %`
+							: '–'}
+					</dd>
+				</div>
+			</dl>
+		</aside>
+	{/if}
+</div>
+{#if sleepOpen}<Dialog title={t('storage.sleepTitle')} onclose={() => (sleepOpen = false)}>
+		<section class="tile disk-sleep" aria-labelledby="disk-sleep-title">
+			<div class="sleep-copy">
+				<h2 class="tile-title" id="disk-sleep-title">{t('storage.sleepTitle')}</h2>
+				<p class="muted">{t('storage.sleepHint')}</p>
+			</div>
+			<div class="sleep-controls">
+				<label for="disk-sleep-time">{t('storage.sleepAfter')}</label>
+				<select
+					class="field"
+					id="disk-sleep-time"
+					value={sleepChoice ?? diskSleep?.idleMinutes ?? 0}
+					onchange={(event) => (sleepChoice = Number(event.currentTarget.value))}
+					disabled={busy || !diskSleep?.available}
+				>
+					{#each idleMinutes as minutes}
+						<option value={minutes}
+							>{minutes === 0
+								? t('storage.sleepOff')
+								: minutes < 60
+									? t('storage.sleepMinutes', { count: minutes })
+									: minutes === 60
+										? t('storage.sleepHour')
+										: t('storage.sleepHours', { count: minutes / 60 })}</option
+						>
+					{/each}
+				</select>
+				<button
+					type="button"
+					class="btn btn-primary"
+					onclick={saveDiskSleep}
+					disabled={busy ||
+						!diskSleep?.available ||
+						sleepChoice === null ||
+						sleepChoice === diskSleep.idleMinutes}>{t('common.save')}</button
+				>
+			</div>
+			<p class="muted sleep-detail">{t('storage.sleepDetails')}</p>
+			{#if diskSleep && !diskSleep.available}<p class="notice-error" role="alert">
+					{t('storage.sleepUnavailable')}
+				</p>{/if}
+			{#if diskSleep?.errors.length}
+				<div class="notice-error" role="alert">
+					<p>{t('storage.sleepFailed')}</p>
+					{#each diskSleep.errors as problem}<p>
+							<strong class="mono">{problem.disk}</strong>: {problem.message}
+						</p>{/each}
+				</div>
+			{/if}
+		</section>
+		<div class="dialog-actions">
+			<button class="btn" onclick={() => (sleepOpen = false)}>{t('common.close')}</button>
 		</div>
-		{#if canAdminister}
-			<button type="button" class="btn btn-primary" onclick={() => (dialog = { kind: 'create' })}>{t('storage.createVolume')}</button>
-		{/if}
-	</section>
-{/if}
+	</Dialog>{/if}
 
 {#if dialog?.kind === 'create'}
-	<CreateVolumeDialog {disks} taken={volumes.map((volume) => volume.name)} onclose={() => (dialog = null)} ondone={done} />
+	<CreateVolumeDialog
+		{disks}
+		taken={volumes.map((volume) => volume.name)}
+		onclose={() => (dialog = null)}
+		ondone={done}
+	/>
 {:else if dialog?.kind === 'add' && dialogVolume}
 	<AddDiskDialog volume={dialogVolume} {disks} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'delete' && dialogVolume}
 	<DeleteVolumeDialog volume={dialogVolume} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'remove'}
 	<Dialog title={t('storage.removeDisk', { disk: dialog.disk })} onclose={() => (dialog = null)}>
-		<p class="remove-text">{t('storage.removeDiskConfirm', { disk: dialog.disk, volume: dialog.volume })}</p>
+		<p class="remove-text">
+			{t('storage.removeDiskConfirm', { disk: dialog.disk, volume: dialog.volume })}
+		</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-warn" onclick={removeDisk}>{t('storage.remove')}</button>
 		</div>
 	</Dialog>
 {/if}
 
 <style>
-	.head {
+	.storage-toolbar,
+	.tabs,
+	.sync-inline,
+	.detail-heading {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
-	}
-	.buttons {
-		display: flex;
-		flex-wrap: wrap;
+		align-items: center;
 		gap: 10px;
+		flex-wrap: wrap;
 	}
-	section {
-		display: flex;
-		flex-direction: column;
+	.storage-toolbar {
 		gap: 12px;
 	}
-	.volumes {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--gap);
+	.tabs {
+		gap: 3px;
+		border-bottom: 1px solid var(--border);
+	}
+	.tabs button {
+		padding: 12px;
+		border: 0;
+		background: transparent;
+		color: var(--muted);
+		border-bottom: 2px solid transparent;
+		cursor: pointer;
+	}
+	.tabs .chosen {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+	.tabs span {
+		margin-left: 7px;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+	}
+	.search {
+		flex: 1;
+		min-width: 180px;
+	}
+	.storage-toolbar select {
+		width: auto;
+		max-width: 200px;
+	}
+	.storage-layout {
+		display: grid;
+		gap: 20px;
+		align-items: start;
+	}
+	.storage-layout.with-detail {
+		grid-template-columns: minmax(0, 1.4fr) minmax(310px, 1fr);
 	}
 	.table {
+		min-width: 0;
 		overflow-x: auto;
 	}
-	table {
+	.table table {
 		width: 100%;
-		min-width: 980px;
-		border-collapse: collapse;
-		font-size: 0.875rem;
-	}
-	th {
-		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
-		border-bottom: 1px solid var(--panel-border);
-		text-align: left;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--muted);
-		white-space: nowrap;
 	}
 	td {
-		padding: var(--row-pad) var(--tile-pad);
-		border-bottom: 1px solid var(--panel-border);
-		vertical-align: top;
+		padding: 14px 16px;
 	}
-	tbody tr:last-child td {
-		border-bottom: 0;
+	tr.selected {
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
 	}
-	.num {
-		text-align: right;
-	}
-	tr.building {
-		background: var(--warn-bg);
-	}
-	tr.building td:first-child {
-		color: var(--warn-text);
-	}
-	tr.faulty {
-		background: var(--error-bg);
-	}
-	tr.faulty td:first-child,
-	.bad {
-		color: var(--error-text);
-	}
-	.status {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		white-space: nowrap;
-	}
-	.status-text {
-		display: inline-block;
-	}
-	.status-text::first-letter {
-		text-transform: uppercase;
-	}
-	.device {
-		display: block;
+	.row-name {
+		border: 0;
+		background: transparent;
+		padding: 0;
+		cursor: pointer;
+		color: var(--text);
 		font-weight: 500;
+		text-align: left;
+	}
+	.row-name:hover {
+		color: var(--accent);
 	}
 	.sub {
 		display: block;
 		font-size: 0.75rem;
 		color: var(--muted);
+		margin-top: 4px;
 	}
-	.free {
-		flex-direction: row;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 16px;
-		padding: var(--tile-pad);
-		border-style: dashed;
+	.num {
+		text-align: right;
+		white-space: nowrap;
 	}
-	.disk-sleep { padding: var(--tile-pad); }
-	.sleep-copy { display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
-	.sleep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 0.875rem; }
-	.sleep-controls select { width: auto; min-width: 150px; }
-	.sleep-detail { font-size: 0.8125rem; }
-	.free-text {
-		flex: 1 1 360px;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.875rem;
+	.bar {
+		height: 5px;
+		margin-top: 7px;
+		min-width: 100px;
 	}
-	.free h2 {
-		font-size: 0.9375rem;
-		font-weight: 600;
-	}
-	.remove-text {
-		font-size: 0.875rem;
-	}
-	pre {
-		margin: 8px 0 0;
-		font-family: var(--font-mono);
+	.sync-inline {
 		font-size: 0.75rem;
-		white-space: pre-wrap;
-		word-break: break-word;
+		margin-top: 7px;
+		gap: 6px;
+	}
+	.sync-inline progress {
+		width: 70px;
+		height: 6px;
+		accent-color: var(--accent);
+	}
+	aside {
+		min-width: 0;
+	}
+	.detail-heading {
+		justify-content: space-between;
+		margin-bottom: 12px;
+	}
+	.detail-heading h2 {
+		font-size: 1rem;
+	}
+	.detail-heading .btn {
+		padding: 6px;
+		min-height: 30px;
+	}
+	.disk-details {
+		padding: 20px;
+	}
+	.disk-details dl {
+		display: grid;
+		gap: 16px;
+		margin: 0;
+	}
+	.disk-details dl > div {
+		display: grid;
+		gap: 4px;
+	}
+	.disk-details dt {
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+	.disk-details dd {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.disk-sleep {
+		padding: 0;
+		border: 0;
+		background: transparent;
+		display: grid;
+		gap: 16px;
+	}
+	.sleep-controls {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	.sleep-controls select {
+		width: auto;
+	}
+	.sleep-copy h2 {
+		display: none;
+	}
+	.sleep-copy p,
+	.sleep-detail {
+		font-size: 0.875rem;
+	}
+	.status {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+	.bad {
+		color: var(--error-text);
+	}
+	@media (max-width: 1100px) {
+		.storage-layout.with-detail {
+			grid-template-columns: 1fr;
+		}
+	}
+	@media (max-width: 760px) {
+		.storage-toolbar {
+			align-items: stretch;
+		}
+		.search {
+			flex-basis: 100%;
+		}
+		td {
+			padding: 12px;
+		}
+		.tabs {
+			width: 100%;
+		}
 	}
 </style>
