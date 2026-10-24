@@ -367,9 +367,9 @@ func (s *Server) scanAutomations(ctx context.Context, u auth.User, now time.Time
 				if e != nil {
 					continue
 				}
-				c, e := s.chats.Get(u.Name, run.Chat)
+				_, e = s.chats.Get(u.Name, run.Chat)
 				if errors.Is(e, assistant.ErrChatNotFound) {
-					c = &assistant.Chat{ID: run.Chat, Title: run.Name, Model: s.opts.Assistant.Settings().PlanningModel, Created: now, Updated: now, Automation: a.ID, Execution: run.Execution, Notify: run.Notify, Run: &assistant.Run{State: "queued", Started: now}, Messages: []assistant.Entry{{Role: "user", Content: run.Instruction, Time: now}}}
+					c := &assistant.Chat{ID: run.Chat, Title: run.Name, Model: s.opts.Assistant.Settings().PlanningModel, Created: now, Updated: now, Automation: a.ID, Execution: run.Execution, Notify: run.Notify, Run: &assistant.Run{State: "queued", Started: now}, Messages: []assistant.Entry{{Role: "user", Content: run.Instruction, Time: now}}}
 					e = s.chats.Save(u.Name, c)
 				}
 				release()

@@ -128,7 +128,11 @@ Abschlussmeldungen verlinken den Zielordner; Fehler behalten den betroffenen
 Pfad. Die Auswahl zeigt ihre Dateigröße, ausgewählte Ordner werden nur auf
 Knopfdruck berechnet. Punktdateien lassen sich über eine im Konto gespeicherte
 Option anzeigen. Vor Kopierkonflikten zeigt der Dialog Quelle und Ziel mit
-Größe und Änderungszeit; Ersetzen benötigt eine zusätzliche Bestätigung.
+Größe und Änderungszeit; Ersetzen benötigt eine zusätzliche Bestätigung. Bei
+Auswahl von Ersetzen oder Einzelentscheidungen startet die begrenzte Zielprüfung
+automatisch, ohne vorgeschalteten Kopierklick. Zielwechsel verwerfen Vorschau
+und Bestätigung, verspätete Antworten werden verworfen. Fehler bieten erneutes
+Prüfen; bei gekürztem Vergleich bleibt Ersetzen gesperrt.
 USB-Backup-Laufwerke sind in der Dateiseite zunächst gegen Änderungen
 geschützt. Ein Dialog schaltet Änderungen für den aktuellen Speicherort frei;
 Speicherortwechsel und Verlassen der Seite beenden diese Freischaltung.

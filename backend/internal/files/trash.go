@@ -108,8 +108,7 @@ func (m *Manager) TrashRestore(root Root, paths []string, user string, uid int, 
 		if err != nil {
 			return err
 		}
-		_, rel, _ := strings.Cut(p, "/")
-		rel = trashDetails(r, p, time.Time{}).Original
+		rel := trashDetails(r, p, time.Time{}).Original
 		target, err := clean(rel)
 		if err != nil || target == "." {
 			return ErrInvalid
@@ -252,13 +251,12 @@ func (m *Manager) TrashFlat(ctx context.Context, root Root, user string, admin b
 			return nil
 		}
 		relative := strings.TrimPrefix(p, RecycleDir+"/")
-		_, original, _ := strings.Cut(relative, "/")
 		info, e := d.Info()
 		if e != nil {
 			return e
 		}
 		metadata := trashDetails(r, relative, info.ModTime())
-		original = metadata.Original
+		original := metadata.Original
 		var allocated *int64
 		if st, ok := info.Sys().(*syscall.Stat_t); ok {
 			key := [2]uint64{uint64(st.Dev), st.Ino}

@@ -25,7 +25,7 @@ export async function refreshSystem() {
         if (now - lastSample >= INTERVAL_MS * .8) {
             const { cpu, memory } = system.info;
             systemHistory.cpu = [...systemHistory.cpu.slice(-89), cpu.usagePercent];
-            systemHistory.memory = [...systemHistory.memory.slice(-89), memory.totalBytes > 0 ? memory.usedBytes / memory.totalBytes * 100 : 0];
+            systemHistory.memory = [...systemHistory.memory.slice(-89), memory.totalBytes > 0 ? memory.availableBytes / memory.totalBytes * 100 : 0];
             lastSample = now;
         }
 	} catch (err) {

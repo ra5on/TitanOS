@@ -602,7 +602,7 @@ func run(opts options) error {
 		slog.Warn("power schedule unavailable", "err", err)
 	}
 	monitor := system.NewMonitor(ctx)
-	memoryPolicy := system.NewMemoryPolicy(store, system.ReadMemory)
+	memoryPolicy := system.NewMemoryPolicy(store, monitor.Memory)
 	memoryPolicy.Disabled = opts.dev
 	if err := memoryPolicy.Load(); err != nil {
 		slog.Warn("memory budget unavailable", "err", err)

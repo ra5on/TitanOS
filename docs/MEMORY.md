@@ -7,11 +7,33 @@ Cacheanzeige verwendet `Cached - Shmem + Buffers + SReclaimable`, begrenzt auf d
 belegten RAM; sie ist keine Garantie, dass jeder einzelne Cache-Byte sofort
 freigegeben werden kann.
 
+Die RAM-Kachel stellt **verfügbaren RAM** einschließlich seines Prozentwerts in
+den Vordergrund. Der Verlauf zeigt ebenfalls verfügbaren RAM. Eine zweite
+Belegungsleiste unterscheidet übrige Belegung und Dateicache; der Rest ist
+physisch frei. „Übrige Belegung“ umfasst unter anderem Anwendungen, Kernel und
+tmpfs, nicht nur Anwendungsdaten. `MemAvailable` überlappt diese Anteile und
+wird nie zur Gesamtbelegung addiert. Das komprimierte Systemabbild und das
+512-MiB-Overlay sind bereits enthalten und kein frei verwerfbarer Lesecache.
+
+Der gemeinsame Systemmonitor liest alle zwei Sekunden RAM und optional
+`/proc/pressure/memory`. PSI `someAvg10`/`fullAvg10` sind die prozentualen
+Wartezeiten mindestens einer bzw. aller aktiven Aufgaben in den letzten zehn
+Sekunden. Fehlende, unvollständige oder ungültige Werte bleiben unbekannt.
+Hoher Cache allein erzeugt keine Warnung. Erst mindestens 30 Sekunden mit
+`MemAvailable <= Reserve` aktivieren `lowAvailable`; zum Aufheben sind 60
+Sekunden oberhalb der Reserve nötig. Beobachtungslücken zählen nicht als
+anhaltender Speichermangel oder Erholung. Dieser Zustand liegt nur im RAM und
+ändert keine Container-/VM-Zuordnung. Die API-Felder sind optional ergänzt;
+bestehende Bytewerte und `cachePercent` behalten ihre Bedeutung.
+
 Die persistente Wahl liegt in `/config/system/memory.json` (`cachePercent`, 10–90
 in Zehnerschritten, Standard 20). Die laufende Regelung liest diese Datei nicht
 zyklisch. Reserve: 10 % des Gesamt-RAM, mindestens 256 MiB und höchstens 2 GiB,
 auf sehr kleinen Systemen höchstens ein Viertel des Gesamt-RAM. Das Zielbudget
 beträgt den gewählten Anteil von `max(0, MemAvailable - Reserve)`.
+Die Oberfläche bezeichnet diesen Anteil ausdrücklich als **Schreibpufferbudget
+für Dateiübertragungen**. Er ist keine Obergrenze für den gesamten Dateicache,
+für Container oder für VM-RAM. Linux verwaltet den Lesecache weiter selbst.
 
 Alle fünf Sekunden setzt TitanOS `vm.dirty_bytes` auf das Budget und
 `vm.dirty_background_bytes` auf die Hälfte. Bei erschöpfter Reserve bleibt eine

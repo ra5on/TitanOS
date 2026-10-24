@@ -123,12 +123,3 @@ func Parse(markdown string) []Block {
 	flush()
 	return blocks
 }
-
-// Plain is the text of spans without their look.
-func Plain(spans []Span) string {
-	var b strings.Builder
-	for _, s := range spans {
-		b.WriteString(s.Text)
-	}
-	return b.String()
-}
