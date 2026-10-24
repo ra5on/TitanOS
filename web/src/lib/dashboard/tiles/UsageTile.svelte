@@ -61,10 +61,53 @@
 						>{t('system.memoryCache', { value: formatBytes(info.memory.cacheBytes ?? 0) })}</span
 					>{/if}
 			</div>{/if}
+		{#if part === 'details' && kind === 'cpu' && options.details && info.cpu.threadUsage?.length}<div
+				class="core-grid"
+			>
+				{#each info.cpu.threadUsage as core (core.id)}<div class="core">
+						<span>{core.id.toUpperCase()}</span>
+						<div class="track"><span style:width="{core.usagePercent ?? 0}%"></span></div>
+						<span class="mono"
+							>{core.usagePercent === null ? '–' : Math.round(core.usagePercent) + '%'}</span
+						>
+					</div>{/each}
+			</div>{/if}
 	{/each}
 {/if}
 
 <style>
+	.core-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 6px 20px;
+	}
+	.core {
+		display: grid;
+		grid-template-columns: 50px minmax(0, 1fr) 38px;
+		align-items: center;
+		gap: 7px;
+		font-size: var(--tile-label-size, 12px);
+		min-width: 0;
+	}
+	.core .mono {
+		text-align: right;
+		white-space: nowrap;
+	}
+	.track {
+		height: 6px;
+		background: var(--track);
+	}
+	.track span {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+	}
+	@media (max-width: 450px) {
+		.core-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
 	.detail {
 		display: flex;
 		justify-content: space-between;

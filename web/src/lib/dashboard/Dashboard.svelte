@@ -1,6 +1,4 @@
 <script lang="ts">
-	import 'gridstack/dist/gridstack.min.css';
-	import { GridStack } from 'gridstack';
 	import { tick, untrack, type Component } from 'svelte';
 	import {
 		api,
@@ -25,13 +23,8 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import {
-		COLUMNS,
-		GAP,
-		ROW_HEIGHT,
 		TILE_IDS,
 		TILES,
-		defaultLayout,
-		defaultWithHardware,
 		defaultPlacement,
 		sanitizeLayout,
 		tileSpec,
@@ -49,6 +42,7 @@
 		STYLE_KEYS,
 		type TileOptions,
 	} from './options.ts';
+	import { flowLayout, columnCount, columnWidth, visibleColumns, legacyPositions } from './flow.ts';
 	import TileEditor, { type EditPart } from './TileEditor.svelte';
 	import UsageTile from './tiles/UsageTile.svelte';
 	import AcceleratorTile from './tiles/AcceleratorTile.svelte';
@@ -74,14 +68,26 @@
 			),
 		),
 	];
-	function defaults() {
-		return defaultWithHardware(hardwareKinds()).filter(
-			(p) => admin || !['docker', 'vms'].includes(sourceId(p.id)),
-		);
+	function defaults(): TilePlacement[] {
+		const order: StaticTileId[] = [
+			'system',
+			'docker',
+			'cpu',
+			'vms',
+			'memory',
+			'volumes',
+			...(hardwareKinds().length ? ['accelerators' as StaticTileId] : []),
+			'shares',
+			'network',
+			'temperatures',
+		];
+		return order
+			.map((id) => ({ id, w: 6, h: 2, span: 1, autoHeight: true }))
+			.filter((p) => admin || !['docker', 'vms'].includes(sourceId(p.id)));
 	}
 	function initialLayout() {
 		if (!session.dashboard?.tiles) return defaults();
-		const layout = sanitizeLayout(session.dashboard);
+		const layout = flowLayout(session.dashboard);
 		if (Number(session.dashboard?.version ?? 0) < 3 && layout.some((t) => t.id === 'system'))
 			return [
 				...layout,
@@ -113,7 +119,29 @@
 		redo = $state<string[]>([]),
 		transferOpen = $state(false),
 		transferTargets = $state<TileId[]>([]);
-	let grid: GridStack | undefined;
+	let columns = $state(columnCount(session.dashboard?.columns)),
+		savedColumns = $state(columnCount(session.dashboard?.columns));
+	let minimumWidth = $state(columnWidth(session.dashboard?.minimumWidth)),
+		savedMinimumWidth = $state(columnWidth(session.dashboard?.minimumWidth));
+	let availableWidth = $state(1200);
+	const actualColumns = $derived(visibleColumns(availableWidth, columns, minimumWidth));
+	let moving = $state<TileId | null>(null);
+	function attachGrid(element: HTMLElement) {
+		let frame = 0;
+		const observer = new ResizeObserver((entries) => {
+			const width = Math.floor(entries[0].contentRect.width);
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => {
+				if (availableWidth !== width) availableWidth = width;
+			});
+		});
+		observer.observe(element);
+		return () => {
+			observer.disconnect();
+			cancelAnimationFrame(frame);
+		};
+	}
+	let refreshSerial = $state(0);
 	let containers = $state<DockerContainer[]>([]),
 		vms = $state<VM[]>([]),
 		shares = $state<Share[]>([]),
@@ -135,7 +163,9 @@
 	const dirty = $derived(
 		editing &&
 			(JSON.stringify(shown) !== JSON.stringify(saved) ||
-				JSON.stringify(options) !== JSON.stringify(savedOptions)),
+				JSON.stringify(options) !== JSON.stringify(savedOptions) ||
+				columns !== savedColumns ||
+				minimumWidth !== savedMinimumWidth),
 	);
 	const subtitle = $derived(
 		system.info
@@ -148,6 +178,7 @@
 	);
 	$effect(() => {
 		if (!watched) return;
+		void refreshSerial;
 		let disposed = false,
 			inflight = false;
 		async function refresh() {
@@ -238,12 +269,16 @@
 		return t(tileSpec(id).title);
 	}
 	function readGrid(): TilePlacement[] {
-		if (!grid) return shown;
-		return sanitizeLayout({ tiles: grid.save(false, false, undefined, COLUMNS) });
+		return shown;
 	}
 
 	function snapshot() {
-		return JSON.stringify({ tiles: readGrid(), options: $state.snapshot(options) });
+		return JSON.stringify({
+			tiles: readGrid(),
+			options: $state.snapshot(options),
+			columns,
+			minimumWidth,
+		});
 	}
 	function checkpoint() {
 		if (!editing) return;
@@ -258,6 +293,8 @@
 	}
 	function restore(value: string) {
 		const state = JSON.parse(value);
+		columns = columnCount(state.columns);
+		minimumWidth = columnWidth(state.minimumWidth);
 		options = Object.fromEntries(
 			sanitizeLayout(state).map((p) => [p.id, tileOptions(state.options, p.id)]),
 		);
@@ -278,41 +315,17 @@
 		}
 		restore(value);
 	}
-	function attachGrid(element: HTMLElement) {
-		const instance = untrack(() =>
-			GridStack.init(
-				{
-					column: COLUMNS,
-					cellHeight: ROW_HEIGHT + GAP,
-					margin: GAP / 2,
-					animate: false,
-					sizeToContent: false,
-					staticGrid: !editing,
-					handle: '.grip',
-					resizable: { handles: 'se' },
-					alwaysShowResizeHandle: true,
-					columnOpts: { breakpoints: [{ w: 760, c: 1 }] },
-				},
-				element,
-			)!,
-		);
-		grid = instance;
-		instance.on('dragstart resizestart', checkpoint);
-		instance.on('change', () => (shown = readGrid()));
-		return () => {
-			instance.destroy(false);
-			if (grid === instance) grid = undefined;
-		};
-	}
+
 	function startEditing() {
 		error = '';
 		undo = [];
 		redo = [];
 		shown = readGrid();
 		editing = true;
-		grid?.setStatic(false);
 	}
 	function cancel() {
+		columns = savedColumns;
+		minimumWidth = savedMinimumWidth;
 		editing = false;
 		customize = null;
 		options = structuredClone($state.snapshot(savedOptions));
@@ -321,11 +334,13 @@
 	async function finish() {
 		saving = true;
 		error = '';
-		const layout = readGrid();
+		const layout = legacyPositions(readGrid(), columns);
 		const allOptions = Object.fromEntries(layout.map((p) => [p.id, tileOptions(options, p.id)]));
 		const preferences = {
 			...session.dashboard,
-			version: 4,
+			version: 5,
+			columns,
+			minimumWidth,
 			tiles: layout,
 			tileOptions: allOptions,
 		};
@@ -333,6 +348,8 @@
 			await api.put('/preferences/dashboard', preferences);
 			session.dashboard = preferences;
 			saved = structuredClone(layout);
+			savedColumns = columns;
+			savedMinimumWidth = minimumWidth;
 			savedOptions = structuredClone(allOptions);
 			options = allOptions;
 			editing = false;
@@ -360,7 +377,11 @@
 		if (!customize) return;
 		checkpoint();
 		rebuild(
-			sanitizeLayout({ tiles: readGrid().map((p) => (p.id === customize ? { ...p, w, h } : p)) }),
+			sanitizeLayout({
+				tiles: readGrid().map((p) =>
+					p.id === customize ? { ...p, span: Math.max(1, Math.min(4, w)), h } : p,
+				),
+			}),
 		);
 	}
 	function duplicate() {
@@ -380,7 +401,7 @@
 		if (shown.length >= 100) return;
 		checkpoint();
 		options = { ...options, [id]: tileOptions(options, id) };
-		rebuild([...readGrid(), defaultPlacement(id)]);
+		rebuild([...readGrid(), { ...defaultPlacement(id), span: 1, autoHeight: true }]);
 		selection = '';
 		customize = id;
 		part = 'tile';
@@ -402,32 +423,88 @@
 		options = next;
 		transferOpen = false;
 	}
+	function moveTile(id: TileId, to: number) {
+		const layout = [...shown],
+			from = layout.findIndex((p) => p.id === id);
+		if (from < 0 || to < 0 || to >= layout.length || from === to) return;
+		checkpoint();
+		const [item] = layout.splice(from, 1);
+		layout.splice(to, 0, item);
+		rebuild(layout);
+	}
 	async function keyboardMove(e: KeyboardEvent, id: TileId) {
 		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
 		e.preventDefault();
-		checkpoint();
-		const current = readGrid();
-		rebuild(
-			sanitizeLayout({
-				tiles: current.map((p) => {
-					if (p.id !== id) return p;
-					const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0,
-						dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
-					return e.shiftKey
-						? { ...p, w: p.w + dx, h: p.h + dy }
-						: {
-								...p,
-								x: Math.max(0, Math.min(12 - p.w, (p.x ?? 0) + dx)),
-								y: Math.max(0, (p.y ?? 0) + dy),
-							};
-				}),
-			}),
-		);
+		const direction = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+		if (e.shiftKey) {
+			customize = id;
+			const p = shown.find((p) => p.id === id)!;
+			size(
+				(p.span ?? 1) + (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ? direction : 0),
+				Math.max(2, p.h + (e.key === 'ArrowUp' || e.key === 'ArrowDown' ? direction : 0)),
+			);
+		} else moveTile(id, shown.findIndex((p) => p.id === id) + direction);
 		await tick();
 		document
 			.querySelector<HTMLButtonElement>(`.grid-stack-item[gs-id="${CSS.escape(id)}"] .grip`)
 			?.focus({ preventScroll: true });
 	}
+	function pointerMove(event: PointerEvent, id: TileId, resize = false) {
+		if (!editing || event.button !== 0) return;
+		const handle = event.currentTarget as HTMLElement;
+		handle.setPointerCapture(event.pointerId);
+		const x = event.clientX,
+			y = event.clientY,
+			current = shown.find((p) => p.id === id)!;
+		let target = id;
+		moving = id;
+		const move = (e: PointerEvent) => {
+			if (resize) return;
+			const hit = document
+				.elementsFromPoint(e.clientX, e.clientY)
+				.map((el) => el.closest<HTMLElement>('[gs-id]'))
+				.find(Boolean);
+			if (hit) target = hit.getAttribute('gs-id') as TileId;
+		};
+		const end = (e: PointerEvent) => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', end);
+			handle.removeEventListener('pointercancel', cancelMove);
+			moving = null;
+			if (resize) {
+				checkpoint();
+				const span = Math.max(
+					1,
+					Math.min(
+						4,
+						(current.span ?? 1) + Math.round((e.clientX - x) / (availableWidth / actualColumns)),
+					),
+				);
+				const h = Math.max(2, Math.min(40, current.h + Math.round((e.clientY - y) / 40)));
+				rebuild(
+					shown.map((p) =>
+						p.id === id
+							? { ...p, span, h, autoHeight: e.clientY - y > 20 ? false : p.autoHeight }
+							: p,
+					),
+				);
+			} else if (Math.abs(e.clientX - x) + Math.abs(e.clientY - y) > 5)
+				moveTile(
+					id,
+					shown.findIndex((p) => p.id === target),
+				);
+		};
+		const cancelMove = () => {
+			moving = null;
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', end);
+			handle.removeEventListener('pointercancel', cancelMove);
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', end);
+		handle.addEventListener('pointercancel', cancelMove);
+	}
+
 	function keys(e: KeyboardEvent) {
 		if (
 			!editing ||
@@ -441,13 +518,16 @@
 	}
 	function interceptLinks(element: HTMLElement, id: TileId) {
 		const click = (event: MouseEvent) => {
-			if (!editing || !(event.target instanceof Element) || !event.target.closest('a')) return;
+			if (!editing || !(event.target instanceof Element) || !event.target.closest('a,button'))
+				return;
+			if (event.target.closest('.tile-head,.resize-handle')) return;
+			event.stopImmediatePropagation();
 			event.preventDefault();
 			const selected = event.target.closest<HTMLElement>('[data-edit-part]');
 			configure(id, (selected?.dataset.editPart as EditPart) || 'labels');
 		};
-		element.addEventListener('click', click);
-		return () => element.removeEventListener('click', click);
+		element.addEventListener('click', click, true);
+		return () => element.removeEventListener('click', click, true);
 	}
 
 	function selectPart(e: PointerEvent, id: TileId) {
@@ -480,207 +560,283 @@
 
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
-<PageHead title={t('dashboard.title')}>
-	{#if subtitle}<p class="muted">{subtitle}</p>{/if}
-	{#snippet actions()}{#if editing}<button
+<div class="dashboard-page">
+	<PageHead title={t('dashboard.title')}>
+		{#if subtitle}<p class="muted">{subtitle}</p>{/if}
+		{#snippet actions()}{#if editing}<button
+					class="btn"
+					disabled={!undo.length || saving}
+					aria-label={t('dashboard.editor.undo')}
+					onclick={() => step('undo')}><Icon name="restart" size={15} /></button
+				><button
+					class="btn"
+					disabled={!redo.length || saving}
+					aria-label={t('dashboard.editor.redo')}
+					onclick={() => step('redo')}><Icon name="restart" size={15} /></button
+				><button class="btn" disabled={saving} onclick={cancel}>{t('common.cancel')}</button><button
+					class="btn btn-primary"
+					disabled={saving}
+					onclick={finish}>{t('dashboard.editor.save')}</button
+				>{:else}<button class="btn" onclick={startEditing}
+					><Icon name="edit" size={16} />{t('dashboard.edit')}</button
+				>{/if}{/snippet}
+	</PageHead>
+	{#if error}<div class="notice-error" role="alert">
+			{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
+		</div>{/if}
+	{#if editing}<div class="editbar">
+			<div class="flow-controls">
+				<label
+					>{t('dashboard.columns')}<select
+						class="field"
+						value={columns}
+						onchange={(e) => {
+							checkpoint();
+							columns = columnCount(Number(e.currentTarget.value));
+						}}
+						>{#each [1, 2, 3, 4] as n}<option value={n}>{n}</option>{/each}</select
+					></label
+				><label
+					>{t('dashboard.minimumWidth')}<input
+						class="field"
+						type="number"
+						min="280"
+						max="700"
+						step="10"
+						value={minimumWidth}
+						onchange={(e) => {
+							checkpoint();
+							minimumWidth = columnWidth(Number(e.currentTarget.value));
+						}}
+					/></label
+				><span>{t('dashboard.visibleColumns', { count: actualColumns })}</span>
+			</div>
+			<button
 				class="btn"
-				disabled={!undo.length || saving}
-				aria-label={t('dashboard.editor.undo')}
-				onclick={() => step('undo')}><Icon name="restart" size={15} /></button
-			><button
-				class="btn"
-				disabled={!redo.length || saving}
-				aria-label={t('dashboard.editor.redo')}
-				onclick={() => step('redo')}><Icon name="restart" size={15} /></button
-			><button class="btn" disabled={saving} onclick={cancel}>{t('common.cancel')}</button><button
-				class="btn btn-primary"
-				disabled={saving}
-				onclick={finish}>{t('dashboard.editor.save')}</button
-			>{:else}<button class="btn" onclick={startEditing}
-				><Icon name="edit" size={16} />{t('dashboard.edit')}</button
-			>{/if}{/snippet}
-</PageHead>
-{#if error}<div class="notice-error" role="alert">
-		{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
-	</div>{/if}
-{#if editing}<div class="editbar">
-		<span>{t('dashboard.editor.hint')}</span><button
-			class="btn"
-			onclick={() => {
-				checkpoint();
-				options = {};
-				rebuild(defaults());
-				customize = null;
-			}}>{t('dashboard.restore')}</button
-		>
-	</div>{/if}
-<div class="dashboard-workspace" class:editing class:with-inspector={editing && !!customize}>
-	<div class="area">
-		{#key revision}<div class="grid-stack" {@attach attachGrid}>
-				{#each mountedLayout as tile (tile.id)}
-					{@const source = sourceId(tile.id)}{@const target = workload(tile.id)}{@const spec =
-						tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
-					<div
-						class="grid-stack-item"
-						gs-id={tile.id}
-						gs-x={tile.x}
-						gs-y={tile.y}
-						gs-w={tile.w}
-						gs-h={tile.h}
-						gs-min-w={spec.minW}
-						gs-min-h={spec.minH}
-						gs-auto-position={tile.x === undefined ? 'true' : undefined}
-					>
-						<section
-							class="grid-stack-item-content tile dashboard-tile"
-							{@attach (element) => interceptLinks(element, tile.id)}
-							class:selected={editing && customize === tile.id}
-							style={tileStyle(settings)}
-							aria-label={titleOf(tile.id)}
-							onpointerdown={(e) => selectPart(e, tile.id)}
+				onclick={() => {
+					checkpoint();
+					options = {};
+					columns = 2;
+					minimumWidth = 350;
+					rebuild(defaults());
+					customize = null;
+				}}>{t('dashboard.restore')}</button
+			>
+		</div>{/if}
+	<div class="dashboard-workspace" class:editing class:with-inspector={editing && !!customize}>
+		<div class="area">
+			{#key revision}<div
+					class="dashboard-grid"
+					style:grid-template-columns={`repeat(${actualColumns},minmax(0,1fr))`}
+					{@attach attachGrid}
+				>
+					{#each mountedLayout as tile (tile.id)}
+						{@const source = sourceId(tile.id)}{@const target = workload(tile.id)}{@const spec =
+							tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
+						<div
+							class="grid-stack-item"
+							style:grid-column={`span ${Math.min(tile.span ?? 1, actualColumns)}`}
+							class:moving={moving === tile.id}
+							gs-id={tile.id}
+							gs-x={tile.x}
+							gs-y={tile.y}
+							gs-w={tile.w}
+							gs-h={tile.h}
+							gs-min-w={spec.minW}
+							gs-min-h={spec.minH}
+							gs-auto-position={tile.x === undefined ? 'true' : undefined}
 						>
-							{#if settings.showTitle || editing}<div class="tile-head">
-									{#if editing}<button
-											class="grip"
-											aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
-											onkeydown={(e) => keyboardMove(e, tile.id)}
-											><Icon name="grip" size={16} /></button
-										>{/if}
-									{#if settings.showIcon}<span class="tile-symbol"
-											><Icon name={settings.icon} size={settings.titleSize + 3} /></span
-										>{/if}
-									<h2 class="tile-title" data-edit-part="heading">
-										{settings.showTitle ? titleOf(tile.id) : ''}
-									</h2>
-									{#if editing}<button
+							<section
+								class="tile dashboard-tile"
+								style:min-height={tile.autoHeight === false ? `${tile.h * 40}px` : undefined}
+								style:height={tile.autoHeight === false ? `${tile.h * 40}px` : undefined}
+								{@attach (element) => interceptLinks(element, tile.id)}
+								class:selected={editing && customize === tile.id}
+								style={tileStyle(settings)}
+								aria-label={titleOf(tile.id)}
+								onpointerdown={(e) => selectPart(e, tile.id)}
+							>
+								{#if settings.showTitle || editing}<div class="tile-head">
+										{#if editing}<button
+												class="grip"
+												aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
+												onkeydown={(e) => keyboardMove(e, tile.id)}
+												onpointerdown={(e) => pointerMove(e, tile.id)}
+												><Icon name="grip" size={16} /></button
+											>{/if}
+										{#if settings.showIcon}<span class="tile-symbol"
+												><Icon name={settings.icon} size={settings.titleSize + 3} /></span
+											>{/if}
+										<h2 class="tile-title" data-edit-part="heading">
+											{settings.showTitle ? titleOf(tile.id) : ''}
+										</h2>
+										<button
 											class="tile-action"
 											aria-label={`${t('dashboard.tileOptions')}: ${titleOf(tile.id)}`}
-											onclick={() => configure(tile.id)}><Icon name="edit" size={14} /></button
-										><button
-											class="tile-action"
-											aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
-											onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
-										>{/if}
-								</div>{/if}
-							<div class="tile-body" data-edit-part="labels">
-								{#if target}<WorkloadTile
-										kind={target.kind}
-										name={target.name}
-										vm={vms.find((v) => v.name === target.name)}
-										container={containers.find((c) => c.name === target.name)}
-										ready={target.kind === 'vm' ? vmsReady : containersReady}
-										error={target.kind === 'vm' ? vmError : dockerError}
-										{admin}
-									/>
-								{:else if source === 'cpu' || source === 'memory'}<UsageTile
-										kind={source}
-										options={settings}
-									/>
-								{:else if source === 'network'}<NetworkTile options={settings} />
-								{:else if source === 'system'}<SystemTile details={settings.details} />
-								{:else if source === 'igpu' || source === 'npu' || source === 'nvidia'}<AcceleratorTile
-										kind={source}
-										options={settings}
-									/>
-								{:else if source === 'docker' || source === 'vms' || source === 'shares'}<CollectionTile
-										kind={source}
-										options={settings}
-										{containers}
-										{vms}
-										{shares}
-										ready={source === 'docker'
-											? containersReady
-											: source === 'vms'
-												? vmsReady
-												: sharesReady}
-										error={source === 'docker'
-											? dockerError
-											: source === 'vms'
-												? vmError
-												: sharesError}
-										{admin}
-										tailscaleHost={tailnetHost(tailnet)}
-									/>
-								{:else}{@const Content = CONTENT[source as StaticTileId]}{#if Content}<Content
+											onclick={() => {
+												if (!editing) startEditing();
+												configure(tile.id);
+											}}><Icon name="edit" size={14} /></button
+										>{#if editing}<button
+												class="tile-action"
+												aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
+												onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
+											>{/if}
+									</div>{/if}
+								<div class="tile-body" data-edit-part="labels">
+									{#if target?.kind === 'app'}<CollectionTile
+											kind="docker"
 											options={settings}
-										/>{/if}{/if}
-							</div>
-						</section>
+											containers={containers.filter((c) => c.app === target.name)}
+											ready={containersReady}
+											error={dockerError}
+											{admin}
+											tailscaleHost={tailnetHost(tailnet)}
+											{editing}
+											onrefresh={() => refreshSerial++}
+											onpin={(id) => {
+												if (!editing) startEditing();
+												add(shown.some((p) => p.id === id) ? duplicateId(id) : id);
+											}}
+										/>
+									{:else if target}<WorkloadTile
+											kind={target.kind}
+											name={target.name}
+											vm={vms.find((v) => v.name === target.name)}
+											container={containers.find((c) => c.name === target.name)}
+											onrefresh={() => refreshSerial++}
+											ready={target.kind === 'vm' ? vmsReady : containersReady}
+											error={target.kind === 'vm' ? vmError : dockerError}
+											{admin}
+										/>
+									{:else if source === 'cpu' || source === 'memory'}<UsageTile
+											kind={source}
+											options={settings}
+										/>
+									{:else if source === 'network'}<NetworkTile options={settings} />
+									{:else if source === 'system'}<SystemTile options={settings} />
+									{:else if source === 'igpu' || source === 'npu' || source === 'nvidia' || source === 'accelerators'}<AcceleratorTile
+											kind={source}
+											options={settings}
+										/>
+									{:else if source === 'docker' || source === 'vms' || source === 'shares'}<CollectionTile
+											kind={source}
+											options={settings}
+											{containers}
+											{vms}
+											{shares}
+											ready={source === 'docker'
+												? containersReady
+												: source === 'vms'
+													? vmsReady
+													: sharesReady}
+											error={source === 'docker'
+												? dockerError
+												: source === 'vms'
+													? vmError
+													: sharesError}
+											{admin}
+											tailscaleHost={tailnetHost(tailnet)}
+											{editing}
+											onrefresh={() => refreshSerial++}
+											onpin={(id) => {
+												if (!editing) startEditing();
+												add(shown.some((p) => p.id === id) ? duplicateId(id) : id);
+											}}
+										/>
+									{:else}{@const Content = CONTENT[source as StaticTileId]}{#if Content}<Content
+												options={settings}
+											/>{/if}{/if}
+								</div>
+								{#if editing}<button
+										class="resize-handle"
+										aria-label={t('dashboard.resize', { tile: titleOf(tile.id) })}
+										onpointerdown={(e) => pointerMove(e, tile.id, true)}
+										><Icon name="resize" size={13} /></button
+									>{/if}
+							</section>
+						</div>
+					{/each}
+				</div>{/key}
+			{#if editing}<section class="tile add-tiles">
+					<h2 class="tile-title">{t('dashboard.hidden')}</h2>
+					<div class="tile-choices">
+						{#each hidden as id}<button
+								class="btn"
+								disabled={shown.length >= 100}
+								onclick={() => add(id)}><Icon name="plus" size={14} />{t(TILES[id].title)}</button
+							>{/each}
 					</div>
-				{/each}
-			</div>{/key}
-		{#if editing}<section class="tile add-tiles">
-				<h2 class="tile-title">{t('dashboard.hidden')}</h2>
-				<div class="tile-choices">
-					{#each hidden as id}<button
+					{#if admin}<label
+							>{t('dashboard.workload')}<select class="field" bind:value={selection}
+								><option value="">{t('dashboard.pickWorkload')}</option
+								>{#each dockerGroups(containers).filter((g) => g.id.startsWith('app:')) as g}<option
+										value={g.id}>{g.name} · {t('docker.stack')}</option
+									>{/each}{#each vms as vm}<option value="vm:{vm.name}">{vmLabel(vm)}</option
+									>{/each}{#each containers as c}<option value="container:{c.name}"
+										>{dockerName(c, 'distinct')}</option
+									>{/each}</select
+							></label
+						><button
 							class="btn"
-							disabled={shown.length >= 100}
-							onclick={() => add(id)}><Icon name="plus" size={14} />{t(TILES[id].title)}</button
-						>{/each}
-				</div>
-				{#if admin}<label
-						>{t('dashboard.workload')}<select class="field" bind:value={selection}
-							><option value="">{t('dashboard.pickWorkload')}</option>{#each vms as vm}<option
-									value="vm:{vm.name}">{vmLabel(vm)}</option
-								>{/each}{#each containers as c}<option value="container:{c.name}"
-									>{dockerName(c, 'distinct')}</option
-								>{/each}</select
-						></label
-					><button
-						class="btn"
-						disabled={!selection || shown.length >= 100}
-						onclick={() =>
-							add(
-								shown.some((p) => p.id === selection)
-									? duplicateId(selection as TileId)
-									: (selection as TileId),
-							)}>{t('dashboard.addWorkload')}</button
-					>{/if}
-				<p class="muted">{t('dashboard.hiddenHint')}</p>
-			</section>{/if}
-	</div>
-	{#if editing && customize && currentPlacement}<TileEditor
-			id={customize}
-			title={titleOf(customize)}
-			settings={currentSettings}
-			placement={currentPlacement}
-			{part}
-			networks={system.info?.networks?.map((n) => n.interface) ?? []}
-			devices={system.info?.accelerators ?? []}
-			items={inspectorItems}
-			onchange={changeOption}
-			onsize={size}
-			onduplicate={duplicate}
-			onreset={resetTile}
-			ontransfer={() => {
-				transferTargets = [];
-				transferOpen = true;
-			}}
-			onclose={() => (customize = null)}
-		/>{/if}
-</div>
-{#if transferOpen}<Dialog
-		title={t('dashboard.editor.transfer')}
-		onclose={() => (transferOpen = false)}
-		><div class="transfer-targets">
-			{#each shown.filter((p) => p.id !== customize) as tile}<label
-					><input
-						type="checkbox"
-						checked={transferTargets.includes(tile.id)}
-						onchange={() =>
-							(transferTargets = transferTargets.includes(tile.id)
-								? transferTargets.filter((id) => id !== tile.id)
-								: [...transferTargets, tile.id])}
-					/>{titleOf(tile.id)}</label
-				>{/each}
+							disabled={!selection || shown.length >= 100}
+							onclick={() =>
+								add(
+									shown.some((p) => p.id === selection)
+										? duplicateId(selection as TileId)
+										: (selection as TileId),
+								)}>{t('dashboard.addWorkload')}</button
+						>{/if}
+					<p class="muted">{t('dashboard.hiddenHint')}</p>
+				</section>{/if}
 		</div>
-		<div class="dialog-actions">
-			<button class="btn" onclick={() => (transferOpen = false)}>{t('common.cancel')}</button
-			><button class="btn btn-primary" disabled={!transferTargets.length} onclick={transfer}
-				>{t('common.done')}</button
-			>
-		</div></Dialog
-	>{/if}
+		{#if editing && customize && currentPlacement}<TileEditor
+				id={customize}
+				title={titleOf(customize)}
+				settings={currentSettings}
+				placement={currentPlacement}
+				onauto={(value) => {
+					checkpoint();
+					rebuild(shown.map((p) => (p.id === customize ? { ...p, autoHeight: value } : p)));
+				}}
+				{part}
+				networks={system.info?.networks?.map((n) => n.interface) ?? []}
+				devices={system.info?.accelerators ?? []}
+				items={inspectorItems}
+				onchange={changeOption}
+				onsize={size}
+				onduplicate={duplicate}
+				onreset={resetTile}
+				ontransfer={() => {
+					transferTargets = [];
+					transferOpen = true;
+				}}
+				onclose={() => (customize = null)}
+			/>{/if}
+	</div>
+	{#if transferOpen}<Dialog
+			title={t('dashboard.editor.transfer')}
+			onclose={() => (transferOpen = false)}
+			><div class="transfer-targets">
+				{#each shown.filter((p) => p.id !== customize) as tile}<label
+						><input
+							type="checkbox"
+							checked={transferTargets.includes(tile.id)}
+							onchange={() =>
+								(transferTargets = transferTargets.includes(tile.id)
+									? transferTargets.filter((id) => id !== tile.id)
+									: [...transferTargets, tile.id])}
+						/>{titleOf(tile.id)}</label
+					>{/each}
+			</div>
+			<div class="dialog-actions">
+				<button class="btn" onclick={() => (transferOpen = false)}>{t('common.cancel')}</button
+				><button class="btn btn-primary" disabled={!transferTargets.length} onclick={transfer}
+					>{t('common.done')}</button
+				>
+			</div></Dialog
+		>{/if}
+</div>
 
 <style>
 	.dashboard-workspace {
@@ -692,20 +848,59 @@
 	.area {
 		flex: 1;
 		min-width: 0;
-		margin: calc(var(--gap, 16px) / -2);
 	}
-	.grid-stack {
-		min-height: 120px;
+	.dashboard-page {
+		background: var(--bg);
+		box-shadow: 0 0 0 24px var(--bg);
+	}
+	.dashboard-grid {
+		display: grid;
+		gap: 12px;
+		align-items: start;
+		min-width: 0;
+	}
+	.grid-stack-item {
+		min-width: 0;
+		position: relative;
+	}
+	.flow-controls {
+		display: flex;
+		gap: 14px;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+	.flow-controls label {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+	.flow-controls .field {
+		width: 80px;
+		min-height: 32px;
+	}
+	.resize-handle {
+		position: absolute;
+		right: 2px;
+		bottom: 2px;
+		border: 0;
+		background: transparent;
+		color: var(--muted);
+		cursor: nwse-resize;
+		touch-action: none;
+		padding: 3px;
+	}
+	.moving {
+		outline: 2px dashed var(--accent);
 	}
 	.dashboard-tile {
-		padding: var(--tile-padding, 18px);
+		padding: 0;
 		border: var(--tile-border, 1px) solid var(--tile-border-color, var(--border));
 		border-radius: var(--tile-radius, 12px);
 		background: var(--tile-background, var(--surface));
 		box-shadow: var(--tile-shadow, none);
 		display: flex;
 		flex-direction: column;
-		gap: var(--tile-gap, 10px);
+		gap: 0;
 		overflow: hidden;
 	}
 	.dashboard-tile.selected {
@@ -717,7 +912,10 @@
 		align-items: center;
 		gap: 8px;
 		flex: none;
-		min-height: 20px;
+		min-height: 35px;
+		padding: 5px 10px;
+		border-bottom: 1px solid var(--border);
+		background: color-mix(in srgb, var(--text) 3%, transparent);
 	}
 	.tile-title {
 		flex: 1;
@@ -729,7 +927,7 @@
 		text-align: var(--tile-title-align, left);
 		line-height: 1.3;
 		letter-spacing: 0;
-		text-transform: none;
+		text-transform: uppercase;
 		overflow-wrap: anywhere;
 	}
 	.tile-symbol {
@@ -756,7 +954,8 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		scrollbar-gutter: stable;
+		scrollbar-gutter: auto;
+		padding: var(--tile-padding, 12px);
 		display: flex;
 		flex-direction: column;
 		gap: var(--tile-gap, 10px);
@@ -769,7 +968,6 @@
 	.tile-body > :global(*) {
 		flex-shrink: 0;
 	}
-	.tile-body :global(.reading),
 	.tile-body :global(.value),
 	.tile-body :global(.usage strong) {
 		font-size: var(--tile-value-size, 36px) !important;
@@ -796,7 +994,7 @@
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
 	}
-	.tile-body :global([data-edit-part='value']) {
+	.tile-body :global([data-edit-part='value']:not(.reading)) {
 		font-size: var(--tile-value-size);
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);

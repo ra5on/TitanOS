@@ -92,11 +92,21 @@ try {
   await tile(page, "docker")
     .getByText("photos-web-1", { exact: true })
     .waitFor();
-  assert.equal(await tile(page, "docker").locator(".links a").count(), 3);
-  assert.equal(await tile(page, "npu").locator(".reading").innerText(), "–%");
+  await tile(page, "docker")
+    .getByRole("button", { name: "Aktionen: photos", exact: true })
+    .click();
+  assert.equal(
+    await page.getByRole("menu").locator('a[target="_blank"]').count(),
+    3,
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await tile(page, "accelerators").locator(".reading").last().textContent(),
+    "–%",
+  );
   await page.screenshot({ path: out + "/dashboard.png", fullPage: true });
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  await tile(page, "docker").locator(".identity a").first().click();
+  await tile(page, "docker").locator(".identity .entry-name").first().click();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(
     await inspector(page)
@@ -122,7 +132,7 @@ try {
     await tile(page, "cpu")
       .locator(".reading")
       .evaluate((e) => getComputedStyle(e).fontSize),
-    "36px",
+    "18px",
   );
   await page.getByRole("button", { name: "Wiederholen", exact: true }).click();
   await tile(page, "cpu").locator(".grip").focus();
@@ -166,7 +176,7 @@ try {
   await page.screenshot({ path: out + "/editor.png", fullPage: true });
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
-  assert.equal(data.prefs.dashboard.version, 4);
+  assert.equal(data.prefs.dashboard.version, 5);
   assert.equal(data.prefs.dashboard.tileOptions.cpu.valueSize, 56);
   assert.equal(data.prefs.dashboard.tiles.find((t) => t.id === "cpu").h, 4);
   const saved = structuredClone(data.prefs.dashboard);
@@ -314,9 +324,9 @@ try {
   await regular.page.getByRole("button", { name: "Edit", exact: true }).click();
   await regular.page.getByRole("button", { name: "Save", exact: true }).click();
   assert.equal(regular.data.prefs.dashboard.tileOptions.network.ipv6, false);
-  assert.deepEqual(regular.data.prefs.dashboard.tiles, [
-    { id: "network", x: 7, y: 3, w: 5, h: 4 },
-  ]);
+  assert.equal(regular.data.prefs.dashboard.tiles[0].id, "network");
+  assert.equal(regular.data.prefs.dashboard.tiles[0].span, 1);
+  assert.equal(regular.data.prefs.dashboard.tiles[0].autoHeight, true);
   assert.equal(
     regular.data.requests.filter((r) => ["/docker", "/vms"].includes(r[1]))
       .length,

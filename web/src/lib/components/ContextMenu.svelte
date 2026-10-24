@@ -15,11 +15,14 @@
 	let { label, x, y, onclose, children }: Props = $props();
 
 	let menu: HTMLElement | undefined = $state();
-	let left = $state(0), top = $state(0);
+	let left = $state(0),
+		top = $state(0);
 	// Whatever had the focus before gets it back, so the keyboard stays in the list.
 	const before = document.activeElement as HTMLElement | null;
 
 	onMount(() => {
+		// The top layer keeps menus outside clipped tiles and glass containing blocks.
+		menu?.showPopover();
 		void place();
 		return () => before?.isConnected && before.focus({ preventScroll: true });
 	});
@@ -52,6 +55,7 @@
 
 <div
 	class="dropdown-panel context-menu"
+	popover="manual"
 	bind:this={menu}
 	role="menu"
 	aria-label={label}
@@ -67,6 +71,8 @@
 <style>
 	.context-menu {
 		position: fixed;
+		inset: auto;
+		margin: 0;
 		z-index: 60;
 		min-width: 14rem;
 		max-width: min(20rem, calc(100vw - 16px));

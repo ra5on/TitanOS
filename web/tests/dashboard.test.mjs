@@ -30,6 +30,7 @@ test('independent instances preserve their source, filters and appearance safely
 	const id = 'network@1a2b3c4d';
 	assert.equal(sourceId(id), 'network');
 	assert.deepEqual(workload('vm:my-server@1a2b3c4d'), { kind: 'vm', name: 'my-server' });
+	assert.deepEqual(workload('app:photos'), { kind: 'app', name: 'photos' });
 	assert.equal(
 		sanitizeLayout({
 			tiles: [
@@ -72,4 +73,53 @@ test('independent instances preserve their source, filters and appearance safely
 	const hw = defaultWithHardware(['igpu', 'npu']);
 	assert.equal(hw.find((p) => p.id === 'igpu').w, 3);
 	assert.equal(hw.find((p) => p.id === 'npu').x, 3);
+});
+
+test('flow migration reads positions once and never reorders saved reading order on resize', async () => {
+	const { flowLayout, visibleColumns, legacyPositions, columnCount, columnWidth } =
+		await import('../src/lib/dashboard/flow.ts');
+	const old = {
+		version: 4,
+		tiles: [
+			{ id: 'vms', x: 6, y: 2, w: 6, h: 3 },
+			{ id: 'cpu', x: 0, y: 0, w: 3, h: 2 },
+			{ id: 'system', x: 6, y: 0, w: 6, h: 3 },
+		],
+	};
+	const migrated = flowLayout(old);
+	assert.deepEqual(
+		migrated.map((p) => p.id),
+		['cpu', 'system', 'vms'],
+	);
+	const saved = { version: 5, tiles: [migrated[2], migrated[0], migrated[1]] };
+	assert.deepEqual(
+		flowLayout(saved).map((p) => p.id),
+		['vms', 'cpu', 'system'],
+	);
+	assert.equal(visibleColumns(1600, 4, 350), 4);
+	assert.equal(visibleColumns(740, 4, 350), 2);
+	assert.equal(visibleColumns(320, 4, 350), 1);
+	const roundtrip = legacyPositions(saved.tiles, 3);
+	assert.deepEqual(
+		flowLayout({ version: 5, tiles: roundtrip }).map((p) => p.id),
+		['vms', 'cpu', 'system'],
+	);
+	assert.equal(columnCount(Infinity), 2);
+	assert.equal(columnWidth(NaN), 350);
+});
+test('system information selection keeps deliberate empty selection and ordered unique fields', () => {
+	const settings = tileOptions(
+		{
+			system: {
+				systemFields: ['bios', 'hostname', 'bios', 'secret'],
+				showLabels: false,
+				systemLayout: 'stacked',
+			},
+		},
+		'system',
+	);
+	assert.deepEqual(settings.systemFields, ['bios', 'hostname']);
+	assert.equal(settings.showLabels, false);
+	assert.equal(settings.systemLayout, 'stacked');
+	assert.deepEqual(tileOptions({ system: { systemFields: [] } }, 'system').systemFields, []);
 });

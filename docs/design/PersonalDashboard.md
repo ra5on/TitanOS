@@ -1,41 +1,42 @@
-# Persönliche Startseite, Speicher und Einstellungen (0.18.0)
+# Persönliche Startseite, Speicher und Einstellungen (0.19.0)
 
 Dieser bestätigte Folgeentwurf ersetzt die älteren Dashboard-, Speicherübersichts-
 und Einstellungsübersichtsregeln. Es gibt **eine** Startseite pro Konto, keine
 Ansichten, Profile oder wechselnden Dashboards. Shares, Dateien und Nutzer
 behalten ihre bestehende Gestaltung. Keine LUKS-Verschlüsselung.
 
-## Dashboard
+## Dashboard (bestätigter Folgeentwurf 0.19.0)
 
-Ruhige, zusammengehörige Kacheln: System, CPU, RAM und Netzwerk oben; erkannte
-Grafik-/NPU-Geräte, Volumes, Docker, VMs, Temperaturen und Shares darunter.
-Vorhandene gespeicherte Anordnungen bleiben erhalten. Neue Standardanordnungen
-berücksichtigen die tatsächlich erkannten Beschleuniger. Keine Aufmerksamkeit-
-oder Nächste-Schritte-Kachel und kein Aufgabenknopf auf der Startseite.
-Aufträge und deren Steuerung bleiben unter Werkzeuge erreichbar.
+### Aufbau
 
-Ein Bearbeiten-Modus mit Griffen, Rastergrößen und seitlichem Inspector. Dessen
-Reiter **Inhalt**, **Darstellung**, **Größe** bearbeiten die markierte Kachel.
-Überschrift, Hauptwert und Beschriftungen besitzen eigene Schriftgröße, Stärke,
-Schriftart, Farbe und Ausrichtung. Hintergrund, Akzent, Rahmen, Innenabstand,
-Elementabstand, Ecken, Deckkraft und Schatten lassen sich je Kachel einstellen.
-Inhaltsabhängige Optionen: Details, Verlauf, CPU-Temperatur; Messwert als Zahl,
-Balken, Ring oder Verlauf; Geräte-/Schnittstellenwahl; Liste/Raster und Auswahl
-angezeigter Volumes, Laufwerke, Shares, VMs oder Docker-Gruppen. Reihenfolge der
-Messwertbereiche, Einträgezahl und laufende Dienste lassen sich beeinflussen.
+Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger Hintergrund, schmale Abschnittsköpfe, kompakte Zeilen und Anwendungsraster. Keine dekorativen großen Messwerte, leeren Karten oder Hintergrundlichter. TitanOS behält Marke, Navigation, IBM Plex und eigene Symbole. Eine persönliche Startseite, keine Ansichten/Profile. Keine Aufmerksamkeit-/Auftragsfläche.
 
-Duplizierte Instanzen behalten eine eigene Kennung und eigene Optionen. Sie
-können andere Schnittstellen/Geräte beobachten. Namen sind Anzeigealiase, keine
-Umbenennung von NAS-Objekten. Fehlende gewählte Quellen bleiben fehlend, ohne
-still auf andere Geräte zu wechseln. Docker-Stacks sind zunächst geschlossen;
-WebUI-, Tailscale- und öffentliche Links stammen vom gewählten Hauptdienst.
+### Reihenfolge und Spalten
 
-Rückgängig/Wiederholen, Stilübertragung und Rücksetzen einzelner Kacheln.
-Pfeiltasten am Griff verschieben, Umschalt + Pfeiltasten skaliert. Vorschau bis
-Speichern; Abbrechen und Navigationsschutz erhalten den gespeicherten Zustand.
-Alle Werte werden geprüft und pro Konto atomar über bestehende Präferenzen
-persistiert. Mobil wird gestapelt; Speichern bewahrt das Desktop-Raster.
-Überbreite Inhalte umbrechen bzw. scrollen innerhalb ihrer Kachel.
+- Globale gewünschte Spaltenzahl (1–4), im Bearbeiten-Modus einstellbar.
+- Eine persistierte Reihenfolge aller Kacheln. Befüllung zeilenweise von links nach rechts, danach nach unten. CSS-Spalten mit vertikalem Lesefluss oder Packen in die kürzeste Spalte sind dafür ungeeignet.
+- Bei zu geringer Breite automatisch weniger Spalten; die gewünschte Anzahl bleibt gespeichert. Kein horizontales Abschneiden. Beispiel A B / C D wird schmal zu A / B / C / D.
+- Einstellbare Mindestbreite und Mindesthöhe; Inhaltshöhe automatisch. Optionale bewusste feste Höhe nur mit sichtbarem Überlaufzugang. Breitere Kacheln können Spalten überspannen, werden mobil begrenzt. Keine absolute Desktopposition als einziges Ordnungsmodell.
+- Vorgeschlagene Reihenfolge: Systeminformationen, Docker, CPU, VMs, RAM, Volumes, Beschleuniger, Shares, Netzwerk, Temperaturen. Jede Kachel verschiebbar; keine festen linken/rechten Kategorien.
+
+### Inhalte und Klickmenüs
+
+- Systeminformationen: auswählbare Felder, Reihenfolge, Beschriftungen/Werte separat; Hostname, Betriebssystem, Laufzeit, Kernel, CPU, Mainboard, BIOS, RAM, Geräte/Treiber, Netzwerkadressen, Slot und Updates. Vorhandene API-Felder wiederverwenden; zusätzliche Inventardaten nur ereignisbezogen/startseitig erfassen, kein zyklisches Sticklesen. Fehlende Werte als unbekannt darstellen.
+- Docker: Symbol-/Namensraster mit verständlichem Status, kompakte Liste optional. Klick auf Symbol oder Namen öffnet ein Menü mit passenden Links, Konsole/Logs, Details, Starten bzw. Stoppen/Neustart, Updateprüfung, Bearbeiten und Anheften. Nur tatsächlich vorhandene WebUI/Tailscale/öffentliche Adressen anbieten. Stacks geschlossen. Ein separater Pfeil oder der Menüpunkt Container anzeigen klappt die Container auf. Einzelne Container/Anwendungen als eigene Kachel weiterhin möglich. Rollen und bestehende Bestätigungsregeln erhalten.
+- VMs: gleich breite, kompakte Rasterzellen mit festem gleichmäßigem Abstand statt über die gesamte Fläche verteilten Einträgen. Entwurf: 200 px pro Eintrag, 16 px horizontaler Abstand, 12 px Zeilenabstand; bei weniger Platz umbrechen. Im Dashboard nur Symbol, Name und Status; lange Namen bleiben im eigenen Bereich. CPU/RAM entfallen dort. Der Button „Alle VM-Details“ öffnet die ausführlichen Informationen aller VMs, einschließlich Prozessor, RAM, Auslastung, Gast, Platten, Netzwerk und Start. Klick auf einzelne VM öffnet weiterhin Konsole, Details, zustandsabhängige Betriebsaktionen, unterstützte Snapshots, Bearbeiten und Anheften. Einzelne VM weiterhin separat platzierbar.
+- CPU/RAM/GPU/iGPU/NPU: standardmäßig beschriftete Balken mit bündiger Zahl plus Einheit, keine riesigen Ringe. Ring als wählbare Alternative; Zahl und Prozentzeichen bleiben zusammen und mittig. Schrift muss bei 0/99/100 %, großer Benutzerschrift und schmaler Kachel passen. Unbekannte NPU-Werte sind kein 0 %.
+- Volumes, Shares, Netzwerk, Temperaturen: kompakte Tabellen/Zeilen mit optionalen Zusatzspalten und direktem Link zu Details.
+- Klickbare Volume-, Share- und Geräteeinträge bekommen eigene fachlich passende Menüs, keine identische globale Aktionsliste. Außenklick/Escape schließen, Tastatur und Touch funktionieren. Im Bearbeiten-Modus gilt die Auswahl zur Gestaltung; Betriebsaktionen dürfen nicht versehentlich beim Verschieben auslösen.
+
+### Editor
+
+Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
+
+
+Bestehende Layouts werden einmal nach Zeile und Spalte in die Lesereihenfolge übernommen.
+Zusätzliche Felder der Layoutversion 5 sind optional; 12-Spalten-Koordinaten bleiben für
+den App-Rückweg erhalten. Persönliche Inhalte und Gestaltungswerte bleiben bestehen;
+„Standard wiederherstellen“ lädt die kompakte neue Standardgestaltung.
 
 ## Speicher
 
@@ -58,6 +59,6 @@ Suche behält Abschnittsziele, Rollen und bestehende Weiterleitungen.
 
 ## Prüfungen
 
-`scripts/test-ui-personal-dashboard.mjs` prüft echte Browserbedienung gegen
+`scripts/test-ui-dashboard-flow.mjs` und `scripts/test-ui-personal-dashboard.mjs` prüft echte Browserbedienung gegen
 isolierte API-Daten; Ergebnisse und Hardwaregrenzen stehen in den Release-Notizen.
 Beispieldaten der Entwürfe und Tests gehören niemals ins Produkt.

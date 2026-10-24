@@ -83,12 +83,13 @@ export type DashboardNetwork = {
 };
 
 export type SystemInfo = {
+	inventory?: {mainboard:string;bios:string};
 	accelerators: Accelerator[];
 	hostname: string;
 	version: string;
 	kernel: string;
 	uptimeSeconds: number;
-	cpu: { model: string; threads: number; usagePercent: number };
+	cpu: { model: string; threads: number; usagePercent: number; threadUsage?: {id:string;usagePercent:number|null}[] };
 	memory: { totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number; cacheBytes?: number; dirtyBytes?: number; writebackBytes?: number };
 	temperatures: Temperature[];
 	image: { slot: string; sizeBytes: number; overlayUsedBytes: number; overlayTotalBytes: number } | null;

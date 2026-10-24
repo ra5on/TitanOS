@@ -88,11 +88,16 @@
 	}
 	.rates div {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 8px;
-		background: var(--chip);
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px;
+		padding: 0;
+		background: none;
 		border-radius: var(--radius-ctl);
+	}
+	.rates div > .label:first-child {
+		flex-basis: 100%;
 	}
 	.label {
 		font-size: 0.75rem;

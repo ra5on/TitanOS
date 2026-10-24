@@ -29,12 +29,18 @@ type Info struct {
 	Network       *Network      `json:"network"`
 	Networks      []Network     `json:"networks"`
 	Temperatures  []Temperature `json:"temperatures"`
+	Inventory     Inventory     `json:"inventory"`
 }
 
 type CPU struct {
-	Model        string  `json:"model"`
-	Threads      int     `json:"threads"`
-	UsagePercent float64 `json:"usagePercent"`
+	Model        string        `json:"model"`
+	Threads      int           `json:"threads"`
+	UsagePercent float64       `json:"usagePercent"`
+	ThreadUsage  []ThreadUsage `json:"threadUsage"`
+}
+type ThreadUsage struct {
+	ID           string   `json:"id"`
+	UsagePercent *float64 `json:"usagePercent"`
 }
 
 type Memory struct {
@@ -94,6 +100,7 @@ type Monitor struct {
 	network      string
 	rates        map[string][2]float64
 	temperatures []Temperature
+	threadUsage  []ThreadUsage
 }
 
 // NewMonitor starts sampling until ctx is done.
@@ -111,6 +118,7 @@ func (m *Monitor) run(ctx context.Context) {
 	defer ticker.Stop()
 
 	prevCPU, _ := readCPUTimes()
+	previousThreads := parseCPUThreads(readString("/proc/stat"))
 	prevIface := defaultRoute().iface
 	prevRx, prevTx := readNetBytes(prevIface)
 	previous := networkCounters()
@@ -125,6 +133,9 @@ func (m *Monitor) run(ctx context.Context) {
 			prevTime = now
 
 			cpu, err := readCPUTimes()
+			currentThreads := parseCPUThreads(readString("/proc/stat"))
+			threadUsage := sampleCPUThreads(previousThreads, currentThreads)
+			previousThreads = currentThreads
 			usage := 0.0
 			if err == nil {
 				usage = cpuUsage(prevCPU, cpu)
@@ -151,6 +162,7 @@ func (m *Monitor) run(ctx context.Context) {
 
 			m.mu.Lock()
 			m.rates = rates
+			m.threadUsage = threadUsage
 			m.cpu, m.rx, m.tx, m.network = usage, rxRate, txRate, iface
 			m.temperatures = temperatures
 			m.mu.Unlock()
@@ -163,6 +175,7 @@ func (m *Monitor) Info() Info {
 	m.mu.RLock()
 	usage, rx, tx := m.cpu, m.rx, m.tx
 	temperatures := slices.Clone(m.temperatures)
+	threads := slices.Clone(m.threadUsage)
 	rates := m.rates
 	sampledInterface := m.network
 	m.mu.RUnlock()
@@ -172,11 +185,12 @@ func (m *Monitor) Info() Info {
 		Hostname:      hostname,
 		Kernel:        readTrimmed("/proc/sys/kernel/osrelease"),
 		UptimeSeconds: readUptime(),
-		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage},
+		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage, ThreadUsage: threads},
 		Memory:        ReadMemory(),
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},
 		Temperatures:  append([]Temperature{}, temperatures...),
+		Inventory:     systemInventory(),
 	}
 
 	if route := defaultRoute(); route.iface != "" {
