@@ -124,7 +124,7 @@ def smoke(archive,binary,log,timeout):
                 remote('mkdir -p /mnt/array/proof\ndd if=/dev/urandom of=/mnt/array/proof/seed bs=1M count=32 status=none\nsync');proof=remote('sha256sum /mnt/array/proof/seed').split()[0]
                 before=next(v for v in request('/storage')['volumes'] if v['name']=='array')['sizeBytes'];fresh=next(d for d in request('/storage')['disks'] if d['serial']=='WORK4')
                 grow={'disk':fresh['name'],'identity':fresh['identity'],'recoveryVolume':'safe','confirm':'array','erase':True}
-                plan=request('/storage/volumes/array/growth/preview',grow);assert plan['targetDisks']==4,plan
+                plan=request('/storage/volumes/array/growth/preview',grow);assert plan['targetDisks']==4 and plan['plannedBytes']>plan['currentBytes']>0,plan
                 remote('echo 10000 > /proc/sys/dev/raid/speed_limit_max')
                 request('/storage/volumes/array/growth',grow)
                 wait(lambda:request('/storage/growth')['operation'].get('phase')=='reshaping','reshape start',120)
@@ -138,7 +138,8 @@ def smoke(archive,binary,log,timeout):
                 remote('mkdir -p /mnt/mirror/photos\nprintf snapshot-proof > /mnt/mirror/photos/picture.txt')
                 request('/storage/volumes/mirror/snapshots',{'name':'before','action':'create'})
                 listing=request('/storage/volumes/mirror/snapshots/before/files?path=photos');assert listing['entries'][0]['path']=='photos/picture.txt',listing
-                restored=request('/storage/volumes/mirror/snapshots/before/files/restore',{'paths':['photos/picture.txt'],'targetVolume':'safe'})
+                preview=request('/storage/volumes/mirror/snapshots/before/files/preview',{'paths':['photos/picture.txt'],'targetVolume':'safe'});assert preview['files']==1 and preview['bytes']==14 and preview['uuid']
+                restored=request('/storage/volumes/mirror/snapshots/before/files/restore',{'paths':['photos/picture.txt'],'targetVolume':'safe','uuid':preview['uuid']})
                 assert remote('cat '+shlex.quote('/mnt/safe/'+restored['folder']+'/photos/picture.txt'))=='snapshot-proof'
                 report=request('/storage/volumes/mirror/usage');assert report['scanned']>0
                 request('/monitoring',{'enabled':True,'volume':'safe','days':7,'maxMiB':8},'PUT')
@@ -177,6 +178,33 @@ docker run -d --name app-proof -v /mnt/mirror/appdata/app-proof:/data titanos-ba
                 assert remote("docker inspect -f '{{.State.Running}}' app-proof")=='true'
                 assert request('/backups/application-recovery')['operation'] is None
                 print('Application backup stopped/restarted the selected Docker container and included a stopped VM.',flush=True)
+                snapshots=request('/backups/verified/snapshots')['snapshots']
+                application_preview=request('/backups/verified/applications/preview',{'snapshot':snapshots[0]['id'],'volume':'safe'})
+                assert not application_preview['currentSelection'] and len(application_preview['capturedApplications'])==2,application_preview
+                application_copy=request('/backups/verified/applications/restore',{'snapshot':snapshots[0]['id'],'volume':'safe'})
+                wait(lambda:not state()['running'],'verified application restore',150)
+                assert state()['applicationRestore']['verified'] and not state()['applicationRestore']['error'],state()
+                assert remote('cat '+shlex.quote(application_copy['target']+'/mnt/mirror/appdata/app-proof/marker'))=='alive'
+                coverage=request('/backups/coverage')
+                assert any(v['kind']=='docker' and v['name']=='app-proof' and v['jobs'] for v in coverage['items']),coverage
+                print('Captured archive identities, verified independent application restore and backup coverage passed.',flush=True)
+                # A VM-only selection must still reject a running Docker writer.
+                audit_job={**job,'id':'writer-proof','destination':{'type':'local','volume':'safe','folder':'writer-proof'},'extras':['appdata'],'applications':[{'kind':'vm','name':'original','method':'stop'}]}
+                request('/backups',audit_job);request('/backups/writer-proof/run',{})
+                audit_state=lambda:next(v for v in request('/backups')['jobs'] if v['job']['id']=='writer-proof')['state']
+                wait(lambda:not audit_state()['running'],'reject live writer',90)
+                assert 'another running container' in audit_state()['lastError'] and not audit_state()['lastOK'],audit_state()
+                assert remote("docker inspect -f '{{.State.Running}}' app-proof")=='true'
+                # Same name is not the same Btrfs snapshot UUID.
+                paused_settings=json.loads(json.dumps(settings));paused_settings['enabled']=False;paused_settings['jobs'][0]['enabled']=False
+                request('/maintenance',paused_settings,'PUT')
+                old=next(s['name'] for s in request('/storage/volumes/mirror/snapshots') if s['name'].startswith('auto-scheduled-'))
+                request('/storage/volumes/mirror/snapshots',{'name':old,'action':'delete','confirm':old})
+                request('/storage/volumes/mirror/snapshots',{'name':old,'action':'create'})
+                request('/maintenance/scheduled/run',{});wait(lambda:not request('/maintenance')['jobs'][0]['state']['running'],'manual replacement retention')
+                assert any(s['name']==old for s in request('/storage/volumes/mirror/snapshots'))
+                request('/maintenance',settings,'PUT')
+                print('Regression proofs passed: VM-only backup rejects Docker writer; manual replacement snapshot survives retention.',flush=True)
                 # Pause before publication, restart titand, reauthorize and resume.
                 # The unfinished file restarts from byte zero; already published
                 # files are not replayed and the old temporary inode is removed.

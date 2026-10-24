@@ -638,7 +638,7 @@ func run(opts options) error {
 	upkeep.Disabled = opts.dev
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -650,6 +650,13 @@ func run(opts options) error {
 		return slices.ContainsFunc(status.Volumes, func(v storage.Volume) bool {
 			return v.State == storage.VolumeRebuilding || v.State == storage.VolumeSyncing || v.State == storage.VolumeChecking
 		})
+	}
+	upkeep.Conflict = func(job maintenance.Job) string {
+		// The callback must not call upkeep.Status: admission already holds its lock.
+		if backups.DueSoon(time.Now(), 5*time.Minute) {
+			return "backup-priority"
+		}
+		return ""
 	}
 	upkeep.OnResult = func(result maintenance.Result) {
 		if result.Error != "" {

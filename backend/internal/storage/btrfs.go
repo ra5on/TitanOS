@@ -272,6 +272,11 @@ func (m *Manager) Snapshots(name string) ([]Snapshot, error) {
 func (m *Manager) SnapshotAction(ctx context.Context, volume, name, action, confirm string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	return m.snapshotAction(ctx, volume, name, action, confirm)
+}
+
+// Caller holds actions so snapshot identity checks and removal are one operation.
+func (m *Manager) snapshotAction(ctx context.Context, volume, name, action, confirm string) error {
 	if m.ReadOnly {
 		return ErrReadOnly
 	}

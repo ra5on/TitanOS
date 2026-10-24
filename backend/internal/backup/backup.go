@@ -148,8 +148,10 @@ type Job struct {
 
 // State is what is known about the runs of a job.
 type State struct {
-	Probe   *ProbeResult `json:"probe,omitempty"`
-	Running bool         `json:"running"`
+	StatusError        string                    `json:"statusError,omitempty"`
+	ApplicationRestore *ApplicationRestoreResult `json:"applicationRestore,omitempty"`
+	Probe              *ProbeResult              `json:"probe,omitempty"`
+	Running            bool                      `json:"running"`
 	// Phase is backup, cleanup or restore while Running.
 	Phase      string  `json:"phase"`
 	Percent    float64 `json:"percent"`
@@ -418,7 +420,8 @@ func (m *Manager) List() []View {
 	views := []View{}
 	for _, job := range jobs {
 		shown, set := withoutSecrets(job)
-		view := View{StateKnown: true, Job: shown, SecretSet: set, State: m.state(job)}
+		state := m.state(job)
+		view := View{StateKnown: state.StatusError == "", Job: shown, SecretSet: set, State: state}
 		if next, ok := job.NextRun(m.now()); ok {
 			view.Next = &next
 		}
@@ -617,11 +620,19 @@ func (m *Manager) state(job Job) State {
 	if file == "" {
 		// Its shares are not there, so neither is what it remembers.
 		// Nothing is kept: the next look may find them.
+		state.StatusError = "backup state volume unavailable"
 		return state
 	}
-	if data, err := os.ReadFile(file); err == nil {
-		json.Unmarshal(data, &state)
+	data, err := os.ReadFile(file)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		state.StatusError = "backup state could not be read"
+		return state
 	}
+	if err == nil && json.Unmarshal(data, &state) != nil {
+		state = State{StatusError: "backup state is invalid"}
+		return state
+	}
+
 	state.Running, state.Phase, state.Percent = false, "", 0
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -854,7 +865,7 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 			s.Running, s.Phase, s.Percent = false, "", 0
 			if phase != "backup" {
 				// A failed check is kept as CheckError, not as a failed backup.
-				if err != nil && !cancelled && phase != "check" && phase != "probe" {
+				if err != nil && !cancelled && phase != "check" && phase != "probe" && phase != "application-restore" {
 					s.LastError = err.Error()
 				}
 				return
@@ -1052,45 +1063,10 @@ func (m *Manager) Restore(id, snapshot, volume string) (string, error) {
 	if !ok {
 		return "", ErrNotFound
 	}
-	if !snapshotForm.MatchString(snapshot) {
-		return "", invalid("backup")
+	if !snapshotForm.MatchString(snapshot) || !slices.Contains(m.mounted(), volume) {
+		return "", invalid("backup snapshot or volume")
 	}
-	if !slices.Contains(m.mounted(), volume) {
-		return "", invalid("volume")
-	}
-	target := filepath.Join(m.mountRoot, volume, "restored", job.ID+"-"+m.now().Format("20060102-150405"))
-	err := m.begin(job, "restore", func(ctx context.Context) error {
-		_, base, env, cleanup, err := m.repository(job)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-		if err := os.MkdirAll(target, 0o770); err != nil {
-			return err
-		}
-		out, err := m.run(ctx, env, append(base, "restore", snapshot, "--target", target, "--json"), func(line string) {
-			var message struct {
-				Type    string  `json:"message_type"`
-				Percent float64 `json:"percent_done"`
-				Done    uint64  `json:"bytes_restored"`
-				Total   uint64  `json:"total_bytes"`
-			}
-			if json.Unmarshal([]byte(line), &message) == nil && message.Type == "status" {
-				m.update(job, func(s *State) {
-					s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
-				})
-			}
-		})
-		if err != nil && ctx.Err() == nil {
-			return errors.New(lastLines(out, job.Password))
-		}
-		if err == nil {
-			m.update(job, func(s *State) { s.RestoredTo = target })
-			slog.Info("backup restored", "job", job.ID, "snapshot", snapshot, "to", target)
-		}
-		return err
-	})
-	return target, err
+	return m.restoreVerifiedCopy(job, snapshot, volume, nil, false)
 }
 
 // Run starts the jobs when their time has come, until ctx is done. A NAS

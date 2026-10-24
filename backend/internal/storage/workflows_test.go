@@ -2,12 +2,15 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -171,9 +174,26 @@ func (r scheduleSnapshotRunner) Run(ctx context.Context, stdin, name string, arg
 		target := args[len(args)-1]
 		switch args[1] {
 		case "snapshot":
-			return "", os.Mkdir(target, 0700)
+			if err := os.Mkdir(target, 0700); err != nil {
+				return "", err
+			}
+			var random [16]byte
+			if _, err := rand.Read(random[:]); err != nil {
+				return "", err
+			}
+			uuid := fmt.Sprintf("%x-%x-%x-%x-%x", random[:4], random[4:6], random[6:8], random[8:10], random[10:])
+			return "", os.WriteFile(filepath.Join(target, ".uuid"), []byte(uuid), 0600)
 		case "delete":
 			return "", os.RemoveAll(target)
+		case "show":
+			if data, err := os.ReadFile(filepath.Join(target, ".uuid")); err == nil {
+				return "UUID: " + string(data), nil
+			}
+			info, err := os.Stat(target)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("UUID: 12345678-1234-1234-1234-%012x\n", info.Sys().(*syscall.Stat_t).Ino), nil
 		}
 	}
 	return r.base.Run(ctx, stdin, name, args...)

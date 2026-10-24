@@ -555,3 +555,17 @@ func (m *Manager) UploadRoot(id, user string) (Root, error) {
 func uploadPartName(name, id string) string {
 	return path.Join(path.Dir(name), ".titanos-upload-"+id+partSuffix)
 }
+
+// UploadTasks exposes only this account's in-memory upload progress. Browser
+// file objects are not persisted and this method does not reopen target folders.
+func (m *Manager) UploadTasks(user string) []UploadStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []UploadStatus{}
+	for _, u := range m.uploads {
+		if u.user == user {
+			out = append(out, UploadStatus{ID: u.id, Offset: u.offset.Load(), Size: u.size, Name: u.name, Busy: u.busy})
+		}
+	}
+	return out
+}

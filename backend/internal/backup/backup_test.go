@@ -407,7 +407,7 @@ func TestSnapshotsAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Into a folder of its own, never over the share.
-	if want := filepath.Join(e.m.mountRoot, "tank/restored/cloud-20261014-120000"); target != want {
+	if want := filepath.Join(e.m.mountRoot, "tank/restored/cloud-20261014-120000"); !strings.HasPrefix(target, want+"-") {
 		t.Errorf("target: %s, want %s", target, want)
 	}
 	for range 300 {
