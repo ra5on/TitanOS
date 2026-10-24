@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { dashboardControl } from '#lib/dashboard/control.svelte.ts';
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import type { Role } from '#lib/api.ts';
@@ -92,6 +93,7 @@
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
 		</button>
 	</div>
+	{#if page.url.pathname === '/' && dashboardControl.edit}<button class="terminal" type="button" aria-label={t('dashboard.editTitle')} aria-pressed={dashboardControl.editing} disabled={dashboardControl.editing} onclick={() => dashboardControl.edit?.()}><Icon name="edit" size={18}/></button>{/if}
 	{#if role !== 'user'}
 		<button type="button" class="terminal" aria-pressed={terminal.open} aria-label={t('terminal.title')} title={t('terminal.shortcut')} onclick={toggleTerminal}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg>
@@ -235,7 +237,7 @@
 	}
 	@media (max-width: 480px) {
 		header { gap: 4px; padding: 8px; }
-		.terminal { padding: 0 8px; }
+		.terminal { padding: 0; width:36px; }
 		.nav-arrow { width: 28px; }
 		.nav-shell, .nav-items { gap: 2px; }
 		.nav-shell nav a { padding-inline: 10px; }

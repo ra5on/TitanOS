@@ -11,7 +11,7 @@
 {#if selected.length === 0}
 	<p class="muted">{t('temperatures.choose')}</p>
 {:else}
-	<dl>
+	<dl class:grid={options.list === 'grid'}>
 		{#each selected as choice (choice.id)}
 			{@const sensor = system.info?.temperatures?.find((sensor) => sensor.id === choice.id)}
 			{@const hot =
@@ -47,6 +47,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+	}
+	dl.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+		gap: 16px;
+	}
+	dl.grid > div {
+		flex-direction: column;
+		gap: 4px;
+	}
+	dl.grid dd {
+		text-align: left;
 	}
 	dl > div {
 		display: flex;

@@ -33,7 +33,7 @@ export const sourceId = (id: TileId): SourceId => id.replace(/@[a-f0-9]{8}$/, ''
 export type TileSpec = { title: MessageKey; minW: number; minH: number };
 
 export const TILES: Record<StaticTileId, TileSpec> = {
-	cpu: { title: 'system.cpu', minW: 2, minH: 2 },
+	cpu: { title: 'dashboard.processor', minW: 2, minH: 2 },
 	memory: { title: 'system.memory', minW: 2, minH: 2 },
 	system: { title: 'tile.system', minW: 2, minH: 2 },
 	volumes: { title: 'tile.volumes', minW: 2, minH: 2 },
@@ -46,7 +46,7 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	nvidia: { title: 'tile.nvidia', minW: 2, minH: 2 },
 	assistant: { title: 'tile.assistant', minW: 3, minH: 3 },
 	docker: { title: 'nav.docker', minW: 3, minH: 2 },
-	vms: { title: 'nav.vms', minW: 3, minH: 2 },
+	vms: { title: 'dashboard.virtualMachines', minW: 3, minH: 2 },
 	shares: { title: 'nav.shares', minW: 3, minH: 2 },
 };
 
@@ -82,6 +82,10 @@ export type TilePlacement = {
 	h: number;
 	span?: number;
 	autoHeight?: boolean;
+	column?: number;
+	offset?: number;
+	locked?: boolean;
+	height?: number;
 };
 
 export function defaultLayout(): TilePlacement[] {
@@ -162,6 +166,10 @@ export function sanitizeLayout(input: unknown): TilePlacement[] {
 			h: cells(v.h, tileSpec(id).minH, 40) ?? fallback.h,
 			...(v.span !== undefined ? { span: cells(v.span, 1, 4) ?? 1 } : {}),
 			...(typeof v.autoHeight === 'boolean' ? { autoHeight: v.autoHeight } : {}),
+			...(v.column !== undefined ? { column: cells(v.column, 0, 3) ?? 0 } : {}),
+			...(v.offset !== undefined ? { offset: cells(v.offset, 0, 8000) ?? 0 } : {}),
+			...(typeof v.locked === 'boolean' ? { locked: v.locked } : {}),
+			...(v.height !== undefined ? { height: cells(v.height, 80, 1600) ?? 80 } : {}),
 		});
 	}
 	return layout;

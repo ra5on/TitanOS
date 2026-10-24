@@ -112,7 +112,7 @@
 		: undefined}
 >
 	<Header />
-	<main class:readable={!dockerPage}>
+	<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 		{#if !dockerPage}<ConnectionBanner />{#if page.url.pathname !== '/'}<TasksPanel />{/if}{/if}
 		{@render children()}
 	</main>
@@ -168,6 +168,7 @@
 		flex-direction: column;
 		gap: var(--gap);
 	}
+	main.dashboard { padding-top:12px; }
 	.fab {
 		position: fixed;
 		right: 20px;
@@ -194,7 +195,8 @@
 		outline-offset: 2px;
 	}
 	@media (max-width: 760px) {
-		.fab {
+		main.dashboard { padding-top:12px; }
+	.fab {
 			right: 14px;
 			bottom: 40px;
 		}

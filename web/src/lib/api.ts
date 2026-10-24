@@ -260,6 +260,8 @@ export type DockerContainer = {
  publicUrl: string;
  icon: string;
 	updateAvailable: boolean;
+ updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
+ updateError?: string;
 };
 
 export type DockerStatus = {

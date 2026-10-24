@@ -32,6 +32,10 @@ export const STYLE_KEYS = [
 	'valueFont',
 	'titleFont',
 	'labelFont',
+	'iconSize',
+	'entryWidth',
+	'nameLines',
+	'showSummary',
 ] as const;
 export const EDITOR_ICONS = [
 	'chip',
@@ -46,6 +50,11 @@ export const EDITOR_ICONS = [
 	'archive',
 ] as const;
 export type TileOptions = {
+	iconSize: number;
+	entryWidth: number;
+	nameLines: number;
+	showSummary: boolean;
+	collapsed: boolean;
 	details: boolean;
 	history: boolean;
 	temperature: boolean;
@@ -122,6 +131,11 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		]),
 	];
 	return {
+		iconSize: number('iconSize', 32, 20, 64),
+		entryWidth: number('entryWidth', idSource === 'vms' ? 200 : 170, 120, 320),
+		nameLines: number('nameLines', 2, 1, 2),
+		showSummary: bool('showSummary', true),
+		collapsed: bool('collapsed', false),
 		details: bool(
 			'details',
 			!['network', 'system', 'igpu', 'npu', 'nvidia', 'accelerators'].includes(idSource),
@@ -194,7 +208,11 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		labelAlign: choice('labelAlign', align, 'left'),
 		density: choice('density', ['compact', 'normal', 'comfortable'], 'normal'),
 		display: choice('display', ['auto', 'value', 'bar', 'ring', 'history'], 'auto'),
-		list: choice('list', ['list', 'grid'], ['docker', 'vms'].includes(idSource) ? 'grid' : 'list'),
+		list: choice(
+			'list',
+			['list', 'grid'],
+			['docker', 'vms', 'temperatures'].includes(idSource) ? 'grid' : 'list',
+		),
 		valueFont: choice(
 			'valueFont',
 			['mono', 'sans'],
@@ -223,7 +241,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 				].slice(0, 1000)
 			: null,
 		runningOnly: bool('runningOnly', false),
-		rows: number('rows', 12, 1, 100),
+		rows: number('rows', 100, 1, 100),
 		systemFields: systemFields(v.systemFields),
 		systemLayout: choice('systemLayout', ['rows', 'stacked'], 'rows'),
 		showLabels: bool('showLabels', true),
@@ -232,7 +250,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 export function tileStyle(o: TileOptions): string {
 	const font = (v: string) =>
 		v === 'mono' ? "'IBM Plex Mono',monospace" : "'IBM Plex Sans',sans-serif";
-	return `--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.opacity}%,transparent);--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
+	return `--tile-icon-size:${o.iconSize}px;--tile-entry-width:${o.entryWidth}px;--tile-name-lines:${o.nameLines};--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.opacity}%,transparent);--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
 }
 export function transferStyle(from: TileOptions, to: TileOptions): TileOptions {
 	const next = { ...to };

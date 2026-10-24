@@ -125,7 +125,7 @@ try {
   );
   await page.goto(base + "/");
   await tile(page, "vms")
-    .getByRole("button", { name: "Alle VM-Details", exact: true })
+    .getByRole("button", { name: "Aktionen: Windows 11", exact: true })
     .waitFor();
   assert.deepEqual((await order(page)).slice(0, 6), [
     "system",
@@ -138,7 +138,7 @@ try {
   assert.ok(!(await tile(page, "vms").innerText()).match(/CPU|RAM/));
   assert.equal(
     await tile(page, "docker")
-      .getByRole("button", { name: "photos", exact: true })
+      .getByRole("button", { name: "photos: Container anzeigen", exact: true })
       .getAttribute("aria-expanded"),
     "false",
   );
@@ -154,21 +154,21 @@ try {
     assert.ok(await r.evaluate((e) => e.scrollWidth <= e.clientWidth + 1));
   await page.screenshot({ path: out + "/dashboard.png", fullPage: true });
   await tile(page, "vms")
-    .getByRole("button", { name: "Alle VM-Details", exact: true })
+    .getByRole("button", { name: "Aktionen: Windows 11", exact: true })
     .click();
   await page
-    .getByRole("dialog")
+    .getByRole("menu")
+    .getByRole("menuitem", { name: "Details anzeigen", exact: true })
+    .click();
+  await tile(page, "vms")
+    .locator(".vm-inline")
     .getByText("2 vCPU", { exact: true })
-    .first()
     .waitFor();
-  assert.equal(
-    await page.getByRole("dialog").locator(".vm-details-grid section").count(),
-    4,
-  );
+  assert.equal(await tile(page, "vms").locator(".vm-inline").count(), 1);
+  assert.equal(await page.getByRole("dialog").count(), 0);
   await page.screenshot({ path: out + "/vm-details.png", fullPage: true });
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Fertig", exact: true })
+  await tile(page, "vms")
+    .getByRole("button", { name: "VM-Details schließen", exact: true })
     .click();
   await tile(page, "docker")
     .getByRole("button", { name: "Aktionen: photos", exact: true })
@@ -220,9 +220,14 @@ try {
   await tile(page, "app:photos").waitFor();
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
   assert.equal(await tile(page, "app:photos").count(), 0);
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await tile(page, "system")
-    .getByRole("button", { name: "Kachel anpassen: System", exact: true })
+    .getByRole("button", {
+      name: "Kachel anpassen: Systeminformationen",
+      exact: true,
+    })
     .click();
   await inspector(page)
     .getByRole("button", { name: "Inhalt", exact: true })
@@ -245,7 +250,9 @@ try {
   await page.screenshot({ path: out + "/editor.png", fullPage: true });
 
   for (const id of ["volumes", "shares"]) {
-    await tile(page, id).locator(".tile-action").first().click();
+    await tile(page, id)
+      .getByRole("button", { name: /^Kachel anpassen:/ })
+      .click();
     await inspector(page)
       .getByRole("button", { name: "Inhalt", exact: true })
       .click();
@@ -313,8 +320,10 @@ try {
     .getByRole("combobox", { name: "Spalten", exact: true })
     .selectOption("3");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
-  assert.equal(data.prefs.dashboard.version, 5);
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
+  assert.equal(data.prefs.dashboard.version, 6);
   assert.equal(data.prefs.dashboard.columns, 3);
   assert.ok(
     data.prefs.dashboard.tileOptions.system.systemFields.includes("ipv4"),
@@ -338,9 +347,13 @@ try {
       );
   }
   await page.screenshot({ path: out + "/mobile.png", fullPage: true });
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
   assert.deepEqual(
     data.prefs.dashboard,
     saved,
@@ -351,7 +364,9 @@ try {
     .getByText("192.168.1.20/24", { exact: true })
     .waitFor();
   await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
   await page
     .getByRole("combobox", { name: "Spalten", exact: true })
     .selectOption("4");
@@ -370,10 +385,12 @@ try {
   await regular.page.goto(base + "/");
   await tile(regular.page, "network").waitFor();
   assert.deepEqual(await order(regular.page), ["system", "network"]);
-  await regular.page.getByRole("button", { name: "Edit", exact: true }).click();
+  await regular.page
+    .getByRole("button", { name: "Edit dashboard", exact: true })
+    .click();
   await regular.page.getByRole("button", { name: "Save", exact: true }).click();
   await regular.page
-    .getByRole("button", { name: "Edit", exact: true })
+    .getByRole("button", { name: "Edit dashboard", exact: true })
     .waitFor();
   assert.equal(
     regular.data.prefs.dashboard.tileOptions.network.interface,
