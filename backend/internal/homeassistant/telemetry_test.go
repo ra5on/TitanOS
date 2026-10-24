@@ -1,0 +1,177 @@
+package homeassistant
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/config"
+)
+
+func TestTelemetryUnknownSelectionAndIdentity(t *testing.T) {
+	zero := "0.00"
+	devices := []DeviceValues{{Group: "gpu", ID: "pci:a-b", Name: "Card", Metrics: []MetricValue{{Key: "load", Value: &zero}, {Key: "temperature", Class: "temperature"}}}, {Group: "gpu", ID: "pci:a_b", Name: "Other", Metrics: []MetricValue{{Key: "load", Value: &zero}}}}
+	q := MQTT{Groups: []string{"gpu"}}
+	all := telemetryEntities(devices, q)
+	if len(all) != 3 || all[0].key == all[2].key || !*all[0].available || *all[1].available || all[1].state != "None" {
+		t.Fatalf("unknown/identity: %+v", all)
+	}
+	q.Devices = map[string][]string{"gpu": {devices[0].ID}}
+	if len(telemetryEntities(devices, q)) != 2 {
+		t.Fatal("selection ignored")
+	}
+	q.Devices["gpu"] = []string{}
+	if len(telemetryEntities(devices, q)) != 0 {
+		t.Fatal("empty selection became all")
+	}
+	// Older settings have no device restrictions. Unknown legacy values retain
+	// discovery with unavailable state instead of claiming that a disk is healthy.
+	legacy := entities(Snapshot{Disks: []DiskValues{{ID: "serial", Name: "disk"}}, Volumes: []VolumeValues{{Name: "data"}}, Backups: []BackupValues{{Name: "archive"}}, UPS: &UPSValues{}}, MQTT{Groups: []string{"disks", "volumes", "backups", "ups"}}, "base")
+	for _, e := range legacy {
+		if strings.HasSuffix(e.key, "_problem") || strings.HasSuffix(e.key, "_temperature") || strings.HasSuffix(e.key, "_used") || e.key == "ups_charge" {
+			if e.available == nil || *e.available || e.state != "None" {
+				t.Fatalf("false healthy: %+v", e)
+			}
+		}
+	}
+}
+func TestDeviceSettingsDoNotAliasCaller(t *testing.T) {
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	input := map[string][]string{"gpu": {"0000:01:00.0"}}
+	if err := m.SetSettings(Settings{MQTT: MQTT{Devices: input}}); err != nil {
+		t.Fatal(err)
+	}
+	input["gpu"][0] = "changed"
+	input["gpu"] = []string{}
+	settings, _ := m.Settings()
+	if len(settings.MQTT.Devices["gpu"]) != 1 || settings.MQTT.Devices["gpu"][0] != "0000:01:00.0" {
+		t.Fatal("caller mutated live settings")
+	}
+	settings.MQTT.Devices["gpu"][0] = "changed"
+	again, _ := m.Settings()
+	if again.MQTT.Devices["gpu"][0] != "0000:01:00.0" {
+		t.Fatal("response aliases live settings")
+	}
+	if err := m.SetSettings(Settings{MQTT: MQTT{Devices: map[string][]string{"shell": {"x"}}}}); err == nil {
+		t.Fatal("unknown group accepted")
+	}
+}
+func TestMQTTUnknownRemovedAndBirth(t *testing.T) {
+	b := startBroker(t)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	if err := m.SetSettings(Settings{MQTT: MQTT{Enabled: true, Host: "127.0.0.1", Port: b.port(), ID: "telemetry", Groups: []string{"gpu"}}}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	value := "31.00"
+	snapshot := Snapshot{Telemetry: []DeviceValues{{Group: "gpu", ID: "card", Name: "GPU", Metrics: []MetricValue{{Key: "temperature", Value: &value, Class: "temperature", Unit: "°C"}}}}}
+	source := func(context.Context) Snapshot {
+		mu.Lock()
+		defer mu.Unlock()
+		result := snapshot
+		result.Telemetry = append([]DeviceValues{}, snapshot.Telemetry...)
+		for i := range result.Telemetry {
+			result.Telemetry[i].Metrics = append([]MetricValue{}, result.Telemetry[i].Metrics...)
+		}
+		return result
+	}
+	old := mqttInterval
+	mqttInterval = 40 * time.Millisecond
+	defer func() { mqttInterval = old }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.RunMQTT(ctx, source, nil)
+	key := telemetryEntities(snapshot.Telemetry, MQTT{Groups: []string{"gpu"}})[0].key
+	topic := "homeassistant/sensor/titanos_telemetry/" + key + "/config"
+	avail := "titanos/telemetry/available/" + key
+	eventually(t, "initial metric", func() bool {
+		return b.get(func(b *fakeBroker) bool { return b.retained[topic] != "" && b.retained[avail] == "online" })
+	})
+	b.get(func(b *fakeBroker) bool {
+		var cfg map[string]any
+		json.Unmarshal([]byte(b.retained[topic]), &cfg)
+		if cfg["expire_after"] != float64(95) || cfg["availability_mode"] != "all" {
+			t.Errorf("availability %+v", cfg)
+		}
+		if b.retained["titanos/telemetry/state/"+key] != "" {
+			t.Error("stale state retained")
+		}
+		return true
+	})
+	mu.Lock()
+	snapshot.Telemetry[0].Metrics[0].Value = nil
+	mu.Unlock()
+	eventually(t, "missing value", func() bool {
+		return b.get(func(b *fakeBroker) bool {
+			return b.retained[avail] == "offline" && b.states["titanos/telemetry/state/"+key] == "None" && b.retained[topic] != ""
+		})
+	})
+	mu.Lock()
+	snapshot.Telemetry = nil
+	snapshot.UnavailableGroups = []string{"gpu"}
+	mu.Unlock()
+	// Birth forces a complete fresh announcement. Retained discovery from a prior
+	// connection stays unavailable during a source error, then is retired on removal.
+	b.send("homeassistant/status", "online")
+	oldcfg := `{"unique_id":"titanos_telemetry_` + key + `","name":"GPU temperature"}`
+	b.send(topic, oldcfg)
+	eventually(t, "unavailable discovery preserved", func() bool {
+		return b.get(func(b *fakeBroker) bool { return b.retained[topic] != "" && b.retained[avail] == "offline" })
+	})
+	mu.Lock()
+	snapshot.UnavailableGroups = nil
+	mu.Unlock()
+	eventually(t, "removed device", func() bool {
+		return b.get(func(b *fakeBroker) bool { return b.retained[topic] == "" && b.retained[avail] == "" })
+	})
+	// A burst larger than the command queue must not lose retained cleanup.
+	for i := range 128 {
+		name := fmt.Sprintf("gpu_old_%d", i)
+		b.send("homeassistant/sensor/titanos_telemetry/"+name+"/config", `{"unique_id":"titanos_telemetry_`+name+`"}`)
+	}
+	eventually(t, "retained discovery burst", func() bool {
+		return b.get(func(b *fakeBroker) bool {
+			for i := range 128 {
+				v, seen := b.retained[fmt.Sprintf("homeassistant/sensor/titanos_telemetry/gpu_old_%d/config", i)]
+				if !seen || v != "" {
+					return false
+				}
+			}
+			return true
+		})
+	})
+	stale := "homeassistant/sensor/titanos_telemetry/gpu_old_load/config"
+	b.send(stale, `{"unique_id":"titanos_telemetry_gpu_old_load"}`)
+	eventually(t, "stale retained discovery cleared", func() bool {
+		return b.get(func(b *fakeBroker) bool { _, seen := b.retained[stale]; return seen && b.retained[stale] == "" })
+	})
+}
+
+func TestNormalizedNamesCannotAliasCommands(t *testing.T) {
+	snap := Snapshot{Containers: []RunValues{{Name: "photos-web", Running: true}, {Name: "photos_web", Running: false}}}
+	list := entities(snap, MQTT{Groups: []string{"containers"}, Commands: []string{"containers"}}, "base")
+	ids, topics := map[string]bool{}, map[string]bool{}
+	for _, e := range list {
+		if ids[e.key] {
+			t.Fatal("discovery key collision")
+		}
+		ids[e.key] = true
+		if e.component == "switch" {
+			topic := e.config["command_topic"].(string)
+			if topics[topic] {
+				t.Fatal("command can target two containers")
+			}
+			topics[topic] = true
+		}
+	}
+	single := entities(Snapshot{Containers: snap.Containers[:1]}, MQTT{Groups: []string{"containers"}}, "base")
+	if single[0].key != "container_photos_web" {
+		t.Fatal("non-colliding historical ID changed")
+	}
+}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tileOptions, type TileOptions } from '../options.ts';
+	let { options = tileOptions(null, 'assistant') }: { options?: TileOptions } = $props();
 	// The latest tasks of this account and the next automations. Reads only
 	// what the assistant pages read; refreshes while the dashboard is visible.
 	import { onMount } from 'svelte';
@@ -40,7 +42,14 @@
 		return () => clearInterval(timer);
 	});
 
-	const CHIP: Record<string, string> = { confirmation: 'warn', blocked: 'error', running: 'info', queued: 'info', waiting: 'info', done: 'ok' };
+	const CHIP: Record<string, string> = {
+		confirmation: 'warn',
+		blocked: 'error',
+		running: 'info',
+		queued: 'info',
+		waiting: 'info',
+		done: 'ok',
+	};
 </script>
 
 {#if unavailable}
@@ -54,17 +63,25 @@
 		<ul>
 			{#each chats as chat (chat.id)}
 				<li>
-					<a href="/assistant?chat={encodeURIComponent(chat.id)}">{chat.title || t('assistant.untitled')}</a>
-					{#if chat.run?.state}<span class="chip {CHIP[chat.run.state] ?? ''}">{t(`agent.state.${chat.run.state}` as MessageKey)}</span>{/if}
+					<a href="/assistant?chat={encodeURIComponent(chat.id)}"
+						>{chat.title || t('assistant.untitled')}</a
+					>
+					{#if chat.run?.state}<span class="chip {CHIP[chat.run.state] ?? ''}"
+							>{t(`agent.state.${chat.run.state}` as MessageKey)}</span
+						>{/if}
 				</li>
 			{/each}
 		</ul>
 	{/if}
-	{#if next.length}
+	{#if options.details && next.length}
 		<h3>{t('tile.assistantNext')}</h3>
 		<ul>
 			{#each next as a (a.id)}
-				<li><a href="/assistant/automations">{a.name}</a><span class="muted mono">{formatDateTime(new Date(a.next!))}</span></li>
+				<li>
+					<a href="/assistant/automations">{a.name}</a><span class="muted mono"
+						>{formatDateTime(new Date(a.next!))}</span
+					>
+				</li>
 			{/each}
 		</ul>
 	{/if}

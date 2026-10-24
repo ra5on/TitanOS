@@ -52,7 +52,7 @@ func (s *Server) handleHASettings(w http.ResponseWriter, r *http.Request) {
 	watching, watchError := s.opts.HomeAssistant.WatchStatus()
 	publishing, mqttError := s.opts.HomeAssistant.MQTTStatus()
 	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(),
-		"diagnostics": s.opts.HomeAssistant.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups,
+		"diagnostics": s.opts.HomeAssistant.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups, "mqttDevices": s.HASnapshot(r.Context()).Telemetry,
 		"status": map[string]any{"watching": watching, "watchError": watchError, "mqtt": publishing, "mqttError": mqttError}})
 }
 

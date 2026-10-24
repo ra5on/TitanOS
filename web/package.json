@@ -16,8 +16,8 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run format:check:workflows",
-		"format:workflows": "prettier --write src/lib/operations.ts \"src/lib/operations/**/*.{ts,svelte}\" src/routes/shares/+page.svelte src/routes/storage/manage/+page.svelte \"src/routes/tools/{tasks,maintenance,monitoring}/+page.svelte\" \"src/routes/settings/backups/{coverage,applications}/+page.svelte\"",
-		"format:check:workflows": "prettier --check src/lib/operations.ts \"src/lib/operations/**/*.{ts,svelte}\" src/routes/shares/+page.svelte src/routes/storage/manage/+page.svelte \"src/routes/tools/{tasks,maintenance,monitoring}/+page.svelte\" \"src/routes/settings/backups/{coverage,applications}/+page.svelte\""
+		"format:workflows": "prettier --write src/lib/operations.ts \"src/lib/operations/**/*.{ts,svelte}\" src/routes/shares/+page.svelte src/routes/storage/manage/+page.svelte \"src/routes/tools/{tasks,maintenance,monitoring}/+page.svelte\" \"src/routes/settings/backups/{coverage,applications}/+page.svelte\" \"src/lib/dashboard/**/*.{ts,svelte}\" src/lib/storage-view.ts src/routes/storage/+page.svelte src/routes/settings/+page.svelte src/routes/settings/homeassistant/+page.svelte",
+		"format:check:workflows": "prettier --check src/lib/operations.ts \"src/lib/operations/**/*.{ts,svelte}\" src/routes/shares/+page.svelte src/routes/storage/manage/+page.svelte \"src/routes/tools/{tasks,maintenance,monitoring}/+page.svelte\" \"src/routes/settings/backups/{coverage,applications}/+page.svelte\" \"src/lib/dashboard/**/*.{ts,svelte}\" src/lib/storage-view.ts src/routes/storage/+page.svelte src/routes/settings/+page.svelte src/routes/settings/homeassistant/+page.svelte"
 	},
 	"devDependencies": {
 		"@fontsource/ibm-plex-mono": "^5.3.0",

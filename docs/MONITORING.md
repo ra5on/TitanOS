@@ -93,3 +93,13 @@ Die optionale Kapazitätsentwicklung auf derselben Seite verwendet nur ausreiche
 lange, frische zusammenhängende Messungen. Fehlende oder stark schwankende Daten
 bleiben unbekannt. Hinweise sind auf der geladenen Seite sichtbar; es gibt dafür
 keine zusätzlichen Push-Meldungen. Genaue Grenzen in [WORKFLOWS.md](WORKFLOWS.md).
+
+## Dashboard-Editor und MQTT seit 0.18.0
+
+Der [persönliche Editor](design/PersonalDashboard.md) ergänzt Typografie, Flächen,
+Messwertdarstellungen und mehrere unabhängige Kachelinstanzen auf einer Startseite.
+Alte gespeicherte Layouts bleiben erhalten. MQTT nutzt die vorhandenen
+Beschleunigermesswerte und begrenzte stündliche RAM-Beobachtungen des Recorders
+für Prognosen; es liest dafür keine Historie nach. Einmaliges Vorwärmen erfolgt
+im Recorder, nicht im MQTT-Takt. Datenlücken, Volume-Wechsel und alte Daten
+verhindern falsche Prognosen. Details: [Home Assistant](HOME-ASSISTANT.md).

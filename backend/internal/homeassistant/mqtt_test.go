@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -107,13 +108,13 @@ func TestMQTTDiscoveryStatesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	var mu sync.Mutex
-	containers := []RunValues{{"immich_server", true}, {"pihole", false}}
+	containers := []RunValues{{Name: "immich_server", Running: true}, {Name: "pihole", Running: false}}
 	used := 42.0
 	source := func(context.Context) Snapshot {
 		mu.Lock()
 		defer mu.Unlock()
 		return Snapshot{Host: "nas", Version: "0.14.0", System: &SystemValues{CPUPercent: 12.3, MemoryPercent: 40},
-			Volumes: []VolumeValues{{Name: "data", State: "ok", UsedPercent: &used}}, Containers: append([]RunValues{}, containers...), VMs: []RunValues{{"win11", true}}}
+			Volumes: []VolumeValues{{Name: "data", State: "ok", UsedPercent: &used}}, Containers: append([]RunValues{}, containers...), VMs: []RunValues{{Name: "win11", Running: true}}}
 	}
 	var cmds []string
 	commands := func(_ context.Context, kind, name, action string) error {
@@ -130,13 +131,15 @@ func TestMQTTDiscoveryStatesAndCommands(t *testing.T) {
 	go m.RunMQTT(ctx, source, commands)
 
 	cfg := "homeassistant/sensor/titanos_abc123/cpu/config"
-	eventually(t, "discovery", func() bool { return broker.get(func(b *fakeBroker) bool { return b.retained[cfg] != "" }) })
+	eventually(t, "discovery", func() bool {
+		return broker.get(func(b *fakeBroker) bool { return b.retained[cfg] != "" && len(b.subs) == 3 })
+	})
 	broker.get(func(b *fakeBroker) bool {
 		// Login, last will (QoS 1, retained) and the command subscription.
 		if !strings.Contains(string(b.connect), "titanos/abc123/status") || !strings.Contains(string(b.connect), "nas") || b.connect[7]&0x3c != 0x2c {
 			t.Errorf("connect %q", b.connect)
 		}
-		if len(b.subs) != 1 || b.subs[0] != "titanos/abc123/cmd/#" {
+		if len(b.subs) != 3 || !slices.Contains(b.subs, "titanos/abc123/cmd/#") {
 			t.Errorf("subs %v", b.subs)
 		}
 		var c map[string]any
@@ -146,6 +149,11 @@ func TestMQTTDiscoveryStatesAndCommands(t *testing.T) {
 		}
 		if b.states["titanos/abc123/state/cpu"] != "12.3" || b.states["titanos/abc123/state/volume_data_used"] != "42.0" || b.states["titanos/abc123/status"] != "online" {
 			t.Errorf("states %v", b.states)
+		}
+		var sw map[string]any
+		json.Unmarshal([]byte(b.retained["homeassistant/switch/titanos_abc123/container_pihole/config"]), &sw)
+		if _, invalid := sw["expire_after"]; invalid {
+			t.Error("MQTT switches do not support sensor expiration")
 		}
 		// Containers with commands are switches; VMs are neither sensors nor switches here.
 		if b.retained["homeassistant/switch/titanos_abc123/container_pihole/config"] == "" || b.states["titanos/abc123/state/container_immich_server"] != "ON" {

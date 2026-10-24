@@ -106,3 +106,49 @@ func CapacityTrends(samples []Sample, now time.Time) []Trend {
 	}
 	return out
 }
+
+// remember bounds telemetry to one recent sample per hour. It runs when the
+// optional recorder writes, never as a consequence of MQTT publishing.
+func (m *Manager) remember(samples []Sample, volume string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.settings.Volume != volume || !m.settings.Enabled {
+		return
+	}
+	hours := map[int64]Sample{}
+	for _, s := range append(append([]Sample{}, m.cachedSamples...), samples...) {
+		hour := s.At.Unix() / 3600
+		old, ok := hours[hour]
+		gap := s.Gap || old.Gap
+		if !ok || s.At.After(old.At) {
+			hours[hour] = s
+		}
+		latest := hours[hour]
+		latest.Gap = gap
+		hours[hour] = latest
+	}
+	keys := make([]int64, 0, len(hours))
+	for k := range hours {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	if len(keys) > 721 {
+		keys = keys[len(keys)-721:]
+	}
+	m.cachedSamples = nil
+	for _, k := range keys {
+		m.cachedSamples = append(m.cachedSamples, hours[k])
+	}
+}
+
+// CachedTrends performs no file access; stale/missing history stays unknown.
+func (m *Manager) CachedTrends(now time.Time) []Trend {
+	m.mu.Lock()
+	samples := append([]Sample{}, m.cachedSamples...)
+	enabled := m.settings.Enabled && m.problem == ""
+	m.mu.Unlock()
+	if !enabled {
+		return nil
+	}
+	return CapacityTrends(samples, now)
+}
