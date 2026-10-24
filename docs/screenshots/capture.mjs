@@ -207,7 +207,7 @@ data.shares = ["Dokumente", "Medien", "Fotos", "Projekte"].map((name, i) => ({
 data.system = {
   ...data.system,
   hostname: "titan-nas",
-  version: "0.19.1",
+  version: "0.20.0",
   kernel: "6.12.113+deb13-amd64",
   uptimeSeconds: 20 * 3600 + 41 * 60,
   inventory: { mainboard: "ASRock B560M Pro4", bios: "P2.30 · 12.09.2025" },
@@ -268,6 +268,24 @@ data.system.temperatures = ["CPU-Paket", "NVMe", "Mainboard"].map(
 );
 data.prefs.dashboard = {
   version: 6,
+  visual: {
+    transparency: 48,
+    blur: 14,
+    glow: 18,
+    dim: 15,
+    motion: true,
+    duration: 450,
+    images: [],
+    background: {
+      source: "builtin",
+      id: "nordlicht",
+      fit: "contain",
+      x: 50,
+      y: 50,
+      zoom: 100,
+      fixed: true,
+    },
+  },
   columns: 2,
   minimumWidth: 350,
   tiles: [
@@ -411,10 +429,31 @@ try {
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
     .click();
   await page
-    .locator("[gs-id=docker]")
-    .getByRole("button", { name: "Kachel anpassen: Docker", exact: true })
-    .click();
+    .getByRole("complementary", { name: "Gesamtes Dashboard", exact: true })
+    .waitFor();
   await shot("dashboard-editor");
+  await page
+    .getByRole("button", {
+      name: "Bild auswählen oder hinzufügen …",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Hintergrund auswählen", exact: true })
+    .waitFor();
+  await shot("dashboard-hintergruende");
+  await page
+    .getByRole("button", { name: "Eigenes Bild hinzufügen", exact: true })
+    .click();
+  await page
+    .locator("input[type=file]")
+    .setInputFiles("web/static/backgrounds/bergsee.webp");
+  await page.locator(".personal-image").waitFor();
+  await shot("dashboard-bild-upload");
+  await page
+    .getByRole("button", { name: "Abbrechen", exact: true })
+    .last()
+    .click();
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
   await page.setViewportSize({ width: 1600, height: 780 });
   await page.goto(base + "/storage#volume-data");
@@ -459,6 +498,8 @@ try {
   const names = [
     "dashboard",
     "dashboard-editor",
+    "dashboard-hintergruende",
+    "dashboard-bild-upload",
     "dashboard-vm-details",
     "speicher",
     "shares",
@@ -502,7 +543,7 @@ try {
     ) + "\n",
   );
   console.log(
-    "11 current WebUI screenshots captured; fonts, Docker logos, mobile width and browser runtime checked.",
+    "13 current WebUI screenshots captured; fonts, Docker logos, mobile width and browser runtime checked.",
   );
 } catch (error) {
   await page.screenshot({
