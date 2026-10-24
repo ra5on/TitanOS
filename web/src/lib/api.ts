@@ -1,20 +1,31 @@
 // Thin wrapper around fetch for the titand API.
 
 export class ApiError extends Error {
+	readonly status: number;
+	readonly code: string;
+	readonly retryAfter: number;
 	constructor(
-		readonly status: number,
+		status: number,
 		/** Machine-readable reason, e.g. "invalid_credentials". Translated via `error.<code>`. */
-		readonly code: string,
+		code: string,
 		message: string,
-		readonly retryAfter = 0
+		retryAfter = 0,
 	) {
 		super(message);
+		this.status = status;
+		this.code = code;
+		this.retryAfter = retryAfter;
 	}
 }
 
 type Body = Record<string, unknown> | Blob | FormData | undefined;
 
-async function request<T>(method: string, path: string, body?: Body, signal?: AbortSignal): Promise<T> {
+async function request<T>(
+	method: string,
+	path: string,
+	body?: Body,
+	signal?: AbortSignal,
+): Promise<T> {
 	const init: RequestInit = { method, credentials: 'same-origin', signal };
 	if (body instanceof Blob || body instanceof FormData) {
 		init.body = body;
@@ -46,14 +57,23 @@ async function request<T>(method: string, path: string, body?: Body, signal?: Ab
 	}
 	// Many actions answer without a body (201, 202, 204).
 	const text = await res.text();
-	return (text ? JSON.parse(text) : undefined) as T;
+	if (!text) return undefined as T;
+	if (!res.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+		throw new ApiError(res.status, 'invalid_response', 'Expected a JSON API response');
+	}
+	try {
+		return JSON.parse(text) as T;
+	} catch {
+		throw new ApiError(res.status, 'invalid_response', 'Invalid JSON API response');
+	}
 }
 
 export const api = {
 	get: <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal),
-	post: <T>(path: string, body?: Body, signal?: AbortSignal) => request<T>('POST', path, body, signal),
+	post: <T>(path: string, body?: Body, signal?: AbortSignal) =>
+		request<T>('POST', path, body, signal),
 	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
-	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body)
+	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body),
 };
 
 export type Role = 'owner' | 'admin' | 'user';
@@ -69,30 +89,67 @@ export type Session = {
 };
 
 export type Accelerator = {
-	address: string; name: string; vendor: string; kind: string; driver: string;
+	address: string;
+	name: string;
+	vendor: string;
+	kind: string;
+	driver: string;
 	state: 'ready' | 'driver_missing' | 'vm' | 'suspended';
-	usagePercent: number | null; temperatureC: number | null; powerWatts: number | null;
-	memoryUsedBytes: number | null; memoryTotalBytes: number | null; frequencyMHz: number | null;
-	pState: string; engines: { name: string; usagePercent: number }[]; history: (number | null)[];
+	usagePercent: number | null;
+	temperatureC: number | null;
+	powerWatts: number | null;
+	memoryUsedBytes: number | null;
+	memoryTotalBytes: number | null;
+	frequencyMHz: number | null;
+	pState: string;
+	engines: { name: string; usagePercent: number }[];
+	history: (number | null)[];
 };
 
 export type DashboardNetwork = {
- interface: string; ipv4: string; ipv4Addresses: string[]; ipv6Addresses: string[];
- gateway: string; gateway6: string; speedMbps: number; mac: string; mtu: number; state: string;
- rxBytesPerSecond: number; txBytesPerSecond: number;
+	interface: string;
+	ipv4: string;
+	ipv4Addresses: string[];
+	ipv6Addresses: string[];
+	gateway: string;
+	gateway6: string;
+	speedMbps: number;
+	mac: string;
+	mtu: number;
+	state: string;
+	rxBytesPerSecond: number;
+	txBytesPerSecond: number;
 };
 
 export type SystemInfo = {
-	inventory?: {mainboard:string;bios:string};
+	inventory?: { mainboard: string; bios: string };
 	accelerators: Accelerator[];
 	hostname: string;
 	version: string;
 	kernel: string;
 	uptimeSeconds: number;
-	cpu: { model: string; threads: number; usagePercent: number; threadUsage?: {id:string;usagePercent:number|null}[] };
-	memory: { totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number; cacheBytes?: number; dirtyBytes?: number; writebackBytes?: number };
+	cpu: {
+		model: string;
+		threads: number;
+		usagePercent: number;
+		threadUsage?: { id: string; usagePercent: number | null }[];
+	};
+	memory: {
+		totalBytes: number;
+		usedBytes: number;
+		freeBytes: number;
+		availableBytes: number;
+		cacheBytes?: number;
+		dirtyBytes?: number;
+		writebackBytes?: number;
+	};
 	temperatures: Temperature[];
-	image: { slot: string; sizeBytes: number; overlayUsedBytes: number; overlayTotalBytes: number } | null;
+	image: {
+		slot: string;
+		sizeBytes: number;
+		overlayUsedBytes: number;
+		overlayTotalBytes: number;
+	} | null;
 	stick: { label: string; present: boolean };
 	network: DashboardNetwork | null;
 	networks: DashboardNetwork[];
@@ -125,13 +182,14 @@ export type Temperature = {
 
 export type DiskRole = 'stick' | 'member' | 'free' | 'used';
 export type MemberState = 'active' | 'rebuilding' | 'faulty' | 'spare';
-export type VolumeState = 'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
+export type VolumeState =
+	'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
 export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
 export type Filesystem = 'ext4' | 'xfs' | 'btrfs';
 
 export type Disk = {
- identity?: string;
- unavailableReason?: 'stick' | 'volume' | 'mounted' | 'testing' | 'small' | 'vm';
+	identity?: string;
+	unavailableReason?: 'stick' | 'volume' | 'mounted' | 'testing' | 'small' | 'vm';
 	name: string;
 	path: string;
 	model: string;
@@ -170,10 +228,20 @@ export type Volume = {
 	mismatches: number;
 };
 
-export type DiskSleepStatus = { idleMinutes: number; available: boolean; errors: { disk: string; message: string }[] };
+export type DiskSleepStatus = {
+	idleMinutes: number;
+	available: boolean;
+	errors: { disk: string; message: string }[];
+};
 export type StorageStatus = { disks: Disk[]; volumes: Volume[]; diskSleep: DiskSleepStatus };
 
-export type Account = { name: string; role: Role; created: string; smbReady: boolean; twoFactor: boolean };
+export type Account = {
+	name: string;
+	role: Role;
+	created: string;
+	smbReady: boolean;
+	twoFactor: boolean;
+};
 
 export type AccessLevel = 'ro' | 'rw';
 
@@ -205,10 +273,14 @@ export type FileRoot = {
 };
 
 export type CopyJob = {
- durable?:boolean;blocked?:boolean;
- waiting?:boolean; paused?:boolean; priority?:number; rate?:number;
- operation?: string;
- retryable?: boolean;
+	durable?: boolean;
+	blocked?: boolean;
+	waiting?: boolean;
+	paused?: boolean;
+	priority?: number;
+	rate?: number;
+	operation?: string;
+	retryable?: boolean;
 	id: string;
 	move: boolean;
 	state: 'running' | 'done' | 'failed' | 'cancelled';
@@ -240,7 +312,13 @@ export type UsbDevice = {
 
 export type FileEntry = { name: string; dir: boolean; size: number; modified: string };
 
-export type UploadStatus = { id: string; offset: number; size: number; name: string; busy?: boolean };
+export type UploadStatus = {
+	id: string;
+	offset: number;
+	size: number;
+	name: string;
+	busy?: boolean;
+};
 
 export type DockerContainer = {
 	id: string;
@@ -257,11 +335,11 @@ export type DockerContainer = {
 	cpuHistory: number[];
 	/** Value of the label titanos.webui: a host port, a port with a path or a URL. */
 	webui: string;
- publicUrl: string;
- icon: string;
+	publicUrl: string;
+	icon: string;
 	updateAvailable: boolean;
- updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
- updateError?: string;
+	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
+	updateError?: string;
 };
 
 export type DockerStatus = {
@@ -287,7 +365,7 @@ export type AppSource = {
 };
 
 export type CatalogApp = {
- icon: string;
+	icon: string;
 	id: string;
 	source: string;
 	name: string;
@@ -314,7 +392,7 @@ export type VMDisk = {
 export type VMFolder = { path: string; tag: string; readOnly: boolean };
 
 export type VM = {
- directory?: string;
+	directory?: string;
 	name: string;
 	displayName?: string;
 	description: string;
@@ -355,12 +433,24 @@ export type VMStatus = {
 	kvm: boolean;
 	/** Whether the bridge is set up that gives VMs an address of their own. */
 	bridge: boolean;
-	host: { cpus: number; memoryBytes: number; usedMemoryBytes: number; availableMemoryBytes?: number; cpuModel: string };
+	host: {
+		cpus: number;
+		memoryBytes: number;
+		usedMemoryBytes: number;
+		availableMemoryBytes?: number;
+		cpuModel: string;
+	};
 	vms: VM[];
 };
 
 export type HostCPU = { id: number; kind: '' | 'p' | 'e'; siblings: number[]; usedBy: string[] };
-export type DiskImage = { path: string; format: string; virtualBytes: number; actualBytes: number; usedBy: string };
+export type DiskImage = {
+	path: string;
+	format: string;
+	virtualBytes: number;
+	actualBytes: number;
+	usedBy: string;
+};
 export type WholeDisk = { path: string; device: string; usedBy: string };
 export type VMHost = { cpus: HostCPU[]; images: DiskImage[]; disks: WholeDisk[] };
 
@@ -379,5 +469,14 @@ export type PCIDevice = {
 	/** Why it cannot be handed to a VM: no_iommu, shared_group, npu. */
 	reason: string;
 };
-export type USBDevice = { id: string; name: string; port: string; stick: boolean; duplicate: boolean };
-export type Hardware = { hardware: { iommu: boolean; pci: PCIDevice[]; usb: USBDevice[] }; usedBy: Record<string, string[]> };
+export type USBDevice = {
+	id: string;
+	name: string;
+	port: string;
+	stick: boolean;
+	duplicate: boolean;
+};
+export type Hardware = {
+	hardware: { iommu: boolean; pci: PCIDevice[]; usb: USBDevice[] };
+	usedBy: Record<string, string[]>;
+};

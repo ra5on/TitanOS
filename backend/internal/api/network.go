@@ -11,6 +11,8 @@ import (
 
 func writeNetworkError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, network.ErrBridgePort):
+		writeError(w, http.StatusConflict, "network_bridge_port", err.Error())
 	case errors.Is(err, network.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_network", err.Error())
 	case errors.Is(err, network.ErrDisabled):
@@ -25,6 +27,22 @@ func writeNetworkError(w http.ResponseWriter, err error) {
 		slog.Error("network change failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "network_failed", err.Error())
 	}
+}
+
+func (s *Server) handleNetworkBridge(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Port             string `json:"port"`
+		OnlyUnconfigured bool   `json:"onlyUnconfigured"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Network.EnsureBridge(r.Context(), req.Port, req.OnlyUnconfigured); err != nil {
+		writeNetworkError(w, err)
+		return
+	}
+	slog.Info("network bridge requested", "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleNetwork(w, r)
 }
 
 func (s *Server) handleNetwork(w http.ResponseWriter, r *http.Request) {

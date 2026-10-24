@@ -49,10 +49,11 @@ var (
 	ErrDisabled  = errors.New("network: not available in development mode")
 	ErrNotLoaded = errors.New("network: configuration could not be read from /config")
 	// ErrInvalid means a setting is not acceptable; the message says which.
-	ErrInvalid   = errors.New("network: invalid setting")
-	ErrNoPending = errors.New("network: no change is waiting for confirmation")
-	ErrPending   = errors.New("network: a change is waiting for confirmation")
-	ErrReverting = errors.New("network: restoring the previous configuration")
+	ErrInvalid    = errors.New("network: invalid setting")
+	ErrNoPending  = errors.New("network: no change is waiting for confirmation")
+	ErrPending    = errors.New("network: a change is waiting for confirmation")
+	ErrReverting  = errors.New("network: restoring the previous configuration")
+	ErrBridgePort = errors.New("network: select the Ethernet port for the bridge")
 )
 
 var hostnameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -91,7 +92,9 @@ type Interface struct {
 
 // Status is everything the network page shows.
 type Status struct {
-	Config Config `json:"config"`
+	Config      Config `json:"config"`
+	Configured  bool   `json:"configured"`
+	BridgeReady bool   `json:"bridgeReady"`
 	// Pending is a change on trial; PendingSeconds is how long it has left.
 	Pending        *Config     `json:"pending"`
 	PendingSeconds int         `json:"pendingSeconds"`
@@ -115,10 +118,11 @@ type Manager struct {
 	// trial is how long a change waits for confirmation.
 	trial time.Duration
 
-	mu      sync.Mutex
-	loaded  bool
-	active  Config
-	pending *Config
+	mu         sync.Mutex
+	loaded     bool
+	configured bool
+	active     Config
+	pending    *Config
 	// before is what comes back if the pending change is not confirmed.
 	before    Config
 	deadline  time.Time
@@ -149,7 +153,7 @@ func (m *Manager) Load(ctx context.Context) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.active, m.loaded = normal(cfg), true
+	m.active, m.loaded, m.configured = normal(cfg), true, !missing
 	if missing || m.Disabled {
 		return nil
 	}
@@ -360,7 +364,7 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 	}
 	// Nothing new: a restart of titand (as for an app update) must not
 	// take the network down for a moment, nor the bridge of the VMs.
-	changed := len(m.retired) > 0
+	changed := len(m.retired) > 0 || cfg.Bridge && !m.HasBridge()
 	for _, entry := range old {
 		if name := entry.Name(); strings.HasPrefix(name, prefix) && files[name] == "" {
 			changed = true
@@ -462,6 +466,78 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 	if m.pending != nil {
 		return ErrPending
 	}
+	return m.changeLocked(ctx, cfg)
+}
+
+// EnsureBridge preserves the current network topology and addressing. A new
+// installation may request setup only while no explicit configuration exists.
+// Port selection is required when the current uplink cannot be determined.
+func (m *Manager) EnsureBridge(ctx context.Context, port string, onlyUnconfigured bool) error {
+	if m.Disabled {
+		return ErrDisabled
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	if m.pending != nil {
+		return ErrPending
+	}
+	if onlyUnconfigured && m.configured {
+		return nil
+	}
+	if m.active.Bridge && m.HasBridge() {
+		return nil
+	}
+	cfg := m.active
+	cfg.Ports = slices.Clone(cfg.Ports)
+	if len(cfg.Ports) == 0 {
+		known := m.Interfaces()
+		if port == "" {
+			lookup, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			out, err := m.runner.Run(lookup, "", "ip", "-4", "route", "show", "default")
+			if err != nil {
+				return ErrBridgePort
+			}
+			candidates := map[string]bool{}
+			unknown := false
+			for _, line := range strings.Split(out, "\n") {
+				fields := strings.Fields(line)
+				for i := 0; i+1 < len(fields); i++ {
+					if fields[i] == "dev" {
+						if slices.ContainsFunc(known, func(p Interface) bool { return p.Name == fields[i+1] }) {
+							candidates[fields[i+1]] = true
+						} else {
+							unknown = true
+						}
+					}
+				}
+			}
+			if unknown || len(candidates) != 1 {
+				return ErrBridgePort
+			}
+			for candidate := range candidates {
+				port = candidate
+			}
+		}
+		if !slices.ContainsFunc(known, func(p Interface) bool { return p.Name == port }) {
+			return ErrBridgePort
+		}
+		cfg.Ports = []string{port}
+	} else if port != "" && !slices.Contains(cfg.Ports, port) {
+		return ErrBridgePort
+	}
+	cfg.Bridge = true
+	if err := m.validate(cfg); err != nil {
+		return err
+	}
+	return m.changeLocked(ctx, cfg)
+}
+
+// The caller holds mu and has checked configuration and pending changes.
+func (m *Manager) changeLocked(ctx context.Context, cfg Config) error {
 	// Losing the HTTP connection is expected while its interface moves to br0.
 	// Finish the bounded operation and leave rollback to the confirmation timer.
 	ctx = context.WithoutCancel(ctx)
@@ -552,6 +628,7 @@ func (m *Manager) Confirm() error {
 	}
 	m.timer.Stop()
 	m.active, m.pending = *m.pending, nil
+	m.configured = true
 	slog.Info("network change confirmed")
 	return nil
 }
@@ -582,10 +659,17 @@ func (m *Manager) HasBridge() bool {
 	return err == nil
 }
 
+// BridgeReady excludes a bridge that is still on trial or being reverted.
+func (m *Manager) BridgeReady() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loaded && m.active.Bridge && m.pending == nil && m.HasBridge()
+}
+
 // Status returns the configuration and what the network looks like right now.
 func (m *Manager) Status(ctx context.Context) Status {
 	m.mu.Lock()
-	status := Status{Config: m.active, Addresses: []string{}, DNS: []string{}}
+	status := Status{Config: m.active, Configured: m.configured, BridgeReady: m.loaded && m.active.Bridge && m.pending == nil && m.HasBridge(), Addresses: []string{}, DNS: []string{}}
 	if m.pending != nil {
 		pending := *m.pending
 		status.Pending = &pending

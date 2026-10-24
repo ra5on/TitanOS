@@ -18,6 +18,7 @@ type fakeRunner struct {
 	mu       sync.Mutex
 	commands []string
 	fail     string
+	routeOut string
 }
 
 func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
@@ -30,6 +31,9 @@ func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string
 	r.commands = append(r.commands, line)
 	if r.fail != "" && strings.Contains(line, r.fail) {
 		return "", errors.New("failed: " + line)
+	}
+	if name == "ip" && strings.Join(args, " ") == "-4 route show default" {
+		return r.routeOut, nil
 	}
 	return "", nil
 }

@@ -402,6 +402,30 @@ Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystem
 Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
 Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.
 
+### VM anlegen und bearbeiten (bestätigter Folgeentwurf, 24. Oktober 2026)
+
+Variante 1 des vom Projektinhaber gewählten Vergleichs ersetzt den langen
+Einspaltenaufbau aus `VmCreate.dc.html`. Fünf kompakte Kacheln im Dashboard-Stil:
+Allgemein über beide Formularspalten, darunter CPU/RAM und Datenträger sowie
+Installation/Start und Netzwerk/Erweiterungen. Rechts eine haftende Zusammenfassung
+mit den beiden Erstellaktionen; auf schmalen Bildschirmen eine Lesespalte und
+die Zusammenfassung darunter. Schmale Symbol-/Abschnittsköpfe, vorhandene
+Theme-Werte und lokale IBM-Plex-Schriften; keine Beispieldaten im Produkt.
+
+VM-Ordner, Firmware, Größenvorgaben und Datenträgerhinweise sind aufklappbar;
+PCI/USB und NAS-Ordner liegen unter Netzwerk/Erweiterungen. Vorhandene Optionen
+und Einschränkungen beim Bearbeiten laufender VMs bleiben erhalten.
+Die Heimnetz-Aktivierung benutzt denselben Netzwerk-Probelauf wie die
+Einstellungen. Netzwerkbestätigung und Rückfall sind im Formular möglich;
+keine Navigation oder Neuladung während der Umstellung, daher bleibt der Entwurf
+erhalten. Neue VMs bevorzugen eine bereits bestätigte `br0`.
+
+VM-Menüaktionen halten ihr Ziel vor dem Schließen fest. Eine reaktive
+`@const` aus einem gerade geschlossenen Menü ist kein stabiles Aktionsargument.
+`scripts/test-ui-vm-create.mjs` prüft echte Klicks, Rechtsklick, Tastatur und Touch,
+Formularoptionen, DE/EN, Graphit/Hell, Desktop/Mobil sowie Bridge und Protokoll.
+Prüfstand und Grenzen: [VM-Einrichtung](../VM-CREATE-VALIDATION.md).
+
 ### VM-Seite (0.20.1)
 
 Der am 24. Oktober 2026 bestätigte kompakte Folgeentwurf baut auf `VmPage.html`
