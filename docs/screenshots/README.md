@@ -1,6 +1,6 @@
 # Screenshots der Weboberfläche
 
-`current/` enthält die aktuellen Aufnahmen für die Projekt-README. Die Bilder stammen aus der **gebauten Svelte-WebUI von TitanOS 0.19.1**, Quellstand [`d16fb79`](https://github.com/ra5on/TitanOS/commit/d16fb79ba60dd5ff0174850f9289c41ca5add1c4), aufgenommen am **24. Oktober 2026** mit Chromium.
+`current/` enthält die aktuellen Aufnahmen für die Projekt-README. Die Bilder stammen aus der **gebauten Svelte-WebUI von TitanOS 0.20.0**, Quellstand [`1012d6f`](https://github.com/ra5on/TitanOS/commit/1012d6fd3285d06b6cec242720542f8e36a5fed8), aufgenommen am **24. Oktober 2026** mit Chromium.
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten.
 
@@ -9,7 +9,9 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | Datei | Inhalt | Darstellung |
 |---|---|---|
 | [dashboard.png](current/dashboard.png) | Persönliche Startseite mit zehn Kacheln | Desktop, zwei Spalten |
-| [dashboard-editor.png](current/dashboard-editor.png) | Positionsraster und Einstellungen der Docker-Kachel | Desktop |
+| [dashboard-editor.png](current/dashboard-editor.png) | Positionsraster und globale Transparenz-/Blur-/Glow-Regler | Desktop |
+| [dashboard-hintergruende.png](current/dashboard-hintergruende.png) | Galerie mit zehn lokalen Motiven und Vorschau | Desktop |
+| [dashboard-bild-upload.png](current/dashboard-bild-upload.png) | Eigene Bilder hinzufügen und auswählen | Desktop |
 | [dashboard-vm-details.png](current/dashboard-vm-details.png) | Details unmittelbar unter der ausgewählten VM | Desktop |
 | [speicher.png](current/speicher.png) | Volume-Liste und ausgewähltes RAID5-Volume | Desktop |
 | [shares.png](current/shares.png) | Kompakte Freigabenliste | Desktop |
@@ -20,7 +22,7 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone |
 | [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone |
 
-Desktopbreite: **1600 CSS-Pixel**, Smartphone: **390 × 844 CSS-Pixel**. Theme: Graphit, blauer Akzent, Glasflächen; Dashboard-Kacheln mit eigener deckender Darstellung. Die Desktopbilder zeigen die vollständige Seite, die Mobilbilder den sichtbaren Bildschirmausschnitt. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups.
+Desktopbreite: **1600 CSS-Pixel**, Smartphone: **390 × 844 CSS-Pixel**. Theme: Graphit, blauer Akzent, Glasflächen; Dashboard mit Nordlicht-Hintergrund und global durchscheinenden Kacheln. Die Desktopbilder zeigen die vollständige Seite, die Mobilbilder den sichtbaren Bildschirmausschnitt. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups.
 
 [Die Aufnahmedaten](current/capture.json) nennen Quellstand, Bildgrößen und Prüfsummen. Bei der Aufnahme werden geladene Schriftdateien, alle 13 Docker-Logos, fehlender horizontaler Überlauf auf dem Smartphone und JavaScript-Laufzeitfehler geprüft. Das ersetzt keine vollständige Funktions- oder Hardwareprüfung.
 

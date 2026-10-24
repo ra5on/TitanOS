@@ -1,6 +1,6 @@
 {
-  "source": "d16fb79ba60dd5ff0174850f9289c41ca5add1c4",
-  "version": "0.19.1",
+  "source": "1012d6fd3285d06b6cec242720542f8e36a5fed8",
+  "version": "0.20.0",
   "captured": "2026-10-24",
   "demoData": true,
   "theme": "Graphit / Blau / Glas",
@@ -11,64 +11,78 @@
       "file": "dashboard.png",
       "width": 1600,
       "height": 1366,
-      "bytes": 197486,
-      "sha256": "eca827b0d49edab26401a94886fd5fdea4209655a2f6e5b3d933fe56c655b35d"
+      "bytes": 650653,
+      "sha256": "33932fbb2aad0b4e4dc8a81173d4494a1df0c0ec412ea73532902734194abc60"
     },
     {
       "file": "dashboard-editor.png",
       "width": 1600,
       "height": 1810,
-      "bytes": 292009,
-      "sha256": "155580b8c2f1a3432b4c114c9bb10aad1b322ab6ca24135e60703ae57a43e898"
+      "bytes": 735068,
+      "sha256": "23600c586b1af3c4621d1e370d491df8f24416b44143aff5e3f35812a1111108"
+    },
+    {
+      "file": "dashboard-hintergruende.png",
+      "width": 1600,
+      "height": 1810,
+      "bytes": 617881,
+      "sha256": "f2f990ccd876634ce65cd519831ebeccdf8a187b28abbb54bca69de249f3ae4b"
+    },
+    {
+      "file": "dashboard-bild-upload.png",
+      "width": 1600,
+      "height": 1810,
+      "bytes": 397157,
+      "sha256": "8c64fd0e0f9a775a4fa7b00386120a840663ec247e721908622de2248453536e"
     },
     {
       "file": "dashboard-vm-details.png",
       "width": 1600,
       "height": 1733,
-      "bytes": 224925,
-      "sha256": "af4f6a56e5f2e33c8636d0df61bd86246b2c4bf7635d232cec7aa95269496657"
+      "bytes": 680377,
+      "sha256": "c50883be6c1acfbaf5eb334bda7f27908935cb04e09519c4c6090c243530b67c"
     },
     {
       "file": "speicher.png",
       "width": 1600,
       "height": 780,
-      "bytes": 287938,
-      "sha256": "9a05ab147d81907c135bbeba675884aedcbf095c12fb1d2381d4c9144de24949"
+      "bytes": 287935,
+      "sha256": "e77db2bb2d342b2e8afc84962e5c770441c765e4e24adeab604787a194558e0d"
     },
     {
       "file": "shares.png",
       "width": 1600,
       "height": 780,
-      "bytes": 251070,
-      "sha256": "8262b929219e193e10d1bc98d611b13404a2b241b4a9121d48462f3fa7902f8a"
+      "bytes": 251071,
+      "sha256": "4d588056be8b3c442a31eadb93af789ea2b120c50cfffea878c88d8d2266fa70"
     },
     {
       "file": "dateien.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 300533,
-      "sha256": "bb7e0f7841cc09db6ccbb57743ece5b943e8d17d6d7650580c445b40c2e1e658"
+      "bytes": 300537,
+      "sha256": "b11e72badbc1ec5b6181b78626e0ae92350411762ceecfc817e50776676a3d9a"
     },
     {
       "file": "docker.png",
       "width": 1600,
       "height": 1175,
-      "bytes": 402354,
-      "sha256": "3026eda4552c5692995b8de008f7c926b18e9720ec9da6b76e81b3afdd079f4b"
+      "bytes": 395413,
+      "sha256": "cae9e6b2f3ae4bd39bb63af10f74e2c359cda8b8c8ebde1863814a1a1d9e06e2"
     },
     {
       "file": "vms.png",
       "width": 1600,
       "height": 800,
-      "bytes": 342079,
-      "sha256": "a8cec591e9b3cb0ae4d77a97b7d1a607b246a344f0d83f4177416f384601a6ba"
+      "bytes": 342077,
+      "sha256": "7a8eface16a61b819663d99f846a5ce7c9f1d38ca183566540283371728096b4"
     },
     {
       "file": "einstellungen.png",
       "width": 1600,
       "height": 1013,
-      "bytes": 326650,
-      "sha256": "455629b1056c79ccc7dfe980a36b1d51ea5b0066373833a039933a1a019e603d"
+      "bytes": 326649,
+      "sha256": "8cd3842ba8761f74eb87f5cd9f63689d7773904d2bd37533ef55eada5ba72814"
     },
     {
       "file": "dateien-mobil.png",
@@ -81,8 +95,8 @@
       "file": "dashboard-mobil.png",
       "width": 390,
       "height": 844,
-      "bytes": 53252,
-      "sha256": "d3566fc2c2734ac6c20af7db6bf1862fc6511605223143b8b184ac4e1c7aea84"
+      "bytes": 102647,
+      "sha256": "63ff032650e5c4a727eb9cb841c4f0df73bce5ddeabc881dc10b076934af7d6d"
     }
   ]
 }

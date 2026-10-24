@@ -47,6 +47,9 @@
 		type TileOptions,
 	} from './options.ts';
 	import { flowLayout, columnCount, columnWidth, visibleColumns, legacyPositions } from './flow.ts';
+	import GlobalEditor from './GlobalEditor.svelte';
+	import { dashboardVisual, visualStyle, type DashboardVisual } from './visual.ts';
+	import { dashboardScene } from './scene.svelte.ts';
 	import TileEditor, { type EditPart } from './TileEditor.svelte';
 	import UsageTile from './tiles/UsageTile.svelte';
 	import AcceleratorTile from './tiles/AcceleratorTile.svelte';
@@ -112,6 +115,46 @@
 		),
 	);
 	let savedOptions = $state(untrack(() => structuredClone($state.snapshot(options))));
+	let visual = $state(dashboardVisual(session.dashboard?.visual));
+	let savedVisual = $state(dashboardVisual(session.dashboard?.visual));
+	let galleryVisual = $state<DashboardVisual | null>(null),
+		globalOpen = $state(false);
+	const effectiveVisual = $derived(galleryVisual ?? visual);
+	const pendingImages = new Map<string, File>();
+	$effect(() => {
+		dashboardScene.preview = effectiveVisual;
+	});
+	onDestroy(() => {
+		dashboardScene.preview = null;
+		clearImages();
+	});
+	function clearImages() {
+		pendingImages.clear();
+		for (const url of Object.values(dashboardScene.urls)) URL.revokeObjectURL(url);
+		dashboardScene.urls = {};
+	}
+	function pruneImages() {
+		const retained = new Set(visual.images.map((image) => image.id));
+		for (const snapshot of [...undo, ...redo]) {
+			for (const image of dashboardVisual(JSON.parse(snapshot).visual).images)
+				retained.add(image.id);
+		}
+		const urls = { ...dashboardScene.urls };
+		for (const [id, url] of Object.entries(urls)) {
+			if (retained.has(id)) continue;
+			URL.revokeObjectURL(url);
+			pendingImages.delete(id);
+			delete urls[id];
+		}
+		dashboardScene.urls = urls;
+	}
+	function registerImage(id: string, file: File, url: string) {
+		const previous = dashboardScene.urls[id];
+		if (previous) URL.revokeObjectURL(previous);
+		pendingImages.set(id, file);
+		dashboardScene.urls = { ...dashboardScene.urls, [id]: url };
+	}
+
 	let editing = $state(false),
 		saving = $state(false),
 		error = $state(''),
@@ -184,6 +227,7 @@
 		editing &&
 			(JSON.stringify(shown) !== JSON.stringify(saved) ||
 				JSON.stringify(options) !== JSON.stringify(savedOptions) ||
+				JSON.stringify(visual) !== JSON.stringify(savedVisual) ||
 				columns !== savedColumns ||
 				minimumWidth !== savedMinimumWidth),
 	);
@@ -293,6 +337,7 @@
 		return JSON.stringify({
 			tiles: readGrid(),
 			options: $state.snapshot(options),
+			visual: $state.snapshot(visual),
 			columns,
 			minimumWidth,
 		});
@@ -309,6 +354,8 @@
 	}
 	function restore(value: string) {
 		const state = JSON.parse(value);
+		visual = dashboardVisual(state.visual);
+		galleryVisual = null;
 		columns = columnCount(state.columns);
 		minimumWidth = columnWidth(state.minimumWidth);
 		options = Object.fromEntries(
@@ -338,16 +385,24 @@
 		redo = [];
 		shown = readGrid();
 		editing = true;
+		globalOpen = true;
 	}
 	function cancel() {
+		visual = structuredClone($state.snapshot(savedVisual));
+		galleryVisual = null;
+		globalOpen = false;
 		columns = savedColumns;
 		minimumWidth = savedMinimumWidth;
 		editing = false;
 		customize = null;
+		undo = [];
+		redo = [];
+		clearImages();
 		options = structuredClone($state.snapshot(savedOptions));
 		rebuild(structuredClone($state.snapshot(saved)));
 	}
 	async function finish() {
+		if (saving) return;
 		saving = true;
 		error = '';
 		const layout = legacyPositions(readGrid(), columns);
@@ -359,9 +414,22 @@
 			minimumWidth,
 			tiles: layout,
 			tileOptions: allOptions,
+			visual: $state.snapshot(visual),
 		};
 		try {
-			await api.put('/preferences/dashboard', preferences);
+			const uploads = visual.images.filter((image) => pendingImages.has(image.id));
+			if (uploads.length) {
+				const form = new FormData();
+				form.append('preferences', JSON.stringify(preferences));
+				for (const image of uploads) form.append('image', pendingImages.get(image.id)!, image.id);
+				await api.put('/preferences/dashboard', form);
+			} else await api.put('/preferences/dashboard', preferences);
+			savedVisual = structuredClone($state.snapshot(visual));
+			clearImages();
+			undo = [];
+			redo = [];
+			galleryVisual = null;
+			globalOpen = false;
 			session.dashboard = preferences;
 			saved = structuredClone(layout);
 			savedColumns = columns;
@@ -708,6 +776,7 @@
 	function keys(e: KeyboardEvent) {
 		if (
 			!editing ||
+			saving ||
 			!(e.ctrlKey || e.metaKey) ||
 			e.key.toLowerCase() !== 'z' ||
 			(e.target instanceof HTMLElement && e.target.closest('input,textarea,select'))
@@ -760,7 +829,7 @@
 
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
-<div class="dashboard-page">
+<div class="dashboard-page" inert={saving} style={visualStyle(effectiveVisual)}>
 	{#if editing}<div class="editor-actions">
 			<button
 				class="btn"
@@ -783,6 +852,14 @@
 		</div>{/if}
 	{#if editing}<div class="editbar">
 			<div class="flow-controls">
+				<button
+					class="btn"
+					aria-pressed={globalOpen && !customize}
+					onclick={() => {
+						globalOpen = true;
+						customize = null;
+					}}><Icon name="palette" size={16} />{t('dashboard.visual.all')}</button
+				>
 				<label
 					>{t('dashboard.columns')}<select
 						class="field"
@@ -813,6 +890,7 @@
 				onclick={() => {
 					checkpoint();
 					options = {};
+					visual = dashboardVisual({ images: visual.images });
 					columns = 2;
 					minimumWidth = 350;
 					rebuild(defaults());
@@ -820,7 +898,11 @@
 				}}>{t('dashboard.restore')}</button
 			>
 		</div>{/if}
-	<div class="dashboard-workspace" class:editing class:with-inspector={editing && !!customize}>
+	<div
+		class="dashboard-workspace"
+		class:editing
+		class:with-inspector={editing && (!!customize || globalOpen)}
+	>
 		<div class="area">
 			<div class="dashboard-grid" {@attach attachGrid}>
 				{#each mountedLayout as tile (tile.id)}
@@ -1042,6 +1124,18 @@
 					<p class="muted">{t('dashboard.hiddenHint')}</p>
 				</section>{/if}
 		</div>
+		{#if editing && globalOpen && !customize}<GlobalEditor
+				value={visual}
+				urls={dashboardScene.urls}
+				onbegin={checkpoint}
+				onchange={(v) => (visual = v)}
+				onpreview={(v) => {
+					galleryVisual = v;
+					if (!v) pruneImages();
+				}}
+				onupload={registerImage}
+				onclose={() => (globalOpen = false)}
+			/>{/if}
 		{#if editing && customize && currentPlacement}<TileEditor
 				id={customize}
 				title={titleOf(customize)}
@@ -1152,8 +1246,8 @@
 		opacity: 0.35;
 	}
 	.dashboard-page {
-		background: var(--bg);
-		box-shadow: 0 0 0 24px var(--bg);
+		background: transparent;
+		box-shadow: none;
 	}
 	.dashboard-grid {
 		position: relative;
@@ -1198,7 +1292,15 @@
 		border: var(--tile-border, 1px) solid var(--tile-border-color, var(--border));
 		border-radius: var(--tile-radius, 12px);
 		background: var(--tile-background, var(--surface));
-		box-shadow: var(--tile-shadow, none);
+		box-shadow:
+			var(--tile-shadow, none),
+			0 0 24px
+				color-mix(
+					in srgb,
+					var(--dashboard-glow-color, var(--accent)) calc(var(--tile-glow, 0) * 100%),
+					transparent
+				);
+		backdrop-filter: blur(var(--tile-blur, 0px)) saturate(115%);
 		display: flex;
 		flex-direction: column;
 		gap: 0;
@@ -1353,6 +1455,18 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+	}
+	@supports not (backdrop-filter: blur(1px)) {
+		.dashboard-tile {
+			background: var(--surface);
+		}
+	}
+	@media (prefers-reduced-transparency: reduce) {
+		.dashboard-tile {
+			background: var(--surface);
+			backdrop-filter: none;
+			box-shadow: none;
+		}
 	}
 	@media (max-width: 760px) {
 		.dashboard-workspace {
