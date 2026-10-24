@@ -70,17 +70,19 @@ type counters struct {
 	values [5]uint64
 }
 type Manager struct {
-	store     *config.Store
-	MountRoot string
-	Mounted   func() []string
-	Snapshot  func() (system.Info, storage.Status)
-	mu        sync.Mutex
-	ioMu      sync.Mutex
-	settings  Settings
-	last      *time.Time
-	problem   string
-	previous  map[string]counters
-	sysBlock  string
+	store         *config.Store
+	MountRoot     string
+	Mounted       func() []string
+	Snapshot      func() (system.Info, storage.Status)
+	mu            sync.Mutex
+	ioMu          sync.Mutex
+	settings      Settings
+	last          *time.Time
+	problem       string
+	previous      map[string]counters
+	cachedSamples []Sample
+	warmed        bool
+	sysBlock      string
 }
 
 func New(store *config.Store) *Manager {
@@ -119,6 +121,8 @@ func (m *Manager) Set(s Settings) error {
 	m.mu.Lock()
 	m.settings = s
 	m.previous = map[string]counters{}
+	m.cachedSamples = nil
+	m.warmed = false
 	m.mu.Unlock()
 	return nil
 }
@@ -139,6 +143,17 @@ func (m *Manager) Run(ctx context.Context) {
 				m.mu.Lock()
 				m.problem = err.Error()
 				m.mu.Unlock()
+			} else {
+				m.mu.Lock()
+				volume := m.settings.Volume
+				warm := !m.warmed && m.settings.Enabled
+				m.warmed = m.warmed || warm
+				m.mu.Unlock()
+				if warm {
+					if history, err := m.History(ctx, 168); err == nil {
+						m.remember(history, volume)
+					}
+				}
 			}
 		}
 	}
@@ -256,6 +271,7 @@ func (m *Manager) Record(now time.Time) error {
 	m.last = &stamp
 	m.problem = ""
 	m.mu.Unlock()
+	m.remember([]Sample{sample}, s.Volume)
 	return nil
 }
 func records(root *os.Root) ([]fs.DirEntry, error) {

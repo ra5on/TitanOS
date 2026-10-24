@@ -12,8 +12,8 @@
 	import { system, watchSystem } from '#lib/system.svelte.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import Header from './Header.svelte';
- import CommandPalette from './CommandPalette.svelte';
- import { palette, togglePalette } from '#lib/palette.svelte.ts';
+	import CommandPalette from './CommandPalette.svelte';
+	import { palette, togglePalette } from '#lib/palette.svelte.ts';
 	import StatusBar from './StatusBar.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import Icon from './Icon.svelte';
@@ -22,21 +22,43 @@
 	let { children }: { children: Snippet } = $props();
 
 	// A shell is a way into the system: administrators only.
-	const dockerPage = $derived(page.url.pathname === '/docker' || page.url.pathname.startsWith('/docker/'));
+	const dockerPage = $derived(
+		page.url.pathname === '/docker' || page.url.pathname.startsWith('/docker/'),
+	);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	function hotkey(event: KeyboardEvent) {
-  if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyK'){
-   if(!palette.open&&document.querySelector('dialog[open]'))return;
-   event.preventDefault();togglePalette();return;
-  }
+		if (
+			(event.ctrlKey || event.metaKey) &&
+			!event.altKey &&
+			!event.shiftKey &&
+			event.code === 'KeyK'
+		) {
+			if (!palette.open && document.querySelector('dialog[open]')) return;
+			event.preventDefault();
+			togglePalette();
+			return;
+		}
 		// Ctrl+` wherever the key is; layouts differ in what it types.
-		if (admin && event.ctrlKey && !event.altKey && !event.metaKey && (event.key === '`' || event.code === 'Backquote')) {
+		if (
+			admin &&
+			event.ctrlKey &&
+			!event.altKey &&
+			!event.metaKey &&
+			(event.key === '`' || event.code === 'Backquote')
+		) {
 			event.preventDefault();
 			toggleTerminal();
 		}
 		// Ctrl+J opens and closes the chat with the assistant.
-		if (assistant.status?.available && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.code === 'KeyJ') {
+		if (
+			assistant.status?.available &&
+			event.ctrlKey &&
+			!event.altKey &&
+			!event.metaKey &&
+			!event.shiftKey &&
+			event.code === 'KeyJ'
+		) {
 			event.preventDefault();
 			toggleAssistant();
 		}
@@ -60,7 +82,9 @@
 	$effect(() => {
 		if (session.data?.user?.name) loadAssistant();
 	});
-	const fab = $derived(!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant');
+	const fab = $derived(
+		!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant',
+	);
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -70,22 +94,43 @@
 	<!-- A network change on trial: whoever still reaches the NAS confirms it, from any page. -->
 	<div class="trial" role="alert">
 		<span>{t('netcfg.pending', { seconds: pendingSeconds })}</span>
-		<button type="button" class="btn btn-primary" onclick={() => settle('confirm')} disabled={settling}>{t('netcfg.keep')}</button>
-		<button type="button" class="btn" onclick={() => settle('revert')} disabled={settling}>{t('netcfg.back')}</button>
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => settle('confirm')}
+			disabled={settling}>{t('netcfg.keep')}</button
+		>
+		<button type="button" class="btn" onclick={() => settle('revert')} disabled={settling}
+			>{t('netcfg.back')}</button
+		>
 	</div>
 {/if}
-<div class="shell" style:padding-bottom={admin && terminal.open && !terminal.full ? `${terminal.height}px` : undefined}>
+<div
+	class="shell"
+	style:padding-bottom={admin && terminal.open && !terminal.full
+		? `${terminal.height}px`
+		: undefined}
+>
 	<Header />
 	<main class:readable={!dockerPage}>
-		{#if !dockerPage}<ConnectionBanner /><TasksPanel />{/if}
+		{#if !dockerPage}<ConnectionBanner />{#if page.url.pathname !== '/'}<TasksPanel />{/if}{/if}
 		{@render children()}
 	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
 {#if admin}<TerminalPanel />{/if}
-{#if palette.open}<CommandPalette onclose={()=>palette.open=false}/>{/if}
+{#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if fab}
-	<button type="button" class="fab" style:bottom={admin && terminal.open && !terminal.full ? `${terminal.height + 16}px` : undefined} aria-label={t('assistant.title')} title={t('assistant.shortcut')} onclick={toggleAssistant}>
+	<button
+		type="button"
+		class="fab"
+		style:bottom={admin && terminal.open && !terminal.full
+			? `${terminal.height + 16}px`
+			: undefined}
+		aria-label={t('assistant.title')}
+		title={t('assistant.shortcut')}
+		onclick={toggleAssistant}
+	>
 		<Icon name="chat" size={22} />
 	</button>
 {/if}

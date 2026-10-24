@@ -59,11 +59,17 @@ Voraussetzung ist ein MQTT-Broker, zum Beispiel das Mosquitto-Add-on, und die MQ
 
 | Gruppe | Entitäten |
 |---|---|
-| System | CPU %, RAM %, CPU-Temperatur, Laufzeit, Update verfügbar, Version |
-| Volumes | Zustand, Belegung in %, frei in GB |
-| Platten | Temperatur, Problem (SMART); benannt nach der Seriennummer |
-| Container, VMs | läuft (an/aus) |
-| USV | Status, Ladung |
+| System | CPU %, RAM %, CPU-Temperatur, Laufzeit, Version, Updates/Phase, Slot, Overlay, Boot-Stick |
+| Volumes | Zustand, Belegung, frei, RAID-Fortschritt/-Geschwindigkeit/-Restzeit, fehlende Mitglieder |
+| Platten | Temperatur, SMART-Problem, Stunden, Fehler, Verschleiß, Test; stabile Seriennummer |
+| Container, VMs | Laufzustand, CPU, RAM; bekannte Containerupdates |
+| Stacks | Gesamtzahl, laufende und gestoppte Dienste |
+| Netzwerk | Empfang/Versand, Linkzustand und Geschwindigkeit |
+| Backups | Laufzustand, Fortschritt, Erfolg/Termin, Archivprüfung/Restore-Probe, überfällig, lokales Ziel |
+| Wartung | Laufzustand, Blockierung, Wartegrund, Phase, Fehler, Erfolg/Termin |
+| Kapazität | Geschätzte Tage bis 90 % / voll, nur mit gültiger optionaler Monitoring-Historie |
+| GPU, iGPU / weitere Grafik, NPU | Auslastung, Temperatur, Leistung, Speicher, Takt, Engines, Zustand/Treiber |
+| USV | Status, Ladung, Last, Restlaufzeit, Batterie-/Abschaltzustand |
 
 Die Werte kommen alle 30 Sekunden. TitanOS fragt dafür keine Platten zusätzlich ab; schlafende Platten bleiben schlafen. Topics:
 
@@ -71,7 +77,26 @@ Die Werte kommen alle 30 Sekunden. TitanOS fragt dafür keine Platten zusätzlic
 - Zustände: `titanos/<id>/state/<key>`
 - Verfügbarkeit (Last Will): `titanos/<id>/status`
 
-`<id>` wird einmal erzeugt und bleibt gleich. Verschwindet ein Container, verschwindet auch seine Entität.
+`<id>` wird einmal erzeugt und bleibt gleich. Geräte je Gruppe wählen oder alle,
+einschließlich künftig erkannter Geräte, veröffentlichen. Eine explizit leere
+Geräteauswahl sendet keine Geräte. Entfernte konfigurierte Geräte bleiben in der
+Auswahl erkennbar. Neue Sensor-IDs hängen von Gruppe und stabiler Gerätekennung ab,
+nicht vom Anzeigenamen. Bestehende eindeutige Sensor-IDs bleiben erhalten. Bisher kollidierende Namen
+erhalten getrennte Kennungen und Befehlstopics.
+
+Unbekannte Messwerte bleiben unavailable/unknown. Ausfälle einer Zustandsquelle
+löschen keine zuvor bekannten Entitäten. Tatsächlich entfernte Entitäten werden
+auch nach Wiederverbindung aus der retained Discovery bereinigt. Home-Assistant-
+Birth kündigt aktuelle Entitäten erneut an. Zustände sind nicht retained; Sensorwerte
+laufen nach 95 Sekunden ab; globale Last-Will- und individuelle Verfügbarkeit
+verhindern alte gesunde Werte. Sensoren, die Treiber nicht liefern, bleiben unbekannt.
+
+MQTT verwendet vorhandene günstige Statusquellen und RAM-Messwerte, ohne zusätzliche
+SMART-/Weckabfragen, Repository- oder zyklische Backup-/Monitoring-Dateiabfragen.
+Kapazitätsprognosen kommen aus einem begrenzten Cache des optionalen Recorders;
+mindestens 24 stündliche Beobachtungen ohne Lücken und veraltete Werte sind nötig.
+Lokale Backupziele werden anhand ihrer Einbindung bewertet; keine zyklischen
+Verbindungsproben entfernter Ziele. Kein Export von Geheimnissen oder Chatinhalten.
 
 ### Knöpfe und Schalter
 
@@ -127,3 +152,9 @@ Geprüft mit nachgebauten Servern für REST, WebSocket und MQTT:
 - Assist und die Knöpfe der App
 
 **Nicht geprüft:** ein echtes Home Assistant, ein echter Mosquitto-Broker, die Home-Assistant-App auf einem Smartphone und die Blueprint in einem echten Home Assistant.
+
+Discovery richtet sich nach den offiziellen MQTT-Schemata für
+[Sensoren](https://www.home-assistant.io/integrations/sensor.mqtt/),
+[Binärsensoren](https://www.home-assistant.io/integrations/binary_sensor.mqtt/) und
+[Schalter](https://www.home-assistant.io/integrations/switch.mqtt/): Ablaufzeit
+nur für Sensoren, individuelle Verfügbarkeit auch für Schalter.

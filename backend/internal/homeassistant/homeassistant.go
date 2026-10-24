@@ -72,12 +72,13 @@ type Settings struct {
 
 // MQTT is the broker Home Assistant's MQTT integration uses.
 type MQTT struct {
-	Enabled  bool   `json:"enabled"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"`
-	TLS      bool   `json:"tls"`
+	Devices  map[string][]string `json:"devices,omitempty"`
+	Enabled  bool                `json:"enabled"`
+	Host     string              `json:"host"`
+	Port     int                 `json:"port"`
+	Username string              `json:"username"`
+	Password string              `json:"password,omitempty"`
+	TLS      bool                `json:"tls"`
 	// Prefix is Home Assistant's discovery prefix, homeassistant by default.
 	Prefix string `json:"prefix"`
 	// Groups of sensors: system, volumes, disks, containers, vms, ups.
@@ -92,7 +93,7 @@ type MQTT struct {
 
 // SensorGroups and CommandGroups are the choices in MQTT.
 var (
-	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
+	SensorGroups  = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work", "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity"}
 	CommandGroups = []string{"containers", "vms", "backups", "updates", "power"}
 )
 
@@ -198,6 +199,13 @@ func (m *Manager) Settings() (Settings, map[string]bool) {
 	s.Policies = clonePolicies(s.Policies)
 	set := map[string]bool{"token": s.Token != "", "mqtt": s.MQTT.Password != ""}
 	s.Token, s.MQTT.Password = "", ""
+	if s.MQTT.Devices != nil {
+		copied := make(map[string][]string, len(s.MQTT.Devices))
+		for group, ids := range s.MQTT.Devices {
+			copied[group] = append([]string{}, ids...)
+		}
+		s.MQTT.Devices = copied
+	}
 	s.MQTT.Groups, s.MQTT.Commands = append([]string{}, s.MQTT.Groups...), append([]string{}, s.MQTT.Commands...)
 	s.Domains, s.Entities = append([]string{}, s.Domains...), append([]string{}, s.Entities...)
 	return s, set
@@ -325,6 +333,19 @@ func checkMQTT(q *MQTT, old string) error {
 	if !mqttID.MatchString(q.ID) {
 		return invalid("MQTT ID")
 	}
+	devices := make(map[string][]string, len(q.Devices))
+	for group, ids := range q.Devices {
+		if !slices.Contains(SensorGroups, group) || len(ids) > 256 {
+			return invalid("MQTT device selection")
+		}
+		for _, id := range ids {
+			if id == "" || len(id) > 256 || strings.ContainsAny(id, "\r\n\x00") {
+				return invalid("MQTT device ID")
+			}
+		}
+		devices[group] = slices.Compact(slices.Sorted(slices.Values(ids)))
+	}
+	q.Devices = devices
 	q.Groups = slices.Compact(slices.Sorted(slices.Values(q.Groups)))
 	q.Commands = slices.Compact(slices.Sorted(slices.Values(q.Commands)))
 	for _, g := range q.Groups {
