@@ -15,6 +15,9 @@ export const STYLE_KEYS = [
 	'background',
 	'borderColor',
 	'opacity',
+	'surfaceOverride',
+	'blur',
+	'glow',
 	'radius',
 	'padding',
 	'gap',
@@ -81,6 +84,9 @@ export type TileOptions = {
 	background: string;
 	borderColor: string;
 	opacity: number;
+	surfaceOverride: boolean;
+	blur: number;
+	glow: number;
 	radius: number;
 	padding: number;
 	gap: number;
@@ -197,7 +203,10 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		accent: color('accent'),
 		background: color('background'),
 		borderColor: color('borderColor'),
-		opacity: number('opacity', 100, 35, 100),
+		opacity: number('opacity', 100, 10, 100),
+		surfaceOverride: bool('surfaceOverride', typeof v.opacity === 'number' && v.opacity !== 100),
+		blur: number('blur', 14, 0, 40),
+		glow: number('glow', 18, 0, 100),
 		radius: number('radius', 4, 0, 40),
 		padding: number('padding', 12, 8, 40),
 		gap: number('gap', 10, 2, 30),
@@ -250,7 +259,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 export function tileStyle(o: TileOptions): string {
 	const font = (v: string) =>
 		v === 'mono' ? "'IBM Plex Mono',monospace" : "'IBM Plex Sans',sans-serif";
-	return `--tile-icon-size:${o.iconSize}px;--tile-entry-width:${o.entryWidth}px;--tile-name-lines:${o.nameLines};--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.opacity}%,transparent);--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
+	return `--tile-icon-size:${o.iconSize}px;--tile-entry-width:${o.entryWidth}px;--tile-name-lines:${o.nameLines};--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.surfaceOverride ? o.opacity + '%' : 'calc(var(--dashboard-alpha,1)*100%)'},transparent);--tile-blur:${o.surfaceOverride ? o.blur + 'px' : 'var(--dashboard-blur,0px)'};--tile-glow:${o.surfaceOverride ? o.glow / 100 : 'var(--dashboard-glow,0)'};--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
 }
 export function transferStyle(from: TileOptions, to: TileOptions): TileOptions {
 	const next = { ...to };

@@ -52,7 +52,8 @@
 						aria-valuemax="100"
 						aria-valuenow={v.mounted ? Math.min(100, percent) : undefined}
 					>
-						<span style:width="{v.mounted ? Math.min(100, percent) : 0}%"></span>
+						<span class="metric-level" style:width="{v.mounted ? Math.min(100, percent) : 0}%"
+						></span>
 					</div></td
 				>{#if options.details}<td class="mono"
 						>{v.mounted

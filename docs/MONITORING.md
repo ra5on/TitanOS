@@ -103,3 +103,15 @@ Beschleunigermesswerte und begrenzte stündliche RAM-Beobachtungen des Recorders
 für Prognosen; es liest dafür keine Historie nach. Einmaliges Vorwärmen erfolgt
 im Recorder, nicht im MQTT-Takt. Datenlücken, Volume-Wechsel und alte Daten
 verhindern falsche Prognosen. Details: [Home Assistant](HOME-ASSISTANT.md).
+
+## Darstellung der Messwerte
+
+Im Dashboard-Editor sind sanfte Übergänge für Balken, Ringe und Verläufe
+abschaltbar und zwischen 150 und 1000 ms einstellbar (Standard 450 ms).
+Die Einstellung gilt auch für die entsprechenden Docker-, VM- und
+Speicheranzeigen. Die Bewegungsreduktion des Browsers hat Vorrang.
+Es werden ausschließlich Anzeigeübergänge berechnet: Erfassungsintervalle,
+Monitoring-Daten und MQTT-Werte bleiben unverändert. Fehlende Werte bleiben
+unbekannt bzw. Lücken. Feste Verlaufsslots verhindern Strecksprünge bei kurzen
+Verläufen; die Docker-Skala wächst bei Bedarf weich und bleibt während der
+Anzeige stabil. Verdeckte Seiten beenden ihre laufenden Übergänge.

@@ -150,7 +150,7 @@
 			</div>
 			<div class="meter">
 				<span class="key">{t('ui.ram')}</span>
-				<div class="bar" aria-hidden="true"><span style:width="{memoryShare}%"></span></div>
+				<div class="bar" aria-hidden="true"><span class="metric-level" style:width="{memoryShare}%"></span></div>
 				<span class="mono value">{formatBytes(vm.memoryBytes)} / {formatBytes(vm.memoryMiB * 1024 * 1024)}</span>
 			</div>
 			{#if uptime}<p class="muted small">{t('vms.since', { time: uptime })}</p>{/if}

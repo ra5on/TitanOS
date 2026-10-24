@@ -12,11 +12,11 @@ export class ApiError extends Error {
 	}
 }
 
-type Body = Record<string, unknown> | Blob | undefined;
+type Body = Record<string, unknown> | Blob | FormData | undefined;
 
 async function request<T>(method: string, path: string, body?: Body, signal?: AbortSignal): Promise<T> {
 	const init: RequestInit = { method, credentials: 'same-origin', signal };
-	if (body instanceof Blob) {
+	if (body instanceof Blob || body instanceof FormData) {
 		init.body = body;
 	} else if (body !== undefined) {
 		init.body = JSON.stringify(body);
