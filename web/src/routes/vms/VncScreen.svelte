@@ -3,21 +3,22 @@
 	// titand, QEMU's VNC server behind it.
 	import { untrack } from 'svelte';
 	import RFB from '@novnc/novnc';
-	import { t } from '#lib/i18n/index.svelte.ts';
 
 	export type ScaleMode = 'scale' | 'remote' | 'full';
+	export type ConnectionPhase = 'connecting' | 'connected' | 'lost';
 
 	// resizable: the guest can take a resolution from the browser. That needs
 	// the virtio graphics of the Linux template; the plain VGA of Windows and
 	// other systems cannot, so their picture is scaled instead.
-	type Props = { vm: string; mode: ScaleMode; resizable: boolean };
-	let { vm, mode, resizable }: Props = $props();
+	type Props = {
+		vm: string;
+		mode: ScaleMode;
+		resizable: boolean;
+		onstatus?: (phase: ConnectionPhase) => void;
+	};
+	let { vm, mode, resizable, onstatus = () => {} }: Props = $props();
 
 	let target = $state<HTMLElement>();
-	let phase = $state<'connecting' | 'connected' | 'lost'>('connecting');
-	// What the guest sends and how large it shows, in CSS pixels.
-	let guest = $state({ width: 0, height: 0 });
-	let shown = $state({ width: 0, height: 0 });
 
 	let rfb: RFB | undefined;
 	const effective = $derived<ScaleMode>(mode === 'remote' && !resizable ? 'scale' : mode);
@@ -35,36 +36,24 @@
 		let retry: ReturnType<typeof setTimeout> | undefined;
 		let closed = false;
 
-		// noVNC draws on one canvas: its attributes are the guest's resolution,
-		// its box the size on screen.
-		let canvas: HTMLCanvasElement | null = null;
-		const measure = () => {
-			canvas = element.querySelector('canvas');
-			if (!canvas) return;
-			guest = { width: canvas.width, height: canvas.height };
-			const box = canvas.getBoundingClientRect();
-			shown = { width: Math.round(box.width), height: Math.round(box.height) };
-		};
-		const watch = new MutationObserver(measure);
-		const sizes = new ResizeObserver(measure);
-		watch.observe(element, { subtree: true, childList: true, attributes: true, attributeFilter: ['width', 'height', 'style'] });
-		sizes.observe(element);
-
 		const connect = () => {
-			const connection = new RFB(element, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1/vms/${vm}/screen`);
+			onstatus('connecting');
+			const connection = new RFB(
+				element,
+				`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1/vms/${vm}/screen`,
+			);
 			rfb = connection;
 			connection.background = 'var(--screen-bg)';
 			applyMode();
 			connection.addEventListener('connect', () => {
-				phase = 'connected';
-				connection.focus();
-				measure();
+				onstatus('connected');
+				connection.focus({ preventScroll: true });
 			});
 			connection.addEventListener('disconnect', () => {
 				rfb = undefined;
 				if (closed) return;
 				// The VM restarts, or it is off; the page above knows which.
-				phase = 'lost';
+				onstatus('lost');
 				retry = setTimeout(connect, 2000);
 			});
 		};
@@ -75,8 +64,6 @@
 		return () => {
 			closed = true;
 			clearTimeout(retry);
-			watch.disconnect();
-			sizes.disconnect();
 			rfb?.disconnect();
 			rfb = undefined;
 		};
@@ -89,7 +76,7 @@
 
 	export function ctrlAltDel() {
 		rfb?.sendCtrlAltDel();
-		rfb?.focus();
+		rfb?.focus({ preventScroll: true });
 	}
 
 	/** Presses keys together, as X keysyms with their key codes, and lets go in reverse. */
@@ -97,37 +84,22 @@
 		if (!rfb) return;
 		for (const [keysym, code] of keys) rfb.sendKey(keysym, code, true);
 		for (const [keysym, code] of [...keys].reverse()) rfb.sendKey(keysym, code, false);
-		rfb.focus();
+		rfb.focus({ preventScroll: true });
 	}
 
 	/** Types text into the VM, as the clipboard of the guest. */
 	export function paste(text: string) {
 		rfb?.clipboardPasteFrom(text);
-		rfb?.focus();
+		rfb?.focus({ preventScroll: true });
 	}
 
 	/** The picture as it is right now, as a PNG. */
 	export function screenshot(): string {
 		return rfb?.toDataURL('image/png') ?? '';
 	}
-
-	const size = (s: { width: number; height: number }) => `${s.width} × ${s.height}`;
 </script>
 
 <div class="screen" class:full={effective === 'full'} bind:this={target}></div>
-{#if phase !== 'connected'}
-	<p class="state" role="status">{t(phase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</p>
-{:else if guest.width}
-	<span class="resolution mono" aria-live="polite">
-		{#if effective === 'remote'}
-			{t('vms.resolution.remote', { size: size(guest) })}
-		{:else if effective === 'full'}
-			{t('vms.resolution.full', { size: size(guest) })}
-		{:else}
-			{t('vms.resolution.scaled', { size: size(guest), shown: size(shown) })}
-		{/if}
-	</span>
-{/if}
 
 <style>
 	.screen {
@@ -139,28 +111,5 @@
 	/* Pixel for pixel: a picture larger than the window scrolls. */
 	.screen.full {
 		overflow: auto;
-	}
-	.state {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin: 0;
-		color: var(--screen-muted);
-		font-size: 0.875rem;
-		pointer-events: none;
-	}
-	/* Small and out of the way; it does not catch the mouse. */
-	.resolution {
-		position: absolute;
-		top: 8px;
-		right: 8px;
-		padding: 2px 8px;
-		background: var(--screen-chip);
-		border-radius: var(--radius-ctl);
-		color: var(--screen-muted);
-		font-size: 0.6875rem;
-		pointer-events: none;
 	}
 </style>
