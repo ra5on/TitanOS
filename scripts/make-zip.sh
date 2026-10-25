@@ -37,6 +37,7 @@ install -D -m 0644 LICENSE.md "$extra/usr/share/titanos/LICENSE.md"
 python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"
 # The finalize hook runs in mkosi's host sandbox, with no access to this checkout.
 install -m 0644 scripts/third-party-licenses.py "$extra/usr/share/titanos/build-licenses.py"
+install -m 0644 scripts/check-image-hardware.py "$extra/usr/share/titanos/check-image-hardware.py"
 
 # Without root, mkosi would map everything to a single user and every file in
 # the image would end up owned by root. A user namespace with the full subuid

@@ -2,6 +2,7 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { system, systemHistory } from '#lib/system.svelte.ts';
+	import { memoryParts } from '#lib/memory.ts';
 	import type { TileOptions } from '../options.ts';
 	import Metric from './Metric.svelte';
 	import History from './History.svelte';
@@ -11,12 +12,13 @@
 		ondetails,
 	}: { kind: 'cpu' | 'memory'; options: TileOptions; ondetails: () => void } = $props();
 	const info = $derived(system.info);
+	const ram = $derived(info ? memoryParts(info.memory) : null);
 	const percent = $derived(
 		info && system.reachable
 			? kind === 'cpu'
 				? info.cpu.usagePercent
 				: info.memory.totalBytes > 0
-					? (info.memory.usedBytes / info.memory.totalBytes) * 100
+					? (info.memory.availableBytes / info.memory.totalBytes) * 100
 					: null
 			: null,
 	);
@@ -39,8 +41,8 @@
 					value={percent}
 					label={kind === 'cpu'
 						? t('dashboard.totalUsage')
-						: t('dashboard.memoryUsed', {
-								used: formatBytes(info.memory.usedBytes),
+						: t('dashboard.memoryAvailableTotal', {
+								available: formatBytes(info.memory.availableBytes),
 								total: formatBytes(info.memory.totalBytes),
 							})}
 					compact={kind === 'cpu'}
@@ -48,6 +50,24 @@
 					{options}
 					history={systemHistory[kind]}
 				/>
+				{#if kind === 'memory' && ram && system.reachable}
+					<div class="memory-occupancy" aria-label={t('system.memoryIncludesCache')}>
+						<div class="memory-track" aria-hidden="true">
+							<span
+								class="other"
+								style:width="{ram.total ? ((ram.other ?? ram.used) / ram.total) * 100 : 0}%"
+							></span>
+							<span
+								class="cache"
+								style:width="{ram.total ? ((ram.cache ?? 0) / ram.total) * 100 : 0}%"
+							></span>
+						</div>
+						<p>{t('system.memoryIncludesCache')}: <b>{formatBytes(ram.used)}</b></p>
+					</div>
+					{#if info.memory.lowAvailable}<p class="notice-warn" role="status">
+							{t('memoryPolicy.lowAvailable')}
+						</p>{/if}
+				{/if}
 			</div>
 		{:else if part === 'history' && options.history && options.display !== 'history'}<div
 				data-part="history"
@@ -70,12 +90,24 @@
 			>
 				<div>
 					<span>{t('dashboard.memoryAvailable')}</span><b
-						>{formatBytes(info.memory.availableBytes)}</b
+						>{system.reachable ? formatBytes(info.memory.availableBytes) : '–'}</b
 					>
 				</div>
 				<div>
 					<span>{t('dashboard.memoryCache')}</span><b
-						>{info.memory.cacheBytes == null ? '–' : formatBytes(info.memory.cacheBytes)}</b
+						>{!system.reachable || ram?.cache == null ? '–' : formatBytes(ram.cache)}</b
+					>
+				</div>
+				<div>
+					<span>{t('memoryPolicy.other')}</span><b
+						>{!system.reachable || ram?.other == null ? '–' : formatBytes(ram.other)}</b
+					>
+				</div>
+				<div>
+					<span>{t('memoryPolicy.pressure')}</span><b
+						>{!system.reachable || !info.memory.pressure
+							? t('common.unavailable')
+							: `${info.memory.pressure.someAvg10.toFixed(1)} % / ${info.memory.pressure.fullAvg10.toFixed(1)} %`}</b
 					>
 				</div>
 			</div>{/if}
@@ -107,6 +139,34 @@
 {/if}
 
 <style>
+	.memory-occupancy {
+		margin-top: 10px;
+		font-size: var(--tile-label-size, 12px);
+		color: var(--tile-label-color, var(--muted));
+	}
+	.memory-occupancy p {
+		margin: 5px 0 0;
+	}
+	.memory-occupancy b {
+		color: var(--text);
+		font-weight: 500;
+	}
+	.memory-track {
+		display: flex;
+		height: 6px;
+		background: var(--track);
+		border-radius: var(--radius-bar);
+		overflow: hidden;
+	}
+	.memory-track span {
+		height: 100%;
+	}
+	.memory-track .other {
+		background: var(--accent);
+	}
+	.memory-track .cache {
+		background: var(--muted);
+	}
 	.cpu-model {
 		margin: 0;
 		color: var(--tile-label-color);

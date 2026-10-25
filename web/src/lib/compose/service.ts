@@ -2,7 +2,8 @@
 // writes them back. Whatever the form does not understand stays as it is.
 
 import { publicURL } from '../app-links.ts';
-import { isAlias, isMap, isNode, isScalar, Scalar, type Document } from 'yaml';
+import { isAlias, isMap, isNode, isScalar, Scalar, visit, type Document, type Node } from 'yaml';
+import { validImage } from './image.ts';
 
 export type PathRow = { host: string; container: string; readOnly: boolean; raw?: unknown };
 export type PortRow = { host: string; container: string; protocol: 'tcp' | 'udp'; raw?: unknown };
@@ -15,7 +16,7 @@ export type ServiceForm = {
 	privileged: boolean;
 	hardware: string[];
 	webui: string;
- publicUrl: string;
+	publicUrl: string;
 	paths: PathRow[];
 	ports: PortRow[];
 	env: Pair[];
@@ -32,7 +33,9 @@ const PORT = /^(?:(\d+):)?(\d+)(?:\/(tcp|udp))?$/;
 /** Names of the services in a compose file. */
 export function serviceNames(doc: Document): string[] {
 	const services = doc.get('services');
-	return isMap(services) ? services.items.map((item) => String(isScalar(item.key) ? item.key.value : item.key)) : [];
+	return isMap(services)
+		? services.items.map((item) => String(isScalar(item.key) ? item.key.value : item.key))
+		: [];
 }
 
 function pairs(value: unknown): Pair[] {
@@ -43,7 +46,10 @@ function pairs(value: unknown): Pair[] {
 		});
 	}
 	if (value && typeof value === 'object') {
-		return Object.entries(value).map(([name, v]) => ({ name, value: v === null || v === undefined ? '' : String(v) }));
+		return Object.entries(value).map(([name, v]) => ({
+			name,
+			value: v === null || v === undefined ? '' : String(v),
+		}));
 	}
 	return [];
 }
@@ -54,11 +60,14 @@ function list(value: unknown): unknown[] {
 
 export function readService(doc: Document, service: string): ServiceForm {
 	// Read as plain values, so that YAML aliases count as what they stand for.
-	const plain = (doc.toJS()?.services?.[service] ?? {}) as Record<string, unknown>;
+	const root = doc.toJS();
+	const plain = (root?.services?.[service] ?? {}) as Record<string, unknown>;
 	const at = (key: string) => plain[key];
 	const text = (key: string, fallback = '') => {
 		const value = at(key);
-		return value === undefined || value === null || typeof value === 'object' ? fallback : String(value);
+		return value === undefined || value === null || typeof value === 'object'
+			? fallback
+			: String(value);
 	};
 	const labels = pairs(at('labels'));
 
@@ -69,43 +78,91 @@ export function readService(doc: Document, service: string): ServiceForm {
 		restart: text('restart', 'no'),
 		network: text('network_mode', 'bridge'),
 		privileged: at('privileged') === true,
-		hardware: list(at('x-titanos-hardware')).filter((entry): entry is string => typeof entry === 'string'),
+		hardware: list(
+			at('x-titanos-hardware') ??
+				(serviceNames(doc).sort()[0] === service ? root?.['x-titanos']?.hardware : []),
+		).filter((entry): entry is string => typeof entry === 'string'),
 		webui: labels.find((label) => label.name === WEBUI_LABEL)?.value ?? '',
 		publicUrl: labels.find((label) => label.name === PUBLIC_URL_LABEL)?.value ?? '',
- labels: labels.filter((label) => label.name !== WEBUI_LABEL && label.name !== PUBLIC_URL_LABEL),
+		labels: labels.filter((label) => label.name !== WEBUI_LABEL && label.name !== PUBLIC_URL_LABEL),
 		env: pairs(at('environment')),
 		paths: list(at('volumes')).map((entry): PathRow => {
 			if (typeof entry === 'string') {
 				const parts = entry.split(':');
 				// "name:/path" with a named volume or anything unusual stays untouched.
-				if ((parts.length === 2 || (parts.length === 3 && ['ro', 'rw'].includes(parts[2]))) && /^[./~]/.test(parts[0])) {
+				if (
+					(parts.length === 2 || (parts.length === 3 && ['ro', 'rw'].includes(parts[2]))) &&
+					/^[./~]/.test(parts[0])
+				) {
 					return { host: parts[0], container: parts[1], readOnly: parts[2] === 'ro' };
 				}
 			} else if (entry && typeof entry === 'object') {
 				// The long form, as long as it says nothing the short one cannot.
-				const { type, source, target, read_only: readOnly, bind, ...rest } = entry as Record<string, unknown>;
+				const {
+					type,
+					source,
+					target,
+					read_only: readOnly,
+					bind,
+					...rest
+				} = entry as Record<string, unknown>;
 				// Creating a missing folder is what the short form does anyway.
-				const plainBind = bind === undefined || JSON.stringify(bind) === '{"create_host_path":true}';
-				if (type === 'bind' && typeof source === 'string' && typeof target === 'string' && /^[./~]/.test(source) && plainBind && Object.keys(rest).length === 0) {
+				const plainBind =
+					bind === undefined || JSON.stringify(bind) === '{"create_host_path":true}';
+				if (
+					type === 'bind' &&
+					typeof source === 'string' &&
+					typeof target === 'string' &&
+					/^[./~]/.test(source) &&
+					plainBind &&
+					Object.keys(rest).length === 0
+				) {
 					// Some templates append the short form's ":ro" here as well.
 					const mode = /:(ro|rw)$/;
-					return { host: source.replace(mode, ''), container: target.replace(mode, ''), readOnly: readOnly === true || source.endsWith(':ro') || target.endsWith(':ro') };
+					return {
+						host: source.replace(mode, ''),
+						container: target.replace(mode, ''),
+						readOnly: readOnly === true || source.endsWith(':ro') || target.endsWith(':ro'),
+					};
 				}
 			}
 			return { host: '', container: '', readOnly: false, raw: entry };
 		}),
 		ports: list(at('ports')).map((entry): PortRow => {
-			const match = typeof entry === 'string' || typeof entry === 'number' ? PORT.exec(String(entry)) : null;
-			if (match) return { host: match[1] ?? '', container: match[2], protocol: (match[3] as 'tcp' | 'udp') ?? 'tcp' };
+			const match =
+				typeof entry === 'string' || typeof entry === 'number' ? PORT.exec(String(entry)) : null;
+			if (match)
+				return {
+					host: match[1] ?? '',
+					container: match[2],
+					protocol: (match[3] as 'tcp' | 'udp') ?? 'tcp',
+				};
 			if (entry && typeof entry === 'object') {
-				const { target, published, protocol = 'tcp', mode = 'ingress', ...rest } = entry as Record<string, unknown>;
-				const number = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^\d+$/.test(String(value));
-				if (number(target) && (published === undefined || number(published)) && (protocol === 'tcp' || protocol === 'udp') && mode === 'ingress' && Object.keys(rest).length === 0) {
-					return { host: published === undefined ? '' : String(published), container: String(target), protocol };
+				const {
+					target,
+					published,
+					protocol = 'tcp',
+					mode = 'ingress',
+					...rest
+				} = entry as Record<string, unknown>;
+				const number = (value: unknown) =>
+					(typeof value === 'number' || typeof value === 'string') && /^\d+$/.test(String(value));
+				if (
+					number(target) &&
+					(published === undefined || number(published)) &&
+					(protocol === 'tcp' || protocol === 'udp') &&
+					mode === 'ingress' &&
+					Object.keys(rest).length === 0
+				) {
+					return {
+						host: published === undefined ? '' : String(published),
+						container: String(target),
+						protocol,
+					};
 				}
 			}
 			return { host: '', container: '', protocol: 'tcp', raw: entry };
-		})
+		}),
 	};
 }
 
@@ -125,15 +182,53 @@ function quoted(value: string): Scalar {
  */
 export function writeService(doc: Document, service: string, form: ServiceForm) {
 	const before = readService(doc, service);
-	const same = (key: keyof ServiceForm) => JSON.stringify(before[key]) === JSON.stringify(form[key]);
+	const same = (key: keyof ServiceForm) =>
+		JSON.stringify(before[key]) === JSON.stringify(form[key]);
+	if ((Object.keys(form) as (keyof ServiceForm)[]).every(same)) return;
+	// Copy on write: editing an anchored service/value must not edit its consumers.
+	// Expand only aliases whose source is being changed; unrelated anchors stay intact.
+	const preserveAliases = (source: Node) => {
+		const replacements = new Map<Node, Node>();
+		visit(doc, {
+			Alias(_key, alias) {
+				if (alias.resolve(doc) === source) {
+					const replacement = doc.createNode(source.toJS(doc));
+					replacement.comment = alias.comment;
+					replacement.commentBefore = alias.commentBefore;
+					replacements.set(alias, replacement);
+				}
+			},
+		});
+		visit(doc, {
+			Alias(_key, alias) {
+				return replacements.get(alias);
+			},
+		});
+	};
+	const services = doc.get('services', true);
+	if (isAlias(services)) doc.set('services', doc.createNode(services.toJS(doc)));
+	const source = doc.getIn(['services', service], true);
+	if (isAlias(source)) doc.setIn(['services', service], doc.createNode(source.toJS(doc)));
+	else if (isNode(source)) preserveAliases(source);
 	const path = (key: string) => ['services', service, key];
 	const set = (key: string, value: unknown) => {
-		const empty = value === undefined || (Array.isArray(value) && value.length === 0) || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+		const old = doc.getIn(path(key), true);
+		if (isNode(old) && !isAlias(old) && old.anchor) preserveAliases(old);
+		const empty =
+			value === undefined ||
+			(Array.isArray(value) && value.length === 0) ||
+			(value !== null &&
+				typeof value === 'object' &&
+				!Array.isArray(value) &&
+				Object.keys(value).length === 0);
 		if (empty) return void doc.deleteIn(path(key));
 		const node = doc.createNode(value);
 		// Other services may refer to this entry by its anchor.
-		const old = doc.getIn(path(key), true);
 		if (isNode(old) && !isAlias(old) && old.anchor && !isAlias(node)) node.anchor = old.anchor;
+		if (isNode(old)) {
+			node.comment = old.comment;
+			node.commentBefore = old.commentBefore;
+		}
 		doc.setIn(path(key), node);
 	};
 
@@ -152,20 +247,38 @@ export function writeService(doc: Document, service: string, form: ServiceForm) 
 	if (!same('paths')) {
 		set(
 			'volumes',
-			form.paths.map((row) => row.raw ?? quoted(`${row.host.trim()}:${row.container.trim()}${row.readOnly ? ':ro' : ''}`))
+			form.paths.map(
+				(row) =>
+					row.raw ??
+					quoted(`${row.host.trim()}:${row.container.trim()}${row.readOnly ? ':ro' : ''}`),
+			),
 		);
 	}
 	if (publishes && !same('ports')) {
 		set(
 			'ports',
-			form.ports.map((row) => row.raw ?? quoted(`${row.host.trim() ? row.host.trim() + ':' : ''}${row.container.trim()}${row.protocol === 'udp' ? '/udp' : ''}`))
+			form.ports.map(
+				(row) =>
+					row.raw ??
+					quoted(
+						`${row.host.trim() ? row.host.trim() + ':' : ''}${row.container.trim()}${row.protocol === 'udp' ? '/udp' : ''}`,
+					),
+			),
 		);
 	}
-	if (!same('env')) set('environment', Object.fromEntries(form.env.filter((pair) => pair.name.trim()).map((pair) => [pair.name.trim(), pair.value])));
+	if (!same('env'))
+		set(
+			'environment',
+			Object.fromEntries(
+				form.env.filter((pair) => pair.name.trim()).map((pair) => [pair.name.trim(), pair.value]),
+			),
+		);
 	if (!same('labels') || !same('webui') || !same('publicUrl')) {
-		const labels = form.labels.filter((pair) => pair.name.trim()).map((pair) => [pair.name.trim(), pair.value]);
+		const labels = form.labels
+			.filter((pair) => pair.name.trim())
+			.map((pair) => [pair.name.trim(), pair.value]);
 		if (form.webui.trim()) labels.push([WEBUI_LABEL, form.webui.trim()]);
- if (form.publicUrl.trim()) labels.push([PUBLIC_URL_LABEL, form.publicUrl.trim()]);
+		if (form.publicUrl.trim()) labels.push([PUBLIC_URL_LABEL, form.publicUrl.trim()]);
 		set('labels', Object.fromEntries(labels));
 	}
 }
@@ -176,21 +289,59 @@ export type Problems = { ports: string[]; env: string[]; paths: string[]; any: b
  * Checks the form as it is typed. `taken` maps "port/protocol" to the name
  * of another container that already publishes it.
  */
-export function check(form: ServiceForm, taken: Map<string, string>, t: (key: 'editor.portInvalid' | 'editor.portDuplicate' | 'editor.portInUse' | 'editor.envInvalid' | 'editor.envDuplicate' | 'editor.pathInvalid', params?: Record<string, string>) => string): Problems {
-	const validPort = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
+export function check(
+	form: ServiceForm,
+	taken: Map<string, string>,
+	t: (
+		key:
+			| 'editor.portInvalid'
+			| 'editor.portDuplicate'
+			| 'editor.portInUse'
+			| 'editor.envInvalid'
+			| 'editor.envDuplicate'
+			| 'editor.pathInvalid',
+		params?: Record<string, string>,
+	) => string,
+): Problems {
+	const validPort = (value: string) =>
+		/^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
 	const ports = form.ports.map((row, index) => {
 		if (row.raw !== undefined) return '';
-		if (!validPort(row.container) || (row.host !== '' && !validPort(row.host))) return t('editor.portInvalid');
+		if (!validPort(row.container) || (row.host !== '' && !validPort(row.host)))
+			return t('editor.portInvalid');
 		if (row.host === '') return '';
 		const key = `${Number(row.host)}/${row.protocol}`;
-		if (form.ports.some((other, at) => at !== index && other.raw === undefined && other.host !== '' && `${Number(other.host)}/${other.protocol}` === key)) return t('editor.portDuplicate');
+		if (
+			form.ports.some(
+				(other, at) =>
+					at !== index &&
+					other.raw === undefined &&
+					other.host !== '' &&
+					`${Number(other.host)}/${other.protocol}` === key,
+			)
+		)
+			return t('editor.portDuplicate');
 		const user = taken.get(key);
 		return user ? t('editor.portInUse', { name: user }) : '';
 	});
 	const env = form.env.map((pair, index) => {
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(pair.name)) return t('editor.envInvalid');
-		return form.env.some((other, at) => at !== index && other.name === pair.name) ? t('editor.envDuplicate') : '';
+		return form.env.some((other, at) => at !== index && other.name === pair.name)
+			? t('editor.envDuplicate')
+			: '';
 	});
-	const paths = form.paths.map((row) => (row.raw === undefined && (!row.host.trim() || !row.container.trim().startsWith('/')) ? t('editor.pathInvalid') : ''));
-	return { ports, env, paths, any: [...ports, ...env, ...paths].some(Boolean) || !form.image.trim() || (!!form.publicUrl.trim() && !publicURL(form.publicUrl)) };
+	const paths = form.paths.map((row) =>
+		row.raw === undefined && (!row.host.trim() || !row.container.trim().startsWith('/'))
+			? t('editor.pathInvalid')
+			: '',
+	);
+	return {
+		ports,
+		env,
+		paths,
+		any:
+			[...ports, ...env, ...paths].some(Boolean) ||
+			!validImage(form.image) ||
+			(!!form.publicUrl.trim() && !publicURL(form.publicUrl)),
+	};
 }

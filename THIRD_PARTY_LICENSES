@@ -17,6 +17,7 @@ Linux kernel              GPL-2.0-only            Exact Debian source packages l
 Debian 13 base system     various (GPL, LGPL,     Exact Debian source packages linked in each release
                           MIT, BSD, …)
 Device firmware           vendor-specific         Debian firmware-nonfree source package and copyright
+CPU microcode             vendor-specific         Debian intel-microcode / amd64-microcode original notices
 systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
 mdadm                     GPL-2.0-or-later        Debian source packages
 btrfs-progs               GPL-2.0-only and others Debian source packages

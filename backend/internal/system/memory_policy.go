@@ -51,9 +51,12 @@ type MemoryPolicy struct {
 func NewMemoryPolicy(store *config.Store, memory func() Memory) *MemoryPolicy {
 	return &MemoryPolicy{store: store, memory: memory, sysctl: "/proc/sys/vm", settings: MemorySettings{20}, write: func(p string, b []byte) error { return os.WriteFile(p, b, 0644) }}
 }
+func memoryReserve(total uint64) uint64 {
+	return min(total/4, max(uint64(256<<20), min(uint64(2<<30), total/10)))
+}
 func memoryBudget(mem Memory, percent int) (uint64, uint64) {
 	// Leave headroom for services even if a high percentage was selected.
-	reserve := min(mem.TotalBytes/4, max(uint64(256<<20), min(uint64(2<<30), mem.TotalBytes/10)))
+	reserve := memoryReserve(mem.TotalBytes)
 	available := mem.AvailableBytes
 	if available <= reserve {
 		return 0, reserve

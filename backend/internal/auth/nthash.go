@@ -6,7 +6,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"golang.org/x/crypto/md4" //nolint:staticcheck // the SMB protocol defines this hash
+	//lint:ignore SA1019 SMB NT hashes mandate MD4; TitanOS web passwords use Argon2id.
+	"golang.org/x/crypto/md4"
 )
 
 // ntHash returns the NT hash of a password: MD4 over its UTF-16LE encoding,

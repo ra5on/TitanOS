@@ -1,15 +1,24 @@
 <script lang="ts">
- import { beforeNavigate, goto } from '$app/navigation';
- import Dialog from '#lib/components/Dialog.svelte';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
- import { publicURL } from '#lib/app-links.ts';
+	import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
+	import ImageField from '#lib/components/ImageField.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
 	import { api, ApiError, type DockerStatus } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { check, NETWORKS, readService, RESTART_POLICIES, serviceNames, writeService, type ServiceForm } from '#lib/compose/service.ts';
+	import {
+		check,
+		NETWORKS,
+		readService,
+		RESTART_POLICIES,
+		serviceNames,
+		writeService,
+		type ServiceForm,
+	} from '#lib/compose/service.ts';
 
 	const name = $derived(page.params.name ?? '');
 
@@ -32,7 +41,7 @@
 
 	/** Reads the text into the form. Returns false if it is not valid YAML. */
 	function parse(): boolean {
-		const parsed = parseDocument(text);
+		const parsed = parseDocument(text, { merge: true });
 		if (parsed.errors.length > 0) {
 			yamlError = parsed.errors[0].message;
 			return false;
@@ -69,9 +78,12 @@
 				original = text = res.compose;
 				if (!parse()) view = 'compose';
 			},
-			(err) => (loadError = errorText(err instanceof ApiError ? err.code : 'internal'))
+			(err) => (loadError = errorText(err instanceof ApiError ? err.code : 'internal')),
 		);
-		api.get<DockerStatus>('/docker').then((res) => (status = res), () => {});
+		api.get<DockerStatus>('/docker').then(
+			(res) => (status = res),
+			() => {},
+		);
 	});
 
 	// Ports other containers already publish, for the live check.
@@ -79,19 +91,29 @@
 		const map = new Map<string, string>();
 		for (const container of status?.containers ?? []) {
 			if (container.app === name) continue;
-			for (const port of container.ports) map.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
+			for (const port of container.ports)
+				map.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
 		}
 		return map;
 	});
 	const problems = $derived(form ? check(form, taken, t) : null);
 	const changed = $derived(text !== original);
- let leaving=$state(false),pendingURL='',allowNavigation=false;
- beforeNavigate(navigation=>{
-  if(!changed||applying||allowNavigation)return;
-  navigation.cancel();
-  if(!navigation.willUnload){pendingURL=navigation.to?.url.href??'';leaving=true;}
- });
- function discard(){allowNavigation=true;leaving=false;if(pendingURL)void goto(pendingURL);}
+	let leaving = $state(false),
+		pendingURL = '',
+		allowNavigation = false;
+	beforeNavigate((navigation) => {
+		if (!changed || applying || allowNavigation) return;
+		navigation.cancel();
+		if (!navigation.willUnload) {
+			pendingURL = navigation.to?.url.href ?? '';
+			leaving = true;
+		}
+	});
+	function discard() {
+		allowNavigation = true;
+		leaving = false;
+		if (pendingURL) void goto(pendingURL);
+	}
 
 	const blocked = $derived(applying || !changed || (view === 'form' ? !!problems?.any : false));
 
@@ -110,7 +132,11 @@
 				if (job.state === 'done') {
 					original = text;
 					result = { ok: true, text: t('editor.applied'), detail: '' };
-     if(pendingURL){allowNavigation=true;leaving=false;void goto(pendingURL);}
+					if (pendingURL) {
+						allowNavigation = true;
+						leaving = false;
+						void goto(pendingURL);
+					}
 				} else {
 					result = { ok: false, text: t('editor.failed'), detail: job.output };
 				}
@@ -118,32 +144,61 @@
 			}
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			result = { ok: false, text: errorText(code), detail: code === 'invalid_compose' || code === 'docker_failed' ? (err as ApiError).message : '' };
+			result = {
+				ok: false,
+				text: errorText(code),
+				detail:
+					code === 'invalid_compose' || code === 'docker_failed' ? (err as ApiError).message : '',
+			};
 		}
 		applying = false;
 	}
 </script>
 
-<PageHead title={t('editor.title', { name })} parent={{ href: '/docker', label: t('docker.title') }}>
-	<p class="muted mono location">{t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}</p>
+<PageHead
+	title={t('editor.title', { name })}
+	parent={{ href: '/docker', label: t('docker.title') }}
+>
+	<p class="muted mono location">
+		{t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}
+	</p>
 	{#snippet actions()}
 		<div class="segments" role="radiogroup">
-			<button type="button" role="radio" aria-checked={view === 'form'} onclick={() => show('form')}>{t('editor.form')}</button>
-			<button type="button" role="radio" aria-checked={view === 'compose'} onclick={() => show('compose')}>{t('editor.compose')}</button>
+			<button type="button" role="radio" aria-checked={view === 'form'} onclick={() => show('form')}
+				>{t('editor.form')}</button
+			>
+			<button
+				type="button"
+				role="radio"
+				aria-checked={view === 'compose'}
+				onclick={() => show('compose')}>{t('editor.compose')}</button
+			>
 		</div>
 	{/snippet}
 </PageHead>
 
 {#if loadError}<p class="notice-error" role="alert">{loadError}</p>{/if}
-{#if yamlError}<div class="notice-error" role="alert">{t('editor.yamlError')}<pre>{yamlError}</pre></div>{/if}
+{#if yamlError}<div class="notice-error" role="alert">
+		{t('editor.yamlError')}
+		<pre>{yamlError}</pre>
+	</div>{/if}
 
 {#if view === 'compose'}
-	<textarea class="field mono yaml" bind:value={text} spellcheck="false" aria-label={t('editor.compose')}></textarea>
+	<textarea
+		class="field mono yaml"
+		bind:value={text}
+		spellcheck="false"
+		aria-label={t('editor.compose')}></textarea>
 {:else if form && problems}
 	{#if services.length > 1}
 		<div class="segments services" role="radiogroup" aria-label={t('editor.service')}>
 			{#each services as entry (entry)}
-				<button type="button" role="radio" aria-checked={service === entry} onclick={() => pickService(entry)}>{entry}</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={service === entry}
+					onclick={() => pickService(entry)}>{entry}</button
+				>
 			{/each}
 		</div>
 	{/if}
@@ -151,35 +206,118 @@
 	<section class="tile" aria-labelledby="h-general">
 		<h2 class="tile-title" id="h-general">{t('editor.general')}</h2>
 		<div class="grid">
-			<label><span>{t('editor.image')}</span><input class="field mono" type="text" bind:value={form.image} oninput={commit} spellcheck="false" /></label>
-			<label><span>{t('editor.restart')}</span>
-				<select class="field" bind:value={form.restart} onchange={commit}>{#each RESTART_POLICIES as policy (policy)}<option value={policy}>{t(`editor.restart.${policy}` as 'editor.restart.no')}</option>{/each}{#if !RESTART_POLICIES.includes(form.restart)}<option value={form.restart}>{form.restart}</option>{/if}</select>
+			<ImageField bind:image={form.image} onchange={commit} />
+			<label
+				><span>{t('editor.restart')}</span>
+				<select class="field" bind:value={form.restart} onchange={commit}
+					>{#each RESTART_POLICIES as policy (policy)}<option value={policy}
+							>{t(`editor.restart.${policy}` as 'editor.restart.no')}</option
+						>{/each}{#if !RESTART_POLICIES.includes(form.restart)}<option value={form.restart}
+							>{form.restart}</option
+						>{/if}</select
+				>
 			</label>
-			<label><span>{t('editor.network')}</span>
-				<select class="field" bind:value={form.network} onchange={commit}>{#each NETWORKS as mode (mode)}<option value={mode}>{t(`editor.network.${mode}` as 'editor.network.host')}</option>{/each}{#if !NETWORKS.includes(form.network)}<option value={form.network}>{form.network}</option>{/if}</select>
+			<label
+				><span>{t('editor.network')}</span>
+				<select class="field" bind:value={form.network} onchange={commit}
+					>{#each NETWORKS as mode (mode)}<option value={mode}
+							>{t(`editor.network.${mode}` as 'editor.network.host')}</option
+						>{/each}{#if !NETWORKS.includes(form.network)}<option value={form.network}
+							>{form.network}</option
+						>{/if}</select
+				>
 			</label>
-			<label><span>{t('editor.publicUrl')}</span><input class="field mono" type="url" bind:value={form.publicUrl} oninput={commit} placeholder="https://app.example.org" spellcheck="false" /><small>{t('editor.publicUrlHint')}</small>{#if form.publicUrl.trim() && !publicURL(form.publicUrl)}<small class="notice-error" role="alert">{t('editor.publicUrlInvalid')}</small>{/if}</label>
-			<label><span>{t('editor.webui')}</span><input class="field mono" type="text" bind:value={form.webui} oninput={commit} placeholder="8096" spellcheck="false" /><small>{t('editor.webuiHint')}</small></label>
+			<label
+				><span>{t('editor.publicUrl')}</span><input
+					class="field mono"
+					type="url"
+					bind:value={form.publicUrl}
+					oninput={commit}
+					placeholder="https://app.example.org"
+					spellcheck="false"
+				/><small>{t('editor.publicUrlHint')}</small
+				>{#if form.publicUrl.trim() && !publicURL(form.publicUrl)}<small
+						class="notice-error"
+						role="alert">{t('editor.publicUrlInvalid')}</small
+					>{/if}</label
+			>
+			<label
+				><span>{t('editor.webui')}</span><input
+					class="field mono"
+					type="text"
+					bind:value={form.webui}
+					oninput={commit}
+					placeholder="8096"
+					spellcheck="false"
+				/><small>{t('editor.webuiHint')}</small></label
+			>
 		</div>
-		<label class="check"><input type="checkbox" bind:checked={form.privileged} onchange={commit} /><span>{t('editor.privileged')}</span></label>
-		{#if form.privileged}<p class="notice-warn" role="alert">{t('editor.privilegedWarning')}</p>{/if}
+		<label class="check"
+			><input type="checkbox" bind:checked={form.privileged} onchange={commit} /><span
+				>{t('editor.privileged')}</span
+			></label
+		>
+		{#if form.privileged}<p class="notice-warn" role="alert">
+				{t('editor.privilegedWarning')}
+			</p>{/if}
 	</section>
 
 	<section class="tile"><HardwarePicker bind:selected={form.hardware} onchange={commit} /></section>
 	<section class="tile" aria-labelledby="h-paths">
-		<div class="section-head"><h2 class="tile-title" id="h-paths">{t('editor.paths')}</h2><button type="button" class="btn small" onclick={() => (form!.paths.push({ host: './data', container: '/data', readOnly: false }), commit())}>{t('editor.addPath')}</button></div>
+		<div class="section-head">
+			<h2 class="tile-title" id="h-paths">{t('editor.paths')}</h2>
+			<button
+				type="button"
+				class="btn small"
+				onclick={() => (
+					form!.paths.push({ host: './data', container: '/data', readOnly: false }),
+					commit()
+				)}>{t('editor.addPath')}</button
+			>
+		</div>
 		{#each form.paths as row, index (index)}
 			<div class="row">
 				{#if row.raw !== undefined}
-					<span class="mono raw">{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span><span class="muted small-text">{t('editor.rawEntry')}</span>
+					<span class="mono raw"
+						>{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span
+					><span class="muted small-text">{t('editor.rawEntry')}</span>
 				{:else}
-					<label class="grow"><span>{t('editor.hostPath')}</span><input class="field mono" type="text" bind:value={row.host} oninput={commit} spellcheck="false" /></label>
-					<label class="grow"><span>{t('editor.containerPath')}</span><input class="field mono" type="text" bind:value={row.container} oninput={commit} spellcheck="false" /></label>
-					<label><span>&nbsp;</span>
-						<select class="field" value={row.readOnly ? 'ro' : 'rw'} onchange={(event) => ((row.readOnly = event.currentTarget.value === 'ro'), commit())}><option value="rw">{t('editor.readWrite')}</option><option value="ro">{t('editor.readOnly')}</option></select>
+					<label class="grow"
+						><span>{t('editor.hostPath')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={row.host}
+							oninput={commit}
+							spellcheck="false"
+						/></label
+					>
+					<label class="grow"
+						><span>{t('editor.containerPath')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={row.container}
+							oninput={commit}
+							spellcheck="false"
+						/></label
+					>
+					<label
+						><span>&nbsp;</span>
+						<select
+							class="field"
+							value={row.readOnly ? 'ro' : 'rw'}
+							onchange={(event) => ((row.readOnly = event.currentTarget.value === 'ro'), commit())}
+							><option value="rw">{t('editor.readWrite')}</option><option value="ro"
+								>{t('editor.readOnly')}</option
+							></select
+						>
 					</label>
 				{/if}
-				<button type="button" class="btn small remove" aria-label={t('editor.remove')} onclick={() => (form!.paths.splice(index, 1), commit())}>✕</button>
+				<button
+					type="button"
+					class="btn small remove"
+					aria-label={t('editor.remove')}
+					onclick={() => (form!.paths.splice(index, 1), commit())}>✕</button
+				>
 				{#if problems.paths[index]}<p class="problem" role="alert">{problems.paths[index]}</p>{/if}
 			</div>
 		{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
@@ -187,19 +325,56 @@
 
 	{#if form.network !== 'host' && form.network !== 'none'}
 		<section class="tile" aria-labelledby="h-ports">
-			<div class="section-head"><h2 class="tile-title" id="h-ports">{t('editor.ports')}</h2><button type="button" class="btn small" onclick={() => (form!.ports.push({ host: '', container: '', protocol: 'tcp' }), commit())}>{t('editor.addPort')}</button></div>
+			<div class="section-head">
+				<h2 class="tile-title" id="h-ports">{t('editor.ports')}</h2>
+				<button
+					type="button"
+					class="btn small"
+					onclick={() => (form!.ports.push({ host: '', container: '', protocol: 'tcp' }), commit())}
+					>{t('editor.addPort')}</button
+				>
+			</div>
 			{#each form.ports as row, index (index)}
 				<div class="row">
 					{#if row.raw !== undefined}
-						<span class="mono raw">{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span><span class="muted small-text">{t('editor.rawEntry')}</span>
+						<span class="mono raw"
+							>{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span
+						><span class="muted small-text">{t('editor.rawEntry')}</span>
 					{:else}
-						<label><span>{t('editor.hostPort')}</span><input class="field mono port" type="text" inputmode="numeric" bind:value={row.host} oninput={commit} /></label>
-						<label><span>{t('editor.containerPort')}</span><input class="field mono port" type="text" inputmode="numeric" bind:value={row.container} oninput={commit} /></label>
-						<label><span>&nbsp;</span><select class="field" bind:value={row.protocol} onchange={commit}><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+						<label
+							><span>{t('editor.hostPort')}</span><input
+								class="field mono port"
+								type="text"
+								inputmode="numeric"
+								bind:value={row.host}
+								oninput={commit}
+							/></label
+						>
+						<label
+							><span>{t('editor.containerPort')}</span><input
+								class="field mono port"
+								type="text"
+								inputmode="numeric"
+								bind:value={row.container}
+								oninput={commit}
+							/></label
+						>
+						<label
+							><span>&nbsp;</span><select class="field" bind:value={row.protocol} onchange={commit}
+								><option value="tcp">TCP</option><option value="udp">UDP</option></select
+							></label
+						>
 						<span class="grow"></span>
 					{/if}
-					<button type="button" class="btn small remove" aria-label={t('editor.remove')} onclick={() => (form!.ports.splice(index, 1), commit())}>✕</button>
-					{#if problems.ports[index]}<p class="problem" role="alert">{problems.ports[index]}</p>{/if}
+					<button
+						type="button"
+						class="btn small remove"
+						aria-label={t('editor.remove')}
+						onclick={() => (form!.ports.splice(index, 1), commit())}>✕</button
+					>
+					{#if problems.ports[index]}<p class="problem" role="alert">
+							{problems.ports[index]}
+						</p>{/if}
 				</div>
 			{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
 		</section>
@@ -208,13 +383,44 @@
 	{#each [['env', 'editor.env', 'editor.addEnv'], ['labels', 'editor.labels', 'editor.addLabel']] as [key, title, add] (key)}
 		{@const rows = key === 'env' ? form.env : form.labels}
 		<section class="tile" aria-labelledby="h-{key}">
-			<div class="section-head"><h2 class="tile-title" id="h-{key}">{t(title as 'editor.env')}</h2><button type="button" class="btn small" onclick={() => (rows.push({ name: '', value: '' }), commit())}>{t(add as 'editor.addEnv')}</button></div>
+			<div class="section-head">
+				<h2 class="tile-title" id="h-{key}">{t(title as 'editor.env')}</h2>
+				<button
+					type="button"
+					class="btn small"
+					onclick={() => (rows.push({ name: '', value: '' }), commit())}
+					>{t(add as 'editor.addEnv')}</button
+				>
+			</div>
 			{#each rows as pair, index (index)}
 				<div class="row">
-					<label class="grow"><span>{t('editor.envName')}</span><input class="field mono" type="text" bind:value={pair.name} oninput={commit} spellcheck="false" /></label>
-					<label class="grow"><span>{t('editor.envValue')}</span><input class="field mono" type="text" bind:value={pair.value} oninput={commit} spellcheck="false" /></label>
-					<button type="button" class="btn small remove" aria-label={t('editor.remove')} onclick={() => (rows.splice(index, 1), commit())}>✕</button>
-					{#if key === 'env' && problems.env[index]}<p class="problem" role="alert">{problems.env[index]}</p>{/if}
+					<label class="grow"
+						><span>{t('editor.envName')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={pair.name}
+							oninput={commit}
+							spellcheck="false"
+						/></label
+					>
+					<label class="grow"
+						><span>{t('editor.envValue')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={pair.value}
+							oninput={commit}
+							spellcheck="false"
+						/></label
+					>
+					<button
+						type="button"
+						class="btn small remove"
+						aria-label={t('editor.remove')}
+						onclick={() => (rows.splice(index, 1), commit())}>✕</button
+					>
+					{#if key === 'env' && problems.env[index]}<p class="problem" role="alert">
+							{problems.env[index]}
+						</p>{/if}
 				</div>
 			{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
 		</section>
@@ -224,17 +430,49 @@
 {/if}
 
 <div class="apply">
-	<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}>{t('editor.apply')}</button>
-	<span class="muted note" role="status">{applying ? t('editor.applying') : changed ? t('editor.applyNote') : t('editor.unchanged')}</span>
+	<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}
+		>{t('editor.apply')}</button
+	>
+	<span class="muted note" role="status"
+		>{applying
+			? t('editor.applying')
+			: changed
+				? t('editor.applyNote')
+				: t('editor.unchanged')}</span
+	>
 </div>
 {#if result}
-	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}</div>
+	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">
+		{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}
+	</div>
 {/if}
 
-{#if leaving}<Dialog title={t('shares.unsaved')} locked={applying} onclose={()=>{leaving=false;pendingURL='';}}>
- <p>{t('editor.unsavedHint')}</p><div class="dialog-actions"><button class="btn" disabled={applying} onclick={()=>{leaving=false;pendingURL='';}}>{t('shares.keepEditing')}</button><button class="btn btn-warn" disabled={applying} onclick={discard}>{t('shares.discard')}</button><button class="btn btn-primary" disabled={blocked} onclick={apply}>{t('editor.apply')}</button></div>
- {#if result&&!result.ok}<p class="notice-error" role="alert">{result.text}</p>{/if}
-</Dialog>{/if}
+{#if leaving}<Dialog
+		title={t('shares.unsaved')}
+		locked={applying}
+		onclose={() => {
+			leaving = false;
+			pendingURL = '';
+		}}
+	>
+		<p>{t('editor.unsavedHint')}</p>
+		<div class="dialog-actions">
+			<button
+				class="btn"
+				disabled={applying}
+				onclick={() => {
+					leaving = false;
+					pendingURL = '';
+				}}>{t('shares.keepEditing')}</button
+			><button class="btn btn-warn" disabled={applying} onclick={discard}
+				>{t('shares.discard')}</button
+			><button class="btn btn-primary" disabled={blocked} onclick={apply}
+				>{t('editor.apply')}</button
+			>
+		</div>
+		{#if result && !result.ok}<p class="notice-error" role="alert">{result.text}</p>{/if}
+	</Dialog>{/if}
+
 <style>
 	.location {
 		font-size: 0.8125rem;
@@ -375,9 +613,16 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
- @media (max-width: 760px) {
- .grid { grid-template-columns: minmax(0, 1fr); }
- .row { flex-wrap: wrap; }
- .row > label { min-width: 0; flex: 1 1 100%; }
- }
+	@media (max-width: 760px) {
+		.grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.row {
+			flex-wrap: wrap;
+		}
+		.row > label {
+			min-width: 0;
+			flex: 1 1 100%;
+		}
+	}
 </style>

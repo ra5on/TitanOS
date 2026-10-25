@@ -186,7 +186,18 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                         raise AssertionError("HDD standby package missing from third-party inventory")
                     if request("/api/v1/system/ssh")["enabled"]:
                         raise AssertionError("SSH must be disabled on a fresh installation")
-                    if request("/api/v1/system")["accelerators"] != []:
+                    system_info = request("/api/v1/system")
+                    memory = system_info["memory"]
+                    assert memory["totalBytes"] > 0 and memory["usedBytes"] + memory["freeBytes"] == memory["totalBytes"], memory
+                    assert 0 <= memory["cacheBytes"] <= memory["usedBytes"] and memory["availableBytes"] <= memory["totalBytes"], memory
+                    if tuple(map(int, version.split('-')[0].split('.'))) >= (0, 21, 0):
+                        assert memory["reserveBytes"] > 0, memory
+                        policy = request("/api/v1/system/memory")
+                        assert policy["settings"]["cachePercent"] == 20 and not policy.get("error"), policy
+                        if "pressure" in memory:
+                            assert 0 <= memory["pressure"]["fullAvg10"] <= memory["pressure"]["someAvg10"] <= 100, memory
+                    print(f"Boot {boot}: memory sample " + json.dumps(memory, sort_keys=True), flush=True)
+                    if system_info["accelerators"] != []:
                         raise AssertionError("virtual display must not appear as a physical accelerator")
                     if plugins:
                         try:

@@ -44,13 +44,16 @@ type ThreadUsage struct {
 }
 
 type Memory struct {
-	TotalBytes     uint64 `json:"totalBytes"`
-	UsedBytes      uint64 `json:"usedBytes"`
-	FreeBytes      uint64 `json:"freeBytes"`
-	AvailableBytes uint64 `json:"availableBytes"`
-	CacheBytes     uint64 `json:"cacheBytes"`
-	DirtyBytes     uint64 `json:"dirtyBytes"`
-	WritebackBytes uint64 `json:"writebackBytes"`
+	TotalBytes     uint64          `json:"totalBytes"`
+	UsedBytes      uint64          `json:"usedBytes"`
+	FreeBytes      uint64          `json:"freeBytes"`
+	AvailableBytes uint64          `json:"availableBytes"`
+	CacheBytes     uint64          `json:"cacheBytes"`
+	DirtyBytes     uint64          `json:"dirtyBytes"`
+	WritebackBytes uint64          `json:"writebackBytes"`
+	ReserveBytes   uint64          `json:"reserveBytes"`
+	LowAvailable   bool            `json:"lowAvailable,omitempty"`
+	Pressure       *MemoryPressure `json:"pressure,omitempty"`
 }
 
 // Image describes the system image in RAM. It is nil when TitanOS is not
@@ -101,11 +104,12 @@ type Monitor struct {
 	rates        map[string][2]float64
 	temperatures []Temperature
 	threadUsage  []ThreadUsage
+	memory       Memory
 }
 
 // NewMonitor starts sampling until ctx is done.
 func NewMonitor(ctx context.Context) *Monitor {
-	m := &Monitor{}
+	m := &Monitor{memory: readMemorySample()}
 	go m.run(ctx)
 	return m
 }
@@ -123,6 +127,8 @@ func (m *Monitor) run(ctx context.Context) {
 	prevRx, prevTx := readNetBytes(prevIface)
 	previous := networkCounters()
 	prevTime := time.Now()
+	var memoryWarning memoryWarning
+	memoryWarning.observe(m.Memory(), prevTime)
 
 	for {
 		select {
@@ -159,8 +165,11 @@ func (m *Monitor) run(ctx context.Context) {
 				}
 			}
 			previous = current
+			memory := readMemorySample()
+			memory.LowAvailable = memoryWarning.observe(memory, now)
 
 			m.mu.Lock()
+			m.memory = memory
 			m.rates = rates
 			m.threadUsage = threadUsage
 			m.cpu, m.rx, m.tx, m.network = usage, rxRate, txRate, iface
@@ -186,7 +195,7 @@ func (m *Monitor) Info() Info {
 		Kernel:        readTrimmed("/proc/sys/kernel/osrelease"),
 		UptimeSeconds: readUptime(),
 		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage, ThreadUsage: threads},
-		Memory:        ReadMemory(),
+		Memory:        m.Memory(),
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},
 		Temperatures:  append([]Temperature{}, temperatures...),
@@ -248,10 +257,29 @@ func cpuModel(cpuinfo string) string {
 	return ""
 }
 
+// ReadMemory reads fresh capacity for managed transfer reservations. PSI is
+// sampled separately by Monitor at its regular interval, never per upload.
 // Used includes all occupied RAM, including caches, kernel memory and tmpfs.
 // Available is the kernel's separate estimate of capacity for new workloads.
 // Do not add the RAM image, VM allocations or Shmem: they are already counted.
-func ReadMemory() Memory { return parseMeminfo(readString("/proc/meminfo")) }
+func ReadMemory() Memory {
+	mem := parseMeminfo(readString("/proc/meminfo"))
+	mem.ReserveBytes = memoryReserve(mem.TotalBytes)
+	return mem
+}
+
+func readMemorySample() Memory {
+	mem := ReadMemory()
+	mem.Pressure = parseMemoryPressure(readString("/proc/pressure/memory"))
+	return mem
+}
+
+// Memory returns the shared sample, including the server-owned warning state.
+func (m *Monitor) Memory() Memory {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.memory
+}
 
 func parseMeminfo(meminfo string) Memory {
 	values := map[string]uint64{}

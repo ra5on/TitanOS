@@ -1,0 +1,3 @@
+# A release image must boot other Intel CPUs, including when built on AMD.
+IUCODE_TOOL_INITRAMFS=early
+IUCODE_TOOL_SCANCPUS=no

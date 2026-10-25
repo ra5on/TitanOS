@@ -23,6 +23,10 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter und originaler historischer Versionsmeldung | Desktop, Entwicklungsstand |
 | [einstellungen.png](current/einstellungen.png) | Fünf Einstellungsgruppen | Desktop |
 | [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone |
+| [arbeitsspeicher.png](current/arbeitsspeicher.png) | Verfügbarer RAM trotz hoher Cachebelegung | Desktop, Entwicklungsstand 0.21.0 |
+| [app-images.png](current/app-images.png) | Eigene Image-Tags je Compose-Dienst | Desktop, Entwicklungsstand 0.21.0 |
+| [app-images-mobil.png](current/app-images-mobil.png) | Image-Tags im Installationspanel | Smartphone, vollständige Seite, Entwicklungsstand 0.21.0 |
+| [dateien-ersetzen.png](current/dateien-ersetzen.png) | Ersetzen-Bestätigung vor dem ersten Kopierklick | Desktop, Entwicklungsstand 0.21.0 |
 | [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone |
 
 Desktopbreite: **1600 CSS-Pixel**, Smartphone: **390 × 844 CSS-Pixel**. Theme: Graphit, blauer Akzent, Glasflächen; Dashboard mit Nordlicht-Hintergrund und global durchscheinenden Kacheln. Die Desktopbilder zeigen die vollständige Seite, die Mobilbilder den sichtbaren Bildschirmausschnitt. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups.
@@ -30,6 +34,15 @@ Desktopbreite: **1600 CSS-Pixel**, Smartphone: **390 × 844 CSS-Pixel**. Theme: 
 [Die Aufnahmedaten](current/capture.json) nennen Quellstand, Bildgrößen und Prüfsummen. Bei der Aufnahme werden geladene Schriftdateien, alle 13 Docker-Logos, fehlender horizontaler Überlauf auf dem Smartphone und JavaScript-Laufzeitfehler geprüft. Das ersetzt keine vollständige Funktions- oder Hardwareprüfung.
 
 [VM-Aufnahmedaten](current/vm-create-capture.json) dokumentieren den Arbeitsstand mit Quell-Datei- und Bild-Prüfsummen. Aufnahme durch `scripts/test-ui-vm-create.mjs` gegen das gebaute Frontend, Graphit, Deutsch, mit isolierten Beispieldaten und der sichtbaren Testversion `0.20.2-vm-ui-test`. Die vollständige Browserprüfung ergänzt Hell und Englisch. Die Dateien `graphit-1600-de.png`, `graphit-390-de.png` und `system-logs.png` aus dem Testausgabeordner werden unverändert als `vm-erstellen.png`, `vm-erstellen-mobil.png` und `protokoll.png` übernommen. Die übrigen bisherigen Bilder und ihr Nachweis bleiben beim oben genannten Release-Stand.
+
+Die RAM-/Image-Tag-/Ersetzen-Bilder wurden am **25. Oktober 2026** aus dem
+gebauten Entwicklungsstand 0.21.0 aufgenommen, mit Chromium, Graphit und
+ausschließlich isolierten API-Daten. Die Desktopbreite dieser vier Ergänzungen
+beträgt 1440 CSS-Pixel, mobil 390 Pixel.
+[memory-images-capture.json](current/memory-images-capture.json) nennt
+Quell-Dateihashes und unveränderte Bildprüfsummen. Aufnahmeskripte:
+`scripts/test-ui-memory-images.mjs` und `scripts/test-ui-copy-confirmation.mjs`.
+Die übrigen Bilder behalten den oben dokumentierten früheren Stand.
 
 ## Neu aufnehmen
 
