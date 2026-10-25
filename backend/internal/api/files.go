@@ -42,6 +42,7 @@ var fileErrors = []struct {
 	{files.ErrVolumeChanged, http.StatusConflict, "upload_volume_unavailable"},
 	{system.ErrMemoryPressure, http.StatusServiceUnavailable, "upload_memory_pressure"},
 	{files.ErrNoUpload, http.StatusNotFound, "upload_not_found"},
+	{files.ErrJobBusy, http.StatusConflict, "file_job_busy"},
 	{files.ErrNoJob, http.StatusNotFound, "job_not_found"},
 }
 
@@ -78,7 +79,7 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 	if user.Role.CanAdminister() {
 		if s.opts.USB != nil {
 			for _, drive := range s.opts.USB.Mounted() {
-				roots = append(roots, files.Root{ID: "usb/" + drive.Mount, Name: drive.Name, Kind: "usb", Dir: drive.Dir, Writable: true})
+				roots = append(roots, files.Root{ID: "usb/" + drive.Mount, Name: drive.Name, Kind: "usb", Dir: drive.Dir, Writable: !drive.ReadOnly})
 			}
 		}
 		// The stick is only looked at, apart from text files. Its secrets

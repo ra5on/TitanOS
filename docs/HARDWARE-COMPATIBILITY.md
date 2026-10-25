@@ -35,10 +35,36 @@ Firmware-Sammelmetapaket, keine automatische Herstellerinstallation auf dem NAS.
 
 Der Build verlangt die Kernelmodule für Intel e1000e/igb/igc/ixgbe/i40e/ice,
 Realtek r8169, Broadcom tg3/bnx2/bnx2x, QLogic qla2xxx, mpt3sas,
-megaraid_sas, NVMe, AHCI, UAS, xHCI, Virtio, VFIO, KVM Intel/AMD und
+megaraid_sas, aacraid, hpsa, NVMe/NVMe-Core, Intel VMD, AHCI, ata_piix,
+sata_mv, sata_sil24, SCSI/sd_mod, USB-Storage/UAS, xHCI, Virtio, VFIO, KVM Intel/AMD und
 coretemp/k10temp. Built-ins zählen ebenfalls. Das verhindert versehentliches
 Weglassen einer Treiberfamilie; nicht jeder Adapter benötigt zusätzliche
 Firmware. Unterstützung einzelner PCI-/USB-IDs hängt weiterhin vom Kernel ab.
+
+Zusätzlich prüft das Abbild die Treiber für NTFS3, FUSE, exFAT, FAT, ext4,
+XFS und Btrfs. `ntfs-3g` und `exfatprogs` gehören zur Systembasis. Ein Fehler beim
+Einbinden von NTFS3 versucht NTFS-3G ausschließlich lesend; der Dateimanager
+zeigt das an und die API verweigert Schreibaktionen. Kein `force`, `ntfsfix`
+oder Entfernen eines Windows-Ruhezustands. Schlägt auch der lesende Weg fehl,
+bleiben die Treiberfehler im NAS-Protokoll erhalten. Grundlagen:
+[NTFS3](https://docs.kernel.org/filesystems/ntfs3.html),
+[NTFS-3G](https://manpages.debian.org/trixie/ntfs-3g/ntfs-3g.8.en.html).
+
+Der Dateimanager entdeckt auch interne nicht verwaltete Dateisysteme; ein
+unbekannter oder nicht einbindbarer Datenträger wird dadurch nicht automatisch
+zu einem TitanOS-RAID-Volume. Dateien zuerst auf ein TitanOS-Volume kopieren;
+eine spätere Neuformatierung löscht die vorhandenen Daten. Es gibt keine
+verlustfreie automatische Umwandlung von NTFS in ein NAS-Dateisystem.
+
+Beim Abbildbau entfernt `normalize-image-tmpfiles.py` doppelte Erstellregeln
+für `/run/lock` und `/run/utmp`, erhält dabei die zuerst wirksame Regel samt
+Debian-Rechten sowie alle anderen Regeln und Herstellerhinweise. Hintergründe:
+[Debian-Fehlerbericht zur Doppeldefinition](https://bugs.debian.org/1072105).
+Die Journalansicht filtert keine Warnungen weg. Meldungen wie „Volume was not
+properly unmounted“ oder „Start/Stop Unit failed / DID_BAD_TARGET“ benötigen die
+Prüfung des betroffenen Sticks, Laufwerks beziehungsweise Controllers; diese
+Änderung repariert keine beschädigten Datenträger und bestätigt keine Behebung
+dieser konkreten Hardwaremeldungen.
 
 ## Abnahme
 
@@ -56,3 +82,10 @@ QEMU-Messungen gehören zum jeweiligen Releasebericht.
 Grundlagen: [Debian-Microcode](https://wiki.debian.org/Microcode),
 [frühes Laden im Kernel](https://docs.kernel.org/arch/x86/microcode.html),
 [NVIDIA-Modulunterstützung](https://github.com/NVIDIA/open-gpu-kernel-modules).
+
+Die Erweiterung nach 0.21.0 ist mit isolierten Gerätebäumen für SATA, SAS, NVMe,
+fehlende Transportangaben, belegte Dateisysteme, Bootstick-Partitionen und VM-
+Platten geprüft. NTFS-Ausweichbefehle und Schreibschutz-Flags verwenden
+simulierte Mounttabellen; kein echter NTFS-Mount in dieser Prüfung. Der neue
+Systemabbildbau und echte HDD-/SSD-/NVMe-/Controller-Tests stehen noch aus.
+Die zusätzlichen Pakete/Build-Prüfungen benötigen ein volles Systemrelease.

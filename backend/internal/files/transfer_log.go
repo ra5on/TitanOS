@@ -15,8 +15,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
-const transferLogLimit = 128 << 20
-
 type transferProgress struct {
 	State    string    `json:"state"`
 	Error    string    `json:"error"`
@@ -88,8 +86,18 @@ func (m *Manager) appendTransfer(job *Job, event transferEvent) error {
 	t.logMu.Lock()
 	defer t.logMu.Unlock()
 	m.jobs.mu.Lock()
+	if t.forgotten {
+		m.jobs.mu.Unlock()
+		return ErrNoJob
+	}
 	event.Progress = progressLocked(job)
 	m.jobs.mu.Unlock()
+	if t.store != nil {
+		if err := t.store.apply(event); err != nil {
+			return mapError(err)
+		}
+		return m.afterTransferEvent(job, event)
+	}
 	root, err := m.transferRoot(t.Volume, t.User)
 	if err != nil {
 		return err
@@ -98,8 +106,8 @@ func (m *Manager) appendTransfer(job *Job, event transferEvent) error {
 	name := job.ID + ".events"
 	stBefore, statErr := root.Lstat(name)
 	created := errors.Is(statErr, os.ErrNotExist)
-	if st, err := stBefore, statErr; err == nil && (!st.Mode().IsRegular() || st.Size() > transferLogLimit) {
-		return errors.New("invalid or full transfer event log")
+	if st, err := stBefore, statErr; err == nil && !st.Mode().IsRegular() {
+		return errors.New("invalid transfer event log")
 	}
 	file, err := root.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
@@ -115,13 +123,6 @@ func (m *Manager) appendTransfer(job *Job, event transferEvent) error {
 	}
 	if len(data) > 60000 {
 		return errors.New("transfer event exceeds limit")
-	}
-	st, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	if st.Size()+int64(len(data)+1) > transferLogLimit {
-		return errors.New("transfer event log exceeds 128 MiB")
 	}
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		return err
@@ -140,6 +141,10 @@ func (m *Manager) appendTransfer(job *Job, event transferEvent) error {
 			return err
 		}
 	}
+	return m.afterTransferEvent(job, event)
+}
+func (m *Manager) afterTransferEvent(job *Job, event transferEvent) error {
+	t := job.durable
 	m.jobs.mu.Lock()
 	if event.Pending != nil {
 		t.Pending = *event.Pending
@@ -150,6 +155,11 @@ func (m *Manager) appendTransfer(job *Job, event transferEvent) error {
 	}
 	m.jobs.mu.Unlock()
 	if event.Progress.State != JobRunning && t.Pending == "" {
+		root, err := m.transferRoot(t.Volume, t.User)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
 		if err := volumedata.WriteJSON(root, job.ID+".status.json", transferEnd{event.Progress.Finished}); err != nil {
 			return err
 		}
@@ -182,14 +192,14 @@ func readTransferEvents(root *os.Root, id string, t *transfer) error {
 	}
 	defer file.Close()
 	st, err := file.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Size() > transferLogLimit {
+	if err != nil || !st.Mode().IsRegular() {
 		return errors.New("invalid transfer event log")
 	}
 	// Only complete, fsynced-before-mutation records are authoritative. An
 	// incomplete completion keeps the preceding publication intent in force.
-	reader := bufio.NewReaderSize(io.LimitReader(file, transferLogLimit+1), 65536)
+	reader := bufio.NewReaderSize(file, 65536)
 	for {
-		line, err := reader.ReadBytes('\n')
+		line, err := reader.ReadSlice('\n')
 		if err == io.EOF {
 			return nil
 		}
@@ -256,7 +266,9 @@ func (m *Manager) transferSkipped(job *Job, rel string) error {
 	if job.durable == nil {
 		return nil
 	}
-	job.durable.Skipped[rel] = true
+	if !job.paged() {
+		job.durable.Skipped[rel] = true
+	}
 	return m.appendTransfer(job, transferEvent{Rel: rel, Complete: true, Skip: true})
 }
 

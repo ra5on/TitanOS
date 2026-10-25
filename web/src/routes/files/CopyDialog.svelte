@@ -87,10 +87,12 @@
 		inspectionKey = '';
 		inspection = null;
 		inspectionError = '';
+		inspectionDeferred = false;
 		decisions = {};
 	});
 	let inspecting = $state(false),
-		inspectionError = $state('');
+		inspectionError = $state(''),
+		inspectionDeferred = $state(false);
 	let pendingKey = '',
 		pendingInspection: Promise<boolean> | null = null;
 	let inspectionController: AbortController | undefined;
@@ -124,7 +126,8 @@
 	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
 	let scope = $state<{ bytes: number; files: number } | null>(null),
-		scopeError = $state('');
+		scopeError = $state(''),
+		scopeDeferred = $state(false);
 	const nestedTarget = $derived(
 		!restore && from.id === toRoot && paths.some((p) => dir === p || dir.startsWith(p + '/')),
 	);
@@ -140,6 +143,7 @@
 		const controller = new AbortController();
 		scope = null;
 		scopeError = '';
+		scopeDeferred = false;
 		api
 			.post<{ bytes: number; files: number }>(
 				'/files/inspect',
@@ -150,7 +154,10 @@
 				if (!controller.signal.aborted) scope = result;
 			})
 			.catch((err) => {
-				if (!controller.signal.aborted) scopeError = fail(err);
+				if (!controller.signal.aborted) {
+					scopeDeferred = err instanceof ApiError && err.code === 'file_scan_timeout';
+					scopeError = fail(err);
+				}
 			});
 		return () => controller.abort();
 	});
@@ -194,6 +201,7 @@
 		pendingKey = key;
 		inspecting = true;
 		inspectionError = '';
+		inspectionDeferred = false;
 		const request = { root: from.id, paths: [...paths], toRoot, toDir: dir };
 		pendingInspection = api
 			.post<Inspection>('/files/inspect', request, controller.signal)
@@ -211,7 +219,11 @@
 				return true;
 			})
 			.catch((err) => {
-				if (!controller.signal.aborted && key === targetKey) inspectionError = fail(err);
+				if (!controller.signal.aborted && key === targetKey) {
+					inspectionDeferred = err instanceof ApiError && err.code === 'file_scan_timeout';
+					inspectionError =
+						inspectionDeferred && !replaces && conflict !== 'individual' ? '' : fail(err);
+				}
 				return false;
 			})
 			.finally(() => {
@@ -226,7 +238,7 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !scope || nestedTarget || (move && sameFolder)) return;
+		if (busy || (!scope && !scopeDeferred) || nestedTarget || (move && sameFolder)) return;
 		if (
 			restore &&
 			(!restoreName ||
@@ -247,7 +259,10 @@
 					return;
 				}
 				if (inspectionKey !== targetKey) {
-					if (!(await inspectTarget())) {
+					if (
+						!(await inspectTarget()) &&
+						!(inspectionDeferred && !replaces && conflict !== 'individual')
+					) {
 						busy = false;
 						return;
 					}
@@ -329,6 +344,8 @@
 				</p>
 				{#if scope}<p>
 						{t('files.summaryScope', { count: scope.files, size: formatBytes(scope.bytes) })}
+					</p>{:else if scopeDeferred}<p class="muted" role="status">
+						{t('files.scopeDeferred')}
 					</p>{:else if scopeError}<p class="notice-error" role="alert">{scopeError}</p>{:else}<p
 						role="status"
 					>
@@ -467,7 +484,7 @@
 					class="btn {replaces && !restore ? 'btn-danger' : 'btn-primary'}"
 					disabled={busy ||
 						inspecting ||
-						!scope ||
+						(!scope && !scopeDeferred) ||
 						nestedTarget ||
 						(move && sameFolder) ||
 						!toRoot ||

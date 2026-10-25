@@ -213,9 +213,25 @@ Priorität gilt die Eingangsreihenfolge; höhere Priorität erhält am nächsten
 Dateiblock Vorrang. Pause hält temporäre Dateien offen und gibt die Warteschlange
 frei. Fortsetzen prüft den aktuellen Root-Zugriff. Ein optionales Limit von
 0–1024 MiB/s gilt je Auftrag (0 = unbegrenzt), mit höchstens einem 256-KiB-Block
-Vorlauf. Innerhalb desselben Dateisystems erfolgt Verschieben als Umbenennung;
+Vorlauf. Innerhalb derselben Dateiwurzel ohne Einzelentscheidungen erfolgt Verschieben als Umbenennung;
 ein bereits laufender einzelner Dateisystemaufruf lässt sich nicht pausieren.
 Extraktion und Browser-Uploads behalten ihre eigenen Abläufe. Seit 0.16.0 erhalten Kopier-/Verschiebeaufträge mit Ziel auf einem Daten-Volume dauerhafte Checkpoints; andere Ziele bleiben im RAM. Siehe `../WORKFLOWS.md`.
+
+Kopieraufträge haben keine feste Datei-/GB-Obergrenze. Die Dateimengen-
+Vorschau kann nach 15 Sekunden auf die vollständige Berechnung beim Start
+verweisen und normales Kopieren freigeben; Speicherplatz und Rechte prüft
+das Backend vor dem ersten Schreibzugriff auf Nutzdateien. Bestehende
+Schutzgrenzen der Ersetzen-/Einzelkonfliktprüfung bleiben erhalten.
+
+Beendete Aufträge erscheinen vollständig statt auf fünf Einträge gekürzt.
+„Auftragseintrag entfernen“ entfernt den eigenen Eintrag sofort ohne Dialog oder
+Kennungseingabe; „Alle beendeten Aufträge entfernen“ räumt sämtliche eigenen
+beendeten RAM-/Volume-Einträge auf. Laufende/abschließende Aufträge bleiben,
+Nutzdateien und Teilkopien ebenso. Fehler bleiben sichtbar und wiederholbar.
+Unter „Angeschlossene Laufwerke“ erscheinen auch interne SATA-/SAS-/NVMe-
+Dateisysteme mit Name, Dateisystem und Anschluss; in Benutzung befindliche
+Dateisysteme erhalten keinen Einbinden-Knopf. Ein lesender NTFS-Ausweichweg
+wird beim eingebundenen Laufwerk kenntlich gemacht.
 
 Mehrfachauswahl und Ordner öffnen vor dem ZIP-Download einen Prüfdialog mit
 Dateianzahl, unkomprimierter Größe und Archivnamen. Der Download bleibt ein

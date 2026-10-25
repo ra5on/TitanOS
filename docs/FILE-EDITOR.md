@@ -22,13 +22,19 @@ kein versioniertes Backup.
 Ein späteres Speichern über die normale Einstellungsseite kann manuelle Änderungen
 ersetzen; viele Einstellungen werden erst beim Start neu eingelesen.
 
-## USB und exFAT
+## USB, interne Datenträger und exFAT
 
 Beta 7 prüfte Upload-Ziele nur gegen interne Volumes. Dadurch konnte eine korrekt
 montierte USB-SSD als nicht verfügbar erscheinen. Außerdem verwendete der
 Upload-Abschluss Hardlinks, die FAT/exFAT nicht unterstützen. Beide Fehler werden
 im Folgestand korrigiert: USB-Ziele werden gegen ihre tatsächliche Einbindung
 geprüft und neue Dateien atomar ohne Überschreiben vorhandener Namen umbenannt.
+
+Nicht verwaltete SATA-/SAS-/NVMe-Dateisysteme erscheinen ebenso wie USB unter
+**Dateien › Angeschlossene Laufwerke** und lassen sich dort ausdrücklich einbinden.
+NTFS nutzt bei einem Fehler von ntfs3 einen ausschließlich lesenden ntfs-3g-
+Ausweichweg. Der sichtbare Hinweis und die API sperren dann alle Schreibaktionen.
+Der Bootstick wird hier samt seinen weiteren Partitionen ausgenommen.
 
 Bei FAT, exFAT und NTFS werden Dateien mit auf root beschränkten Einbinderechten
 bereitgestellt, damit Upload-Metadaten dieselben Schutzprüfungen erfüllen wie auf
