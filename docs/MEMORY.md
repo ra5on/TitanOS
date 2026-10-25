@@ -42,7 +42,9 @@ zugehörigen Prozent-Sysctls werden vom Kernel deaktiviert. Änderungen und
 Konfigurationsfehler stellen die vorherige aktive Byte-/Prozentkombination wieder
 her. Im Entwicklungsmodus werden keine Host-Sysctls verändert.
 
-Browser-Uploads reservieren gemeinsam höchstens das aktuelle Budget. Ein Fenster
+Browser-Uploads reservieren gemeinsam höchstens das aktuelle Budget. Jede
+Reservierung liest die Kapazität frisch; sie wartet nicht auf den Anzeigetakt des
+Systemmonitors. PSI wird dabei nicht erneut gelesen. Ein Fenster
 ist maximal 8 MiB oder ein Viertel des Budgets. Nach jedem Fenster: `fsync`,
 Bestätigung des Offsets, `posix_fadvise(FADV_DONTNEED)` für abgeschlossene Seiten,
 Freigabe der Reservierung. `FADV_DONTNEED` ist ein gezielter Hinweis, keine harte
