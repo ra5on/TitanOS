@@ -1,0 +1,298 @@
+{
+  "tested_at": "2026-10-25T22:23:41.140756+01:00",
+  "titanos_commit": "1f803ded377e42e6e60fe50b82cf8a91aefd463f",
+  "apps_commit": "d8ce929a333c8689361f3aeea18ba0a7b7640813",
+  "archive_sha256": "9cf3b1c8f807a4219ab2d451c5daed6c6d5176b549ca7fe54c3e1a11567c624f",
+  "binary_sha256": "edfb392cb1394fbad917a476bb6a704a7284e90b2e5bfe7f8df81ab565d77a9d",
+  "packaged_binary_matches": true,
+  "workflow_exit_code": 0,
+  "storage_apps_exit_code": 0,
+  "nas_acceleration": "KVM",
+  "nested_snapshot_guest_acceleration": "QEMU software emulation (TCG), minimal Linux test guest",
+  "nas_boots": 5,
+  "results": {
+    "mdadm": [
+      "foreign RAID1 import without reformatting and stale disk identity rejection",
+      "RAID5 expansion from 3 to 4 disks with daemon restart, explicit recovery, filesystem growth and unchanged file hashes"
+    ],
+    "btrfs": [
+      "native RAID1 import",
+      "snapshot, selective file restore and retention",
+      "four NAS boots including missing member, replacement, completed scrub and healthy remount"
+    ],
+    "docker": [
+      "real Engine/Compose in NAS guest",
+      "local container data and coordinated backup/restore",
+      "daemon-crash recovery fence and restart of original container",
+      "synthetic CDI request and legacy container repair"
+    ],
+    "vms": [
+      "independent stopped VM clone with distinct MAC",
+      "live nested Linux guest",
+      "qcow2, RAM, UEFI NVRAM and TPM snapshot/restore",
+      "snapshot metadata after daemon restart"
+    ],
+    "catalog_apps": [
+      {
+        "app": "Nextcloud + MariaDB + cron",
+        "version": {
+          "installed": true,
+          "maintenance": false,
+          "needsDbUpgrade": false,
+          "version": "35.0.2.2",
+          "versionstring": "35.0.2",
+          "edition": "",
+          "productname": "Nextcloud",
+          "extendedSupport": false
+        },
+        "images": [
+          {
+            "name": "/qemu-nextcloud-nextcloud-cron-1",
+            "image": "nextcloud:latest",
+            "image_id": "sha256:1d5a25fae9df8df7ba9b49dbd75628c5e08e9a2fc463c02596641ee950935937",
+            "running": true
+          },
+          {
+            "name": "/qemu-nextcloud-nextcloud-1",
+            "image": "nextcloud:latest",
+            "image_id": "sha256:1d5a25fae9df8df7ba9b49dbd75628c5e08e9a2fc463c02596641ee950935937",
+            "running": true
+          },
+          {
+            "name": "/qemu-nextcloud-mariadb-1",
+            "image": "mariadb:latest",
+            "image_id": "sha256:c912705a92a6b0645980ede642c047dbf24197c0a0cde1af8668aa51b68e4e31",
+            "running": true
+          }
+        ],
+        "checks": [
+          "TitanOS Compose API installation",
+          "published HTTP port",
+          "anonymous WebDAV rejected",
+          "authenticated WebDAV upload/download",
+          "data/account persistence after app removal and recreation"
+        ]
+      },
+      {
+        "app": "Eclipse Mosquitto",
+        "images": [
+          {
+            "name": "/qemu-mosquitto-mosquitto-1",
+            "image": "eclipse-mosquitto:latest",
+            "image_id": "sha256:a46a9080d48c49e81eb31e6d2abed5d2cdb1a6188ed2380c92edde48f2689c78",
+            "running": true
+          }
+        ],
+        "checks": [
+          "TitanOS Compose API installation",
+          "authenticated MQTT publish/subscribe",
+          "anonymous and wrong-password rejection",
+          "retained message after app recreation"
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "Only new disposable virtual disks; no physical host disks attached",
+    "No claim that every RAID level, app or guest OS was tested",
+    "No real GPU/PCI/USB passthrough or performance/production endurance validation",
+    "Inner VM snapshot test uses the dedicated minimal Linux guest with software emulation, not a Windows/desktop installation",
+    "Existing installations, application major-version migrations and hardware compatibility not covered"
+  ],
+  "boot_smoke": {
+    "tested_at": "2026-10-25T22:10:22.593849+01:00",
+    "commit": "1f803ded377e42e6e60fe50b82cf8a91aefd463f",
+    "version": "0.22.0",
+    "kernel": "6.12.113+deb13-amd64",
+    "archive_bytes": 532501888,
+    "sha256": "9cf3b1c8f807a4219ab2d451c5daed6c6d5176b549ca7fe54c3e1a11567c624f",
+    "build": "passed",
+    "qemu_smoke": "passed",
+    "boots": 2,
+    "acceleration": "kvm",
+    "firmware": "UEFI / Fedora OVMF 4M converted from qcow2 to raw",
+    "guest_memory": "4 GiB",
+    "guest_vcpus": 2,
+    "checks": [
+      "HTTPS and ready health endpoint",
+      "initial setup and owner role",
+      "correct version",
+      "login after reboot",
+      "persistent HTTPS certificate",
+      "persistent disk standby settings",
+      "embedded WebUI HTTP HTML",
+      "generated third-party license inventory",
+      "SSH disabled by default",
+      "memory API and default memory policy",
+      "real reboot through API"
+    ],
+    "limits": [
+      "No physical disks attached",
+      "No storage/RAID, application-container, VM-in-VM or NVIDIA-plugin tests in this run",
+      "Unsigned local test build; nothing published"
+    ],
+    "observations": [
+      "Initramfs reports efivarfs unavailable; UEFI boot succeeds",
+      "No WLAN regulatory.db in image",
+      "systemd-ssh-generator reports absent AF_VSOCK CID in QEMU",
+      "Shutdown reports run-live-medium unmount and remaining loop-device warnings; both requested reboots complete"
+    ]
+  },
+  "toolchains": {
+    "go": {
+      "version": "1.27.3",
+      "url": "https://go.dev/dl/go1.27.3.linux-amd64.tar.gz",
+      "sha256": "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
+    },
+    "node": {
+      "version": "24.22.1",
+      "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz",
+      "sha256": "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6"
+    },
+    "mkosi": {
+      "version": "25.3",
+      "source": "https://github.com/systemd/mkosi.git",
+      "commit": "a31ed1fc8c6901ae3ee40d458761e261adca835e"
+    }
+  },
+  "logs": {
+    "build": {
+      "local_path": "out/validation/environment-2026-10-25/image-build.log",
+      "sha256": "ac494f466ba6ab89e539011d53df25e4ff0ce3c48ded25361c57c93715fec7a6",
+      "committed": false
+    },
+    "boot": {
+      "local_path": "out/validation/environment-2026-10-25/qemu-smoke.log",
+      "sha256": "872e49e80ee10399ebb9655f0d66d824f39e53649c1edb63ef99078eb0f31e14",
+      "committed": false
+    },
+    "boot_serial": {
+      "local_path": "out/validation/environment-2026-10-25/qemu-serial.log",
+      "sha256": "ed0b2dde33ef724d82b49c2a4ae4cfa4cd288e453f147249cfef26a59178f39a",
+      "committed": false
+    },
+    "workflows": {
+      "local_path": "out/validation/environment-2026-10-25/extended/workflows.log",
+      "sha256": "9350c7b73adb988070da17fecdc7829623ca6ea84b7eb897c2ca2bcde2a57ca9",
+      "committed": false
+    },
+    "workflows_serial": {
+      "local_path": "out/validation/environment-2026-10-25/extended/workflows-serial.log",
+      "sha256": "5ce64544fcea2be1c9810ce8880f4a2dafaac19de552723f8fad04a446cb24bf",
+      "committed": false
+    },
+    "storage_apps": {
+      "local_path": "out/validation/environment-2026-10-25/extended/storage-apps.log",
+      "sha256": "17598fba3ed27d425f752f5719cac2e473da0dd18797a0ee273729e66bf3e8c2",
+      "committed": false
+    },
+    "storage_apps_serial": {
+      "local_path": "out/validation/environment-2026-10-25/extended/storage-apps-serial.log",
+      "sha256": "e6cc9bb23fb6cbbf2126d9bbf473e2c6b74236018178ab33842c878584eada6b",
+      "committed": false
+    }
+  },
+  "notes": [
+    "Historical results measured before this documentation commit; source commits recorded above.",
+    "Raw logs, temporary SSH keys, synthetic credentials, binaries and VM images are not committed.",
+    "latest app tags and Debian mirrors can change; image IDs and artifact hashes describe this run, not bit-for-bit rebuild guarantees."
+  ],
+  "host": {
+    "distribution": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+    "architecture": "x86_64",
+    "python": "Python 3.14.8",
+    "packages": [
+      "qemu-system-x86-core-10.2.2-1.fc44.x86_64",
+      "gcc-16.2.1-2.fc44.x86_64",
+      "make-4.4.1-12.fc44.x86_64",
+      "apt-3.3.3-1.fc44.x86_64",
+      "dpkg-1.23.7-1.fc44.x86_64",
+      "glibc-static-2.43-9.fc44.x86_64"
+    ]
+  },
+  "repository_helpers_validation": {
+    "tested_at": "2026-10-25T22:38:35.873938+01:00",
+    "unit_release_exit_code": 0,
+    "storage_apps_exit_code": 0,
+    "commands": [
+      "scripts/fedora-dev.sh make test test-release",
+      "scripts/fedora-dev.sh python3 scripts/test-storage-apps-qemu.py --zip out/titanos-0.22.0.zip --apps-dir ../TitanOS-Apps --output out/validation/repository-storage-apps"
+    ],
+    "logs": {
+      "unit_release": {
+        "local_path": "out/validation/environment-2026-10-25/extended/repository-helper-check.log",
+        "sha256": "181b01ee0f3db4f97d5b4db7cf55133246eff8a523e7e4aa0446491015903da9",
+        "committed": false
+      },
+      "storage_apps": {
+        "local_path": "out/validation/environment-2026-10-25/extended/repository-storage-apps.log",
+        "sha256": "f26b171e91b857922113304dbae7106725f9c783018082de528267d26aef81f5",
+        "committed": false
+      },
+      "storage_apps_serial": {
+        "local_path": "out/validation/repository-storage-apps/storage-apps-serial.log",
+        "sha256": "52c4374520ceaf1c79f298a3344b962d47ea7233bf548ff533a7137ea6b5ac3a",
+        "committed": false
+      }
+    },
+    "catalog_apps": [
+      {
+        "app": "Nextcloud + MariaDB + cron",
+        "version": {
+          "installed": true,
+          "maintenance": false,
+          "needsDbUpgrade": false,
+          "version": "35.0.2.2",
+          "versionstring": "35.0.2",
+          "edition": "",
+          "productname": "Nextcloud",
+          "extendedSupport": false
+        },
+        "images": [
+          {
+            "name": "/qemu-nextcloud-nextcloud-cron-1",
+            "image": "nextcloud:latest",
+            "image_id": "sha256:1d5a25fae9df8df7ba9b49dbd75628c5e08e9a2fc463c02596641ee950935937",
+            "running": true
+          },
+          {
+            "name": "/qemu-nextcloud-nextcloud-1",
+            "image": "nextcloud:latest",
+            "image_id": "sha256:1d5a25fae9df8df7ba9b49dbd75628c5e08e9a2fc463c02596641ee950935937",
+            "running": true
+          },
+          {
+            "name": "/qemu-nextcloud-mariadb-1",
+            "image": "mariadb:latest",
+            "image_id": "sha256:c912705a92a6b0645980ede642c047dbf24197c0a0cde1af8668aa51b68e4e31",
+            "running": true
+          }
+        ],
+        "checks": [
+          "TitanOS Compose API installation",
+          "published HTTP port",
+          "anonymous WebDAV rejected",
+          "authenticated WebDAV upload/download",
+          "data/account persistence after app removal and recreation"
+        ]
+      },
+      {
+        "app": "Eclipse Mosquitto",
+        "images": [
+          {
+            "name": "/qemu-mosquitto-mosquitto-1",
+            "image": "eclipse-mosquitto:latest",
+            "image_id": "sha256:a46a9080d48c49e81eb31e6d2abed5d2cdb1a6188ed2380c92edde48f2689c78",
+            "running": true
+          }
+        ],
+        "checks": [
+          "TitanOS Compose API installation",
+          "authenticated MQTT publish/subscribe",
+          "anonymous and wrong-password rejection",
+          "retained message after app recreation"
+        ]
+      }
+    ]
+  }
+}
