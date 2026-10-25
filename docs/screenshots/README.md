@@ -28,6 +28,8 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [app-images-mobil.png](current/app-images-mobil.png) | Image-Tags im Installationspanel | Smartphone, vollständige Seite, Entwicklungsstand 0.21.0 |
 | [dateien-ersetzen.png](current/dateien-ersetzen.png) | Ersetzen-Bestätigung vor dem ersten Kopierklick | Desktop, Entwicklungsstand 0.21.0 |
 | [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone |
+| [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png) | Interne Laufwerke, Restzeit und Entfernen einzelner/aller beendeten Aufträge | Desktop, Entwicklungsstand nach 0.21.0 |
+| [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Dieselben Funktionen mit geöffneter Ortsauswahl | Smartphone, vollständige Seite, Entwicklungsstand nach 0.21.0 |
 
 Desktopbreite: **1600 CSS-Pixel**, Smartphone: **390 × 844 CSS-Pixel**. Theme: Graphit, blauer Akzent, Glasflächen; Dashboard mit Nordlicht-Hintergrund und global durchscheinenden Kacheln. Die Desktopbilder zeigen die vollständige Seite, die Mobilbilder den sichtbaren Bildschirmausschnitt. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups.
 
@@ -43,6 +45,17 @@ beträgt 1440 CSS-Pixel, mobil 390 Pixel.
 Quell-Dateihashes und unveränderte Bildprüfsummen. Aufnahmeskripte:
 `scripts/test-ui-memory-images.mjs` und `scripts/test-ui-copy-confirmation.mjs`.
 Die übrigen Bilder behalten den oben dokumentierten früheren Stand.
+
+Die Laufwerks-/Auftragsbilder wurden am **25. Oktober 2026** aus dem gebauten
+Entwicklungsstand nach 0.21.0 aufgenommen: Chromium, Graphit, Deutsch,
+1440 beziehungsweise 390 CSS-Pixel, vollständige Seite. Alle Laufwerke,
+Dateianzahlen, Geschwindigkeiten und Restzeiten sind isolierte API-Beispiele.
+`scripts/test-ui-drive-transfers.mjs`
+prüft zusätzlich acht beendete Aufträge, Einzelentfernung ohne Dialog/Kennung,
+veraltete Statusantworten, Neuladen, Fehler/Wiederholen, laufende Aufträge sowie
+Englisch/Hell und horizontalen Überlauf. Die Bilder wurden unverändert aus der
+Testausgabe übernommen. [Aufnahmedaten](current/drive-transfers-capture.json)
+nennen Quell-Datei- und Bildprüfsummen. Das ist keine Hardwareabnahme.
 
 ## Neu aufnehmen
 

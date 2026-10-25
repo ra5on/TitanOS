@@ -18,8 +18,17 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
+// Old JSON checkpoints are imported with their historical format bound.
+// New plans put entries in the volume database, never in this descriptor.
+const legacyTransferPlanLimit = 128 << 20
+
+var ErrJobBusy = errors.New("files: the transfer is still updating its status")
+
 type transfer struct {
+	Format              int `json:"format,omitempty"`
+	store               *transferStore
 	initialized         bool
+	forgotten           bool
 	logMu               sync.Mutex
 	Job                 Job                   `json:"job"`
 	User                string                `json:"user"`
@@ -77,9 +86,6 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
 	if m.Mounted == nil || dst.Volume == "" {
 		return nil
 	}
-	if job.Files > 50000 {
-		return errors.New("durable transfers are limited to 50000 files per job")
-	}
 	source, err := transferIdentity(src.Dir)
 	if err != nil {
 		return err
@@ -93,21 +99,6 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
 		return err
 	}
 	t := &transfer{User: job.user, Volume: dst.Volume, Boot: strings.TrimSpace(string(boot)), SourceDir: src.Dir, DestinationDir: dst.Dir, SourceIdentity: source, DestinationIdentity: destination, Conflict: job.conflict, Choices: job.choices, Skipped: map[string]bool{}, Completed: job.completed, CompletedTop: job.completedTop, Targets: job.targets, Sources: map[string]string{}, Destinations: map[string]string{}}
-	var count, size int64
-	for _, rel := range job.Names {
-		if err := walk(sr, rel, func(p string, info fs.FileInfo) {
-			if info.Mode().IsRegular() {
-				t.Sources[p] = entryVersion(info)
-				count++
-				size += info.Size()
-			}
-		}); err != nil {
-			return err
-		}
-	}
-	if job.Files != count || job.Bytes != size {
-		return ErrTextConflict
-	}
 	root, err := m.transferRoot(t.Volume, t.User)
 	if err != nil {
 		return err
@@ -117,9 +108,25 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
 	if err != nil {
 		return err
 	}
+	t.Format = 2
+	t.Sources, t.Destinations, t.Skipped, t.Completed, t.CompletedTop, t.Targets = nil, nil, nil, nil, nil, nil
+	t.store = &transferStore{manager: m, volume: t.Volume, user: t.User, id: job.ID}
 	job.durable = t
 	job.Durable = true
-	return m.saveTransfer(job, "")
+	if err := t.store.initialize(job, sr, func() error { return m.saveTransfer(job, "") }); err != nil {
+		if t.store.created {
+			if root, e := m.transferRoot(t.Volume, t.User); e == nil {
+				root.Remove(job.ID + ".json")
+				root.Remove(job.ID + ".db")
+				_ = syncTransferParent(root, job.ID+".json")
+				root.Close()
+			}
+		}
+		job.durable = nil
+		job.Durable = false
+		return mapError(err)
+	}
+	return nil
 }
 func (m *Manager) saveTransfer(job *Job, pending string) error {
 	t := job.durable
@@ -132,6 +139,11 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 	t.Pending = pending
 	m.jobs.mu.Lock()
 	t.Job = snapshotLocked(job)
+	if t.Format == 2 {
+		t.Job.Operation = "checkpoint-v2"
+		t.Job.Blocked = true
+		t.Job.Retryable = false
+	}
 	m.jobs.mu.Unlock()
 	root, err := m.transferRoot(t.Volume, t.User)
 	if err != nil {
@@ -142,16 +154,13 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 	if err != nil {
 		return err
 	}
-	if len(data) > 32<<20 {
-		return errors.New("transfer checkpoint exceeds 32 MiB")
-	}
 	if err := volumedata.Write(root, job.ID+".json", data); err != nil {
 		return err
 	}
 	t.initialized = true
 	return nil
 }
-func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final string) error {
+func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final string, top ...bool) error {
 	if job.durable == nil {
 		return nil
 	}
@@ -163,9 +172,16 @@ func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final string) error
 		return err
 	}
 	version := entryVersion(info)
-	job.durable.Destinations[final] = version
+	if !job.paged() {
+		job.durable.Destinations[final] = version
+	}
 	empty := ""
-	return m.appendTransfer(job, transferEvent{Pending: &empty, Part: &transferPart{}, Rel: rel, Target: final, Version: version, Complete: job.completed[rel], Top: job.completedTop[rel]})
+	complete, isTop := job.completed[rel], job.completedTop[rel]
+	if job.paged() {
+		complete = info.Mode().IsRegular()
+		isTop = len(top) > 0 && top[0]
+	}
+	return m.appendTransfer(job, transferEvent{Pending: &empty, Part: &transferPart{}, Rel: rel, Target: final, Version: version, Complete: complete, Top: isTop})
 }
 func (m *Manager) loadTransfers(user string) {
 	if m.Mounted == nil {
@@ -210,9 +226,23 @@ func (m *Manager) loadTransfers(user string) {
 				continue
 			}
 			var t transfer
-			readErr := volumedata.ReadJSON(root, e.Name(), &t, 32<<20)
-			if readErr == nil {
+			readErr := volumedata.ReadJSON(root, e.Name(), &t, legacyTransferPlanLimit)
+			if readErr == nil && t.Format == 2 {
+				t.store = &transferStore{manager: m, volume: volume, user: user, id: id}
+				var state transferStoreState
+				state, readErr = t.store.summary()
+				if readErr == nil {
+					state.Progress.apply(&t.Job)
+					t.Job.Operation = ""
+					t.Job.Blocked = false
+					t.Pending = state.Pending
+					t.Part = state.Part.Path
+					t.PartIdentity = state.Part.Identity
+				}
+			} else if readErr == nil && t.Format == 0 {
 				readErr = readTransferEvents(root, id, &t)
+			} else if readErr == nil {
+				readErr = ErrInvalid
 			}
 			if err := readErr; err != nil {
 				m.jobs.mu.Lock()
@@ -220,7 +250,7 @@ func (m *Manager) loadTransfers(user string) {
 				m.jobs.mu.Unlock()
 				continue
 			}
-			if t.User != user || t.Volume != volume || t.Job.ID != id || len(t.Sources) > 50000 {
+			if t.User != user || t.Volume != volume || t.Job.ID != id {
 				continue
 			}
 			t.initialized = true
@@ -284,10 +314,22 @@ func (m *Manager) verifyTransfer(job *Job, src, dst Root, dr *os.Root) error {
 	if source != t.SourceIdentity || destination != t.DestinationIdentity {
 		return ErrTextConflict
 	}
-	for p, version := range t.Destinations {
+	checkDestination := func(p, version string) error {
 		info, err := dr.Lstat(p)
 		if err != nil || entryVersion(info) != version || m.protected(dst, p) || dst.secret(p) {
 			return ErrTextConflict
+		}
+		return nil
+	}
+	if t.store != nil {
+		if err := t.store.verifyDestinations(checkDestination); err != nil {
+			return err
+		}
+	} else {
+		for p, version := range t.Destinations {
+			if err := checkDestination(p, version); err != nil {
+				return err
+			}
 		}
 	}
 	if t.Part != "" {
@@ -311,10 +353,9 @@ func (m *Manager) verifyTransfer(job *Job, src, dst Root, dr *os.Root) error {
 	}
 	return nil
 }
-func (m *Manager) ForgetTransfer(user, id, confirm string) error {
-	if id != confirm {
-		return ErrInvalid
-	}
+
+// ForgetTransfer removes only a terminal job's bookkeeping, never user files.
+func (m *Manager) ForgetTransfer(user, id string) error {
 	m.loadTransfers(user)
 	m.jobs.mu.Lock()
 	defer m.jobs.mu.Unlock()
@@ -323,27 +364,72 @@ func (m *Manager) ForgetTransfer(user, id, confirm string) error {
 			continue
 		}
 		if j.State == JobRunning || j.finishing {
-			return ErrInvalid
+			return ErrJobBusy
 		}
-		if j.durable != nil {
-			root, err := m.transferRoot(j.durable.Volume, user)
-			if err != nil {
-				return err
-			}
-			defer root.Close()
-			for _, suffix := range []string{".events", ".status.json"} {
-				if err := root.Remove(id + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
-					return err
-				}
-			}
-			if err := root.Remove(id + ".json"); err != nil {
-				return err
-			}
+		if err := m.removeTransfer(j); err != nil {
+			return err
 		}
 		m.jobs.list = append(m.jobs.list[:i], m.jobs.list[i+1:]...)
 		return nil
 	}
 	return ErrNoJob
+}
+
+// ClearTransfers snapshots all terminal jobs under the same lock as starts and
+// retries. Running/finishing jobs and other accounts are never removed.
+func (m *Manager) ClearTransfers(user string) error {
+	m.loadTransfers(user)
+	m.jobs.mu.Lock()
+	defer m.jobs.mu.Unlock()
+	var first error
+	for i := 0; i < len(m.jobs.list); {
+		j := m.jobs.list[i]
+		if j.user != user || j.State == JobRunning || j.finishing {
+			i++
+			continue
+		}
+		if err := m.removeTransfer(j); err != nil {
+			if first == nil {
+				first = err
+			}
+			i++
+			continue
+		}
+		m.jobs.list = append(m.jobs.list[:i], m.jobs.list[i+1:]...)
+	}
+	return first
+}
+func (m *Manager) removeTransfer(j *Job) error {
+	if j.durable == nil {
+		return nil
+	}
+	// appendTransfer takes logMu before jobs.mu. Never wait for it while
+	// holding jobs.mu; let the caller retry a still-finishing status write.
+	if !j.durable.logMu.TryLock() {
+		return ErrJobBusy
+	}
+	defer j.durable.logMu.Unlock()
+	j.closeStore()
+	root, err := m.transferRoot(j.durable.Volume, j.user)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	// Remove and sync the immutable plan first. A crash during cleanup must
+	// never leave a replayable plan whose publication journal was deleted.
+	if err := root.Remove(j.ID + ".json"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	j.durable.forgotten = true
+	if err := syncTransferParent(root, j.ID+".json"); err != nil {
+		return err
+	}
+	for _, suffix := range []string{".events", ".status.json", ".db"} {
+		if err := root.Remove(j.ID + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return syncTransferParent(root, j.ID+".json")
 }
 func (m *Manager) transferAvailable(job *Job) error {
 	if m.Available != nil {
@@ -383,7 +469,7 @@ func pruneTransfers(root *os.Root) error {
 	}
 	sort.Slice(done, func(i, j int) bool { return done[i].at < done[j].at })
 	for len(done) > maxJobs {
-		for _, suffix := range []string{".json", ".events", ".status.json"} {
+		for _, suffix := range []string{".json", ".events", ".status.json", ".db"} {
 			if err := root.Remove(done[0].id + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}

@@ -406,3 +406,33 @@ func TestCrossRootMoveKeepsUncopiedEntries(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamingCopyDoesNotDiscoverItsOwnOutput(t *testing.T) {
+	m, src, _ := twoRoots(t)
+	job, err := m.StartCopy(src, []string{"urlaub"}, src, ".", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	job = finish(t, m, job.ID)
+	if job.State != JobDone {
+		t.Fatal(job)
+	}
+	if read(t, filepath.Join(src.Dir, "urlaub (2)", "strand.jpg")) != "strand" {
+		t.Fatal("self copy not published separately")
+	}
+	if _, err := os.Stat(filepath.Join(src.Dir, "urlaub", "strand (2).jpg")); !os.IsNotExist(err) {
+		t.Fatal("copy wrote inside its source", err)
+	}
+}
+
+func TestStreamingCopyRejectsAliasedDescendant(t *testing.T) {
+	m, src, _ := twoRoots(t)
+	if err := os.Mkdir(filepath.Join(src.Dir, "urlaub", "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	// A separate root aliases a descendant of the selected source directory.
+	dst := Root{ID: "volume/alias", Kind: "volume", Dir: filepath.Join(src.Dir, "urlaub", "nested"), Writable: true}
+	if _, err := m.StartCopy(src, []string{"urlaub"}, dst, ".", false, ConflictRename, "alex", os.Getuid()); !errors.Is(err, ErrInvalid) {
+		t.Fatal("aliased self-recursion accepted", err)
+	}
+}

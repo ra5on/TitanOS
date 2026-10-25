@@ -1,4 +1,4 @@
-// Package usb shows drives that are plugged in over USB and mounts them on
+// Package usb shows unmanaged data drives on USB, SATA, SAS and NVMe and mounts them on
 // request, so that their files can be browsed and copied in the file manager.
 //
 // Nothing is mounted by itself and nothing is stored: which drive is plugged
@@ -33,7 +33,8 @@ var (
 	// ErrUnsupported means the filesystem of the drive cannot be mounted.
 	ErrUnsupported = errors.New("usb: this filesystem cannot be mounted")
 	// ErrBusy means something still uses the drive.
-	ErrBusy = errors.New("usb: the drive is in use")
+	ErrBusy        = errors.New("usb: the drive is in use")
+	ErrMountFailed = errors.New("usb: the filesystem could not be mounted")
 	// ErrMounted and ErrNotMounted report a request that makes no sense.
 	ErrMounted    = errors.New("usb: the drive is mounted already")
 	ErrNotMounted = errors.New("usb: the drive is not mounted")
@@ -54,7 +55,7 @@ var filesystems = map[string]struct{ kind, options string }{
 	"btrfs": {"btrfs", ""},
 }
 
-// Device is a filesystem on a drive plugged in over USB.
+// Device is a filesystem on an unmanaged physical data drive.
 type Device struct {
 	// ID is the filesystem UUID.
 	ID    string `json:"id"`
@@ -65,8 +66,11 @@ type Device struct {
 	FSType string `json:"fsType"`
 	Size   uint64 `json:"size"`
 	// Supported is false for filesystems that cannot be mounted.
-	Supported bool `json:"supported"`
-	Mounted   bool `json:"mounted"`
+	Supported bool   `json:"supported"`
+	Mounted   bool   `json:"mounted"`
+	ReadOnly  bool   `json:"readOnly"`
+	Busy      bool   `json:"busy"`
+	Transport string `json:"transport"`
 	// Dir is where the drive is mounted; empty if it is not.
 	Dir string `json:"-"`
 	// Mount is the name it is mounted under.
@@ -101,6 +105,8 @@ type Manager struct {
 	Disabled bool
 	// Reserved reports a filesystem UUID that belongs to a volume of the NAS.
 	Reserved func(uuid string) bool
+	// Claimed excludes whole disks assigned to VMs or undergoing disk tests.
+	Claimed func() map[string]string
 	// OnPlug is told of each drive that appeared since the last look.
 	OnPlug func(Device)
 
@@ -120,6 +126,9 @@ const bootStickLabel = "TITANOS"
 
 // collect adds the usable filesystems below a drive.
 func collect(n node, transport string, out *[]Device, reserved func(string) bool) {
+	if (n.Type != "disk" && n.Type != "part") || n.Label == bootStickLabel || (reserved != nil && reserved(n.UUID)) {
+		return
+	}
 	if n.Transport != "" {
 		transport = n.Transport
 	}
@@ -128,12 +137,12 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	alias := n.Type == "disk" && slices.ContainsFunc(n.Children, func(child node) bool {
 		return child.Type == "part" && child.UUID == n.UUID && child.FSType == n.FSType && child.Size == n.Size
 	})
-	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && transport == "usb" {
+	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && (transport == "usb" || transport == "sata" || transport == "sas" || transport == "nvme" || transport == "ata" || transport == "scsi" || transport == "") {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
 			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {
 			_, supported := filesystems[n.FSType]
-			*out = append(*out, Device{ID: n.UUID, Label: n.Label, Model: strings.TrimSpace(n.Model), FSType: n.FSType, Size: n.Size, Supported: supported, path: n.Name})
+			*out = append(*out, Device{ID: n.UUID, Label: n.Label, Model: strings.TrimSpace(n.Model), FSType: n.FSType, Size: n.Size, Supported: supported, Busy: n.Mountpoint != "" || len(n.Children) > 0, Transport: transport, path: n.Name})
 		}
 	}
 	for _, child := range n.Children {
@@ -196,7 +205,14 @@ func (m *Manager) List(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 	var devices []Device
+	claimed := map[string]string{}
+	if m.Claimed != nil {
+		claimed = m.Claimed()
+	}
 	for _, n := range parsed.Blockdevices {
+		if n.Type != "disk" || claimed[filepath.Base(n.Name)] != "" || containsBoot(n) {
+			continue
+		}
 		collect(n, "", &devices, m.Reserved)
 	}
 	mounted := m.mounts()
@@ -204,7 +220,8 @@ func (m *Manager) List(ctx context.Context) ([]Device, error) {
 		d := &devices[i]
 		d.Name = firstNonEmpty(d.Label, d.Model, d.FSType)
 		if dir, ok := mounted[d.path]; ok {
-			d.Mounted, d.Dir, d.Mount = true, dir, filepath.Base(dir)
+			d.Mounted, d.Dir, d.Mount, d.Busy = true, dir, filepath.Base(dir), false
+			d.ReadOnly = m.readOnly(dir)
 		}
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Name+devices[i].ID < devices[j].Name+devices[j].ID })
@@ -236,6 +253,7 @@ func (m *Manager) find(ctx context.Context, id string) (Device, error) {
 type Mounted struct {
 	// Mount is the folder name; Name is what to show.
 	Mount, Name, Dir string
+	ReadOnly         bool
 }
 
 // Mounted returns the drives that are mounted right now.
@@ -248,7 +266,7 @@ func (m *Manager) Mounted() []Mounted {
 		if at := strings.LastIndex(name, "-"); at > 0 {
 			shown = name[:at]
 		}
-		drives = append(drives, Mounted{Mount: name, Name: shown, Dir: dir})
+		drives = append(drives, Mounted{Mount: name, Name: shown, Dir: dir, ReadOnly: m.readOnly(dir)})
 	}
 	sort.Slice(drives, func(i, j int) bool { return drives[i].Mount < drives[j].Mount })
 	return drives
@@ -285,6 +303,9 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 	if d.Mounted {
 		return ErrMounted
 	}
+	if d.Busy {
+		return ErrBusy
+	}
 	fs, ok := filesystems[d.FSType]
 	if !ok {
 		return ErrUnsupported
@@ -295,8 +316,17 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 	}
 	options := strings.Trim("nosuid,nodev,noexec,"+fs.options, ",")
 	if _, err := m.runner.Run(ctx, "", "mount", "-t", fs.kind, "-o", options, d.path, dir); err != nil {
-		os.Remove(dir)
-		return fmt.Errorf("%w: %v", ErrUnsupported, err)
+		// The FUSE driver provides a read-only import path, including Windows
+		// hibernation/unclean shutdown cases. Never force, repair or remove hiberfiles.
+		if d.FSType != "ntfs" {
+			os.Remove(dir)
+			return fmt.Errorf("%w: %v", ErrMountFailed, err)
+		}
+		if _, fallback := m.runner.Run(ctx, "", "mount", "-t", "ntfs-3g", "-o", options+",ro", d.path, dir); fallback != nil {
+			os.Remove(dir)
+			return fmt.Errorf("%w: ntfs3: %v; read-only ntfs-3g: %v", ErrMountFailed, err, fallback)
+		}
+		slog.Warn("NTFS mounted read-only using fallback driver", "name", d.Name, "reason", err)
 	}
 	slog.Info("usb drive mounted", "name", d.Name, "fs", d.FSType)
 	return nil
@@ -382,7 +412,7 @@ func (m *Manager) look(ctx context.Context) {
 	var plugged []Device
 	for _, d := range devices {
 		now[d.ID] = true
-		if !first && !m.seen[d.ID] {
+		if !first && !m.seen[d.ID] && d.Transport == "usb" {
 			plugged = append(plugged, d)
 		}
 	}
@@ -421,6 +451,9 @@ func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root
 	if !d.Mounted {
 		return ErrNotMounted
 	}
+	if d.ReadOnly {
+		return ErrBusy
+	}
 	root, err := os.OpenRoot(d.Dir)
 	if err != nil {
 		return err
@@ -431,7 +464,7 @@ func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root
 	if err != nil {
 		return err
 	}
-	if !again.Mounted || again.Dir != d.Dir || again.path != d.path {
+	if !again.Mounted || again.ReadOnly || again.Dir != d.Dir || again.path != d.path {
 		return ErrNotMounted
 	}
 	// Linux mount IDs identify the pinned mount even for Btrfs subvolumes,
@@ -471,9 +504,32 @@ func matchesMount(info, dir, device, fsType, mountID string) bool {
 		// Our generated mount directory and lsblk device path contain no spaces.
 		if fields[4] == dir && fields[0] == mountID && tail[1] == device {
 			if fsType == "ntfs" {
-				return tail[0] == "ntfs3"
+				return tail[0] == "ntfs3" || tail[0] == "fuseblk"
 			}
 			return tail[0] == fsType
+		}
+	}
+	return false
+}
+
+// Exclude every partition of the system stick, even when it has more than one.
+func containsBoot(n node) bool {
+	if n.Label == bootStickLabel {
+		return true
+	}
+	for _, child := range n.Children {
+		if containsBoot(child) {
+			return true
+		}
+	}
+	return false
+}
+func (m *Manager) readOnly(dir string) bool {
+	data, _ := os.ReadFile(m.mountsFile)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 4 && strings.ReplaceAll(fields[1], `\040`, " ") == dir {
+			return slices.Contains(strings.Split(fields[3], ","), "ro")
 		}
 	}
 	return false

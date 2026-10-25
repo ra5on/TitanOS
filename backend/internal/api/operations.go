@@ -55,6 +55,7 @@ func (s *Server) operationsRoutes(mux *http.ServeMux) {
 	heavy("POST /api/v1/vms/{name}/clone", s.handleVMClone)
 	admin("GET /api/v1/vm-clones/{volume}", s.handleVMClones)
 	heavy("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
+	mux.HandleFunc("DELETE /api/v1/files/transfers", s.requireUser(s.handleTransfersClear))
 	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.handleTransferForget))
 }
 func featureError(w http.ResponseWriter, err error) {
@@ -406,14 +407,8 @@ func (s *Server) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (s *Server) handleTransferForget(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Confirm string `json:"confirm"`
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
 	slog.Info("forget transfer requested", "id", r.PathValue("id"), "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Files.ForgetTransfer(currentUser(r).Name, r.PathValue("id"), req.Confirm); err != nil {
+	if err := s.opts.Files.ForgetTransfer(currentUser(r).Name, r.PathValue("id")); err != nil {
 		writeFileError(w, err)
 		return
 	}
@@ -532,4 +527,12 @@ func (s *Server) handleSnapshotRestorePreview(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, 200, out)
+}
+
+func (s *Server) handleTransfersClear(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Files.ClearTransfers(currentUser(r).Name); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

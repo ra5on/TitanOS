@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -159,24 +158,30 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 		return Job{}, mapError(err)
 	}
 	closeRoots := func() { sr.Close(); dr.Close() }
-	if info, err := dr.Stat(dir); err != nil || !info.IsDir() {
+	targetDirectory, e := dr.Stat(dir)
+	if e != nil || !targetDirectory.IsDir() {
 		closeRoots()
 		return Job{}, ErrNotFound
 	}
 	var p plan
 	for _, rel := range rels {
-		if err := walk(sr, rel, func(_ string, info fs.FileInfo) {
+		if err := walkEntries(sr, rel, func(_ string, info fs.FileInfo) error {
+			// Inode comparison catches aliases and bind mounts across roots.
+			if info.IsDir() && os.SameFile(info, targetDirectory) {
+				return ErrInvalid
+			}
 			if info.Mode().IsRegular() {
 				p.files++
 				p.bytes += info.Size()
 			}
+			return nil
 		}); err != nil {
 			closeRoots()
 			return Job{}, mapError(err)
 		}
 	}
-	// A move inside one filesystem renames and needs no room.
-	if _, free := Usage(dst); !(move && sameFilesystem(src, dst) && len(choices) == 0) && uint64(p.bytes) > free {
+	// A plain move within the same root renames and needs no room.
+	if _, free := Usage(dst); !(move && src.Dir == dst.Dir && len(choices) == 0) && uint64(p.bytes) > free {
 		closeRoots()
 		return Job{}, ErrNoSpace
 	}
@@ -191,6 +196,15 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 		closeRoots()
 		cancel()
 		return Job{}, err
+	}
+	if _, free := Usage(dst); job.paged() && !(move && src.Dir == dst.Dir && len(choices) == 0) && uint64(p.bytes) > free {
+		m.jobs.mu.Lock()
+		_ = m.removeTransfer(job)
+		m.jobs.mu.Unlock()
+		m.transferMu.Unlock()
+		closeRoots()
+		cancel()
+		return Job{}, ErrNoSpace
 	}
 	m.jobs.mu.Lock()
 	m.jobs.list = append(m.jobs.list, job)
@@ -212,6 +226,7 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 					m.jobs.mu.Unlock()
 				}
 			}
+			job.closeStore()
 			m.jobs.mu.Lock()
 			job.finishing = false
 			m.jobs.mu.Unlock()
@@ -233,51 +248,59 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 	return m.snapshot(job), nil
 }
 
-func sameFilesystem(a, b Root) bool {
-	device := func(dir string) (uint64, bool) {
-		info, err := os.Stat(dir)
-		if err != nil {
-			return 0, false
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		return uint64(stat.Dev), ok
-	}
-	x, okX := device(a.Dir)
-	y, okY := device(b.Dir)
-	return okX && okY && x == y
-}
-
-// walk calls fn for a file or folder and everything below it, not following links.
-func walk(r *os.Root, rel string, fn func(string, fs.FileInfo)) error {
-	info, err := r.Lstat(rel)
-	if err != nil {
-		return err
-	}
-	fn(rel, info)
-	if !info.IsDir() {
-		return nil
-	}
+// Directory batches bound RAM independently of a directory's total children.
+func eachChild(r *os.Root, rel string, fn func(fs.DirEntry) error) error {
 	dir, err := r.Open(rel)
 	if err != nil {
 		return err
 	}
-	entries, err := dir.ReadDir(-1)
-	dir.Close()
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if hidden(entry.Name()) {
-			continue
+	defer dir.Close()
+	for {
+		entries, err := dir.ReadDir(128)
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+		for _, entry := range entries {
+			if err := fn(entry); err != nil {
+				return err
+			}
 		}
-		if err := walk(r, path.Join(rel, entry.Name()), fn); err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 	}
-	return nil
+}
+
+// walk calls fn for a file or folder and everything below it, not following links.
+func walk(r *os.Root, rel string, fn func(string, fs.FileInfo)) error {
+	return walkEntries(r, rel, func(p string, info fs.FileInfo) error { fn(p, info); return nil })
+}
+func walkEntries(r *os.Root, rel string, fn func(string, fs.FileInfo) error) error {
+	info, err := r.Lstat(rel)
+	if err != nil {
+		return err
+	}
+	if err := fn(rel, info); err != nil {
+		if errors.Is(err, fs.SkipDir) && info.IsDir() {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	return eachChild(r, rel, func(entry fs.DirEntry) error {
+		if hidden(entry.Name()) {
+			return nil
+		}
+		return walkEntries(r, path.Join(rel, entry.Name()), fn)
+	})
 }
 
 func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, dst Root, rels []string, dir string, move bool, conflict string, uid int) error {
+	job.keepStoreOpen()
+	defer job.closeStore()
 	renamed := move && src.Dir == dst.Dir && len(job.choices) == 0
 	for _, rel := range rels {
 		if err := m.copyCheckpoint(ctx, job, 0); err != nil {
@@ -286,7 +309,11 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if job.completedTop[rel] {
+		entry, err := job.entry(rel)
+		if err != nil {
+			return err
+		}
+		if entry.Top {
 			continue
 		}
 		target := choiceTarget(path.Join(dir, path.Base(rel)), job.choices[rel])
@@ -295,7 +322,9 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 		}
 		if job.choices[rel].Action == "skip" {
 			m.countTree(job, sr, rel)
-			job.completedTop[rel] = true
+			if !job.paged() {
+				job.completedTop[rel] = true
+			}
 			if err := m.transferTop(job, rel); err != nil {
 				return err
 			}
@@ -342,8 +371,10 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 				}
 			}
 			m.countTree(job, sr, target)
-			job.completedTop[rel] = true
-			if err := m.finishTransfer(job, dr, rel, target); err != nil {
+			if !job.paged() {
+				job.completedTop[rel] = true
+			}
+			if err := m.finishTransfer(job, dr, rel, target, true); err != nil {
 				return err
 			}
 			if job.undoEligible[rel] {
@@ -382,12 +413,18 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 				}
 			}
 		}
-		job.completedTop[rel] = true
+		if !job.paged() {
+			job.completedTop[rel] = true
+		}
 		if err := m.transferTop(job, rel); err != nil {
 			return err
 		}
 		if move && job.undoEligible[rel] {
-			actual := job.targets[rel]
+			entry, err := job.entry(rel)
+			if err != nil {
+				return err
+			}
+			actual := entry.Target
 			if actual == "" {
 				actual = target
 			}
@@ -445,13 +482,17 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 	if err := m.copyCheckpoint(ctx, job, 0); err != nil {
 		return err
 	}
-	if job.completed[rel] {
+	entry, err := job.entry(rel)
+	if err != nil {
+		return err
+	}
+	if entry.Complete {
 		if job.durable != nil {
-			if job.durable.Skipped[rel] {
+			if entry.Skip {
 				return nil
 			}
 			current, err := sr.Lstat(rel)
-			if err != nil || job.durable.Sources[rel] != entryVersion(current) {
+			if err != nil || entry.Source != entryVersion(current) {
 				return ErrTextConflict
 			}
 			return nil
@@ -475,7 +516,9 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 				return ErrTextConflict
 			}
 			m.countTree(job, sr, rel)
-			job.completed[rel] = true
+			if !job.paged() {
+				job.completed[rel] = true
+			}
 			return m.transferSkipped(job, rel)
 		}
 		if choice.SourceVersion != "" {
@@ -487,7 +530,7 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		if m.protected(Root{Dir: job.destinationDir}, target) {
 			return ErrProtected
 		}
-		if choice.TargetVersion != "" && job.targets[rel] == "" {
+		if choice.TargetVersion != "" && entry.Target == "" {
 			if err := checkChoice(dr, target, choice.TargetVersion); err != nil {
 				return err
 			}
@@ -495,7 +538,7 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		conflict = choice.Action
 		if conflict == "copy" || choice.Name != "" {
 			conflict = "exact"
-			if job.targets[rel] == "" {
+			if entry.Target == "" {
 				if _, err := dr.Lstat(target); !os.IsNotExist(err) {
 					return ErrExists
 				}
@@ -503,8 +546,8 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		}
 	}
 
-	if chosen, ok := job.targets[rel]; ok {
-		target = chosen
+	if entry.Target != "" {
+		target = entry.Target
 	}
 	m.jobs.mu.Lock()
 	job.Current = rel
@@ -516,11 +559,28 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 	if err != nil {
 		return mapError(err)
 	}
-	if job.durable != nil && info.Mode().IsRegular() && job.durable.Sources[rel] != entryVersion(info) {
+	if job.durable != nil && info.Mode().IsRegular() && entry.Source != entryVersion(info) {
 		return ErrTextConflict
 	}
 	switch {
 	case info.IsDir():
+		if existing, e := dr.Stat(target); e == nil && os.SameFile(info, existing) {
+			if job.Move || conflict == ConflictReplace {
+				return ErrInvalid
+			}
+			if conflict == ConflictSkip {
+				m.countTree(job, sr, rel)
+				if !job.paged() {
+					job.completed[rel] = true
+				}
+				return m.transferSkipped(job, rel)
+			}
+			var e error
+			target, e = m.settle(dr, target, ConflictRename)
+			if e != nil {
+				return e
+			}
+		}
 		// A folder that exists is merged into, whatever the conflict rule.
 		if existing, err := dr.Lstat(target); err == nil && !existing.IsDir() {
 			if target, err = m.settle(dr, target, conflict); err != nil || target == "" {
@@ -536,34 +596,23 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 			}
 			m.own(dr, target, uid, true)
 		}
-		if job.targets != nil {
-			job.targets[rel] = target
+		if job.targets != nil || job.paged() {
+			if !job.paged() {
+				job.targets[rel] = target
+			}
 			if err := m.transferTarget(job, rel, target); err != nil {
 				return err
 			}
 		}
-		dir, err := sr.Open(rel)
-		if err != nil {
-			return mapError(err)
-		}
-		entries, err := dir.ReadDir(-1)
-		dir.Close()
-		if err != nil {
-			return mapError(err)
-		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-		for _, entry := range entries {
-			if hidden(entry.Name()) {
+		return eachChild(sr, rel, func(child fs.DirEntry) error {
+			if hidden(child.Name()) {
 				if job.Move {
 					return ErrProtected
 				}
-				continue
+				return nil
 			}
-			if err := m.copyEntry(ctx, job, sr, dr, path.Join(rel, entry.Name()), path.Join(target, entry.Name()), conflict, uid); err != nil {
-				return err
-			}
-		}
-		return nil
+			return m.copyEntry(ctx, job, sr, dr, path.Join(rel, child.Name()), path.Join(target, child.Name()), conflict, uid)
+		})
 	case !info.Mode().IsRegular():
 		// Links, sockets and devices are not copied; a move must retain them.
 		if job.Move {
@@ -583,7 +632,9 @@ func (m *Manager) copyEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		job.c.copied.Add(info.Size())
 		job.c.committed.Add(info.Size())
 		if job.completed != nil {
-			job.completed[rel] = true
+			if !job.paged() {
+				job.completed[rel] = true
+			}
 		}
 		return m.transferSkipped(job, rel)
 	}
@@ -681,14 +732,14 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 		return mapError(err)
 	}
 	done = true
-	if job.targets != nil {
+	if job.targets != nil && !job.paged() {
 		job.targets[rel] = final
 	}
 	job.c.count.Add(1)
 	job.c.committed.Add(info.Size())
-	if job.completed != nil {
+	if job.completed != nil && !job.paged() {
 		job.completed[rel] = true
-		if job.completedSource != nil {
+		if job.completedSource != nil && job.durable == nil {
 			job.completedSource[rel] = info
 		}
 	}
@@ -703,7 +754,7 @@ func (m *Manager) snapshot(job *Job) Job {
 }
 
 func snapshotLocked(job *Job) Job {
-	return Job{Durable: job.Durable, Blocked: job.Blocked, Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: !job.finishing && !job.Blocked && (job.durable == nil || job.durable.Pending == "") && job.Operation == "" && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
+	return Job{Durable: job.Durable, Blocked: job.Blocked, Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: !job.finishing && !job.Blocked && (job.durable == nil || job.durable.Pending == "" && !job.durable.forgotten) && job.Operation == "" && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
 }
 
 // Jobs returns the copy jobs of a user, the newest first.
@@ -768,7 +819,7 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 			break
 		}
 	}
-	if job == nil || job.finishing || job.Operation != "" || (job.State != JobFailed && job.State != JobCancelled) || job.From != src.ID || job.To != dst.ID || job.sourceDir != src.Dir || job.destinationDir != dst.Dir {
+	if job == nil || job.finishing || job.durable != nil && job.durable.forgotten || job.Operation != "" || (job.State != JobFailed && job.State != JobCancelled) || job.From != src.ID || job.To != dst.ID || job.sourceDir != src.Dir || job.destinationDir != dst.Dir {
 		m.jobs.mu.Unlock()
 		return Job{}, ErrNoJob
 	}
@@ -832,6 +883,7 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 					m.jobs.mu.Unlock()
 				}
 			}
+			job.closeStore()
 			m.jobs.mu.Lock()
 			job.finishing = false
 			m.jobs.mu.Unlock()
@@ -859,25 +911,22 @@ func (m *Manager) rememberMoveUndo(job *Job) {
 // Recheck every source entry before removing a cross-root move. In particular,
 // a file added while the job was paused must never be deleted unseen.
 func verifyCopiedSource(ctx context.Context, job *Job, r *os.Root, rel string) error {
-	return fs.WalkDir(r.FS(), rel, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return mapError(err)
-		}
-		if err = ctx.Err(); err != nil {
+	return walkEntries(r, rel, func(p string, info fs.FileInfo) error {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-		info, err := d.Info()
+		entry, err := job.entry(p)
 		if err != nil {
-			return mapError(err)
+			return err
 		}
 		if info.IsDir() {
-			if _, ok := job.targets[p]; !ok {
+			if entry.Target == "" {
 				return ErrTextConflict
 			}
 			return nil
 		}
 		if job.durable != nil {
-			if !info.Mode().IsRegular() || job.durable.Sources[p] != entryVersion(info) {
+			if !info.Mode().IsRegular() || entry.Source != entryVersion(info) || !entry.Complete || entry.Skip {
 				return ErrTextConflict
 			}
 			return nil

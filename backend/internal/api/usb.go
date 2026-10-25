@@ -17,12 +17,16 @@ var usbErrors = []struct {
 	{usb.ErrDisabled, http.StatusConflict, "read_only"},
 	{usb.ErrNotFound, http.StatusNotFound, "usb_not_found"},
 	{usb.ErrUnsupported, http.StatusUnprocessableEntity, "usb_unsupported"},
+	{usb.ErrMountFailed, http.StatusUnprocessableEntity, "drive_mount_failed"},
 	{usb.ErrBusy, http.StatusConflict, "usb_busy"},
 	{usb.ErrMounted, http.StatusConflict, "usb_mounted"},
 	{usb.ErrNotMounted, http.StatusConflict, "usb_not_mounted"},
 }
 
 func writeUSBError(w http.ResponseWriter, err error) {
+	if errors.Is(err, usb.ErrMountFailed) {
+		slog.Warn("drive mount failed", "err", err)
+	}
 	for _, known := range usbErrors {
 		if errors.Is(err, known.err) {
 			writeError(w, known.status, known.code, known.err.Error())

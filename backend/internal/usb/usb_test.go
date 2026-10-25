@@ -59,7 +59,7 @@ func newTest(t *testing.T) (*Manager, *fake) {
 	return m, f
 }
 
-func TestOnlyUSBDataDrives(t *testing.T) {
+func TestUnmanagedDataDrives(t *testing.T) {
 	m, _ := newTest(t)
 	devices, err := m.List(context.Background())
 	if err != nil {
@@ -69,8 +69,8 @@ func TestOnlyUSBDataDrives(t *testing.T) {
 	for _, d := range devices {
 		names = append(names, d.Name+":"+d.FSType)
 	}
-	// SATA disks, RAID members, the boot stick and reserved devices stay out.
-	if got := strings.Join(names, ","); got != "Backup HDD:ntfs,Backup HDD:zfs_member,Fotos Urlaub:exfat" {
+	// Internal data disks are included; RAID, boot and NAS-owned filesystems stay out.
+	if got := strings.Join(names, ","); got != "Backup HDD:ntfs,Backup HDD:zfs_member,Fotos Urlaub:exfat,data:ext4" {
 		t.Errorf("devices = %s", got)
 	}
 	for _, d := range devices {
@@ -219,5 +219,68 @@ func TestMountedIdentitySupportsBtrfsVirtualDevice(t *testing.T) {
 	}
 	if matchesMount("", "/run/titanos-usb/backup", "/dev/sdb1", "btrfs", "50") {
 		t.Fatal("missing mount accepted")
+	}
+}
+
+func TestInternalTransportsAndProtectedDrives(t *testing.T) {
+	m, f := newTest(t)
+	f.listing = `{"blockdevices":[
+ {"name":"/dev/sda","type":"disk","tran":"sata","children":[{"name":"/dev/sda1","type":"part","fstype":"ntfs","uuid":"sata"}]},
+ {"name":"/dev/sdb","type":"disk","tran":"sas","children":[{"name":"/dev/sdb1","type":"part","fstype":"xfs","uuid":"sas","mountpoint":"/srv/existing"}]},
+ {"name":"/dev/nvme0n1","type":"disk","tran":"nvme","fstype":"ext4","uuid":"nvme"},
+ {"name":"/dev/sdc","type":"disk","children":[{"name":"/dev/sdc1","type":"part","fstype":"ext4","uuid":"scsi"}]},
+ {"name":"/dev/sdd","type":"disk","tran":"sata","fstype":"ntfs","uuid":"guest"},
+ {"name":"/dev/sde","type":"disk","tran":"sata","children":[{"name":"/dev/sde1","type":"part","fstype":"vfat","uuid":"boot","label":"TITANOS"},{"name":"/dev/sde2","type":"part","fstype":"ntfs","uuid":"boot-other"}]},
+ {"name":"/dev/loop0","type":"loop","fstype":"ext4","uuid":"loop"},
+ {"name":"/dev/sdf","type":"disk","tran":"sata","fstype":"btrfs","uuid":"in-volume"}
+]}`
+	m.Claimed = func() map[string]string { return map[string]string{"sdd": "VM test"} }
+	devices, err := m.List(context.Background())
+	if err != nil || len(devices) != 4 {
+		t.Fatalf("devices: %+v, %v", devices, err)
+	}
+	for _, id := range []string{"sata", "sas", "nvme", "scsi"} {
+		d, err := m.find(context.Background(), id)
+		if err != nil || !d.Supported {
+			t.Fatalf("%s: %+v %v", id, d, err)
+		}
+	}
+	if err := m.Mount(context.Background(), "sas"); !errors.Is(err, ErrBusy) {
+		t.Fatal("existing mount not protected", err)
+	}
+	if err := m.Mount(context.Background(), "guest"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("VM disk exposed", err)
+	}
+
+}
+
+func TestNTFSReadOnlyFallback(t *testing.T) {
+	m, f := newTest(t)
+	f.fail = "mount -t ntfs3 "
+	if err := m.Mount(context.Background(), "NTFS0000000000AA"); err != nil {
+		t.Fatal(err)
+	}
+	calls := strings.Join(f.calls, "\n")
+	if !strings.Contains(calls, "mount -t ntfs-3g -o nosuid,nodev,noexec,uid=0,gid=0,fmask=0177,dmask=0077,ro ") || strings.Contains(calls, "force") || strings.Contains(calls, "remove_hiberfile") {
+		t.Fatal(calls)
+	}
+	// Mirror the kernel mount table of a successful read-only FUSE mount.
+	dir := filepath.Join(m.root, "Backup-HDD-ntfs00")
+	os.WriteFile(m.mountsFile, []byte("/dev/sdd1 "+dir+" fuseblk ro,nosuid,nodev,noexec 0 0\n"), 0600)
+	d, err := m.find(context.Background(), "NTFS0000000000AA")
+	if err != nil || !d.Mounted || !d.ReadOnly {
+		t.Fatal(d, err)
+	}
+	for _, mounted := range m.Mounted() {
+		if !mounted.ReadOnly {
+			t.Fatal("read-only flag lost")
+		}
+	}
+	if !matchesMount("50 30 8:49 / "+dir+" ro - fuseblk /dev/sdd1 ro\n", dir, "/dev/sdd1", "ntfs", "50") {
+		t.Fatal("FUSE identity rejected")
+	}
+	f.fail = "mount "
+	if err := m.Mount(context.Background(), "1111-sata"); !errors.Is(err, ErrMountFailed) {
+		t.Fatal(err)
 	}
 }
