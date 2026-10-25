@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 )
@@ -56,38 +57,35 @@ func (m *Manager) Inspect(ctx context.Context, src Root, paths []string, dst *Ro
 			return result, ErrNotFound
 		}
 	}
-	seen := map[string]bool{}
+	// Only the explicitly selected paths are held in RAM. Remove duplicates
+	// and descendants of selected directories before streaming their trees.
+	selectedPaths := make([]string, 0, len(paths))
 	for _, selected := range paths {
 		rel, e := clean(selected)
 		if e != nil || rel == "." || src.secret(rel) {
 			return result, ErrInvalid
 		}
-		err = fs.WalkDir(sr.FS(), rel, func(p string, d fs.DirEntry, walkErr error) error {
+		selectedPaths = append(selectedPaths, rel)
+	}
+	sort.Strings(selectedPaths)
+	last := ""
+	for _, rel := range selectedPaths {
+		if last != "" && (rel == last || strings.HasPrefix(rel, last+"/")) {
+			continue
+		}
+		last = rel
+		err = walkEntries(sr, rel, func(p string, info fs.FileInfo) error {
 			if e := ctx.Err(); e != nil {
 				return e
 			}
-			if walkErr != nil {
-				return walkErr
-			}
 			if hidden(path.Base(p)) || src.secret(p) || m.protected(src, p) {
-				if d.IsDir() {
+				if info.IsDir() {
 					return fs.SkipDir
 				}
 				return nil
 			}
-			if d.Type()&os.ModeSymlink != 0 {
+			if info.Mode()&os.ModeSymlink != 0 {
 				return nil
-			}
-			if seen[p] {
-				if d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			seen[p] = true
-			info, e := d.Info()
-			if e != nil {
-				return e
 			}
 			if info.Mode().IsRegular() {
 				result.Files++

@@ -30,29 +30,74 @@
 		onremovefavorite: (favorite: Favorite) => void;
 	};
 	let {
-		roots, current, dir, showHidden, admin, usbDevices, usbBusy, usbLoadError, backups, backupLoadError,
-		backupProgressError, openingBackup, favorites, onopen, onusb, onbackup, onrefreshbackups, onmanagefavorites, onremovefavorite
+		roots,
+		current,
+		dir,
+		showHidden,
+		admin,
+		usbDevices,
+		usbBusy,
+		usbLoadError,
+		backups,
+		backupLoadError,
+		backupProgressError,
+		openingBackup,
+		favorites,
+		onopen,
+		onusb,
+		onbackup,
+		onrefreshbackups,
+		onmanagefavorites,
+		onremovefavorite,
 	}: Props = $props();
 
 	const kinds = ['share', 'volume', 'usb', 'stick'] as const;
 	const unmounted = $derived(usbDevices.filter((device) => !device.mounted));
 	const groupName = (kind: (typeof kinds)[number]) =>
-		t(kind === 'share' ? 'files.shares' : kind === 'volume' ? 'files.volumes' : kind === 'usb' ? 'files.usb' : 'files.stick');
+		t(
+			kind === 'share'
+				? 'files.shares'
+				: kind === 'volume'
+					? 'files.volumes'
+					: kind === 'usb'
+						? 'files.usb'
+						: 'files.stick',
+		);
 	const favoriteName = (favorite: Favorite) =>
-		favorite.label || favorite.path.split('/').at(-1) || roots.find((r) => r.id === favorite.root)?.name || favorite.root;
+		favorite.label ||
+		favorite.path.split('/').at(-1) ||
+		roots.find((r) => r.id === favorite.root)?.name ||
+		favorite.root;
 </script>
 
 {#if favorites.length}
 	<div class="group-head">
 		<span class="group">{t('files.favorites')}</span>
-		<button type="button" class="icon" aria-label={t('files.manageFavorites')} title={t('files.manageFavorites')} onclick={onmanagefavorites}><Icon name="edit" size={14} /></button>
+		<button
+			type="button"
+			class="icon"
+			aria-label={t('files.manageFavorites')}
+			title={t('files.manageFavorites')}
+			onclick={onmanagefavorites}><Icon name="edit" size={14} /></button
+		>
 	</div>
 	{#each favorites as favorite (`${favorite.root}/${favorite.path}`)}
 		<div class="favorite-row">
-			<button type="button" class="place" class:current={current === favorite.root && dir === favorite.path} title={`${roots.find((r) => r.id === favorite.root)?.name}/${favorite.path}`} onclick={() => onopen(favorite.root, favorite.path)}>
+			<button
+				type="button"
+				class="place"
+				class:current={current === favorite.root && dir === favorite.path}
+				title={`${roots.find((r) => r.id === favorite.root)?.name}/${favorite.path}`}
+				onclick={() => onopen(favorite.root, favorite.path)}
+			>
 				<Icon name="star" size={16} /><span class="place-name">{favoriteName(favorite)}</span>
 			</button>
-			<button type="button" class="icon remove" aria-label={t('files.removeFavorite', { name: favorite.path || favorite.root })} onclick={() => onremovefavorite(favorite)}><Icon name="close" size={14} /></button>
+			<button
+				type="button"
+				class="icon remove"
+				aria-label={t('files.removeFavorite', { name: favorite.path || favorite.root })}
+				onclick={() => onremovefavorite(favorite)}><Icon name="close" size={14} /></button
+			>
 		</div>
 	{/each}
 {/if}
@@ -62,27 +107,55 @@
 	{#if list.length > 0}
 		{#snippet placesList()}
 			{#each list as place (place.id)}
-				<FolderTree readOnly={!place.writable && kind !== 'stick'} root={place.id} name={place.name} currentRoot={current} currentPath={dir} {showHidden} {onopen} />
+				<FolderTree
+					readOnly={!place.writable && kind !== 'stick'}
+					root={place.id}
+					name={place.name}
+					currentRoot={current}
+					currentPath={dir}
+					{showHidden}
+					{onopen}
+				/>
 				{#if place.id === current && kind !== 'stick'}
-					{@const used = place.totalBytes > 0 ? Math.min(100, Math.max(0, (1 - place.freeBytes / place.totalBytes) * 100)) : 0}
+					{@const used =
+						place.totalBytes > 0
+							? Math.min(100, Math.max(0, (1 - place.freeBytes / place.totalBytes) * 100))
+							: 0}
 					<div class="space" class:full={used >= 90}>
 						<div class="bar" aria-hidden="true"><span style:width="{used}%"></span></div>
-						<span class="mono">{t('files.free', { free: formatDiskBytes(place.freeBytes), total: formatDiskBytes(place.totalBytes) })}</span>
+						<span class="mono"
+							>{t('files.free', {
+								free: formatDiskBytes(place.freeBytes),
+								total: formatDiskBytes(place.totalBytes),
+							})}</span
+						>
 					</div>
 				{/if}
 				{#if kind === 'usb'}
 					{@const device = usbDevices.find((d) => d.root === place.id)}
-					{#if device}<button type="button" class="chip-btn eject" disabled={usbBusy === device.id} onclick={() => onusb(device, 'eject')}>{t('files.eject')}</button>{/if}
+					{#if device?.readOnly}<span class="note">{t('files.driveReadOnly')}</span>{/if}
+					{#if device}<button
+							type="button"
+							class="chip-btn eject"
+							disabled={usbBusy === device.id}
+							onclick={() => onusb(device, 'eject')}>{t('files.eject')}</button
+						>{/if}
 				{/if}
 			{/each}
 		{/snippet}
 		{#if kind === 'volume'}
 			<details class="advanced" open={roots.find((r) => r.id === current)?.kind === 'volume'}>
-				<summary>{t('files.advancedAccess')}<span class="summary-note">{t('files.volumes')} · {t('files.adminOnly')}</span></summary>
+				<summary
+					>{t('files.advancedAccess')}<span class="summary-note"
+						>{t('files.volumes')} · {t('files.adminOnly')}</span
+					></summary
+				>
 				{@render placesList()}
 			</details>
 		{:else}
-			<span class="group">{groupName(kind)}{kind === 'share' ? '' : ` · ${t('files.adminOnly')}`}</span>
+			<span class="group"
+				>{groupName(kind)}{kind === 'share' ? '' : ` · ${t('files.adminOnly')}`}</span
+			>
 			{@render placesList()}
 		{/if}
 	{/if}
@@ -93,9 +166,22 @@
 	{#each unmounted as device (device.id)}
 		<div class="usb">
 			<Icon name="disk" size={16} />
-			<span class="place-name">{device.name} <span class="muted mono">{device.fsType}</span></span>
-			{#if device.supported}
-				<button type="button" class="chip-btn" disabled={usbBusy === device.id} onclick={() => onusb(device, 'mount')}>{t('files.mount')}</button>
+			<span class="drive-description"
+				><span class="place-name" title={device.name}>{device.name}</span><span
+					class="drive-details mono"
+					>{device.fsType}{#if device.transport}
+						· {device.transport.toUpperCase()}{/if}{#if device.size > 0}
+						· {formatDiskBytes(device.size)}{/if}</span
+				></span
+			>
+			{#if device.busy}<span class="chip">{t('files.driveBusy')}</span>
+			{:else if device.supported}
+				<button
+					type="button"
+					class="chip-btn"
+					disabled={usbBusy === device.id}
+					onclick={() => onusb(device, 'mount')}>{t('files.mount')}</button
+				>
 			{:else}
 				<span class="chip">{t('files.usbUnsupported')}</span>
 			{/if}
@@ -107,28 +193,75 @@
 {#if admin && (backups.length > 0 || backupLoadError)}
 	<div class="group-head">
 		<span class="group">{t('files.usbBackups')}</span>
-		<button type="button" class="icon" aria-label={t('files.usbBackupRefresh')} title={t('files.usbBackupRefresh')} onclick={onrefreshbackups}><Icon name="refresh" size={14} /></button>
+		<button
+			type="button"
+			class="icon"
+			aria-label={t('files.usbBackupRefresh')}
+			title={t('files.usbBackupRefresh')}
+			onclick={onrefreshbackups}><Icon name="refresh" size={14} /></button
+		>
 	</div>
 	{#each backups as backup (backup.job.id)}
 		{@const drive = usbDevices.find((device) => device.id === backup.job.destination.deviceId)}
 		<div class="backup">
-			<button type="button" class="place" class:current={drive?.root === current && dir === backupFolder(backup)} disabled={!drive?.supported || openingBackup !== ''} onclick={() => onbackup(backup, false)}>
+			<button
+				type="button"
+				class="place"
+				class:current={drive?.root === current && dir === backupFolder(backup)}
+				disabled={!drive?.supported || openingBackup !== ''}
+				onclick={() => onbackup(backup, false)}
+			>
 				<Icon name="disk" size={16} /><span class="place-name">{backup.job.id}</span>
 			</button>
 			<div class="backup-details">
 				<span class="mono backup-path">/{backupFolder(backup)}</span>
 				<span>
-					{drive ? drive.supported ? drive.mounted ? drive.name : t('files.usbBackupMount', { name: drive.name }) : t('files.usbUnsupported') : t(usbLoadError ? 'files.usbDeviceLoadFailed' : 'files.usbBackupOffline')}{#if drive?.mounted && Number.isFinite(drive.freeBytes)} · <span>{t('files.backupFree', { size: formatDiskBytes(drive.freeBytes) })}</span>{/if}
+					{drive
+						? drive.supported
+							? drive.mounted
+								? drive.name
+								: t('files.usbBackupMount', { name: drive.name })
+							: t('files.usbUnsupported')
+						: t(
+								usbLoadError ? 'files.usbDeviceLoadFailed' : 'files.usbBackupOffline',
+							)}{#if drive?.mounted && Number.isFinite(drive.freeBytes)}
+						· <span>{t('files.backupFree', { size: formatDiskBytes(drive.freeBytes) })}</span>{/if}
 				</span>
 				{#if backupProgressError}<span>{t('files.backupProgressStale')}</span>
 				{:else if backup.state?.running}
 					<span role="status">{t('files.backupRunning')}</span>
-					<progress max="100" value={backup.state.bytesTotal > 0 ? Math.min(100, Math.max(0, backup.state.percent)) : undefined} aria-label={t('files.backupRunning')}></progress>
-					<span class="mono">{backup.state.bytesTotal > 0 ? t('files.backupBytes', { done: formatBytes(backup.state.bytesDone), total: formatBytes(backup.state.bytesTotal) }) : t('files.backupCounting')}</span>
-				{:else if backup.state?.lastError}<span class="backup-error">{t('files.backupFailed')}: {backup.state.lastError}</span>
-				{:else}<span>{t('files.backupLastOK', { time: backup.state?.lastOK ? formatDateTime(new Date(backup.state.lastOK)) : t('files.backupNever') })}</span>{/if}
+					<progress
+						max="100"
+						value={backup.state.bytesTotal > 0
+							? Math.min(100, Math.max(0, backup.state.percent))
+							: undefined}
+						aria-label={t('files.backupRunning')}
+					></progress>
+					<span class="mono"
+						>{backup.state.bytesTotal > 0
+							? t('files.backupBytes', {
+									done: formatBytes(backup.state.bytesDone),
+									total: formatBytes(backup.state.bytesTotal),
+								})
+							: t('files.backupCounting')}</span
+					>
+				{:else if backup.state?.lastError}<span class="backup-error"
+						>{t('files.backupFailed')}: {backup.state.lastError}</span
+					>
+				{:else}<span
+						>{t('files.backupLastOK', {
+							time: backup.state?.lastOK
+								? formatDateTime(new Date(backup.state.lastOK))
+								: t('files.backupNever'),
+						})}</span
+					>{/if}
 				{#if backup.state?.warning}<span>{backup.state.warning}</span>{/if}
-				<button type="button" class="chip-btn" disabled={!drive?.supported || openingBackup !== '' || backup.state?.running} onclick={() => onbackup(backup, true)}>{t('files.restoreBackup')}</button>
+				<button
+					type="button"
+					class="chip-btn"
+					disabled={!drive?.supported || openingBackup !== '' || backup.state?.running}
+					onclick={() => onbackup(backup, true)}>{t('files.restoreBackup')}</button
+				>
 			</div>
 		</div>
 	{/each}
@@ -261,6 +394,18 @@
 	.eject {
 		align-self: flex-end;
 		margin: -4px 10px 4px;
+	}
+	.drive-description {
+		flex: 1;
+		min-width: 0;
+	}
+	.drive-description .place-name {
+		display: block;
+	}
+	.drive-details {
+		display: block;
+		font-size: 0.7rem;
+		overflow-wrap: anywhere;
 	}
 	.usb {
 		display: flex;

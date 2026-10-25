@@ -1788,3 +1788,56 @@ func (ts *testServer) withShare() string {
 	}
 	return dir
 }
+
+func TestTransferRemovalDoesNotRequireIDConfirmation(t *testing.T) {
+	ts := newTestServer(t)
+	if res, _ := ts.request("DELETE", "/api/v1/files/transfers", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.StatusCode)
+	}
+	ts.setup()
+	base := t.TempDir()
+	src := files.Root{ID: "test/source", Dir: filepath.Join(base, "source"), Writable: true}
+	dst := files.Root{ID: "test/target", Dir: filepath.Join(base, "target"), Writable: true}
+	os.Mkdir(src.Dir, 0700)
+	os.Mkdir(dst.Dir, 0700)
+	os.WriteFile(filepath.Join(src.Dir, "a.txt"), []byte("keep"), 0600)
+	create := func(user string) string {
+		j, err := ts.server.opts.Files.StartCopy(src, []string{"a.txt"}, dst, ".", false, files.ConflictRename, user, os.Getuid())
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			for _, view := range ts.server.opts.Files.Jobs(user) {
+				if view.ID == j.ID && view.State == files.JobDone {
+					return j.ID
+				}
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatal("copy did not finish")
+		return ""
+	}
+	own := create("alex")
+	foreign := create("sam")
+	if res, _ := ts.request("DELETE", "/api/v1/files/transfers/"+foreign, nil); res.StatusCode != http.StatusNotFound {
+		t.Fatal("foreign deletion", res.StatusCode)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/files/transfers/"+own, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	create("alex")
+	create("alex")
+	if res, body := ts.request("DELETE", "/api/v1/files/transfers", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	if jobs := ts.server.opts.Files.Jobs("alex"); len(jobs) != 0 {
+		t.Fatal(jobs)
+	}
+	if jobs := ts.server.opts.Files.Jobs("sam"); len(jobs) != 1 {
+		t.Fatal("foreign jobs removed")
+	}
+	if b, err := os.ReadFile(filepath.Join(dst.Dir, "a.txt")); err != nil || string(b) != "keep" {
+		t.Fatal("copied data changed", err)
+	}
+}

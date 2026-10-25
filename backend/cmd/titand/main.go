@@ -545,9 +545,18 @@ func run(opts options) error {
 	backupTarget.Mounted = volumes.Mounted
 	backupTarget.Load()
 	go backupTarget.Run(ctx)
-	// Drives plugged in over USB: shown, and mounted on a click.
+	// Unmanaged data drives: shown, and mounted only on a click.
 	drives := usb.NewManager()
 	drives.Disabled = opts.dev
+	drives.Claimed = func() map[string]string {
+		claimed := machines.ClaimedDisks()
+		for _, test := range volumes.Tests() {
+			if test.Result == "" {
+				claimed[test.Disk] = "disk test"
+			}
+		}
+		return claimed
+	}
 	backups.WithUSB = drives.WithMounted
 	go backups.Run(ctx)
 	drives.Reserved = func(uuid string) bool { return slices.Contains(volumes.FilesystemUUIDs(), uuid) }

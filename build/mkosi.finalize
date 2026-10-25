@@ -3,6 +3,9 @@
 # Produces the files of one system slot on the stick in $OUTPUTDIR.
 set -eu
 
+python3 "$BUILDROOT/usr/share/titanos/normalize-image-tmpfiles.py" "$BUILDROOT"
+rm "$BUILDROOT/usr/share/titanos/normalize-image-tmpfiles.py"
+
 python3 "$BUILDROOT/usr/share/titanos/build-licenses.py" image "$BUILDROOT"
 rm "$BUILDROOT/usr/share/titanos/build-licenses.py"
 

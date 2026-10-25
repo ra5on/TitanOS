@@ -300,6 +300,9 @@ export type CopyJob = {
 };
 
 export type UsbDevice = {
+	transport?: string;
+	busy?: boolean;
+	readOnly?: boolean;
 	id: string;
 	name: string;
 	label: string;
