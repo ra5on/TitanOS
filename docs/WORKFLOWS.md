@@ -277,12 +277,27 @@ Veröffentlichung wird nicht durch erneutes Kopieren überdeckt.
 ## Dateiübertragungen nach Dienstneustart
 
 Kopieren/Verschieben mit Ziel auf einem Daten-Volume speichert je Konto einen
-unveränderlichen Plan und ein begrenztes, fortgeschriebenes Ereignisjournal
-unter `.titanos/transfers/`. Das vermeidet das vollständige Neuschreiben großer
-Dateilisten pro Datei. Grenzen: 50.000 Dateien, Plan 32 MiB, Ereignisse 128 MiB;
+unveränderlichen Quellplan und den Ausführungsstand in einer transaktionalen
+bbolt-Datenbank unter `.titanos/transfers/`. Es gibt keine feste Obergrenze für
+Dateianzahl, Nutzdatenmenge oder Gesamtgröße des Kopierplans. Verzeichnisse
+werden in 128er-Blöcken gelesen und Quellmetadaten in 1024er-Transaktionen
+abgelegt. Der gesamte Dateibaum und alle fertigen Ergebnisse werden nicht als
+RAM-Maps gehalten. Die Datenbank aktualisiert einzelne Einträge, statt ein
+unbegrenzt wachsendes Fortschrittsjournal neu einzulesen.
+
+Der vollständige Umfang und freie Zielplatz werden vor Dateiänderungen geprüft,
+nach der Planablage nochmals. Dateisystemblöcke, Verzeichnisse und Auftragsdaten
+benötigen zusätzlich Platz; zwischenzeitliche andere Schreibzugriffe können das
+Ziel füllen. Ein solcher Fehler wird gemeldet und beendet den Auftrag nicht als
+Erfolg. Die Größen-Vorschau der Oberfläche darf nach 15 Sekunden auf die
+vollständige Berechnung beim Start verweisen; normale Kopien bleiben startbar.
+Die Schutzgrenzen der Ersetzen-/Einzelkonfliktvorschau bleiben erhalten.
+
 20 bekannte abgeschlossene Ergebnisse und höchstens 100 gespeicherte Aufträge
-je Konto/Volume. Unbekannte Veröffentlichungen werden nicht automatisch verdrängt.
-Andere Ziele sowie Extraktionsaufträge behalten ihren bisherigen RAM-Ablauf.
+je Konto/Volume begrenzen die Auftragshistorie, nicht die Dateien eines Auftrags.
+Unbekannte Veröffentlichungen werden nicht automatisch verdrängt. Andere Ziele
+sowie Extraktionsaufträge behalten ihren bisherigen RAM-Ablauf und benötigen
+entsprechend Arbeitsspeicher. Kein unendlicher physischer Speicher wird zugesagt.
 
 Nach titand-Neustart muss das Konto den Auftrag ausdrücklich fortsetzen. Aktuelle
 Root-Rechte, Zuordnung, Boot-ID, Verzeichnisidentität, unveränderte Quelldateien
@@ -290,14 +305,25 @@ und bereits veröffentlichte Ziele werden erneut geprüft. Die noch offene Datei
 beginnt bei Byte null; fertige Dateien werden übersprungen. Eine protokollierte
 Teilkopie wird nur bei passendem temporärem Namen, Eigentümer und Geräte-/Inode-Paar
 entfernt. Veröffentlichung und Quellentfernung stehen vor ihrer Ausführung im
-Journal, danach folgen die tatsächlichen Ergebnisse und Verzeichnissynchronisation.
+dauerhaften Datenbankstand, danach folgen Verzeichnissynchronisation und die
+tatsächlichen Ergebnisse in einer atomaren Transaktion. Ältere JSON-/Append-
+Aufträge bleiben importierbar; neue kleine JSON-Deskriptoren sperren die
+Wiederaufnahme durch Apps, die das Datenbankformat nicht verstehen.
+Ein beim Vorbereiten unterbrochener Plan bleibt sichtbar gesperrt und entfernbar.
 Ein unklarer Ausgang bleibt gesperrt. Nicht fertig geschriebene letzte
 Protokollzeilen löschen keine vorherige Mutationssperre.
 
 Ein kompletter NAS-Neustart erlaubt wegen wechselnder Geräteidentität keine
 ungeprüfte Wiederaufnahme. Quelle/Ziel sind dann zu prüfen und ein neuer Auftrag
-anzulegen. **Auftragseintrag entfernen** entfernt nur das Journal, nicht bereits
-kopierte Dateien oder verbliebene Teilkopien. Browser-Uploads und Rückgängig-Verlauf
+anzulegen. **Auftragseintrag entfernen** funktioniert mit einem Klick ohne Eingabe einer
+internen Kennung. **Alle beendeten Aufträge entfernen** entfernt sämtliche eigenen
+beendeten Einträge, einschließlich der gespeicherten Pläne/Journale/Datenbanken und der
+RAM-Aufträge; laufende oder gerade abschließende Aufträge bleiben erhalten.
+Die Liste zeigt alle verfügbaren eigenen Einträge statt nur fünf beendete.
+Kopierte Dateien und verbliebene Teilkopien bleiben erhalten. Vor dem Entfernen
+der Ereignisse wird der Plan gelöscht und das Verzeichnis synchronisiert, damit
+ein Abbruch keinen wiederholbaren Plan ohne Veröffentlichungssperren hinterlässt.
+Fehler behalten den betreffenden Eintrag und bieten einen erneuten Versuch. Browser-Uploads und Rückgängig-Verlauf
 haben weiterhin ihre eigenen, in der Dateimanager-Dokumentation beschriebenen Grenzen.
 
 ## Prüfungen
@@ -316,3 +342,27 @@ haben weiterhin ihre eigenen, in der Dateimanager-Dokumentation beschriebenen Gr
 Der genaue Release-Prüfstand und verbleibende Hardware-/Stromausfallgrenzen stehen
 in [v0.17.0](releases/v0.17.0.md). Diese Prüfungen ersetzen keine Abnahme aller
 NAS-Platten, Controller, PostgreSQL-Images oder Gastsysteme.
+
+### Entwicklungsprüfung nach 0.21.0
+
+Isolierte Go-Regressionen prüfen die Vorbereitung und das erneute Laden eines
+Plans mit 85.177 echten leeren Testdateien, über einer Million synthetischer
+Datenbankeinträge und einer über 2 GiB großen (größtenteils dünn belegten)
+Datenbankdatei sowie ein altes Ereignisjournal über 128 MiB,
+Einzel-/Sammelentfernung einschließlich Dienstneustart, Kontentrennung und den
+Erhalt von Originalen, Kopien und Teilkopien. Das ist keine vollständige
+318-GB-Übertragung und kein Stromausfalltest. `scripts/test-ui-drive-transfers.mjs`
+prüft Einzelklick ohne Kennung, acht beendete Einträge, Erhalt laufender Arbeit,
+Neuladen und Fehler/Wiederholen auf Desktop/Smartphone sowie auf Englisch.
+Neue Datenbankpläne sind ausdrücklich gegen die Wiederaufnahme durch ältere
+Apps gesperrt; unterbrochene/fehlende Datenbanken bleiben gesperrt statt neu
+und leer erzeugt zu werden. Keine Vollübertragung von einer Million Dateien
+oder Messung ihres Durchsatzes wird aus dem Metadaten-Test abgeleitet.
+
+`scripts/test-ui-large-copy.mjs` prüft auf Desktop und Smartphone, dass eine
+abgelaufene Größen-/Zielvorschau normales Kopieren zulässt, der Server einen
+Speicherplatzfehler weiterhin melden kann und der Dialog zum Wiederholen offen
+bleibt. `scripts/test-ui-copy-confirmation.mjs` prüft weiterhin die ausdrückliche
+Ersetzen-Bestätigung einschließlich Fehlern und veralteten Antworten.
+Quell-/Zielalias und das Kopieren in den eigenen Ordner sind gesondert geprüft;
+Kopien dürfen beim blockweisen Lesen keine eigenen Ausgabedateien erneut finden.

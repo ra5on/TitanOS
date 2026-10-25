@@ -21,6 +21,7 @@ on:
       - 'boot/**'
       - 'scripts/make-zip.sh'
       - 'scripts/check-image-hardware.py'
+      - 'scripts/normalize-image-tmpfiles.py'
       - 'scripts/make-release.sh'
       - 'scripts/sign-release.sh'
       - 'scripts/verify-release.py'

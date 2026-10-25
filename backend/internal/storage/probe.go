@@ -132,7 +132,7 @@ func appendUnique(list []string, value string) []string {
 
 func diskKind(d blockDevice) string {
 	switch {
-	case d.Transport == "nvme":
+	case d.Transport == "nvme" || strings.HasPrefix(filepath.Base(d.Name), "nvme"):
 		return "nvme"
 	case d.Transport == "usb":
 		return "usb"

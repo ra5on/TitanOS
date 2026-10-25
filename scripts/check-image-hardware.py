@@ -8,7 +8,10 @@ FIRMWARE = ("i915/*guc*.bin*", "i915/*huc*.bin*", "i915/*dmc*.bin*", "xe/*guc*.b
 MODULES = (
     "i915", "xe", "intel_vpu", "amdgpu", "coretemp", "k10temp",
     "e1000e", "igb", "igc", "ixgbe", "i40e", "ice", "r8169", "tg3", "bnx2", "bnx2x",
-    "qla2xxx", "mpt3sas", "megaraid_sas", "nvme", "ahci", "uas", "xhci_pci",
+    "qla2xxx", "mpt3sas", "megaraid_sas", "aacraid", "hpsa",
+    "nvme", "nvme_core", "vmd", "ahci", "ata_piix", "sata_mv", "sata_sil24",
+    "sd_mod", "scsi_mod", "usb_storage", "uas", "xhci_pci",
+    "ntfs3", "fuse", "exfat", "vfat", "ext4", "xfs", "btrfs",
     "virtio_pci", "virtio_blk", "virtio_net", "vfio_pci", "kvm_intel", "kvm_amd",
 )
 

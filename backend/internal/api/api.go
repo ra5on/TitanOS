@@ -87,7 +87,7 @@ type Options struct {
 	Backup *backup.Manager
 	// BackupTarget takes in the backups of other TitanOS over Tailscale.
 	BackupTarget *backuptarget.Manager
-	// USB lists and mounts drives plugged in over USB; nil if there is none.
+	// USB lists and mounts unmanaged physical data drives; nil if unavailable.
 	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
 	UPS      *ups.Manager
