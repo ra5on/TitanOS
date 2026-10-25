@@ -1,0 +1,128 @@
+{
+  "version": "0.21.0",
+  "acceleration": "kvm",
+  "guestRAM": "2 GiB",
+  "parallelUploads": {
+    "count": 4,
+    "bytesEach": 8388608,
+    "maxObservedReservationBytes": 33554432,
+    "checksums": "correct"
+  },
+  "pressureUpload": "503 upload_memory_pressure, then same upload completed after recovery",
+  "lowPolicy": {
+    "settings": {
+      "cachePercent": 20
+    },
+    "readOnly": false,
+    "budgetBytes": 0,
+    "reserveBytes": 268435456,
+    "inFlightBytes": 0,
+    "memory": {
+      "totalBytes": 2063159296,
+      "usedBytes": 1997545472,
+      "freeBytes": 65613824,
+      "availableBytes": 182812672,
+      "cacheBytes": 260575232,
+      "dirtyBytes": 0,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456
+    },
+    "paused": true
+  },
+  "recoveredPolicy": {
+    "settings": {
+      "cachePercent": 20
+    },
+    "readOnly": false,
+    "budgetBytes": 199697203,
+    "reserveBytes": 268435456,
+    "inFlightBytes": 0,
+    "memory": {
+      "totalBytes": 2063159296,
+      "usedBytes": 911466496,
+      "freeBytes": 1151692800,
+      "availableBytes": 1266921472,
+      "cacheBytes": 258621440,
+      "dirtyBytes": 0,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456
+    },
+    "paused": false
+  },
+  "checks": [
+    "over 90% physical occupancy by reclaimable cache remains healthy for 34 seconds",
+    "actual anonymous memory allocation below existing reserve triggers warning after 30 seconds",
+    "freeing anonymous pages clears warning after 60 seconds above reserve"
+  ],
+  "scope": "fresh disposable guest and USB media; no host disks or host sysctls changed",
+  "source": "b1437d41bbec488e093fdb953820768548f74a38",
+  "kernel": "6.12.113+deb13-amd64",
+  "guestCPUs": 2,
+  "scratchStorage": "two fresh 2 GiB qcow2 disks, RAID0 ext4; 1400 MiB synthetic unwritten extent for cache reads",
+  "measuredAt": "2026-10-25T01:20:13.322915+00:00",
+  "warningObservedAfterSeconds": 30.1,
+  "recoveryObservedAfterSeconds": 60.1,
+  "samples": {
+    "baseline": {
+      "totalBytes": 2063159296,
+      "usedBytes": 971517952,
+      "freeBytes": 1091641344,
+      "availableBytes": 1249148928,
+      "cacheBytes": 299175936,
+      "dirtyBytes": 77824,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456,
+      "pressure": {
+        "someAvg10": 0,
+        "fullAvg10": 0
+      }
+    },
+    "cache-filled": {
+      "totalBytes": 2063159296,
+      "usedBytes": 1972473856,
+      "freeBytes": 90685440,
+      "availableBytes": 1225842688,
+      "cacheBytes": 1278521344,
+      "dirtyBytes": 0,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456,
+      "pressure": {
+        "someAvg10": 0,
+        "fullAvg10": 0
+      }
+    },
+    "pressure-warning": {
+      "totalBytes": 2063159296,
+      "usedBytes": 1997545472,
+      "freeBytes": 65613824,
+      "availableBytes": 182812672,
+      "cacheBytes": 260575232,
+      "dirtyBytes": 0,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456,
+      "lowAvailable": true,
+      "pressure": {
+        "someAvg10": 0,
+        "fullAvg10": 0
+      }
+    },
+    "recovered": {
+      "totalBytes": 2063159296,
+      "usedBytes": 911466496,
+      "freeBytes": 1151692800,
+      "availableBytes": 1266921472,
+      "cacheBytes": 258621440,
+      "dirtyBytes": 0,
+      "writebackBytes": 0,
+      "reserveBytes": 268435456,
+      "pressure": {
+        "someAvg10": 0,
+        "fullAvg10": 0
+      }
+    }
+  },
+  "probeSHA256": "e5f25c41bbc36ff66ddf83c9b50a445723d7e27f8f055892272883b95b5f66a7",
+  "helperSourceSHA256": "ca33f4f9826740db510a0f99c09f57aeaf9e00ab92d0fe679c3e703aafb1ccb0",
+  "helperBinarySHA256": "82b49086d450d9e0b79b4fa70ad8e3a3f1470174f77a51b975a05c8d12c276b0",
+  "passed": true
+}

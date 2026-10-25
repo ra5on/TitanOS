@@ -1,36 +1,128 @@
 {
   "before": {
     "version": "0.20.3",
+    "source": "13f986657b5c2c85173d0a068d71bf95f357accd",
+    "kernel": "6.12.113+deb13-amd64",
     "zipBytes": 489710952,
     "squashfsBytes": 428412928,
     "guestRAM": "2 GiB",
     "guestCPUs": 2,
     "machine": "q35",
     "acceleration": "KVM",
-    "scope": "fresh empty installation; sample after setup/login and readiness on each of two boots; no containers or VMs",
+    "scope": "fresh empty installation; 5 seconds settling after setup/login and About reads on each of two boots; physical capacity read fresh from memory-policy API, shared UI sample retained separately; no containers or VMs",
     "zipSignatureVerified": true,
     "probeSHA256": "1e19a93163dfd142512102e78080a6d39524c9efd5ec04773288631197325c36",
-    "memorySamples": [
+    "wrapperSHA256": "5f0bb79f44597b77a4f89bed620314abc49911321c5d1e42c36af92e269b5243",
+    "measuredAt": "2026-10-25T01:11:08.805029+00:00",
+    "freshCapacitySamples": [
       {
-        "availableBytes": 1301196800,
-        "cacheBytes": 255553536,
+        "availableBytes": 1295777792,
+        "cacheBytes": 255459328,
         "dirtyBytes": 0,
-        "freeBytes": 1186885632,
+        "freeBytes": 1181511680,
         "totalBytes": 2063163392,
-        "usedBytes": 876277760,
+        "usedBytes": 881651712,
         "writebackBytes": 0
       },
       {
-        "availableBytes": 1302228992,
-        "cacheBytes": 255520768,
+        "availableBytes": 1300942848,
+        "cacheBytes": 255430656,
         "dirtyBytes": 0,
-        "freeBytes": 1187889152,
+        "freeBytes": 1186672640,
+        "totalBytes": 2063167488,
+        "usedBytes": 876494848,
+        "writebackBytes": 0
+      }
+    ],
+    "memorySamples": [
+      {
+        "availableBytes": 1295777792,
+        "cacheBytes": 255459328,
+        "dirtyBytes": 0,
+        "freeBytes": 1181511680,
         "totalBytes": 2063163392,
-        "usedBytes": 875274240,
+        "usedBytes": 881651712,
+        "writebackBytes": 0
+      },
+      {
+        "availableBytes": 1300942848,
+        "cacheBytes": 255430656,
+        "dirtyBytes": 0,
+        "freeBytes": 1186672640,
+        "totalBytes": 2063167488,
+        "usedBytes": 876494848,
         "writebackBytes": 0
       }
     ],
     "smokePassed": true
   },
-  "after": null
+  "after": {
+    "version": "0.21.0",
+    "source": "b1437d41bbec488e093fdb953820768548f74a38",
+    "kernel": "6.12.113+deb13-amd64",
+    "zipBytes": 533175169,
+    "squashfsBytes": 454029312,
+    "guestRAM": "2 GiB",
+    "guestCPUs": 2,
+    "machine": "q35",
+    "acceleration": "KVM",
+    "scope": "fresh empty installation; 5 seconds settling after setup/login and About reads on each of two boots; physical capacity read fresh from memory-policy API, shared UI sample retained separately; no containers or VMs",
+    "zipSignatureVerified": true,
+    "probeSHA256": "1e19a93163dfd142512102e78080a6d39524c9efd5ec04773288631197325c36",
+    "wrapperSHA256": "5f0bb79f44597b77a4f89bed620314abc49911321c5d1e42c36af92e269b5243",
+    "measuredAt": "2026-10-25T01:12:06.486080+00:00",
+    "freshCapacitySamples": [
+      {
+        "availableBytes": 1251024896,
+        "cacheBytes": 254681088,
+        "dirtyBytes": 0,
+        "freeBytes": 1137508352,
+        "reserveBytes": 268435456,
+        "totalBytes": 2063163392,
+        "usedBytes": 925655040,
+        "writebackBytes": 0
+      },
+      {
+        "availableBytes": 1272586240,
+        "cacheBytes": 255406080,
+        "dirtyBytes": 0,
+        "freeBytes": 1158246400,
+        "reserveBytes": 268435456,
+        "totalBytes": 2063167488,
+        "usedBytes": 904921088,
+        "writebackBytes": 0
+      }
+    ],
+    "memorySamples": [
+      {
+        "availableBytes": 1251024896,
+        "cacheBytes": 254681088,
+        "dirtyBytes": 8192,
+        "freeBytes": 1137508352,
+        "pressure": {
+          "fullAvg10": 0,
+          "someAvg10": 0
+        },
+        "reserveBytes": 268435456,
+        "totalBytes": 2063163392,
+        "usedBytes": 925655040,
+        "writebackBytes": 0
+      },
+      {
+        "availableBytes": 1272586240,
+        "cacheBytes": 255406080,
+        "dirtyBytes": 0,
+        "freeBytes": 1158246400,
+        "pressure": {
+          "fullAvg10": 0,
+          "someAvg10": 0
+        },
+        "reserveBytes": 268435456,
+        "totalBytes": 2063167488,
+        "usedBytes": 904921088,
+        "writebackBytes": 0
+      }
+    ],
+    "smokePassed": true
+  }
 }
