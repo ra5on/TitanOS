@@ -214,15 +214,6 @@ func (s *Stick) check(version string, data, signature []byte, file string) error
 	return nil
 }
 
-// ManifestInfo reads what a manifest says about its app, without checking it.
-func ManifestInfo(data []byte) (string, *Info) {
-	var m manifest
-	if json.Unmarshal(data, &m) != nil {
-		return "", nil
-	}
-	return m.Version, m.App
-}
-
 // Launch decides which titand runs: the app of the slot, if there is one
 // that passes the checks, or else "" for the base itself. A new app on
 // trial counts one more start; after MaxTries the one before it runs

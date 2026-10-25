@@ -2,6 +2,8 @@ package docker
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -94,6 +96,29 @@ func exists(path string) bool {
 	return err == nil
 }
 
+// Validate with the same project directory and env values as the later start.
+// New secrets stay in a private RAM temporary file until validation succeeds.
+func (m *Manager) validateCompose(ctx context.Context, volume, name, compose, env string) error {
+	file, err := os.CreateTemp("", "titanos-compose-env-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.WriteString(env); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	out, err := m.runner.Run(ctx, compose, "docker", "compose", "--project-name", name,
+		"--file", "-", "--project-directory", m.appData(volume, name), "--env-file", file.Name(), "config", "--quiet")
+	if err != nil {
+		return &InvalidComposeError{Detail: strings.TrimSpace(out)}
+	}
+	return nil
+}
+
 // CreateApp stores a compose file and brings the app up in the background:
 // images are pulled and containers created. Progress shows up as a job.
 //
@@ -126,8 +151,8 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	}
 
 	// Let Docker check the file before anything is kept.
-	if out, err := m.runner.Run(ctx, compose, "docker", "compose", "--project-name", name, "--file", "-", "config", "--quiet"); err != nil {
-		return &InvalidComposeError{Detail: strings.TrimSpace(out)}
+	if err := m.validateCompose(ctx, settings.Volume, name, compose, secrets); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(m.appData(settings.Volume, name), 0o770); err != nil {
 		return err
@@ -254,8 +279,12 @@ func (m *Manager) SetCompose(ctx context.Context, name, compose string) error {
 	if !appNameRE.MatchString(name) {
 		return ErrNotFound
 	}
-	if out, err := m.runner.Run(ctx, compose, "docker", "compose", "--project-name", name, "--file", "-", "config", "--quiet"); err != nil {
-		return &InvalidComposeError{Detail: strings.TrimSpace(out)}
+	env, err := m.store.Read(envFile(name))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := m.validateCompose(ctx, m.current().Volume, name, compose, string(env)); err != nil {
+		return err
 	}
 	job, volume, err := m.begin(name)
 	if err != nil {

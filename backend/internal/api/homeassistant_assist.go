@@ -68,11 +68,6 @@ func (s *Server) handleAssist(data json.RawMessage) {
 	}()
 }
 
-// assist runs a question and returns what Home Assistant should say.
-func (s *Server) assist(ctx context.Context, text string) string {
-	return s.assistConversation(ctx, text, "")
-}
-
 func (s *Server) assistConversation(ctx context.Context, text, conversation string) string {
 	settings, _ := s.opts.HomeAssistant.Settings()
 	user, ok := s.opts.Users.Get(settings.Account)

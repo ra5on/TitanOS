@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-25",
+  "version": "0.21.0 development",
+  "sourceBase": "13f986657b5c2c85173d0a068d71bf95f357accd",
+  "build": "make build VERSION=0.21.0; vite preview; Chromium; isolated API fixtures only",
+  "fixtures": "No NAS, host disks or real containers contacted. Other historical screenshots retain their separate provenance.",
+  "sources": {
+    "web/src/lib/dashboard/tiles/UsageTile.svelte": "00d4a0e31b663ad39693ae3c8601473ad30d323a2df9f949a20d457cdd9453b7",
+    "web/src/lib/components/ImageField.svelte": "2101f252204a766034706840d3df3595b95e97f3ace5d3dd43b05d71425ec9b8",
+    "web/src/lib/compose/image.ts": "f30425a73bb89969036826a7c3401b83ece113e3eea01a96cf703a00b1cf5f66",
+    "web/src/lib/compose/service.ts": "08bcb975b50c4703989fbb5f0016f1d85d417865312c52c3d3448d5687115c05",
+    "web/src/lib/compose/template.ts": "eab63a6ae2decc7bcbe417754a8e62a869b1ca2d751feb33ba46fe2bd161a822",
+    "web/src/routes/apps/InstallPanel.svelte": "96be523da27d0ae25f07fe52bfb73648e181a051cb38fa8ea571f505e8408350",
+    "web/src/routes/files/CopyDialog.svelte": "e05d12dc2707e37339ea687f783eaf41e7fb7f02857a0c98469c42a3f20d398a",
+    "scripts/test-ui-memory-images.mjs": "c69b901a55e431cb0f547e9f39bc22ef1c4799fb1d82e24a5c3570f41b3d9438",
+    "scripts/test-ui-copy-confirmation.mjs": "328b723bc268efd85a85213a8849c8e0d1aa711e3eeac541c0f9b793d9b46450"
+  },
+  "images": [
+    {
+      "file": "arbeitsspeicher.png",
+      "source": "out/validation/ui-memory-images/ram-cache.png",
+      "width": 1440,
+      "height": 1120,
+      "sha256": "b655b454802767b12f532665a47347689d34a345d1c15fc638ae0cfb5f828656"
+    },
+    {
+      "file": "app-images.png",
+      "source": "out/validation/ui-memory-images/stack-images.png",
+      "width": 1440,
+      "height": 2176,
+      "sha256": "76d1d3e9dee2569d6aa97d1e4abc1b5e1d8b8855eb5b4ead65a7d52022822688"
+    },
+    {
+      "file": "app-images-mobil.png",
+      "source": "out/validation/ui-memory-images/stack-images-mobile.png",
+      "width": 390,
+      "height": 3035,
+      "sha256": "f7e5924623592eec5391ab0b9473c7494390421009a290d6c27f4b6adc3fe457"
+    },
+    {
+      "file": "dateien-ersetzen.png",
+      "source": "out/validation/ui-copy-confirmation/replace-before-copy.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "ceb551158ea3687e8f7d67fcd711e5ecce131d9158ca29e551e782c19bd0842f"
+    }
+  ]
+}
