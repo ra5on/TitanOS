@@ -11,6 +11,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
 )
 
 // An app is a Compose project whose compose file TitanOS keeps in
@@ -170,25 +172,41 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	if err := m.validateCompose(ctx, settings.Volume, name, compose, secrets); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(m.appData(settings.Volume, name), 0o770); err != nil {
-		return err
-	}
-	if secrets != "" {
-		if err := m.store.Write(envFile(name), []byte(secrets)); err != nil {
-			return err
-		}
-	}
-	if err := m.store.Write(composeFile(name), []byte(compose)); err != nil {
-		return err
-	}
+	// Register the job before anything is written: an app backup refuses
+	// to start while it runs, and a refusal here leaves no files behind.
 	m.mu.Lock()
-	m.appList = nil
 	if m.backups > 0 {
 		m.mu.Unlock()
 		return errBackupRunning
 	}
+	if job := m.jobs[name]; job != nil && job.State == "running" {
+		m.mu.Unlock()
+		return ErrExists
+	}
 	job := &Job{State: "running"}
 	m.jobs[name] = job
+	m.mu.Unlock()
+	abandon := func(err error) error {
+		m.store.RemoveAll(appsDir + "/" + name)
+		m.mu.Lock()
+		delete(m.jobs, name)
+		m.appList = nil
+		m.mu.Unlock()
+		return err
+	}
+	if err := os.MkdirAll(m.appData(settings.Volume, name), 0o770); err != nil {
+		return abandon(err)
+	}
+	if secrets != "" {
+		if err := m.store.Write(envFile(name), []byte(secrets)); err != nil {
+			return abandon(err)
+		}
+	}
+	if err := m.store.Write(composeFile(name), []byte(compose)); err != nil {
+		return abandon(err)
+	}
+	m.mu.Lock()
+	m.appList = nil
 	m.mu.Unlock()
 
 	m.startJob(ctx, settings.Volume, name, job, false)
@@ -208,8 +226,8 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		if err == nil {
 			// Resolve hardware against the leases under hardwareMu, but run
 			// compose up (pulls, builds: minutes) without it. While composing
-			// is non-zero BeginVM refuses new GPU leases, so the resolved
-			// devices stay free until the containers run.
+			// is recorded, BeginVM refuses to lease the devices it may use,
+			// so they stay free until the containers run.
 			var path string
 			var cleanup func()
 			path, cleanup, err = m.beginCompose(ctx, name)
@@ -219,7 +237,7 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 				var up string
 				up, err = m.runner.Run(ctx, "", "docker", args...)
 				cleanup()
-				m.endCompose()
+				m.endCompose(name)
 				out += up
 			}
 		}
@@ -247,15 +265,25 @@ func (m *Manager) beginCompose(ctx context.Context, name string) (string, func()
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
 	path, cleanup, err := m.hardwareCompose(ctx, name)
-	if err == nil {
-		m.composing++
+	if err != nil {
+		return "", nil, err
 	}
-	return path, cleanup, err
+	text, err := m.Compose(name)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	var devices []hardware.ContainerDevice
+	if m.HardwareDevices != nil {
+		devices = m.HardwareDevices(ctx)
+	}
+	m.composing[name] = composeHardware(text, devices)
+	return path, cleanup, nil
 }
 
-func (m *Manager) endCompose() {
+func (m *Manager) endCompose(name string) {
 	m.hardwareMu.Lock()
-	m.composing--
+	delete(m.composing, name)
 	m.hardwareMu.Unlock()
 }
 

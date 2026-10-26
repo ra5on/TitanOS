@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,10 +82,10 @@ func TestLongComposeUpDoesNotBlockVMsOrContainers(t *testing.T) {
 	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
 	m.applied = m.dataRoot("data")
 	m.HardwareDevices = func(context.Context) []hardware.ContainerDevice {
-		return []hardware.ContainerDevice{{ID: "card", Kind: "nvidia", Available: true}}
+		return []hardware.ContainerDevice{{ID: "card", Kind: "nvidia", Available: true}, {ID: "igpu", Kind: "igpu", Vendor: "8086", Available: true}}
 	}
 	ctx := context.Background()
-	if err := m.CreateApp(ctx, "slow", "services:\n  web:\n    image: busybox\n", nil); err != nil {
+	if err := m.CreateApp(ctx, "slow", "services:\n  web:\n    image: busybox\n    x-titanos-hardware: [card]\n", nil); err != nil {
 		t.Fatal(err)
 	}
 	<-runner.started
@@ -101,9 +102,17 @@ func TestLongComposeUpDoesNotBlockVMsOrContainers(t *testing.T) {
 			finish(true)
 		}
 	})
+	within(t, "VM on hardware the app does not use", func() {
+		finish, err := m.BeginVM(ctx, "other", []string{"igpu"}, nil, false)
+		if err != nil {
+			t.Error(err)
+		} else {
+			finish(true)
+		}
+	})
 	within(t, "GPU VM", func() {
 		// The app may still start on this GPU: refuse instead of waiting.
-		if _, err := m.BeginVM(ctx, "gpu", []string{"card"}, nil, false); !errors.Is(err, ErrBusy) {
+		if _, err := m.BeginVM(ctx, "gpu", []string{"card"}, nil, false); !errors.Is(err, ErrHardwareBusy) {
 			t.Error("GPU leased during compose up:", err)
 		}
 	})
@@ -121,6 +130,120 @@ func TestLongComposeUpDoesNotBlockVMsOrContainers(t *testing.T) {
 		t.Fatal(err)
 	}
 	finish(true)
+}
+
+func TestComposeHardwareOnlyNamesUsedDevices(t *testing.T) {
+	devices := []hardware.ContainerDevice{{ID: "0000:00:02.0", Kind: "igpu", Vendor: "8086", Available: true}}
+	if use := composeHardware("services:\n  web:\n    image: x\n", devices); use.uses("0000:00:02.0") {
+		t.Fatal("plain app claims a GPU")
+	}
+	if use := composeHardware("services:\n  web:\n    image: x\n    x-titanos-hardware: [gpu-intel]\n", devices); !use.uses("0000:00:02.0") {
+		t.Fatal("selection missed")
+	}
+	if use := composeHardware("services:\n  web:\n    image: x\n    devices: [/dev/dri:/dev/dri]\n", devices); !use.uses("anything") {
+		t.Fatal("raw mapping missed")
+	}
+}
+
+// gpuContainerEngine has one stopped container that uses the GPU "card".
+func gpuContainerEngine(t *testing.T, m *Manager) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "POST":
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			fmt.Fprint(w, `[]`)
+		default:
+			fmt.Fprint(w, `{"State":{"Running":false,"ExitCode":0},"Config":{"Labels":{"titanos.hardware":"card"}}}`)
+		}
+	}))
+	t.Cleanup(server.Close)
+	m.api = &client{http: &http.Client{Transport: rewriteTransport{server.URL}}}
+}
+
+func TestBackupKeepsHardwareOfStoppedContainers(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	gpuContainerEngine(t, m)
+	m.hardwareRunDir = t.TempDir()
+	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
+	m.applied = m.dataRoot("data")
+	m.HardwareDevices = func(context.Context) []hardware.ContainerDevice {
+		return []hardware.ContainerDevice{{ID: "card", Kind: "igpu", Available: true}}
+	}
+	ctx := context.Background()
+	lease, err := m.BackupLease(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Stop(ctx, "jellyfin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.BeginVM(ctx, "vm", []string{"card"}, nil, false); !errors.Is(err, ErrHardwareBusy) {
+		t.Fatal("VM took the GPU of a container the backup restarts:", err)
+	}
+	if err := lease.Start(ctx, "jellyfin"); err != nil {
+		t.Fatal(err)
+	}
+	lease.Close()
+	finish, err := m.BeginVM(ctx, "vm", []string{"card"}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish(true)
+	// A later backup start (recovery) still respects the VM lease.
+	lease, err = m.BackupLease(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if err := lease.Start(ctx, "jellyfin"); err == nil {
+		t.Fatal("backup started a container on a VM GPU")
+	}
+}
+
+func TestCreateAppRefusedByBackupLeavesNoFiles(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
+	m.applied = m.dataRoot("data")
+	ctx := context.Background()
+	compose := "services:\n  web:\n    image: busybox\n"
+	lease, err := m.BackupLease(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The early check passes before the lease exists; force the late one.
+	m.mu.Lock()
+	m.backups--
+	m.mu.Unlock()
+	validated := false
+	m.runner = runnerFunc(func(args []string) {
+		if !validated && slices.Contains(args, "config") {
+			validated = true
+			m.mu.Lock()
+			m.backups++
+			m.mu.Unlock()
+		}
+	})
+	if err := m.CreateApp(ctx, "late", compose, map[string]string{"KEY": "v"}); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	if _, err := m.Compose("late"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("refused app left its compose file")
+	}
+	lease.Close()
+	if err := m.CreateApp(ctx, "late", compose, nil); err != nil {
+		t.Fatal("retry after the backup:", err)
+	}
+	for m.Busy() {
+		time.Sleep(time.Millisecond)
+	}
+}
+
+type runnerFunc func(args []string)
+
+func (f runnerFunc) Run(_ context.Context, _ string, _ string, args ...string) (string, error) {
+	f(args)
+	return "", nil
 }
 
 func TestBackupLeaseDoesNotBlockVMsOrDocker(t *testing.T) {

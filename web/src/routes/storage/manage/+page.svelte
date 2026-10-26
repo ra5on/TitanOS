@@ -454,7 +454,7 @@
 				><button
 					type="button"
 					class="btn btn-warn"
-					disabled={busy}
+					disabled={busy || growth.active}
 					onclick={growthAction === 'recover' ? recover : cancelGrowth}
 					>{t(growthAction === 'recover' ? 'ops.resume' : 'ops.cancelGrowth')}</button
 				>

@@ -79,7 +79,7 @@ func (m *Manager) validateApplicationPaths(job backup.Job, paths []string) error
 // The lease is held even for VM-only jobs: a disabled engine may still be stopping.
 func (m *Manager) prepareDocker(ctx context.Context, applications []backup.Application, protected []string) (lease *docker.BackupLease, members []Member, paths []string, result error) {
 	if m.Docker == nil {
-		return nil, nil, nil, errors.New("Docker writer inventory unavailable")
+		return nil, nil, nil, errors.New("the inventory of Docker writers is unavailable")
 	}
 	lease, err := m.Docker.BackupLease(ctx)
 	if err != nil {

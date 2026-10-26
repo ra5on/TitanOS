@@ -7,14 +7,32 @@
 	type Props = { action: 'restart' | 'shutdown'; onclose: () => void };
 	let { action, onclose }: Props = $props();
 
-	let phase = $state<'confirm' | 'working' | 'done'>('confirm');
+	type PowerStatus = { pending: { action: string; by: string; since: string } | null; rebuilding: boolean };
+	let phase = $state<'confirm' | 'working' | 'done' | 'waiting'>('confirm');
 	let error = $state('');
+	let status = $state<PowerStatus | null>(null);
+	// Ticked by default while a rebuild runs: a restart would start it over.
+	let afterRebuild = $state(true);
+
+	$effect(() => {
+		api.get<PowerStatus>('/system/power')
+			.then((res) => (status = res))
+			.catch(() => (status = null));
+	});
 
 	async function confirm() {
 		error = '';
 		phase = 'working';
+		const wait = !!status?.rebuilding && afterRebuild;
 		try {
-			await api.post('/system/power', { action: action === 'restart' ? 'reboot' : 'poweroff' });
+			const res = await api.post<{ pending?: boolean } | null>('/system/power', {
+				action: action === 'restart' ? 'reboot' : 'poweroff',
+				afterRebuild: wait
+			});
+			if (wait && res?.pending) {
+				phase = 'waiting';
+				return;
+			}
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			phase = 'confirm';
@@ -22,6 +40,15 @@
 		}
 		phase = 'done';
 		if (action === 'restart') waitForRestart();
+	}
+
+	async function cancelWaiting() {
+		error = '';
+		try {
+			status = await api.delete<PowerStatus>('/system/power');
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
 	}
 
 	// The NAS first has to go down, then come back: wait for an answer that
@@ -51,10 +78,21 @@
 			? action === 'restart' ? 'power.restartTitle' : 'power.shutdownTitle'
 			: action === 'restart' ? 'power.restarting' : 'power.shuttingDown'
 	)}
-	locked={phase !== 'confirm'}
+	locked={phase === 'working' || phase === 'done'}
 	{onclose}
 >
-	{#if phase !== 'done'}
+	{#if phase === 'waiting'}
+		<p role="status">{t(action === 'restart' ? 'power.waitingRestart' : 'power.waitingShutdown')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
+		</div>
+	{:else if phase !== 'done'}
+		{#if status?.pending}
+			<div class="notice-warn" role="status">
+				{t(status.pending.action === 'reboot' ? 'power.pendingRestart' : 'power.pendingShutdown', { user: status.pending.by })}
+				<button type="button" class="btn small" onclick={cancelWaiting}>{t('power.cancelWaiting')}</button>
+			</div>
+		{/if}
 		<ul>
 			<li><span class="dot" aria-hidden="true"></span>{t('power.servicesNote')}</li>
 			<li><span class="dot" aria-hidden="true"></span>{t('power.workloadsNote')}</li>
@@ -63,6 +101,9 @@
 			{#if action === 'shutdown'}<li class="muted"><span class="dot" aria-hidden="true"></span>{t('power.wakeOnLanNote')}</li>{/if}
 			<li class="muted"><span class="dot" aria-hidden="true"></span>{t(action === 'restart' ? 'power.restartNote' : 'power.shutdownNote')}</li>
 		</ul>
+		{#if status?.rebuilding}
+			<label class="check"><input type="checkbox" bind:checked={afterRebuild} />{t('power.afterRebuild')}</label>
+		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={phase === 'working'}>{t('common.cancel')}</button>

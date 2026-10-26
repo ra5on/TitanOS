@@ -169,9 +169,18 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 	}
 	// A compose up resolved its hardware before this lease existed; its
 	// containers may still start on these devices.
-	if m.composing > 0 {
+	for app, use := range m.composing {
+		for _, device := range lease.Devices {
+			if use.uses(device.ID) {
+				finish()
+				return nil, fmt.Errorf("%w: Docker is starting app %s on %s", ErrHardwareBusy, app, device.ID)
+			}
+		}
+	}
+	// Containers an app backup stopped are started again when it ends.
+	if err := m.backupNeeds(ctx, lease.Devices); err != nil {
 		finish()
-		return nil, fmt.Errorf("%w: wait until Docker has started the app", ErrBusy)
+		return nil, err
 	}
 	var affected []string
 	if m.current().Enabled && !m.engineRunning() {
@@ -208,7 +217,7 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 	}
 	if len(affected) > 0 && m.backupActive() {
 		finish()
-		return nil, errBackupRunning
+		return nil, fmt.Errorf("%w: %w", ErrHardwareBusy, errBackupRunning)
 	}
 	if m.gpuLeases == nil {
 		m.gpuLeases = map[string]gpuLease{}
@@ -320,6 +329,33 @@ func (m *Manager) ReturnVMHardware(ctx context.Context, running map[string]bool)
 		}
 	}
 	return errors.Join(failures...)
+}
+
+// backupNeeds refuses devices a container stopped by the open app backup
+// uses. The caller holds hardwareMu.
+func (m *Manager) backupNeeds(ctx context.Context, devices []hardware.ContainerDevice) error {
+	m.mu.Lock()
+	stopped := make([]string, 0, len(m.backupStopped))
+	for id := range m.backupStopped {
+		stopped = append(stopped, id)
+	}
+	m.mu.Unlock()
+	for _, id := range stopped {
+		info, err := m.inspect(ctx, url.PathEscape(id))
+		var apiErr *apiError
+		if errors.As(err, &apiErr) && apiErr.Status == 404 {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		for _, device := range devices {
+			if usesDevice(info, device) {
+				return fmt.Errorf("%w: an app backup will restart a container using %s", ErrHardwareBusy, device.ID)
+			}
+		}
+	}
+	return nil
 }
 
 func (m *Manager) canStartContainer(ctx context.Context, id string) error {

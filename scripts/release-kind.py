@@ -33,6 +33,7 @@ ALLOWED = (
     "examples/",
     ".github/workflows/agent.yml",
     "README.md",
+    # Former name of CLAUDE.md; removing it is no system change.
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",

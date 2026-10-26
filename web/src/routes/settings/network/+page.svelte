@@ -139,6 +139,15 @@
 			await load();
 			if (status) draft = $state.snapshot(status.pending ?? status.config);
 		} catch (e) {
+			// While bonds or VLANs settle, the answer to "confirm" can be cut
+			// off after the NAS stored it: what counts is the state now.
+			if (kind === 'confirm' && !(e instanceof ApiError && e.status >= 400)) {
+				await load().catch(() => {});
+				if (status && !status.pending) {
+					draft = $state.snapshot(status.config);
+					return;
+				}
+			}
 			error =
 				errorText(e instanceof ApiError ? e.code : 'internal') +
 				(e instanceof ApiError && e.message ? ' · ' + e.message : '');

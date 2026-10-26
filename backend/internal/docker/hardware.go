@@ -47,9 +47,7 @@ func resolveHardware(text string, devices []hardware.ContainerDevice, blocked ma
 			if !ok {
 				return "", fmt.Errorf("%w: invalid hardware selection", ErrInvalid)
 			}
-			match := slices.IndexFunc(devices, func(device hardware.ContainerDevice) bool {
-				return device.ID == id || (device.Available && (id == "gpu-nvidia" && device.Kind == "nvidia" || id == "gpu-intel" && (device.Kind == "igpu" || device.Kind == "gpu") && device.Vendor == "8086" || id == "npu-intel" && device.Kind == "npu" && device.Vendor == "8086"))
-			})
+			match := selectDevice(devices, id)
 			if match < 0 || !devices[match].Available || blocked[devices[match].ID] {
 				return "", fmt.Errorf("%w: hardware %s is missing or reserved by a VM", ErrInvalid, id)
 			}
@@ -90,6 +88,57 @@ func resolveHardware(text string, devices []hardware.ContainerDevice, blocked ma
 	}
 	out, err := yaml.Marshal(doc)
 	return string(out), err
+}
+
+func selectDevice(devices []hardware.ContainerDevice, id string) int {
+	return slices.IndexFunc(devices, func(device hardware.ContainerDevice) bool {
+		return device.ID == id || (device.Available && (id == "gpu-nvidia" && device.Kind == "nvidia" || id == "gpu-intel" && (device.Kind == "igpu" || device.Kind == "gpu") && device.Vendor == "8086" || id == "npu-intel" && device.Kind == "npu" && device.Vendor == "8086"))
+	})
+}
+
+// composeUse is the hardware a running compose up may start containers on:
+// the selected device IDs, or any device if a service maps devices itself.
+type composeUse struct {
+	ids map[string]bool
+	raw bool
+}
+
+func (u composeUse) uses(id string) bool { return u.raw || u.ids[id] }
+
+func composeHardware(text string, devices []hardware.ContainerDevice) composeUse {
+	use := composeUse{ids: map[string]bool{}}
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+		use.raw = true
+		return use
+	}
+	services, _ := doc["services"].(map[string]any)
+	names := make([]string, 0, len(services))
+	for name := range services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	meta, _ := doc["x-titanos"].(map[string]any)
+	for at, name := range names {
+		service, _ := services[name].(map[string]any)
+		if service == nil {
+			continue
+		}
+		use.raw = use.raw || usesRawGPU(service)
+		selected, _ := service["x-titanos-hardware"].([]any)
+		if at == 0 && selected == nil {
+			selected, _ = meta["hardware"].([]any)
+		}
+		for _, value := range selected {
+			id, _ := value.(string)
+			if match := selectDevice(devices, id); match >= 0 {
+				use.ids[devices[match].ID] = true
+			} else {
+				use.ids[id] = true
+			}
+		}
+	}
+	return use
 }
 
 func appendUniqueValue(value any, item string) []any {

@@ -107,12 +107,28 @@ func (m *Manager) PrepareHandoff(pci []string) (bool, error) {
 		}
 		detached = true
 	}
+	if detached {
+		// Only what TitanOS took is given back later.
+		if err := os.MkdirAll(m.state, 0o755); err == nil {
+			os.WriteFile(m.consoleNote(), nil, 0o644)
+		}
+	}
 	return detached, nil
 }
 
+// consoleNote marks that TitanOS detached the text console.
+func (m *Manager) consoleNote() string {
+	return filepath.Join(m.state, "console-detached")
+}
+
 // RestoreConsole gives the text console back to the display once no VM has
-// the device it lives on. It does nothing while one still does.
+// the device it lives on. It does nothing while one still does, and nothing
+// at all if TitanOS did not detach the console itself. Callers keep it apart
+// from a VM start (see titand's main), which detaches it again.
 func (m *Manager) RestoreConsole() {
+	if _, err := os.Stat(m.consoleNote()); err != nil {
+		return
+	}
 	for _, device := range m.Status().PCI {
 		if device.Primary && device.Driver == "vfio-pci" {
 			return
@@ -123,4 +139,5 @@ func (m *Manager) RestoreConsole() {
 			os.WriteFile(filepath.Join(console, "bind"), []byte("1"), 0)
 		}
 	}
+	os.Remove(m.consoleNote())
 }

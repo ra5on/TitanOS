@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
@@ -46,6 +47,7 @@ var vmErrors = []struct {
 	{hardware.ErrNotPassable, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrIncompleteGroup, http.StatusBadRequest, "hardware_incomplete_group"},
 	{hardware.ErrInUse, http.StatusConflict, "hardware_in_use"},
+	{docker.ErrHardwareBusy, http.StatusConflict, "vm_hardware_busy"},
 }
 
 func writeVMError(w http.ResponseWriter, err error) {

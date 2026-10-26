@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -1841,5 +1842,63 @@ func TestTransferRemovalDoesNotRequireIDConfirmation(t *testing.T) {
 	}
 	if b, err := os.ReadFile(filepath.Join(dst.Dir, "a.txt")); err != nil || string(b) != "keep" {
 		t.Fatal("copied data changed", err)
+	}
+}
+
+// "Only after the rebuild" waits, can be cancelled, and runs once the
+// volumes are quiet.
+func TestPowerAfterRebuild(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	var busy atomic.Bool
+	busy.Store(true)
+	ts.server.rebuilding = busy.Load
+	defer func(old time.Duration) { powerPollInterval = old }(powerPollInterval)
+	powerPollInterval = 10 * time.Millisecond
+
+	status := func() map[string]any {
+		t.Helper()
+		var got map[string]any
+		res, body := ts.request("GET", "/api/v1/system/power", nil)
+		if res.StatusCode != http.StatusOK || json.Unmarshal([]byte(body), &got) != nil {
+			t.Fatalf("status: %d %s", res.StatusCode, body)
+		}
+		return got
+	}
+	if res, _ := ts.request("POST", "/api/v1/system/power", map[string]any{"action": "poweroff", "afterRebuild": true}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("waiting shutdown: %d", res.StatusCode)
+	}
+	if got := status(); got["pending"] == nil || got["rebuilding"] != true {
+		t.Fatalf("status while waiting: %v", got)
+	}
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case got := <-ts.power.actions:
+		t.Fatalf("%s during the rebuild", got)
+	default:
+	}
+	// Cancelled: nothing happens even when the rebuild ends.
+	ts.request("DELETE", "/api/v1/system/power", nil)
+	busy.Store(false)
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case got := <-ts.power.actions:
+		t.Fatalf("cancelled %s still ran", got)
+	default:
+	}
+	// Waiting again, then the rebuild ends.
+	busy.Store(true)
+	ts.request("POST", "/api/v1/system/power", map[string]any{"action": "reboot", "afterRebuild": true})
+	busy.Store(false)
+	select {
+	case got := <-ts.power.actions:
+		if got != "reboot" {
+			t.Fatalf("ran %s", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the restart did not follow the rebuild")
+	}
+	if got := status(); got["pending"] != nil {
+		t.Fatalf("still pending: %v", got)
 	}
 }

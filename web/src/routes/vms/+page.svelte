@@ -817,7 +817,7 @@
 							</div>
 						{:else if connectionPhase !== 'connected'}
 							<p class="muted hint" role="status">
-								{t(connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}
+								{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}
 							</p>
 						{/if}
 						<p class="muted hint">{t('vms.hint')}</p>

@@ -8,7 +8,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 
 	export type ScaleMode = 'scale' | 'remote' | 'full';
-	export type ConnectionPhase = 'connecting' | 'connected' | 'lost' | 'declined';
+	export type ConnectionPhase = 'connecting' | 'connected' | 'lost' | 'declined' | 'disabled';
 
 	// resizable: the guest can take a resolution from the browser. That needs
 	// the virtio graphics of the Linux template; the plain VGA of Windows and
@@ -43,10 +43,10 @@
 		let closed = false;
 
 		/** Whether titand will open the screen now; asks for the password if needed. */
-		const allowed = async (): Promise<'yes' | 'declined' | 'unavailable'> => {
+		const allowed = async (): Promise<'yes' | 'declined' | 'disabled' | 'unavailable'> => {
 			try {
 				const info = await api.get<{ enabled: boolean }>('/terminal');
-				if (!info.enabled) return 'unavailable';
+				if (!info.enabled) return 'disabled';
 				if ((await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed) return 'yes';
 			} catch {
 				return 'unavailable';
@@ -63,8 +63,8 @@
 			if (answer !== 'yes') {
 				// Not confirmed: wait until asked again (reconnect).
 				// Switched off or not reachable: look again in a while.
-				onstatus(answer === 'declined' ? 'declined' : 'lost');
-				if (answer === 'unavailable') retry = setTimeout(connect, 5000);
+				onstatus(answer === 'declined' ? 'declined' : answer === 'disabled' ? 'disabled' : 'lost');
+				if (answer !== 'declined') retry = setTimeout(connect, 5000);
 				return;
 			}
 			const connection = new RFB(

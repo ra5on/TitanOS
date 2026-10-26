@@ -144,10 +144,12 @@ export async function loadAssistant() {
 }
 
 export async function loadModels() {
+	const account = accountGeneration;
 	try {
-		assistant.models = (await api.get<{ models: AssistantModel[] }>('/assistant/models')).models;
+		const models = (await api.get<{ models: AssistantModel[] }>('/assistant/models')).models;
+		if (account === accountGeneration) assistant.models = models;
 	} catch {
-		assistant.models = [];
+		if (account === accountGeneration) assistant.models = [];
 	}
 }
 
@@ -166,7 +168,7 @@ export async function loadChats() {
 		if (assistant.status) assistant.status.persistent = res.persistent;
 		assistant.error = '';
 	} catch (err) {
-		assistant.error = problemOf(err);
+		if (account === accountGeneration) assistant.error = problemOf(err);
 	}
 }
 
@@ -204,7 +206,6 @@ export async function openChat(id: string) {
 	}
 }
 
-/** Starts an empty chat; the NAS creates it with the first message. */
 // Bumped when the signed-in account changes, so late answers for the
 // previous account are dropped.
 let accountGeneration = 0;
@@ -226,6 +227,7 @@ export function resetAssistant() {
 	assistant.prefs = { ...DEFAULT_PREFS };
 }
 
+/** Starts an empty chat; the NAS creates it with the first message. */
 export function newChat() {
  detach();
 	assistant.chatId = '';

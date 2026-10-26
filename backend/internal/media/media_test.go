@@ -479,7 +479,7 @@ func TestOfficialAliasUpgradesSameOriginRedirectsBeforeTransport(t *testing.T) {
 					if foreign {
 						target = "https://untrusted.example/virtio.iso"
 					}
-					http.Redirect(w, r, target, 301)
+					http.Redirect(w, r, target, http.StatusMovedPermanently)
 					return
 				}
 				w.Write(testISO(80 << 10))

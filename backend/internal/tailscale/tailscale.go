@@ -28,7 +28,7 @@ import (
 const settingsFile = "plugins/tailscale/settings.json"
 
 var ErrInvalid = errors.New("invalid Tailscale settings")
-var ErrUnavailable = errors.New("Tailscale plugin is not active")
+var ErrUnavailable = errors.New("the Tailscale plugin is not active")
 var ErrPending = errors.New("confirm or undo the pending Tailscale settings first")
 
 type Settings struct {
@@ -353,7 +353,7 @@ func (m *Manager) Action(action string) error {
 			if statusErr == nil && json.Unmarshal([]byte(raw), &st) == nil && (loginURL(st.AuthURL) != "" || st.BackendState == "Running" || st.BackendState == "NeedsMachineAuth") {
 				return nil
 			}
-			return errors.New("Tailscale connection could not be started; check the service log")
+			return errors.New("the Tailscale connection could not be started; check the service log")
 		}
 		return nil
 	case "disconnect":

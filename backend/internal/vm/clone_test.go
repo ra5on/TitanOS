@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"os"
@@ -206,14 +207,24 @@ func TestClonePublishConflictKeepsForeignFolderAndCanBeDiscarded(t *testing.T) {
 	if _, err := m.get("copy"); err == nil {
 		t.Fatal("conflicting clone registered")
 	}
-	// A crash between journaling "publishing" and the rename leaves the
-	// same state as an older version's failed publication: still discardable.
+	// The journal stays readable by the previous app version: it keeps phase
+	// "publishing" (which that version can finish or discard) and records the
+	// conflict in the separate optional field.
 	journal := filepath.Join(m.mountRoot, "fast", ".titanos", "vmclones", ops[0].ID, "operation.json")
 	b, err := os.ReadFile(journal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(journal, []byte(strings.Replace(string(b), `"phase":"conflict"`, `"phase":"publishing"`, 1)), 0o600); err != nil {
+	var saved struct {
+		Phase    string `json:"phase"`
+		Conflict string `json:"conflict"`
+	}
+	if err := json.Unmarshal(b, &saved); err != nil || saved.Phase != "publishing" || saved.Conflict != target {
+		t.Fatal("journal not compatible", string(b), err)
+	}
+	// Without the new field (as an older version would rewrite it) the
+	// operation is a plain interrupted publication, still discardable.
+	if err := os.WriteFile(journal, []byte(strings.Replace(string(b), `"conflict":`, `"ignored":`, 1)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if ops, _ := m.CloneOperations("fast", []string{"fast"}); len(ops) != 1 || ops[0].Phase != "publishing" {

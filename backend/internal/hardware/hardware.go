@@ -74,13 +74,16 @@ type Manager struct {
 	sys string
 	// proc is where the open DRM clients of the NAS are found.
 	proc string
+	// state holds what lives only while the NAS is up, such as the note
+	// that TitanOS took the text console from the display.
+	state string
 	// stick is the label of the stick TitanOS runs from.
 	stickLink string
 }
 
 // NewManager returns a manager looking at the real system.
 func NewManager() *Manager {
-	return &Manager{sys: "/sys", proc: "/proc", stickLink: "/dev/disk/by-label/TITANOS"}
+	return &Manager{sys: "/sys", proc: "/proc", state: "/run/titanos-hardware", stickLink: "/dev/disk/by-label/TITANOS"}
 }
 
 var vendors = map[string]string{"8086": "Intel", "10de": "NVIDIA", "1002": "AMD", "1022": "AMD", "1234": "QEMU", "1af4": "Red Hat", "1b36": "Red Hat"}

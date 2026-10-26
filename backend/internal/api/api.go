@@ -123,9 +123,14 @@ type Server struct {
 	automations *assistant.Automations
 	chats       *assistant.Chats
 	agentMu     sync.Mutex
-	scheduleMu  sync.Mutex
-	agentJobs   map[string]*agentJob
-	agentSlots  chan struct{}
+	// power is a restart or shutdown that waits for a rebuild; see system.go.
+	powerMu sync.Mutex
+	power   pendingPower
+	// rebuilding replaces the rebuild check in tests.
+	rebuilding func() bool
+	scheduleMu sync.Mutex
+	agentJobs  map[string]*agentJob
+	agentSlots chan struct{}
 	// push holds the one-time tokens of buttons in notifications.
 	push           pushTokens
 	assistSessions assistSessions
@@ -189,6 +194,8 @@ func New(opts Options) *Server {
 
 	mux.HandleFunc("GET /api/v1/system", s.requireUser(s.handleSystem))
 	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
+	mux.HandleFunc("GET /api/v1/system/power", s.requireAdmin(s.handlePowerStatus))
+	mux.HandleFunc("DELETE /api/v1/system/power", s.requireAdmin(s.handlePowerCancel))
 
 	// Everyone may see the volumes; only administrators may change disks.
 	s.operationsRoutes(mux)

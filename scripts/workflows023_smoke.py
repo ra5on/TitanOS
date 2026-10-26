@@ -4,6 +4,7 @@ Real networkd, VLAN frames over emulated Ethernet hubs, active-backup bond,
 Docker LAN/Compose, NFS server, media publication and libvirt XML. Extra ports
 and data disks are supplied by --workflows023. No host interfaces are changed.
 """
+import http.client
 import gzip
 import hashlib
 import json
@@ -23,7 +24,7 @@ def wait(fn, label, timeout=90):
             value = fn()
             if value:
                 return value
-        except (OSError, RuntimeError, subprocess.SubprocessError):
+        except (OSError, RuntimeError, subprocess.SubprocessError, http.client.HTTPException):
             pass
         time.sleep(1)
     raise TimeoutError(label)
@@ -69,8 +70,14 @@ def checks(boot, request, remote, put, directory, opener, url, password, online_
         assert pending['networks'] == c['networks'], pending
         if confirm:
             wait(lambda: request('/network')['network']['addresses'], 'management DHCP')
-            request('/network/confirm', {})
-            assert request('/network')['network']['pending'] is None
+            # Bond and VLAN may still settle: a link change can cut the
+            # answer after titand stored the confirmation. What counts is
+            # the state afterwards.
+            try:
+                request('/network/confirm', {})
+            except (OSError, http.client.HTTPException):
+                pass
+            wait(lambda: request('/network')['network']['pending'] is None, 'confirmed topology')
 
     apply(cfg)
     remote('ip -j -d link show tvapps')

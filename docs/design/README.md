@@ -4,7 +4,7 @@ Diese Dateien sind die Quelltexte der Entwürfe aus dem Design-Canvas „TitanOS
 
 - Sie nutzen ein Entwurfsformat (`.dc.html`) mit eigener Laufzeit und laufen außerhalb des Canvas nicht direkt im Browser.
 - Alle Daten sind Beispieldaten.
-- Farben sind darin als feste Werte geschrieben; im Produkt kommen sie aus den Theme-Variablen (siehe `AGENTS.md`, Abschnitt Themes).
+- Farben sind darin als feste Werte geschrieben; im Produkt kommen sie aus den Theme-Variablen (siehe `CLAUDE.md`, Abschnitt Themes).
 - Der Datenteil steht jeweils unten im `<script>`-Block (`renderVals()`), das Layout oben im Markup.
 
 | Datei | Seite |

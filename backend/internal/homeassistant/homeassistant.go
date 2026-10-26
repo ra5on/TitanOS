@@ -438,7 +438,7 @@ func newClient(s Settings) *http.Client {
 		Timeout:   20 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return errors.New("Home Assistant answered with a redirect; enter the final address")
+			return errors.New("the Home Assistant address answered with a redirect; enter the final address")
 		},
 	}
 }

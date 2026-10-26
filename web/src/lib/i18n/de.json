@@ -897,6 +897,7 @@
 	"vms.showXml": "Konfiguration als XML ansehen",
 	"vms.screenConnecting": "Verbindung zum Bildschirm wird aufgebaut …",
 	"vms.screenLost": "Die Verbindung zum Bildschirm ist unterbrochen. Neuer Versuch …",
+	"vms.screenDisabled": "Konsolen sind unter Einstellungen › Zugang ausgeschaltet; der Bildschirm öffnet sich, sobald sie wieder eingeschaltet sind.",
 	"vms.screenDeclined": "Der Bildschirm wurde nicht geöffnet, weil die Bestätigung abgebrochen wurde.",
 	"vms.screenOpen": "Bildschirm öffnen",
 	"vms.resolution": "{width} × {height} · angezeigt {shownWidth} × {shownHeight}",
@@ -2168,6 +2169,7 @@
 	"vms.form.requiredCompanions": "Die Funktionen {list} gehören zur selben Karte. Wähle die benötigten Funktionen ausdrücklich aus; gemeinsam isolierte Funktionen müssen zusammen ausgewählt werden.",
 	"error.hardware_incomplete_group": "Wähle auch die angegebenen Funktionen derselben IOMMU-Gruppe aus. Es wird nichts automatisch hinzugefügt.",
 	"error.hardware_in_use": "Ein Programm auf dem NAS nutzt die Grafik noch, zum Beispiel ein Container mit /dev/dri. Beende es und starte die VM erneut; welches Programm es ist, steht im Protokoll. Die Grafik wird ihm nicht im laufenden Betrieb weggenommen, weil das das ganze NAS anhalten kann.",
+	"error.vm_hardware_busy": "Auf dieser Hardware wird gerade eine Docker-App gestartet, oder eine laufende App-Sicherung startet danach einen Container, der sie nutzt. Bitte danach erneut versuchen.",
 	"error.plugin_update_pending": "Ein Systemupdate läuft oder wartet auf den Neustart. Schließe das Update ab oder nimm es zurück, bevor du Plugins änderst.",
 	"plugins.activateNow": "Direkt aktivieren",
 	"plugins.activateLaterHint": "Ohne diesen Haken wird das Plugin nur auf dem Daten-Volume installiert. Laufende VMs und Container bleiben unverändert. Du kannst es später aktivieren, wenn die benötigte Hardware verfügbar ist.",
@@ -4192,5 +4194,11 @@
 	"power.workloadsNote": "Laufende Container und VMs werden sauber beendet.",
 	"power.maintenanceNote": "Laufende Speicherwartung (Wiederaufbau, Prüfung) kann unterbrochen werden; RAID-Wartung setzt mdadm nach dem Start von selbst fort.",
 	"power.diskTestNote": "Laufende Plattentests (Platten vorbereiten) überstehen keinen Neustart und müssen danach neu gestartet werden.",
+	"power.afterRebuild": "Erst nach Abschluss des laufenden Wiederaufbaus bzw. der Prüfung",
+	"power.waitingRestart": "Der Neustart ist vorgemerkt und beginnt, sobald Wiederaufbau und Prüfungen abgeschlossen sind. Ein Neustart von titand verwirft die Vormerkung.",
+	"power.waitingShutdown": "Das Herunterfahren ist vorgemerkt und beginnt, sobald Wiederaufbau und Prüfungen abgeschlossen sind. Ein Neustart von titand verwirft die Vormerkung.",
+	"power.pendingRestart": "{user} hat einen Neustart nach dem Wiederaufbau vorgemerkt.",
+	"power.pendingShutdown": "{user} hat das Herunterfahren nach dem Wiederaufbau vorgemerkt.",
+	"power.cancelWaiting": "Vormerkung aufheben",
 	"power.wakeOnLanNote": "Ist Wake-on-LAN eingeschaltet (Einstellungen › Energie), lässt sich das NAS auch über das Netzwerk wieder einschalten."
 }

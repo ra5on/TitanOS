@@ -28,6 +28,11 @@ type CloneOperation struct {
 	Phase   string    `json:"phase"`
 	Error   string    `json:"error"`
 	Created time.Time `json:"created"`
+	// Conflict records a target folder that blocked publication. The journal
+	// keeps Phase "publishing" so the previous app version can still finish
+	// (retrying the no-replace rename) or discard it; CloneOperations reports
+	// such an operation as phase "conflict".
+	Conflict string `json:"conflict,omitempty"`
 }
 
 func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, mounted []string) error {
@@ -238,19 +243,13 @@ func (m *Manager) publishClone(root *os.Root, op *CloneOperation) error {
 			return err
 		}
 	}
-	if op.Phase == "conflict" {
-		op.Phase = "publishing"
-		op.Error = ""
-		if err := volumedata.WriteJSON(root, op.ID+"/operation.json", op); err != nil {
-			return err
-		}
-	}
+	op.Conflict = ""
 	if _, err := os.Lstat(stage); err == nil {
 		if err := unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, final, unix.RENAME_NOREPLACE); err != nil {
 			if errors.Is(err, unix.EEXIST) || errors.Is(err, unix.ENOTEMPTY) {
 				// Someone else's folder: never touch it. The staged copy
 				// stays and can be finished later or discarded.
-				op.Phase = "conflict"
+				op.Conflict = final
 				err = fmt.Errorf("%w: %s already exists; remove or rename it and finish, or discard the staged clone", ErrBadFolder, final)
 				op.Error = err.Error()
 				return errors.Join(err, volumedata.WriteJSON(root, op.ID+"/operation.json", op))
@@ -347,6 +346,9 @@ func (m *Manager) CloneOperations(volume string, mounted []string) ([]CloneOpera
 		if err := volumedata.ReadJSON(root, e.Name()+"/operation.json", &op, 1<<20); err != nil {
 			return nil, err
 		}
+		if op.Phase == "publishing" && op.Conflict != "" {
+			op.Phase = "conflict" // reported only; the journal stays "publishing"
+		}
 		out = append(out, op)
 	}
 	return out, nil
@@ -376,7 +378,7 @@ func (m *Manager) RecoverClone(volume, id, action, confirm string, mounted []str
 	}
 	if action == "discard" {
 		switch op.Phase {
-		case "copying", "verified", "conflict":
+		case "copying", "verified":
 			return root.RemoveAll(id)
 		case "publishing":
 			// Until the rename succeeded the staged copy is the only copy and
@@ -395,7 +397,7 @@ func (m *Manager) RecoverClone(volume, id, action, confirm string, mounted []str
 		}
 		return ErrInvalid
 	}
-	if action == "finish" && (op.Phase == "verified" || op.Phase == "publishing" || op.Phase == "conflict") {
+	if action == "finish" && (op.Phase == "verified" || op.Phase == "publishing") {
 		if err := m.validClone(op.VM, volume); err != nil {
 			return err
 		}

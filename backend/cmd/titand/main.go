@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -379,6 +380,9 @@ func run(opts options) error {
 	}
 	machines.BridgeReady = connection.BridgeReady
 	machines.Timezone = settings.CurrentTimezone
+	// consoleMu keeps giving the text console back apart from a VM start,
+	// which may just have taken it, until libvirt has the device.
+	var consoleMu sync.Mutex
 	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
 		devices := hardware.NewManager()
 		if _, err := devices.Check(pci, usb); err != nil {
@@ -388,9 +392,11 @@ func run(opts options) error {
 		if err != nil {
 			return nil, err
 		}
+		consoleMu.Lock()
 		// After the containers: an automatic NVIDIA switch stops them first,
 		// then nothing on the NAS may hold the device any more.
 		if _, err := devices.PrepareHandoff(pci); err != nil {
+			consoleMu.Unlock()
 			slog.Warn("VM hardware still in use on the NAS", "vm", name, "err", err)
 			finish(false)
 			return nil, err
@@ -400,12 +406,15 @@ func run(opts options) error {
 			if !started {
 				devices.RestoreConsole()
 			}
+			consoleMu.Unlock()
 		}, nil
 	}
 	machines.AfterPoll = func(ctx context.Context, running map[string]bool) error {
 		err := containers.ReturnVMHardware(ctx, running)
 		if !opts.dev {
+			consoleMu.Lock()
 			hardware.NewManager().RestoreConsole()
+			consoleMu.Unlock()
 		}
 		return err
 	}

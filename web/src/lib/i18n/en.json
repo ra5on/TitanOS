@@ -897,6 +897,7 @@
 	"vms.showXml": "View the configuration as XML",
 	"vms.screenConnecting": "Connecting to the screen …",
 	"vms.screenLost": "The connection to the screen was lost. Trying again …",
+	"vms.screenDisabled": "Consoles are switched off under Settings › Access; the screen opens once they are switched on again.",
 	"vms.screenDeclined": "The screen was not opened because the confirmation was cancelled.",
 	"vms.screenOpen": "Open screen",
 	"vms.resolution": "{width} × {height} · shown {shownWidth} × {shownHeight}",
@@ -2168,6 +2169,7 @@
 	"vms.form.requiredCompanions": "Functions {list} belong to the same card. Select the functions explicitly; functions sharing an isolation group must be selected together.",
 	"error.hardware_incomplete_group": "Select the listed functions in the same IOMMU group. Nothing is added automatically.",
 	"error.hardware_in_use": "A program on the NAS is still using the graphics device, for example a container with /dev/dri. Stop it and start the VM again; the log names the program. The device is not taken away from it while running, because that can bring the whole NAS down.",
+	"error.vm_hardware_busy": "A Docker app is being started on this hardware, or a running app backup will restart a container that uses it. Try again afterwards.",
 	"error.plugin_update_pending": "A system update is running or awaiting a restart. Complete or cancel it before changing plugins.",
 	"plugins.activateNow": "Activate immediately",
 	"plugins.activateLaterHint": "Without this option, the plugin is only installed on the data volume. Running VMs and containers remain unchanged. You can activate it later when the required hardware is available.",
@@ -4192,5 +4194,11 @@
 	"power.workloadsNote": "Running containers and VMs are shut down cleanly.",
 	"power.maintenanceNote": "Running storage maintenance (rebuild, check) may be interrupted; mdadm resumes RAID maintenance by itself after the start.",
 	"power.diskTestNote": "Running disk tests (prepare disks) do not survive a restart and have to be started again afterwards.",
+	"power.afterRebuild": "Only after the running rebuild or check has finished",
+	"power.waitingRestart": "The restart is scheduled and starts once rebuilds and checks have finished. Restarting titand drops it.",
+	"power.waitingShutdown": "The shutdown is scheduled and starts once rebuilds and checks have finished. Restarting titand drops it.",
+	"power.pendingRestart": "{user} scheduled a restart after the rebuild.",
+	"power.pendingShutdown": "{user} scheduled a shutdown after the rebuild.",
+	"power.cancelWaiting": "Cancel scheduled action",
 	"power.wakeOnLanNote": "With Wake-on-LAN switched on (Settings › Energy), the NAS can also be switched on again over the network."
 }

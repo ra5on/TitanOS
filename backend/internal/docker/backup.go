@@ -25,20 +25,21 @@ func (m *Manager) BackupLease(ctx context.Context) (*BackupLease, error) {
 	// one that is underway finish before the backup takes over.
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
-	if m.composing > 0 {
-		return nil, errors.New("Docker is changing containers")
+	if len(m.composing) > 0 {
+		return nil, errors.New("containers are being changed by Docker")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, job := range m.jobs {
 		if job.State == "running" {
-			return nil, errors.New("Docker app work is running")
+			return nil, errors.New("work on a Docker app is running")
 		}
 	}
 	if m.backups > 0 {
 		return nil, errors.New("another app backup holds Docker")
 	}
 	m.backups++
+	clear(m.backupStopped)
 	return &BackupLease{manager: m}, nil
 }
 func (l *BackupLease) Close() {
@@ -46,6 +47,7 @@ func (l *BackupLease) Close() {
 		l.closed = true
 		l.manager.mu.Lock()
 		l.manager.backups--
+		clear(l.manager.backupStopped)
 		l.manager.mu.Unlock()
 	}
 }
@@ -71,6 +73,11 @@ func (l *BackupLease) Containers(ctx context.Context) ([]Container, error) {
 	return out, nil
 }
 func (l *BackupLease) Stop(ctx context.Context, id string) error {
+	// Recorded before the stop: from now on no VM may take its hardware,
+	// so Start below can bring it back.
+	l.manager.mu.Lock()
+	l.manager.backupStopped[id] = true
+	l.manager.mu.Unlock()
 	if err := l.manager.api.post(ctx, "/containers/"+url.PathEscape(id)+"/stop", url.Values{"t": []string{"60"}}); err != nil {
 		return err
 	}
@@ -89,8 +96,22 @@ func (l *BackupLease) Stop(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// Start goes through the same GPU lease check as any container start.
 func (l *BackupLease) Start(ctx context.Context, id string) error {
-	return l.manager.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil)
+	m := l.manager
+	m.hardwareMu.Lock()
+	defer m.hardwareMu.Unlock()
+	if err := m.canStartContainer(ctx, url.PathEscape(id)); err != nil {
+		return err
+	}
+	if err := m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	delete(m.backupStopped, id)
+	m.mu.Unlock()
+	return nil
 }
 
 type BackupMount struct {

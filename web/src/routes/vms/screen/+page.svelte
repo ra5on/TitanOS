@@ -67,7 +67,7 @@
 				>{t('vms.screenDeclined')}</span
 			><button type="button" onclick={() => screen?.reconnect()}>{t('vms.screenOpen')}</button>
 		{:else if connectionPhase !== 'connected'}<span class="muted" role="status"
-				>{t(connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</span
+				>{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</span
 			>{/if}
 		<span class="grow"></span>
 		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}

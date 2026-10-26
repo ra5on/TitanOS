@@ -52,7 +52,7 @@ func TestHandoffRefusesDeviceInUse(t *testing.T) {
 	client(t, proc, "100", "jellyfin", "0000:00:02.0")
 	os.MkdirAll(filepath.Join(proc, "self"), 0o755) // not a process
 	fb := console(t, sys, "vtcon1", "(M) frame buffer device", "1")
-	m := &Manager{sys: sys, proc: proc}
+	m := &Manager{sys: sys, proc: proc, state: t.TempDir()}
 
 	users, err := m.Users([]string{"0000:00:02.0"})
 	if err != nil || !slices.Equal(users, []string{"jellyfin (100)"}) {
@@ -76,7 +76,7 @@ func TestHandoffMovesConsoleOffPrimaryDisplay(t *testing.T) {
 	driver(t, sys, "0000:00:02.0", "i915")
 	dummy := console(t, sys, "vtcon0", "(S) dummy device", "1")
 	fb := console(t, sys, "vtcon1", "(M) frame buffer device", "1")
-	m := &Manager{sys: sys, proc: proc}
+	m := &Manager{sys: sys, proc: proc, state: t.TempDir()}
 
 	detached, err := m.PrepareHandoff([]string{"0000:00:02.0"})
 	if err != nil || !detached {
@@ -97,5 +97,18 @@ func TestHandoffMovesConsoleOffPrimaryDisplay(t *testing.T) {
 	m.RestoreConsole()
 	if bound(t, fb) != "1" {
 		t.Fatalf("console not restored: %q", bound(t, fb))
+	}
+}
+
+// A console that TitanOS did not take is left alone.
+func TestRestoreConsoleOnlyGivesBackWhatItTook(t *testing.T) {
+	sys := t.TempDir()
+	device(t, sys, "0000:00:02.0", "030000", "8086", 0, map[string]string{"boot_vga": "1"})
+	driver(t, sys, "0000:00:02.0", "i915")
+	fb := console(t, sys, "vtcon1", "(M) frame buffer device", "0")
+	m := &Manager{sys: sys, proc: t.TempDir(), state: t.TempDir()}
+	m.RestoreConsole()
+	if bound(t, fb) != "0\n" {
+		t.Fatalf("a console detached by someone else was rebound: %q", bound(t, fb))
 	}
 }

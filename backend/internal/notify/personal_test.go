@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -93,9 +94,12 @@ func TestPersonalOncePerKeyAndWithLink(t *testing.T) {
 
 func TestPersonalAgentRateLimit(t *testing.T) {
 	m, _ := newManager(t)
+	// Deliveries run in the background and read the clock too.
+	var clock sync.Mutex
+	current := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { clock.Lock(); defer clock.Unlock(); return current }
+	advance := func(d time.Duration) { clock.Lock(); current = current.Add(d); clock.Unlock() }
 	personalSink(t, m, "alex", Quiet{})
-	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	m.now = func() time.Time { return now }
 	msg := PersonalMessage{Event: EventAgent, Severity: Info, Title: "Hi", Text: "x"}
 	if err := m.SendPersonal("alex", "", msg); err != nil {
 		t.Fatal(err)
@@ -104,12 +108,12 @@ func TestPersonalAgentRateLimit(t *testing.T) {
 		t.Fatalf("second within a minute: %v", err)
 	}
 	for i := range 19 {
-		now = now.Add(time.Minute + time.Second)
+		advance(time.Minute + time.Second)
 		if err := m.SendPersonal("alex", "", msg); err != nil {
 			t.Fatalf("message %d: %v", i+2, err)
 		}
 	}
-	now = now.Add(2 * time.Minute)
+	advance(2 * time.Minute)
 	if err := m.SendPersonal("alex", "", msg); !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("21st within an hour: %v", err)
 	}

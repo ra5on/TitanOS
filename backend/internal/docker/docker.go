@@ -146,9 +146,9 @@ type Manager struct {
 	hardwareMu     sync.Mutex
 	hardwareRunDir string
 	gpuLeases      map[string]gpuLease
-	// composing counts `docker compose up` runs whose hardware was resolved
-	// against the current leases; guarded by hardwareMu.
-	composing int
+	// composing holds the hardware of each running `docker compose up`,
+	// resolved against the leases of its start; guarded by hardwareMu.
+	composing map[string]composeUse
 
 	store  *config.Store
 	runner run.Runner
@@ -168,6 +168,9 @@ type Manager struct {
 	jobs     map[string]*Job
 	appList  []string // apps in /config; nil until read
 	backups  int      // open BackupLeases; no container lifecycle changes
+	// backupStopped are containers the open backup stopped and will start
+	// again; a VM must not take their hardware meanwhile.
+	backupStopped map[string]bool
 
 	// What the registries said the last time they were asked.
 	remote         map[string]string   // image reference → digest
@@ -178,7 +181,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store, configDir string) *Manager {
-	return &Manager{hardwareRunDir: "/run/titanos-hardware", gpuLeases: map[string]gpuLease{},
+	return &Manager{hardwareRunDir: "/run/titanos-hardware", gpuLeases: map[string]gpuLease{}, composing: map[string]composeUse{}, backupStopped: map[string]bool{},
 		store: store, runner: run.Exec{}, api: newClient(socketPath), configDir: configDir, mountRoot: "/mnt", daemonConfig: daemonConfig,
 		samples: map[string]*sample{}, jobs: map[string]*Job{}, remote: map[string]string{}, local: map[string][]string{},
 	}
@@ -295,7 +298,7 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 	}
 	// A running compose up or app backup owns the containers; retry on the
 	// next tick. Only a vanished data volume stops the engine regardless.
-	if (m.composing > 0 || m.backupActive()) && !(applied != "" && !slices.Contains(mounted, settings.Volume)) {
+	if (len(m.composing) > 0 || m.backupActive()) && !(applied != "" && !slices.Contains(mounted, settings.Volume)) {
 		return nil
 	}
 
@@ -660,6 +663,10 @@ func (m *Manager) AppsWithUpdates(ctx context.Context) []string {
 }
 
 var errBackupRunning = fmt.Errorf("%w: an app backup is running", ErrBusy)
+
+// ErrHardwareBusy refuses a VM start whose devices a Docker app is being
+// started on, or that containers stopped by a running app backup need.
+var ErrHardwareBusy = errors.New("docker: the hardware is needed by a starting app or an app backup")
 
 // backupActive reports an open BackupLease.
 func (m *Manager) backupActive() bool {

@@ -100,8 +100,8 @@ eingebauten Weboberfläche, ohne Neustart des NAS). Das entscheidet
   wird deshalb immer voll.
 - Haben sich seit dem Tag der Basis nur `backend/`, `web/`, `docs/`, die
   Browserprüfungen, `examples/` und `agent.yml` (der frühere Beispiel-Agent,
-  seit dem Assistenten entfernt) und die Projektdateien (README, AGENTS,
-  CLAUDE, …) geändert, wird es
+  seit dem Assistenten entfernt) und die Projektdateien (README, CLAUDE,
+  CONTRIBUTING, …) geändert, wird es
   ein App-Release. Jede andere Änderung, etwa unter
   `build/`, `boot/`, `scripts/` (außer Browserprüfungen), `.github/` oder am
   `Makefile`, ergibt ein volles Release.

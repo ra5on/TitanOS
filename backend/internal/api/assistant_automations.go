@@ -198,7 +198,7 @@ func (s *Server) automationEvent(ctx context.Context, u auth.User, t assistant.T
 	case "homeassistant":
 		ha := s.opts.HomeAssistant
 		if ha == nil || !ha.Active() {
-			return "", false, fmt.Errorf("Home Assistant is not connected")
+			return "", false, errors.New("no connection to Home Assistant")
 		}
 		if !ha.Allowed(t.Target) {
 			return "", false, homeassistant.ErrNotAllowed
