@@ -188,6 +188,10 @@ type Manager struct {
 	// sleepSamples is protected by actions, never persisted on the stick.
 	sleepSamples  map[string]sleepSample
 	btrfsProgress map[string]btrfsProgress
+	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
+	// mirror (protected by actions). clock replaces time.Now in tests.
+	btrfsSeen map[string]time.Time
+	clock     func() time.Time
 }
 
 // NewManager returns a manager working on the real system.
@@ -289,7 +293,9 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		if volume.Filesystem == "btrfs" {
 			uuid = volume.FilesystemUUID
 		}
-		volumeByArray[normalizeUUID(uuid)] = volume.Name
+		if uuid = normalizeUUID(uuid); uuid != "" {
+			volumeByArray[uuid] = volume.Name
+		}
 	}
 
 	status := Status{Disks: []Disk{}, Volumes: []Volume{}, DiskSleep: m.DiskSleep()}
@@ -317,7 +323,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 			MountPoint: m.mountRoot + "/" + cfg.Name, State: VolumeMissing, Members: []Member{},
 		}
 		for _, a := range arrays {
-			if a.uuid != normalizeUUID(cfg.ArrayUUID) {
+			if a.uuid == "" || cfg.Filesystem == "btrfs" || a.uuid != normalizeUUID(cfg.ArrayUUID) {
 				continue
 			}
 			volume.RaidDisks = a.disks
@@ -451,7 +457,11 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 		m.mountAll(ctx)
 		m.refreshBtrfs(ctx)
-		if loaded {
+		// A mirror still waiting for its second member is not settled: the
+		// boot check must not count it as missing before the grace is over.
+		// After that it is settled even if mounting fails, so that a broken
+		// mirror does not undo a system update.
+		if loaded && !m.btrfsWaiting() {
 			m.mu.Lock()
 			m.settled = true
 			m.mu.Unlock()
@@ -511,6 +521,13 @@ func (m *Manager) ActionsRunning() bool {
 	}
 	m.actions.Unlock()
 	return false
+}
+
+func (m *Manager) now() time.Time {
+	if m.clock != nil {
+		return m.clock()
+	}
+	return time.Now()
 }
 
 func (m *Manager) readMounts() map[string]bool {

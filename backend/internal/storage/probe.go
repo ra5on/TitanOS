@@ -64,6 +64,13 @@ func isArray(d blockDevice) bool {
 	return strings.HasPrefix(d.Type, "raid") || d.Type == "md" || d.Type == "linear"
 }
 
+// ownedByDisk reports whether an lsblk node is stored on one disk only: the
+// disk itself or one of its partitions. Arrays, LVM volumes, crypt and other
+// device-mapper targets sit on top and can span other disks.
+func ownedByDisk(d blockDevice) bool {
+	return d.Type == "disk" || d.Type == "part" || d.Type == ""
+}
+
 // classify turns the lsblk tree of one disk into what TitanOS shows.
 // volumeByArray maps the UUID of an md array to the volume it belongs to.
 func classify(d blockDevice, volumeByArray map[string]string) Disk {
@@ -76,11 +83,18 @@ func classify(d blockDevice, volumeByArray map[string]string) Disk {
 		Kind:      diskKind(d),
 	}
 
-	stick := false
+	stick, mountedAbove := false, false
 	var inspect func(node blockDevice)
 	inspect = func(node blockDevice) {
 		if isArray(node) {
 			// The filesystem of a volume lives on the array, not on this disk.
+			// Something mounted on top still makes the disk busy unless the
+			// array is a TitanOS volume (decided below).
+			node.walk(func(above blockDevice) {
+				if above.Mountpoint != "" {
+					mountedAbove = true
+				}
+			})
 			return
 		}
 		if node.Mountpoint != "" {
@@ -107,6 +121,9 @@ func classify(d blockDevice, volumeByArray map[string]string) Disk {
 		}
 	}
 	inspect(d)
+	if mountedAbove && disk.Volume == "" {
+		disk.Mounted = true
+	}
 
 	switch {
 	case stick:

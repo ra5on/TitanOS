@@ -45,6 +45,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Kompakter Schnellzugriff:** Suche, Terminal, Assistent, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
 - **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
 - **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
+- **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus.
 - **Visueller Editor mit Vorschau:** Änderungen direkt sehen, rückgängig machen, wiederholen, speichern oder verwerfen.
 
 [![Dashboard-Editor mit globalen Schiebereglern für Transparenz, Blur und Glow](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
@@ -56,8 +57,8 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 ### Speicher und Laufwerke
 
 - **Klassisches RAID:** mdadm mit RAID 0, 1, 5, 6 und 10; Dateisysteme ext4 und XFS. Volumes anlegen, Zustand und Belegung sehen, Mitglieder ersetzen und Wiederaufbau oder Konsistenzprüfung verfolgen.
-- **Btrfs-Spiegel:** native RAID1-Volumes aus genau zwei Platten, schreibgeschützte Snapshots, Scrub und Plattenersatz. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots oder einzelner Dateien in neue Ordner.
-- **Vorhandenen Speicher übernehmen:** lesende Vorschau unterstützter mdadm- und Btrfs-Volumes, danach Registrierung ohne Formatierung. RAID5/6 lässt sich um eine Platte erweitern; dafür ist ein separates Rettungs-Volume erforderlich.
+- **Btrfs-Spiegel:** native RAID1-Volumes aus genau zwei Platten, schreibgeschützte Snapshots, Scrub und Plattenersatz. Fehlt beim Start ein Mitglied, wartet TitanOS 60 Sekunden auf langsam anlaufende Platten, bevor der Spiegel ohne Redundanz eingebunden und als solcher gemeldet wird. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots oder einzelner Dateien in neue Ordner.
+- **Vorhandenen Speicher übernehmen:** lesende Vorschau unterstützter mdadm- und Btrfs-Volumes, danach Registrierung ohne Formatierung. RAID5/6 lässt sich um eine Platte erweitern; dafür ist ein separates Rettungs-Volume erforderlich. Hinzufügen, Erweitern und Ersetzen prüfen die gewählte Platte erneut und lassen fremde Arrays, LVM und eingebundene Dateisysteme auf anderen Platten unangetastet.
 - **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Einstellbarer Laufwerksruhezustand.
 - **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
@@ -106,8 +107,8 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 - **KVM/QEMU und libvirt:** VMs anlegen, starten, sauber herunterfahren und automatisch starten. UEFI als Standard, optional Legacy-BIOS für passende Gäste; Windows 11 mit TPM 2.0 und Secure Boot im Gast.
 - **Ressourcen und Datenträger:** CPU-Kerne zuweisen oder reservieren, qcow2/raw und vorhandene Abbilder nutzen, physische Platten einbinden und ausgeschaltete VMs mit neuen Kennungen klonen.
-- **Browserkonsolen:** Übersicht, Bildschirm und Snapshots mit gemeinsamer Bedienleiste und bündiger VM-Liste. VNC zeigt ausschließlich das Gastbild; Tastenkombinationen, Text senden, Vollbild und Bildschirmfoto bleiben außerhalb der Bildfläche erreichbar. Serielle Konsole und ISO-Wechsel im laufenden Betrieb.
-- **Netzwerk und Geräte:** bestätigte benannte NAS-Bridges mit eigener Gast-IP oder QEMU-User-Networking; erkannte IP-Adressen, PCI/GPU-/USB-Passthrough und Ordnerfreigaben per virtiofs.
+- **Browserkonsolen:** Übersicht, Bildschirm und Snapshots mit gemeinsamer Bedienleiste und bündiger VM-Liste. VNC zeigt ausschließlich das Gastbild; Tastenkombinationen, Text senden, Vollbild und Bildschirmfoto bleiben außerhalb der Bildfläche erreichbar. Der Bildschirm gilt als Konsole: erneute Passwortbestätigung (abschaltbar), Ende nach 15 Minuten ohne Eingabe und beim Abmelden. Serielle Konsole und ISO-Wechsel im laufenden Betrieb.
+- **Netzwerk und Geräte:** bestätigte benannte NAS-Bridges mit eigener Gast-IP oder QEMU-User-Networking; erkannte IP-Adressen, PCI/GPU-/USB-Passthrough und Ordnerfreigaben per virtiofs. Eine Grafik wird nur übergeben, wenn kein Programm des NAS sie noch nutzt; bei der Start-iGPU wird die Textkonsole vorher gelöst und danach zurückgegeben, damit das NAS dabei nicht hängen bleibt.
 - **Installationsmedien und Abbilder:** Browser-Upload oder HTTP(S)-Import, gzip/xz/ZIP auf dem Daten-Volume entpacken, Prüfsummen und kontrollierte Wiederaufnahme. Offizielle stabile Windows-VirtIO-ISO automatisch als zweites CD-Laufwerk einlegen. [Medienimport und Grenzen](docs/VM-MEDIA.md).
 - **Snapshots:** VM-Datenträger, Konfiguration und bei unterstützten Gästen RAM-Zustand, UEFI und TPM sichern und zurücksetzen. Zeitpläne, Aufbewahrung und Wiederherstellungsstatus; Voraussetzungen und Ausschlüsse werden angezeigt.
 
@@ -183,8 +184,8 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall.
 - **Energie und USV:** CPU-Profile, Herunterfahren und Einschalten per RTC-Zeitplan, Wake-on-LAN und Verhalten des physischen Ein-/Ausschalters. USB- oder Netzwerk-USV über NUT, Abschalten bei Stromausfall und Weitergabe des USV-Status.
 - **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start oder eigene PEM-Zertifikate samt Schlüssel und Kette importieren.
-- **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt.
-- **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse.
+- **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
+- **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse. Eigene ntfy-/Discord-Ziele normaler Benutzerkonten erreichen nur öffentliche Adressen, nicht das Heimnetz.
 
 [Netzwerk](docs/NETWORKING.md) · [Tailscale](docs/TAILSCALE.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
 
@@ -264,6 +265,8 @@ Voraussetzungen: Go 1.27+, Node.js 24+, Python 3.11+ und `make`. Für Systemabbi
 | `make build` | Weboberfläche, `backend/bin/titand` mit eingebetteter UI und `backend/bin/titanosctl` bauen |
 | `make test` | Go vet/Tests, Webtests und Svelte-/TypeScript-Prüfung ausführen |
 | `make test-release` | Paketierung, Lizenzinventar, Signaturen und Manipulationserkennung prüfen |
+| `node scripts/test-ui-*.mjs` | Browserprüfungen mit isolierten Testdaten gegen `npm --prefix web run preview` (Playwright, `UI_URL`, `PLAYWRIGHT_MODULE`) |
+| `node scripts/test-ui-crawl.mjs` | Jede Seite eines `titand -dev` öffnen und jeden Knopf klicken, um Darstellungsfehler zu finden (`UI_URL`, `UI_LOGIN=name:passwort`) |
 | `make dev` | Backend im Entwicklungsmodus und Vite mit automatischem Neuladen starten |
 | `make zip` | Systemabbild und bootfähigen Stick-Inhalt unter `out/` bauen |
 | `make zip-dev` | Entwicklungsabbild mit automatischer root-Anmeldung an der lokalen Konsole bauen |

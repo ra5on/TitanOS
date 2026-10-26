@@ -266,7 +266,11 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 		}
 		if member.Method == "postgres-export" {
 			dump := filepath.Join(m.MountRoot, volume, ".titanos", "appbackups", op.ID, member.Identity+".sql")
-			if err := dumpPostgres(ctx, member.Identity, dump); err != nil {
+			user, err := dl.PostgresUser(ctx, member.Identity)
+			if err != nil {
+				return nil, nil, errors.Join(err, finish())
+			}
+			if err := dumpPostgres(ctx, member.Identity, user, dump); err != nil {
 				return nil, nil, errors.Join(err, finish())
 			}
 			paths = append(paths, dump)
@@ -300,9 +304,24 @@ func (w *boundedWriter) Write(b []byte) (int, error) {
 	w.left -= int64(n)
 	return n, err
 }
-func dumpPostgres(ctx context.Context, id, target string) error {
+
+// postgresDumpArgs runs pg_dumpall as the OS user postgres over the local
+// socket, connecting as the image's superuser role. No shell and no password
+// argument; the role is one argv element.
+func postgresDumpArgs(id, user string) ([]string, error) {
 	if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(id) {
-		return errors.New("invalid container identity")
+		return nil, errors.New("invalid container identity")
+	}
+	if user == "" || len(user) > 63 || strings.ContainsFunc(user, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return nil, errors.New("invalid PostgreSQL user")
+	}
+	return []string{"exec", "--user", "postgres", id, "pg_dumpall", "--no-password", "--username=" + user}, nil
+}
+
+func dumpPostgres(ctx context.Context, id, user, target string) error {
+	args, err := postgresDumpArgs(id, user)
+	if err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -311,7 +330,7 @@ func dumpPostgres(ctx context.Context, id, target string) error {
 		return err
 	}
 	defer file.Close()
-	cmd := exec.CommandContext(ctx, "docker", "exec", "--user", "postgres", id, "pg_dumpall", "--no-password")
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout = &boundedWriter{file, 8 << 30, cancel}
 	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {

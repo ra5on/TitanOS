@@ -209,6 +209,8 @@ func disabledBackup(store *config.Store) *configbackup.Manager {
 // loadedNotify returns a notifier without any channel.
 func loadedNotify(store *config.Store) *notify.Manager {
 	m := notify.NewManager(store)
+	// Test servers listen on loopback, which only administrators may reach.
+	m.Confined = func(string) bool { return false }
 	m.Load()
 	return m
 }

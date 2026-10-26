@@ -108,6 +108,21 @@ func (s *Sessions) Get(token string) (Session, bool) {
 	return *session, true
 }
 
+// Peek returns the session for a token without marking it as used, for
+// checks that run on their own, such as those of an open console.
+func (s *Sessions) Peek(token string) (Session, bool) {
+	if token == "" {
+		return Session{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sha256.Sum256([]byte(token))]
+	if !ok || expired(session, s.now()) {
+		return Session{}, false
+	}
+	return *session, true
+}
+
 // Delete ends the session for a token.
 func (s *Sessions) Delete(token string) {
 	s.mu.Lock()

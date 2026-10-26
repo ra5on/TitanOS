@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -231,7 +232,7 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.Import(r.Context(), req); err != nil {
+	if err := s.opts.Storage.Import(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "import registration", err)
 		return
 	}
@@ -262,7 +263,7 @@ func (s *Server) handleGrowthStart(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.StartGrowth(r.Context(), r.PathValue("name"), req); err != nil {
+	if err := s.opts.Storage.StartGrowth(context.WithoutCancel(r.Context()), r.PathValue("name"), req); err != nil {
 		writeStorageError(w, r, "growth start", err)
 		return
 	}

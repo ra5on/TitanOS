@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ra5on/TitanOS/backend/internal/minisign"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -199,8 +200,9 @@ func (m *Manager) prepareSDK(ctx context.Context, volume string, sdk buildSDK) (
 	if err != nil || sum != sdk.SHA256 || size != sdk.Size {
 		m.buildPhase("environment")
 		base, _ := m.releaseBase()
+		// A previous interrupted transfer is resumed; downloadImage verifies
+		// the complete file and restarts on a hash mismatch.
 		part := archive + ".part"
-		os.Remove(part)
 		if err := m.downloadImage(ctx, base+sdk.Asset, part, Manifest{SHA256: sdk.SHA256, Size: sdk.Size}); err != nil {
 			return "", err
 		}
@@ -241,8 +243,157 @@ func (m *Manager) prepareSDK(ctx context.Context, volume string, sdk buildSDK) (
 	}
 	return root, nil
 }
+
+// buildLogPath lies beside the sandbox root, in titand's private build
+// directory. The sandbox (uid 0, writable /work) cannot see or replace it, so
+// PID 1 never follows a sandbox-planted symlink when opening it for append.
+func buildLogPath(root string) string {
+	return filepath.Join(filepath.Dir(root), "build.log")
+}
+
+// resetBuildLog recreates the log as a fresh, private regular file.
+func resetBuildLog(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return err
+	}
+	return file.Close()
+}
+
+// buildLogTail returns at most the last 4 KiB of the log, never through a link.
+func buildLogTail(path string) string {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	st, err := file.Stat()
+	if err != nil || !st.Mode().IsRegular() {
+		return ""
+	}
+	offset := max(int64(0), st.Size()-4096)
+	buf := make([]byte, st.Size()-offset)
+	n, _ := file.ReadAt(buf, offset)
+	return string(buf[:n])
+}
+
+// sandboxFile opens a file the build sandbox produced below root/work. The
+// sandbox runs as uid 0 with a writable /work, so nothing there is trusted:
+// no symlinks in any component, no FIFOs/devices, no hard links, bounded size.
+// The sandbox has exited (systemd-run --wait kills its cgroup) before titand
+// reads, and os.Root additionally confines every lookup to /work.
+func sandboxFile(root, name string, limit int64) (*os.File, int64, error) {
+	invalid := fmt.Errorf("%w: unsafe build output %s", ErrInvalid, name)
+	work := filepath.Join(root, "work")
+	if st, err := os.Lstat(work); err != nil || !st.IsDir() {
+		return nil, 0, invalid
+	}
+	dir, err := os.OpenRoot(work)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer dir.Close()
+	parts := strings.Split(filepath.Clean(name), string(filepath.Separator))
+	for i := range parts[:len(parts)-1] {
+		if st, err := dir.Lstat(filepath.Join(parts[:i+1]...)); err != nil || !st.IsDir() {
+			return nil, 0, invalid
+		}
+	}
+	link, err := dir.Lstat(name)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !safeSandboxEntry(link) || link.Size() > limit {
+		return nil, 0, invalid
+	}
+	file, err := dir.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+	st, err := file.Stat()
+	if err != nil || !os.SameFile(link, st) || !safeSandboxEntry(st) || st.Size() > limit {
+		file.Close()
+		return nil, 0, invalid
+	}
+	return file, st.Size(), nil
+}
+
+// safeSandboxEntry accepts directories and singly linked regular files.
+func safeSandboxEntry(st fs.FileInfo) bool {
+	if st.IsDir() {
+		return true
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	return st.Mode().IsRegular() && ok && sys.Nlink == 1
+}
+
+func readSandboxFile(root, name string, limit int64) ([]byte, error) {
+	file, size, err := sandboxFile(root, name, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data := make([]byte, size)
+	if _, err := io.ReadFull(file, data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func hashSandboxFile(root, name string, limit int64) (string, int64, error) {
+	file, _, err := sandboxFile(root, name, limit)
+	if err != nil {
+		return "", 0, err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	n, err := io.Copy(hash, io.LimitReader(file, limit+1))
+	return hex.EncodeToString(hash.Sum(nil)), n, err
+}
+
+// checkSandboxTree rejects anything but plain directories and singly linked
+// regular files before titand adopts a sandbox-written tree into its cache,
+// whose readers follow paths normally.
+func checkSandboxTree(path string) error {
+	if st, err := os.Lstat(path); err != nil || !st.IsDir() {
+		return fmt.Errorf("%w: unsafe build output", ErrInvalid)
+	}
+	return filepath.WalkDir(path, func(p string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		st, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !safeSandboxEntry(st) {
+			return fmt.Errorf("%w: unsafe build output %s", ErrInvalid, entry.Name())
+		}
+		return nil
+	})
+}
+
+// writeFresh replaces path with a new private file without following links.
+func writeFresh(path string, data []byte) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
 func buildCommand(root, action string) []string {
-	args := []string{"--wait", "--collect", "--quiet", "--unit=titanos-nvidia-build", "--property=RootDirectory=" + root, "--property=WorkingDirectory=/usr/lib/titanos/nvidia-build", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes", "--property=ProtectSystem=strict", "--property=ReadWritePaths=+/work", "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=", "--property=ProtectKernelTunables=yes", "--property=ProtectControlGroups=yes", "--property=RestrictSUIDSGID=yes", "--property=MemoryMax=2G", "--property=CPUQuota=200%", "--property=TasksMax=256", "--property=RuntimeMaxSec=7200", "--property=Nice=10", "--property=StandardOutput=append:" + filepath.Join(root, "work/build.log"), "--property=StandardError=inherit"}
+	args := []string{"--wait", "--collect", "--quiet", "--unit=titanos-nvidia-build", "--property=RootDirectory=" + root, "--property=WorkingDirectory=/usr/lib/titanos/nvidia-build", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes", "--property=ProtectSystem=strict", "--property=ReadWritePaths=+/work", "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=", "--property=ProtectKernelTunables=yes", "--property=ProtectControlGroups=yes", "--property=RestrictSUIDSGID=yes", "--property=MemoryMax=2G", "--property=CPUQuota=200%", "--property=TasksMax=256", "--property=RuntimeMaxSec=7200", "--property=Nice=10", "--property=StandardOutput=append:" + buildLogPath(root), "--property=StandardError=inherit"}
 	if action == "build" {
 		args = append(args, "--property=PrivateNetwork=yes")
 	} else {
@@ -289,23 +440,25 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepar
 			}
 		}
 	}()
+	// The SDK download is bounded by a stall timeout and resumes, not by the
+	// build deadline: a slow line must not make a 2 GiB SDK unreachable.
+	sdk, err := m.fetchBuildSDK(ctx)
+	if err != nil {
+		return err
+	}
+	root, err := m.prepareSDK(ctx, settings.Volume, sdk)
+	if err != nil {
+		return err
+	}
 	operation, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	sdk, err := m.fetchBuildSDK(operation)
-	if err != nil {
-		return err
-	}
-	root, err := m.prepareSDK(operation, settings.Volume, sdk)
-	if err != nil {
-		return err
-	}
 	if !prepare {
 		m.buildPhase("downloading")
 		if _, err = m.runBuildJob(operation, root, "check"); err != nil {
 			return err
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(root, "work/source-status.json"))
+	data, err := readSandboxFile(root, "source-status.json", 1<<20)
 	if err != nil {
 		return err
 	}
@@ -328,11 +481,14 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepar
 		return err
 	}
 	result := filepath.Join(root, "work/result")
-	image, size, err := hashFile(filepath.Join(result, "nvidia.raw"), maxImageBytes)
+	if err = checkSandboxTree(result); err != nil {
+		return err
+	}
+	image, size, err := hashSandboxFile(root, "result/nvidia.raw", maxImageBytes)
 	if err != nil {
 		return err
 	}
-	raw, err := os.ReadFile(filepath.Join(result, "nvidia"+manifestSuffix))
+	raw, err := readSandboxFile(root, "result/nvidia"+manifestSuffix, 1<<20)
 	if err != nil {
 		return err
 	}
@@ -341,7 +497,7 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepar
 		return ErrInvalid
 	}
 	// Only titand can attest output after the sandbox has exited successfully.
-	packageSum, _, err := hashFile(filepath.Join(root, "work/packages.lock.json"), 1<<20)
+	packageSum, _, err := hashSandboxFile(root, "packages.lock.json", 1<<20)
 	if err != nil {
 		return err
 	}
@@ -349,10 +505,10 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepar
 	receipt := buildReceipt{ManifestSHA256: hex.EncodeToString(sum[:]), SDK: sdk.SHA256, PackagesSHA256: packageSum}
 	receipt.MAC = m.receiptMAC(receipt)
 	encoded, _ := json.Marshal(receipt)
-	if err = os.WriteFile(filepath.Join(result, localReceipt), encoded, 0600); err != nil {
+	if err = writeFresh(filepath.Join(result, localReceipt), encoded); err != nil {
 		return err
 	}
-	if err = os.WriteFile(filepath.Join(result, ".ready"), []byte(m.Release), 0600); err != nil {
+	if err = writeFresh(filepath.Join(result, ".ready"), []byte(m.Release)); err != nil {
 		return err
 	}
 	if err = os.MkdirAll(m.driverCache(settings.Volume), 0700); err != nil {
@@ -407,6 +563,10 @@ func (m *Manager) RequestDriverBuild(mounted []string) error {
 }
 
 func (m *Manager) runBuildJob(ctx context.Context, root, action string) (string, error) {
+	logPath := buildLogPath(root)
+	if err := resetBuildLog(logPath); err != nil {
+		return "", err
+	}
 	output, err := m.runner.Run(ctx, "", "systemd-run", buildCommand(root, action)...)
 	if ctx.Err() != nil {
 		cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -415,16 +575,8 @@ func (m *Manager) runBuildJob(ctx context.Context, root, action string) (string,
 		return output, errors.Join(err, stopErr)
 	}
 	if err != nil {
-		file, openErr := os.Open(filepath.Join(root, "work/build.log"))
-		if openErr == nil {
-			defer file.Close()
-			if st, e := file.Stat(); e == nil {
-				offset := max(int64(0), st.Size()-4096)
-				buf := make([]byte, st.Size()-offset)
-				if n, _ := file.ReadAt(buf, offset); n > 0 {
-					err = fmt.Errorf("%w\n%s", err, string(buf[:n]))
-				}
-			}
+		if tail := buildLogTail(logPath); tail != "" {
+			err = fmt.Errorf("%w\n%s", err, tail)
 		}
 	}
 	return output, err

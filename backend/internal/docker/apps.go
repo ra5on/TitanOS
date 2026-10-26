@@ -151,12 +151,16 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	m.mu.Lock()
 	running := m.applied != ""
 	known := slices.Contains(m.knownApps(), name)
+	backup := m.backups > 0
 	m.mu.Unlock()
 	if !running {
 		return ErrNotRunning
 	}
 	if known {
 		return ErrExists
+	}
+	if backup {
+		return errBackupRunning
 	}
 
 	// Let Docker check the file before anything is kept.
@@ -179,6 +183,10 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	}
 	m.mu.Lock()
 	m.appList = nil
+	if m.backups > 0 {
+		m.mu.Unlock()
+		return errBackupRunning
+	}
 	job := &Job{State: "running"}
 	m.jobs[name] = job
 	m.mu.Unlock()
@@ -198,18 +206,22 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 			out, err = m.runner.Run(ctx, "", "docker", m.compose(volume, name, "pull", "--quiet")...)
 		}
 		if err == nil {
-			m.hardwareMu.Lock()
-			path, cleanup, prepareErr := m.hardwareCompose(ctx, name)
-			err = prepareErr
+			// Resolve hardware against the leases under hardwareMu, but run
+			// compose up (pulls, builds: minutes) without it. While composing
+			// is non-zero BeginVM refuses new GPU leases, so the resolved
+			// devices stay free until the containers run.
+			var path string
+			var cleanup func()
+			path, cleanup, err = m.beginCompose(ctx, name)
 			if err == nil {
 				args := m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")
 				args[4] = path
 				var up string
 				up, err = m.runner.Run(ctx, "", "docker", args...)
 				cleanup()
+				m.endCompose()
 				out += up
 			}
-			m.hardwareMu.Unlock()
 		}
 		if pull && err == nil {
 			// The hints are stale now; ask again what is current.
@@ -231,6 +243,22 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 	}()
 }
 
+func (m *Manager) beginCompose(ctx context.Context, name string) (string, func(), error) {
+	m.hardwareMu.Lock()
+	defer m.hardwareMu.Unlock()
+	path, cleanup, err := m.hardwareCompose(ctx, name)
+	if err == nil {
+		m.composing++
+	}
+	return path, cleanup, err
+}
+
+func (m *Manager) endCompose() {
+	m.hardwareMu.Lock()
+	m.composing--
+	m.hardwareMu.Unlock()
+}
+
 // begin registers a job for a known app, unless one is running.
 func (m *Manager) begin(name string) (*Job, string, error) {
 	if m.Disabled {
@@ -247,6 +275,9 @@ func (m *Manager) begin(name string) (*Job, string, error) {
 	}
 	if job := m.jobs[name]; job != nil && job.State == "running" {
 		return nil, "", ErrBusy
+	}
+	if m.backups > 0 {
+		return nil, "", errBackupRunning
 	}
 	job := &Job{State: "running"}
 	m.jobs[name] = job
@@ -362,12 +393,16 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 	known := slices.Contains(m.knownApps(), name)
 	job := m.jobs[name]
 	running := m.applied != ""
+	backup := m.backups > 0
 	m.mu.Unlock()
 	if !known {
 		return ErrNotFound
 	}
 	if job != nil && job.State == "running" {
 		return ErrBusy
+	}
+	if backup {
+		return errBackupRunning
 	}
 	if running {
 		down := []string{"down", "--remove-orphans"}

@@ -43,17 +43,35 @@ type Tokens struct {
 
 func NewTokens(store *config.Store) *Tokens {
 	t := &Tokens{store: store}
-	if store == nil {
-		return t
-	}
-	err := store.ReadJSON(tokenFile, &t.tokens)
-	t.loaded = err == nil || errors.Is(err, fs.ErrNotExist)
+	t.mu.Lock()
+	t.loadLocked()
+	t.mu.Unlock()
 	return t
+}
+
+// loadLocked reads the tokens until that worked once. A missing file means "no tokens" only when the stick is there
+// (its users folder can be listed): a stick that was not mounted yet at
+// start must not lead to a new, empty file that revokes every token.
+func (t *Tokens) loadLocked() {
+	if t.loaded || t.store == nil {
+		return
+	}
+	var tokens []APIToken
+	err := t.store.ReadJSON(tokenFile, &tokens)
+	if errors.Is(err, fs.ErrNotExist) {
+		if names, listErr := t.store.List("users"); listErr == nil && names != nil {
+			err = nil
+		}
+	}
+	if err == nil {
+		t.tokens, t.loaded = tokens, true
+	}
 }
 
 func (t *Tokens) List(user string) []APIToken {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.loadLocked()
 	list := []APIToken{}
 	for _, token := range t.tokens {
 		if token.User == user {
@@ -69,6 +87,7 @@ func (t *Tokens) List(user string) []APIToken {
 func (t *Tokens) Create(user User, name string, scopes []string) (APIToken, string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.loadLocked()
 	if !t.loaded {
 		return APIToken{}, "", ErrNotLoaded
 	}
@@ -134,6 +153,7 @@ func (t *Tokens) Lookup(plain string) (APIToken, bool) {
 	hash := sha256.Sum256([]byte(plain))
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.loadLocked()
 	if !t.loaded {
 		return APIToken{}, false
 	}
@@ -158,6 +178,7 @@ func (t *Tokens) Lookup(plain string) (APIToken, bool) {
 func (t *Tokens) Revoke(user, id string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.loadLocked()
 	if !t.loaded {
 		return ErrNotLoaded
 	}

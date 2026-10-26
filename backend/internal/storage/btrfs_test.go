@@ -32,8 +32,9 @@ func TestBtrfsCreateSafetyAndNativeMirror(t *testing.T) {
 	if !strings.Contains(commands, "mkfs.btrfs -f -L mirror -d raid1 -m raid1 /dev/sde1 /dev/sdf1") || strings.Contains(commands, "mdadm --create") {
 		t.Fatal(commands)
 	}
-	if !strings.Contains(commands, "subvolid=5,degraded") {
-		t.Fatal("missing Btrfs mount options", commands)
+	// Both members are there: a complete mirror is never mounted degraded.
+	if !strings.Contains(commands, "subvolid=5") || strings.Contains(commands, "degraded") {
+		t.Fatal("wrong Btrfs mount options", commands)
 	}
 	if cfg, ok := m.find("mirror"); !ok || cfg.ArrayUUID != "" || cfg.FilesystemUUID == "" {
 		t.Fatalf("not persisted by filesystem UUID: %+v", cfg)

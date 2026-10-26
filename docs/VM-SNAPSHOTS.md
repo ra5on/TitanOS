@@ -51,7 +51,7 @@ niemals automatisch ein zweites Mal eingespielt: Der Besitzer muss nötigenfalls
 den RAM verwerfen und später frisch booten. Das verhindert, dass alter RAM mit
 zwischenzeitlich weitergeschriebenen Platten kombiniert wird.
 
-Snapshots lassen sich einzeln mit Namensbestätigung löschen, auch während die VM
+Snapshots lassen sich einzeln nach einem Bestätigungsdialog löschen, auch während die VM
 läuft. Beschädigte/unvollständige Einträge bleiben sichtbar und können nach
 Bestätigung ihrer ID entfernt werden. Vor dem Entfernen einer VM müssen deren
 Snapshots ausdrücklich gelöscht werden. Ein Snapshot auf demselben Volume ist

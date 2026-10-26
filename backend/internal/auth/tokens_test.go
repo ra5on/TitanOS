@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +11,10 @@ import (
 )
 
 func TestPersonalTokensHashRestartAndRevoke(t *testing.T) {
-	store := config.Open(t.TempDir())
+	dir := t.TempDir()
+	// Tokens exist only next to accounts: the stick has its users folder.
+	os.Mkdir(filepath.Join(dir, "users"), 0o700)
+	store := config.Open(dir)
 	tokens := NewTokens(store)
 	user := User{Name: "alex", Role: RoleOwner, Created: time.Now().UTC()}
 	for i := 0; i < 20; i++ {

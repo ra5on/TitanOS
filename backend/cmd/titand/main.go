@@ -380,12 +380,35 @@ func run(opts options) error {
 	machines.BridgeReady = connection.BridgeReady
 	machines.Timezone = settings.CurrentTimezone
 	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
-		if _, err := hardware.NewManager().Check(pci, usb); err != nil {
+		devices := hardware.NewManager()
+		if _, err := devices.Check(pci, usb); err != nil {
 			return nil, err
 		}
-		return containers.BeginVM(ctx, name, pci, usb, autoGPU)
+		finish, err := containers.BeginVM(ctx, name, pci, usb, autoGPU)
+		if err != nil {
+			return nil, err
+		}
+		// After the containers: an automatic NVIDIA switch stops them first,
+		// then nothing on the NAS may hold the device any more.
+		if _, err := devices.PrepareHandoff(pci); err != nil {
+			slog.Warn("VM hardware still in use on the NAS", "vm", name, "err", err)
+			finish(false)
+			return nil, err
+		}
+		return func(started bool) {
+			finish(started)
+			if !started {
+				devices.RestoreConsole()
+			}
+		}, nil
 	}
-	machines.AfterPoll = containers.ReturnVMHardware
+	machines.AfterPoll = func(ctx context.Context, running map[string]bool) error {
+		err := containers.ReturnVMHardware(ctx, running)
+		if !opts.dev {
+			hardware.NewManager().RestoreConsole()
+		}
+		return err
+	}
 	machines.Disabled = opts.dev
 	if err := machines.Load(); err != nil {
 		slog.Warn("VMs not readable from /config", "err", err)
@@ -442,6 +465,12 @@ func run(opts options) error {
 	// Tells in the web UI, by mail and by push message when a volume or a
 	// disk needs attention.
 	notifier := notify.NewManager(store)
+	// Only owners and administrators may point their own channels into the
+	// home network; a plain user's go to public addresses only.
+	notifier.Confined = func(name string) bool {
+		user, ok := users.Get(name)
+		return !ok || !user.Role.CanAdminister()
+	}
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}

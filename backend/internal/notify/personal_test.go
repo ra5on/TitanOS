@@ -2,7 +2,9 @@ package notify
 
 import (
 	"errors"
+	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,8 @@ func personalSink(t *testing.T, m *Manager, user string, quiet Quiet) *sink {
 	t.Helper()
 	s := &sink{}
 	srv := httptest.NewServer(s)
+	// The test server is on loopback, which a plain user may not reach.
+	m.Confined = func(string) bool { return false }
 	t.Cleanup(srv.Close)
 	server := srv.URL
 	p := defaultPersonal("en")
@@ -197,5 +201,38 @@ func TestPersonalMailUsesTheSharedServerOnly(t *testing.T) {
 	}
 	if len(sent) != 1 || sent[0] != "alex@example.org" {
 		t.Fatalf("sent to %v", sent)
+	}
+}
+
+// A plain user's own channel must not reach into the NAS or the home network,
+// nor read back what a server there answered.
+func TestConfinedUserCannotReachPrivateAddresses(t *testing.T) {
+	m, _ := newManager(t)
+	reached := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		http.Error(w, "router admin secret", http.StatusForbidden)
+	}))
+	defer srv.Close()
+	m.Confined = func(user string) bool { return user == "sam" }
+	p := defaultPersonal("en")
+	p.Ntfy = Ntfy{Enabled: true, URL: srv.URL + "/topic"}
+	if err := m.SetPersonal("sam", p); err != nil {
+		t.Fatal(err)
+	}
+	err := m.TestPersonal("sam", "ntfy")
+	if err == nil || reached || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("confined request: err=%v reached=%v", err, reached)
+	}
+	if err := m.SetPersonal("alex", p); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.TestPersonal("alex", "ntfy"); err == nil || !reached {
+		t.Fatalf("an administrator's own server on the LAN: err=%v reached=%v", err, reached)
+	}
+	for addr, want := range map[string]bool{"8.8.8.8": true, "10.0.0.1": false, "127.0.0.1": false, "100.100.1.1": false, "169.254.169.254": false, "::1": false, "fd00::1": false, "2001:4860:4860::8888": true} {
+		if public(netip.MustParseAddr(addr)) != want {
+			t.Errorf("public(%s) != %v", addr, want)
+		}
 	}
 }

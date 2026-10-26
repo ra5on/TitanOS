@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,12 @@ type fakeBroker struct {
 	states   map[string]string
 	subs     []string
 	conn     net.Conn
+	// connects counts logins; the first deaf ones never get a PINGRESP,
+	// like a half-open connection. online records which logins announced
+	// availability.
+	connects int
+	deaf     int
+	online   map[int]bool
 }
 
 func startBroker(t *testing.T) *fakeBroker {
@@ -32,7 +39,7 @@ func startBroker(t *testing.T) *fakeBroker {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := &fakeBroker{ln: ln, retained: map[string]string{}, states: map[string]string{}}
+	b := &fakeBroker{ln: ln, retained: map[string]string{}, states: map[string]string{}, online: map[int]bool{}}
 	t.Cleanup(func() { ln.Close() })
 	go func() {
 		for {
@@ -52,6 +59,7 @@ func (b *fakeBroker) serve(conn net.Conn) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 	c := &mqttClient{r: r}
+	login := 0
 	for {
 		header, body, err := c.readPacket()
 		if err != nil {
@@ -62,6 +70,8 @@ func (b *fakeBroker) serve(conn net.Conn) {
 		case mqttConnect:
 			b.connect = body
 			b.conn = conn
+			b.connects++
+			login = b.connects
 			conn.Write([]byte{mqttConnack << 4, 2, 0, 0})
 		case mqttPublish:
 			n := int(binary.BigEndian.Uint16(body))
@@ -72,12 +82,17 @@ func (b *fakeBroker) serve(conn net.Conn) {
 			if strings.Contains(topic, "/state/") || strings.HasSuffix(topic, "/status") {
 				b.states[topic] = payload
 			}
+			if strings.HasPrefix(topic, "titanos/") && strings.HasSuffix(topic, "/status") && payload == "online" {
+				b.online[login] = true
+			}
 		case mqttSubscribe:
 			n := int(binary.BigEndian.Uint16(body[2:]))
 			b.subs = append(b.subs, string(body[4:4+n]))
 			conn.Write([]byte{mqttSuback << 4, 3, body[0], body[1], 0})
 		case mqttPingreq:
-			conn.Write([]byte{mqttPingresp << 4, 0})
+			if login > b.deaf {
+				conn.Write([]byte{mqttPingresp << 4, 0})
+			}
 		case mqttDisconnect:
 			b.mu.Unlock()
 			return
@@ -229,5 +244,107 @@ func TestMQTTSettings(t *testing.T) {
 	}
 	if !allowedCommand(MQTT{Commands: []string{"power"}}, "system", "power", "poweroff") || allowedCommand(MQTT{Commands: []string{"updates"}}, "system", "power", "reboot") {
 		t.Fatal("power commands")
+	}
+}
+
+// A connection whose broker stops answering pings is given up: the status
+// says disconnected, TitanOS reconnects and announces itself again.
+func TestMQTTDeadConnectionReconnects(t *testing.T) {
+	broker := startBroker(t)
+	broker.deaf = 1
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	if err := m.SetSettings(Settings{MQTT: MQTT{Enabled: true, Host: "127.0.0.1", Port: broker.port(), Groups: []string{"system"}, ID: "abc123"}}); err != nil {
+		t.Fatal(err)
+	}
+	source := func(context.Context) Snapshot {
+		return Snapshot{Host: "nas", System: &SystemValues{CPUPercent: 1}}
+	}
+	oldKeep, oldRetry := mqttKeepAlive, mqttRetry
+	mqttKeepAlive, mqttRetry = time.Second, 50*time.Millisecond
+	defer func() { mqttKeepAlive, mqttRetry = oldKeep, oldRetry }()
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	defer func() { cancel(); <-stopped }()
+	go func() { m.RunMQTT(ctx, source, nil); close(stopped) }()
+
+	eventually(t, "first login", func() bool { return broker.get(func(b *fakeBroker) bool { return b.online[1] }) })
+	if connected, _ := m.MQTTStatus(); !connected {
+		t.Fatal("not connected after login")
+	}
+	start := time.Now()
+	sawDown := false
+	eventually(t, "reconnect", func() bool {
+		if connected, msg := m.MQTTStatus(); !connected && strings.Contains(msg, "answer") {
+			sawDown = true
+		}
+		return broker.get(func(b *fakeBroker) bool { return b.connects >= 2 && b.online[2] })
+	})
+	if !sawDown {
+		t.Error("status never said disconnected")
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("dead connection noticed after %v", d)
+	}
+	if connected, _ := m.MQTTStatus(); !connected {
+		t.Error("not connected after reconnect")
+	}
+	// The healthy second connection stays up.
+	time.Sleep(2 * time.Second)
+	if broker.get(func(b *fakeBroker) bool { return b.connects != 2 }) {
+		t.Error("healthy connection dropped")
+	}
+}
+
+// A flood of presses runs at most mqttCommandLimit commands at once and at
+// most one per target; repeated presses are dropped while one is pending.
+func TestMQTTCommandFloodBounded(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	running, peak, total := 0, 0, 0
+	r := newCommandRunner(func(ctx context.Context, kind, name, action string) error {
+		mu.Lock()
+		running++
+		total++
+		peak = max(peak, running)
+		mu.Unlock()
+		<-release
+		mu.Lock()
+		running--
+		mu.Unlock()
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	accepted := 0
+	for i := 0; i < 5000; i++ {
+		if r.submit(ctx, "container", "c"+strconv.Itoa(i%5), "restart") {
+			accepted++
+		}
+	}
+	if accepted != 5 {
+		t.Errorf("accepted %d commands for 5 targets", accepted)
+	}
+	eventually(t, "running", func() bool { mu.Lock(); defer mu.Unlock(); return running == mqttCommandLimit })
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	if peak > mqttCommandLimit {
+		t.Errorf("%d commands at once", peak)
+	}
+	mu.Unlock()
+	close(release)
+	eventually(t, "drained", func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return len(r.pending) == 0
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	if total != 5 || peak > mqttCommandLimit {
+		t.Errorf("total %d, peak %d", total, peak)
+	}
+	// Once done, the same target can be pressed again.
+	if !r.submit(ctx, "container", "c0", "restart") {
+		t.Error("target still blocked after completion")
 	}
 }

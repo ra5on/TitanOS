@@ -66,7 +66,11 @@ func (l *Limiter) Fail(keys ...string) {
 		e, ok := l.entries[key]
 		if !ok || now.Sub(e.last) > limiterForget {
 			if !ok && len(l.entries) >= limiterMaxKeys {
-				continue
+				// A full table must not let guesses through uncounted:
+				// make room by forgetting the key that failed longest ago,
+				// a blocked one only if all are blocked. Keys under attack
+				// stay, because every guess makes them recent again.
+				l.evict(now)
 			}
 			e = &limiterEntry{}
 			l.entries[key] = e
@@ -81,6 +85,24 @@ func (l *Limiter) Fail(keys ...string) {
 			e.blockedUntil = now.Add(delay)
 		}
 	}
+}
+
+// evict forgets one key, see Fail.
+func (l *Limiter) evict(now time.Time) {
+	oldest, oldestBlocked := "", ""
+	for key, e := range l.entries {
+		if e.blockedUntil.After(now) {
+			if oldestBlocked == "" || e.last.Before(l.entries[oldestBlocked].last) {
+				oldestBlocked = key
+			}
+		} else if oldest == "" || e.last.Before(l.entries[oldest].last) {
+			oldest = key
+		}
+	}
+	if oldest == "" {
+		oldest = oldestBlocked
+	}
+	delete(l.entries, oldest)
 }
 
 // Reset forgets the failures of a key after a successful login.

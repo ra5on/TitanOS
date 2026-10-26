@@ -155,6 +155,16 @@ var (
 	plainForm = regexp.MustCompile(`^[\x21-\x7e]{1,64}$`)
 )
 
+// quote writes a value for NUT's configuration files, where # starts a
+// comment and quotes and backslashes have a meaning of their own. Plain
+// values stay as they are, so that files written before do not change.
+func quote(value string) string {
+	if !strings.ContainsAny(value, "#\"\\'=") {
+		return value
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
+}
+
 func invalid(what string) error { return fmt.Errorf("%w: %s", ErrInvalid, what) }
 
 func randomPassword() string {
@@ -307,17 +317,17 @@ func (m *Manager) files(settings Settings, localPassword string) map[string]stri
 		files["nut.conf"] = header + "MODE=" + mode + "\n"
 		files["ups.conf"] = header + fmt.Sprintf("maxretry = 3\n\n[%s]\n\tdriver = %s\n\tport = %s\n\tdesc = \"TitanOS\"\n", upsName, settings.Driver, settings.Port)
 		listen := "LISTEN 127.0.0.1 3493\nLISTEN ::1 3493\n"
-		users := fmt.Sprintf("[local]\n\tpassword = %s\n\tupsmon primary\n", localPassword)
+		users := fmt.Sprintf("[local]\n\tpassword = %s\n\tupsmon primary\n", quote(localPassword))
 		if settings.Serve {
 			listen = "LISTEN 0.0.0.0 3493\nLISTEN :: 3493\n"
-			users += fmt.Sprintf("\n[%s]\n\tpassword = %s\n\tupsmon secondary\n", remoteUser, settings.RemotePassword)
+			users += fmt.Sprintf("\n[%s]\n\tpassword = %s\n\tupsmon secondary\n", remoteUser, quote(settings.RemotePassword))
 		}
 		files["upsd.conf"] = header + listen
 		files["upsd.users"] = header + users
-		files["upsmon.conf"] = header + m.upsmon(fmt.Sprintf("%s@localhost 1 local %s primary", upsName, localPassword))
+		files["upsmon.conf"] = header + m.upsmon(fmt.Sprintf("%s@localhost 1 local %s primary", upsName, quote(localPassword)))
 	case "network":
 		files["nut.conf"] = header + "MODE=netclient\n"
-		files["upsmon.conf"] = header + m.upsmon(fmt.Sprintf("%s@%s 1 %s %s secondary", settings.Name, settings.Host, settings.User, settings.Password))
+		files["upsmon.conf"] = header + m.upsmon(fmt.Sprintf("%s@%s 1 %s %s secondary", settings.Name, settings.Host, settings.User, quote(settings.Password)))
 	default:
 		files["nut.conf"] = header + "MODE=none\n"
 	}

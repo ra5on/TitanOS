@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
@@ -93,6 +94,16 @@ func (s *Server) handleConfigBackupDownload(w http.ResponseWriter, r *http.Reque
 // could log in. A restore gives nobody access they did not have, it brings
 // back the accounts of the backup.
 func (s *Server) newStick(w http.ResponseWriter) bool {
+	setupMu.Lock()
+	defer setupMu.Unlock()
+	return s.newStickLocked(w)
+}
+
+// setupMu keeps the first owner account and a restore of a backup apart:
+// both are allowed only while there is no account, and only one may win.
+var setupMu sync.Mutex
+
+func (s *Server) newStickLocked(w http.ResponseWriter) bool {
 	if !s.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return false
@@ -130,8 +141,10 @@ func (s *Server) restored(w http.ResponseWriter, r *http.Request, source string)
 }
 
 func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
+	setupMu.Lock()
+	defer setupMu.Unlock()
 	var req struct{ Device, Name string }
-	if !readJSON(w, r, &req) || !s.newStick(w) {
+	if !readJSON(w, r, &req) || !s.newStickLocked(w) {
 		return
 	}
 	if _, err := s.opts.ConfigBackup.RestoreFound(r.Context(), req.Device, req.Name); err != nil {
@@ -143,7 +156,9 @@ func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 
 // handleSetupRestoreUpload takes a backup file as the body of the request.
 func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
-	if !s.newStick(w) {
+	setupMu.Lock()
+	defer setupMu.Unlock()
+	if !s.newStickLocked(w) {
 		return
 	}
 	if _, err := s.opts.ConfigBackup.RestoreUpload(r.Body); err != nil {

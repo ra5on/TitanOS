@@ -10,8 +10,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/coder/websocket"
-
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
@@ -47,6 +45,7 @@ var vmErrors = []struct {
 	{hardware.ErrUnknown, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrNotPassable, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrIncompleteGroup, http.StatusBadRequest, "hardware_incomplete_group"},
+	{hardware.ErrInUse, http.StatusConflict, "hardware_in_use"},
 }
 
 func writeVMError(w http.ResponseWriter, err error) {
@@ -270,62 +269,46 @@ func (s *Server) handleVMSerial(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// vmRunning reports whether a VM of that name runs.
+func (s *Server) vmRunning(name string) bool {
+	for _, known := range s.opts.VMs.List(nil) {
+		if known.Name == name && known.State == "running" {
+			return true
+		}
+	}
+	return false
+}
+
+// vmScreenConsole is how the screen of a VM is served: a VM console with
+// confirmation, binary RFB as it is, and only keyboard and mouse count as
+// input. The viewer sends small messages, but a pasted clipboard can be
+// larger.
+func vmScreenConsole(name string) consoleOptions {
+	return consoleOptions{target: "vm screen " + name, requireConfirmation: true, raw: true, readLimit: 4 << 20, input: vncInput}
+}
+
 // handleVMScreen connects a WebSocket to the screen of a running VM. The
 // VNC server of QEMU listens on a socket only titand can open; this is the
-// only way to it, and it is behind the login.
+// only way to it, behind the login and with the rules of every VM console:
+// terminals switched on, the password entered again (unless switched off),
+// the end after 15 minutes without keyboard or mouse input, and the end
+// with the login. The stream is binary RFB in both directions.
 func (s *Server) handleVMScreen(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	found := false
-	for _, known := range s.opts.VMs.List(nil) {
-		found = found || (known.Name == name && known.State == "running")
-	}
-	if !found {
+	// Whether a VM runs is no secret to an administrator (the list shows
+	// it); telling it first gives a clear error instead of a closed socket.
+	if !s.vmRunning(name) {
 		writeError(w, http.StatusConflict, "vm_not_running", "the VM is not running")
 		return
 	}
-	screen, err := net.DialTimeout("unix", s.opts.VMs.VNCSocket(name), 3*time.Second)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "vm_failed", "the screen of the VM is not reachable")
-		return
-	}
-	defer screen.Close()
-	// Accept checks that the page asking is this site, not another one.
-	conn, err := websocket.Accept(w, r, nil)
-	if err != nil {
-		return
-	}
-	defer conn.CloseNow()
-	// The viewer sends small messages, but a pasted clipboard can be larger.
-	conn.SetReadLimit(4 << 20)
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	slog.Info("VM screen opened", "vm", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-
-	go func() {
-		defer cancel()
-		buf := make([]byte, 64*1024)
-		for {
-			n, err := screen.Read(buf)
-			if n > 0 && conn.Write(ctx, websocket.MessageBinary, buf[:n]) != nil {
-				return
-			}
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					slog.Debug("VM screen", "vm", name, "err", err)
-				}
-				// The VM was switched off.
-				conn.Close(websocket.StatusNormalClosure, "")
-				return
-			}
+	s.serveStream(w, r, vmScreenConsole(name), func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		if !s.vmRunning(name) {
+			return nil, nil, vm.ErrNotRunning
 		}
-	}()
-	for {
-		_, data, err := conn.Read(ctx)
+		screen, err := net.DialTimeout("unix", s.opts.VMs.VNCSocket(name), 3*time.Second)
 		if err != nil {
-			return
+			return nil, nil, err
 		}
-		if _, err := screen.Write(data); err != nil {
-			return
-		}
-	}
+		return screen, nil, nil
+	})
 }

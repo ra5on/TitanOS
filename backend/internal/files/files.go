@@ -419,7 +419,12 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 			if err != nil || info.Mode()&fs.ModeSymlink != 0 {
 				return nil
 			}
-			rel := strings.TrimPrefix(strings.TrimPrefix(name, prefix), "/")
+			// A selection at the top has the prefix "."; trimming that would
+			// eat the dot of a hidden name such as .config.
+			rel := name
+			if prefix != "." {
+				rel = strings.TrimPrefix(strings.TrimPrefix(name, prefix), "/")
+			}
 			header := &zip.FileHeader{Name: rel, Modified: info.ModTime(), Method: zip.Store}
 			if entry.IsDir() {
 				header.Name += "/"

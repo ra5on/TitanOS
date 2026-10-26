@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -275,9 +276,15 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 // mqttInterval is how often states are published.
 var mqttInterval = 30 * time.Second
 
+// mqttRetry is the first wait before reconnecting; it doubles up to 5 minutes.
+var mqttRetry = 5 * time.Second
+
 // RunMQTT publishes sensors while MQTT is switched on, until ctx ends.
 func (m *Manager) RunMQTT(ctx context.Context, source Source, commands Commander) {
-	backoff := 5 * time.Second
+	backoff := mqttRetry
+	// One runner for all sessions: a reconnect does not lift the limits on
+	// commands still running.
+	runner := newCommandRunner(commands)
 	for ctx.Err() == nil {
 		changed := m.Changed()
 		m.mu.Lock()
@@ -296,18 +303,18 @@ func (m *Manager) RunMQTT(ctx context.Context, source Source, commands Commander
 			q.Commands = nil // no account to act for: no buttons
 		}
 		started := time.Now()
-		err := m.mqttSession(ctx, q.ID, q, source, commands, changed)
+		err := m.mqttSession(ctx, q.ID, q, source, runner, changed)
 		if ctx.Err() != nil {
 			return
 		}
 		if err == nil { // settings changed
-			backoff = 5 * time.Second
+			backoff = mqttRetry
 			continue
 		}
 		m.setMQTTStatus(false, err.Error())
 		slog.Warn("MQTT connection to Home Assistant lost", "err", err, "retry", backoff)
 		if time.Since(started) > time.Minute {
-			backoff = 5 * time.Second
+			backoff = mqttRetry
 		}
 		select {
 		case <-ctx.Done():
@@ -332,7 +339,7 @@ func (m *Manager) MQTTStatus() (bool, string) {
 }
 
 // mqttSession publishes until the settings change (nil) or the connection fails.
-func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Source, commands Commander, changed <-chan struct{}) error {
+func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Source, commands *commandRunner, changed <-chan struct{}) error {
 	base := "titanos/" + id
 	availability := base + "/status"
 	client, err := dialMQTT(ctx, MQTTOptions{Host: q.Host, Port: q.Port, Username: q.Username, Password: q.Password, TLS: q.TLS,
@@ -483,7 +490,7 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 	}
 	tick := time.NewTicker(mqttInterval)
 	defer tick.Stop()
-	ping := time.NewTicker(30 * time.Second)
+	ping := time.NewTicker(client.keepAlive / 2)
 	defer ping.Stop()
 	for {
 		select {
@@ -581,21 +588,75 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 			}
 			target, known := targets[msg.Topic]
 			action := strings.TrimSpace(string(msg.Payload))
-			if !known || commands == nil || !allowedCommand(q, target[0], target[1], action) {
+			if !known || commands.run == nil || !allowedCommand(q, target[0], target[1], action) {
 				slog.Warn("command from Home Assistant ignored", "topic", msg.Topic)
 				continue
 			}
-			go func() {
-				cmdCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-				defer cancel()
-				if err := commands(cmdCtx, target[0], target[1], action); err != nil {
-					slog.Warn("command from Home Assistant failed", "kind", target[0], "name", target[1], "action", action, "err", err)
-				}
-			}()
+			if !commands.submit(ctx, target[0], target[1], action) {
+				continue
+			}
 			// Publish soon so that switches show the new state.
 			tick.Reset(3 * time.Second)
 		}
 	}
+}
+
+// mqttCommandLimit is how many commands run at once; each target (one
+// container, VM, backup or system action) has at most one command pending
+// or running, further presses of it are dropped meanwhile.
+const mqttCommandLimit = 2
+
+// commandRunner carries out commands from Home Assistant with bounded
+// concurrency, so that a flood of messages cannot start thousands of
+// Docker or VM actions as the chosen account.
+type commandRunner struct {
+	run     Commander
+	slots   chan struct{}
+	mu      sync.Mutex
+	pending map[string]bool // kind/name with a command waiting or running
+	dropped int
+	logged  time.Time
+}
+
+func newCommandRunner(run Commander) *commandRunner {
+	return &commandRunner{run: run, slots: make(chan struct{}, mqttCommandLimit), pending: map[string]bool{}}
+}
+
+// submit starts the command unless one for the same target is pending; the
+// number of waiting goroutines is thus bounded by the published targets.
+func (r *commandRunner) submit(ctx context.Context, kind, name, action string) bool {
+	target := kind + "/" + name
+	r.mu.Lock()
+	if r.pending[target] {
+		r.dropped++
+		if time.Since(r.logged) >= time.Minute {
+			slog.Warn("commands from Home Assistant dropped while one for the same target is pending", "target", target, "count", r.dropped)
+			r.dropped, r.logged = 0, time.Now()
+		}
+		r.mu.Unlock()
+		return false
+	}
+	r.pending[target] = true
+	r.mu.Unlock()
+	go func() {
+		defer func() {
+			r.mu.Lock()
+			delete(r.pending, target)
+			r.mu.Unlock()
+		}()
+		select {
+		case r.slots <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		defer func() { <-r.slots }()
+		cmdCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer cancel()
+		if err := r.run(cmdCtx, kind, name, action); err != nil {
+			slog.Warn("command from Home Assistant failed", "kind", kind, "name", name, "action", action, "err", err)
+		}
+	}()
+	return true
 }
 
 // allowedCommand checks a command against the groups switched on; only the

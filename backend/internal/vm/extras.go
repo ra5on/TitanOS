@@ -82,12 +82,43 @@ func (m *Manager) imageInfo(ctx context.Context, path string) (Image, error) {
 		ActualSize  int64  `json:"actual-size"`
 		Backing     string `json:"backing-filename"`
 	}
-	if json.Unmarshal([]byte(out), &info) != nil || info.VirtualSize <= 0 || info.Backing != "" {
+	var raw any
+	if json.Unmarshal([]byte(out), &info) != nil || json.Unmarshal([]byte(out), &raw) != nil || info.VirtualSize <= 0 || info.Backing != "" {
 		// An image that builds on another file is not taken: that file
 		// could be anything.
 		return Image{}, ErrBadImage
 	}
+	if hasDataFile(raw) {
+		// A qcow2 external data file holds the guest data outside the image;
+		// copies (snapshots, clones) would share it and it could be any file.
+		return Image{}, fmt.Errorf("%w: images with an external data file are not supported", ErrBadImage)
+	}
 	return Image{Path: path, Format: format, VirtualBytes: info.VirtualSize, ActualBytes: info.ActualSize}, nil
+}
+
+// hasDataFile reports whether qemu-img info names an external data file
+// anywhere (format-specific.data.data-file for qcow2).
+func hasDataFile(v any) bool {
+	switch value := v.(type) {
+	case map[string]any:
+		for k, v := range value {
+			if k == "data-file" {
+				if s, ok := v.(string); !ok || s != "" {
+					return true
+				}
+			}
+			if hasDataFile(v) {
+				return true
+			}
+		}
+	case []any:
+		for _, v := range value {
+			if hasDataFile(v) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // usedBy returns the VM that has a path as a disk. The caller holds no lock.
@@ -360,7 +391,17 @@ func (m *Manager) Grow(ctx context.Context, name string, index int, sizeBytes in
 // not run as root. Only these device nodes change their group, and only
 // while the VM runs.
 func (m *Manager) lend(vm VM) error {
-	var nodes []string
+	// Each node is recorded before its group changes, so that release
+	// returns it even when a later node fails and the start is abandoned.
+	// Nodes a failed earlier start left behind stay recorded.
+	borrow := func(node string) error {
+		m.mu.Lock()
+		if !slices.Contains(m.borrowed[vm.Name], node) {
+			m.borrowed[vm.Name] = append(m.borrowed[vm.Name], node)
+		}
+		m.mu.Unlock()
+		return os.Chown(node, -1, m.runGid)
+	}
 	for _, disk := range vm.Disks {
 		if !m.isBlock(disk) {
 			continue
@@ -369,23 +410,18 @@ func (m *Manager) lend(vm VM) error {
 		if err != nil {
 			return ErrBadImage
 		}
-		if err := os.Chown(real, -1, m.runGid); err != nil {
+		if err := borrow(real); err != nil {
 			return err
 		}
-		nodes = append(nodes, real)
 	}
 	for _, id := range vm.USB {
 		// The same for USB devices; every plugged-in device of this kind.
 		for _, node := range m.usbNodes(id) {
-			if err := os.Chown(node, -1, m.runGid); err != nil {
+			if err := borrow(node); err != nil {
 				return err
 			}
-			nodes = append(nodes, node)
 		}
 	}
-	m.mu.Lock()
-	m.borrowed[vm.Name] = nodes
-	m.mu.Unlock()
 	return nil
 }
 

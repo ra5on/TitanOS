@@ -1227,6 +1227,15 @@ func (m *Manager) downloadOnce(ctx context.Context, url, part string, file File,
 	if _, err := io.CopyN(hash, f, have); err != nil {
 		return have, err
 	}
+	// A download that ended just before it was renamed is complete: asking
+	// for more would get "range not satisfiable".
+	if have == file.Size && have > 0 {
+		if hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
+			return have, errChecksum
+		}
+		progress(have, 0)
+		return have, f.Sync()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

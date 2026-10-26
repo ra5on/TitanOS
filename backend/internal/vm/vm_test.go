@@ -38,6 +38,9 @@ func (r *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string
 		if strings.Contains(args[len(args)-1], "overlay") {
 			backing = `, "backing-filename": "/etc/shadow"`
 		}
+		if strings.Contains(args[len(args)-1], "datafile") {
+			backing = `, "format-specific": {"type": "qcow2", "data": {"data-file": "/etc/shadow", "data-file-raw": false}}`
+		}
 		return fmt.Sprintf(`{"virtual-size": %d, "actual-size": %d, "format": "%s"%s}`, 3*gib, info.Size(), args[3], backing), nil
 	case name == "qemu-img" && args[0] == "convert":
 		return "", os.WriteFile(args[len(args)-1], []byte("copy"), 0o600)

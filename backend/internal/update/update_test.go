@@ -676,3 +676,21 @@ func TestLoginCheckIsAsyncDeduplicatedAndDoesNotInstall(t *testing.T) {
 		t.Fatal("development mode started a check")
 	}
 }
+
+// A part that is already complete (only renaming it was left) is checked,
+// not asked for again: the server would answer 416.
+func TestCompletePartIsNotRequestedAgain(t *testing.T) {
+	data := []byte("the whole file")
+	sum := sha256.Sum256(data)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
+	}))
+	defer srv.Close()
+	part := filepath.Join(t.TempDir(), "file.part")
+	os.WriteFile(part, data, 0o644)
+	m := &Manager{client: srv.Client(), stall: time.Minute}
+	have, err := m.downloadOnce(context.Background(), srv.URL, part, File{Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}, func(int64, uint64) {})
+	if err != nil || have != int64(len(data)) {
+		t.Fatalf("have=%d err=%v", have, err)
+	}
+}

@@ -12,6 +12,8 @@ type btrfsProgress struct {
 	State  string
 	Sync   *Sync
 	Errors uint64
+	// Missing is the number of devices the mounted filesystem misses.
+	Missing int
 }
 
 var btrfsPercent = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)% done`)
@@ -49,11 +51,16 @@ func (m *Manager) refreshBtrfs(ctx context.Context) {
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
 		scrub, scrubErr := m.runner.Run(probe, "", "btrfs", "scrub", "status", "-R", m.MountPoint(volume.Name))
 		replace, replaceErr := m.runner.Run(probe, "", "btrfs", "replace", "status", "-1", m.MountPoint(volume.Name))
+		show, showErr := m.runner.Run(probe, "", "btrfs", "filesystem", "show", "--raw", m.MountPoint(volume.Name))
 		cancel()
 		state := parseBtrfsProgress(scrub, replace)
 		m.mu.RLock()
 		previous := m.btrfsProgress[volume.Name]
 		m.mu.RUnlock()
+		state.Missing = btrfsMissing(show)
+		if showErr != nil {
+			state.Missing = previous.Missing // unknown: keep what was seen
+		}
 		// An observation failure must not let the standby worker treat a
 		// previously busy mirror as idle.
 		if state.State == "" && (scrubErr != nil && previous.State == VolumeChecking || replaceErr != nil && previous.State == VolumeRebuilding) {

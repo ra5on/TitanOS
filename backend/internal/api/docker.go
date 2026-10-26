@@ -2,15 +2,11 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/coder/websocket"
 
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
@@ -267,9 +263,6 @@ func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string][]string{"apps": apps})
 }
 
-// consoleIdle ends a console nobody typed into for this long.
-const consoleIdle = 15 * time.Minute
-
 // handleContainerConsole connects a WebSocket to a shell inside a container.
 func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) {
 	id, shell := r.PathValue("id"), r.URL.Query().Get("shell")
@@ -297,81 +290,7 @@ func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
 // Routes require an authenticated administrator. NAS and Docker terminals use the
 // existing login; VM consoles still require recent password confirmation.
 func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target string, requireConfirmation bool, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
-	user := currentUser(r)
-	if !s.opts.Terminal.Enabled() {
-		writeError(w, http.StatusForbidden, "terminal_off", "terminals are switched off in the settings")
-		return
-	}
-	if requireConfirmation && !s.confirmed(r) {
-		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
-		return
-	}
-	// Accept checks that the page asking is this site, not another one.
-	conn, err := websocket.Accept(w, r, nil)
-	if err != nil {
-		return
-	}
-	defer conn.CloseNow()
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
-	stream, resize, err := open(ctx)
-	if err != nil {
-		conn.Close(websocket.StatusInternalError, "console could not be opened")
-		return
-	}
-	defer stream.Close()
-	slog.Info("console opened", "target", target, "user", user.Name, "ip", remoteIP(r))
-	defer slog.Info("console closed", "target", target, "user", user.Name, "ip", remoteIP(r))
-
-	idle := time.AfterFunc(consoleIdle, cancel)
-	defer idle.Stop()
-	// Switching terminals off ends the ones that are open.
-	off := s.opts.Terminal.Off()
-	go func() {
-		select {
-		case <-off:
-			conn.Close(websocket.StatusPolicyViolation, "terminals were switched off")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
-	go func() {
-		defer cancel()
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := stream.Read(buf)
-			if n > 0 {
-				if conn.Write(ctx, websocket.MessageBinary, buf[:n]) != nil {
-					return
-				}
-			}
-			if err != nil {
-				// The shell ended.
-				conn.Close(websocket.StatusNormalClosure, "")
-				return
-			}
-		}
-	}()
-
-	for {
-		kind, data, err := conn.Read(ctx)
-		if err != nil {
-			return
-		}
-		idle.Reset(consoleIdle)
-		if kind == websocket.MessageText {
-			var size struct{ Cols, Rows int }
-			if json.Unmarshal(data, &size) == nil {
-				resize(size.Cols, size.Rows)
-			}
-			continue
-		}
-		if _, err := stream.Write(data); err != nil {
-			return
-		}
-	}
+	s.serveStream(w, r, consoleOptions{target: target, requireConfirmation: requireConfirmation}, open)
 }
 
 // handleTerminal tells the web UI whether terminals are allowed.

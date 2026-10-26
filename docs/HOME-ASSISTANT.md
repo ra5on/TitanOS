@@ -42,7 +42,7 @@ Was Home Assistant zurückgibt, behandelt der Assistent als Daten und nie als An
 
 Ein Tippen auf die Nachricht öffnet die passende Seite. Fehler kommen mit hoher Priorität.
 
-Ist unter *Einstellungen › KI-Assistent* **Freigeben und Ablehnen aus Benachrichtigungen** eingeschaltet, tragen Nachrichten über wartende Aktionen die Knöpfe „Freigeben“ und „Ablehnen“. Jeder Knopf gilt einmal, 15 Minuten lang und nur bis zum nächsten Neustart von TitanOS. Aktionen, für die man einen Namen eintippen muss, lassen sich nie aus einer Nachricht freigeben.
+Ist unter *Einstellungen › KI-Assistent* **Freigeben und Ablehnen aus Benachrichtigungen** eingeschaltet, tragen Nachrichten über wartende Aktionen die Knöpfe „Freigeben“ und „Ablehnen“. Jeder Knopf gilt einmal, 15 Minuten lang und nur bis zum nächsten Neustart von TitanOS. Zerstörende Aktionen lassen sich nie aus einer Nachricht freigeben.
 
 ## Automationen mit Home-Assistant-Auslöser
 

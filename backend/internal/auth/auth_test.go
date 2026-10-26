@@ -2,6 +2,9 @@ package auth
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -274,5 +277,43 @@ func TestAccountsWithoutUIDGetOne(t *testing.T) {
 	}
 	if _, ok := users.RememberSMBHash("alt", "another password"); ok {
 		t.Error("an existing SMB hash was replaced")
+	}
+}
+
+// Filling the table with junk names must not let guesses at a real account
+// through uncounted.
+func TestLimiterFullTableStillCounts(t *testing.T) {
+	l := NewLimiter()
+	now := time.Unix(1_800_000_000, 0)
+	l.now = func() time.Time { return now }
+	for i := range limiterMaxKeys {
+		l.Fail(fmt.Sprintf("user:junk%d", i))
+	}
+	now = now.Add(time.Second)
+	for range limiterFreeAttempts + 1 {
+		l.Fail("user:alice", "ip:2001:db8::1")
+	}
+	if l.RetryAfter("user:alice") == 0 || l.RetryAfter("ip:2001:db8::1") == 0 {
+		t.Fatal("guesses against alice were not counted with a full table")
+	}
+	if len(l.entries) > limiterMaxKeys {
+		t.Fatalf("%d entries", len(l.entries))
+	}
+}
+
+// A stick that is not there yet at start must not make the token file look
+// empty: the first new token would overwrite and revoke all others.
+func TestTokensWaitForTheStick(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "config")
+	store := config.Open(dir)
+	tokens := NewTokens(store)
+	if _, _, err := tokens.Create(User{Name: "alex", Role: RoleOwner}, "cli", nil); !errors.Is(err, ErrNotLoaded) {
+		t.Fatalf("created a token without the stick: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "users"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tokens.Create(User{Name: "alex", Role: RoleOwner}, "cli", nil); err != nil {
+		t.Fatalf("stick is there now: %v", err)
 	}
 }

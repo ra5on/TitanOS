@@ -149,19 +149,16 @@ func (m *Manager) GrowthPreview(ctx context.Context, name string, req GrowthRequ
 			return Growth{}, ErrNotPossible
 		}
 	}
-	var size uint64
-	for _, member := range a.members {
-		size = max(size, readSysfsUint(filepath.Join(m.sysBlock, "..", "class", "block", member.device, "size")))
-	}
-	if size == 0 {
-		for _, d := range status.Disks {
-			if d.Volume == name {
-				size = max(size, memberSizeMiB(d.SizeBytes)*mebibyte/512)
-			}
-		}
-	}
-	if disk.SizeBytes <= reserveBytes+mebibyte || size == 0 || memberSizeMiB(disk.SizeBytes)*mebibyte < size*512 {
+	size := m.growthPartitionMiB(a, status, name)
+	if disk.SizeBytes <= reserveBytes+mebibyte || size == 0 || memberSizeMiB(disk.SizeBytes) < size {
 		return Growth{}, ErrDiskTooSmall
+	}
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return Growth{}, err
+	}
+	if _, err := m.oldArrays(devices, []string{disk.Name}); err != nil {
+		return Growth{}, err
 	}
 	var space syscall.Statfs_t
 	if err := syscall.Statfs(m.MountPoint(req.RecoveryVolume), &space); err != nil {
@@ -185,6 +182,22 @@ func (m *Manager) GrowthPreview(ctx context.Context, name string, req GrowthRequ
 		planned = current / uint64(a.disks-parity) * uint64(a.disks+1-parity)
 	}
 	return Growth{GrowthPointer: GrowthPointer{Volume: name, RecoveryVolume: req.RecoveryVolume}, CurrentBytes: current, PlannedBytes: planned, ArrayUUID: v.ArrayUUID, DiskSerial: disk.Serial, OriginalDisks: a.disks, TargetDisks: a.disks + 1, Phase: "preview", Started: time.Now().UTC()}, nil
+}
+
+// growthPartitionMiB is the size of the partition a new member gets: the
+// largest member partition (rounded up to MiB), or, if the kernel does not
+// tell, what TitanOS would have created on the largest member disk.
+func (m *Manager) growthPartitionMiB(a array, status Status, name string) uint64 {
+	if sectors := m.memberSectors(a); sectors > 0 {
+		return (sectors*512 + mebibyte - 1) / mebibyte
+	}
+	var size uint64
+	for _, d := range status.Disks {
+		if d.Volume == name {
+			size = max(size, memberSizeMiB(d.SizeBytes))
+		}
+	}
+	return size
 }
 func (m *Manager) StartGrowth(ctx context.Context, name string, req GrowthRequest) error {
 	m.actions.Lock()
@@ -243,14 +256,15 @@ func (m *Manager) grow(ctx context.Context, root *os.Root, g Growth, diskName st
 			if err != nil || disk.Serial != g.DiskSerial {
 				return ErrDiskUnavailable
 			}
-			var size uint64
-			for _, d := range status.Disks {
-				if d.Volume == g.Volume {
-					size = max(size, memberSizeMiB(d.SizeBytes))
-				}
-			}
-			if size == 0 {
+			// The same partition size the preview checked: as large as the
+			// largest existing member partition, not the largest member disk.
+			size := m.growthPartitionMiB(a, status, g.Volume)
+			if size == 0 || memberSizeMiB(disk.SizeBytes) < size {
 				return ErrDiskTooSmall
+			}
+			devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
+			if err != nil {
+				return err
 			}
 			device, ok := findDevice(devices, diskName)
 			if !ok {

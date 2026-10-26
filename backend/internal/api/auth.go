@@ -124,7 +124,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setupMu.Lock()
 	user, err := s.opts.Users.CreateOwner(req.Name, req.Password)
+	setupMu.Unlock()
 	switch {
 	case errors.Is(err, auth.ErrSetupDone):
 		writeError(w, http.StatusConflict, "setup_done", "the owner account already exists")

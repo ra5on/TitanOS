@@ -167,6 +167,19 @@ func (m *Manager) releaseOldArrays(ctx context.Context, devices []blockDevice, s
 	}
 	return current, nil
 }
+
+// checkIdentity refuses a disk that is gone or is no longer the one the
+// caller picked. An empty identity (older clients) checks only presence.
+func checkIdentity(devices []blockDevice, name, identity string) error {
+	device, found := findDevice(devices, name)
+	if !found {
+		return fmt.Errorf("%w: %s not found", ErrDiskUnavailable, name)
+	}
+	if identity != "" && diskIdentity(classify(device, nil)) != identity {
+		return fmt.Errorf("%w: %s changed since selection; refresh the disk list", ErrDiskUnavailable, name)
+	}
+	return nil
+}
 func validateDiskIdentities(req CreateRequest, status Status) error {
 	if len(req.Identities) == 0 {
 		return nil

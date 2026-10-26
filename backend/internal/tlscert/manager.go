@@ -131,10 +131,19 @@ func (m *Manager) SetCustom(certPEM, keyPEM []byte) error {
 	if err != nil {
 		return err
 	}
+	// Both files belong together: if the second cannot be written, the
+	// first goes back to what it was, so that the next start does not find
+	// a key without its certificate.
+	oldKey, keyErr := m.store.Read(customKeyFile)
 	if err := m.store.Write(customKeyFile, keyPEM); err != nil {
 		return err
 	}
 	if err := m.store.Write(customCertFile, certPEM); err != nil {
+		if keyErr == nil {
+			m.store.Write(customKeyFile, oldKey)
+		} else {
+			m.store.Remove(customKeyFile)
+		}
 		return err
 	}
 	m.current.Store(&cert)

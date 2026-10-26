@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -139,13 +140,18 @@ func (m *Manager) work(ctx context.Context, e *entry) {
 			err = errors.Join(err, reader.Close())
 		}
 	case "xz":
-		cmd := exec.CommandContext(ctx, "xz", "-dc")
+		// The dictionary size of an .xz stream decides how much memory the
+		// decoder allocates. Beyond the limit xz fails instead of allocating.
+		cmd := exec.CommandContext(ctx, "xz", "--decompress", "--stdout", "--threads=1", "--memlimit-decompress="+xzMemLimit)
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
 		cmd.Stdin = source
 		cmd.Stdout = destination
 		var stderr cappedBuffer
 		cmd.Stderr = &stderr
 		err = cmd.Run()
-		if err != nil {
+		if err != nil && strings.Contains(stderr.String(), "Memory usage limit") {
+			err = fmt.Errorf("%w: the xz archive needs more than %s of memory to extract", ErrInvalid, xzMemLimit)
+		} else if err != nil {
 			err = fmt.Errorf("xz extraction failed: %w", err)
 		}
 	case "zip":
@@ -208,11 +214,100 @@ func (m *Manager) work(ctx context.Context, e *entry) {
 	root.Remove("source.part")
 }
 
+// xzMemLimit bounds the memory of the xz decoder (a variable for tests).
+var xzMemLimit = "256MiB"
+
+// zipDirectoryBudget bounds what zip.NewReader may read, i.e. the central
+// directory it keeps in memory (a variable for tests). Disk image archives
+// have a handful of entries; a crafted one could have millions.
+var zipDirectoryBudget int64 = 8 << 20
+
+// zipMaxEntries bounds the entry count announced by the end record:
+// zip.NewReader preallocates a slice for that many entries.
+const zipMaxEntries = 20000
+
+type budgetReaderAt struct {
+	r      io.ReaderAt
+	budget int64
+	armed  bool
+}
+
+func (b *budgetReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if b.armed {
+		if int64(len(p)) > b.budget {
+			return 0, fmt.Errorf("%w: ZIP directory too large", ErrInvalid)
+		}
+		b.budget -= int64(len(p))
+	}
+	return b.r.ReadAt(p, off)
+}
+
+// zipDirectory reads the entry count and directory size the archive
+// announces, the way archive/zip finds them (last valid end record).
+func zipDirectory(r io.ReaderAt, size int64) (entries, dirSize uint64, err error) {
+	const endLen, locatorLen = 22, 20
+	tail := min(size, endLen+0xffff)
+	b := make([]byte, tail)
+	if _, err := r.ReadAt(b, size-tail); err != nil && !errors.Is(err, io.EOF) {
+		return 0, 0, err
+	}
+	p := -1
+	for i := len(b) - endLen; i >= 0; i-- {
+		if binary.LittleEndian.Uint32(b[i:]) == 0x06054b50 && i+endLen+int(binary.LittleEndian.Uint16(b[i+20:])) <= len(b) {
+			p = i
+			break
+		}
+	}
+	if p < 0 {
+		return 0, 0, fmt.Errorf("%w: not a ZIP archive", ErrInvalid)
+	}
+	entries = uint64(binary.LittleEndian.Uint16(b[p+10:]))
+	dirSize = uint64(binary.LittleEndian.Uint32(b[p+12:]))
+	offset := binary.LittleEndian.Uint32(b[p+16:])
+	if entries != 0xffff && dirSize != 0xffffffff && offset != 0xffffffff {
+		return entries, dirSize, nil
+	}
+	end := size - tail + int64(p)
+	if end < locatorLen {
+		return 0, 0, fmt.Errorf("%w: ZIP64 locator missing", ErrInvalid)
+	}
+	locator := make([]byte, locatorLen)
+	if _, err := r.ReadAt(locator, end-locatorLen); err != nil {
+		return 0, 0, err
+	}
+	if binary.LittleEndian.Uint32(locator) != 0x07064b50 {
+		// archive/zip then keeps the 32-bit values.
+		return entries, dirSize, nil
+	}
+	at := int64(binary.LittleEndian.Uint64(locator[8:]))
+	record := make([]byte, 56)
+	if at < 0 || at+56 > size {
+		return 0, 0, fmt.Errorf("%w: bad ZIP64 end record", ErrInvalid)
+	}
+	if _, err := r.ReadAt(record, at); err != nil {
+		return 0, 0, err
+	}
+	if binary.LittleEndian.Uint32(record) != 0x06064b50 {
+		return 0, 0, fmt.Errorf("%w: bad ZIP64 end record", ErrInvalid)
+	}
+	return binary.LittleEndian.Uint64(record[32:]), binary.LittleEndian.Uint64(record[40:]), nil
+}
+
 func extractZIP(file *os.File, size int64, name string, out io.Writer) error {
-	archive, err := zip.NewReader(file, size)
+	entries, dirSize, err := zipDirectory(file, size)
 	if err != nil {
 		return err
 	}
+	if entries > zipMaxEntries || dirSize > uint64(zipDirectoryBudget) {
+		return fmt.Errorf("%w: ZIP has too many entries for a disk image archive", ErrInvalid)
+	}
+	limited := &budgetReaderAt{r: file, budget: zipDirectoryBudget + 128<<10, armed: true}
+	archive, err := zip.NewReader(limited, size)
+	if err != nil {
+		return err
+	}
+	// Entry data is read through the same reader; only the directory is bounded.
+	limited.armed = false
 	var image *zip.File
 	for _, entry := range archive.File {
 		path := strings.TrimSuffix(entry.Name, "/")

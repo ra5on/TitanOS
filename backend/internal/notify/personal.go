@@ -385,7 +385,7 @@ func (m *Manager) TestPersonal(user, channel string) error {
 	p := state.settings
 	m.people.mu.Unlock()
 	title, text := wording(p.Language, "test", "")
-	send, ok := m.personalSenders(p, PersonalMessage{Severity: Info, Title: title, Text: text})[channel]
+	send, ok := m.personalSenders(user, p, PersonalMessage{Severity: Info, Title: title, Text: text})[channel]
 	if !ok {
 		return invalid("channel")
 	}
@@ -458,7 +458,7 @@ func quietUntil(q Quiet, t time.Time) (time.Time, bool) {
 
 func (m *Manager) sendTo(user string, p Personal, message PersonalMessage) {
 	enabled := enabledPersonal(p)
-	senders := m.personalSenders(p, message)
+	senders := m.personalSenders(user, p, message)
 	go func() {
 		failed, primary := false, false
 		for name, send := range senders {
@@ -476,7 +476,8 @@ func (m *Manager) sendTo(user string, p Personal, message PersonalMessage) {
 	}()
 }
 
-func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[string]func() error {
+func (m *Manager) personalSenders(user string, p Personal, message PersonalMessage) map[string]func() error {
+	confined := m.Confined == nil || m.Confined(user)
 	link := ""
 	if p.Origin != "" && message.Path != "" {
 		link = p.Origin + message.Path
@@ -518,10 +519,10 @@ func (m *Manager) personalSenders(p Personal, message PersonalMessage) map[strin
 			if body == "" {
 				body = message.Title
 			}
-			return m.ntfyPost(p.Ntfy, title, message.Severity, body, header)
+			return m.ntfyPost(p.Ntfy, title, message.Severity, body, header, confined)
 		},
 		"telegram": func() error { return m.telegram(p.Telegram, title+"\n\n"+text) },
-		"discord":  func() error { return m.discord(p.Discord, "**"+title+"**\n"+text) },
+		"discord":  func() error { return m.discord(p.Discord, "**"+title+"**\n"+text, confined) },
 		"homeassistant": func() error {
 			data := haPriority(message.Severity)
 			if message.Path != "" {

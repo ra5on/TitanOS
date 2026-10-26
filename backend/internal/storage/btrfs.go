@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,6 +46,92 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 	return m.mount(ctx, volume)
 }
 
+const (
+	// btrfsMirrorDisks is the number of members of a TitanOS Btrfs mirror.
+	btrfsMirrorDisks = 2
+	// btrfsGrace is how long mountAll waits for every member of a mirror
+	// to appear before it mounts with one missing.
+	btrfsGrace = 60 * time.Second
+)
+
+// btrfsWaiting reports whether a mirror is still within its grace.
+func (m *Manager) btrfsWaiting() bool {
+	now := m.now()
+	for _, first := range m.btrfsSeen {
+		if now.Sub(first) < btrfsGrace {
+			return true
+		}
+	}
+	return false
+}
+
+// mountBtrfs mounts a mirror once all members are visible. With a member
+// missing it waits btrfsGrace from the first sighting of the mirror, then
+// mounts degraded. It never blocks: mountAll calls again next round.
+func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices []blockDevice) {
+	parts := btrfsParts(devices, volume.FilesystemUUID)
+	if len(parts) == 0 {
+		delete(m.btrfsSeen, volume.Name)
+		return
+	}
+	now := m.now()
+	if m.btrfsSeen == nil {
+		m.btrfsSeen = map[string]time.Time{}
+	}
+	first, seen := m.btrfsSeen[volume.Name]
+	if !seen {
+		first = now
+		m.btrfsSeen[volume.Name] = now
+	}
+	waited := now.Sub(first) >= btrfsGrace
+	if len(parts) >= btrfsMirrorDisks {
+		err := m.mountWith(ctx, volume, false)
+		if err == nil {
+			delete(m.btrfsSeen, volume.Name)
+			slog.Info("volume mounted", "name", volume.Name)
+			return
+		}
+		if !waited {
+			slog.Warn("mount Btrfs mirror", "name", volume.Name, "err", err)
+			return
+		}
+	} else if !waited {
+		return // wait for the other member
+	}
+	slog.Warn("mounting Btrfs mirror degraded", "name", volume.Name, "members", len(parts))
+	if err := m.mountWith(ctx, volume, true); err != nil {
+		slog.Warn("mount Btrfs mirror", "name", volume.Name, "err", err)
+		return
+	}
+	delete(m.btrfsSeen, volume.Name)
+}
+
+// btrfsMissing counts the devices a mounted Btrfs filesystem misses, from
+// `btrfs filesystem show --raw <mountpoint>`.
+func btrfsMissing(output string) int {
+	matches := btrfsDeviceLine.FindAllStringSubmatch(output, -1)
+	missing, present := 0, 0
+	for _, match := range matches {
+		if strings.Contains(strings.ToLower(match[3]), "missing") {
+			missing++
+		} else {
+			present++
+		}
+	}
+	// Some btrfs-progs versions leave a disconnected device out entirely.
+	if total := btrfsTotalDevices.FindStringSubmatch(output); total != nil {
+		if n, _ := strconv.Atoi(total[1]); n > present+missing {
+			missing += n - present - missing
+		}
+	}
+	if missing == 0 && strings.Contains(output, "Some devices missing") {
+		missing = 1
+	}
+	return missing
+}
+
+var btrfsTotalDevices = regexp.MustCompile(`Total devices\s+(\d+)`)
+
 func btrfsParts(devices []blockDevice, uuid string) []blockDevice {
 	var parts []blockDevice
 	for _, device := range devices {
@@ -67,18 +154,20 @@ func (m *Manager) btrfsStatus(volume *Volume, status *Status, devices []blockDev
 			volume.Members = append(volume.Members, Member{Disk: disk.Name, State: MemberActive})
 		}
 	}
-	switch len(volume.Members) {
-	case 0:
-		volume.State = VolumeMissing
-	case 1:
-		volume.State = VolumeDegraded
-	default:
-		volume.State = VolumeOK
-	}
 	// Kernel scrub state is in RAM. Reading it does not wake idle disks.
 	m.mu.RLock()
 	state := m.btrfsProgress[cfg.Name]
 	m.mu.RUnlock()
+	switch {
+	case len(volume.Members) == 0:
+		volume.State = VolumeMissing
+	case len(volume.Members) < btrfsMirrorDisks || state.Missing > 0:
+		// The mounted filesystem is authoritative: a mirror mounted degraded
+		// stays degraded even after the other disk is visible again.
+		volume.State = VolumeDegraded
+	default:
+		volume.State = VolumeOK
+	}
 	if state.State != "" {
 		volume.State, volume.Sync = state.State, state.Sync
 	}
@@ -124,7 +213,7 @@ var btrfsDeviceLine = regexp.MustCompile(`(?m)^\s*devid\s+(\d+)\s+size\s+(\d+)\s
 
 // AddDisk replaces the one missing member, rather than changing the RAID profile
 // or reducing the number of copies. A healthy mirror does not accept a spare.
-func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, diskName string) error {
+func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, diskName, identity string) error {
 	point := m.MountPoint(volume.Name)
 	if !m.readMounts()[point] {
 		return fmt.Errorf("%w: mirror is not mounted", ErrNotPossible)
@@ -138,6 +227,9 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	}
 	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
 	if err != nil {
+		return err
+	}
+	if err := checkIdentity(devices, diskName, identity); err != nil {
 		return err
 	}
 	output, err := m.runner.Run(ctx, "", "btrfs", "filesystem", "show", "--raw", point)
@@ -178,6 +270,13 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	sizeMiB := (size + mebibyte - 1) / mebibyte
 	if memberSizeMiB(disk.SizeBytes) < sizeMiB {
 		return ErrDiskTooSmall
+	}
+	devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
+	if err != nil {
+		return err
+	}
+	if err := checkIdentity(devices, diskName, identity); err != nil {
+		return err
 	}
 	device, _ := findDevice(devices, diskName)
 	part, err := m.prepareDisk(ctx, device, "btrfs:"+volume.Name, sizeMiB)

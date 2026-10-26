@@ -337,6 +337,17 @@ func TestZip(t *testing.T) {
 	if got := strings.Join(list, ","); got != "urlaub/,urlaub/strand.jpg,notiz.txt" {
 		t.Errorf("zip holds %s", got)
 	}
+	// A hidden folder at the top keeps its dot.
+	os.MkdirAll(filepath.Join(root.Dir, ".config"), 0o755)
+	os.WriteFile(filepath.Join(root.Dir, ".config/app.ini"), []byte("x"), 0o644)
+	buf.Reset()
+	if err := m.Zip(&buf, root, []string{".config"}); err != nil {
+		t.Fatal(err)
+	}
+	archive, _ = zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if len(archive.File) != 2 || archive.File[1].Name != ".config/app.ini" {
+		t.Errorf("hidden folder in the zip: %v", archive.File)
+	}
 	if err := m.Zip(&bytes.Buffer{}, root, []string{".recycle"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("zipping the recycle bin: %v", err)
 	}

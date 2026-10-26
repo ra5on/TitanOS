@@ -99,6 +99,15 @@ func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, moun
 	if err := m.checkDirectory(clone); err != nil {
 		return err
 	}
+	// checkDirectory accepts an existing legacy folder (Directory == ""), but
+	// a clone is published without overwriting: a leftover folder (e.g. of a
+	// VM deleted with its disks kept) would only fail after the whole copy.
+	target := m.dir(clone.Volume, clone.folder())
+	if _, err := os.Lstat(target); err == nil {
+		return fmt.Errorf("%w: %s already exists; remove or rename it, or choose another name", ErrBadFolder, target)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	files, err := m.snapshotFiles(source)
 	if err != nil {
 		return err
@@ -229,8 +238,23 @@ func (m *Manager) publishClone(root *os.Root, op *CloneOperation) error {
 			return err
 		}
 	}
+	if op.Phase == "conflict" {
+		op.Phase = "publishing"
+		op.Error = ""
+		if err := volumedata.WriteJSON(root, op.ID+"/operation.json", op); err != nil {
+			return err
+		}
+	}
 	if _, err := os.Lstat(stage); err == nil {
 		if err := unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, final, unix.RENAME_NOREPLACE); err != nil {
+			if errors.Is(err, unix.EEXIST) || errors.Is(err, unix.ENOTEMPTY) {
+				// Someone else's folder: never touch it. The staged copy
+				// stays and can be finished later or discarded.
+				op.Phase = "conflict"
+				err = fmt.Errorf("%w: %s already exists; remove or rename it and finish, or discard the staged clone", ErrBadFolder, final)
+				op.Error = err.Error()
+				return errors.Join(err, volumedata.WriteJSON(root, op.ID+"/operation.json", op))
+			}
 			return err
 		}
 		if err := syncSnapshotDir(parent); err != nil {
@@ -350,10 +374,28 @@ func (m *Manager) RecoverClone(volume, id, action, confirm string, mounted []str
 	if op.ID != id || op.VM.Volume != volume || !nameRE.MatchString(op.VM.Name) || op.VM.Directory != "" {
 		return ErrInvalid
 	}
-	if action == "discard" && (op.Phase == "copying" || op.Phase == "verified") {
-		return root.RemoveAll(id)
+	if action == "discard" {
+		switch op.Phase {
+		case "copying", "verified", "conflict":
+			return root.RemoveAll(id)
+		case "publishing":
+			// Until the rename succeeded the staged copy is the only copy and
+			// nothing was published; afterwards the folder is the clone.
+			info, err := root.Lstat(id + "/data")
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return ErrInvalid
+				}
+				return err
+			}
+			if !info.IsDir() {
+				return ErrInvalid
+			}
+			return root.RemoveAll(id)
+		}
+		return ErrInvalid
 	}
-	if action == "finish" && (op.Phase == "verified" || op.Phase == "publishing") {
+	if action == "finish" && (op.Phase == "verified" || op.Phase == "publishing" || op.Phase == "conflict") {
 		if err := m.validClone(op.VM, volume); err != nil {
 			return err
 		}

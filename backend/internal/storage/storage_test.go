@@ -408,13 +408,13 @@ func TestAddDiskNeedsConfirmationAndARunningVolume(t *testing.T) {
 	m.volumes = []VolumeConfig{{Name: "data", Level: "raid5", ArrayUUID: dataArrayUUID}, {Name: "fast", Level: "raid0", ArrayUUID: "x"}}
 	ctx := context.Background()
 
-	if err := m.AddDisk(ctx, "data", "sde", false); !errors.Is(err, ErrNotConfirmed) {
+	if err := m.AddDisk(ctx, "data", "sde", false, ""); !errors.Is(err, ErrNotConfirmed) {
 		t.Errorf("without confirmation: %v", err)
 	}
-	if err := m.AddDisk(ctx, "fast", "sde", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.AddDisk(ctx, "fast", "sde", true, ""); !errors.Is(err, ErrNotPossible) {
 		t.Errorf("RAID 0: %v", err)
 	}
-	if err := m.AddDisk(ctx, "data", "sde", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.AddDisk(ctx, "data", "sde", true, ""); !errors.Is(err, ErrNotPossible) {
 		t.Errorf("array not running: %v", err)
 	}
 	if len(runner.commands) != 0 {
@@ -432,7 +432,7 @@ func TestReadOnlyRefusesEveryAction(t *testing.T) {
 	for name, err := range map[string]error{
 		"create": m.Create(ctx, CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: disks, Erase: disks}),
 		"delete": m.Delete(ctx, "data", "data"),
-		"add":    m.AddDisk(ctx, "data", "sde", true),
+		"add":    m.AddDisk(ctx, "data", "sde", true, ""),
 		"remove": m.RemoveDisk(ctx, "data", "sda"),
 		"check":  m.Check(ctx, "data", true),
 	} {

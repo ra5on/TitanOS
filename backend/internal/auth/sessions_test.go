@@ -60,3 +60,21 @@ func TestSessionsOutliveARestartOfTitand(t *testing.T) {
 		t.Error("a damaged file was accepted")
 	}
 }
+
+func TestPeekDoesNotTouchTheSession(t *testing.T) {
+	sessions := NewSessions()
+	start := time.Now()
+	sessions.now = func() time.Time { return start }
+	token, _ := sessions.Create("alex", "192.0.2.1", "Firefox")
+	sessions.now = func() time.Time { return start.Add(time.Hour) }
+	if session, ok := sessions.Peek(token); !ok || session.User != "alex" || !session.LastSeen.Equal(start) {
+		t.Fatalf("peek: %+v %v", session, ok)
+	}
+	sessions.Delete(token)
+	if _, ok := sessions.Peek(token); ok {
+		t.Error("an ended session is still found")
+	}
+	if _, ok := sessions.Peek(""); ok {
+		t.Error("an empty token found a session")
+	}
+}

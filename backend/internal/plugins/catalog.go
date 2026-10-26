@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/minisign"
@@ -274,47 +276,125 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 	return m.install(ctx, path, volume, "", mounted, activate)
 }
 
+// downloadStall bounds a transfer that stops delivering bytes. There is no
+// total deadline: a 2 GiB build SDK on a slow line must still finish.
+var downloadStall = 2 * time.Minute
+
+var errDownloadChecksum = errors.New("image checksum or size")
+
+// downloadImage fetches an image into dest and verifies size and SHA-256.
+// An existing partial dest is resumed with an HTTP Range request; a resumed
+// file whose final hash does not match is deleted and fetched once more from
+// the start. The caller must own dest's directory.
 func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest Manifest) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer cancel()
-	// Bound a stalled transfer as well as the total duration.
-	watchdog := time.AfterFunc(time.Minute, cancel)
-	defer watchdog.Stop()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
+	for attempt := 0; ; attempt++ {
+		resumed, err := m.downloadAttempt(ctx, url, dest, manifest)
+		if err != nil && resumed && attempt == 0 && errors.Is(err, errDownloadChecksum) {
+			continue
+		}
 		return err
 	}
-	req.Header.Set("User-Agent", "TitanOS/"+m.Release)
-	response, err := m.client.Do(req)
+}
+
+func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifest Manifest) (resumed bool, err error) {
+	if manifest.Size < 0 {
+		return false, fmt.Errorf("%w: image size", ErrInvalid)
+	}
+	file, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDownload, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%w: HTTP %d", ErrDownload, response.StatusCode)
-	}
-	if response.ContentLength >= 0 && response.ContentLength != manifest.Size {
-		return fmt.Errorf("%w: image size", ErrInvalid)
-	}
-	file, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
+		return false, err
 	}
 	defer file.Close()
+	discard := func(cause error) error {
+		file.Close()
+		os.Remove(dest)
+		return cause
+	}
+	st, err := file.Stat()
+	if err != nil {
+		return false, err
+	}
+	if !st.Mode().IsRegular() {
+		return false, fmt.Errorf("%w: partial download is not a regular file", ErrInvalid)
+	}
 	hash := sha256.New()
-	reader := io.LimitReader(response.Body, manifest.Size+1)
+	offset := st.Size()
+	if offset > manifest.Size {
+		offset = 0
+	}
+	if offset > 0 {
+		if _, err := io.Copy(hash, io.NewSectionReader(file, 0, offset)); err != nil {
+			return false, err
+		}
+		if offset == manifest.Size {
+			if hex.EncodeToString(hash.Sum(nil)) == strings.ToLower(manifest.SHA256) {
+				return true, file.Sync()
+			}
+			hash.Reset()
+			offset = 0
+		}
+	}
+	resumed = offset > 0
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// Bound a stalled transfer, including waiting for response headers.
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(downloadStall, func() { stalled.Store(true); cancel() })
+	defer watchdog.Stop()
+	transferErr := func(cause error) error {
+		if stalled.Load() {
+			return fmt.Errorf("%w: no data for %s", ErrDownload, downloadStall)
+		}
+		return fmt.Errorf("%w: %v", ErrDownload, cause)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return resumed, err
+	}
+	req.Header.Set("User-Agent", "TitanOS/"+m.Release)
+	if resumed {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+	response, err := m.client.Do(req)
+	if err != nil {
+		return resumed, transferErr(err)
+	}
+	defer response.Body.Close()
+	switch {
+	case response.StatusCode == http.StatusPartialContent && resumed:
+		var start, end, total int64
+		if _, err := fmt.Sscanf(response.Header.Get("Content-Range"), "bytes %d-%d/%d", &start, &end, &total); err != nil || start != offset || end != manifest.Size-1 || total != manifest.Size {
+			return resumed, discard(fmt.Errorf("%w: unexpected Content-Range", ErrInvalid))
+		}
+	case response.StatusCode == http.StatusOK:
+		// The server ignored the range: start over.
+		hash.Reset()
+		offset, resumed = 0, false
+	default:
+		return resumed, fmt.Errorf("%w: HTTP %d", ErrDownload, response.StatusCode)
+	}
+	if response.ContentLength >= 0 && response.ContentLength != manifest.Size-offset {
+		return resumed, discard(fmt.Errorf("%w: image size", ErrInvalid))
+	}
+	if err := file.Truncate(offset); err != nil {
+		return resumed, err
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return resumed, err
+	}
+	reader := io.LimitReader(response.Body, manifest.Size-offset+1)
 	buffer := make([]byte, 256<<10)
-	var total int64
+	total := offset
 	for {
 		n, readErr := reader.Read(buffer)
 		if n > 0 {
-			watchdog.Reset(time.Minute)
+			watchdog.Reset(downloadStall)
 			total += int64(n)
 			if total > manifest.Size {
-				return fmt.Errorf("%w: image exceeds size", ErrInvalid)
+				return resumed, discard(fmt.Errorf("%w: image exceeds size", ErrInvalid))
 			}
 			if _, err := file.Write(buffer[:n]); err != nil {
-				return err
+				return resumed, err
 			}
 			hash.Write(buffer[:n])
 		}
@@ -322,11 +402,15 @@ func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest 
 			break
 		}
 		if readErr != nil {
-			return fmt.Errorf("%w: %v", ErrDownload, readErr)
+			// Keep the verified-length prefix for the next attempt.
+			return resumed, transferErr(readErr)
 		}
 	}
 	if total != manifest.Size || hex.EncodeToString(hash.Sum(nil)) != strings.ToLower(manifest.SHA256) {
-		return fmt.Errorf("%w: image checksum or size", ErrInvalid)
+		if total < manifest.Size {
+			return resumed, fmt.Errorf("%w: transfer ended early", ErrDownload)
+		}
+		return resumed, discard(fmt.Errorf("%w: %w", ErrInvalid, errDownloadChecksum))
 	}
-	return file.Sync()
+	return resumed, file.Sync()
 }

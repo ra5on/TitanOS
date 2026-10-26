@@ -105,16 +105,35 @@ func memberSizeMiB(diskBytes uint64) uint64 {
 	return (diskBytes - mebibyte - reserveBytes) / mebibyte
 }
 
+// memberSectors is the size of the largest member partition of an array,
+// in 512-byte sectors, as the kernel reports it.
+func (m *Manager) memberSectors(a array) uint64 {
+	var sectors uint64
+	for _, member := range a.members {
+		sectors = max(sectors, readSysfsUint(filepath.Join(filepath.Dir(m.sysBlock), "class", "block", member.device, "size")))
+	}
+	return sectors
+}
+
 // prepareDisk wipes a disk and creates the one RAID partition on it.
 func (m *Manager) prepareDisk(ctx context.Context, device blockDevice, volume string, sizeMiB uint64) (string, error) {
 	// Remove every signature, innermost first, so that nothing on the disk
 	// is recognized as an old filesystem or array afterwards.
+	// Only the disk and its own partitions are wiped. Nothing below an array
+	// or a device-mapper/LVM/crypt holder belongs to this disk alone: it may be
+	// a filesystem spread over other disks. Callers refuse such holders first.
 	var nodes []blockDevice
-	device.walk(func(node blockDevice) {
-		if !isArray(node) {
-			nodes = append(nodes, node)
+	var collect func(node blockDevice)
+	collect = func(node blockDevice) {
+		if !ownedByDisk(node) {
+			return
 		}
-	})
+		nodes = append(nodes, node)
+		for _, child := range node.Children {
+			collect(child)
+		}
+	}
+	collect(device)
 	slices.Reverse(nodes)
 	for _, node := range nodes {
 		if node.FSType == "linux_raid_member" {
@@ -289,8 +308,14 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 
 // arrayOf returns the live array of a volume.
 func (m *Manager) arrayOf(ctx context.Context, volume VolumeConfig) (array, bool) {
+	// A Btrfs mirror has no array; an array whose UUID mdadm could not tell
+	// is nobody's. An empty UUID never matches.
+	uuid := normalizeUUID(volume.ArrayUUID)
+	if uuid == "" || volume.Filesystem == "btrfs" {
+		return array{}, false
+	}
 	for _, a := range m.arrays(ctx) {
-		if a.uuid == normalizeUUID(volume.ArrayUUID) {
+		if a.uuid == uuid {
 			return a, true
 		}
 	}
@@ -298,13 +323,22 @@ func (m *Manager) arrayOf(ctx context.Context, volume VolumeConfig) (array, bool
 }
 
 func (m *Manager) mount(ctx context.Context, volume VolumeConfig) error {
+	return m.mountWith(ctx, volume, false)
+}
+
+// mountWith mounts a volume. degraded lets a Btrfs mirror start with a
+// member missing; mountAll asks for it only after waiting for all members.
+func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded bool) error {
 	mountPoint := filepath.Join(m.mountRoot, volume.Name)
 	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 		return err
 	}
 	options := "noatime"
 	if volume.Filesystem == "btrfs" {
-		options += ",subvolid=5,degraded"
+		options += ",subvolid=5"
+		if degraded {
+			options += ",degraded"
+		}
 	}
 	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
 	if err != nil {
@@ -338,11 +372,8 @@ func (m *Manager) mountAll(ctx context.Context) {
 			continue
 		}
 		if volume.Filesystem == "btrfs" {
-			devices, err := m.blockDevices(ctx)
-			if err == nil && len(btrfsParts(devices, volume.FilesystemUUID)) > 0 {
-				if err := m.mount(ctx, volume); err != nil {
-					slog.Warn("mount Btrfs mirror", "name", volume.Name, "err", err)
-				}
+			if devices, err := m.blockDevices(ctx); err == nil {
+				m.mountBtrfs(ctx, volume, devices)
 			}
 			continue
 		}
@@ -350,7 +381,7 @@ func (m *Manager) mountAll(ctx context.Context) {
 			arrays = m.arrays(ctx)
 		}
 		for _, a := range arrays {
-			if a.uuid != normalizeUUID(volume.ArrayUUID) || a.state == "inactive" || a.state == "clear" {
+			if a.uuid == "" || a.uuid != normalizeUUID(volume.ArrayUUID) || a.state == "inactive" || a.state == "clear" {
 				continue
 			}
 			if err := m.mount(ctx, volume); err != nil {
@@ -441,7 +472,9 @@ func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
 // AddDisk adds a disk to a volume. If a disk is missing the new one takes
 // its place and is rebuilt; otherwise it waits as a spare that steps in
 // automatically when a disk fails. Everything on the disk is destroyed.
-func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool) error {
+// identity, if not empty, is the disk identity the caller picked (as the disk
+// list shows it); the disk is refused when it no longer matches.
+func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool, identity string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ReadOnly {
@@ -459,7 +492,7 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 		return ErrNotConfirmed
 	}
 	if volume.Filesystem == "btrfs" {
-		return m.replaceMissingBtrfs(ctx, volume, diskName)
+		return m.replaceMissingBtrfs(ctx, volume, diskName, identity)
 	}
 	if volume.Level == "raid0" {
 		return fmt.Errorf("%w: RAID 0 has no redundancy to rebuild from", ErrNotPossible)
@@ -477,16 +510,24 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 	if err != nil {
 		return err
 	}
-	// The new partition must be at least as large as the existing ones.
-	var memberSectors uint64
-	for _, member := range a.members {
-		memberSectors = max(memberSectors, readSysfsUint(filepath.Join("/sys/class/block", member.device, "size")))
+	if err := checkIdentity(devices, diskName, identity); err != nil {
+		return err
 	}
-	sizeMiB := (memberSectors*512 + mebibyte - 1) / mebibyte
+	// The new partition must be at least as large as the existing ones.
+	sizeMiB := (m.memberSectors(a)*512 + mebibyte - 1) / mebibyte
 	if sizeMiB == 0 || disk.SizeBytes < (sizeMiB+1)*mebibyte+mebibyte {
 		return fmt.Errorf("%w: %s", ErrDiskTooSmall, diskName)
 	}
 
+	// Same guard as Create: refuse holders, mounts and foreign arrays that
+	// also live on other disks; stop an old array that lives only here.
+	devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
+	if err != nil {
+		return err
+	}
+	if err := checkIdentity(devices, diskName, identity); err != nil {
+		return err
+	}
 	slog.Info("adding disk to volume", "name", name, "disk", diskName)
 	device, _ := findDevice(devices, diskName)
 	part, err := m.prepareDisk(ctx, device, name, sizeMiB)
@@ -512,6 +553,11 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 	volume, ok := m.find(name)
 	if !ok {
 		return ErrNotFound
+	}
+	if volume.Filesystem == "btrfs" {
+		// A two-disk Btrfs mirror has no spare to take out; a missing member
+		// is replaced with "add disk" (btrfs replace).
+		return fmt.Errorf("%w: disks of a Btrfs mirror are replaced, not removed", ErrNotPossible)
 	}
 	a, running := m.arrayOf(ctx, volume)
 	if !running {

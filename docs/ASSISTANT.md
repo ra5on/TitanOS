@@ -12,7 +12,7 @@ Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Ben
 
 Es gibt zwei Ausführungsarten:
 
-- **Mit Bestätigung** (Standard): einzelne Aktionen erscheinen als Karte; gefährliche Aktionen verlangen ein Häkchen, zerstörerische den Zielnamen. Ein einmal bestätigter Auftrag (`start_task`) erlaubt die folgenden nicht zerstörerischen Schritte ohne weitere Klicks. Zerstörerisches fragt weiter einzeln.
+- **Mit Bestätigung** (Standard): einzelne Aktionen erscheinen als Karte; gefährliche Aktionen verlangen ein Häkchen, zerstörerische einen einfachen Bestätigungsdialog, der Aktion und Ziel nennt (kein Eintippen; die Oberfläche schickt den Zielnamen nach dem Klick mit). Ein einmal bestätigter Auftrag (`start_task`) erlaubt die folgenden nicht zerstörerischen Schritte ohne weitere Klicks. Zerstörerisches fragt weiter einzeln.
 - **Direkt ausführen**: Der Agent führt erlaubte Schritte einschließlich zerstörerischer Änderungen ohne Plan-, Klick-, Häkchen- oder Namensabfrage aus. Die Einstellung erläutert ausdrücklich die Folgen. Rollen, Bereichsrechte, Zielprüfung und die bestehenden API-Sperren gelten weiterhin. Fehlende fachliche Angaben, etwa welches Volume gemeint ist, muss der Agent weiterhin klären.
 
 Die Einstellung gilt für die zugelassenen Konten des NAS. Bestehende Bestätigungsdialoge außerhalb des Assistenten bleiben unverändert. „Alle Agenten pausieren“ unterbricht auch die Modellanfrage; einzelne Aufträge werden anschließend gezielt fortgesetzt.

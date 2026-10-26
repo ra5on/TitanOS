@@ -21,7 +21,8 @@ type gpuLease struct {
 	Stopped []string                   `json:"stopped"`
 }
 
-// hardwareMu serializes Compose/container starts and VM handoffs. Lease records
+// hardwareMu serializes lease changes, hardware resolution for compose up and
+// container starts; it is never held across compose up or a backup. Lease records
 // live in /run so a titand restart can still return the stopped containers.
 func (m *Manager) blockedHardware() map[string]bool {
 	result := map[string]bool{}
@@ -166,6 +167,12 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 		finish()
 		return func(bool) {}, nil
 	}
+	// A compose up resolved its hardware before this lease existed; its
+	// containers may still start on these devices.
+	if m.composing > 0 {
+		finish()
+		return nil, fmt.Errorf("%w: wait until Docker has started the app", ErrBusy)
+	}
 	var affected []string
 	if m.current().Enabled && !m.engineRunning() {
 		finish()
@@ -198,6 +205,10 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 				break
 			}
 		}
+	}
+	if len(affected) > 0 && m.backupActive() {
+		finish()
+		return nil, errBackupRunning
 	}
 	if m.gpuLeases == nil {
 		m.gpuLeases = map[string]gpuLease{}
@@ -294,7 +305,14 @@ func (m *Manager) ReturnVMHardware(ctx context.Context, running map[string]bool)
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
 	var failures []error
-	for name := range m.gpuLeases {
+	backup := m.backupActive()
+	for name, lease := range m.gpuLeases {
+		if !running[name] && backup && len(lease.Stopped) > 0 {
+			// Restarting containers would add writers to a running backup;
+			// the next poll returns them.
+			failures = append(failures, fmt.Errorf("VM %s: %w", name, errBackupRunning))
+			continue
+		}
 		if !running[name] {
 			if err := m.returnVM(ctx, name); err != nil {
 				failures = append(failures, err)

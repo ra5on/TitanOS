@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"syscall"
 )
 
@@ -12,31 +13,40 @@ type BackupLease struct {
 	closed  bool
 }
 
+// BackupLease keeps Docker from changing containers until Close: app jobs,
+// container actions, engine restarts and automatic GPU switches are refused
+// meanwhile. It does not hold hardwareMu, so VM starts that need no container
+// change and other Docker calls keep working during a long backup.
 func (m *Manager) BackupLease(ctx context.Context) (*BackupLease, error) {
 	if m.Disabled {
 		return nil, ErrDisabled
 	}
-	if !m.hardwareMu.TryLock() {
+	// hardwareMu is held only briefly by lifecycle calls; waiting for it lets
+	// one that is underway finish before the backup takes over.
+	m.hardwareMu.Lock()
+	defer m.hardwareMu.Unlock()
+	if m.composing > 0 {
 		return nil, errors.New("Docker is changing containers")
 	}
 	m.mu.Lock()
-	busy := false
+	defer m.mu.Unlock()
 	for _, job := range m.jobs {
 		if job.State == "running" {
-			busy = true
+			return nil, errors.New("Docker app work is running")
 		}
 	}
-	m.mu.Unlock()
-	if busy {
-		m.hardwareMu.Unlock()
-		return nil, errors.New("Docker app work is running")
+	if m.backups > 0 {
+		return nil, errors.New("another app backup holds Docker")
 	}
+	m.backups++
 	return &BackupLease{manager: m}, nil
 }
 func (l *BackupLease) Close() {
 	if !l.closed {
 		l.closed = true
-		l.manager.hardwareMu.Unlock()
+		l.manager.mu.Lock()
+		l.manager.backups--
+		l.manager.mu.Unlock()
 	}
 }
 func (l *BackupLease) Containers(ctx context.Context) ([]Container, error) {
@@ -106,4 +116,31 @@ func (l *BackupLease) Mounts(ctx context.Context, id string) ([]BackupMount, err
 		}
 	}
 	return out, nil
+}
+
+// PostgresUser returns the superuser role the official postgres image created:
+// POSTGRES_USER from the container environment, "postgres" if unset.
+func (l *BackupLease) PostgresUser(ctx context.Context, id string) (string, error) {
+	var inspect struct {
+		Config struct {
+			Env []string `json:"Env"`
+		} `json:"Config"`
+	}
+	if err := l.manager.api.getJSON(ctx, "/containers/"+url.PathEscape(id)+"/json", nil, &inspect); err != nil {
+		return "", err
+	}
+	return postgresUser(inspect.Config.Env), nil
+}
+
+func postgresUser(env []string) string {
+	user := ""
+	for _, value := range env {
+		if v, ok := strings.CutPrefix(value, "POSTGRES_USER="); ok {
+			user = v
+		}
+	}
+	if user == "" {
+		return "postgres"
+	}
+	return user
 }

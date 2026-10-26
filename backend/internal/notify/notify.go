@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/netip"
 	"net/smtp"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -135,6 +137,10 @@ type Settings struct {
 type Manager struct {
 	store *config.Store
 	http  *http.Client
+	// confinedHTTP sends to addresses plain users chose; see post.
+	confinedHTTP *http.Client
+	// Confined says whether an account may only reach public addresses.
+	Confined func(user string) bool
 	// telegramAPI is where Telegram's bots are reached.
 	telegramAPI string
 	// sendMail is how a mail gets out; tests replace it.
@@ -157,7 +163,7 @@ type Manager struct {
 // NewManager returns a manager without any channel set up.
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
-		store: store, http: &http.Client{Timeout: 20 * time.Second}, telegramAPI: "https://api.telegram.org",
+		store: store, http: &http.Client{Timeout: 20 * time.Second}, confinedHTTP: confinedClient(), telegramAPI: "https://api.telegram.org",
 		sendMail: sendMail, retryPause: 10 * time.Second, now: time.Now, settings: Settings{Language: "en", MinSeverity: Warning}, nextID: 1,
 	}
 }
@@ -367,7 +373,7 @@ func (m *Manager) deliver(settings Settings, message Message, only *string) erro
 		"email":    func() error { return m.mail(settings.Email, title, message.Text) },
 		"ntfy":     func() error { return m.ntfy(settings.Ntfy, title, message) },
 		"telegram": func() error { return m.telegram(settings.Telegram, title+"\n\n"+message.Text) },
-		"discord":  func() error { return m.discord(settings.Discord, "**"+title+"**\n"+message.Text) },
+		"discord":  func() error { return m.discord(settings.Discord, "**"+title+"**\n"+message.Text, false) },
 		"homeassistant": func() error {
 			return m.haSend(settings.HomeAssistant, title, message.Text, haPriority(message.Severity))
 		},
@@ -412,7 +418,10 @@ func haPriority(severity string) map[string]any {
 }
 
 // post sends a request and treats every answer but a success as an error.
-func (m *Manager) post(address string, header map[string]string, body []byte) error {
+// A confined request (an address a plain user chose) only goes to public
+// addresses, follows no redirect and does not report what the server said,
+// so that the NAS cannot be used to look into the home network.
+func (m *Manager) post(address string, header map[string]string, body []byte, confined bool) error {
 	req, err := http.NewRequest(http.MethodPost, address, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -420,7 +429,11 @@ func (m *Manager) post(address string, header map[string]string, body []byte) er
 	for name, value := range header {
 		req.Header.Set(name, value)
 	}
-	res, err := m.http.Do(req)
+	client := m.http
+	if confined {
+		client = m.confinedHTTP
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		// The address may hold a token; do not carry it into the log.
 		var urlErr *url.Error
@@ -431,6 +444,9 @@ func (m *Manager) post(address string, header map[string]string, body []byte) er
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode > 299 {
+		if confined {
+			return fmt.Errorf("the server answered %s", res.Status)
+		}
 		detail, _ := io.ReadAll(io.LimitReader(res.Body, 300))
 		return fmt.Errorf("the server answered %s: %s", res.Status, strings.TrimSpace(string(detail)))
 	}
@@ -438,11 +454,11 @@ func (m *Manager) post(address string, header map[string]string, body []byte) er
 }
 
 func (m *Manager) ntfy(cfg Ntfy, title string, message Message) error {
-	return m.ntfyPost(cfg, title, message.Severity, message.Text, nil)
+	return m.ntfyPost(cfg, title, message.Severity, message.Text, nil, false)
 }
 
 // ntfyPost publishes to a topic; extra adds headers such as Click or Actions.
-func (m *Manager) ntfyPost(cfg Ntfy, title, severity, text string, extra map[string]string) error {
+func (m *Manager) ntfyPost(cfg Ntfy, title, severity, text string, extra map[string]string, confined bool) error {
 	header := map[string]string{"Title": title, "Priority": map[string]string{Info: "default", Warning: "high", Error: "urgent"}[severity], "Tags": "floppy_disk"}
 	for name, value := range extra {
 		header[name] = value
@@ -450,17 +466,17 @@ func (m *Manager) ntfyPost(cfg Ntfy, title, severity, text string, extra map[str
 	if cfg.Token != "" {
 		header["Authorization"] = "Bearer " + cfg.Token
 	}
-	return m.post(cfg.URL, header, []byte(text))
+	return m.post(cfg.URL, header, []byte(text), confined)
 }
 
 func (m *Manager) telegram(cfg Telegram, text string) error {
 	body, _ := json.Marshal(map[string]string{"chat_id": cfg.ChatID, "text": text})
-	return m.post(m.telegramAPI+"/bot"+cfg.Token+"/sendMessage", map[string]string{"Content-Type": "application/json"}, body)
+	return m.post(m.telegramAPI+"/bot"+cfg.Token+"/sendMessage", map[string]string{"Content-Type": "application/json"}, body, false)
 }
 
-func (m *Manager) discord(cfg Discord, content string) error {
+func (m *Manager) discord(cfg Discord, content string, confined bool) error {
 	body, _ := json.Marshal(map[string]string{"content": content})
-	return m.post(cfg.Webhook, map[string]string{"Content-Type": "application/json"}, body)
+	return m.post(cfg.Webhook, map[string]string{"Content-Type": "application/json"}, body, confined)
 }
 
 func (m *Manager) mail(cfg Email, subject, text string) error {
@@ -532,4 +548,48 @@ func sendMail(cfg Email, message []byte) error {
 		return err
 	}
 	return client.Quit()
+}
+
+// confinedClient connects to public addresses only and follows no redirect.
+func confinedClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		addr, err := netip.ParseAddr(host)
+		if err != nil || !public(addr) {
+			return errors.New("only public addresses can be reached")
+		}
+		return nil
+	}}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = dialer.DialContext
+	return &http.Client{
+		Timeout:       20 * time.Second,
+		Transport:     transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+// nonPublic are ranges that are not the internet beyond what Go knows:
+// shared address space (Tailscale), benchmarking, documentation, reserved.
+var nonPublic = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"), netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"), netip.MustParsePrefix("fd7a:115c:a1e0::/48"),
+}
+
+func public(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+		return false
+	}
+	for _, prefix := range nonPublic {
+		if prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
 }

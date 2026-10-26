@@ -75,7 +75,9 @@ func DOCXText(data []byte) (string, error) {
 				for _, a := range t.Attr {
 					if a.Name.Local == "val" {
 						if n, ok := strings.CutPrefix(a.Value, "Heading"); ok {
-							if level, err := strconv.Atoi(n); err == nil {
+							// Word has Heading1 to Heading9; anything else in a
+							// file is not trusted to size the prefix.
+							if level, err := strconv.Atoi(n); err == nil && level >= 1 && level <= 9 {
 								prefix = strings.Repeat("#", level) + " "
 							}
 						} else if a.Value == "Title" {
@@ -155,6 +157,11 @@ type xlsxSheet struct {
 	} `xml:"sheetData>row"`
 }
 
+// maxColumn is the last column a workbook can have (XFD).
+const maxColumn = 16383
+
+// columnIndex returns the column of a cell reference such as "C7", from 0.
+// References beyond the last column of Excel give -1.
 func columnIndex(ref string) int {
 	n := 0
 	for _, r := range ref {
@@ -162,6 +169,9 @@ func columnIndex(ref string) int {
 			break
 		}
 		n = n*26 + int(r-'A'+1)
+		if n-1 > maxColumn {
+			return -1
+		}
 	}
 	return n - 1
 }

@@ -208,3 +208,35 @@ func TestDevelopmentModeTouchesNothing(t *testing.T) {
 		t.Errorf("calls: %v", system.calls)
 	}
 }
+
+// The key of the NAS is made only when there is none. A missing public half
+// is derived from the private key, so the fingerprint stays the same.
+func TestHostKeyKeptWhenOnlyPublicHalfIsMissing(t *testing.T) {
+	m, _, _ := newManager(t)
+	first, err := m.hostKey(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.store.Remove(hostKeyFile + ".pub"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := m.hostKey(context.Background())
+	if err != nil || second != first {
+		t.Fatalf("fingerprint %q -> %q (%v)", first, second, err)
+	}
+}
+
+func TestRemovedKeyEndsSessions(t *testing.T) {
+	m, system, _ := newManager(t)
+	first, second := userKey(t), userKey(t)
+	m.SetEnabled(true)
+	if _, err := m.Apply(context.Background(), []auth.User{{Name: "alex", Role: auth.RoleOwner, UID: 2000, SSHKeys: []string{first, second}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Apply(context.Background(), []auth.User{{Name: "alex", Role: auth.RoleOwner, UID: 2000, SSHKeys: []string{first, second}}}); err != nil || system.ran("loginctl terminate-user alex") != 0 {
+		t.Fatalf("unchanged keys ended sessions: %v", system.calls)
+	}
+	if _, err := m.Apply(context.Background(), []auth.User{{Name: "alex", Role: auth.RoleOwner, UID: 2000, SSHKeys: []string{first}}}); err != nil || system.ran("loginctl terminate-user alex") != 1 {
+		t.Fatalf("removing a key kept the sessions: %v", system.calls)
+	}
+}

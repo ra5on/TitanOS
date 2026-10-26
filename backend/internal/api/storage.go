@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -89,7 +90,7 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Create(r.Context(), req); err != nil {
+	if err := s.opts.Storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "create volume", err)
 		return
 	}
@@ -157,7 +158,7 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Delete(r.Context(), name, req.Confirm); err != nil {
+	if err := s.opts.Storage.Delete(context.WithoutCancel(r.Context()), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)
 		return
 	}
@@ -168,13 +169,15 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk  string `json:"disk"`
 		Erase bool   `json:"erase"`
+		// Identity is the disk's identity from the disk list, optional.
+		Identity string `json:"identity"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	name := r.PathValue("name")
 	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.AddDisk(r.Context(), name, req.Disk, req.Erase); err != nil {
+	if err := s.opts.Storage.AddDisk(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
 		writeStorageError(w, r, "add disk", err)
 		return
 	}
@@ -184,7 +187,7 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRemoveVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	name, disk := r.PathValue("name"), r.PathValue("disk")
 	slog.Info("remove disk requested", "volume", name, "disk", disk, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.RemoveDisk(r.Context(), name, disk); err != nil {
+	if err := s.opts.Storage.RemoveDisk(context.WithoutCancel(r.Context()), name, disk); err != nil {
 		writeStorageError(w, r, "remove disk", err)
 		return
 	}

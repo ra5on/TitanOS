@@ -7,6 +7,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -44,7 +46,24 @@ func TestExportBoundStopsAndNamesAreFixed(t *testing.T) {
 	if _, err := w.Write([]byte("too long")); err == nil || !cancelled {
 		t.Fatal("export overflow accepted")
 	}
-	if err := dumpPostgres(context.Background(), "--unsafe", filepath.Join(t.TempDir(), "dump")); err == nil {
+	if err := dumpPostgres(context.Background(), "--unsafe", "postgres", filepath.Join(t.TempDir(), "dump")); err == nil {
 		t.Fatal("unsafe identity accepted")
+	}
+}
+
+func TestPostgresExportUsesImageSuperuser(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	args, err := postgresDumpArgs(id, "immich")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "--user", "postgres", id, "pg_dumpall", "--no-password", "--username=immich"}
+	if !slices.Equal(args, want) {
+		t.Fatal(args)
+	}
+	for _, bad := range []string{"", "a\nb", strings.Repeat("x", 64)} {
+		if _, err := postgresDumpArgs(id, bad); err == nil {
+			t.Fatalf("user %q accepted", bad)
+		}
 	}
 }

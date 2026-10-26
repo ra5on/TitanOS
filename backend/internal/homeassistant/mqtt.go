@@ -12,8 +12,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// mqttKeepAlive is announced to the broker. TitanOS pings every half of it
+// and gives up on a connection that answers nothing for 1.5 times it, or
+// leaves a ping unanswered until the next one is due: a half-open TCP
+// connection is otherwise only noticed after many minutes, while the broker
+// has long published the last will.
+var mqttKeepAlive = 60 * time.Second
 
 // A small MQTT 3.1.1 client with what TitanOS needs: connect with a last
 // will, publish with QoS 0 (retained where Home Assistant needs it) and
@@ -56,6 +64,9 @@ type mqttClient struct {
 	ignored   sync.Map // own live discovery echoes never occupy the input queue
 	done      chan struct{}
 	closeOnce sync.Once
+	// pingSent is the time of the unanswered PINGREQ (UnixNano), 0 if none.
+	pingSent  atomic.Int64
+	keepAlive time.Duration
 }
 
 type mqttMessage struct {
@@ -103,7 +114,7 @@ func dialMQTT(ctx context.Context, o MQTTOptions) (*mqttClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &mqttClient{conn: conn, r: bufio.NewReader(conn), incoming: make(chan mqttMessage, 32), errs: make(chan error, 1), done: make(chan struct{})}
+	c := &mqttClient{conn: conn, r: bufio.NewReader(conn), incoming: make(chan mqttMessage, 32), errs: make(chan error, 1), done: make(chan struct{}), keepAlive: mqttKeepAlive}
 
 	flags := byte(0x02) // clean session
 	var payload []byte
@@ -121,7 +132,8 @@ func dialMQTT(ctx context.Context, o MQTTOptions) (*mqttClient, error) {
 			payload = append(payload, mqttString(o.Password)...)
 		}
 	}
-	body := append(mqttString("MQTT"), 4, flags, 0, 60) // protocol level 4, keep alive 60 s
+	keepAlive := max(1, int(c.keepAlive/time.Second))
+	body := append(mqttString("MQTT"), 4, flags, byte(keepAlive>>8), byte(keepAlive)) // protocol level 4
 	body = append(body, payload...)
 	conn.SetDeadline(time.Now().Add(15 * time.Second))
 	if _, err := conn.Write(mqttPacket(mqttConnect<<4, body)); err != nil {
@@ -179,8 +191,17 @@ func (c *mqttClient) readPacket() (byte, []byte, error) {
 
 func (c *mqttClient) readLoop() {
 	for {
+		// Anything from the broker counts as a sign of life; PINGRESP is
+		// due well within this, so silence means the connection is dead.
+		c.conn.SetReadDeadline(time.Now().Add(c.keepAlive * 3 / 2))
 		header, body, err := c.readPacket()
 		if err != nil {
+			var timeout net.Error
+			if errors.As(err, &timeout) && timeout.Timeout() {
+				err = errors.New("the broker stopped answering")
+			}
+			// No DISCONNECT: the broker is to publish the last will.
+			c.conn.Close()
 			c.errs <- err
 			close(c.incoming)
 			return
@@ -221,7 +242,9 @@ func (c *mqttClient) readLoop() {
 			case c.incoming <- mqttMessage{topic, rest}:
 			default: // a flood of commands is dropped, not queued
 			}
-		case mqttPingresp, mqttSuback:
+		case mqttPingresp:
+			c.pingSent.Store(0)
+		case mqttSuback:
 		}
 	}
 }
@@ -256,7 +279,15 @@ func (c *mqttClient) Subscribe(filters ...string) error {
 	return c.write(mqttPacket(mqttSubscribe<<4|0x02, body))
 }
 
-func (c *mqttClient) Ping() error { return c.write([]byte{mqttPingreq << 4, 0}) }
+// Ping sends a PINGREQ; it fails when the previous one is still unanswered.
+func (c *mqttClient) Ping() error {
+	if sent := c.pingSent.Load(); sent != 0 && time.Since(time.Unix(0, sent)) >= c.keepAlive/4 {
+		c.conn.Close() // no DISCONNECT: the broker is to publish the last will
+		return errors.New("the broker did not answer the keep-alive ping")
+	}
+	c.pingSent.CompareAndSwap(0, time.Now().UnixNano())
+	return c.write([]byte{mqttPingreq << 4, 0})
+}
 
 // Close says goodbye; the broker then does not send the last will.
 func (c *mqttClient) Close() {

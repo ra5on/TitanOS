@@ -512,3 +512,82 @@ func TestTerminalPhaseIsNotPublicBeforeWorkerReleasesStaging(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func uploadAndWait(t *testing.T, m *Manager, name, upload string, data []byte) Job {
+	t.Helper()
+	j, err := m.Create(Request{Volume: "data", Name: name, UploadName: upload, UploadSize: int64(len(data))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Upload(context.Background(), j.ID, 0, data); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.FinishUpload(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	return waitJob(t, m, j.ID, "done", "failed", "review")
+}
+
+func TestXZMemoryLimitRejectsLargeDictionary(t *testing.T) {
+	// The default preset uses an 8 MiB dictionary: with a 1 MiB limit the
+	// decoder must refuse instead of allocating, as for a crafted archive
+	// above the real 256 MiB limit.
+	old := xzMemLimit
+	xzMemLimit = "1MiB"
+	t.Cleanup(func() { xzMemLimit = old })
+	cmd := exec.Command("xz", "-6", "-c")
+	cmd.Stdin = bytes.NewReader(testISO(80 << 10))
+	compressed, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := testManager(t)
+	j := uploadAndWait(t, m, "big.iso", "big.iso.xz", compressed)
+	if j.Phase != "failed" || !strings.Contains(j.Error, "needs more than 1MiB of memory") {
+		t.Fatal(j)
+	}
+	if _, err := os.Stat(filepath.Join(m.MountRoot, "data/iso/big.iso")); err == nil {
+		t.Fatal("published")
+	}
+}
+
+func TestZIPDirectoryIsBounded(t *testing.T) {
+	var buf bytes.Buffer
+	archive := zip.NewWriter(&buf)
+	w, _ := archive.Create("disk.iso")
+	w.Write(testISO(40 << 10))
+	archive.Close()
+	// The end record claims a huge directory: archive/zip would preallocate
+	// for it before reading anything.
+	crafted := bytes.Clone(buf.Bytes())
+	end := bytes.LastIndex(crafted, []byte{0x50, 0x4b, 0x05, 0x06})
+	copy(crafted[end+8:], []byte{0xfe, 0xff, 0xfe, 0xff})
+	m := testManager(t)
+	if j := uploadAndWait(t, m, "disk.iso", "crafted.zip", crafted); j.Phase != "failed" || !strings.Contains(j.Error, "too many entries") {
+		t.Fatal(j)
+	}
+	// Many tiny entries are refused as well.
+	buf.Reset()
+	archive = zip.NewWriter(&buf)
+	for i := range zipMaxEntries + 1 {
+		archive.Create(fmt.Sprintf("d/%d.txt", i))
+	}
+	w, _ = archive.Create("disk.iso")
+	w.Write(testISO(40 << 10))
+	archive.Close()
+	if j := uploadAndWait(t, m, "disk.iso", "many.zip", buf.Bytes()); j.Phase != "failed" || !strings.Contains(j.Error, "too many entries") {
+		t.Fatal(j)
+	}
+	// A normal archive still extracts with the directory budget in place.
+	buf.Reset()
+	archive = zip.NewWriter(&buf)
+	w, _ = archive.Create("disk.iso")
+	w.Write(testISO(3 << 20))
+	archive.Close()
+	old := zipDirectoryBudget
+	zipDirectoryBudget = 4 << 10
+	t.Cleanup(func() { zipDirectoryBudget = old })
+	if j := uploadAndWait(t, m, "disk.iso", "ok.zip", buf.Bytes()); j.Phase != "done" {
+		t.Fatal(j)
+	}
+}

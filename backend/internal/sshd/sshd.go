@@ -7,6 +7,7 @@
 package sshd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -276,8 +277,19 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 			return false, err
 		}
 		// Owned by root: the account cannot add keys behind TitanOS's back.
-		if err := os.WriteFile(filepath.Join(keysDir, user.Name), []byte(strings.Join(user.SSHKeys, "\n")+"\n"), 0o644); err != nil {
+		file := filepath.Join(keysDir, user.Name)
+		before, _ := os.ReadFile(file)
+		if err := os.WriteFile(file, []byte(strings.Join(user.SSHKeys, "\n")+"\n"), 0o644); err != nil {
 			return false, err
+		}
+		// A key that was taken away may be the one a session came in with
+		// (a lost laptop): such sessions end, the account logs in again.
+		for line := range strings.SplitSeq(string(before), "\n") {
+			if line = strings.TrimSpace(line); line != "" && !slices.Contains(user.SSHKeys, line) {
+				m.runner.Run(ctx, "", "loginctl", "terminate-user", user.Name)
+				slog.Info("SSH sessions ended after a key was removed", "user", user.Name)
+				break
+			}
 		}
 		names = append(names, user.Name)
 	}
@@ -294,6 +306,25 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 func (m *Manager) hostKey(ctx context.Context) (string, error) {
 	private, err := m.store.Read(hostKeyFile)
 	public, pubErr := m.store.Read(hostKeyFile + ".pub")
+	// Only a key that is not there is made anew. A stick that cannot be
+	// read right now must not change the fingerprint clients know.
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	if err == nil && pubErr != nil {
+		if !errors.Is(pubErr, fs.ErrNotExist) {
+			return "", pubErr
+		}
+		signer, parseErr := ssh.ParsePrivateKey(private)
+		if parseErr != nil {
+			return "", parseErr
+		}
+		public = append(bytes.TrimSpace(ssh.MarshalAuthorizedKey(signer.PublicKey())), " titanos\n"...)
+		if err := m.store.Write(hostKeyFile+".pub", public); err != nil {
+			return "", err
+		}
+		pubErr = nil
+	}
 	if err != nil || pubErr != nil {
 		if err := os.MkdirAll(m.workDir, 0o700); err != nil {
 			return "", err

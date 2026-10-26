@@ -140,9 +140,15 @@ type Manager struct {
 	Ready           func() bool // drivers must be active before Docker autostarts containers
 	HardwareDevices func(context.Context) []hardware.ContainerDevice
 	RefreshCDI      func(context.Context) error
-	hardwareMu      sync.Mutex
-	hardwareRunDir  string
-	gpuLeases       map[string]gpuLease
+	// hardwareMu guards only short critical sections: GPU leases, the
+	// composing count and engine/container lifecycle calls. Long work
+	// (compose up, app backups) runs without it.
+	hardwareMu     sync.Mutex
+	hardwareRunDir string
+	gpuLeases      map[string]gpuLease
+	// composing counts `docker compose up` runs whose hardware was resolved
+	// against the current leases; guarded by hardwareMu.
+	composing int
 
 	store  *config.Store
 	runner run.Runner
@@ -161,6 +167,7 @@ type Manager struct {
 	samples  map[string]*sample
 	jobs     map[string]*Job
 	appList  []string // apps in /config; nil until read
+	backups  int      // open BackupLeases; no container lifecycle changes
 
 	// What the registries said the last time they were asked.
 	remote         map[string]string   // image reference → digest
@@ -284,6 +291,11 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 	applied := m.applied
 	m.mu.Unlock()
 	if want == applied {
+		return nil
+	}
+	// A running compose up or app backup owns the containers; retry on the
+	// next tick. Only a vanished data volume stops the engine regardless.
+	if (m.composing > 0 || m.backupActive()) && !(applied != "" && !slices.Contains(mounted, settings.Volume)) {
 		return nil
 	}
 
@@ -497,6 +509,9 @@ func (m *Manager) Action(ctx context.Context, id, action string) error {
 	}
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
+	if m.backupActive() {
+		return errBackupRunning
+	}
 	if action != "stop" {
 		if err := m.canStartContainer(ctx, id); err != nil {
 			return err
@@ -642,6 +657,15 @@ func (m *Manager) AppsWithUpdates(ctx context.Context) []string {
 		}
 	}
 	return apps
+}
+
+var errBackupRunning = fmt.Errorf("%w: an app backup is running", ErrBusy)
+
+// backupActive reports an open BackupLease.
+func (m *Manager) backupActive() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.backups > 0
 }
 
 // Busy reports known backend-owned app work without querying the engine.

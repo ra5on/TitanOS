@@ -263,3 +263,17 @@ func TestRestartOfTitandKeepsWatchingTheUPS(t *testing.T) {
 		t.Error("the local password changed")
 	}
 }
+
+// A comment sign, quote or backslash in a password must not cut the line
+// upsmon reads: it would not start and the NAS would not shut down in time.
+func TestPasswordsWithNUTSyntax(t *testing.T) {
+	m := &Manager{}
+	settings := Settings{Mode: "network", Host: "nas2.local", Name: "eaton", User: "monuser", Password: `ab#c"d\e`}
+	got := m.files(settings, "x")["upsmon.conf"]
+	if !strings.Contains(got, `MONITOR eaton@nas2.local 1 monuser "ab#c\"d\\e" secondary`) {
+		t.Fatalf("upsmon.conf:\n%s", got)
+	}
+	if quote("plain-Base64_value") != "plain-Base64_value" {
+		t.Fatal("a plain password changed")
+	}
+}
