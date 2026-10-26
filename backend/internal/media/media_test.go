@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -447,5 +448,67 @@ func TestUploadProofDiscardsOnlyUncheckpointedTail(t *testing.T) {
 	stat, _ := os.Stat(path)
 	if stat.Size() != int64(len(prefix)) {
 		t.Fatal(stat.Size())
+	}
+}
+
+type officialTransport struct {
+	base     http.RoundTripper
+	target   *url.URL
+	insecure atomic.Bool
+}
+
+func (t *officialTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Scheme != "https" || r.URL.Host != "fedorapeople.org" {
+		t.insecure.Store(true)
+		return nil, fmt.Errorf("insecure or foreign request")
+	}
+	copy := r.Clone(r.Context())
+	u := *r.URL
+	u.Scheme = t.target.Scheme
+	u.Host = t.target.Host
+	copy.URL = &u
+	return t.base.RoundTrip(copy)
+}
+func TestOfficialAliasUpgradesSameOriginRedirectsBeforeTransport(t *testing.T) {
+	for _, foreign := range []bool{false, true} {
+		t.Run(strconv.FormatBool(foreign), func(t *testing.T) {
+			m := testManager(t)
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "stable-virtio") {
+					target := "http://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/version/virtio.iso"
+					if foreign {
+						target = "https://untrusted.example/virtio.iso"
+					}
+					http.Redirect(w, r, target, 301)
+					return
+				}
+				w.Write(testISO(80 << 10))
+			}))
+			defer server.Close()
+			target, _ := url.Parse(server.URL)
+			tr := &officialTransport{base: server.Client().Transport, target: target}
+			m.Client.Transport = tr
+			j, err := m.VirtIO("data")
+			if err != nil {
+				t.Fatal(err)
+			}
+			j = waitJob(t, m, j.ID, "done", "failed")
+			if (j.Phase == "done") == foreign || tr.insecure.Load() {
+				t.Fatal(j, tr.insecure.Load())
+			}
+		})
+	}
+}
+
+func TestTerminalPhaseIsNotPublicBeforeWorkerReleasesStaging(t *testing.T) {
+	m := testManager(t)
+	id := "00112233445566778899aabb"
+	m.jobs[id] = &entry{job: Job{ID: id, Volume: "data", Name: "image.iso", Phase: "done"}, running: true}
+	if got := m.List()[0].Phase; got != "publishing" {
+		t.Fatal(got)
+	}
+	m.jobs[id].running = false
+	if got := m.List()[0].Phase; got != "done" {
+		t.Fatal(got)
 	}
 }

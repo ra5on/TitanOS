@@ -293,6 +293,16 @@ func (m *Manager) List() []Job {
 	jobs := []Job{}
 	for _, e := range m.jobs {
 		j := e.job
+		// Do not offer retry/remove until final checkpoint and staging cleanup
+		// have released the worker. A visible terminal phase is actionable.
+		if e.running {
+			if j.Phase == "done" || j.Phase == "review" {
+				j.Phase = "publishing"
+			}
+			if slices.Contains([]string{"failed", "paused", "cancelled"}, j.Phase) {
+				j.Phase = "pausing"
+			}
+		}
 		if j.URL != "" {
 			if u, err := url.Parse(j.URL); err == nil {
 				u.RawQuery = ""
