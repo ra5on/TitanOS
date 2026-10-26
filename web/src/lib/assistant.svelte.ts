@@ -11,7 +11,7 @@ export type ChatAction = {
 	params?: Record<string, string>;
 	reason: string;
 	level: 'normal' | 'danger' | 'destroy';
-	/** What has to be typed for a destroying action, and where it goes. */
+	/** The target name of a destroying action and the field it goes in; the UI sends it back after the confirm dialog. */
 	confirm?: string;
 	confirmField?: string;
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -134,10 +134,12 @@ export function setPrefs(change: Partial<AssistantPrefs>) {
 const problemOf = (err: unknown) => (err instanceof ApiError ? err.code : 'internal');
 
 export async function loadAssistant() {
+	const account = accountGeneration;
 	try {
-		assistant.status = await api.get<AssistantStatus>('/assistant/status');
+		const status = await api.get<AssistantStatus>('/assistant/status');
+		if (account === accountGeneration) assistant.status = status;
 	} catch {
-		assistant.status = { available: false, enabled: false, model: '', web: false, persistent: false };
+		if (account === accountGeneration) assistant.status = { available: false, enabled: false, model: '', web: false, persistent: false };
 	}
 }
 
@@ -155,9 +157,11 @@ export function chosenModel(): string {
 }
 
 export async function loadChats() {
+	const account = accountGeneration;
 	try {
 		const query = assistant.search.trim() ? `?search=${encodeURIComponent(assistant.search.trim())}` : '';
 		const res = await api.get<{ chats: ChatSummary[]; persistent: boolean }>('/assistant/chats' + query);
+		if (account !== accountGeneration) return;
 		assistant.chats = res.chats;
 		if (assistant.status) assistant.status.persistent = res.persistent;
 		assistant.error = '';
@@ -201,6 +205,27 @@ export async function openChat(id: string) {
 }
 
 /** Starts an empty chat; the NAS creates it with the first message. */
+// Bumped when the signed-in account changes, so late answers for the
+// previous account are dropped.
+let accountGeneration = 0;
+
+/** Forgets everything of the signed-in account: chats, the open chat, timers. Called on logout and account change. */
+export function resetAssistant() {
+	accountGeneration++;
+	newChat();
+	clearTimeout(poll);
+	poll = undefined;
+	clearTimeout(saveTimer);
+	saveTimer = undefined;
+	assistant.fromPage = '';
+	assistant.status = null;
+	assistant.models = [];
+	assistant.chats = [];
+	assistant.search = '';
+	assistant.dryRun = false;
+	assistant.prefs = { ...DEFAULT_PREFS };
+}
+
 export function newChat() {
  detach();
 	assistant.chatId = '';

@@ -34,7 +34,9 @@
 	let selected = $state<string[]>([]);
 	let error = $state('');
 	let busy = $state(false);
-	let confirm = $state<{ kind: 'delete' | 'empty' } | null>(null);
+	// Emptying takes the whole bin of the account (or of all accounts at the
+	// top), whatever folder is open; the dialog names exactly that.
+	let confirm = $state<{ kind: 'delete' } | { kind: 'empty'; paths: string[]; all: boolean } | null>(null);
 
 	const join = (...parts: string[]) => parts.filter(Boolean).join('/');
 	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
@@ -107,7 +109,7 @@
 		{/each}
 	</div>
 	{#if !flat && root.writable && entries && entries.length > 0}
-		<button type="button" class="btn btn-danger" disabled={busy} onclick={() => (confirm = { kind: 'empty' })}>{t('files.trashEmpty')}</button>
+		<button type="button" class="btn btn-danger" disabled={busy} onclick={() => (confirm = { kind: 'empty', paths: emptyPaths(), all: atAccounts })}>{t('files.trashEmpty')}</button>
 	{/if}
 </div>
 
@@ -168,13 +170,18 @@
 {/if}
 {#if confirm}
 	{@const kind = confirm.kind}
-	<Dialog title={t(kind === 'empty' ? 'files.trashEmptyTitle' : 'files.trashDeleteTitle', { count: selected.length })} onclose={() => (confirm = null)}>
+	{@const emptying = confirm.kind === 'empty' ? confirm : null}
+	<Dialog title={t(kind === 'empty' ? 'files.trashEmptyTitle' : 'files.trashDeleteTitle', { count: selected.length })} locked={busy} onclose={() => (confirm = null)}>
+		{#if emptying}
+			<p>{emptying.all ? t('files.trashEmptyAll', { share: root.name, count: emptying.paths.length }) : t('files.trashEmptyAccount', { share: root.name, account: emptying.paths[0] ?? '' })}</p>
+			{#if emptying.all}<ul class="restore-list">{#each emptying.paths as account (account)}<li class="mono">{account}</li>{/each}</ul>{/if}
+		{/if}
 		<p class="notice-error">{t('files.trashForeverText')}</p>
         {#if kind==='delete'}<ul class="restore-list">{#each selected as name}<li class="mono">{entries?.find(e=>entryKey(e)===name)?.original??name}</li>{/each}</ul>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (confirm = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn" onclick={() => (confirm = null)} disabled={busy}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" disabled={busy}
-				onclick={() => act('delete', kind === 'empty' ? emptyPaths() : selected)}>
+				onclick={() => act('delete', emptying ? emptying.paths : selected)}>
 				{t(kind === 'empty' ? 'files.trashEmpty' : 'files.trashDeleteForever')}
 			</button>
 		</div>

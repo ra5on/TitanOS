@@ -26,8 +26,7 @@
 		draft = $state<MaintenanceJob | null>(null),
 		initial = $state(''),
 		discard = $state(false),
-		review = $state(''),
-		confirm = $state('');
+		review = $state('');
 	const kinds = ['raid-check', 'smart-long', 'backup-check', 'restore-probe', 'snapshot'] as const;
 	const targets = $derived(
 		draft?.kind === 'smart-long'
@@ -113,10 +112,10 @@
 		try {
 			status = await api.post(
 				`/maintenance/${encodeURIComponent(id)}/${kind}`,
-				kind === 'review' ? { confirm } : {},
+				// The API still wants the job ID as confirmation of the review.
+				kind === 'review' ? { confirm: id } : {},
 			);
 			review = '';
-			confirm = '';
 		} catch (e) {
 			error = operationError(e, t);
 		} finally {
@@ -228,7 +227,6 @@
 										class="btn"
 										onclick={() => {
 											review = view.job.id;
-											confirm = '';
 										}}>{t('ops.review')}</button
 									>{:else}<button
 										class="btn"
@@ -428,15 +426,12 @@
 	>{/if}
 {#if review}<Dialog title={t('ops.review')} locked={busy} onclose={() => (review = '')}
 		><p>{t('ops.reviewHint')}</p>
-		<label
-			>{t('ops.confirmID', { id: review })}<input class="field mono" bind:value={confirm} /></label
-		>{#if error}<p class="notice-error">{error}</p>{/if}
+		<p class="mono">{review}</p>
+		{#if error}<p class="notice-error">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={() => (review = '')}>{t('common.cancel')}</button
-			><button
-				class="btn btn-warn"
-				disabled={busy || confirm !== review}
-				onclick={() => action(review, 'review')}>{t('ops.review')}</button
+			><button class="btn btn-warn" disabled={busy} onclick={() => action(review, 'review')}
+				>{t('ops.review')}</button
 			>
 		</div></Dialog
 	>{/if}

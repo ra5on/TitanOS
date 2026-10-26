@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
+	import { onDestroy } from 'svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
@@ -118,6 +119,10 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 
 	const blocked = $derived(applying || !changed || (view === 'form' ? !!problems?.any : false));
 
+	// Leaving the page ends the wait for the outcome of an apply.
+	let destroyed = false;
+	onDestroy(() => (destroyed = true));
+
 	async function apply() {
 		if (view === 'compose' && !parse()) return;
 		applying = true;
@@ -127,9 +132,18 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			// The containers are recreated in the background; wait for the outcome.
 			for (;;) {
 				await new Promise((resolve) => setTimeout(resolve, 1500));
-				status = await api.get<DockerStatus>('/docker');
+				if (destroyed) return;
+				const next = await api.get<DockerStatus>('/docker');
+				if (destroyed) return;
+				status = next;
 				const job = status.jobs[name];
-				if (!job || job.state === 'running') continue;
+				if (job?.state === 'running') continue;
+				if (!job) {
+					// The NAS registers the job before it answers; a missing job
+					// means it is gone (titand restarted), so its outcome is unknown.
+					result = { ok: false, text: t('editor.jobLost'), detail: '' };
+					break;
+				}
 				if (job.state === 'done') {
 					original = text;
 					result = { ok: true, text: t('editor.applied'), detail: '' };

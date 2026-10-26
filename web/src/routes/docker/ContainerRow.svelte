@@ -66,11 +66,11 @@
 	<!-- The addresses get a labelled line of their own in the stacked layout. -->
 	{#if links.length > 0}
 		<div class="links">
-			{#each links as link (link.href)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
+			{#each links as link, index (`${index}:${link.href}`)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
 		</div>
 	{/if}
 	<div class="acts">
-		{#each links as link (link.href)}<a class="btn small link" href={link.href} target="_blank" rel="noreferrer" aria-label={link.label} title={link.label}><Icon name={link.icon} size={14} /><span class="text">{link.text}</span></a>{/each}
+		{#each links as link, index (`${index}:${link.href}`)}<a class="btn small link" href={link.href} target="_blank" rel="noreferrer" aria-label={link.label} title={link.label}><Icon name={link.icon} size={14} /><span class="text">{link.text}</span></a>{/each}
 		<button type="button" class="btn small toggle" onclick={() => actions.onaction(running ? 'stop' : 'start')} disabled={busy} aria-label={t(running ? 'docker.stop' : 'docker.start')}>
 			<Icon name={running ? 'stop' : 'play'} size={14} /><span class="text">{t(running ? 'docker.stop' : 'docker.start')}</span>
 		</button>

@@ -19,7 +19,9 @@
 		scopes = $state<string[]>([]),
 		loading = $state(true),
 		busy = $state(false),
-		error = $state('');
+		error = $state(''),
+		// Errors of the open create/revoke dialog, shown inside it.
+		dialogError = $state('');
 	let creating = $state(false),
 		name = $state(''),
 		selected = $state<string[]>(['system:read']),
@@ -44,7 +46,7 @@
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
+		dialogError = '';
 		try {
 			const res = await api.post<{ secret: string }>('/account/tokens', { name, scopes: selected });
 			secret = res.secret;
@@ -52,7 +54,7 @@
 			creating = false;
 			await load();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			dialogError = errorText(e instanceof ApiError ? e.code : 'internal');
 		} finally {
 			busy = false;
 		}
@@ -60,13 +62,13 @@
 	async function revoke() {
 		if (!revoking) return;
 		busy = true;
-		error = '';
+		dialogError = '';
 		try {
 			await api.delete(`/account/tokens/${encodeURIComponent(revoking.id)}`);
 			revoking = null;
 			await load();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			dialogError = errorText(e instanceof ApiError ? e.code : 'internal');
 		} finally {
 			busy = false;
 		}
@@ -89,7 +91,7 @@
 				name = '';
 				selected = ['system:read'];
 				creating = true;
-				error = '';
+				dialogError = '';
 			}}>{t('api.create')}</button
 		>{/snippet}
 </PageHead>
@@ -108,7 +110,7 @@
 							· {t('api.lastUsed')} {new Date(token.lastUsed).toLocaleString()}{/if}</small
 					>
 				</div>
-				<button class="btn btn-danger" onclick={() => (revoking = token)}>{t('api.revoke')}</button>
+				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}>{t('api.revoke')}</button>
 			</div>{/each}
 	</section>{/if}
 <section class="tile docs">
@@ -138,6 +140,7 @@
 					>{/each}
 			</fieldset>
 			<p class="muted">{t('api.scopeHint')}</p>
+			{#if dialogError}<div class="notice-error" role="alert">{dialogError}</div>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" disabled={busy} onclick={() => (creating = false)}
 					>{t('common.cancel')}</button
@@ -163,6 +166,7 @@
 	>{/if}
 {#if revoking}<Dialog title={t('api.revoke')} locked={busy} onclose={() => (revoking = null)}
 		><p>{t('api.revokeConfirm', { name: revoking.name })}</p>
+		{#if dialogError}<div class="notice-error" role="alert">{dialogError}</div>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={() => (revoking = null)}
 				>{t('common.cancel')}</button

@@ -5,20 +5,33 @@
 	// "Reject" comes first in the markup and so gets the focus.
 	import { assistant, rejectAction, runAction, type ChatAction } from '#lib/assistant.svelte.ts';
 	import { t, tOr, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
 
 	let { action, index }: { action: ChatAction; index: number } = $props();
 
 	let ticked = $state(false);
-	let typed = $state('');
+	// A destroying action asks once more in a plain dialog; the API still
+	// wants the target name, which is sent after the click.
+	let asking = $state(false);
 	const id = $props.id();
+	// The tick and the open dialog belong to one stored action; another
+	// action in the same place starts unconfirmed.
+	let shown = '';
+	$effect.pre(() => {
+		if (action.id !== shown) {
+			shown = action.id;
+			ticked = false;
+			asking = false;
+		}
+	});
 
 	const title = $derived.by(() => {
 		const key = `assistant.action.${action.key}`;
 		return tOr(key, '') ? t(key as MessageKey, action.params ?? {}) : action.key;
 	});
 	const task = $derived(action.key === 'task');
-	const ready = $derived(action.level === 'normal' || (action.level === 'danger' && ticked) || (action.level === 'destroy' && typed === action.confirm));
+	const ready = $derived(action.level === 'normal' || (action.level === 'danger' && ticked) || action.level === 'destroy');
 	const pending = $derived(action.state === 'pending');
 	const after = $derived((action.after ?? []).map((name) => (name === 'attachment' ? t('assistant.afterAttachment') : name)).join(', '));
 </script>
@@ -47,16 +60,20 @@
 				<input type="checkbox" bind:checked={ticked} />
 				<span>{t('assistant.confirmDanger')}</span>
 			</label>
-		{:else if action.level === 'destroy'}
-			<label class="typed">
-				<span>{t('assistant.confirmDestroy', { name: action.confirm ?? '' })}</span>
-				<input class="field mono" bind:value={typed} autocomplete="off" spellcheck="false" autocapitalize="none" />
-			</label>
 		{/if}
 		<div class="buttons">
 			<button type="button" class="btn" onclick={() => rejectAction(index)} disabled={assistant.busy}>{t('assistant.reject')}</button>
-			<button type="button" class="btn {action.level === 'normal' ? 'btn-primary' : action.level === 'danger' ? 'btn-warn' : 'btn-danger'} go" onclick={() => runAction(index, typed)} disabled={!ready || assistant.busy}>{t(task ? 'assistant.approvePlan' : 'assistant.run')}</button>
+			<button type="button" class="btn {action.level === 'normal' ? 'btn-primary' : action.level === 'danger' ? 'btn-warn' : 'btn-danger'} go" onclick={() => (action.level === 'destroy' ? (asking = true) : runAction(index))} disabled={!ready || assistant.busy}>{t(task ? 'assistant.approvePlan' : 'assistant.run')}</button>
 		</div>
+		{#if asking}
+			<Dialog title={t('assistant.destroyTitle')} locked={assistant.busy} onclose={() => (asking = false)}>
+				<p class="notice-error">{t('assistant.destroyText', { action: title, name: action.confirm ?? '' })}</p>
+				<div class="dialog-actions">
+					<button type="button" class="btn" onclick={() => (asking = false)} disabled={assistant.busy}>{t('common.cancel')}</button>
+					<button type="button" class="btn btn-danger" disabled={assistant.busy} onclick={() => ((asking = false), runAction(index, action.confirm ?? ''))}>{t('assistant.run')}</button>
+				</div>
+			</Dialog>
+		{/if}
 	{:else}
 		<p class="state state-{action.state}" role="status">
 			{t(task && action.state === 'done' ? 'assistant.planApproved' : (`assistant.state.${action.state}` as MessageKey))}{#if action.auto && action.state === 'done'} · {t('assistant.inTask')}{/if}{#if action.state === 'failed' && action.result}: <span class="mono">{action.result}</span>{/if}
@@ -98,11 +115,6 @@
 	}
 	.tick input {
 		margin-top: 2px;
-	}
-	.typed {
-		display: grid;
-		gap: 6px;
-		font-size: 0.8125rem;
 	}
 	.buttons {
 		display: flex;

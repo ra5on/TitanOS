@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The public keys this account may log in with over SSH.
 	import { api, ApiError } from '#lib/api.ts';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -13,6 +14,8 @@
 	let line = $state('');
 	let error = $state('');
 	let busy = $state(false);
+	let removing = $state<Key | null>(null);
+	let removeError = $state('');
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
@@ -35,12 +38,16 @@
 	}
 
 	async function remove(key: Key) {
-		error = '';
+		if (busy) return;
+		busy = true;
+		removeError = '';
 		try {
 			state_ = await api.delete<Answer>(`/account/ssh-keys/${key.id}`);
+			removing = null;
 		} catch (err) {
-			error = problem(err);
+			removeError = problem(err);
 		}
+		busy = false;
 	}
 
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || system.info?.hostname || 'nas');
@@ -62,7 +69,7 @@
 					<span class="name">{key.comment || key.type}</span>
 					<span class="muted mono">{key.type} · {key.fingerprint}</span>
 				</div>
-				<button type="button" class="btn" onclick={() => remove(key)}>{t('ssh.remove')}</button>
+				<button type="button" class="btn" onclick={() => ((removeError = ''), (removing = key))}>{t('ssh.remove')}</button>
 			</div>
 		{:else}
 			<p class="muted">{t('ssh.noKeys')}</p>
@@ -84,6 +91,19 @@
 			<div><button type="button" class="btn" onclick={() => (adding = true)}>{t('ssh.addKey')}</button></div>
 		{/if}
 	</section>
+	{#if removing}
+		{@const key = removing}
+		<Dialog title={t('ssh.removeTitle')} locked={busy} onclose={() => (removing = null)}>
+			<p>{t('ssh.removeText', { name: key.comment || key.type })}</p>
+			<p class="muted mono small" style:overflow-wrap="anywhere">{key.type} · {key.fingerprint}</p>
+			{#if state_.keys.length === 1}<p class="notice-warn">{t('ssh.removeLast')}</p>{/if}
+			{#if removeError}<p class="notice-error" role="alert">{removeError}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (removing = null)}>{t('common.cancel')}</button>
+				<button type="button" class="btn btn-danger" disabled={busy} onclick={() => remove(key)}>{t('ssh.remove')}</button>
+			</div>
+		</Dialog>
+	{/if}
 {/if}
 
 <style>

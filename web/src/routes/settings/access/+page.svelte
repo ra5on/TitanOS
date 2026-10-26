@@ -3,6 +3,7 @@
 	import { revealTarget } from '#lib/reveal-target.ts';
 	// SSH access and the certificate of the web UI.
 	import { api, ApiError } from '#lib/api.ts';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -18,6 +19,7 @@
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state(false);
 	let replacing = $state(false);
+	let removing = $state(false);
 	let certPem = $state('');
 	let keyPem = $state('');
 	let saved = $state(false);
@@ -86,11 +88,13 @@
 	}
 
 	async function removeCertificate() {
+		if (busy) return;
 		busy = true;
 		error = null;
 		saved = false;
 		try {
 			certificate = await api.delete<Certificate>('/system/certificate');
+			removing = false;
 			saved = true;
 		} catch (err) {
 			problem(err);
@@ -172,12 +176,22 @@
 		{:else}
 			<div class="actions start">
 				<button type="button" class="btn" onclick={() => ((replacing = true), (saved = false))}>{t(certificate.kind === 'custom' ? 'access.certReplace' : 'access.certOwn')}</button>
-				{#if certificate.kind === 'custom'}<button type="button" class="btn" onclick={removeCertificate} disabled={busy}>{t('access.certRemove')}</button>{/if}
+				{#if certificate.kind === 'custom'}<button type="button" class="btn" onclick={() => ((removing = true), (error = null))} disabled={busy}>{t('access.certRemove')}</button>{/if}
 			</div>
 		{/if}
 	{/if}
 </section>
 
+{#if removing}
+	<Dialog title={t('access.certRemoveTitle')} locked={busy} onclose={() => (removing = false)}>
+		<p>{t('access.certRemoveText')}</p>
+		{#if error}<p class="notice-error" role="alert">{error.text}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={busy} onclick={() => (removing = false)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={busy} onclick={removeCertificate}>{t('access.certRemoveSubmit')}</button>
+		</div>
+	</Dialog>
+{/if}
 
 <TerminalSettings />
 

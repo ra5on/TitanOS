@@ -84,9 +84,16 @@
 			disposed = true;
 		};
 	});
-	async function load() {
-		if (loading) return;
+	// A load asked for while one runs (e.g. right after a save) runs again
+	// once that one is done, so its answer is not older than the change.
+	let reloadAfter = false;
+	async function load(): Promise<void> {
+		if (loading) {
+			reloadAfter = true;
+			return;
+		}
 		loading = true;
+		reloadAfter = false;
 		error = '';
 		const results = await Promise.allSettled([
 			api.get<Share[]>('/shares'),
@@ -103,6 +110,7 @@
 			accountReady = false;
 		}
 		loading = false;
+		if (reloadAfter) return load();
 	}
 	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 	async function saveView() {

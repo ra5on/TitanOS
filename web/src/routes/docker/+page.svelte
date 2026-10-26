@@ -223,6 +223,9 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
+		// One request at a time: a second click or Enter must not import twice.
+		if (busy) return;
+		busy = true;
 		dialogError = null;
 		try {
 			if (dialog?.kind === 'import') {
@@ -235,6 +238,8 @@
 			await load();
 		} catch (err) {
 			dialogError = problem(err);
+		} finally {
+			busy = false;
 		}
 	}
 
@@ -518,7 +523,7 @@
 	</Dialog>
 {:else if dialog}
 	{@const kind = dialog.kind}
-	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} onclose={() => (dialog = null)}>
+	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} locked={busy} onclose={() => (dialog = null)}>
 		<form onsubmit={submit}>
 			{#if kind === 'import'}
 				<p class="notice-warn">{t('docker.importWarning')}</p>
@@ -541,8 +546,8 @@
 				<div class="notice-error" role="alert">{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}</div>
 			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-				<button type="submit" class="btn btn-primary">{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={busy}>{t('common.cancel')}</button>
+				<button type="submit" class="btn btn-primary" disabled={busy}>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button>
 			</div>
 		</form>
 	</Dialog>

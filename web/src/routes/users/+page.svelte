@@ -13,7 +13,12 @@
 	const me = $derived(session.data?.user);
 	let accounts = $state<Account[] | null>(null);
 	let error = $state('');
-	let dialog = $state<{ kind: 'create' } | { kind: 'password' | 'delete'; name: string } | null>(null);
+	let dialog = $state<
+		| { kind: 'create' }
+		| { kind: 'password' | 'delete'; name: string }
+		| { kind: 'twoFactor'; account: Account }
+		| null
+	>(null);
 
 	// The new account being typed in.
 	let draft = $state({ name: '', role: 'user' as Role, password: '', repeat: '' });
@@ -38,7 +43,7 @@
 		load();
 	});
 
-	async function setRole(account: Account, role: Role) {
+	async function setRole(account: Account, role: Role, select: HTMLSelectElement) {
 		error = '';
 		try {
 			await api.put(`/users/${account.name}`, { role });
@@ -46,15 +51,23 @@
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 		await load();
+		// The select shows what the NAS has; a refused role is turned back
+		// (the value bound to it may not have changed, so set it directly).
+		select.value = accounts?.find((entry) => entry.name === account.name)?.role ?? account.role;
 	}
 
 	/** For someone who lost the phone and the recovery codes. */
 	async function resetTwoFactor(account: Account) {
-		error = '';
+		if (working) return;
+		working = true;
+		dialogError = '';
 		try {
 			await api.put(`/users/${account.name}`, { role: account.role, resetTwoFactor: true });
+			dialog = null;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+		} finally {
+			working = false;
 		}
 		await load();
 	}
@@ -131,7 +144,7 @@
 					</td>
 					<td>
 						{#if manageable}
-							<select class="field role" aria-label="{t('users.role')}: {account.name}" value={account.role} onchange={(event) => setRole(account, event.currentTarget.value as Role)}>
+							<select class="field role" aria-label="{t('users.role')}: {account.name}" value={account.role} onchange={(event) => setRole(account, event.currentTarget.value as Role, event.currentTarget)}>
 								{#each offeredRoles as role (role)}<option value={role}>{t(`role.${role}`)}</option>{/each}
 							</select>
 						{:else}
@@ -143,7 +156,7 @@
 						{#if manageable || account.name === me?.name}
 							<button type="button" class="btn" onclick={() => (dialog = { kind: 'password', name: account.name })}>{t('users.changePassword')}</button>
 							{#if account.twoFactor && manageable && account.name !== me?.name}
-								<button type="button" class="btn" onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button>
+								<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'twoFactor', account }))}>{t('users.resetTwoFactor')}</button>
 							{/if}
 						{/if}
 						{#if manageable && account.name !== me?.name}
@@ -197,6 +210,16 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" onclick={() => remove(name)}>{t('users.delete')}</button>
+		</div>
+	</Dialog>
+{:else if dialog?.kind === 'twoFactor'}
+	{@const account = dialog.account}
+	<Dialog title={t('users.resetTwoFactorTitle', { name: account.name })} locked={working} onclose={() => (dialog = null)}>
+		<p class="text">{t('users.resetTwoFactorText', { name: account.name })}</p>
+		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={working} onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button>
 		</div>
 	</Dialog>
 {/if}

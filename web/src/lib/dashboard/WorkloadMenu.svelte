@@ -50,7 +50,6 @@
 	let dialog = $state<'' | 'logs' | 'remove' | 'checked' | 'confirm'>('');
 	let checkResult = $state('');
 	let logs = $state(''),
-		confirm = $state(''),
 		pending = $state('');
 	const name = $derived(target.kind === 'vm' ? vmLabel(target.vm) : target.name);
 	const running = $derived(
@@ -142,10 +141,7 @@
 		error = '';
 		try {
 			if (target.kind === 'vm')
-				await api.delete(`/vms/${encodeURIComponent(target.vm.name)}`, {
-					deleteDisks: false,
-					confirm,
-				});
+				await api.delete(`/vms/${encodeURIComponent(target.vm.name)}`, { deleteDisks: false });
 			else if (removeApp) await api.delete(`/docker/apps/${encodeURIComponent(removeApp)}`);
 			else await api.delete(`/docker/containers/${encodeURIComponent(target.members[0].id)}`);
 			onrefresh();
@@ -298,13 +294,6 @@
 					? t('dashboard.removeManagedApp', { name: removeApp })
 					: t(target.kind === 'vm' ? 'dashboard.removeVm' : 'dashboard.removeDocker', { name })}
 			</p>
-			{#if target.kind === 'vm'}<label
-					>{t('dashboard.confirmName', { name: target.vm.name })}<input
-						class="field"
-						bind:value={confirm}
-						autocomplete="off"
-					/></label
-				>{/if}
 		{:else}<p>
 				{t(target.kind === 'vm' ? 'dashboard.confirmVmAction' : 'dashboard.retryDockerAction', {
 					name,
@@ -320,10 +309,8 @@
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={close}
 				>{t(dialog === 'logs' || dialog === 'checked' ? 'common.done' : 'common.cancel')}</button
-			>{#if dialog === 'remove'}<button
-					class="btn btn-danger"
-					disabled={busy || (target.kind === 'vm' && confirm !== target.vm.name)}
-					onclick={remove}>{t(target.kind === 'vm' ? 'vms.remove' : 'docker.removeSubmit')}</button
+			>{#if dialog === 'remove'}<button class="btn btn-danger" disabled={busy} onclick={remove}
+					>{t(target.kind === 'vm' ? 'vms.remove' : 'docker.removeSubmit')}</button
 				>{:else if dialog === 'confirm'}<button
 					class="btn btn-warn"
 					disabled={busy}
@@ -348,11 +335,5 @@
 		overflow-wrap: anywhere;
 		max-height: 65vh;
 		overflow: auto;
-	}
-	label {
-		display: grid;
-		gap: 8px;
-		margin-top: 14px;
-		font-size: 0.85rem;
 	}
 </style>

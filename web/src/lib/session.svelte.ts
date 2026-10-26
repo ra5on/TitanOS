@@ -3,7 +3,7 @@ import { sound, resetSound } from './sound.svelte.ts';
 import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
-import { useAssistantPrefs } from './assistant.svelte.ts';
+import { resetAssistant, useAssistantPrefs } from './assistant.svelte.ts';
 import { bell } from './notifications.svelte.ts';
 import { sanitizeBell } from './notify-groups.ts';
 
@@ -41,7 +41,10 @@ async function loadPreferences() {
 export async function refreshSession() {
 	try {
 		const data = await api.get<Session>('/session');
-		if (data.user?.name !== session.data?.user?.name) resetSound();
+		if (data.user?.name !== session.data?.user?.name) {
+			resetSound();
+			resetAssistant();
+		}
 		if (data.user) await loadPreferences();
 		session.data = data;
 		session.status = 'ready';
@@ -66,11 +69,13 @@ export async function logout() {
 	} catch (err) {
 		if (!(err instanceof ApiError)) throw err;
 	}
+	resetAssistant();
 	await refreshSession();
 }
 
 /** Called when the NAS says the session is gone (restart, timeout). */
 export function sessionExpired() {
 	resetSound();
+	resetAssistant();
 	if (session.data) session.data = { ...session.data, user: null };
 }

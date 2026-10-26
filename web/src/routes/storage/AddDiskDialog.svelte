@@ -9,6 +9,13 @@
 	let { volume, disks, onclose, ondone }: Props = $props();
 
 	let selected = $state<string[]>([]);
+	// What the chosen disk was when it was picked. The NAS takes only the
+	// name, so the dialog refuses to go on when a hot-plug changed the disk
+	// behind that name meanwhile.
+	let pickedIdentity = $state<string | undefined>(undefined);
+	function remember(disk: Disk, checked: boolean) {
+		pickedIdentity = checked ? disk.identity : undefined;
+	}
 	let confirmed = $state(false);
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -16,6 +23,8 @@
 	const usable = $derived(disks.filter(isUsable));
 	const working_members = $derived(volume.members.filter((member) => member.state === 'active' || member.state === 'rebuilding').length);
 	const incomplete = $derived(working_members < volume.raidDisks);
+	const chosen = $derived(usable.find((disk) => disk.name === selected[0]));
+	const staleSelection = $derived(selected.length === 1 && (!chosen || chosen.identity !== pickedIdentity));
 
 	$effect(() => {
 		selected;
@@ -24,11 +33,11 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (selected.length !== 1 || !confirmed) return;
+		if (selected.length !== 1 || !confirmed || staleSelection) return;
 		working = true;
 		error = null;
 		try {
-			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true });
+			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true, identity: pickedIdentity });
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
@@ -41,8 +50,11 @@
 <Dialog title={t('addDisk.title', { volume: volume.name })} wide locked={working} {onclose}>
 	<form onsubmit={submit}>
 		<p class="muted">{t(incomplete ? 'addDisk.rebuild' : 'addDisk.spare')}</p>
-		<DiskPicker disks={usable} bind:selected single name="add-disk" />
-		{#if selected.length === 1}
+		<DiskPicker disks={usable} bind:selected single name="add-disk" onselect={remember} />
+		{#if staleSelection}
+			<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
+			<button type="button" class="btn" onclick={() => ((selected = []), (pickedIdentity = undefined))}>{t('create.clearSelection')}</button>
+		{:else if selected.length === 1}
 			<label class="confirm">
 				<input type="checkbox" bind:checked={confirmed} />
 				<span>{t('addDisk.eraseConfirm', { disk: selected[0] })}</span>
@@ -53,7 +65,7 @@
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || working}>{t('addDisk.submit')}</button>
+			<button type="submit" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || staleSelection || working}>{t('addDisk.submit')}</button>
 		</div>
 	</form>
 </Dialog>

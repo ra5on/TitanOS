@@ -18,7 +18,6 @@
 	let name = $state('');
 	let memory = $state(true);
 	let allowPause = $state(false);
-	let confirm = $state('');
 	let discardMemory = $state(false);
 	let schedule = $state<SnapshotSchedule>({
 		enabled: true,
@@ -62,7 +61,6 @@
 	function open(next: Panel, snapshot: Snapshot | null = null) {
 		error = '';
 		target = snapshot;
-		confirm = '';
 		memory = snapshot?.memory ?? true;
 		allowPause = false;
 		discardMemory = false;
@@ -72,11 +70,14 @@
 		panel = next;
 	}
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
+	async function submit() {
+		if (busy) return;
 		busy = true;
 		error = '';
 		const url = base;
+		// The API still wants a name as confirmation; it is sent once the
+		// button is clicked (snapshot name for deleting, VM name otherwise).
+		const confirm = panel === 'delete' ? (target?.name ?? '') : vm.name;
 		try {
 			if (panel === 'create') await api.post(url + '/snapshots', { name, memory, allowPause });
 			if (panel === 'plan') await api.put(url + '/snapshot-schedule', schedule);
@@ -99,13 +100,12 @@
 	}
 
 	const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
-	const confirmName = $derived(panel === 'delete' ? (target?.name ?? '') : vmLabel(vm));
+	// Destructive panels run only from a click on their button, never from Enter.
 	const needsConfirm = $derived(panel === 'restore' || panel === 'delete' || panel === 'recover');
 	const submitDisabled = $derived(
 		busy ||
 			(panel === 'create' && (blocked || (vm.state === 'running' && !memory))) ||
-			(panel === 'plan' && schedule.enabled && !schedule.days.length) ||
-			(needsConfirm && confirm !== confirmName),
+			(panel === 'plan' && schedule.enabled && !schedule.days.length),
 	);
 	const submitClass = $derived(
 		panel === 'restore' || panel === 'delete'
@@ -197,7 +197,12 @@
 		wide={panel === 'plan'}
 		onclose={() => (panel = '')}
 	>
-		<form onsubmit={submit}>
+		<form
+			onsubmit={(event) => {
+				event.preventDefault();
+				if (!needsConfirm) submit();
+			}}
+		>
 			{#if panel === 'create'}
 				<label
 					>{t('snapshots.name')}<input
@@ -300,22 +305,16 @@
 					)}</label
 				>
 			{/if}
-			{#if needsConfirm}
-				<label
-					>{t('snapshots.confirm', { name: confirmName })}<input
-						class="field"
-						bind:value={confirm}
-						autocomplete="off"
-						required
-					/></label
-				>
-			{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (panel = '')} disabled={busy}
 					>{t('common.cancel')}</button
 				>
-				<button type="submit" class="btn {submitClass}" disabled={submitDisabled}
+				<button
+					type={needsConfirm ? 'button' : 'submit'}
+					class="btn {submitClass}"
+					disabled={submitDisabled}
+					onclick={needsConfirm ? submit : undefined}
 					>{t(panel === 'plan' ? 'snapshots.save' : `snapshots.${panel}`)}</button
 				>
 			</div>

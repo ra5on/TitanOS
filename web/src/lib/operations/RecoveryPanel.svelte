@@ -25,7 +25,6 @@
 		review = $state<{ kind: 'app' | 'clone'; id: string; volume: string; action: string } | null>(
 			null,
 		),
-		confirm = $state(''),
 		restart = $state(false);
 	async function load(details = false) {
 		try {
@@ -61,11 +60,13 @@
 		await load(true);
 		if (error || !app) return;
 		review = { kind: 'app', id: app.id, volume: app.volume, action: 'review' };
-		confirm = '';
 		restart = false;
 	}
 	async function act() {
-		if (!review) return;
+		if (!review || busy) return;
+		// The API still wants the operation ID as confirmation; it is sent once
+		// the button is clicked.
+		const confirm = review.id;
 		busy = true;
 		error = '';
 		try {
@@ -77,7 +78,6 @@
 					action: review.action,
 				});
 			review = null;
-			confirm = '';
 			await load();
 		} catch (e) {
 			error = operationError(e, t);
@@ -105,19 +105,17 @@
 					class="mono">{op.id}</span
 				>{#if op.error}<p class="notice-warn">
 						{op.error}
-					</p>{/if}{#if ['verified', 'publishing'].includes(op.phase)}<button
+					</p>{/if}{#if ['verified', 'publishing', 'conflict'].includes(op.phase)}<button
 						class="btn"
 						disabled={busy}
 						onclick={() => {
 							review = { kind: 'clone', id: op.id, volume: op.vm.volume, action: 'finish' };
-							confirm = '';
 						}}>{t('ops.finishClone')}</button
-					>{/if}{#if ['copying', 'verified'].includes(op.phase)}<button
+					>{/if}{#if ['copying', 'verified', 'publishing', 'conflict'].includes(op.phase)}<button
 						class="btn"
 						disabled={busy}
 						onclick={() => {
 							review = { kind: 'clone', id: op.id, volume: op.vm.volume, action: 'discard' };
-							confirm = '';
 						}}>{t('ops.discardClone')}</button
 					>{/if}
 			</div>{/each}
@@ -135,16 +133,13 @@
 			</ul>
 			<label class="check"
 				><input type="checkbox" bind:checked={restart} />{t('ops.restartPrevious')}</label
-			>{/if}<label
-			>{t('ops.confirmID', { id: review.id })}<input
-				class="field mono"
-				bind:value={confirm}
-			/></label
-		>{#if error}<p class="notice-error">{error}</p>{/if}
+			>{/if}
+		<p class="mono">{review.id}</p>
+		{#if error}<p class="notice-error">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={() => (review = null)}
 				>{t('common.cancel')}</button
-			><button class="btn btn-warn" disabled={busy || confirm !== review.id} onclick={act}
+			><button class="btn btn-warn" disabled={busy} onclick={act}
 				>{t(
 					review.kind === 'app' && !restart
 						? 'ops.ackOnly'

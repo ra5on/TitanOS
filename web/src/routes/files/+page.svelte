@@ -970,7 +970,7 @@
 <button type="button" role="menuitem" onclick={()=>{close();shortcuts=true;}}><Icon name="keyboard" size={16}/>{t('files.shortcuts')}</button>
 {/snippet}</Dropdown></div>
 {#if mobileSearch}<label class="mobile-file-search" id="mobile-file-search"><span class="sr-only">{t('files.searchFolder')}</span><Icon name="search" size={16}/><input class="field" type="search" bind:this={mobileSearchField} bind:value={search} placeholder={t('files.searchFolder')} oninput={()=>{selected=[];anchor='';}}/><button class="btn icon" type="button" aria-label={t('common.close')} onclick={toggleMobileSearch}><Icon name="close" size={16}/></button></label>{/if}
-{#if selected.length}<div class="mobile-selection" role="region" aria-label={t('files.selectionActions')}><span>{t('files.selected',{count:selected.length})}</span><button type="button" class="btn icon" aria-label={t('files.copy')} onclick={()=>copying={move:false}}><Icon name="copy" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.moreActions')} onclick={event=>{const entry=selectedEntries.at(-1);if(entry)menuFromButton(entry,event.currentTarget);}}><Icon name="more" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.clearSelection')} onclick={()=>selected=[]}><Icon name="close" size={16}/></button></div>{/if}{/if}
+{#if selected.length}<div class="mobile-selection" role="region" aria-label={t('files.selectionActions')}><span>{t('files.selected',{count:selected.length})}</span><button type="button" class="btn icon" aria-label={t('files.copy')} onclick={()=>copying={move:false}}><Icon name="copy" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.selectionMore')} onclick={event=>{const entry=selectedEntries.at(-1);if(entry)menuFromButton(entry,event.currentTarget);}}><Icon name="more" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.clearSelection')} onclick={()=>selected=[]}><Icon name="close" size={16}/></button></div>{/if}{/if}
 
 
 		<div class="workspace" class:split>
@@ -1230,7 +1230,7 @@
 								<button type="button" class="btn btn-danger" onclick={() => show('delete')}><Icon name="trash" size={16} />{t('files.delete')}</button>
 							{/if}
 							<!-- On phones the other actions are in the menu, so the bar keeps one line. -->
-							<button type="button" class="btn icon more-actions" aria-label={t('files.moreActions')} title={t('files.moreActions')} aria-haspopup="menu" onclick={(event) => { const entry = selectedEntries.at(-1); if (entry) menuFromButton(entry, event.currentTarget); }}><Icon name="more" size={16} /></button>
+							<button type="button" class="btn icon more-actions" aria-label={t('files.selectionMore')} title={t('files.selectionMore')} aria-haspopup="menu" onclick={(event) => { const entry = selectedEntries.at(-1); if (entry) menuFromButton(entry, event.currentTarget); }}><Icon name="more" size={16} /></button>
 							<button type="button" class="btn icon clear" aria-label={t('files.clearSelection')} title={t('files.clearSelection')} onclick={() => (selected = [])}><Icon name="close" size={16} /></button>
 						</div>
 					{/if}

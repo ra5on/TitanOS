@@ -57,6 +57,10 @@
 	{#if phase !== 'done'}
 		<ul>
 			<li><span class="dot" aria-hidden="true"></span>{t('power.servicesNote')}</li>
+			<li><span class="dot" aria-hidden="true"></span>{t('power.workloadsNote')}</li>
+			<li><span class="dot" aria-hidden="true"></span>{t('power.maintenanceNote')}</li>
+			<li><span class="dot" aria-hidden="true"></span>{t('power.diskTestNote')}</li>
+			{#if action === 'shutdown'}<li class="muted"><span class="dot" aria-hidden="true"></span>{t('power.wakeOnLanNote')}</li>{/if}
 			<li class="muted"><span class="dot" aria-hidden="true"></span>{t(action === 'restart' ? 'power.restartNote' : 'power.shutdownNote')}</li>
 		</ul>
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}

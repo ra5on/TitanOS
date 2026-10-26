@@ -9,14 +9,16 @@
  let busy = $state(false);
  let error = $state('');
  let restored = $state('');
- let confirm = $state('');
  let removing = $state('');
  const url = $derived(`/storage/volumes/${volume}/snapshots`);
  async function load() { snapshots = await api.get(url); }
  async function show() { open = true; error = ''; try { await load(); } catch (err) { error = errorText(err instanceof ApiError ? err.code : 'internal'); } }
  async function act(action: string, value: string) {
   busy = true; error = ''; restored = '';
-  try { await api.post(url, { action, name: value, confirm }); removing = ''; confirm = ''; if (action === 'restore') restored = `/mnt/${volume}/restored/${value}`; if (action === 'create') name = ''; await load(); }
+  // The API still wants the snapshot name as confirmation for deleting; the
+  // page sends it once the button in the confirmation dialog is clicked.
+  const confirm = action === 'delete' ? value : '';
+  try { await api.post(url, { action, name: value, confirm }); removing = ''; if (action === 'restore') restored = `/mnt/${volume}/restored/${value}`; if (action === 'create') name = ''; await load(); }
   catch (err) { error = errorText(err instanceof ApiError ? err.code : 'internal'); }
   finally { busy = false; }
  }
@@ -38,17 +40,23 @@
     <div class="row">
      <span class="mono">{snapshot.name}</span>
      <button class="btn" disabled={busy} onclick={() => act('restore', snapshot.name)}>{t('snapshot.restore')}</button>
-     <button class="btn" disabled={busy} onclick={() => { removing = snapshot.name; confirm = ''; }}>{t('files.delete')}</button>
+     <button class="btn" disabled={busy} onclick={() => { removing = snapshot.name; }}>{t('files.delete')}</button>
     </div>
    {/each}
    <p class="muted">{t('snapshot.restoreNote', { path: `/mnt/${volume}/restored/` })}</p>
-   {#if removing}
-    <label>{t('snapshot.confirm', { name: removing })}<input class="field" bind:value={confirm} /></label>
-    <button class="btn btn-warn" disabled={busy || confirm !== removing} onclick={() => act('delete', removing)}>{t('files.delete')}</button>
-   {/if}
   </div>
   <div class="dialog-actions">
    <button type="button" class="btn" disabled={busy} onclick={() => open = false}>{t('common.done')}</button>
+  </div>
+ </Dialog>
+{/if}
+{#if removing}
+ <Dialog title={t('snapshot.deleteTitle')} locked={busy} onclose={() => removing = ''}>
+  <p class="notice-warn">{t('snapshot.deleteText', { name: removing, volume })}</p>
+  {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+  <div class="dialog-actions">
+   <button type="button" class="btn" disabled={busy} onclick={() => removing = ''}>{t('common.cancel')}</button>
+   <button type="button" class="btn btn-danger" disabled={busy} onclick={() => act('delete', removing)}>{t('files.delete')}</button>
   </div>
  </Dialog>
 {/if}

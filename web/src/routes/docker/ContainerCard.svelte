@@ -63,7 +63,7 @@
 	</div>
 	{#if links.length > 0}
 		<div class="links">
-			{#each links as link (link.href)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
+			{#each links as link, index (`${index}:${link.href}`)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
 		</div>
 	{/if}
 </article>

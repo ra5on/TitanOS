@@ -68,7 +68,7 @@
 	function enable() {
 		if (!status) return;
 		draft = topologyDraft(
-			status.config,
+			$state.snapshot(status.config),
 			status.interfaces.map((p) => p.name),
 		);
 		migrating = true;
@@ -137,7 +137,7 @@
 				migrating = false;
 			} else await api.post(`/network/${kind}`, {});
 			await load();
-			if (status) draft = structuredClone(status.pending ?? status.config);
+			if (status) draft = $state.snapshot(status.pending ?? status.config);
 		} catch (e) {
 			error =
 				errorText(e instanceof ApiError ? e.code : 'internal') +
@@ -228,7 +228,7 @@
 					disabled={busy}
 					onclick={() => {
 						migrating = false;
-						draft = current ? structuredClone(current) : null;
+						draft = current ? $state.snapshot(current) : null;
 					}}>{t('common.cancel')}</button
 				><button class="btn btn-primary" disabled={busy} onclick={() => action('apply')}
 					>{t('netx.test')}</button
@@ -534,7 +534,7 @@
 			<button class="btn" onclick={() => (discard = false)}>{t('common.cancel')}</button><button
 				class="btn btn-warn"
 				onclick={() => {
-					draft = current ? structuredClone(current) : null;
+					draft = current ? $state.snapshot(current) : null;
 					migrating = false;
 					discard = false;
 					void goto(destination);

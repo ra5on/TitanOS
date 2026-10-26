@@ -36,11 +36,12 @@
 	let picked = $state('');
 	let asking = $state(false);
 	let activate = $state(true);
-	let confirm = $state('');
 	let volume = $state('');
 	let busy = $state(false);
 	let refreshing = $state(false);
-	let removing = $state(false);
+	// The plugin the remove dialog is about, fixed when it opens; the polled
+	// list may change meanwhile.
+	let removing = $state<{ name: string; title: string } | null>(null);
 	let tailnetPending = $state(false);
 
 	const locked = $derived(busy || tailnetPending || !!status?.driverUpdate?.pending);
@@ -97,7 +98,7 @@
 		try {
 			status = await action();
 			asking = false;
-			removing = false;
+			removing = null;
 		} catch (err) {
 			problem(err);
 		}
@@ -105,9 +106,20 @@
 		await load();
 	}
 
+	// The box shows what the NAS has; a refused change is turned back.
+	async function toggle(name: string, box: HTMLInputElement) {
+		await run(() => api.post<Status>(`/plugins/${name}/${box.checked ? 'enable' : 'disable'}`));
+		const plugin = status?.plugins.find((entry) => entry.name === name);
+		if (plugin) box.checked = plugin.enabled;
+	}
+
+	function openRemove(plugin: Plugin) {
+		error = null;
+		removing = { name: plugin.name, title: plugin.title };
+	}
+
 	function ask() {
 		activate = true;
-		confirm = '';
 		volume = status?.volume || volumes[0] || '';
 		error = null;
 		asking = true;
@@ -141,7 +153,7 @@
 	</div>
 {/if}
 
-{#if error && !asking}
+{#if error && !asking && !removing}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 {/if}
 
@@ -211,7 +223,8 @@
 					</div>
 					{#if !volumes.length}<p class="muted">{t('plugins.needVolume')} <a href="/storage">{t('nav.storage')}</a></p>{/if}
 				{:else if !current.installed}
-					<form class="confirm" onsubmit={(event) => (event.preventDefault(), run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm, activate })))}>
+					<!-- Installs only on a click; the API still wants the plugin name as confirmation for a local (community) plugin. -->
+					<form class="confirm" onsubmit={(event) => event.preventDefault()}>
 						<p class="notice-warn">{t(current.official ? 'plugins.trustOfficial' : 'plugins.trustCommunity')}</p>
 						{#if current.download}<p class="muted">{t('plugins.downloadNote', { size: formatBytes(current.size) })}</p>{/if}
 						{#if current.licenseUrl}<a href={current.licenseUrl}>{t('plugins.licenses')}</a>{/if}
@@ -220,23 +233,18 @@
 								<select class="field" bind:value={volume}>{#each volumes as entry (entry)}<option value={entry}>{entry}</option>{/each}</select>
 							</label>
 						{/if}
-						{#if !current.official}
-							<label><span>{t('plugins.confirmName', { name: current.name })}</span>
-								<input class="field mono" type="text" bind:value={confirm} autocapitalize="none" spellcheck="false" />
-							</label>
-						{/if}
 						<label class="check"><input type="checkbox" bind:checked={activate} disabled={busy} /><span>{t('plugins.activateNow')}</span></label>
 						<p class="muted note">{t('plugins.activateLaterHint')}</p>
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 						<div class="row">
 							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
-							<button type="submit" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel' || (!current.official && confirm !== current.name)}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
+							<button type="button" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel'} onclick={() => run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm: current.name, activate }))}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
 						</div>
 					</form>
 				{:else}
 					<div class="row">
-						<label class="check"><input type="checkbox" checked={current.enabled} disabled={locked} onchange={(event) => run(() => api.post<Status>(`/plugins/${current.name}/${event.currentTarget.checked ? 'enable' : 'disable'}`))} /><span>{t('plugins.enabled')}</span></label>
-						<button type="button" class="btn" onclick={() => (removing = true)} disabled={locked}>{t('plugins.remove')}</button>
+						<label class="check"><input type="checkbox" checked={current.enabled} disabled={locked} onchange={(event) => toggle(current.name, event.currentTarget)} /><span>{t('plugins.enabled')}</span></label>
+						<button type="button" class="btn" onclick={() => openRemove(current)} disabled={locked}>{t('plugins.remove')}</button>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
 					{#if current.name === 'tailscale'}<TailscaleSettings onpending={(value) => tailnetPending = value} />{/if}
@@ -248,12 +256,16 @@
 	</div>
 {/if}
 
-{#if removing && current}
-	<Dialog title={t('plugins.removeTitle', { name: current.title })} onclose={() => (removing = false)}>
+{#if removing}
+	{@const target = removing}
+	<Dialog title={t('plugins.removeTitle', { name: target.title })} locked={busy} onclose={() => (removing = null)}>
 		<p class="text">{t('plugins.removeText')}</p>
+		{#if error}
+			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+		{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={() => run(() => api.delete<Status>(`/plugins/${current.name}`))} disabled={busy}>{t('plugins.removeSubmit')}</button>
+			<button type="button" class="btn" onclick={() => (removing = null)} disabled={busy}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" onclick={() => run(() => api.delete<Status>(`/plugins/${target.name}`))} disabled={busy}>{t('plugins.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {/if}

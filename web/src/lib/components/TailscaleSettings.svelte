@@ -14,11 +14,13 @@
   if (reset || !dirty) { const s = value.settings; routes = s.routes.join('\n'); mode = s.advertiseExit ? 'provide' : s.exitNode ? 'use' : 'none'; exitNode = s.exitNode; acceptRoutes = s.acceptRoutes; acceptDNS = s.acceptDNS; dirty = false; }
  }
  function fail(err: unknown) { error = errorText(err instanceof ApiError ? err.code : 'internal') + (err instanceof ApiError ? `\n${err.message}` : ''); }
- async function load() { if (busy || document.hidden) return; try { take(await api.get<Status>('/plugins/tailscale')); } catch (err) { if (!status) fail(err); } }
+ // Bumped by every save/control: a poll that started before it answers with the old state and is dropped.
+ let generation = 0;
+ async function load() { if (busy || document.hidden) return; const asked = generation; try { const value = await api.get<Status>('/plugins/tailscale'); if (asked === generation && !busy) take(value); } catch (err) { if (!status && asked === generation) fail(err); } }
  $effect(() => { void load(); const timer = setInterval(load, 5000); return () => { clearInterval(timer); onpending(false); }; });
- async function action(name: string) { busy = true; error = ''; try { take(await api.post<Status>(`/plugins/tailscale/control/${name}`, {}), true); loggingOut = false; } catch (err) { fail(err); } finally { busy = false; } }
+ async function action(name: string) { generation++; busy = true; error = ''; try { take(await api.post<Status>(`/plugins/tailscale/control/${name}`, {}), true); loggingOut = false; } catch (err) { fail(err); } finally { busy = false; } }
  async function save(event: SubmitEvent) {
-  event.preventDefault(); busy = true; error = '';
+  event.preventDefault(); generation++; busy = true; error = '';
   try { take(await api.put<Status>('/plugins/tailscale', { routes: routes.split(/[\s,]+/).filter(Boolean), advertiseExit: mode === 'provide', exitNode: mode === 'use' ? exitNode : '', acceptRoutes, acceptDNS }), true); }
   catch (err) { fail(err); } finally { busy = false; }
  }

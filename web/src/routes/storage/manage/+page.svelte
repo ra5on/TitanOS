@@ -37,7 +37,7 @@
 		disk = $state(''),
 		recoveryVolume = $state(''),
 		erase = $state(false),
-		confirm = $state('');
+		growthAction = $state<'recover' | 'cancel' | null>(null);
 	let snapshots = $state<{ name: string }[]>([]),
 		snapshot = $state(''),
 		folder = $state(''),
@@ -103,7 +103,7 @@
 		error = '';
 		disk = '';
 		erase = false;
-		confirm = '';
+		growthAction = null;
 		if (mode === 'snapshots') run(loadSnapshots);
 	}
 	async function run(work: () => Promise<unknown>) {
@@ -123,48 +123,71 @@
 			usage = await api.get(`${base()}/usage`);
 		});
 	}
-	function growthRequest() {
+	// The API still wants the volume name as confirmation; the page sends it
+	// once the danger button in the dialog was clicked.
+	function growthRequest(confirmed = false) {
 		const chosen = candidates.find((d) => d.name === disk);
-		return { disk, identity: chosen?.identity ?? '', recoveryVolume, erase, confirm };
+		return {
+			disk,
+			identity: chosen?.identity ?? '',
+			recoveryVolume,
+			erase,
+			confirm: confirmed ? volume : '',
+		};
 	}
 	async function growPreview() {
 		await run(async () => {
 			preview = await api.post(`${base()}/growth/preview`, growthRequest());
-			confirm = '';
 			erase = false;
 		});
 	}
 	async function grow() {
+		if (!erase || busy) return;
 		await run(async () => {
-			await api.post(`${base()}/growth`, growthRequest());
+			await api.post(`${base()}/growth`, growthRequest(true));
 			preview = null;
 			await loadGrowth();
 		});
 	}
 	async function cancelGrowth() {
+		const confirm = growth?.operation.volume ?? '';
 		await run(async () => {
 			await api.post('/storage/growth/cancel', { confirm });
-			confirm = '';
+			growthAction = null;
 			await loadGrowth();
 		});
 	}
 	async function recover() {
+		const confirm = growth?.operation.volume ?? '';
 		await run(async () => {
 			await api.post('/storage/growth/recover', { confirm });
-			confirm = '';
+			growthAction = null;
 			await loadGrowth();
 		});
 	}
 	async function loadSnapshots() {
 		snapshots = volume ? await api.get(`${base()}/snapshots`) : [];
 	}
+	// Another snapshot starts empty: nothing listed or picked in the old one
+	// may be sent to the new one.
+	function pickSnapshot() {
+		entries = [];
+		folder = '';
+		next = 0;
+		selected = [];
+		restorePreview = null;
+		browse('');
+	}
 	async function browse(path = '', offset = 0) {
 		if (!snapshot) return;
+		const shown = snapshot,
+			from = volume;
 		await run(async () => {
 			const result = await api.get<{ entries: SnapshotEntry[]; next: number }>(
-				`${base()}/snapshots/${encodeURIComponent(snapshot)}/files?` +
+				`${base()}/snapshots/${encodeURIComponent(shown)}/files?` +
 					new URLSearchParams({ path, offset: String(offset) }),
 			);
+			if (shown !== snapshot || from !== volume) return;
 			entries = offset ? [...entries, ...result.entries] : result.entries;
 			folder = path;
 			next = result.next;
@@ -172,12 +195,14 @@
 		});
 	}
 	async function previewRestore() {
+		const shown = snapshot;
 		await run(async () => {
 			const selection = { paths: [...selected], targetVolume: restoreVolume };
 			const info = await api.post<{ uuid: string; files: number; bytes: number }>(
-				`${base()}/snapshots/${encodeURIComponent(snapshot)}/files/preview`,
+				`${base()}/snapshots/${encodeURIComponent(shown)}/files/preview`,
 				selection,
 			);
+			if (shown !== snapshot) return;
 			restorePreview = { ...selection, ...info };
 		});
 	}
@@ -265,24 +290,21 @@
 						after: growth.operation.targetDisks,
 					})}
 				</p>
-				<label
-					>{t('ops.confirmName', { name: growth.operation.volume })}<input
-						class="field"
-						bind:value={confirm}
-					/></label
-				><button
+				<button
+					type="button"
 					class="btn btn-warn"
-					disabled={busy || growth.active || confirm !== growth.operation.volume}
-					onclick={recover}>{t('ops.resume')}</button
+					disabled={busy || growth.active}
+					onclick={() => (growthAction = 'recover')}>{t('ops.resume')}</button
 				>{#if ['preparing', 'adding', 'starting', 'aborting'].includes(growth.operation.phase) && !growth.active}<p
 						class="muted"
 					>
 						{t('ops.cancelGrowthHint')}
 					</p>
 					<button
+						type="button"
 						class="btn btn-warn"
-						disabled={busy || confirm !== growth.operation.volume}
-						onclick={cancelGrowth}>{t('ops.cancelGrowth')}</button
+						disabled={busy}
+						onclick={() => (growthAction = 'cancel')}>{t('ops.cancelGrowth')}</button
 					>{/if}
 			</section>
 		{:else}<form
@@ -317,7 +339,8 @@
 					>{t('snapshot.title')}<select
 						class="field"
 						bind:value={snapshot}
-						onchange={() => browse('')}
+						disabled={busy}
+						onchange={pickSnapshot}
 						><option value="">{t('ops.choose')}</option>{#each snapshots as s (s.name)}<option
 								value={s.name}>{s.name}</option
 							>{/each}</select
@@ -399,33 +422,44 @@
 				<p>{t('tasks.capacityAfter')}: <strong>{formatBytes(preview.plannedBytes)}</strong></p>
 				<p class="muted">{t('tasks.capacityEstimate')}</p>{/if}
 			<p class="mono">{preview.volume} · {preview.diskSerial} · {preview.recoveryVolume}</p>
-			<form
-				id="grow-volume"
-				onsubmit={(e) => {
-					e.preventDefault();
-					grow();
-				}}
+			<p class="notice-warn">
+				{t('ops.growEraseWarning', { disk: preview.diskSerial, volume: preview.volume })}
+			</p>
+			<label class="check"
+				><input type="checkbox" bind:checked={erase} />{t('ops.eraseConsent')}</label
 			>
-				<label class="check"
-					><input type="checkbox" bind:checked={erase} required />{t('ops.eraseConsent')}</label
-				><label
-					>{t('ops.confirmName', { name: preview.volume })}<input
-						class="field mono"
-						bind:value={confirm}
-					/></label
-				>
-			</form>
 			{#if error}<p class="notice-error">{error}</p>{/if}
 			<div class="dialog-actions">
 				<button class="btn" disabled={busy} onclick={() => (preview = null)}
 					>{t('common.cancel')}</button
-				><button
-					form="grow-volume"
-					class="btn btn-warn"
-					disabled={busy || !erase || confirm !== preview.volume}>{t('ops.grow')}</button
+				><button type="button" class="btn btn-warn" disabled={busy || !erase} onclick={grow}
+					>{t('ops.grow')}</button
 				>
 			</div></Dialog
 		>{/if}
+	{#if growthAction && growth?.pending}<Dialog
+			title={t(growthAction === 'recover' ? 'ops.resume' : 'ops.cancelGrowth')}
+			locked={busy}
+			onclose={() => (growthAction = null)}
+		>
+			<p class="notice-warn">
+				{t(growthAction === 'recover' ? 'ops.resumeConfirm' : 'ops.cancelGrowthConfirm', {
+					volume: growth.operation.volume,
+				})}
+			</p>
+			{#if error}<p class="notice-error">{error}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (growthAction = null)}
+					>{t('common.cancel')}</button
+				><button
+					type="button"
+					class="btn btn-warn"
+					disabled={busy}
+					onclick={growthAction === 'recover' ? recover : cancelGrowth}
+					>{t(growthAction === 'recover' ? 'ops.resume' : 'ops.cancelGrowth')}</button
+				>
+			</div>
+		</Dialog>{/if}
 	{#if restorePreview}<Dialog
 			title={t('tasks.restorePreview')}
 			locked={busy}

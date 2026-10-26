@@ -216,11 +216,12 @@
 			sleepChoice = null;
 		});
 
-	function removeDisk() {
-		if (dialog?.kind !== 'remove') return;
+	// The dialog stays open and locked while the disk is removed and erased.
+	async function removeDisk() {
+		if (dialog?.kind !== 'remove' || busy) return;
 		const { volume, disk } = dialog;
-		dialog = null;
-		run(() => api.delete(`/storage/volumes/${volume}/disks/${disk}`));
+		await run(() => api.delete(`/storage/volumes/${volume}/disks/${disk}`));
+		if (!error && dialog?.kind === 'remove' && dialog.disk === disk) dialog = null;
 	}
 
 	function done() {
@@ -420,7 +421,10 @@
 				oncheck={(start) => check(detail, start)}
 				onadd={() => (dialog = { kind: 'add', volume: detail.name })}
 				ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
-				onremove={(disk) => (dialog = { kind: 'remove', volume: detail.name, disk })}
+				onremove={(disk) => (
+					(error = null),
+					(dialog = { kind: 'remove', volume: detail.name, disk })
+				)}
 			/>
 		</aside>
 	{:else if tab === 'disks' && diskDetail}
@@ -531,14 +535,24 @@
 {:else if dialog?.kind === 'delete' && dialogVolume}
 	<DeleteVolumeDialog volume={dialogVolume} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'remove'}
-	<Dialog title={t('storage.removeDisk', { disk: dialog.disk })} onclose={() => (dialog = null)}>
-		<p class="remove-text">
+	<Dialog
+		title={t('storage.removeDisk', { disk: dialog.disk })}
+		locked={busy}
+		onclose={() => (dialog = null)}
+	>
+		<p class="remove-text notice-warn">
 			{t('storage.removeDiskConfirm', { disk: dialog.disk, volume: dialog.volume })}
 		</p>
+		{#if error}<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
+			<button type="button" class="btn" disabled={busy} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
 			>
-			<button type="button" class="btn btn-warn" onclick={removeDisk}>{t('storage.remove')}</button>
+			<button type="button" class="btn btn-danger" disabled={busy} onclick={removeDisk}
+				>{t('storage.remove')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

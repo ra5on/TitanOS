@@ -92,7 +92,7 @@
 		error = null;
 		isNew = true;
 		secretSet = {};
-		draft = { id: '', sources: [], destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', interval: 6, weekday: 0, weekdays: [1], monthDay: 1, time: '02:30', times: ['02:30'], keep: { daily: 7, weekly: 4, monthly: 6 } };
+		draft = { id: '', sources: [], applications: [], allowStop: false, destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', interval: 6, weekday: 0, weekdays: [1], monthDay: 1, time: '02:30', times: ['02:30'], keep: { daily: 7, weekly: 4, monthly: 6 } };
 		loadSelection(draft);
 	}
 
@@ -105,6 +105,9 @@
 		// Jobs from before the schedule grew carry one weekday and one time.
 		draft.interval ||= 6;
 		draft.monthDay ||= 1;
+		// ApplicationSelection binds both; a bound prop may not be undefined.
+		draft.applications ??= [];
+		draft.allowStop ??= false;
 		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
 		if (!draft.times?.length) draft.times = [draft.time];
 		loadSelection(draft);

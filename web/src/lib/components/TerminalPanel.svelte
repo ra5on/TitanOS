@@ -29,11 +29,12 @@
 	const currentConfirmed = $derived((current?.kind === 'nas' || current?.kind === 'ct') || confirmed === true);
 
 	/** Asks titand what is allowed; false if a session has no reason to wait. */
-	async function check(): Promise<boolean> {
+	// For a refused session, judged by that session's kind, not by the tab that happens to be open.
+	async function check(session?: { kind: string }): Promise<boolean> {
 		try {
 			info = await api.get('/terminal');
 			confirmed = (await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed;
-			return (current?.kind === 'vm' && !confirmed) || !info?.enabled;
+			return ((session ?? current)?.kind === 'vm' && !confirmed) || !info?.enabled;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			return false;
@@ -223,7 +224,7 @@
 		{/if}
 		{#each terminal.sessions as session (session.id)}
 			{#key session.shell}
-				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind !== 'vm' || confirmed === true) && info?.enabled === true} onrefused={check} />
+				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind !== 'vm' || confirmed === true) && info?.enabled === true} onrefused={() => check(session)} />
 			{/key}
 		{/each}
 	</div>

@@ -51,7 +51,7 @@
 		| { kind: 'xml'; text: string }
 		| null
 	>(null);
-	let draft = $state({ deleteDisks: false, confirm: '', text: '' });
+	let draft = $state({ deleteDisks: false, text: '' });
 	let dialogError = $state<Problem | null>(null);
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
@@ -289,7 +289,7 @@
 
 	function open(kind: 'remove' | 'poweroff' | 'paste', vm = current) {
 		if (!vm) return;
-		draft = { deleteDisks: false, confirm: '', text: '' };
+		draft = { deleteDisks: false, text: '' };
 		dialogError = null;
 		dialog = kind === 'paste' ? { kind } : { kind, vm: vm.name };
 	}
@@ -310,8 +310,8 @@
 		}
 	}
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
+	// Runs only from the dialog's button, never from Enter in the form.
+	async function submit() {
 		const vm = dialogVM;
 		if (!vm || !dialog || busy) return;
 		busy = true;
@@ -320,7 +320,8 @@
 			if (dialog.kind === 'remove') {
 				await api.delete(`/vms/${encodeURIComponent(vm.name)}`, {
 					deleteDisks: draft.deleteDisks,
-					confirm: draft.confirm,
+					// The API wants the VM name as confirmation for deleting disks.
+					confirm: draft.deleteDisks ? vm.name : '',
 				});
 				await goto('/vms', { replaceState: true });
 			} else if (dialog.kind === 'poweroff') {
@@ -806,6 +807,14 @@
 									disabled={busy || !canStart(current)}>{t('vms.startVm')}</button
 								>
 							</div>
+						{:else if connectionPhase === 'declined'}
+							<div class="screen-state">
+								<span class="muted" role="status">{t('vms.screenDeclined')}</span><button
+									type="button"
+									class="btn"
+									onclick={() => screen?.reconnect()}>{t('vms.screenOpen')}</button
+								>
+							</div>
 						{:else if connectionPhase !== 'connected'}
 							<p class="muted hint" role="status">
 								{t(connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}
@@ -930,7 +939,7 @@
 	{@const kind = dialog.kind}
 	{@const vm = dialogVM}
 	<Dialog title={t(`vms.dialog.${kind}`, { name: vmLabel(vm) })} onclose={() => (dialog = null)}>
-		<form onsubmit={submit}>
+		<form onsubmit={(event) => event.preventDefault()}>
 			{#if kind === 'remove'}
 				<p class="text">{t('vms.removeText')}</p>
 				<label class="check"
@@ -948,15 +957,6 @@
 									.join(', ') || '–',
 						})}
 					</p>
-					<label
-						><span>{t('vms.confirmName', { name: vmLabel(vm) })}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.confirm}
-							autocapitalize="none"
-							spellcheck="false"
-						/></label
-					>
 				{/if}
 			{:else if kind === 'poweroff'}
 				<p class="text">{t('vms.poweroffText')}</p>
@@ -976,10 +976,10 @@
 					>{t('common.cancel')}</button
 				>
 				<button
-					type="submit"
-					class="btn {kind === 'paste' ? 'btn-primary' : 'btn-warn'}"
-					disabled={busy ||
-						(kind === 'remove' && draft.deleteDisks && draft.confirm !== vmLabel(vm))}
+					type="button"
+					class="btn {kind === 'paste' ? 'btn-primary' : kind === 'remove' && draft.deleteDisks ? 'btn-danger' : 'btn-warn'}"
+					disabled={busy}
+					onclick={submit}
 					>{t(`vms.submit.${kind}`)}</button
 				>
 			</div>

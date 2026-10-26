@@ -28,7 +28,6 @@
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let chosen = $state<Disk | null>(null);
 	let mode = $state<Mode>('read');
-	let confirm = $state('');
 	let busy = $state(false);
 
 	function problem(err: unknown) {
@@ -58,7 +57,6 @@
 	function open(disk: Disk) {
 		chosen = disk;
 		mode = 'read';
-		confirm = '';
 		error = null;
 	}
 
@@ -69,13 +67,18 @@
 		return Math.max(1, Math.round((disk.sizeBytes * passes) / speed / 3600));
 	}
 
-	async function start(event: SubmitEvent) {
-		event.preventDefault();
-		if (!chosen) return;
+	// Started only by clicking the button: Enter in the dialog never erases a disk.
+	async function start() {
+		if (!chosen || busy) return;
 		busy = true;
 		error = null;
 		try {
-			tests = (await api.post<{ tests: Test[] }>('/storage/tests', { disk: chosen.name, mode, confirm })).tests;
+			tests = (await api.post<{ tests: Test[] }>('/storage/tests', {
+				disk: chosen.name,
+				mode,
+				// The API still wants the disk name as confirmation for an erasing test.
+				confirm: mode === 'write' ? chosen.name : ''
+			})).tests;
 			chosen = null;
 		} catch (err) {
 			problem(err);
@@ -162,7 +165,7 @@
 {#if chosen}
 	{@const disk = chosen}
 	<Dialog title={t('disktest.dialog', { disk: disk.name })} locked={busy} onclose={() => (chosen = null)}>
-		<form onsubmit={start}>
+		<form onsubmit={(event) => event.preventDefault()}>
 			<p class="muted">{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)].filter(Boolean).join(' · ')}</p>
 			<fieldset>
 				<legend>{t('disktest.mode')}</legend>
@@ -175,15 +178,12 @@
 					{t('disktest.eraseWarning', { disk: disk.name, model: [disk.model, disk.serial].filter(Boolean).join(' · ') })}
 					{#if disk.contents?.length}<br />{t('disktest.eraseContents', { contents: disk.contents.join(', ') })}{/if}
 				</div>
-				<label><span>{t('disktest.confirm', { disk: disk.name })}</span>
-					<input class="field mono" type="text" bind:value={confirm} autocomplete="off" autocapitalize="none" spellcheck="false" required />
-				</label>
 			{/if}
 			<p class="muted">{t('disktest.restartNote')}</p>
 			{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (chosen = null)} disabled={busy}>{t('common.cancel')}</button>
-				<button type="submit" class="btn {mode === 'write' ? 'btn-danger' : 'btn-primary'}" disabled={busy || (mode === 'write' && confirm !== disk.name)}>{t('disktest.begin')}</button>
+				<button type="button" class="btn {mode === 'write' ? 'btn-danger' : 'btn-primary'}" disabled={busy} onclick={start}>{t('disktest.begin')}</button>
 			</div>
 		</form>
 	</Dialog>

@@ -138,7 +138,7 @@
 
 <div class="chat">
 	<div class="log" bind:this={log} onscroll={scrolled} aria-live="polite">
-		{#each assistant.messages as message, index (index)}
+		{#each assistant.messages as message, index (`${assistant.chatId}:${index}:${message.action?.id ?? ''}`)}
 			{#if message.role === 'user'}
 				{#if editing?.index === index}
 					<div class="edit">

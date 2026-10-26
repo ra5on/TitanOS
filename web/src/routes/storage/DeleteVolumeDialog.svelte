@@ -6,22 +6,21 @@
 	type Props = { volume: Volume; onclose: () => void; ondone: () => void };
 	let { volume, onclose, ondone }: Props = $props();
 
-	let typed = $state('');
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
-		if (typed !== volume.name) return;
+	async function submit() {
+		if (working) return;
 		working = true;
 		error = null;
 		try {
-			// DELETE with a body: the confirmation travels with the request.
+			// DELETE with a body: the API still expects the volume name as the
+			// confirmation; the dialog sends it once the button is clicked.
 			const res = await fetch(`/api/v1/storage/volumes/${volume.name}`, {
 				method: 'DELETE',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ confirm: typed })
+				body: JSON.stringify({ confirm: volume.name })
 			});
 			if (!res.ok) {
 				const data = await res.json().catch(() => null);
@@ -37,34 +36,23 @@
 </script>
 
 <Dialog title={t('delete.title', { volume: volume.name })} locked={working} {onclose}>
-	<form onsubmit={submit}>
-		<p class="notice-error">{t('delete.warning')}</p>
-		<label>
-			<span>{t('delete.typeName')}</span>
-			<!-- svelte-ignore a11y_autofocus -->
-			<input class="field mono" type="text" bind:value={typed} autocapitalize="none" autocomplete="off" spellcheck="false" autofocus placeholder={volume.name} />
-		</label>
+	<div class="body">
+		<p class="notice-error">{t('delete.warning', { volume: volume.name })}</p>
 		{#if error}
 			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-danger" disabled={typed !== volume.name || working}>{t('delete.submit')}</button>
+			<button type="button" class="btn btn-danger" disabled={working} onclick={submit}>{t('delete.submit')}</button>
 		</div>
-	</form>
+	</div>
 </Dialog>
 
 <style>
-	form {
+	.body {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		font-size: 0.875rem;
 	}
 	pre {
 		margin: 8px 0 0;
