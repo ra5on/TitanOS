@@ -11,9 +11,6 @@
 	import TerminalScreen from './TerminalScreen.svelte';
 
 	let info = $state<{ enabled: boolean; nasShell: boolean } | null>(null);
-	let confirmed = $state<boolean | null>(null);
-	let password = $state('');
-	let code = $state('');
 	let error = $state('');
 	let menu = $state(false);
 	let containers = $state<{ id: string; name: string }[]>([]);
@@ -26,15 +23,13 @@
 
 	const current = $derived(terminal.sessions.find((session) => session.id === terminal.active));
 	const screen = $derived(current ? screens[current.id] : undefined);
-	const currentConfirmed = $derived((current?.kind === 'nas' || current?.kind === 'ct') || confirmed === true);
 
-	/** Asks titand what is allowed; false if a session has no reason to wait. */
-	// For a refused session, judged by that session's kind, not by the tab that happens to be open.
-	async function check(session?: { kind: string }): Promise<boolean> {
+	/** Asks titand whether terminals are allowed; false if a session has no reason to wait. */
+	// No console asks for the password again: the login is enough.
+	async function check(): Promise<boolean> {
 		try {
 			info = await api.get('/terminal');
-			confirmed = (await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed;
-			return ((session ?? current)?.kind === 'vm' && !confirmed) || !info?.enabled;
+			return !info?.enabled;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			return false;
@@ -56,19 +51,6 @@
 		const timer = setInterval(() => (now = Date.now()), 30_000);
 		return () => clearInterval(timer);
 	});
-
-	async function confirm(event: SubmitEvent) {
-		event.preventDefault();
-		error = '';
-		try {
-			await api.post('/session/confirm', { password, code });
-			password = '';
-			code = '';
-			confirmed = true;
-		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
-		}
-	}
 
 	async function openMenu() {
 		menu = !menu;
@@ -204,27 +186,12 @@
 	<div class="body">
 		{#if info && !info.enabled}
 			<p class="message">{t('terminal.off')} <a href="/settings">{t('nav.settings')}</a></p>
-		{:else if current?.kind === 'vm' && confirmed === false}
-			<form class="confirm" onsubmit={confirm}>
-				<p>{t('docker.consoleConfirm')}</p>
-				<label><span class="muted">{t('auth.password')}</span>
-					<!-- svelte-ignore a11y_autofocus -->
-					<input class="field" type="password" bind:value={password} autocomplete="current-password" required autofocus />
-				</label>
-				{#if account.data?.user?.twoFactor}
-					<label><span class="muted">{t('auth.code')}</span>
-						<input class="field mono" type="text" bind:value={code} inputmode="numeric" autocomplete="one-time-code" spellcheck="false" required />
-					</label>
-				{/if}
-				{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
-				<button type="submit" class="btn btn-primary">{t('docker.consoleOpen')}</button>
-			</form>
 		{:else if terminal.sessions.length === 0}
 			<p class="message">{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}</p>
 		{/if}
 		{#each terminal.sessions as session (session.id)}
 			{#key session.shell}
-				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active && currentConfirmed} fontSize={terminal.fontSize} confirmed={(session.kind !== 'vm' || confirmed === true) && info?.enabled === true} onrefused={() => check(session)} />
+				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active} fontSize={terminal.fontSize} confirmed={info?.enabled === true} onrefused={() => check()} />
 			{/key}
 		{/each}
 	</div>
@@ -452,31 +419,13 @@
 		flex: 1 1 auto;
 		min-height: 0;
 	}
-	.message,
-	.confirm {
+	.message {
 		position: absolute;
 		inset: 0;
 		z-index: 2;
 		padding: 20px 24px;
 		background: var(--bg);
 		font-size: 0.875rem;
-	}
-	.confirm {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 12px;
-		overflow-y: auto;
-	}
-	.confirm p {
-		max-width: 44rem;
-	}
-	.confirm label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		width: min(100%, 22rem);
-		font-size: 0.8125rem;
 	}
 	.foot {
 		flex: none;

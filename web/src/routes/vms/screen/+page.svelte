@@ -63,9 +63,6 @@
 		{#if error}<span class="muted" role="alert">{error}</span>
 		{:else if running === null}<span class="muted" role="status">{t('common.loading')}</span>
 		{:else if !running}<span class="muted">{t('vms.off', { name: displayName || name })}</span>
-		{:else if connectionPhase === 'declined'}<span class="muted" role="status"
-				>{t('vms.screenDeclined')}</span
-			><button type="button" onclick={() => screen?.reconnect()}>{t('vms.screenOpen')}</button>
 		{:else if connectionPhase !== 'connected'}<span class="muted" role="status"
 				>{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</span
 			>{/if}

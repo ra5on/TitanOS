@@ -116,7 +116,7 @@ try {
  failTerminal=true;await enabled.uncheck();await page.locator('#access-terminal [role=alert]').waitFor();assert.equal(await enabled.isChecked(),true);
  failTerminal=false;await enabled.uncheck();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();assert.equal(await enabled.isChecked(),false);
  await page.clock.runFor(5100);assert.equal(await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).count(),0);
- await page.getByRole('checkbox',{name:'Passwort vor VM-Konsolen erneut abfragen',exact:true}).check();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();
+ await page.getByRole('checkbox',{name:'Passwort vor dem Herunterladen von Stick-Sicherungen erneut abfragen',exact:true}).check();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();
  await page.goto(base+'/settings/backups');await page.locator('.groups').waitFor();await page.getByText('Noch keine Sicherung',{exact:true}).waitFor({state:'hidden'});await page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
  const expectedNext=await page.evaluate(()=>new Intl.DateTimeFormat('de',{dateStyle:'medium',timeStyle:'short'}).format(new Date('2026-10-21T02:30:00Z')));
  assert.equal(await page.locator('.summary > div').nth(2).locator('strong').innerText(),expectedNext,'next backup compares instants across time zone offsets');
