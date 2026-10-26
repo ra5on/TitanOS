@@ -14,15 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Read pinned toolchain versions
+        id: lock
+        run: |
+          echo "node=$(jq -er .node.version scripts/dev-toolchains.lock.json)" >> "$GITHUB_OUTPUT"
+          echo "go=$(jq -er .go.version scripts/dev-toolchains.lock.json)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: ${{ steps.lock.outputs.node }}
           cache: npm
           cache-dependency-path: web/package-lock.json
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27'
+          go-version: ${{ steps.lock.outputs.go }}
           cache-dependency-path: backend/go.sum
 
       - name: Release regression test tools

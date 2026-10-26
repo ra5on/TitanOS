@@ -4,23 +4,37 @@ description: Node, Go, mkosi and the packages that release.yml and plugins.yml b
 runs:
   using: composite
   steps:
+    # Exact toolchain versions come from the lock file the dev setup uses.
+    - name: Read pinned toolchain versions
+      id: lock
+      shell: bash
+      run: |
+        lock="$GITHUB_WORKSPACE/scripts/dev-toolchains.lock.json"
+        echo "node=$(jq -er .node.version "$lock")" >> "$GITHUB_OUTPUT"
+        echo "go=$(jq -er .go.version "$lock")" >> "$GITHUB_OUTPUT"
+        echo "mkosi-source=$(jq -er .mkosi.source "$lock")" >> "$GITHUB_OUTPUT"
+        echo "mkosi-commit=$(jq -er .mkosi.commit "$lock")" >> "$GITHUB_OUTPUT"
+
     - uses: actions/setup-node@v7
       with:
-        node-version: 24
+        node-version: ${{ steps.lock.outputs.node }}
         cache: npm
         cache-dependency-path: web/package-lock.json
 
     - uses: actions/setup-go@v7
       with:
-        go-version: '1.27'
+        go-version: ${{ steps.lock.outputs.go }}
         cache-dependency-path: backend/go.sum
 
     - name: Packages and mkosi
       shell: bash
+      env:
+        MKOSI_SOURCE: ${{ steps.lock.outputs.mkosi-source }}
+        MKOSI_COMMIT: ${{ steps.lock.outputs.mkosi-commit }}
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools exfatprogs fdisk kmod openssh-client smbclient gcc libc6-dev restic
-        # The version the image is developed with.
+        # The exact commit the image is developed with (dev-toolchains.lock.json).
         python3 -m venv "$RUNNER_TEMP/mkosi"
-        "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
+        "$RUNNER_TEMP/mkosi/bin/pip" install "git+$MKOSI_SOURCE@$MKOSI_COMMIT"
         echo "$RUNNER_TEMP/mkosi/bin" >> "$GITHUB_PATH"

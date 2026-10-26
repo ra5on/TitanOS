@@ -60,12 +60,6 @@ try {
   await dialog
     .getByRole("textbox", { name: "Name", exact: true })
     .fill("Archive");
-  await dialog
-    .getByRole("textbox", {
-      name: "Zur Bestätigung Archive eingeben",
-      exact: true,
-    })
-    .fill("Archive");
   data.failRegister = true;
   await dialog
     .getByRole("button", { name: "Volume registrieren", exact: true })
@@ -96,12 +90,6 @@ try {
   dialog = page.getByRole("dialog");
   assert.equal(data.growStart, 0);
   await dialog.getByRole("checkbox").check();
-  await dialog
-    .getByRole("textbox", {
-      name: "Zur Bestätigung Data eingeben",
-      exact: true,
-    })
-    .fill("Data");
   await dialog
     .getByRole("button", { name: "Kapazität erweitern", exact: true })
     .click();

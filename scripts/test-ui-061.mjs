@@ -2,13 +2,19 @@
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-061.mjs
 // README_SCREENSHOTS=1 UI_OUTPUT=docs/screenshots/v0.6.1 captures the README gallery.
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.UI_URL || 'http://127.0.0.1:5179';
 const out = process.env.UI_OUTPUT || 'out/validation/ui-061';
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({headless:true, executablePath:process.env.BROWSER_EXECUTABLE});
 const errors = [];
+// The tile counts follow the settings hub's own area list instead of a number that goes stale.
+const settingsSource=await readFile(new URL('../web/src/routes/settings/+page.svelte',import.meta.url),'utf8');
+const areaList=settingsSource.match(/const areas:[^=]*=\s*\[([\s\S]*?)\n\t\];/)?.[1]??'';
+const areaEntries=areaList.match(/\{\s*href:[^}]*\}/g)??[];
+const allAreas=areaEntries.length, userAreas=areaEntries.filter(entry=>!/admin:\s*true/.test(entry)).length;
+assert.ok(allAreas>0&&userAreas>0&&userAreas<allAreas,'settings areas parsed from +page.svelte');
 const time = '2026-10-20T09:00:00Z';
 const system = { hostname:'titan-test',version:'0.6.0',kernel:'test',uptimeSeconds:1000,cpu:{model:'Test CPU',threads:8,usagePercent:12},memory:{totalBytes:16e9,usedBytes:3e9,freeBytes:13e9,availableBytes:13e9},temperatures:[],accelerators:[],image:{slot:'a',sizeBytes:1e9,overlayUsedBytes:0,overlayTotalBytes:512e6},stick:{present:true,label:'TITANOS'},network:null,networks:[],networkPendingSeconds:0,notificationsLatest:1};
 const volume={name:'data',level:'raid1',filesystem:'ext4',mountPoint:'/mnt/data',mounted:true,state:'checking',sizeBytes:1e12,usedBytes:4e11,raidDisks:2,members:[],sync:{percent:32,speedBytesPerSecond:1e8,remainingSeconds:500},mismatches:0};
@@ -94,7 +100,7 @@ try {
  await page.goto(base+'/settings');
  const search=page.getByRole('searchbox');await search.waitFor();
  assert.equal(await page.locator('main select, main input[type=checkbox]').count(),0);
- assert.equal(await page.locator('.areas > a').count(),14);
+ assert.equal(await page.locator('.areas > a').count(),allAreas);
  for(const [query,href] of [['SSH','/settings/access#access-ssh'],['Zertifikat','/settings/access#access-cert'],['Terminal','/settings/access#access-terminal'],['DNS','/settings/network#network-dns'],['Zeitzone','/settings/timezone']]) {
   await search.fill(query);assert.equal(await page.locator('.areas > a').count(),1);assert.equal(await page.locator('.areas > a').getAttribute('href'),href);
  }
@@ -136,7 +142,7 @@ try {
   }
   await ctx.close();
  }
- const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.locator('.areas > a').count(),3);
+ const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.locator('.areas > a').count(),userAreas);
  for(const path of ['backups','backups/data','backups/configuration','backups/restore','timezone','access']) { await user.page.goto(base+'/settings/'+path);await user.page.getByText('Dafür fehlen diesem Konto die Rechte.',{exact:true}).waitFor(); }
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/config-backup','/network','/system/ssh','/system/certificate'].includes(path)));
  await user.ctx.close();assert.deepEqual(errors,[]);console.log('UI 0.6.1 checks passed: grouping, deep links, legacy links, restore dialog, errors/retry, local feedback, no archive polling, roles and responsive themes.');

@@ -17,7 +17,7 @@ try{
   });
   await page.goto(base+'/files?root=share%2FDocuments');
   await page.getByRole('checkbox',{name:'Fotos auswählen',exact:true}).check();
-  if(width===390){await page.getByRole('button',{name:'Weitere Aktionen',exact:true}).click();await page.getByRole('menuitem',{name:'Kopieren nach …',exact:true}).click();}
+  if(width===390){await page.getByRole('button',{name:'Weitere Aktionen für die Auswahl',exact:true}).click();await page.getByRole('menuitem',{name:'Kopieren nach …',exact:true}).click();}
   else await page.getByRole('button',{name:'Kopieren nach …',exact:true}).click();
   const dialog=page.getByRole('dialog'),start=dialog.getByRole('button',{name:'Hierher kopieren',exact:true});
   await dialog.getByRole('combobox').first().selectOption('share/Projects');

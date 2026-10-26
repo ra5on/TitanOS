@@ -100,4 +100,5 @@ valid users = storagetester
         remote('test -z "$(find /run/titanos-backup -name credentials -print)"; ! mount | grep -q /run/titanos-backup/smb-')
         print('SMB backup: encrypted discovery, auth/readonly rejection, selected tree, unchanged/changed files, retained deletions, restore and cleanup passed', flush=True)
     finally:
-        remote('ip netns pids titanos-smb-test | xargs -r kill; ip netns del titanos-smb-test; ip link del smbtest-host 2>/dev/null || true')
+        # A test server may already have exited between listing and kill.
+        remote('ip netns pids titanos-smb-test | xargs -r kill 2>/dev/null || true; ip netns del titanos-smb-test; ip link del smbtest-host 2>/dev/null || true')

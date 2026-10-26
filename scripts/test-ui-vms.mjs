@@ -35,6 +35,9 @@ async function context(theme = 'graphit', width = 1440, locale = 'de') {
 		const method = route.request().method();
 		requests.push([method, path, route.request().postData()]);
 		const json = (data, status = 200) => route.fulfill({ status, json: data });
+		// The screen asks like the serial console whether it may open.
+		if (path === '/terminal') return json({ enabled: true });
+		if (path === '/session/confirmed') return json({ confirmed: true });
 		if (path === '/session') return json({ configAvailable: true, setupRequired: false, user: { name: 'tester', role: 'owner', twoFactor: false }, hostname: 'titan-test' });
 		if (path === '/preferences') return json({ appearance: { theme }, dashboard: null, docker: null, vnc: null, sound: null });
 		if (path === '/system') return json(system);

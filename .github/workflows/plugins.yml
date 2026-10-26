@@ -85,7 +85,9 @@ jobs:
       - name: Pack, sign and verify with the disposable key
         run: |
           printf '%s\n' 'Plugin rehearsal. Disposable signing key. Not for distribution.' > changelog.txt
-          scripts/make-release.sh "$VERSION" beta changelog.txt
+          # Same rule as release.yml: a pre-release suffix is beta, otherwise stable.
+          case "$VERSION" in *-*) channel=beta ;; *) channel=stable ;; esac
+          scripts/make-release.sh "$VERSION" "$channel" changelog.txt
           scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
           python3 scripts/verify-release.py out/release build/mkosi.extra/usr/share/titanos/update-keys
           rm "$RUNNER_TEMP/rehearsal.key"

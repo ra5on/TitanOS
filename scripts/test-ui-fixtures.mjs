@@ -479,6 +479,7 @@ export function fixtureFactory(browser, errors) {
         });
       if (path === "/notifications") return json({ messages: [] });
       if (path === "/terminal") return json({ enabled: true });
+      if (path === "/session/confirmed") return json({ confirmed: true });
       if (path === "/assistant") return json({ available: false });
       if (path === "/files/roots")
         return json(

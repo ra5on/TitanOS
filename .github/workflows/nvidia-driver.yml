@@ -87,8 +87,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends debian-archive-keyring gnupg gpgv minisign squashfs-tools systemd-container python3-venv kmod
+          # The exact mkosi commit the image is developed with.
+          lock=scripts/dev-toolchains.lock.json
           python3 -m venv "$RUNNER_TEMP/mkosi"
-          "$RUNNER_TEMP/mkosi/bin/pip" install 'git+https://github.com/systemd/mkosi.git@v25.3'
+          "$RUNNER_TEMP/mkosi/bin/pip" install "git+$(jq -er .mkosi.source "$lock")@$(jq -er .mkosi.commit "$lock")"
           echo "$RUNNER_TEMP/mkosi/bin" >> "$GITHUB_PATH"
       - name: Authenticate upstream packages and target OS
         id: check
@@ -124,20 +126,27 @@ jobs:
           if-no-files-found: error
   changed:
     needs: build
+    # One failed matrix leg (fail-fast is off) must not hold back the drivers
+    # that built and validated. Only legs whose build job succeeded and that
+    # uploaded an artifact are published; a failed leg never is.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     runs-on: ubuntu-24.04
     outputs:
       versions: ${{ steps.changed.outputs.versions }}
     steps:
-      - name: List actual driver builds
+      - name: List actual driver builds of successful legs
         id: changed
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          versions=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '[.artifacts[] | select(.expired == false) | .name | select(startswith("driver-")) | ltrimstr("driver-")]')
+          artifacts=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name | select(startswith("driver-")) | ltrimstr("driver-")' | jq -Rsc 'split("\n") | map(select(length > 0))')
+          succeeded=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" --jq '.jobs[] | select(.conclusion == "success") | .name | select(startswith("build (")) | ltrimstr("build (") | rtrimstr(")")' | jq -Rsc 'split("\n") | map(select(length > 0))')
+          versions=$(jq -cn --argjson a "$artifacts" --argjson s "$succeeded" '[$a[] | select(. as $v | $s | index($v))] | unique')
+          echo "Artifacts: $artifacts; successful build legs: $succeeded; publishing: $versions"
           echo "versions=$versions" >> "$GITHUB_OUTPUT"
   publish:
     needs: changed
-    if: needs.changed.outputs.versions != '[]'
+    if: ${{ !cancelled() && needs.changed.result == 'success' && needs.changed.outputs.versions != '[]' }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -156,7 +165,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ matrix.version }}
         run: |
-          exists=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq ".artifacts | any(.name == \"driver-$VERSION\")")
+          exists=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq ".artifacts | any(.name == \"driver-$VERSION\")")
           echo "exists=$exists" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v7
         if: steps.artifact.outputs.exists == 'true'

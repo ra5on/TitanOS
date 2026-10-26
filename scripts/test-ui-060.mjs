@@ -34,10 +34,13 @@ async function context(role='owner',theme='graphit',width=1440) {
   if(path==='/backups' && failTasks)return fail();
   if(path==='/backups')return json({smbTargets:[],jobs:[backup],shares:[{name:'documents',volume:'data'}],volumes:['data']});
   if(path==='/backups/daily/stop'){await new Promise(r=>setTimeout(r,500));backup.state.running=false;return json({smbTargets:[],jobs:[backup],shares:[],volumes:['data']});}
+  if(path==='/backups/application-recovery')return json({operation:null,active:false});
+  if(path==='/vm-clones/data')return json([]);
   if(path==='/backups/target')return json({target:{enabled:false,volume:'',port:0,sources:[],listening:[],problem:''},volumes:['data']});
   if(path==='/usb')return json([]);
   if(path==='/update/progress')return json({progress:{phase:'download',percent:40,file:'filesystem.squashfs'}});
   if(path==='/vms')return json({kvm:true,bridge:true,host:{cpus:8,memoryBytes:16e9,usedMemoryBytes:3e9},vms:[vm]});
+  if(path==='/vms/imports')return json({jobs:[]});
   if(path==='/vms/linux/start'){await new Promise(r=>setTimeout(r,700));return failVM?fail():json({});}
   if(path==='/vms/linux/snapshots')return json({snapshots:[],schedule:{enabled:false,time:'03:00',days:[],keep:3,memory:false,allowPause:false},pending:false,reason:'',job:null});
   if(path==='/plugins/tailscale')return json({active:true,state:'Running',name:'test.ts.net',ips:[]});
@@ -78,7 +81,8 @@ try {
  await page.goto(base+'/vms');await page.getByRole('heading',{name:'Linux Server',exact:true}).waitFor();
  failVM=true;await page.getByRole('button',{name:'Starten',exact:true}).click();await page.getByText(/Linux Server: Wird gestartet/).waitFor();await page.getByRole('button',{name:'Erneut versuchen',exact:true}).waitFor();
  failVM=false;await page.getByRole('button',{name:'Erneut versuchen',exact:true}).click();await page.getByText(/Aktion für Linux Server angenommen/).waitFor();
- await page.getByText('Weitere Aktionen',{exact:false}).click();await page.keyboard.press('Escape');assert.equal(await page.locator('.actions-menu').evaluate(n=>n.open),false);
+ const more=page.locator('.dropdown').getByRole('button',{name:'Weitere Aktionen',exact:true});await more.click();const moreMenu=page.getByRole('menu',{name:'Weitere Aktionen',exact:true});await moreMenu.waitFor();
+ await page.keyboard.press('Escape');await moreMenu.waitFor({state:'hidden'});assert.equal(await more.getAttribute('aria-expanded'),'false');
  await page.screenshot({path:out+'/vms-desktop.png',fullPage:true});
  await page.goto(base+'/settings/backups#backup-daily');await page.locator('#backup-daily').waitFor();await page.locator('#backup-daily').getByRole('button',{name:'Abbrechen',exact:true}).click();await page.getByText(/Auftrag für daily angenommen/).waitFor();
  await page.goto(base+'/docker');await page.getByRole('heading',{name:'Docker',exact:true}).waitFor();
