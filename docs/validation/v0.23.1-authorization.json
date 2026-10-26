@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-26",
+  "version": "0.23.1",
+  "systemBase": "0.23.1",
+  "sourceFixCommit": "bc35f69867b2bcf42b275a25c860f4949828386a",
+  "priorFeatureEvidence": "v0.23.0-workflows.json",
+  "image": {
+    "source": "local full mkosi build",
+    "kernel": "6.12.113+deb13-amd64",
+    "sha256": "a65b4b3e73442273ae5594e40bfdef92f52c546166b718351f30da7f50504504"
+  },
+  "confirmedProblem": {
+    "before": "A console Users instance consumed a recovery code; the already-running web Users instance accepted the same code from its stale cache.",
+    "reproducer": "TestRecoveryCodeSharedManagersOnce failed before the fix.",
+    "publication": "The v0.23.0 tag workflow was cancelled before signing and publication; no v0.23.0 update was released."
+  },
+  "unitValidation": {
+    "goVetAndTests": "passed",
+    "webTests": 84,
+    "svelteErrors": 0,
+    "svelteWarnings": 0,
+    "releaseTests": 42,
+    "authRace": "passed as ordinary user, including unwritable-account tests",
+    "apiRace": "passed",
+    "regressions": [
+      "separate OS process consumes a recovery code or TOTP before an already-running manager retries it",
+      "daemon restart does not reset consumed TOTP",
+      "concurrent managers accept the same recovery code exactly once",
+      "stale account mutation does not resurrect a consumed code or discard an unused code",
+      "failed persistence rejects both recovery-code and TOTP authentication and leaves the factor usable after repair"
+    ]
+  },
+  "console": {
+    "sourceZIP": "out/titanos-0.23.1.zip",
+    "virtualConsole": "tty2",
+    "checks": [
+      "wrong password denied on actual TTY2",
+      "second factor required and invalid factor denied",
+      "recovery code used at TTY2 rejected by the still-running web daemon before restart",
+      "TOTP used at TTY2 rejected by the still-running web daemon before restart",
+      "bad management address made HTTPS unreachable before console recovery",
+      "authenticated DHCP recovery restarted titand and restored HTTPS on the selected NIC"
+    ],
+    "result": "passed",
+    "completed": "2026-10-26T13:01:37Z"
+  },
+  "workflowGuest": {
+    "result": "passed",
+    "acceleration": "KVM",
+    "ramGiB": 4,
+    "dataDiskGiB": 8,
+    "boots": 4,
+    "command": "scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.1.zip --workflows023 --workflows-only --log out/validation/workflows0231-final-serial.log",
+    "checks": [
+      "tagged IPv4/IPv6, active-backup failover, changed VLAN/revert and daemon restart",
+      "real NFS RO write denial and explicit RW write",
+      "real Docker ipvlan/macvlan, fixed service address, private DB and NAS reachability",
+      "media import, source proof, daemon restart, hash and publication",
+      "CLI token revocation and private plugin cleanup",
+      "network/NFS/media persistence through four NAS boots; degraded Btrfs replacement and scrub"
+    ],
+    "notRepeatedInThisLocalRun": [
+      "USB/exFAT",
+      "SMB/SMB backup",
+      "CDI",
+      "live VM RAM/disk/UEFI/TPM snapshots"
+    ],
+    "note": "These unchanged suites passed on the prior feature build; the official release workflow runs the complete set on its tag again."
+  },
+  "commands": [
+    "scripts/fedora-dev.sh make test test-release",
+    "cd backend && go test -race ./internal/auth -count=1",
+    "cd backend && ../scripts/fedora-dev.sh go test -race ./internal/api -count=1",
+    "make zip VERSION=0.23.1"
+  ],
+  "provenance": {
+    "out/titanos-0.23.1.zip": "a65b4b3e73442273ae5594e40bfdef92f52c546166b718351f30da7f50504504",
+    "backend/bin/titand": "1cf0baa326909342cfeaeac4fad4b1635e59b201b7ac260f9204abaf439a362e",
+    "backend/bin/titanosctl": "f4beb6c07e860c830ce7fc6530acd090fa351972003012f0482eb504565363a3",
+    "out/implementation-security-test.log": "0ff2597ce4bf4004256839d83a0d81fb2370890a63e5a95cde6f91dd7cf690a2",
+    "out/implementation-auth-race-0231.log": "173d02b6a2a1e016c5499deae5b9afb2b7febe19a5c7de639c416e5f03ba04a2",
+    "out/implementation-api-race-0231.log": "e479d807807d79bd386603e0a3cac3b8d2ea365b504060dca7b002af170f33c2",
+    "out/implementation-tty2-0231.log": "4982ab5f752af972ac73f45146a52703043b9b1b0e3e97d600e78c88d52da658",
+    "out/validation/recovery0231/serial.log": "14e598466fd1d76d12ba3ec3ab1927902e812a6e81b2e634605eda3a9134df52",
+    "out/implementation-qemu-0231.log": "5c642f9b77b3da5439689fe018b0465ec3924f1b68f9a0a2daea86e8d1f07399",
+    "out/validation/workflows0231-final-serial.log": "287430d2ca750bad7388acebcbf18f644dc2bc5b60aac22da489892c82c466d2"
+  },
+  "limits": [
+    "QEMU only; no host disks, host Docker, host NIC changes or production data",
+    "Interactive alternate recovery-menu path, physical console/input and NIC/switch/LACP variants remain untested",
+    "No real GPU/UPS/tailnet/Cloudflare policy or Windows installation/Secure Boot certification",
+    "TOTP consumption now explicitly and atomically writes the optional usedTOTPStep account field; older applications ignore the field",
+    "No periodic configuration reads and no persistent open account-lock descriptor"
+  ]
+}
