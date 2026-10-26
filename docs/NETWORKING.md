@@ -55,6 +55,16 @@ Es gibt keinen ungeschützten Root-Login. Bei manueller Wartung kann root
 `titand -network-recovery` aufrufen; interaktives
 Terminal ist Pflicht.
 
+Am 26. Oktober 2026 wurde dieser Weg auf der tatsächlichen TTY2 eines
+Wegwerf-QEMU-Gasts geprüft: falsches Passwort und ungültiger zweiter Faktor
+werden abgewiesen. Ein Besitzerkonto mit Passwort und Einmal-Recovery-Code
+stellt DHCP auf dem ausgewählten Anschluss wieder her, nachdem eine falsche
+Verwaltungsadresse den HTTPS-Zugang unterbrochen hat. Die Weboberfläche war
+vor Ablauf des automatischen Probelauf-Rückfalls wieder erreichbar.
+[Prüfschritte, Abbildhash und Grenzen](validation/v0.23.0-workflows.json).
+Der andere Rettungsmenüpfad und echte Konsolenhardware sind damit nicht
+abgenommen.
+
 ### Container mit eigener LAN-Adresse
 
 Unter **Docker › LAN-Netze** ein IPv4-Subnetz, externes Gateway und einen
