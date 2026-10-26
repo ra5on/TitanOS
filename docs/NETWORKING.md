@@ -65,6 +65,12 @@ vor Ablauf des automatischen Probelauf-Rückfalls wieder erreichbar.
 Der andere Rettungsmenüpfad und echte Konsolenhardware sind damit nicht
 abgenommen.
 
+Die zusätzliche v0.23.1-Prüfung verwendet an TTY2 einen Recovery-Code und
+einen TOTP-Code und versucht beide vor jedem Daemon-Neustart erneut im
+Webdienst. Beide Wiederholungen werden abgewiesen. Die Prozesssperre und der
+aktuelle Kontostand verhindern die zuvor beobachtete Wiederverwendung;
+[Nachweis und Verbrauchsbuchung](validation/v0.23.1-authorization.json).
+
 ### Container mit eigener LAN-Adresse
 
 Unter **Docker › LAN-Netze** ein IPv4-Subnetz, externes Gateway und einen
