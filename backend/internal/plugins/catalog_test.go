@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type catalogFixture struct {
@@ -368,5 +369,78 @@ func TestOfficialInstallCanDeferActivation(t *testing.T) {
 	}
 	if f.count(true) != 1 || len(f.runner.commands) != 0 {
 		t.Fatalf("download count %d, system commands %v", f.count(true), f.runner.commands)
+	}
+}
+
+// A large image on a slow line must not hold the plugin lock: the page polls
+// Status, Tailscale uses RuntimeAction and VM autostart asks Healthy.
+func TestOfficialDownloadKeepsStatusResponsive(t *testing.T) {
+	f := newCatalogFixture(t)
+	data, _ := os.ReadFile(filepath.Join(f.dir, "intel-gpu-tools.raw"))
+	started, release := make(chan struct{}), make(chan struct{})
+	f.mu.Lock()
+	f.imageHandler = func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-release
+		w.Write(data)
+	}
+	f.mu.Unlock()
+	installed := make(chan error, 1)
+	go func() {
+		installed <- f.m.InstallOfficialWithActivation(context.Background(), "intel-gpu-tools", "data", []string{"data"}, false)
+	}()
+	<-started
+
+	answered := make(chan struct{})
+	go func() {
+		f.m.Status([]string{"data"})
+		f.m.Healthy()
+		f.m.RuntimeAction("tailscale", func() error { return nil })
+		close(answered)
+	}()
+	select {
+	case <-answered:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("status, health or runtime actions waited for the download")
+	}
+	if err := f.m.InstallOfficial(context.Background(), "intel-gpu-tools", "data", []string{"data"}); !errors.Is(err, ErrDownloading) {
+		t.Fatalf("second download of the same plugin: %v", err)
+	}
+
+	close(release)
+	if err := <-installed; err != nil {
+		t.Fatal(err)
+	}
+	if f.count(true) != 1 {
+		t.Fatalf("image downloaded %d times", f.count(true))
+	}
+	if items := f.m.Status([]string{"data"}).Plugins; len(items) != 1 || !items[0].Installed || !items[0].Official {
+		t.Fatalf("after the download: %+v", items)
+	}
+}
+
+// Choosing another plugin volume during the download is checked again
+// before anything is installed.
+func TestOfficialDownloadRechecksVolumeAfterwards(t *testing.T) {
+	f := newCatalogFixture(t)
+	os.MkdirAll(filepath.Join(f.m.mountRoot, "other"), 0o755)
+	data, _ := os.ReadFile(filepath.Join(f.dir, "intel-gpu-tools.raw"))
+	f.mu.Lock()
+	f.imageHandler = func(w http.ResponseWriter, r *http.Request) {
+		settings := f.m.current()
+		settings.Volume = "other"
+		if err := f.m.save(settings); err != nil {
+			t.Error(err)
+		}
+		w.Write(data)
+	}
+	f.mu.Unlock()
+	err := f.m.InstallOfficial(context.Background(), "intel-gpu-tools", "data", []string{"data", "other"})
+	if !errors.Is(err, ErrUnknownVolume) {
+		t.Fatalf("install after a volume change: %v", err)
+	}
+	if len(f.m.installed("data")) != 0 || len(f.m.installed("other")) != 0 {
+		t.Fatal("plugin installed although its volume changed during the download")
 	}
 }

@@ -56,11 +56,16 @@ var (
 	ErrInvalid       = errors.New("plugins: not a valid plugin")
 	ErrNotConfirmed  = errors.New("plugins: the installation was not confirmed")
 	ErrBusy          = errors.New("plugins: a service or kernel module is still in use")
+	ErrDownloading   = errors.New("plugins: this plugin is already being downloaded")
 	ErrDriverPending = errors.New("plugins: cancel the scheduled driver activation or reboot before changing plugins")
 	ErrUpdatePending = errors.New("plugins: finish or cancel the system update before changing plugins")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+
+// unitRE checks module and service names; they end up as arguments of
+// modprobe and systemctl.
+var unitRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$`)
 
 // Manifest describes a plugin. It lies next to the image as <name>.plugin.json.
 type Manifest struct {
@@ -115,6 +120,15 @@ type Plugin struct {
 	LicenseURL string `json:"licenseUrl,omitempty"`
 	// Problem is kernel, activation, integrity, or busy after refused removal.
 	Problem string `json:"problem"`
+	// Update is another version of this installed plugin found in a share.
+	Update *PluginUpdate `json:"update,omitempty"`
+}
+
+// PluginUpdate describes the version an installed plugin can be replaced with.
+type PluginUpdate struct {
+	Path     string `json:"path"`
+	Version  string `json:"version"`
+	Official bool   `json:"official"`
 }
 
 // Status is everything the plugin page shows.
@@ -165,6 +179,16 @@ type Manager struct {
 	catalogPlugins []Plugin
 	catalogAttempt time.Time
 	catalogLoading bool
+	// Official images being downloaded, without holding actions.
+	downloading map[string]bool
+	// Plugin files found in shares. Status polling reuses the last search;
+	// it runs again when the page asks (ScanShares) or the volumes change.
+	shareFiles   []shareFile
+	sharesFor    string
+	sharesLoaded bool
+	// Trusted keys, read again only when their directory changes.
+	keys     []minisign.PublicKey
+	keysFrom time.Time
 	// applied is what was last handed to systemd, to notice changes.
 	applied        string
 	driverRequests chan string
@@ -304,8 +328,7 @@ func parseManifest(data []byte, filename string) (Manifest, error) {
 		return manifest, fmt.Errorf("%w: invalid image checksum", ErrInvalid)
 	}
 	for _, unit := range append(slices.Clone(manifest.Modules), manifest.Services...) {
-		// These end up as arguments of modprobe and systemctl.
-		if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$`).MatchString(unit) {
+		if !unitRE.MatchString(unit) {
 			return manifest, fmt.Errorf("%w: odd name of a module or service", ErrInvalid)
 		}
 	}
@@ -318,7 +341,7 @@ func parseManifest(data []byte, filename string) (Manifest, error) {
 // official reports whether the manifest at path carries a valid signature
 // of a trusted key in <path>.minisig.
 func (m *Manager) official(path string) bool {
-	keys := minisign.LoadKeys(m.keyDir)
+	keys := m.trustedKeys()
 	if len(keys) == 0 {
 		return false
 	}
@@ -328,6 +351,21 @@ func (m *Manager) official(path string) bool {
 	}
 	signature, err := os.ReadFile(path + ".minisig")
 	return err == nil && minisign.Verify(keys, manifest, string(signature)) == nil
+}
+
+// trustedKeys returns the keys in keyDir. They are read again only when
+// the directory changes, not on every status poll.
+func (m *Manager) trustedKeys() []minisign.PublicKey {
+	info, err := os.Stat(m.keyDir)
+	if err != nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.keys == nil || !info.ModTime().Equal(m.keysFrom) {
+		m.keys, m.keysFrom = minisign.LoadKeys(m.keyDir), info.ModTime()
+	}
+	return m.keys
 }
 
 // installed returns the plugins in the plugin folder of the volume.
@@ -351,11 +389,13 @@ func (m *Manager) installed(volume string) map[string]Manifest {
 
 // Status lists the installed plugins and those found on the volumes.
 func (m *Manager) Status(mounted []string) Status {
+	shares := m.sharePlugins(mounted) // before the lock: a new search may take a while
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	settings := m.current()
 	status := Status{Volume: settings.Volume, Kernel: m.kernel, Plugins: []Plugin{}}
 	names := map[string]bool{}
+	installedAt := map[string]int{}
 	if slices.Contains(mounted, settings.Volume) {
 		for name, manifest := range m.installed(settings.Volume) {
 			plugin := Plugin{Manifest: manifest, Installed: true, Enabled: slices.Contains(settings.Enabled, name)}
@@ -370,6 +410,7 @@ func (m *Manager) Status(mounted []string) Status {
 				plugin.Problem = "kernel"
 			}
 			names[name] = true
+			installedAt[name] = len(status.Plugins)
 			status.Plugins = append(status.Plugins, plugin)
 		}
 	}
@@ -391,6 +432,77 @@ func (m *Manager) Status(mounted []string) Status {
 		}
 	}
 	// Plugins someone put into a share or onto a volume, ready to install.
+	for _, file := range shares {
+		if index, ok := installedAt[file.manifest.Name]; ok {
+			installed := &status.Plugins[index]
+			if installed.Update == nil && updatable(installed.Manifest, file.manifest) && file.imageOK && m.compatible(file.manifest) {
+				installed.Update = &PluginUpdate{Path: file.path, Version: file.manifest.Version, Official: file.official}
+			}
+			continue
+		}
+		if !names[file.manifest.Name] {
+			names[file.manifest.Name] = true
+			status.Plugins = append(status.Plugins, Plugin{Manifest: file.manifest, Path: file.path, Official: file.official})
+		} else if index, ok := downloads[file.manifest.Name]; ok && reflect.DeepEqual(status.Plugins[index].Manifest, file.manifest) && file.official && file.imageOK {
+			status.Plugins[index].Download, status.Plugins[index].Path = false, file.path
+			delete(downloads, file.manifest.Name)
+		}
+	}
+	sort.Slice(status.Plugins, func(i, j int) bool { return status.Plugins[i].Name < status.Plugins[j].Name })
+	return status
+}
+
+// updatable reports whether found can replace the installed plugin from a
+// share. NVIDIA is updated through its driver preparation, with a reboot and a
+// way back, never by swapping the image underneath it.
+// Only a newer version counts: the old file usually still lies in the share.
+func updatable(installed, found Manifest) bool {
+	return installed.Name != "nvidia" && !installed.LocalBuild && !found.LocalBuild && found.SHA256 != installed.SHA256 &&
+		newerVersion(found.Version, installed.Version)
+}
+
+var versionNumbers = regexp.MustCompile(`[0-9]+`)
+
+// newerVersion compares the numbers in two version strings in order
+// ("1.10.2" > "1.9"); without numbers, only a different text counts.
+func newerVersion(found, installed string) bool {
+	a, b := versionNumbers.FindAllString(found, -1), versionNumbers.FindAllString(installed, -1)
+	if len(a) == 0 || len(b) == 0 {
+		return found != installed
+	}
+	for i := range max(len(a), len(b)) {
+		var x, y string
+		if i < len(a) {
+			x = strings.TrimLeft(a[i], "0")
+		}
+		if i < len(b) {
+			y = strings.TrimLeft(b[i], "0")
+		}
+		if len(x) != len(y) {
+			return len(x) > len(y)
+		}
+		if x != y {
+			return x > y
+		}
+	}
+	return false
+}
+
+// shareFile is a plugin found in a share or on a volume. Installing it checks
+// everything again; this is only what the list shows.
+type shareFile struct {
+	manifest Manifest
+	path     string
+	official bool
+	imageOK  bool // a regular image of the size the manifest names lies next to it
+}
+
+// ScanShares looks for plugins on the mounted volumes, outside private and
+// app/VM folders, reading at most 50,000 entries. The status poll reuses the
+// result instead of reading the disks every few seconds (and waking them);
+// the page asks for a new search when it opens and on refresh.
+func (m *Manager) ScanShares(mounted []string) {
+	var found []shareFile
 	visited := 0
 	for _, volume := range mounted {
 		root := filepath.Join(m.mountRoot, volume)
@@ -410,22 +522,35 @@ func (m *Manager) Status(mounted []string) Status {
 				return nil
 			}
 			if manifest, err := readManifest(path); err == nil {
-				if !names[manifest.Name] {
-					names[manifest.Name] = true
-					status.Plugins = append(status.Plugins, Plugin{Manifest: manifest, Path: path, Official: m.official(path)})
-				} else if index, ok := downloads[manifest.Name]; ok && reflect.DeepEqual(status.Plugins[index].Manifest, manifest) && m.official(path) {
-					image, err := os.Stat(filepath.Join(filepath.Dir(path), manifest.Name+".raw"))
-					if err == nil && image.Mode().IsRegular() && image.Size() == manifest.Size {
-						status.Plugins[index].Download, status.Plugins[index].Path = false, path
-						delete(downloads, manifest.Name)
-					}
-				}
+				file := shareFile{manifest: manifest, path: path, official: m.official(path)}
+				image, err := os.Stat(filepath.Join(filepath.Dir(path), manifest.Name+".raw"))
+				file.imageOK = err == nil && image.Mode().IsRegular() && image.Size() == manifest.Size
+				found = append(found, file)
 			}
 			return nil
 		})
 	}
-	sort.Slice(status.Plugins, func(i, j int) bool { return status.Plugins[i].Name < status.Plugins[j].Name })
-	return status
+	m.mu.Lock()
+	m.shareFiles, m.sharesFor, m.sharesLoaded = found, volumesKey(mounted), true
+	m.mu.Unlock()
+}
+
+// sharePlugins returns the last search, searching again only if there was
+// none yet or other volumes are mounted now.
+func (m *Manager) sharePlugins(mounted []string) []shareFile {
+	m.mu.Lock()
+	fresh := m.sharesLoaded && m.sharesFor == volumesKey(mounted)
+	m.mu.Unlock()
+	if !fresh {
+		m.ScanShares(mounted)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.shareFiles
+}
+
+func volumesKey(mounted []string) string {
+	return strings.Join(slices.Sorted(slices.Values(mounted)), "\x00")
 }
 
 // compatible reports whether a plugin fits the running kernel.
@@ -520,23 +645,35 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if err := os.Rename(target+".part", target); err != nil {
 		return err
 	}
+	copiedPath := filepath.Join(dir, manifest.Name+manifestSuffix)
+	// Nothing half-copied stays behind: without its manifest an image is
+	// not installed, but it would block the next attempt's disk space.
+	discard := func() {
+		os.Remove(copiedPath)
+		os.Remove(copiedPath + ".minisig")
+		os.Remove(target)
+	}
 	if signed {
-		if err := copyFile(real+".minisig", filepath.Join(dir, manifest.Name+manifestSuffix+".minisig"), 0o600); err != nil {
+		if err := copyFile(real+".minisig", copiedPath+".minisig", 0o600); err != nil {
+			discard()
 			return err
 		}
 	}
-	if err := copyFile(real, filepath.Join(dir, manifest.Name+manifestSuffix), 0o600); err != nil {
+	if err := copyFile(real, copiedPath, 0o600); err != nil {
+		discard()
 		return err
 	}
 	// Recheck the copied metadata too: a writable share may have changed
 	// after the original signature/image checks.
-	copiedPath := filepath.Join(dir, manifest.Name+manifestSuffix)
 	copied, err := readManifest(copiedPath)
 	if err != nil || !reflect.DeepEqual(copied, manifest) || (signed && !m.official(copiedPath)) {
-		os.Remove(copiedPath)
-		os.Remove(copiedPath + ".minisig")
-		os.Remove(target)
+		discard()
 		return fmt.Errorf("%w: plugin metadata changed while being copied", ErrInvalid)
+	}
+	// The renames above survive a power cut only once the folder is synced.
+	if err := syncDirectory(dir); err != nil {
+		discard()
+		return err
 	}
 	// A previous interrupted installation may have left an enabled name.
 	settings.Enabled = slices.DeleteFunc(settings.Enabled, func(name string) bool { return name == manifest.Name })
@@ -633,12 +770,19 @@ func (m *Manager) Remove(ctx context.Context, name string, mounted []string) err
 		return err
 	}
 	dir := m.dir(m.current().Volume)
-	os.Remove(filepath.Join(dir, name+manifestSuffix))
-	os.Remove(filepath.Join(dir, name+manifestSuffix+".minisig"))
+	// The manifest goes first: without it the plugin no longer counts as
+	// installed, even if removing the rest fails.
+	files := []string{name + manifestSuffix, name + manifestSuffix + ".minisig", name + ".raw"}
 	if name == "nvidia" {
-		os.Remove(filepath.Join(dir, localReceipt))
+		files = append(files, localReceipt)
 	}
-	return os.Remove(filepath.Join(dir, name+".raw"))
+	var errs []error
+	for _, file := range files {
+		if err := os.Remove(filepath.Join(dir, file)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(append(errs, syncDirectory(dir))...)
 }
 
 // Run lays the enabled plugins over the system once their volume is
@@ -889,5 +1033,137 @@ func (m *Manager) prepareModules(ctx context.Context) error {
 		return err
 	}
 	_, err := m.runner.Run(ctx, "", "depmod", "-b", m.moduleRoot, m.kernel)
+	return err
+}
+
+// Update replaces an installed plugin with the other version of it that lies
+// in a share. The running plugin is stopped first; if the new version cannot
+// be put in place or activated, the previous files come back and are switched
+// on again. An unsigned version is confirmed by name, like a new community
+// plugin. Official plugins come with their system release; NVIDIA has its own
+// driver preparation and is never swapped here.
+func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string, mounted []string) error {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.current().PendingDriver != nil {
+		return ErrDriverPending
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return ErrUpdatePending
+	}
+	if m.Disabled {
+		return ErrDisabled
+	}
+	settings := m.current()
+	if !slices.Contains(mounted, settings.Volume) {
+		return ErrUnknownVolume
+	}
+	old, exists := m.installed(settings.Volume)[name]
+	if !exists {
+		return ErrNotFound
+	}
+	real, err := filepath.EvalSymlinks(manifestPath)
+	if err != nil || !strings.HasPrefix(real, m.mountRoot+"/") || strings.HasPrefix(real, m.baseDir(settings.Volume)+"/") {
+		return ErrNotFound
+	}
+	manifest, err := readManifest(real)
+	if err != nil {
+		return err
+	}
+	if manifest.Name != name || !updatable(old, manifest) {
+		return fmt.Errorf("%w: not another version of %s", ErrInvalid, name)
+	}
+	if !m.compatible(manifest) {
+		return fmt.Errorf("%w: the new version targets another kernel", ErrInvalid)
+	}
+	signed := m.official(real)
+	if !signed && confirm != name {
+		return ErrNotConfirmed
+	}
+	image := filepath.Join(filepath.Dir(real), name+".raw")
+	if sum, size, err := hashFile(image, maxImageBytes); err != nil || size != manifest.Size || sum != strings.ToLower(manifest.SHA256) {
+		return fmt.Errorf("%w: the image is not the one the manifest describes", ErrInvalid)
+	}
+	if err := m.ensureReleaseSet(settings.Volume); err != nil {
+		return err
+	}
+	dir := m.dir(settings.Volume)
+
+	// The new files are copied and checked next to the installed ones
+	// before anything running is touched.
+	stage, err := os.MkdirTemp(dir, ".update-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	staged := filepath.Join(stage, name+manifestSuffix)
+	if err := copyFile(image, filepath.Join(stage, name+".raw"), 0o600); err != nil {
+		return err
+	}
+	if sum, _, err := hashFile(filepath.Join(stage, name+".raw"), maxImageBytes); err != nil || sum != strings.ToLower(manifest.SHA256) {
+		return fmt.Errorf("%w: the image changed while it was copied", ErrInvalid)
+	}
+	if signed {
+		if err := copyFile(real+".minisig", staged+".minisig", 0o600); err != nil {
+			return err
+		}
+	}
+	if err := copyFile(real, staged, 0o600); err != nil {
+		return err
+	}
+	if copied, err := readManifest(staged); err != nil || !reflect.DeepEqual(copied, manifest) || (signed && !m.official(staged)) {
+		return fmt.Errorf("%w: plugin metadata changed while being copied", ErrInvalid)
+	}
+	previous, err := os.MkdirTemp(dir, ".previous-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(previous)
+
+	if err := m.deactivate(ctx, name); err != nil {
+		return err // still running as before, nothing was replaced
+	}
+	files := []string{name + ".raw", name + manifestSuffix + ".minisig", name + manifestSuffix}
+	move := func(from, to string) error {
+		for _, file := range files {
+			if err := os.Rename(filepath.Join(from, file), filepath.Join(to, file)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+		return syncDirectory(dir)
+	}
+	putBack := func(cause error) error {
+		// Stop what of the new version may have started, without the
+		// restart-on-failure of deactivate: it is not going to stay.
+		if manifest, resident := m.resident[name]; resident {
+			for i := len(manifest.Services) - 1; i >= 0; i-- {
+				m.runner.Run(ctx, "", "systemctl", "stop", manifest.Services[i])
+			}
+			for i := len(manifest.Modules) - 1; i >= 0; i-- {
+				m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, "-r", manifest.Modules[i])
+			}
+		}
+		delete(m.active, name)
+		delete(m.resident, name)
+		delete(m.problems, name)
+		for _, file := range files {
+			os.Remove(filepath.Join(dir, file))
+		}
+		err := move(previous, dir)
+		m.applied = "-"
+		return errors.Join(fmt.Errorf("the new version was not installed, the previous one is back: %w", cause), err, m.apply(ctx, mounted))
+	}
+	if err := move(dir, previous); err != nil {
+		return putBack(err)
+	}
+	if err := move(stage, dir); err != nil {
+		return putBack(err)
+	}
+	m.applied = "-"
+	err = m.apply(ctx, mounted)
+	// An error of another plugin is reported, but does not undo this one.
+	if _, active := m.active[name]; slices.Contains(settings.Enabled, name) && !active {
+		return putBack(errors.Join(errors.New("activation failed"), err))
+	}
 	return err
 }

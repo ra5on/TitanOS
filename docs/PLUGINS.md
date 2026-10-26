@@ -1,16 +1,16 @@
-# Hardware für Container und zusätzliche Plugins
+# Plugins und Hardware für Container
 
-Die folgenden Ergänzungen sind ab `v0.1.0-beta.3` enthalten.
-Für die veröffentlichte beta.2 gilt weiterhin die [NVIDIA-Anleitung](NVIDIA.md).
+## Offizielle Plugins
 
-## Installation der zusätzlichen Plugins
-
-Der Release-Workflow baut neben NVIDIA zwei weitere optionale Erweiterungen:
+Jedes volle Release baut und signiert diese optionalen Erweiterungen passend
+zum Kernel seiner Systembasis:
 
 | Plugin | Inhalt | Voraussetzung |
 | --- | --- | --- |
+| `nvidia` | offene NVIDIA-Kernelmodule, CUDA/NVENC/NVDEC-Bibliotheken, NVML und CDI für Docker, siehe [NVIDIA](NVIDIA.md) | NVIDIA-GPU ab Turing |
 | `intel-gpu-tools` | Debian Intel GPU Tools, unter anderem `intel_gpu_top`, zusätzliche Bibliotheken und deren Lizenz-/Quellverzeichnis | Intel-GPU mit funktionierendem Kernel-Treiber; einzelne Tools benötigen bestimmte Generationen |
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
+| `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |
 
 Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Releases.
 TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
@@ -34,8 +34,12 @@ geladen. Eine erfolgreiche Installation ersetzt nicht die Prüfung auf passender
 echter Hardware.
 
 Beim Öffnen der Seite wird der Katalog abgerufen und für zehn Minuten im RAM
-zwischengespeichert. **Katalog aktualisieren** erzwingt einen neuen Versuch;
-die regelmäßige Statusanzeige ruft GitHub nicht ab. Bei Verbindungsproblemen
+zwischengespeichert. **Katalog und Freigaben aktualisieren** erzwingt einen neuen
+Versuch; die regelmäßige Statusanzeige ruft GitHub nicht ab. Während ein Abbild
+heruntergeladen wird, bleiben Plugin-Seite, Tailscale-Einstellungen und
+VM-Starts bedienbar; nur die eigentliche Installation danach wird kurz gesperrt
+und prüft vorher erneut Systemupdate-Sperre, Plugin-Volume und Treiberwechsel.
+Dasselbe Plugin wird nicht zweimal gleichzeitig heruntergeladen. Bei Verbindungsproblemen
 bleiben installierte Plugins, lokale Dateien und bereits geprüfte Katalogeinträge
 sichtbar. Vor einer direkten Installation wird die Herkunft erneut online
 geprüft. Eine identische signierte Kopie in einer Freigabe hat Vorrang vor dem
@@ -47,8 +51,34 @@ unvollständige Releases erhalten einen erklärenden Hinweis.
 `<name>.plugin.json` und `<name>.plugin.json.minisig` herunterladen und gemeinsam
 in eine NAS-Freigabe legen. Unter **Plugins** erscheinen sie auch ohne Verbindung
 zu GitHub. Ein offizieller Download muss dort als **Offiziell** erkannt werden.
+TitanOS sucht Freigaben und Volumes (ohne `appdata`, `vms` und versteckte
+Ordner, bis vier Ebenen tief, höchstens 50.000 Einträge) beim Öffnen der Seite,
+bei **Katalog und Freigaben aktualisieren** und wenn andere Volumes eingebunden
+sind. Die Statusabfrage alle fünf Sekunden liest die Platten nicht erneut und
+weckt ruhende Festplatten deshalb nicht auf. Neu abgelegte Dateien erscheinen
+nach dem Aktualisieren.
 
-Die Intel-Werkzeuge lassen sich im bestätigten NAS-Terminal verwenden.
+## Plugins aktualisieren
+
+Offizielle Plugins gehören zur Systembasis: Ein volles Systemupdate bringt die
+dazu passenden signierten Fassungen mit (siehe unten). Für NVIDIA gibt es
+zusätzlich **Treiber vorbereiten**; ein neuer Treiber wird beim nächsten
+Neustart aktiviert und kann zum mitgelieferten zurückkehren
+([Lokaler NVIDIA-Bau](NVIDIA-LOCAL-BUILD.md)).
+
+Liegt eine **neuere** Fassung eines installierten Plugins in einer Freigabe,
+zeigt die Plugin-Seite **Update** und unter dem Plugin **Aktualisieren**. Ältere
+Fassungen werden nicht angeboten. Nach einer Rückfrage prüft TitanOS die neue
+Fassung (Prüfsumme, Kernel, bei signierten Plugins die Signatur), kopiert sie
+neben die alte, hält das Plugin an und startet es mit der neuen Fassung. Lässt
+sich ein Plugin nicht anhalten, weil es noch benutzt wird, bleibt alles
+unverändert. Startet die neue Fassung nicht, kommen die bisherigen Dateien
+zurück und werden wieder eingeschaltet. Eine unsignierte Fassung zeigt dieselbe
+Warnung wie eine neue Community-Installation. NVIDIA wird nie auf diesem Weg
+ausgetauscht, auch nicht lokal gebaute Treiber. Versionen werden nach ihren
+Zahlen verglichen (`1.10` ist neuer als `1.9`).
+
+Die Intel-Werkzeuge lassen sich im NAS-Terminal verwenden.
 `intel_gpu_top` benötigt eine passende Intel-GPU; das Plugin erzeugt keine
 künstlichen Dashboard-Messwerte. Kernel und Firmware kommen aus dem Basisabbild.
 
@@ -123,18 +153,17 @@ Dateien liegen je Systemversion unter
 unter `/config/plugins/releases/<version>.json`. Ein Rollback lädt seine eigenen
 Dateien und Einstellungen. Änderungen an Plugins sind während eines laufenden
 oder zum Neustart vorgemerkten Systemupdates gesperrt. Alte Plugin-Sätze bleiben
-für den Rückfall liegen; eine automatische Bereinigung gibt es noch nicht.
-Beim Probestart müssen aktivierte Plugins erfolgreich geladen sein, bevor
-TitanOS den Start bestätigt.
-
-**Übergang von beta.2:** Deren alter Updater kann Plugins noch nicht vorbereiten.
-Bei einem Kernelwechsel das NVIDIA-Plugin vor diesem ersten Systemupdate
-abschalten, nach dem Update die neue passende Version installieren und die
-vorherigen Download-Dateien für einen Rückfall aufbewahren. Ab dem neuen
-Updater läuft die Mitnahme automatisch. Ein bestehendes Plugin wird nicht
-allein durch das Herunterladen eines neuen TitanOS-ZIPs aktualisiert.
+für den Rückfall liegen, bis sie unter **Alte Plugin-Versionen** ausdrücklich
+entfernt werden (siehe unten). Beim Probestart müssen aktivierte Plugins
+erfolgreich geladen sein, bevor TitanOS den Start bestätigt. Ein bestehendes
+Plugin wird nicht allein durch das Herunterladen eines neuen TitanOS-ZIPs
+aktualisiert.
 
 ## Entwicklung und Tests
+
+`scripts/make-plugin.sh <name> <version> <ordner>` packt einen Ordner zu Abbild
+und Manifest. Enthält der Ordner Kernelmodule (`usr/lib/modules/<kernel>`), muss
+`plugin.json` genau diesen Kernel nennen, sonst bricht das Skript ab.
 
 `scripts/make-tools-plugins.sh <version>` baut die Werkzeuge in einem isolierten
 Debian-Rootfs. Es benötigt zuerst das Basisabbild unter `build/mkosi.output` und
@@ -148,20 +177,22 @@ echter Intel-GPU, Coral TPU und NVIDIA fehlen weiterhin.
 Die Go-Tests in `backend/internal/plugins/catalog_test.go` prüfen den Katalog
 und Downloads mit einem lokalen HTTP-Server und echten minisign-Signaturen:
 Abruf erst bei Bedarf, Versions-/Kernelbindung, Manipulationen, Abbrüche,
-Bereinigung und die Sperre bei einem beginnenden Systemupdate.
+Bereinigung, die Sperre bei einem beginnenden Systemupdate und dass ein
+laufender Download Statusabfrage, Healthcheck und Tailscale nicht blockiert.
+`plugins_test.go` prüft Aktualisieren aus einer Freigabe einschließlich Rückweg
+bei Fehlstart, belegtem Plugin und ausgeschlossenem NVIDIA; die Browserprüfung
+`scripts/test-ui-plugins.mjs` den Dialog mit isolierten Daten.
 
 ### Installation bei laufenden VMs und Containern
 
-Im Entwicklungsstand nach beta.3 kann beim Installieren „Direkt aktivieren“
-abgewählt werden. Signatur, Kernel und Prüfsumme werden weiterhin geprüft;
+Beim Installieren kann „Direkt aktivieren“ abgewählt werden. Signatur, Kernel und Prüfsumme werden weiterhin geprüft;
 die Dateien werden nur auf dem Daten-Volume gespeichert. Die Installation lädt
 keine Treiber und stoppt keine VMs oder Container. Späteres Einschalten bindet
 das Plugin wie bisher ein. Eine GPU, die exklusiv an eine VM durchgereicht ist,
 bleibt bis zur Rückgabe bei dieser VM.
 
-Die Sperre während eines Systemupdates ist unabhängig von laufenden VMs. Sie
-wird jetzt ausdrücklich als Systemupdate-Sperre angezeigt. Die vorherige
-allgemeine Meldung über eine belegte GPU konnte hier irreführend erscheinen.
+Die Sperre während eines Systemupdates ist unabhängig von laufenden VMs und
+wird ausdrücklich als Systemupdate-Sperre angezeigt.
 
 ## Alte Release-Dateien
 

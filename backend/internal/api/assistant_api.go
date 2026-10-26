@@ -63,6 +63,7 @@ var apiRoutes = []apiRoute{
 	{"GET", "/plugins", assistant.AreaSystem, "", "Installed and available plugins."},
 	{"POST", "/plugins/catalog", assistant.AreaSystem, assistant.LevelNormal, "Load the list of official plugins for this version."},
 	{"POST", "/plugins", assistant.AreaSystem, assistant.LevelDanger, "Install an official plugin (body: name from GET /plugins, volume from storage_overview, optional activate boolean). A plugin becomes part of the system."},
+	{"POST", "/plugins/{name}/update", assistant.AreaSystem, assistant.LevelDanger, "Replace an installed plugin with the version GET /plugins names under update (body: path from there; confirm the plugin name only if that version is not official). A plugin becomes part of the system."},
 	{"POST", "/plugins/{name}/{action}", assistant.AreaSystem, assistant.LevelDanger, "Switch a plugin on or off (action enable or disable)."},
 	{"DELETE", "/plugins/{name}", assistant.AreaSystem, assistant.LevelDestroy, "Remove a plugin."},
 	{"GET", "/plugins/tailscale", assistant.AreaSystem, "", "Tailscale settings and state."},
