@@ -70,3 +70,13 @@ func (s *Server) tailscaleRuntimeAction(action func() error) error {
 	}
 	return action()
 }
+
+// handleTailscaleDevices lists the tailnet for the dashboard. Without an
+// active plugin the answer is the state "inactive", not an error.
+func (s *Server) handleTailscaleDevices(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Tailscale == nil {
+		writeJSON(w, 200, tailscale.Devices{State: "inactive", Devices: []tailscale.Device{}})
+		return
+	}
+	writeJSON(w, 200, s.opts.Tailscale.Devices())
+}

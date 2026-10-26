@@ -5,6 +5,7 @@
 	import type { TileId, TilePlacement } from './tiles.ts';
 	import { sourceId } from './tiles.ts';
 	import { SYSTEM_FIELDS } from './system-fields.ts';
+	import { TAILSCALE_FIELDS } from './tailscale.ts';
 	export type EditPart = 'tile' | 'heading' | 'value' | 'labels';
 	let {
 		id,
@@ -354,6 +355,54 @@
 					/>{t('dashboard.showLabels')}</label
 				>
 			{/if}
+			{#if source === 'tailscale'}
+				<fieldset>
+					<legend>{t('tailscale.fields')}</legend>
+					{#each [...settings.tailscaleFields, ...TAILSCALE_FIELDS.filter((f) => !settings.tailscaleFields.includes(f))] as field, index (field)}
+						<div class="part-order">
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={settings.tailscaleFields.includes(field)}
+									onchange={() =>
+										onchange(
+											'tailscaleFields',
+											settings.tailscaleFields.includes(field)
+												? settings.tailscaleFields.filter((f) => f !== field)
+												: [...settings.tailscaleFields, field],
+										)}
+								/>{t(`tailscale.field.${field}`)}</label
+							>
+							{#if settings.tailscaleFields.includes(field)}<button
+									class="btn"
+									aria-label={`${t(`tailscale.field.${field}`)}: ${t('dashboard.editor.moveUp')}`}
+									disabled={index === 0}
+									onclick={() => {
+										const fields = [...settings.tailscaleFields];
+										[fields[index], fields[index - 1]] = [fields[index - 1], fields[index]];
+										onchange('tailscaleFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								><button
+									class="btn"
+									aria-label={`${t(`tailscale.field.${field}`)}: ${t('dashboard.editor.moveDown')}`}
+									disabled={index === settings.tailscaleFields.length - 1}
+									onclick={() => {
+										const fields = [...settings.tailscaleFields];
+										[fields[index], fields[index + 1]] = [fields[index + 1], fields[index]];
+										onchange('tailscaleFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								>{/if}
+						</div>
+					{/each}
+				</fieldset>
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={settings.showLabels}
+						onchange={(e) => onchange('showLabels', e.currentTarget.checked)}
+					/>{t('dashboard.showLabels')}</label
+				>
+			{/if}
 			{#if source === 'network'}
 				<label
 					>{t('dashboard.interface')}<select
@@ -411,8 +460,8 @@
 						)}</label
 					>{/each}
 			{/if}
-			{#if ['docker', 'vms', 'shares', 'disks', 'volumes', 'temperatures'].includes(source)}
-				{#if ['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures'].includes(source)}<label
+			{#if ['docker', 'vms', 'shares', 'disks', 'volumes', 'temperatures', 'tailscale'].includes(source)}
+				{#if ['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures', 'tailscale'].includes(source)}<label
 						>{t('dashboard.editor.list')}<select
 							class="field"
 							value={settings.list}
@@ -431,12 +480,14 @@
 							onchange={(e) => onchange('rows', Number(e.currentTarget.value))}
 						/></label
 					>{/if}
-				{#if source === 'docker' || source === 'vms'}<label class="check"
+				{#if source === 'docker' || source === 'vms' || source === 'tailscale'}<label class="check"
 						><input
 							type="checkbox"
 							checked={settings.runningOnly}
 							onchange={(e) => onchange('runningOnly', e.currentTarget.checked)}
-						/>{t('dashboard.editor.runningOnly')}</label
+						/>{t(
+							source === 'tailscale' ? 'tailscale.onlineOnly' : 'dashboard.editor.runningOnly',
+						)}</label
 					>{/if}
 				{#if items.length || settings.items !== null}<label class="check"
 						><input

@@ -122,7 +122,7 @@ func disabledEnergy(store *config.Store) *system.EnergyManager {
 
 func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts := newTestServer(t)
-	for _, route := range []struct{ method, path string }{{"GET", "/backups/progress"}, {"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/backups/progress"}, {"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("anonymous %s: %d", route.path, res.StatusCode)
 		}
@@ -135,6 +135,9 @@ func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 		if res, _ := ts.request("PUT", "/api/v1"+path, map[string]string{"action": "ignore"}); res.StatusCode != 409 {
 			t.Fatalf("development mode allowed changes: %s %d", path, res.StatusCode)
 		}
+	}
+	if res, body := ts.request("GET", "/api/v1/plugins/tailscale/devices", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"state":"inactive"`) || !strings.Contains(string(body), `"devices":[]`) {
+		t.Fatalf("inactive tailnet: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("GET", "/api/v1/system/energy", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"readOnly":true`) {
 		t.Fatalf("energy: %d %s", res.StatusCode, body)
@@ -151,7 +154,7 @@ func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.do(guest, route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Fatalf("user %s: %d", route.path, res.StatusCode)
 		}
