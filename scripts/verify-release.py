@@ -24,7 +24,7 @@ def verify(release, keys, without_plugins=False):
     names = set()
     for plugin in plugins:
         name = plugin.get("name")
-        if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale"} or name in names or plugin.get("asset") != name + ".plugin.json":
+        if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird"} or name in names or plugin.get("asset") != name + ".plugin.json":
             raise ValueError("invalid plugin inventory")
         names.add(name)
         signed.append(name + ".plugin.json")

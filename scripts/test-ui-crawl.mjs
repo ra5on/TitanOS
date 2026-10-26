@@ -117,7 +117,7 @@ if (!only || only.includes("/")) {
 
 // The editor button sits in the header, outside <main>: add every tile the
 // editor offers against the real -dev answers, then cancel. Without an active
-// plugin the Tailscale tile must say so calmly.
+// plugin the Tailscale and NetBird tiles must say so calmly.
 async function addEveryTile() {
   await open("/");
   await page
@@ -139,6 +139,10 @@ async function addEveryTile() {
   await page
     .locator('.grid-stack-item[gs-id="tailscale"]')
     .getByText(/^(Das Tailscale-Plugin ist nicht aktiv\.|The Tailscale plugin is not active\.)$/)
+    .waitFor();
+  await page
+    .locator('.grid-stack-item[gs-id="netbird"]')
+    .getByText(/^(Das NetBird-Plugin ist nicht aktiv\.|The NetBird plugin is not active\.)$/)
     .waitFor();
   await page.getByRole("button", { name: /^(Abbrechen|Cancel)$/ }).click();
   console.log(`ok / editor (${added} tiles added)`);

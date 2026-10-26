@@ -59,7 +59,10 @@ Der Firewall-Helfer erhält diese Reihenfolge nach einem Docker-/Netzwerkstart.
 Eine spätere optionale Firewall muss diese Hooks, UDP 41641, ausgehendes HTTPS
 und die Tailscale-Weiterleitung berücksichtigen; pauschale neue LAN-Freigaben
 legt das Plugin nicht an. Die aktuell global offene TitanOS-Firewall bleibt
-ansonsten unverändert.
+ansonsten unverändert. Ist zusätzlich das NetBird-Plugin installiert, ruft der
+Firewall-Helfer am Ende dessen Hook auf: NetBirds Interface `wt0` wird vor
+`ts-input` angenommen, weil beide Netze 100.64.0.0/10 nutzen (siehe
+[NetBird](NETBIRD.md)).
 
 Subnet-Routing/Exit-Node-Angebot aktivieren IPv4-/IPv6-Forwarding. Vorher werden
 bereits erlaubte IPv6-Router-Advertisements mit `accept_ra=2` erhalten. Beim

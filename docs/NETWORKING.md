@@ -98,6 +98,8 @@ sind nicht durch einen QEMU-Test abgedeckt.
 
 Der Reiter Fernzugriff verlinkt Tailscale und zeigt den bekannten Tailnet-Stand.
 Bestehende Tailscale-Hooks und Docker-NAT/Portweiterleitungen bleiben erhalten.
+Das NetBird-Plugin filtert in eigenen nftables-Tabellen; sein einziger Hook
+nimmt `wt0` vor den Tailscale-Hooks an (siehe [NetBird](NETBIRD.md)).
 Cloudflare bzw. andere öffentliche App-URLs werden bei den App-Links verwaltet;
 eine URL richtet keinen Tunnel ein. Cloudflare-Zero-Trust-/Tailnet-ACLs und
 Router-Firewalls werden weiterhin im jeweiligen externen System verwaltet.
@@ -189,7 +191,10 @@ seiner iptables-Unterstützung. `nftables.service` ist maskiert; libvirts
 unbenutztes Standard-NAT-Netz startet nicht automatisch. TitanOS verwendet
 für VMs `br0` oder QEMU-User-Networking. Die Regelung ist für den mit Debian 13
 ausgelieferten Docker-/libvirt-Stack ausgelegt; zusätzlich von Hand eingerichtete
-native nftables-Regelsätze werden nicht automatisch entfernt.
+native nftables-Regelsätze werden nicht automatisch entfernt. Das NetBird-Plugin
+legt eigene nftables-Tabellen `netbird` an, deren Regeln nur `wt0` betreffen
+und von der offenen Freigabe nicht aufgehoben werden; NetBird entfernt sie beim
+Beenden selbst.
 
 Grundlage: [Docker: iptables](https://docs.docker.com/engine/network/firewall-iptables/)
 und [Docker: Paketfilterung und NAT](https://docs.docker.com/engine/network/packet-filtering-firewalls/).

@@ -31,6 +31,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
+	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -71,6 +72,7 @@ type Options struct {
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
 	Tailscale    *tailscale.Manager
+	Netbird      *netbird.Manager
 	Network      *network.Manager
 	Notify       *notify.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
@@ -458,6 +460,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/plugins/tailscale/devices", s.requireAdmin(s.handleTailscaleDevices))
 	mux.HandleFunc("PUT /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscaleSettings))
 	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", s.requireAdmin(s.handleTailscaleAction))
+	mux.HandleFunc("GET /api/v1/plugins/netbird", s.requireAdmin(s.handleNetbird))
+	mux.HandleFunc("GET /api/v1/plugins/netbird/peers", s.requireAdmin(s.handleNetbirdPeers))
+	mux.HandleFunc("PUT /api/v1/plugins/netbird", s.requireAdmin(s.handleNetbirdSettings))
+	mux.HandleFunc("PUT /api/v1/plugins/netbird/setup-key", s.requireAdmin(s.handleNetbirdSetupKey))
+	mux.HandleFunc("POST /api/v1/plugins/netbird/control/{action}", s.requireAdmin(s.handleNetbirdAction))
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
 	mux.HandleFunc("GET /api/v1/plugins/releases", s.requireAdmin(s.handlePluginOldReleases))
 	mux.HandleFunc("POST /api/v1/plugins/cleanup", s.requireAdmin(s.handlePluginCleanup))

@@ -32,6 +32,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -89,7 +90,7 @@ func newTestServer(t *testing.T) *testServer {
 	notifier := loadedNotify(store)
 	notifier.SetHomeAssistant(home)
 	handler := New(Options{
-		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store),
+		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store), Netbird: disabledNetbird(store),
 		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3",
 	})
 	srv := httptest.NewServer(handler)
@@ -101,6 +102,13 @@ func newTestServer(t *testing.T) *testServer {
 
 func disabledTailscale(store *config.Store) *tailscale.Manager {
 	m := tailscale.NewManager(store)
+	m.Disabled = true
+	m.Load()
+	return m
+}
+
+func disabledNetbird(store *config.Store) *netbird.Manager {
+	m := netbird.NewManager(store)
 	m.Disabled = true
 	m.Load()
 	return m
@@ -122,13 +130,13 @@ func disabledEnergy(store *config.Store) *system.EnergyManager {
 
 func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts := newTestServer(t)
-	for _, route := range []struct{ method, path string }{{"GET", "/backups/progress"}, {"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/backups/progress"}, {"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/plugins/netbird"}, {"GET", "/plugins/netbird/peers"}, {"PUT", "/plugins/netbird"}, {"PUT", "/plugins/netbird/setup-key"}, {"POST", "/plugins/netbird/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("anonymous %s: %d", route.path, res.StatusCode)
 		}
 	}
 	ts.setup()
-	for _, path := range []string{"/system/memory", "/system/power-button", "/plugins/tailscale"} {
+	for _, path := range []string{"/system/memory", "/system/power-button", "/plugins/tailscale", "/plugins/netbird"} {
 		if res, body := ts.request("GET", "/api/v1"+path, nil); res.StatusCode != 200 || !strings.Contains(string(body), `"readOnly":true`) {
 			t.Fatalf("owner status %s: %d %s", path, res.StatusCode, body)
 		}
@@ -138,6 +146,14 @@ func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	}
 	if res, body := ts.request("GET", "/api/v1/plugins/tailscale/devices", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"state":"inactive"`) || !strings.Contains(string(body), `"devices":[]`) {
 		t.Fatalf("inactive tailnet: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/plugins/netbird/peers", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"state":"inactive"`) || !strings.Contains(string(body), `"peers":[]`) {
+		t.Fatalf("inactive NetBird: %d %s", res.StatusCode, body)
+	}
+	for _, change := range []struct{ method, path string }{{"PUT", "/plugins/netbird/setup-key"}, {"POST", "/plugins/netbird/control/connect"}} {
+		if res, body := ts.request(change.method, "/api/v1"+change.path, map[string]string{"setupKey": "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D"}); res.StatusCode != 409 || strings.Contains(string(body), "A1B2C3D4") {
+			t.Fatalf("development mode allowed NetBird changes: %s %d %s", change.path, res.StatusCode, body)
+		}
 	}
 	if res, body := ts.request("GET", "/api/v1/system/energy", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"readOnly":true`) {
 		t.Fatalf("energy: %d %s", res.StatusCode, body)
@@ -154,7 +170,7 @@ func TestEnergyAndNotificationDismissalPermissions(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/system/memory"}, {"PUT", "/system/memory"}, {"GET", "/plugins/tailscale"}, {"GET", "/plugins/tailscale/devices"}, {"PUT", "/plugins/tailscale"}, {"POST", "/plugins/tailscale/control/connect"}, {"GET", "/plugins/netbird"}, {"GET", "/plugins/netbird/peers"}, {"PUT", "/plugins/netbird"}, {"PUT", "/plugins/netbird/setup-key"}, {"POST", "/plugins/netbird/control/connect"}, {"GET", "/system/power-button"}, {"PUT", "/system/power-button"}, {"GET", "/system/energy"}, {"PUT", "/system/energy"}, {"POST", "/notifications/dismiss"}} {
 		if res, _ := ts.do(guest, route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Fatalf("user %s: %d", route.path, res.StatusCode)
 		}

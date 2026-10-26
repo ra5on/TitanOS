@@ -73,6 +73,12 @@ Tailscale plugin: Tailscale 1.104.1, BSD-3-Clause, plus third-party components
 under their original licenses. The plugin and tailscale-licenses.tar.gz include
 the upstream license and dependency notices from https://tailscale.com/licenses/tailscale.
 Source: https://github.com/tailscale/tailscale/tree/v1.104.1
+NetBird plugin: NetBird client 0.81.5, BSD-3-Clause, plus Go modules under their
+original licenses (MIT, BSD, Apache-2.0, ISC, MPL-2.0 and others). Only the client
+is shipped; NetBird's AGPL-3.0 server components are not included. The plugin and
+netbird-licenses.tar.gz include the upstream LICENSE and the notices of every
+linked module with one source link each (third-party.txt).
+Source: https://github.com/netbirdio/netbird/tree/v0.81.5
 NVIDIA build SDK: Debian build tools and exact kernel headers retain their original
 licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lists
 the corresponding Debian source packages. The SDK is separate from the NAS RAM image.

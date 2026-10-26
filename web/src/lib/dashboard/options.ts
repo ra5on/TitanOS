@@ -1,6 +1,7 @@
 import { sourceId, type TileId } from './tiles.ts';
 import { systemFields, type SystemField } from './system-fields.ts';
 import { tailscaleFields, type TailscaleField } from './tailscale.ts';
+import { netbirdFields, type NetbirdField } from './netbird.ts';
 export const PARTS = ['value', 'history', 'temperature', 'details', 'engines'] as const;
 export const STYLE_KEYS = [
 	'titleSize',
@@ -109,6 +110,7 @@ export type TileOptions = {
 	rows: number;
 	systemFields: SystemField[];
 	tailscaleFields: TailscaleField[];
+	netbirdFields: NetbirdField[];
 	systemLayout: 'rows' | 'stacked';
 	showLabels: boolean;
 };
@@ -174,6 +176,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					shares: 'folder',
 					network: 'globe',
 					tailscale: 'globe',
+					netbird: 'globe',
 					temperatures: 'activity',
 				} as Record<string, (typeof EDITOR_ICONS)[number]>
 			)[idSource] ?? 'chip',
@@ -191,6 +194,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 				'temperatures',
 				'assistant',
 				'tailscale',
+				'netbird',
 			].includes(idSource)
 				? 14
 				: 18,
@@ -257,6 +261,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		rows: number('rows', 100, 1, 100),
 		systemFields: systemFields(v.systemFields),
 		tailscaleFields: tailscaleFields(v.tailscaleFields),
+		netbirdFields: netbirdFields(v.netbirdFields),
 		systemLayout: choice('systemLayout', ['rows', 'stacked'], 'rows'),
 		showLabels: bool('showLabels', true),
 	};

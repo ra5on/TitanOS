@@ -41,6 +41,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
+	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
@@ -448,9 +449,19 @@ func run(opts options) error {
 	if err := tailnet.Load(); err != nil {
 		slog.Warn("Tailscale settings not readable from /config", "err", err)
 	}
+	mesh := netbird.NewManager(store)
+	mesh.Disabled = opts.dev
+	if err := mesh.Load(); err != nil {
+		slog.Warn("NetBird settings not readable from /config", "err", err)
+	}
 	extensions := plugins.NewManager(store)
-	extensions.PrepareRuntime = tailnet.Prepare
-	extensions.ActivateRuntime = tailnet.Activate
+	// Each runtime ignores the plugins that are not its own.
+	extensions.PrepareRuntime = func(name, volume string) error {
+		return errors.Join(tailnet.Prepare(name, volume), mesh.Prepare(name, volume))
+	}
+	extensions.ActivateRuntime = func(name string) error {
+		return errors.Join(tailnet.Activate(name), mesh.Activate(name))
+	}
 	extensions.LocalBuilds = true
 	// Plugins are built for the system image, which an app update keeps.
 	extensions.Release = strings.TrimPrefix(version.Version, "v")
@@ -583,9 +594,9 @@ func run(opts options) error {
 	updates.Confirm()
 	extensions.ChangeAllowed = func() bool {
 		status := updates.Status()
-		return !tailnet.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
+		return !tailnet.Pending() && !mesh.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
 	}
-	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
+	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() && !mesh.Pending() }
 	extensions.CleanupProtected = updates.PluginReleaseProtection
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
@@ -829,6 +840,7 @@ func run(opts options) error {
 		Accelerators:       hardware.NewAcceleratorMonitor(ctx, devices),
 		Plugins:            extensions,
 		Tailscale:          tailnet,
+		Netbird:            mesh,
 		Network:            connection,
 		Notify:             notifier,
 		HomeAssistant:      home,
