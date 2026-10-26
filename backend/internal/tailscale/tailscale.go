@@ -71,6 +71,7 @@ type Manager struct {
 	deadline       time.Time
 	timer          *time.Timer
 	problem        string
+	devices        deviceCache
 }
 
 func NewManager(store *config.Store) *Manager {

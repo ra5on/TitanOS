@@ -107,6 +107,42 @@ for (const route of routes) {
     note(route, "crawler", String(e).split("\n")[0]);
   }
 }
+if (!only || only.includes("/")) {
+  try {
+    await addEveryTile();
+  } catch (e) {
+    note("/", "editor", String(e).split("\n")[0]);
+  }
+}
+
+// The editor button sits in the header, outside <main>: add every tile the
+// editor offers against the real -dev answers, then cancel. Without an active
+// plugin the Tailscale tile must say so calmly.
+async function addEveryTile() {
+  await open("/");
+  await page
+    .getByRole("button", { name: /^(Dashboard bearbeiten|Edit dashboard)$/ })
+    .click();
+  const choices = page.locator(".add-tiles .tile-choices button:enabled");
+  await choices.first().waitFor();
+  let added = 0;
+  while ((await choices.count()) && added < 40) {
+    const label = (await choices.first().innerText()).trim();
+    errors.length = 0;
+    consoleErrors.length = 0;
+    await choices.first().click();
+    added++;
+    await page.waitForTimeout(400);
+    if ((await broken()) || errors.length || consoleErrors.length)
+      note("/", `add tile "${label}"`, [...errors, ...consoleErrors].join(" | ") || "error page");
+  }
+  await page
+    .locator('.grid-stack-item[gs-id="tailscale"]')
+    .getByText(/^(Das Tailscale-Plugin ist nicht aktiv\.|The Tailscale plugin is not active\.)$/)
+    .waitFor();
+  await page.getByRole("button", { name: /^(Abbrechen|Cancel)$/ }).click();
+  console.log(`ok / editor (${added} tiles added)`);
+}
 
 async function crawl(route) {
   await open(route);
