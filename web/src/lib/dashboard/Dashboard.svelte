@@ -23,12 +23,14 @@
 	import { positions, type Rect } from './positions.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { temperatureSelection } from './temperatures.ts';
+	import type { TailnetDevices } from './tailscale.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import {
 		TILE_IDS,
 		TILES,
+		ADMIN_TILES,
 		defaultPlacement,
 		sanitizeLayout,
 		tileSpec,
@@ -61,6 +63,7 @@
 	import VolumesTile from './tiles/VolumesTile.svelte';
 	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
 	import AssistantTile from './tiles/AssistantTile.svelte';
+	import TailscaleTile from './tiles/TailscaleTile.svelte';
 	const CONTENT: Partial<Record<StaticTileId, Component<{ options?: TileOptions }>>> = {
 		volumes: VolumesTile,
 		disks: DisksTile,
@@ -90,7 +93,7 @@
 		];
 		return order
 			.map((id) => ({ id, w: 6, h: 2, span: 1, autoHeight: true }))
-			.filter((p) => admin || !['docker', 'vms'].includes(sourceId(p.id)));
+			.filter((p) => admin || !ADMIN_TILES.includes(sourceId(p.id) as StaticTileId));
 	}
 	function initialLayout() {
 		if (!session.dashboard?.tiles) return defaults();
@@ -208,7 +211,9 @@
 	let containers = $state<DockerContainer[]>([]),
 		vms = $state<VM[]>([]),
 		shares = $state<Share[]>([]),
-		tailnet = $state<TailnetStatus | null>(null);
+		tailnet = $state<TailnetStatus | null>(null),
+		tailnetDevices = $state<TailnetDevices | null>(null),
+		tailnetDevicesError = $state('');
 	let containersReady = $state(false),
 		vmsReady = $state(false),
 		sharesReady = $state(false),
@@ -219,8 +224,7 @@
 	const currentPlacement = $derived(shown.find((p) => p.id === customize));
 	const hidden = $derived(
 		TILE_IDS.filter(
-			(id) =>
-				!shown.some((p) => sourceId(p.id) === id) && (admin || !['docker', 'vms'].includes(id)),
+			(id) => !shown.some((p) => sourceId(p.id) === id) && (admin || !ADMIN_TILES.includes(id)),
 		),
 	);
 	const dirty = $derived(
@@ -271,6 +275,38 @@
 		}
 		void refresh();
 		const timer = setInterval(refresh, 5000);
+		return () => {
+			disposed = true;
+			clearInterval(timer);
+		};
+	});
+	// Tailnet devices only while a Tailscale tile is shown or being edited;
+	// the server answers from a short RAM cache.
+	const watchesTailnet = $derived(
+		admin && (editing || shown.some((p) => sourceId(p.id) === 'tailscale')),
+	);
+	$effect(() => {
+		if (!watchesTailnet) return;
+		void refreshSerial;
+		let disposed = false,
+			inflight = false;
+		async function refresh() {
+			if (inflight || document.hidden) return;
+			inflight = true;
+			try {
+				const value = await api.get<TailnetDevices>('/plugins/tailscale/devices');
+				if (!disposed) {
+					tailnetDevices = value;
+					tailnetDevicesError = '';
+				}
+			} catch (e) {
+				if (!disposed) tailnetDevicesError = fail(e);
+			} finally {
+				inflight = false;
+			}
+		}
+		void refresh();
+		const timer = setInterval(refresh, 15000);
 		return () => {
 			disposed = true;
 			clearInterval(timer);
@@ -759,6 +795,16 @@
 						).length,
 					})
 				: '–';
+		if (kind === 'tailscale') {
+			if (!tailnetDevices || tailnetDevicesError) return '–';
+			if (!tailnetDevices.active) return t('tailscale.states.inactive');
+			const o = tileOptions(options, id),
+				list = tailnetDevices.devices.filter((d) => o.items === null || o.items.includes(d.id));
+			return t('tailscale.device.summary', {
+				online: list.filter((d) => d.online === true).length,
+				count: list.length,
+			});
+		}
 		if (kind === 'temperatures')
 			return t('dashboard.sensorSummary', {
 				count: temperatureSelection(session.dashboard).length,
@@ -817,6 +863,11 @@
 				return shares.map((s) => ({ id: s.name, name: s.name }));
 			case 'volumes':
 				return (storage.status?.volumes ?? []).map((v) => ({ id: v.name, name: v.name }));
+			case 'tailscale':
+				return (tailnetDevices?.devices ?? []).map((d) => ({
+					id: d.id,
+					name: d.self ? `${d.name} · ${t('tailscale.device.self')}` : d.name || d.hostName,
+				}));
 			case 'disks':
 				return (storage.status?.disks ?? [])
 					.filter((d) => d.role !== 'stick')
@@ -1037,6 +1088,11 @@
 											ondetails={() => runtimeOption(tile.id, 'details', !settings.details)}
 										/>
 									{:else if source === 'network'}<NetworkTile options={settings} />
+									{:else if source === 'tailscale'}<TailscaleTile
+											options={settings}
+											value={tailnetDevices}
+											error={tailnetDevicesError}
+										/>
 									{:else if source === 'system'}<SystemTile options={settings} />
 									{:else if source === 'igpu' || source === 'npu' || source === 'nvidia' || source === 'accelerators'}<AcceleratorTile
 											kind={source}

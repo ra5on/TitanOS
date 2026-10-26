@@ -246,6 +246,88 @@ try {
   await page
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
     .waitFor();
+  // Tailscale tile: add it, choose devices by stable ID and fields in order.
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .click();
+  await page
+    .locator(".add-tiles")
+    .getByRole("button", { name: "Tailscale", exact: true })
+    .click();
+  await tile(page, "tailscale")
+    .getByText("alex-laptop", { exact: true })
+    .waitFor();
+  assert.equal(
+    await tile(page, "tailscale")
+      .getByText("Dieses NAS", { exact: true })
+      .count(),
+    1,
+  );
+  await tile(page, "tailscale")
+    .getByRole("button", { name: "Kachel anpassen: Tailscale", exact: true })
+    .click();
+  await inspector(page)
+    .getByRole("button", { name: "Inhalt", exact: true })
+    .click();
+  await inspector(page)
+    .getByRole("checkbox", { name: "Subnet-Routen", exact: true })
+    .check();
+  await inspector(page)
+    .getByRole("checkbox", { name: "Betriebssystem", exact: true })
+    .uncheck();
+  await inspector(page)
+    .getByRole("button", { name: "Subnet-Routen: Nach oben", exact: true })
+    .click();
+  // Reordered rows keep the checkbox state of their own field.
+  for (const [name, checked] of [
+    ["Betriebssystem", false],
+    ["Exit Node", false],
+    ["Zuletzt gesehen", true],
+  ])
+    assert.equal(
+      await inspector(page)
+        .getByRole("checkbox", { name, exact: true })
+        .isChecked(),
+      checked,
+      name,
+    );
+  await inspector(page)
+    .getByRole("checkbox", {
+      name: "Alle Einträge, einschließlich neuer",
+      exact: true,
+    })
+    .uncheck();
+  await inspector(page)
+    .getByRole("checkbox", { name: "router", exact: true })
+    .uncheck();
+  assert.equal(
+    await tile(page, "tailscale").getByText("router", { exact: true }).count(),
+    0,
+  );
+  await tile(page, "tailscale")
+    .getByText("192.168.10.0/24", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: out + "/tailscale.png", fullPage: true });
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor();
+  const tailscaleOptions = data.prefs.dashboard.tileOptions.tailscale;
+  assert.deepEqual(tailscaleOptions.items, ["nSELF1CNTRL", "nLAPTOP2CNTRL"]);
+  assert.deepEqual(tailscaleOptions.tailscaleFields, [
+    "status",
+    "self",
+    "ipv4",
+    "routes",
+    "lastSeen",
+  ]);
+  assert.ok(data.prefs.dashboard.tiles.some((t) => t.id === "tailscale"));
+  // Without an active plugin the tile states it calmly instead of failing.
+  data.tailnet = null;
+  await page.reload();
+  await tile(page, "tailscale")
+    .getByText("Das Tailscale-Plugin ist nicht aktiv.", { exact: true })
+    .waitFor();
   await page.goto(base + "/storage");
   await page.getByRole("button", { name: "Data", exact: true }).click();
   await page.locator(".storage-layout aside").waitFor();
@@ -348,8 +430,9 @@ try {
   assert.equal(regular.data.prefs.dashboard.tiles[0].span, 1);
   assert.equal(regular.data.prefs.dashboard.tiles[0].autoHeight, true);
   assert.equal(
-    regular.data.requests.filter((r) => ["/docker", "/vms"].includes(r[1]))
-      .length,
+    regular.data.requests.filter((r) =>
+      ["/docker", "/vms", "/plugins/tailscale/devices"].includes(r[1]),
+    ).length,
     0,
   );
   await regular.ctx.close();

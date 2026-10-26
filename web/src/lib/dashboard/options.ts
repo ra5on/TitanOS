@@ -1,5 +1,6 @@
 import { sourceId, type TileId } from './tiles.ts';
 import { systemFields, type SystemField } from './system-fields.ts';
+import { tailscaleFields, type TailscaleField } from './tailscale.ts';
 export const PARTS = ['value', 'history', 'temperature', 'details', 'engines'] as const;
 export const STYLE_KEYS = [
 	'titleSize',
@@ -107,6 +108,7 @@ export type TileOptions = {
 	runningOnly: boolean;
 	rows: number;
 	systemFields: SystemField[];
+	tailscaleFields: TailscaleField[];
 	systemLayout: 'rows' | 'stacked';
 	showLabels: boolean;
 };
@@ -171,6 +173,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					volumes: 'disk',
 					shares: 'folder',
 					network: 'globe',
+					tailscale: 'globe',
 					temperatures: 'activity',
 				} as Record<string, (typeof EDITOR_ICONS)[number]>
 			)[idSource] ?? 'chip',
@@ -187,6 +190,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 				'disks',
 				'temperatures',
 				'assistant',
+				'tailscale',
 			].includes(idSource)
 				? 14
 				: 18,
@@ -252,6 +256,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		runningOnly: bool('runningOnly', false),
 		rows: number('rows', 100, 1, 100),
 		systemFields: systemFields(v.systemFields),
+		tailscaleFields: tailscaleFields(v.tailscaleFields),
 		systemLayout: choice('systemLayout', ['rows', 'stacked'], 'rows'),
 		showLabels: bool('showLabels', true),
 	};

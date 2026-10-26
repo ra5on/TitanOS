@@ -22,6 +22,21 @@ Anmeldung und Freigabe des Geräts erfolgen dort durch den Besitzer.
   läuft diese Frist ab. Eine fehlgeschlagene Rücknahme bleibt sichtbar und
   wird erneut versucht. Plugin-Mutationen sind während der Probe gesperrt.
 
+## Dashboard-Kachel
+
+Besitzer und Administratoren können im Dashboard-Editor die Kachel
+**Tailscale** hinzufügen. Sie zeigt die Geräte des Tailnets einschließlich
+dieses NAS. Je Kachel lassen sich Geräte (über die stabile Tailscale-Node-ID,
+nie über die IP) und sortierbare Angaben wählen: Online/Offline, Markierung
+dieses NAS, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen,
+Betriebssystem, Exit Node und Subnet-Routen. Die Daten liefert
+`GET /api/v1/plugins/tailscale/devices` aus `tailscale status --json`, höchstens
+alle fünf Sekunden und nur während die Kachel sichtbar oder im Editor ist.
+Ohne aktives Plugin meldet die Kachel „nicht aktiv“; unbekannte Werte (etwa
+Online-Zustände bei getrenntem Backend) bleiben leer. Geprüft mit
+aufgezeichneter Statusausgabe und Browser-Fixtures, noch nicht mit einem echten
+Tailnet.
+
 ## Ablage und Netzwerk
 
 Nur Besitzer und Administratoren erhalten Zugriff auf diese API. Einstellungen
