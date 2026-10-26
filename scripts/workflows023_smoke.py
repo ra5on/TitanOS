@@ -7,6 +7,7 @@ and data disks are supplied by --workflows023. No host interfaces are changed.
 import gzip
 import hashlib
 import json
+import re
 import shlex
 import subprocess
 import time
@@ -212,14 +213,21 @@ ip -n titan-peer link set peer30 up
     assert json.loads(remote('qemu-img info --output=json /mnt/mirror/iso/http-import.qcow2'))['virtual-size']==64<<20
     print('PASS real HTTP gzip/qcow2 download, extraction, qemu-img validation and publication',flush=True)
 
-    remote("mkdir -p /config/plugins/releases /mnt/mirror/.titanos/plugins/releases/0.20.0 /mnt/mirror/.titanos/plugins/releases/0.23.0; chmod 700 /mnt/mirror/.titanos /mnt/mirror/.titanos/plugins /mnt/mirror/.titanos/plugins/releases; printf '{\"volume\":\"mirror\",\"enabled\":[]}' > /config/plugins/releases/0.23.0.json; printf old > /mnt/mirror/.titanos/plugins/releases/0.20.0/fixture.raw; printf current > /mnt/mirror/.titanos/plugins/releases/0.23.0/fixture.raw; systemctl restart titand")
+    current_version=request('/system')['version']
+    current_base=remote('cat /usr/share/titanos/base-version')
+    assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9.]+)?',current_base)
+    old_version='0.0.0' if current_base!='0.0.0' else '0.0.1'
+    release_root=f'/mnt/mirror/.titanos/plugins/releases/{current_base}'
+    old_root=f'/mnt/mirror/.titanos/plugins/releases/{old_version}'
+    settings=json.dumps(dict(volume='mirror',enabled=[]))
+    remote(f'mkdir -p /config/plugins/releases {old_root} {release_root}; chmod 700 /mnt/mirror/.titanos /mnt/mirror/.titanos/plugins /mnt/mirror/.titanos/plugins/releases; printf %s {shlex.quote(settings)} > /config/plugins/releases/{current_base}.json; printf old > {old_root}/fixture.raw; printf current > {release_root}/fixture.raw; systemctl restart titand')
     wait(lambda:request('/health').get('ready'),'plugin inventory restart')
     request('/login',dict(name='storagetester',password=password))
     releases=request('/plugins/releases')['releases']
-    assert next(r for r in releases if r['version']=='0.23.0')['protected']
-    old=next(r for r in releases if r['version']=='0.20.0')
+    assert next(r for r in releases if r['version']==current_base)['protected']
+    old=next(r for r in releases if r['version']==old_version)
     request('/plugins/cleanup',dict(selection=[dict(version=old['version'],fingerprint=old['fingerprint'])]))
-    remote('test ! -e /mnt/mirror/.titanos/plugins/releases/0.20.0; test -f /mnt/mirror/.titanos/plugins/releases/0.23.0/fixture.raw')
+    remote(f'test ! -e {old_root}; test -f {release_root}/fixture.raw')
     print('PASS real plugin-volume cleanup, current release protection and mounted/private directory checks',flush=True)
 
     token=request('/account/tokens',dict(name='QEMU CLI',scopes=['system:read']))
@@ -229,7 +237,7 @@ ip -n titan-peer link set peer30 up
     cert=['/config/tls/cert.pem']
     assert cert, 'NAS certificate missing'
     result=remote('titanosctl --url https://localhost --ca-file '+shlex.quote(cert[0])+' --token-file /root/api-token status')
-    assert json.loads(result)['version']=='0.23.0'
+    assert json.loads(result)['version']==current_version
     request('/account/tokens/'+token['token']['id'],method='DELETE')
     remote('if titanosctl --url https://localhost --ca-file '+shlex.quote(cert[0])+' --token-file /root/api-token status >/dev/null 2>&1; then exit 1; fi; rm /root/api-token')
     print('PASS real CLI HTTPS + personal read-only token and immediate revocation',flush=True)
