@@ -4,7 +4,7 @@
 konfigurierten Plugin-Volume samt geschätzter logischer Dateigröße. Aktiv
 benötigte Versionen bleiben geschützt: laufende System-/App-Basis, vollständige
 Bootslots und Rückfallversionen, vorherige App-Version, vorbereitete Updates,
-aktive/residente Plugin-Manifeste und aktuelle sysext-Ziele.
+aktive/residente Plugin-Manifeste und aktuelle sysext-Ziele. Bei vollständigen Bootslots wird die tatsächliche Basis direkt und begrenzt aus dem squashfs gelesen; eine App-Versionsnummer im Slottitel reicht nicht als Nachweis. Ist die Basis nicht lesbar oder ein Update verändert gerade die Bootverweise, bleibt das Aufräumen gesperrt.
 
 Nur ungeschützte Versionen lassen sich auswählen. „Auswahl prüfen“ zeigt die
 Versionen und die geschätzte Summe; der Löschknopf bleibt bis zur ausdrücklichen

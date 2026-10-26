@@ -259,7 +259,7 @@ VLAN-Paketverkehr mit IPv4/IPv6, Active-backup-Bond, Verwaltungsbestätigung,
 VLAN-Wechsel/Rückfall, echte Docker-ipvlan/macvlan-Endpunkte, NFS-RO/RW,
 Medienimport mit Dienstneustart, öffentliche CLI und Plugin-Aufräumen. Vier
 NAS-Starts prüfen zusätzlich Persistenz und den bestehenden Btrfs-Ausfall/
-Plattenersatz/Scrub. Die virtuellen Datenplatten sind hierbei 4 statt 2 GiB.
+Plattenersatz/Scrub. Die virtuellen Datenplatten sind hierbei 8 statt 2 GiB. Die optionale große VirtIO-ISO soll vor dem absichtlich degradierten Wiederaufbau ausreichend freie Btrfs-Blockgruppen für interne Metadaten lassen. Ein voller/fast vollständig allokierter Btrfs-Spiegel kann beim Ersatz mit ENOSPC abbrechen; der Test führt keine automatische Balance oder Datenlöschung aus.
 `--online-virtio` lädt zusätzlich die offizielle stabile Windows-Treiber-ISO;
 ohne Option wird dieser externe Download nicht als getestet bezeichnet.
 `--workflows-only` überspringt ausschließlich die schon getrennt geprüften

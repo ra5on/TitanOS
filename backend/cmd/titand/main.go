@@ -548,19 +548,7 @@ func run(opts options) error {
 		return !tailnet.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
 	}
 	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
-	extensions.CleanupProtected = func() []string {
-		status := updates.Status()
-		versions := []string{status.Version, status.Base, status.App.Current, status.App.Previous}
-		for _, slot := range status.Slots {
-			if slot.Complete {
-				versions = append(versions, slot.Version)
-			}
-		}
-		if status.Pending != nil {
-			versions = append(versions, status.Pending.Version, status.Pending.From)
-		}
-		return versions
-	}
+	extensions.CleanupProtected = updates.PluginReleaseProtection
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
 	// Backups of shares to another volume, another server or the cloud.

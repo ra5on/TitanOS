@@ -129,7 +129,7 @@ type Status struct {
 
 // Manager installs plugins and keeps the system in line with the settings.
 type Manager struct {
-	CleanupProtected func() []string                 // current boot slots/app fallbacks/pending updates
+	CleanupProtected func() ([]string, error)        // current boot slots/app fallbacks/pending updates
 	PrepareRuntime   func(name, volume string) error // optional plugin-specific volatile configuration
 	ActivateRuntime  func(name string) error         // reapplies saved configuration even if the service was already running
 	ChangeAllowed    func() bool                     // checked under actions, serializes with update staging

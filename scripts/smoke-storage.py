@@ -123,7 +123,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
         helper.command('mcopy', '-i', partition, '-s', *map(str, stick.iterdir()), '::')
         shutil.copyfile('/usr/share/OVMF/OVMF_VARS_4M.fd', directory / 'OVMF_VARS.fd')
         for index in (1, 2, 3):
-            helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '4G' if workflows else '2G')
+            helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '8G' if workflows else '2G')
         helper.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory / 'key'))
         usb_disk = directory / 'external-exfat.img'
         with usb_disk.open('wb') as image:
@@ -299,6 +299,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                             result = remote('btrfs replace status -1 /mnt/mirror')
                             if 'finished' in result:
                                 break
+                            if 'canceled' in result.lower():
+                                raise AssertionError(result + '\n' + remote('dmesg | tail -n 35'))
                             if time.monotonic() > deadline:
                                 raise TimeoutError(result)
                             time.sleep(2)
