@@ -262,6 +262,7 @@ NAS-Starts prüfen zusätzlich Persistenz und den bestehenden Btrfs-Ausfall/
 Plattenersatz/Scrub. Die virtuellen Datenplatten sind hierbei 8 statt 2 GiB. Die optionale große VirtIO-ISO soll vor dem absichtlich degradierten Wiederaufbau ausreichend freie Btrfs-Blockgruppen für interne Metadaten lassen. Ein voller/fast vollständig allokierter Btrfs-Spiegel kann beim Ersatz mit ENOSPC abbrechen; der Test führt keine automatische Balance oder Datenlöschung aus.
 `--online-virtio` lädt zusätzlich die offizielle stabile Windows-Treiber-ISO;
 ohne Option wird dieser externe Download nicht als getestet bezeichnet.
+`--tcg` erzwingt dieselbe CPU-Emulation wie auf CI-Rechnern ohne KVM; Prozessausgang und Host-RAM/-Platz werden bei Abbruch ausgegeben.
 `--workflows-only` überspringt ausschließlich die schon getrennt geprüften
 USB-/SMB-/CDI-/RAM-Snapshot-Teilsuiten für gezielte Wiederholungen; Storage-
 Erzeugung und vier Neustarts bleiben erhalten. Nie gegen ein echtes NAS richten.
