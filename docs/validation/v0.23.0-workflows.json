@@ -1,0 +1,160 @@
+{
+  "date": "2026-10-26",
+  "implementationCommit": "bb6300dac42544f0e5d1ed4510bda8b43864ff9c",
+  "version": "0.23.0",
+  "systemBase": "0.23.0",
+  "kernel": "6.12.113+deb13-amd64",
+  "mode": "Disposable QEMU KVM guest only; host disks, Docker and NICs untouched",
+  "imageNote": "Local full mkosi image before final documentation-only changes; published tag rebuilt and tested by GitHub Actions.",
+  "toolchains": {
+    "go": "1.27.3",
+    "node": "24.22.1",
+    "mkosi": "25.3",
+    "host": "Fedora 44"
+  },
+  "commands": [
+    "scripts/fedora-dev.sh make test test-release",
+    "make zip VERSION=0.23.0",
+    "scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.0.zip --workflows023 --online-virtio --log out/validation/workflows023-final-serial.log",
+    "PLAYWRIGHT_MODULE=<path>/playwright/index.mjs UI_URL=http://127.0.0.1:5186 node scripts/test-ui-023.mjs"
+  ],
+  "unitChecks": {
+    "goVetAndTests": "passed",
+    "frontendTests": 84,
+    "svelteErrors": 0,
+    "svelteWarnings": 0,
+    "releaseTests": 42,
+    "mediaRaceRepeats": 20,
+    "appsTemplateTests": 11,
+    "appsCommit": "d8ce929a333c8689361f3aeea18ba0a7b7640813",
+    "targetedRace": [
+      "auth",
+      "api",
+      "cmd/titanosctl",
+      "network",
+      "docker",
+      "vm",
+      "media",
+      "plugins",
+      "update"
+    ]
+  },
+  "qemu": {
+    "ramGiB": 4,
+    "dataDiskGiB": 8,
+    "boots": 4,
+    "result": "passed",
+    "checks": [
+      "Real exFAT: mount, upload >64 KiB, atomic finish, text edit, conflict rejection, backup and eject passed",
+      "SMB: writable share, 255-byte filename and nested path longer than 260 characters passed",
+      "SMB backup: encrypted discovery, auth/readonly rejection, selected tree, unchanged/changed files, retained deletions, restore and cleanup passed",
+      "Shipped Docker/Compose: CDI device request, failed legacy-container repair and retained app data passed",
+      "Live RAM, qcow2 disk, UEFI and TPM snapshot/resume/restore passed",
+      "VM RAM/disk/UEFI/TPM restore on Btrfs and metadata persistence passed",
+      "Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed",
+      "PASS real networkd: preferred DHCP bridge/MAC, tagged VLAN IPv4/IPv6, active-backup failover, changed VLAN/revert and daemon restart",
+      "PASS real NFS server: RO write denial, explicit RW write, independent SMB/account permissions",
+      "PASS real Docker: ipvlan/macvlan VLAN traffic, static service IP, private DB, host reachability and in-use deletion/topology protection",
+      "PASS media: gzip import, restart/prefix proof, published hash; real generated libvirt named bridge and two Windows CDs (guest OS not installed)",
+      "PASS real HTTP gzip/qcow2 download, extraction, qemu-img validation and publication",
+      "PASS real plugin-volume cleanup, current release protection and mounted/private directory checks",
+      "PASS real CLI HTTPS + personal read-only token and immediate revocation",
+      "PASS official stable VirtIO HTTPS download, ISO validation and hash-verified reuse (no Windows install)",
+      "Btrfs boot 1: data, snapshots, membership and tools passed",
+      "PASS 0.23 boot 2: confirmed topology, bond/VLAN, NFS RO and completed import survive NAS reboot",
+      "Btrfs boot 2: data, snapshots, membership and tools passed",
+      "PASS 0.23 boot 3: confirmed topology, bond/VLAN, NFS RO and completed import survive NAS reboot",
+      "Btrfs boot 3: data, snapshots, membership and tools passed",
+      "PASS 0.23 boot 4: confirmed topology, bond/VLAN, NFS RO and completed import survive NAS reboot",
+      "Btrfs boot 4: data, snapshots, membership and tools passed",
+      "Btrfs and tools smoke test passed"
+    ],
+    "driverSource": "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso",
+    "driverObservedVersion": "0.1.302",
+    "driverBytes": 877373440
+  },
+  "browser": {
+    "fixtureData": true,
+    "evidence": [
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 390,
+        "locale": "de",
+        "appearance": {},
+        "firstEntryY": 217.5,
+        "screenshot": "files-390-graphit-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "hell",
+        "width": 390,
+        "locale": "en",
+        "appearance": {},
+        "firstEntryY": 217.5,
+        "screenshot": "files-390-hell-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 390,
+        "locale": "de",
+        "appearance": {
+          "style": "flat",
+          "font": 120,
+          "rTile": 0,
+          "rCtl": 0
+        },
+        "firstEntryY": 221.390625,
+        "screenshot": "files-390-graphit-120.png"
+      },
+      {
+        "page": "files",
+        "theme": "hell",
+        "width": 1440,
+        "locale": "en",
+        "appearance": {
+          "style": "outline",
+          "rTile": 24,
+          "rCtl": 14
+        },
+        "firstEntryY": 328.5,
+        "screenshot": "files-1440-hell-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 1440,
+        "locale": "de",
+        "appearance": {},
+        "firstEntryY": 328.5,
+        "screenshot": "files-1440-graphit-100.png"
+      }
+    ],
+    "errors": []
+  },
+  "provenance": {
+    "backend/bin/titand": "3374f4f69b2655bcb180354af6b0b748023667109e4603118c299adc85f6a935",
+    "backend/bin/titanosctl": "f3d577495328d5159fde7dc1d2ceb40a29a242502657e4b7cd8646c37f094059",
+    "out/titanos-0.23.0.zip": "528cece6301571a02c7904b1092d4c5ae3f5a547a25604f3fd794b63c9e32820",
+    "out/implementation-qemu-final.log": "3264df3878171dce966a61c8557261f1722e408629b5c0d00283964e65aec0cc",
+    "out/validation/workflows023-final-serial.log": "a9845d743ff2d1ae64451c967222a358828662062b96334910a8d5b525210113",
+    "out/implementation-verified-test.log": "3d561e7a8713692e29adae328c06fe88507bb4756061748a9c50e5425bc2b3f2",
+    "out/implementation-media-stress.log": "4bdf295e5ce7ea8f6dc351aa2686e7fa1e79b334b594cfbb095189bba69a1732",
+    "out/implementation-plugin-bases.log": "f5d834a0980619dff4dba88c78b299974397de7037d20a02cc743deaf00f9fbd",
+    "out/implementation-ui.log": "f0a6d988c6fd6c8ab8e5fb408e4346da1d913703136fac8b53650bc730aa0329",
+    "out/implementation-ui-workflows.log": "43e3fc5522d20920a11702b215687df2834fa6d6fd819688eb882d1fc61b502f",
+    "out/implementation-ui-completion.log": "9b2c5da38482e36804877cd8567c6926a34a5e4ac817554e9dc83ea4e8b8f7be",
+    "out/implementation-ui-vm.log": "47238a166dee2ac78ab1056e047cb288d800c1d32dfb1cc2fa383ffec981da2e",
+    "out/implementation-apps-test.log": "ec8f1855cbb71796a89c791930f740bfb84de4bc41b058049b066a0874392a54"
+  },
+  "limits": [
+    "No physical NIC, switch/LACP, GPU, UPS or real tailnet/Cloudflare policy validation",
+    "No Windows installation or Secure Boot compatibility certification; real live Linux VM RAM/disk/UEFI/TPM restore tested",
+    "TTY2 service enabled; interactive local-console authentication and recovery were not exercised",
+    "Browser fixtures demonstrate UI behavior and layout; they are separate from real guest functionality",
+    "Earlier 4 GiB workflow fixture hit Btrfs ENOSPC while setting a block group read-only for degraded replacement after large media import; 8 GiB test passed. No automatic balancing or data deletion added."
+  ],
+  "pullRequest": "https://github.com/ra5on/TitanOS/pull/117",
+  "releaseWorkflow": "https://github.com/ra5on/TitanOS/actions/workflows/release.yml"
+}
