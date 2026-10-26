@@ -48,6 +48,37 @@ jobs:
       - name: Check formatting
         run: test -z "$(gofmt -l backend)"
 
+      # Opens every page of a development titand and clicks every button, so
+      # a page that breaks while rendering ("500 Internal Error") cannot ship.
+      - name: Browser for the page crawl
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --ignore-scripts playwright@1.56.1
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Crawl every page of titand -dev
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/playwright/node_modules/playwright/index.mjs
+          UI_URL: http://127.0.0.1:18080
+          UI_OUTPUT: ${{ runner.temp }}/ui-crawl
+        run: |
+          config="$RUNNER_TEMP/titand-config"
+          mkdir -p "$config/users"
+          backend/bin/titand -dev -config "$config" -dev-listen 127.0.0.1:18080 > "$RUNNER_TEMP/titand.log" 2>&1 &
+          for _ in $(seq 30); do curl -sf -o /dev/null "$UI_URL/api/v1/session" && break; sleep 1; done
+          password="$(openssl rand -hex 16)"
+          curl -sf -H 'Content-Type: application/json' -H "Origin: $UI_URL" \
+            -d "{\"name\":\"crawler\",\"password\":\"$password\"}" "$UI_URL/api/v1/setup" > /dev/null
+          UI_LOGIN="crawler:$password" node scripts/test-ui-crawl.mjs
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ui-crawl
+          path: |
+            ${{ runner.temp }}/ui-crawl
+            ${{ runner.temp }}/titand.log
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v7
         with:
           name: titand-linux-amd64
