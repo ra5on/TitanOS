@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseDocument}from 'yaml';
+import{assignContainerLAN,lanAssignment}from '../src/lib/compose/lan.ts';
+const text=`# Keep user comments\nservices:\n  web:\n    image: nextcloud\n    networks: [private]\n  database:\n    image: postgres\n    networks: [private]\nnetworks:\n  private: {}\n`;
+test('LAN assignment preserves private networks, other services and comments',()=>{const result=assignContainerLAN(text,'web','apps','192.168.30.130');const doc=parseDocument(result).toJS();assert.ok(result.startsWith('# Keep user comments'));assert.ok(Object.hasOwn(doc.services.web.networks,'private'));assert.deepEqual(doc.services.database.networks,['private']);assert.equal(doc.networks.titanos_lan_apps.external,true);assert.deepEqual(lanAssignment(result,'web'),{network:'apps',address:'192.168.30.130'});});
+test('reassignment removes only unused managed definitions',()=>{const first=assignContainerLAN(text,'web','old','');const next=assignContainerLAN(first,'web','new','');const doc=parseDocument(next).toJS();assert.ok(!doc.networks.titanos_lan_old);assert.ok(doc.networks.private);assert.deepEqual(lanAssignment(next,'web'),{network:'new',address:''});const removed=assignContainerLAN(next,'web','','');assert.deepEqual(lanAssignment(removed,'web'),{network:'',address:''});assert.deepEqual(parseDocument(removed).toJS().services.database.networks,['private']);});
+test('shared service aliases and host networking are not silently rewritten',()=>{assert.throws(()=>assignContainerLAN('services:\n  first: &shared\n    image: test\n  web: *shared\n','web','apps',''));assert.throws(()=>assignContainerLAN('services:\n  web:\n    image: test\n    network_mode: host\n','web','apps',''));});

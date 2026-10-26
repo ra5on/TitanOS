@@ -29,6 +29,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
+	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
@@ -53,6 +54,7 @@ type Options struct {
 	Store              *config.Store
 	Users              *auth.Users
 	Monitoring         *monitoring.Manager
+	Media              *media.Manager
 	Maintenance        *maintenance.Manager
 	ApplicationBackups *appbackup.Manager
 	Monitor            *system.Monitor
@@ -113,6 +115,7 @@ type Options struct {
 type Server struct {
 	opts        Options
 	sessions    *auth.Sessions
+	tokens      *auth.Tokens
 	limiter     *auth.Limiter
 	prefs       *preferences
 	handler     http.Handler
@@ -139,6 +142,7 @@ func New(opts Options) *Server {
 		sessions: opts.Sessions,
 		limiter:  auth.NewLimiter(),
 		prefs:    newPreferences(opts.Store),
+		tokens:   auth.NewTokens(opts.Store),
 	}
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
@@ -212,6 +216,10 @@ func New(opts Options) *Server {
 
 	// One's own account.
 	mux.HandleFunc("GET /api/v1/account/sessions", s.requireUser(s.handleAccountSessions))
+	mux.HandleFunc("GET /api/v1/account/tokens", s.requireUser(s.handleTokens))
+	mux.HandleFunc("POST /api/v1/account/tokens", s.requireUser(s.handleTokenCreate))
+	mux.HandleFunc("DELETE /api/v1/account/tokens/{id}", s.requireUser(s.handleTokenRevoke))
+	mux.HandleFunc("GET /api/v1/openapi.json", s.requireUser(s.handleOpenAPI))
 	mux.HandleFunc("DELETE /api/v1/account/sessions/{id}", s.requireUser(s.handleAccountSessionEnd))
 	mux.HandleFunc("POST /api/v1/account/2fa/begin", s.requireUser(s.handleTwoFactorBegin))
 	mux.HandleFunc("POST /api/v1/account/2fa/enable", s.requireUser(s.handleTwoFactorEnable))
@@ -272,12 +280,16 @@ func New(opts Options) *Server {
 
 	// Docker. Whoever controls containers controls the machine: administrators only.
 	mux.HandleFunc("GET /api/v1/docker", s.requireAdmin(s.handleDocker))
+	mux.HandleFunc("GET /api/v1/docker/networks", s.requireAdmin(s.handleLANNetworks))
+	mux.HandleFunc("POST /api/v1/docker/networks", s.requireHeavyAdmin(s.handleLANCreate))
+	mux.HandleFunc("DELETE /api/v1/docker/networks/{name}", s.requireAdmin(s.handleLANRemove))
 	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAdmin(s.handleDockerSettings))
 	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAdmin(s.handleContainerAction))
 	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAdmin(s.handleContainerRemove))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", s.requireAdmin(s.handleContainerLogs))
 	mux.HandleFunc("POST /api/v1/docker/apps", s.requireHeavyAdmin(s.handleAppCreate))
 	mux.HandleFunc("GET /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppCompose))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/network", s.requireHeavyAdmin(s.handleLANAssign))
 	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppRemove))
 	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppSetCompose))
 	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireHeavyAdmin(s.handleAppUpdate))
@@ -295,6 +307,12 @@ func New(opts Options) *Server {
 
 	// Virtual machines. Like containers: administrators only.
 	mux.HandleFunc("GET /api/v1/vms", s.requireAdmin(s.handleVMs))
+	mux.HandleFunc("GET /api/v1/vms/imports", s.requireAdmin(s.handleMediaImports))
+	mux.HandleFunc("POST /api/v1/vms/imports", s.requireHeavyAdmin(s.handleMediaImport))
+	mux.HandleFunc("POST /api/v1/vms/virtio", s.requireHeavyAdmin(s.handleVirtIO))
+	mux.HandleFunc("PUT /api/v1/vms/imports/{id}/data", s.requireHeavyAdmin(s.handleMediaChunk))
+	mux.HandleFunc("POST /api/v1/vms/imports/{id}/verify", s.requireHeavyAdmin(s.handleMediaUploadVerify))
+	mux.HandleFunc("POST /api/v1/vms/imports/{id}/{action}", s.requireAdmin(s.handleMediaControl))
 	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
@@ -328,6 +346,7 @@ func New(opts Options) *Server {
 
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
+	mux.HandleFunc("POST /api/v1/network/diagnostics", s.requireAdmin(s.handleNetworkDiagnostics))
 	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
 	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
@@ -432,6 +451,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscaleSettings))
 	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", s.requireAdmin(s.handleTailscaleAction))
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
+	mux.HandleFunc("GET /api/v1/plugins/releases", s.requireAdmin(s.handlePluginOldReleases))
+	mux.HandleFunc("POST /api/v1/plugins/cleanup", s.requireAdmin(s.handlePluginCleanup))
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireHeavyAdmin(s.handlePluginInstall))
@@ -449,7 +470,7 @@ func New(opts Options) *Server {
 	mux.Handle("/", uiHandler(opts.UI))
 
 	// Browsers must not let another website send requests with our cookie.
-	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(mux)))
 	return s
 }
 
@@ -541,6 +562,9 @@ func currentUser(r *http.Request) auth.User {
 
 // authenticate returns the account behind the session cookie.
 func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
+	if name, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
+		return s.opts.Users.Get(name)
+	}
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
 		return s.opts.Users.Get(name)

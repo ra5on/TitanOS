@@ -38,6 +38,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
+	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
@@ -76,7 +77,15 @@ func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
 	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")
+	recovery := flag.Bool("network-recovery", false, "authenticated local-console network recovery")
 	flag.Parse()
+	if *recovery {
+		if err := networkRecovery(opts.configDir); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if !opts.dev {
 		// The journal keeps the time itself.
@@ -290,6 +299,29 @@ func run(opts options) error {
 	// Runs the Docker engine while its volume is mounted.
 	devices := hardware.NewManager()
 	containers := docker.NewManager(store, opts.configDir)
+	containers.NetworkLease = func() (func(), error) {
+		release, err := connection.AttachmentLease()
+		if err != nil {
+			return nil, docker.ErrBusy
+		}
+		return release, nil
+	}
+	containers.NetworkResolver = func(id string) (string, string, bool) {
+		dev, ok := connection.Device(id, false)
+		if !ok {
+			return "", "", false
+		}
+		for _, n := range connection.Connections() {
+			if n.ID == id {
+				if n.IPv4 == "dhcp" {
+					address, ready := connection.CurrentIPv4(ctx, id)
+					return dev, address, ready
+				}
+				return dev, n.Address, true
+			}
+		}
+		return "", "", false
+	}
 	containers.HardwareDevices = devices.ContainerDevices
 	containers.RefreshCDI = func(ctx context.Context) error {
 		_, err := (command.Exec{}).Run(ctx, "", "systemctl", "restart", "titanos-nvidia.service")
@@ -315,6 +347,36 @@ func run(opts options) error {
 
 	// Virtual machines; starts those marked for autostart once their volumes are there.
 	machines := vm.NewManager(store, shares.UsersGID)
+	machines.NetworkBridge = func(id string) (string, bool) { return connection.Device(id, true) }
+	machines.NetworkLease = func() (func(), error) {
+		release, err := connection.AttachmentLease()
+		if err != nil {
+			return nil, vm.ErrNoBridge
+		}
+		return release, nil
+	}
+	connection.CheckChange = func(before, after network.Config) error {
+		refs := map[string]bool{}
+		legacy := false
+		for _, n := range containers.LANNetworks() {
+			refs[n.Parent] = false
+			for _, parent := range after.Networks {
+				if parent.ID == n.Parent {
+					if err := n.ValidateParentAddress(parent.Address); err != nil {
+						return fmt.Errorf("%w: %s", network.ErrInvalid, err)
+					}
+				}
+			}
+		}
+		for _, ref := range machines.NetworkReferences() {
+			if ref == "bridge" {
+				legacy = true
+			} else {
+				refs[strings.TrimPrefix(ref, "network:")] = true
+			}
+		}
+		return network.ProtectAttachments(before, after, refs, legacy)
+	}
 	machines.BridgeReady = connection.BridgeReady
 	machines.Timezone = settings.CurrentTimezone
 	machines.BeforeStart = func(ctx context.Context, name string, pci, usb []string, autoGPU bool) (func(bool), error) {
@@ -486,6 +548,19 @@ func run(opts options) error {
 		return !tailnet.Pending() && status.Pending == nil && status.Progress.Phase != "download" && status.Progress.Phase != "switch"
 	}
 	extensions.UpdateAllowed = func() bool { return !tailnet.Pending() }
+	extensions.CleanupProtected = func() []string {
+		status := updates.Status()
+		versions := []string{status.Version, status.Base, status.App.Current, status.App.Previous}
+		for _, slot := range status.Slots {
+			if slot.Complete {
+				versions = append(versions, slot.Version)
+			}
+		}
+		if status.Pending != nil {
+			versions = append(versions, status.Pending.Version, status.Pending.From)
+		}
+		return versions
+	}
 	go extensions.Run(ctx, volumes.Mounted)
 	go containers.Run(ctx, volumes.Mounted)
 	// Backups of shares to another volume, another server or the cloud.
@@ -646,9 +721,12 @@ func run(opts options) error {
 		go history.Run(ctx)
 	}
 	upkeep.Disabled = opts.dev
+	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
+	mediaImports.Disabled = opts.dev
+	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -693,7 +771,7 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working()
 	}
 	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
@@ -705,6 +783,7 @@ func run(opts options) error {
 		}
 	}
 	handler := api.New(api.Options{
+		Media:              mediaImports,
 		UI:                 webui.FS(),
 		Store:              store,
 		Users:              users,

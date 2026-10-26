@@ -166,7 +166,7 @@ func (m *Manager) pendingSnapshot(v VM) bool {
 	return err == nil || !errors.Is(err, fs.ErrNotExist)
 }
 func (m *Manager) snapshotReason(v VM) string {
-	if v.ISO != "" {
+	if v.ISO != "" || v.VirtIOISO != "" {
 		return "iso"
 	}
 	if len(v.PCI) > 0 || len(v.USB) > 0 {
@@ -410,6 +410,9 @@ func (m *Manager) createSnapshot(ctx context.Context, name string, req SnapshotR
 	v, err := m.get(name)
 	if err != nil {
 		return err
+	}
+	if v.ISO != "" || v.VirtIOISO != "" {
+		return ErrSnapshotUnsupported
 	}
 	if !m.available(v, mounted) {
 		return ErrUnknownVolume
@@ -836,7 +839,7 @@ func (m *Manager) restoreSnapshot(ctx context.Context, v VM, s Snapshot, memory 
 	}
 	restored := s.VM
 	restored.SnapshotSchedule = v.SnapshotSchedule
-	if err := m.store.WriteJSON(configDir+"/"+v.Name+".json", restored); err != nil {
+	if err := m.persistVM(restored); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -889,7 +892,7 @@ func (m *Manager) rollbackSnapshot(v VM, op *snapshotOperation) error {
 			return err
 		}
 	}
-	if err := m.store.WriteJSON(configDir+"/"+v.Name+".json", op.Original); err != nil {
+	if err := m.persistVM(op.Original); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -1075,7 +1078,7 @@ func (m *Manager) SetSnapshotSchedule(name string, s SnapshotSchedule) error {
 		return ErrSnapshotRecovery
 	}
 	v.SnapshotSchedule = s
-	if err = m.store.WriteJSON(configDir+"/"+name+".json", v); err != nil {
+	if err = m.persistVM(v); err != nil {
 		return err
 	}
 	m.mu.Lock()

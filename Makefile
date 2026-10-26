@@ -1,16 +1,19 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)
 LDFLAGS := -s -w -X github.com/ra5on/TitanOS/backend/internal/version.Version=$(VERSION)
 
-.PHONY: build web titand test test-release dev dev-backend dev-web zip zip-dev qemu clean
+.PHONY: build web titand titanosctl test test-release dev dev-backend dev-web zip zip-dev qemu clean
 
 # titand with the web UI embedded: backend/bin/titand
-build: web titand
+build: web titand titanosctl
 
 web: web/node_modules
 	cd web && npm run build
 
 titand:
 	cd backend && CGO_ENABLED=0 go build -trimpath -tags embedui -ldflags '$(LDFLAGS)' -o bin/titand ./cmd/titand
+
+titanosctl:
+	cd backend && CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o bin/titanosctl ./cmd/titanosctl
 
 test: web/node_modules
 	cd backend && go vet ./... && go test ./...

@@ -63,10 +63,13 @@ type Share struct {
 }
 
 // NFS exports the share to the listed hosts or networks. NFS knows no
-// accounts: whoever sits on one of those hosts can read and write.
+// accounts: permissions apply to every user on an allowed client.
 type NFS struct {
 	Enabled bool     `json:"enabled"`
 	Clients []string `json:"clients"`
+	// Mode is empty for legacy settings, or off/ro/rw. A protected export
+	// is persisted with Enabled=false so old applications cannot export it rw.
+	Mode string `json:"mode,omitempty"`
 }
 
 // Recycle keeps files deleted over SMB for a number of days.
@@ -181,6 +184,15 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.shares = shares
+	for i := range m.shares {
+		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, m.shares[i].NFS.Mode) {
+			m.loaded = false
+			return ErrInvalidOption
+		}
+		if m.shares[i].NFS.Mode == ReadOnly {
+			m.shares[i].NFS.Enabled = true
+		}
+	}
 	m.loaded = true
 	return nil
 }
@@ -198,7 +210,13 @@ func (m *Manager) save(shares []Share) error {
 	if shares == nil {
 		shares = []Share{}
 	}
-	if err := m.store.WriteJSON(configFile, shares); err != nil {
+	persisted := slices.Clone(shares)
+	for i := range persisted {
+		if persisted[i].NFS.Mode == ReadOnly {
+			persisted[i].NFS.Enabled = false
+		}
+	}
+	if err := m.store.WriteJSON(configFile, persisted); err != nil {
 		return err
 	}
 	m.shares = shares
@@ -211,6 +229,15 @@ func (m *Manager) save(shares []Share) error {
 
 // normalize checks a share and fills in defaults.
 func normalize(share *Share, volumes, users []string) error {
+	switch share.NFS.Mode {
+	case "": // Existing clients retain their original enabled flag.
+	case "off":
+		share.NFS.Enabled = false
+	case ReadOnly, ReadWrite:
+		share.NFS.Enabled = true
+	default:
+		return ErrInvalidOption
+	}
 	if !ValidName(share.Name) {
 		return ErrInvalidName
 	}
@@ -686,7 +713,11 @@ func renderExports(shares []Share, root string) string {
 		for _, client := range share.NFS.Clients {
 			// Every NFS client writes as nobody:users, so that files fit the
 			// share's group whatever user numbers the client has.
-			fmt.Fprintf(&b, " %s(rw,nohide,sync,no_subtree_check,all_squash,anonuid=65534,anongid=%d)", client, UsersGID)
+			mode := ReadWrite
+			if share.NFS.Mode == ReadOnly {
+				mode = ReadOnly
+			}
+			fmt.Fprintf(&b, " %s(%s,nohide,sync,no_subtree_check,all_squash,anonuid=65534,anongid=%d)", client, mode, UsersGID)
 		}
 		b.WriteString("\n")
 	}

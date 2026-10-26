@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 
 	"github.com/ra5on/TitanOS/backend/internal/network"
@@ -53,6 +54,21 @@ func (s *Server) handleNetwork(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleNetworkDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Network string `json:"network"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	checks, err := s.opts.Network.Diagnostics(r.Context(), req.Network)
+	if err != nil {
+		writeNetworkError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"checks": checks})
+}
+
 // handleNetworkChange puts a new configuration on trial.
 func (s *Server) handleNetworkChange(w http.ResponseWriter, r *http.Request) {
 	var cfg network.Config
@@ -70,7 +86,8 @@ func (s *Server) handleNetworkChange(w http.ResponseWriter, r *http.Request) {
 // handleNetworkConfirm keeps the change. That this request arrived shows
 // that the NAS is still reachable with it.
 func (s *Server) handleNetworkConfirm(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Network.Confirm(); err != nil {
+	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if err := s.opts.Network.ConfirmFrom(r.Context(), local); err != nil {
 		writeNetworkError(w, err)
 		return
 	}

@@ -129,12 +129,13 @@ type Status struct {
 
 // Manager installs plugins and keeps the system in line with the settings.
 type Manager struct {
-	PrepareRuntime  func(name, volume string) error // optional plugin-specific volatile configuration
-	ActivateRuntime func(name string) error         // reapplies saved configuration even if the service was already running
-	ChangeAllowed   func() bool                     // checked under actions, serializes with update staging
-	UpdateAllowed   func() bool                     // plugin-specific pending trials, independent of updater phase
-	store           *config.Store
-	runner          run.Runner
+	CleanupProtected func() []string                 // current boot slots/app fallbacks/pending updates
+	PrepareRuntime   func(name, volume string) error // optional plugin-specific volatile configuration
+	ActivateRuntime  func(name string) error         // reapplies saved configuration even if the service was already running
+	ChangeAllowed    func() bool                     // checked under actions, serializes with update staging
+	UpdateAllowed    func() bool                     // plugin-specific pending trials, independent of updater phase
+	store            *config.Store
+	runner           run.Runner
 	// Disabled leaves the system alone. Set in development mode.
 	LocalBuilds bool // build updated open modules on the NAS, only on request
 	buildKey    []byte

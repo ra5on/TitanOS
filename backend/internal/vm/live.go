@@ -49,7 +49,7 @@ func (m *Manager) SetMedium(ctx context.Context, name, path string) error {
 		}
 	}
 	vm.ISO = real
-	if err := m.store.WriteJSON(configDir+"/"+name+".json", vm); err != nil {
+	if err := m.persistVM(vm); err != nil {
 		return err
 	}
 	m.mu.Lock()

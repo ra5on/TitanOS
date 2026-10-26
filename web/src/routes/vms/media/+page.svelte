@@ -1,0 +1,402 @@
+<script lang="ts">
+	import { onDestroy } from 'svelte';
+	import { api, ApiError } from '#lib/api.ts';
+	import { storage } from '#lib/storage.svelte.ts';
+	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { formatBytes } from '#lib/format.ts';
+	import { mediaActive, verifyMediaUpload, type MediaJob } from '#lib/media.ts';
+	import PageHead from '#lib/components/PageHead.svelte';
+	import Dialog from '#lib/components/Dialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	let jobs = $state<MediaJob[]>([]),
+		loading = $state(true),
+		error = $state(''),
+		busy = $state(false),
+		adding = $state(false),
+		source = $state<'url' | 'upload'>('url'),
+		url = $state(''),
+		volume = $state(''),
+		name = $state(''),
+		sha256 = $state(''),
+		compression = $state('auto'),
+		picked = $state<File | null>(null),
+		chunk = $state(8 << 20),
+		uploading = $state(''),
+		verifyProgress = $state('');
+	const volumes = $derived((storage.status?.volumes ?? []).filter((v) => v.mounted));
+	const files = new Map<string, File>();
+	const paused = new Set<string>();
+	let confirm = $state<{ job: MediaJob; action: 'cancel' | 'remove' } | null>(null);
+	const phases: Record<string, MessageKey> = {
+		uploading: 'media.phase.uploading',
+		downloading: 'media.phase.downloading',
+		extracting: 'media.phase.extracting',
+		verifying: 'media.phase.verifying',
+		publishing: 'media.phase.publishing',
+		paused: 'media.phase.paused',
+		pausing: 'media.phase.pausing',
+		failed: 'media.phase.failed',
+		review: 'media.phase.review',
+		cancelled: 'media.phase.cancelled',
+		done: 'media.phase.done',
+	};
+	async function load() {
+		try {
+			const res = await api.get<{ jobs: MediaJob[]; chunkBytes: number }>('/vms/imports');
+			jobs = res.jobs ?? [];
+			chunk = res.chunkBytes || 8 << 20;
+		} catch (e) {
+			error = errorText(e instanceof ApiError ? e.code : 'internal');
+		} finally {
+			loading = false;
+		}
+	}
+	$effect(() => {
+		void load();
+		const timer = setInterval(() => {
+			if (!document.hidden) void load();
+		}, 1500);
+		return () => clearInterval(timer);
+	});
+	function outputName(source: string) {
+		let result = source.split('/').at(-1) ?? '';
+		result = result.replace(/\.(gz|xz|zip)$/i, '');
+		if (!/\.(iso|qcow2|raw|img|vmdk|vhdx|vdi)$/i.test(result)) result += '.iso';
+		return result;
+	}
+	function add() {
+		source = 'url';
+		url = '';
+		name = '';
+		sha256 = '';
+		compression = 'auto';
+		picked = null;
+		volume = volumes[0]?.name ?? '';
+		error = '';
+		adding = true;
+	}
+	onDestroy(() => {
+		if (uploading) {
+			paused.add(uploading);
+			void api.post(`/vms/imports/${uploading}/pause`, {}).catch(() => {});
+		}
+	});
+	async function send(job: MediaJob, file: File) {
+		if (file.name !== job.uploadName || file.size !== job.uploadSize) {
+			error = t('media.originalFile');
+			return;
+		}
+		files.set(job.id, file);
+		paused.delete(job.id);
+		uploading = job.id;
+		try {
+			if (job.bytes) {
+				verifyProgress = t('media.verifyPrefix');
+				await verifyMediaUpload(
+					job,
+					file,
+					chunk,
+					(done) =>
+						(verifyProgress = `${t('media.verifyPrefix')} ${formatBytes(done)} / ${formatBytes(job.bytes)}`),
+				);
+				verifyProgress = '';
+			}
+			if (['paused', 'failed'].includes(job.phase))
+				await api.post(`/vms/imports/${job.id}/resume`, {});
+			for (let at = job.bytes; at < file.size; at += chunk) {
+				if (paused.has(job.id)) break;
+				await api.put(
+					`/vms/imports/${job.id}/data?offset=${at}`,
+					file.slice(at, Math.min(file.size, at + chunk)),
+				);
+				await load();
+			}
+			if (!paused.has(job.id)) await api.post(`/vms/imports/${job.id}/finish`, {});
+		} catch (e) {
+			error =
+				errorText(e instanceof ApiError ? e.code : 'internal') +
+				(e instanceof ApiError ? ` · ${e.message}` : '');
+		} finally {
+			uploading = '';
+			verifyProgress = '';
+			await load();
+		}
+	}
+	async function create(e: SubmitEvent) {
+		e.preventDefault();
+		busy = true;
+		error = '';
+		try {
+			const req = {
+				volume,
+				name,
+				sha256,
+				compression,
+				...(source === 'url' ? { url } : { uploadName: picked?.name, uploadSize: picked?.size }),
+			};
+			const job = await api.post<MediaJob>('/vms/imports', req);
+			adding = false;
+			if (source === 'upload' && picked) void send(job, picked);
+			await load();
+		} catch (e) {
+			error =
+				errorText(e instanceof ApiError ? e.code : 'internal') +
+				(e instanceof ApiError ? ` · ${e.message}` : '');
+		} finally {
+			busy = false;
+		}
+	}
+	async function control(job: MediaJob, action: string) {
+		error = '';
+		if (action === 'pause' || action === 'cancel') paused.add(job.id);
+		try {
+			await api.post(`/vms/imports/${job.id}/${action}`, {});
+			confirm = null;
+			await load();
+		} catch (e) {
+			error =
+				errorText(e instanceof ApiError ? e.code : 'internal') +
+				(e instanceof ApiError ? ` · ${e.message}` : '');
+		}
+	}
+</script>
+
+<PageHead title={t('media.title')} parent={{ href: '/vms', label: t('nav.vms') }}
+	><p class="muted">{t('media.intro')}</p>
+	{#snippet actions()}<button class="btn btn-primary" disabled={!volumes.length} onclick={add}
+			><Icon name="plus" />{t('media.add')}</button
+		>{/snippet}</PageHead
+>
+{#if error}<div class="notice-error" role="alert">{error}</div>{/if}{#if verifyProgress}<p
+		role="status"
+	>
+		{verifyProgress}
+	</p>{/if}
+{#if loading}<p role="status">{t('common.loading')}</p>{:else if !jobs.length}<EmptyState
+		title={t('media.empty')}
+	/>{:else}{#each jobs as job (job.id)}<section class="tile job">
+			<div class="row">
+				<strong>{job.name}</strong><span class="chip"
+					>{t(phases[job.phase] ?? 'media.phase.review')}</span
+				>
+			</div>
+			<p class="muted">
+				{job.volume} · {formatBytes(job.bytes)}{job.total
+					? ` / ${formatBytes(job.total)}`
+					: ''}{job.written ? ` · ${t('media.unpacked')}: ${formatBytes(job.written)}` : ''}
+			</p>
+			{#if job.total > 0 && ['uploading', 'downloading', 'paused'].includes(job.phase)}<progress
+					value={job.bytes}
+					max={job.total}
+					aria-label={job.name}
+				></progress>{/if}{#if job.error}<p
+					class={job.phase === 'review' ? 'notice-warn' : 'notice-error'}
+					role="status"
+				>
+					{job.error}
+				</p>{/if}{#if job.output}<p class="mono path">{job.output}</p>
+				<details>
+					<summary>SHA-256</summary>
+					<p class="mono path">{job.sha256}</p>
+				</details>{/if}
+			<div class="actions">
+				{#if (mediaActive(job) && job.phase !== 'publishing' && job.phase !== 'pausing') || uploading === job.id}<button
+						class="btn"
+						onclick={() => control(job, 'pause')}><Icon name="pause" />{t('media.pause')}</button
+					>{/if}
+				{#if job.phase === 'review'}<button class="btn" onclick={() => control(job, 'review')}
+						>{t('media.review')}</button
+					>{/if}{#if job.url && job.phase === 'paused'}<button
+						class="btn btn-primary"
+						onclick={() => control(job, 'resume')}>{t('media.resume')}</button
+					>{/if}{#if job.url && job.phase === 'failed'}<button
+						class="btn"
+						onclick={() => control(job, 'retry')}>{t('common.retry')}</button
+					>{/if}
+				{#if !job.url && !job.sourceReady && ['uploading', 'paused', 'failed'].includes(job.phase) && uploading !== job.id}<label
+						class="resume"
+						><span>{t('media.reselect')}</span><input
+							class="field"
+							type="file"
+							onchange={(e) => {
+								const file = e.currentTarget.files?.[0];
+								if (file) void send(job, file);
+							}}
+						/></label
+					>{/if}
+				{#if !job.url && job.sourceReady && ['paused', 'failed'].includes(job.phase)}<button
+						class="btn"
+						onclick={() => control(job, 'resume')}>{t('media.resume')}</button
+					>{/if}
+				{#if !['done', 'cancelled', 'review', 'publishing', 'pausing'].includes(job.phase)}<button
+						class="btn"
+						onclick={() => (confirm = { job, action: 'cancel' })}>{t('common.cancel')}</button
+					>{/if}
+				{#if !mediaActive(job) && uploading !== job.id}<button
+						class="btn"
+						onclick={() => (confirm = { job, action: 'remove' })}>{t('media.remove')}</button
+					>{/if}
+			</div>
+		</section>{/each}{/if}
+<p class="muted">{t('media.background')}</p>
+{#if adding}<Dialog title={t('media.add')} wide locked={busy} onclose={() => (adding = false)}
+		><form onsubmit={create}>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="tabs" role="tablist" aria-label={t('media.source')}>
+				<button
+					type="button"
+					class="btn"
+					role="tab"
+					aria-selected={source === 'url'}
+					onclick={() => (source = 'url')}>{t('media.url')}</button
+				><button
+					type="button"
+					class="btn"
+					role="tab"
+					aria-selected={source === 'upload'}
+					onclick={() => (source = 'upload')}>{t('media.upload')}</button
+				>
+			</div>
+			{#if source === 'url'}<label
+					><span>{t('media.url')}</span><input
+						class="field"
+						type="url"
+						bind:value={url}
+						required
+						onblur={() => {
+							if (!name) {
+								try {
+									name = outputName(new URL(url).pathname);
+								} catch {}
+							}
+						}}
+					/></label
+				>{:else}<label
+					><span>{t('media.upload')}</span><input
+						class="field"
+						type="file"
+						required
+						accept=".iso,.qcow2,.raw,.img,.vmdk,.vhdx,.vdi,.gz,.xz,.zip"
+						onchange={(e) => {
+							picked = e.currentTarget.files?.[0] ?? null;
+							if (picked) name = outputName(picked.name);
+						}}
+					/></label
+				>{/if}<label
+				><span>{t('media.volume')}</span><select class="field" bind:value={volume}
+					>{#each volumes as v}<option value={v.name}
+							>{v.name} · {formatBytes(v.sizeBytes - v.usedBytes)}</option
+						>{/each}</select
+				></label
+			><label
+				><span>{t('media.filename')}</span><input
+					class="field mono"
+					bind:value={name}
+					required
+					maxlength="120"
+				/></label
+			>
+			<details>
+				<summary>{t('media.options')}</summary><label
+					><span>{t('media.sourceHash')}</span><input
+						class="field mono"
+						bind:value={sha256}
+						pattern="[a-fA-F0-9]{64}"
+					/></label
+				><label
+					><span>{t('media.compression')}</span><select class="field" bind:value={compression}
+						><option value="auto">{t('netx.automatic')}</option><option value="none"
+							>{t('media.none')}</option
+						><option value="gz">gzip</option><option value="xz">xz</option><option value="zip"
+							>ZIP</option
+						></select
+					></label
+				>
+			</details>
+			<p class="muted">{t('media.archiveHint')}</p>
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (adding = false)}
+					>{t('common.cancel')}</button
+				><button
+					class="btn btn-primary"
+					disabled={busy || !volume || (source === 'upload' && !picked)}>{t('media.start')}</button
+				>
+			</div>
+		</form></Dialog
+	>{/if}
+{#if confirm}<Dialog
+		title={confirm.action === 'remove' ? t('media.remove') : t('common.cancel')}
+		onclose={() => (confirm = null)}
+		><p>
+			{t(confirm.action === 'remove' ? 'media.removeHint' : 'media.cancelHint', {
+				name: confirm.job.name,
+			})}
+		</p>
+		<div class="dialog-actions">
+			<button class="btn" onclick={() => (confirm = null)}>{t('common.cancel')}</button><button
+				class="btn btn-danger"
+				onclick={() => {
+					if (confirm) void control(confirm.job, confirm.action);
+				}}>{t(confirm.action === 'remove' ? 'media.remove' : 'media.cancelImport')}</button
+			>
+		</div></Dialog
+	>{/if}
+
+<style>
+	.job {
+		padding: var(--tile-pad);
+		display: grid;
+		gap: var(--gap);
+	}
+	.row,
+	.actions,
+	.tabs,
+	.dialog-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.row {
+		justify-content: space-between;
+	}
+	.row strong,
+	.path {
+		overflow-wrap: anywhere;
+		min-width: 0;
+	}
+	.path {
+		font-size: 0.8125rem;
+	}
+	form,
+	label {
+		display: grid;
+		gap: var(--gap);
+	}
+	progress {
+		width: 100%;
+		accent-color: var(--accent);
+	}
+	.tabs [aria-selected='true'] {
+		color: var(--accent);
+		border-bottom: 2px solid var(--accent);
+	}
+	.dialog-actions {
+		justify-content: flex-end;
+		margin-top: var(--gap);
+	}
+	.resume {
+		max-width: 100%;
+		font-size: 0.8125rem;
+	}
+	details summary {
+		cursor: pointer;
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+	}
+	details label {
+		margin: var(--gap) 0;
+	}
+</style>

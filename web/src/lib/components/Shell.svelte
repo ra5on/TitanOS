@@ -117,7 +117,7 @@
 	<Header />
 	<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 		{#if !dockerPage}<ConnectionBanner
-			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel />{/if}{/if}
+			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel hideEmptyMobile={page.url.pathname === '/files'} />{/if}{/if}
 		{@render children()}
 	</main>
 	<StatusBar note={shell.statusNote} />
