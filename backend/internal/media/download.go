@@ -128,8 +128,16 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 	if j.URL == VirtIOURL {
 		original := client.CheckRedirect
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			if req.URL.Scheme != "https" || req.URL.Hostname() != "fedorapeople.org" {
+			if req.URL.User != nil || req.URL.Host != "fedorapeople.org" || !strings.HasPrefix(req.URL.Path, "/groups/virt/virtio-win/direct-downloads/") || (req.URL.Scheme != "https" && req.URL.Scheme != "http") {
 				return ErrInvalid
+			}
+			// Fedora's official alias currently emits http Location headers even
+			// on HTTPS. Upgrade that same-origin path before any request leaves
+			// the client; never send the ISO download over plaintext HTTP.
+			if req.URL.Scheme == "http" {
+				u := *req.URL
+				u.Scheme = "https"
+				req.URL = &u
 			}
 			if original != nil {
 				return original(req, via)

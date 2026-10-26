@@ -66,7 +66,7 @@ keine geänderten Controller. Manuelle Treiberpfade bleiben möglich.
 Quelle ist die offizielle stabile ISO des
 [VirtIO-Windows-Projekts](https://github.com/virtio-win/virtio-win-pkg-scripts):
 `https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso`.
-Weiterleitungen bleiben auf HTTPS bei fedorapeople.org. Eine bereits importierte
+Weiterleitungen bleiben auf HTTPS bei fedorapeople.org im offiziellen Downloadpfad. Fedora liefert bei diesem Alias teilweise HTTP-Location-Kopfzeilen; TitanOS ersetzt dort das Schema vor dem nächsten Request durch HTTPS. Es wird dabei keine HTTP-Verbindung aufgebaut. Eine bereits importierte
 ISO dieser Quelle wird erst nach erneutem Hashabgleich wiederverwendet. Der
 Download liegt auf dem gewählten Daten-Volume und erscheint in den Aufträgen.
 VM-Anlage wartet auf das fertige Medium; das spätere Starten bleibt eine

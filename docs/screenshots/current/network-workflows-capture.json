@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-26",
+  "sourceCommit": "99cfd0947819a22145ab3303a6e7b98b979aa83b",
+  "fixtureData": true,
+  "productUI": true,
+  "captureScript": "scripts/test-ui-023.mjs",
+  "sourceHashes": {
+    "web/src/routes/files/+page.svelte": "6515faf42b4f91442d11b640e96b3b5b150094be09b46980fec415d8bf45904b",
+    "web/src/routes/settings/network/+page.svelte": "0c50efa6150eadc385f2d477655983dde452aa917edc7c852a8fa90e2e989d6c",
+    "web/src/routes/docker/networks/+page.svelte": "9ca4baaa40fe9ef460038bc62ac33cb061704c350e8a0b1375f2a5eb08e8b588",
+    "web/src/routes/settings/api/+page.svelte": "4eacb188b4fd522281f0078596f25ac954db6af23877819fd3d7323e2431d74d",
+    "web/src/routes/vms/media/+page.svelte": "ab0061f81b71cac89e59b973e3f54cca53dabd5d97e567efd01809bd83d4cae6",
+    "web/src/routes/plugins/cleanup/+page.svelte": "13586ba175bf563519f345c50a9a84b6a937e580f30d43babd962b27a889c966",
+    "web/src/lib/components/TasksPanel.svelte": "31c096e36fcfd7d022ba1f315df15eab04c475332afe3ab5391a8c544720fff9"
+  },
+  "images": [
+    {
+      "file": "dateien-mobil.png",
+      "source": "files-390-graphit-100.png",
+      "sha256": "43ce5718eaf1cd25f1f00b9c278bdad7d9c24cb4a50c6edaeb2f1343da2ba576"
+    },
+    {
+      "file": "netzwerk.png",
+      "source": "settings-network-1440-graphit.png",
+      "sha256": "1bfa445cff0aaa146e2c1506223c30c04907ac7452733413f29070a4dd7a3509"
+    },
+    {
+      "file": "netzwerk-mobil.png",
+      "source": "settings-network-390-graphit.png",
+      "sha256": "22b897ba70d0fac08cebdb8be21916eedf7b6bce9ff58fbb5a9456f27cc38fd8"
+    },
+    {
+      "file": "netzwerk-mobil-hell.png",
+      "source": "settings-network-390-hell.png",
+      "sha256": "6b0b0285f75664f458461c2d20ca0cf9f343b66e72b1f1136693d2b7f03e55b1"
+    },
+    {
+      "file": "docker-lan.png",
+      "source": "docker-networks-1440-graphit.png",
+      "sha256": "4a7dad98fe930346e539b49e94899c6c20901d5d8355a462b4cc955acc6efee8"
+    },
+    {
+      "file": "api-zugaenge.png",
+      "source": "settings-api-1440-graphit.png",
+      "sha256": "e3fce205ab48130f79aa54b55daba83e92499f24080487020de9d5bf67fd7e06"
+    },
+    {
+      "file": "vm-medien-mobil.png",
+      "source": "vms-media-390-graphit.png",
+      "sha256": "6b9d63be6d92a08af962d4acc5a5149f16f56af514c35d66cd8c811d1bc2847e"
+    },
+    {
+      "file": "plugin-aufraeumen.png",
+      "source": "plugins-cleanup-1440-graphit.png",
+      "sha256": "8ce6941d45c137b3f7e069fe40dd45ffe7bd5e16de8b76383e07480e6f3461f0"
+    }
+  ],
+  "browserResults": {
+    "fixtureData": true,
+    "evidence": [
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 390,
+        "locale": "de",
+        "appearance": {},
+        "firstEntryY": 217.5,
+        "screenshot": "files-390-graphit-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "hell",
+        "width": 390,
+        "locale": "en",
+        "appearance": {},
+        "firstEntryY": 217.5,
+        "screenshot": "files-390-hell-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 390,
+        "locale": "de",
+        "appearance": {
+          "style": "flat",
+          "font": 120,
+          "rTile": 0,
+          "rCtl": 0
+        },
+        "firstEntryY": 221.390625,
+        "screenshot": "files-390-graphit-120.png"
+      },
+      {
+        "page": "files",
+        "theme": "hell",
+        "width": 1440,
+        "locale": "en",
+        "appearance": {
+          "style": "outline",
+          "rTile": 24,
+          "rCtl": 14
+        },
+        "firstEntryY": 328.5,
+        "screenshot": "files-1440-hell-100.png"
+      },
+      {
+        "page": "files",
+        "theme": "graphit",
+        "width": 1440,
+        "locale": "de",
+        "appearance": {},
+        "firstEntryY": 328.5,
+        "screenshot": "files-1440-graphit-100.png"
+      }
+    ],
+    "errors": []
+  }
+}
