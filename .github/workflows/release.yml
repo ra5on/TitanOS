@@ -175,7 +175,7 @@ jobs:
       - name: App update, its failure and the way back in UEFI QEMU
         if: github.event_name != 'push'
         run: |
-          python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420 --workflows023
+          python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
           rm "$RUNNER_TEMP/rehearsal.key"
 
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
