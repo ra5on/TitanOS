@@ -170,7 +170,7 @@ jobs:
           python3 scripts/verify-release.py ${{ github.event_name == 'pull_request' && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
 
       - name: Boot the actual installation ZIP in UEFI QEMU
-        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420 --workflows023
+        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
 
       - name: App update, its failure and the way back in UEFI QEMU
         if: github.event_name != 'push'
