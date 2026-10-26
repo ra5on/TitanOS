@@ -134,6 +134,7 @@ func (u *Users) EnableTwoFactor(name, code string) ([]string, error) {
 			return ErrTwoFactorEnabled
 		}
 		user.TOTPSecret, user.RecoveryCodes = secret, hashes
+		user.UsedTOTPStep = step
 		return nil
 	})
 	if err != nil {
@@ -141,7 +142,6 @@ func (u *Users) EnableTwoFactor(name, code string) ([]string, error) {
 	}
 	u.mu.Lock()
 	delete(u.pendingTOTP, name)
-	u.usedStep[name] = step
 	u.mu.Unlock()
 	return codes, nil
 }
@@ -150,6 +150,7 @@ func (u *Users) EnableTwoFactor(name, code string) ([]string, error) {
 func (u *Users) DisableTwoFactor(name string) error {
 	_, err := u.update(name, func(user *User) error {
 		user.TOTPSecret, user.RecoveryCodes = "", nil
+		user.UsedTOTPStep = 0
 		return nil
 	})
 	return err
@@ -166,19 +167,20 @@ func (u *Users) CheckSecondFactor(name, code string) bool {
 	if user.TOTPSecret == "" {
 		return true
 	}
-	if step := checkTOTP(user.TOTPSecret, code, time.Now()); step != 0 {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		// A code counts once: whoever read it over a shoulder cannot use it again.
-		if step <= u.usedStep[name] {
-			return false
-		}
-		u.usedStep[name] = step
-		return true
-	}
 	hash := hashRecoveryCode(code)
 	used := false
-	u.update(name, func(user *User) error {
+	_, err := u.update(name, func(user *User) error {
+		if user.TOTPSecret == "" {
+			return ErrNoTwoFactor
+		}
+		if step := checkTOTP(user.TOTPSecret, code, time.Now()); step != 0 {
+			if step <= user.UsedTOTPStep {
+				return ErrWrongCode
+			}
+			user.UsedTOTPStep = step
+			used = true
+			return nil
+		}
 		for i, known := range user.RecoveryCodes {
 			if subtle.ConstantTimeCompare([]byte(known), []byte(hash)) == 1 {
 				user.RecoveryCodes = append(user.RecoveryCodes[:i:i], user.RecoveryCodes[i+1:]...)
@@ -188,7 +190,7 @@ func (u *Users) CheckSecondFactor(name, code string) bool {
 		}
 		return ErrWrongCode
 	})
-	return used
+	return (err == nil && used) || errors.Is(err, ErrNoTwoFactor)
 }
 
 // CodeForTest returns the code of a secret, offset time steps from now.
