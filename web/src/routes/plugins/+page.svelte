@@ -28,6 +28,7 @@
 		download: boolean;
 		licenseUrl?: string;
 		problem: string;
+		update?: { path: string; version: string; official: boolean } | null;
 	};
 	type Status = { driverUpdate: DriverStatus; volume: string; kernel: string; plugins: Plugin[]; catalog: { release: string; state: string; error?: string } };
 
@@ -42,6 +43,8 @@
 	// The plugin the remove dialog is about, fixed when it opens; the polled
 	// list may change meanwhile.
 	let removing = $state<{ name: string; title: string } | null>(null);
+	// Likewise the update dialog: plugin and the version it was opened for.
+	let updating = $state<{ name: string; title: string; path: string; version: string; official: boolean } | null>(null);
 	let tailnetPending = $state(false);
 
 	const locked = $derived(busy || tailnetPending || !!status?.driverUpdate?.pending);
@@ -99,6 +102,7 @@
 			status = await action();
 			asking = false;
 			removing = null;
+			updating = null;
 		} catch (err) {
 			problem(err);
 		}
@@ -116,6 +120,12 @@
 	function openRemove(plugin: Plugin) {
 		error = null;
 		removing = { name: plugin.name, title: plugin.title };
+	}
+
+	function openUpdate(plugin: Plugin) {
+		if (!plugin.update) return;
+		error = null;
+		updating = { name: plugin.name, title: plugin.title, ...plugin.update };
 	}
 
 	function ask() {
@@ -153,7 +163,7 @@
 	</div>
 {/if}
 
-{#if error && !asking && !removing}
+{#if error && !asking && !removing && !updating}
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 {/if}
 
@@ -173,6 +183,7 @@
 						<span class="name-row"><span class="name">{plugin.title}</span><span class="muted source">{t(plugin.local ? 'plugins.driverLocal' : plugin.official ? 'plugins.official' : 'plugins.community')}</span></span>
 						<span class="description">{text(plugin.description)}</span>
 					</span>
+					{#if plugin.update}<span class="chip">{t('plugins.updateChip')}</span>{/if}
 					<span class="chip {state.kind}">{state.text}</span>
 				</button>
 			{/each}
@@ -247,6 +258,12 @@
 						<button type="button" class="btn" onclick={() => openRemove(current)} disabled={locked}>{t('plugins.remove')}</button>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
+					{#if current.update}
+						<div class="row update">
+							<span>{t('plugins.updateAvailable', { version: current.update.version })} <span class="muted path">{current.update.path}</span></span>
+							<button type="button" class="btn btn-primary" disabled={locked} onclick={() => openUpdate(current)}>{t('plugins.update')}</button>
+						</div>
+					{/if}
 					{#if current.name === 'tailscale'}<TailscaleSettings onpending={(value) => tailnetPending = value} />{/if}
 					{#if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate}<DriverUpdates status={status.driverUpdate} {busy} action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))} />{/if}
 					{#if current.enabled && current.problem === 'activation'}<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}>{t('plugins.retry')}</button>{/if}
@@ -266,6 +283,23 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (removing = null)} disabled={busy}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-warn" onclick={() => run(() => api.delete<Status>(`/plugins/${target.name}`))} disabled={busy}>{t('plugins.removeSubmit')}</button>
+		</div>
+	</Dialog>
+{/if}
+
+{#if updating}
+	{@const target = updating}
+	<Dialog title={t('plugins.updateTitle', { name: target.title, version: target.version })} locked={busy} onclose={() => (updating = null)}>
+		<p class="text">{t('plugins.updateText')}</p>
+		{#if !target.official}<p class="notice-warn">{t('plugins.trustCommunity')}</p>{/if}
+		<p class="muted mono path">{target.path}</p>
+		{#if error}
+			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+		{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (updating = null)} disabled={busy}>{t('common.cancel')}</button>
+			<!-- The API wants the plugin name as confirmation for an unsigned version; the click is that confirmation. -->
+			<button type="button" class="btn btn-primary" onclick={() => run(() => api.post<Status>(`/plugins/${target.name}/update`, { path: target.path, confirm: target.name }))} disabled={busy}>{t(busy ? 'plugins.updating' : 'plugins.update')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -417,6 +451,11 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
+	}
+	.update {
+		padding: 10px 12px;
+		border: 1px solid var(--panel-border);
+		border-radius: var(--radius-ctl);
 	}
 	.confirm {
 		display: flex;

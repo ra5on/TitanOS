@@ -464,6 +464,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireHeavyAdmin(s.handlePluginInstall))
+	mux.HandleFunc("POST /api/v1/plugins/{name}/update", s.requireHeavyAdmin(s.handlePluginUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))
 	mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.requireAdmin(s.handlePluginRemove))
 

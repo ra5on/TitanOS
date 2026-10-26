@@ -446,3 +446,157 @@ func TestSignature(t *testing.T) {
 		t.Errorf("a plugin with a broken signature installs without confirmation: %v", err)
 	}
 }
+
+// The status poll reuses the last search of the shares instead of reading the
+// volumes every few seconds; the page asks for a new one, and other mounted
+// volumes start one by themselves.
+func TestStatusReusesShareSearch(t *testing.T) {
+	m, _ := newTestManager(t)
+	share := filepath.Join(m.mountRoot, "data", "media")
+	plugin(t, share, "eins", nil)
+	if got := m.Status([]string{"data"}).Plugins; len(got) != 1 || got[0].Name != "eins" {
+		t.Fatalf("first status: %+v", got)
+	}
+	plugin(t, share, "zwei", nil)
+	if got := m.Status([]string{"data"}).Plugins; len(got) != 1 {
+		t.Fatalf("polling searched the share again: %+v", got)
+	}
+	m.ScanShares([]string{"data"})
+	if got := m.Status([]string{"data"}).Plugins; len(got) != 2 {
+		t.Fatalf("an explicit search missed the new plugin: %+v", got)
+	}
+	os.MkdirAll(filepath.Join(m.mountRoot, "usb", "drivers"), 0o755)
+	plugin(t, filepath.Join(m.mountRoot, "usb", "drivers"), "drei", nil)
+	if got := m.Status([]string{"usb", "data"}).Plugins; len(got) != 3 {
+		t.Fatalf("a newly mounted volume was not searched: %+v", got)
+	}
+}
+
+// secondVersion puts version 2.0 of name, with another image, into dir.
+func secondVersion(t *testing.T, dir, name string, change func(*Manifest)) string {
+	t.Helper()
+	image := []byte("squashfs of " + name + " 2.0")
+	sum := sha256.Sum256(image)
+	path := plugin(t, dir, name, func(p *Manifest) {
+		p.Version, p.SHA256, p.Size = "2.0", hex.EncodeToString(sum[:]), int64(len(image))
+		p.Services = []string{name + ".service"}
+		if change != nil {
+			change(p)
+		}
+	})
+	if err := os.WriteFile(filepath.Join(dir, name+".raw"), image, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestUpdateFromShareReplacesRunningPlugin(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx, mounted := context.Background(), []string{"data"}
+	share := filepath.Join(m.mountRoot, "data", "media")
+	first := plugin(t, share, "werkzeug", func(p *Manifest) { p.Services = []string{"werkzeug.service"} })
+	if err := m.Install(ctx, first, "data", "werkzeug", mounted); err != nil {
+		t.Fatal(err)
+	}
+	next := filepath.Join(m.mountRoot, "data", "neu")
+	os.MkdirAll(next, 0o755)
+	path := secondVersion(t, next, "werkzeug", nil)
+	m.ScanShares(mounted)
+	got := m.Status(mounted).Plugins
+	if len(got) != 1 || got[0].Update == nil || got[0].Update.Path != path || got[0].Update.Version != "2.0" || got[0].Update.Official {
+		t.Fatalf("offered update: %+v", got)
+	}
+
+	if err := m.Update(ctx, "werkzeug", path, "", mounted); !errors.Is(err, ErrNotConfirmed) {
+		t.Fatalf("unsigned update without confirmation: %v", err)
+	}
+	if err := m.Update(ctx, "werkzeug", first, "werkzeug", mounted); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("update to the installed version: %v", err)
+	}
+	if err := m.Update(ctx, "werkzeug", filepath.Join(m.baseDir("data"), "werkzeug"+manifestSuffix), "werkzeug", mounted); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("update from the plugin folder itself: %v", err)
+	}
+	runner.commands = nil
+	if err := m.Update(ctx, "werkzeug", path, "werkzeug", mounted); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"systemctl stop werkzeug.service", "systemd-sysext refresh", "ldconfig -X", "systemctl daemon-reload", "systemctl start werkzeug.service"}
+	if !slices.Equal(runner.commands, want) {
+		t.Errorf("commands = %v", runner.commands)
+	}
+	got = m.Status(mounted).Plugins
+	if len(got) != 1 || got[0].Version != "2.0" || !got[0].Active || got[0].Update != nil {
+		t.Fatalf("after the update: %+v", got)
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(m.dir("data"), ".*"))
+	if len(leftovers) != 0 {
+		t.Fatalf("update left %v behind", leftovers)
+	}
+}
+
+func TestUpdateThatFailsToStartBringsPreviousBack(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx, mounted := context.Background(), []string{"data"}
+	share := filepath.Join(m.mountRoot, "data", "media")
+	first := plugin(t, share, "werkzeug", func(p *Manifest) { p.Services = []string{"werkzeug.service"} })
+	if err := m.Install(ctx, first, "data", "werkzeug", mounted); err != nil {
+		t.Fatal(err)
+	}
+	next := filepath.Join(m.mountRoot, "data", "neu")
+	os.MkdirAll(next, 0o755)
+	path := secondVersion(t, next, "werkzeug", func(p *Manifest) { p.Services = []string{"werkzeug-neu.service"} })
+	runner.fail = "start werkzeug-neu.service"
+	if err := m.Update(ctx, "werkzeug", path, "werkzeug", mounted); err == nil {
+		t.Fatal("a version that does not start was accepted")
+	}
+	got := m.Status(mounted).Plugins
+	if len(got) == 0 || got[0].Version != "1.0" || !got[0].Active || got[0].Problem != "" {
+		t.Fatalf("previous version not back: %+v", got)
+	}
+	if !m.Healthy() {
+		t.Fatal("not healthy after the way back")
+	}
+
+	// A plugin still in use is not touched at all.
+	runner.fail = "stop werkzeug.service"
+	if err := m.Update(ctx, "werkzeug", path, "werkzeug", mounted); !errors.Is(err, ErrBusy) {
+		t.Fatalf("busy plugin: %v", err)
+	}
+	if v := m.installed("data")["werkzeug"].Version; v != "1.0" {
+		t.Fatalf("busy plugin was replaced by %s", v)
+	}
+}
+
+func TestNvidiaIsNotUpdatedFromShares(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx, mounted := context.Background(), []string{"data"}
+	share := filepath.Join(m.mountRoot, "data", "media")
+	first := plugin(t, share, "nvidia", nil)
+	if err := m.Install(ctx, first, "data", "nvidia", mounted); err != nil {
+		t.Fatal(err)
+	}
+	next := filepath.Join(m.mountRoot, "data", "neu")
+	os.MkdirAll(next, 0o755)
+	path := secondVersion(t, next, "nvidia", nil)
+	m.ScanShares(mounted)
+	if got := m.Status(mounted).Plugins; len(got) != 1 || got[0].Update != nil {
+		t.Fatalf("NVIDIA offered as share update: %+v", got)
+	}
+	if err := m.Update(ctx, "nvidia", path, "nvidia", mounted); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("NVIDIA update from a share: %v", err)
+	}
+}
+
+func TestNewerVersion(t *testing.T) {
+	for _, c := range []struct {
+		found, installed string
+		newer            bool
+	}{
+		{"2.0", "1.0", true}, {"1.10.2", "1.9", true}, {"1.9", "1.10.2", false}, {"1.0", "1.0", false},
+		{"1.0.1", "1.0", true}, {"1.0", "1.0.0", false}, {"v1.2", "1.1-beta", true}, {"neu", "alt", true},
+	} {
+		if got := newerVersion(c.found, c.installed); got != c.newer {
+			t.Errorf("%s newer than %s: %v", c.found, c.installed, got)
+		}
+	}
+}

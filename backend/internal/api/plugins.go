@@ -23,6 +23,7 @@ var pluginErrors = []struct {
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{plugins.ErrDriverPending, http.StatusConflict, "plugin_driver_pending"},
 	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
+	{plugins.ErrDownloading, http.StatusConflict, "plugin_downloading"},
 	{plugins.ErrUpdatePending, http.StatusConflict, "plugin_update_pending"},
 	{plugins.ErrDownload, http.StatusBadGateway, "plugin_download_failed"},
 	{plugins.ErrRelease, http.StatusNotFound, "plugin_release_unavailable"},
@@ -81,6 +82,9 @@ func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Plugins.RefreshCatalog(r.Context(), req.Force); err != nil {
 		slog.Warn("plugin catalog unavailable", "err", err)
 	}
+	// Opening or refreshing the page also looks for new files in shares;
+	// the status poll in between does not read the volumes.
+	s.opts.Plugins.ScanShares(s.opts.Storage.Mounted())
 	// An unavailable catalog must not hide installed or locally uploaded plugins.
 	s.handlePlugins(w, r)
 }
@@ -129,6 +133,24 @@ func (s *Server) handlePluginAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("plugin "+action+"d", "plugin", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handlePlugins(w, r)
+}
+
+func (s *Server) handlePluginUpdate(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
+	var req struct{ Path, Confirm string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.opts.Plugins.Update(r.Context(), name, req.Path, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	slog.Info("plugin updated", "plugin", name, "from", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.opts.Plugins.ScanShares(s.opts.Storage.Mounted())
 	s.handlePlugins(w, r)
 }
 

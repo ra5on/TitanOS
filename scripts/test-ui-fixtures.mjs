@@ -506,6 +506,19 @@ export function fixtureFactory(browser, errors) {
           updatesChecked: time,
         });
       }
+      // Shaped like GET /plugins; tests set data.plugins.
+      if ((path === "/plugins" || path === "/plugins/catalog") && data.plugins)
+        return json(data.plugins);
+      if (path.endsWith("/update") && path.startsWith("/plugins/") && method === "POST") {
+        (data.pluginUpdates ??= []).push([path, route.request().postDataJSON()]);
+        if (data.failPluginUpdate)
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: "plugin_busy", message: "fixture busy" } },
+          });
+        data.plugins = data.pluginsAfterUpdate ?? data.plugins;
+        return json(data.plugins);
+      }
       if (path === "/plugins/tailscale/devices")
         return json(
           data.tailnet ?? {

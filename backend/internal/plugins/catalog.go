@@ -209,31 +209,33 @@ func (m *Manager) InstallOfficial(ctx context.Context, name, volume string, moun
 
 // InstallOfficialWithActivation verifies the same signed release in either
 // mode; deferred activation changes only the live system integration.
+//
+// The actions lock is held only for the checks before and the installation
+// after the download: status, Tailscale and VM starts stay responsive while a
+// large image arrives on a slow line.
 func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volume string, mounted []string, activate bool) error {
 	m.actions.Lock()
-	defer m.actions.Unlock()
-	if m.current().PendingDriver != nil {
-		return ErrDriverPending
+	volume, err := m.officialInstallAllowed(name, volume, mounted)
+	m.actions.Unlock()
+	if err != nil {
+		return err
 	}
-	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
-		return ErrUpdatePending
+	// One download per plugin; a second click must not fetch it twice.
+	m.mu.Lock()
+	if m.downloading[name] {
+		m.mu.Unlock()
+		return ErrDownloading
 	}
-	if m.Disabled {
-		return ErrDisabled
+	if m.downloading == nil {
+		m.downloading = map[string]bool{}
 	}
-	if !nameRE.MatchString(name) {
-		return ErrNotFound
-	}
-	settings := m.current()
-	if settings.Volume != "" {
-		volume = settings.Volume
-	}
-	if !slices.Contains(mounted, volume) || volume == "" {
-		return ErrUnknownVolume
-	}
-	if _, exists := m.installed(volume)[name]; exists {
-		return ErrExists
-	}
+	m.downloading[name] = true
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.downloading, name)
+		m.mu.Unlock()
+	}()
 	// Revalidate the signed release and plugin at install time, not just when
 	// the page was opened. Untrusted metadata never reaches the volume.
 	entries, err := m.fetchCatalog(ctx)
@@ -273,7 +275,43 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 	if err := m.downloadImage(ctx, base+name+".raw", filepath.Join(stage, name+".raw"), selected.plugin.Manifest); err != nil {
 		return err
 	}
+	// Whatever changed during the download (an update began, a driver was
+	// prepared, the plugin volume was chosen) is checked again under the lock.
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if again, err := m.officialInstallAllowed(name, volume, mounted); err != nil {
+		return err
+	} else if again != volume {
+		return ErrUnknownVolume
+	}
 	return m.install(ctx, path, volume, "", mounted, activate)
+}
+
+// officialInstallAllowed returns the volume an official plugin goes to.
+// Caller holds actions.
+func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) (string, error) {
+	if m.current().PendingDriver != nil {
+		return "", ErrDriverPending
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return "", ErrUpdatePending
+	}
+	if m.Disabled {
+		return "", ErrDisabled
+	}
+	if !nameRE.MatchString(name) {
+		return "", ErrNotFound
+	}
+	if settings := m.current(); settings.Volume != "" {
+		volume = settings.Volume
+	}
+	if !slices.Contains(mounted, volume) || volume == "" {
+		return "", ErrUnknownVolume
+	}
+	if _, exists := m.installed(volume)[name]; exists {
+		return "", ErrExists
+	}
+	return volume, nil
 }
 
 // downloadStall bounds a transfer that stops delivering bytes. There is no
