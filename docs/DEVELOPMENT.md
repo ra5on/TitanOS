@@ -245,12 +245,12 @@ die festen Toolchains und dokumentierten Schritte machen den Ablauf wiederholbar
 garantieren aber keinen bytegleichen zukünftigen Build. Für einen historischen
 Vergleich die oben genannten Git-Stände separat auschecken.
 
-## Netzwerk- und Workflow-Prüfung ab 0.23.0
+## Netzwerk- und Workflow-Prüfung ab 0.23.1
 
 ```sh
 scripts/fedora-dev.sh make test test-release
-make zip VERSION=0.23.0
-scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.0.zip \
+make zip VERSION=0.23.1
+scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.1.zip \
   --workflows023 --online-virtio --log out/validation/workflows023-serial.log
 ```
 
@@ -281,3 +281,35 @@ Ergebnisse/Bilder liegen unter `out/validation/ui-023/`. Der Release-Bericht
 nennt den konkreten Quellstand, erfolgreiche Messungen und offene Hardware-/
 Gast-/Cloud-Prüfungen. Ein grüner Test ist kein Nachweis aller Netzadapter,
 Switches, LACP-Konfigurationen, Windows-Versionen oder echter Tailnets.
+
+
+## Öffentliches Systemupdate und Rückwechsel
+
+Nach Veröffentlichung eines vollständigen Stable-Releases prüft dieser Test
+Signatur und Boot eines alten öffentlichen ZIPs, den echten GitHub-Updateweg,
+den bestätigten neuen Slot und den Rückwechsel. Besitzerkonto und HTTPS-Zertifikat
+müssen über drei Starts erhalten bleiben. Alle Medien werden neu erzeugt; es
+wird kein existierendes NAS angesprochen. Das Ziel muss beim Test noch das
+aktuelle öffentliche Stable-Systemrelease sein.
+
+```sh
+gh release download v0.22.0 --dir out/public-v0.22.0 \
+  --pattern 'titanos-0.22.0.zip*' --skip-existing
+scripts/fedora-dev.sh python3 backend/tests/public_update_qemu.py \
+  out/public-v0.22.0/titanos-0.22.0.zip \
+  --from-version 0.22.0 --to-version 0.23.1 \
+  --log out/validation/public-update-0231-serial.log \
+  --result out/validation/public-update-0231.json
+```
+
+Ohne KVM kann `--tcg` verwendet werden. Die Signatur muss zu den bereits
+vertrauenswürdigen öffentlichen Projektschlüsseln passen; ein Spiegel oder
+alternativer Update-Endpunkt wird nicht gesetzt. App-Updates ohne Systemwechsel
+werden weiterhin mit `scripts/smoke-app-update.py` gesondert geprüft.
+
+Der gezielte 2FA-Nachweis aus 0.23.1 steht in
+[der Validierungsdatei](validation/v0.23.1-authorization.json): zwei tatsächlich
+getrennte Prozesse, paralleler Faktorverbrauch, alte Kontocaches, Neustart und
+fehlgeschlagene Speicherung. Die Schreibfehlerfälle zusätzlich als normaler
+Benutzer mit `cd backend && go test -race ./internal/auth -count=1` ausführen;
+als Namespace-root werden diese reinen Dateirechtefälle ausdrücklich übersprungen.

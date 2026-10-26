@@ -146,15 +146,58 @@
     "out/implementation-ui-workflows.log": "43e3fc5522d20920a11702b215687df2834fa6d6fd819688eb882d1fc61b502f",
     "out/implementation-ui-completion.log": "9b2c5da38482e36804877cd8567c6926a34a5e4ac817554e9dc83ea4e8b8f7be",
     "out/implementation-ui-vm.log": "47238a166dee2ac78ab1056e047cb288d800c1d32dfb1cc2fa383ffec981da2e",
-    "out/implementation-apps-test.log": "ec8f1855cbb71796a89c791930f740bfb84de4bc41b058049b066a0874392a54"
+    "out/implementation-apps-test.log": "ec8f1855cbb71796a89c791930f740bfb84de4bc41b058049b066a0874392a54",
+    "out/implementation-tty2.log": "47d43fef6c0e6215ebdb5fb567567428a32db3b35780bb61f093bc6e6678dd7d",
+    "out/validation/recovery023/serial.log": "2a01c6c1fc84a4960d58ca24264d479bc918e4b140d443683fe85cb977e19045"
   },
   "limits": [
     "No physical NIC, switch/LACP, GPU, UPS or real tailnet/Cloudflare policy validation",
     "No Windows installation or Secure Boot compatibility certification; real live Linux VM RAM/disk/UEFI/TPM restore tested",
-    "TTY2 service enabled; interactive local-console authentication and recovery were not exercised",
+    "Interactive TTY2 password/2FA and selected-NIC DHCP recovery passed; the other recovery-menu path and additional console/input variants remain untested",
     "Browser fixtures demonstrate UI behavior and layout; they are separate from real guest functionality",
     "Earlier 4 GiB workflow fixture hit Btrfs ENOSPC while setting a block group read-only for degraded replacement after large media import; 8 GiB test passed. No automatic balancing or data deletion added."
   ],
   "pullRequest": "https://github.com/ra5on/TitanOS/pull/117",
-  "releaseWorkflow": "https://github.com/ra5on/TitanOS/actions/workflows/release.yml"
+  "releaseWorkflow": "https://github.com/ra5on/TitanOS/actions/workflows/release.yml",
+  "consoleRecovery": {
+    "completed": "2026-10-26T12:09:37Z",
+    "result": "passed",
+    "image": "out/titanos-0.23.0.zip",
+    "imageSHA256": "528cece6301571a02c7904b1092d4c5ae3f5a547a25604f3fd794b63c9e32820",
+    "console": "actual guest TTY2; QMP keyboard and VGA screendump with OCR",
+    "authentication": "owner password plus one-time 2FA recovery code",
+    "checks": [
+      "wrong password denied on actual TTY2",
+      "second factor required and invalid factor denied",
+      "bad management address made HTTPS unreachable before console recovery",
+      "authenticated DHCP recovery restarted titand and restored HTTPS on the selected NIC"
+    ],
+    "reproduction": [
+      "Boot the local 0.23.0 ZIP with fresh disposable UEFI/USB media; create an owner account and enable 2FA.",
+      "Switch to the actual guest TTY2 using Ctrl+Alt+F2. A wrong password must return to the administrator prompt without offering recovery.",
+      "A correct password must request the second factor; an invalid factor must return to the login prompt. systemd clears the terminal on command exit.",
+      "Authenticate with the owner password and a single-use recovery code. Select DHCP on one port and choose the connected emulated NIC.",
+      "Before confirming locally, use the authenticated API to trial a management address outside the QEMU user network; verify HTTPS is unreachable.",
+      "Confirm YES on TTY2 before the two-minute automatic trial rollback. HTTPS health must return, titand must be running, pending must be empty and the selected NIC must use legacy DHCP configuration."
+    ],
+    "limits": [
+      "No real console, keyboard, NIC, switch or production data was used.",
+      "The other recovery-menu path and additional console/input variants were not exercised in this interactive test."
+    ]
+  },
+  "githubRehearsals": {
+    "headRevision": "223b3ad920d71668afc84bb87e6a3e0023b88f34",
+    "build": {
+      "result": "passed",
+      "url": "https://github.com/ra5on/TitanOS/actions/runs/40316368378"
+    },
+    "releaseImage": {
+      "result": "passed",
+      "url": "https://github.com/ra5on/TitanOS/actions/runs/40316368595"
+    },
+    "plugins": {
+      "result": "passed",
+      "url": "https://github.com/ra5on/TitanOS/actions/runs/40316368557"
+    }
+  }
 }
