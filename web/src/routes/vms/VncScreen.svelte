@@ -4,11 +4,10 @@
 	import { untrack } from 'svelte';
 	import RFB from '@novnc/novnc';
 	import { api } from '#lib/api.ts';
-	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 
 	export type ScaleMode = 'scale' | 'remote' | 'full';
-	export type ConnectionPhase = 'connecting' | 'connected' | 'lost' | 'declined' | 'disabled';
+	export type ConnectionPhase = 'connecting' | 'connected' | 'lost' | 'disabled';
 
 	// resizable: the guest can take a resolution from the browser. That needs
 	// the virtio graphics of the Linux template; the plain VGA of Windows and
@@ -22,9 +21,6 @@
 	let { vm, mode, resizable, onstatus = () => {} }: Props = $props();
 
 	let target = $state<HTMLElement>();
-	// The screen is a VM console: titand asks for the password again first,
-	// as for the serial console, unless that is switched off in the settings.
-	let asking = $state<{ resolve: (confirmed: boolean) => void } | null>(null);
 
 	let rfb: RFB | undefined;
 	const effective = $derived<ScaleMode>(mode === 'remote' && !resizable ? 'scale' : mode);
@@ -42,18 +38,14 @@
 		let retry: ReturnType<typeof setTimeout> | undefined;
 		let closed = false;
 
-		/** Whether titand will open the screen now; asks for the password if needed. */
-		const allowed = async (): Promise<'yes' | 'declined' | 'disabled' | 'unavailable'> => {
+		/** Whether titand will open the screen now: consoles switched on. */
+		const allowed = async (): Promise<'yes' | 'disabled' | 'unavailable'> => {
 			try {
 				const info = await api.get<{ enabled: boolean }>('/terminal');
-				if (!info.enabled) return 'disabled';
-				if ((await api.get<{ confirmed: boolean }>('/session/confirmed')).confirmed) return 'yes';
+				return info.enabled ? 'yes' : 'disabled';
 			} catch {
 				return 'unavailable';
 			}
-			if (closed) return 'declined';
-			const confirmed = await new Promise<boolean>((resolve) => (asking = { resolve }));
-			return confirmed ? 'yes' : 'declined';
 		};
 
 		const connect = async () => {
@@ -61,10 +53,9 @@
 			const answer = await allowed();
 			if (closed) return;
 			if (answer !== 'yes') {
-				// Not confirmed: wait until asked again (reconnect).
 				// Switched off or not reachable: look again in a while.
-				onstatus(answer === 'declined' ? 'declined' : answer === 'disabled' ? 'disabled' : 'lost');
-				if (answer !== 'declined') retry = setTimeout(connect, 5000);
+				onstatus(answer === 'disabled' ? 'disabled' : 'lost');
+				retry = setTimeout(connect, 5000);
 				return;
 			}
 			const connection = new RFB(
@@ -89,15 +80,9 @@
 		// Only the element decides when to connect anew: neither the display
 		// mode nor the state of the connection may start this over.
 		untrack(connect);
-		again = () => {
-			clearTimeout(retry);
-			if (!rfb && !asking) void connect();
-		};
 
 		return () => {
 			closed = true;
-			asking?.resolve(false);
-			asking = null;
 			clearTimeout(retry);
 			rfb?.disconnect();
 			rfb = undefined;
@@ -108,12 +93,6 @@
 		effective;
 		applyMode();
 	});
-
-	let again: (() => void) | undefined;
-	/** Asks for the password again after the dialog was cancelled. */
-	export function reconnect() {
-		again?.();
-	}
 
 	export function ctrlAltDel() {
 		rfb?.sendCtrlAltDel();
@@ -142,21 +121,6 @@
 
 <div class="screen" class:full={effective === 'full'} bind:this={target}></div>
 
-{#if asking}
-	<ConfirmDialog
-		reason={t('docker.consoleConfirm')}
-		onconfirmed={() => {
-			const pending = asking;
-			asking = null;
-			pending?.resolve(true);
-		}}
-		onclose={() => {
-			const pending = asking;
-			asking = null;
-			pending?.resolve(false);
-		}}
-	/>
-{/if}
 
 <style>
 	.screen {

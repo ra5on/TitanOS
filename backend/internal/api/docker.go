@@ -267,14 +267,14 @@ func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) {
 	id, shell := r.PathValue("id"), r.URL.Query().Get("shell")
 	// The short form of the ID, as Docker's own tools show it.
-	s.serveConsole(w, r, "container "+id[:min(len(id), 12)], false, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	s.serveConsole(w, r, "container "+id[:min(len(id), 12)], func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		return s.opts.Docker.Console(ctx, id, shell)
 	})
 }
 
 // handleShell connects a WebSocket to a root shell on the NAS.
 func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
-	s.serveConsole(w, r, "nas", false, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	s.serveConsole(w, r, "nas", func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		session, err := s.opts.Terminal.Shell(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -287,10 +287,10 @@ func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
 // terminal data in both directions; a text message {"cols":80,"rows":24}
 // tells the size of the terminal.
 //
-// Routes require an authenticated administrator. NAS and Docker terminals use the
-// existing login; VM consoles still require recent password confirmation.
-func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target string, requireConfirmation bool, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
-	s.serveStream(w, r, consoleOptions{target: target, requireConfirmation: requireConfirmation}, open)
+// Routes require an authenticated administrator. Every console uses the
+// existing login without asking for the password again.
+func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
+	s.serveStream(w, r, consoleOptions{target: target}, open)
 }
 
 // handleTerminal tells the web UI whether terminals are allowed.

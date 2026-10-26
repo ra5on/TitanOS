@@ -39,9 +39,11 @@ func TestVMScreenFollowsTheConsoleRules(t *testing.T) {
 		return res, body
 	}
 
+	// No password again: a plain request gets past the checks and is only
+	// refused by the WebSocket upgrade.
 	res, body := get()
-	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
-		t.Errorf("screen without confirmation: %d %s", res.StatusCode, body)
+	if res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("screen with the login alone: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": false}); res.StatusCode >= 300 {
 		t.Fatalf("switch off: %d %s", res.StatusCode, body)
@@ -51,8 +53,8 @@ func TestVMScreenFollowsTheConsoleRules(t *testing.T) {
 		t.Errorf("screen with terminals off: %d %s", res.StatusCode, body)
 	}
 
-	// With the prompt switched off, the login is enough.
-	ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": true, "confirm": false})
+	// Switched on again, the login is enough.
+	ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": true})
 	dialConsole(t, ts, ts.client, address)
 
 	// The route itself still says first when the VM does not run.
