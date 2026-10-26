@@ -220,7 +220,10 @@ ip -n titan-peer link set peer30 up
     release_root=f'/mnt/mirror/.titanos/plugins/releases/{current_base}'
     old_root=f'/mnt/mirror/.titanos/plugins/releases/{old_version}'
     settings=json.dumps(dict(volume='mirror',enabled=[]))
-    remote(f'mkdir -p /config/plugins/releases {old_root} {release_root}; chmod 700 /mnt/mirror/.titanos /mnt/mirror/.titanos/plugins /mnt/mirror/.titanos/plugins/releases; printf %s {shlex.quote(settings)} > /config/plugins/releases/{current_base}.json; printf old > {old_root}/fixture.raw; printf current > {release_root}/fixture.raw; systemctl restart titand')
+    # This represents an initialized current release, including the marker
+    # required by Manager.dir. An incomplete artificial directory would make
+    # a subsequent real plugin installation safely refuse its bootstrap.
+    remote(f'mkdir -p /config/plugins/releases {old_root} {release_root}; chmod 700 /mnt/mirror/.titanos /mnt/mirror/.titanos/plugins /mnt/mirror/.titanos/plugins/releases {release_root}; printf %s {shlex.quote(settings)} > /config/plugins/releases/{current_base}.json; printf old > {old_root}/fixture.raw; printf current > {release_root}/fixture.raw; printf %s {shlex.quote(current_base)} > {release_root}/.ready; chmod 600 {release_root}/.ready; systemctl restart titand')
     wait(lambda:request('/health').get('ready'),'plugin inventory restart')
     request('/login',dict(name='storagetester',password=password))
     releases=request('/plugins/releases')['releases']
