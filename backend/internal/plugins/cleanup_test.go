@@ -23,7 +23,7 @@ func TestCleanupProtectsBootsChangedSelectionsAndPrivateDirectories(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	m.CleanupProtected = func() []string { return []string{"0.22.0", "0.24.0"} }
+	m.CleanupProtected = func() ([]string, error) { return []string{"0.22.0", "0.24.0"}, nil }
 	list, err := m.OldReleases([]string{"data"})
 	if err != nil {
 		t.Fatal(err)

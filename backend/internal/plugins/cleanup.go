@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -72,6 +73,12 @@ func (m *Manager) cleanupRoot(mounted []string) (*os.Root, error) {
 		}
 	}
 	child, err := root.OpenRoot(part)
+	if err == nil {
+		err = volumedata.SameMount(root, child)
+		if err != nil {
+			child.Close()
+		}
+	}
 	root.Close()
 	return child, err
 }
@@ -134,7 +141,11 @@ func (m *Manager) oldReleases(mounted []string) ([]OldRelease, error) {
 	}
 	protected := map[string]string{m.Release: "current"}
 	if m.CleanupProtected != nil {
-		for _, version := range m.CleanupProtected() {
+		versions, err := m.CleanupProtected()
+		if err != nil {
+			return nil, fmt.Errorf("%w: cannot verify boot references: %v", ErrInvalid, err)
+		}
+		for _, version := range versions {
 			if version != "" {
 				protected[strings.TrimPrefix(version, "v")] = "boot-or-update"
 			}
