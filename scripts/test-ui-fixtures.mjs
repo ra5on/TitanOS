@@ -542,6 +542,7 @@ export function fixtureFactory(browser, errors) {
           hardware: { pci: [], usb: [], iommu: false },
           usedBy: {},
         });
+      if (path === "/vms/imports") return json({ jobs: [], chunkBytes: 8 << 20 });
       if (path === "/vms/media") return json({ media: [] });
       if (path === "/vms")
         return json({

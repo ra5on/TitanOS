@@ -32,6 +32,7 @@ fi
 extra=$(mktemp -d)
 trap 'rm -rf "$extra"' EXIT
 install -D -m 0755 backend/bin/titand "$extra/usr/bin/titand"
+install -D -m 0755 backend/bin/titanosctl "$extra/usr/bin/titanosctl"
 # The licenses are shown under Settings > About.
 install -D -m 0644 LICENSE.md "$extra/usr/share/titanos/LICENSE.md"
 python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"

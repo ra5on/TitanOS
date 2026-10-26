@@ -51,6 +51,29 @@ export const isActive = (task: TaskItem) => ['running', 'paused', 'waiting'].inc
 // All consumers use the same state mapping. Missing measurements never imply success.
 export function taskItems(data: Operations): TaskItem[] {
 	const result: TaskItem[] = [];
+	for (const job of data.media ?? []) {
+		const state: TaskState =
+			job.phase === 'review'
+				? 'blocked'
+				: ['uploading', 'downloading', 'extracting', 'verifying', 'publishing', 'pausing'].includes(
+							job.phase,
+					  )
+					? 'running'
+					: ['paused', 'done', 'failed', 'cancelled'].includes(job.phase)
+						? (job.phase as TaskState)
+						: 'unknown';
+		result.push({
+			id: `media:${job.id}`,
+			name: job.name,
+			kind: 'vm',
+			state,
+			href: '/vms/media',
+			detail: job.error || job.output,
+			progress: ['uploading', 'downloading'].includes(job.phase)
+				? percent(job.bytes, job.total)
+				: undefined,
+		});
+	}
 	for (const job of data.transfers ?? []) {
 		const state = job.blocked
 			? 'blocked'

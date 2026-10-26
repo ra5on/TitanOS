@@ -688,6 +688,9 @@
 
 	// --- Clipboard and keyboard ---------------------------------------------
 
+	let mobileSearch = $state(false);
+	let mobileSearchField: HTMLInputElement | undefined = $state();
+	async function toggleMobileSearch() { mobileSearch=!mobileSearch; if(mobileSearch){await tick();mobileSearchField?.focus();}else search=''; }
 	let clipboard = $state<{ from: FileRoot; paths: string[]; move: boolean } | null>(null);
 	function rememberSelection(move: boolean) {
 		if (!root || !selected.length || root.kind === 'stick' || (move && !writable)) return;
@@ -905,7 +908,7 @@
 </script>
 
 <svelte:window onkeydown={keyboard} />
-<PageHead title={t('files.title')} />
+<div class="files-pagehead"><PageHead title={t('files.title')} /></div>
 {#if preferenceError}<p class="notice-error" role="alert">{preferenceError} <button class="btn" onclick={() => (preferencesReady ? savePreferences() : loadPreferences())}>{t('files.retryPreferences')}</button></p>{/if}
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 <!-- Fixed, so that saving never moves the page. -->
@@ -915,9 +918,10 @@
 	<EmptyState title={t('files.noRoots')} text={canAdminister ? t('files.noRootsAdmin') : undefined} />
 {:else if roots}
 	<div class="layout">
-		<button type="button" class="btn places-toggle" aria-expanded={placesOpen} aria-controls="file-places" onclick={() => (placesOpen = !placesOpen)}>
-			<Icon name="folder" size={16} /><span>{t('files.placeCurrent', { name: root?.name ?? '–' })}</span><Icon name="chevronDown" size={14} />
-		</button>
+		<div class="mobile-location">
+<button type="button" class="btn places-toggle" aria-label={`${root?.name??'–'} / ${dir}`} title={`${root?.name??'–'} / ${dir}`} aria-expanded={placesOpen} aria-controls="file-places" onclick={() => (placesOpen = !placesOpen)}><Icon name="folder" size={16}/><span>{root?.name??'–'}{#if dir}<span class="muted"> / {dir}</span>{/if}</span><Icon name="chevronDown" size={14}/></button>
+<button type="button" class="btn mobile-back" aria-label={t('files.back')} disabled={!back.length} onclick={()=>historyGo('back')}><Icon name="arrowLeft" size={16}/></button>
+</div>
 		<nav id="file-places" class="tile places" class:open={placesOpen} aria-label={t('files.places')}>
 			<Places
 				{roots}
@@ -944,6 +948,30 @@
 				onremovefavorite={(favorite) => saveFavorites(favorites.filter((f) => f !== favorite))}
 			/>
 		</nav>
+{#if !trash}<div class="mobile-file-actions" role="toolbar" aria-label={t('files.moreActions')}>
+<button type="button" class="btn btn-primary" disabled={!writable} onclick={()=>fileInput?.click()}><Icon name="upload" size={16}/><span>{t('files.mobileUpload')}</span></button>
+<Dropdown label={t('files.new')} text={t('files.new')} icon="plus" disabled={!writable}>{#snippet children(close)}<button type="button" role="menuitem" onclick={()=>{close();show('mkdir');}}><Icon name="folder" size={16}/>{t('files.newFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();creatingFile=true;}}><Icon name="fileText" size={16}/>{t('files.newFile')}</button><button type="button" role="menuitem" onclick={()=>{close();folderInput?.click();}}><Icon name="upload" size={16}/>{t('files.uploadFolder')}</button>{/snippet}</Dropdown>
+<button type="button" class="btn" aria-expanded={mobileSearch} aria-controls="mobile-file-search" onclick={toggleMobileSearch}><Icon name="search" size={16}/><span>{t('files.mobileSearch')}</span></button>
+<Dropdown label={t('files.moreActions')} text={t('files.mobileMore')} icon="more" align="right">{#snippet children(close)}
+<button type="button" role="menuitem" disabled={!dir} onclick={()=>{close();open(rootId,dir.split('/').slice(0,-1).join('/'));}}><Icon name="arrowUp" size={16}/>{t('files.up')}</button>
+<button type="button" role="menuitem" disabled={!forward.length} onclick={()=>{close();historyGo('forward');}}><Icon name="arrowRight" size={16}/>{t('files.forward')}</button>
+<button type="button" role="menuitem" onclick={()=>{close();editPath();}}><Icon name="edit" size={16}/>{t('files.editPath')}</button>
+{#if root?.kind!=='stick'}<button type="button" role="menuitem" onclick={()=>{close();toggleFavorite();}}><Icon name="star" size={16}/>{t(isFavorite?'files.unfavorite':'files.favorite')}</button>{/if}
+{#if clipboard}<button type="button" role="menuitem" disabled={!canPaste} onclick={()=>{close();paste();}}><Icon name="paste" size={16}/>{t('files.paste')}</button>{/if}
+<hr/><button type="button" role="menuitem" onclick={()=>{close();selected=visibleEntries.map(e=>e.name);}}><Icon name="select" size={16}/>{t('files.selectAll')}</button>
+<button type="button" role="menuitem" onclick={()=>{close();deepSearch=true;}}><Icon name="search" size={16}/>{t('files.deepSearch')}</button>
+{#if root?.kind!=='stick'}<button type="button" role="menuitem" onclick={()=>{close();usage=true;}}>{t('files.usageTitle')}</button><button type="button" role="menuitem" onclick={()=>{close();duplicates=true;}}>{t('files.duplicatesTitle')}</button>{/if}
+{#if root?.kind==='share'}<button type="button" role="menuitem" onclick={()=>{close();trash=true;selected=[];}}><Icon name="trash" size={16}/>{t('files.trash')}</button>{/if}
+<hr/>{#each views as option}<button type="button" role="menuitem" disabled={!preferencesReady} onclick={()=>{close();changeView(option.mode);}}><Icon name={option.icon} size={16}/>{t(option.label)}</button>{/each}
+<button type="button" role="menuitem" onclick={()=>{close();split=!split;savePreferences();}}><Icon name="columns" size={16}/>{t('files.twoPanes')}</button>
+{#if split}<button type="button" role="menuitem" disabled={!rightRoot} onclick={()=>{close();comparison=true;}}>{t('files.compareFolders')}</button>{/if}
+<button type="button" role="menuitem" onclick={()=>{close();showHidden=!showHidden;selected=[];savePreferences();}}><Icon name="eye" size={16}/>{t('files.showHidden')}</button>
+{#if root?.kind!=='stick'}<button type="button" role="menuitem" disabled={!preferencesReady||(!folderViewSaved&&folderViews.length>=200)} onclick={()=>{close();toggleFolderView();}}>{t('files.rememberFolderView')}</button>{/if}
+<button type="button" role="menuitem" onclick={()=>{close();shortcuts=true;}}><Icon name="keyboard" size={16}/>{t('files.shortcuts')}</button>
+{/snippet}</Dropdown></div>
+{#if mobileSearch}<label class="mobile-file-search" id="mobile-file-search"><span class="sr-only">{t('files.searchFolder')}</span><Icon name="search" size={16}/><input class="field" type="search" bind:this={mobileSearchField} bind:value={search} placeholder={t('files.searchFolder')} oninput={()=>{selected=[];anchor='';}}/><button class="btn icon" type="button" aria-label={t('common.close')} onclick={toggleMobileSearch}><Icon name="close" size={16}/></button></label>{/if}
+{#if selected.length}<div class="mobile-selection" role="region" aria-label={t('files.selectionActions')}><span>{t('files.selected',{count:selected.length})}</span><button type="button" class="btn icon" aria-label={t('files.copy')} onclick={()=>copying={move:false}}><Icon name="copy" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.moreActions')} onclick={event=>{const entry=selectedEntries.at(-1);if(entry)menuFromButton(entry,event.currentTarget);}}><Icon name="more" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.clearSelection')} onclick={()=>selected=[]}><Icon name="close" size={16}/></button></div>{/if}{/if}
+
 
 		<div class="workspace" class:split>
 			{#if split && !trash && (selected.length || right.selected.length) && root?.kind !== 'stick'}
@@ -984,7 +1012,7 @@
 					{/if}
 				{:else}
 					<!-- Where: history, path and search. -->
-					<div class="toolbar nav-bar">
+					<div class="toolbar nav-bar" class:path-editing={pathEditing}>
 						<div class="nav-buttons">
 							<button type="button" class="btn icon" aria-label={t('files.back')} title={t('files.back')} disabled={!back.length} onclick={() => historyGo('back')}><Icon name="arrowLeft" size={16} /></button>
 							<button type="button" class="btn icon" aria-label={t('files.forward')} title={t('files.forward')} disabled={!forward.length} onclick={() => historyGo('forward')}><Icon name="arrowRight" size={16} /></button>
@@ -1865,4 +1893,18 @@
 			height: 2.75rem;
 		}
 	}
+
+.mobile-location{display:contents}.mobile-back,.mobile-file-actions,.mobile-file-search,.mobile-selection{display:none}
+@media(max-width:760px){
+ .files-pagehead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .mobile-location{display:flex;gap:8px;align-items:center;min-width:0}.mobile-location .places-toggle{flex:1;min-width:0;width:auto;height:44px;background:var(--panel-bg);border-color:var(--panel-border);backdrop-filter:var(--panel-backdrop)}
+ .mobile-location .places-toggle>span{min-width:0;flex:1}.mobile-location .places-toggle>span .muted{display:inline;white-space:nowrap}.mobile-back{display:inline-flex;width:44px;min-width:44px;height:44px;padding:0}
+ .mobile-file-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-width:0}.mobile-file-actions>.btn{min-width:0;padding:0 6px;font-size:.8125rem;gap:5px;height:44px}
+ .mobile-file-actions :global(.dropdown){min-width:0;width:100%}.mobile-file-actions :global(.dropdown>button){width:100%;height:44px;padding:0 5px;gap:4px;font-size:.8125rem}.mobile-file-actions :global(.chevron){display:none}.mobile-file-actions :global(.dropdown-panel){max-width:calc(100vw - 32px);max-height:65vh;overflow-y:auto}
+ .mobile-file-actions :global(.dropdown-panel button){min-height:44px}
+ .mobile-file-search{display:flex;gap:8px;align-items:center;min-width:0}.mobile-file-search .field{flex:1;min-width:0;height:44px}.mobile-selection{display:flex;align-items:center;gap:6px}.mobile-selection>span{flex:1;font-size:.8125rem}
+ .browser>.nav-bar,.browser>.action-bar,.browser>.actions{display:none}.browser>.nav-bar.path-editing{display:flex}.browser>.nav-bar.path-editing>:not(.path-form){display:none}
+ .layout{gap:8px}.mobile-selection .btn{width:44px;height:44px;padding:0}
+}
+
 </style>

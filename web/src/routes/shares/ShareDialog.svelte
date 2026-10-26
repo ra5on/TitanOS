@@ -29,7 +29,7 @@
 		name: share?.name ?? '',
 		volume: share?.volume ?? volumes[0] ?? '',
 		smb: share?.smb ?? true,
-		nfs: share?.nfs.enabled ?? false,
+		nfs: (share?.nfs.enabled ? share.nfs.mode || 'rw' : 'off') as 'off' | 'ro' | 'rw',
 		clients: (share?.nfs.clients ?? []).join('\n'),
 		// Whoever creates a share can use it; Samba does not offer a share no one may open.
 		access: { ...(share?.access ?? (session.data?.user ? { [session.data.user.name]: 'rw' } : {})) } as Record<string, AccessLevel>,
@@ -73,7 +73,7 @@
 			name: draft.name,
 			volume: draft.volume,
 			smb: draft.smb,
-			nfs: { enabled: draft.nfs, clients: draft.clients.split('\n').map((line) => line.trim()).filter(Boolean) },
+			nfs: { enabled: draft.nfs !== 'off', mode: draft.nfs, clients: draft.clients.split('\n').map((line) => line.trim()).filter(Boolean) },
 			access: $state.snapshot(draft.access),
 			guest: draft.smb && draft.guest,
 			browseable: draft.browseable,
@@ -119,13 +119,14 @@
 		<fieldset>
 			<legend>{t('share.protocols')}</legend>
 			<label class="check"><input type="checkbox" bind:checked={draft.smb} /><span>{t('share.smb')}</span></label>
-			<label class="check"><input type="checkbox" bind:checked={draft.nfs} /><span>{t('share.nfs')}</span></label>
-			{#if draft.nfs}
+			<label class="field-row"><span class="label">{t('share.nfs')}</span><select class="field" bind:value={draft.nfs}><option value="off">{t('share.nfsOff')}</option><option value="ro">{t('share.ro')}</option><option value="rw">{t('share.rw')}</option></select></label>
+			{#if draft.nfs !== 'off'}
 				<label class="field-row indent">
 					<span class="label">{t('share.nfsClients')}</span>
 					<textarea class="field mono" rows="3" bind:value={draft.clients} placeholder="192.168.1.0/24" spellcheck="false"></textarea>
 				</label>
 				<p class="notice-warn">{t('share.nfsWarning')}</p>
+				{#if draft.nfs === 'ro'}<p class="muted">{t('share.nfsReadOnlyHint')}</p>{/if}
 			{/if}
 		</fieldset>
 

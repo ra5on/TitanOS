@@ -44,3 +44,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Fontconfig scratch output from isolated backend document tests.
+/backend/var/cache/fontconfig/

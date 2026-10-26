@@ -124,7 +124,8 @@ type VM struct {
 	Directory string `json:"directory,omitempty"`
 	Disks     []Disk `json:"disks"`
 	// ISO is the path of the installation medium, or empty.
-	ISO string `json:"iso"`
+	ISO       string `json:"iso"`
+	VirtIOISO string `json:"virtioISO,omitempty"`
 	// Autostart starts the VM once its volumes are there after a boot.
 	Autostart bool      `json:"autostart"`
 	Created   time.Time `json:"created"`
@@ -146,6 +147,9 @@ type VM struct {
 	// network of the NAS, which needs the bridge br0. Anything else is
 	// "user": outgoing connections through the NAS only.
 	Network string `json:"network"`
+	// Older applications cannot attach named networks correctly: no automatic
+	// guest start on a fallback version. Current applications restore this flag.
+	TopologyAutostart *bool `json:"topologyAutostart,omitempty"`
 	// PCI devices (0000:01:00.0) and USB devices (046d:c52b) handed to the guest.
 	PCI     []string `json:"pci"`
 	AutoGPU bool     `json:"autoGPU"`
@@ -188,10 +192,12 @@ type Manager struct {
 	ScheduleAdmission func() (func(), error)
 	AutoReady         func() bool
 	// BridgeReady rejects creation/start until the network trial is confirmed.
-	BridgeReady func() bool
-	BeforeStart func(context.Context, string, []string, []string, bool) (func(bool), error)
-	AfterPoll   func(context.Context, map[string]bool) error
-	Timezone    func() string
+	BridgeReady   func() bool
+	NetworkBridge func(string) (string, bool)
+	NetworkLease  func() (func(), error)
+	BeforeStart   func(context.Context, string, []string, []string, bool) (func(bool), error)
+	AfterPoll     func(context.Context, map[string]bool) error
+	Timezone      func() string
 
 	store  *config.Store
 	runner run.Runner
@@ -278,6 +284,11 @@ func (m *Manager) Load() error {
 			continue
 		}
 		vms[name] = vm
+		if strings.HasPrefix(vm.Network, "network:") && vm.TopologyAutostart != nil {
+			vm.Autostart = *vm.TopologyAutostart
+			vm.TopologyAutostart = nil
+			vms[name] = vm
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -345,6 +356,19 @@ func (vm VM) volumes() []string {
 
 func (m *Manager) available(vm VM, mounted []string) bool {
 	for _, volume := range vm.volumes() {
+		if !slices.Contains(mounted, volume) {
+			return false
+		}
+	}
+	for _, path := range []string{vm.ISO, vm.VirtIOISO} {
+		if path == "" {
+			continue
+		}
+		relative, err := filepath.Rel(m.mountRoot, path)
+		if err != nil || strings.HasPrefix(relative, "..") {
+			return false
+		}
+		volume := strings.Split(filepath.ToSlash(relative), "/")[0]
 		if !slices.Contains(mounted, volume) {
 			return false
 		}
@@ -607,6 +631,11 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 		return err
 	}
 	vm.ISO = iso
+	drivers, err := m.checkISO(vm.VirtIOISO)
+	if err != nil {
+		return err
+	}
+	vm.VirtIOISO = drivers
 	if len(vm.CPUPin) > 0 {
 		seen := map[int]bool{}
 		for _, cpu := range vm.CPUPin {
@@ -618,7 +647,12 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	} else {
 		vm.Exclusive = false
 	}
-	if vm.Network != "bridge" {
+	vm.TopologyAutostart = nil
+	if strings.HasPrefix(vm.Network, "network:") {
+		if _, ok := m.namedBridge(vm.Network); !ok {
+			return ErrNoBridge
+		}
+	} else if vm.Network != "bridge" {
 		vm.Network = "user"
 	}
 	if err := m.checkFolders(vm.Folders); err != nil {
@@ -746,6 +780,13 @@ func newMAC() string {
 
 // Create makes a new VM with its disks. It does not start it.
 func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
+	if m.NetworkLease != nil {
+		release, err := m.NetworkLease()
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	if !m.createMu.TryLock() {
 		return ErrSnapshotBusy
 	}
@@ -825,7 +866,7 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 			return fail(err)
 		}
 	}
-	if err := m.store.WriteJSON(configDir+"/"+vm.Name+".json", vm); err != nil {
+	if err := m.persistVM(vm); err != nil {
 		return fail(err)
 	}
 	m.mu.Lock()
@@ -847,6 +888,7 @@ type Change struct {
 	MemoryMiB   int      `json:"memoryMiB"`
 	VCPUs       int      `json:"vcpus"`
 	ISO         string   `json:"iso"`
+	VirtIOISO   string   `json:"virtioISO"`
 	Autostart   bool     `json:"autostart"`
 	CPUPin      []int    `json:"cpuPin"`
 	Exclusive   bool     `json:"exclusive"`
@@ -860,6 +902,13 @@ type Change struct {
 // Update changes a VM. Everything but the display name, description and autostart
 // belongs to the virtual hardware and only changes while the VM is off.
 func (m *Manager) Update(ctx context.Context, name string, change Change, mounted []string) error {
+	if m.NetworkLease != nil {
+		release, err := m.NetworkLease()
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	lock, lockErr := m.operation(name)
 	if lockErr != nil {
 		return lockErr
@@ -884,6 +933,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	}
 	changed.Description, changed.Autostart = change.Description, change.Autostart
 	changed.MemoryMiB, changed.VCPUs, changed.ISO = change.MemoryMiB, change.VCPUs, change.ISO
+	changed.VirtIOISO = change.VirtIOISO
 	changed.CPUPin, changed.Exclusive, changed.Folders, changed.PCI, changed.USB = change.CPUPin, change.Exclusive, change.Folders, change.PCI, change.USB
 	changed.Network = change.Network
 	changed.AutoGPU = change.AutoGPU
@@ -896,7 +946,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	if !reflect.DeepEqual(normal(before), normal(after)) && m.pid(name) != 0 {
 		return ErrRunning
 	}
-	if err := m.store.WriteJSON(configDir+"/"+name+".json", changed); err != nil {
+	if err := m.persistVM(changed); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -933,6 +983,13 @@ func (m *Manager) XML(name string) (string, error) {
 
 // Start boots a VM.
 func (m *Manager) Start(ctx context.Context, name string, mounted []string) error {
+	if m.NetworkLease != nil {
+		release, err := m.NetworkLease()
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	lock, lockErr := m.operation(name)
 	if lockErr != nil {
 		return lockErr
@@ -971,8 +1028,22 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 			return ErrNoBridge
 		}
 	}
+	if strings.HasPrefix(vm.Network, "network:") {
+		dev, ok := m.namedBridge(vm.Network)
+		if !ok {
+			return ErrNoBridge
+		}
+		if _, err := os.Stat(filepath.Join(m.sysDir, "class/net", dev)); err != nil {
+			return ErrNoBridge
+		}
+	}
 	if vm.ISO != "" {
 		if _, err := m.checkISO(vm.ISO); err != nil {
+			return err
+		}
+	}
+	if vm.VirtIOISO != "" {
+		if _, err := m.checkISO(vm.VirtIOISO); err != nil {
 			return err
 		}
 	}

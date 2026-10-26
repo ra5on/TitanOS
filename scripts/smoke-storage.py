@@ -102,7 +102,7 @@ def check_uploads(request, opener, url, remote, password):
     remote('rm /mnt/mirror/appdata/upload.bin')
 
 
-def smoke(archive, plugins, log, timeout):
+def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False, force_tcg=False):
     os.environ['PATH'] += ':/usr/sbin:/sbin'
     with tempfile.TemporaryDirectory(prefix='titanos-storage-', dir=log.parent) as tmp:
         directory = Path(tmp)
@@ -123,7 +123,7 @@ def smoke(archive, plugins, log, timeout):
         helper.command('mcopy', '-i', partition, '-s', *map(str, stick.iterdir()), '::')
         shutil.copyfile('/usr/share/OVMF/OVMF_VARS_4M.fd', directory / 'OVMF_VARS.fd')
         for index in (1, 2, 3):
-            helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '2G')
+            helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '8G' if workflows else '2G')
         helper.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory / 'key'))
         usb_disk = directory / 'external-exfat.img'
         with usb_disk.open('wb') as image:
@@ -159,7 +159,7 @@ def smoke(archive, plugins, log, timeout):
         def volume():
             return next(v for v in request('/storage')['volumes'] if v['name'] == 'mirror')
 
-        accel = ['-accel', 'kvm', '-cpu', 'host'] if os.access('/dev/kvm', os.W_OK) else ['-accel', 'tcg', '-cpu', 'max']
+        accel = ['-accel', 'kvm', '-cpu', 'host'] if not force_tcg and os.access('/dev/kvm', os.W_OK) else ['-accel', 'tcg', '-cpu', 'max']
         base_args = ['qemu-system-x86_64', '-machine', 'q35', *accel, '-smp', '2', '-m', '4G',
             '-drive', 'if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
             '-drive', f'if=pflash,format=raw,file={directory}/OVMF_VARS.fd',
@@ -171,6 +171,12 @@ def smoke(archive, plugins, log, timeout):
             '-device', 'virtio-net-pci,netdev=net0',
             '-smbios', 'type=11,value=io.systemd.boot.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200',
             '-display', 'none', '-serial', 'stdio', '-monitor', 'none', '-no-reboot']
+        if workflows:
+            # Extra emulated Ethernet ports only; QEMU hubs never touch host NICs.
+            for index, hub in ((1, 1), (2, 1), (3, 2), (4, 2)):
+                base_args += ['-netdev', f'hubport,id=extra{index},hubid={hub}',
+                              '-device', f'virtio-net-pci,netdev=extra{index},mac=52:54:00:23:00:0{index}']
+            from workflows023_smoke import checks as feature_checks
         password = secrets.token_urlsafe(24)
         with log.open('wb') as serial:
             for boot in (1, 2, 3, 4):
@@ -184,7 +190,7 @@ def smoke(archive, plugins, log, timeout):
                     deadline = time.monotonic() + timeout
                     while True:
                         if process.poll() is not None:
-                            raise RuntimeError('VM stopped before health')
+                            raise RuntimeError(f'VM stopped before health (QEMU exit {process.returncode})')
                         try:
                             if request('/health').get('ready'):
                                 break
@@ -229,25 +235,29 @@ def smoke(archive, plugins, log, timeout):
                         remote('mkdir "/mnt/mirror/vms/Home Assistant"; qemu-img create -q -f qcow2 "/mnt/mirror/vms/Home Assistant/ha.qcow2" 1G')
                         request('/vms', {'name': 'home-assistant', 'displayName': 'Home Assistant', 'directory': 'Home Assistant', 'volume': 'mirror', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'path': '/mnt/mirror/vms/Home Assistant/ha.qcow2', 'format': 'qcow2'}]})
                         remote('test ! -e /mnt/mirror/vms/home-assistant')
-                        check_usb_files(request, opener, url)
-                        check_uploads(request, opener, url, remote, password)
-                        check_smb_share(request, remote, smb_port, password, directory)
-                        check_smb_backup(request, remote, password)
-                        check_cdi(request, remote)
-                        snapshot_vm, snapshot = check_vm_snapshots(request, remote, put, directory, volume='mirror')
-                        for attempt in range(60):
-                            try:
-                                if request('/health').get('ready'): break
-                            except OSError: pass
-                            time.sleep(1)
-                        request('/login', {'name': 'storagetester', 'password': password})
-                        assert len(request(f'/vms/{snapshot_vm}/snapshots')['snapshots']) == 1
-                        request(f'/vms/{snapshot_vm}/poweroff', {})
-                        request(f'/vms/{snapshot_vm}/snapshots/{snapshot["id"]}', {'confirm': snapshot['name']}, 'DELETE')
-                        request(f'/vms/{snapshot_vm}', {'deleteDisks': True, 'confirm': snapshot_vm}, 'DELETE')
-                        remote('rm -r /mnt/mirror/snapshot-tools')
-                        print('VM RAM/disk/UEFI/TPM restore on Btrfs and metadata persistence passed', flush=True)
-                        print('Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed', flush=True)
+                        if not workflows_only:
+                            check_usb_files(request, opener, url)
+                            check_uploads(request, opener, url, remote, password)
+                            check_smb_share(request, remote, smb_port, password, directory)
+                            check_smb_backup(request, remote, password)
+                            check_cdi(request, remote)
+                            snapshot_vm, snapshot = check_vm_snapshots(request, remote, put, directory, volume='mirror')
+                            for attempt in range(60):
+                                try:
+                                    if request('/health').get('ready'): break
+                                except OSError: pass
+                                time.sleep(1)
+                            request('/login', {'name': 'storagetester', 'password': password})
+                            assert len(request(f'/vms/{snapshot_vm}/snapshots')['snapshots']) == 1
+                            request(f'/vms/{snapshot_vm}/poweroff', {})
+                            request(f'/vms/{snapshot_vm}/snapshots/{snapshot["id"]}', {'confirm': snapshot['name']}, 'DELETE')
+                            request(f'/vms/{snapshot_vm}', {'deleteDisks': True, 'confirm': snapshot_vm}, 'DELETE')
+                            remote('rm -r /mnt/mirror/snapshot-tools')
+                            print('VM RAM/disk/UEFI/TPM restore on Btrfs and metadata persistence passed', flush=True)
+                            print('Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed', flush=True)
+                        if workflows:
+                            feature_checks(boot, request, remote, put, directory, opener, url, password, online_virtio)
+
                         request('/vms/disk-test', {'displayName': 'Home Assistant NAS', 'memoryMiB': 512, 'vcpus': 1, 'network': created['network']}, 'PUT')
                         memory = request('/system')['memory']
                         assert memory['usedBytes'] + memory['freeBytes'] == memory['totalBytes'], memory
@@ -273,6 +283,8 @@ def smoke(archive, plugins, log, timeout):
                     else:
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
+                        if workflows:
+                            feature_checks(boot, request, remote, put, directory, opener, url, password, online_virtio)
                         renamed = next(vm for vm in request('/vms')['vms'] if vm['name'] == 'disk-test')
                         assert renamed['displayName'] == 'Home Assistant NAS', renamed
                         assert remote('cat /mnt/mirror/restored/before/documents/file') == 'before'
@@ -287,6 +299,8 @@ def smoke(archive, plugins, log, timeout):
                             result = remote('btrfs replace status -1 /mnt/mirror')
                             if 'finished' in result:
                                 break
+                            if 'canceled' in result.lower():
+                                raise AssertionError(result + '\n' + remote('dmesg | tail -n 35'))
                             if time.monotonic() > deadline:
                                 raise TimeoutError(result)
                             time.sleep(2)
@@ -308,6 +322,10 @@ def smoke(archive, plugins, log, timeout):
                     request('/system/power', {'action': 'reboot'})
                     process.wait(timeout=90)
                 except Exception:
+                    # Report host pressure separately from a guest/service failure.
+                    print(f'QEMU process exit: {process.poll()}', flush=True)
+                    subprocess.run(['free', '-m'], check=False)
+                    subprocess.run(['df', '-h', str(log.parent)], check=False)
                     subprocess.run([*ssh, 'sudo journalctl -b -u titand.service --no-pager -n 80'], timeout=15)
                     raise
                 finally:
@@ -327,6 +345,10 @@ if __name__ == '__main__':
     parser.add_argument('--plugins', type=Path)
     parser.add_argument('--log', type=Path, default=Path('out/storage-smoke.log'))
     parser.add_argument('--timeout', type=int, default=420)
+    parser.add_argument('--tcg', action='store_true', help='force CPU emulation to reproduce CI without KVM')
+    parser.add_argument('--workflows023', action='store_true')
+    parser.add_argument('--workflows-only', action='store_true', help='focus the additional checks without repeating the independent USB/SMB/snapshot suites')
+    parser.add_argument('--online-virtio', action='store_true', help='also download and validate the official stable driver ISO')
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout)
+    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout, args.workflows023, args.online_virtio, args.workflows_only, args.tcg)

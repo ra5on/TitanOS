@@ -71,6 +71,32 @@ func (c *client) getJSON(ctx context.Context, path string, query url.Values, v a
 	return json.NewDecoder(res.Body).Decode(v)
 }
 
+func (c *client) sendJSON(ctx context.Context, method, path string, body, v any) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v1.43"+path, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 400 {
+		var problem struct{ Message string }
+		json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&problem)
+		return &apiError{Status: res.StatusCode, Message: problem.Message}
+	}
+	if v != nil {
+		return json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(v)
+	}
+	return nil
+}
+
 func (c *client) post(ctx context.Context, path string, query url.Values) error {
 	res, err := c.do(ctx, http.MethodPost, path, query)
 	if err != nil {

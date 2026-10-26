@@ -92,3 +92,26 @@ node scripts/test-ui-vm-create.mjs
 ```
 
 Nach einer Neuaufnahme die drei Dateien wie oben zuordnen und die Quell- und Bild-Prüfsummen in `vm-create-capture.json` aktualisieren. Der zugehörige Funktions- und QEMU-Prüfstand steht in [VM-CREATE-VALIDATION.md](../VM-CREATE-VALIDATION.md).
+
+## Netzwerk und Workflows 0.23.0
+
+Die ergänzten Aufnahmen vom **26. Oktober 2026** zeigen die gebaute Produkt-WebUI
+von 0.23.0 und ausschließlich isolierte Beispiele, keine QEMU-Messwerte.
+`dateien-mobil.png` wurde durch den kompakten Dateimanager ersetzt. Die bisherigen
+anderen Aufnahmen behalten ihren oben genannten Stand.
+
+| Datei | Inhalt |
+|---|---|
+| [netzwerk.png](current/netzwerk.png) | Mehrere NAS-Netze, Desktop 1440 Pixel |
+| [netzwerk-mobil.png](current/netzwerk-mobil.png) / [Hell](current/netzwerk-mobil-hell.png) | Netzwerk in 390×844, Graphit/Hell |
+| [docker-lan.png](current/docker-lan.png) | Docker-LAN-Pool, Desktop |
+| [api-zugaenge.png](current/api-zugaenge.png) | Persönliche API-Zugänge, Desktop |
+| [vm-medien-mobil.png](current/vm-medien-mobil.png) | Medienimport, Smartphone |
+| [plugin-aufraeumen.png](current/plugin-aufraeumen.png) | Geschützte und auswählbare Plugin-Versionen |
+
+[Aufnahmedaten](current/network-workflows-capture.json) enthalten den Quellcommit,
+Quell-Dateihashes, Bildprüfsummen und die gemessenen Dateizeilenpositionen.
+`scripts/test-ui-023.mjs` prüft außerdem tokenbezogene Lesestandards/Widerruf,
+Dialoge, Überlauf und globale Flächen-/Schriftoptionen. Die Original-PNGs wurden
+unverändert übernommen. Sie liegen einzeln vor und benötigen weder ZIP noch
+lokale Bildergalerie.

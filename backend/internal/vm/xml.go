@@ -100,6 +100,11 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		cdrom = cdrom.with(el("source", "file", vm.ISO))
 	}
 	devices = devices.with(cdrom.with(el("target", "dev", cdromTarget(vm), "bus", "sata"), el("readonly")))
+	if vm.VirtIOISO != "" {
+		target := cdromTarget(vm)
+		target = target[:len(target)-1] + string(rune(target[len(target)-1])+1)
+		devices = devices.with(el("disk", "type", "file", "device", "cdrom").with(el("driver", "name", "qemu", "type", "raw"), el("source", "file", vm.VirtIOISO), el("target", "dev", target, "bus", "sata"), el("readonly")))
+	}
 	for _, folder := range vm.Folders {
 		share := el("filesystem", "type", "mount", "accessmode", "passthrough").with(
 			el("driver", "type", "virtiofs"),
@@ -118,6 +123,13 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 	card := el("interface", "type", "user").with(el("mac", "address", vm.MAC), el("model", "type", nic))
 	if vm.Network == "bridge" {
 		card = el("interface", "type", "bridge").with(el("source", "bridge", bridge), el("mac", "address", vm.MAC), el("model", "type", nic))
+	}
+	if strings.HasPrefix(vm.Network, "network:") {
+		dev, ok := m.namedBridge(vm.Network)
+		if !ok {
+			return "", ErrNoBridge
+		}
+		card = el("interface", "type", "bridge").with(el("source", "bridge", dev), el("mac", "address", vm.MAC), el("model", "type", nic))
 	}
 	devices = devices.with(
 		card,

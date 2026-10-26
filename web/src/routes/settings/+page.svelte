@@ -8,6 +8,7 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const areas: { href: string; label: MessageKey; admin?: boolean }[] = [
 		{ href: 'appearance', label: 'menu.appearance' },
+		{ href: 'api', label: 'api.title' },
 		{ href: 'network', label: 'netcfg.title', admin: true },
 		{ href: 'notifications', label: 'notify.settingsTitle', admin: true },
 		{ href: 'updates', label: 'update.title', admin: true },
@@ -33,11 +34,13 @@
 		assistant: 'integrations',
 		homeassistant: 'integrations',
 		appearance: 'personal',
+		api: 'personal',
 		notifications: 'personal',
 		temperatures: 'personal',
 	};
 	const icons: Record<string, IconName> = {
 		appearance: 'palette',
+		api: 'key',
 		network: 'globe',
 		notifications: 'bell',
 		updates: 'download',
