@@ -432,6 +432,7 @@
 	{#if !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
 	<PageHead title={t('vms.title')}>
 		{#snippet actions()}
+<a class="btn" href="/vms/media">{t('media.title')}</a>
 			<TasksPanel compact />
 			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
 		{/snippet}

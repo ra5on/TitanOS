@@ -261,6 +261,7 @@
 		</p>
 	{/if}
 	{#snippet actions()}
+<a class="btn" href="/docker/networks">{t('lan.title')}</a>
 		{#if status?.settings.enabled}
 			<button type="button" class="btn" onclick={() => open('settings')}>{t('docker.settings')}</button>
 			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}>{t('docker.import')}</button>

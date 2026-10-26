@@ -85,6 +85,9 @@ for file in vmlinuz initrd.img filesystem.squashfs; do
     cp "$slot/$file" "$release/titanos-$version-$file"
 done
 cp "$titand" "$release/titanos-$version-titand"
+if [ -x backend/bin/titanosctl ]; then
+    cp backend/bin/titanosctl "$release/titanos-$version-cli-linux-amd64"
+fi
 
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'

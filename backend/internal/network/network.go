@@ -63,7 +63,11 @@ var BondModes = []string{"active-backup", "802.3ad", "balance-alb"}
 
 // Config is /config/network/network.json.
 type Config struct {
-	Hostname string `json:"hostname"`
+	// Networks/Bonds are the opt-in topology. The legacy file is preserved
+	// separately for older boot slots until a topology is explicitly confirmed.
+	Networks []LogicalNetwork `json:"networks,omitempty"`
+	Bonds    []Bond           `json:"bonds,omitempty"`
+	Hostname string           `json:"hostname"`
 	// Ports are the Ethernet ports the NAS is connected through. None
 	// means: every port, each with DHCP. Several form a bond.
 	Ports []string `json:"ports"`
@@ -109,8 +113,11 @@ type Status struct {
 
 // Manager applies the configuration and keeps changes on trial.
 type Manager struct {
-	store  *config.Store
-	runner run.Runner
+	attachments sync.RWMutex
+	// CheckChange protects configured workloads, including stopped ones.
+	CheckChange func(Config, Config) error
+	store       *config.Store
+	runner      run.Runner
 	// Disabled leaves the system alone. Set in development mode.
 	Disabled bool
 	// dir is where systemd-networkd reads its files from; sys is /sys.
@@ -151,6 +158,12 @@ func (m *Manager) Load(ctx context.Context) error {
 	if err != nil && !missing {
 		return err
 	}
+	var topology Config
+	if err := m.store.ReadJSON(topologyFile, &topology); err == nil {
+		cfg, missing = topology, false
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.active, m.loaded, m.configured = normal(cfg), true, !missing
@@ -158,12 +171,20 @@ func (m *Manager) Load(ctx context.Context) error {
 		return nil
 	}
 	if err := m.validate(m.active); err != nil {
+		m.loaded = false
 		return err
 	}
-	return m.apply(ctx, m.active)
+	if err := m.apply(ctx, m.active); err != nil {
+		m.loaded = false
+		return err
+	}
+	return nil
 }
 
 func normal(cfg Config) Config {
+	if len(cfg.Networks) > 0 {
+		return cloneTopology(cfg)
+	}
 	if cfg.Ports == nil {
 		cfg.Ports = []string{}
 	}
@@ -206,6 +227,14 @@ func (m *Manager) Interfaces() []Interface {
 
 // device returns the interface that carries the address with a configuration.
 func device(cfg Config) string {
+	if len(cfg.Networks) > 0 {
+		for _, n := range cfg.Networks {
+			if n.Management {
+				return networkDevice(n)
+			}
+		}
+		return ""
+	}
 	switch {
 	case cfg.Bridge:
 		return Bridge
@@ -221,6 +250,9 @@ func device(cfg Config) string {
 
 // validate checks a configuration against the machine.
 func (m *Manager) validate(cfg Config) error {
+	if len(cfg.Networks) > 0 {
+		return m.validateTopology(cfg)
+	}
 	invalid := func(format string, args ...any) error {
 		return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 	}
@@ -276,6 +308,9 @@ func (m *Manager) validate(cfg Config) error {
 
 // render returns the files for systemd-networkd, by name.
 func (m *Manager) render(cfg Config) map[string]string {
+	if len(cfg.Networks) > 0 {
+		return m.renderTopology(cfg)
+	}
 	files := map[string]string{}
 	if len(cfg.Ports) == 0 {
 		return files // the image's own file applies: DHCP on every port
@@ -358,7 +393,7 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 		m.retired = map[string]bool{}
 	}
 	for name := range m.retired {
-		if files[prefix+name+".netdev"] != "" {
+		if len(cfg.Networks) == 0 && files[prefix+name+".netdev"] != "" {
 			delete(m.retired, name)
 		}
 	}
@@ -382,6 +417,8 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 		names = append(names, name)
 		if current, err := os.ReadFile(path); err == nil && string(current) == content {
 			continue
+		} else if err == nil && len(cfg.Networks) > 0 && strings.HasSuffix(name, ".netdev") {
+			m.retired[strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".netdev")] = true
 		}
 		changed = true
 		if err := os.WriteFile(path+".tmp", []byte(content), 0o644); err != nil {
@@ -411,11 +448,22 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 
 // reconfigure makes networkd take up changed files. The caller holds the lock.
 func (m *Manager) reconfigure(ctx context.Context, files map[string]string) error {
+	// New links can appear in sysfs before networkd has consumed RTM_NEWLINK.
+	// They configure themselves on discovery; reconfigure only preexisting links.
+	existing := map[string]bool{}
+	for name := range files {
+		if link, ok := strings.CutSuffix(strings.TrimPrefix(name, prefix), ".netdev"); ok && !m.retired[link] {
+			if _, err := os.Stat(filepath.Join(m.sys, "class/net", link)); err == nil {
+				existing[link] = true
+			}
+		}
+	}
 	if _, err := m.runner.Run(ctx, "", "networkctl", "reload"); err != nil {
 		return err
 	}
 	// Forget obsolete .netdev files before deleting their links, so networkd
 	// cannot recreate a bridge we are removing (including during rollback).
+	deleted := false
 	for name := range m.retired {
 		if _, err := os.Stat(filepath.Join(m.sys, "class/net", name)); errors.Is(err, fs.ErrNotExist) {
 			delete(m.retired, name)
@@ -425,6 +473,12 @@ func (m *Manager) reconfigure(ctx context.Context, files map[string]string) erro
 			return err
 		}
 		delete(m.retired, name)
+		deleted = true
+	}
+	if deleted {
+		if _, err := m.runner.Run(ctx, "", "networkctl", "reload"); err != nil {
+			return err
+		}
 	}
 	// Reconfigure both released/selected physical ports and existing virtual
 	// links. Newly created links are configured by networkd on appearance.
@@ -433,7 +487,7 @@ func (m *Manager) reconfigure(ctx context.Context, files map[string]string) erro
 		links = append(links, port.Name)
 	}
 	for name := range files {
-		if link, ok := strings.CutSuffix(strings.TrimPrefix(name, prefix), ".netdev"); ok {
+		if link, ok := strings.CutSuffix(strings.TrimPrefix(name, prefix), ".netdev"); ok && existing[link] {
 			if _, err := os.Stat(filepath.Join(m.sys, "class/net", link)); err == nil {
 				links = append(links, link)
 			}
@@ -451,6 +505,8 @@ func (m *Manager) reconfigure(ctx context.Context, files map[string]string) erro
 // Change puts a new configuration on trial. It stays only if Confirm is
 // called within two minutes; otherwise the previous one comes back.
 func (m *Manager) Change(ctx context.Context, cfg Config) error {
+	m.attachments.Lock()
+	defer m.attachments.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -466,6 +522,14 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 	if m.pending != nil {
 		return ErrPending
 	}
+	if len(m.active.Networks) > 0 && len(cfg.Networks) == 0 {
+		return fmt.Errorf("%w: topology cannot be replaced by a legacy request", ErrInvalid)
+	}
+	if m.CheckChange != nil {
+		if err := m.CheckChange(cloneTopology(m.active), cloneTopology(cfg)); err != nil {
+			return err
+		}
+	}
 	return m.changeLocked(ctx, cfg)
 }
 
@@ -473,6 +537,8 @@ func (m *Manager) Change(ctx context.Context, cfg Config) error {
 // installation may request setup only while no explicit configuration exists.
 // Port selection is required when the current uplink cannot be determined.
 func (m *Manager) EnsureBridge(ctx context.Context, port string, onlyUnconfigured bool) error {
+	m.attachments.Lock()
+	defer m.attachments.Unlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -491,6 +557,9 @@ func (m *Manager) EnsureBridge(ctx context.Context, port string, onlyUnconfigure
 		return nil
 	}
 	cfg := m.active
+	if len(cfg.Networks) > 0 {
+		return ErrBridgePort
+	}
 	cfg.Ports = slices.Clone(cfg.Ports)
 	if len(cfg.Ports) == 0 {
 		known := m.Interfaces()
@@ -582,7 +651,7 @@ func (m *Manager) SetHostname(ctx context.Context, hostname string) error {
 	if err := m.apply(ctx, cfg); err != nil {
 		return err
 	}
-	if err := m.store.WriteJSON(configFile, cfg); err != nil {
+	if err := m.saveConfig(cfg); err != nil {
 		return err
 	}
 	m.active = cfg
@@ -623,7 +692,10 @@ func (m *Manager) Confirm() error {
 	if m.reverting {
 		return ErrReverting
 	}
-	if err := m.store.WriteJSON(configFile, *m.pending); err != nil {
+	if len(m.pending.Networks) > 0 {
+		return fmt.Errorf("%w: confirm through the new management connection", ErrInvalid)
+	}
+	if err := m.saveConfig(*m.pending); err != nil {
 		return err
 	}
 	m.timer.Stop()
@@ -663,13 +735,13 @@ func (m *Manager) HasBridge() bool {
 func (m *Manager) BridgeReady() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.loaded && m.active.Bridge && m.pending == nil && m.HasBridge()
+	return m.loaded && (m.active.Bridge || topologyHasBridge(m.active)) && m.pending == nil && m.HasBridge()
 }
 
 // Status returns the configuration and what the network looks like right now.
 func (m *Manager) Status(ctx context.Context) Status {
 	m.mu.Lock()
-	status := Status{Config: m.active, Configured: m.configured, BridgeReady: m.loaded && m.active.Bridge && m.pending == nil && m.HasBridge(), Addresses: []string{}, DNS: []string{}}
+	status := Status{Config: cloneTopology(m.active), Configured: m.configured, BridgeReady: m.loaded && (m.active.Bridge || topologyHasBridge(m.active)) && m.pending == nil && m.HasBridge(), Addresses: []string{}, DNS: []string{}}
 	if m.pending != nil {
 		pending := *m.pending
 		status.Pending = &pending
@@ -691,11 +763,21 @@ func (m *Manager) Status(ctx context.Context) Status {
 			}
 		}
 	}
+	if status.Device == "" {
+		cfg := status.Config
+		if status.Pending != nil {
+			cfg = *status.Pending
+		}
+		status.Device = device(cfg)
+	}
 	if status.Device != "" {
-		if out, err := m.runner.Run(ctx, "", "ip", "-4", "-o", "addr", "show", "dev", status.Device); err == nil {
+		if out, err := m.runner.Run(ctx, "", "ip", "-o", "addr", "show", "dev", status.Device); err == nil {
 			for _, line := range strings.Split(out, "\n") {
 				fields := strings.Fields(line)
 				if at := slices.Index(fields, "inet"); at >= 0 && at+1 < len(fields) {
+					status.Addresses = append(status.Addresses, fields[at+1])
+				}
+				if at := slices.Index(fields, "inet6"); at >= 0 && at+1 < len(fields) {
 					status.Addresses = append(status.Addresses, fields[at+1])
 				}
 			}

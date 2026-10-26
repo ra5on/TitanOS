@@ -279,7 +279,7 @@ func (m *Manager) publishClone(root *os.Root, op *CloneOperation) error {
 			return ErrExists
 		}
 	} else {
-		if err := m.store.WriteJSON(configDir+"/"+v.Name+".json", v); err != nil {
+		if err := m.persistVM(v); err != nil {
 			return err
 		}
 		m.mu.Lock()

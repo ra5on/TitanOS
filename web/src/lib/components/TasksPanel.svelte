@@ -7,8 +7,12 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { taskPercent } from '#lib/task-progress.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
+	import type { MediaJob } from '#lib/media.ts';
 	import Dialog from './Dialog.svelte';
-	let { compact = false }: { compact?: boolean } = $props();
+	let {
+		compact = false,
+		hideEmptyMobile = false,
+	}: { compact?: boolean; hideEmptyMobile?: boolean } = $props();
 
 	type Task = {
 		id: string;
@@ -55,6 +59,22 @@
 			];
 			if (privileged)
 				sources.push(
+					[
+						'media',
+						async () =>
+							(await api.get<{ jobs: MediaJob[] }>('/vms/imports', AbortSignal.timeout(10000))).jobs
+								.filter((job) => !['done', 'cancelled'].includes(job.phase))
+								.map((job) => ({
+									id: `media-${job.id}`,
+									title: job.name,
+									kind: 'media.title' as const,
+									href: '/vms/media',
+									percent: ['uploading', 'downloading'].includes(job.phase)
+										? taskPercent(job.bytes, job.total)
+										: undefined,
+									attention: ['paused', 'failed', 'review'].includes(job.phase),
+								})),
+					],
 					[
 						'backups',
 						async () =>
@@ -149,7 +169,11 @@
 	] as Task[]);
 </script>
 
-<div class="tasks-entry" class:compact>
+<div
+	class="tasks-entry"
+	class:compact
+	class:hide-empty-mobile={hideEmptyMobile && !all.length && !failed}
+>
 	<button class="btn" type="button" onclick={() => (open = true)}
 		>{t('ui.tasks')} <span class="mono">{loaded ? all.length : '…'}</span>{#if failed}<span
 				aria-label={t('ui.tasksPartial')}>!</span
@@ -205,6 +229,9 @@
 		color: var(--muted);
 	}
 	@media (max-width: 760px) {
+		.tasks-entry.hide-empty-mobile {
+			display: none;
+		}
 		.tasks-entry.compact {
 			flex: 1 1 100%;
 			justify-content: flex-start;

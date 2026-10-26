@@ -125,6 +125,7 @@
 	<p class="muted">{t('plugins.intro')} <a href="/apps">{t('nav.apps')}</a></p>
 	<p class="muted">{t('plugins.catalogIntro')}</p>
 	{#snippet actions()}
+<a class="btn" href="/plugins/cleanup">{t('cleanup.title')}</a>
 		<button type="button" class="btn" disabled={busy || refreshing} onclick={() => refreshCatalog(true)}>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button>
 	{/snippet}
 </PageHead>

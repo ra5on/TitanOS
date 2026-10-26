@@ -56,6 +56,75 @@ func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Docker.Status(r.Context()))
 }
 
+func (s *Server) handleLANNetworks(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"networks": s.opts.Docker.LANNetworks(), "parents": s.opts.Network.Connections()})
+}
+func (s *Server) handleLANCreate(w http.ResponseWriter, r *http.Request) {
+	var n docker.LANNetwork
+	if !readJSON(w, r, &n) {
+		return
+	}
+	if err := s.opts.Docker.CreateLAN(r.Context(), n); err != nil {
+		writeLANError(w, err)
+		return
+	}
+	s.handleLANNetworks(w, r)
+}
+func (s *Server) handleLANRemove(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Docker.RemoveLAN(r.Context(), r.PathValue("name")); err != nil {
+		writeLANError(w, err)
+		return
+	}
+	s.handleLANNetworks(w, r)
+}
+
+func writeLANError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, docker.ErrInvalid):
+		writeError(w, 400, "invalid_lan_network", err.Error())
+	case errors.Is(err, docker.ErrExists):
+		writeError(w, 409, "lan_exists", err.Error())
+	case errors.Is(err, docker.ErrBusy):
+		writeError(w, 409, "lan_in_use", err.Error())
+	default:
+		writeDockerError(w, err)
+	}
+}
+
+func (s *Server) handleLANAssign(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Service string `json:"service"`
+		Network string `json:"network"`
+		Address string `json:"address"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	var selected *docker.LANNetwork
+	for _, n := range s.opts.Docker.LANNetworks() {
+		if n.Name == req.Network {
+			copy := n
+			selected = &copy
+		}
+	}
+	if selected == nil {
+		writeLANError(w, docker.ErrInvalid)
+		return
+	}
+	text, err := s.opts.Docker.Compose(r.PathValue("name"))
+	if err == nil {
+		text, err = docker.AssignLAN(text, req.Service, *selected, req.Address)
+	}
+	if err == nil {
+		err = s.opts.Docker.SetCompose(r.Context(), r.PathValue("name"), text)
+	}
+	if err != nil {
+		writeLANError(w, err)
+		return
+	}
+	w.WriteHeader(202)
+}
+
 func (s *Server) handleDockerSettings(w http.ResponseWriter, r *http.Request) {
 	var settings docker.Settings
 	if !readJSON(w, r, &settings) {

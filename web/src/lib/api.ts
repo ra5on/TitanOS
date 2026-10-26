@@ -252,7 +252,7 @@ export type Share = {
 	name: string;
 	volume: string;
 	smb: boolean;
-	nfs: { enabled: boolean; clients: string[] | null };
+	nfs: { enabled: boolean; clients: string[] | null; mode?: 'off' | 'ro' | 'rw' };
 	access: Record<string, AccessLevel>;
 	guest: boolean;
 	browseable: boolean;
@@ -408,6 +408,7 @@ export type VM = {
 	volume: string;
 	disks: VMDisk[];
 	iso: string;
+	virtioISO?: string;
 	autostart: boolean;
 	/** Logical CPUs the vCPUs are tied to; empty lets Linux decide. */
 	cpuPin: number[] | null;
@@ -420,7 +421,7 @@ export type VM = {
 	autoGPU?: boolean;
 	usb: string[] | null;
 	/** "bridge" for an address of its own in the network, otherwise "user". */
-	network: 'user' | 'bridge';
+	network: 'user' | 'bridge' | `network:${string}`;
 	mac: string;
 	/** Set while disks are copied, or if that failed. */
 	job: { operation?: string; state: 'running' | 'failed'; text: string } | null;
@@ -435,6 +436,7 @@ export type VM = {
 };
 
 export type VMStatus = {
+ networks?: import('./network.ts').NASNetwork[];
 	/** Whether the machine has hardware virtualization. */
 	kvm: boolean;
 	/** Whether the bridge is set up that gives VMs an address of their own. */

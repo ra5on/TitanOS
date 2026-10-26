@@ -33,6 +33,7 @@ on:
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
       - 'scripts/smoke-storage.py'
+      - 'scripts/workflows023_smoke.py'
       - 'scripts/files_usb_smoke.py'
       - 'scripts/smb_backup_smoke.py'
       - 'scripts/network_smoke.py'
@@ -180,7 +181,7 @@ jobs:
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
         # An app release keeps image and plugins of its base, which were tested then.
         if: steps.kind.outputs.kind == 'system'
-        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420 --workflows023
 
       - uses: actions/upload-artifact@v7
         if: always()

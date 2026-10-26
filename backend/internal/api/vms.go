@@ -78,8 +78,9 @@ func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
 			"cpuModel":             s.opts.Monitor.Info().CPU.Model,
 		},
 		// With the bridge, VMs can have an address of their own in the network.
-		"bridge": s.opts.Network.BridgeReady(),
-		"vms":    s.opts.VMs.List(s.opts.Storage.Mounted()),
+		"bridge":   s.opts.Network.BridgeReady(),
+		"networks": s.opts.Network.Connections(),
+		"vms":      s.opts.VMs.List(s.opts.Storage.Mounted()),
 	})
 }
 

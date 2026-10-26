@@ -15,6 +15,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
+import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -64,12 +65,14 @@
 	let secure = $state(initial ? initial.tpm : false);
 	let disks = $state<DiskDraft[]>([]);
 	let iso = $state(initial?.iso ?? '');
+let virtioISO=$state(initial?.virtioISO??'');let virtioPending=$state(false);
+$effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 	let autostart = $state(initial?.autostart ?? false);
 	let folders = $state((initial?.folders ?? []).map((folder) => ({ ...folder })));
 	let autoGPU = $state(initial?.autoGPU ?? false);
 	let pci = $state<string[]>(initial?.pci ?? []);
 	let usb = $state<string[]>(initial?.usb ?? []);
-	let net = $state<'user' | 'bridge'>(initial?.network ?? 'user');
+	let net = $state<VM['network']>(initial?.network ?? 'user');
 	let bridgePending = $state(false);
 	let bridgeChecked = false;
 	async function bridgeState(ready: boolean, pending: boolean) {
@@ -320,7 +323,7 @@
 			: '',
 	);
 	const blocked = $derived(
-		busy ||
+		busy || virtioPending ||
 			bridgePending ||
 			(net === 'bridge' && !status?.bridge) ||
 			!validVMDisplayName(displayName) ||
@@ -349,6 +352,7 @@
 		cpuPin: pinning ? pinned : [],
 		exclusive: pinning && exclusive,
 		iso: iso.trim(),
+		virtioISO:virtioISO.trim(),
 		folders: folders.map((folder) => ({
 			path: folder.path.trim().replace(/\/+$/, ''),
 			tag: folder.tag,
@@ -907,6 +911,8 @@
 						spellcheck="false"
 					/>
 					<small>{t(media.length > 0 ? 'vms.new.mediumHint' : 'vms.new.mediumNone')}</small>
+<a href="/vms/media">{t('media.add')}</a>
+{#if template==='windows'}<VirtIODrivers volume={disks.find(d=>d.volume)?.volume??volumes[0]?.name??''} initial={initial?.virtioISO??''} defaultAuto={!existing} disabled={running} onready={value=>virtioISO=value} onbusy={value=>virtioPending=value}/>{/if}
 				</div>
 			</fieldset>
 			<div class="start-options">
@@ -927,6 +933,7 @@
 					<select class="field" bind:value={net}>
 						<option value="user">{t('vms.form.netUser')}</option>
 						<option value="bridge" disabled={!status?.bridge}>{t('vms.form.netBridge')}</option>
+{#each status?.networks?.filter(n=>n.bridge)??[] as n}<option value={`network:${n.id}`}>{n.name}{n.vlan?` · VLAN ${n.vlan}`:''}</option>{/each}
 					</select>
 					{#if !status?.bridge}<small
 							>{t('vms.form.netNoBridge')}
@@ -1140,7 +1147,7 @@
 				</div>{/if}
 			<div>
 				<dt>{t('vms.form.network')}</dt>
-				<dd>{t(net === 'bridge' ? 'vms.form.netBridge' : 'vms.form.netUser')}</dd>
+				<dd>{net.startsWith('network:') ? status?.networks?.find(n=>'network:'+n.id===net)?.name??net : t(net === 'bridge' ? 'vms.form.netBridge' : 'vms.form.netUser')}</dd>
 			</div>
 			<div>
 				<dt>{t('vms.autostart')}</dt>
