@@ -807,14 +807,6 @@
 									disabled={busy || !canStart(current)}>{t('vms.startVm')}</button
 								>
 							</div>
-						{:else if connectionPhase === 'declined'}
-							<div class="screen-state">
-								<span class="muted" role="status">{t('vms.screenDeclined')}</span><button
-									type="button"
-									class="btn"
-									onclick={() => screen?.reconnect()}>{t('vms.screenOpen')}</button
-								>
-							</div>
 						{:else if connectionPhase !== 'connected'}
 							<p class="muted hint" role="status">
 								{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}

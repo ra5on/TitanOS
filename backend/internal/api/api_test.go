@@ -1445,8 +1445,9 @@ func TestVMConsoleConfirmationAndDirectAdminShells(t *testing.T) {
 	if res, _ := ts.do(ts.newClient(), "GET", dockerConsole, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("anonymous Docker console: %d", res.StatusCode)
 	}
-	if res, body := ts.request("GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
-		t.Errorf("console without confirmation: %d %s", res.StatusCode, body)
+	// VM consoles use the existing login too, without asking again.
+	if res, body := ts.request("GET", console, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
+		t.Errorf("console with the login alone: %d %s", res.StatusCode, body)
 	}
 	if _, body := ts.request("GET", "/api/v1/session/confirmed", nil); !strings.Contains(string(body), "false") {
 		t.Errorf("confirmed = %s", body)
@@ -1482,10 +1483,10 @@ func TestVMConsoleConfirmationAndDirectAdminShells(t *testing.T) {
 		}
 	}
 	ts.request("PUT", "/api/v1/terminal", map[string]bool{"enabled": true})
-	// The confirmation belongs to this session only.
+	// Any session of an administrator opens consoles.
 	other := ts.newClient()
 	ts.do(other, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword})
-	if res, body := ts.do(other, "GET", console, nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
+	if res, body := ts.do(other, "GET", console, nil); res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusOK {
 		t.Errorf("another session of the same account: %d %s", res.StatusCode, body)
 	}
 }

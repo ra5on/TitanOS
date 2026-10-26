@@ -29,9 +29,6 @@ func init() {
 type consoleOptions struct {
 	// target names the console in the log ("nas", "vm <name>", …).
 	target string
-	// requireConfirmation asks for the recently entered password (unless
-	// the owner switched that off), as VM consoles do.
-	requireConfirmation bool
 	// raw passes every message to the stream as it is (the VNC screen).
 	// Otherwise a text message carries the size of the terminal.
 	raw bool
@@ -45,8 +42,7 @@ type consoleOptions struct {
 
 // serveStream is the one way from a WebSocket to a console: NAS shell,
 // container console, serial line and screen of a VM. It keeps the rules
-// every console shares in one place: terminals switched on, confirmation
-// where required, the Origin check of the WebSocket, the end after
+// every console shares in one place: terminals switched on, the Origin check of the WebSocket, the end after
 // consoleIdle without input, the end when terminals are switched off, and
 // the end when the login behind it no longer holds (see consoleAllowed).
 func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consoleOptions, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error)) {
@@ -58,10 +54,8 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consol
 		writeError(w, http.StatusForbidden, "terminal_off", "terminals are switched off in the settings")
 		return
 	}
-	if opts.requireConfirmation && !s.confirmed(r) {
-		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to open a console")
-		return
-	}
+	// No console asks for the password again: the login of an owner or
+	// administrator is enough (owner decision).
 	// Accept checks that the page asking is this site, not another one.
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {

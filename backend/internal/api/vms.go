@@ -254,7 +254,7 @@ func (s *Server) handleHardware(w http.ResponseWriter, r *http.Request) {
 // with the same checks as every console.
 func (s *Server) handleVMSerial(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	s.serveConsole(w, r, "vm "+name, true, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	s.serveConsole(w, r, "vm "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		running := false
 		for _, known := range s.opts.VMs.List(nil) {
 			running = running || (known.Name == name && known.State == "running")
@@ -281,12 +281,12 @@ func (s *Server) vmRunning(name string) bool {
 	return false
 }
 
-// vmScreenConsole is how the screen of a VM is served: a VM console with
-// confirmation, binary RFB as it is, and only keyboard and mouse count as
+// vmScreenConsole is how the screen of a VM is served: a console with
+// binary RFB as it is, and only keyboard and mouse count as
 // input. The viewer sends small messages, but a pasted clipboard can be
 // larger.
 func vmScreenConsole(name string) consoleOptions {
-	return consoleOptions{target: "vm screen " + name, requireConfirmation: true, raw: true, readLimit: 4 << 20, input: vncInput}
+	return consoleOptions{target: "vm screen " + name, raw: true, readLimit: 4 << 20, input: vncInput}
 }
 
 // handleVMScreen connects a WebSocket to the screen of a running VM. The
