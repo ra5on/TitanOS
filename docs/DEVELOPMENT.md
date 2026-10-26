@@ -249,8 +249,8 @@ Vergleich die oben genannten Git-Stände separat auschecken.
 
 ```sh
 scripts/fedora-dev.sh make test test-release
-make zip VERSION=0.23.1
-scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.1.zip \
+make zip VERSION=0.23.2
+scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.2.zip \
   --workflows023 --online-virtio --log out/validation/workflows023-serial.log
 ```
 
@@ -297,7 +297,7 @@ gh release download v0.22.0 --dir out/public-v0.22.0 \
   --pattern 'titanos-0.22.0.zip*' --skip-existing
 scripts/fedora-dev.sh python3 backend/tests/public_update_qemu.py \
   out/public-v0.22.0/titanos-0.22.0.zip \
-  --from-version 0.22.0 --to-version 0.23.1 \
+  --from-version 0.22.0 --to-version 0.23.2 \
   --log out/validation/public-update-0231-serial.log \
   --result out/validation/public-update-0231.json
 ```
