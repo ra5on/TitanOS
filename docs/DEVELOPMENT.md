@@ -244,3 +244,39 @@ Daten oder Dauerlast. Debian-Spiegel und `latest`-Container-Tags verändern sich
 die festen Toolchains und dokumentierten Schritte machen den Ablauf wiederholbar,
 garantieren aber keinen bytegleichen zukünftigen Build. Für einen historischen
 Vergleich die oben genannten Git-Stände separat auschecken.
+
+## Netzwerk- und Workflow-Prüfung ab 0.23.0
+
+```sh
+scripts/fedora-dev.sh make test test-release
+make zip VERSION=0.23.0
+scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.0.zip \
+  --workflows023 --online-virtio --log out/validation/workflows023-serial.log
+```
+
+`--workflows023` ergänzt vier virtuelle Ethernetports an QEMU-internen Hubs:
+VLAN-Paketverkehr mit IPv4/IPv6, Active-backup-Bond, Verwaltungsbestätigung,
+VLAN-Wechsel/Rückfall, echte Docker-ipvlan/macvlan-Endpunkte, NFS-RO/RW,
+Medienimport mit Dienstneustart, öffentliche CLI und Plugin-Aufräumen. Vier
+NAS-Starts prüfen zusätzlich Persistenz und den bestehenden Btrfs-Ausfall/
+Plattenersatz/Scrub. Die virtuellen Datenplatten sind hierbei 4 statt 2 GiB.
+`--online-virtio` lädt zusätzlich die offizielle stabile Windows-Treiber-ISO;
+ohne Option wird dieser externe Download nicht als getestet bezeichnet.
+`--workflows-only` überspringt ausschließlich die schon getrennt geprüften
+USB-/SMB-/CDI-/RAM-Snapshot-Teilsuiten für gezielte Wiederholungen; Storage-
+Erzeugung und vier Neustarts bleiben erhalten. Nie gegen ein echtes NAS richten.
+
+Die Browserprüfung benötigt einen frisch gestarteten Preview-Server **nach**
+dem letzten `npm run build`; ein noch laufender Preview-Prozess kann auf alte
+Asset-Hashes zeigen. Alle APIs werden abgefangen, keine NAS-Mutation:
+
+```sh
+npm --prefix web run preview -- --host 127.0.0.1 --port 5186
+UI_URL=http://127.0.0.1:5186 PLAYWRIGHT_MODULE=/pfad/zu/playwright/index.mjs \
+  node scripts/test-ui-023.mjs
+```
+
+Ergebnisse/Bilder liegen unter `out/validation/ui-023/`. Der Release-Bericht
+nennt den konkreten Quellstand, erfolgreiche Messungen und offene Hardware-/
+Gast-/Cloud-Prüfungen. Ein grüner Test ist kein Nachweis aller Netzadapter,
+Switches, LACP-Konfigurationen, Windows-Versionen oder echter Tailnets.

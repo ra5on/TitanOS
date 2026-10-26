@@ -587,3 +587,27 @@ kompakte Speicherlisten und thematisch gruppierte Einstellungen. Die zehn lokale
 Motive und ihre Herkunft stehen in [DashboardBackgrounds.md](DashboardBackgrounds.md).
 Er ersetzt die älteren Dashboard-/Editor- und Übersichtsregeln einschließlich
 der Aufmerksamkeit-/Auftragsfläche auf der Startseite.
+
+## Netzwerk- und Workflow-Ergänzungen (0.23.0)
+
+Der Projektinhaber hat die gerenderten Vorschauen für mehrere NAS-Netze,
+Docker-LAN-Zuweisung, unabhängige NFS-Modi, VM-Medien, API-Zugänge und
+Plugin-Aufräumen bestätigt und deren Umsetzung beauftragt. Die bisherige
+Docker-Übersicht und VM-Erstellung behalten ihre Grundaufteilung; ergänzt werden
+nur die zugehörigen Funktionen und Fachdialoge. Verbindlich bleiben alle globalen
+Darstellungswerte (Theme, Akzent, Flächenstil, Schrift, Dichte, Radien) und das
+bestehende SVG-Symbolsystem. Keine Piktogramm-Schrift oder Ersatz-Emoji-Icons.
+
+Im Dateimanager zeigt die Smartphone-Ansicht oben nur eine Root-/Pfadzeile und
+eine Zeile Upload, Neu, Suche und Mehr. Suchfeld/Auswahl erscheinen bei Bedarf.
+Die Desktopleisten bleiben erhalten. Die leere Aufgabenanzeige entfällt nur
+hier mobil; Fehler/laufende Aufgaben bleiben sichtbar. Bei 390×844 Pixeln und
+normaler Schrift beginnt die erste Datei höchstens 260 Pixel unter dem oberen
+Rand. `scripts/test-ui-023.mjs` misst diesen Wert, prüft Graphit/Hell, Deutsch/
+Englisch, Flat/Glas/Outline und 120 % Schrift sowie die neuen Fachdialoge anhand
+isolierter Daten. Diese Aufnahmen ersetzen keine QEMU-Funktionsprüfung.
+
+Router, DHCP und Zugriffsregeln bleiben extern. Netzwerkzwecke und
+Verwaltungsmarkierung sind keine Firewall-Regeln. Tailscale bleibt eine eigene
+Integration; öffentliche Cloudflare-App-Links sind keine Tunnelverwaltung.
+Ablaufende Download-Links sind ausdrücklich nicht Teil des Umfangs.

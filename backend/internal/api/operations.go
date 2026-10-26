@@ -418,6 +418,9 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	out := map[string]any{"transfers": s.opts.Files.Jobs(user.Name), "uploads": s.opts.Files.UploadTasks(user.Name)}
 	problems := []string{}
+	if s.opts.Media != nil {
+		out["media"] = s.opts.Media.List()
+	}
 	if s.chats != nil {
 		list, err := s.chats.List(user.Name, "")
 		if err == nil {

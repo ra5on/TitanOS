@@ -1,4 +1,97 @@
-# Netzwerk, VM-Bridge und Firewall
+# Netzwerk, VLANs, Bonds und Anwendungen
+
+Ab 0.23.0 kann TitanOS mehrere benannte NAS-Netze verwalten. Bestehende NAS
+behalten ihre gespeicherte Konfiguration, bis unter **Einstellungen › Netzwerk**
+ausdrücklich „Mehrere Netze einrichten“ gewählt wird. Router, DHCP-Server und
+übergreifende Zugriffsregeln bleiben extern. TitanOS wird dadurch kein Router
+oder DHCP-Server und erhält keine konfigurierbare Firewall.
+
+## Mehrere NAS-Netze
+
+Ein Netz hat einen Namen, einen Zweck (Verwaltung, Speicher, Anwendungen oder
+benutzerdefiniert), einen physischen Anschluss bzw. Bond, optional eine VLAN-ID
+und optional eine Bridge. Mehrere VLANs dürfen denselben Uplink verwenden.
+Bond-Ports gehören jeweils genau einem Bond; Switch-Einstellungen müssen zum
+gewählten Modus passen. Active-backup benötigt kein LACP; 802.3ad verlangt eine
+passende Switch-Konfiguration. VLANs erfordern ein passendes externes getaggtes
+Netz. TitanOS verteilt selbst keine Adressen.
+
+IPv4 unterstützt DHCP, feste Adresse/Präfix und Aus. IPv6 unterstützt SLAAC/RA,
+DHCPv6/RA, feste Adresse/Präfix und Aus. Dazu kommen DNS und gezielte statische
+Routen. Genau ein Netz ist der bevorzugte Verwaltungszugang: nur dort werden
+automatisch Standardrouten und DNS aus DHCP/RA übernommen. Sekundäre Netze
+verdrängen diese nicht. Explizite Gateways/Routen bleiben eine bewusste
+Konfiguration; redundante IP-Netze auf verschiedenen Anschlüssen werden
+abgewiesen. Zweck und Verwaltungsmarkierung sind keine Firewall-Regeln.
+
+VMs wählen ein bestätigtes benanntes Netz mit Bridge (`network:<id>`). Docker
+verwendet einen bestätigten Anschluss des gewählten NAS-Netzes. Auch gestoppte,
+konfigurierte VMs/Container-Netze schützen ihre Netze vor Entfernen bzw. Änderung
+von Anschluss, VLAN und Bridge. Vor einem solchen Umbau Anwendungen verlagern.
+Bestehende VMs an `br0` behalten beim Umstieg denselben Uplink und dieselbe VLAN-ID.
+
+Neue Topologien liegen separat in `/config/network/topology.json`; die alte
+`network.json` bleibt für einen Systemrückfall erhalten. Ältere Versionen sehen
+damit ihre vorherige Konfiguration. Benannte VM-Netze werden für alte Versionen
+mit deaktiviertem Autostart gespeichert. Beim aktuellen Laden wird der
+Autostartwunsch wiederhergestellt; nach einem Rückfall benannte Netze vor
+manuellem VM-Start prüfen.
+
+### Probelauf und lokale Rettung
+
+Jede Änderung läuft weiterhin zwei Minuten auf Probe. Bestätigen muss eine
+normale Administratorsitzung über die tatsächliche neue Verwaltungsadresse;
+Host-/Forwarded-Kopfzeilen und API-Tokens ersetzen diesen Nachweis nicht.
+Ohne Bestätigung wird zurückgesetzt. Auch ein Dienstneustart lädt die zuletzt
+bestätigte Konfiguration, keine unbestätigte Browserfassung.
+
+An der angeschlossenen NAS-Konsole öffnet **Strg+Alt+F2** die lokale
+Netzwerkwiederherstellung. NAS-Besitzer/Administrator melden sich mit ihrem
+NAS-Passwort und gegebenenfalls 2FA-/Recovery-Code an. Danach lässt sich die
+vorige bestätigte Konfiguration oder DHCP auf genau einem ausgewählten
+physischen Anschluss wiederherstellen. Erst die Texteingabe JA/YES stoppt
+vorübergehend titand, stellt das Netz um und startet den Dienst wieder.
+Es gibt keinen ungeschützten Root-Login. Bei manueller Wartung kann root
+`titand -network-recovery` aufrufen; interaktives
+Terminal ist Pflicht.
+
+### Container mit eigener LAN-Adresse
+
+Unter **Docker › LAN-Netze** ein IPv4-Subnetz, externes Gateway und einen
+reservierten IP-Pool innerhalb des Subnetzes festlegen. **Diesen Pool im
+externen DHCP-Server von der Vergabe ausschließen.** Docker-IPAM vergibt daraus
+dynamische Adressen; für einzelne Dienste kann eine feste Adresse aus diesem
+Pool gesetzt werden. Dafür läuft kein DHCP-Server in TitanOS.
+
+Standard ist ipvlan L2, alternativ macvlan. Sie verwenden ein bestätigtes
+NAS-Netz; mehrere Dienste behalten ihre privaten Compose-Netze. Beim Bearbeiten
+einer App wird nur der gewählte Dienst ans LAN gehängt, eine Datenbank landet
+nicht automatisch im LAN. Manuelle Compose-Einstellungen bleiben prüfbar.
+Die App wird erst mit dem normalen Speichern neu erstellt. Laufende bzw.
+gespeicherte App-Referenzen sperren das Entfernen eines LAN-Netzes.
+
+ipvlan/macvlan isolieren den ursprünglichen Host-Endpunkt. Optionaler NAS-Zugang
+legt deshalb einen eigenen lokalen Endpunkt mit einer freien Adresse außerhalb
+des Containerpools an und routet nur diesen Pool darüber. Auch diese Adresse im
+externen Netz reservieren. Es entstehen keine zusätzlichen Firewall-Regeln.
+Docker-LAN-Pools sind in dieser Version IPv4; IPv6 der NAS-Netze ist unabhängig.
+WLAN-Uplinks, alle Switch-/Bond-Varianten und beliebige Docker-Netzwerktreiber
+sind nicht durch einen QEMU-Test abgedeckt.
+
+### Fernzugriff und Diagnose
+
+Der Reiter Fernzugriff verlinkt Tailscale und zeigt den bekannten Tailnet-Stand.
+Bestehende Tailscale-Hooks und Docker-NAT/Portweiterleitungen bleiben erhalten.
+Cloudflare bzw. andere öffentliche App-URLs werden bei den App-Links verwaltet;
+eine URL richtet keinen Tunnel ein. Cloudflare-Zero-Trust-/Tailnet-ACLs und
+Router-Firewalls werden weiterhin im jeweiligen externen System verwaltet.
+
+Die Diagnose prüft tatsächlichen Link/Adressen, konfigurierte Gateways und
+DNS-Auflösung. Ein erfolgreicher `ip`-Aufruf allein bedeutet keinen gesunden
+Link. DNS-/Ping-Fehler bleiben sichtbar; eine fehlgeschlagene Diagnose ist kein
+allgemeiner Ausfallnachweis aller Netzwerkdienste.
+
+## Bestehende Heimnetz-Bridge
 
 Eine VM im Bridge-Modus hängt mit ihrer eigenen MAC-Adresse an `br0`. Ihre IP
 kommt vom Router bzw. aus der Netzwerkkonfiguration des Gasts. Die IP des NAS

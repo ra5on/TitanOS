@@ -6,6 +6,7 @@
 	import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
 	import ImageField from '#lib/components/ImageField.svelte';
+import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
 	import { api, ApiError, type DockerStatus } from '#lib/api.ts';
@@ -324,6 +325,7 @@
 	</section>
 
 	{#if form.network !== 'host' && form.network !== 'none'}
+<LANAssignment {text} {service} onchange={(next)=>{text=next;parse();}} />
 		<section class="tile" aria-labelledby="h-ports">
 			<div class="section-head">
 				<h2 class="tile-title" id="h-ports">{t('editor.ports')}</h2>

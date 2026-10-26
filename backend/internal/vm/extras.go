@@ -298,7 +298,7 @@ func (m *Manager) copyDisks(ctx context.Context, vm VM) {
 		}
 		vm.Disks[i].Source = ""
 	}
-	if err := m.store.WriteJSON(configDir+"/"+vm.Name+".json", vm); err != nil {
+	if err := m.persistVM(vm); err != nil {
 		fail(err)
 		return
 	}
@@ -347,7 +347,7 @@ func (m *Manager) Grow(ctx context.Context, name string, index int, sizeBytes in
 		return err
 	}
 	vm.Disks[index].SizeBytes = sizeBytes
-	if err := m.store.WriteJSON(configDir+"/"+name+".json", vm); err != nil {
+	if err := m.persistVM(vm); err != nil {
 		return err
 	}
 	m.mu.Lock()

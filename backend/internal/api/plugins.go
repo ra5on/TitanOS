@@ -48,6 +48,31 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Plugins.Status(s.opts.Storage.Mounted()))
 }
 
+func (s *Server) handlePluginOldReleases(w http.ResponseWriter, r *http.Request) {
+	list, err := s.opts.Plugins.OldReleases(s.opts.Storage.Mounted())
+	if err != nil {
+		writePluginError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"releases": list})
+}
+func (s *Server) handlePluginCleanup(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
+	var req struct {
+		Selection []plugins.CleanupSelection `json:"selection"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Plugins.Cleanup(s.opts.Storage.Mounted(), req.Selection); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	s.handlePluginOldReleases(w, r)
+}
+
 func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Force bool }
 	if !readJSON(w, r, &req) {

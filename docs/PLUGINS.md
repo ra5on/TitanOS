@@ -162,3 +162,7 @@ bleibt bis zur Rückgabe bei dieser VM.
 Die Sperre während eines Systemupdates ist unabhängig von laufenden VMs. Sie
 wird jetzt ausdrücklich als Systemupdate-Sperre angezeigt. Die vorherige
 allgemeine Meldung über eine belegte GPU konnte hier irreführend erscheinen.
+
+## Alte Release-Dateien
+
+Nicht mehr benötigte Plugin-Versionen lassen sich mit Vorschau und erneuter Schutzprüfung aufräumen. Aktuelle, aktive, Rückfall- und vorbereitete Versionen bleiben erhalten. [Ablauf und Grenzen](PLUGIN-CLEANUP.md).

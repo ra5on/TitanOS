@@ -131,6 +131,12 @@ type sample struct {
 
 // Manager keeps the engine in line with the settings and answers the UI.
 type Manager struct {
+	NetworkResolver func(string) (string, string, bool)
+	NetworkLease    func() (func(), error)
+	lanMu           sync.Mutex
+	lanUsers        sync.RWMutex
+	lan             []LANNetwork
+	lanErrors       map[string]string
 	Ready           func() bool // drivers must be active before Docker autostarts containers
 	HardwareDevices func(context.Context) []hardware.ContainerDevice
 	RefreshCDI      func(context.Context) error
@@ -173,6 +179,14 @@ func NewManager(store *config.Store, configDir string) *Manager {
 
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
+	var lan []LANNetwork
+	if err := m.store.ReadJSON(lanFile, &lan); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	m.lanMu.Lock()
+	m.lan = lan
+	m.lanErrors = map[string]string{}
+	m.lanMu.Unlock()
 	var settings Settings
 	err := m.store.ReadJSON(settingsFile, &settings)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -239,6 +253,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			if err := m.reconcile(ctx, mounted()); err != nil {
 				slog.Error("docker engine", "err", err)
 			}
+			m.ReconcileLAN(ctx)
 			m.sample(ctx)
 			m.mu.Lock()
 			due := m.applied != "" && time.Since(m.updatesChecked) > updateInterval

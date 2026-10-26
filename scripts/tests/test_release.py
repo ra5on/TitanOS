@@ -92,6 +92,9 @@ class ReleaseTest(unittest.TestCase):
         (self.root / "usr/share/titanos/base-version").write_text("0.1.0-beta.1\n")
         (self.repo / "backend/bin").mkdir(parents=True)
         (self.repo / "backend/bin/titand").write_bytes(b"titand 0.1.0-beta.1")
+        cli = self.repo / "backend/bin/titanosctl"
+        cli.write_bytes(b"CLI fixture")
+        cli.chmod(0o755)
         notices = self.root / "usr/share/titanos"
         (notices / "licenses").mkdir(parents=True, exist_ok=True)
         for name in ["LICENSE.md", "THIRD_PARTY_LICENSES", "licenses/NOTICE"]:
@@ -145,7 +148,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(manifest["app"]["asset"], "titanos-0.1.0-beta.1-titand")
         self.assertEqual((self.release / "titanos-0.1.0-beta.1-titand").read_bytes(), b"titand 0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz", "titanos-0.1.0-beta.1-titand",
-                     "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt",
+                     "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt", "titanos-0.1.0-beta.1-cli-linux-amd64",
                      "nvidia-build-sdk.tar.zst", "nvidia-build-sdk-sources.txt", "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
                 path = self.release / name

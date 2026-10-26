@@ -1,0 +1,19 @@
+[Unit]
+Description=TitanOS authenticated local network recovery (Ctrl+Alt+F2)
+After=systemd-user-sessions.service
+Conflicts=getty@tty2.service
+
+[Service]
+ExecStart=/usr/bin/titand -network-recovery
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty2
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

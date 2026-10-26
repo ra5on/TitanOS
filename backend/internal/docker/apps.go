@@ -125,6 +125,15 @@ func (m *Manager) validateCompose(ctx context.Context, volume, name, compose, en
 // env holds secrets the compose file refers to as ${NAME}. They go into a
 // file of their own next to the compose file.
 func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[string]string) error {
+	if m.NetworkLease != nil {
+		release, err := m.NetworkLease()
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+	m.lanUsers.RLock()
+	defer m.lanUsers.RUnlock()
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -151,6 +160,9 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	}
 
 	// Let Docker check the file before anything is kept.
+	if err := m.validateLANCompose(compose); err != nil {
+		return err
+	}
 	if err := m.validateCompose(ctx, settings.Volume, name, compose, secrets); err != nil {
 		return err
 	}
@@ -270,6 +282,18 @@ func (m *Manager) UpdateApp(ctx context.Context, name string) error {
 // SetCompose replaces the compose file of an app and recreates its
 // containers. Data in mounted folders stays.
 func (m *Manager) SetCompose(ctx context.Context, name, compose string) error {
+	if m.NetworkLease != nil {
+		release, err := m.NetworkLease()
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+	m.lanUsers.RLock()
+	defer m.lanUsers.RUnlock()
+	if err := m.validateLANCompose(compose); err != nil {
+		return err
+	}
 	if strings.TrimSpace(compose) == "" || len(compose) > maxComposeBytes {
 		return ErrInvalid
 	}

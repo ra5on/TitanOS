@@ -109,6 +109,7 @@ export type BackupView = {
 	next: string | null;
 };
 export type Operations = {
+	media?: import('#lib/media.ts').MediaJob[];
 	storageActive?: boolean;
 	clones?: {
 		id: string;
