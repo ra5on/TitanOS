@@ -8,7 +8,8 @@
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Settings = { channel: 'stable' | 'beta'; autoInstall: boolean; installTime: string };
+	/** checkEvery: minutes between automatic checks; 0 or missing is once a day, -1 manual only. */
+	type Settings = { channel: 'stable' | 'beta'; autoInstall: boolean; installTime: string; checkEvery?: number };
 	type Manifest = { version: string; channel: string; kernel: string; released: string; minVersion?: string; changelog: string; files: { size: number }[]; app?: { base: string; size: number } };
 	type Slot = { name: string; version: string; running: boolean; complete: boolean; next: boolean; triesLeft: number | null };
 	type Status = {
@@ -19,6 +20,8 @@
 		canVerify: boolean;
 		available: Manifest | null;
 		lastCheck: string | null;
+		/** When the next automatic check is due; null with manual checks or none scheduled. */
+		nextCheck: string | null;
 		checkError: string;
 		progress: { phase: '' | 'download' | 'switch' | 'restart' | 'done' | 'failed'; file: string; percent: number; speedBytesPerSecond: number; error: string };
 		pending: { kind: 'update' | 'rollback'; version: string; slot: string } | null;
@@ -45,9 +48,64 @@
 		error = { text: errorText(code), detail: ['update_failed', 'update_too_old', 'update_no_space'].includes(code) && err instanceof ApiError ? err.message : '' };
 	}
 
+	// How often to look, as the server keeps it (minutes): presets, or a
+	// custom spacing from an hour to 30 days. Manual leaves it to the button.
+	const MANUAL = -1;
+	const presets = [360, 720, 0, 10080];
+	const MIN_EVERY = 60;
+	const MAX_EVERY = 30 * 24 * 60;
+	let mode = $state('0');
+	let amount = $state(1);
+	let unit = $state<'hours' | 'days'>('hours');
+
+	// The settings with a missing interval read as the default, so that the
+	// draft compares equal to what the server sent.
+	function normal(settings: Settings): Settings {
+		const every = settings.checkEvery ?? 0;
+		return { ...settings, checkEvery: every === 24 * 60 ? 0 : every };
+	}
+
+	function showEvery(every: number) {
+		if (every === MANUAL) mode = 'manual';
+		else if (presets.includes(every)) mode = String(every);
+		else {
+			mode = 'custom';
+			unit = every % (24 * 60) === 0 ? 'days' : 'hours';
+			amount = every / (unit === 'days' ? 24 * 60 : 60);
+		}
+	}
+
+	const chosenEvery = $derived(mode === 'manual' ? MANUAL : mode === 'custom' ? Math.round(amount * (unit === 'days' ? 24 * 60 : 60)) : Number(mode));
+	const customInvalid = $derived(mode === 'custom' && (!Number.isFinite(amount) || chosenEvery < MIN_EVERY || chosenEvery > MAX_EVERY));
+	const manual = $derived(mode === 'manual');
+
+	// Applies the choice to the draft. Installing by itself needs automatic
+	// checks, so manual turns it off; the checkbox stays disabled meanwhile.
+	function chooseEvery() {
+		if (!draft) return;
+		// One day is the default and saved as such.
+		if (!customInvalid) draft.checkEvery = chosenEvery === 24 * 60 ? 0 : chosenEvery;
+		if (manual) draft.autoInstall = false;
+	}
+
+	// Custom starts from the interval chosen so far, so "once a week" turns
+	// into 7 days rather than an hour.
+	function pickMode() {
+		if (mode === 'custom' && draft) {
+			const every = draft.checkEvery || 24 * 60;
+			const days = every > 0 && every % (24 * 60) === 0;
+			unit = days || every < 0 ? 'days' : 'hours';
+			amount = every < 0 ? 1 : every / (days ? 24 * 60 : 60);
+		}
+		chooseEvery();
+	}
+
 	function take(res: Status) {
-		status = res;
-		if (!draft) draft = { ...res.settings };
+		status = { ...res, settings: normal(res.settings) };
+		if (!draft) {
+			draft = { ...status.settings };
+			showEvery(draft.checkEvery ?? 0);
+		}
 	}
 
 	// titand restarts for an app update: the page keeps asking until the new
@@ -94,14 +152,18 @@
 	}
 
 	const changed = $derived(!!status && !!draft && JSON.stringify(draft) !== JSON.stringify(status.settings));
+	// The next check belongs to the saved interval; it is hidden while
+	// another one is chosen but not saved yet.
+	const nextCheck = $derived(status?.nextCheck && draft && (draft.checkEvery ?? 0) === (status.settings.checkEvery ?? 0) ? new Date(status.nextCheck) : null);
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft) return;
 		busy = 'save'; saved = false;
 		error = null;
 		try {
-			status = await api.put<Status>('/update/settings', draft);
-			draft = { ...status.settings }; saved = true;
+			take(await api.put<Status>('/update/settings', draft));
+			draft = { ...status!.settings }; saved = true;
+			showEvery(draft.checkEvery ?? 0);
 		} catch (err) {
 			problem(err);
 		}
@@ -226,14 +288,35 @@
 	<form class="tile" onsubmit={save}>
 		<h2 class="tile-title">{t('update.settings')}</h2>
 		<p class="muted">{t('update.singleChannel')}</p>
-		<label class="check"><input type="checkbox" bind:checked={draft.autoInstall} /><span>{t('update.auto')}</span></label>
-		{#if draft.autoInstall}
+		<div class="interval">
+			<label class="narrow"><span>{t('update.interval')}</span>
+				<select class="field" bind:value={mode} onchange={pickMode}>
+					{#each presets as every (every)}<option value={String(every)}>{t(`update.interval.${every}` as 'update.interval.0')}</option>{/each}
+					<option value="custom">{t('update.interval.custom')}</option>
+					<option value="manual">{t('update.interval.manual')}</option>
+				</select>
+			</label>
+			{#if mode === 'custom'}
+				<label class="amount"><span>{t('update.interval.every')}</span><input class="field mono" type="number" min="1" max={unit === 'days' ? 30 : 720} step="1" bind:value={amount} oninput={chooseEvery} aria-invalid={customInvalid} /></label>
+				<select class="field unit" bind:value={unit} onchange={chooseEvery} aria-label={t('update.interval.unit')}>
+					<option value="hours">{t('update.interval.hours')}</option>
+					<option value="days">{t('update.interval.days')}</option>
+				</select>
+			{/if}
+		</div>
+		{#if customInvalid}<p class="notice-error" role="alert">{t('update.interval.range')}</p>{/if}
+		<p class="muted">{t(manual ? 'update.interval.manualHint' : 'update.interval.hint')}</p>
+		{#if nextCheck && !manual}<p class="muted" role="status">{nextCheck.getTime() <= Date.now() ? t('update.nextCheckSoon') : t('update.nextCheck', { time: formatDateTime(nextCheck) })}</p>{/if}
+		<label class="check"><input type="checkbox" bind:checked={draft.autoInstall} disabled={manual} /><span>{t('update.auto')}</span></label>
+		{#if manual}
+			<p class="muted">{t('update.autoNeedsChecks')}</p>
+		{:else if draft.autoInstall}
 			<label class="narrow"><span>{t('update.autoTime')}</span><input class="field mono" type="time" bind:value={draft.installTime} required /></label>
 			<p class="muted">{t('update.autoHint')}</p>
 		{:else}
 			<p class="muted">{t('update.manualHint')}</p>
 		{/if}
-		<div class="actions"><button type="submit" class="btn btn-primary" disabled={!changed || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}</div>
+		<div class="actions"><button type="submit" class="btn btn-primary" disabled={!changed || customInvalid || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}</div>
 	</form>
 {/if}
 
@@ -386,6 +469,24 @@
 	}
 	.narrow {
 		max-width: 320px;
+	}
+	.interval {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 10px 12px;
+	}
+	.interval .narrow {
+		flex: 1 1 220px;
+	}
+	.amount {
+		width: 6.5rem;
+	}
+	.unit {
+		width: 8rem;
+	}
+	.check input:disabled + span {
+		color: var(--muted);
 	}
 	label.check {
 		flex-direction: row;

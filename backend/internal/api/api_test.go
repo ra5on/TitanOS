@@ -1206,6 +1206,23 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "beta", "installTime": "04:15", "autoInstall": true, "source": "https://evil.example"}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"channel":"stable"`) || strings.Contains(string(body), "evil") {
 		t.Errorf("settings: %d %s", res.StatusCode, body)
 	}
+	// How often to look: an hour to 30 days, or by hand only; installing by
+	// itself then needs automatic checks.
+	for _, bad := range []map[string]any{
+		{"channel": "stable", "installTime": "03:30", "checkEvery": 30},
+		{"channel": "stable", "installTime": "03:30", "checkEvery": 30*24*60 + 1},
+		{"channel": "stable", "installTime": "03:30", "checkEvery": -1, "autoInstall": true},
+	} {
+		if res, body := ts.request("PUT", "/api/v1/update/settings", bad); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_update_settings" {
+			t.Errorf("settings %v: %d %s", bad, res.StatusCode, body)
+		}
+	}
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "stable", "installTime": "03:30", "checkEvery": 6 * 60}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"checkEvery":360`) || !strings.Contains(string(body), `"nextCheck":null`) {
+		t.Errorf("every six hours (development mode schedules nothing): %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/update/settings", map[string]any{"channel": "stable", "installTime": "03:30", "checkEvery": -1}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"checkEvery":-1`) {
+		t.Errorf("manual checks: %d %s", res.StatusCode, body)
+	}
 	if res, body := ts.request("GET", "/api/v1/health", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"ready":`) {
 		t.Errorf("health: %d %s", res.StatusCode, body)
 	}

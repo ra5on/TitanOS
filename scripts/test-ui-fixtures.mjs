@@ -143,6 +143,39 @@ export function fixtureFactory(browser, errors) {
       operations: null,
       recovery: null,
       exports: 0,
+      // Settings › Updates, shaped like GET /update. checkEvery is missing
+      // as in a file from before the field; the routes below apply the
+      // server's rules for it.
+      update: {
+        version: "0.24.0",
+        release: true,
+        slots: [],
+        settings: {
+          channel: "stable",
+          autoInstall: true,
+          installTime: "03:30",
+        },
+        canVerify: true,
+        available: null,
+        lastCheck: time,
+        nextCheck: "2026-10-24T16:00:00Z",
+        checkError: "",
+        progress: {
+          phase: "",
+          file: "",
+          percent: 0,
+          speedBytesPerSecond: 0,
+          error: "",
+        },
+        pending: null,
+        canRollback: false,
+        unconfirmed: false,
+        base: "0.24.0",
+        kind: "",
+        app: { current: "", previous: "", trial: false, canRollback: false },
+      },
+      updateChecks: 0,
+      updatePuts: [],
       // Shaped like GET /plugins/tailscale/devices; null = plugin not active.
       tailnet: {
         active: true,
@@ -639,6 +672,39 @@ export function fixtureFactory(browser, errors) {
         });
       if (path === "/update/progress")
         return json({ progress: { phase: "idle" } });
+      if (path === "/update" && method === "GET") return json(data.update);
+      if (path === "/update/settings" && method === "PUT") {
+        const body = route.request().postDataJSON();
+        data.updatePuts.push(body);
+        const every = body.checkEvery ?? 0;
+        const valid =
+          every === 0 ||
+          (every === -1 && !body.autoInstall) ||
+          (every >= 60 && every <= 30 * 24 * 60);
+        if (!valid)
+          return route.fulfill({
+            status: 400,
+            json: {
+              error: { code: "invalid_update_settings", message: "invalid" },
+            },
+          });
+        const settings = { ...body, checkEvery: every === 24 * 60 ? 0 : every };
+        if (!settings.checkEvery) delete settings.checkEvery;
+        const next = new Date(
+          Date.parse(data.update.lastCheck) +
+            (every > 0 ? every : 24 * 60) * 60e3,
+        ).toISOString();
+        data.update = {
+          ...data.update,
+          settings,
+          nextCheck: every === -1 ? null : next,
+        };
+        return json(data.update);
+      }
+      if (path === "/update/check" && method === "POST") {
+        data.updateChecks++;
+        return json(data.update);
+      }
       return json({});
     });
     const page = await ctx.newPage();
