@@ -46,6 +46,9 @@ type User struct {
 	// one-time codes for a lost phone.
 	TOTPSecret    string   `json:"totpSecret,omitempty"`
 	RecoveryCodes []string `json:"recoveryCodes,omitempty"`
+	// UsedTOTPStep prevents replay between the daemon, local recovery and
+	// subsequent daemon starts. It is saved with the accepted factor.
+	UsedTOTPStep uint64 `json:"usedTOTPStep,omitempty"`
 	// SSHKeys are the public keys the account may log in with over SSH,
 	// one line each as in an authorized_keys file.
 	SSHKeys []string `json:"sshKeys,omitempty"`
@@ -106,23 +109,21 @@ func ValidatePassword(password string) error {
 	return nil
 }
 
-// Users is the set of accounts. It is read from the store once and then
-// kept in memory, so that logins do not wake up the stick.
+// Users caches ordinary password checks. Mutations and second-factor
+// consumption reload under a cross-process lock; no access runs on a timer.
 type Users struct {
 	store *config.Store
 
 	mu     sync.RWMutex
 	users  map[string]User
 	loaded bool
-	// pendingTOTP holds secrets that were handed out but not confirmed
-	// yet; usedStep the last time step a code was accepted for.
+	// pendingTOTP holds secrets that were handed out but not confirmed yet.
 	pendingTOTP map[string]string
-	usedStep    map[string]uint64
 }
 
 // NewUsers returns the accounts in store. Call Load before using them.
 func NewUsers(store *config.Store) *Users {
-	return &Users{store: store, users: map[string]User{}, pendingTOTP: map[string]string{}, usedStep: map[string]uint64{}}
+	return &Users{store: store, users: map[string]User{}, pendingTOTP: map[string]string{}}
 }
 
 func accountFile(name string) string {
@@ -131,6 +132,22 @@ func accountFile(name string) string {
 
 // Load reads all accounts from the store.
 func (u *Users) Load() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	unlock, err := u.lockAccountFiles()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := u.reloadAccountsLocked(); err != nil {
+		return err
+	}
+	u.loaded = true
+	return nil
+}
+
+// reloadAccountsLocked requires mu and the account-file lock.
+func (u *Users) reloadAccountsLocked() error {
 	names, err := u.store.List("users")
 	if err != nil {
 		return err
@@ -161,10 +178,7 @@ func (u *Users) Load() error {
 		}
 	}
 
-	u.mu.Lock()
-	defer u.mu.Unlock()
 	u.users = users
-	u.loaded = true
 	return nil
 }
 
@@ -246,6 +260,14 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 	if !u.loaded {
 		return User{}, ErrNotLoaded
 	}
+	unlock, err := u.lockAccountFiles()
+	if err != nil {
+		return User{}, err
+	}
+	defer unlock()
+	if err := u.reloadAccountsLocked(); err != nil {
+		return User{}, err
+	}
 	if first && len(u.users) > 0 {
 		return User{}, ErrSetupDone
 	}
@@ -295,6 +317,17 @@ func (u *Users) Authenticate(name, password string) (User, bool) {
 func (u *Users) update(name string, change func(user *User) error) (User, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	if !u.loaded {
+		return User{}, ErrNotLoaded
+	}
+	unlock, err := u.lockAccountFiles()
+	if err != nil {
+		return User{}, err
+	}
+	defer unlock()
+	if err := u.reloadAccountsLocked(); err != nil {
+		return User{}, err
+	}
 	user, ok := u.users[name]
 	if !ok {
 		return User{}, ErrNotFound
@@ -368,6 +401,14 @@ func (u *Users) SetRole(name string, role Role) (User, error) {
 func (u *Users) Delete(name string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	unlock, err := u.lockAccountFiles()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := u.reloadAccountsLocked(); err != nil {
+		return err
+	}
 	user, ok := u.users[name]
 	if !ok {
 		return ErrNotFound

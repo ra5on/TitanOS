@@ -55,6 +55,22 @@ Es gibt keinen ungeschützten Root-Login. Bei manueller Wartung kann root
 `titand -network-recovery` aufrufen; interaktives
 Terminal ist Pflicht.
 
+Am 26. Oktober 2026 wurde dieser Weg auf der tatsächlichen TTY2 eines
+Wegwerf-QEMU-Gasts geprüft: falsches Passwort und ungültiger zweiter Faktor
+werden abgewiesen. Ein Besitzerkonto mit Passwort und Einmal-Recovery-Code
+stellt DHCP auf dem ausgewählten Anschluss wieder her, nachdem eine falsche
+Verwaltungsadresse den HTTPS-Zugang unterbrochen hat. Die Weboberfläche war
+vor Ablauf des automatischen Probelauf-Rückfalls wieder erreichbar.
+[Prüfschritte, Abbildhash und Grenzen](validation/v0.23.0-workflows.json).
+Der andere Rettungsmenüpfad und echte Konsolenhardware sind damit nicht
+abgenommen.
+
+Die zusätzliche v0.23.1-Prüfung verwendet an TTY2 einen Recovery-Code und
+einen TOTP-Code und versucht beide vor jedem Daemon-Neustart erneut im
+Webdienst. Beide Wiederholungen werden abgewiesen. Die Prozesssperre und der
+aktuelle Kontostand verhindern die zuvor beobachtete Wiederverwendung;
+[Nachweis und Verbrauchsbuchung](validation/v0.23.1-authorization.json).
+
 ### Container mit eigener LAN-Adresse
 
 Unter **Docker › LAN-Netze** ein IPv4-Subnetz, externes Gateway und einen
