@@ -81,6 +81,8 @@ type Job struct {
 	user         string
 	cancel       context.CancelFunc
 	c            *counters
+	// download is set for downloads from a link (Operation "download").
+	download *download
 }
 
 // counters are what the copying goroutine counts while others read it.
@@ -754,7 +756,7 @@ func (m *Manager) snapshot(job *Job) Job {
 }
 
 func snapshotLocked(job *Job) Job {
-	return Job{Durable: job.Durable, Blocked: job.Blocked, Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: !job.finishing && !job.Blocked && (job.durable == nil || job.durable.Pending == "" && !job.durable.forgotten) && job.Operation == "" && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
+	return Job{Durable: job.Durable, Blocked: job.Blocked, Waiting: job.State == JobRunning && job.Waiting, Paused: job.Paused, Priority: job.Priority, Rate: job.Rate, ID: job.ID, Operation: job.Operation, Move: job.Move, State: job.State, From: job.From, To: job.To, Dir: job.Dir, Names: append([]string{}, job.Names...), Files: job.Files, Bytes: job.Bytes, Current: job.Current, Error: job.Error, Started: job.Started, Finished: job.Finished, Retryable: !job.finishing && !job.Blocked && (job.durable == nil || job.durable.Pending == "" && !job.durable.forgotten) && (job.Operation == "" || job.download != nil) && (job.State == JobFailed || job.State == JobCancelled), Copied: job.c.copied.Load(), Done: job.c.count.Load()}
 }
 
 // Jobs returns the copy jobs of a user, the newest first.
@@ -799,6 +801,8 @@ func (m *Manager) pruneJobs() {
 	for i := 0; i < len(m.jobs.list); {
 		j := m.jobs.list[i]
 		if finished[j.user] > maxJobs && eligible(j) {
+			// A failed download keeps its part file for a retry until then.
+			m.discardDownload(j.download)
 			m.jobs.list = append(m.jobs.list[:i], m.jobs.list[i+1:]...)
 			finished[j.user]--
 		} else {

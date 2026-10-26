@@ -422,6 +422,20 @@ Speicherwarnungen sind Schätzungen, weil Umbenennen innerhalb eines Dateisystem
 Ersetzen und gleichzeitige Zugriffe den tatsächlichen Bedarf verändern können.
 Konfliktprüfung und serverseitige Rechte-/Pfadprüfung bleiben maßgeblich.
 
+### Von Link herunterladen (nach 0.24.0)
+
+Letzter Eintrag im Menü „Neu“ (Globus-Symbol) und im Kontextmenü der freien
+Fläche, nur bei Schreibrecht und ohne aktive USB-Backup-Sperre. Ein schmaler
+`Dialog.svelte` mit Link, „Name und Größe abfragen“ (Größe und Typ in einer Zeile
+daneben), Name und optionaler SHA-256; Hinweise unter den Feldern, ungültige
+Eingaben sperren „Herunterladen“. Bei vorhandenem Namen bleibt der Dialog offen,
+erklärt in einem Warnkasten, dass nichts überschrieben wird, und bietet
+„Beide behalten“; einen Ersetzen-Knopf gibt es nicht. Konten mit Rolle Benutzer
+sehen den Hinweis, dass nur Internetadressen erreichbar sind. Der Auftrag
+erscheint in der Liste „Dateiaufträge“ mit Name, Größe (oder „Größe unbekannt“),
+Tempo, Restzeit, Abbrechen und Wiederholen. Verhalten und Grenzen:
+`docs/FILE-DOWNLOADS.md`; Browserprüfung `scripts/test-ui-url-download.mjs`.
+
 ### VM anlegen und bearbeiten (bestätigter Folgeentwurf, 24. Oktober 2026)
 
 Variante 1 des vom Projektinhaber gewählten Vergleichs ersetzt den langen

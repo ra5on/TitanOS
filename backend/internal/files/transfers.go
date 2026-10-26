@@ -400,6 +400,8 @@ func (m *Manager) ClearTransfers(user string) error {
 	return first
 }
 func (m *Manager) removeTransfer(j *Job) error {
+	// A failed download's part file is titand's, not a user file.
+	m.discardDownload(j.download)
 	if j.durable == nil {
 		return nil
 	}

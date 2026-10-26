@@ -49,6 +49,8 @@ fortgesetzt. Liefert der Server eine komplette neue Antwort, wird die Quelle
 von Anfang an neu geschrieben; widersprüchliche Teilantworten werden abgewiesen.
 HTTPS-Downloads dürfen nicht auf HTTP umleiten. URL-Anmeldedaten werden nicht
 akzeptiert, URL-Abfrageparameter erscheinen nicht in der Auftragsliste.
+Anfrage, Range-Prüfung und Weiterleitungsregeln teilt der Import mit „Von Link
+herunterladen“ im Dateimanager (`internal/httpfetch`, `docs/FILE-DOWNLOADS.md`).
 
 Eine unterbrochene Veröffentlichung steht auf **Prüfung erforderlich**. Mit
 „Veröffentlichtes Abbild prüfen“ lässt sich ein schon vorhandenes Ziel nur nach

@@ -7,9 +7,12 @@ export function transferSample(previous:TransferSample|undefined,copied:number,t
 }
 export function transferProblem(error:string){
  if(/not enough free space|no space left/i.test(error))return 'space';
+ if(/may not be reached|address not allowed|redirect not allowed/i.test(error))return 'blocked';
+ if(/SHA-256 does not match/i.test(error))return 'hash';
+ if(/download returned HTTP/i.test(error))return 'http';
  if(/no write access|permission denied|read.only/i.test(error))return 'permission';
  if(/no such file|not found/i.test(error))return 'missing';
  if(/changed|conflict|already exists|name exists/i.test(error))return 'changed';
- if(/connection|network|timeout|timed out/i.test(error))return 'connection';
+ if(/connection|network|timeout|timed out|stalled|unexpected EOF|download failed/i.test(error))return 'connection';
  return 'other';
 }

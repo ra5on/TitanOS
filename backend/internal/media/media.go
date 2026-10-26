@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"golang.org/x/sys/unix"
 )
@@ -98,18 +99,9 @@ func New(ctx context.Context, mounted func() []string, gid int) *Manager {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.Proxy = nil
 	tr.ResponseHeaderTimeout = 30 * time.Second
-	client := &http.Client{Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return ErrInvalid
-		}
-		if req.URL.User != nil || (req.URL.Scheme != "http" && req.URL.Scheme != "https") {
-			return ErrInvalid
-		}
-		if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
-			return ErrInvalid
-		}
-		return nil
-	}}
+	// The same redirect rules as file downloads: at most ten, http(s) only,
+	// never back from https to http.
+	client := &http.Client{Transport: tr, CheckRedirect: httpfetch.Redirects(10)}
 	return &Manager{Context: ctx, Mounted: mounted, MountRoot: "/mnt", GID: gid, Client: client, jobs: map[string]*entry{}, roots: map[string]*os.Root{}}
 }
 func validName(name string) bool { return nameRE.MatchString(name) && supported(name) }

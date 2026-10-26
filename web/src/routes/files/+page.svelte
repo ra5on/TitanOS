@@ -38,6 +38,7 @@
 	import UndoPanel from './UndoPanel.svelte';
 	import UploadPanel from './UploadPanel.svelte';
 	import UploadReview from './UploadReview.svelte';
+	import UrlDownloadDialog from './UrlDownloadDialog.svelte';
 	import UsageDialog from './UsageDialog.svelte';
 	import VirtualEntries from './VirtualEntries.svelte';
 	import WindowsPath from './WindowsPath.svelte';
@@ -85,7 +86,7 @@
 	let editing = $state<string | null>(null);
 	let jobsTick = $state(0);
 	let windowsPath = $state(false);
-	let favoriteManager = $state(false), creatingFile = $state(false), shortcuts = $state(false);
+	let favoriteManager = $state(false), creatingFile = $state(false), shortcuts = $state(false), downloadingLink = $state(false);
 	let selectionFilter = $state('images');
 	let downloadPaths = $state<string[] | null>(null), usage = $state(false), duplicates = $state(false);
 	let deepSearch = $state(false), comparison = $state(false), batchRename = $state(false), archive = $state<string | null>(null);
@@ -950,7 +951,7 @@
 		</nav>
 {#if !trash}<div class="mobile-file-actions" role="toolbar" aria-label={t('files.moreActions')}>
 <button type="button" class="btn btn-primary" disabled={!writable} onclick={()=>fileInput?.click()}><Icon name="upload" size={16}/><span>{t('files.mobileUpload')}</span></button>
-<Dropdown label={t('files.new')} text={t('files.new')} icon="plus" disabled={!writable}>{#snippet children(close)}<button type="button" role="menuitem" onclick={()=>{close();show('mkdir');}}><Icon name="folder" size={16}/>{t('files.newFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();creatingFile=true;}}><Icon name="fileText" size={16}/>{t('files.newFile')}</button><button type="button" role="menuitem" onclick={()=>{close();folderInput?.click();}}><Icon name="upload" size={16}/>{t('files.uploadFolder')}</button>{/snippet}</Dropdown>
+<Dropdown label={t('files.new')} text={t('files.new')} icon="plus" disabled={!writable}>{#snippet children(close)}<button type="button" role="menuitem" onclick={()=>{close();show('mkdir');}}><Icon name="folder" size={16}/>{t('files.newFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();creatingFile=true;}}><Icon name="fileText" size={16}/>{t('files.newFile')}</button><button type="button" role="menuitem" onclick={()=>{close();folderInput?.click();}}><Icon name="upload" size={16}/>{t('files.uploadFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();downloadingLink=true;}}><Icon name="globe" size={16}/>{t('files.urlDownload')}</button>{/snippet}</Dropdown>
 <button type="button" class="btn" aria-expanded={mobileSearch} aria-controls="mobile-file-search" onclick={toggleMobileSearch}><Icon name="search" size={16}/><span>{t('files.mobileSearch')}</span></button>
 <Dropdown label={t('files.moreActions')} text={t('files.mobileMore')} icon="more" align="right">{#snippet children(close)}
 <button type="button" role="menuitem" disabled={!dir} onclick={()=>{close();open(rootId,dir.split('/').slice(0,-1).join('/'));}}><Icon name="arrowUp" size={16}/>{t('files.up')}</button>
@@ -1083,6 +1084,7 @@
 									<button type="button" role="menuitem" onclick={() => { close(); creatingFile = true; }}><Icon name="fileText" size={16} /><span>{t('files.newFile')}</span></button>
 									<hr />
 									<button type="button" role="menuitem" onclick={() => { close(); folderInput?.click(); }}><Icon name="upload" size={16} /><span>{t('files.uploadFolder')}</span></button>
+									<button type="button" role="menuitem" onclick={() => { close(); downloadingLink = true; }}><Icon name="globe" size={16} /><span>{t('files.urlDownload')}</span></button>
 								{/snippet}
 							</Dropdown>
 							<input bind:this={fileInput} type="file" multiple hidden onchange={(event) => picked(event.currentTarget)} />
@@ -1276,6 +1278,7 @@
 			<button type="button" role="menuitem" onclick={() => choose(() => show('mkdir'))}><Icon name="folder" size={16} /><span>{t('files.newFolder')}</span></button>
 			<button type="button" role="menuitem" onclick={() => choose(() => (creatingFile = true))}><Icon name="fileText" size={16} /><span>{t('files.newFile')}</span></button>
 			<button type="button" role="menuitem" onclick={() => choose(() => fileInput?.click())}><Icon name="upload" size={16} /><span>{t('files.upload')}</span></button>
+			<button type="button" role="menuitem" onclick={() => choose(() => (downloadingLink = true))}><Icon name="globe" size={16} /><span>{t('files.urlDownload')}</span></button>
 			<button type="button" role="menuitem" disabled={!canPaste} onclick={() => choose(paste)}><Icon name="paste" size={16} /><span>{t('files.paste')}</span><kbd aria-hidden="true">Ctrl+V</kbd></button>
 			<hr />
 		{/if}
@@ -1365,6 +1368,7 @@
 {#if properties}<FileProperties root={properties.root} path={properties.path} locked={properties.root.kind === 'usb' && !safeRoots.find((r) => r.id === properties?.root.id)?.writable && properties.root.writable} onclose={() => (properties = null)} />{/if}
 {#if uploadReview}<UploadReview root={uploadReview.root} dir={uploadReview.dir} files={uploadReview.files} onclose={() => (uploadReview = null)} onconfirm={startUpload} />{/if}
 {#if favoriteManager}<FavoritesDialog {favorites} onsave={saveFavorites} onclose={() => (favoriteManager = false)} />{/if}
+{#if downloadingLink && root && writable}<UrlDownloadDialog root={rootId} {dir} confined={!canAdminister} onclose={() => (downloadingLink = false)} onstarted={() => { downloadingLink = false; jobsTick++; }} />{/if}
 {#if creatingFile && root && writable}<CreateFileDialog root={rootId} {dir} onclose={() => (creatingFile = false)} oncreated={(path) => { creatingFile = false; editing = path; load(); }} />{/if}
 {#if otherPreview}<FilePreview {...otherPreview} onclose={() => (otherPreview = null)} />{/if}
 {#if shortcuts}

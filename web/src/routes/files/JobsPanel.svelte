@@ -212,9 +212,11 @@
 						>{t(
 							job.operation === 'extract'
 								? 'files.jobExtract'
-								: job.move
-									? 'files.jobMove'
-									: 'files.jobCopy',
+								: job.operation === 'download'
+									? 'files.jobDownload'
+									: job.move
+										? 'files.jobMove'
+										: 'files.jobCopy',
 							{ count: job.names.length },
 						)} · <span class="mono">{job.from} → {job.to}/{job.dir}</span></span
 					>
@@ -273,10 +275,15 @@
 					aria-label={t('files.jobs')}
 				></progress>
 				<div class="muted small">
-					{formatBytes(job.copied)} / {formatBytes(job.bytes)} · {t('files.jobFiles', {
-						done: job.done,
-						files: job.files,
-					})}{#if job.state === 'running' && job.current}
+					{#if job.operation === 'download'}{formatBytes(job.copied)} / {job.bytes > 0
+							? formatBytes(job.bytes)
+							: t('files.urlSizeUnknown')} ·
+						<span class="mono">{job.names[0]}</span>{:else}{formatBytes(job.copied)} / {formatBytes(
+							job.bytes,
+						)} · {t('files.jobFiles', {
+							done: job.done,
+							files: job.files,
+						})}{/if}{#if job.state === 'running' && job.current}
 						· <span class="mono">{job.current}</span>{/if}
 				</div>
 				{#if job.state === 'running' && !job.paused && !job.waiting}<p class="small muted">

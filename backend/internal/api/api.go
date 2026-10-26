@@ -269,6 +269,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/files/text", s.requireUser(s.handleFileText))
 	mux.HandleFunc("POST /api/v1/files/inspect", s.requireUser(s.handleFileInspect))
 	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
+	mux.HandleFunc("POST /api/v1/files/url-download/probe", s.requireUser(s.handleFileDownloadProbe))
+	mux.HandleFunc("POST /api/v1/files/url-download", s.requireUser(s.handleFileURLDownload))
 	mux.HandleFunc("POST /api/v1/files/jobs/{id}/control", s.requireUser(s.handleFileJobControl))
 	mux.HandleFunc("POST /api/v1/files/usage", s.requireUser(s.handleFileUsage))
 	mux.HandleFunc("GET /api/v1/files/jobs", s.requireUser(s.handleFileJobs))
