@@ -102,7 +102,7 @@ def check_uploads(request, opener, url, remote, password):
     remote('rm /mnt/mirror/appdata/upload.bin')
 
 
-def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False):
+def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False, force_tcg=False):
     os.environ['PATH'] += ':/usr/sbin:/sbin'
     with tempfile.TemporaryDirectory(prefix='titanos-storage-', dir=log.parent) as tmp:
         directory = Path(tmp)
@@ -159,7 +159,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
         def volume():
             return next(v for v in request('/storage')['volumes'] if v['name'] == 'mirror')
 
-        accel = ['-accel', 'kvm', '-cpu', 'host'] if os.access('/dev/kvm', os.W_OK) else ['-accel', 'tcg', '-cpu', 'max']
+        accel = ['-accel', 'kvm', '-cpu', 'host'] if not force_tcg and os.access('/dev/kvm', os.W_OK) else ['-accel', 'tcg', '-cpu', 'max']
         base_args = ['qemu-system-x86_64', '-machine', 'q35', *accel, '-smp', '2', '-m', '4G',
             '-drive', 'if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
             '-drive', f'if=pflash,format=raw,file={directory}/OVMF_VARS.fd',
@@ -190,7 +190,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                     deadline = time.monotonic() + timeout
                     while True:
                         if process.poll() is not None:
-                            raise RuntimeError('VM stopped before health')
+                            raise RuntimeError(f'VM stopped before health (QEMU exit {process.returncode})')
                         try:
                             if request('/health').get('ready'):
                                 break
@@ -322,6 +322,10 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                     request('/system/power', {'action': 'reboot'})
                     process.wait(timeout=90)
                 except Exception:
+                    # Report host pressure separately from a guest/service failure.
+                    print(f'QEMU process exit: {process.poll()}', flush=True)
+                    subprocess.run(['free', '-m'], check=False)
+                    subprocess.run(['df', '-h', str(log.parent)], check=False)
                     subprocess.run([*ssh, 'sudo journalctl -b -u titand.service --no-pager -n 80'], timeout=15)
                     raise
                 finally:
@@ -341,9 +345,10 @@ if __name__ == '__main__':
     parser.add_argument('--plugins', type=Path)
     parser.add_argument('--log', type=Path, default=Path('out/storage-smoke.log'))
     parser.add_argument('--timeout', type=int, default=420)
+    parser.add_argument('--tcg', action='store_true', help='force CPU emulation to reproduce CI without KVM')
     parser.add_argument('--workflows023', action='store_true')
     parser.add_argument('--workflows-only', action='store_true', help='focus the additional checks without repeating the independent USB/SMB/snapshot suites')
     parser.add_argument('--online-virtio', action='store_true', help='also download and validate the official stable driver ISO')
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout, args.workflows023, args.online_virtio, args.workflows_only)
+    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout, args.workflows023, args.online_virtio, args.workflows_only, args.tcg)
