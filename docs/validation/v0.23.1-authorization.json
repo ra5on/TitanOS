@@ -27,7 +27,7 @@
       "daemon restart does not reset consumed TOTP",
       "concurrent managers accept the same recovery code exactly once",
       "stale account mutation does not resurrect a consumed code or discard an unused code",
-      "failed persistence rejects both recovery-code and TOTP authentication and leaves the factor usable after repair"
+      "an unwritable account directory rejects recovery-code and TOTP authentication before account-file publication; after repair the unconsumed factor remains usable"
     ]
   },
   "console": {

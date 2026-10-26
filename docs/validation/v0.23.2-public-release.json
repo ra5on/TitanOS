@@ -1,0 +1,304 @@
+{
+  "completed": "2026-10-26T15:01:56Z",
+  "version": "0.23.2",
+  "systemBase": "0.23.2",
+  "kernel": "6.12.113+deb13-amd64",
+  "tag": "v0.23.2",
+  "tagCommit": "c9335512642e7b8f4c514d18fbb7b34a28cf103a",
+  "releaseURL": "https://github.com/ra5on/TitanOS/releases/tag/v0.23.2",
+  "publishedAt": "2026-10-26T14:56:45Z",
+  "channel": "stable",
+  "githubActions": {
+    "officialRelease": {
+      "run": 40337148533,
+      "result": "passed",
+      "url": "https://github.com/ra5on/TitanOS/actions/runs/40337148533"
+    },
+    "releaseRehearsal": {
+      "run": 40336647819,
+      "result": "passed"
+    },
+    "plugins": {
+      "run": 40336647943,
+      "result": "passed"
+    },
+    "requiredBuild": {
+      "run": 40336647738,
+      "result": "passed"
+    },
+    "mainBuild": {
+      "run": 40337126998,
+      "result": "passed"
+    }
+  },
+  "publicAssetVerification": {
+    "result": "passed",
+    "command": "python3 scripts/verify-release.py out/public-v0.23.2 build/mkosi.extra/usr/share/titanos/update-keys",
+    "trustedSigner": "titanos-release-1.pub",
+    "files": 34,
+    "githubAssetDigestsAlsoMatch": true,
+    "latestManifestMatchesSignedTagManifest": true,
+    "cliAsset": "titanos-0.23.2-cli-linux-amd64",
+    "assets": [
+      {
+        "name": "SHA256SUMS",
+        "bytes": 2343,
+        "sha256": "9b7794c949360ce8f2b8636773f324a5ceef083f4f1bbea0aecd56747585ca0a"
+      },
+      {
+        "name": "SHA256SUMS.minisig",
+        "bytes": 288,
+        "sha256": "9d52435ea66e1f6a62a53fe065d69d376976dae57096c525c4910632326cbb40"
+      },
+      {
+        "name": "coral-usb-licenses.tar.gz",
+        "bytes": 1823,
+        "sha256": "ff130e1891744d57b0af5af5edf9dca16d35ac3319d78c6cb2ce7162e011fffa"
+      },
+      {
+        "name": "coral-usb.plugin.json",
+        "bytes": 943,
+        "sha256": "d180537617c4f14bdd939dadbb3efc5df1ce662f9cc229a3ce2e281e07687f1e"
+      },
+      {
+        "name": "coral-usb.plugin.json.minisig",
+        "bytes": 299,
+        "sha256": "d01ae4060b6c3133d3cad4e2637d18d533bb67d47988fe1e48fb5c4f64c40e2a"
+      },
+      {
+        "name": "coral-usb.raw",
+        "bytes": 4096,
+        "sha256": "b08eeca9761d529368f222cf77c59ca2ebc6b70d46931eca4d04985415da32cf"
+      },
+      {
+        "name": "intel-gpu-tools-licenses.tar.gz",
+        "bytes": 182686,
+        "sha256": "83fcb5eb9dcdadb0016382bd859838bbbd6bf767ecb32cba1038574570b39cde"
+      },
+      {
+        "name": "intel-gpu-tools.plugin.json",
+        "bytes": 711,
+        "sha256": "bd20d6b41b9d61f62311daed490d92ee959cebb079d025d3e80d1921324007ab"
+      },
+      {
+        "name": "intel-gpu-tools.plugin.json.minisig",
+        "bytes": 305,
+        "sha256": "966936623bb93f60ca3d5ca6ad39f34757084bea272de4357a9ead8b10f7c68b"
+      },
+      {
+        "name": "intel-gpu-tools.raw",
+        "bytes": 2777088,
+        "sha256": "727566078565bdab08bbb666c6a0ff2d0eaabc5c5078ec9be58b5883f59247a6"
+      },
+      {
+        "name": "manifest.json",
+        "bytes": 7996,
+        "sha256": "5be7c127d910ea2476c972796e20ae6459709c422e1a1ad7321cff6a5a412d4f"
+      },
+      {
+        "name": "manifest.json.minisig",
+        "bytes": 291,
+        "sha256": "d2e7387761e1e6ec2a22210688a6b073b21806b8379664d97d2b92fe8d68b369"
+      },
+      {
+        "name": "nvidia-build-sdk-sources.txt",
+        "bytes": 15841,
+        "sha256": "c5401a2d52ecd9086e951daf10ea429c73211f3a0ea8f6e912f1f319449239e4"
+      },
+      {
+        "name": "nvidia-build-sdk.tar.zst",
+        "bytes": 364622026,
+        "sha256": "9f020ef0a37bbc4f0459e5056651016129a6decd41af3baf9727466c5c61ad34"
+      },
+      {
+        "name": "nvidia-kernel-sources.tar.gz",
+        "bytes": 24715240,
+        "sha256": "5e93f4e7f3a70ff804a7c7adf1703610263e03b7981d4a5a4fb28f8a5ac3bf1a"
+      },
+      {
+        "name": "nvidia-licenses.tar.gz",
+        "bytes": 1820649,
+        "sha256": "098956da82570720bc9af70ccb68e1e1541e13d2b4bba59cd3cdd2afde5765cf"
+      },
+      {
+        "name": "nvidia.plugin.json",
+        "bytes": 1247,
+        "sha256": "29f6922cbfc2fd9161b06c0905db4c63a0b0628b33247f54dad6e46a683d253b"
+      },
+      {
+        "name": "nvidia.plugin.json.minisig",
+        "bytes": 296,
+        "sha256": "2e980eebcc9bea3380e180d4575ec41993de3f5add962a5875178fbbd55431ac"
+      },
+      {
+        "name": "nvidia.raw",
+        "bytes": 224702464,
+        "sha256": "1cd0c398ee3918ad6a039b4cdf134344f2b3dd1ff3cf06cde797ab3ecbe7faa5"
+      },
+      {
+        "name": "tailscale-licenses.tar.gz",
+        "bytes": 49757,
+        "sha256": "c05522d64eb93b317d04b8b14b0147c3be0a574adbdfa01d642983f3edfd839c"
+      },
+      {
+        "name": "tailscale.plugin.json",
+        "bytes": 603,
+        "sha256": "9b86592d1c93e8a01dfef621da87f2ce9ba5e448406d11d88e8d04b3411c5195"
+      },
+      {
+        "name": "tailscale.plugin.json.minisig",
+        "bytes": 299,
+        "sha256": "bd2c46ed2417c3205702973ff593502c266cd34c9675b84a04f2ce80f72db277"
+      },
+      {
+        "name": "tailscale.raw",
+        "bytes": 38440960,
+        "sha256": "4fc86201bf88f118e2fcfc21af8cfb41270baa3f0206eeff467dbafaf296a325"
+      },
+      {
+        "name": "titanos-0.23.2-cli-linux-amd64",
+        "bytes": 6217888,
+        "sha256": "5d71d62d278878baab6ea5c863cfbfd11c231df036528ecbee8e0726cbaebb3c"
+      },
+      {
+        "name": "titanos-0.23.2-filesystem.squashfs",
+        "bytes": 457809920,
+        "sha256": "74e24a4ffad86cf498c0f70cc68f2d1951db9518e38a8395b951cba239033bb4"
+      },
+      {
+        "name": "titanos-0.23.2-homeassistant.zip",
+        "bytes": 3817,
+        "sha256": "82957629bf838bdb19d2a5cf18c02d9e4522f87337c2ccb8007a8a36f26ef3ae"
+      },
+      {
+        "name": "titanos-0.23.2-initrd.img",
+        "bytes": 67194175,
+        "sha256": "dc2549c1152af504c525eca65967a1de45ce510f0d9028f7b6e857fd4c280656"
+      },
+      {
+        "name": "titanos-0.23.2-licenses.tar.gz",
+        "bytes": 1965463,
+        "sha256": "5d78e5a128c420a32e5bf72bc85a643d4654ae899499954596a42a63e21ddb8b"
+      },
+      {
+        "name": "titanos-0.23.2-sources.txt",
+        "bytes": 45746,
+        "sha256": "019169b805dc2c57162dabf5ecbe283932f40db87712a5a14fb212da9166df63"
+      },
+      {
+        "name": "titanos-0.23.2-titand",
+        "bytes": 20795552,
+        "sha256": "d3f11dccbccfe1f006a7c373ce5af525ddeeb975d2370a13f304de2db8468bc9"
+      },
+      {
+        "name": "titanos-0.23.2-vmlinuz",
+        "bytes": 12154816,
+        "sha256": "4336c75fc1a6a58e7bda66cbe9f4042f88064e7abc93faaea9e2aceb19459561"
+      },
+      {
+        "name": "titanos-0.23.2.zip",
+        "bytes": 537286098,
+        "sha256": "b1908f47cf1e52a7ec547521c0423492bc80a05851fd3d6e89fecbd80ad5b2a8"
+      },
+      {
+        "name": "titanos-0.23.2.zip.minisig",
+        "bytes": 296,
+        "sha256": "28eed83947cc67b78e5b846cd609484177debeb02cc09f0278598dd84c24a1cd"
+      },
+      {
+        "name": "titanos-0.23.2.zip.sha256",
+        "bytes": 85,
+        "sha256": "5e89e2a622c2a14df89c5cf21b700a0debd9804714769d622df25e8444372d69"
+      }
+    ]
+  },
+  "actualPublicUpdate": {
+    "source": "https://github.com/ra5on/TitanOS",
+    "channel": "stable",
+    "from": "0.22.0",
+    "to": "0.23.2",
+    "mirror": false,
+    "started": "2026-10-26T14:57:39Z",
+    "archiveSHA256": "7dd195b1271019798b0e95e2ae5f04ab631f1aa322b023822ee95aa1bca7fd65",
+    "oldZIPSigningKey": "titanos-release-1.pub",
+    "runnerSHA256": "ac5014307bfc651888938c9368625d65a0d7b27ee288199343a1842fca81065b",
+    "checks": [
+      {
+        "boot": 1,
+        "version": "0.22.0",
+        "slot": "a",
+        "account": "owner preserved",
+        "certificate": "preserved",
+        "confirmed": true
+      },
+      {
+        "boot": 2,
+        "version": "0.23.2",
+        "slot": "b",
+        "account": "owner preserved",
+        "certificate": "preserved",
+        "confirmed": true
+      },
+      {
+        "boot": 3,
+        "version": "0.22.0",
+        "slot": "a",
+        "account": "owner preserved",
+        "certificate": "preserved",
+        "confirmed": true
+      }
+    ],
+    "acceleration": "kvm",
+    "completed": "2026-10-26T15:00:54Z",
+    "result": "passed",
+    "baselineNote": "Boot 1 creates the owner and records the certificate baseline. Boots 2 and 3 explicitly verify account credentials, role and unchanged certificate."
+  },
+  "publicUpdateCommand": "scripts/fedora-dev.sh python3 backend/tests/public_update_qemu.py out/public-v0.22.0/titanos-0.22.0.zip --from-version 0.22.0 --to-version 0.23.2 --log out/validation/public-update-0232-serial.log --result out/validation/public-update-0232.json",
+  "negativeSourceSignatureTest": "corrupted old ZIP rejected before QEMU, serial log or result creation",
+  "combinedLocalPluginValidation": {
+    "date": "2026-10-26",
+    "result": "passed",
+    "imageVersion": "0.23.1",
+    "productFixCommit": "bc35f69867b2bcf42b275a25c860f4949828386a",
+    "testFixtureFixCommit": "f5b8a15536b295975ef7fff6b73b7af7cdca0cc4",
+    "mode": "KVM guest on fresh disposable media, four NAS boots, 4 GiB RAM and 8 GiB data disks",
+    "pluginProvenance": "Intel GPU Tools built with mkosi from Debian 13; Coral built from the repo. Unsigned local fixtures were installed with explicit confirmation. No claim of physical GPU/Coral validation.",
+    "command": "scripts/fedora-dev.sh python3 scripts/smoke-storage.py out/titanos-0.23.1.zip --plugins out/plugins-combined-0231 --workflows023 --workflows-only --log out/validation/combined-plugins-final-serial.log",
+    "checks": [
+      "network/bond/VLAN/NFS/Docker/media/CLI/cleanup workflows",
+      "real plugin installation after cleanup fixture initialized with .ready",
+      "Intel/Coral tool persistence over NAS restarts",
+      "degraded Btrfs replacement and final scrub"
+    ],
+    "provenance": {
+      "out/titanos-0.23.1.zip": "a65b4b3e73442273ae5594e40bfdef92f52c546166b718351f30da7f50504504",
+      "scripts/workflows023_smoke.py": "617716289b5db499cbd7662fc1cb86b72b6f39882227458d45bb0f1a2fb0a864",
+      "out/plugins-combined-0231/intel-gpu-tools.raw": "c18a865433b0ae03811d6d34bdac89c16a12e4a2dd359906c63807d03f125e88",
+      "out/plugins-combined-0231/intel-gpu-tools.plugin.json": "9ca8f6bbb7787640360e35e97c01c5c0e45bed447d83076c5c7f0e6718da3b54",
+      "out/plugins-combined-0231/coral-usb.raw": "a62caf1112f60a87b0ca9ad610d9f2d2d3fcbef24f52aad6f58253208fecb566",
+      "out/plugins-combined-0231/coral-usb.plugin.json": "05df2f8fc8ec5219583eeecc4d2ae103b9383330173beb0fd16497cc11f94ef5",
+      "out/implementation-combined-plugins-qemu.log": "b8c67e9b8c2f12d4b940550b3661486aabd5ac6460720234e86956c7d8af9126",
+      "out/validation/combined-plugins-final-serial.log": "6e633b96fda8b4b32247413bc28e357319c46a3063f789e8844e22133169661c",
+      "out/implementation-cleanup-install-sequence.log": "f254cb5c4435d64f4c53bf7ffeb7665f781b59776a16f78354e64916dbb46829",
+      "out/implementation-plugin-race-0232.log": "c2b99dd6f7b4b7dd08ba3f5495222571fcc30136f76e7686e9e161f76cbb6b33"
+    }
+  },
+  "additionalSecurityEvidence": "v0.23.1-authorization.json",
+  "priorFeatureAndBrowserEvidence": "v0.23.0-workflows.json",
+  "provenance": {
+    "out/implementation-public-verify-0232.log": "7a6d2217d73c9a59e772d45c03eaa942c0a29b6a5d40fa2ba9238591805550aa",
+    "out/implementation-public-update-0232.log": "b17e355e536b76bf259e29fd7ba26d8c19c51a4cc31a340911b704d17cbc340d",
+    "out/validation/public-update-0232-serial.log": "19d4d080200c0f26a13b2879fca6ffb187890feb9a6bac3ea05b31d27e131eec",
+    "out/implementation-public-signature-negative.log": "63ba12b2b964670eb29113dc6ddf4616350c95d3adcbedbf13fd7c516c4b9244",
+    "out/implementation-ci-0232-rehearsal.log": "f8b67ca5856f698e8aeeb72a3d312a47d43fc81312a73c490ea06a2f41199031",
+    "out/implementation-ci-0232-plugins.log": "3766df17f1d5ba6a576bd94888554df3bc5e3446e16d2b48b670bb3fbc328395",
+    "out/implementation-ci-0232-tag.log": "bf19d5344554db5e2fc606e61f60d0f8d7c1d581bba97be6f93a82c133ff227d"
+  },
+  "limits": [
+    "Only disposable QEMU media and browser fixtures; no production NAS data, host disks, host Docker or host NIC changes",
+    "No physical NIC/switch/LACP/GPU/UPS/tailnet/Cloudflare policy certification",
+    "No Windows installation or Secure Boot certification; real Linux VM RAM/disk/UEFI/TPM restoration tested by the full release workflow",
+    "Alternate TTY recovery-menu path and additional physical console/input variants remain untested",
+    "Local combined plugin run used real locally-built unsigned Intel/Coral tools with explicit confirmation; public release assets were independently verified with project keys"
+  ]
+}
