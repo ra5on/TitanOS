@@ -1,10 +1,62 @@
 package plugins
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestCleanupThenInstallRequiresInitializedCurrentRelease(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		t.Run(map[bool]string{false: "incomplete-protected", true: "initialized-installable"}[ready], func(t *testing.T) {
+			m, _ := newTestManager(t)
+			m.Release = "0.23.1"
+			settings := m.current()
+			settings.Volume = "data"
+			if err := m.save(settings); err != nil {
+				t.Fatal(err)
+			}
+			current := m.releaseDir("data", m.Release)
+			old := m.releaseDir("data", "0.0.0")
+			for _, dir := range []string{current, old} {
+				if err := os.MkdirAll(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "fixture.raw"), []byte("retain"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if ready {
+				if err := os.WriteFile(filepath.Join(current, ".ready"), []byte(m.Release), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			list, err := m.OldReleases([]string{"data"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, release := range list {
+				if release.Version == "0.0.0" {
+					if err := m.Cleanup([]string{"data"}, []CleanupSelection{{Version: release.Version, Fingerprint: release.Fingerprint}}); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "tools", nil)
+			err = m.Install(context.Background(), path, "data", "tools", []string{"data"})
+			if ready && err != nil {
+				t.Fatalf("initialized cleanup fixture blocked the next install: %v", err)
+			}
+			if !ready && err == nil {
+				t.Fatal("installation took over an incomplete existing directory")
+			}
+			if content, err := os.ReadFile(filepath.Join(current, "fixture.raw")); err != nil || string(content) != "retain" {
+				t.Fatal("current release data was changed", err)
+			}
+		})
+	}
+}
 
 func TestCleanupProtectsBootsChangedSelectionsAndPrivateDirectories(t *testing.T) {
 	m, _ := newTestManager(t)
