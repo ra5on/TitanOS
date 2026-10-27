@@ -5135,5 +5135,9 @@
 	"cache.disableWriteback": "Zuerst werden alle Daten aus dem Schreibcache auf die Platten zurückgeschrieben; das Volume bleibt dabei nutzbar. Danach wird der Cache entfernt, und es gibt eine Meldung.",
 	"error.volume_cache_configured": "Das Volume hat einen SSD-Cache. Schalte ihn zuerst aus.",
 	"notify.kind.disk_wear.title": "Platte {subject} zeigt Verschleiß",
-	"notify.kind.disk_wear.text": "Die SMART-Werte zeigen neue Anzeichen von Verschleiß oder Schäden. Sichere die Daten und plane einen Ersatz. Einzelheiten unter Speicher › SMART."
+	"notify.kind.disk_wear.text": "Die SMART-Werte zeigen neue Anzeichen von Verschleiß oder Schäden. Sichere die Daten und plane einen Ersatz. Einzelheiten unter Speicher › SMART.",
+	"notify.kind.vm_io_error.title": "VM {subject} wegen Plattenfehler angehalten",
+	"notify.kind.vm_io_error.text": "Beim Zugriff auf eine Platte der VM ist auf dem NAS ein Fehler aufgetreten. Prüfe unter Speicher Volume und SMART-Werte, bevor du sie fortsetzt.",
+	"vms.ioError": "Angehalten: Beim Lesen oder Schreiben einer Platte dieser VM ist auf dem NAS ein Fehler aufgetreten. Prüfe zuerst unter Speicher Volume und SMART-Werte.",
+	"vms.resume": "Fortsetzen"
 }

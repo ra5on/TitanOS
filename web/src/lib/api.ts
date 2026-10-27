@@ -471,6 +471,8 @@ export type VM = {
 	available: boolean;
 	/** Load in percent of the VM's own vCPUs. */
 	cpuPercent: number;
+	/** Paused by QEMU after a disk error on the NAS; "resume" goes on. */
+	ioError?: boolean;
 	/** RAM of the NAS the VM occupies right now. */
 	memoryBytes: number;
 	since: string;

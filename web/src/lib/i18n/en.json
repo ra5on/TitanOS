@@ -5135,5 +5135,9 @@
 	"cache.disableWriteback": "First all data in the write cache is written back to the disks; the volume stays usable meanwhile. Then the cache is removed and you get a notification.",
 	"error.volume_cache_configured": "The volume has an SSD cache. Switch it off first.",
 	"notify.kind.disk_wear.title": "Disk {subject} shows wear",
-	"notify.kind.disk_wear.text": "The SMART values show new signs of wear or damage. Back up the data and plan a replacement. Details under Storage › SMART."
+	"notify.kind.disk_wear.text": "The SMART values show new signs of wear or damage. Back up the data and plan a replacement. Details under Storage › SMART.",
+	"notify.kind.vm_io_error.title": "VM {subject} paused after a disk error",
+	"notify.kind.vm_io_error.text": "Accessing a disk of the VM failed on the NAS. Check volume and SMART values under Storage before you resume it.",
+	"vms.ioError": "Paused: reading or writing a disk of this VM failed on the NAS. First check volume and SMART values under Storage.",
+	"vms.resume": "Resume"
 }
