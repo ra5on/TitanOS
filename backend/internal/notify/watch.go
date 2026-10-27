@@ -13,6 +13,11 @@ import (
 const (
 	fullPercent, roomyPercent = 90, 85
 	hotCelsius, coolCelsius   = 55, 50
+	// startGrace is how long after the start a volume that is not (yet)
+	// there is not reported as failed or missing: mdadm starts an array
+	// with a missing disk only after its last-resort timer, Btrfs waits a
+	// minute for its members, and slow controllers bring disks late.
+	startGrace = 3 * time.Minute
 )
 
 // Watcher turns the state of volumes and disks into messages: it tells
@@ -28,6 +33,9 @@ type Watcher struct {
 	checking       map[string]bool
 	// full, hot and unhealthy are the warnings that are standing.
 	full, hot, unhealthy map[string]bool
+	// settled is when startGrace ends; zero for no grace.
+	settled time.Time
+	now     func() time.Time
 }
 
 // NewWatcher returns a watcher that reports through m.
@@ -35,6 +43,7 @@ func NewWatcher(m *Manager) *Watcher {
 	return &Watcher{
 		notify: m, reported: map[string]string{}, seen: map[string]string{}, known: map[string]bool{},
 		checking: map[string]bool{}, full: map[string]bool{}, hot: map[string]bool{}, unhealthy: map[string]bool{},
+		now: time.Now,
 	}
 }
 
@@ -42,6 +51,7 @@ func NewWatcher(m *Manager) *Watcher {
 func (w *Watcher) Run(ctx context.Context, status func(context.Context) (storage.Status, error)) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	w.settled = w.now().Add(startGrace)
 	for {
 		// The stick may not have been there when titand started.
 		if !w.notify.Loaded() {
@@ -75,7 +85,11 @@ func trouble(state string) (string, bool) {
 func (w *Watcher) Observe(status storage.Status) {
 	for _, volume := range status.Volumes {
 		name := volume.Name
-		if now, clear := trouble(volume.State); clear {
+		now, clear := trouble(volume.State)
+		if (now == storage.VolumeFailed || now == storage.VolumeMissing) && w.now().Before(w.settled) {
+			clear = false // still starting: neither reported nor counted
+		}
+		if clear {
 			before := w.reported[name]
 			twice := w.seen[name] == now && w.known[name]
 			w.seen[name], w.known[name] = now, true

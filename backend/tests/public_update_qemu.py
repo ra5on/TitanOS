@@ -13,6 +13,9 @@ Only new temporary QEMU media are used. The target must still be the public
 latest Stable release when the test runs.
 """
 import argparse
+import functools
+import http.server
+import threading
 import hashlib
 import http.client
 import http.cookiejar
@@ -45,7 +48,7 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def run(archive, from_version, to_version, log, result_path, force_tcg=False, timeout=600, to_base=None, break_new_slot=False):
+def run(archive, from_version, to_version, log, result_path, force_tcg=False, timeout=600, to_base=None, break_new_slot=False, mirror=None):
     to_base = to_base or to_version
     log.parent.mkdir(parents=True, exist_ok=True)
     result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +87,23 @@ def run(archive, from_version, to_version, log, result_path, force_tcg=False, ti
                 input=b"start=1MiB, type=c, bootable\n")
         command("mformat", "-i", str(disk) + "@@1M", "-F", "-v", "TITANOS", "::")
         command("mcopy", "-i", str(disk) + "@@1M", "-s", *map(str, stick.iterdir()), "::")
+        if mirror:
+            # A local copy of the published release, for environments where
+            # the VM cannot reach GitHub. The files are the signed originals;
+            # titand checks them exactly as from GitHub. The source is only
+            # read from /config, never set through the API.
+            handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(mirror))
+            handler.log_message = lambda *a: None
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            source = f"http://10.0.2.2:{server.server_address[1]}"
+            settings = directory / "update.json"
+            settings.write_text(json.dumps({"source": source}) + "\n")
+            for folder in ("::/config", "::/config/system"):
+                subprocess.run(["mmd", "-i", str(disk) + "@@1M", folder], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            command("mcopy", "-i", str(disk) + "@@1M", str(settings), "::/config/system/update.json")
+            evidence["mirror"] = True
+            print(f"Release mirror at {mirror}, served to the VM as {source}", flush=True)
         shutil.copyfile("/usr/share/OVMF/OVMF_VARS_4M.fd", directory / "OVMF_VARS.fd")
         port = free_port()
         url = f"https://127.0.0.1:{port}"
@@ -220,7 +240,7 @@ def run(archive, from_version, to_version, log, result_path, force_tcg=False, ti
                                                "account": "owner preserved", "certificate": "preserved",
                                                "confirmed": True})
                     if boot == 1:
-                        assert not state["settings"].get("source"), "update source is overridden"
+                        assert mirror or not state["settings"].get("source"), "update source is overridden"
                         try:
                             state = request("/api/v1/update/check", {})
                         except http.client.IncompleteRead:
@@ -272,6 +292,7 @@ if __name__ == "__main__":
     parser.add_argument('--timeout', type=int, default=600, help='seconds per boot/confirmation')
     parser.add_argument('--tcg', action='store_true', help='force CPU emulation without KVM')
     parser.add_argument('--to-base', help='system base of the target when it is an app release (e.g. 0.26.0 for 0.28.0)')
+    parser.add_argument('--mirror', type=Path, help='folder with releases/latest/download and releases/download/<tag> of the published release')
     parser.add_argument('--break-new-slot', action='store_true', help='make the updated slot fail and expect the automatic fallback')
     args = parser.parse_args()
     if not all(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value) for value in [args.from_version, args.to_version]):
@@ -279,4 +300,4 @@ if __name__ == "__main__":
     if args.from_version == args.to_version or args.timeout < 1:
         parser.error('versions must differ and timeout must be positive')
     run(args.zip.resolve(), args.from_version, args.to_version, args.log.resolve(), args.result.resolve(), args.tcg, args.timeout,
-        args.to_base, args.break_new_slot)
+        args.to_base, args.break_new_slot, args.mirror.resolve() if args.mirror else None)

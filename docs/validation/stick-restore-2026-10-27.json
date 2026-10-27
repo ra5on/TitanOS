@@ -1,0 +1,71 @@
+{
+  "archive": "titanos-0.28.0.zip",
+  "cases": [
+    {
+      "case": "btrfs",
+      "filesystem": "btrfs",
+      "membersAfterReplacement": 2,
+      "steps": [
+        "set up: owner, RAID1 btrfs volume, share and host name",
+        "configuration backup on the volume: config-20261027T174050Z-979be5869770.tar.gz (version 0.28.0)",
+        "stick A powered off and removed",
+        "fresh stick found 1 backup(s) on vdb1 (label tank)",
+        "restore accepted, the NAS restarts",
+        "old owner logs in with the old password",
+        "volume tank mounted, state ok",
+        "share and host name restored",
+        "no update result reported; notifications: []",
+        "the old backups are still listed on the volume"
+      ],
+      "result": "passed"
+    },
+    {
+      "case": "ext4",
+      "filesystem": "ext4",
+      "membersAfterReplacement": 2,
+      "steps": [
+        "set up: owner, RAID1 ext4 volume, share and host name",
+        "configuration backup on the volume: config-20261027T174302Z-449632248e22.tar.gz (version 0.28.0)",
+        "stick A powered off and removed",
+        "fresh stick found 1 backup(s) on md127 (label tank)",
+        "restore accepted, the NAS restarts",
+        "old owner logs in with the old password",
+        "volume tank mounted, state ok",
+        "share and host name restored",
+        "no update result reported; notifications: []",
+        "the old backups are still listed on the volume"
+      ],
+      "result": "passed"
+    },
+    {
+      "case": "ext4-degraded",
+      "filesystem": "ext4",
+      "membersAfterReplacement": 1,
+      "steps": [
+        "set up: owner, RAID1 ext4 volume, share and host name",
+        "configuration backup on the volume: config-20261027T174518Z-55c18f061d6c.tar.gz (version 0.28.0)",
+        "stick A powered off and removed",
+        "fresh stick found 1 backup(s) on md127 (label tank)",
+        "restore accepted, the NAS restarts",
+        "old owner logs in with the old password",
+        "volume tank mounted, state degraded",
+        "share and host name restored",
+        "no update result reported; notifications: ['volume_failed']",
+        "the old backups are still listed on the volume"
+      ],
+      "result": "passed"
+    }
+  ],
+  "date": "2026-10-27",
+  "runner": "scripts/smoke-stick-restore.py",
+  "acceleration": "tcg (no KVM on the test host)",
+  "scope": "Published titanos-0.28.0.zip (SHA-256 04b6d805…648f): automatic configuration backup on the volume, fresh stick from the same ZIP, restore from the setup page, restart, login with the old owner.",
+  "findings": [
+    "All three cases passed with the published 0.28.0.",
+    "ext4-degraded: the NAS reported volume_failed while mdadm had not yet started the array with one disk missing; fixed for 0.28.1 by a three-minute start grace in the notification watcher."
+  ],
+  "limits": [
+    "QEMU virtual disks and USB stick only; no real hardware.",
+    "The restore-side fixes of 0.28.1 (newer-backup warning, skipping update-pending.json, search retry) are covered by unit tests, not by this run of the published 0.28.0."
+  ]
+}
