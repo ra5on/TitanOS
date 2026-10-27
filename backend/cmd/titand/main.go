@@ -782,6 +782,14 @@ func run(opts options) error {
 		audit.Mounted = volumes.Mounted
 		go audit.Run(ctx)
 	}
+	// SSH logins with the key they came in with, from the journal of sshd.
+	go access.FollowLogins(ctx, users.List, func(login sshd.Login) {
+		action := "ssh_login"
+		if login.Blocked {
+			action = "ssh_login_blocked"
+		}
+		audit.Record(activity.Entry{At: login.At, User: login.User, Via: activity.ViaSSH, IP: login.IP, Action: action, Target: login.Target(), OK: !login.Blocked})
+	})
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev

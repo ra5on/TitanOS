@@ -109,6 +109,52 @@ DNS-Auflösung. Ein erfolgreicher `ip`-Aufruf allein bedeutet keinen gesunden
 Link. DNS-/Ping-Fehler bleiben sichtbar; eine fehlgeschlagene Diagnose ist kein
 allgemeiner Ausfallnachweis aller Netzwerkdienste.
 
+### SSH nur aus bestimmten Netzen
+
+Unter Einstellungen › Zugang › SSH lässt sich eine Liste von Netzen in
+CIDR-Schreibweise (IPv4/IPv6) angeben, aus denen SSH-Anmeldungen kommen dürfen.
+Eine einzelne Adresse gilt als `/32` bzw. `/128`, höchstens 32 Einträge. Eine
+leere Liste bedeutet wie bisher: aus allen Netzen. Vorgaben fügen das
+**Heimnetz** (die Netze, in denen das NAS gerade selbst eine Adresse hat, ohne
+Loopback, Link-local, Docker-, VM- und VPN-Schnittstellen), **Tailscale**
+(`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) oder **NetBird** (Standardbereich
+`100.64.0.0/10`) hinzu.
+
+- Durchgesetzt wird die Liste von sshd selbst, nicht von einer Firewall:
+  titand schreibt `/etc/ssh/sshd_config.d/20-titanos-networks.conf` mit
+  `AllowUsers *@<netz> …`. `AllowGroups titanos-ssh` aus der Grundkonfiguration
+  gilt weiter; beide müssen eine Anmeldung zulassen. Die Firewall,
+  nftables.service (maskiert) und die bestehenden Regeln bleiben unverändert.
+- Vor dem Übernehmen prüft `sshd -t` die gesamte Konfiguration. Lehnt sshd sie
+  ab, bleibt die vorige Datei bestehen, sshd wird nicht neu geladen, und die
+  Seite zeigt den Fehler. Eine geänderte Liste lädt sshd per
+  `systemctl reload ssh.service` neu; offene Sitzungen bleiben bestehen, auch
+  wenn ihre Adresse nicht mehr erlaubt ist.
+- Gespeichert wird im optionalen Feld `allowedNetworks` in
+  `/config/system/ssh.json`, nur beim Speichern der Liste. Ältere titand-Versionen
+  ignorieren das Feld; schaltet eine ältere Version SSH um, schreibt sie die
+  Datei ohne Liste (danach wieder alle Netze). Die Datei unter `/etc` liegt im
+  RAM: Nach einem Rückfall auf eine ältere App ohne Neustart gilt sie bis zum
+  nächsten NAS-Start weiter.
+- Schutz der eigenen Sitzung: Enthält die Liste die Adresse nicht, von der die
+  speichernde Websitzung kommt, lehnt die API mit `ssh_network_excludes_you` ab.
+  Die Oberfläche zeigt dann einen einfachen Bestätigungsdialog und schickt die
+  Liste danach mit `confirm: true`. Die Adresse ist die tatsächliche
+  Socket-Adresse der Anfrage; Forwarded-Kopfzeilen zählen nicht.
+- Rückweg: Die Weboberfläche ist von der Liste nicht betroffen. Ohne
+  Weboberfläche hebt die lokale Konsole (**Strg+Alt+F2**,
+  `titand -network-recovery`, Anmeldung wie oben, Auswahl **3**, dann JA/YES)
+  die Beschränkung auf; titand wird dafür kurz gestoppt und wieder gestartet.
+- Route: `PUT /api/v1/system/ssh/networks` mit `{"networks": [...], "confirm": false}`,
+  nur Besitzer/Administratoren in einer Websitzung (nicht über API-Tokens, nicht
+  im Assistenten-Katalog). `GET /api/v1/system/ssh` liefert zusätzlich
+  `allowedNetworks`, `networksError`, `homeNetworks`, `tailscaleNetworks`,
+  `netbirdNetworks` und `clientAddress`.
+- Geprüft mit Unit-Tests (Normalisierung, Adressabdeckung, erzeugte Datei,
+  abgelehntes `sshd -t`, Reload, Rückweg über die Konsole, Lesbarkeit für ältere
+  Versionen) und API-Tests. Ein echtes sshd in QEMU und Anmeldungen über Tailscale
+  bzw. NetBird sind damit noch nicht abgenommen.
+
 ## Bestehende Heimnetz-Bridge
 
 Eine VM im Bridge-Modus hängt mit ihrer eigenen MAC-Adresse an `br0`. Ihre IP

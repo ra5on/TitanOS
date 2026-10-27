@@ -62,6 +62,8 @@ const (
 	ViaToken  = "token"
 	ViaAgent  = "agent"
 	ViaSystem = "system"
+	// ViaSSH is a login over SSH, read from the journal of sshd.
+	ViaSSH = "ssh"
 )
 
 type Status struct {

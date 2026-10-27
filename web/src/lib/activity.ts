@@ -10,7 +10,7 @@ export type ActivityStatus = {
 export type ActivityEntry = {
 	at: string;
 	user: string;
-	via: 'web' | 'token' | 'agent' | 'system';
+	via: 'web' | 'token' | 'agent' | 'system' | 'ssh';
 	ip?: string;
 	action: string;
 	target?: string;
@@ -30,6 +30,8 @@ const named: Record<string, string> = {
 	logout: 'logout',
 	login_failed: 'loginFailed',
 	login_blocked: 'loginBlocked',
+	ssh_login: 'sshLogin',
+	ssh_login_blocked: 'sshLoginBlocked',
 	setup: 'setup',
 	'POST /api/v1/files/delete': 'fileDelete',
 	'POST /api/v1/files/rename': 'fileRename',
