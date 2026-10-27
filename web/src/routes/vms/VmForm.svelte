@@ -16,6 +16,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
 import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
+	import IsoPicker from './IsoPicker.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -43,6 +44,7 @@ import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
 	let hardware = $state<Hardware | null>(null);
 	let shares = $state<Share[]>([]);
 	let media = $state<{ path: string; sizeBytes: number }[]>([]);
+	let browsing = $state(false);
 
 	// The form is made anew for every VM, so what it starts from is read once.
 	const initial = untrack(() => existing);
@@ -889,29 +891,36 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 			<fieldset class="content" disabled={running}>
 				<div class="medium">
 					<label for="vm-iso">{t('vms.new.medium')}</label>
-					{#if media.length > 0}
-						<select
+					<div class="medium-pick">
+						<input
+							id="vm-iso"
 							class="field mono"
-							value={media.some((entry) => entry.path === iso) ? iso : ''}
-							onchange={(event) => (iso = event.currentTarget.value)}
-							aria-label={t('vms.new.mediumFound')}
-						>
-							<option value="">{t('vms.new.mediumPick')}</option>
-							{#each media as entry (entry.path)}<option value={entry.path}
-									>{entry.path} · {formatBytes(entry.sizeBytes)}</option
-								>{/each}
-						</select>
-					{/if}
-					<input
-						id="vm-iso"
-						class="field mono"
-						type="text"
-						bind:value={iso}
-						placeholder="/mnt/…/….iso"
-						spellcheck="false"
-					/>
+							type="text"
+							bind:value={iso}
+							placeholder="/mnt/…/….iso"
+							spellcheck="false"
+						/>
+						<button type="button" class="btn" onclick={() => (browsing = true)}
+							><Icon name="folder" size={14} />{t('vms.iso.browse')}</button
+						>{#if iso}<button
+								type="button"
+								class="btn"
+								onclick={() => (iso = '')}
+								aria-label={t('vms.iso.clear')}><Icon name="close" size={14} /></button
+							>{/if}
+					</div>
 					<small>{t(media.length > 0 ? 'vms.new.mediumHint' : 'vms.new.mediumNone')}</small>
 <a href="/vms/media">{t('media.add')}</a>
+{#if browsing}<IsoPicker
+						title={t('vms.iso.title')}
+						initial={iso}
+						submit={t('vms.iso.pick')}
+						onpick={(path) => {
+							iso = path;
+							browsing = false;
+						}}
+						onclose={() => (browsing = false)}
+					/>{/if}
 {#if template==='windows'}<VirtIODrivers volume={disks.find(d=>d.volume)?.volume??volumes[0]?.name??''} initial={initial?.virtioISO??''} defaultAuto={!existing} disabled={running} onready={value=>virtioISO=value} onbusy={value=>virtioPending=value}/>{/if}
 				</div>
 			</fieldset>
@@ -1472,6 +1481,14 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 	}
 	.medium label {
 		font-size: 0.875rem;
+	}
+	.medium-pick {
+		display: flex;
+		gap: 8px;
+	}
+	.medium-pick input {
+		flex: 1;
+		min-width: 0;
 	}
 	aside {
 		min-width: 0;

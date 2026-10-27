@@ -2,12 +2,12 @@
 	// The tab "Overview" of a VM: what it is made of and what it does, as
 	// tiles. The CD drive can be changed here, also while the VM runs.
 	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
-	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Sparkline from '#lib/components/Sparkline.svelte';
 	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { SnapshotStatus } from './snapshots.ts';
+	import IsoPicker from './IsoPicker.svelte';
 
 	type Props = {
 		vm: VM;
@@ -136,24 +136,11 @@
 	}
 
 	// Changing the medium in the CD drive.
-	let medium = $state<{
-		list: { path: string; sizeBytes: number }[] | null;
-		path: string;
-		error: string;
-	} | null>(null);
+	let medium = $state<{ error: string } | null>(null);
 	let mediumBusy = $state(false);
 	let ejectError = $state('');
-	async function chooseMedium() {
-		medium = { list: null, path: vm.iso, error: '' };
-		try {
-			const result = await api.get<{ media: { path: string; sizeBytes: number }[] }>('/vms/media');
-			if (medium) medium.list = result.media;
-		} catch (err) {
-			if (medium) {
-				medium.list = [];
-				medium.error = errorText(err instanceof ApiError ? err.code : 'internal');
-			}
-		}
+	function chooseMedium() {
+		medium = { error: '' };
 	}
 	async function setMedium(path: string) {
 		mediumBusy = true;
@@ -171,10 +158,6 @@
 		} finally {
 			mediumBusy = false;
 		}
-	}
-	async function submitMedium(event: SubmitEvent) {
-		event.preventDefault();
-		if (medium?.path) await setMedium(medium.path);
 	}
 </script>
 
@@ -373,37 +356,19 @@
 </div>
 
 {#if medium}
-	<Dialog title={t('vms.ov.cdTitle')} locked={mediumBusy} onclose={() => (medium = null)}>
-		<form onsubmit={submitMedium}>
-			<p class="text">{t(running ? 'vms.ov.cdTextLive' : 'vms.ov.cdText')}</p>
-			{#if medium.list === null}
-				<p class="muted">{t('vms.ov.cdSearching')}</p>
-			{:else if medium.list.length === 0}
-				<p class="muted">{t('vms.ov.cdNone')}</p>
-			{:else}
-				<label>
-					<span>{t('vms.ov.cdFile')}</span>
-					<select class="field mono" bind:value={medium.path}>
-						{#each medium.list as entry (entry.path)}<option value={entry.path}
-								>{entry.path} ({formatBytes(entry.sizeBytes)})</option
-							>{/each}
-					</select>
-				</label>
-			{/if}
-			{#if medium.error}<p class="notice-error" role="alert">{medium.error}</p>{/if}
-			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (medium = null)} disabled={mediumBusy}
-					>{t('common.cancel')}</button
-				>
-				<button
-					type="submit"
-					class="btn btn-primary"
-					disabled={mediumBusy || !medium.path || medium.path === vm.iso}
-					>{t('vms.ov.cdSubmit')}</button
-				>
-			</div>
-		</form>
-	</Dialog>
+	<IsoPicker
+		title={t('vms.ov.cdTitle')}
+		text={t(running ? 'vms.ov.cdTextLive' : 'vms.ov.cdText')}
+		initial={vm.iso}
+		submit={t('vms.ov.cdSubmit')}
+		busy={mediumBusy}
+		error={medium.error}
+		onpick={(path) => {
+			if (path !== vm.iso) void setMedium(path);
+			else medium = null;
+		}}
+		onclose={() => (medium = null)}
+	/>
 {/if}
 
 <style>
@@ -558,22 +523,5 @@
 	.icon:hover {
 		background: var(--chip);
 		color: var(--text);
-	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.8125rem;
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.text {
-		font-size: 0.875rem;
 	}
 </style>
