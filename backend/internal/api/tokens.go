@@ -71,6 +71,10 @@ func (s *Server) bearerAccess(next http.Handler) http.Handler {
 			writeError(w, 401, "unauthorized", "token account no longer exists")
 			return
 		}
+		if user.Disabled {
+			writeError(w, 401, "unauthorized", "the account of this token is locked")
+			return
+		}
 		scope := publicScope(r.Method, r.URL.Path)
 		if scope == "" || !slices.Contains(token.Scopes, scope) {
 			writeError(w, 403, "token_scope_required", "API token does not allow this endpoint")

@@ -5,6 +5,7 @@
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import { ACCOUNT_STATUS_FILTERS, filterAccounts, mayLock, type AccountStatusFilter } from '#lib/users-view.ts';
 
 	const ROLES: Role[] = ['owner', 'admin', 'user'];
 	const NAME = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -22,6 +23,7 @@
 		| { kind: 'password' | 'delete'; name: string }
 		| { kind: 'twoFactor'; account: Account }
 		| { kind: 'role'; account: Account; role: Role }
+		| { kind: 'lock'; account: Account; disabled: boolean }
 		| null
 	>(null);
 
@@ -36,6 +38,20 @@
 	}
 	const offeredRoles = $derived(ROLES.filter(mayManage));
 	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }));
+	const dateTime = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }));
+	// The status filter lives only in this page visit (no write to the stick).
+	let statusFilter = $state<AccountStatusFilter>('all');
+	const shown = $derived(accounts ? filterAccounts(accounts, statusFilter) : []);
+	const filterLabel: Record<AccountStatusFilter, 'users.filterAll' | 'users.filterActive' | 'users.filterLocked'> = {
+		all: 'users.filterAll',
+		active: 'users.filterActive',
+		locked: 'users.filterLocked',
+	};
+	function lockedTitle(account: Account): string {
+		if (!account.disabledAt) return t('users.statusLocked');
+		const when = dateTime.format(new Date(account.disabledAt));
+		return account.disabledBy ? t('users.lockedSince', { date: when, name: account.disabledBy }) : t('users.lockedAt', { date: when });
+	}
 
 	async function load() {
 		loading = true;
@@ -130,6 +146,22 @@
 		working = false;
 	}
 
+	/** Locks or unlocks; a refusal keeps the dialog open with the reason. */
+	async function setLocked(account: Account, disabled: boolean) {
+		if (working) return;
+		working = true;
+		dialogError = '';
+		try {
+			await api.post(`/users/${account.name}/${disabled ? 'lock' : 'unlock'}`);
+			dialog = null;
+		} catch (err) {
+			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+		} finally {
+			working = false;
+		}
+		await load();
+	}
+
 	// A failed removal keeps the dialog open with the reason.
 	async function remove(name: string) {
 		if (working) return;
@@ -162,21 +194,30 @@
 {#if accounts === null}
 	{#if !loadError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
 {:else}
+<div class="toolbar">
+	<label>
+		<span>{t('users.filter')}</span>
+		<select class="field filter" bind:value={statusFilter}>
+			{#each ACCOUNT_STATUS_FILTERS as option (option)}<option value={option}>{t(filterLabel[option])}</option>{/each}
+		</select>
+	</label>
+</div>
 <div class="tile table">
 	<table>
 		<thead>
 			<tr>
 				<th scope="col">{t('users.name')}</th>
 				<th scope="col">{t('users.role')}</th>
+				<th scope="col">{t('users.status')}</th>
 				<th scope="col">{t('users.shares')}</th>
 				<th scope="col">{t('users.created')}</th>
 				<th scope="col"></th>
 			</tr>
 		</thead>
 		<tbody>
-			{#each accounts as account (account.name)}
+			{#each shown as account (account.name)}
 				{@const manageable = mayManage(account.role)}
-				<tr>
+				<tr class:locked={account.disabled}>
 					<td>
 						<span class="who">
 							<span class="avatar" aria-hidden="true">{account.name.charAt(0).toUpperCase()}</span>
@@ -194,6 +235,14 @@
 							</select>
 						{:else}
 							{t(`role.${account.role}`)}
+						{/if}
+					</td>
+					<td>
+						{#if account.disabled}
+							<span class="chip warn" title={lockedTitle(account)}>{t('users.statusLocked')}</span>
+							{#if account.disabledAt}<span class="sub">{lockedTitle(account)}</span>{/if}
+						{:else}
+							<span class="chip ok">{t('users.statusActive')}</span>
 						{/if}
 					</td>
 					<td class="reach">
@@ -215,11 +264,16 @@
 								<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'twoFactor', account }))}>{t('users.resetTwoFactor')}</button>
 							{/if}
 						{/if}
+						{#if accounts && mayLock(me, account, accounts)}
+							<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'lock', account, disabled: !account.disabled }))}>{account.disabled ? t('users.unlock') : t('users.lock')}</button>
+						{/if}
 						{#if manageable && account.name !== me?.name}
 							<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'delete', name: account.name }))}>{t('users.delete')}</button>
 						{/if}
 					</td>
 				</tr>
+			{:else}
+				<tr><td colspan="6" class="muted">{t('users.filterEmpty')}</td></tr>
 			{/each}
 		</tbody>
 	</table>
@@ -282,6 +336,16 @@
 			<button type="button" class="btn btn-warn" disabled={working} onclick={() => setRole(change.account, change.role)}>{t('users.ownerSubmit')}</button>
 		</div>
 	</Dialog>
+{:else if dialog?.kind === 'lock'}
+	{@const change = dialog}
+	<Dialog title={t(change.disabled ? 'users.lockTitle' : 'users.unlockTitle', { name: change.account.name })} locked={working} onclose={() => (dialog = null)}>
+		<p class="text">{t(change.disabled ? 'users.lockText' : 'users.unlockText', { name: change.account.name })}</p>
+		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class={change.disabled ? 'btn btn-warn' : 'btn btn-primary'} disabled={working} onclick={() => setLocked(change.account, change.disabled)}>{t(change.disabled ? 'users.lock' : 'users.unlock')}</button>
+		</div>
+	</Dialog>
 {:else if dialog?.kind === 'twoFactor'}
 	{@const account = dialog.account}
 	<Dialog title={t('users.resetTwoFactorTitle', { name: account.name })} locked={working} onclose={() => (dialog = null)}>
@@ -298,9 +362,26 @@
 	.table {
 		overflow-x: auto;
 	}
+	.toolbar {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 12px;
+	}
+	.toolbar label {
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+	}
+	.filter {
+		width: auto;
+		height: 2.25rem;
+	}
+	tr.locked .name {
+		color: var(--muted);
+	}
 	table {
 		width: 100%;
-		min-width: 720px;
+		min-width: 840px;
 		border-collapse: collapse;
 		font-size: 0.875rem;
 	}

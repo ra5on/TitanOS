@@ -240,3 +240,31 @@ func TestRemovedKeyEndsSessions(t *testing.T) {
 		t.Fatalf("removing a key kept the sessions: %v", system.calls)
 	}
 }
+
+func TestLockedAccountLosesSSH(t *testing.T) {
+	m, system, _ := newManager(t)
+	key := userKey(t)
+	users := []auth.User{{Name: "bo", Role: auth.RoleAdmin, UID: 2001, SSHKeys: []string{key}}}
+	m.SetEnabled(true)
+	m.Apply(context.Background(), users)
+	if accounts := m.Status().Accounts; len(accounts) != 1 {
+		t.Fatalf("accounts before the lock: %v", accounts)
+	}
+	// Locked: out of the group, its SSH sessions end, the key file goes.
+	users[0].Disabled = true
+	if _, err := m.Apply(context.Background(), users); err != nil {
+		t.Fatal(err)
+	}
+	if system.ran("gpasswd --delete bo titanos-ssh") != 1 || system.ran("loginctl terminate-user bo") != 1 || system.ran("usermod --shell /usr/sbin/nologin bo") != 1 {
+		t.Errorf("calls: %v", system.calls)
+	}
+	if _, err := os.Stat(filepath.Join(m.etcDir, "authorized_keys/bo")); err == nil {
+		t.Error("the key file of a locked account is still there")
+	}
+	// Unlocked: back in, with the same key.
+	users[0].Disabled = false
+	m.Apply(context.Background(), users)
+	if keys, _ := os.ReadFile(filepath.Join(m.etcDir, "authorized_keys/bo")); string(keys) != key+"\n" || len(m.Status().Accounts) != 1 {
+		t.Errorf("after unlock: %q %v", keys, m.Status().Accounts)
+	}
+}

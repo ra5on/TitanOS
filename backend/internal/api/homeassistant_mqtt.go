@@ -165,7 +165,7 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		}
 	}
 	settings, _ := s.opts.HomeAssistant.Settings()
-	if user, ok := s.opts.Users.Get(settings.Account); ok && user.Role.CanAdminister() {
+	if user, ok := s.activeUser(settings.Account); ok && user.Role.CanAdminister() {
 		work := &homeassistant.WorkValues{Busy: s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() || s.storageBusy(ctx)}
 		if s.opts.Files != nil {
 			for _, job := range s.opts.Files.Jobs(user.Name) {
@@ -192,7 +192,7 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 // interface, so that its rights and checks apply.
 func (s *Server) HACommand(ctx context.Context, kind, name, action string) error {
 	settings, _ := s.opts.HomeAssistant.Settings()
-	user, ok := s.opts.Users.Get(settings.Account)
+	user, ok := s.activeUser(settings.Account)
 	if !ok || !user.Role.CanAdminister() {
 		return fmt.Errorf("no owner or administrator account chosen for Home Assistant")
 	}
