@@ -114,6 +114,9 @@ func (s *Server) handleFileRenameBatch(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	for _, c := range req.Changes {
+		noteTarget(r, filePlace(req.Root, c.From)+" → "+c.To)
+	}
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -152,6 +155,7 @@ func (s *Server) handleFileExtract(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, req.Path), "→ "+filePlace(req.ToRoot, req.ToDir))
 	src, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return

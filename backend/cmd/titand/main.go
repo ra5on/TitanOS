@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
@@ -295,7 +296,7 @@ func run(opts options) error {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
 	go folders.Run(ctx, func() shares.State {
-		return shares.State{Users: users.List(), Mounted: volumes.Mounted()}
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas}
 	})
 
 	// Runs the Docker engine while its volume is mounted.
@@ -531,6 +532,9 @@ func run(opts options) error {
 		}
 		backupFailed = err != nil
 	}
+	stickBackup.OnNoVolume = func(volume string) {
+		notifier.Notify(notify.Warning, "config_backup_no_volume", volume)
+	}
 	go stickBackup.Run(ctx, volumes.Mounted)
 
 	// SSH is off unless switched on; then for administrators with a key.
@@ -641,6 +645,10 @@ func run(opts options) error {
 	backups.OnOverdue = func(job string) {
 		notifier.Notify(notify.Warning, "backup_overdue", job)
 	}
+	backups.OnIncomplete = func(job string) {
+		notifier.Notify(notify.Warning, "backup_incomplete", job)
+	}
+	backups.Timezone = settings.CurrentTimezone
 	appBackups := &appbackup.Manager{Store: store, Docker: containers, VMs: machines, Mounted: volumes.Mounted, MountRoot: "/mnt", Disabled: opts.dev}
 	if err := appBackups.Load(); err != nil {
 		slog.Error("application backup recovery unavailable", "err", err)
@@ -671,8 +679,16 @@ func run(opts options) error {
 	}
 	backups.WithUSB = drives.WithMounted
 	go backups.Run(ctx)
-	drives.Reserved = func(uuid string) bool { return slices.Contains(volumes.FilesystemUUIDs(), uuid) }
+	drives.Reserved = volumes.Owns
+	drives.Busy = func() bool { return volumes.ActionsRunning() || volumes.GrowthActive() }
 	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
+	drives.OnFormatted = func(job usb.FormatJob) {
+		if job.Phase == "done" {
+			notifier.Notify(notify.Info, "usb_formatted", job.Name)
+		} else {
+			notifier.Notify(notify.Warning, "usb_format_failed", job.Name)
+		}
+	}
 	go drives.Watch(ctx)
 
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.
@@ -756,6 +772,15 @@ func run(opts options) error {
 	}
 	if !opts.dev {
 		go history.Run(ctx)
+	}
+	// The activity log stays in memory in development mode.
+	audit := activity.New(store)
+	if err := audit.Load(); err != nil {
+		slog.Warn("activity log settings unavailable", "err", err)
+	}
+	if !opts.dev {
+		audit.Mounted = volumes.Mounted
+		go audit.Run(ctx)
 	}
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
@@ -864,6 +889,7 @@ func run(opts options) error {
 		SecureCookies:      !opts.dev,
 		Sessions:           sessions,
 		Assistant:          chat,
+		Activity:           audit,
 	})
 
 	agentDone := make(chan struct{})

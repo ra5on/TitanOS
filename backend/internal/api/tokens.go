@@ -91,6 +91,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	token, plain, err := s.tokens.Create(currentUser(r), req.Name, req.Scopes)
 	if err != nil {
 		writeError(w, 400, "invalid_api_token", err.Error())

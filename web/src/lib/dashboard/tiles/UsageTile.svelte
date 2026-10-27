@@ -4,6 +4,7 @@
 	import { system, systemHistory } from '#lib/system.svelte.ts';
 	import { memoryParts } from '#lib/memory.ts';
 	import type { TileOptions } from '../options.ts';
+	import { cpuTemperature } from '../temperatures.ts';
 	import Metric from './Metric.svelte';
 	import History from './History.svelte';
 	let {
@@ -22,13 +23,7 @@
 					: null
 			: null,
 	);
-	const temperature = $derived(
-		info?.temperatures.find(
-			(s) =>
-				(s.chip === 'coretemp' && s.label === 'Package id 0') ||
-				(s.chip === 'k10temp' && s.label === 'Tctl'),
-		),
-	);
+	const temperature = $derived(cpuTemperature(info?.temperatures, options.sensor));
 </script>
 
 {#if info}

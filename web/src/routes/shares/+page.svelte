@@ -20,6 +20,7 @@
 		type ShareView,
 	} from '#lib/share-view.ts';
 	import ShareDialog from './ShareDialog.svelte';
+	import { formatDiskBytes } from '#lib/format.ts';
 
 	const canAdminister = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const volumes = $derived((storage.status?.volumes ?? []).map((v) => v.name));
@@ -362,6 +363,29 @@
 						<dd class="mono">{detail.path}</dd>
 						<dt>{t('shares.status')}</dt>
 						<dd>{t(detail.available ? 'shares.available' : 'shares.unavailable')}</dd>
+						<dt>{t('shares.quota')}</dt>
+						<dd>
+							{#if !detail.quota}{t(
+									'shares.noQuota',
+								)}{:else if detail.quotaStatus?.state === 'active' || detail.quotaStatus?.state === 'applying'}{t(
+									'shares.quotaUsed',
+									{
+										used: formatDiskBytes(detail.quotaStatus.used),
+										limit: formatDiskBytes(detail.quota),
+									},
+								)}<span class="quota-bar" class:full={detail.quotaStatus.used >= detail.quota * 0.9}
+									><span
+										style:width="{Math.min(100, (100 * detail.quotaStatus.used) / detail.quota)}%"
+									></span></span
+								>{#if detail.quotaStatus.state === 'applying'}<small class="muted"
+										>{t('shares.quotaApplying')}</small
+									>{/if}{:else}{formatDiskBytes(detail.quota)} ·
+								<span class:problem={detail.quotaStatus?.state === 'error'}
+									>{detail.quotaStatus?.state === 'error'
+										? t('shares.quotaError', { error: detail.quotaStatus.error ?? '' })
+										: t('shares.quotaPending')}</span
+								>{/if}
+						</dd>
 					{:else if tab === 'access'}{#each Object.entries(detail.access).sort( ([a], [b]) => a.localeCompare(b) ) as [name, level]}<dt
 								class="mono"
 							>
@@ -494,6 +518,26 @@
 {/if}
 
 <style>
+	.quota-bar {
+		display: block;
+		height: 6px;
+		margin: 6px 0 2px;
+		max-width: 260px;
+		border-radius: 3px;
+		background: var(--track);
+		overflow: hidden;
+	}
+	.quota-bar > span {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+	}
+	.quota-bar.full > span {
+		background: var(--warn-text);
+	}
+	dd .problem {
+		color: var(--error-text);
+	}
 	.toolbar select {
 		width: auto;
 		max-width: 100%;

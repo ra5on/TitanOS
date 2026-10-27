@@ -143,6 +143,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the account could not be saved to /config")
 	default:
 		slog.Info("owner account created", "user", user.Name, "ip", remoteIP(r))
+		s.recordEvent(r, user.Name, "setup", "", true)
 		s.opts.Shares.Kick()
 		s.opts.SSH.Kick()
 		if s.startSession(w, r, user) {
@@ -162,6 +163,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if wait := s.limiter.RetryAfter(userKey, ipKey); wait > 0 {
 		seconds := int(math.Ceil(wait.Seconds()))
+		s.recordEvent(r, req.Name, "login_blocked", "", false)
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed logins, try again later", RetryAfter: seconds,
 		}})
@@ -176,6 +178,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		s.limiter.Fail(userKey, ipKey)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
+		s.recordEvent(r, req.Name, "login_failed", "", false)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "wrong name or password")
 		return
 	}
@@ -189,6 +192,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
 			s.limiter.Fail(userKey, ipKey)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
+			s.recordEvent(r, req.Name, "login_failed", "2fa", false)
 			writeError(w, http.StatusUnauthorized, "invalid_code", "the code is wrong or was used already")
 			return
 		}
@@ -202,6 +206,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.opts.SSH.Kick()
 	}
 	if s.startSession(w, r, user) {
+		s.recordEvent(r, user.Name, "login", "", true)
 		if user.Role.CanAdminister() && s.opts.Update != nil {
 			s.opts.Update.CheckAfterLogin()
 		}
@@ -211,6 +216,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(s.cookieName()); err == nil {
+		if session, ok := s.sessions.Get(cookie.Value); ok {
+			s.recordEvent(r, session.User, "logout", "", true)
+		}
 		s.sessions.Delete(cookie.Value)
 	}
 	s.setSessionCookie(w, "", -1)

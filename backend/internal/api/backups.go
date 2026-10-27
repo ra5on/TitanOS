@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -55,6 +58,7 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &job) {
 		return
 	}
+	noteTarget(r, job.ID)
 	if err := s.opts.Backup.Create(job, s.opts.Storage.Names()); err != nil {
 		writeBackupJobError(w, err)
 		return
@@ -74,6 +78,32 @@ func (s *Server) handleBackupUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("backup job changed", "job", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleBackups(w, r)
+}
+
+// backupJobOr sends a PUT that changes a job to handleBackupUpdate. The fixed
+// routes /backups/smb and /backups/target win over /backups/{id}; a job made
+// with such a name before the names were reserved could otherwise not be
+// changed, and its form would be taken for the settings of that route. A job
+// always has a destination; neither of those bodies has one.
+func (s *Server) backupJobOr(id string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		var probe map[string]json.RawMessage
+		if json.Unmarshal(body, &probe) == nil {
+			if _, ok := probe["destination"]; ok {
+				r.SetPathValue("id", id)
+				s.handleBackupUpdate(w, r)
+				return
+			}
+		}
+		next(w, r)
+	}
 }
 
 // handleBackupDelete forgets a job. The backups it made stay where they are.

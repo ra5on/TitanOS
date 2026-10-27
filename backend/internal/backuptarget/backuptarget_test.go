@@ -236,3 +236,39 @@ func TestNeedsTailscaleAndVolume(t *testing.T) {
 		t.Errorf("problem = %q", m.View().Problem)
 	}
 }
+
+// A volume that went away between two looks of reconcile is refused per
+// request: nothing is written into the empty folder in the RAM below.
+func TestUnmountedVolumeIsNeverWritten(t *testing.T) {
+	m, root := newTarget(t)
+	srv := httptest.NewServer(m.Handler())
+	defer srv.Close()
+	serverURL = srv.URL
+	text, err := m.Pair("Backup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := decode(t, text)
+	m.Mounted = func() []string { return nil }
+	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "data"); res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("upload to an unmounted volume: %d", res.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(root, "mnt/tank", targetDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("something was written below the unmounted volume: %v", err)
+	}
+	m.Mounted = func() []string { return []string{"tank"} }
+	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "data"); res.StatusCode != http.StatusOK {
+		t.Errorf("upload once mounted: %d", res.StatusCode)
+	}
+	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "other"); res.StatusCode != http.StatusForbidden {
+		t.Errorf("blob overwritten: %d", res.StatusCode)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "mnt/tank", targetDir, "Backup/data", blob[:2], blob))
+	if string(data) != "data" {
+		t.Errorf("blob content: %q", data)
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, "mnt/tank", targetDir, "Backup/data", blob[:2]))
+	if len(entries) != 1 {
+		t.Errorf("hidden upload files left behind: %v", entries)
+	}
+}

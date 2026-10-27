@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
@@ -330,7 +331,7 @@ func (s *Server) handleBackupProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.opts.Backup.Probe(r.PathValue("id"), req); err != nil {
-		writeBackupError(w, err)
+		writeBackupJobError(w, err)
 		return
 	}
 	w.WriteHeader(202)
@@ -345,16 +346,19 @@ func (s *Server) handleApplicationRecovery(w http.ResponseWriter, r *http.Reques
 		featureError(w, errors.New("application recovery state could not be loaded; inspect the system log"))
 		return
 	}
-	message := ""
+	message, missing := "", false
 	if r.URL.Query().Get("details") == "1" {
 		review, _, err := s.opts.ApplicationBackups.Review()
-		if err != nil {
+		switch {
+		case errors.Is(err, appbackup.ErrJournalMissing):
+			missing = true
+		case err != nil:
 			message = err.Error()
-		} else {
+		default:
 			op = review
 		}
 	}
-	writeJSON(w, 200, map[string]any{"operation": op, "active": active, "error": message})
+	writeJSON(w, 200, map[string]any{"operation": op, "active": active, "error": message, "journalMissing": missing})
 }
 func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request) {
 	if s.opts.ApplicationBackups == nil {

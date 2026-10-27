@@ -28,7 +28,7 @@ const routes = [
   "/settings/temperatures", "/settings/timezone", "/settings/updates",
   "/settings/ups", "/shares", "/storage", "/storage/import",
   "/storage/manage", "/terminal", "/tools", "/tools/maintenance",
-  "/tools/monitoring", "/tools/tasks", "/users", "/vms", "/vms/edit?vm=source",
+  "/tools/monitoring", "/tools/activity", "/tools/tasks", "/users", "/vms", "/vms/edit?vm=source",
   "/vms/media", "/vms/new", "/vms/screen?vm=source", "/welcome",
 ].filter((route) => !only || only.includes(route));
 

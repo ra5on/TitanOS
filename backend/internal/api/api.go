@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -111,6 +112,8 @@ type Options struct {
 	Sessions *auth.Sessions
 	// Assistant is the chat with a model from Ollama; nil makes one that is off.
 	Assistant *assistant.Manager
+	// Activity records who changed what; nil records nothing.
+	Activity *activity.Manager
 }
 
 // Server answers all HTTP requests.
@@ -204,6 +207,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage", s.requireUser(s.handleStorage))
 	mux.HandleFunc("GET /api/v1/storage/disk-sleep", s.requireAdmin(s.handleDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/quotas", s.requireAdmin(s.handleSetShareQuotas))
 	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
 	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireHeavyAdmin(s.handleCreateVolume))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
@@ -281,6 +285,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/usb", s.requireAdmin(s.handleUSB))
 	mux.HandleFunc("POST /api/v1/usb/{id}/mount", s.requireAdmin(s.handleUSBMount))
 	mux.HandleFunc("POST /api/v1/usb/{id}/eject", s.requireAdmin(s.handleUSBEject))
+	mux.HandleFunc("GET /api/v1/usb/disks", s.requireAdmin(s.handleUSBDisks))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/format", s.requireAdmin(s.handleUSBFormat))
 	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
@@ -379,18 +385,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
+	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
+	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
 	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
 
 	// Backups of shares. They hold everyone's files: administrators only.
 	mux.HandleFunc("POST /api/v1/backups/smb/discover", s.requireAdmin(s.handleSMBDiscover))
-	mux.HandleFunc("PUT /api/v1/backups/smb", s.requireAdmin(s.handleSMBSave))
+	mux.HandleFunc("PUT /api/v1/backups/smb", s.requireAdmin(s.backupJobOr("smb", s.handleSMBSave)))
 	mux.HandleFunc("DELETE /api/v1/backups/smb/{target}", s.requireAdmin(s.handleSMBDelete))
 	mux.HandleFunc("GET /api/v1/backups/progress", s.requireAdmin(s.handleUSBBackupProgress))
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
 	mux.HandleFunc("GET /api/v1/backups/target", s.requireAdmin(s.handleBackupTarget))
-	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.handleBackupTargetSet))
+	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.backupJobOr("target", s.handleBackupTargetSet)))
 	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
 	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
 	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
@@ -488,7 +496,7 @@ func New(opts Options) *Server {
 	mux.Handle("/", uiHandler(opts.UI))
 
 	// Browsers must not let another website send requests with our cookie.
-	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(mux)))
+	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux))))
 	return s
 }
 
@@ -606,6 +614,7 @@ func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 			return
 		}
+		noteActivity(r, user)
 		next(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, user)))
 	}
 }

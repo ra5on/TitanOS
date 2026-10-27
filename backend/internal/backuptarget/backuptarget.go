@@ -36,6 +36,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
 const (
@@ -438,24 +439,48 @@ func (m *Manager) Handler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		m.serveRepo(w, r, m.repoDir(volume, name), rest)
+		// Each request pins the mounted volume. One that went away since the
+		// last look of reconcile is refused; nothing lands in the RAM below.
+		mounted := []string{volume}
+		if m.Mounted != nil {
+			mounted = m.Mounted()
+		}
+		root, err := volumedata.OpenVolume(m.mountRoot, volume, mounted)
+		if err != nil {
+			slog.Warn("backup target volume unavailable", "volume", volume, "err", err)
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		defer root.Close()
+		dir := filepath.Join(targetDir, name)
+		if err := root.MkdirAll(dir, 0o700); err != nil {
+			fail(w, err)
+			return
+		}
+		repo, err := root.OpenRoot(dir)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		defer repo.Close()
+		m.serveRepo(w, r, repo, rest)
 	})
 }
 
-func (m *Manager) serveRepo(w http.ResponseWriter, r *http.Request, dir, rest string) {
+func (m *Manager) serveRepo(w http.ResponseWriter, r *http.Request, repo *os.Root, rest string) {
 	switch {
 	case rest == "" && r.Method == http.MethodPost && r.URL.Query().Get("create") == "true":
-		for _, sub := range append([]string{""}, repoTypes...) {
-			if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
+		for _, sub := range repoTypes {
+			if err := repo.MkdirAll(sub, 0o700); err != nil {
 				fail(w, err)
 				return
 			}
 		}
 		for i := range 256 {
-			os.MkdirAll(filepath.Join(dir, "data", fmt.Sprintf("%02x", i)), 0o700)
+			repo.MkdirAll(filepath.Join("data", fmt.Sprintf("%02x", i)), 0o700)
 		}
 	case rest == "config":
-		m.serveFile(w, r, filepath.Join(dir, "config"), true)
+		m.serveFile(w, r, repo, "config", true)
 	default:
 		kind, id, _ := strings.Cut(rest, "/")
 		if !repoTypesForm.MatchString(kind) {
@@ -467,30 +492,30 @@ func (m *Manager) serveRepo(w http.ResponseWriter, r *http.Request, dir, rest st
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			m.list(w, r, dir, kind)
+			m.list(w, r, repo, kind)
 			return
 		}
 		if !blobForm.MatchString(id) {
 			http.NotFound(w, r)
 			return
 		}
-		path := filepath.Join(dir, kind, id)
+		path := filepath.Join(kind, id)
 		if kind == "data" {
-			path = filepath.Join(dir, "data", id[:2], id)
+			path = filepath.Join("data", id[:2], id)
 		}
-		m.serveFile(w, r, path, false)
+		m.serveFile(w, r, repo, path, false)
 	}
 }
 
 // list answers the content of one type, as names or (version 2) with sizes.
-func (m *Manager) list(w http.ResponseWriter, r *http.Request, dir, kind string) {
+func (m *Manager) list(w http.ResponseWriter, r *http.Request, repo *os.Root, kind string) {
 	type item struct {
 		Name string `json:"name"`
 		Size int64  `json:"size"`
 	}
 	items := []item{}
 	collect := func(folder string) {
-		entries, _ := os.ReadDir(folder)
+		entries, _ := fs.ReadDir(repo.FS(), folder)
 		for _, entry := range entries {
 			if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && blobForm.MatchString(entry.Name()) {
 				items = append(items, item{entry.Name(), info.Size()})
@@ -498,14 +523,14 @@ func (m *Manager) list(w http.ResponseWriter, r *http.Request, dir, kind string)
 		}
 	}
 	if kind == "data" {
-		subs, _ := os.ReadDir(filepath.Join(dir, "data"))
+		subs, _ := fs.ReadDir(repo.FS(), "data")
 		for _, sub := range subs {
 			if sub.IsDir() {
-				collect(filepath.Join(dir, "data", sub.Name()))
+				collect(filepath.Join("data", sub.Name()))
 			}
 		}
 	} else {
-		collect(filepath.Join(dir, kind))
+		collect(kind)
 	}
 	if strings.Contains(r.Header.Get("Accept"), "application/vnd.x.restic.rest.v2") {
 		w.Header().Set("Content-Type", "application/vnd.x.restic.rest.v2")
@@ -521,12 +546,12 @@ func (m *Manager) list(w http.ResponseWriter, r *http.Request, dir, kind string)
 }
 
 // serveFile handles HEAD, GET, POST and DELETE of one file. A file is
-// written under a hidden name and renamed when it is whole; one that exists
-// is never overwritten.
-func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, path string, isConfig bool) {
+// written under a hidden name and linked to its name when it is whole; one
+// that exists is never overwritten, also not by two uploads at once.
+func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Root, path string, isConfig bool) {
 	switch r.Method {
 	case http.MethodHead, http.MethodGet:
-		file, err := os.Open(path)
+		file, err := repo.Open(path)
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -540,22 +565,23 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, path string,
 		w.Header().Set("Content-Type", "application/octet-stream")
 		http.ServeContent(w, r, "", time.Time{}, file)
 	case http.MethodPost:
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		if err := repo.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			fail(w, err)
 			return
 		}
-		if _, err := os.Lstat(path); err == nil {
+		if _, err := repo.Lstat(path); err == nil {
 			http.Error(w, "already exists", http.StatusForbidden)
 			return
 		}
 		raw := make([]byte, 6)
 		rand.Read(raw)
 		temp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+"."+hex.EncodeToString(raw)+".part")
-		out, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		out, err := repo.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
 			fail(w, err)
 			return
 		}
+		defer repo.Remove(temp)
 		_, err = io.Copy(out, io.LimitReader(r.Body, maxBlob+1))
 		if err == nil {
 			err = out.Sync()
@@ -564,15 +590,18 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, path string,
 			err = closeErr
 		}
 		if err == nil {
-			if info, statErr := os.Stat(temp); statErr == nil && info.Size() > maxBlob {
+			if info, statErr := repo.Stat(temp); statErr == nil && info.Size() > maxBlob {
 				err = errors.New("blob too large")
 			}
 		}
 		if err == nil {
-			err = os.Rename(temp, path)
+			// A link fails if the name exists; a rename would replace it.
+			if err = repo.Link(temp, path); errors.Is(err, fs.ErrExist) {
+				http.Error(w, "already exists", http.StatusForbidden)
+				return
+			}
 		}
 		if err != nil {
-			os.Remove(temp)
 			fail(w, err)
 			return
 		}
@@ -581,7 +610,7 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, path string,
 			http.Error(w, "the repository stays", http.StatusForbidden)
 			return
 		}
-		if err := os.Remove(path); err != nil {
+		if err := repo.Remove(path); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				http.NotFound(w, r)
 				return

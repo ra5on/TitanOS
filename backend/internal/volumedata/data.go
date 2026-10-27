@@ -18,9 +18,10 @@ import (
 
 var ErrUnavailable = errors.New("data volume is unavailable")
 
-// Open pins the mounted volume and refuses symlinked or writable-by-others private directories.
-func Open(mountRoot, volume, feature string, mounted []string) (*os.Root, error) {
-	if !naming.ValidVolume(volume) || !slices.Contains(mounted, volume) || !naming.ValidVolume(feature) {
+// OpenVolume pins the root of a mounted volume. A volume that is not mounted
+// is refused instead of handing out the empty folder in the RAM below it.
+func OpenVolume(mountRoot, volume string, mounted []string) (*os.Root, error) {
+	if !naming.ValidVolume(volume) || !slices.Contains(mounted, volume) {
 		return nil, ErrUnavailable
 	}
 	point := filepath.Join(mountRoot, volume)
@@ -32,10 +33,23 @@ func Open(mountRoot, volume, feature string, mounted []string) (*os.Root, error)
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
 	if err := verifyMountedRoot(root, mountRoot, point); err != nil {
+		root.Close()
 		return nil, err
 	}
+	return root, nil
+}
+
+// Open pins the mounted volume and refuses symlinked or writable-by-others private directories.
+func Open(mountRoot, volume, feature string, mounted []string) (*os.Root, error) {
+	if !naming.ValidVolume(feature) {
+		return nil, ErrUnavailable
+	}
+	root, err := OpenVolume(mountRoot, volume, mounted)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	for _, part := range []string{".titanos", ".titanos/" + feature} {
 		if err := root.Mkdir(part, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 			return nil, err

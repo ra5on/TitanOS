@@ -7,7 +7,7 @@ export const pages: {href:string;label:MessageKey;admin?:boolean}[] = [
  {href:'/',label:'nav.dashboard'}, {href:'/storage',label:'nav.storage',admin:true}, {href:'/shares',label:'nav.shares',admin:true},
  {href:'/files',label:'nav.files'}, {href:'/users',label:'nav.users',admin:true}, {href:'/docker',label:'nav.docker',admin:true},
  {href:'/vms',label:'nav.vms',admin:true}, {href:'/apps',label:'nav.apps',admin:true}, {href:'/plugins',label:'nav.plugins',admin:true},
- {href:'/settings',label:'nav.settings'}, {href:'/tools',label:'nav.tools',admin:true}, {href:'/tools/tasks',label:'ops.tasks',admin:true}, {href:'/tools/maintenance',label:'ops.maintenance',admin:true}, {href:'/tools/monitoring',label:'ops.monitoring',admin:true}, {href:'/storage/import',label:'ops.import',admin:true}, {href:'/storage/manage',label:'ops.usage',admin:true}, {href:'/account',label:'menu.account'}
+ {href:'/settings',label:'nav.settings'}, {href:'/tools',label:'nav.tools',admin:true}, {href:'/tools/tasks',label:'ops.tasks',admin:true}, {href:'/tools/maintenance',label:'ops.maintenance',admin:true}, {href:'/tools/monitoring',label:'ops.monitoring',admin:true}, {href:'/tools/activity',label:'ops.activity',admin:true}, {href:'/storage/import',label:'ops.import',admin:true}, {href:'/storage/manage',label:'ops.usage',admin:true}, {href:'/account',label:'menu.account'}
 ];
 const settings: {id:string;label:MessageKey;admin?:boolean}[] = [
  {id:'appearance',label:'menu.appearance'}, {id:'network',label:'netcfg.title',admin:true}, {id:'notifications',label:'notify.settingsTitle',admin:true},

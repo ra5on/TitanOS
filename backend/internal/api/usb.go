@@ -21,6 +21,8 @@ var usbErrors = []struct {
 	{usb.ErrBusy, http.StatusConflict, "usb_busy"},
 	{usb.ErrMounted, http.StatusConflict, "usb_mounted"},
 	{usb.ErrNotMounted, http.StatusConflict, "usb_not_mounted"},
+	{usb.ErrNotFormattable, http.StatusConflict, "usb_not_formattable"},
+	{usb.ErrFormatInvalid, http.StatusBadRequest, "usb_format_invalid"},
 }
 
 func writeUSBError(w http.ResponseWriter, err error) {
@@ -29,7 +31,12 @@ func writeUSBError(w http.ResponseWriter, err error) {
 	}
 	for _, known := range usbErrors {
 		if errors.Is(err, known.err) {
-			writeError(w, known.status, known.code, known.err.Error())
+			message := known.err.Error()
+			if known.err == usb.ErrNotFormattable || known.err == usb.ErrFormatInvalid {
+				// Says which rule was broken; it holds no paths.
+				message = err.Error()
+			}
+			writeError(w, known.status, known.code, message)
 			return
 		}
 	}
@@ -88,4 +95,33 @@ func (s *Server) handleUSBEject(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("usb drive ejected", "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleUSB(w, r)
+}
+
+func (s *Server) handleUSBDisks(w http.ResponseWriter, r *http.Request) {
+	disks, job := []usb.Disk{}, (*usb.FormatJob)(nil)
+	if s.opts.USB != nil {
+		var err error
+		if disks, job, err = s.opts.USB.Disks(r.Context()); err != nil {
+			writeUSBError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"disks": disks, "job": job})
+}
+
+func (s *Server) handleUSBFormat(w http.ResponseWriter, r *http.Request) {
+	if s.opts.USB == nil {
+		writeUSBError(w, usb.ErrNotFound)
+		return
+	}
+	var req usb.FormatRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.USB.Format(r.Context(), r.PathValue("id"), req); err != nil {
+		writeUSBError(w, err)
+		return
+	}
+	slog.Info("drive format started", "fs", req.Filesystem, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleUSBDisks(w, r)
 }

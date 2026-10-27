@@ -302,6 +302,32 @@ export function fixtureFactory(browser, errors) {
         });
         return json(data.maintenance);
       }
+      // Activity log: tests may replace data.activity; queries are kept.
+      if (path === "/activity") {
+        const log = (data.activity ??= {
+          settings: { enabled: true, volume: "", days: 90, maxMiB: 64 },
+          entries: [
+            { at: time, user: "alex", via: "web", ip: "192.168.1.20", action: "POST /api/v1/files/delete", target: "Media/alt.mkv", status: 200, ok: true },
+            { at: time, user: "sam", via: "web", ip: "192.168.1.31", action: "login_failed", ok: false },
+            { at: time, user: "alex", via: "token", action: "PUT /api/v1/system/timezone", status: 200, ok: true },
+          ],
+          queries: [],
+        });
+        const status = { settings: log.settings, volume: log.settings.enabled ? "Data" : "", pending: 0, dropped: 0, error: "" };
+        if (method === "PUT") {
+          log.settings = route.request().postDataJSON();
+          return json({ ...status, settings: log.settings });
+        }
+        log.queries.push(Object.fromEntries(url.searchParams));
+        if (url.searchParams.get("format")) {
+          data.exports++;
+          return route.fulfill({ body: "time,user\n", contentType: "text/csv" });
+        }
+        const user = url.searchParams.get("user"),
+          failed = url.searchParams.get("failed") === "1";
+        const entries = log.entries.filter((e) => (!user || e.user === user) && (!failed || !e.ok));
+        return json({ entries, more: false, stored: true, status });
+      }
       if (path === "/monitoring") {
         if (method === "PUT") data.monitor = route.request().postDataJSON();
         return json({
@@ -527,12 +553,20 @@ export function fixtureFactory(browser, errors) {
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);
+      // Share quotas per volume; PUT .../quotas switches them like titand.
+      const quotas = (data.volumeQuotas ??= { Data: "active", Fast: "unsupported", Safe: "off" });
+      const switched = /^\/storage\/volumes\/([^/]+)\/quotas$/.exec(path);
+      if (switched && method === "PUT") {
+        const on = route.request().postDataJSON().enabled;
+        quotas[decodeURIComponent(switched[1])] = on ? "pending" : "off";
+        return route.fulfill({ status: 204 });
+      }
       if (path === "/storage")
         return json({
           volumes: [
-            { ...volume, level: "raid5" },
-            { ...volume, name: "Fast", filesystem: "btrfs" },
-            { ...volume, name: "Safe" },
+            { ...volume, level: "raid5", shareQuotas: quotas.Data },
+            { ...volume, name: "Fast", filesystem: "btrfs", shareQuotas: quotas.Fast },
+            { ...volume, name: "Safe", shareQuotas: quotas.Safe },
           ],
           disks: [
             {
@@ -583,6 +617,7 @@ export function fixtureFactory(browser, errors) {
           return route.fulfill({ status: 204 });
         }
         if (data.failSave) return fail();
+        (data.shareSaves ??= []).push(route.request().postDataJSON());
         return route.fulfill({ status: 204 });
       }
       if (path === "/docker") {
@@ -675,6 +710,21 @@ export function fixtureFactory(browser, errors) {
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
       if (path === "/assistant") return json({ available: false });
+      // Formatting drives: tests set data.usbDisks and data.formatError and
+      // read data.formats; data.usbJob is the job the NAS reports.
+      if (path === "/usb/disks" && method === "GET")
+        return json({ disks: data.usbDisks ?? [], job: data.usbJob ?? null });
+      if (path.startsWith("/usb/disks/") && path.endsWith("/format") && method === "POST") {
+        const body = route.request().postDataJSON();
+        (data.formats ??= []).push({ id: decodeURIComponent(path.split("/")[3]), ...body });
+        if (data.formatError)
+          return route.fulfill({ status: 409, json: { error: { code: data.formatError, message: "usb: this drive cannot be formatted now: inuse" } } });
+        const disk = data.usbDisks.find((d) => d.id === decodeURIComponent(path.split("/")[3]));
+        data.usbJob = { disk: disk.id, device: disk.device, name: disk.model, filesystem: body.filesystem, label: body.label, scheme: "mbr", phase: "format", started: time };
+        disk.formattable = false;
+        disk.reason = "formatting";
+        return json({ disks: data.usbDisks, job: data.usbJob });
+      }
       // Downloads from a link: tests set data.urlProbe, data.urlConflict
       // (answer the first start with file_exists) and read data.urlDownloads.
       if (path === "/files/url-download/probe" && method === "POST") {

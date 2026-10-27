@@ -60,6 +60,7 @@ var apiRoutes = []apiRoute{
 	{"GET", "/usb", assistant.AreaSystem, "", "USB drives that can be mounted."},
 	{"POST", "/usb/{id}/mount", assistant.AreaSystem, assistant.LevelNormal, "Mount a USB drive by its ID from GET /usb."},
 	{"POST", "/usb/{id}/eject", assistant.AreaSystem, assistant.LevelNormal, "Eject a USB drive."},
+	{"GET", "/usb/disks", assistant.AreaSystem, "", "Whole unmanaged drives, also empty ones, and the last format. Formatting is only offered in the web UI."},
 	{"GET", "/plugins", assistant.AreaSystem, "", "Installed and available plugins."},
 	{"POST", "/plugins/catalog", assistant.AreaSystem, assistant.LevelNormal, "Load the list of official plugins for this version."},
 	{"POST", "/plugins", assistant.AreaSystem, assistant.LevelDanger, "Install an official plugin (body: name from GET /plugins, volume from storage_overview, optional activate boolean). A plugin becomes part of the system."},

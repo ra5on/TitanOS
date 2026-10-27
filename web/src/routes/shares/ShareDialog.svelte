@@ -5,6 +5,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import { storage } from '#lib/storage.svelte.ts';
 
 	type Props = {
 		/** The share to edit; undefined creates a new one. */
@@ -38,7 +39,8 @@
 		recycle: share?.recycle.enabled ?? false,
 		days: share?.recycle.days ?? 30,
 		timeMachine: share?.timeMachine.enabled ?? false,
-		sizeGB: share?.timeMachine.sizeGB ?? 0
+		sizeGB: share?.timeMachine.sizeGB ?? 0,
+		quotaGB: share?.quota ? Math.round(share.quota / 1e7) / 100 : 0
 	});
 	let working = $state(false);
 	let error = $state('');
@@ -57,6 +59,8 @@
  });
 
 	const nameError = $derived(draft.name !== '' && !validName(draft.name) ? errorText('invalid_share_name') : '');
+	const quotaState = $derived(storage.status?.volumes.find((v) => v.name === draft.volume)?.shareQuotas ?? 'off');
+	const quotaTooSmall = $derived(Number(draft.quotaGB) > 0 && Number(draft.quotaGB) * 1e9 < 16 * 2 ** 20);
 	const nobody = $derived(draft.smb && !draft.guest && Object.keys(draft.access).length === 0);
 
 	function setAccess(user: string, level: '' | AccessLevel) {
@@ -78,7 +82,8 @@
 			guest: draft.smb && draft.guest,
 			browseable: draft.browseable,
 			recycle: { enabled: draft.smb && draft.recycle, days: Number(draft.days) || 30 },
-			timeMachine: { enabled: draft.smb && draft.timeMachine, sizeGB: Number(draft.sizeGB) || 0 }
+			timeMachine: { enabled: draft.smb && draft.timeMachine, sizeGB: Number(draft.sizeGB) || 0 },
+			quota: Math.round((Number(draft.quotaGB) || 0) * 1e9)
 		};
 		try {
 			if (share) await api.put(`/shares/${encodeURIComponent(share.name)}`, body);
@@ -115,6 +120,13 @@
 				<small>{t('share.location', { path: `/mnt/${draft.volume}/${draft.name || '…'}` })}</small>
 			</label>
 		</div>
+		{#if quotaState !== 'unsupported' || draft.quotaGB}
+			<label class="field-row">
+				<span class="label">{t('share.quota')}</span>
+				<input class="field number" type="number" min="0" step="0.1" bind:value={draft.quotaGB} />
+				<small class:problem={quotaTooSmall}>{quotaTooSmall ? t('share.quotaTooSmall') : t(`share.quotaHint.${quotaState}`)}</small>
+			</label>
+		{:else}<p class="muted hint">{t('share.quotaHint.unsupported')}</p>{/if}
 
 		<fieldset>
 			<legend>{t('share.protocols')}</legend>
@@ -169,7 +181,7 @@
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={requestClose} disabled={working}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={working || !draft.volume}>{t(share ? 'share.save' : 'share.create')}</button>
+			<button type="submit" class="btn btn-primary" disabled={working || !draft.volume || quotaTooSmall}>{t(share ? 'share.save' : 'share.create')}</button>
 		</div>
 	</form>
 </Dialog>

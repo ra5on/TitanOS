@@ -40,7 +40,7 @@
 		password?: string;
 	};
 	type Job = { applications?:Application[];allowStop?:boolean; id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
-	type State = { statusError?: string; probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; lastCheck?: string; checkError?: string };
+	type State = { statusError?: string; probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; restoreError?: string; lastCheck?: string; checkError?: string };
 	type View = { stateKnown?: boolean; job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
@@ -69,13 +69,34 @@
 		error = { text: errorText(code), detail: ['invalid_backup_job', 'backup_job_failed'].includes(code) && err instanceof ApiError ? err.message.replace(/^backup: invalid job: /, '') : '' };
 	}
 
+	// Answers can overtake each other: a look that started before a run was
+	// accepted must not put back the state from before it.
+	let generation = 0;
+	function apply(next: Overview) {
+		generation++;
+		overview = next;
+	}
 	async function load() {
+		const mine = ++generation;
 		try {
-			overview = await api.get<Overview>('/backups');
+			const next = await api.get<Overview>('/backups');
+			if (mine !== generation) return;
+			overview = next;
 			loadError = '';
+		} catch (err) {
+			if (mine !== generation) return;
+			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
+	// USB drives are only needed by the form; a drive list that cannot be
+	// read does not make the page look broken.
+	let usbError = $state('');
+	async function loadUSB() {
+		usbError = '';
+		try {
 			usbDrives = await api.get<typeof usbDrives>('/usb');
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			usbError = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 	}
 	const active = $derived(overview?.jobs.some((view) => view.state.running) ?? false);
@@ -93,7 +114,9 @@
 		isNew = true;
 		secretSet = {};
 		draft = { id: '', sources: [], applications: [], allowStop: false, destination: { type: 'local', volume: '', folder: '', port: 22 }, enabled: true, every: 'daily', interval: 6, weekday: 0, weekdays: [1], monthDay: 1, time: '02:30', times: ['02:30'], keep: { daily: 7, weekly: 4, monthly: 6 } };
+		original = null;
 		loadSelection(draft);
+		loadUSB();
 	}
 
 	function edit(view: View) {
@@ -110,9 +133,22 @@
 		draft.allowStop ??= false;
 		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
 		if (!draft.times?.length) draft.times = [draft.time];
+		original = { ...draft.destination };
 		loadSelection(draft);
+		loadUSB();
 		if (draft.destination.type === 'sftp') showKey();
 	}
+	// The destination as it was stored: a stored secret only stays for the
+	// same server and account (the NAS does not send it anywhere else).
+	let original = $state<Destination | null>(null);
+	const secretKept = $derived.by(() => {
+		const d = draft?.destination;
+		if (!d || !original || d.type !== original.type) return { secretKey: false, password: false };
+		return {
+			secretKey: !!secretSet.secretKey && d.endpoint?.trim() === original.endpoint && d.accessKey?.trim() === original.accessKey,
+			password: !!secretSet.password && d.url?.trim() === original.url && (d.username?.trim() ?? '') === (original.username ?? ''),
+		};
+	});
 
 	type Mode = 'whole' | 'all' | 'only';
 	const EXTRAS = ['appdata', 'vms', 'config'] as const;
@@ -246,7 +282,7 @@
 		const weekdays = [...(draft.weekdays ?? [])].sort();
 		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
-			overview = isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job);
+			apply(isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job));
 			feedback = t('ui.saved');
 			const created = isNew ? job : null;
 			draft = null;
@@ -263,85 +299,114 @@
 		pending[job.id] = action; feedback = ''; retry = null;
 		error = null;
 		try {
-			overview = await api.post<Overview>(`/backups/${job.id}/${action}`);
+			apply(await api.post<Overview>(`/backups/${job.id}/${action}`));
 			feedback = t('ui.backupAccepted', { name: job.id });
 		} catch (err) {
 			problem(err); retry = { job, action };
 		} finally { delete pending[job.id]; }
 	}
 
+	let removeError = $state('');
 	async function remove() {
-		if (!removing) return;
-		error = null;
+		if (!removing || busy) return;
+		busy = true;
+		removeError = '';
 		try {
-			overview = await api.delete<Overview>(`/backups/${removing.id}`);
+			apply(await api.delete<Overview>(`/backups/${removing.id}`));
+			removing = null;
 		} catch (err) {
-			problem(err);
+			removeError = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
-		removing = null;
+		busy = false;
 	}
 
 	async function showPassword(job: Job) {
 		error = null;
+		const confirmed = secret?.asking === true;
 		try {
 			const res = await api.get<{ password: string }>(`/backups/${job.id}/password`);
 			secret = { job, password: res.password, asking: false };
 		} catch (err) {
-			if (err instanceof ApiError && err.code === 'confirm_required') secret = { job, password: '', asking: true };
-			else problem(err);
+			// Asked once; a second "confirm" answer or any other failure closes
+			// the dialog instead of leaving it locked.
+			if (!confirmed && err instanceof ApiError && err.code === 'confirm_required') secret = { job, password: '', asking: true };
+			else {
+				secret = null;
+				problem(err);
+			}
+		}
+	}
+	let copiedPassword = $state(false);
+	async function copyPassword() {
+		if (!secret) return;
+		try {
+			await navigator.clipboard.writeText(secret.password);
+			copiedPassword = true;
+		} catch {
+			// The password is shown and can be selected by hand.
 		}
 	}
 
+	// Each opening of the restore dialog has its number; a list of saved
+	// states that arrives late belongs to an earlier one and is dropped.
+	let restoreRequest = 0;
+	let dialogError = $state('');
 	async function openRestore(job: Job) {
 		error = null;
+		dialogError = '';
+		const mine = ++restoreRequest;
 		restoring = { job, snapshots: null, snapshot: '', volume: volumes[0] ?? '', target: '', mode: 'all', paths: [] };
 		try {
 			const res = await api.get<{ snapshots: Snapshot[] }>(`/backups/${job.id}/snapshots`);
-			if (restoring) {
-				restoring.snapshots = res.snapshots;
-				restoring.snapshot = res.snapshots[0]?.id ?? '';
-			}
+			if (mine !== restoreRequest || !restoring) return;
+			restoring.snapshots = res.snapshots;
+			restoring.snapshot = res.snapshots[0]?.id ?? '';
 		} catch (err) {
+			if (mine !== restoreRequest) return;
 			problem(err);
 			restoring = null;
 		}
 	}
+	function closeRestore() {
+		restoreRequest++;
+		restoring = null;
+		dialogError = '';
+	}
 
 	async function restore(event: SubmitEvent) {
 		event.preventDefault();
-		if (!restoring) return;
+		if (!restoring || busy) return;
 		busy = true;
-		error = null;
+		dialogError = '';
 		try {
 			const res = await api.post<{ target: string }>(`/backups/${restoring.job.id}/restore`, { snapshot: restoring.snapshot, volume: restoring.volume, paths: restoring.mode === 'files' ? restoring.paths : undefined });
 			restoring.target = res.target;
 			load();
 		} catch (err) {
-			problem(err);
-			restoring = null;
+			// The dialog stays with what was chosen; the reason is shown in it.
+			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 		busy = false;
 	}
 
 	async function check(event: SubmitEvent) {
 		event.preventDefault();
-		if (!checking) return;
+		if (!checking || busy) return;
 		busy = true;
-		error = null;
+		dialogError = '';
 		try {
 			await api.post(`/backups/${checking.job.id}/check`, { readData: Number(checking.readData) });
 			checking = null;
 			load();
 		} catch (err) {
-			problem(err);
-			checking = null;
+			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 		busy = false;
 	}
 
 	function where(d: Destination): string {
 		if (d.type === 'smb-copy') return `${d.targetId} / ${d.folder}`;
-		if (d.type === 'usb-copy') return `USB ${d.deviceId} / ${d.folder}`;
+		if (d.type === 'usb-copy') return `${t('backup.kind.usb-copy')} ${d.deviceId} / ${d.folder}`;
 		switch (d.type) {
 			case 'local':
 				return `/mnt/${d.volume}/${d.folder}`;
@@ -398,12 +463,13 @@
 		<section class="tile" use:revealTarget id="backup-{job.id}">
 			<div class="head">
 				<div>
-					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">Beta</span>{/if}
+					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">{t('backup.beta')}</span>{/if}
 					<p class="muted">{[...job.sources,...(job.applications??[]).map(a=>a.name)].join(', ')} → <span class="mono">{where(job.destination)}</span></p>
 				</div>
 				{#if state.running}<span class="chip info">{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span>
 				{:else if view.stateKnown === false || state.statusError}<span class="chip warn">{t('tasks.state.unknown')}</span>
 				{:else if state.lastError && state.lastError !== 'cancelled'}<span class="chip error">{t('backup.failed')}</span>
+				{:else if state.lastError === 'cancelled'}<span class="chip warn">{t('backup.cancelled')}</span>
 				{:else if state.warning}<span class="chip warn">{t('backup.withWarning')}</span>
 				{:else if state.lastOK}<span class="chip ok">{t('backup.ok')}</span>
 				{:else}<span class="chip">{t('backup.never')}</span>{/if}
@@ -415,7 +481,8 @@
 			{#if view.stateKnown === false || state.statusError}<p class="notice-warn">{t('coverage.stateUnknown')}</p>{/if}
 			<dl>
 				<div><dt>{t('backup.schedule')}</dt><dd>{when(job)}</dd></div>
-				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>{/if}
+				{#if next}<div><dt>{t('backup.next')}</dt><dd>{formatDateTime(new Date(next))}</dd></div>
+				{:else if job.enabled}<div><dt>{t('backup.next')}</dt><dd class="muted">{t('backup.nextUnknown')}</dd></div>{/if}
 				<div><dt>{t('safeguard.lastRun')}</dt><dd>{state.lastRun ? formatDateTime(new Date(state.lastRun)) : '–'}</dd></div>
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
 				<div><dt>{t('backup.keeps')}</dt><dd>{plainCopy(job.destination.type) ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
@@ -426,8 +493,9 @@
 				{#if state.checkError}<div class="notice-error">{t('backup.checkFailed')}<pre>{state.checkError}</pre></div>
 				{:else}<p class="muted">{t('backup.checkOk', { at: formatDateTime(new Date(state.lastCheck)) })}</p>{/if}
 			{/if}
-			{#if state.probe}<p class={state.probe.error?'notice-warn':'muted'}>{t('ops.probe')} · {formatDateTime(new Date(state.probe.at))} · {state.probe.files} · {formatBytes(state.probe.bytes)}{#if state.probe.error}<span>{state.probe.error}</span>{/if}{#if state.probe.truncated}<span> · {t('ops.truncated')}</span>{/if}</p>{/if}
- {#if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
+			{#if state.probe}<p class={state.probe.error?'notice-warn':'muted'}>{t('ops.probe')} · {formatDateTime(new Date(state.probe.at))} · {t('backup.probeFiles', { count: state.probe.files })} · {formatBytes(state.probe.bytes)}{#if state.probe.truncated}<span> · {t('ops.truncated')}</span>{/if}{#if state.probe.error}<span> · {state.probe.error}</span>{/if}</p>{/if}
+			{#if !state.running && state.restoreError}<div class="notice-error">{t('backup.restoreFailed')}<pre>{state.restoreError}</pre></div>
+			{:else if !state.running && state.restoredTo}<p class="notice-ok">{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span></p>{/if}
 			{#if pending[job.id]}<p role="status">{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}</p>{/if}
 			<div class="row">
 				{#if state.running}
@@ -436,10 +504,10 @@
 					{#if !restoreOnly}<button type="button" class="btn btn-primary" disabled={!!pending[job.id]} onclick={() => act(job, 'run')}>{t('backup.run')}</button>{/if}
 					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
 					<button type="button" class="btn" onclick={()=>probing=job.id}>{t('ops.probe')}</button>
- <button type="button" class="btn" onclick={() => (checking = { job, readData: 0 })}>{t('backup.check')}</button>
+ <button type="button" class="btn" onclick={() => ((checking = { job, readData: 0 }), (dialogError = ''))}>{t('backup.check')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
-					{#if !restoreOnly}<button type="button" class="btn" onclick={() => edit(view)}>{t('backup.edit')}</button>
-					<button type="button" class="btn" onclick={() => (removing = job)}>{t('backup.remove')}</button>{/if}
+					{#if !restoreOnly}<button type="button" class="btn" aria-label={t('backup.editNamed', { name: job.id })} onclick={() => edit(view)}>{t('backup.edit')}</button>
+					<button type="button" class="btn" aria-label={t('backup.removeNamed', { name: job.id })} onclick={() => ((removing = job), (removeError = ''))}>{t('backup.remove')}</button>{/if}
 				{/if}
 			</div>
 		</section>
@@ -506,11 +574,12 @@
 			</div>
 			<p class="muted">{t(`backup.kindHint.${draft.destination.type}`)}</p>
 			{#if draft.destination.type === 'smb-copy'}
- <span class="chip warn">Beta</span>
+ <span class="chip warn">{t('backup.beta')}</span>
  <label class="block"><span>{t('backup.smb.target')}</span><select class="field" bind:value={draft.destination.targetId} required><option value="" disabled>–</option>{#each overview?.smbTargets ?? [] as target(target.id)}<option value={target.id}>{target.id} · {target.host}/{target.share}</option>{/each}</select></label>
  <p class="muted">{t('backup.smb.first')}</p>
  <label class="block"><span>{t('backup.smb.jobFolder')}</span><input class="field" bind:value={draft.destination.folder} placeholder="backups/{draft.id}" /></label>
  {:else if draft.destination.type === 'usb-copy'}
+ {#if usbError}<p class="notice-warn" role="alert">{usbError} <button type="button" class="btn small" onclick={loadUSB}>{t('ui.retry')}</button></p>{/if}
  <label class="block"><span>{t('backup.usbDevice')}</span><select class="field" bind:value={draft.destination.deviceId} required>
  <option value="" disabled>–</option>
  {#if draft.destination.deviceId && !usbDrives.some(d => d.id === draft?.destination.deviceId)}<option value={draft.destination.deviceId}>{draft.destination.deviceId} · {t('backup.usbMissing')}</option>{/if}
@@ -527,7 +596,8 @@
 					</label>
 					<label class="narrow"><span>{t('backup.folder')}</span><input class="field mono" type="text" bind:value={draft.destination.folder} placeholder={`backups/${draft.id || 'name'}`} spellcheck="false" /></label>
 				</div>
-			{:else if draft.destination.type === 's3'}
+				{#if volumes.length === 0}<p class="notice-warn">{t('backup.noVolume')}</p>{/if}
+				{:else if draft.destination.type === 's3'}
 				<div class="row">
 					<label class="wide"><span>{t('backup.endpoint')}</span><input class="field mono" type="url" bind:value={draft.destination.endpoint} placeholder="https://s3.eu-central-1.amazonaws.com" spellcheck="false" required /></label>
 					<label class="narrow"><span>{t('backup.bucket')}</span><input class="field mono" type="text" bind:value={draft.destination.bucket} spellcheck="false" autocapitalize="none" required /></label>
@@ -535,8 +605,9 @@
 				</div>
 				<div class="row">
 					<label class="narrow"><span>{t('backup.accessKey')}</span><input class="field mono" type="text" bind:value={draft.destination.accessKey} autocomplete="off" spellcheck="false" required /></label>
-					<label class="narrow"><span>{t('backup.secretKey')}</span><input class="field mono" type="password" bind:value={draft.destination.secretKey} autocomplete="new-password" placeholder={secretSet.secretKey ? t('notify.secretStored') : ''} required={!secretSet.secretKey} /></label>
-				</div>
+					<label class="narrow"><span>{t('backup.secretKey')}</span><input class="field mono" type="password" bind:value={draft.destination.secretKey} autocomplete="new-password" placeholder={secretKept.secretKey ? t('notify.secretStored') : ''} required={!secretKept.secretKey} /></label>
+ </div>
+ {#if secretSet.secretKey && !secretKept.secretKey}<p class="notice-warn">{t('backup.secretAgain')}</p>{/if}
 			{:else if draft.destination.type === 'sftp'}
 				<div class="row">
 					<label class="narrow"><span>{t('backup.host')}</span><input class="field mono" type="text" bind:value={draft.destination.host} spellcheck="false" autocapitalize="none" required /></label>
@@ -558,8 +629,9 @@
 				<div class="row">
 					<label class="wide"><span>{t('backup.restUrl')}</span><input class="field mono" type="url" bind:value={draft.destination.url} placeholder="https://backup.example.org:8000/nas" spellcheck="false" required /></label>
 					<label class="narrow"><span>{t('notify.username')}</span><input class="field mono" type="text" bind:value={draft.destination.username} autocomplete="off" spellcheck="false" /></label>
-					<label class="narrow"><span>{t('notify.password')}</span><input class="field mono" type="password" bind:value={draft.destination.password} autocomplete="new-password" placeholder={secretSet.password ? t('notify.secretStored') : ''} /></label>
-				</div>
+					<label class="narrow"><span>{t('notify.password')}</span><input class="field mono" type="password" bind:value={draft.destination.password} autocomplete="new-password" placeholder={secretKept.password ? t('notify.secretStored') : ''} /></label>
+ </div>
+ {#if secretSet.password && !secretKept.password}<p class="notice-warn">{t('backup.secretAgain')}</p>{/if}
 			{/if}
 		</fieldset>
 		<fieldset>
@@ -585,7 +657,7 @@
 					{#if draft.every === 'monthly'}
 						<label class="tiny"><span>{t('backup.monthDay')}</span>
 							<select class="field mono" bind:value={draft.monthDay}>
-								{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}<option value={day}>{day}.</option>{/each}
+								{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}<option value={day}>{t('backup.monthDayOption', { day })}</option>{/each}
 							</select>
 						</label>
 					{/if}
@@ -640,11 +712,12 @@
 {/if}
 
 {#if removing}
-	<Dialog title={t('backup.removeTitle', { name: removing.id })} onclose={() => (removing = null)}>
+	<Dialog title={t('backup.removeTitle', { name: removing.id })} locked={busy} onclose={() => (removing = null)}>
 		<p>{t('backup.removeText')}</p>
+		{#if removeError}<p class="notice-error" role="alert">{removeError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" onclick={remove}>{t('backup.remove')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (removing = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>{t('backup.remove')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -652,27 +725,30 @@
 {#if secret?.asking}
 	<ConfirmDialog reason={t('backup.passwordReason')} onconfirmed={() => secret && showPassword(secret.job)} onclose={() => (secret = null)} />
 {:else if secret}
-	<Dialog title={t('backup.passwordTitle', { name: secret.job.id })} onclose={() => (secret = null)}>
+	<Dialog title={t('backup.passwordTitle', { name: secret.job.id })} onclose={() => ((secret = null), (copiedPassword = false))}>
 		<p>{t('backup.passwordText')}</p>
 		<input class="field mono" type="text" readonly value={secret.password} onfocus={(event) => event.currentTarget.select()} aria-label={t('backup.passwordTitle', { name: secret.job.id })} />
 		<p class="notice-warn">{t('backup.passwordWarn')}</p>
-		<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={() => (secret = null)}>{t('backup.passwordDone')}</button></div>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={copyPassword}>{copiedPassword ? t('backup.targetCopied') : t('backup.targetCopy')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => (secret = null)}>{t('backup.passwordDone')}</button>
+		</div>
 	</Dialog>
 {/if}
 
 {#if restoring}
 	{@const r = restoring}
-	<Dialog title={t('backup.restoreTitle', { name: r.job.id })} locked={busy} onclose={() => (restoring = null)}>
+	<Dialog title={t('backup.restoreTitle', { name: r.job.id })} locked={busy} onclose={closeRestore}>
 		{#if r.target}
 			<p>{t('backup.restoreStarted')}</p>
 			<p class="mono">{r.target}</p>
 			<p class="muted">{t('backup.restoreWhere')}</p>
-			<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={() => (restoring = null)}>{t('common.done')}</button></div>
+			<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={closeRestore}>{t('common.done')}</button></div>
 		{:else if r.snapshots === null}
 			<p class="muted">{t('backup.restoreLoading')}</p>
 		{:else if r.snapshots.length === 0}
 			<p class="muted">{t('backup.restoreNone')}</p>
-			<div class="dialog-actions"><button type="button" class="btn" onclick={() => (restoring = null)}>{t('common.cancel')}</button></div>
+			<div class="dialog-actions"><button type="button" class="btn" onclick={closeRestore}>{t('common.cancel')}</button></div>
 		{:else}
 			<form class="plain" onsubmit={restore}>
 				<p class="muted">{t('backup.restoreText')}</p>
@@ -693,8 +769,10 @@
 						{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
 					</select>
 				</label>
+				{#if volumes.length === 0}<p class="notice-warn">{t('backup.noVolume')}</p>{/if}
+				{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 				<div class="dialog-actions">
-					<button type="button" class="btn" onclick={() => (restoring = null)} disabled={busy}>{t('common.cancel')}</button>
+					<button type="button" class="btn" onclick={closeRestore} disabled={busy}>{t('common.cancel')}</button>
 					<button type="submit" class="btn btn-primary" disabled={busy || !r.volume || (r.mode === 'files' && r.paths.length === 0)}>{t('backup.restoreDo')}</button>
 				</div>
 			</form>
@@ -712,6 +790,7 @@
 					{#each [0, 5, 25, 100] as share}<option value={share}>{t(share === 0 ? 'backup.checkStructure' : 'backup.checkShare', { share })}</option>{/each}
 				</select>
 			</label>
+			{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (checking = null)} disabled={busy}>{t('common.cancel')}</button>
 				<button type="submit" class="btn btn-primary" disabled={busy}>{t('backup.checkDo')}</button>

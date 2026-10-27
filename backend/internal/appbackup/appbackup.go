@@ -28,6 +28,12 @@ import (
 
 const pointerFile = "backup/application-pending.json"
 
+// ErrJournalMissing means the pointer on the stick names an operation whose
+// journal is not on its (mounted) volume, for example after a stick backup
+// taken during the run was restored. Nothing is known that could be
+// restarted; the pointer can only be forgotten.
+var ErrJournalMissing = errors.New("the journal of this application backup is not on its volume")
+
 type Member struct {
 	Kind     string `json:"kind"`
 	Name     string `json:"name"`
@@ -355,6 +361,9 @@ func (m *Manager) Review() (*Operation, bool, error) {
 	defer root.Close()
 	var saved Operation
 	if err := volumedata.ReadJSON(root, op.ID+"/operation.json", &saved, 1<<20); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return op, active, ErrJournalMissing
+		}
 		return op, active, err
 	}
 	if saved.ID != op.ID || saved.Volume != op.Volume || saved.Job != op.Job {
@@ -382,7 +391,21 @@ func (m *Manager) Recover(ctx context.Context, confirm string, restart bool) err
 	defer root.Close()
 	var op Operation
 	if err := volumedata.ReadJSON(root, p.ID+"/operation.json", &op, 1<<20); err != nil {
-		return err
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if restart {
+			return ErrJournalMissing
+		}
+		// Without a journal there is nothing to restart or remove: only the
+		// pointer is forgotten, so that application changes work again.
+		if err := m.Store.WriteJSON(pointerFile, nil); err != nil {
+			return err
+		}
+		m.mu.Lock()
+		m.pending = nil
+		m.mu.Unlock()
+		return nil
 	}
 	if op.ID != p.ID || op.Volume != p.Volume {
 		return errors.New("application recovery identity mismatch")
