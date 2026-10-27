@@ -36,6 +36,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
@@ -53,6 +54,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
@@ -775,6 +777,29 @@ func run(opts options) error {
 	if !opts.dev {
 		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
 	}
+	// Thumbnails are made on request and cached on the volume of the file.
+	previews := thumbs.New()
+	if !opts.dev {
+		previews.MountRoot, previews.Mounted = "/mnt", volumes.Mounted
+	}
+	// The full-text index is opt-in and runs only while a volume is in use.
+	fullText := fileindex.New(store)
+	fullText.Disabled = opts.dev
+	fullText.MountRoot, fullText.Mounted = "/mnt", volumes.Mounted
+	fullText.Protected = machines.ProtectFile
+	fullText.Timezone = settings.CurrentTimezone
+	fullText.ShareVolume = func(name string) (string, bool) {
+		for _, share := range folders.List() {
+			if share.Name == name {
+				return share.Volume, true
+			}
+		}
+		return "", false
+	}
+	if err := fullText.Load(); err != nil {
+		slog.Warn("file index settings unavailable", "err", err)
+	}
+	go fullText.Run(ctx)
 	history := monitoring.New(store)
 	history.Mounted = volumes.Mounted
 	history.Snapshot = func() (system.Info, storage.Status) {
@@ -888,6 +913,8 @@ func run(opts options) error {
 		Storage:            volumes,
 		Shares:             folders,
 		Files:              fileManager,
+		Thumbs:             previews,
+		FileIndex:          fullText,
 		Docker:             containers,
 		Catalog:            appCatalog,
 		Terminal:           shells,

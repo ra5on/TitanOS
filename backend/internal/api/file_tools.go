@@ -2,14 +2,19 @@ package api
 
 import (
 	"context"
-	"github.com/ra5on/TitanOS/backend/internal/files"
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/fileindex"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
 func (s *Server) handleFileSearch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root string
+		// Content searches words inside files in the full-text index.
+		Content bool
 		files.SearchOptions
 	}
 	if !readJSON(w, r, &req) {
@@ -21,6 +26,20 @@ func (s *Server) handleFileSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
+	if req.Content {
+		result, err := s.contentSearch(ctx, root, req.SearchOptions)
+		switch {
+		case errors.Is(err, fileindex.ErrInvalid):
+			writeError(w, http.StatusBadRequest, "invalid_query", "enter one to sixteen words")
+		case errors.Is(err, fileindex.ErrUnavailable):
+			writeError(w, http.StatusConflict, "index_unavailable", "no full-text index for this place")
+		case err != nil:
+			writeFileError(w, err)
+		default:
+			writeJSON(w, http.StatusOK, result)
+		}
+		return
+	}
 	result, err := s.opts.Files.Search(ctx, root, req.SearchOptions)
 	if err != nil {
 		writeFileError(w, err)

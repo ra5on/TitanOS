@@ -1,47 +1,29 @@
 <script lang="ts">
- import Icon from '#lib/components/Icon.svelte';
- let { root, path, size }: { root: string; path: string; size: number } = $props();
+ import FileIcon from './FileIcon.svelte';
+ import { thumbnailKind, thumbnailURL } from '#lib/file-actions.ts';
+ let { root, path, modified, box = 320, height = 96 }: { root: string; path: string; modified?: string; box?: number; height?: number } = $props();
  let host = $state<HTMLSpanElement>();
- let url = $state('');
+ let visible = $state(false);
  let failed = $state(false);
- // Avoid full-size downloads of large originals while browsing a folder.
- const limit = 2 * 1024 * 1024;
+ const name = $derived(path.split('/').pop() ?? path);
+ const kind = $derived(thumbnailKind(name));
+ // titand makes the thumbnail and caches it on the volume; the browser asks
+ // only once the entry scrolls into view.
  $effect(() => {
-  if (!host || size > limit) return;
-  const controller = new AbortController();
-  let objectURL = '';
-  async function load() {
-   try {
-    const res = await fetch('/api/v1/files/download?' + new URLSearchParams({ root, path }), { signal: controller.signal, credentials: 'same-origin' });
-    if (!res.ok || Number(res.headers.get('content-length')) > limit || !res.body) throw new Error('unavailable');
-    const reader = res.body.getReader(), chunks: Uint8Array[] = [];
-    let length = 0;
-    for (;;) {
-     const { done, value } = await reader.read();
-     if (done) break;
-     length += value.byteLength;
-     if (length > limit) { await reader.cancel(); throw new Error('too large'); }
-     chunks.push(value);
-    }
-    if (controller.signal.aborted) return;
-    const bytes = new Uint8Array(length); let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    const ext = path.split('.').pop()!.toLowerCase();
-    objectURL = URL.createObjectURL(new Blob([bytes], { type: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) }));
-    url = objectURL;
-   } catch { failed = true; controller.abort(); }
-  }
+  if (!host || !kind) return;
+  failed = false;
   const observer = new IntersectionObserver(entries => {
-   if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); void load(); }
-  });
+   if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); visible = true; }
+  }, { rootMargin: '200px' });
   observer.observe(host);
-  return () => { observer.disconnect(); controller.abort(); if (objectURL) URL.revokeObjectURL(objectURL); };
+  return () => observer.disconnect();
  });
 </script>
-<span class="thumbnail" bind:this={host} aria-hidden="true">
- {#if url && !failed}<img src={url} alt="" onerror={() => { failed = true; }} />{:else}<Icon name="file" size={48} />{/if}
+<span class="thumbnail" bind:this={host} aria-hidden="true" style:height="{height}px">
+ {#if kind && visible && !failed}<img src={thumbnailURL(root, path, box, modified)} alt="" decoding="async" style:max-height="{height}px" onerror={() => { failed = true; }} />{#if kind === 'video'}<span class="play">▶</span>{/if}{:else}<FileIcon {name} dir={false} size={48} />{/if}
 </span>
 <style>
- .thumbnail { display:flex; align-items:center; justify-content:center; width:100%; height:96px; }
- img { max-width:100%; max-height:96px; object-fit:contain; border-radius:var(--radius-small); }
+ .thumbnail { position:relative; display:flex; align-items:center; justify-content:center; width:100%; }
+ img { max-width:100%; object-fit:contain; border-radius:var(--radius-small); }
+ .play { position:absolute; inset:auto auto 6px 6px; padding:2px 6px; border-radius:var(--radius-small); background:var(--surface); color:var(--text); font-size:0.75rem; }
 </style>

@@ -291,6 +291,8 @@ export type FileRoot = {
 	editable?: boolean;
 	totalBytes: number;
 	freeBytes: number;
+	/** The full-text index covers (part of) this root. */
+	indexed?: boolean;
 };
 
 export type CopyJob = {

@@ -83,6 +83,8 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Dateien und Ordner bearbeiten:** erstellen, hochladen, herunterladen, als ZIP laden, kopieren, verschieben, umbenennen und löschen. Ziehen zwischen Ansichten, Übertragungsvorschau und Entscheidungen bei Namenskonflikten.
 - **Von Link herunterladen:** eine HTTP(S)-Adresse, etwa ein ISO-Abbild, lädt das NAS selbst als Hintergrundauftrag in den geöffneten Ordner: optionale SHA-256-Prüfung, Fortsetzen nach Verbindungsabbruch, nie Überschreiben. Benutzerkonten erreichen dabei nur Adressen im Internet.
 - **Vorschau und Texteditor:** Bilder, PDF, Audio und Video ansehen; UTF-8-Textdateien bis 512 KiB bearbeiten, einschließlich Markdown, JSON und YAML. Vorige Fassung vergleichen und wiederherstellen.
+- **Vorschaubilder und Fotoansicht:** das NAS erzeugt Miniaturen für JPEG, PNG, GIF, WebP, PDF (erste Seite) und Videos (mit ffmpeg) und legt sie auf dem jeweiligen Daten-Volume ab. Die Fotoansicht zeigt einen Ordner als Raster nach Aufnahmedatum (EXIF) und im Großbild mit Pfeiltasten und Wischen.
+- **Volltextsuche (optional):** ein ab Werk ausgeschalteter Index je Volume findet Wörter in PDF-, Word-, Excel- und Textdateien, auf Wunsch auch in gescannten PDFs (OCR). Er arbeitet nur, während das Volume ohnehin benutzt wird oder zu einer gewählten Uhrzeit, und zeigt jedem Konto nur Treffer in seinen Freigaben.
 - **Werkzeuge:** Unterordnersuche, Sammelumbenennen, ZIP-Inhalte, Ordnervergleich, gezielte Übernahme von Unterschieden, Duplikatsuche und Speicheranalyse auf Anforderung.
 - **Papierkorb:** Originalpfad, Datum und Belegung sehen, filtern und vor der Wiederherstellung prüfen. Unterstützte Aktionen lassen sich innerhalb der Dienstlaufzeit rückgängig machen.
 - **Übertragungen steuern:** Warteschlange, Pause, Priorität, Geschwindigkeitslimit, Fortschritt und Restzeitschätzung. Dauerhaft gespeicherte Kopier-/Verschiebeaufträge auf Daten-Volumes lassen sich nach einem Dienstneustart geprüft fortsetzen. Unfertige Uploads können nach erneuter Dateiauswahl fortgesetzt werden.
@@ -91,7 +93,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 [![Dateimanager mit Ortsauswahl, Ordnern, Dokumenten und Werkzeugleiste](docs/screenshots/current/dateien.png)](docs/screenshots/current/dateien.png)
 
-[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
+[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Vorschaubilder und Volltextsuche](docs/FILE-SEARCH.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
 
 ### Docker und App-Store
 

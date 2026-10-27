@@ -66,3 +66,32 @@ export function fileKind(name: string, dir: boolean): FileKind {
  if (type === 'documents' || /^(log|conf|ini|ya?ml|toml|xml|html?|css|js|ts|sh|py|go|env)$/.test(ext)) return 'text';
  return 'file';
 }
+
+/** Files titand makes thumbnails of (same list as backend/internal/thumbs). */
+export type ThumbnailKind = 'image' | 'pdf' | 'video';
+export function thumbnailKind(name: string): ThumbnailKind | null {
+ if (/\.(jpe?g|png|gif|webp)$/i.test(name)) return 'image';
+ if (/\.pdf$/i.test(name)) return 'pdf';
+ if (/\.(mp4|m4v|mov|mkv|webm|avi|ogv|mts|m2ts|wmv)$/i.test(name)) return 'video';
+ return null;
+}
+/** The modification time is part of the address, so the browser cache never shows an old version. */
+export function thumbnailURL(root: string, path: string, size: number, modified?: string): string {
+ return '/api/v1/files/thumb?' + new URLSearchParams({ root, path, size: String(size), ...(modified ? { v: modified } : {}) });
+}
+export type Photo = { name: string; size: number; modified: string; taken?: string; kind: 'image' | 'video' };
+/** Pictures by date taken (EXIF, else modification time), newest first, or by name. */
+export function sortPhotos(list: Photo[], by: 'taken' | 'name', locale = 'de'): Photo[] {
+ const when = (p: Photo) => Date.parse(p.taken || p.modified) || 0;
+ const byName = (a: Photo, b: Photo) => a.name.localeCompare(b.name, locale, { numeric: true });
+ return list.toSorted((a, b) => by === 'name' ? byName(a, b) : when(b) - when(a) || byName(a, b));
+}
+/** A horizontal swipe: -1 = next picture (finger to the left), 1 = previous, 0 = none. */
+export function swipeDirection(dx: number, dy: number): -1 | 0 | 1 {
+ if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return 0;
+ return dx < 0 ? -1 : 1;
+}
+/** Videos the browser may play from the authorized stream (backend media=1 allowlist). */
+export function streamableVideo(name: string): boolean {
+ return /\.(mp4|webm|ogv)$/i.test(name);
+}
