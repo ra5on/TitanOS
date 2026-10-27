@@ -70,7 +70,7 @@ func (s *Server) handleAssist(data json.RawMessage) {
 
 func (s *Server) assistConversation(ctx context.Context, text, conversation string) string {
 	settings, _ := s.opts.HomeAssistant.Settings()
-	user, ok := s.opts.Users.Get(settings.Account)
+	user, ok := s.activeUser(settings.Account)
 	german := true
 	if ok {
 		if p, _, err := s.opts.Notify.PersonalSettings(user.Name); err == nil {

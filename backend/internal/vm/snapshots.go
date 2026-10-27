@@ -839,6 +839,7 @@ func (m *Manager) restoreSnapshot(ctx context.Context, v VM, s Snapshot, memory 
 	}
 	restored := s.VM
 	restored.SnapshotSchedule = v.SnapshotSchedule
+	restored.PowerSchedule = v.PowerSchedule
 	if err := m.persistVM(restored); err != nil {
 		return err
 	}

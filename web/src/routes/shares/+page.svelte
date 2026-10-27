@@ -21,6 +21,12 @@
 	} from '#lib/share-view.ts';
 	import ShareDialog from './ShareDialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
+	import {
+		canDeleteData,
+		usageKey,
+		type ShareDataPreview,
+		type ShareDeletion,
+	} from '#lib/share-delete.ts';
 
 	const canAdminister = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const volumes = $derived((storage.status?.volumes ?? []).map((v) => v.name));
@@ -56,6 +62,11 @@
 		preferenceError = $state(''),
 		deleteError = $state('');
 	let deleting = $state(false),
+		deleteData = $state(false),
+		dataPreview = $state<ShareDataPreview | null>(null),
+		previewing = $state(false),
+		previewError = $state(''),
+		purgeStarted = $state(''),
 		copied = $state(''),
 		copyFailed = $state('');
 	let dialog = $state<
@@ -156,16 +167,58 @@
 		dialog = null;
 		await load();
 	}
+	function openDelete(share: Share) {
+		deleteError = '';
+		deleteData = false;
+		dataPreview = null;
+		previewError = '';
+		dialog = { kind: 'delete', share };
+	}
+	// Counting a large folder takes a while; the dialog stays usable meanwhile.
+	let previewFor = 0;
+	async function loadPreview(share: Share) {
+		const ticket = ++previewFor;
+		previewing = true;
+		previewError = '';
+		dataPreview = null;
+		try {
+			const preview = await api.get<ShareDataPreview>(
+				`/shares/${encodeURIComponent(share.name)}/delete-data`,
+			);
+			if (ticket === previewFor) dataPreview = preview;
+		} catch (err) {
+			if (ticket === previewFor) previewError = fail(err);
+		} finally {
+			if (ticket === previewFor) previewing = false;
+		}
+	}
+	function toggleData(share: Share) {
+		if (deleteData) void loadPreview(share);
+		else {
+			previewFor++;
+			previewing = false;
+			dataPreview = null;
+			previewError = '';
+		}
+	}
 	async function remove(share: Share) {
 		deleting = true;
 		deleteError = '';
 		try {
-			await api.delete(`/shares/${encodeURIComponent(share.name)}`);
+			if (deleteData) {
+				if (!dataPreview) return;
+				await api.post<ShareDeletion>(`/shares/${encodeURIComponent(share.name)}/delete-data`, {
+					path: dataPreview.path,
+				});
+				purgeStarted = share.name;
+			} else await api.delete(`/shares/${encodeURIComponent(share.name)}`);
 			dialog = null;
 			if (selected === share.name) selected = '';
 			await load();
 		} catch (err) {
 			deleteError = fail(err);
+			// What stands in the way may have changed: show the current state.
+			if (deleteData && err instanceof ApiError && err.status === 409) void loadPreview(share);
 		} finally {
 			deleting = false;
 		}
@@ -213,6 +266,11 @@
 				onclick={() => (dialog = { kind: 'create' })}>{t('shares.new')}</button
 			>{/if}{/snippet}
 </PageHead>
+{#if purgeStarted}<div class="notice-ok" role="status">
+		{t('share.deleteDataStarted', { name: purgeStarted })}
+		<a href="/tools/tasks">{t('share.deleteDataLink')}</a>
+		<button class="btn" onclick={() => (purgeStarted = '')}>{t('common.done')}</button>
+	</div>{/if}
 {#if error}<div class="notice-error" role="alert">
 		{error} <button class="btn" disabled={loading} onclick={load}>{t('common.retry')}</button>
 	</div>{/if}
@@ -469,14 +527,8 @@
 				onclick={() => choose(() => (dialog = { kind: 'edit', share }))}>{t('shares.edit')}</button
 			>
 			<hr />
-			<button
-				role="menuitem"
-				class="danger"
-				onclick={() =>
-					choose(() => {
-						deleteError = '';
-						dialog = { kind: 'delete', share };
-					})}>{t('shares.delete')}</button
+			<button role="menuitem" class="danger" onclick={() => choose(() => openDelete(share))}
+				>{t('shares.delete')}</button
 			>{/if}
 	</ContextMenu>
 {/if}
@@ -525,19 +577,102 @@
 		locked={deleting}
 		onclose={() => (dialog = null)}
 	>
-		<p>{t('share.deleteText', { path: share.path })}</p>
+		{#if !deleteData}<p>{t('share.deleteText', { path: share.path })}</p>{/if}
+		<label class="check"
+			><input
+				type="checkbox"
+				bind:checked={deleteData}
+				disabled={deleting}
+				onchange={() => toggleData(share)}
+			/><span>{t('share.deleteData')}</span></label
+		>
+		{#if deleteData}
+			<div class="purge" aria-live="polite">
+				<p class="notice-warn">{t('share.deleteDataHint', { path: share.path })}</p>
+				{#if previewing}<p class="muted">{t('share.deleteDataCounting')}</p>
+				{:else if previewError}<p class="notice-error" role="alert">{previewError}</p>
+				{:else if dataPreview}
+					<p class="mono path">{dataPreview.path}</p>
+					{#if !dataPreview.exists}<p>{t('share.deleteDataMissing', { path: dataPreview.path })}</p>
+					{:else}<p>
+							{t('share.deleteDataSummary', {
+								files: dataPreview.files.toLocaleString(i18n.locale),
+								dirs: dataPreview.dirs.toLocaleString(i18n.locale),
+								size: formatDiskBytes(dataPreview.bytes),
+							})}
+						</p>
+						{#if !dataPreview.complete}<p class="muted">
+								{t('share.deleteDataPartial', { limit: dataPreview.limit ?? '' })}
+							</p>{/if}
+						{#if dataPreview.subvolume}<p>{t('share.deleteDataSubvolume')}</p>{/if}
+					{/if}
+					{#if dataPreview.blockers.length}
+						<div class="notice-error" role="alert">
+							<p>{t('share.deleteDataBlocked')}</p>
+							<ul>
+								{#each dataPreview.blockers as use, i (i)}<li>
+										{t(usageKey(use.kind), { name: use.name ?? '', path: use.path ?? '' })}
+									</li>{/each}
+							</ul>
+						</div>
+					{/if}
+					{#if dataPreview.warnings.length}
+						<div class="notice-warn">
+							<p>{t('share.deleteDataWarnings')}</p>
+							<ul>
+								{#each dataPreview.warnings as use, i (i)}<li>
+										{t(usageKey(use.kind), { name: use.name ?? '', path: use.path ?? '' })}
+									</li>{/each}
+							</ul>
+						</div>
+					{/if}
+				{/if}
+				{#if !previewing && (previewError || dataPreview?.blockers.length)}<button
+						class="btn"
+						disabled={deleting}
+						onclick={() => loadPreview(share)}>{t('share.deleteDataRetry')}</button
+					>{/if}
+			</div>
+		{/if}
 		{#if deleteError}<p class="notice-error" role="alert">{deleteError}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={deleting} onclick={() => (dialog = null)}
 				>{t('common.cancel')}</button
-			><button class="btn btn-warn" disabled={deleting} onclick={() => remove(share)}
-				>{t('share.deleteSubmit')}</button
+			><button
+				class="btn btn-warn"
+				disabled={deleting || (deleteData && (previewing || !canDeleteData(dataPreview)))}
+				onclick={() => remove(share)}
+				>{t(deleteData ? 'share.deleteDataSubmit' : 'share.deleteSubmit')}</button
 			>
 		</div>
 	</Dialog>
 {/if}
 
 <style>
+	.check {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-top: 8px;
+	}
+	.purge {
+		display: grid;
+		gap: 8px;
+		margin-top: 8px;
+	}
+	.purge p,
+	.purge ul {
+		margin: 0;
+	}
+	.purge ul {
+		padding-left: 18px;
+	}
+	.purge .path {
+		overflow-wrap: anywhere;
+	}
+	.purge .btn {
+		justify-self: start;
+	}
 	.quota-bar {
 		display: block;
 		height: 6px;

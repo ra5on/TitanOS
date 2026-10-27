@@ -236,6 +236,16 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 		delete(m.downloading, name)
 		m.mu.Unlock()
 	}()
+	tr := m.track(name, "install", StepSignature, StepDownload, StepChecksum, StepWrite)
+	ctx = withTracker(ctx, tr)
+	err = m.installOfficial(ctx, name, volume, mounted, activate)
+	tr.finish(err)
+	return err
+}
+
+func (m *Manager) installOfficial(ctx context.Context, name, volume string, mounted []string, activate bool) error {
+	tr := trackerOf(ctx)
+	tr.begin(StepSignature)
 	// Revalidate the signed release and plugin at install time, not just when
 	// the page was opened. Untrusted metadata never reaches the volume.
 	entries, err := m.fetchCatalog(ctx)
@@ -255,6 +265,7 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 	if !m.compatible(selected.plugin.Manifest) {
 		return fmt.Errorf("%w: plugin targets another kernel", ErrInvalid)
 	}
+	tr.name(name, selected.plugin.Title)
 	base, _ := m.releaseBase()
 	dir := m.baseDir(volume)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -272,9 +283,15 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 	if err := os.WriteFile(path+".minisig", selected.signature, 0o600); err != nil {
 		return err
 	}
+	tr.begin(StepDownload)
+	tr.bytes(0, selected.plugin.Size)
 	if err := m.downloadImage(ctx, base+name+".raw", filepath.Join(stage, name+".raw"), selected.plugin.Manifest); err != nil {
+		if errors.Is(err, errDownloadChecksum) {
+			tr.begin(StepChecksum)
+		}
 		return err
 	}
+	tr.complete()
 	// Whatever changed during the download (an update began, a driver was
 	// prepared, the plugin volume was chosen) is checked again under the lock.
 	m.actions.Lock()
@@ -435,6 +452,7 @@ func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifes
 				return resumed, err
 			}
 			hash.Write(buffer[:n])
+			trackerOf(ctx).bytes(total, manifest.Size)
 		}
 		if readErr == io.EOF {
 			break

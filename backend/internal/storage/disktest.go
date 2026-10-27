@@ -41,6 +41,9 @@ const (
 	TestPassed    = "passed"
 	TestFailed    = "failed"
 	TestCancelled = "cancelled"
+	// TestInterrupted is a test that a restart stopped and that waits to
+	// be continued or dismissed (see disktest_resume.go).
+	TestInterrupted = "interrupted"
 )
 
 const (
@@ -88,8 +91,32 @@ type DiskTest struct {
 	// Result is empty while the test runs.
 	Result string     `json:"result"`
 	Notes  []TestNote `json:"notes"`
+	// AutoResume continues a read test by itself after a restart. A test
+	// that overwrites is never continued without being asked.
+	AutoResume bool `json:"autoResume"`
+	// Persistent is set while a checkpoint of the test lies on a data
+	// volume, so that it can be continued after a restart. NotPersistent
+	// says why not: no_serial, no_volume or write_failed.
+	Persistent    bool   `json:"persistent"`
+	NotPersistent string `json:"notPersistent,omitempty"`
+	// Resumed is when the test was last continued after a restart,
+	// Resumes how often that happened.
+	Resumed *time.Time `json:"resumed,omitempty"`
+	Resumes int        `json:"resumes,omitempty"`
 
 	cancel context.CancelFunc
+	// seed makes the pattern of a writing test; kept so that a continued
+	// test still knows what it wrote.
+	seed uint64
+	// offset is how far the current phase got and is known to be on the
+	// disk; resume is set while a test continues from a checkpoint.
+	offset int64
+	resume bool
+	// SMART error counters before the test (smartKnown: the disk has SMART).
+	smartKnown  bool
+	smartErrors uint64
+	// saved is when the checkpoint was last written.
+	saved time.Time
 }
 
 // blockFile is a disk as the test uses it.
@@ -153,50 +180,28 @@ func (m *Manager) testing() map[string]bool {
 }
 
 // StartTest begins testing a disk. Writing destroys what is on it and
-// needs the name of the disk once more as confirmation.
-func (m *Manager) StartTest(ctx context.Context, name, mode, confirm string) error {
+// needs the name of the disk once more as confirmation. autoResume lets a
+// read test continue by itself after a restart; it is ignored for writing.
+func (m *Manager) StartTest(ctx context.Context, name, mode, confirm string, autoResume bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
-	if m.ReadOnly {
-		return ErrReadOnly
-	}
-	if m.GrowthPending() {
-		return ErrBusy
-	}
 	if mode != TestRead && mode != TestWrite {
 		return fmt.Errorf("%w: unknown kind of test", ErrNotPossible)
 	}
-	status, err := m.Status(ctx)
+	disk, err := m.testableDisk(ctx, name)
 	if err != nil {
 		return err
-	}
-	var disk *Disk
-	for i := range status.Disks {
-		if status.Disks[i].Name == name {
-			disk = &status.Disks[i]
-		}
-	}
-	switch {
-	case disk == nil:
-		return fmt.Errorf("%w: %s not found", ErrDiskUnavailable, name)
-	case disk.Testing:
-		return ErrTestRunning
-	case disk.Role == RoleStick || disk.Role == RoleMember || disk.Mounted:
-		return fmt.Errorf("%w: %s is in use", ErrDiskUnavailable, name)
-	}
-	if m.Claimed != nil {
-		if by := m.Claimed()[name]; by != "" {
-			return fmt.Errorf("%w: %s belongs to %s", ErrDiskUnavailable, name, by)
-		}
 	}
 	if mode == TestWrite && confirm != name {
 		return ErrNotConfirmed
 	}
 
 	testCtx, cancel := context.WithCancel(context.Background())
+	now := time.Now()
 	test := &DiskTest{
 		Disk: disk.Name, Model: disk.Model, Serial: disk.Serial, SizeBytes: disk.SizeBytes, Mode: mode,
-		Started: time.Now(), Notes: []TestNote{}, cancel: cancel,
+		Started: now, Notes: []TestNote{}, AutoResume: autoResume && mode == TestRead,
+		cancel: cancel, seed: uint64(now.UnixNano()),
 	}
 	m.testMu.Lock()
 	if m.tests == nil {
@@ -207,6 +212,41 @@ func (m *Manager) StartTest(ctx context.Context, name, mode, confirm string) err
 	slog.Info("disk test started", "disk", name, "serial", disk.Serial, "mode", mode)
 	go m.runTest(testCtx, test, disk.Path)
 	return nil
+}
+
+// testableDisk finds a disk that may be tested: in no volume, not mounted,
+// not the stick and not given to a VM. The caller holds m.actions.
+func (m *Manager) testableDisk(ctx context.Context, name string) (*Disk, error) {
+	if m.ReadOnly {
+		return nil, ErrReadOnly
+	}
+	if m.GrowthPending() {
+		return nil, ErrBusy
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var disk *Disk
+	for i := range status.Disks {
+		if status.Disks[i].Name == name {
+			disk = &status.Disks[i]
+		}
+	}
+	switch {
+	case disk == nil:
+		return nil, fmt.Errorf("%w: %s not found", ErrDiskUnavailable, name)
+	case disk.Testing:
+		return nil, ErrTestRunning
+	case disk.Role == RoleStick || disk.Role == RoleMember || disk.Mounted:
+		return nil, fmt.Errorf("%w: %s is in use", ErrDiskUnavailable, name)
+	}
+	if m.Claimed != nil {
+		if by := m.Claimed()[name]; by != "" {
+			return nil, fmt.Errorf("%w: %s belongs to %s", ErrDiskUnavailable, name, by)
+		}
+	}
+	return disk, nil
 }
 
 // StopTest cancels a running test, or dismisses a finished one.
@@ -222,6 +262,10 @@ func (m *Manager) StopTest(name string) error {
 		return nil
 	}
 	delete(m.tests, name)
+	if test.Result == TestInterrupted {
+		// Dismissed for good: its checkpoint goes too.
+		go m.saveTests()
+	}
 	return nil
 }
 
@@ -237,10 +281,21 @@ func (m *Manager) note(test *DiskTest, kind, detail string) {
 
 // runTest carries a test through its phases and records the result.
 func (m *Manager) runTest(ctx context.Context, test *DiskTest, path string) {
-	before := m.readSmart(ctx, path)
+	m.testMu.Lock()
+	resume, resumeSmart := test.resume, test.resume && test.Phase == PhaseSmart
+	m.testMu.Unlock()
+	if !resume {
+		// A continued test compares with the counters from its real start.
+		if before := m.readSmart(ctx, path); before != nil {
+			m.updateTest(test, func(t *DiskTest) { t.smartKnown, t.smartErrors = true, before.Errors })
+		}
+	}
+	m.saveTests()
 	failed := false
 
-	if errs, err := m.surfaceTest(ctx, test, path); err != nil {
+	if resumeSmart {
+		// The surface was done before the restart.
+	} else if errs, err := m.surfaceTest(ctx, test, path); err != nil {
 		if ctx.Err() == nil {
 			m.note(test, "io_errors", err.Error())
 			failed = true
@@ -252,7 +307,7 @@ func (m *Manager) runTest(ctx context.Context, test *DiskTest, path string) {
 
 	// A disk that could not even be read through need not test itself.
 	if ctx.Err() == nil && !failed {
-		if !m.smartSelfTest(ctx, test, path, before != nil) {
+		if !m.smartSelfTest(ctx, test, path, test.smartKnown, resumeSmart) {
 			failed = true
 		}
 	}
@@ -262,8 +317,8 @@ func (m *Manager) runTest(ctx context.Context, test *DiskTest, path string) {
 				m.note(test, "smart_unhealthy", "")
 				failed = true
 			}
-			if before != nil && after.Errors > before.Errors {
-				m.note(test, "smart_counters", fmt.Sprintf("%d → %d", before.Errors, after.Errors))
+			if test.smartKnown && after.Errors > test.smartErrors {
+				m.note(test, "smart_counters", fmt.Sprintf("%d → %d", test.smartErrors, after.Errors))
 				failed = true
 			}
 		}
@@ -282,6 +337,8 @@ func (m *Manager) runTest(ctx context.Context, test *DiskTest, path string) {
 		}
 	})
 	test.cancel()
+	// A finished test needs no checkpoint any more.
+	m.saveTests()
 	slog.Info("disk test finished", "disk", test.Disk, "serial", test.Serial, "result", test.Result, "errors", test.Errors)
 	if m.OnTestDone != nil {
 		m.testMu.Lock()
@@ -311,6 +368,20 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 	}
 	defer disk.Close()
 	size := int64(test.SizeBytes)
+	// Where a continued test picks up: the phase and offset of its last
+	// checkpoint, and the bad places counted until then.
+	m.testMu.Lock()
+	from, fromOffset, errs, seed := "", int64(0), 0, test.seed
+	if test.resume {
+		from, fromOffset, errs = test.Phase, min(test.offset/testChunk*testChunk, size), test.Errors
+	}
+	m.testMu.Unlock()
+	startAt := func(phase string) int64 {
+		if phase == from {
+			return fromOffset
+		}
+		return 0
+	}
 
 	expected, freeExpected := alignedBuffer(testChunk)
 	defer freeExpected()
@@ -319,10 +390,10 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 
 	// The same pattern in every chunk, but each block starts with its own
 	// position on the disk.
-	var seed [32]byte
-	binary.LittleEndian.PutUint64(seed[:], uint64(test.Started.UnixNano()))
+	var seedBytes [32]byte
+	binary.LittleEndian.PutUint64(seedBytes[:], seed)
 	pattern := make([]byte, testChunk)
-	rand.NewChaCha8(seed).Read(pattern)
+	rand.NewChaCha8(seedBytes).Read(pattern)
 	fill := func(offset int64, n int) {
 		copy(expected[:n], pattern)
 		for at := 0; at+8 <= n; at += testBlock {
@@ -330,16 +401,18 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 		}
 	}
 
-	errs := 0
 	bad := func() bool {
 		errs++
 		m.updateTest(test, func(t *DiskTest) { t.Errors = errs })
 		return errs >= testMaxErrors
 	}
-	pass := func(phase string, each func(offset int64, n int) bool) bool {
-		m.updateTest(test, func(t *DiskTest) { t.Phase, t.Percent, t.SpeedBytesPerSecond, t.RemainingSeconds = phase, 0, 0, -1 })
-		started, last, lastOffset := time.Now(), time.Now(), int64(0)
-		for offset := int64(0); offset < size; offset += testChunk {
+	pass := func(phase string, from int64, each func(offset int64, n int) bool) bool {
+		m.updateTest(test, func(t *DiskTest) {
+			t.Phase, t.offset, t.Percent, t.SpeedBytesPerSecond, t.RemainingSeconds = phase, from, 100*float64(from)/float64(max(size, 1)), 0, -1
+		})
+		m.saveTests()
+		started, last, lastOffset := time.Now(), time.Now(), from
+		for offset := from; offset < size; offset += testChunk {
 			if ctx.Err() != nil {
 				return false
 			}
@@ -347,10 +420,18 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 			if !each(offset, n) {
 				return false
 			}
+			if m.checkpointDue(test) {
+				// Only what is surely on the disk counts as done.
+				if phase != PhaseWrite || disk.Sync() == nil {
+					done := offset + int64(n)
+					m.updateTest(test, func(t *DiskTest) { t.offset, t.Errors = done, errs })
+					m.saveTests()
+				}
+			}
 			if now := time.Now(); now.Sub(last) >= time.Second || offset+int64(n) >= size {
 				done := offset + int64(n)
 				speed := float64(done-lastOffset) / now.Sub(last).Seconds()
-				if average := float64(done) / now.Sub(started).Seconds(); now.Sub(started) > 10*time.Second {
+				if average := float64(done-from) / now.Sub(started).Seconds(); now.Sub(started) > 10*time.Second {
 					speed = average // steadier for the estimate
 				}
 				m.updateTest(test, func(t *DiskTest) {
@@ -367,19 +448,22 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 	}
 
 	if write {
-		ok := pass(PhaseWrite, func(offset int64, n int) bool {
-			fill(offset, n)
-			if _, err := disk.WriteAt(expected[:n], offset); err != nil {
-				slog.Warn("disk test: write failed", "disk", test.Disk, "offset", offset, "err", err)
-				return !bad()
+		ok := true
+		if from != PhaseVerify {
+			ok = pass(PhaseWrite, startAt(PhaseWrite), func(offset int64, n int) bool {
+				fill(offset, n)
+				if _, err := disk.WriteAt(expected[:n], offset); err != nil {
+					slog.Warn("disk test: write failed", "disk", test.Disk, "offset", offset, "err", err)
+					return !bad()
+				}
+				return true
+			})
+			if err := disk.Sync(); err != nil && ctx.Err() == nil {
+				bad()
 			}
-			return true
-		})
-		if err := disk.Sync(); err != nil && ctx.Err() == nil {
-			bad()
 		}
 		if ok {
-			pass(PhaseVerify, func(offset int64, n int) bool {
+			pass(PhaseVerify, startAt(PhaseVerify), func(offset int64, n int) bool {
 				fill(offset, n)
 				if _, err := disk.ReadAt(got[:n], offset); err != nil {
 					slog.Warn("disk test: read failed", "disk", test.Disk, "offset", offset, "err", err)
@@ -403,7 +487,7 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 		}
 		disk.Sync()
 	} else {
-		pass(PhaseRead, func(offset int64, n int) bool {
+		pass(PhaseRead, startAt(PhaseRead), func(offset int64, n int) bool {
 			if _, err := disk.ReadAt(got[:n], offset); err != nil {
 				slog.Warn("disk test: read failed", "disk", test.Disk, "offset", offset, "err", err)
 				return !bad()
@@ -487,18 +571,32 @@ func parseSelfTest(output string) (selfTestState, bool) {
 
 // smartSelfTest lets the disk run its long self-test and waits for it.
 // It returns false if the disk failed it.
-func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string, hasSmart bool) bool {
+// resume is set when the test was in this phase before a restart: the disk
+// runs its self-test on its own, so a test that is still running is only
+// watched again; one that a power cycle broke off starts once more.
+func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string, hasSmart, resume bool) bool {
 	m.updateTest(test, func(t *DiskTest) {
-		t.Phase, t.Percent, t.SpeedBytesPerSecond, t.RemainingSeconds = PhaseSmart, 0, 0, -1
+		t.Phase, t.offset, t.Percent, t.SpeedBytesPerSecond, t.RemainingSeconds = PhaseSmart, 0, 0, 0, -1
 	})
+	m.saveTests()
 	if !hasSmart {
 		m.note(test, "smart_unsupported", "")
 		return true
 	}
-	if _, err := m.runner.Run(ctx, "", "smartctl", "--json=c", "--test=long", path); err != nil && ctx.Err() == nil {
-		// Some USB adapters pass the health on but no commands.
-		m.note(test, "smart_unsupported", "")
-		return true
+	seen := false
+	if resume {
+		output, _ := m.runner.Run(ctx, "", "smartctl", "--json=c", "--capabilities", "--log=selftest", path)
+		if state, ok := parseSelfTest(output); ok && state.running {
+			seen = true
+			slog.Info("disk test: the self-test of the disk is still running", "disk", test.Disk)
+		}
+	}
+	if !seen {
+		if _, err := m.runner.Run(ctx, "", "smartctl", "--json=c", "--test=long", path); err != nil && ctx.Err() == nil {
+			// Some USB adapters pass the health on but no commands.
+			m.note(test, "smart_unsupported", "")
+			return true
+		}
 	}
 	interval := m.smartPoll
 	if interval == 0 {
@@ -506,7 +604,6 @@ func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string
 	}
 	started := time.Now()
 	deadline := started.Add(96 * time.Hour)
-	seen := false
 	for {
 		select {
 		case <-ctx.Done():

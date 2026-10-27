@@ -163,7 +163,7 @@ func newDiskTestEnv(t *testing.T) *testEnv {
 
 func (e *testEnv) run(t *testing.T, disk, mode string) DiskTest {
 	t.Helper()
-	if err := e.m.StartTest(context.Background(), disk, mode, disk); err != nil {
+	if err := e.m.StartTest(context.Background(), disk, mode, disk, false); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -218,7 +218,7 @@ func TestReadTestWritesNothing(t *testing.T) {
 	e := newDiskTestEnv(t)
 	copy(e.disk.data, "precious")
 	// A disk with a foreign file system may be read, without confirmation.
-	if err := e.m.StartTest(context.Background(), "sdb", TestRead, ""); err != nil {
+	if err := e.m.StartTest(context.Background(), "sdb", TestRead, "", false); err != nil {
 		t.Fatal(err)
 	}
 	test := <-e.done
@@ -280,18 +280,18 @@ func TestOnlyDisksThatNothingUsesAreTested(t *testing.T) {
 	e := newDiskTestEnv(t)
 	ctx := context.Background()
 	for name, disk := range map[string]string{"mounted": "sdc", "the stick": "sdz", "unknown": "sdq"} {
-		if err := e.m.StartTest(ctx, disk, TestRead, ""); !errors.Is(err, ErrDiskUnavailable) {
+		if err := e.m.StartTest(ctx, disk, TestRead, "", false); !errors.Is(err, ErrDiskUnavailable) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := e.m.StartTest(ctx, "sda", TestWrite, ""); !errors.Is(err, ErrNotConfirmed) {
+	if err := e.m.StartTest(ctx, "sda", TestWrite, "", false); !errors.Is(err, ErrNotConfirmed) {
 		t.Errorf("write without the name: %v", err)
 	}
-	if err := e.m.StartTest(ctx, "sda", "format", "sda"); !errors.Is(err, ErrNotPossible) {
+	if err := e.m.StartTest(ctx, "sda", "format", "sda", false); !errors.Is(err, ErrNotPossible) {
 		t.Errorf("unknown mode: %v", err)
 	}
 	e.m.Claimed = func() map[string]string { return map[string]string{"sda": "VM win11"} }
-	if err := e.m.StartTest(ctx, "sda", TestWrite, "sda"); !errors.Is(err, ErrDiskUnavailable) || !strings.Contains(err.Error(), "win11") {
+	if err := e.m.StartTest(ctx, "sda", TestWrite, "sda", false); !errors.Is(err, ErrDiskUnavailable) || !strings.Contains(err.Error(), "win11") {
 		t.Errorf("a disk of a VM: %v", err)
 	}
 	// Nor does such a disk go into a volume.
@@ -301,7 +301,7 @@ func TestOnlyDisksThatNothingUsesAreTested(t *testing.T) {
 	}
 	e.m.Claimed = nil
 	e.m.ReadOnly = true
-	if err := e.m.StartTest(ctx, "sda", TestRead, ""); !errors.Is(err, ErrReadOnly) {
+	if err := e.m.StartTest(ctx, "sda", TestRead, "", false); !errors.Is(err, ErrReadOnly) {
 		t.Errorf("development mode: %v", err)
 	}
 	if len(e.opened) != 0 {
@@ -313,10 +313,10 @@ func TestADiskUnderTestIsTakenAndCanBeCancelled(t *testing.T) {
 	e := newDiskTestEnv(t)
 	e.disk.slow = 20 * time.Millisecond
 	ctx := context.Background()
-	if err := e.m.StartTest(ctx, "sda", TestWrite, "sda"); err != nil {
+	if err := e.m.StartTest(ctx, "sda", TestWrite, "sda", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.m.StartTest(ctx, "sda", TestRead, ""); !errors.Is(err, ErrTestRunning) {
+	if err := e.m.StartTest(ctx, "sda", TestRead, "", false); !errors.Is(err, ErrTestRunning) {
 		t.Errorf("second test of the same disk: %v", err)
 	}
 	status, _ := e.m.Status(ctx)

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import UsageBreakdown from '#lib/operations/UsageBreakdown.svelte';
+	import SnapshotFolderRestore from '#lib/operations/SnapshotFolderRestore.svelte';
+	import SnapshotRestoreJobs from '#lib/operations/SnapshotRestoreJobs.svelte';
+	import type { FolderRestoreJob } from '#lib/snapshot-restore.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -46,7 +49,11 @@
 		next = $state(0),
 		selected = $state<string[]>([]),
 		restoreVolume = $state(''),
-		restored = $state('');
+		restored = $state(''),
+		// The snapshot folder whose restore dialog is open.
+		folderRestore = $state(''),
+		restoreJobs = $state<FolderRestoreJob[]>([]);
+	let jobList = $state<{ load: () => Promise<void> } | undefined>();
 	let restorePreview = $state<{
 		uuid: string;
 		files: number;
@@ -127,6 +134,7 @@
 		growthAction = null;
 		restored = '';
 		restorePreview = null;
+		folderRestore = '';
 		remember();
 		if (mode === 'snapshots') run(loadSnapshots);
 	}
@@ -377,18 +385,29 @@
 							class="btn"
 							disabled={busy || !folder}
 							onclick={() => browse(folder.split('/').slice(0, -1).join('/'))}>{t('ops.up')}</button
-						><span class="mono">/{folder}</span>
+						><span class="mono">/{folder}</span>{#if folder}<button
+								class="btn"
+								disabled={busy}
+								onclick={() => (folderRestore = folder)}>{t('snapshotRestore.thisFolder')}</button
+							>{/if}
 					</div>
 					<div class="table-wrap">
 						<table>
 							<thead><tr><th>{t('ops.name')}</th><th>{t('ops.logical')}</th></tr></thead><tbody
 								>{#each entries as entry (entry.path)}<tr
 										><td
-											>{#if entry.directory}<button
-													class="btn"
-													disabled={busy}
-													onclick={() => browse(entry.path)}
-													>{entry.path.split('/').at(-1)} /</button
+											>{#if entry.directory}<span class="folder"
+													><button class="btn" disabled={busy} onclick={() => browse(entry.path)}
+														>{entry.path.split('/').at(-1)} /</button
+													><button
+														class="btn"
+														disabled={busy}
+														aria-label={t('snapshotRestore.folderLabel', {
+															name: entry.path.split('/').at(-1) ?? '',
+														})}
+														onclick={() => (folderRestore = entry.path)}
+														>{t('snapshotRestore.restore')}</button
+													></span
 												>{:else}<label class="check"
 													><input
 														type="checkbox"
@@ -445,6 +464,10 @@
 						>
 					</form>{/if}
 			</div>{/if}
+		{#if selectedVolume?.filesystem === 'btrfs'}<SnapshotRestoreJobs
+				bind:this={jobList}
+				bind:jobs={restoreJobs}
+			/>{/if}
 		{#if restored}<p class="notice" role="status">
 				{t('ops.restored', { path: restored })}
 				<a
@@ -503,6 +526,17 @@
 				>
 			</div>
 		</Dialog>{/if}
+	{#if folderRestore && snapshot}<SnapshotFolderRestore
+			{volume}
+			{snapshot}
+			path={folderRestore}
+			onclose={() => (folderRestore = '')}
+			onstarted={(job) => {
+				folderRestore = '';
+				restoreJobs = [job, ...restoreJobs.filter((j) => j.id !== job.id)];
+				jobList?.load();
+			}}
+		/>{/if}
 	{#if restorePreview}<Dialog
 			title={t('tasks.restorePreview')}
 			locked={busy}
@@ -571,6 +605,11 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
+	}
+	.folder {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	.check span {
 		overflow-wrap: anywhere;

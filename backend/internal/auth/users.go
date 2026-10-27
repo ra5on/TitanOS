@@ -52,6 +52,14 @@ type User struct {
 	// SSHKeys are the public keys the account may log in with over SSH,
 	// one line each as in an authorized_keys file.
 	SSHKeys []string `json:"sshKeys,omitempty"`
+	// Disabled locks the account without removing it: no login to the web
+	// interface, API tokens, SSH or SMB, while its files, shares and rights
+	// stay. DisabledAt and DisabledBy say when and by whom. In the file the
+	// lock is also written in a form titand before 0.28.0 refuses, see
+	// MarshalJSON.
+	Disabled   bool      `json:"disabled,omitempty"`
+	DisabledAt time.Time `json:"disabledAt,omitzero"`
+	DisabledBy string    `json:"disabledBy,omitempty"`
 }
 
 // TwoFactor reports whether the account logs in with a second factor.
@@ -73,6 +81,7 @@ var (
 	ErrNotFound         = errors.New("auth: no such account")
 	ErrInvalidRole      = errors.New("auth: unknown role")
 	ErrLastOwner        = errors.New("auth: the last owner cannot be removed or demoted")
+	ErrLastActiveOwner  = errors.New("auth: the last owner that is not locked cannot be locked, removed or demoted")
 )
 
 // Account names double as Linux and SMB user names.
@@ -296,8 +305,18 @@ var dummyHash = sync.OnceValue(func() string {
 	return hash
 })
 
-// Authenticate checks a name and password.
+// Authenticate checks a name and password. A locked account never passes.
 func (u *Users) Authenticate(name, password string) (User, bool) {
+	user, ok := u.Verify(name, password)
+	if !ok || user.Disabled {
+		return User{}, false
+	}
+	return user, true
+}
+
+// Verify checks only the password, also of a locked account. The login uses
+// it to say "locked" to someone who knows the password, and only to them.
+func (u *Users) Verify(name, password string) (User, bool) {
 	user, exists := u.Get(name)
 	if len(password) > MaxPasswordLength {
 		return User{}, false
@@ -312,6 +331,9 @@ func (u *Users) Authenticate(name, password string) (User, bool) {
 	}
 	return user, true
 }
+
+// errUnchanged tells update that change left the account as it was.
+var errUnchanged = errors.New("auth: unchanged")
 
 // update changes one account and writes it to the store.
 func (u *Users) update(name string, change func(user *User) error) (User, error) {
@@ -332,7 +354,9 @@ func (u *Users) update(name string, change func(user *User) error) (User, error)
 	if !ok {
 		return User{}, ErrNotFound
 	}
-	if err := change(&user); err != nil {
+	if err := change(&user); errors.Is(err, errUnchanged) {
+		return user, nil // nothing to write to the stick
+	} else if err != nil {
 		return User{}, err
 	}
 	if err := u.store.WriteJSON(accountFile(name), user); err != nil {
@@ -342,15 +366,34 @@ func (u *Users) update(name string, change func(user *User) error) (User, error)
 	return user, nil
 }
 
-// owners counts the accounts with the owner role. The caller holds the lock.
-func (u *Users) owners() int {
-	count := 0
+// owners counts the accounts with the owner role, and those of them that
+// are not locked. The caller holds the lock.
+func (u *Users) owners() (all, active int) {
 	for _, user := range u.users {
 		if user.Role == RoleOwner {
-			count++
+			all++
+			if !user.Disabled {
+				active++
+			}
 		}
 	}
-	return count
+	return all, active
+}
+
+// keepsOwner returns an error if user is needed as an owner: the last one,
+// or the last one that can still log in. The caller holds the lock.
+func (u *Users) keepsOwner(user User) error {
+	if user.Role != RoleOwner {
+		return nil
+	}
+	all, active := u.owners()
+	switch {
+	case all == 1:
+		return ErrLastOwner
+	case !user.Disabled && active == 1:
+		return ErrLastActiveOwner
+	}
+	return nil
 }
 
 // SetPassword gives an account a new password.
@@ -389,8 +432,10 @@ func (u *Users) SetRole(name string, role Role) (User, error) {
 		return User{}, ErrInvalidRole
 	}
 	return u.update(name, func(user *User) error {
-		if user.Role == RoleOwner && role != RoleOwner && u.owners() == 1 {
-			return ErrLastOwner
+		if role != RoleOwner {
+			if err := u.keepsOwner(*user); err != nil {
+				return err
+			}
 		}
 		user.Role = role
 		return nil
@@ -413,12 +458,35 @@ func (u *Users) Delete(name string) error {
 	if !ok {
 		return ErrNotFound
 	}
-	if user.Role == RoleOwner && u.owners() == 1 {
-		return ErrLastOwner
+	if err := u.keepsOwner(user); err != nil {
+		return err
 	}
 	if err := u.store.RemoveAll("users/" + name); err != nil {
 		return err
 	}
 	delete(u.users, name)
 	return nil
+}
+
+// SetDisabled locks or unlocks an account. by is the account doing it. The
+// last owner that is not locked stays unlocked, so that someone can always
+// manage the NAS. Locking an account that is locked already keeps the
+// original time and name.
+func (u *Users) SetDisabled(name string, disabled bool, by string) (User, error) {
+	return u.update(name, func(user *User) error {
+		switch {
+		case disabled == user.Disabled:
+			return errUnchanged
+		case disabled:
+			if user.Role == RoleOwner {
+				if _, active := u.owners(); active == 1 {
+					return ErrLastActiveOwner
+				}
+			}
+			user.Disabled, user.DisabledAt, user.DisabledBy = true, time.Now().UTC().Truncate(time.Second), by
+		default:
+			user.Disabled, user.DisabledAt, user.DisabledBy = false, time.Time{}, ""
+		}
+		return nil
+	})
 }

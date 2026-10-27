@@ -7,6 +7,8 @@
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
+	import PluginSteps from '#lib/components/PluginSteps.svelte';
+	import { latestFor, type PluginProgress } from '#lib/plugin-progress.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -49,8 +51,14 @@
 	let updating = $state<{ name: string; title: string; path: string; version: string; official: boolean } | null>(null);
 	let tailnetPending = $state(false);
 	let netbirdPending = $state(false);
+	// Steps of installations, updates and removals as the NAS reports them.
+	// They keep running when the page is left; a finished one is shown for the
+	// plugins changed here and for failures until it is dismissed.
+	let operations = $state<PluginProgress[]>([]);
+	let actedOn = $state<string[]>([]);
+	const working = $derived(operations.some((entry) => entry.state === 'running'));
 
-	const locked = $derived(busy || tailnetPending || netbirdPending || !!status?.driverUpdate?.pending);
+	const locked = $derived(busy || working || tailnetPending || netbirdPending || !!status?.driverUpdate?.pending);
 	const plugins = $derived(status?.plugins ?? []);
 	const current = $derived(plugins.find((plugin) => plugin.name === picked) ?? plugins[0]);
 	const volumes = $derived((storage.status?.volumes ?? []).filter((entry) => entry.mounted).map((entry) => entry.name));
@@ -58,6 +66,29 @@
 	const contains = (plugin: Plugin) => plugin.contains?.[i18n.locale] ?? plugin.contains?.en ?? [];
 	const monogram = (plugin: Plugin) => plugin.title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).replace(/^./, (c) => c.toUpperCase()) || '?';
 	const hue = (plugin: Plugin) => [...plugin.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
+
+	function stepsFor(name: string): PluginProgress | undefined {
+		const entry = latestFor(operations, name);
+		if (!entry) return undefined;
+		return entry.state === 'running' || entry.state === 'failed' || actedOn.includes(name) ? entry : undefined;
+	}
+	async function loadProgress() {
+		try {
+			operations = (await api.get<{ operations: PluginProgress[] }>('/plugins/progress')).operations ?? [];
+		} catch {
+			// The status poll shows connection problems; the steps keep their last state.
+		}
+	}
+	async function dismiss(entry: PluginProgress | undefined) {
+		if (!entry) return;
+		operations = operations.filter((other) => other.id !== entry.id);
+		actedOn = actedOn.filter((name) => name !== entry.plugin);
+		try {
+			await api.delete(`/plugins/progress/${encodeURIComponent(entry.id)}`);
+		} catch {
+			// Already gone, or still kept by the NAS: the next poll shows it again.
+		}
+	}
 
 	function badge(plugin: Plugin): { text: string; kind: string } {
 		if (!plugin.installed && plugin.problem === 'kernel') return { text: t('plugins.incompatible'), kind: 'warn' };
@@ -77,6 +108,7 @@
 	let changes = 0;
 	async function load() {
 		if (document.hidden) return;
+		void loadProgress();
 		const started = changes;
 		try {
 			const next = await api.get<Status>('/plugins');
@@ -102,8 +134,17 @@
 		const timer = setInterval(load, 5000);
 		return () => clearInterval(timer);
 	});
+	// While something runs, follow its steps every second.
+	$effect(() => {
+		if (!busy && !working) return;
+		const timer = setInterval(() => {
+			if (!document.hidden) void loadProgress();
+		}, 1000);
+		return () => clearInterval(timer);
+	});
 
-	async function run(action: () => Promise<Status>) {
+	async function run(action: () => Promise<Status>, plugin = '') {
+		if (plugin && !actedOn.includes(plugin)) actedOn = [...actedOn, plugin];
 		busy = true;
 		error = null;
 		changes++;
@@ -119,6 +160,11 @@
 		changes++;
 		await load();
 	}
+	// Steps of the shown plugin outside its dialogs: after coming back to the
+	// page, or a failure to look at.
+	const shown = $derived(current ? stepsFor(current.name) : undefined);
+	const removingSteps = $derived(removing ? stepsFor(removing.name) : undefined);
+	const updatingSteps = $derived(updating ? stepsFor(updating.name) : undefined);
 
 	// The box shows what the NAS has; a refused change is turned back.
 	async function toggle(name: string, box: HTMLInputElement) {
@@ -127,18 +173,27 @@
 		if (plugin) box.checked = plugin.enabled;
 	}
 
+	// A new attempt starts without the marks of the previous one.
+	function clearFinished(name: string) {
+		const entry = stepsFor(name);
+		if (entry && entry.state !== 'running') void dismiss(entry);
+	}
+
 	function openRemove(plugin: Plugin) {
+		clearFinished(plugin.name);
 		error = null;
 		removing = { name: plugin.name, title: plugin.title };
 	}
 
 	function openUpdate(plugin: Plugin) {
 		if (!plugin.update) return;
+		clearFinished(plugin.name);
 		error = null;
 		updating = { name: plugin.name, title: plugin.title, ...plugin.update };
 	}
 
 	function ask() {
+		if (current) clearFinished(current.name);
 		activate = true;
 		volume = status?.volume || volumes[0] || '';
 		error = null;
@@ -243,6 +298,10 @@
 					<p class="notice-warn" role="status">{t('plugins.busy')}</p>
 				{/if}
 
+				{#if shown && !asking && removing?.name !== current.name && updating?.name !== current.name}
+					<PluginSteps progress={shown} ondismiss={() => dismiss(shown)} />
+				{/if}
+
 				{#if !current.installed && !asking}
 					<div class="row">
 						<span class="muted path">{current.download ? t('plugins.githubSource', { version: status.catalog.release }) : current.path}</span>
@@ -263,7 +322,10 @@
 						<label class="check"><input type="checkbox" bind:checked={activate} disabled={busy} /><span>{t('plugins.activateNow')}</span></label>
 						<p class="muted note">{t('plugins.activateLaterHint')}</p>
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
-						{#if busy}
+						{#if shown}
+							<PluginSteps progress={shown} ondismiss={busy ? undefined : () => dismiss(shown)} />
+						{:else if busy}
+							<!-- Until the first step arrives. -->
 							<div class="progress" role="status">
 								<progress aria-label={t(current.download ? 'plugins.downloadingChecking' : 'plugins.installing')}></progress>
 								<span class="muted">{t(current.download ? 'plugins.downloadingChecking' : 'plugins.installing')}</span>
@@ -271,7 +333,7 @@
 						{/if}
 						<div class="row">
 							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
-							<button type="button" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel'} onclick={() => run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm: current.name, activate }))}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
+							<button type="button" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel'} onclick={() => run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm: current.name, activate }), current.name)}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
 						</div>
 					</form>
 				{:else}
@@ -300,12 +362,13 @@
 	{@const target = removing}
 	<Dialog title={t('plugins.removeTitle', { name: target.title })} locked={busy} onclose={() => (removing = null)}>
 		<p class="text">{t('plugins.removeText')}</p>
+		{#if removingSteps && (busy || removingSteps.state !== 'done')}<PluginSteps progress={removingSteps} />{/if}
 		{#if error}
 			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (removing = null)} disabled={busy}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={() => run(() => api.delete<Status>(`/plugins/${target.name}`))} disabled={busy}>{t('plugins.removeSubmit')}</button>
+			<button type="button" class="btn btn-warn" onclick={() => run(() => api.delete<Status>(`/plugins/${target.name}`), target.name)} disabled={busy}>{t('plugins.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -316,13 +379,14 @@
 		<p class="text">{t('plugins.updateText')}</p>
 		{#if !target.official}<p class="notice-warn">{t('plugins.trustCommunity')}</p>{/if}
 		<p class="muted mono path">{target.path}</p>
+		{#if updatingSteps && (busy || updatingSteps.state !== 'done')}<PluginSteps progress={updatingSteps} />{/if}
 		{#if error}
 			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (updating = null)} disabled={busy}>{t('common.cancel')}</button>
 			<!-- The API wants the plugin name as confirmation for an unsigned version; the click is that confirmation. -->
-			<button type="button" class="btn btn-primary" onclick={() => run(() => api.post<Status>(`/plugins/${target.name}/update`, { path: target.path, confirm: target.name }))} disabled={busy}>{t(busy ? 'plugins.updating' : 'plugins.update')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => run(() => api.post<Status>(`/plugins/${target.name}/update`, { path: target.path, confirm: target.name }), target.name)} disabled={busy}>{t(busy ? 'plugins.updating' : 'plugins.update')}</button>
 		</div>
 	</Dialog>
 {/if}

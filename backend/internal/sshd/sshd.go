@@ -45,6 +45,9 @@ var (
 // Settings is /config/system/ssh.json.
 type Settings struct {
 	Enabled bool `json:"enabled"`
+	// AllowedNetworks limits where logins may come from (CIDR). Empty or
+	// missing means all networks; older titand ignores the field.
+	AllowedNetworks []string `json:"allowedNetworks,omitempty"`
 }
 
 // Status is what the settings page shows.
@@ -56,6 +59,11 @@ type Status struct {
 	Fingerprint string `json:"fingerprint"`
 	// Accounts are those that can log in right now.
 	Accounts []string `json:"accounts"`
+	// AllowedNetworks are the networks logins may come from; empty = all.
+	AllowedNetworks []string `json:"allowedNetworks"`
+	// NetworksError says why sshd refused the list (sshd -t); the last
+	// good configuration stays in use meanwhile.
+	NetworksError string `json:"networksError,omitempty"`
 }
 
 // Manager keeps sshd in line with the settings and the accounts.
@@ -82,6 +90,7 @@ type Manager struct {
 	fingerprint string
 	running     bool
 	accounts    []string
+	netErr      string
 }
 
 // NewManager returns a manager working on the real system. usersGID is
@@ -116,7 +125,8 @@ func (m *Manager) SetEnabled(enabled bool) error {
 		m.mu.Unlock()
 		return ErrNotLoaded
 	}
-	settings := Settings{Enabled: enabled}
+	settings := m.settings
+	settings.Enabled = enabled
 	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
 		m.mu.Unlock()
 		return err
@@ -140,7 +150,10 @@ func (m *Manager) Kick() {
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Status{Enabled: m.settings.Enabled, Running: m.running, Fingerprint: m.fingerprint, Accounts: append([]string{}, m.accounts...)}
+	return Status{
+		Enabled: m.settings.Enabled, Running: m.running, Fingerprint: m.fingerprint, Accounts: append([]string{}, m.accounts...),
+		AllowedNetworks: append([]string{}, m.settings.AllowedNetworks...), NetworksError: m.netErr,
+	}
 }
 
 // Run applies the settings at the start and whenever something changed,
@@ -178,11 +191,12 @@ func (m *Manager) Run(ctx context.Context, users func() []auth.User) {
 }
 
 // eligible returns the accounts that may log in: owners and
-// administrators that have a key.
+// administrators that have a key and are not locked. A locked account is
+// taken out like one that lost its role, which also ends its sessions.
 func eligible(users []auth.User) []auth.User {
 	var list []auth.User
 	for _, user := range users {
-		if user.Role.CanAdminister() && len(user.DescribeSSHKeys()) > 0 {
+		if user.Role.CanAdminister() && !user.Disabled && len(user.DescribeSSHKeys()) > 0 {
 			list = append(list, user)
 		}
 	}
@@ -209,6 +223,7 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 	}
 	m.mu.Lock()
 	enabled := m.settings.Enabled
+	networks := slices.Clone(m.settings.AllowedNetworks)
 	m.mu.Unlock()
 
 	keysDir := filepath.Join(m.etcDir, "authorized_keys")
@@ -294,7 +309,30 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 		names = append(names, user.Name)
 	}
 
+	// The networks before the start: sshd must never run without the
+	// restriction that was asked for. A list sshd refuses keeps the last
+	// good file; sshd then runs with that one.
+	changed, netErr := m.applyNetworks(ctx, networks)
+	m.mu.Lock()
+	m.netErr = ""
+	if netErr != nil {
+		m.netErr = netErr.Error()
+	}
+	m.mu.Unlock()
+	if netErr != nil {
+		m.mu.Lock()
+		m.fingerprint, m.accounts = fingerprint, names
+		m.mu.Unlock()
+		return complete, netErr
+	}
+
 	_, startErr := m.runner.Run(ctx, "", "systemctl", "start", service)
+	if startErr == nil && changed {
+		// A running sshd reads its configuration again; open sessions stay.
+		if _, err := m.runner.Run(ctx, "", "systemctl", "reload", service); err != nil {
+			startErr = err
+		}
+	}
 	m.mu.Lock()
 	m.fingerprint, m.running, m.accounts = fingerprint, startErr == nil, names
 	m.mu.Unlock()

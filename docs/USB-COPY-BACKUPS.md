@@ -32,3 +32,8 @@ Rücksicherung: Dateien über den Dateimanager zurückkopieren oder die Platte a
 einem anderen Rechner öffnen. Unterstützte Dateisysteme entsprechen der
 USB-Verwaltung (u. a. ext4, XFS, Btrfs, exFAT, NTFS und FAT32); Größen- und
 Namensgrenzen des Ziel-Dateisystems gelten weiterhin.
+
+Bandbreite: Auch USB-Kopien lassen sich auf MiB/s begrenzen, optional mit einer
+anderen Grenze in einem Zeitfenster; die Kopie folgt dem Fenster während des Laufs.
+Einzelheiten für alle Backupverfahren in `docs/SMB-COPY-BACKUPS.md`, Abschnitt
+„Bandbreite begrenzen“.

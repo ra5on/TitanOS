@@ -10,6 +10,7 @@ package shares
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,6 +20,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -152,6 +154,7 @@ type Manager struct {
 	Disabled bool
 
 	mountRoot string
+	mounts    func() map[string]bool
 	gid       int // group that owns the shares
 	sambaConf string
 	exports   string
@@ -166,12 +169,17 @@ type Manager struct {
 
 	quota       quotaState
 	quotaKernel quotaKernel
+
+	// gen counts saved changes; appliedGen is the newest one Apply has
+	// brought to the system. Deleting a share's data waits for it.
+	gen, appliedGen uint64
+	purge           purgeState
 }
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
-		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: UsersGID,
+		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: UsersGID, mounts: mountPoints,
 		sambaConf: "/etc/samba/smb.conf", exports: "/etc/exports", nfsRoot: "/srv/nfs", runDir: "/run/titanos",
 		kick: make(chan struct{}, 1),
 	}
@@ -228,6 +236,7 @@ func (m *Manager) save(shares []Share) error {
 		return err
 	}
 	m.shares = shares
+	m.gen++
 	select {
 	case m.kick <- struct{}{}:
 	default:
@@ -418,6 +427,7 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 				slog.Error("apply shares", "err", err)
 			}
 			m.ApplyQuotas(current.Quotas, current.Mounted)
+			m.resumePurges(current.Mounted)
 		}
 		select {
 		case <-ctx.Done():
@@ -433,7 +443,11 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 // Apply makes accounts, configuration files and services match the shares.
 // It does nothing if nothing changed since the last time.
 func (m *Manager) Apply(ctx context.Context, state State) error {
+	m.mu.Lock()
+	gen := m.gen
+	m.mu.Unlock()
 	if m.Disabled {
+		m.markApplied(gen)
 		return nil
 	}
 	shares := m.List()
@@ -457,6 +471,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 		// A share taken off NFS may still have been busy when its mount
 		// was to be removed; try again until it is gone.
 		m.unbindShares(ctx, offered)
+		m.markApplied(gen)
 		return nil
 	}
 
@@ -512,6 +527,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	m.mu.Lock()
 	m.applied = signature
 	m.mu.Unlock()
+	m.markApplied(gen)
 	slog.Info("shares applied", "shares", len(offered), "accounts", len(users), "smb", smb, "nfs", nfs)
 	return nil
 }
@@ -563,6 +579,28 @@ func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords
 			return err
 		}
 	}
+	// The file already carries the D flag of a locked account; smbpasswd
+	// sets the flag on an entry Samba knew before as well. A lock that does
+	// not take fails the round, which is tried again.
+	locked := false
+	for _, user := range users {
+		if user.SMBHash == "" {
+			continue
+		}
+		flag := "-e"
+		if user.Disabled {
+			flag, locked = "-d", true
+		}
+		if _, err := m.runner.Run(ctx, "", "smbpasswd", flag, user.Name); err != nil {
+			if user.Disabled {
+				return fmt.Errorf("lock Samba account %s: %w", user.Name, err)
+			}
+			slog.Warn("unlock Samba account", "user", user.Name, "err", err)
+		}
+	}
+	if locked {
+		m.endSMBSessions(ctx, users)
+	}
 
 	known, err := m.runner.Run(ctx, "", "pdbedit", "--list")
 	if err != nil {
@@ -585,6 +623,57 @@ func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords
 	return nil
 }
 
+// endSMBSessions ends the SMB connections of locked accounts. A disabled
+// Samba account only stops new logins; a connection that is open keeps its
+// session until it ends. Each connection is one smbd process, which is told
+// to stop; the client then has to log in again and is refused.
+func (m *Manager) endSMBSessions(ctx context.Context, users []auth.User) {
+	output, err := m.runner.Run(ctx, "", "smbstatus", "--processes", "--json")
+	if err != nil {
+		slog.Debug("SMB sessions not readable", "err", err) // smbd not running
+		return
+	}
+	for _, pid := range lockedSMBProcesses(output, users) {
+		if _, err := m.runner.Run(ctx, "", "kill", "-TERM", pid); err != nil {
+			slog.Warn("end SMB connection of a locked account", "pid", pid, "err", err)
+		} else {
+			slog.Info("SMB connection of a locked account ended", "pid", pid)
+		}
+	}
+}
+
+// lockedSMBProcesses reads `smbstatus --processes --json` and returns the
+// smbd processes serving a locked account, matched by name or UID.
+func lockedSMBProcesses(output string, users []auth.User) []string {
+	var status struct {
+		Sessions map[string]struct {
+			Username string `json:"username"`
+			UID      *int   `json:"uid"`
+			ServerID struct {
+				PID json.RawMessage `json:"pid"`
+			} `json:"server_id"`
+		} `json:"sessions"`
+	}
+	if json.Unmarshal([]byte(output), &status) != nil {
+		return nil
+	}
+	var pids []string
+	for _, session := range status.Sessions {
+		locked := slices.ContainsFunc(users, func(u auth.User) bool {
+			return u.Disabled && (strings.EqualFold(session.Username, u.Name) || session.UID != nil && *session.UID == u.UID)
+		})
+		pid := strings.Trim(string(session.ServerID.PID), `"`)
+		if n, err := strconv.Atoi(pid); !locked || err != nil || n <= 1 {
+			continue
+		}
+		if !slices.Contains(pids, pid) {
+			pids = append(pids, pid)
+		}
+	}
+	sort.Strings(pids)
+	return pids
+}
+
 // renderSMBPasswd writes the accounts in the format of Samba's smbpasswd
 // file, which pdbedit can import. Accounts without an SMB hash are left out;
 // they get one at their next login.
@@ -597,7 +686,11 @@ func renderSMBPasswd(users []auth.User) string {
 		// The time the password was last changed must not be zero: Samba
 		// reads that as "must change the password before logging in".
 		changed := max(user.Created.Unix(), 1)
-		fmt.Fprintf(&b, "%s:%d:%s:%s:[U          ]:LCT-%08X:\n", user.Name, user.UID, strings.Repeat("X", 32), user.SMBHash, changed)
+		flags := "[U          ]"
+		if user.Disabled {
+			flags = "[DU         ]" // account disabled: Samba refuses the login
+		}
+		fmt.Fprintf(&b, "%s:%d:%s:%s:%s:LCT-%08X:\n", user.Name, user.UID, strings.Repeat("X", 32), user.SMBHash, flags, changed)
 	}
 	return b.String()
 }

@@ -174,7 +174,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := s.opts.Users.Authenticate(req.Name, req.Password)
+	// Verify also passes a locked account: whether it is locked is told
+	// only after the password (and the second factor) were right, so the
+	// answer reveals nothing to someone guessing.
+	user, ok := s.opts.Users.Verify(req.Name, req.Password)
 	if !ok {
 		s.limiter.Fail(userKey, ipKey)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
@@ -196,6 +199,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid_code", "the code is wrong or was used already")
 			return
 		}
+	}
+	if user.Disabled {
+		// Not a guess, so the limiter is left alone; no session, no SMB hash.
+		slog.Warn("login of a locked account refused", "user", user.Name, "ip", ip)
+		s.recordEvent(r, user.Name, "login_disabled", "", false)
+		writeError(w, http.StatusForbidden, "account_disabled", "this account is locked; ask an owner or administrator")
+		return
 	}
 	s.limiter.Reset(userKey)
 	slog.Info("login", "user", user.Name, "ip", ip)

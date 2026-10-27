@@ -9,8 +9,13 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
+	import { addNetworks, parseNetworks, sameNetworks } from '#lib/ssh-networks.ts';
 
-	type Ssh = { enabled: boolean; running: boolean; fingerprint: string; accounts: string[] };
+	type Ssh = {
+		enabled: boolean; running: boolean; fingerprint: string; accounts: string[];
+		allowedNetworks: string[]; networksError?: string;
+		homeNetworks: string[]; tailscaleNetworks: string[]; netbirdNetworks: string[]; clientAddress: string;
+	};
 	type Certificate = { kind: 'self-signed' | 'custom'; names: string[]; issuer: string; notBefore: string; notAfter: string; fingerprint: string };
 
 	let ssh = $state<Ssh | null>(null);
@@ -75,6 +80,34 @@
 		try { ssh = await api.put<Ssh>('/system/ssh', { enabled }); sshSaved = true; }
 		catch (err) { sshError = errorText(err instanceof ApiError ? err.code : 'internal'); }
 		finally { sshBusy = false; }
+	}
+
+	// Networks SSH logins may come from. The text is only taken over from the
+	// NAS while nobody edits it.
+	let netText = $state('');
+	let netEdited = $state(false);
+	let netBusy = $state(false);
+	let netSaved = $state(false);
+	let netError = $state('');
+	let netConfirm = $state(false);
+	$effect(() => { if (ssh && !netEdited) netText = ssh.allowedNetworks.join('\n'); });
+	$effect(() => { if (netSaved) { const timer = setTimeout(() => netSaved = false, 5000); return () => clearTimeout(timer); } });
+	const netChanged = $derived(!!ssh && !sameNetworks(parseNetworks(netText), ssh.allowedNetworks));
+	function addPreset(list: string[]) {
+		netText = addNetworks(netText, list);
+		netEdited = true;
+	}
+	async function saveNetworks(confirm = false) {
+		if (netBusy) return;
+		netBusy = true; netSaved = false; netError = '';
+		try {
+			ssh = await api.put<Ssh>('/system/ssh/networks', { networks: parseNetworks(netText), confirm });
+			netEdited = false; netConfirm = false; netSaved = true;
+			netText = ssh.allowedNetworks.join('\n');
+		} catch (err) {
+			if (err instanceof ApiError && err.code === 'ssh_network_excludes_you' && !confirm) netConfirm = true;
+			else { netConfirm = false; netError = errorText(err instanceof ApiError ? err.code : 'internal'); }
+		} finally { netBusy = false; }
 	}
 
 	async function readFile(event: Event, into: 'cert' | 'key') {
@@ -146,6 +179,24 @@
 			{#if ssh.accounts.length === 0}<p class="notice-warn">{t('access.sshNoKeys')} <a href="/account">{t('menu.account')}</a></p>{/if}
 			<p class="muted">{t('access.sshNote')}</p>
 		{/if}
+		<div class="networks">
+			<h3 id="access-ssh-networks">{t('access.sshNetworks')}</h3>
+			<p class="muted">{t('access.sshNetworksText')}</p>
+			<p>{ssh.allowedNetworks.length ? t('access.sshNetworksActive', { list: ssh.allowedNetworks.join(', ') }) : t('access.sshNetworksAll')}</p>
+			{#if ssh.networksError}<p class="notice-error" role="alert">{t('access.sshNetworksError', { detail: ssh.networksError })}</p>{/if}
+			<textarea class="field mono" rows="4" aria-labelledby="access-ssh-networks" placeholder="192.168.1.0/24" spellcheck="false" bind:value={netText} oninput={() => (netEdited = true)} disabled={netBusy}></textarea>
+			<div class="actions start">
+				<button type="button" class="btn" disabled={netBusy || ssh.homeNetworks.length === 0} title={ssh.homeNetworks.length ? ssh.homeNetworks.join(', ') : t('access.sshNetworksNoHome')} onclick={() => addPreset(ssh?.homeNetworks ?? [])}>{t('access.sshNetworksHome')}</button>
+				<button type="button" class="btn" disabled={netBusy} title={ssh.tailscaleNetworks.join(', ')} onclick={() => addPreset(ssh?.tailscaleNetworks ?? [])}>{t('access.sshNetworksTailscale')}</button>
+				<button type="button" class="btn" disabled={netBusy} title={ssh.netbirdNetworks.join(', ')} onclick={() => addPreset(ssh?.netbirdNetworks ?? [])}>{t('access.sshNetworksNetbird')}</button>
+				<button type="button" class="btn btn-primary" disabled={netBusy || !netChanged} onclick={() => saveNetworks()}>{t('access.sshNetworksSave')}</button>
+			</div>
+			{#if ssh.homeNetworks.length === 0}<p class="muted">{t('access.sshNetworksNoHome')}</p>{/if}
+			{#if ssh.clientAddress}<p class="muted">{t('access.sshNetworksYou', { address: ssh.clientAddress })}</p>{/if}
+			{#if netBusy || netSaved}<p role="status">{t(netBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
+			{#if netError}<p class="notice-error" role="alert">{netError}</p>{/if}
+			<p class="muted">{t('access.sshNetworksRecovery')}</p>
+		</div>
 		{/if}
 		{#if sshBusy || sshSaved}<p role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
 		{#if sshError}<div class="notice-error" role="alert">{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button></div>{:else if !ssh}<p role="status">{t('common.loading')}</p>{/if}
@@ -197,6 +248,16 @@
 	{/if}
 </section>
 
+{#if netConfirm && ssh}
+	<Dialog title={t('access.sshNetworksConfirmTitle')} locked={netBusy} onclose={() => (netConfirm = false)}>
+		<p>{t('access.sshNetworksConfirmText', { address: ssh.clientAddress })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={netBusy} onclick={() => (netConfirm = false)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={netBusy} onclick={() => saveNetworks(true)}>{t('access.sshNetworksConfirmSubmit')}</button>
+		</div>
+	</Dialog>
+{/if}
+
 {#if removing}
 	<Dialog title={t('access.certRemoveTitle')} locked={busy} onclose={() => (removing = false)}>
 		<p>{t('access.certRemoveText')}</p>
@@ -245,6 +306,21 @@
 		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 		gap: 12px 24px;
 		margin: 0;
+	}
+	.networks {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding-top: 14px;
+		border-top: 1px solid var(--border);
+	}
+	.networks h3 {
+		margin: 0;
+		font-size: 0.9375rem;
+	}
+	.networks textarea {
+		max-width: 32rem;
+		resize: vertical;
 	}
 	.wide {
 		grid-column: 1 / -1;

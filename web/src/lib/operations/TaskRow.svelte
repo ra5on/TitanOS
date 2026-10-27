@@ -18,7 +18,8 @@
 		<div class="meta">
 			{t(`tasks.kind.${task.kind}` as MessageKey)} · {t(
 				`tasks.state.${task.state}` as MessageKey,
-			)}{#if task.at}
+			)}{#if task.stepKey}
+				· {t(task.stepKey)}{/if}{#if task.at}
 				· <time datetime={task.at}>{new Date(task.at).toLocaleString()}</time>{/if}
 		</div>
 		{#if task.wait && task.state === 'waiting'}<p>

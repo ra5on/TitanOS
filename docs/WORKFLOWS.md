@@ -326,6 +326,70 @@ ein Abbruch keinen wiederholbaren Plan ohne Veröffentlichungssperren hinterläs
 Fehler behalten den betreffenden Eintrag und bieten einen erneuten Versuch. Browser-Uploads und Rückgängig-Verlauf
 haben weiterhin ihre eigenen, in der Dateimanager-Dokumentation beschriebenen Grenzen.
 
+## Freigabe samt Daten löschen
+
+„Freigabe löschen“ entfernt ab Werk nur die Freigabe; der Ordner bleibt. Im
+selben Bestätigungsdialog lässt sich das Häkchen „Auch die Daten löschen“
+setzen (ab Werk aus). Es gibt kein Eintippen des Namens, nur den Klick auf
+„Freigabe und Daten löschen“. Nur Besitzer und Administratoren.
+
+- **Vorschau** (`GET /api/v1/shares/{name}/delete-data`): beim Setzen des
+  Häkchens zählt titand den Ordner im Hintergrund, höchstens 20 Sekunden bzw.
+  200.000 Einträge, und zeigt Pfad, Anzahl der Dateien/Ordner und logische
+  Größe; ein vorzeitig beendetes Zählen wird als Mindestwert gekennzeichnet.
+  Symbolische Links werden gezählt, nie verfolgt.
+- **Sperren** (Löschen nicht möglich, Dialog nennt jeden Grund): VMs, deren
+  Ordner, Platten, Installations-/VirtIO-ISO oder NAS-Ordner (virtiofs) im
+  Ordner liegen oder ihn enthalten; Docker-Container (laufend oder nicht) mit
+  Bind-/Volume-Einbindungen dort und Datenordner verwalteter Apps; eine
+  eingeschaltete, aber nicht antwortende Docker-Engine (Inventar unbekannt);
+  Backup-Aufträge, die die Freigabe sichern oder lokal in den Ordner schreiben;
+  andere Freigaben im bzw. über dem Ordner; offene SMB-Verbindungen
+  (`smbstatus --shares --json`, nicht prüfbar zählt als Sperre); Einbindungen
+  unterhalb des Ordners; verschachtelte Btrfs-Subvolumes; Snapshots eines
+  Subvolumes; eine bereits laufende Löschung.
+- **Btrfs:** Ist der Freigabeordner selbst ein Subvolume, wird er mit
+  `btrfs subvolume delete --commit-after` gelöscht – aber nur, wenn
+  `btrfs subvolume show` keine Snapshots von ihm nennt. Gibt es welche, lehnt
+  TitanOS ab; die Snapshots werden nie mitgelöscht. Bei einem gewöhnlichen
+  Ordner auf einem Btrfs-Volume mit Volume-Snapshots ist das Löschen erlaubt;
+  der Dialog warnt, dass die Snapshots ihre Kopie behalten und der Platz erst
+  mit ihrem Löschen frei wird.
+- **Pfadschutz:** gelöscht wird ausschließlich `/mnt/<volume>/<freigabe>` auf
+  einem eingebundenen TitanOS-Volume (Kernel-Mount-ID unter `/mnt`), geöffnet
+  ohne Links zu folgen (`O_NOFOLLOW`) und auf derselben Einbindung wie das
+  Volume. Nie die Volume-Wurzel, nie außerhalb der Volumes. Beim Löschen wird
+  jeder Ordner relativ zum geöffneten Elternordner geöffnet; ein Ordner auf
+  einem anderen Gerät (Einbindung, Subvolume) bricht ab.
+- **Ablauf als Hintergrundauftrag** (`POST …/delete-data` mit dem Pfad der
+  Vorschau, 202): erneute Prüfung, vollständiges Zählen, dann Freigabe aus der
+  Konfiguration entfernen, warten bis Samba/NFS die neue Konfiguration
+  übernommen haben, SMB-Verbindungen schließen (`smbcontrol smbd close-share`)
+  und auf das Ende von Verbindungen und NFS-Einbindung warten (höchstens zwei
+  Minuten), alle Sperren erneut prüfen. Erst dann wird der Ordner nach
+  `.titanos/share-delete/<id>` auf demselben Volume verschoben (mit einer
+  kleinen Notiz daneben) und dort gelöscht. Scheitert ein Schritt vorher,
+  bleiben die Daten unverändert („Daten erhalten“), auch wenn die Freigabe
+  schon entfernt ist.
+- Fortschritt (gelöschte Dateien von der gezählten Gesamtzahl) unter
+  Werkzeuge › Aufträge (`shareDeletions` in `GET /api/v1/operations`, die
+  letzten 20 Ergebnisse im RAM). Ende als Meldung `share_data_deleted` bzw.
+  `share_data_delete_failed` und als Eintrag im Aktivitätsprotokoll im Namen
+  des auslösenden Kontos; der Start selbst erscheint dort als
+  „Freigabe mit Daten löschen“. App-Updates und Wartungsaufträge warten auf
+  eine laufende Löschung, ebenso das geplante Herunterfahren.
+- Nach einem Absturz oder Neustart von titand setzt TitanOS eine begonnene
+  Löschung aus `.titanos/share-delete` fort, sobald das Volume eingebunden ist.
+  Ein Absturz vor dem Verschieben lässt den Ordner an seinem Platz.
+
+Grenzen: Ist Docker ausgeschaltet und die Engine nicht da, sind nur die
+Datenordner verwalteter Apps bekannt, nicht die Einbindungen gestoppter
+Container. Hardlinks werden im Umfang mehrfach gezählt. Laufende
+Dateimanager-Aufträge in den Ordner werden nicht gesondert gesperrt; sie
+scheitern. Geprüft mit isolierten Ordnern, nachgebautem `smbstatus`/`btrfs`
+und API-Tests; echtes Samba, NFS und Btrfs-Subvolumes auf einem NAS sind noch
+zu prüfen.
+
 ## Prüfungen
 
 - `make test test-release`, produktiver Build und gezielte Go-Race-Tests.

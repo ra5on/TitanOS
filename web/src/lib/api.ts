@@ -247,6 +247,10 @@ export type Account = {
 	created: string;
 	smbReady: boolean;
 	twoFactor: boolean;
+	/** Locked: no login anywhere; files, shares and rights stay. */
+	disabled: boolean;
+	disabledAt?: string;
+	disabledBy?: string;
 };
 
 export type AccessLevel = 'ro' | 'rw';
@@ -447,6 +451,10 @@ export type VM = {
 	/** RAM of the NAS the VM occupies right now. */
 	memoryBytes: number;
 	since: string;
+	/** Start and shut down at set times; missing means none. */
+	powerSchedule?: import('./vm-schedule.ts').VMPowerSchedule;
+	/** Next scheduled start/stop and what waits, while a schedule is on. */
+	schedule?: import('./vm-schedule.ts').VMScheduleView;
 };
 
 export type VMStatus = {

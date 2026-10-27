@@ -266,6 +266,20 @@ func (p *PowerScheduler) Status() PowerScheduleStatus {
 	return st
 }
 
+// ShutdownSoon reports whether the NAS shuts down by its schedule within the
+// next while, or a due shutdown already waits for running work. Scheduled
+// starts of VMs are left out then: the schedule of the NAS wins.
+func (p *PowerScheduler) ShutdownSoon(within time.Duration) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.postponedSince.IsZero() {
+		return true
+	}
+	now := p.now()
+	at, ok := p.set.Off.next(now)
+	return ok && at.Sub(now) <= within
+}
+
 // maxPostpone is how long a due shutdown waits for running work.
 const maxPostpone = 6 * time.Hour
 

@@ -142,6 +142,8 @@ type Job struct {
 	WindowFrom string   `json:"windowFrom,omitempty"`
 	WindowTo   string   `json:"windowTo,omitempty"`
 	Keep       Keep     `json:"keep"`
+	// Bandwidth limits how fast a run moves data; nil is no limit.
+	Bandwidth *Bandwidth `json:"bandwidth,omitempty"`
 	// Password encrypts the backup. It is made once and never changes.
 	Password string `json:"password,omitempty"`
 }
@@ -157,6 +159,9 @@ type State struct {
 	Percent    float64 `json:"percent"`
 	BytesDone  uint64  `json:"bytesDone"`
 	BytesTotal uint64  `json:"bytesTotal"`
+	// BandwidthLimit is the limit in MiB/s the running job keeps to now;
+	// 0 while it runs without one and when it does not run.
+	BandwidthLimit int `json:"bandwidthLimit,omitempty"`
 	// LastRun is the last attempt, LastOK the last one that worked.
 	LastRun   *time.Time `json:"lastRun"`
 	LastOK    *time.Time `json:"lastOK"`
@@ -360,6 +365,9 @@ func check(job Job, shares []Source, volumes []string) error {
 	if err := checkSchedule(job); err != nil {
 		return err
 	}
+	if err := checkBandwidth(job.Bandwidth); err != nil {
+		return err
+	}
 	for _, count := range []int{job.Keep.Daily, job.Keep.Weekly, job.Keep.Monthly} {
 		if count < 0 || count > 999 {
 			return invalid("how many to keep")
@@ -483,6 +491,7 @@ func defaults(job *Job) {
 	if job.Every == "" {
 		job.Every = "daily"
 	}
+	job.Bandwidth = normalBandwidth(job.Bandwidth)
 }
 
 // reservedNames are fixed routes next to /api/v1/backups/{id}.
@@ -681,7 +690,7 @@ func (m *Manager) state(job Job) State {
 		return state
 	}
 
-	state.Running, state.Phase, state.Percent = false, "", 0
+	state.Running, state.Phase, state.Percent, state.BandwidthLimit = false, "", 0, 0
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing := m.states[job.ID]; existing != nil {
@@ -943,7 +952,7 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		return ErrRunning
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	state.Running, state.Phase, state.Percent, state.BytesDone, state.BytesTotal = true, phase, 0, 0, 0
+	state.Running, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, phase, 0, 0, 0, 0
 	m.cancels[job.ID] = cancel
 	m.mu.Unlock()
 	go func() {
@@ -957,7 +966,7 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		delete(m.cancels, job.ID)
 		m.mu.Unlock()
 		m.update(job, func(s *State) {
-			s.Running, s.Phase, s.Percent = false, "", 0
+			s.Running, s.Phase, s.Percent, s.BandwidthLimit = false, "", 0, 0
 			if phase != "backup" {
 				// A failed check is kept as CheckError, a failed restore as
 				// RestoreError: neither is a failed backup.
@@ -1029,6 +1038,11 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		return err
 	}
 	defer cleanup()
+	// restic cannot change its limit while it runs: the one that holds at
+	// the start holds for the whole run, also past a window boundary.
+	limit := job.Bandwidth.at(m.local(m.now()))
+	base = append(base, resticLimits(limit)...)
+	m.update(job, func(s *State) { s.BandwidthLimit = limit })
 
 	// A repository that is not there yet is made; one that is, is used. This
 	// comes before applications are stopped: a target that cannot be reached

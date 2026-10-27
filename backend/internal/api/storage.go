@@ -26,11 +26,13 @@ var storageErrors = []struct {
 	{storage.ErrDiskUnavailable, http.StatusConflict, "disk_unavailable"},
 	{storage.ErrTestRunning, http.StatusConflict, "disk_test_running"},
 	{storage.ErrNoTest, http.StatusNotFound, "disk_test_not_found"},
+	{storage.ErrNoRestore, http.StatusNotFound, "snapshot_restore_not_found"},
 	{storage.ErrDiskTooSmall, http.StatusBadRequest, "disk_too_small"},
 	{storage.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
+	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
 }
 
 func writeStorageError(w http.ResponseWriter, r *http.Request, action string, err error) {
@@ -82,6 +84,34 @@ func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStorageRescan(w http.ResponseWriter, r *http.Request) {
 	s.opts.Storage.RefreshSmart(r.Context())
 	s.handleStorage(w, r)
+}
+
+// handleSmart lists the SMART state of all disks from the RAM cache. It runs
+// no smartctl and so never wakes a disk.
+func (s *Server) handleSmart(w http.ResponseWriter, r *http.Request) {
+	reports, err := s.opts.Storage.SmartReports(r.Context(), false)
+	if err != nil {
+		writeStorageError(w, r, "smart", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"disks": reports})
+}
+
+// handleSmartRefresh reads SMART of the awake disks again (at most every 30
+// seconds); disks in standby are left asleep.
+func (s *Server) handleSmartRefresh(w http.ResponseWriter, r *http.Request) {
+	s.opts.Storage.RefreshSmartSoon(r.Context())
+	s.handleSmart(w, r)
+}
+
+// handleSmartDisk returns one disk with its full attribute table.
+func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
+	report, err := s.opts.Storage.SmartReport(r.Context(), r.PathValue("disk"))
+	if err != nil {
+		writeStorageError(w, r, "smart disk", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
@@ -213,23 +243,50 @@ func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleDiskTests lists the tests of disks that run or have finished.
+// handleDiskTests lists the tests of disks that run, have finished or wait
+// to be continued after a restart, and the checkpoints that were dropped.
 func (s *Server) handleDiskTests(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"tests": s.opts.Storage.Tests()})
+	writeJSON(w, http.StatusOK, map[string]any{"tests": s.opts.Storage.Tests(), "notices": s.opts.Storage.TestNotices()})
 }
 
 // handleDiskTestStart begins the test of a disk. Overwriting it needs its
-// name once more.
+// name once more. autoResume lets a read test continue by itself after a
+// restart.
 func (s *Server) handleDiskTestStart(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Disk, Mode, Confirm string }
+	var req struct {
+		Disk, Mode, Confirm string
+		AutoResume          bool `json:"autoResume"`
+	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.StartTest(r.Context(), req.Disk, req.Mode, req.Confirm); err != nil {
+	if err := s.opts.Storage.StartTest(r.Context(), req.Disk, req.Mode, req.Confirm, req.AutoResume); err != nil {
 		writeStorageError(w, r, "test disk", err)
 		return
 	}
-	slog.Info("disk test requested", "disk", req.Disk, "mode", req.Mode, "by", currentUser(r).Name, "ip", remoteIP(r))
+	slog.Info("disk test requested", "disk", req.Disk, "mode", req.Mode, "autoResume", req.AutoResume, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleDiskTests(w, r)
+}
+
+// handleDiskTestResume continues a test that a restart stopped. A test
+// that overwrites needs the name of the disk once more.
+func (s *Server) handleDiskTestResume(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Confirm string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	disk := r.PathValue("disk")
+	if err := s.opts.Storage.ResumeTest(r.Context(), disk, req.Confirm); err != nil {
+		writeStorageError(w, r, "continue disk test", err)
+		return
+	}
+	slog.Info("disk test continued", "disk", disk, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleDiskTests(w, r)
+}
+
+// handleDiskTestNotices forgets the notices about dropped checkpoints.
+func (s *Server) handleDiskTestNotices(w http.ResponseWriter, r *http.Request) {
+	s.opts.Storage.DismissTestNotices()
 	s.handleDiskTests(w, r)
 }
 

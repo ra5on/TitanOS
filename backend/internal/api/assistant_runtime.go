@@ -130,7 +130,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			current, ok := s.opts.Users.Get(user.Name)
+			current, ok := s.activeUser(user.Name)
 			if !ok || current.Role != user.Role || !s.assistantAllowed(current) {
 				return assistant.ErrOff
 			}

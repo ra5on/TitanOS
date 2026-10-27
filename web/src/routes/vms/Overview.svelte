@@ -4,7 +4,7 @@
 	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Sparkline from '#lib/components/Sparkline.svelte';
-	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
+	import { formatBytes, formatDateTime, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { SnapshotStatus } from './snapshots.ts';
 	import IsoPicker from './IsoPicker.svelte';
@@ -215,6 +215,24 @@
 			</dd>
 			<dt>{t('vms.autostart')}</dt>
 			<dd>{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</dd>
+			<dt>{t('vms.sched.title')}</dt>
+			<dd>
+				{#if vm.schedule}
+					{t('vms.sched.nextStart')}: {vm.schedule.nextStart
+						? formatDateTime(new Date(vm.schedule.nextStart))
+						: '–'}<br />
+					{t('vms.sched.nextStop')}: {vm.schedule.nextStop
+						? formatDateTime(new Date(vm.schedule.nextStop))
+						: '–'}
+					{#if vm.schedule.waiting}<br /><span class="muted"
+							>{t(
+								`vms.sched.wait.${vm.schedule.waiting}.${vm.schedule.waitReason ?? 'busy'}` as 'vms.sched.wait.start.busy',
+							)}</span
+						>{/if}
+				{:else}
+					{t('vms.sched.off')}
+				{/if}
+			</dd>
 		</dl>
 	</section>
 

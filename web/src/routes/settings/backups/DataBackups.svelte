@@ -12,6 +12,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { bandwidthForm, bandwidthParts, bandwidthPayload, maxBandwidth, type Bandwidth, type BandwidthForm } from '#lib/backup-bandwidth.ts';
 	import FolderTree from './FolderTree.svelte';
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
@@ -39,8 +40,8 @@
 		username?: string;
 		password?: string;
 	};
-	type Job = { applications?:Application[];allowStop?:boolean; id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number } };
-	type State = { statusError?: string; probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; restoreError?: string; lastCheck?: string; checkError?: string };
+	type Job = { applications?:Application[];allowStop?:boolean; id: string; sources: string[]; folders?: Record<string, string[]>; skip?: string[]; patterns?: string[]; extras?: string[]; destination: Destination; enabled: boolean; every: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval?: number; weekday: number; weekdays?: number[]; monthDay?: number; time: string; times?: string[]; windowFrom?: string; windowTo?: string; keep: { daily: number; weekly: number; monthly: number }; bandwidth?: Bandwidth };
+	type State = { statusError?: string; probe?:{at:string;snapshot:string;files:number;bytes:number;truncated:boolean;error:string}; running: boolean; phase: string; percent: number; bytesDone: number; bytesTotal: number; bandwidthLimit?: number; lastRun: string | null; lastOK: string | null; lastError: string; warning: string; bytes: number; restoredTo: string; restoreError?: string; lastCheck?: string; checkError?: string };
 	type View = { stateKnown?: boolean; job: Job; secretSet: Record<string, boolean>; state: State; next: string | null };
 	type Overview = { smbTargets: SmbTarget[]; jobs: View[]; shares: { name: string; volume: string }[]; volumes: string[] | null };
 	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
@@ -155,6 +156,7 @@
 	/** Per share: all of it, or with folders left out, or only some folders. */
 	let modes = $state<Record<string, Mode>>({});
 	let patterns = $state('');
+	let bandwidth = $state<BandwidthForm>(bandwidthForm());
 
 	function loadSelection(job: Job) {
 		modes = {};
@@ -162,6 +164,7 @@
 			modes[name] = job.folders?.[name]?.length ? 'only' : job.skip?.some((skip) => skip.startsWith(`${name}/`)) ? 'all' : 'whole';
 		}
 		patterns = (job.patterns ?? []).join('\n');
+		bandwidth = bandwidthForm(job.bandwidth);
 	}
 
 	function setMode(name: string, mode: Mode) {
@@ -280,7 +283,7 @@
 		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
 		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
 		const weekdays = [...(draft.weekdays ?? [])].sort();
-		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
+		const job = { ...draft, folders, skip, patterns: patterns.split('\n').map((line) => line.trim()).filter(Boolean), extras: draft.extras ?? [], id: draft.id.trim(), interval: Number(draft.interval) || 0, monthDay: Number(draft.monthDay) || 0, times, time: times[0] ?? draft.time, weekdays, weekday: weekdays[0] ?? 0, windowFrom: draft.windowFrom || '', windowTo: draft.windowFrom ? draft.windowTo || '' : '', destination: destination(draft.destination), bandwidth: bandwidthPayload(bandwidth), keep: { daily: Number(draft.keep.daily) || 0, weekly: Number(draft.keep.weekly) || 0, monthly: Number(draft.keep.monthly) || 0 } };
 		try {
 			apply(isNew ? await api.post<Overview>('/backups', job) : await api.put<Overview>(`/backups/${job.id}`, job));
 			feedback = t('ui.saved');
@@ -440,6 +443,13 @@
 		}
 		return job.windowFrom ? `${text} · ${t('backup.whenWindow', { from: job.windowFrom, to: job.windowTo ?? '' })}` : text;
 	}
+
+	const rate = (mib: number) => (mib > 0 ? t('backup.bandwidthRate', { value: mib }) : t('backup.bandwidthNone'));
+	function bandwidthText(b?: Bandwidth): string {
+		const parts = bandwidthParts(b);
+		if (!parts) return t('backup.bandwidthNone');
+		return parts.window ? `${rate(parts.limit)} · ${t('backup.bandwidthWindowText', { from: parts.window.from, to: parts.window.to, limit: rate(parts.window.limit) })}` : rate(parts.limit);
+	}
 </script>
 
 {#if !restoreOnly}<PageHead title={t('safeguard.data')} parent={{ href: '/settings/backups', label: t('safeguard.title') }}>
@@ -476,7 +486,7 @@
 			</div>
 			{#if state.running}
 				<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(state.percent)} aria-label={t(`backup.phase.${state.phase}` as 'backup.phase.backup')}><span style:width="{state.percent}%"></span></div>
-				<p class="muted mono">{#if state.bytesTotal > 0}{state.percent.toFixed(0)} %{' · '}{formatBytes(state.bytesDone)} / {formatBytes(state.bytesTotal)}{:else}{formatBytes(state.bytesDone)}{/if}</p>
+				<p class="muted mono">{#if state.bytesTotal > 0}{state.percent.toFixed(0)} %{' · '}{formatBytes(state.bytesDone)} / {formatBytes(state.bytesTotal)}{:else}{formatBytes(state.bytesDone)}{/if}{#if job.bandwidth}{' · '}{(state.bandwidthLimit ?? 0) > 0 ? t('backup.bandwidthActive', { value: state.bandwidthLimit ?? 0 }) : t('backup.bandwidthActiveNone')}{/if}</p>
 			{/if}
 			{#if view.stateKnown === false || state.statusError}<p class="notice-warn">{t('coverage.stateUnknown')}</p>{/if}
 			<dl>
@@ -485,6 +495,7 @@
 				{:else if job.enabled}<div><dt>{t('backup.next')}</dt><dd class="muted">{t('backup.nextUnknown')}</dd></div>{/if}
 				<div><dt>{t('safeguard.lastRun')}</dt><dd>{state.lastRun ? formatDateTime(new Date(state.lastRun)) : '–'}</dd></div>
 				<div><dt>{t('backup.lastOK')}</dt><dd>{state.lastOK ? formatDateTime(new Date(state.lastOK)) : '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}</dd></div>
+				{#if job.bandwidth}<div><dt>{t('backup.bandwidth')}</dt><dd>{bandwidthText(job.bandwidth)}</dd></div>{/if}
 				<div><dt>{t('backup.keeps')}</dt><dd>{plainCopy(job.destination.type) ? t('backup.copyRetain') : job.keep.daily + job.keep.weekly + job.keep.monthly > 0 ? t('backup.keepsText', { daily: job.keep.daily, weekly: job.keep.weekly, monthly: job.keep.monthly }) : t('backup.keepsAll')}</dd></div>
 			</dl>
 			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div class="notice-error">{t('backup.lastError')}<pre>{state.lastError}</pre>{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askBackup', { job: job.id }), [{ name: `${job.id}-error.txt`, kind: 'text', text: state.lastError }])}><Icon name="chat" size={14} />{t('assistant.ask')}</button>{/if}</div>{/if}
@@ -692,6 +703,24 @@
 					<p class="muted">{t('backup.windowHint')}</p>
 				{/if}
 				<p class="muted">{t('backup.catchUp')}</p>
+			{/if}
+		</fieldset>
+		<fieldset>
+			<legend>{t('backup.bandwidth')}</legend>
+			<label class="check"><input type="checkbox" bind:checked={bandwidth.on} /><span>{t('backup.bandwidthLimit')}</span></label>
+			{#if bandwidth.on}
+				<div class="row">
+					<label class="tiny"><span>{t('backup.bandwidthMax')}</span><input class="field mono" type="number" min="0" max={maxBandwidth} step="1" bind:value={bandwidth.limit} /></label>
+				</div>
+				<label class="check"><input type="checkbox" bind:checked={bandwidth.window} /><span>{t('backup.bandwidthWindow')}</span></label>
+				{#if bandwidth.window}
+					<div class="row">
+						<label class="tiny"><span>{t('backup.windowFrom')}</span><input class="field mono" type="time" bind:value={bandwidth.windowFrom} required /></label>
+						<label class="tiny"><span>{t('backup.windowTo')}</span><input class="field mono" type="time" bind:value={bandwidth.windowTo} required /></label>
+						<label class="tiny"><span>{t('backup.bandwidthWindowLimit')}</span><input class="field mono" type="number" min="0" max={maxBandwidth} step="1" bind:value={bandwidth.windowLimit} /></label>
+					</div>
+				{/if}
+				<p class="muted">{t(plainCopy(draft.destination.type) ? 'backup.bandwidthHintCopy' : 'backup.bandwidthHintRestic')}</p>
 			{/if}
 		</fieldset>
 		{#if !plainCopy(draft.destination.type)}<fieldset>

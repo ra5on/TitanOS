@@ -1,5 +1,8 @@
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { Operations } from '#lib/operations.ts';
+import { currentStep, downloadPercent, pluginStepKey } from '#lib/plugin-progress.ts';
+import { folderRestoreProgress } from '#lib/snapshot-restore.ts';
+import { deletionPercent } from '#lib/share-delete.ts';
 
 export type TaskState =
 	| 'running'
@@ -22,6 +25,8 @@ export type TaskKind =
 	| 'automation'
 	| 'upload'
 	| 'recovery'
+	| 'plugin'
+	| 'restore'
 	| 'system';
 export type TaskAction = {
 	label: 'pause' | 'resume' | 'stop' | 'retry';
@@ -40,6 +45,8 @@ export type TaskItem = {
 	progress?: number;
 	actions?: TaskAction[];
 	wait?: string;
+	/** The running or failed step of a stepped operation. */
+	stepKey?: MessageKey;
 };
 const path = encodeURIComponent;
 const percent = (done: number, total: number) =>
@@ -74,6 +81,17 @@ export function taskItems(data: Operations): TaskItem[] {
 				: undefined,
 		});
 	}
+	for (const job of data.shareDeletions ?? [])
+		result.push({
+			id: `share-delete:${job.id}`,
+			name: job.path,
+			kind: 'files',
+			state: job.phase === 'done' ? 'done' : job.phase === 'failed' ? 'failed' : 'running',
+			href: '/shares',
+			detail: job.error,
+			at: job.finished ?? job.started,
+			progress: deletionPercent(job),
+		});
 	for (const job of data.transfers ?? []) {
 		const state = job.blocked
 			? 'blocked'
@@ -236,10 +254,41 @@ export function taskItems(data: Operations): TaskItem[] {
 					? 'done'
 					: job.result === 'cancelled'
 						? 'cancelled'
-						: 'failed',
+						: job.result === 'interrupted'
+							? 'paused'
+							: 'failed',
 			detail: job.result || job.phase,
 			progress: job.percent,
 			href: '/tools',
+		});
+	for (const operation of data.plugins ?? []) {
+		const step = currentStep(operation);
+		result.push({
+			id: `plugin:${operation.id}`,
+			name: operation.title || operation.plugin,
+			kind: 'plugin',
+			state: operation.state,
+			href: '/plugins',
+			detail: operation.state === 'failed' ? step?.error || operation.error : undefined,
+			at: operation.finished || operation.started,
+			progress: downloadPercent(operation),
+			stepKey: step ? pluginStepKey(step.id) : undefined,
+		});
+	}
+	for (const job of data.snapshotRestores ?? [])
+		result.push({
+			id: `snapshot-restore:${job.id}`,
+			name: `${job.volume}/${job.path}`,
+			kind: 'restore',
+			state: job.state,
+			detail: job.error || (job.state === 'done' ? `${job.volume}/${job.target}` : undefined),
+			at: job.finished ?? job.started,
+			progress: job.state === 'running' ? folderRestoreProgress(job) : undefined,
+			href: '/storage/manage?mode=snapshots',
+			actions:
+				job.state === 'running'
+					? [{ label: 'stop', path: `/storage/snapshot-restores/${path(job.id)}/cancel`, body: {} }]
+					: [],
 		});
 	if (data.growth?.pending)
 		result.push({

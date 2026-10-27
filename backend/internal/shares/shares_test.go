@@ -18,6 +18,10 @@ type fakeRunner struct {
 	commands []string
 	// passdb is what `pdbedit --list` reports.
 	passdb string
+	// smbstatus is what `smbstatus --processes --json` reports.
+	smbstatus string
+	// fail makes commands starting with it fail.
+	fail string
 }
 
 func (r *fakeRunner) Run(_ context.Context, _ string, name string, args ...string) (string, error) {
@@ -27,6 +31,10 @@ func (r *fakeRunner) Run(_ context.Context, _ string, name string, args ...strin
 		return "", errors.New("exit status 2") // no Linux user exists yet
 	case name == "pdbedit" && slices.Contains(args, "--list"):
 		return r.passdb, nil
+	case name == "smbstatus":
+		return r.smbstatus, nil
+	case r.fail != "" && strings.HasPrefix(command, r.fail):
+		return "", errors.New("exit status 1")
 	}
 	r.commands = append(r.commands, command)
 	return "", nil
@@ -333,5 +341,60 @@ func TestSweepRecycle(t *testing.T) {
 		if _, err := os.Stat(keep); err != nil {
 			t.Errorf("%s was deleted", keep)
 		}
+	}
+}
+
+func TestLockedAccountLosesSMB(t *testing.T) {
+	m, runner := newTestManager(t)
+	m.Create(Share{Name: "fotos", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite, "gast": ReadOnly}}, volumes, users)
+	created := time.Unix(0x65000000, 0)
+	accounts := []auth.User{{Name: "alex", UID: 2000, SMBHash: "AA", Created: created}, {Name: "gast", UID: 2001, SMBHash: "BB", Created: created}}
+	state := State{Users: accounts, Mounted: []string{"data"}}
+	ctx := context.Background()
+	if err := m.Apply(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(runner.commands, "\n")
+	if !strings.Contains(all, "smbpasswd -e gast") || strings.Contains(all, "smbpasswd -d") || strings.Contains(all, "smbstatus") {
+		t.Errorf("before the lock:\n%s", all)
+	}
+
+	runner.commands = nil
+	runner.smbstatus = `{"sessions": {
+		"1": {"username": "gast", "uid": 2001, "server_id": {"pid": "4711"}},
+		"2": {"username": "alex", "uid": 2000, "server_id": {"pid": "4712"}},
+		"3": {"username": "GAST", "server_id": {"pid": 4713}},
+		"4": {"username": "gast", "server_id": {"pid": "1"}}
+	}}`
+	accounts[1].Disabled = true
+	if err := m.Apply(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	all = strings.Join(runner.commands, "\n")
+	for _, want := range []string{"smbpasswd -d gast", "smbpasswd -e alex", "kill -TERM 4711", "kill -TERM 4713"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("missing %q in:\n%s", want, all)
+		}
+	}
+	if strings.Contains(all, "4712") || strings.Contains(all, "kill -TERM 1\n") || strings.HasSuffix(all, "kill -TERM 1") {
+		t.Errorf("another connection was ended:\n%s", all)
+	}
+	// The account and its rights stay in smb.conf, only Samba refuses it.
+	if passwords := renderSMBPasswd(accounts); !strings.Contains(passwords, "gast:2001:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:BB:[DU         ]:") || !strings.Contains(passwords, "alex:2000:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:AA:[U          ]:") {
+		t.Errorf("smbpasswd:\n%s", passwords)
+	}
+	if conf, _ := os.ReadFile(m.sambaConf); !strings.Contains(string(conf), "valid users = alex gast") {
+		t.Errorf("smb.conf:\n%s", conf)
+	}
+
+	// A lock that Samba does not take fails the round, which is tried again.
+	runner.commands, runner.fail = nil, "smbpasswd -d"
+	accounts[0].Disabled = true
+	if err := m.Apply(ctx, state); err == nil {
+		t.Error("a failed lock was not reported")
+	}
+	runner.fail = ""
+	if err := m.Apply(ctx, state); err != nil || !strings.Contains(strings.Join(runner.commands, "\n"), "smbpasswd -d alex") {
+		t.Errorf("retry: %v\n%s", err, strings.Join(runner.commands, "\n"))
 	}
 }

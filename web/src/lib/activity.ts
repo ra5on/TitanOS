@@ -10,7 +10,7 @@ export type ActivityStatus = {
 export type ActivityEntry = {
 	at: string;
 	user: string;
-	via: 'web' | 'token' | 'agent' | 'system';
+	via: 'web' | 'token' | 'agent' | 'system' | 'ssh';
 	ip?: string;
 	action: string;
 	target?: string;
@@ -30,6 +30,9 @@ const named: Record<string, string> = {
 	logout: 'logout',
 	login_failed: 'loginFailed',
 	login_blocked: 'loginBlocked',
+	ssh_login: 'sshLogin',
+	ssh_login_blocked: 'sshLoginBlocked',
+	login_disabled: 'loginDisabled',
 	setup: 'setup',
 	'POST /api/v1/files/delete': 'fileDelete',
 	'POST /api/v1/files/rename': 'fileRename',
@@ -46,12 +49,18 @@ const named: Record<string, string> = {
 	'POST /api/v1/users': 'userCreate',
 	'PUT /api/v1/users/{name}': 'userChange',
 	'DELETE /api/v1/users/{name}': 'userDelete',
+	'POST /api/v1/users/{name}/lock': 'userLock',
+	'POST /api/v1/users/{name}/unlock': 'userUnlock',
 	'POST /api/v1/users/{name}/password': 'userPassword',
 	'POST /api/v1/shares': 'shareCreate',
 	'PUT /api/v1/shares/{name}': 'shareChange',
 	'DELETE /api/v1/shares/{name}': 'shareDelete',
+	'POST /api/v1/shares/{name}/delete-data': 'shareDeleteData',
+	share_data_deleted: 'shareDataDeleted',
+	share_data_delete_failed: 'shareDataDeleteFailed',
 	'POST /api/v1/storage/volumes': 'volumeCreate',
 	'DELETE /api/v1/storage/volumes/{name}': 'volumeDelete',
+	'POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore': 'snapshotFolderRestore',
 	'GET /api/v1/terminal/shell': 'consoleShell',
 	'GET /api/v1/docker/containers/{id}/console': 'consoleContainer',
 	'GET /api/v1/vms/{name}/serial': 'consoleSerial',
@@ -67,6 +76,9 @@ const named: Record<string, string> = {
 	'POST /api/v1/account/tokens': 'tokenCreate',
 	'DELETE /api/v1/account/tokens/{id}': 'tokenDelete',
 	'PUT /api/v1/activity': 'activitySettings',
+	vm_schedule_start: 'vmScheduleStart',
+	vm_schedule_stop: 'vmScheduleStop',
+	vm_schedule_poweroff: 'vmSchedulePoweroff',
 };
 
 const areas: Record<string, string> = {

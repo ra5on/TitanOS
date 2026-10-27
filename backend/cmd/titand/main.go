@@ -504,6 +504,14 @@ func run(opts options) error {
 	notifier.SetHomeAssistant(home)
 	go home.Run(ctx)
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
+	volumes.OnSnapshotRestoreDone = func(job storage.SnapshotFolderJob) {
+		switch job.State {
+		case storage.RestoreDone:
+			notifier.Notify(notify.Info, "snapshot_restore_done", job.Volume+"/"+job.Target)
+		case storage.RestoreFailed:
+			notifier.Notify(notify.Error, "snapshot_restore_failed", job.Volume+"/"+job.Path)
+		}
+	}
 	volumes.OnTestDone = func(test storage.DiskTest) {
 		disk := test.Disk
 		if test.Serial != "" {
@@ -515,6 +523,14 @@ func run(opts options) error {
 		case storage.TestFailed:
 			notifier.Notify(notify.Error, "disk_test_failed", disk)
 		}
+	}
+	// A test that a restart stopped and that waits to be continued.
+	volumes.OnTestInterrupted = func(test storage.DiskTest) {
+		disk := test.Disk
+		if test.Serial != "" {
+			disk += " (" + test.Model + ", " + test.Serial + ")"
+		}
+		notifier.Notify(notify.Warning, "disk_test_waiting", disk)
 	}
 
 	// Copies of /config on a volume: the stick is the only place where
@@ -738,6 +754,9 @@ func run(opts options) error {
 	if err := schedule.Load(); err != nil {
 		slog.Warn("power schedule unavailable", "err", err)
 	}
+	// A VM is not started on its schedule shortly before the NAS shuts down.
+	machines.PowerOffSoon = func() bool { return schedule.ShutdownSoon(15 * time.Minute) }
+	machines.Notify = notifier.Notify
 	monitor := system.NewMonitor(ctx)
 	memoryPolicy := system.NewMemoryPolicy(store, system.ReadMemory)
 	memoryPolicy.Disabled = opts.dev
@@ -782,13 +801,24 @@ func run(opts options) error {
 		audit.Mounted = volumes.Mounted
 		go audit.Run(ctx)
 	}
+	// SSH logins with the key they came in with, from the journal of sshd.
+	go access.FollowLogins(ctx, users.List, func(login sshd.Login) {
+		action := "ssh_login"
+		if login.Blocked {
+			action = "ssh_login_blocked"
+		}
+		audit.Record(activity.Entry{At: login.At, User: login.User, Via: activity.ViaSSH, IP: login.IP, Action: action, Target: login.Target(), OK: !login.Blocked})
+	})
+	machines.Activity = func(action, target string, ok bool) {
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
+	}
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
 	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -833,7 +863,7 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
 	}
 	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
@@ -844,6 +874,8 @@ func run(opts options) error {
 			slog.Warn("logins of before not taken over", "err", err)
 		}
 	}
+	diagnostics := diagnose.NewManager(store, version.Version)
+	diagnostics.SMART = func(ctx context.Context) any { return volumes.SmartDumps(ctx) }
 	handler := api.New(api.Options{
 		Media:              mediaImports,
 		UI:                 webui.FS(),
@@ -872,7 +904,7 @@ func run(opts options) error {
 		ConfigBackup:       stickBackup,
 		USB:                drives,
 		BackupTarget:       backupTarget,
-		Diagnose:           diagnose.NewManager(store, version.Version),
+		Diagnose:           diagnostics,
 		SSH:                access,
 		Update:             updates,
 		Backup:             backups,

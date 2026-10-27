@@ -154,6 +154,10 @@ type VM struct {
 	PCI     []string `json:"pci"`
 	AutoGPU bool     `json:"autoGPU"`
 	USB     []string `json:"usb"`
+	// PowerSchedule starts and shuts the VM down at set times; left out of
+	// the file while unused. Older versions of titand ignore it (and drop
+	// it when they save the VM).
+	PowerSchedule PowerSchedule `json:"powerSchedule,omitzero"`
 }
 
 // Job is the preparation of a VM's disks, which can take a while.
@@ -177,6 +181,8 @@ type Status struct {
 	Since       time.Time `json:"since"`
 	// Job is set while disks are copied, or if that failed.
 	Job *Job `json:"job"`
+	// Schedule says when the power schedule starts and stops the VM next.
+	Schedule *PowerView `json:"schedule,omitempty"`
 }
 
 type sample struct {
@@ -198,6 +204,13 @@ type Manager struct {
 	BeforeStart   func(context.Context, string, []string, []string, bool) (func(bool), error)
 	AfterPoll     func(context.Context, map[string]bool) error
 	Timezone      func() string
+	// Notify reports scheduled starts and stops that failed or were left out.
+	Notify func(severity, kind, subject string)
+	// Activity records a scheduled start or stop in the activity log.
+	Activity func(action, target string, ok bool)
+	// PowerOffSoon says the NAS shuts down by its own schedule shortly or
+	// waits to; a scheduled start is then left out.
+	PowerOffSoon func() bool
 
 	store  *config.Store
 	runner run.Runner
@@ -253,6 +266,21 @@ type Manager struct {
 	// (an app update): a VM someone shut down stays down until the NAS
 	// itself starts again.
 	autostartFile string
+
+	// The power schedules: what was carried out (also in powerFile, so that
+	// a restart of titand does nothing twice) and what is due.
+	powerMu      sync.Mutex
+	powerZone    *time.Location
+	powerHandled map[string]time.Time
+	powerPending map[string]*powerPending
+	powerBoot    bool
+	powerFile    string
+	powerWork    sync.WaitGroup
+	// powerUnit is a second of the stop timeout, powerPoll how often a
+	// shutting down VM is looked at. Tests make both short.
+	powerUnit, powerPoll time.Duration
+	// now is the clock the next scheduled times are shown from; tests set it.
+	now func() time.Time
 }
 
 // NewManager returns a manager working on the real system. gid is the
@@ -262,6 +290,7 @@ func NewManager(store *config.Store, gid int) *Manager {
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
 		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
 		snapshotJobs: map[string]*Job{}, autostartFile: "/run/titanos/vms-autostarted",
+		powerFile: "/run/titanos/vm-schedule.json", powerUnit: time.Second, powerPoll: 2 * time.Second,
 		FreeDisks: func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
 	}
 }
@@ -412,6 +441,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			m.Load()
 		} else if !m.Disabled {
 			m.runSnapshotSchedules(ctx, mounted(), time.Now())
+			m.runPowerSchedules(ctx, mounted(), time.Now())
 			m.autostart(ctx, mounted())
 			m.sample()
 			if m.AfterPoll != nil {
@@ -526,11 +556,12 @@ func bootTime(procDir string) time.Time {
 
 // List returns all VMs with their state.
 func (m *Manager) List(mounted []string) []Status {
+	loc, now := m.zone(), m.clock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	list := make([]Status, 0, len(m.vms))
 	for name, vm := range m.vms {
-		status := Status{VM: vm, State: "stopped", Available: m.available(vm, mounted)}
+		status := Status{VM: vm, State: "stopped", Available: m.available(vm, mounted), Schedule: m.powerView(vm, loc, now)}
 		if job := m.jobs[name]; job != nil {
 			copied := *job
 			status.Job = &copied
@@ -609,6 +640,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 	}
 	if !slices.Contains([]string{"linux", "windows", "other"}, vm.Template) {
 		return fmt.Errorf("%w: unknown template", ErrInvalid)
+	}
+	if err := checkPowerSchedule(&vm.PowerSchedule); err != nil {
+		return err
 	}
 	if err := validateFirmware(*vm); err != nil {
 		return err
@@ -875,6 +909,9 @@ func (m *Manager) Create(ctx context.Context, vm VM, mounted []string) error {
 		m.jobs[vm.Name] = &Job{State: "running"}
 	}
 	m.mu.Unlock()
+	if vm.PowerSchedule.Enabled {
+		m.resetPower(vm.Name, time.Now())
+	}
 	if copies {
 		go m.copyDisks(context.WithoutCancel(ctx), vm)
 	}
@@ -897,6 +934,8 @@ type Change struct {
 	AutoGPU     bool     `json:"autoGPU"`
 	USB         []string `json:"usb"`
 	Network     string   `json:"network"`
+	// PowerSchedule replaces the schedule; without it the schedule stays.
+	PowerSchedule *PowerSchedule `json:"powerSchedule"`
 }
 
 // Update changes a VM. Everything but the display name, description and autostart
@@ -937,12 +976,16 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	changed.CPUPin, changed.Exclusive, changed.Folders, changed.PCI, changed.USB = change.CPUPin, change.Exclusive, change.Folders, change.PCI, change.USB
 	changed.Network = change.Network
 	changed.AutoGPU = change.AutoGPU
+	if change.PowerSchedule != nil {
+		changed.PowerSchedule = *change.PowerSchedule
+	}
 	if err := m.prepare(ctx, &changed, mounted); err != nil {
 		return err
 	}
 	before, after := vm, changed
 	before.DisplayName, after.DisplayName = "", ""
 	before.Description, before.Autostart, after.Description, after.Autostart = "", false, "", false
+	before.PowerSchedule, after.PowerSchedule = PowerSchedule{}, PowerSchedule{}
 	if !reflect.DeepEqual(normal(before), normal(after)) && m.pid(name) != 0 {
 		return ErrRunning
 	}
@@ -952,6 +995,9 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 	m.mu.Lock()
 	m.vms[name] = changed
 	m.mu.Unlock()
+	if !reflect.DeepEqual(vm.PowerSchedule, changed.PowerSchedule) {
+		m.resetPower(name, time.Now())
+	}
 	return nil
 }
 
@@ -1243,6 +1289,7 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 	delete(m.autostarted, name)
 	delete(m.jobs, name)
 	m.mu.Unlock()
+	m.resetPower(name, time.Now())
 	os.Remove(filepath.Join(m.runDir, name+".xml"))
 
 	if deleteDisks {

@@ -110,6 +110,7 @@ export type BackupView = {
 };
 export type Operations = {
 	media?: import('#lib/media.ts').MediaJob[];
+	shareDeletions?: import('#lib/share-delete.ts').ShareDeletion[];
 	storageActive?: boolean;
 	clones?: {
 		id: string;
@@ -144,6 +145,8 @@ export type Operations = {
 	vms?: VM[];
 	growth?: GrowthStatus;
 	diskTests?: { disk: string; phase: string; result: string; percent: number }[];
+	plugins?: import('#lib/plugin-progress.ts').PluginProgress[];
+	snapshotRestores?: import('#lib/snapshot-restore.ts').FolderRestoreJob[];
 };
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 export const operationError = (error: unknown, translate?: (key: MessageKey) => string) =>

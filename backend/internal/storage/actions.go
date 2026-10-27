@@ -419,6 +419,9 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 	if confirm != name {
 		return ErrNotConfirmed
 	}
+	if m.restoreUses(name, "") {
+		return fmt.Errorf("%w: a snapshot folder restore is running", ErrBusy)
+	}
 
 	if volume.Filesystem == "btrfs" {
 		return m.deleteBtrfs(ctx, volume)

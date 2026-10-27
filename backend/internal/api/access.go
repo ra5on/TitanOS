@@ -12,8 +12,68 @@ import (
 
 // SSH access and the certificate of the web UI.
 
+// sshView is the status plus what the page needs to choose networks.
+type sshView struct {
+	sshd.Status
+	// HomeNetworks are the networks the NAS is in right now.
+	HomeNetworks []string `json:"homeNetworks"`
+	Tailscale    []string `json:"tailscaleNetworks"`
+	NetBird      []string `json:"netbirdNetworks"`
+	// ClientAddress is the address this request came from, so the page
+	// can warn before the admin shuts themselves out.
+	ClientAddress string `json:"clientAddress"`
+}
+
+func (s *Server) sshView(r *http.Request, status sshd.Status) sshView {
+	home := []string{}
+	if !s.opts.SSH.Disabled {
+		home = sshd.HomeNetworks()
+	}
+	return sshView{Status: status, HomeNetworks: home, Tailscale: sshd.TailscaleNetworks, NetBird: sshd.NetBirdNetworks, ClientAddress: remoteIP(r)}
+}
+
 func (s *Server) handleSSH(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.SSH.Status())
+	writeJSON(w, http.StatusOK, s.sshView(r, s.opts.SSH.Status()))
+}
+
+// handleSSHNetworks sets the networks SSH logins may come from. A list
+// that leaves out the address of the admin saving it needs confirm: the
+// admin would most likely shut out their own next SSH login.
+func (s *Server) handleSSHNetworks(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Networks []string `json:"networks"`
+		Confirm  bool     `json:"confirm"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	networks, err := sshd.NormalizeNetworks(req.Networks)
+	if err != nil {
+		if errors.Is(err, sshd.ErrTooManyNetworks) {
+			writeError(w, http.StatusBadRequest, "ssh_too_many_networks", err.Error())
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_ssh_network", err.Error())
+		}
+		return
+	}
+	client := remoteIP(r)
+	if !req.Confirm && !sshd.Covers(networks, client) {
+		writeError(w, http.StatusConflict, "ssh_network_excludes_you", "the list does not contain the address you are connected from ("+client+")")
+		return
+	}
+	if _, err := s.opts.SSH.SetNetworks(networks); err != nil {
+		switch {
+		case errors.Is(err, sshd.ErrDisabled):
+			writeError(w, http.StatusConflict, "read_only", err.Error())
+		case errors.Is(err, sshd.ErrNotLoaded):
+			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+		}
+		return
+	}
+	slog.Info("SSH networks changed", "networks", networks, "by", currentUser(r).Name, "ip", client)
+	writeJSON(w, http.StatusOK, s.sshView(r, s.opts.SSH.Status()))
 }
 
 func (s *Server) handleSSHChange(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +96,7 @@ func (s *Server) handleSSHChange(w http.ResponseWriter, r *http.Request) {
 	// What the settings say; the service follows within a moment.
 	status := s.opts.SSH.Status()
 	status.Enabled = req.Enabled
-	writeJSON(w, http.StatusOK, status)
+	writeJSON(w, http.StatusOK, s.sshView(r, status))
 }
 
 func (s *Server) accountKeys(w http.ResponseWriter, user auth.User) {

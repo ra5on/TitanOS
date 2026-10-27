@@ -157,6 +157,9 @@ func New(opts Options) *Server {
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
+	if s.opts.Shares != nil {
+		s.opts.Shares.OnPurgeResumed(s.sharePurgeDone)
+	}
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
 	}
@@ -209,6 +212,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/quotas", s.requireAdmin(s.handleSetShareQuotas))
 	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
+	mux.HandleFunc("GET /api/v1/storage/smart", s.requireAdmin(s.handleSmart))
+	mux.HandleFunc("POST /api/v1/storage/smart/refresh", s.requireAdmin(s.handleSmartRefresh))
+	mux.HandleFunc("GET /api/v1/storage/smart/{disk}", s.requireAdmin(s.handleSmartDisk))
 	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireHeavyAdmin(s.handleCreateVolume))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireHeavyAdmin(s.handleAddVolumeDisk))
@@ -219,11 +225,15 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage/tests", s.requireAdmin(s.handleDiskTests))
 	mux.HandleFunc("POST /api/v1/storage/tests", s.requireHeavyAdmin(s.handleDiskTestStart))
 	mux.HandleFunc("DELETE /api/v1/storage/tests/{disk}", s.requireAdmin(s.handleDiskTestStop))
+	mux.HandleFunc("POST /api/v1/storage/tests/{disk}/resume", s.requireHeavyAdmin(s.handleDiskTestResume))
+	mux.HandleFunc("DELETE /api/v1/storage/test-notices", s.requireAdmin(s.handleDiskTestNotices))
 
 	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
 	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
 	mux.HandleFunc("PUT /api/v1/users/{name}", s.requireAdmin(s.handleUpdateUser))
 	mux.HandleFunc("DELETE /api/v1/users/{name}", s.requireAdmin(s.handleDeleteUser))
+	mux.HandleFunc("POST /api/v1/users/{name}/lock", s.requireAdmin(s.handleLockUser(true)))
+	mux.HandleFunc("POST /api/v1/users/{name}/unlock", s.requireAdmin(s.handleLockUser(false)))
 	// Everyone may change their own password.
 	mux.HandleFunc("POST /api/v1/users/{name}/password", s.requireUser(s.handleSetPassword))
 
@@ -250,6 +260,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
 	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
 	mux.HandleFunc("DELETE /api/v1/shares/{name}", s.requireAdmin(s.handleDeleteShare))
+	mux.HandleFunc("GET /api/v1/shares/{name}/delete-data", s.requireAdmin(s.handleShareDataPreview))
+	mux.HandleFunc("POST /api/v1/shares/{name}/delete-data", s.requireHeavyAdmin(s.handleShareDataDelete))
 
 	// The file manager. Every request names a root the account has access to.
 	mux.HandleFunc("GET /api/v1/files/roots", s.requireUser(s.handleFileRoots))
@@ -422,6 +434,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
 	mux.HandleFunc("GET /api/v1/system/ssh", s.requireAdmin(s.handleSSH))
 	mux.HandleFunc("PUT /api/v1/system/ssh", s.requireAdmin(s.handleSSHChange))
+	mux.HandleFunc("PUT /api/v1/system/ssh/networks", s.requireAdmin(s.handleSSHNetworks))
 	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
 	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
@@ -478,6 +491,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/plugins/netbird/setup-key", s.requireAdmin(s.handleNetbirdSetupKey))
 	mux.HandleFunc("POST /api/v1/plugins/netbird/control/{action}", s.requireAdmin(s.handleNetbirdAction))
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
+	mux.HandleFunc("GET /api/v1/plugins/progress", s.requireAdmin(s.handlePluginProgress))
+	mux.HandleFunc("DELETE /api/v1/plugins/progress/{id}", s.requireAdmin(s.handlePluginProgressForget))
 	mux.HandleFunc("GET /api/v1/plugins/releases", s.requireAdmin(s.handlePluginOldReleases))
 	mux.HandleFunc("POST /api/v1/plugins/cleanup", s.requireAdmin(s.handlePluginCleanup))
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
@@ -591,11 +606,11 @@ func currentUser(r *http.Request) auth.User {
 // authenticate returns the account behind the session cookie.
 func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if name, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return s.opts.Users.Get(name)
+		return s.activeUser(name)
 	}
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
-		return s.opts.Users.Get(name)
+		return s.activeUser(name)
 	}
 	cookie, err := r.Cookie(s.cookieName())
 	if err != nil {
@@ -605,8 +620,20 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if !ok {
 		return auth.User{}, false
 	}
-	// The account may have been removed since the login.
-	return s.opts.Users.Get(session.User)
+	// The account may have been removed or locked since the login.
+	return s.activeUser(session.User)
+}
+
+// activeUser returns an account that exists and is not locked. Everything
+// that acts as an account (sessions, API tokens, the assistant, Home
+// Assistant, consoles) goes through it, so a lock holds on every path even
+// before its sessions are ended.
+func (s *Server) activeUser(name string) (auth.User, bool) {
+	user, ok := s.opts.Users.Get(name)
+	if !ok || user.Disabled {
+		return auth.User{}, false
+	}
+	return user, true
 }
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {

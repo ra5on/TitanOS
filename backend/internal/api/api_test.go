@@ -1150,6 +1150,35 @@ func TestDiagnosticsAreForAdministrators(t *testing.T) {
 	}
 }
 
+func TestSSHNetworks(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("GET", "/api/v1/system/ssh", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"allowedNetworks":[]`) || !strings.Contains(string(body), `"clientAddress":"127.0.0.1"`) || !strings.Contains(string(body), `"tailscaleNetworks":["100.64.0.0/10","fd7a:115c:a1e0::/48"]`) {
+		t.Errorf("status: %d %s", res.StatusCode, body)
+	}
+	for _, tc := range []struct {
+		body   map[string]any
+		status int
+		code   string
+	}{
+		{map[string]any{"networks": []string{"192.168.1.0/33"}}, http.StatusBadRequest, "invalid_ssh_network"},
+		{map[string]any{"networks": []string{"nas.local"}}, http.StatusBadRequest, "invalid_ssh_network"},
+		// The test client comes from 127.0.0.1: a list without it shuts
+		// the admin out unless they confirm.
+		{map[string]any{"networks": []string{"192.168.1.0/24"}}, http.StatusConflict, "ssh_network_excludes_you"},
+		// Confirmed or covering lists get through to the manager, which
+		// changes nothing in development mode.
+		{map[string]any{"networks": []string{"192.168.1.0/24"}, "confirm": true}, http.StatusConflict, "read_only"},
+		{map[string]any{"networks": []string{"127.0.0.0/8"}}, http.StatusConflict, "read_only"},
+		{map[string]any{"networks": []string{}}, http.StatusConflict, "read_only"},
+	} {
+		if res, body := ts.request("PUT", "/api/v1/system/ssh/networks", tc.body); res.StatusCode != tc.status || errorCode(t, body) != tc.code {
+			t.Errorf("%v: %d %s, want %d %s", tc.body, res.StatusCode, body, tc.status, tc.code)
+		}
+	}
+}
+
 func TestSSHKeysAndAccess(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
@@ -1191,7 +1220,7 @@ func TestSSHKeysAndAccess(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/system/ssh"}, {"PUT", "/api/v1/system/ssh"}, {"GET", "/api/v1/system/certificate"}, {"PUT", "/api/v1/system/certificate"}, {"DELETE", "/api/v1/system/certificate"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/system/ssh"}, {"PUT", "/api/v1/system/ssh"}, {"PUT", "/api/v1/system/ssh/networks"}, {"GET", "/api/v1/system/certificate"}, {"PUT", "/api/v1/system/certificate"}, {"DELETE", "/api/v1/system/certificate"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

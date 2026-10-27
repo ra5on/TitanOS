@@ -174,8 +174,29 @@ type Manager struct {
 	openDisk  func(path string, write bool) (blockFile, error)
 	smartPoll time.Duration
 
-	testMu sync.Mutex
-	tests  map[string]*DiskTest
+	// OnTestInterrupted is told about every test that a restart stopped
+	// and that waits to be continued.
+	OnTestInterrupted func(DiskTest)
+	// checkpointEvery and testStateVolumes are replaced in tests.
+	checkpointEvery  time.Duration
+	testStateVolumes func() []string
+
+	testMu      sync.Mutex
+	tests       map[string]*DiskTest
+	testNotices []TestNotice
+	// testSaveMu serializes the checkpoint file (disktest_resume.go):
+	// the volume it lies on, which volumes have one and which were read.
+	testSaveMu       sync.Mutex
+	testStateVolume  string
+	testStateFiles   map[string]bool
+	testStateScanned map[string]bool
+
+	// OnSnapshotRestoreDone is told about every folder restore that ends.
+	OnSnapshotRestoreDone func(SnapshotFolderJob)
+	restoreMu             sync.Mutex
+	restores              []*SnapshotFolderJob
+	// restoreStep is called before each file of a folder restore (tests).
+	restoreStep func(name string)
 
 	mu      sync.RWMutex
 	volumes []VolumeConfig
@@ -188,9 +209,12 @@ type Manager struct {
 	loaded       bool
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
-	settled         bool
-	smart           map[string]*Smart // by disk path
-	smartTime       time.Time
+	settled    bool
+	smart      map[string]*Smart // by disk path
+	smartDisks map[string]*smartEntry
+	smartTime  time.Time
+	// smartRefresh serializes the smartctl rounds.
+	smartRefresh    sync.Mutex
 	diskSleep       DiskSleepSettings
 	diskSleepLoaded bool
 	diskSleepErrors []DiskSleepError
@@ -441,13 +465,26 @@ func readMounts() map[string]bool {
 
 // RefreshSmart reads the health of all disks. It can take seconds per disk,
 // so it runs in the background and on request, never while a page loads.
+// A disk in standby is left asleep and keeps the values read before.
 func (m *Manager) RefreshSmart(ctx context.Context) {
+	m.smartRefresh.Lock()
+	defer m.smartRefresh.Unlock()
+	m.refreshSmart(ctx)
+}
+
+// refreshSmart does the work of RefreshSmart; smartRefresh is held.
+func (m *Manager) refreshSmart(ctx context.Context) {
 	devices, err := m.blockDevices(ctx)
 	if err != nil {
 		slog.Warn("list disks", "err", err)
 		return
 	}
+	m.mu.RLock()
+	before, beforeSmart := m.smartDisks, m.smart
+	m.mu.RUnlock()
+	now := m.now()
 	smart := map[string]*Smart{}
+	entries := map[string]*smartEntry{}
 	for _, device := range devices {
 		if !isDisk(device) {
 			continue
@@ -455,11 +492,26 @@ func (m *Manager) RefreshSmart(ctx context.Context) {
 		// smartctl reports problems of the disk in its exit status; the
 		// JSON is complete either way.
 		output, _ := m.runner.Run(ctx, "", "smartctl", append(smartctlArgs, device.Name)...)
-		smart[device.Name] = parseSmart(output)
+		entry := &smartEntry{checked: now}
+		if smartSleeping(output) {
+			entry.sleeping = true
+			if old := before[device.Name]; old != nil {
+				entry.read, entry.values, entry.raw = old.read, old.values, old.raw
+			}
+			smart[device.Name] = beforeSmart[device.Name]
+		} else {
+			entry.values = parseSmartValues(output)
+			if entry.values != nil {
+				entry.read, entry.raw = now, output
+			}
+			smart[device.Name] = parseSmart(output)
+		}
+		entries[device.Name] = entry
 	}
 	m.mu.Lock()
 	m.smart = smart
-	m.smartTime = time.Now()
+	m.smartDisks = entries
+	m.smartTime = now
 	m.mu.Unlock()
 }
 
@@ -490,6 +542,10 @@ func (m *Manager) Run(ctx context.Context) {
 			m.mu.Lock()
 			m.settled = true
 			m.mu.Unlock()
+		}
+		if m.Settled() {
+			// Disk tests that a restart stopped, from volumes mounted since.
+			m.ResumeSavedTests(ctx)
 		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge
@@ -560,6 +616,12 @@ func (m *Manager) readMounts() map[string]bool {
 		return m.mounts()
 	}
 	return readMounts()
+}
+
+// UseRunner makes the manager run commands through runner. For tests of
+// other packages.
+func (m *Manager) UseRunner(runner Runner) {
+	m.runner = runner
 }
 
 // UseMounts makes the manager see volumes as mounted below root as mounted
