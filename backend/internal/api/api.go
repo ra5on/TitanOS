@@ -226,6 +226,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
 	mux.HandleFunc("PUT /api/v1/users/{name}", s.requireAdmin(s.handleUpdateUser))
 	mux.HandleFunc("DELETE /api/v1/users/{name}", s.requireAdmin(s.handleDeleteUser))
+	mux.HandleFunc("POST /api/v1/users/{name}/lock", s.requireAdmin(s.handleLockUser(true)))
+	mux.HandleFunc("POST /api/v1/users/{name}/unlock", s.requireAdmin(s.handleLockUser(false)))
 	// Everyone may change their own password.
 	mux.HandleFunc("POST /api/v1/users/{name}/password", s.requireUser(s.handleSetPassword))
 
@@ -594,11 +596,11 @@ func currentUser(r *http.Request) auth.User {
 // authenticate returns the account behind the session cookie.
 func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if name, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return s.opts.Users.Get(name)
+		return s.activeUser(name)
 	}
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
-		return s.opts.Users.Get(name)
+		return s.activeUser(name)
 	}
 	cookie, err := r.Cookie(s.cookieName())
 	if err != nil {
@@ -608,8 +610,20 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if !ok {
 		return auth.User{}, false
 	}
-	// The account may have been removed since the login.
-	return s.opts.Users.Get(session.User)
+	// The account may have been removed or locked since the login.
+	return s.activeUser(session.User)
+}
+
+// activeUser returns an account that exists and is not locked. Everything
+// that acts as an account (sessions, API tokens, the assistant, Home
+// Assistant, consoles) goes through it, so a lock holds on every path even
+// before its sessions are ended.
+func (s *Server) activeUser(name string) (auth.User, bool) {
+	user, ok := s.opts.Users.Get(name)
+	if !ok || user.Disabled {
+		return auth.User{}, false
+	}
+	return user, true
 }
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {

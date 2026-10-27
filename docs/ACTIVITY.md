@@ -11,7 +11,11 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
   Administratorfunktion, stehen als fehlgeschlagen im Protokoll.
 - **Anmeldungen:** Anmeldung, Abmeldung, fehlgeschlagene Anmeldung (falsches
   Passwort oder falscher Zwei-Faktor-Code, mit dem eingegebenen Kontonamen) und
-  gesperrte Versuche nach zu vielen Fehlversuchen sowie die Ersteinrichtung.
+  gesperrte Versuche nach zu vielen Fehlversuchen, abgelehnte Anmeldungen
+  gesperrter Konten (`login_disabled`, nur nach richtigem Passwort) sowie die
+  Ersteinrichtung. Sperren und Entsperren eines Kontos stehen als
+  `POST /api/v1/users/{name}/lock` bzw. `…/unlock` mit dem Konto als Ziel im
+  Protokoll (siehe `docs/ACCOUNT-LOCK.md`).
 - **Konsolen und sensible Downloads:** NAS-Konsole, Container-Konsole,
   serielle VM-Konsole, VM-Bildschirm, Download der Konfigurationssicherung und
   das Diagnosepaket.

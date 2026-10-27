@@ -100,7 +100,7 @@ func (s *Server) decidePush(ctx context.Context, token, decision string) error {
 	if !ok {
 		return errPushToken
 	}
-	user, ok := s.opts.Users.Get(t.user)
+	user, ok := s.activeUser(t.user)
 	if !ok || !s.assistantAllowed(user) || !s.opts.Assistant.Settings().PushApproval {
 		return errPushToken
 	}

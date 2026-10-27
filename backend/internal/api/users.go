@@ -18,10 +18,19 @@ type accountResponse struct {
 	SMBReady bool `json:"smbReady"`
 	// TwoFactor says whether the account logs in with a second factor.
 	TwoFactor bool `json:"twoFactor"`
+	// Disabled says the account is locked, since DisabledAt by DisabledBy.
+	Disabled   bool       `json:"disabled"`
+	DisabledAt *time.Time `json:"disabledAt,omitempty"`
+	DisabledBy string     `json:"disabledBy,omitempty"`
 }
 
 func accountOf(user auth.User) accountResponse {
-	return accountResponse{Name: user.Name, Role: user.Role, Created: user.Created, SMBReady: user.SMBHash != "", TwoFactor: user.TwoFactor()}
+	res := accountResponse{Name: user.Name, Role: user.Role, Created: user.Created, SMBReady: user.SMBHash != "", TwoFactor: user.TwoFactor(), Disabled: user.Disabled, DisabledBy: user.DisabledBy}
+	if user.Disabled && !user.DisabledAt.IsZero() {
+		at := user.DisabledAt
+		res.DisabledAt = &at
+	}
+	return res
 }
 
 // mayManage reports whether actor may change target or give out role.
@@ -50,6 +59,8 @@ func writeAccountError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "password_too_long", "the password is too long")
 	case errors.Is(err, auth.ErrLastOwner):
 		writeError(w, http.StatusConflict, "last_owner", "the last owner cannot be removed or demoted")
+	case errors.Is(err, auth.ErrLastActiveOwner):
+		writeError(w, http.StatusConflict, "last_active_owner", "the last owner that is not locked cannot be locked, removed or demoted")
 	default:
 		slog.Error("account change failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the account could not be saved to /config")
@@ -216,4 +227,43 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	s.opts.Shares.Kick()
 	s.opts.SSH.Kick()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleLockUser locks (POST …/lock) or unlocks (POST …/unlock) an account.
+// Nobody locks themselves, owners are only locked by owners, and the last
+// owner that is not locked stays unlocked. Locking ends every session of the
+// account at once; open consoles notice within consoleRecheck, SSH sessions
+// end with the next apply of sshd and SMB connections with that of Samba.
+func (s *Server) handleLockUser(disabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor := currentUser(r)
+		target, ok := s.opts.Users.Get(r.PathValue("name"))
+		if !ok {
+			writeAccountError(w, auth.ErrNotFound)
+			return
+		}
+		if target.Name == actor.Name {
+			writeError(w, http.StatusConflict, "cannot_lock_self", "you cannot lock the account you are logged in with")
+			return
+		}
+		if !mayManage(actor, target.Role) {
+			writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
+			return
+		}
+		user, err := s.opts.Users.SetDisabled(target.Name, disabled, actor.Name)
+		if err != nil {
+			writeAccountError(w, err)
+			return
+		}
+		if disabled {
+			s.sessions.DeleteUser(user.Name, "")
+			slog.Info("account locked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
+		} else {
+			slog.Info("account unlocked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
+		}
+		// Samba and sshd take the account away or give it back.
+		s.opts.Shares.Kick()
+		s.opts.SSH.Kick()
+		writeJSON(w, http.StatusOK, accountOf(user))
+	}
 }

@@ -191,11 +191,12 @@ func (m *Manager) Run(ctx context.Context, users func() []auth.User) {
 }
 
 // eligible returns the accounts that may log in: owners and
-// administrators that have a key.
+// administrators that have a key and are not locked. A locked account is
+// taken out like one that lost its role, which also ends its sessions.
 func eligible(users []auth.User) []auth.User {
 	var list []auth.User
 	for _, user := range users {
-		if user.Role.CanAdminister() && len(user.DescribeSSHKeys()) > 0 {
+		if user.Role.CanAdminister() && !user.Disabled && len(user.DescribeSSHKeys()) > 0 {
 			list = append(list, user)
 		}
 	}

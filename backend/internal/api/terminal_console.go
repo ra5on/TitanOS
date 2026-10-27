@@ -170,7 +170,7 @@ func (s *Server) consoleAllowed(r *http.Request, user auth.User) bool {
 			return false
 		}
 	}
-	current, ok := s.opts.Users.Get(name)
+	current, ok := s.activeUser(name)
 	// The same name may have been given to a new account.
 	return ok && current.Created.Equal(user.Created) && current.Role.CanAdminister()
 }

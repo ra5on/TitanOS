@@ -247,6 +247,10 @@ export type Account = {
 	created: string;
 	smbReady: boolean;
 	twoFactor: boolean;
+	/** Locked: no login anywhere; files, shares and rights stay. */
+	disabled: boolean;
+	disabledAt?: string;
+	disabledBy?: string;
 };
 
 export type AccessLevel = 'ro' | 'rw';
