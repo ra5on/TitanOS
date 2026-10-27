@@ -161,12 +161,17 @@ type State struct {
 	LastRun   *time.Time `json:"lastRun"`
 	LastOK    *time.Time `json:"lastOK"`
 	LastError string     `json:"lastError"`
+	// FailingSince is the first failed attempt after the last backup that
+	// worked; empty while backups work.
+	FailingSince *time.Time `json:"failingSince,omitempty"`
 	// Warning is set when a backup was made but could not read everything.
 	Warning string `json:"warning"`
 	// Bytes is how much data the last backup covered.
 	Bytes uint64 `json:"bytes"`
-	// RestoredTo is the folder of the last restore.
-	RestoredTo string `json:"restoredTo"`
+	// RestoredTo is the folder of the last restore; RestoreError why the
+	// last one failed. A failed restore is not a failed backup.
+	RestoredTo   string `json:"restoredTo"`
+	RestoreError string `json:"restoreError,omitempty"`
 	// LastCheck is when the repository was last checked; CheckError what
 	// restic found then, empty if all was well.
 	LastCheck  *time.Time `json:"lastCheck,omitempty"`
@@ -216,12 +221,24 @@ type Manager struct {
 	OnProbe func(job string, err error)
 	// OnOverdue is told once when a job has gone without a backup that
 	// worked for too long (see overdue); again only after one worked.
-	OnOverdue      func(job string)
+	OnOverdue func(job string)
+	// OnIncomplete is told when a backup was made without some of its
+	// shares or places because they were not there.
+	OnIncomplete   func(job string)
 	ScheduledStart func(string) error
-	overdue        map[string]bool
+	// Timezone names the time zone of the NAS. Go keeps time.Local from the
+	// start; schedules follow a change without a restart of titand.
+	Timezone func() string
+	overdue  map[string]bool
+	// unavailable is since when a job could not run because none of its
+	// shares was there; only in the RAM.
+	unavailable map[string]time.Time
+	zone        *time.Location
 
 	// queue lets one job work at a time.
 	queue sync.Mutex
+	// hostsMu keeps two calls from writing known_hosts at once.
+	hostsMu sync.Mutex
 
 	mu      sync.Mutex
 	loaded  bool
@@ -422,7 +439,7 @@ func (m *Manager) List() []View {
 		shown, set := withoutSecrets(job)
 		state := m.state(job)
 		view := View{StateKnown: state.StatusError == "", Job: shown, SecretSet: set, State: state}
-		if next, ok := job.NextRun(m.now()); ok {
+		if next, ok := job.NextRun(m.local(m.now())); ok {
 			view.Next = &next
 		}
 		views = append(views, view)
@@ -468,11 +485,17 @@ func defaults(job *Job) {
 	}
 }
 
+// reservedNames are fixed routes next to /api/v1/backups/{id}.
+var reservedNames = []string{"smb", "target", "progress", "folders", "ssh-key"}
+
 // Create adds a job and makes the password its backups are encrypted with.
 func (m *Manager) Create(job Job, volumes []string) error {
 	defaults(&job)
 	if err := check(job, m.sources(), volumes); err != nil {
 		return err
+	}
+	if slices.ContainsFunc(reservedNames, func(name string) bool { return strings.EqualFold(name, job.ID) }) {
+		return invalid("name is used by the backup pages")
 	}
 	secret := make([]byte, 24)
 	if _, err := rand.Read(secret); err != nil {
@@ -510,11 +533,14 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 	if (plainCopy(job.Destination.Type)) != (plainCopy(old.Destination.Type)) {
 		return invalid("create a separate job to change the backup format")
 	}
-	if job.Destination.SecretKey == "" {
-		job.Destination.SecretKey = old.Destination.SecretKey
+	// An empty secret keeps the stored one, but only for the same server and
+	// account: restic sends the REST password to whatever address it is given.
+	d, was := &job.Destination, old.Destination
+	if d.SecretKey == "" && d.Type == was.Type && d.Endpoint == was.Endpoint && d.AccessKey == was.AccessKey {
+		d.SecretKey = was.SecretKey
 	}
-	if job.Destination.Password == "" {
-		job.Destination.Password = old.Destination.Password
+	if d.Password == "" && d.Type == was.Type && d.URL == was.URL && d.Username == was.Username {
+		d.Password = was.Password
 	}
 	defaults(&job)
 	if err := check(job, m.sources(), volumes); err != nil {
@@ -557,6 +583,28 @@ func (m *Manager) sources() []Source {
 		return nil
 	}
 	return m.Sources()
+}
+
+// local returns a moment in the time zone of the NAS as it is set now.
+func (m *Manager) local(at time.Time) time.Time {
+	if m.Timezone == nil {
+		return at
+	}
+	name := m.Timezone()
+	m.mu.Lock()
+	zone := m.zone
+	m.mu.Unlock()
+	if zone == nil || zone.String() != name {
+		loaded, err := time.LoadLocation(name)
+		if err != nil {
+			return at
+		}
+		zone = loaded
+		m.mu.Lock()
+		m.zone = zone
+		m.mu.Unlock()
+	}
+	return at.In(zone)
 }
 
 // --- the SSH key of this NAS ------------------------------------------------
@@ -668,6 +716,40 @@ func (m *Manager) update(job Job, change func(*State)) {
 	}
 }
 
+// rememberHosts adds the lines ssh learnt to the stored known_hosts. Two
+// calls may have learnt something at the same time; neither loses the other's.
+func (m *Manager) rememberHosts(learnt []byte) {
+	m.hostsMu.Lock()
+	defer m.hostsMu.Unlock()
+	stored, err := m.store.Read(hostFile)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("backup: key of the server not remembered", "err", err)
+		return
+	}
+	merged := strings.TrimRight(string(stored), "\n")
+	known := map[string]bool{}
+	for _, line := range strings.Split(merged, "\n") {
+		known[line] = true
+	}
+	added := false
+	for _, line := range strings.Split(string(learnt), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !known[line] {
+			known[line] = true
+			if merged != "" {
+				merged += "\n"
+			}
+			merged += line
+			added = true
+		}
+	}
+	if !added {
+		return
+	}
+	if err := m.store.Write(hostFile, []byte(merged+"\n")); err != nil {
+		slog.Warn("backup: key of the server not remembered", "err", err)
+	}
+}
+
 // repository returns the address restic takes, extra arguments and the
 // environment for a job. cleanup removes what was put in place for it.
 func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup func(), err error) {
@@ -708,28 +790,41 @@ func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup 
 		}
 		// ssh wants its key in a file only root can read; /config is
 		// asleep most of the time. Both lie in the RAM while the job runs.
-		dir := filepath.Join(m.workDir, job.ID)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		// Each call has a folder of its own: a look at the snapshots while
+		// the job runs must not take the key away from the backup.
+		if err := os.MkdirAll(m.workDir, 0o700); err != nil {
 			return "", nil, nil, cleanup, err
 		}
-		key, err := m.store.Read(keyFile)
+		dir, err := os.MkdirTemp(m.workDir, job.ID+"-")
 		if err != nil {
 			return "", nil, nil, cleanup, err
 		}
-		hosts, _ := m.store.Read(hostFile)
+		cleanup = func() { os.RemoveAll(dir) }
+		key, err := m.store.Read(keyFile)
+		if err != nil {
+			cleanup()
+			return "", nil, nil, func() {}, err
+		}
+		// A known_hosts that cannot be read is not an empty one: ssh would
+		// take any server under the name.
+		hosts, err := m.store.Read(hostFile)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			cleanup()
+			return "", nil, nil, func() {}, err
+		}
 		if err := os.WriteFile(filepath.Join(dir, "key"), key, 0o600); err != nil {
-			return "", nil, nil, cleanup, err
+			cleanup()
+			return "", nil, nil, func() {}, err
 		}
 		if err := os.WriteFile(filepath.Join(dir, "known_hosts"), hosts, 0o600); err != nil {
-			return "", nil, nil, cleanup, err
+			cleanup()
+			return "", nil, nil, func() {}, err
 		}
 		cleanup = func() {
 			// A server seen for the first time is remembered: from then
 			// on only that one is accepted under its name.
 			if now, err := os.ReadFile(filepath.Join(dir, "known_hosts")); err == nil && string(now) != string(hosts) && len(now) > 0 {
-				if err := m.store.Write(hostFile, now); err != nil {
-					slog.Warn("backup: key of the server not remembered", "err", err)
-				}
+				m.rememberHosts(now)
 			}
 			os.RemoveAll(dir)
 		}
@@ -864,20 +959,29 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		m.update(job, func(s *State) {
 			s.Running, s.Phase, s.Percent = false, "", 0
 			if phase != "backup" {
-				// A failed check is kept as CheckError, not as a failed backup.
-				if err != nil && !cancelled && phase != "check" && phase != "probe" && phase != "application-restore" {
-					s.LastError = err.Error()
+				// A failed check is kept as CheckError, a failed restore as
+				// RestoreError: neither is a failed backup.
+				if phase == "restore" {
+					switch {
+					case err == nil:
+						s.RestoreError = ""
+					case !cancelled:
+						s.RestoreError = err.Error()
+					}
 				}
 				return
 			}
 			s.LastRun, s.LastError = &now, ""
 			switch {
 			case cancelled:
-				s.LastError = "cancelled"
+				s.LastError = errCancelled
 			case err != nil:
 				s.LastError = err.Error()
+				if s.FailingSince == nil {
+					s.FailingSince = &now
+				}
 			default:
-				s.LastOK = &now
+				s.LastOK, s.FailingSince = &now, nil
 			}
 		})
 		if err != nil && !cancelled {
@@ -914,29 +1018,21 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		return m.copyUSB(ctx, job)
 	}
 	sel := m.selection(job)
-	if len(job.Applications) > 0 {
-		if m.PrepareApplications == nil {
-			return invalid("application backups unavailable")
-		}
-		extra, finish, err := m.PrepareApplications(ctx, job, m.homeVolume(job), sel.paths)
-		if err != nil {
-			return err
-		}
-		defer func() { result = errors.Join(result, finish()) }()
-		sel.paths = append(sel.paths, extra...)
-	}
-	paths := sel.paths
-	if len(paths) == 0 {
+	if len(sel.paths) == 0 && len(job.Applications) == 0 {
 		return ErrSources
+	}
+	if len(job.Applications) > 0 && m.PrepareApplications == nil {
+		return invalid("application backups unavailable")
 	}
 	_, base, env, cleanup, err := m.repository(job)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	slog.Info("backup started", "job", job.ID, "shares", len(paths))
 
-	// A repository that is not there yet is made; one that is, is used.
+	// A repository that is not there yet is made; one that is, is used. This
+	// comes before applications are stopped: a target that cannot be reached
+	// must not stop them on every retry.
 	if looked, err := m.run(ctx, env, append(slices.Clone(base), "cat", "config", "--quiet"), nil); err != nil {
 		if made, err := m.run(ctx, env, append(slices.Clone(base), "init"), nil); err != nil {
 			if ctx.Err() != nil {
@@ -948,6 +1044,20 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	// What a run that was cut short left locked.
 	m.run(ctx, env, append(slices.Clone(base), "unlock"), nil)
+
+	if len(job.Applications) > 0 {
+		extra, finish, err := m.PrepareApplications(ctx, job, m.homeVolume(job), sel.paths)
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, finish()) }()
+		sel.paths = append(sel.paths, extra...)
+	}
+	paths := sel.paths
+	if len(paths) == 0 {
+		return ErrSources
+	}
+	slog.Info("backup started", "job", job.ID, "shares", len(paths))
 
 	args := append(slices.Clone(base), "backup", "--json", "--tag", "titanos", "--exclude", ".recycle", "--exclude", "*.titanos-part")
 	for _, exclude := range sel.excludes {
@@ -991,9 +1101,18 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		missing := "Not found, not saved: " + strings.Join(sel.notes, ", ")
 		warning = strings.TrimSpace(warning + "\n" + missing)
 	}
+	// Old backups are the only copy of what is missing now: "keep the
+	// newest of N days" would forget them after N such runs.
+	if len(sel.missing) > 0 {
+		missing := "Not available, not saved: " + strings.Join(sel.missing, ", ") + "\nOlder backups are all kept until it is back."
+		warning = strings.TrimSpace(warning + "\n" + missing)
+	}
 	m.update(job, func(s *State) { s.Bytes, s.Warning, s.Phase, s.Percent = total, warning, "cleanup", 100 })
+	if len(sel.missing) > 0 && m.OnIncomplete != nil {
+		m.OnIncomplete(job.ID)
+	}
 
-	if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 {
+	if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
 		args := append(slices.Clone(base), "forget", "--tag", "titanos", "--group-by", "tags", "--prune")
 		for flag, count := range map[string]int{"--keep-daily": job.Keep.Daily, "--keep-weekly": job.Keep.Weekly, "--keep-monthly": job.Keep.Monthly} {
 			if count > 0 {
@@ -1092,12 +1211,16 @@ func (m *Manager) Run(ctx context.Context) {
 		m.mu.Unlock()
 		for _, job := range jobs {
 			// A job whose shares are not there has no state to tell
-			// whether it ran; it waits.
+			// whether it ran; it waits, and says so when that lasts.
 			if m.stateFile(job) == "" {
+				m.checkUnavailable(job)
 				continue
 			}
+			m.mu.Lock()
+			delete(m.unavailable, job.ID)
+			m.mu.Unlock()
 			state := m.state(job)
-			if due(job, state, m.now()) {
+			if due(job, state, m.local(m.now())) {
 				start := m.Start
 				if m.ScheduledStart != nil {
 					start = m.ScheduledStart
@@ -1113,13 +1236,34 @@ func (m *Manager) Run(ctx context.Context) {
 
 // checkOverdue tells OnOverdue when a job became overdue.
 func (m *Manager) checkOverdue(job Job, state State) {
-	late := overdue(job, state, m.now())
+	m.tellOverdue(job, state.Running, overdue(job, state, m.local(m.now())))
+}
+
+// checkUnavailable treats a job that cannot run because none of its shares
+// is there like one whose backups fail: overdue after two of its moments and
+// overdueAfter.
+func (m *Manager) checkUnavailable(job Job) {
+	now := m.local(m.now())
+	m.mu.Lock()
+	if m.unavailable == nil {
+		m.unavailable = map[string]time.Time{}
+	}
+	since, ok := m.unavailable[job.ID]
+	if !ok {
+		since = now
+		m.unavailable[job.ID] = now
+	}
+	m.mu.Unlock()
+	m.tellOverdue(job, false, overdue(job, State{FailingSince: &since, LastRun: &since}, now))
+}
+
+func (m *Manager) tellOverdue(job Job, running, late bool) {
 	m.mu.Lock()
 	if m.overdue == nil {
 		m.overdue = map[string]bool{}
 	}
 	// A running job keeps what was said: it may still fail.
-	changed := !state.Running && late != m.overdue[job.ID]
+	changed := !running && late != m.overdue[job.ID]
 	if changed {
 		m.overdue[job.ID] = late
 	}
@@ -1147,6 +1291,7 @@ func (m *Manager) Busy() bool {
 // CachedViews exposes only known RAM states for telemetry. A nil state is
 // deliberately unknown; this method never opens an archive or wakes a disk.
 func (m *Manager) CachedViews() []View {
+	now := m.local(m.now())
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]View, 0, len(m.jobs))
@@ -1157,7 +1302,7 @@ func (m *Manager) CachedViews() []View {
 			v.State = *state
 			v.StateKnown = state.StatusError == ""
 		}
-		if next, ok := job.NextRun(m.now()); ok {
+		if next, ok := job.NextRun(now); ok {
 			v.Next = &next
 		}
 		out = append(out, v)

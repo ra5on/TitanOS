@@ -302,7 +302,7 @@ func TestDestinations(t *testing.T) {
 	calls := e.calls()
 	for _, want := range []string{
 		"repo=rest:https://backup.example:8000/nas", "rest=nas",
-		"-o sftp.command=ssh -i " + filepath.Join(e.m.workDir, "box/key"), "StrictHostKeyChecking=accept-new", "-p 22 u123@u123.your-storagebox.de -s sftp",
+		"-o sftp.command=ssh -i " + filepath.Join(e.m.workDir, "box-"), "StrictHostKeyChecking=accept-new", "-p 22 u123@u123.your-storagebox.de -s sftp",
 		"repo=sftp:u123@u123.your-storagebox.de:backups/nas",
 	} {
 		if !strings.Contains(calls, want) {

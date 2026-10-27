@@ -80,6 +80,9 @@ type selection struct {
 	paths, excludes []string
 	// notes are folders that were chosen but are not there.
 	notes []string
+	// missing are shares and places that are not there at all: their
+	// volume is not mounted. Old backups are the only copy of them then.
+	missing []string
 }
 
 // volumeOf returns the volume a path under the mount root is on.
@@ -109,6 +112,7 @@ func (m *Manager) selection(job Job) selection {
 	for _, name := range job.Sources {
 		source, ok := shares[name]
 		if !ok {
+			sel.missing = append(sel.missing, name)
 			continue
 		}
 		folders := job.Folders[name]
@@ -147,6 +151,8 @@ func (m *Manager) selection(job Job) selection {
 			// /config is a link into the mounted stick; restic wants the folder.
 			if real, err := filepath.EvalSymlinks(m.configDir); err == nil {
 				add(real)
+			} else {
+				sel.missing = append(sel.missing, "config")
 			}
 		}
 	}

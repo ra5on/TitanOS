@@ -30,10 +30,10 @@
  }
 </script>
 <section class="tile">
- <div class="row"><h2>{t('backup.smb.title')}</h2><span class="chip warn">Beta</span></div>
+ <div class="row"><h2>{t('backup.smb.title')}</h2><span class="chip warn">{t('backup.beta')}</span></div>
  <p class="muted">{t('backup.smb.intro')}</p>
  {#each targets as target(target.id)}
- <div class="row"><span class="mono">{target.id} · //{target.host}/{target.share}/{target.folder}</span><button class="btn" onclick={()=>edit(target)}>{t('backup.edit')}</button><button class="btn" onclick={()=>{deleting=target.id;error='';}}>{t('backup.remove')}</button></div>
+ <div class="row"><span class="mono">{target.id} · //{target.host}/{target.share}/{target.folder}</span><button class="btn" aria-label={t('backup.editNamed', { name: target.id })} onclick={()=>edit(target)}>{t('backup.edit')}</button><button class="btn" aria-label={t('backup.removeNamed', { name: target.id })} onclick={()=>{deleting=target.id;error='';}}>{t('backup.remove')}</button></div>
  {/each}
  <button class="btn" onclick={()=>edit()}>{t('backup.smb.add')}</button>
 </section>
@@ -55,10 +55,11 @@
  </Dialog>
 {/if}
 {#if deleting}
- <Dialog title={t('backup.remove')} locked={busy} onclose={()=>{if(!busy)deleting=null;}}>
- <p>{t('backup.smb.removeHint')}</p>
+ <Dialog title={t('backup.smb.removeTitle', { name: deleting })} locked={busy} onclose={()=>{if(!busy)deleting=null;}}>
+ <p>{t('backup.smb.removeText', { name: deleting })}</p>
+ <p class="muted">{t('backup.smb.removeHint')}</p>
  {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
- <div class="dialog-actions"><button class="btn" disabled={busy} onclick={()=>deleting=null}>{t('common.cancel')}</button><button class="btn" disabled={busy} onclick={remove}>{t('backup.remove')}</button></div>
+ <div class="dialog-actions"><button class="btn" disabled={busy} onclick={()=>deleting=null}>{t('common.cancel')}</button><button class="btn btn-danger" disabled={busy} onclick={remove}>{t('backup.remove')}</button></div>
  </Dialog>
 {/if}
 <style>

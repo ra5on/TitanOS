@@ -35,6 +35,10 @@ const (
 	overdueAfter = 48 * time.Hour
 )
 
+// errCancelled is the LastError of a run that was stopped on purpose. It is
+// not tried again before its next moment.
+const errCancelled = "cancelled"
+
 // times returns the times of day a job runs at, in order.
 func (j Job) times() []string {
 	times := slices.Clone(j.Times)
@@ -190,21 +194,26 @@ func due(job Job, state State, now time.Time) bool {
 	case state.LastRun.Before(slot):
 		return true
 	}
-	// A target that was not there is tried again until it works.
-	return state.LastError != "" && now.Sub(*state.LastRun) >= retryAfter && (state.LastOK == nil || state.LastOK.Before(slot))
+	// A target that was not there is tried again until it works. A run
+	// that was stopped on purpose waits for its next moment.
+	return state.LastError != "" && state.LastError != errCancelled && now.Sub(*state.LastRun) >= retryAfter && (state.LastOK == nil || state.LastOK.Before(slot))
 }
 
 // Overdue reports whether a job has gone too long without a backup that
 // worked; see overdue.
 func (m *Manager) Overdue(view View) bool {
-	return overdue(view.Job, view.State, m.now())
+	return overdue(view.Job, view.State, m.local(m.now()))
 }
 
 // overdue reports whether a job has gone without a backup that worked for at
 // least two of its scheduled moments and at least overdueAfter. A job that has
-// never been tried is not overdue: it starts right away.
+// never been tried is not overdue: it starts right away. One that never worked
+// counts from its first failed attempt; every retry moves LastRun on.
 func overdue(job Job, state State, now time.Time) bool {
 	since := state.LastOK
+	if since == nil {
+		since = state.FailingSince
+	}
 	if since == nil {
 		since = state.LastRun
 	}
@@ -222,18 +231,18 @@ func overdue(job Job, state State, now time.Time) bool {
 
 // DueSoon lets maintenance yield before a scheduled backup without interrupting
 // already running work. It only inspects in-memory settings and states.
+// A job whose state is not known (its volume is missing, or titand has just
+// started) only counts with its next moment: it may never run, and must not
+// hold maintenance back for good.
 func (m *Manager) DueSoon(now time.Time, ahead time.Duration) bool {
+	now = m.local(now)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, job := range m.jobs {
 		if !job.Enabled {
 			continue
 		}
-		state := State{}
-		if st := m.states[job.ID]; st != nil {
-			state = *st
-		}
-		if due(job, state, now) {
+		if st := m.states[job.ID]; st != nil && st.StatusError == "" && due(job, *st, now) {
 			return true
 		}
 		if next, ok := job.NextRun(now); ok && !next.After(now.Add(ahead)) {
