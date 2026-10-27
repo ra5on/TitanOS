@@ -12,7 +12,7 @@ func TestAuditRetentionPreservesRecreatedManualSnapshot(t *testing.T) {
 	m, _ := snapshotFilesFixture(t)
 	m.runner = scheduleSnapshotRunner{m.runner.(*fakeRunner)}
 	ctx := context.Background()
-	if err := m.ScheduledSnapshot(ctx, "data", "audit", 1); err != nil {
+	if err := m.ScheduledSnapshot(ctx, "data", "audit", 1, 0); err != nil {
 		t.Fatal(err)
 	}
 	root, err := volumedata.Open(m.mountRoot, "data", "snapplans", m.Mounted())
@@ -36,7 +36,7 @@ func TestAuditRetentionPreservesRecreatedManualSnapshot(t *testing.T) {
 	if err := os.WriteFile(marker, []byte("must survive automatic retention"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.ScheduledSnapshot(ctx, "data", "audit", 1); err != nil {
+	if err := m.ScheduledSnapshot(ctx, "data", "audit", 1, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(marker); err != nil {

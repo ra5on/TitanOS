@@ -92,7 +92,7 @@ const (
 
 // hidden reports whether a name is internal and not shown.
 func hidden(name string) bool {
-	return name == ".titanos" || strings.Contains(name, ".titanos-snapshot-") || name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
+	return name == ".titanos" || name == ".snapshots" || strings.Contains(name, ".titanos-snapshot-") || name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
 }
 
 // clean checks a slash-separated path relative to a root. "" is the root.

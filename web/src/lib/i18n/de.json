@@ -5087,5 +5087,19 @@
 	"error.replication_not_found": "Diese Replikation gibt es nicht.",
 	"error.replication_busy": "Die Replikation läuft gerade.",
 	"error.replication_not_btrfs": "Replikation gibt es nur für Btrfs-Volumes.",
-	"error.replication_failed": "Die Replikation ist fehlgeschlagen."
+	"error.replication_failed": "Die Replikation ist fehlgeschlagen.",
+	"notify.kind.share_guard_locked.title": "Freigabe {subject} gesperrt: Verdacht auf Ransomware",
+	"notify.kind.share_guard_locked.text": "Viele Dateien wurden in kurzer Zeit verdächtig umbenannt. Die Freigabe ist jetzt nur noch lesbar. Prüfe das Gerät des Kontos, bevor du sie wieder freigibst.",
+	"share.previousVersions": "Vorgängerversionen in Windows",
+	"share.previousVersionsHint": "Die Snapshots des Volumes erscheinen in Windows unter Eigenschaften › Vorgängerversionen. Jeder sieht darin nur, was er in dieser Freigabe sehen darf.",
+	"share.previousVersionsBtrfs": "Nur auf Btrfs-Volumes: Sie haben Snapshots.",
+	"share.guard": "Ransomware-Schutz",
+	"share.guardHint": "Benennt ein Konto über SMB in kurzer Zeit viele Dateien auf typische Ransomware-Endungen oder alle auf dieselbe neue Endung um, wird die Freigabe für alle schreibgeschützt und offene Verbindungen werden getrennt. Auf Btrfs entsteht zusätzlich sofort ein Snapshot.",
+	"shares.guardLocked": "Seit {time} schreibgeschützt: Das Konto {user} hat {files} Dateien verdächtig umbenannt (Ransomware-Verdacht).",
+	"shares.guardUnlock": "Wieder freigeben",
+	"shares.guardUnlockTitle": "Freigabe {name} wieder beschreibbar machen?",
+	"shares.guardUnlockText": "Mach das erst, wenn das betroffene Gerät geprüft ist. Beschädigte Dateien lassen sich aus Snapshots, dem Papierkorb oder einem Backup zurückholen.",
+	"ops.lockDays": "Sperrfrist in Tagen",
+	"ops.lockDaysHint": "So lange lässt sich ein Snapshot dieses Auftrags weder von Hand noch durch die Aufbewahrung löschen. 0 = keine Sperre.",
+	"error.snapshot_locked": "Dieser Snapshot ist noch gesperrt und kann nicht gelöscht werden."
 }

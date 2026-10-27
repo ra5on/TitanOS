@@ -349,7 +349,9 @@ func (m *Manager) snapshotIdentity(ctx context.Context, volume, name string) (st
 	return "", errors.New("snapshot UUID is unavailable")
 }
 
-func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep int) error {
+// ScheduledSnapshot takes a snapshot for a maintenance job and removes the
+// oldest beyond keep. lockDays > 0 forbids deleting it for that long.
+func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep, lockDays int) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if !regexp.MustCompile(`^[A-Za-z0-9-]{1,32}$`).MatchString(id) || keep < 1 || keep > 100 {
@@ -383,6 +385,11 @@ func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep
 	if err := m.snapshotAction(ctx, volume, name, "create", ""); err != nil {
 		return err
 	}
+	if lockDays > 0 {
+		if err := m.lockSnapshot(volume, name, now.AddDate(0, 0, lockDays)); err != nil {
+			return fmt.Errorf("snapshot %s created, its lock could not be saved: %w", name, err)
+		}
+	}
 	uuid, err := m.snapshotIdentity(ctx, volume, name)
 	if err != nil {
 		return fmt.Errorf("snapshot %s retained without pruning: %w", name, err)
@@ -393,6 +400,11 @@ func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep
 	}
 	for len(copies) > keep {
 		old := copies[0]
+		// A locked snapshot stays, and with it the ones after it: retention
+		// goes on once the lock has ended.
+		if !m.lockedUntil(volume, old.Name).IsZero() {
+			break
+		}
 		identity, err := m.snapshotIdentity(ctx, volume, old.Name)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err

@@ -5087,5 +5087,19 @@
 	"error.replication_not_found": "This replication does not exist.",
 	"error.replication_busy": "The replication is running.",
 	"error.replication_not_btrfs": "Replication is available for Btrfs volumes only.",
-	"error.replication_failed": "The replication failed."
+	"error.replication_failed": "The replication failed.",
+	"notify.kind.share_guard_locked.title": "Share {subject} locked: suspected ransomware",
+	"notify.kind.share_guard_locked.text": "Many files were renamed in a suspicious way within a short time. The share is now read-only. Check the device of the account before you unlock it.",
+	"share.previousVersions": "Previous versions in Windows",
+	"share.previousVersionsHint": "The volume's snapshots appear in Windows under Properties › Previous Versions. Everyone sees only what they may see in this share.",
+	"share.previousVersionsBtrfs": "Btrfs volumes only: they have snapshots.",
+	"share.guard": "Ransomware protection",
+	"share.guardHint": "If an account renames many files over SMB within a short time to typical ransomware extensions, or all to the same new extension, the share becomes read-only for everyone and open connections are closed. On Btrfs a snapshot is taken at once as well.",
+	"shares.guardLocked": "Read-only since {time}: the account {user} renamed {files} files in a suspicious way (suspected ransomware).",
+	"shares.guardUnlock": "Unlock",
+	"shares.guardUnlockTitle": "Make the share {name} writable again?",
+	"shares.guardUnlockText": "Do this only once the affected device has been checked. Damaged files can be brought back from snapshots, the recycle bin or a backup.",
+	"ops.lockDays": "Lock in days",
+	"ops.lockDaysHint": "For this long a snapshot of this job can be deleted neither by hand nor by the retention. 0 = no lock.",
+	"error.snapshot_locked": "This snapshot is still locked and cannot be deleted."
 }

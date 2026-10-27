@@ -445,6 +445,14 @@
 						max="100"
 						bind:value={draft.keep}
 					/></label
+				><label
+					>{t('ops.lockDays')}<input
+						class="field"
+						type="number"
+						min="0"
+						max="365"
+						bind:value={draft.lockDays}
+					/><small class="muted">{t('ops.lockDaysHint')}</small></label
 				><label class="check"
 					><input type="checkbox" bind:checked={draft.allowPrune} required />{t(
 						'ops.pruneConsent',

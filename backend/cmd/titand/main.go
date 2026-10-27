@@ -293,6 +293,7 @@ func run(opts options) error {
 	// services in line with accounts, shares and mounted volumes.
 	folders := shares.NewManager(store)
 	folders.Disabled = opts.dev
+	folders.Shadow = volumes.ShadowDir
 	if err := folders.Load(); err != nil {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
@@ -526,6 +527,28 @@ func run(opts options) error {
 		}
 	}
 	// A test that a restart stopped and that waits to be continued.
+	// Ransomware guard: a share that looks attacked becomes read-only, and
+	// a Btrfs volume gets a snapshot of what was still intact.
+	go folders.FollowAudit(ctx, func(share shares.Share) {
+		notifier.Notify(notify.Error, "share_guard_locked", share.Name)
+		if volumes.FilesystemOf(share.Volume) == "btrfs" {
+			name := "guard-" + time.Now().UTC().Format("20060102T150405")
+			if err := volumes.SnapshotAction(context.WithoutCancel(ctx), share.Volume, name, "create", ""); err != nil {
+				slog.Error("snapshot after ransomware lock failed", "volume", share.Volume, "err", err)
+			}
+		}
+	})
+	// Previous versions for Windows follow the snapshots.
+	go func() {
+		for {
+			volumes.SyncShadowCopies(ctx, folders.PreviousVersionVolumes())
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Minute):
+			}
+		}
+	}()
 	volumes.OnReshaped = func(volume string, err error) {
 		if err != nil {
 			notifier.Notify(notify.Error, "volume_disk_remove_failed", volume)
@@ -876,7 +899,11 @@ func run(opts options) error {
 		case "backup-check", "restore-probe":
 			return backups.MaintenanceRun(work, job.Target, job.Kind, job.ReadData, backup.ProbeRequest{MaxBytes: job.MaxBytes, MaxFiles: job.MaxFiles})
 		case "snapshot":
-			return volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep)
+			if err := volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays); err != nil {
+				return err
+			}
+			volumes.SyncShadowCopies(work, folders.PreviousVersionVolumes())
+			return nil
 		}
 		return errors.New("unknown maintenance kind")
 	}

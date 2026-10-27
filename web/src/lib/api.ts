@@ -271,6 +271,11 @@ export type Share = {
 	quota?: number;
 	quotaID?: number;
 	quotaStatus?: ShareQuotaStatus;
+	/** Btrfs snapshots as "Previous Versions" in Windows. */
+	previousVersions?: boolean;
+	/** Ransomware guard over SMB; guardLocked is set by the NAS only. */
+	guard?: boolean;
+	guardLocked?: { at: string; user: string; reason: string; files: number };
 	path: string;
 	available: boolean;
 };

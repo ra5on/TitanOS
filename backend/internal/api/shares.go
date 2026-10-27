@@ -125,3 +125,15 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	slog.Info("share deleted (files kept)", "share", name, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleShareUnlock lifts the lock the ransomware guard put on a share.
+func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.opts.Shares.UnlockGuard(name); err != nil {
+		writeShareError(w, err)
+		return
+	}
+	noteTarget(r, name)
+	slog.Info("ransomware lock lifted", "share", name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}

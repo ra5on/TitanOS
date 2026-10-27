@@ -168,7 +168,7 @@ func TestRenderSMBConf(t *testing.T) {
 		{Name: "backup", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite}, TimeMachine: TimeMachine{Enabled: true, SizeGB: 500}},
 		{Name: "nobody", Volume: "data", SMB: true},
 		{Name: "nfsonly", Volume: "data", NFS: NFS{Enabled: true, Clients: []string{"192.168.1.0/24"}}, Access: map[string]string{"alex": ReadWrite}},
-	}, path)
+	}, path, nil)
 
 	for _, want := range []string{
 		"map to guest = never",
@@ -194,7 +194,7 @@ func TestRenderSMBConf(t *testing.T) {
 		}
 	}
 
-	guest := renderSMBConf([]Share{{Name: "public", Volume: "data", SMB: true, Guest: true, Access: map[string]string{"alex": ReadWrite}}}, path)
+	guest := renderSMBConf([]Share{{Name: "public", Volume: "data", SMB: true, Guest: true, Access: map[string]string{"alex": ReadWrite}}}, path, nil)
 	if !strings.Contains(guest, "map to guest = bad user") || !strings.Contains(guest, "guest ok = yes") || strings.Contains(guest, "valid users") {
 		t.Errorf("guest share:\n%s", guest)
 	}

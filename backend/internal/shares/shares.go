@@ -67,6 +67,15 @@ type Share struct {
 	Quota uint64 `json:"quota,omitempty"`
 	// QuotaID is the project of the share's files, kept once given.
 	QuotaID uint32 `json:"quotaID,omitempty"`
+	// PreviousVersions offers the Btrfs snapshots of the volume as
+	// "Previous Versions" in Windows (Samba shadow_copy2).
+	PreviousVersions bool `json:"previousVersions,omitempty"`
+	// Guard watches renames over SMB for ransomware and makes the share
+	// read-only when it sees it (guard.go).
+	Guard bool `json:"guard,omitempty"`
+	// GuardLocked is set by titand, never by the client: the share is
+	// read-only since then, until an administrator lifts it.
+	GuardLocked *GuardLock `json:"guardLocked,omitempty"`
 }
 
 // NFS exports the share to the listed hosts or networks. NFS knows no
@@ -174,6 +183,11 @@ type Manager struct {
 	// brought to the system. Deleting a share's data waits for it.
 	gen, appliedGen uint64
 	purge           purgeState
+
+	guard guardState
+	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has
+	// none (not Btrfs). Set by titand from the storage manager.
+	Shadow func(volume string) string
 }
 
 // NewManager returns a manager working on the real system.
@@ -183,6 +197,14 @@ func NewManager(store *config.Store) *Manager {
 		sambaConf: "/etc/samba/smb.conf", exports: "/etc/exports", nfsRoot: "/srv/nfs", runDir: "/run/titanos",
 		kick: make(chan struct{}, 1),
 	}
+}
+
+// shadowDir is Shadow for a share.
+func (m *Manager) shadowDir(share Share) string {
+	if m.Shadow == nil {
+		return ""
+	}
+	return m.Shadow(share.Volume)
 }
 
 // Path returns where the files of a share live.
@@ -335,6 +357,7 @@ func (m *Manager) Update(name string, share Share, volumes, users []string) erro
 		return ErrVolumeChange
 	}
 	share.QuotaID = m.shares[i].QuotaID
+	share.GuardLocked = m.shares[i].GuardLocked
 	if err := m.assignQuotaID(&share); err != nil {
 		return err
 	}
@@ -460,7 +483,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	users := slices.Clone(state.Users)
 	sort.Slice(users, func(i, j int) bool { return users[i].Name < users[j].Name })
 
-	smbConf := renderSMBConf(offered, m.Path)
+	smbConf := renderSMBConf(offered, m.Path, m.shadowDir)
 	exports := renderExports(offered, m.nfsRoot)
 	passwords := renderSMBPasswd(users)
 	signature := sha256.Sum256([]byte(smbConf + "\x00" + exports + "\x00" + passwords))
@@ -715,7 +738,9 @@ func offeredOverSMB(share Share) bool {
 	return share.Guest || len(share.Access) > 0
 }
 
-func renderSMBConf(shares []Share, path func(Share) string) string {
+// renderSMBConf writes smb.conf. shadow returns the folder with the
+// @GMT snapshots of a share's volume, or "" if it has none.
+func renderSMBConf(shares []Share, path func(Share) string, shadow func(Share) string) string {
 	guests := slices.ContainsFunc(shares, func(s Share) bool { return s.SMB && s.Guest })
 	var b strings.Builder
 	b.WriteString("# Written by titand from /config/shares/shares.json. Do not edit: it is\n# replaced whenever shares or accounts change.\n\n[global]\n")
@@ -764,10 +789,34 @@ func renderSMBConf(shares []Share, path func(Share) string) string {
 		if !share.Guest {
 			options = append(options, [2]string{"valid users", strings.Join(all, " ")})
 		}
-		if len(writers) > 0 {
+		// A share locked by the ransomware guard has no writers at all.
+		if len(writers) > 0 && share.GuardLocked == nil {
 			options = append(options, [2]string{"write list", strings.Join(writers, " ")})
 		}
 		var vfs []string
+		if dir := shadowOf(share, shadow); dir != "" {
+			// The snapshots hold the whole volume; basedir maps the share
+			// path below the volume to the same path in each snapshot.
+			vfs = append(vfs, "shadow_copy2")
+			options = append(options,
+				[2]string{"shadow:snapdir", dir},
+				[2]string{"shadow:basedir", filepath.Dir(dir)},
+				[2]string{"shadow:format", shadowFormat},
+				[2]string{"shadow:localtime", "no"},
+				[2]string{"shadow:sort", "desc"},
+			)
+		}
+		if share.Guard {
+			vfs = append(vfs, "full_audit")
+			options = append(options,
+				[2]string{"full_audit:prefix", "%u|%S"},
+				[2]string{"full_audit:success", "renameat unlinkat"},
+				[2]string{"full_audit:failure", "none"},
+				[2]string{"full_audit:facility", "LOCAL5"},
+				[2]string{"full_audit:priority", "NOTICE"},
+				[2]string{"full_audit:syslog", "true"},
+			)
+		}
 		if share.TimeMachine.Enabled {
 			vfs = append(vfs, "catia", "fruit", "streams_xattr")
 			options = append(options, [2]string{"fruit:time machine", "yes"})
@@ -841,7 +890,7 @@ func renderExports(shares []Share, root string) string {
 			// Every NFS client writes as nobody:users, so that files fit the
 			// share's group whatever user numbers the client has.
 			mode := ReadWrite
-			if share.NFS.Mode == ReadOnly {
+			if share.NFS.Mode == ReadOnly || share.GuardLocked != nil {
 				mode = ReadOnly
 			}
 			fmt.Fprintf(&b, " %s(%s,nohide,sync,no_subtree_check,all_squash,anonuid=65534,anongid=%d)", client, mode, UsersGID)
