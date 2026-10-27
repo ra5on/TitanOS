@@ -76,7 +76,7 @@
 	$effect(() => {
 		if (!confirmed || !term || socket || phase === 'ended') return;
 		const terminal = term;
-		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : `/docker/containers/${session.container}/console${session.shell ? `?shell=${session.shell}` : ''}`;
+		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : session.kind === 'lxc' ? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}` : `/docker/containers/${session.container}/console${session.shell ? `?shell=${session.shell}` : ''}`;
 		const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1${path}`);
 		connection.binaryType = 'arraybuffer';
 		socket = connection;
@@ -89,6 +89,7 @@
 				terminal.writeln(`\x1b[33m${t('terminal.nasWarning')}\x1b[0m\r\n`);
 			}
 			if (session.kind === 'vm') terminal.writeln(`\x1b[90m${t('terminal.vmBanner')}\x1b[0m\r\n`);
+			if (session.kind === 'lxc' && session.shell) terminal.writeln(`\x1b[90m${t('terminal.lxcBanner')}\x1b[0m\r\n`);
 			connection.send(JSON.stringify({ cols: terminal.cols, rows: terminal.rows }));
 			if (active) terminal.focus();
 		};

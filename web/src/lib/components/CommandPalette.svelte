@@ -7,6 +7,7 @@
  import { findPaletteEntries, palettePages, type PaletteEntry } from '#lib/command-palette.ts';
  import { assistant } from '#lib/assistant.svelte.ts';
  import { recentPages, rememberPage } from '#lib/palette.svelte.ts';
+ import { containerLabel, type LXCList } from '#lib/lxc.ts';
  import Dialog from './Dialog.svelte';
  let {onclose}:{onclose:()=>void}=$props();
  let query=$state(''), dynamic=$state<PaletteEntry[]>([]), loading=$state(false), partial=$state(false), index=$state(0);
@@ -24,13 +25,15 @@
   const result=await Promise.allSettled([
    api.get<FileRoot[]>('/files/roots'),
    admin?api.get<DockerStatus>('/docker'):Promise.resolve(null),
-   admin?api.get<{vms:VM[]}>('/vms'):Promise.resolve(null)
+   admin?api.get<{vms:VM[]}>('/vms'):Promise.resolve(null),
+   admin?api.get<LXCList>('/lxc'):Promise.resolve(null)
   ]);
   if(disposed)return;
   const next:PaletteEntry[]=[];
   if(result[0].status==='fulfilled')for(const root of result[0].value.filter(r=>r.kind==='share'))next.push({href:'/files?'+new URLSearchParams({root:root.id}),label:root.name,section:t('nav.shares')});
   if(result[1].status==='fulfilled'&&result[1].value){const apps=new Set<string>();for(const c of result[1].value.containers)if(c.managed&&c.app&&!apps.has(c.app)){apps.add(c.app);next.push({href:'/docker/apps/'+encodeURIComponent(c.app),label:c.app,section:t('nav.docker')});}}
   if(result[2].status==='fulfilled'&&result[2].value)for(const vm of result[2].value.vms)next.push({href:'/vms?'+new URLSearchParams({vm:vm.name}),label:vm.displayName||vm.name,section:t('nav.vms')});
+  if(result[3].status==='fulfilled'&&result[3].value)for(const c of result[3].value.containers)next.push({href:'/lxc?'+new URLSearchParams({ct:c.name}),label:containerLabel(c),section:t('nav.lxc')});
   dynamic=next;partial=result.some(r=>r.status==='rejected');loading=false;index=0;
  }
  function visit(entry:PaletteEntry){rememberPage(entry.href);onclose();void goto(entry.href);}

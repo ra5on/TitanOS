@@ -78,6 +78,18 @@ CONF
 # keeps here and has to be able to write.
 chown -R libvirt-qemu /var/lib/swtpm-localca
 
+# System containers: titand starts them as titanos-lxc@<name>.service with
+# their lxcpath on a volume. LXC's own services stay off: lxc-net would
+# bring a NAT bridge with a DHCP server of its own, lxc.service autostarts
+# containers below /var/lib/lxc in RAM. Unprivileged containers map their
+# IDs 0-65535 to 100000-165535; their group 100 is the group "users" of the
+# NAS (see docs/LXC.md).
+for unit in lxc.service lxc-net.service lxc-monitord.service; do
+    ln -sf /dev/null "/etc/systemd/system/$unit"
+done
+printf 'root:100000:65536\n' >> /etc/subuid
+printf 'root:100000:65536\nroot:100:1\n' >> /etc/subgid
+
 # What mkosi.extra brought in carries the permissions of the checkout it
 # was built from, which may be writable for the group. Nothing in /etc or
 # among the units is meant to be; sshd even refuses to work below such a
@@ -86,6 +98,7 @@ chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
     /usr/lib/systemd/system/titanos-boot-check.service \
     /usr/lib/systemd/system/titanos-app-check.service \
     /usr/lib/systemd/system/titanos-firewall-open.service \
+    /usr/lib/systemd/system/titanos-lxc@.service \
     /usr/lib/systemd/system/docker.service.d /usr/libexec/titanos-firewall-open \
     /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos
 

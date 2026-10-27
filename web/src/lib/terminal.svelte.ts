@@ -3,10 +3,10 @@
 
 export type TerminalSession = {
 	id: number;
-	/** A root shell on the NAS, a shell inside a container, or the serial port of a VM. */
-	kind: 'nas' | 'ct' | 'vm';
+	/** A root shell on the NAS, a shell inside a container, the serial port of a VM, or a system container. */
+	kind: 'nas' | 'ct' | 'vm' | 'lxc';
 	title: string;
-	/** ID of the container for `ct`, name of the VM for `vm`. */
+	/** ID of the container for `ct`, name of the VM for `vm`, of the system container for `lxc`. */
 	container: string;
 	/** '' picks bash where the image has it and sh everywhere else. */
 	shell: '' | 'bash' | 'sh';
@@ -76,6 +76,18 @@ export function addVmConsole(name: string, label = name) {
 		return;
 	}
 	add({ kind: 'vm', title: label, container: name, shell: '' });
+}
+
+/** Opens a shell (or, with `console`, the text console) of a system container. */
+export function addLXCConsole(name: string, label = name, mode: 'shell' | 'console' = 'shell') {
+	const shell = mode === 'console' ? 'sh' : '';
+	const existing = terminal.sessions.find((session) => session.kind === 'lxc' && session.container === name && session.shell === shell);
+	if (existing) {
+		terminal.active = existing.id;
+		terminal.open = true;
+		return;
+	}
+	add({ kind: 'lxc', title: mode === 'console' ? `${label} (tty)` : label, container: name, shell });
 }
 
 export function closeSession(id: number) {
