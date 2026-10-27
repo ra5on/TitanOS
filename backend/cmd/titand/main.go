@@ -754,6 +754,9 @@ func run(opts options) error {
 	if err := schedule.Load(); err != nil {
 		slog.Warn("power schedule unavailable", "err", err)
 	}
+	// A VM is not started on its schedule shortly before the NAS shuts down.
+	machines.PowerOffSoon = func() bool { return schedule.ShutdownSoon(15 * time.Minute) }
+	machines.Notify = notifier.Notify
 	monitor := system.NewMonitor(ctx)
 	memoryPolicy := system.NewMemoryPolicy(store, system.ReadMemory)
 	memoryPolicy.Disabled = opts.dev
@@ -806,6 +809,9 @@ func run(opts options) error {
 		}
 		audit.Record(activity.Entry{At: login.At, User: login.User, Via: activity.ViaSSH, IP: login.IP, Action: action, Target: login.Target(), OK: !login.Blocked})
 	})
+	machines.Activity = func(action, target string, ok bool) {
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
+	}
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev

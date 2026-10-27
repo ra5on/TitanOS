@@ -76,6 +76,9 @@ const named: Record<string, string> = {
 	'POST /api/v1/account/tokens': 'tokenCreate',
 	'DELETE /api/v1/account/tokens/{id}': 'tokenDelete',
 	'PUT /api/v1/activity': 'activitySettings',
+	vm_schedule_start: 'vmScheduleStart',
+	vm_schedule_stop: 'vmScheduleStop',
+	vm_schedule_poweroff: 'vmSchedulePoweroff',
 };
 
 const areas: Record<string, string> = {

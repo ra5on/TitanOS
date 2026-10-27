@@ -27,6 +27,10 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
   „Accepted publickey …“ bzw. „… not listed in AllowUsers“ von sshd aus dem
   Journal (`journalctl --follow`, `sshd-session`/`sshd`); Versuche mit
   unbekannten Namen bleiben außen vor.
+- **Zeitpläne von VMs:** Starten, Herunterfahren und erzwungenes Ausschalten
+  nach dem VM-Zeitplan (`vm_schedule_start`, `vm_schedule_stop`,
+  `vm_schedule_poweroff`) mit Herkunft „System“ und ohne Konto; ausgelassene
+  oder gescheiterte Termine als fehlgeschlagen. Siehe `docs/VM-SCHEDULE.md`.
 - **Herkunft:** Weboberfläche, API-Token, Assistent/Home Assistant oder SSH. Aufträge
   des Assistenten laufen über dieselbe API und stehen unter dem Konto, für das er
   handelt.
