@@ -192,7 +192,8 @@
 				>
 				<span class="what"
 					><strong>{describe(entry)}</strong
-					>{#if !entry.ok && !entry.action.startsWith('login_')}<span class="tag"
+					>{#if !entry.ok && !entry.action.startsWith('login_') && !entry.action.startsWith('ssh_login')}<span
+							class="tag"
 							>{t('activity.failed')}{#if entry.status}
 								({entry.status}){/if}</span
 						>{/if}{#if entry.target}<span class="target">{entry.target}</span>{/if}<span

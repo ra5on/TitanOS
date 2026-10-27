@@ -15,7 +15,15 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
 - **Konsolen und sensible Downloads:** NAS-Konsole, Container-Konsole,
   serielle VM-Konsole, VM-Bildschirm, Download der Konfigurationssicherung und
   das Diagnosepaket.
-- **Herkunft:** Weboberfläche, API-Token oder Assistent/Home Assistant. Aufträge
+- **SSH-Anmeldungen** (Herkunft „per SSH“): Konto, Adresse und als Ziel Art und
+  SHA256-Fingerabdruck des Schlüssels, dazu der Kommentar des passenden
+  Schlüssels aus „Mein Konto“ (`ED25519 SHA256:… (laptop)`). Abgewiesene
+  Anmeldungen eines SSH-berechtigten Kontos aus einem nicht erlaubten Netz
+  stehen als `ssh_login_blocked`. titand liest dafür die Zeilen
+  „Accepted publickey …“ bzw. „… not listed in AllowUsers“ von sshd aus dem
+  Journal (`journalctl --follow`, `sshd-session`/`sshd`); Versuche mit
+  unbekannten Namen bleiben außen vor.
+- **Herkunft:** Weboberfläche, API-Token, Assistent/Home Assistant oder SSH. Aufträge
   des Assistenten laufen über dieselbe API und stehen unter dem Konto, für das er
   handelt.
 
@@ -69,7 +77,10 @@ beide nur für Besitzer und Administratoren, nicht über API-Tokens.
 Das Protokoll ist eine Nachvollziehbarkeitshilfe, kein manipulationssicheres
 Revisionsprotokoll: Wer Zugriff auf die NAS-Konsole oder das Volume hat, kann die
 Dateien ändern. In der Oberfläche gibt es keine Löschfunktion für Einträge.
-Zugriffe über SMB, NFS und SSH laufen nicht über titand und erscheinen nicht.
+Zugriffe über SMB und NFS laufen nicht über titand und erscheinen nicht. Von SSH
+erscheint nur die Anmeldung, nicht was in der Sitzung geschieht. Anmeldungen,
+während titand nicht läuft (etwa während eines App-Updates), werden nicht
+nachgetragen, und das Journal liegt im RAM.
 Allgemeine Einträge werden nach Bereich und Methode benannt („System:
 geändert“); die genaue Route steht darunter.
 
