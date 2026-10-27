@@ -2,7 +2,7 @@
 	// Testing disks before they go into a volume.
 	import { api, ApiError, type Disk } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
-	import { formatDiskBytes, formatDuration } from '#lib/format.ts';
+	import { formatDiskBytes, formatDuration, formatTime } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 
 	type Mode = 'read' | 'write';
@@ -29,6 +29,10 @@
 	let chosen = $state<Disk | null>(null);
 	let mode = $state<Mode>('read');
 	let busy = $state(false);
+	// The last state that could be read, when a later refresh failed.
+	let loaded = $state<Date | null>(null);
+	let stale = $state(false);
+	let stopping = $state<Test | null>(null);
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -40,8 +44,13 @@
 			const [storage, running] = await Promise.all([api.get<{ disks: Disk[] }>('/storage'), api.get<{ tests: Test[] }>('/storage/tests')]);
 			disks = storage.disks;
 			tests = running.tests;
+			loaded = new Date();
+			stale = false;
+			if (error && !chosen && !stopping) error = null;
 		} catch (err) {
-			if (disks.length === 0) problem(err);
+			// Once something is shown it stays, marked as possibly out of date.
+			if (loaded) stale = true;
+			else problem(err);
 		}
 	}
 
@@ -86,13 +95,17 @@
 		busy = false;
 	}
 
+	// Cancelling a running test asks first; dismissing a finished one does not.
 	async function stop(test: Test) {
+		busy = true;
 		error = null;
 		try {
 			tests = (await api.delete<{ tests: Test[] }>(`/storage/tests/${test.disk}`)).tests;
+			stopping = null;
 		} catch (err) {
 			problem(err);
 		}
+		busy = false;
 	}
 
 	const TONE = { passed: 'ok', failed: 'error', cancelled: '' } as const;
@@ -108,7 +121,8 @@
 <section class="tile" aria-labelledby="tools-disks">
 	<h2 class="tile-title" id="tools-disks">{t('disktest.title')}</h2>
 	<p class="muted">{t('disktest.intro')}</p>
-	{#if error && !chosen}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+	{#if error && !chosen && !stopping}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></div>{/if}
+	{#if stale && loaded}<p class="notice-warn" role="status">{t('disktest.stale', { time: formatTime(loaded) })} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></p>{/if}
 
 	{#if tests.length > 0}
 		<h3>{t('disktest.running')}</h3>
@@ -127,7 +141,7 @@
 						<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(test.percent)} aria-label={test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}><span style:width="{test.percent}%"></span></div>
 						<div class="line">
 							<span>{test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}{#if progress(test) && test.phase}{' · '}<span class="mono">{progress(test)}</span>{/if}</span>
-							<button type="button" class="btn small" onclick={() => stop(test)}>{t('disktest.cancel')}</button>
+							<button type="button" class="btn small" onclick={() => { error = null; stopping = test; }}>{t('disktest.cancel')}</button>
 						</div>
 					{:else}
 						<div class="line">
@@ -186,6 +200,18 @@
 				<button type="button" class="btn {mode === 'write' ? 'btn-danger' : 'btn-primary'}" disabled={busy} onclick={start}>{t('disktest.begin')}</button>
 			</div>
 		</form>
+	</Dialog>
+{/if}
+
+{#if stopping}
+	{@const test = stopping}
+	<Dialog title={t('disktest.cancelTitle', { disk: test.disk })} locked={busy} onclose={() => (stopping = null)}>
+		<p>{t(test.mode === 'write' ? 'disktest.cancelWrite' : 'disktest.cancelRead', { disk: test.disk })}</p>
+		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={busy} onclick={() => (stopping = null)}>{t('disktest.keepRunning')}</button>
+			<button type="button" class="btn btn-warn" disabled={busy} onclick={() => stop(test)}>{t('disktest.cancelConfirm')}</button>
+		</div>
 	</Dialog>
 {/if}
 

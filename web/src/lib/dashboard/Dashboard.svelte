@@ -20,7 +20,7 @@
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import { dashboardControl } from './control.svelte.ts';
 	import { positionGrid } from './position-grid.svelte.ts';
-	import { positions, type Rect } from './positions.ts';
+	import { dropLayout, type Rect } from './positions.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { cpuTemperature, temperatureSelection, tileTemperatures } from './temperatures.ts';
 	import type { TailnetDevices } from './tailscale.ts';
@@ -168,6 +168,9 @@
 		selection = $state('');
 	let undo = $state<string[]>([]),
 		redo = $state<string[]>([]),
+		adding = $state(false),
+		confirmCancel = $state(false),
+		confirmRestore = $state(false),
 		transferOpen = $state(false),
 		transferTargets = $state<TileId[]>([]);
 	let columns = $state(columnCount(session.dashboard?.columns)),
@@ -480,8 +483,31 @@
 		shown = readGrid();
 		editing = true;
 		globalOpen = true;
+		adding = false;
+	}
+	// Leaving the editor with unsaved changes asks first.
+	function requestCancel() {
+		if (dirty) confirmCancel = true;
+		else cancel();
+	}
+	function openAdd() {
+		customize = null;
+		globalOpen = false;
+		adding = true;
+	}
+	function restoreDefaults() {
+		checkpoint();
+		options = {};
+		visual = dashboardVisual({ images: visual.images });
+		columns = 2;
+		minimumWidth = 350;
+		rebuild(defaults());
+		customize = null;
+		confirmRestore = false;
 	}
 	function cancel() {
+		confirmCancel = false;
+		adding = false;
 		visual = structuredClone($state.snapshot(savedVisual));
 		galleryVisual = null;
 		globalOpen = false;
@@ -524,6 +550,7 @@
 			redo = [];
 			galleryVisual = null;
 			globalOpen = false;
+			adding = false;
 			session.dashboard = preferences;
 			saved = structuredClone(layout);
 			savedColumns = columns;
@@ -542,6 +569,7 @@
 	function configure(id: TileId, p: EditPart = 'tile') {
 		customize = id;
 		part = p;
+		adding = false;
 	}
 	function changeOption(key: keyof TileOptions, value: unknown) {
 		if (!customize) return;
@@ -607,8 +635,15 @@
 		options = { ...options, [id]: tileOptions(options, id) };
 		rebuild([...readGrid(), { ...defaultPlacement(id), span: 1, autoHeight: true }]);
 		selection = '';
+		// The new tile opens in the inspector; "Add a tile" reopens the list.
 		customize = id;
 		part = 'tile';
+		adding = false;
+		void tick().then(() =>
+			document
+				.querySelector(`.grid-stack-item[gs-id="${CSS.escape(id)}"]`)
+				?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
+		);
 	}
 	function resetTile() {
 		if (!customize) return;
@@ -673,9 +708,20 @@
 		const original = structuredClone($state.snapshot(shown));
 		const base = Object.fromEntries(Object.entries(boardRects).map(([id, r]) => [id, { ...r }]));
 		const history = snapshot();
-		let changed = false;
+		const explicit = actualColumns === columns;
+		let changed = false,
+			preview = '';
 		handle.setPointerCapture(event.pointerId);
 		moving = id;
+		const dropped = (g: NonNullable<typeof ghost>) =>
+			dropLayout(
+				original,
+				id,
+				base,
+				{ column: Math.round(g.left / cell), top: g.top },
+				actualColumns,
+				explicit,
+			);
 		function move(e: PointerEvent) {
 			const dx = e.clientX - start.x,
 				dy = e.clientY - start.y;
@@ -692,6 +738,15 @@
 				? Math.max(80, Math.min(1600, Math.round((r.height + dy) / 8) * 8))
 				: r.height;
 			ghost = { left: column * cell, top: resize ? r.top : top, width: span * cell - 12, height };
+			if (!resize) {
+				// Live preview: the other tiles make room while dragging.
+				const layout = dropped(ghost);
+				const key = JSON.stringify(layout.map((p) => [p.id, p.column, p.offset]));
+				if (key !== preview) {
+					preview = key;
+					rebuild(layout);
+				}
+			}
 			if (resize) {
 				rebuild(
 					original.map((p) =>
@@ -720,54 +775,16 @@
 		}
 		function end() {
 			if (changed && ghost) {
-				if (!resize) {
-					const g = ghost;
-					const col = Math.round(g.left / cell);
-					const rest = original
-						.filter((p) => p.id !== id)
-						.map((p) => ({ ...p, column: base[p.id].column }));
-					let index = rest.findIndex(
-						(p) =>
-							base[p.id].top > g.top + 8 ||
-							(Math.abs(base[p.id].top - g.top) <= 8 && base[p.id].column >= col),
-					);
-					if (index < 0) index = rest.length;
-					const before = rest.slice(0, index);
-					const packed = positions(
-						before,
-						actualColumns,
-						Object.fromEntries(Object.entries(base).map(([id, r]) => [id, r.height])),
-					);
-					const end = Math.max(
-						0,
-						...before
-							.filter((p) => {
-								const b = packed.rects[p.id];
-								return b.column < col + r.span && b.column + b.span > col;
-							})
-							.map((p) => packed.rects[p.id].top + packed.rects[p.id].height + 12),
-					);
-					rest.splice(index, 0, {
-						...current,
-						column: col,
-						offset: Math.min(8000, Math.max(0, g.top - end)),
-					});
-					rebuild(
-						actualColumns === columns
-							? rest
-							: rest.map((p) => {
-									const old = original.find((t) => t.id === p.id)!;
-									return { ...p, column: old.column, offset: old.offset };
-								}),
-					);
+				if (!resize) rebuild(dropped(ghost));
+				if (JSON.stringify(shown) !== JSON.stringify(original)) {
+					undo = [...undo.slice(-39), history];
+					redo = [];
 				}
-				undo = [...undo.slice(-39), history];
-				redo = [];
 			}
 			cleanup();
 		}
 		function abort() {
-			if (resize && changed) rebuild(original);
+			if (changed) rebuild(original);
 			cleanup();
 		}
 		handle.addEventListener('pointermove', move);
@@ -887,17 +904,33 @@
 		return '';
 	}
 
+	// Editor shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or +Y redo, Ctrl/Cmd+S
+	// save, Escape closes the side panel and then leaves the editor.
 	function keys(e: KeyboardEvent) {
-		if (
-			!editing ||
-			saving ||
-			!(e.ctrlKey || e.metaKey) ||
-			e.key.toLowerCase() !== 'z' ||
-			(e.target instanceof HTMLElement && e.target.closest('input,textarea,select'))
-		)
+		if (!editing || saving || e.defaultPrevented || moving || confirmCancel || confirmRestore)
 			return;
+		const target = e.target instanceof HTMLElement ? e.target : null;
+		if (target?.closest('[role="dialog"],dialog,[role="menu"]')) return;
+		const key = e.key.toLowerCase();
+		if (e.ctrlKey || e.metaKey) {
+			if (key === 's') {
+				e.preventDefault();
+				void finish();
+				return;
+			}
+			if (target?.closest('input,textarea,select')) return;
+			if (key === 'z' || key === 'y') {
+				e.preventDefault();
+				step(e.shiftKey || key === 'y' ? 'redo' : 'undo');
+			}
+			return;
+		}
+		if (key !== 'escape' || target?.closest('input,textarea,select')) return;
 		e.preventDefault();
-		step(e.shiftKey ? 'redo' : 'undo');
+		if (customize) customize = null;
+		else if (adding) adding = false;
+		else if (globalOpen) globalOpen = false;
+		else requestCancel();
 	}
 	function interceptLinks(element: HTMLElement, id: TileId) {
 		const click = (event: MouseEvent) => {
@@ -959,34 +992,21 @@
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
 <div class="dashboard-page" inert={saving} style={visualStyle(effectiveVisual)}>
-	{#if editing}<div class="editor-actions">
-			<button
-				class="btn"
-				disabled={!undo.length || saving}
-				aria-label={t('dashboard.editor.undo')}
-				onclick={() => step('undo')}><Icon name="restart" size={15} /></button
-			><button
-				class="btn"
-				disabled={!redo.length || saving}
-				aria-label={t('dashboard.editor.redo')}
-				onclick={() => step('redo')}><Icon name="restart" size={15} /></button
-			><button class="btn" disabled={saving} onclick={cancel}>{t('common.cancel')}</button><button
-				class="btn btn-primary"
-				disabled={saving}
-				onclick={finish}>{t('dashboard.editor.save')}</button
-			>
-		</div>{/if}
-	{#if error}<div class="notice-error" role="alert">
-			{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
-		</div>{/if}
-	{#if editing}<div class="editbar">
+	{#if editing}<div class="editbar" role="toolbar" aria-label={t('dashboard.editor.toolbar')}>
 			<div class="flow-controls">
 				<button
 					class="btn"
-					aria-pressed={globalOpen && !customize}
+					aria-pressed={adding}
+					disabled={saving}
+					onclick={() => (adding ? (adding = false) : openAdd())}
+					><Icon name="plus" size={16} />{t('dashboard.hidden')}</button
+				><button
+					class="btn"
+					aria-pressed={globalOpen && !customize && !adding}
 					onclick={() => {
 						globalOpen = true;
 						customize = null;
+						adding = false;
 					}}><Icon name="palette" size={16} />{t('dashboard.visual.all')}</button
 				>
 				<label
@@ -1012,25 +1032,42 @@
 							minimumWidth = columnWidth(Number(e.currentTarget.value));
 						}}
 					/></label
-				><span>{t('dashboard.visibleColumns', { count: actualColumns })}</span>
+				>{#if actualColumns !== columns}<span
+						>{t('dashboard.visibleColumns', { count: actualColumns })}</span
+					>{/if}
 			</div>
-			<button
-				class="btn"
-				onclick={() => {
-					checkpoint();
-					options = {};
-					visual = dashboardVisual({ images: visual.images });
-					columns = 2;
-					minimumWidth = 350;
-					rebuild(defaults());
-					customize = null;
-				}}>{t('dashboard.restore')}</button
-			>
+			<div class="editor-actions">
+				<button
+					class="btn icon-btn"
+					disabled={!undo.length || saving}
+					title={`${t('dashboard.editor.undo')} (Strg+Z)`}
+					aria-label={t('dashboard.editor.undo')}
+					onclick={() => step('undo')}><Icon name="undo" size={15} /></button
+				><button
+					class="btn icon-btn"
+					disabled={!redo.length || saving}
+					title={`${t('dashboard.editor.redo')} (Strg+Y)`}
+					aria-label={t('dashboard.editor.redo')}
+					onclick={() => step('redo')}><Icon name="redo" size={15} /></button
+				><button class="btn" disabled={saving} onclick={() => (confirmRestore = true)}
+					>{t('dashboard.restore')}</button
+				><button class="btn" disabled={saving} onclick={requestCancel}>{t('common.cancel')}</button
+				><button
+					class="btn btn-primary"
+					disabled={saving}
+					title={`${t('dashboard.editor.save')} (Strg+S)`}
+					onclick={finish}
+					>{saving ? t('dashboard.editor.saving') : t('dashboard.editor.save')}</button
+				>
+			</div>
+		</div>{/if}
+	{#if error}<div class="notice-error" role="alert">
+			{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
 		</div>{/if}
 	<div
 		class="dashboard-workspace"
 		class:editing
-		class:with-inspector={editing && (!!customize || globalOpen)}
+		class:with-inspector={editing && (!!customize || globalOpen || adding)}
 	>
 		<div class="area">
 			<div class="dashboard-grid" {@attach attachGrid}>
@@ -1068,6 +1105,7 @@
 									{#if editing}<button
 											disabled={tile.locked}
 											class="grip"
+											title={t('dashboard.editor.moveHint')}
 											aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
 											onkeydown={(e) => keyboardMove(e, tile.id)}
 											onpointerdown={(e) => pointerMove(e, tile.id)}
@@ -1083,6 +1121,7 @@
 										>{/if}
 									{#if editing}<button
 											class="tile-action"
+											title={t(tile.locked ? 'dashboard.unlockPosition' : 'dashboard.lockPosition')}
 											aria-label={t('dashboard.lockPosition')}
 											aria-pressed={!!tile.locked}
 											onclick={() => {
@@ -1090,35 +1129,33 @@
 												rebuild(
 													shown.map((p) => (p.id === tile.id ? { ...p, locked: !p.locked } : p)),
 												);
-											}}><Icon name="key" size={13} /></button
-										>{/if}
-									{#if !editing}<button
+											}}><Icon name={tile.locked ? 'lock' : 'unlock'} size={14} /></button
+										><button
 											class="tile-action"
+											title={t('dashboard.tileOptions')}
+											aria-label={`${t('dashboard.tileOptions')}: ${titleOf(tile.id)}`}
+											onclick={() => configure(tile.id)}><Icon name="edit" size={14} /></button
+										><button
+											class="tile-action"
+											title={t('dashboard.hide', { tile: titleOf(tile.id) })}
+											aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
+											onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
+										>{:else}<button
+											class="tile-action collapse"
+											class:collapsed={settings.collapsed}
 											disabled={saving}
+											title={t(
+												settings.collapsed ? 'dashboard.expandTile' : 'dashboard.collapseTile',
+												{ name: titleOf(tile.id) },
+											)}
 											aria-label={t(
 												settings.collapsed ? 'dashboard.expandTile' : 'dashboard.collapseTile',
 												{ name: titleOf(tile.id) },
 											)}
 											aria-expanded={!settings.collapsed}
 											onclick={() => runtimeOption(tile.id, 'collapsed', !settings.collapsed)}
-											><Icon
-												name={settings.collapsed ? 'chevronDown' : 'arrowUp'}
-												size={12}
-											/></button
+											><Icon name="chevronDown" size={13} /></button
 										>{/if}
-									{#if editing}
-										<button
-											class="tile-action"
-											aria-label={`${t('dashboard.tileOptions')}: ${titleOf(tile.id)}`}
-											onclick={() => {
-												if (!editing) startEditing();
-												configure(tile.id);
-											}}><Icon name="edit" size={14} /></button
-										>{#if editing}<button
-												class="tile-action"
-												aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
-												onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
-											>{/if}{/if}
 								</div>{/if}
 							{#if !settings.collapsed || editing}<!-- svelte-ignore a11y_no_noninteractive_tabindex (fixed-height content is keyboard scrollable) -->
 								<div
@@ -1216,6 +1253,7 @@
 							{#if editing}<button
 									disabled={tile.locked}
 									class="resize-handle"
+									title={t('dashboard.editor.resizeHint')}
 									aria-label={t('dashboard.resize', { tile: titleOf(tile.id) })}
 									onpointerdown={(e) => pointerMove(e, tile.id, true)}
 									><Icon name="resize" size={13} /></button
@@ -1231,40 +1269,48 @@
 						style:height={`${ghost.height}px`}
 					></div>{/if}
 			</div>
-			{#if editing}<section class="tile add-tiles">
+		</div>
+		{#if editing && adding}<aside class="tile add-tiles" aria-label={t('dashboard.hidden')}>
+				<div class="add-head">
 					<h2 class="tile-title">{t('dashboard.hidden')}</h2>
-					<div class="tile-choices">
+					<button
+						class="tile-action"
+						title={t('common.close')}
+						aria-label={t('common.close')}
+						onclick={() => (adding = false)}><Icon name="close" size={16} /></button
+					>
+				</div>
+				{#if hidden.length}<div class="tile-choices">
 						{#each hidden as id}<button
 								class="btn"
 								disabled={shown.length >= 100}
 								onclick={() => add(id)}><Icon name="plus" size={14} />{t(TILES[id].title)}</button
 							>{/each}
-					</div>
-					{#if admin}<label
-							>{t('dashboard.workload')}<select class="field" bind:value={selection}
-								><option value="">{t('dashboard.pickWorkload')}</option
-								>{#each workloadGroups as group}<optgroup label={t(group.label)}
-										>{#each group.choices as choice}<option value={choice.id}
-												>{choice.name}{shown.some((p) => sourceId(p.id) === choice.id)
-													? ` · ${t('dashboard.onDashboard')}`
-													: ''}</option
-											>{/each}</optgroup
-									>{/each}</select
-							></label
-						><button
-							class="btn"
-							disabled={!selection || shown.length >= 100}
-							onclick={() =>
-								add(
-									shown.some((p) => p.id === selection)
-										? duplicateId(selection as TileId)
-										: (selection as TileId),
-								)}>{t('dashboard.addWorkload')}</button
-						>{/if}
-					<p class="muted">{t('dashboard.hiddenHint')}</p>
-				</section>{/if}
-		</div>
-		{#if editing && globalOpen && !customize}<GlobalEditor
+					</div>{:else}<p class="muted">{t('dashboard.editor.allAdded')}</p>{/if}
+				{#if admin}<label
+						>{t('dashboard.workload')}<select class="field" bind:value={selection}
+							><option value="">{t('dashboard.pickWorkload')}</option
+							>{#each workloadGroups as group}<optgroup label={t(group.label)}
+									>{#each group.choices as choice}<option value={choice.id}
+											>{choice.name}{shown.some((p) => sourceId(p.id) === choice.id)
+												? ` · ${t('dashboard.onDashboard')}`
+												: ''}</option
+										>{/each}</optgroup
+								>{/each}</select
+						></label
+					><button
+						class="btn"
+						disabled={!selection || shown.length >= 100}
+						onclick={() =>
+							add(
+								shown.some((p) => p.id === selection)
+									? duplicateId(selection as TileId)
+									: (selection as TileId),
+							)}>{t('dashboard.addWorkload')}</button
+					>{/if}
+				<p class="muted">{t('dashboard.hiddenHint')}</p>
+			</aside>{/if}
+		{#if editing && globalOpen && !customize && !adding}<GlobalEditor
 				value={visual}
 				urls={dashboardScene.urls}
 				onbegin={checkpoint}
@@ -1349,6 +1395,29 @@
 				>
 			</div></Dialog
 		>{/if}
+	{#if confirmCancel}<Dialog
+			title={t('dashboard.editor.discardTitle')}
+			onclose={() => (confirmCancel = false)}
+			><p>{t('dashboard.editor.discardText')}</p>
+			<div class="dialog-actions">
+				<button class="btn" onclick={() => (confirmCancel = false)}
+					>{t('dashboard.editor.keepEditing')}</button
+				><button type="button" class="btn btn-warn" onclick={cancel}
+					>{t('dashboard.editor.discard')}</button
+				>
+			</div></Dialog
+		>{/if}
+	{#if confirmRestore}<Dialog
+			title={t('dashboard.restore')}
+			onclose={() => (confirmRestore = false)}
+			><p>{t('dashboard.editor.restoreText')}</p>
+			<div class="dialog-actions">
+				<button class="btn" onclick={() => (confirmRestore = false)}>{t('common.cancel')}</button
+				><button type="button" class="btn btn-warn" onclick={restoreDefaults}
+					>{t('dashboard.restore')}</button
+				>
+			</div></Dialog
+		>{/if}
 </div>
 
 <style>
@@ -1365,8 +1434,17 @@
 	.editor-actions {
 		display: flex;
 		justify-content: flex-end;
+		flex-wrap: wrap;
 		gap: 8px;
-		margin-bottom: 12px;
+	}
+	.icon-btn {
+		padding-inline: 9px;
+	}
+	.collapse :global(svg) {
+		transform: rotate(180deg);
+	}
+	.collapse.collapsed :global(svg) {
+		transform: none;
 	}
 	.tile-summary {
 		color: var(--muted);
@@ -1380,6 +1458,8 @@
 			linear-gradient(var(--border) 1px, transparent 1px),
 			linear-gradient(90deg, var(--border) 1px, transparent 1px);
 		background-size: 8px 8px;
+		/* Dragging tiles must not select their text. */
+		user-select: none;
 	}
 	.placement-placeholder {
 		position: absolute;
@@ -1558,7 +1638,11 @@
 		outline-offset: 3px;
 		cursor: pointer;
 	}
+	/* One bar for all editor controls; it stays below the header while scrolling. */
 	.editbar {
+		position: sticky;
+		top: 60px;
+		z-index: 15;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1567,16 +1651,33 @@
 		border: 1px solid var(--border);
 		background: var(--surface);
 		border-radius: var(--radius-ctl);
-		padding: 10px 14px;
+		padding: 8px 12px;
+		margin-bottom: 12px;
 		font-size: 0.8rem;
 		color: var(--muted);
 	}
+	.dashboard-page:has(.editbar) {
+		--dashboard-sticky-top: 132px;
+	}
 	.add-tiles {
-		padding: 20px;
-		margin: 18px 8px 8px;
+		position: sticky;
+		top: var(--dashboard-sticky-top, 76px);
+		width: 320px;
+		flex: none;
+		max-height: calc(100vh - var(--dashboard-sticky-top, 76px) - 19px);
+		overflow: auto;
+		box-sizing: border-box;
+		padding: 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 15px;
+		background: var(--surface);
+	}
+	.add-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
 	}
 	.tile-choices {
 		display: flex;
@@ -1626,6 +1727,14 @@
 		}
 		.editbar {
 			font-size: 0.75rem;
+		}
+		.add-tiles {
+			position: fixed;
+			inset: auto 10px 12px;
+			top: auto;
+			width: auto;
+			max-height: 75vh;
+			z-index: 40;
 		}
 		.dashboard-tile {
 			container-type: inline-size;

@@ -5,12 +5,8 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HistoryChart from '#lib/operations/HistoryChart.svelte';
-	import {
-		operationError,
-		type MonitorSettings,
-		type MonitorStatus,
-		type MonitorSample,
-	} from '#lib/operations.ts';
+	import { problemText, requestProblem, type Problem } from '../problem.ts';
+	import { type MonitorSettings, type MonitorStatus, type MonitorSample } from '#lib/operations.ts';
 	type Trend = {
 		volume: string;
 		known: boolean;
@@ -30,7 +26,7 @@
 		samples = $state<MonitorSample[]>([]),
 		hours = $state(24),
 		busy = $state(false),
-		error = $state(''),
+		error = $state<Problem | null>(null),
 		saved = $state(false),
 		disk = $state(''),
 		network = $state('');
@@ -39,7 +35,7 @@
 		networks = $derived([...new Set(samples.flatMap((s) => s.networks.map((n) => n.name)))].sort());
 	async function load() {
 		busy = true;
-		error = '';
+		error = null;
 		try {
 			status = await api.get('/monitoring');
 			if (!settings) {
@@ -52,7 +48,7 @@
 			if (!disks.includes(disk)) disk = disks[0] ?? '';
 			if (!networks.includes(network)) network = networks[0] ?? '';
 		} catch (e) {
-			error = operationError(e, t);
+			error = requestProblem(e, t);
 		} finally {
 			busy = false;
 		}
@@ -62,20 +58,20 @@
 		api
 			.get<StorageStatus>('/storage')
 			.then((s) => (storage = s))
-			.catch((e) => (error = operationError(e, t)));
+			.catch((e) => (error = requestProblem(e, t)));
 	});
 	async function save() {
 		if (!settings) return;
 		busy = true;
 		saved = false;
-		error = '';
+		error = null;
 		try {
 			status = await api.put('/monitoring', settings);
 			settings = structuredClone($state.snapshot(status!.settings));
 			initialSettings = JSON.stringify(settings);
 			saved = true;
 		} catch (e) {
-			error = operationError(e, t);
+			error = requestProblem(e, t);
 		} finally {
 			busy = false;
 		}
@@ -83,7 +79,7 @@
 	}
 	async function download(format: 'csv' | 'json') {
 		busy = true;
-		error = '';
+		error = null;
 		try {
 			const response = await fetch(`/api/v1/monitoring/export?hours=${hours}&format=${format}`, {
 				credentials: 'same-origin',
@@ -97,7 +93,7 @@
 			link.click();
 			setTimeout(() => URL.revokeObjectURL(url), 1000);
 		} catch (e) {
-			error = operationError(e, t);
+			error = requestProblem(e, t);
 		} finally {
 			busy = false;
 		}
@@ -110,10 +106,14 @@
 		>{/snippet}</PageHead
 >
 <p class="muted">{t('ops.monitorHint')}</p>
-{#if error}<p class="notice-error" role="alert">{error}</p>{/if}{#if status?.error}<p
-		class="notice-warn"
-	>
-		{status.error}
+{#snippet problemLine(problem: Problem)}{problem.text}{#if problem.detail}<code class="detail"
+			>{problem.detail}</code
+		>{/if}{/snippet}
+{#if error}<p class="notice-error" role="alert">
+		{@render problemLine(error)}
+		<button class="btn small" disabled={busy} onclick={load}>{t('ui.retry')}</button>
+	</p>{/if}{#if status?.error}<p class="notice-warn">
+		{@render problemLine(problemText(status.error, t))}
 	</p>{/if}
 {#if settings}<form
 		class="tile settings"
@@ -298,5 +298,11 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
 		gap: var(--gap);
+	}
+	.detail {
+		display: block;
+		margin-top: 4px;
+		font-size: 0.75rem;
+		overflow-wrap: anywhere;
 	}
 </style>

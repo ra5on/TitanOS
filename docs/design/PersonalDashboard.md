@@ -35,6 +35,19 @@ Der Startseitenkopf entfällt. Oben rechts liegt eine gemeinsame kompakte Fläch
 
 Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
 
+Seit 0.27.0 liegen alle Editor-Bedienelemente in einer haftenden Leiste direkt
+unter der Kopfzeile: Kachel hinzufügen (öffnet die Auswahl in der Seitenleiste
+statt am Seitenende), Gesamtes Dashboard, Spalten und Mindestbreite, Rückgängig
+und Wiederholen mit eigenen Symbolen, Standard wiederherstellen (mit Rückfrage),
+Abbrechen (Rückfrage nur bei ungespeicherten Änderungen) und Speichern.
+Strg/⌘+Z, Strg/⌘+Y bzw. Umschalt+Strg/⌘+Z und Strg/⌘+S; Esc schließt zuerst die
+Seitenleiste, dann den Editor. Symbolknöpfe tragen Tooltips, die Sperre zeigt ein
+offenes bzw. geschlossenes Schloss. Beim Ziehen rücken die übrigen Kacheln live
+nach; die gezogene Kachel reiht sich hinter der letzten Kachel ihrer Zielspalte
+ein, die oberhalb der Ablagestelle beginnt, sodass Kacheln darüber und in anderen
+Spalten nicht springen. Leere Docker-, VM- und Volume-Kacheln verweisen auf
+„App installieren“, „VM anlegen“ bzw. „Volume anlegen“ statt auf Zähler.
+
 
 ### Globale Darstellung, Hintergrund und Bewegung
 

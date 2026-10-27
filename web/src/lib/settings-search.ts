@@ -1,4 +1,5 @@
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
+import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
 	appearance: 'theme design farbe color font schrift hintergrund background',
@@ -68,3 +69,39 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'restore', label: 'safeguard.restore', href: '/settings/backups/restore' },
 	],
 };
+
+export type SettingsGroup = 'system' | 'network' | 'storage' | 'integrations' | 'personal';
+export type SettingsArea = {
+	id: string;
+	label: MessageKey;
+	group: SettingsGroup;
+	icon: IconName;
+	admin?: boolean;
+};
+
+// One list for the settings overview, the command palette and the route guard.
+export const settingsAreas: SettingsArea[] = [
+	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
+	{ id: 'api', label: 'api.title', group: 'personal', icon: 'key' },
+	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
+	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
+	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
+	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
+	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },
+	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'system', icon: 'battery', admin: true },
+	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'storage', icon: 'grid', admin: true },
+	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'personal', icon: 'activity' },
+	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
+];
+
+/** Settings paths that accounts with the role "user" may open. */
+export const userSettingsPaths = [
+	'/settings',
+	...settingsAreas.filter((area) => !area.admin).map((area) => `/settings/${area.id}`),
+];

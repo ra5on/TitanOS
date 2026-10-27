@@ -16,11 +16,20 @@
 	let busy = $state(false);
 	let removing = $state<Key | null>(null);
 	let removeError = $state('');
+	let loadError = $state('');
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
+	async function load() {
+		loadError = '';
+		try {
+			state_ = await api.get<Answer>('/account/ssh-keys');
+		} catch (err) {
+			loadError = problem(err);
+		}
+	}
 	$effect(() => {
-		api.get<Answer>('/account/ssh-keys').then((res) => (state_ = res), (err) => (error = problem(err)));
+		load();
 	});
 
 	async function add(event: SubmitEvent) {
@@ -53,9 +62,15 @@
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || system.info?.hostname || 'nas');
 </script>
 
-{#if state_}
-	<section class="tile" aria-labelledby="acc-ssh">
-		<h2 class="tile-title" id="acc-ssh">{t('ssh.keys')}</h2>
+<section class="tile" aria-labelledby="acc-ssh">
+	<h2 class="tile-title" id="acc-ssh">{t('ssh.keys')}</h2>
+	{#if !state_}
+		{#if loadError}
+			<div class="notice-error failed" role="alert"><span>{loadError}</span><button type="button" class="btn" onclick={load}>{t('common.retry')}</button></div>
+		{:else}
+			<p class="muted" role="status">{t('common.loading')}</p>
+		{/if}
+	{:else}
 		{#if !state_.mayLogin}
 			<p class="muted">{t('ssh.onlyAdmins')}</p>
 		{:else if !state_.sshEnabled}
@@ -90,7 +105,9 @@
 		{:else}
 			<div><button type="button" class="btn" onclick={() => (adding = true)}>{t('ssh.addKey')}</button></div>
 		{/if}
-	</section>
+	{/if}
+</section>
+{#if state_}
 	{#if removing}
 		{@const key = removing}
 		<Dialog title={t('ssh.removeTitle')} locked={busy} onclose={() => (removing = null)}>
@@ -154,6 +171,13 @@
 	}
 	.small {
 		font-size: 0.75rem;
+	}
+	.failed {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
 	}
 	.actions {
 		display: flex;

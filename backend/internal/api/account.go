@@ -33,6 +33,20 @@ func (s *Server) handleAccountSessionEnd(w http.ResponseWriter, r *http.Request)
 	s.handleAccountSessions(w, r)
 }
 
+// handleAccountSessionsEndOthers ends every session of the account except
+// the one the request came with ("log out all other devices").
+func (s *Server) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.Request) {
+	user, token := currentUser(r), s.sessionToken(r)
+	if token == "" {
+		// Without a session of its own the request would end all of them.
+		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can end its other sessions")
+		return
+	}
+	s.sessions.DeleteUser(user.Name, token)
+	slog.Info("other sessions ended from the list of devices", "user", user.Name, "ip", remoteIP(r))
+	s.handleAccountSessions(w, r)
+}
+
 // handleTwoFactorBegin hands out a secret for the authenticator app. It
 // only counts once handleTwoFactorEnable has seen a code made from it.
 func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +104,43 @@ func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) 
 	}
 	slog.Info("two-factor login switched off", "user", user.Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleTwoFactorRecovery replaces the recovery codes, with the password
+// and a code as proof like switching the second factor off. The new codes
+// are shown this once; only their hashes are kept.
+func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Password, Code string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	if user.TOTPSecret == "" {
+		writeError(w, http.StatusConflict, "two_factor_not_begun", "two-factor login is off")
+		return
+	}
+	key := "user:" + user.Name
+	if wait := s.limiter.RetryAfter(key); wait > 0 {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return
+	}
+	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
+		return
+	}
+	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+		return
+	}
+	codes, err := s.opts.Users.NewRecoveryCodes(user.Name)
+	if err != nil {
+		writeTwoFactorError(w, err)
+		return
+	}
+	slog.Info("two-factor recovery codes renewed", "user", user.Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, map[string][]string{"recoveryCodes": codes})
 }
 
 func writeTwoFactorError(w http.ResponseWriter, err error) {
