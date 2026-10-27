@@ -714,6 +714,22 @@ export function fixtureFactory(browser, errors) {
       // read data.formats; data.usbJob is the job the NAS reports.
       if (path === "/usb/disks" && method === "GET")
         return json({ disks: data.usbDisks ?? [], job: data.usbJob ?? null });
+      // Partition editor: tests set data.usbLayouts (disk ID -> layout) and
+      // read data.partitionActions; each action starts a running job.
+      const partitionRoute = path.match(/^\/usb\/disks\/([^/]+)\/(partitions|table)(?:\/(\d+)(?:\/(\w+))?)?$/);
+      if (partitionRoute) {
+        const [, rawId, kind, number, verb] = partitionRoute;
+        const id = decodeURIComponent(rawId);
+        const layout = data.usbLayouts?.[id];
+        if (!layout)
+          return route.fulfill({ status: 404, json: { error: { code: "usb_not_found", message: "usb: no such drive" } } });
+        if (method === "GET") return json({ ...layout, job: data.usbJob ?? null });
+        const body = method === "DELETE" ? {} : route.request().postDataJSON();
+        const action = kind === "table" ? "table" : !number ? "create" : method === "DELETE" ? "delete" : verb;
+        (data.partitionActions ??= []).push({ id, action, ...(number ? { number: Number(number) } : {}), ...body });
+        data.usbJob = { disk: id, device: layout.disk.device, name: layout.disk.model, action, partition: number ? layout.disk.device + number : "", filesystem: body.filesystem ?? "", label: body.label ?? "", scheme: layout.table, phase: "partition", started: time };
+        return json({ disks: data.usbDisks ?? [], job: data.usbJob });
+      }
       if (path.startsWith("/usb/disks/") && path.endsWith("/format") && method === "POST") {
         const body = route.request().postDataJSON();
         (data.formats ??= []).push({ id: decodeURIComponent(path.split("/")[3]), ...body });

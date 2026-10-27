@@ -842,6 +842,12 @@ func TestFilesNeedARoot(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/usb/disks/abc/format", map[string]string{"filesystem": "exfat"}); res.StatusCode != http.StatusNotFound {
 		t.Errorf("format without drives: %d %s", res.StatusCode, body)
 	}
+	if res, body := ts.request("GET", "/api/v1/usb/disks/abc/partitions", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "usb_not_found" {
+		t.Errorf("partitions without drives: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/usb/disks/abc/partitions/x", nil); res.StatusCode != http.StatusNotFound {
+		t.Errorf("bad partition number: %d %s", res.StatusCode, body)
+	}
 	if res, _ := ts.request("GET", "/api/v1/files/jobs", nil); res.StatusCode != http.StatusOK {
 		t.Errorf("jobs: %d", res.StatusCode)
 	}
