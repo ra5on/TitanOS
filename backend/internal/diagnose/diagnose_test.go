@@ -186,3 +186,38 @@ func TestBundleHoldsNoSecrets(t *testing.T) {
 		t.Errorf("README: %q", files["README.txt"])
 	}
 }
+
+func TestBundleHoldsSMART(t *testing.T) {
+	m, _, _ := newManager(t, map[string]string{})
+	unzip := func() map[string]string {
+		var buf bytes.Buffer
+		if err := m.Bundle(context.Background(), &buf, nil); err != nil {
+			t.Fatal(err)
+		}
+		archive, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := map[string]string{}
+		for _, file := range archive.File {
+			r, _ := file.Open()
+			data, _ := io.ReadAll(r)
+			r.Close()
+			files[file.Name] = string(data)
+		}
+		return files
+	}
+	if _, ok := unzip()["smart.json"]; ok {
+		t.Error("smart.json without a SMART source")
+	}
+	m.SMART = func(ctx context.Context) any {
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("SMART read without a deadline")
+		}
+		return []map[string]any{{"disk": "sda", "sleeping": true, "note": "host keller at 192.168.1.9"}}
+	}
+	smart := unzip()["smart.json"]
+	if !strings.Contains(smart, `"disk": "sda"`) || !strings.Contains(smart, `"sleeping": true`) || strings.Contains(smart, "keller") || strings.Contains(smart, "192.168.1.9") {
+		t.Errorf("smart.json: %q", smart)
+	}
+}

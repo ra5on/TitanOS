@@ -31,6 +31,7 @@ var storageErrors = []struct {
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
+	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
 }
 
 func writeStorageError(w http.ResponseWriter, r *http.Request, action string, err error) {
@@ -82,6 +83,34 @@ func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStorageRescan(w http.ResponseWriter, r *http.Request) {
 	s.opts.Storage.RefreshSmart(r.Context())
 	s.handleStorage(w, r)
+}
+
+// handleSmart lists the SMART state of all disks from the RAM cache. It runs
+// no smartctl and so never wakes a disk.
+func (s *Server) handleSmart(w http.ResponseWriter, r *http.Request) {
+	reports, err := s.opts.Storage.SmartReports(r.Context(), false)
+	if err != nil {
+		writeStorageError(w, r, "smart", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"disks": reports})
+}
+
+// handleSmartRefresh reads SMART of the awake disks again (at most every 30
+// seconds); disks in standby are left asleep.
+func (s *Server) handleSmartRefresh(w http.ResponseWriter, r *http.Request) {
+	s.opts.Storage.RefreshSmartSoon(r.Context())
+	s.handleSmart(w, r)
+}
+
+// handleSmartDisk returns one disk with its full attribute table.
+func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
+	report, err := s.opts.Storage.SmartReport(r.Context(), r.PathValue("disk"))
+	if err != nil {
+		writeStorageError(w, r, "smart disk", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {

@@ -39,6 +39,7 @@ var activityQuiet = []string{
 	"POST /api/v1/files/inspect",
 	"POST /api/v1/files/rename-preview",
 	"POST /api/v1/files/search",
+	"POST /api/v1/storage/smart/refresh",
 	"POST /api/v1/files/usage",
 	"POST /api/v1/files/url-download/probe",
 	"POST /api/v1/assistant/knowledge/search",

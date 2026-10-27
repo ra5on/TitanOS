@@ -844,6 +844,8 @@ func run(opts options) error {
 			slog.Warn("logins of before not taken over", "err", err)
 		}
 	}
+	diagnostics := diagnose.NewManager(store, version.Version)
+	diagnostics.SMART = func(ctx context.Context) any { return volumes.SmartDumps(ctx) }
 	handler := api.New(api.Options{
 		Media:              mediaImports,
 		UI:                 webui.FS(),
@@ -872,7 +874,7 @@ func run(opts options) error {
 		ConfigBackup:       stickBackup,
 		USB:                drives,
 		BackupTarget:       backupTarget,
-		Diagnose:           diagnose.NewManager(store, version.Version),
+		Diagnose:           diagnostics,
 		SSH:                access,
 		Update:             updates,
 		Backup:             backups,

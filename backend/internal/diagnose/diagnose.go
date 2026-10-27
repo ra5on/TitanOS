@@ -76,6 +76,9 @@ type Manager struct {
 	hostname func() string
 	// sysRoot is where the kernel shows the hardware.
 	sysRoot string
+	// SMART returns the SMART answers of the disks for smart.json, without
+	// waking sleeping disks and without serial numbers. Nil leaves it out.
+	SMART func(context.Context) any
 }
 
 // NewManager returns a manager working on the real system.
@@ -228,6 +231,10 @@ name of the NAS, the names of the accounts, and whatever looks like a
 password, token or key. The same address has the same stand-in everywhere
 (<ip-1>, <mac-2>, <user-1> ...), so the logs can still be followed.
 
+smart.json holds what smartctl reported per disk, without serial numbers
+and world wide names. Disks in standby were not woken; they show the last
+values read while awake, or none.
+
 Not in here at all: accounts and password hashes, the compose files and
 secrets of apps, certificates, notification settings, and no file of yours.
 
@@ -276,6 +283,19 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+	}
+
+	if m.SMART != nil {
+		smartCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		dumps := m.SMART(smartCtx)
+		cancel()
+		data, err := json.MarshalIndent(dumps, "", "  ")
+		if err != nil {
+			data = []byte(fmt.Sprintf("(%v)", err))
+		}
+		if err := add("smart.json", redactor.Text(string(data)+"\n")); err != nil {
+			return err
 		}
 	}
 
