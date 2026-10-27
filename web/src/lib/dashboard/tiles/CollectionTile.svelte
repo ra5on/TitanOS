@@ -265,7 +265,16 @@
 		</div>
 		{#if !machines.length}<p class="muted">{t('ops.none')}</p>{/if}
 	{/if}
-	{#if !standalone}<div class="footer">
+	{#if !standalone && ready && !error && !total && !options.runningOnly && kind !== 'shares'}<div
+			class="footer"
+		>
+			<a href={kind === 'docker' ? '/apps' : '/vms'}
+				>{t(kind === 'docker' ? 'dashboard.installApp' : 'dashboard.createVm')}<Icon
+					name="arrowRight"
+					size={12}
+				/></a
+			>
+		</div>{:else if !standalone}<div class="footer">
 			<span>{t('dashboard.visibleItems', { count: Math.min(total, limit), total })}</span
 			>{#if total > limit}<button class="link" onclick={() => (showAll = true)}
 					>{t('dashboard.showAll')}</button

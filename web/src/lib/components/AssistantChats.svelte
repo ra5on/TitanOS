@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { assistant, deleteAllChats, deleteChat, loadChats, newChat, openChat, renameChat, setPrefs } from '#lib/assistant.svelte.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { formatDateTime } from '#lib/format.ts';
 	import { ApiError } from '#lib/api.ts';
 	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
@@ -40,7 +41,7 @@
 		}
 	}
 
-	const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+	const when = (iso: string) => formatDateTime(new Date(iso));
 </script>
 
 <div class="chats">

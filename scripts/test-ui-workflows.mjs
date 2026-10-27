@@ -166,8 +166,8 @@ try {
   // Command palette loads only authorized roots and navigates, never runs a NAS action.
   await page.keyboard.press("Control+k");
   await page.getByRole("dialog").waitFor();
-  await page.getByRole("dialog").getByRole("searchbox").fill("SSH");
-  await page.getByRole("button", { name: /Zugang › SSH/ }).click();
+  await page.getByRole("dialog").getByRole("combobox").fill("SSH");
+  await page.getByRole("option", { name: /Zugang › SSH/ }).click();
   await page.waitForURL(/settings\/access#access-ssh/);
   await page.goto(base + "/shares");
   await page.getByRole("button", { name: "Projects", exact: true }).waitFor();
@@ -213,7 +213,7 @@ try {
   assert.equal(
     await user.page
       .locator("#palette-results")
-      .getByRole("button", { name: /Docker/ })
+      .getByRole("option", { name: /Docker/ })
       .count(),
     0,
   );

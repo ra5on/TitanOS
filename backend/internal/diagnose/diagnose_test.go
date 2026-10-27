@@ -94,6 +94,14 @@ func TestLogs(t *testing.T) {
 	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--after-cursor=s=abc;i=3") || strings.Contains(last, " -n ") {
 		t.Errorf("follow: %q", last)
 	}
+	m.Logs(context.Background(), Query{Priority: 7, Since: time.Unix(1791900000, 0)})
+	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--since=@1791900000") {
+		t.Errorf("since: %q", last)
+	}
+	m.Logs(context.Background(), Query{Priority: 7})
+	if last := system.calls[len(system.calls)-1]; strings.Contains(last, "--since") {
+		t.Errorf("no since: %q", last)
+	}
 }
 
 func TestLogsRefuseOddQueries(t *testing.T) {

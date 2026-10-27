@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick, onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { session } from '#lib/session.svelte.ts';
@@ -35,7 +36,16 @@
 
 	let status = $state<DockerStatus | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
-	let busy = $state(false);
+	// What has a request on its way: `container:<id>`, `app:<name>` or `global`
+	// for actions on everything. Other cards stay usable meanwhile.
+	const busyKeys = new SvelteSet<string>();
+	const appKey = (app: string) => `app:${app}`;
+	const containerKey = (container: DockerContainer) => `container:${container.id}`;
+	const containerBusy = (container: DockerContainer) =>
+		busyKeys.has(containerKey(container)) || (!!container.app && busyKeys.has(appKey(container.app)));
+	const globalBusy = $derived(busyKeys.has('global'));
+	// Requests of the dialogs (remove, import, settings).
+	let dialogBusy = $state(false);
 	let search = $state('');
 	let filter = $state<'all' | 'running' | 'stopped' | 'updates'>('all');
 	// A stack is closed until the user opens it; filters reveal matching services.
@@ -54,15 +64,21 @@
 	// The view is saved right away; only the order waits for "Save layout".
 	async function setView(view: DockerView) {
 		if (layout.view === view) return;
+		const previous = layout.view;
 		layout.view = view;
 		layoutError = '';
 		const value = sanitizeDockerLayout({ ...savedLayout, view });
+		savingLayout = true;
 		try {
 			await api.put('/preferences/docker', value);
 			session.docker = value;
 			savedLayout = value;
 		} catch (err) {
-			layoutError = errorText(err instanceof ApiError ? err.code : 'internal');
+			// Not saved: the page shows the view that is still stored.
+			layout.view = previous;
+			layoutError = t('docker.layout.viewFailed', { error: errorText(err instanceof ApiError ? err.code : 'internal') });
+		} finally {
+			savingLayout = false;
 		}
 	}
 	function move(from: string, to: string) { layout.order = moveDockerGroup(layout.order, groups, from, to); }
@@ -83,6 +99,7 @@
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
+		| { kind: 'updates'; selected: string[]; failed: { app: string; text: string }[] }
 		| { kind: 'remove'; container: DockerContainer }
 		| { kind: 'removeApp'; app: string; purge: boolean }
 		| null
@@ -166,41 +183,148 @@
 		return () => clearInterval(timer);
 	});
 
-	async function run(action: () => Promise<unknown>) {
-		busy = true;
+	// The failed action, for "Retry" next to its error.
+	let failedAction = $state<{ key: string; action: () => Promise<unknown>; label: string } | null>(null);
+	async function run(key: string, action: () => Promise<unknown>, label = '') {
+		if (busyKeys.has(key)) return;
+		busyKeys.add(key);
 		error = null;
+		failedAction = null;
 		try {
 			await action();
 		} catch (err) {
-			error = problem(err);
+			const failed = problem(err);
+			// Says which container or app it was, as other cards stay usable.
+			error = label ? { ...failed, text: `${label}: ${failed.text}` } : failed;
+			failedAction = { key, action, label };
 		}
 		await load();
-		busy = false;
+		busyKeys.delete(key);
 	}
 
-	async function showLogs(container: DockerContainer) {
-		dialog = { kind: 'logs', container, text: null };
+	// Logs: only the answer to the latest request for the open container
+	// counts; a late answer for another container is dropped.
+	let logsRequest = 0;
+	let logsError = $state(''), logsFollow = $state(false), logsSearch = $state(''), logsLoading = $state(false);
+	let logsBox: HTMLElement | undefined = $state();
+	const logsFor = (container: DockerContainer) => dialog?.kind === 'logs' && dialog.container.id === container.id;
+	async function showLogs(container: DockerContainer, again = false) {
+		const request = ++logsRequest;
+		if (!again || !logsFor(container)) {
+			dialog = { kind: 'logs', container, text: null };
+			logsFollow = false;
+			logsSearch = '';
+		}
+		logsError = '';
+		logsLoading = true;
 		try {
 			const res = await api.get<{ logs: string }>(`/docker/containers/${container.id}/logs?tail=300`);
-			if (dialog?.kind === 'logs') dialog.text = res.logs;
+			if (request !== logsRequest || !logsFor(container) || dialog?.kind !== 'logs') return;
+			dialog.text = res.logs;
+			if (logsFollow) {
+				await tick();
+				if (logsBox) logsBox.scrollTop = logsBox.scrollHeight;
+			}
 		} catch (err) {
-			if (dialog?.kind === 'logs') dialog.text = problem(err).text;
+			if (request === logsRequest && logsFor(container)) logsError = problem(err).text;
+		} finally {
+			if (request === logsRequest) logsLoading = false;
+		}
+	}
+	// Following fetches the logs again every three seconds while the dialog is open.
+	$effect(() => {
+		const container = dialog?.kind === 'logs' ? dialog.container : null;
+		if (!container || !logsFollow) return;
+		const timer = setInterval(() => {
+			if (!document.hidden) void showLogs(container, true);
+		}, 3000);
+		return () => clearInterval(timer);
+	});
+	type LogPart = { text: string; hit: boolean };
+	const logParts = $derived.by<LogPart[]>(() => {
+		const text = dialog?.kind === 'logs' ? (dialog.text ?? '') : '';
+		const query = logsSearch.trim().toLowerCase();
+		if (!query) return [{ text, hit: false }];
+		const parts: LogPart[] = [];
+		const lower = text.toLowerCase();
+		let at = 0;
+		for (let found = lower.indexOf(query); found >= 0; found = lower.indexOf(query, at)) {
+			if (found > at) parts.push({ text: text.slice(at, found), hit: false });
+			parts.push({ text: text.slice(found, found + query.length), hit: true });
+			at = found + query.length;
+		}
+		if (at < text.length) parts.push({ text: text.slice(at), hit: false });
+		return parts;
+	});
+	const logHits = $derived(logParts.filter((part) => part.hit).length);
+	$effect(() => {
+		// The first hit comes into view when the search changes.
+		if (!logsSearch.trim() || !logsBox) return;
+		void logHits;
+		tick().then(() => logsBox?.querySelector('mark')?.scrollIntoView({ block: 'nearest' }));
+	});
+	function downloadLogs(container: DockerContainer, text: string) {
+		const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = `${dockerName(container, 'distinct').replace(/[^\w.-]+/g, '_')}-logs.txt`;
+		anchor.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	// "Update all" asks which apps first; all with an update are ticked.
+	const updateApps = $derived.by(() => {
+		const apps = new Map<string, string[]>();
+		for (const container of containers)
+			if (container.updateAvailable && container.managed && container.app)
+				apps.set(container.app, [...(apps.get(container.app) ?? []), dockerName(container, 'distinct')]);
+		return [...apps].map(([app, names]) => ({ app, names }));
+	});
+	function askUpdates() {
+		dialogError = null;
+		dialog = { kind: 'updates', selected: updateApps.map((entry) => entry.app), failed: [] };
+	}
+	async function applyUpdates() {
+		if (dialog?.kind !== 'updates' || dialogBusy) return;
+		const chosen = [...dialog.selected];
+		const failed: { app: string; text: string }[] = [];
+		dialogBusy = true;
+		busyKeys.add('global');
+		for (const app of chosen) {
+			busyKeys.add(appKey(app));
+			try {
+				await api.post(`/docker/apps/${encodeURIComponent(app)}/update`);
+			} catch (err) {
+				failed.push({ app, text: problem(err).text });
+			} finally {
+				busyKeys.delete(appKey(app));
+			}
+		}
+		busyKeys.delete('global');
+		dialogBusy = false;
+		await load();
+		if (dialog?.kind !== 'updates') return;
+		// Started ones are done here; failed ones stay ticked for another try.
+		if (failed.length === 0) dialog = null;
+		else {
+			dialog.failed = failed;
+			dialog.selected = failed.map((entry) => entry.app);
 		}
 	}
 
 	async function remove(container: DockerContainer) {
-  busy=true;dialogError=null;
+  dialogBusy=true;dialogError=null;busyKeys.add(containerKey(container));
   try {await api.delete(`/docker/containers/${encodeURIComponent(container.id)}`);dialog=null;await load();}
-  catch(err){dialogError=problem(err);}finally{busy=false;}
+  catch(err){dialogError=problem(err);}finally{dialogBusy=false;busyKeys.delete(containerKey(container));}
 	}
 
 	function actionsFor(container: DockerContainer): ContainerActions {
 		return {
-			onaction: (action) => run(() => api.post(`/docker/containers/${container.id}/${action}`)),
+			onaction: (action) => run(containerKey(container), () => api.post(`/docker/containers/${container.id}/${action}`), dockerName(container, 'distinct')),
 			onlogs: () => showLogs(container),
 			onremove: () => {dialogError=null;container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });},
 			onconsole: () => addContainerConsole(container.id, dockerName(container, 'distinct')),
-			onupdate: () => run(() => api.post(`/docker/apps/${container.app}/update`))
+			onupdate: () => run(appKey(container.app), () => api.post(`/docker/apps/${container.app}/update`), container.app)
 		};
 	}
 
@@ -210,9 +334,9 @@
 	}
 
 	async function removeApp(app: string, purge: boolean) {
-  busy=true;dialogError=null;
+  dialogBusy=true;dialogError=null;busyKeys.add(appKey(app));
   try {await api.delete(`/docker/apps/${encodeURIComponent(app)}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`);dialog=null;await load();}
-  catch(err){dialogError=problem(err);}finally{busy=false;}
+  catch(err){dialogError=problem(err);}finally{dialogBusy=false;busyKeys.delete(appKey(app));}
 	}
 
 	function open(kind: 'import' | 'settings') {
@@ -224,8 +348,8 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		// One request at a time: a second click or Enter must not import twice.
-		if (busy) return;
-		busy = true;
+		if (dialogBusy) return;
+		dialogBusy = true;
 		dialogError = null;
 		try {
 			if (dialog?.kind === 'import') {
@@ -239,7 +363,7 @@
 		} catch (err) {
 			dialogError = problem(err);
 		} finally {
-			busy = false;
+			dialogBusy = false;
 		}
 	}
 
@@ -251,7 +375,7 @@
 		}
 	});
 
-	const enable = () => run(() => api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }));
+	const enable = () => run('global', () => api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }));
 </script>
 
 <PageHead title={t('docker.title')}>
@@ -262,7 +386,7 @@
 			<span class="mono">{totals}</span>
 			<span>{t('docker.version', { version: status.version })}</span>
 			<span>{checked}</span>
-			<button type="button" class="link" onclick={() => run(async () => (status = await api.post<DockerStatus>('/docker/updates/check')))} disabled={busy}>{t('docker.checkUpdates')}</button>
+			<button type="button" class="link" onclick={() => run('global', async () => (status = await api.post<DockerStatus>('/docker/updates/check')))} disabled={globalBusy}>{t('docker.checkUpdates')}</button>
 		</p>
 	{/if}
 	{#snippet actions()}
@@ -271,7 +395,7 @@
 			<button type="button" class="btn" onclick={() => open('settings')}>{t('docker.settings')}</button>
 			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}>{t('docker.import')}</button>
 			{#if updatable}
-				<button type="button" class="btn" onclick={() => run(() => api.post('/docker/updates/apply'))} disabled={busy}>{t('docker.updateAll')}</button>
+				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}>{t('docker.updateAll')}</button>
 			{/if}
 			<a class="btn btn-primary" href="/apps">{t('docker.installApp')}</a>
 		{/if}
@@ -279,7 +403,10 @@
 </PageHead>
 
 {#if error}
-	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+	<div class="notice-error" role="alert">
+		<div class="error-line"><span>{error.text}</span>{#if failedAction}{@const retry = failedAction}<button type="button" class="btn" disabled={busyKeys.has(retry.key)} onclick={() => run(retry.key, retry.action, retry.label)}>{t('common.retry')}</button>{/if}</div>
+		{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>
 {/if}
 
 {#if refreshError}<div class="notice-warn" role="alert"><span>{refreshError} {lastRefresh?t('docker.stale',{time:new Date(lastRefresh).toLocaleTimeString()}):t('docker.noCurrentData')}</span><button class="btn" disabled={refreshing} onclick={load}>{t('common.retry')}</button></div>{/if}
@@ -295,7 +422,7 @@
 				<label><span>{t('docker.volume')}</span>
 					<select class="field" bind:value={draft.volume}>{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}</select>
 				</label>
-				<button type="button" class="btn btn-primary" onclick={enable} disabled={busy}>{t('docker.enable')}</button>
+				<button type="button" class="btn btn-primary" onclick={enable} disabled={globalBusy}>{t('docker.enable')}</button>
 			</div>
 		{/if}
 	</section>
@@ -312,10 +439,10 @@
 			{#if job.state === 'failed' && job.output}<pre>{job.output}</pre>{/if}
 			{#if job.state === 'failed'}
 				<div class="buttons job-actions">
-					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('common.retry')}</button>
+					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}>{t('common.retry')}</button>
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-					<button type="button" class="btn" disabled={busy} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
-					<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.delete(`/docker/apps/${app}/job`))}>{t('docker.jobDismiss')}</button>
+					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
+					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}>{t('docker.jobDismiss')}</button>
 					{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askAppSetup', { app }), job.output ? [{ name: `${app}-setup.log`, kind: 'text', text: job.output.slice(-200000) }] : [])}>{t('assistant.ask')}</button>{/if}
 				</div>
 			{/if}
@@ -326,9 +453,9 @@
 		<div class="notice-warn" role="status">
 			{t('docker.appIdle', { app, path: `/config/apps/${app}/compose.yaml` })}
 			<div class="buttons job-actions">
-				<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post(`/docker/apps/${app}/update`))}>{t('docker.appStart')}</button>
+				<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}>{t('docker.appStart')}</button>
 				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-				<button type="button" class="btn" disabled={busy} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
+				<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
 			</div>
 		</div>
 	{/each}
@@ -431,7 +558,7 @@
 						</section>
 					{:else}
 						{@const container = group.members[0]}
-						<ContainerCard {container} {host} {tailscaleHost} {busy} details={layout.details} {...actionsFor(container)} />
+						<ContainerCard {container} {host} {tailscaleHost} busy={containerBusy(container)} details={layout.details} {...actionsFor(container)} />
 					{/if}
 				{/each}
 			</div>
@@ -445,7 +572,7 @@
 {/if}
 
 {#snippet row(container: DockerContainer, member: boolean)}
-	<ContainerRow {container} {host} {tailscaleHost} {busy} {member} details={layout.details} {...actionsFor(container)} />
+	<ContainerRow {container} {host} {tailscaleHost} busy={containerBusy(container)} {member} details={layout.details} {...actionsFor(container)} />
 {/snippet}
 
 {#snippet stackHead(group: DockerGroup)}
@@ -488,42 +615,67 @@
 {/if}
 {#if dialog?.kind === 'logs'}
 	{@const container = dialog.container}
+	{@const text = dialog.text}
 	<Dialog title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })} wide onclose={() => (dialog = null)}>
-		<pre class="logs">{dialog.text === null ? '…' : dialog.text || t('docker.logsEmpty')}</pre>
+		<div class="logs-tools">
+			<input class="field logs-search" type="search" bind:value={logsSearch} placeholder={t('docker.logsSearch')} aria-label={t('docker.logsSearch')} />
+			{#if logsSearch.trim()}<span class="muted mono" role="status">{t('docker.logsHits', { count: logHits })}</span>{/if}
+			<label class="check"><input type="checkbox" bind:checked={logsFollow} /><span>{t('docker.logsFollow')}</span></label>
+		</div>
+		{#if logsError}<div class="notice-error logs-error" role="alert"><span>{logsError}</span><button type="button" class="btn" disabled={logsLoading} onclick={() => showLogs(container, true)}>{t('common.retry')}</button></div>{/if}
+		<pre class="logs" bind:this={logsBox}>{#if text === null}…{:else if !text}{t('docker.logsEmpty')}{:else}{#each logParts as part, index (index)}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{/if}</pre>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => showLogs(container)}>{t('docker.logsRefresh')}</button>
+			<button type="button" class="btn" disabled={!text} onclick={() => text && downloadLogs(container, text)}><Icon name="download" size={16} />{t('docker.logsDownload')}</button>
+			<button type="button" class="btn" disabled={logsLoading} onclick={() => showLogs(container, true)}>{t('docker.logsRefresh')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}>{t('common.done')}</button>
+		</div>
+	</Dialog>
+{:else if dialog?.kind === 'updates'}
+	{@const target = dialog}
+	<Dialog title={t('docker.updatesTitle')} locked={dialogBusy} onclose={() => (dialog = null)}>
+		<p class="text">{t('docker.updatesText')}</p>
+		<div class="update-list">
+			{#each updateApps as entry (entry.app)}
+				<label class="check"><input type="checkbox" disabled={dialogBusy} checked={target.selected.includes(entry.app)}
+					onchange={(event) => (target.selected = event.currentTarget.checked ? [...target.selected, entry.app] : target.selected.filter((app) => app !== entry.app))} />
+					<span><span class="mono">{entry.app}</span>{#if entry.names.length > 1 || entry.names[0] !== entry.app} <span class="muted">· {entry.names.join(', ')}</span>{/if}</span></label>
+			{:else}<p class="muted">{t('docker.updatesNone')}</p>{/each}
+		</div>
+		{#if target.failed.length}<div class="notice-error" role="alert">{t('docker.updatesFailed')}<ul>{#each target.failed as entry (entry.app)}<li><span class="mono">{entry.app}</span>: {entry.text}</li>{/each}</ul></div>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-primary" disabled={dialogBusy || target.selected.length === 0} onclick={applyUpdates}>{t(dialogBusy ? 'docker.updatesRunning' : 'docker.updatesSubmit', { count: target.selected.length })}</button>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
-	<Dialog title={t('docker.removeTitle', { name: container.name })} locked={busy} onclose={() => (dialog = null)}>
+	<Dialog title={t('docker.removeTitle', { name: container.name })} locked={dialogBusy} onclose={() => (dialog = null)}>
 		<p class="text">{t('docker.removeContainer')}</p>
  {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={busy} onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={dialogBusy} onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'removeApp'}
 	{@const app = dialog.app}
-	<Dialog title={t('docker.removeTitle', { name: app })} locked={busy} onclose={() => (dialog = null)}>
+	<Dialog title={t('docker.removeTitle', { name: app })} locked={dialogBusy} onclose={() => (dialog = null)}>
 		{@const path = `/mnt/${status?.settings.volume}/appdata/${app}`}
 		<p class="text">{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}</p>
  {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
-		<label class="check"><input type="checkbox" bind:checked={dialog.purge} disabled={busy} /><span>{t('docker.removeData', { path })}</span></label>
+		<label class="check"><input type="checkbox" bind:checked={dialog.purge} disabled={dialogBusy} /><span>{t('docker.removeData', { path })}</span></label>
 		{#if dialog.purge}
 			<p class="notice-error">{t('docker.removeDataWarning')}</p>
 		{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" disabled={busy} class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" disabled={dialogBusy} class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
 				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button>
 		</div>
 	</Dialog>
 {:else if dialog}
 	{@const kind = dialog.kind}
-	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} locked={busy} onclose={() => (dialog = null)}>
+	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} locked={dialogBusy} onclose={() => (dialog = null)}>
 		<form onsubmit={submit}>
 			{#if kind === 'import'}
 				<p class="notice-warn">{t('docker.importWarning')}</p>
@@ -546,8 +698,8 @@
 				<div class="notice-error" role="alert">{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}</div>
 			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={busy}>{t('common.cancel')}</button>
-				<button type="submit" class="btn btn-primary" disabled={busy}>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}>{t('common.cancel')}</button>
+				<button type="submit" class="btn btn-primary" disabled={dialogBusy}>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button>
 			</div>
 		</form>
 	</Dialog>
@@ -846,9 +998,6 @@
 		position: relative;
 		padding-bottom: 4px;
 	}
-	.stack-card:has(:global(.menu-open)) {
-		z-index: 30;
-	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.chevron {
@@ -945,5 +1094,49 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		line-height: 1.5;
+	}
+	.error-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.logs mark {
+		background: var(--warn-bg);
+		color: var(--warn-text);
+		outline: 1px solid var(--warn-border);
+		border-radius: var(--radius-small);
+	}
+	.logs-tools {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+		margin-bottom: 10px;
+	}
+	.logs-search {
+		flex: 1 1 14rem;
+		min-width: 0;
+	}
+	.logs-error {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 10px;
+	}
+	.update-list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		max-height: 50vh;
+		overflow: auto;
+		margin: 12px 0;
+	}
+	.notice-error ul {
+		margin: 6px 0 0;
+		padding-left: 1.1rem;
 	}
 </style>

@@ -1,144 +1,25 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { parseLogs, type LogEntry as Entry } from '#lib/logs.ts';
-	import { api, ApiError } from '#lib/api.ts';
-	import EmptyState from '#lib/components/EmptyState.svelte';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import DiskTests from './DiskTests.svelte';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
-	const SOURCES = [
-		'',
-		'titand',
-		'kernel',
-		'storage',
-		'shares',
-		'docker',
-		'vms',
-		'network',
-	] as const;
-	const KEEP = 2000;
+	const tools: { href: string; label: MessageKey; icon: IconName }[] = [
+		{ href: '/tools/tasks', label: 'ops.tasks', icon: 'list' },
+		{ href: '/tools/maintenance', label: 'ops.maintenance', icon: 'tool' },
+		{ href: '/tools/monitoring', label: 'ops.monitoring', icon: 'activity' },
+		{ href: '/tools/activity', label: 'ops.activity', icon: 'clock' },
+		{ href: '/tools/logs', label: 'tools.logs', icon: 'fileText' },
+	];
 
-	const askedSource = untrack(() => page.url.searchParams.get('source') ?? '');
-	let source = $state<(typeof SOURCES)[number]>(
-		SOURCES.includes(askedSource as (typeof SOURCES)[number])
-			? (askedSource as (typeof SOURCES)[number])
-			: '',
-	);
-	const askedPriority = Number(untrack(() => page.url.searchParams.get('priority') ?? '6'));
-	let priority = $state([3, 4, 6, 7].includes(askedPriority) ? askedPriority : 6);
-	let search = $state(untrack(() => page.url.searchParams.get('search') ?? ''));
-	let follow = $state(true);
-	let entries = $state<Entry[]>([]);
-	let cursor = '';
-	let error = $state('');
-	let loading = $state(true);
-	let list = $state<HTMLElement>();
-	let generation = 0;
-	let fetchingMore = false;
-
-	function query(after = ''): string {
-		const params = new URLSearchParams({ source, priority: String(priority), lines: '500' });
-		if (search.trim()) params.set('search', search.trim());
-		if (after) params.set('after', after);
-		return '/logs?' + params;
-	}
-
-	async function load() {
-		const request = ++generation;
-		loading = true;
-		error = '';
-		try {
-			const res = parseLogs(await api.get<unknown>(query()));
-			if (request !== generation) return;
-			entries = res.entries;
-			cursor = res.cursor;
-			toEnd();
-		} catch (err) {
-			if (request !== generation) return;
-			error = errorText(err instanceof ApiError ? err.code : 'logs_failed');
-		}
-		if (request === generation) loading = false;
-	}
-
-	async function more() {
-		if (!cursor || document.hidden || loading || fetchingMore) return;
-		const request = generation;
-		fetchingMore = true;
-		try {
-			const res = parseLogs(await api.get<unknown>(query(cursor)));
-			if (request !== generation) return;
-			error = '';
-			cursor = res.cursor;
-			if (res.entries.length > 0) {
-				entries = [...entries, ...res.entries].slice(-KEEP);
-				toEnd();
-			}
-		} catch (err) {
-			if (request === generation)
-				error = errorText(err instanceof ApiError ? err.code : 'logs_failed');
-		} finally {
-			fetchingMore = false;
-		}
-	}
-
-	function toEnd() {
-		if (follow) requestAnimationFrame(() => list?.scrollTo({ top: list.scrollHeight }));
-	}
-
-	// A new choice loads anew; typing waits a moment.
-	$effect(() => {
-		source;
-		priority;
-		search;
-		untrack(() => {
-			generation++;
-		});
-		const timer = setTimeout(() => untrack(load), 250);
-		return () => clearTimeout(timer);
+	// Saved links to the journal pointed at a section of this page.
+	onMount(() => {
+		if (location.hash === '#tools-logs')
+			void goto(`/tools/logs${page.url.search}`, { replaceState: true });
 	});
-
-	$effect(() => {
-		if (!follow) return;
-		const timer = setInterval(more, 3000);
-		return () => clearInterval(timer);
-	});
-
-	const clock = $derived(
-		new Intl.DateTimeFormat(i18n.locale, {
-			day: '2-digit',
-			month: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-		}),
-	);
-	/** The lines as text for the assistant, oldest first. */
-	function logText(from: number, to: number): string {
-		return entries
-			.slice(Math.max(0, from), to)
-			.map(
-				(e) =>
-					`${e.time} ${e.source} ${e.priority <= 3 ? 'ERROR ' : e.priority === 4 ? 'WARNING ' : ''}${e.message}`,
-			)
-			.join('\n');
-	}
-	function askLog() {
-		askAbout(t('assistant.askLog'), [
-			{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) },
-		]);
-	}
-	function askLine(index: number) {
-		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [
-			{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) },
-		]);
-	}
-
-	function level(priority: number): 'error' | 'warn' | '' {
-		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
-	}
 
 	let packing = $state(false);
 	let packError = $state('');
@@ -167,10 +48,9 @@
 
 <PageHead title={t('nav.tools')} />
 
-<nav class="operation-links">
-	{#each [['tasks', '/tools/tasks'], ['maintenance', '/tools/maintenance'], ['monitoring', '/tools/monitoring'], ['activity', '/tools/activity'], ['import', '/storage/import']] as [key, href] (key)}<a
-			class="tile"
-			{href}>{t(`ops.${key}` as 'ops.tasks')} →</a
+<nav class="operation-links" aria-label={t('nav.tools')}>
+	{#each tools as tool (tool.href)}<a class="tile" href={tool.href}
+			><span class="tool-icon"><Icon name={tool.icon} size={22} /></span>{t(tool.label)}</a
 		>{/each}
 </nav>
 <DiskTests />
@@ -197,71 +77,6 @@
 	</div>
 </section>
 
-<section class="tile logs" aria-labelledby="tools-logs">
-	<h2 class="tile-title" id="tools-logs">{t('tools.logs')}</h2>
-	<div class="filters">
-		<label
-			><span>{t('tools.source')}</span>
-			<select class="field" bind:value={source}>
-				{#each SOURCES as name (name)}<option value={name}
-						>{t(`tools.source.${name || 'all'}`)}</option
-					>{/each}
-			</select>
-		</label>
-		<label
-			><span>{t('tools.level')}</span>
-			<select class="field" bind:value={priority}>
-				<option value={3}>{t('tools.level.error')}</option>
-				<option value={4}>{t('tools.level.warning')}</option>
-				<option value={6}>{t('tools.level.info')}</option>
-				<option value={7}>{t('tools.level.debug')}</option>
-			</select>
-		</label>
-		<label class="grow"
-			><span>{t('tools.search')}</span>
-			<input class="field" type="search" bind:value={search} maxlength="200" spellcheck="false" />
-		</label>
-		<label class="check"
-			><input type="checkbox" bind:checked={follow} /><span>{t('tools.follow')}</span></label
-		>
-		{#if assistant.status?.available && entries.length > 0}
-			<button type="button" class="btn" onclick={askLog}>{t('assistant.askLogButton')}</button>
-		{/if}
-	</div>
-	{#if error}<p class="notice-error" role="alert">
-			{error}
-			<button type="button" class="btn small" onclick={load} disabled={loading}
-				>{t('ui.retry')}</button
-			>
-		</p>{/if}
-	<!-- A region that scrolls must be reachable with the keyboard. -->
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<div class="lines mono" bind:this={list} role="log" aria-label={t('tools.logs')} tabindex="0">
-		{#each entries as entry, index (index)}
-			<div class="line {level(entry.priority)}">
-				<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
-				<span class="source">{entry.source}</span>
-				<span class="message"
-					>{#if level(entry.priority)}<span class="tag"
-							>{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span
-						>
-					{/if}{entry.message}</span
-				>
-				{#if level(entry.priority) && assistant.status?.available}<button
-						type="button"
-						class="ask"
-						title={t('assistant.ask')}
-						aria-label={t('assistant.askLine')}
-						onclick={() => askLine(index)}>?</button
-					>{/if}
-			</div>
-		{:else}
-			<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
-		{/each}
-	</div>
-	<p class="muted note">{t('tools.logsNote')}</p>
-</section>
-
 <style>
 	.operation-links {
 		display: grid;
@@ -270,10 +85,22 @@
 		margin-bottom: var(--gap);
 	}
 	.operation-links a {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 		padding: 18px;
 		color: var(--text);
 		text-decoration: none;
 		font-weight: 600;
+	}
+
+	.operation-links a:hover,
+	.operation-links a:focus-visible {
+		border-color: var(--accent);
+	}
+	.tool-icon {
+		color: var(--accent);
+		display: flex;
 	}
 
 	section {
@@ -293,99 +120,5 @@
 	}
 	.name {
 		font-weight: 600;
-	}
-	.filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: 12px 16px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.8125rem;
-	}
-	label > span {
-		color: var(--muted);
-	}
-	label select {
-		min-width: 11rem;
-	}
-	.grow {
-		flex: 1 1 220px;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: 8px;
-		height: 2.75rem;
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.lines {
-		height: min(60vh, 640px);
-		overflow: auto;
-		padding: 10px 12px;
-		background: var(--track);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		font-size: 0.75rem;
-		line-height: 1.55;
-		scrollbar-width: thin;
-		scrollbar-color: var(--muted) transparent;
-	}
-	.line {
-		display: grid;
-		grid-template-columns: 9.5rem 9rem 1fr auto;
-		gap: 0 12px;
-		min-width: 720px;
-	}
-	.ask {
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid var(--border);
-		border-radius: 50%;
-		background: transparent;
-		color: var(--muted);
-		font-size: 0.6875rem;
-		cursor: pointer;
-	}
-	.ask:hover {
-		color: var(--text);
-	}
-	.line time,
-	.source {
-		color: var(--muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.message {
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
-	}
-	.line.error .message {
-		color: var(--error-text);
-	}
-	.line.warn .message {
-		color: var(--warn-text);
-	}
-	.tag {
-		font-weight: 600;
-	}
-	.empty {
-		font-family: var(--font-sans, inherit);
-		padding: 12px 0;
-	}
-	.note {
-		font-size: 0.75rem;
 	}
 </style>

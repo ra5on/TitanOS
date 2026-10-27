@@ -3,6 +3,7 @@
 	// carry a short summary because nobody else reads them.
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { formatDateTime } from '#lib/format.ts';
 
 	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord' | 'homeAssistant';
 	type Event = 'confirmation' | 'done' | 'blocked' | 'agent';
@@ -201,7 +202,7 @@
 
 			<label class="check"><input type="checkbox" bind:checked={draft.persistQuiet}/>{t('personal.persistQuiet')}</label><p class="muted small">{t('personal.persistHint')}</p>
             <label>{t('personal.fallback')}<select class="field" bind:value={draft.fallback}><option value="">{t('personal.noFallback')}</option>{#each channels.filter(c=>draft?.[c].enabled) as channel}<option value={channel==='homeAssistant'?'homeassistant':channel}>{channel}</option>{/each}</select></label>
-            <details><summary>{t('personal.delivery')}</summary>{#each Object.entries(delivery??{}) as [channel,status]}<p class={status.ok?'notice-ok':'notice-error'}>{channel}: {t(status.ok?'personal.delivered':'personal.failed')} · {new Date(status.time).toLocaleString()} ({status.attempts})</p>{/each}<button type="button" class="btn" onclick={async()=>{try{const response=await api.get<Answer>('/account/notifications');delivery=response.delivery??{}}catch(e){problem(e)}}}>{t('personal.refreshDelivery')}</button></details>
+            <details><summary>{t('personal.delivery')}</summary>{#each Object.entries(delivery??{}) as [channel,status]}<p class={status.ok?'notice-ok':'notice-error'}>{channel}: {t(status.ok?'personal.delivered':'personal.failed')} · {formatDateTime(new Date(status.time))} ({status.attempts})</p>{/each}<button type="button" class="btn" onclick={async()=>{try{const response=await api.get<Answer>('/account/notifications');delivery=response.delivery??{}}catch(e){problem(e)}}}>{t('personal.refreshDelivery')}</button></details>
             <div class="actions">
 				{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
 				<button type="submit" class="btn btn-primary" disabled={busy !== null}>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button>

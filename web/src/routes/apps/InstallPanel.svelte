@@ -33,9 +33,11 @@
 		description: string;
 		docker: DockerStatus | null;
 		shares: Share[];
+		/** True once the user changed something in the form. */
+		dirty?: boolean;
 		onclose: () => void;
 	};
-	let { app, source, description, docker, shares, onclose }: Props = $props();
+	let { app, source, description, docker, shares, dirty = $bindable(false), onclose }: Props = $props();
 
 	let tpl = $state<Template | null>(null);
 	let form = $state<InstallForm | null>(null);
@@ -109,6 +111,31 @@
 	});
 
 	const problems = $derived(form ? check(form, installedApps, used) : null);
+
+	// Changes of the user, against what the template filled in. Until the
+	// user touches the panel, values filled in by the page move the start.
+	const formState = $derived(
+		form ? JSON.stringify({ form, selectedHardware, text: view === 'compose' ? text : '' }) : '',
+	);
+	let baseline = $state('');
+	let edited = false;
+	$effect(() => {
+		const current = formState;
+		if (!edited) baseline = current;
+	});
+	const markEdited = () => (edited = true);
+	$effect(() => {
+		const element = panel;
+		if (!element) return;
+		for (const type of ['input', 'change', 'keydown']) element.addEventListener(type, markEdited);
+		return () => {
+			for (const type of ['input', 'change', 'keydown'])
+				element.removeEventListener(type, markEdited);
+		};
+	});
+	$effect(() => {
+		dirty = !!formState && formState !== baseline;
+	});
 	const by = (name: string | null | undefined) => name || t('apps.system');
 
 	/** Paths nobody changed follow the name of the app. */
@@ -603,13 +630,19 @@
 			</div>
 		{/if}
 
-		{#if form && view === 'form'}
-			<section class="section">
+		{#if form && view === 'form' && Object.keys(selectedHardware).length > 0}
+			<div class="body"><section aria-labelledby="install-hardware">
+				<h3 id="install-hardware">{t('apps.hardware')}</h3>
 				{#each Object.keys(selectedHardware) as serviceName (serviceName)}
-					<p class="mono">{serviceName}</p>
-					<HardwarePicker bind:selected={selectedHardware[serviceName]} />
+					<fieldset class="box">
+						<legend class="mono">{serviceName}</legend>
+						<HardwarePicker
+							bind:selected={selectedHardware[serviceName]}
+							onchange={markEdited}
+						/>
+					</fieldset>
 				{/each}
-			</section>
+			</section></div>
 		{/if}
 		{#if error}
 			<div class="body">

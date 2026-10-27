@@ -9,6 +9,9 @@
 	import { session as account } from '#lib/session.svelte.ts';
 	import { addContainerConsole, addNasShell, addVmConsole, closeSession, MIN_HEIGHT, remember, terminal } from '#lib/terminal.svelte.ts';
 	import TerminalScreen from './TerminalScreen.svelte';
+	import Dialog from './Dialog.svelte';
+	import { focusFirstItem, moveFocus } from './menu.ts';
+	import { tick } from 'svelte';
 
 	let info = $state<{ enabled: boolean; nasShell: boolean } | null>(null);
 	let error = $state('');
@@ -20,6 +23,10 @@
 	let now = $state(Date.now());
 	let screens = $state<Record<number, TerminalScreen | undefined>>({});
 	let menuRoot = $state<HTMLElement>();
+	let menuPanel = $state<HTMLElement>();
+	let plus = $state<HTMLButtonElement>();
+	// A connected root shell that "✕" would end, while its confirmation is open.
+	let ending = $state<{ id: number; title: string } | null>(null);
 
 	const current = $derived(terminal.sessions.find((session) => session.id === terminal.active));
 	const screen = $derived(current ? screens[current.id] : undefined);
@@ -29,6 +36,7 @@
 	async function check(): Promise<boolean> {
 		try {
 			info = await api.get('/terminal');
+			error = '';
 			return !info?.enabled;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
@@ -66,6 +74,29 @@
 		} catch {
 			machines = [];
 		}
+		await tick();
+		if (menu) focusFirstItem(menuPanel);
+	}
+
+	function closeMenu(focus = false) {
+		menu = false;
+		if (focus) plus?.focus();
+	}
+
+	function menuKeys(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			event.stopPropagation();
+			closeMenu(true);
+			return;
+		}
+		moveFocus(menuPanel, event);
+	}
+
+	// Ending a root shell that is still connected asks first; anything else closes at once.
+	function end(id: number, title: string, kind: string) {
+		if (kind === 'nas' && screens[id]?.connected()) ending = { id, title };
+		else closeSession(id);
 	}
 
 	function choose(action: () => void) {
@@ -123,12 +154,12 @@
 						<span class="kind" class:ct={session.kind === 'ct'} class:vm={session.kind === 'vm'} aria-hidden="true">{session.kind === 'nas' ? 'NAS' : session.kind === 'vm' ? 'VM' : 'CT'}</span>
 						<span class="mono">{session.title}</span>
 					</button>
-					<button type="button" class="x" aria-label={t('terminal.end', { name: session.title })} onclick={() => closeSession(session.id)}>✕</button>
+					<button type="button" class="x" aria-label={t('terminal.end', { name: session.title })} onclick={() => end(session.id, session.title, session.kind)}>✕</button>
 				</div>
 			{/each}
-			<button type="button" class="plus" aria-label={t('terminal.new')} aria-expanded={menu} onclick={openMenu} disabled={!info?.enabled}>+</button>
+			<button type="button" class="plus" bind:this={plus} aria-label={t('terminal.new')} aria-haspopup="menu" aria-expanded={menu} onclick={openMenu} disabled={!info?.enabled}>+</button>
 			{#if menu}
-				<div class="menu" role="menu" aria-label={t('terminal.new')}>
+				<div class="menu" role="menu" tabindex="-1" aria-label={t('terminal.new')} bind:this={menuPanel} onkeydown={menuKeys}>
 					{#if info?.nasShell}
 						<button type="button" role="menuitem" onclick={() => choose(addNasShell)}><span class="kind" aria-hidden="true">NAS</span>{t('terminal.newNas')}</button>
 					{/if}
@@ -144,7 +175,7 @@
 							<button type="button" role="menuitem" onclick={() => choose(() => addVmConsole(machine.name, machine.label))}><span class="kind vm" aria-hidden="true">VM</span><span class="mono">{machine.label}</span></button>
 						{/each}
 					{/if}
-					<a role="menuitem" href="/vms" onclick={() => (menu = false)}><span class="kind vm" aria-hidden="true">VM</span>{t('terminal.vmConsole')}</a>
+					<a role="menuitem" href="/vms" onclick={() => closeMenu()}><span class="kind vm" aria-hidden="true">VM</span>{t('terminal.vmConsole')}</a>
 				</div>
 			{/if}
 		</div>
@@ -201,6 +232,17 @@
 		<span>{t('terminal.footer', { name: account.data?.user?.name ?? '' })}</span>
 	</div>
 </section>
+
+{#if ending}
+	{@const target = ending}
+	<Dialog title={t('terminal.endTitle')} onclose={() => (ending = null)}>
+		<p>{t('terminal.endText', { name: target.title })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (ending = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" onclick={() => { closeSession(target.id); ending = null; }}>{t('terminal.endConfirm')}</button>
+		</div>
+	</Dialog>
+{/if}
 
 <style>
 	.panel {

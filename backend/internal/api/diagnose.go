@@ -23,6 +23,14 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		q.Priority = priority
 	}
+	if value := query.Get("since"); value != "" {
+		seconds, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || seconds <= 0 || seconds > time.Now().Add(24*time.Hour).Unix() {
+			writeError(w, http.StatusBadRequest, "bad_request", "since must be a Unix time in seconds")
+			return
+		}
+		q.Since = time.Unix(seconds, 0)
+	}
 	q.Lines, _ = strconv.Atoi(query.Get("lines"))
 	logs, err := s.opts.Diagnose.Logs(r.Context(), q)
 	if err != nil {

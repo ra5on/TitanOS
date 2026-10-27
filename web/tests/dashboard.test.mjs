@@ -153,3 +153,32 @@ test('explicit columns, intentional offsets and spanning tiles retain non-overla
  const sanitized=sanitizeLayout({tiles:[{id:'cpu',column:50,offset:-4,locked:true,height:Infinity}]})[0];
  assert.equal(sanitized.column,3);assert.equal(sanitized.offset,0);assert.equal(sanitized.locked,true);assert.equal(sanitized.height,80);
 });
+test('dropping a tile keeps tiles above the drop point in their lane', async () => {
+	const { positions, dropLayout } = await import('../src/lib/dashboard/positions.ts');
+	const heights = { A: 300, B: 100, C: 300, D: 100, E: 300, F: 100 };
+	const items = ['A', 'B', 'C', 'D', 'E', 'F'].map((id) => ({ id, span: 1 }));
+	const { rects } = positions(items, 2, heights);
+	assert.equal(rects.F.top, 224);
+	// A dragged into the right lane below F: F must not jump under A.
+	const layout = dropLayout(items, 'A', rects, { column: 1, top: 340 }, 2, true);
+	const after = positions(layout, 2, heights).rects;
+	assert.equal(after.F.top, 224);
+	assert.equal(after.D.top, 112);
+	assert.equal(after.A.column, 1);
+	assert.equal(after.A.top, 340);
+	// Dropped between D and F: F makes room below A, D stays.
+	const between = positions(
+		dropLayout(items, 'A', rects, { column: 1, top: 200 }, 2, true),
+		2,
+		heights,
+	).rects;
+	assert.equal(between.D.top, 112);
+	assert.equal(between.A.top, 224);
+	assert.equal(between.F.top, 536);
+	// With fewer visible columns only the reading order changes.
+	const narrow = dropLayout(items, 'F', rects, { column: 0, top: 0 }, 2, false);
+	assert.deepEqual(
+		narrow.map((p) => p.id),
+		['F', 'A', 'B', 'C', 'D', 'E'],
+	);
+});
