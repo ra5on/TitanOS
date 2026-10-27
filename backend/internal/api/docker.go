@@ -6,8 +6,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
 
@@ -49,7 +51,32 @@ func writeDockerError(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Docker.Status(r.Context()))
+	status := s.opts.Docker.Status(r.Context())
+	if s.opts.AppProxy != nil {
+		addProxyURLs(status.Containers, s.opts.AppProxy)
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+// addProxyURLs gives the HTTPS name of an app to the container that
+// publishes the port of its route; to all of the app's containers if none
+// does (host network).
+func addProxyURLs(containers []docker.Container, routes *appproxy.Manager) {
+	publishes := map[string]bool{}
+	for _, c := range containers {
+		if route, ok := routes.Route(c.App); ok && c.App != "" && slices.ContainsFunc(c.Ports, func(p docker.Port) bool { return p.Host == route.Port }) {
+			publishes[c.App] = true
+		}
+	}
+	for i, c := range containers {
+		route, ok := routes.Route(c.App)
+		if !ok || c.App == "" {
+			continue
+		}
+		if !publishes[c.App] || slices.ContainsFunc(c.Ports, func(p docker.Port) bool { return p.Host == route.Port }) {
+			containers[i].ProxyURL = routes.URL(c.App)
+		}
+	}
 }
 
 func (s *Server) handleLANNetworks(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +230,12 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Docker.RemoveApp(r.Context(), name, purge); err != nil {
 		writeDockerError(w, err)
 		return
+	}
+	// The HTTPS name goes with the app; a new app of that name starts without.
+	if s.opts.AppProxy != nil {
+		if err := s.opts.AppProxy.RemoveRoute(name); err != nil {
+			slog.Warn("HTTPS name of a removed app not forgotten", "app", name, "err", err)
+		}
 	}
 	slog.Info("app removed", "app", name, "dataDeleted", purge, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)

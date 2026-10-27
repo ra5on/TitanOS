@@ -52,6 +52,8 @@ type Manager struct {
 	mu      sync.Mutex
 	current atomic.Pointer[tls.Certificate]
 	kind    atomic.Value // string
+	// apps serves the HTTPS names of Docker apps; see apps.go.
+	apps appsCert
 }
 
 // NewManager loads the certificate to use: the administrator's own if

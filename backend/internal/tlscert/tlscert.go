@@ -86,6 +86,12 @@ func load(store *config.Store) (tls.Certificate, error) {
 }
 
 func generate(hostname string, now time.Time) (certPEM, keyPEM []byte, err error) {
+	return generateFor(hostname, []string{hostname, hostname + ".local", "localhost"}, append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, localAddresses()...), now)
+}
+
+// generateFor makes a self-signed certificate named commonName for the
+// given host names and addresses.
+func generateFor(commonName string, dnsNames []string, ips []net.IP, now time.Time) (certPEM, keyPEM []byte, err error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, err
@@ -101,14 +107,14 @@ func generate(hostname string, now time.Time) (certPEM, keyPEM []byte, err error
 		// certificate of another TitanOS (or of this NAS before a new stick)
 		// would otherwise look for the issuer under the same name, find the
 		// old certificate and reject the new one as wrongly signed.
-		Subject:               pkix.Name{CommonName: hostname, Organization: []string{"TitanOS"}, SerialNumber: fmt.Sprintf("%032x", serial)},
+		Subject:               pkix.Name{CommonName: commonName, Organization: []string{"TitanOS"}, SerialNumber: fmt.Sprintf("%032x", serial)},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(validity),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		DNSNames:              []string{hostname, hostname + ".local", "localhost"},
-		IPAddresses:           append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, localAddresses()...),
+		DNSNames:              dnsNames,
+		IPAddresses:           ips,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {

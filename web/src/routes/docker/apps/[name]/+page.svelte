@@ -19,6 +19,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { isRunning, webLinks } from '../../container.ts';
+	import AppProxy from './AppProxy.svelte';
 	import {
 		check,
 		NETWORKS,
@@ -123,7 +124,9 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		members.find((container) => container.service === service) ?? primary ?? members[0],
 	);
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || location.hostname);
-	const webui = $derived(primary ? webLinks(primary, host, '').find((link) => link.icon === 'globe') : undefined);
+	const quickLinks = $derived(
+		primary ? webLinks(primary, host, '').filter((link) => link.icon === 'globe' || link.icon === 'lock') : [],
+	);
 	let restarting = $state(false),
 		actionError = $state('');
 	async function restartAll() {
@@ -294,9 +297,9 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		{/if}
 	</div>
 	<div class="quick">
-		{#if webui}<a class="btn small" href={webui.href} target="_blank" rel="noreferrer"
-				><Icon name="globe" size={14} />{webui.text}</a
-			>{/if}
+		{#each quickLinks as link (link.icon)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}
+				><Icon name={link.icon} size={14} />{link.text}</a
+			>{/each}
 		<button type="button" class="btn small" disabled={!target} onclick={() => target && showLogs(target)}
 			><Icon name="fileText" size={14} />{t('docker.logs')}</button
 		>
@@ -580,6 +583,8 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 {:else if !loadError && !yamlError && original}
 	<p class="notice-warn">{t('editor.noServices')}</p>
 {/if}
+
+{#if loaded}<AppProxy app={name} {members} />{/if}
 
 {#if result}
 	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">
