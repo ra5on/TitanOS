@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -77,7 +78,8 @@ func (m *Manager) Publish(ctx context.Context) error {
 }
 
 // hostsContent is the avahi hosts file: one line "address name" for each
-// enabled route. Without an address it names nothing.
+// name of an enabled route, under the local name and, if chosen, as short
+// name. Without an address or with mDNS off it names nothing.
 func (m *Manager) hostsContent() string {
 	var b strings.Builder
 	b.WriteString("# Made by TitanOS from /config/docker/proxy.json; changes are overwritten.\n")
@@ -85,20 +87,21 @@ func (m *Manager) hostsContent() string {
 	if address == nil {
 		address = primaryIPv4
 	}
-	ip, host := address(), m.host()
-	if ip == "" || host == "" {
+	m.mu.RLock()
+	local := m.localSuffix(m.settings)
+	m.mu.RUnlock()
+	ip := address()
+	if ip == "" || local == "" {
 		return b.String()
 	}
-	m.mu.RLock()
-	var names []string
-	for _, route := range m.settings.Apps {
-		if route.Enabled {
-			names = append(names, route.Name+"."+host+".local")
+	hosts := m.shortNames()
+	for _, e := range m.enabled() {
+		for _, name := range names(e.route) {
+			hosts = append(hosts, name+"."+local)
 		}
 	}
-	m.mu.RUnlock()
-	sort.Strings(names)
-	for _, name := range names {
+	sort.Strings(hosts)
+	for _, name := range slices.Compact(hosts) {
 		b.WriteString(ip + " " + name + "\n")
 	}
 	return b.String()

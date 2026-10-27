@@ -282,7 +282,7 @@ func TestURLsAndCertificateNames(t *testing.T) {
 	if m.CertificateNames("nas.local") != nil || m.CertificateNames("") != nil {
 		t.Error("the web UI's own name got app names")
 	}
-	_, _, apps := m.Info()
+	apps := m.Info().Apps
 	if len(apps) != 1 || len(apps[0].URLs) != 2 || apps[0].Scheme != "http" {
 		t.Errorf("info %+v", apps)
 	}

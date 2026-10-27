@@ -18,7 +18,7 @@ func TestAppProxyRoutes(t *testing.T) {
 	routes.Reserved = []int{443}
 	ts.server.opts.AppProxy = routes
 
-	for _, route := range []struct{ method, path string }{{"GET", "/docker/proxy"}, {"PUT", "/docker/proxy"}, {"PUT", "/docker/proxy/apps/immich"}, {"DELETE", "/docker/proxy/apps/immich"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/docker/proxy"}, {"PUT", "/docker/proxy"}, {"PUT", "/docker/proxy/apps/immich"}, {"DELETE", "/docker/proxy/apps/immich"}, {"PUT", "/docker/proxy/targets/ha"}, {"DELETE", "/docker/proxy/targets/ha"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("anonymous %s %s: %d", route.method, route.path, res.StatusCode)
 		}
@@ -51,6 +51,33 @@ func TestAppProxyRoutes(t *testing.T) {
 	}
 	if res, _ := ts.request("DELETE", "/api/v1/docker/proxy/apps/immich", nil); res.StatusCode != http.StatusOK || routes.URL("immich") != "" {
 		t.Fatalf("remove: %d", res.StatusCode)
+	}
+
+	// Settings for all names: what is not sent stays (older pages send only the domain).
+	if res, body := ts.request("PUT", "/api/v1/docker/proxy", map[string]any{"localName": "apps", "mdns": false, "off": true}); res.StatusCode != http.StatusOK {
+		t.Fatalf("general: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("PUT", "/api/v1/docker/proxy", map[string]any{"domain": "home.example.org"})
+	var status appproxy.Status
+	json.Unmarshal(body, &status)
+	if res.StatusCode != http.StatusOK || status.LocalName != "apps" || status.MDNS || !status.Off || status.Domain != "home.example.org" || status.DefaultLocalName != "nas" {
+		t.Fatalf("after the domain alone: %d %s", res.StatusCode, body)
+	}
+
+	// Targets outside Docker.
+	if res, body := ts.request("PUT", "/api/v1/docker/proxy/targets/ha", map[string]any{"enabled": true, "name": "ha", "host": "192.168.1.30", "port": 8123}); res.StatusCode != http.StatusOK {
+		t.Fatalf("target: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/docker/proxy/targets/web", map[string]any{"name": "web", "host": "1.1.1.1", "port": 80}); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("public target: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("GET", "/api/v1/docker/proxy", nil)
+	json.Unmarshal(body, &status)
+	if len(status.Targets) != 1 || status.Targets[0].Host != "192.168.1.30" || len(status.Apps) != 0 {
+		t.Fatalf("status %s", body)
+	}
+	if res, _ := ts.request("DELETE", "/api/v1/docker/proxy/targets/ha", nil); res.StatusCode != http.StatusOK || len(routes.Settings().Targets) != 0 {
+		t.Fatalf("remove target: %d", res.StatusCode)
 	}
 }
 

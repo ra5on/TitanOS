@@ -1,4 +1,4 @@
-# Eigener HTTPS-Name je Docker-App
+# Eigener HTTPS-Name je Docker-App und weitere Ziele
 
 Eine Docker-App kann zusätzlich zu `http://<NAS>:<Port>` unter einem eigenen
 Namen erreichbar sein, z. B. `https://immich.nas.local`. Entscheidung des
@@ -25,11 +25,47 @@ Administratoren, nur verwaltete Apps unter `/config/apps/<name>/`):
 
 Einstellungen › Netzwerk und Dienste › **HTTPS-Namen für Apps**
 (`/settings/proxy`, nur Besitzer und Administratoren, seit 0.30.0) bündelt alle
-HTTPS-Namen: je App Ein/Aus, Adressen, Ziel-Port, „nur Heimnetz“, Link in den
-App-Editor und Entfernen mit einfachem Bestätigungsdialog. Dort steht auch die
-**Eigene Domain (für alle Apps)**, z. B. `home.example.org`, sowie eine
-Erklärung zu mDNS, Router-DNS und Zertifikat. Der App-Editor verweist für die
-Domain auf diese Seite. Dieselbe API wie unten, keine neuen Felder.
+Namen. Der App-Editor zeigt dieselben Felder für seine App; die Einstellungen
+„für alle Namen“ gibt es nur hier.
+
+**Für alle Namen**
+
+- **Hauptschalter** „HTTPS-Namen eingeschaltet“: nimmt alle Namen auf einmal vom
+  Netz (sie gehen dann an die Weboberfläche), die Einstellung je App und Ziel
+  bleibt erhalten.
+- **.local-Namen per mDNS bekannt geben** (ab Werk an). Aus: keine
+  `.local`-Namen und keine Kurznamen, nichts wird veröffentlicht, avahi läuft
+  dafür nicht; erreichbar bleiben nur Namen unter der eigenen Domain. Ohne beides
+  warnt die Seite.
+- **Lokaler Name**: steht vor `.local` (`apps` → `immich.apps.local`), ein bis
+  drei DNS-Teile, ein angehängtes `.local` wird weggelassen. Leer = Name des NAS.
+  Ein neuer Name führt beim nächsten Aufruf zu einem neuen App-Zertifikat.
+- **Eigene Domain (für alle Apps)**, z. B. `home.example.org`.
+- Eine Erklärung zu mDNS, Router-DNS und Zertifikat mit Link zu Zugang › Zertifikat.
+
+**Je App und je Ziel** (Liste mit Ein/Aus, Adressen, Ziel, Reichweite,
+Bearbeiten-Dialog, Link in den App-Editor, Entfernen mit einfachem
+Bestätigungsdialog)
+
+- **Weitere Namen** (bis 8), z. B. `fotos` und `bilder` für Immich. Jeder Name
+  und weitere Name gilt für genau eine App oder ein Ziel.
+- **Kurzname** `<name>.local` ohne den lokalen Namen dazwischen (ab Werk aus, nur
+  mit mDNS). `.local` gilt im ganzen Heimnetz; heißt ein anderes Gerät genauso,
+  benennt avahi einen davon um. Ein Kurzname, der dem Namen des NAS bzw. dem
+  lokalen Namen entspräche, wird abgelehnt.
+- **Erreichbar aus**: Heimnetz/Tailscale/NetBird (ab Werk), **nur eigenen
+  Netzen** (bis 32 CIDR oder einzelne Adressen, IPv4/IPv6) oder allen Netzen.
+  Maßgeblich ist die tatsächliche Gegenstelle, nie eine Weiterleitungs-Kopfzeile.
+- **Zertifikat der App prüfen** (nur bei HTTPS zur App, ab Werk aus): ohne
+  Prüfung wird jedes Zertifikat angenommen; mit Prüfung nur eines einer
+  anerkannten Stelle für genau diese Adresse.
+
+**Weitere Ziele** außerhalb von Docker: VMs, LXC-Container oder Geräte im
+Heimnetz (z. B. `ha` → `192.168.1.30:8123`). Adresse als IP oder Hostname.
+titand verbindet sich nur mit Adressen im Heimnetz, über Tailscale oder NetBird
+(`netguard.Local`, geprüft bei jeder Verbindung an der tatsächlich gewählten
+Adresse, auch nach DNS-Auflösung) und nie mit den Ports von titand selbst auf dem
+NAS. Öffentliche Ziele werden abgelehnt.
 
 ## Ablauf in titand
 
@@ -109,33 +145,56 @@ Betriebssystem.
 ## Konfiguration
 
 `/config/docker/proxy.json`, eine eigene Datei, die ältere titand nicht kennen
-und unverändert lassen (beim Rückweg auf eine ältere App-Version gibt es dann
+und unverändert lassen (beim Rückweg auf eine App-Version vor 0.29.0 gibt es dann
 einfach keine HTTPS-Namen):
 
 ```json
 {
   "domain": "home.example.org",
+  "localName": "apps",
   "apps": {
-    "immich": { "enabled": true, "name": "immich", "port": 2283, "localOnly": true },
-    "vault": { "enabled": true, "name": "vault", "port": 8443, "scheme": "https" }
+    "immich": { "enabled": true, "name": "immich", "aliases": ["fotos"], "short": true, "port": 2283, "localOnly": true, "networks": ["192.168.1.0/24"] },
+    "vault": { "enabled": true, "name": "vault", "port": 8443, "scheme": "https", "verifyTLS": true }
+  },
+  "targets": {
+    "ha": { "enabled": true, "name": "ha", "host": "192.168.1.30", "port": 8123, "localOnly": true }
   }
 }
 ```
 
-`domain`, `scheme` (Standard `http`) und `localOnly` sind optional. Ein Name gilt
-für genau eine App.
+Alles außer `apps` mit `enabled`/`name`/`port` ist optional. Felder seit 0.30.0:
+`localName`, `noMDNS`, `off`, `targets` sowie je Route `aliases`, `short`, `host`
+(nur Ziele), `verifyTLS`, `networks`, `paused`. Rücksicht auf 0.29.0, das die
+neuen Felder nicht kennt:
+
+- **Hauptschalter aus:** `off: true`, und jede eingeschaltete Route steht als
+  `enabled: false, paused: true` auf dem Stick. 0.29.0 sieht sie dadurch aus,
+  nicht an; diese Version liest sie wieder als eingeschaltet.
+- **Eigene Netze** setzen auf dem Stick zusätzlich `localOnly: true`, die
+  nächstliegende Regel, die 0.29.0 kennt.
+- **Ziele** stehen in einer eigenen Liste `targets`, damit 0.29.0 sie nie als App
+  an `127.0.0.1:<Port>` weiterleitet.
+- 0.29.0 ignoriert die übrigen Felder (weitere Namen, Kurznamen, lokaler Name,
+  mDNS aus, Zertifikatsprüfung) und verliert sie, wenn es die Datei speichert.
 
 ## API
 
 Nur Besitzer/Administratoren, jede Änderung im Aktivitätsprotokoll:
 
-- `GET /api/v1/docker/proxy` → `{domain, suffixes, apps: [{app, enabled, name, port, scheme, localOnly, urls}]}`
-- `PUT /api/v1/docker/proxy` mit `{domain}` (leer entfernt sie)
-- `PUT /api/v1/docker/proxy/apps/{app}` mit `{enabled, name, port, scheme, localOnly}`
-- `DELETE /api/v1/docker/proxy/apps/{app}`
+- `GET /api/v1/docker/proxy` → `{domain, localName, defaultLocalName, mdns, off, suffixes, apps: [...], targets: [...]}`; je Route `{app, enabled, name, aliases, short, host, port, scheme, verifyTLS, localOnly, networks, urls}` (bei Zielen ist `app` die Kennung)
+- `PUT /api/v1/docker/proxy` mit `{domain?, localName?, mdns?, off?}`; nicht gesendete Felder bleiben unverändert (ältere Seiten schicken nur `domain`)
+- `PUT /api/v1/docker/proxy/apps/{app}` und `PUT /api/v1/docker/proxy/targets/{id}` mit der Route
+- `DELETE /api/v1/docker/proxy/apps/{app}`, `DELETE /api/v1/docker/proxy/targets/{id}`
 
 Fehler: `proxy_invalid` (400), `proxy_name_taken` (409). `GET /api/v1/docker`
 liefert je Container `proxyUrl`.
+
+## Zertifikate bei Kurznamen
+
+Ein Platzhalter direkt unter `.local` (`*.local`) taugt nicht; deshalb nennt das
+App-Zertifikat Kurznamen einzeln (`immich.local`). Kommt ein Kurzname dazu, wird
+das selbst signierte App-Zertifikat neu erzeugt, und Browser fragen für jeden
+Namen erneut nach der Ausnahme.
 
 ## Prüfstand und Grenzen
 
@@ -144,7 +203,13 @@ Geprüft mit Go-Tests (`internal/appproxy`, `internal/tlscert/apps_test.go`,
 Weiterleitung nach Host-Namen, Entfernen der Sitzungscookies, verworfene
 `Set-Cookie`, Weiterleitungs-Kopfzeilen, WebSocket-Upgrade, „Nur Heimnetz“, 502,
 Prüfung der Einstellungen, Zertifikatsnamen, importiertes Platzhalterzertifikat,
-avahi-Hosts-Datei und Entwicklungsmodus. Webtest `web/tests/app-proxy.test.mjs`.
+avahi-Hosts-Datei und Entwicklungsmodus. Seit 0.30.0 zusätzlich
+(`internal/appproxy/options_test.go`): lokaler Name, mDNS aus, Kurznamen samt
+Zertifikatsnamen und Hosts-Datei, weitere Namen und ihre Eindeutigkeit über Apps
+und Ziele, Hauptschalter einschließlich der Sicht von 0.29.0 auf die Datei, eigene
+Netze (auch IPv4 in IPv6), Ziele samt Ablehnung öffentlicher Adressen und der
+Ports von titand bei jeder Verbindung, Zertifikatsprüfung gegen ein selbst
+signiertes Zertifikat. Webtest `web/tests/app-proxy.test.mjs`.
 
 Nicht geprüft: echtes avahi (Neuladen von `/etc/avahi/hosts`, Namenskonflikte im
 Netz, ein von avahi umbenannter NAS-Name wie `nas-2.local`), Browser mit echten
