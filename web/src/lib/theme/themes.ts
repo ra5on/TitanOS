@@ -74,6 +74,14 @@ export type Appearance = {
 	/** Changes whenever a new background image is uploaded; 0 = none uploaded. */
 	bgVersion: number;
 	custom: CustomColors;
+	/** Glow around tiles in percent, 0–100; 0 = none. */
+	glow: number;
+	/** Color of the glow; empty = the accent color. */
+	glowColor: Hex | '';
+	/** Whether bars, rings and histories move smoothly to new values. */
+	motion: boolean;
+	/** Length of that movement in ms, 150–1000. */
+	duration: number;
 };
 
 export const LIMITS = {
@@ -83,7 +91,9 @@ export const LIMITS = {
 	rTile: { min: 0, max: 32, step: 2 },
 	rCtl: { min: 0, max: 22, step: 1 },
 	font: { min: 90, max: 120, step: 5 },
-	dim: { min: 0, max: 80, step: 5 }
+	dim: { min: 0, max: 80, step: 5 },
+	glow: { min: 0, max: 100, step: 5 },
+	duration: { min: 150, max: 1000, step: 50 }
 } as const;
 
 export function defaultAppearance(): Appearance {
@@ -102,7 +112,11 @@ export function defaultAppearance(): Appearance {
 		bg: 'shapes',
 		dim: 30,
 		bgVersion: 0,
-		custom: { bg: '#101418', surface: '#1A2027', header: '#13181D', text: '#ECEFF3', border: '#2A333D' }
+		custom: { bg: '#101418', surface: '#1A2027', header: '#13181D', text: '#ECEFF3', border: '#2A333D' },
+		glow: 0,
+		glowColor: '',
+		motion: true,
+		duration: 450
 	};
 }
 
@@ -123,10 +137,14 @@ function hex(value: unknown, fallback: Hex): Hex {
  * Turns anything (stored settings, an imported theme file) into valid
  * settings. Unknown or broken values fall back to the defaults.
  */
-export function sanitizeAppearance(input: unknown): Appearance {
+export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance {
 	const d = defaultAppearance();
 	if (typeof input !== 'object' || input === null) return d;
-	const v = input as Record<string, unknown>;
+	// Glow and animation were set in the dashboard editor before 0.30.0
+	// (dashboard preferences, "visual"); they count until the appearance
+	// has its own.
+	const old = (typeof legacy === 'object' && legacy !== null ? legacy : {}) as Record<string, unknown>;
+	const v: Record<string, unknown> = { glow: old.glow, glowColor: old.glowColor, motion: old.motion, duration: old.duration, ...(input as Record<string, unknown>) };
 	const custom = (typeof v.custom === 'object' && v.custom !== null ? v.custom : {}) as Record<string, unknown>;
 	return {
 		theme: oneOf(v.theme, THEME_IDS, d.theme),
@@ -149,7 +167,11 @@ export function sanitizeAppearance(input: unknown): Appearance {
 			header: hex(custom.header, d.custom.header),
 			text: hex(custom.text, d.custom.text),
 			border: hex(custom.border, d.custom.border)
-		}
+		},
+		glow: inRange(v.glow, LIMITS.glow, d.glow),
+		glowColor: isHex(v.glowColor) ? v.glowColor.toUpperCase() : '',
+		motion: typeof v.motion === 'boolean' ? v.motion : d.motion,
+		duration: inRange(v.duration, LIMITS.duration, d.duration)
 	};
 }
 
@@ -238,7 +260,12 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--glass-shadow': `rgba(0, 0, 0, ${p.dark ? 0.3 : 0.08})`,
 		'--outline-border': p.dark ? shade(p.border, 0.12) : shade(p.border, -0.15),
 		'--overlay': withAlpha(p.dark ? p.bg : p.text, 0.7),
-		'--bg-dim': (a.dim / 100).toFixed(2)
+		'--bg-dim': (a.dim / 100).toFixed(2),
+		// A shadow list entry even when off, so it can follow --panel-shadow.
+		'--panel-glow': a.glow
+			? `0 0 24px color-mix(in srgb, ${a.glowColor || accent} ${a.glow}%, transparent)`
+			: '0 0 0 transparent',
+		'--metric-duration': `${a.motion ? a.duration : 0}ms`
 	};
 }
 

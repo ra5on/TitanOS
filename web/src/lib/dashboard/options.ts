@@ -268,13 +268,17 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		showLabels: bool('showLabels', true),
 	};
 }
-export function tileStyle(o: TileOptions): string {
+/**
+ * The CSS variables of a tile. Since 0.30.0 a tile has no design of its
+ * own: corners, surface, glow, fonts and spacing come from Settings ›
+ * Appearance like every other tile in the UI. Sizes are in rem, so the
+ * font size chosen there scales them. Design values stored by older
+ * versions stay in the preferences and are ignored here.
+ */
+export function tileStyle(o: TileOptions, id: TileId): string {
+	const d = tileOptions(null, id);
+	const rem = (px: number) => `${px / 16}rem`;
 	const font = (v: string) =>
 		v === 'mono' ? "'IBM Plex Mono',monospace" : "'IBM Plex Sans',sans-serif";
-	return `--tile-icon-size:${o.iconSize}px;--tile-entry-width:${o.entryWidth}px;--tile-name-lines:${o.nameLines};--tile-title-size:${o.titleSize}px;--tile-value-size:${o.valueSize}px;--tile-label-size:${o.labelSize}px;--tile-title-weight:${o.titleWeight};--tile-value-weight:${o.valueWeight};--tile-label-weight:${o.labelWeight};--tile-title-color:${o.titleColor || 'var(--text)'};--tile-value-color:${o.valueColor || 'var(--text)'};--tile-label-color:${o.labelColor || 'var(--muted)'};--tile-value-font:${font(o.valueFont)};--tile-title-font:${font(o.titleFont)};--tile-label-font:${font(o.labelFont)};--tile-align:${o.align};--tile-title-align:${o.titleAlign};--tile-label-align:${o.labelAlign};--tile-padding:${o.padding}px;--tile-gap:${o.gap}px;--row-pad:var(--tile-row-gap);--tile-row-gap:${o.density === 'compact' ? 6 : o.density === 'comfortable' ? 16 : 10}px;--tile-radius:${o.radius}px;--tile-border:${o.borderWidth}px;--tile-border-color:${o.borderColor || 'var(--border)'};--tile-background:color-mix(in srgb,${o.background || 'var(--surface)'} ${o.surfaceOverride ? o.opacity + '%' : 'calc(var(--dashboard-alpha,1)*100%)'},transparent);--tile-blur:${o.surfaceOverride ? o.blur + 'px' : 'var(--dashboard-blur,0px)'};--tile-glow:${o.surfaceOverride ? o.glow / 100 : 'var(--dashboard-glow,0)'};--tile-shadow:0 ${Math.round(o.shadow / 3)}px ${o.shadow}px rgb(0 0 0 / ${o.shadow ? '.2' : '0'});${o.accent ? `--accent:${o.accent};` : ''}`;
-}
-export function transferStyle(from: TileOptions, to: TileOptions): TileOptions {
-	const next = { ...to };
-	for (const key of STYLE_KEYS) (next as Record<string, unknown>)[key] = from[key];
-	return next;
+	return `--tile-icon-size:${o.iconSize}px;--tile-entry-width:${o.entryWidth}px;--tile-name-lines:${o.nameLines};--tile-title-size:${rem(d.titleSize)};--tile-value-size:${rem(d.valueSize)};--tile-label-size:${rem(d.labelSize)};--tile-title-weight:${d.titleWeight};--tile-value-weight:${d.valueWeight};--tile-label-weight:${d.labelWeight};--tile-title-color:var(--text);--tile-value-color:var(--text);--tile-label-color:var(--muted);--tile-value-font:${font(d.valueFont)};--tile-title-font:${font(d.titleFont)};--tile-label-font:${font(d.labelFont)};--tile-align:left;--tile-title-align:left;--tile-label-align:left;--tile-padding:var(--tile-pad);--tile-gap:var(--gap);--row-pad:var(--tile-row-gap);`;
 }

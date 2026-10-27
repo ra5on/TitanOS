@@ -107,11 +107,13 @@
 	--gap: 12px;
 	--tile-pad: 16px;
 	--row-pad: 7px;
+	--tile-row-gap: 10px;
 }
 [data-density='compact'] {
 	--gap: 8px;
 	--tile-pad: 12px;
 	--row-pad: 5px;
+	--tile-row-gap: 6px;
 }
 
 /* Style of surfaces. Each style sets every panel variable, so that a preview
@@ -120,7 +122,7 @@
 	--panel-bg: var(--surface);
 	--panel-border: var(--border);
 	--panel-backdrop: none;
-	--panel-shadow: none;
+	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--surface);
 }
 [data-surface='glass'] {
@@ -134,7 +136,7 @@
 	--panel-bg: transparent;
 	--panel-border: var(--outline-border);
 	--panel-backdrop: none;
-	--panel-shadow: none;
+	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--bg);
 }
 
@@ -211,7 +213,7 @@ input[type='checkbox'] {
 	border-radius: var(--radius-tile);
 	-webkit-backdrop-filter: var(--panel-backdrop);
 	backdrop-filter: var(--panel-backdrop);
-	box-shadow: var(--panel-shadow);
+	box-shadow: var(--panel-shadow), var(--panel-glow, 0 0 0 transparent);
 }
 
 .tile-title {

@@ -42,16 +42,9 @@
 		type StaticTileId,
 		type TilePlacement,
 	} from './tiles.ts';
-	import {
-		tileOptions,
-		tileStyle,
-		transferStyle,
-		STYLE_KEYS,
-		type TileOptions,
-	} from './options.ts';
+	import { tileOptions, tileStyle, STYLE_KEYS, type TileOptions } from './options.ts';
 	import { flowLayout, columnCount, columnWidth, visibleColumns, legacyPositions } from './flow.ts';
-	import GlobalEditor from './GlobalEditor.svelte';
-	import { dashboardVisual, visualStyle, type DashboardVisual } from './visual.ts';
+	import { dashboardVisual, type DashboardVisual } from './visual.ts';
 	import { dashboardScene } from './scene.svelte.ts';
 	import TileEditor, { type EditPart } from './TileEditor.svelte';
 	import UsageTile from './tiles/UsageTile.svelte';
@@ -122,8 +115,7 @@
 	let savedOptions = $state(untrack(() => structuredClone($state.snapshot(options))));
 	let visual = $state(dashboardVisual(session.dashboard?.visual));
 	let savedVisual = $state(dashboardVisual(session.dashboard?.visual));
-	let galleryVisual = $state<DashboardVisual | null>(null),
-		globalOpen = $state(false);
+	let galleryVisual = $state<DashboardVisual | null>(null);
 	const effectiveVisual = $derived(galleryVisual ?? visual);
 	const pendingImages = new Map<string, File>();
 	$effect(() => {
@@ -170,9 +162,7 @@
 		redo = $state<string[]>([]),
 		adding = $state(false),
 		confirmCancel = $state(false),
-		confirmRestore = $state(false),
-		transferOpen = $state(false),
-		transferTargets = $state<TileId[]>([]);
+		confirmRestore = $state(false);
 	let columns = $state(columnCount(session.dashboard?.columns)),
 		savedColumns = $state(columnCount(session.dashboard?.columns));
 	let minimumWidth = $state(columnWidth(session.dashboard?.minimumWidth)),
@@ -482,7 +472,6 @@
 		redo = [];
 		shown = readGrid();
 		editing = true;
-		globalOpen = true;
 		adding = false;
 	}
 	// Leaving the editor with unsaved changes asks first.
@@ -492,7 +481,6 @@
 	}
 	function openAdd() {
 		customize = null;
-		globalOpen = false;
 		adding = true;
 	}
 	function restoreDefaults() {
@@ -510,7 +498,6 @@
 		adding = false;
 		visual = structuredClone($state.snapshot(savedVisual));
 		galleryVisual = null;
-		globalOpen = false;
 		columns = savedColumns;
 		minimumWidth = savedMinimumWidth;
 		editing = false;
@@ -549,7 +536,6 @@
 			undo = [];
 			redo = [];
 			galleryVisual = null;
-			globalOpen = false;
 			adding = false;
 			session.dashboard = preferences;
 			saved = structuredClone(layout);
@@ -652,15 +638,6 @@
 			next = { ...currentSettings };
 		for (const key of STYLE_KEYS) (next as unknown as Record<string, unknown>)[key] = fresh[key];
 		options = { ...options, [customize]: next };
-	}
-	function transfer() {
-		if (!customize) return;
-		checkpoint();
-		const next = { ...options };
-		for (const id of transferTargets)
-			next[id] = transferStyle(currentSettings, tileOptions(options, id));
-		options = next;
-		transferOpen = false;
 	}
 	function moveTile(id: TileId, to: number) {
 		const layout = [...shown],
@@ -945,7 +922,6 @@
 		e.preventDefault();
 		if (customize) customize = null;
 		else if (adding) adding = false;
-		else if (globalOpen) globalOpen = false;
 		else requestCancel();
 	}
 	function interceptLinks(element: HTMLElement, id: TileId) {
@@ -1007,7 +983,7 @@
 
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
-<div class="dashboard-page" inert={saving} style={visualStyle(effectiveVisual)}>
+<div class="dashboard-page" inert={saving}>
 	{#if editing}<div class="editbar" role="toolbar" aria-label={t('dashboard.editor.toolbar')}>
 			<div class="flow-controls">
 				<button
@@ -1016,14 +992,8 @@
 					disabled={saving}
 					onclick={() => (adding ? (adding = false) : openAdd())}
 					><Icon name="plus" size={16} />{t('dashboard.hidden')}</button
-				><button
-					class="btn"
-					aria-pressed={globalOpen && !customize && !adding}
-					onclick={() => {
-						globalOpen = true;
-						customize = null;
-						adding = false;
-					}}><Icon name="palette" size={16} />{t('dashboard.visual.all')}</button
+				><a class="btn" href="/settings/appearance"
+					><Icon name="palette" size={16} />{t('dashboard.visual.all')}</a
 				>
 				<label
 					>{t('dashboard.columns')}<select
@@ -1083,7 +1053,7 @@
 	<div
 		class="dashboard-workspace"
 		class:editing
-		class:with-inspector={editing && (!!customize || globalOpen || adding)}
+		class:with-inspector={editing && (!!customize || adding)}
 	>
 		<div class="area">
 			<div class="dashboard-grid" {@attach attachGrid}>
@@ -1113,7 +1083,7 @@
 								: undefined}
 							{@attach (element) => interceptLinks(element, tile.id)}
 							class:selected={editing && customize === tile.id}
-							style={tileStyle(settings)}
+							style={tileStyle(settings, tile.id)}
 							aria-label={titleOf(tile.id)}
 							onpointerdown={(e) => selectPart(e, tile.id)}
 						>
@@ -1330,18 +1300,6 @@
 					>{/if}
 				<p class="muted">{t('dashboard.hiddenHint')}</p>
 			</aside>{/if}
-		{#if editing && globalOpen && !customize && !adding}<GlobalEditor
-				value={visual}
-				urls={dashboardScene.urls}
-				onbegin={checkpoint}
-				onchange={(v) => (visual = v)}
-				onpreview={(v) => {
-					galleryVisual = v;
-					if (!v) pruneImages();
-				}}
-				onupload={registerImage}
-				onclose={() => (globalOpen = false)}
-			/>{/if}
 		{#if editing && customize && currentPlacement}<TileEditor
 				id={customize}
 				title={titleOf(customize)}
@@ -1386,35 +1344,9 @@
 				onsize={size}
 				onduplicate={duplicate}
 				onreset={resetTile}
-				ontransfer={() => {
-					transferTargets = [];
-					transferOpen = true;
-				}}
 				onclose={() => (customize = null)}
 			/>{/if}
 	</div>
-	{#if transferOpen}<Dialog
-			title={t('dashboard.editor.transfer')}
-			onclose={() => (transferOpen = false)}
-			><div class="transfer-targets">
-				{#each shown.filter((p) => p.id !== customize) as tile}<label
-						><input
-							type="checkbox"
-							checked={transferTargets.includes(tile.id)}
-							onchange={() =>
-								(transferTargets = transferTargets.includes(tile.id)
-									? transferTargets.filter((id) => id !== tile.id)
-									: [...transferTargets, tile.id])}
-						/>{titleOf(tile.id)}</label
-					>{/each}
-			</div>
-			<div class="dialog-actions">
-				<button class="btn" onclick={() => (transferOpen = false)}>{t('common.cancel')}</button
-				><button class="btn btn-primary" disabled={!transferTargets.length} onclick={transfer}
-					>{t('common.done')}</button
-				>
-			</div></Dialog
-		>{/if}
 	{#if confirmCancel}<Dialog
 			title={t('dashboard.editor.discardTitle')}
 			onclose={() => (confirmCancel = false)}
@@ -1538,18 +1470,13 @@
 	.dashboard-tile {
 		container-type: inline-size;
 		padding: 0;
-		border: var(--tile-border, 1px) solid var(--tile-border-color, var(--border));
-		border-radius: var(--tile-radius, 12px);
-		background: var(--tile-background, var(--surface));
-		box-shadow:
-			var(--tile-shadow, none),
-			0 0 24px
-				color-mix(
-					in srgb,
-					var(--dashboard-glow-color, var(--accent)) calc(var(--tile-glow, 0) * 100%),
-					transparent
-				);
-		backdrop-filter: blur(var(--tile-blur, 0px)) saturate(115%);
+		/* The same surface as every tile in the UI (Settings › Appearance). */
+		border: 1px solid var(--panel-border);
+		border-radius: var(--radius-tile);
+		background: var(--panel-bg);
+		box-shadow: var(--panel-shadow), var(--panel-glow, 0 0 0 transparent);
+		-webkit-backdrop-filter: var(--panel-backdrop);
+		backdrop-filter: var(--panel-backdrop);
 		display: flex;
 		flex-direction: column;
 		gap: 0;
@@ -1727,15 +1654,6 @@
 	}
 	.add-tiles p {
 		font-size: 0.8rem;
-	}
-	.transfer-targets {
-		display: grid;
-		gap: 14px;
-	}
-	.transfer-targets label {
-		display: flex;
-		align-items: center;
-		gap: 8px;
 	}
 	@supports not (backdrop-filter: blur(1px)) {
 		.dashboard-tile {

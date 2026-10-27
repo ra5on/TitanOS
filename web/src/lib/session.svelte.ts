@@ -26,7 +26,7 @@ async function loadPreferences() {
 		session.vnc = prefs.vnc;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
-		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance));
+		if (prefs.appearance) useAppearance(sanitizeAppearance(prefs.appearance, prefs.dashboard?.visual));
 		useAssistantPrefs(prefs.assistant);
 	} catch {
 		// The UI works with defaults; saving will report the problem.

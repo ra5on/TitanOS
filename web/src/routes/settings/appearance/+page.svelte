@@ -11,6 +11,7 @@
 		defaultAppearance,
 		DENSITIES,
 		LIMITS,
+		pickedAccent,
 		resolvePalette,
 		sanitizeAppearance,
 		SURFACE_STYLES,
@@ -21,6 +22,11 @@
 		type ThemeId
 	} from '#lib/theme/themes.ts';
 	import Preview from './Preview.svelte';
+	import BackgroundEditor from '#lib/dashboard/BackgroundEditor.svelte';
+	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
+	import { dashboardVisual, type DashboardVisual } from '#lib/dashboard/visual.ts';
+	import { session } from '#lib/session.svelte.ts';
+	import { onDestroy } from 'svelte';
 
 	const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 	const CUSTOM_FIELDS: (keyof CustomColors)[] = ['bg', 'surface', 'header', 'text', 'border'];
@@ -33,7 +39,19 @@
 	let themeFile: HTMLInputElement;
 	let imageFile = $state<HTMLInputElement>();
 
-	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current));
+	// The dashboard background lives in the dashboard preferences (with the
+	// account's images); it is saved with "Apply" like the rest.
+	let visual = $state<DashboardVisual>(dashboardVisual(session.dashboard?.visual));
+	const pendingImages = new Map<string, File>();
+	const visualDirty = $derived(
+		JSON.stringify(visual) !== JSON.stringify(dashboardVisual(session.dashboard?.visual))
+	);
+	onDestroy(() => {
+		for (const url of Object.values(dashboardScene.urls)) URL.revokeObjectURL(url);
+		dashboardScene.urls = {};
+	});
+
+	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty);
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
 	const ratio = $derived(textContrast(palette));
 
@@ -56,6 +74,7 @@
 		saving = true;
 		message = null;
 		try {
+			if (visualDirty) await saveVisual();
 			await saveAppearance($state.snapshot(draft));
 			message = { text: t('appearance.saved'), warn: false };
 		} catch (err) {
@@ -63,6 +82,19 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	async function saveVisual() {
+		const preferences = { ...session.dashboard, visual: $state.snapshot(visual) };
+		const uploads = visual.images.filter((image) => pendingImages.has(image.id));
+		if (uploads.length) {
+			const form = new FormData();
+			form.append('preferences', JSON.stringify(preferences));
+			for (const image of uploads) form.append('image', pendingImages.get(image.id)!, image.id);
+			await api.put('/preferences/dashboard', form);
+		} else await api.put('/preferences/dashboard', preferences);
+		pendingImages.clear();
+		session.dashboard = preferences;
 	}
 
 	function reset() {
@@ -215,6 +247,27 @@
 			</div>
 		</section>
 
+		<section class="tile panel" aria-labelledby="h-effects">
+			<h2 class="tile-title" id="h-effects">{t('appearance.effects')}</h2>
+			<Slider id="glow" label={t('dashboard.visual.glow')} bind:value={draft.glow} limit={LIMITS.glow} unit="%" />
+			<p class="hint muted">{t('dashboard.visual.glowHint')}</p>
+			{#if draft.glow > 0}
+				<label class="check"
+					><input type="checkbox" checked={!draft.glowColor} onchange={(e) => (draft.glowColor = e.currentTarget.checked ? '' : pickedAccent(draft))} />{t('appearance.accent')}</label
+				>
+				{#if draft.glowColor}
+					<label class="color-field"
+						><input type="color" value={draft.glowColor} oninput={(e) => (draft.glowColor = e.currentTarget.value.toUpperCase())} /><span>{t('dashboard.visual.glowColor')}</span></label
+					>
+				{/if}
+			{/if}
+			<label class="check divided"><input type="checkbox" bind:checked={draft.motion} />{t('dashboard.visual.smooth')}</label>
+			{#if draft.motion}
+				<Slider id="duration" label={t('dashboard.visual.duration')} bind:value={draft.duration} limit={LIMITS.duration} unit="ms" />
+			{/if}
+			<p class="hint muted">{t('dashboard.visual.motionHint')}</p>
+		</section>
+
 		<section class="tile panel" aria-labelledby="h-bg">
 			<h2 class="tile-title" id="h-bg">{t('appearance.background')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-bg">
@@ -237,6 +290,20 @@
 			{/if}
 		</section>
 
+		<BackgroundEditor
+			value={visual}
+			urls={dashboardScene.urls}
+			onbegin={() => {}}
+			onchange={(v) => (visual = v)}
+			onpreview={() => {}}
+			onupload={(id, file, url) => {
+				const previous = dashboardScene.urls[id];
+				if (previous) URL.revokeObjectURL(previous);
+				pendingImages.set(id, file);
+				dashboardScene.urls = { ...dashboardScene.urls, [id]: url };
+			}}
+		/>
+
 		<div class="apply">
 			<button type="button" class="btn btn-primary" onclick={apply} disabled={saving || !dirty}>{t('appearance.apply')}</button>
 			<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>
@@ -256,6 +323,20 @@
 </div>
 
 <style>
+	.color-field {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 0.875rem;
+	}
+	.color-field input {
+		width: 42px;
+		height: 28px;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-small);
+		background: none;
+	}
 	.columns {
 		display: flex;
 		flex-wrap: wrap;

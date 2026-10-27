@@ -26,7 +26,7 @@ test('tile options retain deliberate hiding and reject invalid interface paths',
 
 test('independent instances preserve their source, filters and appearance safely', async () => {
 	const { sourceId, workload, defaultWithHardware } = await import('../src/lib/dashboard/tiles.ts');
-	const { tileStyle, transferStyle } = await import('../src/lib/dashboard/options.ts');
+	const { tileStyle } = await import('../src/lib/dashboard/options.ts');
 	const id = 'network@1a2b3c4d';
 	assert.equal(sourceId(id), 'network');
 	assert.deepEqual(workload('vm:my-server@1a2b3c4d'), { kind: 'vm', name: 'my-server' });
@@ -59,17 +59,8 @@ test('independent instances preserve their source, filters and appearance safely
 	assert.deepEqual(custom.items, []);
 	assert.deepEqual(custom.hiddenFields, ['driver']);
 	assert.deepEqual(custom.parts.slice(0, 2), ['details', 'value']);
-	assert.ok(tileStyle(custom).includes('--tile-value-size:56px'));
-	assert.ok(!tileStyle(custom).includes('display:none'));
-	const target = tileOptions(
-		{ network: { interface: 'eth0', title: 'My interface', items: ['a'] } },
-		'network',
-	);
-	const copy = transferStyle(custom, target);
-	assert.equal(copy.valueSize, 56);
-	assert.equal(copy.interface, 'eth0');
-	assert.equal(copy.title, 'My interface');
-	assert.deepEqual(copy.items, ['a']);
+	assert.ok(!tileStyle(custom, id).includes('56px'));
+	assert.ok(!tileStyle(custom, id).includes('display:none'));
 	const hw = defaultWithHardware(['igpu', 'npu']);
 	assert.equal(hw.find((p) => p.id === 'igpu').w, 3);
 	assert.equal(hw.find((p) => p.id === 'npu').x, 3);

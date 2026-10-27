@@ -24,7 +24,6 @@
 		onauto,
 		onduplicate,
 		onreset,
-		ontransfer,
 		onclose,
 	}: {
 		id: TileId;
@@ -43,33 +42,13 @@
 		onauto: (value: boolean) => void;
 		onduplicate: () => void;
 		onreset: () => void;
-		ontransfer: () => void;
 		onclose: () => void;
 	} = $props();
-	let tab = $state<'content' | 'appearance' | 'size'>('appearance');
+	let tab = $state<'content' | 'size'>('content');
 	const source = $derived(sourceId(id));
 	const metric = $derived(
 		['cpu', 'memory', 'igpu', 'npu', 'nvidia', 'accelerators'].includes(source),
 	);
-	const prefix = $derived(part === 'heading' ? 'title' : part === 'labels' ? 'label' : 'value');
-	const sizeKey = $derived((prefix + 'Size') as keyof TileOptions),
-		weightKey = $derived((prefix + 'Weight') as keyof TileOptions),
-		colorKey = $derived((prefix + 'Color') as keyof TileOptions),
-		fontKey = $derived((prefix + 'Font') as keyof TileOptions),
-		alignKey = $derived(
-			prefix === 'title' ? 'titleAlign' : prefix === 'label' ? 'labelAlign' : 'align',
-		);
-	const ranges = [
-		['padding', 8, 40],
-		['radius', 0, 40],
-		['opacity', 10, 100],
-		['blur', 0, 40],
-		['glow', 0, 100],
-		['borderWidth', 0, 4],
-		['shadow', 0, 40],
-		['gap', 2, 30],
-	] as const;
-	const colorFields = ['background', 'borderColor', 'accent'] as const;
 	function reorder(index: number, delta: number) {
 		const parts = [...settings.parts];
 		[parts[index], parts[index + delta]] = [parts[index + delta], parts[index]];
@@ -88,7 +67,7 @@
 		>
 	</div>
 	<div class="editor-tabs" role="group" aria-label={t('dashboard.tileOptions')}>
-		{#each ['content', 'appearance', 'size'] as value}<button
+		{#each ['content', 'size'] as value}<button
 				class:chosen={tab === value}
 				aria-pressed={tab === value}
 				onclick={() => (tab = value as typeof tab)}
@@ -96,79 +75,7 @@
 			>{/each}
 	</div>
 	<div class="editor-body">
-		{#if tab === 'appearance'}
-			<label
-				>{t('dashboard.editor.element')}<select
-					class="field"
-					value={part}
-					onchange={(e) => {
-						const choice = e.currentTarget.value;
-						part = choice as EditPart;
-					}}
-					><option value="tile">{t('dashboard.editor.tile')}</option><option value="heading"
-						>{t('dashboard.editor.heading')}</option
-					><option value="value">{t('dashboard.editor.value')}</option><option value="labels"
-						>{t('dashboard.editor.labels')}</option
-					></select
-				></label
-			>
-			{#if part !== 'tile'}<fieldset>
-					<legend>{t('dashboard.editor.font')}</legend>
-					<label
-						>{t('dashboard.editor.fontSize')}<output>{settings[sizeKey]} px</output><input
-							type="range"
-							aria-label={t('dashboard.editor.fontSize')}
-							min="11"
-							max={prefix === 'value' ? 96 : prefix === 'title' ? 36 : 28}
-							value={Number(settings[sizeKey])}
-							oninput={(e) => onchange(sizeKey, Number(e.currentTarget.value))}
-						/></label
-					>
-					<div class="pair">
-						<label
-							>{t('dashboard.editor.weight')}<select
-								class="field"
-								value={String(settings[weightKey])}
-								onchange={(e) => onchange(weightKey, Number(e.currentTarget.value))}
-								>{#each [400, 500, 600] as weight}<option value={weight}>{weight}</option
-									>{/each}</select
-							></label
-						><label
-							>{t('dashboard.editor.font')}<select
-								class="field"
-								value={String(settings[fontKey])}
-								onchange={(e) => onchange(fontKey, e.currentTarget.value)}
-								><option value="sans">IBM Plex Sans</option><option value="mono"
-									>IBM Plex Mono</option
-								></select
-							></label
-						>
-					</div>
-					<label
-						>{t('dashboard.editor.alignment')}<select
-							class="field"
-							value={settings[alignKey]}
-							onchange={(e) => onchange(alignKey, e.currentTarget.value)}
-							>{#each ['left', 'center', 'right'] as a}<option value={a}
-									>{t(`dashboard.editor.${a}` as MessageKey)}</option
-								>{/each}</select
-						></label
-					>
-					<div class="color-row">
-						<label
-							><input
-								type="checkbox"
-								checked={!settings[colorKey]}
-								onchange={(e) => onchange(colorKey, e.currentTarget.checked ? '' : '#6CB6FF')}
-							/>{t('dashboard.editor.themeColor')}</label
-						><input
-							aria-label={t('dashboard.editor.textColor')}
-							type="color"
-							value={String(settings[colorKey] || '#6CB6FF')}
-							oninput={(e) => onchange(colorKey, e.currentTarget.value)}
-						/>
-					</div>
-				</fieldset>{/if}
+		{#if tab === 'content'}
 			{#if ['docker', 'vms'].includes(source) || /^(app|container|vm):/.test(source)}<fieldset>
 					<legend>{t('dashboard.entries')}</legend>
 					{#each [['iconSize', 20, 64], ['entryWidth', 120, 320], ['nameLines', 1, 2]] as [key, min, max]}<label
@@ -193,56 +100,6 @@
 							>{/each}</select
 					>
 				</fieldset>{/if}
-			<fieldset>
-				<legend>{t('dashboard.editor.surface')}</legend><label
-					><input
-						type="checkbox"
-						checked={settings.surfaceOverride}
-						onchange={(e) => onchange('surfaceOverride', e.currentTarget.checked)}
-					/>{t('dashboard.visual.override')}</label
-				>
-				<label
-					>{t('dashboard.editor.density')}<select
-						class="field"
-						value={settings.density}
-						onchange={(e) => onchange('density', e.currentTarget.value)}
-						>{#each ['compact', 'normal', 'comfortable'] as density}<option value={density}
-								>{t(`dashboard.editor.${density}` as MessageKey)}</option
-							>{/each}</select
-					></label
-				>
-				{#each ranges as [key, min, max]}<label
-						>{t(`dashboard.editor.${key}` as MessageKey)}<output
-							>{settings[key]} {['opacity', 'glow'].includes(key) ? '%' : 'px'}</output
-						><input
-							type="range"
-							aria-label={t(`dashboard.editor.${key}` as MessageKey)}
-							{min}
-							{max}
-							value={settings[key]}
-							disabled={['opacity', 'blur', 'glow'].includes(key) && !settings.surfaceOverride}
-							oninput={(e) => onchange(key, Number(e.currentTarget.value))}
-						/></label
-					>{/each}
-				{#each colorFields as key}<div class="color-row">
-						<label
-							><input
-								type="checkbox"
-								checked={!!settings[key]}
-								onchange={(e) => onchange(key, e.currentTarget.checked ? '#6CB6FF' : '')}
-							/>{t(`dashboard.editor.${key}` as MessageKey)}</label
-						><input
-							type="color"
-							aria-label={t(`dashboard.editor.${key}` as MessageKey)}
-							value={settings[key] || '#6CB6FF'}
-							oninput={(e) => onchange(key, e.currentTarget.value)}
-						/>
-					</div>{/each}
-			</fieldset>
-			<button class="btn" onclick={ontransfer}
-				><Icon name="copy" size={14} />{t('dashboard.editor.transfer')}</button
-			><button class="link reset" onclick={onreset}>{t('dashboard.editor.reset')}</button>
-		{:else if tab === 'content'}
 			<label
 				>{t('dashboard.editor.customTitle')}<input
 					class="field"
@@ -618,6 +475,7 @@
 							>
 						</div>{/each}
 				</fieldset>{/if}
+			<button class="link reset" onclick={onreset}>{t('dashboard.editor.reset')}</button>
 		{:else}
 			<div class="pair">
 				<label
@@ -742,18 +600,6 @@
 		grid-template-columns: 1fr 1fr;
 		gap: 10px;
 	}
-	input[type='range'] {
-		display: block;
-		width: 100%;
-		accent-color: var(--accent);
-		margin: 14px 0 4px;
-	}
-	output {
-		float: right;
-		color: var(--text);
-		font-size: 0.75rem;
-		font-family: 'IBM Plex Mono', monospace;
-	}
 	fieldset {
 		margin: 0;
 		border: 0;
@@ -773,25 +619,6 @@
 		align-items: center;
 		gap: 8px;
 		color: var(--text);
-	}
-	.color-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-	}
-	.color-row label {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-	}
-	input[type='color'] {
-		width: 32px;
-		height: 28px;
-		padding: 2px;
-		border: 1px solid var(--border);
-		background: transparent;
-		border-radius: var(--radius-small);
 	}
 	.reset {
 		font-size: 0.8rem;
