@@ -698,9 +698,17 @@
 			.querySelector<HTMLButtonElement>(`.grid-stack-item[gs-id="${CSS.escape(id)}"] .grip`)
 			?.focus({ preventScroll: true });
 	}
+	// The whole head moves the tile, not only the small grip; its other buttons keep their action.
+	function headMove(event: PointerEvent, id: TileId) {
+		const target = event.target as HTMLElement;
+		if (!editing || target.closest('button:not(.grip)')) return;
+		pointerMove(event, id);
+	}
 	function pointerMove(event: PointerEvent, id: TileId, resize = false) {
 		const current = shown.find((p) => p.id === id)!;
 		if (!editing || saving || current.locked || event.button !== 0 || !board) return;
+		// No text selection or native drag while the pointer holds the tile.
+		event.preventDefault();
 		const handle = event.currentTarget as HTMLElement;
 		const start = { x: event.clientX, y: event.clientY },
 			r = boardRects[id];
@@ -764,9 +772,10 @@
 			}
 		}
 		function cleanup() {
-			handle.removeEventListener('pointermove', move);
-			handle.removeEventListener('pointerup', end);
-			handle.removeEventListener('pointercancel', abort);
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onCancel);
+			window.removeEventListener('blur', abort);
 			document.removeEventListener('keydown', escapeMove);
 			if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 			moving = null;
@@ -787,9 +796,16 @@
 			if (changed) rebuild(original);
 			cleanup();
 		}
-		handle.addEventListener('pointermove', move);
-		handle.addEventListener('pointerup', end);
-		handle.addEventListener('pointercancel', abort);
+		// On the window, not the handle: the live preview reorders the tiles, which moves the
+		// dragged tile's node and takes the pointer capture away from its handle.
+		const onMove = (e: PointerEvent) => e.pointerId === event.pointerId && move(e);
+		const onUp = (e: PointerEvent) => e.pointerId === event.pointerId && end();
+		const onCancel = (e: PointerEvent) => e.pointerId === event.pointerId && abort();
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onCancel);
+		// Switching windows mid-drag loses the pointerup; never stay half-dragged.
+		window.addEventListener('blur', abort);
 		cancelPointer = abort;
 		function escapeMove(e: KeyboardEvent) {
 			if (e.key === 'Escape') {
@@ -1101,14 +1117,18 @@
 							aria-label={titleOf(tile.id)}
 							onpointerdown={(e) => selectPart(e, tile.id)}
 						>
-							{#if settings.showTitle || settings.collapsed || editing}<div class="tile-head">
+							{#if settings.showTitle || settings.collapsed || editing}<!-- svelte-ignore a11y_no_static_element_interactions (the grip is the keyboard handle) -->
+								<div
+									class="tile-head"
+									class:draggable={editing && !tile.locked}
+									onpointerdown={(e) => headMove(e, tile.id)}
+								>
 									{#if editing}<button
 											disabled={tile.locked}
 											class="grip"
 											title={t('dashboard.editor.moveHint')}
 											aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
 											onkeydown={(e) => keyboardMove(e, tile.id)}
-											onpointerdown={(e) => pointerMove(e, tile.id)}
 											><Icon name="grip" size={16} /></button
 										>{/if}
 									{#if settings.showIcon}<span class="tile-symbol"
@@ -1548,6 +1568,17 @@
 		padding: 5px 10px;
 		border-bottom: 1px solid var(--border);
 		background: color-mix(in srgb, var(--text) 3%, transparent);
+	}
+	/* Selected text in the editor would be dragged natively by the browser instead of the tile. */
+	.editing .dashboard-grid {
+		user-select: none;
+	}
+	.tile-head.draggable {
+		cursor: grab;
+		touch-action: none;
+	}
+	.moving .tile-head.draggable {
+		cursor: grabbing;
 	}
 	.tile-title {
 		flex: 1;
