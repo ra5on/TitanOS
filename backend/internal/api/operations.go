@@ -483,6 +483,10 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Maintenance != nil {
 		out["maintenance"] = s.opts.Maintenance.Status()
 	}
+	if s.opts.Plugins != nil {
+		// RAM only and under its own lock: a running activation does not hold this up.
+		out["plugins"] = s.opts.Plugins.Progress()
+	}
 	if s.opts.Backup != nil {
 		out["backups"] = s.opts.Backup.CachedViews()
 	}
