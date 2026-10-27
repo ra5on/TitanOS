@@ -62,3 +62,55 @@ Rücksicherung auf der verwendeten Hardware ergänzt werden.
 Auftrags- und Zielnamen behalten die eingegebene Groß-/Kleinschreibung. Beispielsweise bleibt `Backup` auch im automatisch vorgeschlagenen Zielordner `backups/Backup` erhalten. Der feste Präfix `backups/` ist eine Ablagestruktur, keine zweite Fassung des Auftragsnamens. Freigaben, Unterordner und Dateien werden unverändert benannt, etwa `backups/Backup/Daten/MeineFotos/Urlaub.JPG`.
 
 Bestehende Aufträge und Pfade werden nicht umbenannt. Zwei neue Aufträge oder Zielbezeichnungen, die sich nur durch Groß-/Kleinschreibung unterscheiden, werden nicht parallel angelegt. Die Prüfungen verwenden isolierte Zielverzeichnisse für den gemeinsamen USB-/SMB-Kopierpfad; die Namensbehandlung des konkreten externen NAS muss dessen Dateisystem und SMB-Konfiguration ebenfalls unterstützen.
+
+## Bandbreite begrenzen (alle Backupaufträge, ab 0.28.0)
+
+Gilt für jeden Backupauftrag, nicht nur für SMB-Ordnerkopien: restic-Aufträge
+(anderes Volume, S3, SFTP, REST-Server, anderes TitanOS) sowie USB- und
+SMB-Ordnerkopien. Im Auftragsformular unter **Bandbreite**:
+
+- **Bandbreite begrenzen** mit einer Grenze in MiB/s (ganze Zahl 1–10.000;
+  0 = unbegrenzt).
+- Optional **In einem Zeitfenster eine andere Grenze**: Von/Bis (HH:MM) mit eigener
+  Grenze, 0 = unbegrenzt. Das Fenster folgt denselben Regeln wie das Startfenster
+  des Zeitplans: Es darf über Mitternacht gehen (z. B. 22:00–06:00), Beginn ist
+  enthalten, Ende nicht; maßgeblich ist die eingestellte Zeitzone des NAS.
+  Beispiel „tagsüber 10 MiB/s, nachts unbegrenzt“: Grenze 10, Fenster 22:00–06:00
+  mit 0. Umgekehrt „nur während der Arbeitszeit bremsen“: Grenze 0, Fenster
+  08:00–18:00 mit 5.
+
+Gespeichert wird das optionale Feld `bandwidth` (`limit`, `windowFrom`,
+`windowTo`, `windowLimit`) im Auftrag in `/config/backup/jobs.json`, nur beim
+ausdrücklichen Speichern des Auftrags. Eine Einstellung, die nichts begrenzt, wird
+nicht gespeichert. Ältere titand-Versionen kennen das Feld nicht, lesen den Auftrag
+unverändert und sichern dann ohne Grenze; speichern sie den Auftrag neu, entfällt
+das Feld.
+
+**Wirkung je Verfahren**
+
+- **restic:** `--limit-upload` und `--limit-download` in KiB/s (MiB/s × 1024) für
+  alle restic-Aufrufe eines Backup-Laufs (Repository öffnen/anlegen, `unlock`,
+  `backup`, `forget --prune`). restic kann die Grenze während eines Aufrufs nicht
+  ändern: Es gilt die Grenze zum **Start des Laufs** für den ganzen Lauf, auch wenn
+  er über eine Fenstergrenze hinaus läuft. Prüfen, Wiederherstellungsproben,
+  Wiederherstellen und Snapshot-Listen laufen ohne Grenze. Die Grenze zählt, was
+  restic an sein Backend überträgt (nach Deduplizierung und Kompression), nicht
+  die gelesenen Quelldaten.
+- **USB- und SMB-Ordnerkopie:** In titand selbst begrenzt (kein rsync): gezählt
+  werden die ins Ziel geschriebenen Bytes und die zum Inhaltsvergleich vom Ziel
+  zurückgelesenen. Die Kopie sieht höchstens einmal je Sekunde auf die Uhr und
+  wechselt beim Überschreiten einer Fenstergrenze **während des Laufs** auf die
+  neue Grenze. Lesen der Quelle und SMB-Protokollaufwand werden nicht gezählt; die
+  Leitung kann daher etwas über der Grenze ausgelastet sein. Pausen (Öffnen von
+  Dateien, langsame Platten) ergeben keinen nachgeholten Schub von mehr als einer
+  Sekunde.
+
+Während ein Auftrag läuft, zeigt die Fortschrittszeile die gerade geltende Grenze
+(„begrenzt auf 10 MiB/s“ bzw. „gerade unbegrenzt“); die API liefert sie als
+`state.bandwidthLimit` (MiB/s, fehlt bei unbegrenzt). Nach dem Lauf wird der Wert
+geleert und nicht mit dem Zustand gespeichert.
+
+Geprüft mit Unit-Tests (Argumente für restic, Umrechnung, Fensterwahl über
+Mitternacht, Tempo und Fensterwechsel der Kopie mit künstlicher Uhr, API-Prüfung)
+und nachgebautem restic. Nicht geprüft: tatsächlich erreichte Raten mit echtem
+restic gegen S3/SFTP/REST und SMB/USB auf echter Hardware.

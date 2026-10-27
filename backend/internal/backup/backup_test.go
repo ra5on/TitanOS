@@ -25,7 +25,7 @@ skip=
 for arg in "$@"; do
   if [ -n "$skip" ]; then skip=; continue; fi
   case "$arg" in
-    -o) skip=1 ;;
+    -o|--limit-upload|--limit-download) skip=1 ;;
     -*) ;;
     *) command=$arg; break ;;
   esac
