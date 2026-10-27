@@ -516,6 +516,14 @@ func run(opts options) error {
 			notifier.Notify(notify.Error, "disk_test_failed", disk)
 		}
 	}
+	// A test that a restart stopped and that waits to be continued.
+	volumes.OnTestInterrupted = func(test storage.DiskTest) {
+		disk := test.Disk
+		if test.Serial != "" {
+			disk += " (" + test.Model + ", " + test.Serial + ")"
+		}
+		notifier.Notify(notify.Warning, "disk_test_waiting", disk)
+	}
 
 	// Copies of /config on a volume: the stick is the only place where
 	// the configuration lives, and sticks wear out.

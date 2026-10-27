@@ -174,8 +174,22 @@ type Manager struct {
 	openDisk  func(path string, write bool) (blockFile, error)
 	smartPoll time.Duration
 
-	testMu sync.Mutex
-	tests  map[string]*DiskTest
+	// OnTestInterrupted is told about every test that a restart stopped
+	// and that waits to be continued.
+	OnTestInterrupted func(DiskTest)
+	// checkpointEvery and testStateVolumes are replaced in tests.
+	checkpointEvery  time.Duration
+	testStateVolumes func() []string
+
+	testMu      sync.Mutex
+	tests       map[string]*DiskTest
+	testNotices []TestNotice
+	// testSaveMu serializes the checkpoint file (disktest_resume.go):
+	// the volume it lies on, which volumes have one and which were read.
+	testSaveMu       sync.Mutex
+	testStateVolume  string
+	testStateFiles   map[string]bool
+	testStateScanned map[string]bool
 
 	mu      sync.RWMutex
 	volumes []VolumeConfig
@@ -490,6 +504,10 @@ func (m *Manager) Run(ctx context.Context) {
 			m.mu.Lock()
 			m.settled = true
 			m.mu.Unlock()
+		}
+		if m.Settled() {
+			// Disk tests that a restart stopped, from volumes mounted since.
+			m.ResumeSavedTests(ctx)
 		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge

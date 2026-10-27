@@ -219,6 +219,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage/tests", s.requireAdmin(s.handleDiskTests))
 	mux.HandleFunc("POST /api/v1/storage/tests", s.requireHeavyAdmin(s.handleDiskTestStart))
 	mux.HandleFunc("DELETE /api/v1/storage/tests/{disk}", s.requireAdmin(s.handleDiskTestStop))
+	mux.HandleFunc("POST /api/v1/storage/tests/{disk}/resume", s.requireHeavyAdmin(s.handleDiskTestResume))
+	mux.HandleFunc("DELETE /api/v1/storage/test-notices", s.requireAdmin(s.handleDiskTestNotices))
 
 	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
 	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
