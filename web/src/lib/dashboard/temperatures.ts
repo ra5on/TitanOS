@@ -1,4 +1,5 @@
-import { defaultPlacement, sanitizeLayout } from './tiles.ts';
+import type { Temperature } from '#lib/api.ts';
+import { defaultPlacement, sanitizeLayout, sourceId } from './tiles.ts';
 
 export type SelectedTemperature = { id: string; chip: string; label: string };
 
@@ -38,12 +39,50 @@ export function withTemperatures(
 	selected: SelectedTemperature[],
 ) {
 	let tiles = sanitizeLayout(preferences);
-	if (show && !tiles.some((tile) => tile.id === 'temperatures'))
+	if (show && !tiles.some((tile) => sourceId(tile.id) === 'temperatures'))
 		tiles = [...tiles, defaultPlacement('temperatures')];
-	if (!show) tiles = tiles.filter((tile) => tile.id !== 'temperatures');
+	if (!show) tiles = tiles.filter((tile) => sourceId(tile.id) !== 'temperatures');
 	return {
 		...preferences,
 		tiles,
 		temperatureSensors: temperatureSelection({ temperatureSensors: selected }),
 	};
+}
+
+/**
+ * Sensors a temperature tile shows: its own choice (`items`, sensor IDs) or,
+ * without one, the account's selection from Settings › Temperatures. Sensors
+ * that disappeared stay in the list with their last known name.
+ */
+export function tileTemperatures(
+	preferences: Record<string, unknown> | null,
+	items: string[] | null,
+	sensors: readonly Temperature[],
+): { id: string; chip: string; label: string; sensor?: Temperature }[] {
+	const account = temperatureSelection(preferences);
+	const ids = items ?? account.map((choice) => choice.id);
+	return ids.map((id) => {
+		const sensor = sensors.find((s) => s.id === id);
+		const known = account.find((choice) => choice.id === id);
+		return {
+			id,
+			chip: sensor?.chip ?? known?.chip ?? '',
+			label: sensor?.label ?? known?.label ?? id,
+			sensor,
+		};
+	});
+}
+
+/** Package temperature of the CPU: Intel coretemp, AMD k10temp or zenpower. */
+export function cpuTemperature(
+	sensors: readonly Temperature[] | undefined,
+	chosen = '',
+): Temperature | undefined {
+	if (!sensors) return undefined;
+	if (chosen) return sensors.find((s) => s.id === chosen);
+	return sensors.find(
+		(s) =>
+			(s.chip === 'coretemp' && s.label === 'Package id 0') ||
+			((s.chip === 'k10temp' || s.chip === 'zenpower') && s.label === 'Tctl'),
+	);
 }

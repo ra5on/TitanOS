@@ -25,3 +25,27 @@ test('saved accelerator layouts reject duplicates and clamp corrupt sizes', () =
 	assert.equal(tiles[0].h, TILES.nvidia.minH);
 	assert.equal(tiles[1].h, defaultPlacement('npu').h);
 });
+
+test('the add list offers no tile that would repeat another one', async () => {
+	const { addableTiles } = await import('../src/lib/dashboard/tiles.ts');
+	const admin = { admin: true, hardware: [] };
+	const none = addableTiles([], admin);
+	for (const id of ['accelerators', 'igpu', 'npu', 'nvidia']) assert.ok(!none.includes(id), id);
+	assert.ok(none.includes('tailscale'), 'unknown plugin state stays addable');
+	assert.ok(!addableTiles([], { ...admin, tailscale: false, netbird: false }).includes('netbird'));
+
+	// One kind of device: the all-devices tile is the same as the kind tile.
+	const one = addableTiles([], { ...admin, hardware: ['igpu'] });
+	assert.ok(one.includes('accelerators'));
+	assert.ok(!one.includes('igpu'));
+	assert.ok(!addableTiles([{ id: 'igpu' }], { ...admin, hardware: ['igpu'] }).includes('accelerators'));
+
+	// Two kinds: each kind on its own, only kinds that exist.
+	const two = addableTiles([{ id: 'accelerators' }], { ...admin, hardware: ['igpu', 'npu'] });
+	assert.deepEqual(two.filter((id) => ['accelerators', 'igpu', 'npu', 'nvidia'].includes(id)), ['igpu', 'npu']);
+
+	// Kinds already shown, also as copies, are duplicated in the editor instead.
+	const shown = addableTiles([{ id: 'cpu@1a2b3c4d' }, { id: 'vm:debian' }], admin);
+	assert.ok(!shown.includes('cpu'));
+	assert.ok(!addableTiles([], { admin: false, hardware: [] }).includes('docker'));
+});

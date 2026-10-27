@@ -22,16 +22,16 @@
 	import { positionGrid } from './position-grid.svelte.ts';
 	import { positions, type Rect } from './positions.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { temperatureSelection } from './temperatures.ts';
+	import { cpuTemperature, temperatureSelection, tileTemperatures } from './temperatures.ts';
 	import type { TailnetDevices } from './tailscale.ts';
 	import type { NetbirdPeers } from './netbird.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import {
-		TILE_IDS,
 		TILES,
 		ADMIN_TILES,
+		addableTiles,
 		defaultPlacement,
 		sanitizeLayout,
 		tileSpec,
@@ -227,9 +227,38 @@
 	const currentSettings = $derived(tileOptions(options, customize ?? 'cpu'));
 	const currentPlacement = $derived(shown.find((p) => p.id === customize));
 	const hidden = $derived(
-		TILE_IDS.filter(
-			(id) => !shown.some((p) => sourceId(p.id) === id) && (admin || !ADMIN_TILES.includes(id)),
-		),
+		addableTiles(shown, {
+			admin,
+			hardware: hardwareKinds(),
+			tailscale: tailnetDevices?.active,
+			netbird: netbirdPeers?.active,
+		}),
+	);
+	// Stacks, VMs and single containers in their own groups; entries already on
+	// the dashboard are marked, adding them again creates an independent copy.
+	type WorkloadGroup = { label: MessageKey; choices: { id: TileId; name: string }[] };
+	const workloadGroups = $derived(
+		(
+			[
+				{
+					label: 'docker.stack',
+					choices: dockerGroups(containers)
+						.filter((g) => g.id.startsWith('app:'))
+						.map((g) => ({ id: g.id as TileId, name: g.name })),
+				},
+				{
+					label: 'nav.vms',
+					choices: vms.map((vm) => ({ id: `vm:${vm.name}` as TileId, name: vmLabel(vm) })),
+				},
+				{
+					label: 'tile.container',
+					choices: containers.map((c) => ({
+						id: `container:${c.name}` as TileId,
+						name: dockerName(c, 'distinct'),
+					})),
+				},
+			] satisfies WorkloadGroup[]
+		).filter((group) => group.choices.length),
 	);
 	const dirty = $derived(
 		editing &&
@@ -793,11 +822,7 @@
 				: '–';
 		if (kind === 'cpu') {
 			if (!tileOptions(options, id).temperature) return '';
-			const temp = info?.temperatures.find(
-				(s) =>
-					(s.chip === 'coretemp' && s.label === 'Package id 0') ||
-					(s.chip === 'k10temp' && s.label === 'Tctl'),
-			);
+			const temp = cpuTemperature(info?.temperatures, tileOptions(options, id).sensor);
 			return temp?.celsius == null ? '' : `${temp.celsius.toFixed(0)} °C`;
 		}
 		if (kind === 'memory') return info ? formatBytes(info.memory.totalBytes) : '–';
@@ -853,7 +878,11 @@
 		}
 		if (kind === 'temperatures')
 			return t('dashboard.sensorSummary', {
-				count: temperatureSelection(session.dashboard).length,
+				count: tileTemperatures(
+					session.dashboard,
+					tileOptions(options, id).items,
+					info?.temperatures ?? [],
+				).length,
 			});
 		if (kind === 'network') {
 			const o = tileOptions(options, id),
@@ -918,6 +947,11 @@
 				return (tailnetDevices?.devices ?? []).map((d) => ({
 					id: d.id,
 					name: d.self ? `${d.name} · ${t('tailscale.device.self')}` : d.name || d.hostName,
+				}));
+			case 'temperatures':
+				return (system.info?.temperatures ?? []).map((s) => ({
+					id: s.id,
+					name: `${s.label} · ${s.chip}`,
 				}));
 			case 'disks':
 				return (storage.status?.disks ?? [])
@@ -1216,11 +1250,12 @@
 					{#if admin}<label
 							>{t('dashboard.workload')}<select class="field" bind:value={selection}
 								><option value="">{t('dashboard.pickWorkload')}</option
-								>{#each dockerGroups(containers).filter((g) => g.id.startsWith('app:')) as g}<option
-										value={g.id}>{g.name} · {t('docker.stack')}</option
-									>{/each}{#each vms as vm}<option value="vm:{vm.name}">{vmLabel(vm)}</option
-									>{/each}{#each containers as c}<option value="container:{c.name}"
-										>{dockerName(c, 'distinct')}</option
+								>{#each workloadGroups as group}<optgroup label={t(group.label)}
+										>{#each group.choices as choice}<option value={choice.id}
+												>{choice.name}{shown.some((p) => sourceId(p.id) === choice.id)
+													? ` · ${t('dashboard.onDashboard')}`
+													: ''}</option
+											>{/each}</optgroup
 									>{/each}</select
 							></label
 						><button
@@ -1279,6 +1314,15 @@
 				networks={system.info?.networks?.map((n) => n.interface) ?? []}
 				devices={system.info?.accelerators ?? []}
 				items={inspectorItems}
+				defaultItems={sourceId(customize) === 'temperatures'
+					? temperatureSelection(session.dashboard).map((choice) => choice.id)
+					: undefined}
+				sensors={sourceId(customize) === 'cpu'
+					? (system.info?.temperatures ?? []).map((s) => ({
+							id: s.id,
+							name: `${s.label} · ${s.chip}`,
+						}))
+					: []}
 				onchange={changeOption}
 				onsize={size}
 				onduplicate={duplicate}
