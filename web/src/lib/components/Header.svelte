@@ -206,7 +206,7 @@
 			<button
 				type="button"
 				class="terminal"
-				aria-current={page.url.pathname === '/assistant' ? 'page' : undefined}
+				aria-pressed={page.url.pathname === '/assistant'}
 				aria-label={t('assistant.title')}
 				title={t('assistant.shortcut')}
 				onclick={toggleAssistant}
@@ -263,7 +263,7 @@
 		width: var(--quick-button-size);
 		height: 36px;
 		border: 0;
-		border-radius: 6px;
+		border-radius: var(--radius-small);
 	}
 	.quick-access .terminal:hover {
 		background: color-mix(in srgb, var(--text) 7%, transparent);

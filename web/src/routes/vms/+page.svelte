@@ -19,6 +19,7 @@
 	import { fitHeight, VNC_HEIGHT, vncHeight, vncWidth } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Overview from './Overview.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import VncScreen, { type ScaleMode, type ConnectionPhase } from './VncScreen.svelte';
@@ -28,11 +29,21 @@
 	type Problem = { text: string; detail: string };
 
 	let status = $state<VMStatus | null>(null);
+	// The first load failed: nothing to show but the error.
 	let error = $state<Problem | null>(null);
-	let busy = $state(false);
-	let pending = $state<{ name: string; action: string } | null>(null);
+	// A later refresh failed: the last list stays, marked as possibly stale.
+	let refreshError = $state(''),
+		lastRefresh = $state(''),
+		refreshing = $state(false);
+	// VMs with a request on its way; the others stay usable meanwhile.
+	const busyNames = new SvelteSet<string>();
+	const isBusy = (vm: VM | undefined) => !!vm && busyNames.has(vm.name);
+	// Requests of the dialogs (remove, power off, paste).
+	let dialogBusy = $state(false);
+	let pending = $state<Record<string, string>>({});
 	let feedback = $state('');
-	let retry = $state<{ vm: VM; action: string } | null>(null);
+	// The failed action of each VM, shown only with that VM.
+	let failures = $state<Record<string, { problem: Problem; action: string }>>({});
 	let search = $state('');
 	let filter = $state<Filter>('all');
 	// On a phone the list folds away behind the name of the chosen VM.
@@ -208,9 +219,13 @@
 	}
 
 	async function load() {
-		if (document.hidden) return;
+		if (document.hidden || refreshing) return;
+		refreshing = true;
 		try {
 			status = await api.get<VMStatus>('/vms');
+			error = null;
+			refreshError = '';
+			lastRefresh = new Date().toISOString();
 			const next: Record<string, number[]> = {};
 			for (const vm of status.vms)
 				if (vm.state === 'running')
@@ -218,6 +233,9 @@
 			history = next;
 		} catch (err) {
 			if (!status) error = problem(err);
+			else refreshError = problem(err).text;
+		} finally {
+			refreshing = false;
 		}
 	}
 	$effect(() => {
@@ -228,24 +246,22 @@
 
 	let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 	async function act(vm: VM, action: string) {
-		if (busy) return;
-		busy = true;
-		error = null;
+		if (busyNames.has(vm.name)) return;
+		busyNames.add(vm.name);
+		delete failures[vm.name];
 		feedback = '';
-		retry = null;
-		pending = { name: vm.name, action };
+		pending[vm.name] = action;
 		try {
 			await api.post(`/vms/${encodeURIComponent(vm.name)}/${action}`);
 			feedback = t('ui.vmAccepted', { name: vmLabel(vm) });
 			clearTimeout(feedbackTimer);
 			feedbackTimer = setTimeout(() => (feedback = ''), 5000);
 		} catch (err) {
-			error = problem(err);
-			retry = { vm, action };
+			failures[vm.name] = { problem: problem(err), action };
 		} finally {
 			await load();
-			pending = null;
-			busy = false;
+			delete pending[vm.name];
+			busyNames.delete(vm.name);
 		}
 	}
 	const pendingText = (action: string) =>
@@ -262,8 +278,14 @@
 	const notices = $derived.by<Notice[]>(() => {
 		if (!current) return [];
 		const list: Notice[] = [];
-		if (error)
-			list.push({ level: 'error', text: error.text, detail: error.detail, retry: !!retry });
+		const failure = failures[current.name];
+		if (failure)
+			list.push({
+				level: 'error',
+				text: failure.problem.text,
+				detail: failure.problem.detail,
+				retry: !!failure.action,
+			});
 		if (current.job?.state === 'failed')
 			list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
 		if (status && !status.kvm) list.push({ level: 'warn', text: t('vms.noKvm') });
@@ -272,10 +294,10 @@
 			list.push({ level: 'warn', text: t('vms.jobRunning', { file: current.job.text }) });
 		if (lowSpace.length)
 			list.push({ level: 'warn', text: t('vms.lowSpace', { volumes: lowSpace.join(', ') }) });
-		if (pending)
+		for (const [name, action] of Object.entries(pending))
 			list.push({
 				level: 'info',
-				text: `${vmLabel(vms.find((vm) => vm.name === pending?.name) ?? current)}: ${pendingText(pending.action)}`,
+				text: `${vmLabel(vms.find((vm) => vm.name === name) ?? current)}: ${pendingText(action)}`,
 			});
 		if (feedback) list.push({ level: 'ok', text: feedback });
 		return list;
@@ -306,15 +328,17 @@
 				text: (await api.get<{ xml: string }>(`/vms/${encodeURIComponent(vm.name)}/xml`)).xml,
 			};
 		} catch (err) {
-			error = problem(err);
+			failures[vm.name] = { problem: problem(err), action: '' };
 		}
 	}
 
 	// Runs only from the dialog's button, never from Enter in the form.
 	async function submit() {
 		const vm = dialogVM;
-		if (!vm || !dialog || busy) return;
-		busy = true;
+		if (!vm || !dialog || dialogBusy) return;
+		dialogBusy = true;
+		const marks = dialog.kind !== 'paste';
+		if (marks) busyNames.add(vm.name);
 		dialogError = null;
 		try {
 			if (dialog.kind === 'remove') {
@@ -334,7 +358,8 @@
 		} catch (err) {
 			dialogError = problem(err);
 		} finally {
-			busy = false;
+			dialogBusy = false;
+			if (marks) busyNames.delete(vm.name);
 		}
 	}
 
@@ -390,8 +415,11 @@
 	$effect(() => {
 		if (mode === 'remote' && current && current.template !== 'linux') mode = 'scale';
 	});
+	// Only a different VM closes the list; a refreshed copy of the same one
+	// (a new object after every poll) must not.
+	const currentName = $derived(current?.name);
 	$effect(() => {
-		current?.name;
+		void currentName;
 		listOpen = false;
 		allNotices = false;
 	});
@@ -425,7 +453,28 @@
 
 {#if !status && error}
 	<div class="notice-error" role="alert">
-		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+		<div class="notice-line">
+			<span class="notice-text">{error.text}</span>
+			<button type="button" class="btn small" disabled={refreshing} onclick={load}
+				>{t('common.retry')}</button
+			>
+		</div>
+		{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>
+{:else if !status}
+	<p class="muted" role="status">{t('common.loading')}</p>
+{/if}
+{#if status && refreshError}
+	<div class="notice-warn" role="alert">
+		<div class="notice-line">
+			<span class="notice-text"
+				>{refreshError}
+				{t('vms.stale', { time: new Date(lastRefresh).toLocaleTimeString() })}</span
+			>
+			<button type="button" class="btn small" disabled={refreshing} onclick={load}
+				>{t('common.retry')}</button
+			>
+		</div>
 	</div>
 {/if}
 
@@ -459,14 +508,14 @@
 						type="button"
 						class="btn btn-primary"
 						onclick={() => act(current, 'shutdown')}
-						disabled={busy}>{t('vms.shutdown')}</button
+						disabled={isBusy(current)}>{t('vms.shutdown')}</button
 					>
 				{:else}
 					<button
 						type="button"
 						class="btn btn-primary"
 						onclick={() => act(current, 'start')}
-						disabled={busy || !canStart(current)}>{t('vms.start')}</button
+						disabled={isBusy(current) || !canStart(current)}>{t('vms.start')}</button
 					>
 				{/if}
 				<a
@@ -481,7 +530,7 @@
 							<button
 								type="button"
 								role="menuitem"
-								disabled={busy}
+								disabled={isBusy(current)}
 								onclick={() => {
 									close();
 									act(current, 'reboot');
@@ -490,7 +539,7 @@
 							<button
 								type="button"
 								role="menuitem"
-								disabled={busy}
+								disabled={isBusy(current)}
 								onclick={() => {
 									close();
 									open('poweroff');
@@ -518,18 +567,18 @@
 							<button
 								type="button"
 								role="menuitem"
-								disabled={busy || !!current.job}
+								disabled={isBusy(current) || !!current.job}
 								onclick={() => {
 									close();
 									cloning = current;
-								}}>{t('ops.clone')}</button
+								}}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
 							>
 							<hr />
 							<button
 								type="button"
 								role="menuitem"
 								class="danger"
-								disabled={busy}
+								disabled={isBusy(current)}
 								onclick={() => {
 									close();
 									open('remove');
@@ -550,11 +599,12 @@
 					>
 						<div class="notice-line">
 							<span class="notice-text">{notice.text}</span>
-							{#if notice.retry && retry}<button
+							{#if notice.retry && failures[current.name]?.action}<button
 									type="button"
 									class="btn small"
-									disabled={busy}
-									onclick={() => retry && act(retry.vm, retry.action)}>{t('ui.retry')}</button
+									disabled={isBusy(current)}
+									onclick={() => act(current, failures[current.name].action)}
+									>{t('ui.retry')}</button
 								>{/if}
 							{#if index === 0 && notices.length > 1}
 								<button
@@ -763,7 +813,7 @@
 						history={history[current.name] ?? []}
 						volumes={storage.status?.volumes ?? []}
 						canStart={canStart(current)}
-						{busy}
+						busy={isBusy(current)}
 						onstart={() => act(current, 'start')}
 						onchanged={load}
 						onsnapshots={() => goto(link(current, 'snapshots'), { replaceState: true })}
@@ -804,7 +854,7 @@
 									type="button"
 									class="btn btn-primary"
 									onclick={() => act(current, 'start')}
-									disabled={busy || !canStart(current)}>{t('vms.startVm')}</button
+									disabled={isBusy(current) || !canStart(current)}>{t('vms.startVm')}</button
 								>
 							</div>
 						{:else if connectionPhase !== 'connected'}
@@ -832,7 +882,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				disabled={busy}
+				disabled={isBusy(vm)}
 				onclick={() =>
 					rowAction((vm) => {
 						act(vm, 'shutdown');
@@ -841,7 +891,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				disabled={busy}
+				disabled={isBusy(vm)}
 				onclick={() =>
 					rowAction((vm) => {
 						act(vm, 'reboot');
@@ -859,7 +909,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				disabled={busy || !canStart(vm)}
+				disabled={isBusy(vm) || !canStart(vm)}
 				onclick={() =>
 					rowAction((vm) => {
 						act(vm, 'start');
@@ -877,11 +927,11 @@
 		{#if vm.state === 'stopped'}<button
 				type="button"
 				role="menuitem"
-				disabled={busy || !!vm.job}
+				disabled={isBusy(vm) || !!vm.job}
 				onclick={() =>
 					rowAction((vm) => {
 						cloning = vm;
-					})}>{t('ops.clone')}</button
+					})}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
 			>{/if}
 		<button
 			type="button"
@@ -897,7 +947,7 @@
 				type="button"
 				role="menuitem"
 				class="danger"
-				disabled={busy}
+				disabled={isBusy(vm)}
 				onclick={() =>
 					rowAction((vm) => {
 						open('poweroff', vm);
@@ -908,7 +958,7 @@
 				type="button"
 				role="menuitem"
 				class="danger"
-				disabled={busy}
+				disabled={isBusy(vm)}
 				onclick={() =>
 					rowAction((vm) => {
 						open('remove', vm);
@@ -930,12 +980,16 @@
 {:else if dialog && dialogVM}
 	{@const kind = dialog.kind}
 	{@const vm = dialogVM}
-	<Dialog title={t(`vms.dialog.${kind}`, { name: vmLabel(vm) })} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t(`vms.dialog.${kind}`, { name: vmLabel(vm) })}
+		locked={dialogBusy}
+		onclose={() => (dialog = null)}
+	>
 		<form onsubmit={(event) => event.preventDefault()}>
 			{#if kind === 'remove'}
 				<p class="text">{t('vms.removeText')}</p>
 				<label class="check"
-					><input type="checkbox" bind:checked={draft.deleteDisks} /><span
+					><input type="checkbox" bind:checked={draft.deleteDisks} disabled={dialogBusy} /><span
 						>{t('vms.deleteDisks')}</span
 					></label
 				>
@@ -964,13 +1018,13 @@
 				</div>
 			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)}
+				<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
 					>{t('common.cancel')}</button
 				>
 				<button
 					type="button"
 					class="btn {kind === 'paste' ? 'btn-primary' : kind === 'remove' && draft.deleteDisks ? 'btn-danger' : 'btn-warn'}"
-					disabled={busy}
+					disabled={dialogBusy}
 					onclick={submit}
 					>{t(`vms.submit.${kind}`)}</button
 				>

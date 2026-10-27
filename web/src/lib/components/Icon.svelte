@@ -63,6 +63,13 @@
 		keyboard: 'M3 7h18v10H3ZM7 10h.01M11 10h.01M15 10h.01M8 14h8',
 		monitor: 'M3 4h18v12H3ZM8 20h8M12 16v4',
 		eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+		undo: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+		redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3',
+		lock: 'M6 11h12v9H6ZM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+		unlock: 'M6 11h12v9H6ZM8.5 11V8a3.5 3.5 0 0 1 6.8-1.2',
+		battery: 'M3 8h15v8H3ZM18 10.5h2.5v3H18ZM6 11v2M9 11v2',
+		home: 'M3 11.5 12 4l9 7.5M5.5 9.5V20h13V9.5M10 20v-5.5h4V20',
+		zap: 'M13 3 5 13.5h6L10 21l8-10.5h-6Z',
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

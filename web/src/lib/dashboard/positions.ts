@@ -24,3 +24,61 @@ export function positions(
 	}
 	return { rects, height: Math.max(0, ...ends) ? Math.max(...ends) - 12 : 0 };
 }
+
+/**
+ * Reading order after dropping `id` at the drop point `at` (pixels, column
+ * index already snapped). With `explicit` columns the tile goes behind the last
+ * tile of its target lanes that starts above the drop point, so tiles above it
+ * in that lane keep their place and tiles in other lanes keep their column; the
+ * gap above becomes its offset. Without explicit columns (fewer visible columns
+ * than wished for) only the reading order changes.
+ */
+export function dropLayout<T extends Position>(
+	items: T[],
+	id: string,
+	rects: Record<string, Rect>,
+	at: { column: number; top: number },
+	columns: number,
+	explicit: boolean,
+): T[] {
+	const current = items.find((p) => p.id === id);
+	if (!current) return items;
+	const span = rects[id]?.span ?? 1,
+		col = at.column;
+	const overlaps = (r: Rect) => r.column < col + span && r.column + r.span > col;
+	const rest = items
+		.filter((p) => p.id !== id)
+		.map((p) => (explicit ? { ...p, column: rects[p.id].column } : p));
+	if (!explicit) {
+		let index = rest.findIndex(
+			(p) =>
+				rects[p.id].top > at.top + 8 ||
+				(Math.abs(rects[p.id].top - at.top) <= 8 && rects[p.id].column >= col),
+		);
+		if (index < 0) index = rest.length;
+		rest.splice(index, 0, current);
+		return rest;
+	}
+	let index = 0;
+	rest.forEach((p, i) => {
+		if (overlaps(rects[p.id]) && rects[p.id].top <= at.top + 8) index = i + 1;
+	});
+	const before = rest.slice(0, index);
+	const packed = positions(
+		before,
+		columns,
+		Object.fromEntries(Object.entries(rects).map(([id, r]) => [id, r.height])),
+	);
+	const end = Math.max(
+		0,
+		...before
+			.filter((p) => overlaps(packed.rects[p.id]))
+			.map((p) => packed.rects[p.id].top + packed.rects[p.id].height + 12),
+	);
+	rest.splice(index, 0, {
+		...current,
+		column: col,
+		offset: Math.min(8000, Math.max(0, at.top - end)),
+	});
+	return rest;
+}

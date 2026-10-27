@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { api, ApiError, type VMStatus } from '#lib/api.ts';
+	import { vmLabel } from '#lib/vm-name.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
@@ -27,7 +29,35 @@
 	const volumes = $derived((storage.status?.volumes ?? []).filter((v) => v.mounted));
 	const files = new Map<string, File>();
 	const paused = new Set<string>();
-	let confirm = $state<{ job: MediaJob; action: 'cancel' | 'remove' } | null>(null);
+	let confirm = $state<{ job: MediaJob; action: 'cancel' | 'remove' } | null>(null),
+		confirmBusy = $state(false),
+		confirmError = $state('');
+	// The list could not be refreshed; the last state stays visible.
+	let loadError = $state('');
+	// Jobs with a request on its way, so a second click does not send it again.
+	const controlling = new SvelteSet<string>();
+	// Media already on the volumes and the VMs that use them.
+	let media = $state<{ path: string; sizeBytes: number }[] | null>(null),
+		mediaError = $state(''),
+		vms = $state<VMStatus['vms']>([]);
+	const usedBy = (path: string) =>
+		vms.filter((vm) => vm.iso === path || vm.virtioISO === path).map((vm) => vmLabel(vm));
+	async function loadMedia() {
+		try {
+			const [found, status] = await Promise.all([
+				api.get<{ media: { path: string; sizeBytes: number }[] }>('/vms/media'),
+				api.get<VMStatus>('/vms'),
+			]);
+			media = found.media ?? [];
+			vms = status.vms;
+			mediaError = '';
+		} catch (e) {
+			mediaError = errorText(e instanceof ApiError ? e.code : 'internal');
+		}
+	}
+	const failure = (e: unknown) =>
+		errorText(e instanceof ApiError ? e.code : 'internal') +
+		(e instanceof ApiError ? ` · ${e.message}` : '');
 	const phases: Record<string, MessageKey> = {
 		uploading: 'media.phase.uploading',
 		downloading: 'media.phase.downloading',
@@ -44,19 +74,35 @@
 	async function load() {
 		try {
 			const res = await api.get<{ jobs: MediaJob[]; chunkBytes: number }>('/vms/imports');
+			const finished = (res.jobs ?? []).some(
+				(job) => job.phase === 'done' && jobs.some((old) => old.id === job.id && old.phase !== 'done'),
+			);
 			jobs = res.jobs ?? [];
 			chunk = res.chunkBytes || 8 << 20;
+			loadError = '';
+			// A newly published medium belongs into the list below.
+			if (finished) void loadMedia();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			loadError = errorText(e instanceof ApiError ? e.code : 'internal');
 		} finally {
 			loading = false;
 		}
 	}
+	// Quick while something is moving, slow when every job rests.
+	const active = $derived(
+		!!uploading || jobs.some((job) => mediaActive(job) || job.phase === 'uploading'),
+	);
 	$effect(() => {
 		void load();
-		const timer = setInterval(() => {
-			if (!document.hidden) void load();
-		}, 1500);
+		void loadMedia();
+	});
+	$effect(() => {
+		const timer = setInterval(
+			() => {
+				if (!document.hidden) void load();
+			},
+			active ? 1500 : 15000,
+		);
 		return () => clearInterval(timer);
 	});
 	function outputName(source: string) {
@@ -148,17 +194,41 @@
 		}
 	}
 	async function control(job: MediaJob, action: string) {
+		if (controlling.has(job.id)) return;
+		controlling.add(job.id);
 		error = '';
 		if (action === 'pause' || action === 'cancel') paused.add(job.id);
+		try {
+			await api.post(`/vms/imports/${job.id}/${action}`, {});
+			await load();
+		} catch (e) {
+			error = failure(e);
+		} finally {
+			controlling.delete(job.id);
+		}
+	}
+	// From the confirmation: an error stays in the dialog, which stays open.
+	async function confirmed() {
+		if (!confirm || confirmBusy) return;
+		const { job, action } = confirm;
+		confirmBusy = true;
+		confirmError = '';
+		controlling.add(job.id);
+		if (action === 'cancel') paused.add(job.id);
 		try {
 			await api.post(`/vms/imports/${job.id}/${action}`, {});
 			confirm = null;
 			await load();
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError ? ` · ${e.message}` : '');
+			confirmError = failure(e);
+		} finally {
+			confirmBusy = false;
+			controlling.delete(job.id);
 		}
+	}
+	function ask(job: MediaJob, action: 'cancel' | 'remove') {
+		confirmError = '';
+		confirm = { job, action };
 	}
 </script>
 
@@ -168,7 +238,10 @@
 			><Icon name="plus" />{t('media.add')}</button
 		>{/snippet}</PageHead
 >
-{#if error}<div class="notice-error" role="alert">{error}</div>{/if}{#if verifyProgress}<p
+{#if error && !adding}<div class="notice-error" role="alert">{error}</div>{/if}
+{#if loadError}<div class="notice-warn stale" role="alert">
+		<span>{loadError}</span><button class="btn" onclick={load}>{t('common.retry')}</button>
+	</div>{/if}{#if verifyProgress}<p
 		role="status"
 	>
 		{verifyProgress}
@@ -203,15 +276,21 @@
 			<div class="actions">
 				{#if (mediaActive(job) && job.phase !== 'publishing' && job.phase !== 'pausing') || uploading === job.id}<button
 						class="btn"
+						disabled={controlling.has(job.id)}
 						onclick={() => control(job, 'pause')}><Icon name="pause" />{t('media.pause')}</button
 					>{/if}
-				{#if job.phase === 'review'}<button class="btn" onclick={() => control(job, 'review')}
+				{#if job.phase === 'review'}<button
+						class="btn"
+						disabled={controlling.has(job.id)}
+						onclick={() => control(job, 'review')}
 						>{t('media.review')}</button
 					>{/if}{#if job.url && job.phase === 'paused'}<button
 						class="btn btn-primary"
+						disabled={controlling.has(job.id)}
 						onclick={() => control(job, 'resume')}>{t('media.resume')}</button
 					>{/if}{#if job.url && job.phase === 'failed'}<button
 						class="btn"
+						disabled={controlling.has(job.id)}
 						onclick={() => control(job, 'retry')}>{t('common.retry')}</button
 					>{/if}
 				{#if !job.url && !job.sourceReady && ['uploading', 'paused', 'failed'].includes(job.phase) && uploading !== job.id}<label
@@ -227,19 +306,46 @@
 					>{/if}
 				{#if !job.url && job.sourceReady && ['paused', 'failed'].includes(job.phase)}<button
 						class="btn"
+						disabled={controlling.has(job.id)}
 						onclick={() => control(job, 'resume')}>{t('media.resume')}</button
 					>{/if}
 				{#if !['done', 'cancelled', 'review', 'publishing', 'pausing'].includes(job.phase)}<button
 						class="btn"
-						onclick={() => (confirm = { job, action: 'cancel' })}>{t('common.cancel')}</button
+						disabled={controlling.has(job.id)}
+						onclick={() => ask(job, 'cancel')}>{t('media.cancelImport')}</button
 					>{/if}
 				{#if !mediaActive(job) && uploading !== job.id}<button
 						class="btn"
-						onclick={() => (confirm = { job, action: 'remove' })}>{t('media.remove')}</button
+						disabled={controlling.has(job.id)}
+						onclick={() => ask(job, 'remove')}>{t('media.remove')}</button
 					>{/if}
 			</div>
 		</section>{/each}{/if}
 <p class="muted">{t('media.background')}</p>
+<section class="tile files" aria-labelledby="media-files">
+	<div class="row">
+		<h2 class="tile-title" id="media-files">{t('media.files')}</h2>
+		<button class="btn" onclick={loadMedia}><Icon name="refresh" />{t('media.filesRefresh')}</button>
+	</div>
+	{#if mediaError}<div class="notice-error" role="alert">
+			<span>{mediaError}</span>
+			<button class="btn" onclick={loadMedia}>{t('common.retry')}</button>
+		</div>{/if}
+	{#if media === null && !mediaError}<p class="muted" role="status">{t('common.loading')}</p>
+	{:else if media && media.length === 0}<p class="muted">{t('media.filesEmpty')}</p>
+	{:else if media}<ul class="file-list">
+			{#each media as entry (entry.path)}
+				{@const users = usedBy(entry.path)}
+				<li>
+					<span class="mono path">{entry.path}</span>
+					<span class="muted mono">{formatBytes(entry.sizeBytes)}</span>
+					<span class="muted"
+						>{users.length ? t('media.usedBy', { vms: users.join(', ') }) : t('media.unused')}</span
+					>
+				</li>
+			{/each}
+		</ul>{/if}
+</section>
 {#if adding}<Dialog title={t('media.add')} wide locked={busy} onclose={() => (adding = false)}
 		><form onsubmit={create}>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -326,19 +432,20 @@
 		</form></Dialog
 	>{/if}
 {#if confirm}<Dialog
-		title={confirm.action === 'remove' ? t('media.remove') : t('common.cancel')}
+		title={t(confirm.action === 'remove' ? 'media.removeTitle' : 'media.cancelTitle')}
+		locked={confirmBusy}
 		onclose={() => (confirm = null)}
 		><p>
 			{t(confirm.action === 'remove' ? 'media.removeHint' : 'media.cancelHint', {
 				name: confirm.job.name,
 			})}
 		</p>
+		{#if confirmError}<p class="notice-error" role="alert">{confirmError}</p>{/if}
 		<div class="dialog-actions">
-			<button class="btn" onclick={() => (confirm = null)}>{t('common.cancel')}</button><button
-				class="btn btn-danger"
-				onclick={() => {
-					if (confirm) void control(confirm.job, confirm.action);
-				}}>{t(confirm.action === 'remove' ? 'media.remove' : 'media.cancelImport')}</button
+			<button class="btn" disabled={confirmBusy} onclick={() => (confirm = null)}
+				>{t(confirm.action === 'remove' ? 'media.keepJob' : 'media.keepImport')}</button
+			><button class="btn btn-danger" disabled={confirmBusy} onclick={confirmed}
+				>{t(confirm.action === 'remove' ? 'media.remove' : 'media.cancelImport')}</button
 			>
 		</div></Dialog
 	>{/if}
@@ -398,5 +505,39 @@
 	}
 	details label {
 		margin: var(--gap) 0;
+	}
+	.stale,
+	.notice-error:has(> .btn) {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.files {
+		padding: var(--tile-pad);
+		display: grid;
+		gap: var(--gap);
+		margin-top: var(--gap);
+	}
+	.file-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+	}
+	.file-list li {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(8rem, auto);
+		gap: 4px 16px;
+		align-items: center;
+		padding: 8px 0;
+		border-top: 1px solid var(--panel-border);
+		font-size: 0.8125rem;
+	}
+	@media (max-width: 760px) {
+		.file-list li {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 </style>

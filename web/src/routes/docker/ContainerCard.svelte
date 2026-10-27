@@ -78,9 +78,6 @@
 		padding: 12px 14px;
 		font-size: 0.875rem;
 	}
-	.card:has(:global(.menu-open)) {
-		z-index: 30;
-	}
 	.top {
 		display: flex;
 		align-items: center;

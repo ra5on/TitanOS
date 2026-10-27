@@ -10,8 +10,15 @@
 import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
-	import { api, ApiError, type DockerStatus } from '#lib/api.ts';
+	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
+	import Icon from '#lib/components/Icon.svelte';
+	import { stackPrimary, sanitizeDockerLayout } from '#lib/docker-layout.ts';
+	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { session } from '#lib/session.svelte.ts';
+	import { system } from '#lib/system.svelte.ts';
+	import { addContainerConsole } from '#lib/terminal.svelte.ts';
+	import { isRunning, webLinks } from '../../container.ts';
 	import {
 		check,
 		NETWORKS,
@@ -36,6 +43,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	let yamlError = $state('');
 	let status = $state<DockerStatus | null>(null);
 	let loadError = $state('');
+	let loaded = $state(false);
 	let applying = $state(false);
 	let result = $state<{ ok: boolean; text: string; detail: string } | null>(null);
 
@@ -73,20 +81,86 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		if (doc) form = readService(doc, next);
 	}
 
-	$effect(() => {
-		const app = name;
+	function loadCompose(app = name) {
+		loadError = '';
 		api.get<{ compose: string }>(`/docker/apps/${app}`).then(
 			(res) => {
+				if (app !== name) return;
 				original = text = res.compose;
+				loaded = true;
 				if (!parse()) view = 'compose';
 			},
-			(err) => (loadError = errorText(err instanceof ApiError ? err.code : 'internal')),
+			(err) => {
+				if (app === name) loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			},
 		);
-		api.get<DockerStatus>('/docker').then(
-			(res) => (status = res),
-			() => {},
-		);
+	}
+	let statusError = $state('');
+	async function loadStatus() {
+		if (document.hidden || applying) return;
+		try {
+			status = await api.get<DockerStatus>('/docker');
+			statusError = '';
+		} catch (err) {
+			statusError = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
+	$effect(() => {
+		loadCompose(name);
+		void loadStatus();
+		const timer = setInterval(loadStatus, 5000);
+		return () => clearInterval(timer);
 	});
+
+	// The head of the page: state and load of the app's containers, with
+	// the actions of the Docker page for the container of the chosen service.
+	const members = $derived((status?.containers ?? []).filter((container) => container.app === name));
+	const runningCount = $derived(members.filter(isRunning).length);
+	const primary = $derived(
+		stackPrimary({ id: `app:${name}`, name, members }, sanitizeDockerLayout(session.docker).primaryServices),
+	);
+	const target = $derived(
+		members.find((container) => container.service === service) ?? primary ?? members[0],
+	);
+	const host = $derived(system.info?.network?.ipv4.split('/')[0] || location.hostname);
+	const webui = $derived(primary ? webLinks(primary, host, '').find((link) => link.icon === 'globe') : undefined);
+	let restarting = $state(false),
+		actionError = $state('');
+	async function restartAll() {
+		if (restarting || members.length === 0) return;
+		restarting = true;
+		actionError = '';
+		try {
+			for (const container of members)
+				await api.post(`/docker/containers/${encodeURIComponent(container.id)}/restart`);
+		} catch (err) {
+			actionError = errorText(err instanceof ApiError ? err.code : 'internal');
+		} finally {
+			restarting = false;
+			await loadStatus();
+		}
+	}
+	let logs = $state<{ container: DockerContainer; text: string | null; error: string } | null>(null);
+	let logsRequest = 0;
+	async function showLogs(container: DockerContainer) {
+		const request = ++logsRequest;
+		if (logs?.container.id !== container.id) logs = { container, text: null, error: '' };
+		else logs.error = '';
+		try {
+			const res = await api.get<{ logs: string }>(`/docker/containers/${encodeURIComponent(container.id)}/logs?tail=300`);
+			if (request === logsRequest && logs?.container.id === container.id) logs.text = res.logs;
+		} catch (err) {
+			if (request === logsRequest && logs?.container.id === container.id)
+				logs.error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
+	let confirmDiscard = $state(false);
+	function discardChanges() {
+		confirmDiscard = false;
+		text = original;
+		result = null;
+		if (!parse()) view = 'compose';
+	}
 
 	// Ports other containers already publish, for the live check.
 	const taken = $derived.by(() => {
@@ -192,7 +266,69 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	{/snippet}
 </PageHead>
 
-{#if loadError}<p class="notice-error" role="alert">{loadError}</p>{/if}
+<section class="tile app-head" aria-label={t('editor.appState')}>
+	<div class="app-state">
+		{#if members.length}
+			<span class="state"
+				><span
+					class="dot"
+					class:ok={runningCount === members.length}
+					class:warn={runningCount > 0 && runningCount < members.length}
+					aria-hidden="true"
+				></span>{t('docker.stackSummary', { running: runningCount, total: members.length })}</span
+			>
+			{#if runningCount}
+				<span class="mono value"
+					><span class="muted">{t('docker.cpu')}</span>
+					{formatPercent(members.filter(isRunning).reduce((sum, container) => sum + container.cpuPercent, 0))}</span
+				>
+				<span class="mono value"
+					><span class="muted">{t('docker.ram')}</span>
+					{formatBytes(members.filter(isRunning).reduce((sum, container) => sum + container.memoryBytes, 0))}</span
+				>
+			{/if}
+		{:else if status}
+			<span class="muted">{t('editor.noContainers')}</span>
+		{:else if !statusError}
+			<span class="muted" role="status">{t('common.loading')}</span>
+		{/if}
+	</div>
+	<div class="quick">
+		{#if webui}<a class="btn small" href={webui.href} target="_blank" rel="noreferrer"
+				><Icon name="globe" size={14} />{webui.text}</a
+			>{/if}
+		<button type="button" class="btn small" disabled={!target} onclick={() => target && showLogs(target)}
+			><Icon name="fileText" size={14} />{t('docker.logs')}</button
+		>
+		<button
+			type="button"
+			class="btn small"
+			disabled={!target || !isRunning(target)}
+			onclick={() => target && addContainerConsole(target.id, dockerName(target, 'distinct'))}
+			><Icon name="terminal" size={14} />{t('docker.console')}</button
+		>
+		<button type="button" class="btn small" disabled={!members.length || restarting || applying} onclick={restartAll}
+			><Icon name="restart" size={14} />{t(restarting ? 'editor.restarting' : 'docker.restart')}</button
+		>
+	</div>
+	{#if statusError}<div class="notice-warn row-note" role="alert">
+			<span>{statusError}</span><button type="button" class="btn small" onclick={loadStatus}
+				>{t('common.retry')}</button
+			>
+		</div>{/if}
+	{#if actionError}<div class="notice-error row-note" role="alert">
+			<span>{actionError}</span><button type="button" class="btn small" disabled={restarting} onclick={restartAll}
+				>{t('common.retry')}</button
+			>
+		</div>{/if}
+</section>
+
+{#if loadError}<div class="notice-error row-note" role="alert">
+		<span>{loadError}</span><button type="button" class="btn small" onclick={() => loadCompose()}
+			>{t('common.retry')}</button
+		>
+	</div>
+{:else if !loaded}<p class="muted" role="status">{t('common.loading')}</p>{/if}
 {#if yamlError}<div class="notice-error" role="alert">
 		{t('editor.yamlError')}
 		<pre>{yamlError}</pre>
@@ -445,22 +581,65 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	<p class="notice-warn">{t('editor.noServices')}</p>
 {/if}
 
-<div class="apply">
-	<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}
-		>{t('editor.apply')}</button
-	>
-	<span class="muted note" role="status"
-		>{applying
-			? t('editor.applying')
-			: changed
-				? t('editor.applyNote')
-				: t('editor.unchanged')}</span
-	>
-</div>
 {#if result}
 	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">
 		{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}
 	</div>
+{/if}
+{#if loaded}
+	<div class="apply">
+		<span class="muted note" role="status"
+			>{applying
+				? t('editor.applying')
+				: changed
+					? t('editor.applyNote')
+					: t('editor.unchanged')}</span
+		>
+		<button
+			type="button"
+			class="btn"
+			disabled={!changed || applying}
+			onclick={() => (confirmDiscard = true)}>{t('editor.discard')}</button
+		>
+		<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}
+			>{t('editor.apply')}</button
+		>
+	</div>
+{/if}
+
+{#if confirmDiscard}<Dialog title={t('editor.discardTitle')} onclose={() => (confirmDiscard = false)}>
+		<p>{t('editor.discardText')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (confirmDiscard = false)}
+				>{t('shares.keepEditing')}</button
+			><button type="button" class="btn btn-warn" onclick={discardChanges}
+				>{t('editor.discard')}</button
+			>
+		</div>
+	</Dialog>{/if}
+
+{#if logs}
+	{@const open = logs}
+	<Dialog
+		title={t('docker.logsTitle', { name: dockerName(open.container, 'distinct') })}
+		wide
+		onclose={() => (logs = null)}
+	>
+		{#if open.error}<div class="notice-error row-note" role="alert">
+				<span>{open.error}</span><button type="button" class="btn small" onclick={() => showLogs(open.container)}
+					>{t('common.retry')}</button
+				>
+			</div>{/if}
+		<pre class="logs">{open.text === null ? '…' : open.text || t('docker.logsEmpty')}</pre>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => showLogs(open.container)}
+				>{t('docker.logsRefresh')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={() => (logs = null)}
+				>{t('common.done')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#if leaving}<Dialog
@@ -613,11 +792,69 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		scrollbar-width: thin;
 		scrollbar-color: var(--muted) transparent;
 	}
-	.apply {
+	.app-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
+		justify-content: space-between;
+		gap: 10px 16px;
+		padding: 12px 18px;
+	}
+	.app-state,
+	.quick {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+		font-size: 0.875rem;
+	}
+	.quick {
+		gap: 8px;
+	}
+	.state {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.value {
+		font-size: 0.8125rem;
+	}
+	.row-note {
+		flex: 1 1 100%;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.logs {
+		max-height: 60vh;
+		margin: 0;
+		padding: 12px 14px;
+		overflow: auto;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		line-height: 1.5;
+	}
+	/* Always in reach at the bottom of the window while editing. */
+	.apply {
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
 		gap: 12px;
+		padding: 10px var(--tile-pad);
+		background: var(--surface);
+		border: 1px solid var(--panel-border);
+		border-radius: var(--radius-tile);
+		box-shadow: var(--panel-shadow);
+	}
+	.apply .note {
+		flex: 1 1 16rem;
 	}
 	.note {
 		font-size: 0.8125rem;

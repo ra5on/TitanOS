@@ -1,6 +1,7 @@
 <script lang="ts">
  import { api, ApiError } from '#lib/api.ts';
  import { t, errorText } from '#lib/i18n/index.svelte.ts';
+ import { formatTime } from '#lib/format.ts';
  import Dialog from './Dialog.svelte';
  let { onpending = (_pending: boolean) => {} } = $props<{ onpending?: (pending: boolean) => void }>();
  type Settings = { routes: string[]; advertiseExit: boolean; exitNode: string; acceptRoutes: boolean; acceptDNS: boolean };
@@ -43,7 +44,7 @@
   </div>
   {#if status.pendingUntil}
    <div class="notice-warn" role="status">
-    <p>{t('tailscale.trial', { time: new Date(status.pendingUntil).toLocaleTimeString() })}</p>
+    <p>{t('tailscale.trial', { time: formatTime(new Date(status.pendingUntil)) })}</p>
     <div class="actions"><button class="btn btn-primary" disabled={busy} onclick={() => action('confirm')}>{t('tailscale.confirm')}</button><button class="btn" disabled={busy} onclick={() => action('undo')}>{t('tailscale.undo')}</button></div>
    </div>
   {/if}

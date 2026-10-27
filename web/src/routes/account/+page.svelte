@@ -15,8 +15,10 @@
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
 
 	const user = $derived(session.data?.user);
-	let devices = $state<Device[]>([]);
+	let devices = $state<Device[] | null>(null);
+	let devicesError = $state('');
 	let error = $state('');
+	let endingOthers = $state(false);
 	let changingPassword = $state(false);
 	// Setting up the second factor: the secret to scan, then the recovery codes.
 	let setup = $state<{ secret: string; uri: string } | null>(null);
@@ -26,15 +28,20 @@
 	let password = $state('');
 	let dialogError = $state('');
 	let busy = $state(false);
+	// Renewing the recovery codes takes the password and a code like switching off.
+	let renewing = $state(false);
+	let copyNote = $state<'' | 'copied' | 'failed'>('');
+	let codesBlock = $state<HTMLPreElement>();
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 	const time = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }));
 
 	async function loadDevices() {
+		devicesError = '';
 		try {
 			devices = (await api.get<{ sessions: Device[] }>('/account/sessions')).sessions;
 		} catch (err) {
-			error = problem(err);
+			devicesError = problem(err);
 		}
 	}
 	$effect(() => {
@@ -55,6 +62,7 @@
 
 	async function begin() {
 		error = '';
+		dialogError = '';
 		code = '';
 		try {
 			setup = await api.post('/account/2fa/begin');
@@ -77,8 +85,15 @@
 		busy = false;
 	}
 
-	async function disable(event: SubmitEvent) {
-		event.preventDefault();
+	function cancelSetup() {
+		setup = null;
+		code = '';
+		dialogError = '';
+	}
+
+	// Switching off and renewing run only from a click on their buttons, never from Enter.
+	async function disable() {
+		if (busy) return;
 		busy = true;
 		dialogError = '';
 		try {
@@ -93,12 +108,69 @@
 		busy = false;
 	}
 
+	async function renew() {
+		if (busy) return;
+		busy = true;
+		dialogError = '';
+		try {
+			recovery = (await api.post<{ recoveryCodes: string[] }>('/account/2fa/recovery', { password, code })).recoveryCodes;
+			renewing = false;
+		} catch (err) {
+			dialogError = problem(err);
+		}
+		password = '';
+		code = '';
+		busy = false;
+	}
+
+	function openConfirm(kind: 'disable' | 'renew') {
+		dialogError = '';
+		code = '';
+		password = '';
+		disabling = kind === 'disable';
+		renewing = kind === 'renew';
+	}
+
 	async function end(device: Device) {
 		try {
 			devices = (await api.delete<{ sessions: Device[] }>(`/account/sessions/${device.id}`)).sessions;
 		} catch (err) {
 			error = problem(err);
 		}
+	}
+
+	async function endOthers() {
+		if (busy) return;
+		busy = true;
+		dialogError = '';
+		try {
+			devices = (await api.delete<{ sessions: Device[] }>('/account/sessions')).sessions;
+			endingOthers = false;
+		} catch (err) {
+			dialogError = problem(err);
+		}
+		busy = false;
+	}
+
+	async function copyCodes() {
+		if (!recovery) return;
+		try {
+			await navigator.clipboard.writeText(recovery.join('\n'));
+			copyNote = 'copied';
+		} catch {
+			// No clipboard (plain http, refused): select the codes for copying by hand.
+			copyNote = 'failed';
+			if (codesBlock) getSelection()?.selectAllChildren(codesBlock);
+		}
+	}
+
+	/** The codes as a text file, made in the browser; nothing goes through the NAS. */
+	function downloadCodes() {
+		if (!recovery || !user) return;
+		const url = URL.createObjectURL(new Blob([recovery.join('\n') + '\n'], { type: 'text/plain' }));
+		const link = Object.assign(document.createElement('a'), { href: url, download: `titanos-${user.name}-recovery-codes.txt` });
+		link.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
 
 	/** What a browser calls itself, cut down to what a person recognizes. */
@@ -111,9 +183,6 @@
 
 
 <PageHead title={t('account.title')} />
-<PersonalNotifications />
-{#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
-<SoundSettings />
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 {#if user}
@@ -137,7 +206,10 @@
 		<div class="row">
 			<p><span class="chip" class:ok={user.twoFactor}>{t(user.twoFactor ? 'plugins.active' : 'plugins.off')}</span> <span class="muted">{t(user.twoFactor ? 'account.twoFactorOn' : 'account.twoFactorOff')}</span></p>
 			{#if user.twoFactor}
-				<button type="button" class="btn" onclick={() => ((disabling = true), (dialogError = ''), (code = ''))}>{t('account.twoFactorDisable')}</button>
+				<div class="buttons">
+					<button type="button" class="btn" onclick={() => openConfirm('renew')}>{t('account.recoveryRenew')}</button>
+					<button type="button" class="btn" onclick={() => openConfirm('disable')}>{t('account.twoFactorDisable')}</button>
+				</div>
 			{:else if !setup}
 				<button type="button" class="btn btn-primary" onclick={begin}>{t('account.twoFactorSetup')}</button>
 			{/if}
@@ -151,7 +223,7 @@
 					<label><span>{t('account.enterCode')}</span><input class="field mono" type="text" bind:value={code} inputmode="numeric" autocomplete="one-time-code" spellcheck="false" required /></label>
 					{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
 					<div class="actions">
-						<button type="button" class="btn" onclick={() => (setup = null)}>{t('common.cancel')}</button>
+						<button type="button" class="btn" onclick={cancelSetup}>{t('common.cancel')}</button>
 						<button type="submit" class="btn btn-primary" disabled={busy}>{t('account.enable')}</button>
 					</div>
 				</div>
@@ -161,46 +233,77 @@
 
 	<SshKeys />
 
-
 	<section class="tile" aria-labelledby="acc-devices">
-		<h2 class="tile-title" id="acc-devices">{t('account.devices')}</h2>
-		{#each devices as device (device.id)}
-			<div class="device">
-				<div>
-					<span class="name">{browser(device.userAgent)}{#if device.current} <span class="chip ok">{t('account.thisDevice')}</span>{/if}</span>
-					<span class="muted mono">{device.remoteIP} · {t('account.since', { time: time.format(new Date(device.created)) })} · {t('account.lastSeen', { time: time.format(new Date(device.lastSeen)) })}</span>
+		<div class="row">
+			<h2 class="tile-title" id="acc-devices">{t('account.devices')}</h2>
+			{#if devices && devices.some((device) => !device.current)}
+				<button type="button" class="btn" onclick={() => ((endingOthers = true), (dialogError = ''))}>{t('account.endOthers')}</button>
+			{/if}
+		</div>
+		{#if devicesError}
+			<div class="notice-error row" role="alert"><span>{devicesError}</span><button type="button" class="btn" onclick={loadDevices}>{t('common.retry')}</button></div>
+		{:else if !devices}
+			<p class="muted" role="status">{t('common.loading')}</p>
+		{:else}
+			{#each devices as device (device.id)}
+				<div class="device">
+					<div>
+						<span class="name">{browser(device.userAgent)}{#if device.current} <span class="chip ok">{t('account.thisDevice')}</span>{/if}</span>
+						<span class="muted mono">{device.remoteIP} · {t('account.since', { time: time.format(new Date(device.created)) })} · {t('account.lastSeen', { time: time.format(new Date(device.lastSeen)) })}</span>
+					</div>
+					{#if !device.current}<button type="button" class="btn" onclick={() => end(device)}>{t('account.end')}</button>{/if}
 				</div>
-				{#if !device.current}<button type="button" class="btn" onclick={() => end(device)}>{t('account.end')}</button>{/if}
-			</div>
-		{/each}
+			{/each}
+		{/if}
 		<p class="muted note">{t('account.devicesNote')}</p>
 	</section>
 {/if}
+
+<PersonalNotifications />
+{#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
+<SoundSettings />
 
 {#if changingPassword && user}
 	<PasswordDialog name={user.name} self onclose={() => ((changingPassword = false), loadDevices())} />
 {/if}
 
 {#if recovery}
-	<Dialog title={t('account.recoveryTitle')} locked onclose={() => (recovery = null)}>
+	<Dialog title={t('account.recoveryTitle')} locked onclose={() => ((recovery = null), (copyNote = ''))}>
 		<p class="text">{t('account.recoveryText')}</p>
-		<pre class="codes">{recovery.join('\n')}</pre>
-		<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={() => (recovery = null)}>{t('account.recoveryDone')}</button></div>
+		<pre class="codes" bind:this={codesBlock}>{recovery.join('\n')}</pre>
+		<div class="buttons">
+			<button type="button" class="btn" onclick={copyCodes}>{t('account.recoveryCopy')}</button>
+			<button type="button" class="btn" onclick={downloadCodes}>{t('account.recoveryDownload')}</button>
+		</div>
+		{#if copyNote === 'copied'}<p class="muted" role="status">{t('account.recoveryCopied')}</p>{/if}
+		{#if copyNote === 'failed'}<p class="notice-warn" role="alert">{t('account.recoveryCopyFailed')}</p>{/if}
+		<div class="dialog-actions"><button type="button" class="btn btn-primary" onclick={() => ((recovery = null), (copyNote = ''))}>{t('account.recoveryDone')}</button></div>
 	</Dialog>
 {/if}
 
-{#if disabling}
-	<Dialog title={t('account.disableTitle')} onclose={() => (disabling = false)}>
-		<form class="confirm" onsubmit={disable}>
-			<p class="text">{t('account.disableText')}</p>
+{#if disabling || renewing}
+	<Dialog title={t(disabling ? 'account.disableTitle' : 'account.renewTitle')} locked={busy} onclose={() => ((disabling = false), (renewing = false))}>
+		<form class="confirm" onsubmit={(event) => event.preventDefault()}>
+			<p class="text">{t(disabling ? 'account.disableText' : 'account.renewText')}</p>
 			<label><span>{t('auth.password')}</span><input class="field" type="password" bind:value={password} autocomplete="current-password" required /></label>
 			<label><span>{t('auth.code')}</span><input class="field mono" type="text" bind:value={code} inputmode="numeric" autocomplete="one-time-code" spellcheck="false" required /></label>
 			{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (disabling = false)}>{t('common.cancel')}</button>
-				<button type="submit" class="btn btn-warn" disabled={busy}>{t('account.disableSubmit')}</button>
+				<button type="button" class="btn" disabled={busy} onclick={() => ((disabling = false), (renewing = false))}>{t('common.cancel')}</button>
+				<button type="button" class="btn btn-warn" disabled={busy || !password || !code} onclick={disabling ? disable : renew}>{t(disabling ? 'account.disableSubmit' : 'account.renewSubmit')}</button>
 			</div>
 		</form>
+	</Dialog>
+{/if}
+
+{#if endingOthers}
+	<Dialog title={t('account.endOthersTitle')} locked={busy} onclose={() => (endingOthers = false)}>
+		<p class="text">{t('account.endOthersText', { count: devices?.filter((device) => !device.current).length ?? 0 })}</p>
+		{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={busy} onclick={() => (endingOthers = false)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-warn" disabled={busy} onclick={endOthers}>{t('account.endOthersSubmit')}</button>
+		</div>
 	</Dialog>
 {/if}
 
@@ -279,6 +382,11 @@
 	}
 	label > span {
 		color: var(--muted);
+	}
+	.buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	.actions {
 		display: flex;

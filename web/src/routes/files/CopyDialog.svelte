@@ -236,8 +236,12 @@
 		return pendingInspection;
 	}
 
-	async function submit(event: SubmitEvent) {
+	// Enter starts only a harmless copy; replacing files runs from a click on its button alone.
+	function enter(event: SubmitEvent) {
 		event.preventDefault();
+		if (!(replaces && !restore)) submit();
+	}
+	async function submit() {
 		if (busy || (!scope && !scopeDeferred) || nestedTarget || (move && sameFolder)) return;
 		if (
 			restore &&
@@ -330,7 +334,7 @@
 	{onclose}
 	wide
 >
-	<form onsubmit={submit}>
+	<form onsubmit={enter}>
 		<fieldset disabled={busy}>
 			<section class="summary">
 				<h3>{t('files.transferSummary')}</h3>
@@ -480,7 +484,8 @@
 					>{t('common.cancel')}</button
 				>
 				<button
-					type="submit"
+					type="button"
+					onclick={submit}
 					class="btn {replaces && !restore ? 'btn-danger' : 'btn-primary'}"
 					disabled={busy ||
 						inspecting ||
