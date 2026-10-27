@@ -549,6 +549,9 @@ func run(opts options) error {
 			}
 		}
 	}()
+	volumes.OnCacheMissing = func(volume string) { notifier.Notify(notify.Error, "volume_cache_missing", volume) }
+	volumes.OnCacheRemoved = func(volume string) { notifier.Notify(notify.Info, "volume_cache_removed", volume) }
+	go volumes.RunCacheCleaner(ctx)
 	volumes.OnReshaped = func(volume string, err error) {
 		if err != nil {
 			notifier.Notify(notify.Error, "volume_disk_remove_failed", volume)

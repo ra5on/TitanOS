@@ -234,6 +234,22 @@ export type Volume = {
 	/** Limits for shares: ext4/XFS only, switched on take effect at the next start. */
 	shareQuotas: 'unsupported' | 'off' | 'pending' | 'active';
 	shareQuotasError?: string;
+	/** SSD cache of an mdadm volume (internal/storage cache.go). */
+	cache?: VolumeCache;
+};
+
+export type CacheMode = 'writethrough' | 'writeback';
+export type VolumeCache = {
+	mode: CacheMode;
+	disk: string;
+	active: boolean;
+	missing: boolean;
+	removing: boolean;
+	usedBlocks: number;
+	totalBlocks: number;
+	dirtyBlocks: number;
+	readHitRate: number;
+	blockBytes: number;
 };
 
 export type DiskSleepStatus = {

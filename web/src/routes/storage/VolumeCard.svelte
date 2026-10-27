@@ -8,6 +8,7 @@
 	import { stateTone } from './labels.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import { canShrink, takesDisk } from './btrfs.ts';
+	import CachePanel from './CachePanel.svelte';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
 
 	type Props = {
@@ -141,6 +142,7 @@
 			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}>{t('storage.delete')}</button>
 		</div>
 	{/if}
+	{#if canAdminister && volume.filesystem !== 'btrfs'}<CachePanel {volume} />{/if}
 	{#if canAdminister && volume.mounted && volume.filesystem === 'btrfs'}<Snapshots volume={volume.name} />{/if}
 </article>
 

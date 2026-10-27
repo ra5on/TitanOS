@@ -108,21 +108,25 @@ type VolumeConfig struct {
 	Profile string `json:"profile,omitempty"`
 	// Devices is how many disks a Btrfs volume has; missing means two.
 	Devices int `json:"devices,omitempty"`
+	// Cache is the SSD cache of an mdadm volume (cache.go), off when nil.
+	Cache *CacheConfig `json:"cache,omitempty"`
 }
 
 // Volume is a configured volume with its live state.
 type Volume struct {
-	Name       string   `json:"name"`
-	Level      string   `json:"level"`
-	Filesystem string   `json:"filesystem"`
-	MountPoint string   `json:"mountPoint"`
-	Mounted    bool     `json:"mounted"`
-	State      string   `json:"state"`
-	SizeBytes  uint64   `json:"sizeBytes"`
-	UsedBytes  uint64   `json:"usedBytes"`
-	RaidDisks  int      `json:"raidDisks"`
-	Members    []Member `json:"members"`
-	Sync       *Sync    `json:"sync"`
+	Name       string `json:"name"`
+	Level      string `json:"level"`
+	Filesystem string `json:"filesystem"`
+	MountPoint string `json:"mountPoint"`
+	Mounted    bool   `json:"mounted"`
+	State      string `json:"state"`
+	SizeBytes  uint64 `json:"sizeBytes"`
+	UsedBytes  uint64 `json:"usedBytes"`
+	RaidDisks  int    `json:"raidDisks"`
+	// Cache is the SSD cache, if the volume has one.
+	Cache   *CacheView `json:"cache,omitempty"`
+	Members []Member   `json:"members"`
+	Sync    *Sync      `json:"sync"`
 	// Mismatches is what the last check found: blocks whose copies differ.
 	Mismatches uint64 `json:"mismatches"`
 	// ShareQuotas is one of the Quotas* states.
@@ -235,7 +239,12 @@ type Manager struct {
 	btrfsRemoving map[string]string
 	// OnReshaped is told when taking a disk out of a Btrfs volume ended.
 	OnReshaped func(volume string, err error)
-	clock      func() time.Time
+	// OnCacheMissing is told when a volume's cache SSD is not there at
+	// mount; OnCacheRemoved when a write cache was written back and removed.
+	OnCacheMissing, OnCacheRemoved func(volume string)
+	partUUIDDir                    string
+	zero                           func(part string) error
+	clock                          func() time.Time
 }
 
 // NewManager returns a manager working on the real system.
@@ -405,6 +414,22 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		}
 		if cfg.Filesystem == "btrfs" {
 			m.btrfsStatus(&volume, &status, devices, cfg)
+		}
+		if cfg.Cache != nil {
+			volume.Cache = m.cacheView(cfg)
+			// The cache SSD belongs to the volume: never offered elsewhere.
+			for _, device := range devices {
+				device.walk(func(node blockDevice) {
+					if node.PartUUID == "" || !strings.EqualFold(node.PartUUID, cfg.Cache.MetaUUID) && !strings.EqualFold(node.PartUUID, cfg.Cache.DataUUID) {
+						return
+					}
+					for i := range status.Disks {
+						if status.Disks[i].Name == diskOfPart[strings.TrimPrefix(node.KName, "/dev/")] {
+							status.Disks[i].Role, status.Disks[i].Volume = RoleMember, cfg.Name
+						}
+					}
+				})
+			}
 		}
 		if mounts[volume.MountPoint] {
 			volume.Mounted = true

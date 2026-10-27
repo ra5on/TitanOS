@@ -31,6 +31,7 @@ var storageErrors = []struct {
 	{storage.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
 	{storage.ErrLocked, http.StatusConflict, "snapshot_locked"},
+	{storage.ErrCacheConfigured, http.StatusConflict, "volume_cache_configured"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
 	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
@@ -364,6 +365,44 @@ func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Btrfs profile change requested", "volume", name, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.ConvertBtrfs(context.WithoutCancel(r.Context()), name, req.Profile); err != nil {
 		writeStorageError(w, r, "change Btrfs profile", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleVolumeCache switches the SSD cache of a volume on (disk, erase) or
+// changes its mode (mode only, when it has one).
+func (s *Server) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Disk     string `json:"disk"`
+		Mode     string `json:"mode"`
+		Erase    bool   `json:"erase"`
+		Identity string `json:"identity"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	ctx := context.WithoutCancel(r.Context())
+	var err error
+	if req.Disk != "" {
+		slog.Info("SSD cache requested", "volume", name, "disk", req.Disk, "mode", req.Mode, "user", currentUser(r).Name, "ip", remoteIP(r))
+		err = s.opts.Storage.EnableCache(ctx, name, req.Disk, req.Mode, req.Identity, req.Erase)
+	} else {
+		err = s.opts.Storage.SetCacheMode(ctx, name, req.Mode)
+	}
+	if err != nil {
+		writeStorageError(w, r, "SSD cache", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	slog.Info("SSD cache removal requested", "volume", name, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if err := s.opts.Storage.DisableCache(context.WithoutCancel(r.Context()), name); err != nil {
+		writeStorageError(w, r, "SSD cache", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

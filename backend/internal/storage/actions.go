@@ -343,12 +343,16 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 			options += ",degraded"
 		}
 	}
-	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
+	source, err := m.mountSource(ctx, volume)
+	if err != nil {
+		return err
+	}
+	_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, source, mountPoint)
 	if err != nil && quotas != "" {
 		// Quotas never keep a volume from mounting.
 		slog.Warn("mount with project quotas failed, mounting without", "volume", volume.Name, "err", err)
 		m.setQuotaProblem(volume.Name, err.Error())
-		_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", strings.TrimSuffix(options, quotas), "UUID="+volume.FilesystemUUID, mountPoint)
+		_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", strings.TrimSuffix(options, quotas), source, mountPoint)
 	}
 	if err != nil {
 		return err
