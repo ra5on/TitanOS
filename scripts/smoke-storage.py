@@ -25,6 +25,7 @@ import urllib.request
 import zipfile
 
 from cdi_smoke import check_cdi
+from quota_smoke import check_share_quotas
 from vm_snapshot_smoke import check_vm_snapshots
 
 spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).with_name('smoke-release.py'))
@@ -124,6 +125,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
         shutil.copyfile('/usr/share/OVMF/OVMF_VARS_4M.fd', directory / 'OVMF_VARS.fd')
         for index in (1, 2, 3):
             helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'data{index}.qcow2'), '8G' if workflows else '2G')
+        for index in (1, 2):
+            helper.command('qemu-img', 'create', '-q', '-f', 'qcow2', str(directory / f'quota{index}.qcow2'), '1G')
         helper.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory / 'key'))
         usb_disk = directory / 'external-exfat.img'
         with usb_disk.open('wb') as image:
@@ -184,6 +187,9 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                 for index in ((1, 2, 3) if boot < 3 else (1, 3)):
                     args += ['-drive', f'if=none,id=data{index},format=qcow2,file={directory}/data{index}.qcow2',
                              '-device', f'virtio-blk-pci,drive=data{index},serial=BTRFS{index}']
+                for index in (1, 2):
+                    args += ['-drive', f'if=none,id=quota{index},format=qcow2,file={directory}/quota{index}.qcow2',
+                             '-device', f'virtio-blk-pci,drive=quota{index},serial=QUOTA{index}']
                 print(f'Btrfs boot {boot} ({accel[1]})', flush=True)
                 process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=serial, stderr=subprocess.STDOUT)
                 try:
@@ -211,6 +217,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                             raise TimeoutError('SSH')
                         time.sleep(1)
                     disks = {d['serial']: d['name'] for d in request('/storage')['disks']}
+                    if boot != 1:
+                        check_share_quotas(boot, request, remote, disks)
                     if boot == 1:
                         members = [disks['BTRFS1'], disks['BTRFS2']]
                         # Exercise real foreign RAID release, only on these fresh
@@ -227,6 +235,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members})
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
+                        # After mirror: the first new volume gets the default folders.
+                        check_share_quotas(boot, request, remote, disks)
                         profiles = remote('btrfs filesystem usage /mnt/mirror')
                         assert 'Data,RAID1' in profiles and 'Metadata,RAID1' in profiles, profiles
                         request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})

@@ -40,7 +40,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ## Funktionsumfang und offene Vorhaben
 
-- Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, Plugins, Netzwerk mit Rückfall, Backups, USV, Benachrichtigungen, Diagnose, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
+- Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, Plugins, Netzwerk mit Rückfall, Backups, USV, Benachrichtigungen, Diagnose, Aktivitätsprotokoll, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
 - Ersteinrichtung: frei gewähltes Besitzerkonto, danach `/welcome` mit Sprache, Hostname, Zeitzone, automatischer Heimnetz-Bridge und nächsten Schritten. Das erste Volume wird auf der Speicher-Seite angelegt.
 - Deutsch und Englisch; alle Oberflächentexte über Übersetzungsdateien.
 - Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. Einzelheiten in den eigenen Abschnitten.
@@ -571,6 +571,16 @@ Die Einstellungsübersicht zeigt kompakte Symbol-/Titelkacheln ohne Beschreibung
 - NVIDIA-InRelease/GPG und Paketprüfsummen prüfen; fertiges lokales Image mit NAS-eigenem Schlüssel authentifizieren, in der UI „Auf diesem NAS gebaut“, niemals als offiziell signiert ausgeben. API-Status liest keine Konfiguration vom Stick. Details: `docs/NVIDIA-LOCAL-BUILD.md`.
 - Das Bauprotokoll liegt außerhalb der Sandbox im privaten Bauordner und wird je Lauf frisch angelegt; alles, was die Sandbox erzeugt (Status, Ergebnis, Manifest), liest titand ohne Links zu folgen und nur als gewöhnliche Datei mit Größengrenze; Links, Geräte und Hardlinks im Ergebnis werden abgelehnt. Der SDK-Download setzt per HTTP-Range fort, bricht nur nach zwei Minuten ohne Daten ab und hat keine Gesamtfrist; die Zwei-Stunden-Frist gilt nur dem Compilerlauf.
 - CI baut die passende Bauumgebung und prüft den realen Buildpfad. Der ältere Workflow für fertig gebaute Zusatztreiber bleibt manuell; täglicher CI-Treiberbau ist abgeschaltet. Hardwareaktivierung/CUDA/NVENC weiter auf echtem NAS prüfen.
+
+## Obergrenzen für Freigaben
+
+- Projekt-Kontingente pro Freigabe, nur ext4/XFS; Btrfs nicht (Freigaben sind keine Subvolumes, keine Hintergrund-Scans). Paket `internal/quota` spricht direkt mit dem Kernel (`quotactl_fd`, `FS_IOC_FS[GS]ETXATTR`), keine Quota-Werkzeuge im Abbild nötig. `VolumeConfig.ShareQuotas`: XFS und ext4 werden mit `prjquota` eingebunden (ext4 zählt sonst nur mit), ext4 bekommt vorher einmalig `tune2fs -O quota,project -Q prjquota`; ein Fehler dabei verhindert nie das Einbinden (Rückfall ohne `prjquota`). „Aktiv“ nur bei tatsächlicher Durchsetzung (`Q_XGETQSTATV`, `FS_QUOTA_PDQ_ENFD`). Wirksam erst nach dem nächsten Einbinden (Neustart).
+- `Share.Quota` (Bytes, ≥ 16 MiB) und `Share.QuotaID` (ab 10000, nie zweimal vergeben, Zähler `/config/shares/quota-ids.json`, vom Client nie übernommen). `shares.ApplyQuotas` läuft in jeder Runde von `Run`: Grenzen nur bei Änderung setzen, Projekt-ID vorhandener Dateien im Hintergrund vergeben, Belegung nur auf Anfrage (höchstens alle 30 s) lesen, damit ruhende Platten schlafen. ext4 ignoriert Grenzen für root (titand prüft vorher per statfs). CI-Prüfung im QEMU-Storage-Test (`scripts/quota_smoke.py`). Siehe `docs/SHARE-QUOTAS.md`.
+
+## Aktivitätsprotokoll
+
+- Paket `internal/activity`, Seite Werkzeuge › Aktivität (nur Besitzer/Admin, nicht per API-Token). Middleware `activityLog` um den Mux: jede POST/PUT/PATCH/DELETE eines angemeldeten Kontos, ausgewählte Konsolen-/Download-GETs (`activityReads`), dazu `login`, `logout`, `login_failed`, `login_blocked`, `setup`. `requireUser` meldet Konto und `r.Pattern` per `noteActivity`; Handler ergänzen Ziele nur mit `noteTarget` (Namen und Pfade, nie Inhalte, Links nur Schema+Server). Request-Bodies nie speichern. Häufige/private Routen in `activityQuiet` ausnehmen statt Einträge zu filtern.
+- Tägliche JSONL unter `.titanos/activity/` auf dem gewählten oder ersten eingebundenen Volume, nie auf dem Stick; 30/90/365 Tage, 8–256 MiB, Standard an/90/64. Ohne Volume 500 Einträge Anzeige, bis 5.000 wartend im RAM. Kein manipulationssicheres Revisionsprotokoll, keine Löschfunktion in der UI. Siehe `docs/ACTIVITY.md`.
 
 ## Monitoring, Ein-/Ausschalter und Fernzugriff
 

@@ -100,6 +100,7 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	if req.Name != "" && req.Path != "" {
 		writeError(w, http.StatusBadRequest, "invalid_plugin", "choose a release plugin or a local file")
 		return

@@ -99,6 +99,8 @@ type VolumeConfig struct {
 	// Set only for a newly created first volume; cleared after its folders
 	// are durable. Existing/imported volumes are never populated implicitly.
 	InitializeFolders bool `json:"initializeFolders,omitempty"`
+	// ShareQuotas lets shares on an ext4 or XFS volume have a size limit.
+	ShareQuotas bool `json:"shareQuotas,omitempty"`
 }
 
 // Volume is a configured volume with its live state.
@@ -116,6 +118,9 @@ type Volume struct {
 	Sync       *Sync    `json:"sync"`
 	// Mismatches is what the last check found: blocks whose copies differ.
 	Mismatches uint64 `json:"mismatches"`
+	// ShareQuotas is one of the Quotas* states.
+	ShareQuotas      string `json:"shareQuotas"`
+	ShareQuotasError string `json:"shareQuotasError,omitempty"`
 }
 
 // Member is a disk of a volume.
@@ -172,8 +177,12 @@ type Manager struct {
 	testMu sync.Mutex
 	tests  map[string]*DiskTest
 
-	mu           sync.RWMutex
-	volumes      []VolumeConfig
+	mu      sync.RWMutex
+	volumes []VolumeConfig
+	// quotaProblems are why share quotas could not start, by volume.
+	quotaProblems map[string]string
+	// quotaProbe replaces the kernel check in tests.
+	quotaProbe   func(mountPoint string) (bool, error)
 	growth       *GrowthPointer
 	growthActive bool
 	loaded       bool
@@ -370,6 +379,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 				volume.UsedBytes = (stat.Blocks - stat.Bfree) * uint64(stat.Bsize)
 			}
 		}
+		m.quotaState(cfg, &volume)
 		status.Volumes = append(status.Volumes, volume)
 	}
 	claimed := map[string]string{}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"path"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/files"
@@ -51,6 +52,7 @@ func (s *Server) handleFileURLDownload(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, path.Join(req.Dir, req.Name)), urlPlace(req.URL))
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return

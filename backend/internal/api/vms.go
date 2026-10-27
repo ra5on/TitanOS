@@ -94,6 +94,7 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	mounted := s.opts.Storage.Mounted()
 	// Validate only the hardware the owner explicitly selected.
 	pci, err := s.opts.Hardware.Check(req.PCI, req.USB)

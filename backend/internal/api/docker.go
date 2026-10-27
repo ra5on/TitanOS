@@ -178,6 +178,7 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBody(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	if err := s.opts.Docker.CreateApp(r.Context(), req.Name, req.Compose, req.Env); err != nil {
 		writeDockerError(w, err)
 		return

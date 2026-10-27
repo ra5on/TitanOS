@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
@@ -295,7 +296,7 @@ func run(opts options) error {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
 	go folders.Run(ctx, func() shares.State {
-		return shares.State{Users: users.List(), Mounted: volumes.Mounted()}
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas}
 	})
 
 	// Runs the Docker engine while its volume is mounted.
@@ -772,6 +773,15 @@ func run(opts options) error {
 	if !opts.dev {
 		go history.Run(ctx)
 	}
+	// The activity log stays in memory in development mode.
+	audit := activity.New(store)
+	if err := audit.Load(); err != nil {
+		slog.Warn("activity log settings unavailable", "err", err)
+	}
+	if !opts.dev {
+		audit.Mounted = volumes.Mounted
+		go audit.Run(ctx)
+	}
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -879,6 +889,7 @@ func run(opts options) error {
 		SecureCookies:      !opts.dev,
 		Sessions:           sessions,
 		Assistant:          chat,
+		Activity:           audit,
 	})
 
 	agentDone := make(chan struct{})

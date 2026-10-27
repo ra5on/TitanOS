@@ -302,6 +302,32 @@ export function fixtureFactory(browser, errors) {
         });
         return json(data.maintenance);
       }
+      // Activity log: tests may replace data.activity; queries are kept.
+      if (path === "/activity") {
+        const log = (data.activity ??= {
+          settings: { enabled: true, volume: "", days: 90, maxMiB: 64 },
+          entries: [
+            { at: time, user: "alex", via: "web", ip: "192.168.1.20", action: "POST /api/v1/files/delete", target: "Media/alt.mkv", status: 200, ok: true },
+            { at: time, user: "sam", via: "web", ip: "192.168.1.31", action: "login_failed", ok: false },
+            { at: time, user: "alex", via: "token", action: "PUT /api/v1/system/timezone", status: 200, ok: true },
+          ],
+          queries: [],
+        });
+        const status = { settings: log.settings, volume: log.settings.enabled ? "Data" : "", pending: 0, dropped: 0, error: "" };
+        if (method === "PUT") {
+          log.settings = route.request().postDataJSON();
+          return json({ ...status, settings: log.settings });
+        }
+        log.queries.push(Object.fromEntries(url.searchParams));
+        if (url.searchParams.get("format")) {
+          data.exports++;
+          return route.fulfill({ body: "time,user\n", contentType: "text/csv" });
+        }
+        const user = url.searchParams.get("user"),
+          failed = url.searchParams.get("failed") === "1";
+        const entries = log.entries.filter((e) => (!user || e.user === user) && (!failed || !e.ok));
+        return json({ entries, more: false, stored: true, status });
+      }
       if (path === "/monitoring") {
         if (method === "PUT") data.monitor = route.request().postDataJSON();
         return json({
@@ -527,12 +553,20 @@ export function fixtureFactory(browser, errors) {
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);
+      // Share quotas per volume; PUT .../quotas switches them like titand.
+      const quotas = (data.volumeQuotas ??= { Data: "active", Fast: "unsupported", Safe: "off" });
+      const switched = /^\/storage\/volumes\/([^/]+)\/quotas$/.exec(path);
+      if (switched && method === "PUT") {
+        const on = route.request().postDataJSON().enabled;
+        quotas[decodeURIComponent(switched[1])] = on ? "pending" : "off";
+        return route.fulfill({ status: 204 });
+      }
       if (path === "/storage")
         return json({
           volumes: [
-            { ...volume, level: "raid5" },
-            { ...volume, name: "Fast", filesystem: "btrfs" },
-            { ...volume, name: "Safe" },
+            { ...volume, level: "raid5", shareQuotas: quotas.Data },
+            { ...volume, name: "Fast", filesystem: "btrfs", shareQuotas: quotas.Fast },
+            { ...volume, name: "Safe", shareQuotas: quotas.Safe },
           ],
           disks: [
             {
@@ -583,6 +617,7 @@ export function fixtureFactory(browser, errors) {
           return route.fulfill({ status: 204 });
         }
         if (data.failSave) return fail();
+        (data.shareSaves ??= []).push(route.request().postDataJSON());
         return route.fulfill({ status: 204 });
       }
       if (path === "/docker") {

@@ -4,8 +4,10 @@
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDiskBytes, formatDuration, formatPercent } from '#lib/format.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { stateTone } from './labels.ts';
+	import { api, ApiError } from '#lib/api.ts';
+	import { refreshStorage } from '#lib/storage.svelte.ts';
 
 	type Props = {
 		volume: Volume;
@@ -19,6 +21,19 @@
 	let { volume, canAdminister, busy, oncheck, onadd, ondelete, onremove }: Props = $props();
 
 	const tone = $derived(stateTone(volume));
+	let quotaBusy = $state(false),
+		quotaError = $state('');
+	async function switchQuotas(enabled: boolean) {
+		quotaBusy = true;
+		quotaError = '';
+		try {
+			await api.put(`/storage/volumes/${encodeURIComponent(volume.name)}/quotas`, { enabled });
+			await refreshStorage();
+		} catch (err) {
+			quotaError = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+		quotaBusy = false;
+	}
 	const usedPercent = $derived(volume.sizeBytes > 0 ? (100 * volume.usedBytes) / volume.sizeBytes : 0);
 	const rebuilding = $derived(volume.members.filter((member) => member.state === 'rebuilding').map((member) => member.disk));
 
@@ -92,6 +107,19 @@
 			<div class="bar"><span class="metric-level" style:width="{usedPercent}%"></span></div>
 		</div>
 	{/if}
+	{#if canAdminister && volume.shareQuotas && volume.shareQuotas !== 'unsupported'}
+		<div class="quotas">
+			<div>
+				<span class="label">{t('storage.shareQuotas')}</span>
+				<span>{t(`storage.shareQuotas.${volume.shareQuotas}`)}</span>
+				{#if volume.shareQuotasError}<small class="problem">{volume.shareQuotasError}</small>{/if}
+				{#if quotaError}<small class="problem" role="alert">{quotaError}</small>{/if}
+			</div>
+			<button type="button" class="btn" disabled={busy || quotaBusy} onclick={() => switchQuotas(volume.shareQuotas === 'off')}
+				>{t(volume.shareQuotas === 'off' ? 'storage.shareQuotasOn' : 'storage.shareQuotasOff')}</button
+			>
+		</div>
+	{/if}
 	{#if volume.mismatches > 0}
 		<p class="notice-warn">{t('storage.mismatches')}: <span class="mono">{volume.mismatches}</span></p>
 	{/if}
@@ -113,6 +141,23 @@
 </article>
 
 <style>
+	.quotas {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 16px;
+	}
+	.quotas > div {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.quotas .problem {
+		color: var(--error-text);
+		overflow-wrap: anywhere;
+	}
 	article {
 		flex: 1 1 520px;
 		min-width: 0;

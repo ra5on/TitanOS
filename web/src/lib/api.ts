@@ -229,6 +229,9 @@ export type Volume = {
 	members: { disk: string; state: MemberState }[];
 	sync: { percent: number; speedBytesPerSecond: number; remainingSeconds: number } | null;
 	mismatches: number;
+	/** Limits for shares: ext4/XFS only, switched on take effect at the next start. */
+	shareQuotas: 'unsupported' | 'off' | 'pending' | 'active';
+	shareQuotasError?: string;
 };
 
 export type DiskSleepStatus = {
@@ -258,8 +261,19 @@ export type Share = {
 	browseable: boolean;
 	recycle: { enabled: boolean; days: number };
 	timeMachine: { enabled: boolean; sizeGB: number };
+	/** Most the share may hold in bytes; absent for no limit. */
+	quota?: number;
+	quotaID?: number;
+	quotaStatus?: ShareQuotaStatus;
 	path: string;
 	available: boolean;
+};
+
+export type ShareQuotaStatus = {
+	state: 'pending' | 'applying' | 'active' | 'error';
+	used: number;
+	limit: number;
+	error?: string;
 };
 
 export type FileRoot = {

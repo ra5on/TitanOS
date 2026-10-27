@@ -89,6 +89,7 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "create volume", err)
@@ -263,5 +264,23 @@ func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("Btrfs snapshot action", "volume", r.PathValue("name"), "snapshot", req.Name, "action", req.Action, "user", currentUser(r).Name)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetShareQuotas switches limits for the shares of a volume on or off.
+// They take effect at the next start of the NAS.
+func (s *Server) handleSetShareQuotas(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Storage.SetShareQuotas(r.PathValue("name"), req.Enabled); err != nil {
+		writeStorageError(w, r, "share quotas", err)
+		return
+	}
+	slog.Info("share quotas changed", "volume", r.PathValue("name"), "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.opts.Shares.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -333,7 +333,8 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 		return err
 	}
-	options := "noatime"
+	quotas := m.quotaMountOptions(ctx, volume)
+	options := "noatime" + quotas
 	if volume.Filesystem == "btrfs" {
 		options += ",subvolid=5"
 		if degraded {
@@ -341,6 +342,12 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 		}
 	}
 	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
+	if err != nil && quotas != "" {
+		// Quotas never keep a volume from mounting.
+		slog.Warn("mount with project quotas failed, mounting without", "volume", volume.Name, "err", err)
+		m.setQuotaProblem(volume.Name, err.Error())
+		_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", strings.TrimSuffix(options, quotas), "UUID="+volume.FilesystemUUID, mountPoint)
+	}
 	if err != nil {
 		return err
 	}
