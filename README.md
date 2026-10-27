@@ -99,6 +99,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 - **Container und Compose-Stacks:** Images und Tags einzeln je Dienst bearbeiten, Store-Vorgaben und Digests erhalten; Start, Stopp, Neustart, Logs und Browserkonsole; CPU, RAM, Ports und geprüfte Updatezustände im Blick. Suche, Filter sowie anpassbare Reihenfolge und Ansicht.
 - **Anwendungen schnell öffnen:** eigene App-Icons und Links zur WebUI, zur Tailscale-Adresse und zur öffentlichen Adresse. Bei Stacks bestimmt ein Hauptdienst die gemeinsamen Links.
+- **Eigener HTTPS-Name je App:** auf Wunsch erreichst du eine App unter `https://immich.<nas>.local` oder unter einer eigenen Domain. TitanOS leitet selbst weiter (auch WebSockets), gibt die Namen per mDNS im Heimnetz bekannt und hält die TitanOS-Anmeldung von den Apps fern; wahlweise nur aus Heimnetz, Tailscale und NetBird erreichbar.
 - **Eigene LAN-Adressen:** ipvlan L2 oder macvlan mit reserviertem IPv4-Pool, optional fester Adresse pro Dienst und eigenem NAS-Endpunkt; private Dienste eines Stacks bleiben privat. [Einrichtung](docs/NETWORKING.md#container-mit-eigener-lan-adresse).
 - **Apps als Formular oder Compose bearbeiten:** Ports, Datenpfade, Umgebungswerte und Hardware je Dienst zuweisen. Die Docker-Daten liegen auf einem ausgewählten Daten-Volume.
 - **App-Store mit eigenen Quellen:** offizieller [TitanOS-App-Katalog](https://github.com/ra5on/TitanOS-Apps), zusätzliche Repositories, Archive und Compose-Dateien; Unterstützung für CasaOS-kompatible Stores.
@@ -106,7 +107,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 [![Docker-Übersicht mit geschlossenen Stacks und einzelnen Anwendungen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
 
-[App-Links](docs/APP-LINKS.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
+[App-Links](docs/APP-LINKS.md) · [HTTPS-Namen für Apps](docs/APP-PROXY.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
 
 ### Virtuelle Maschinen
 

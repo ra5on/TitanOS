@@ -459,7 +459,8 @@ Die Einstellungsübersicht zeigt kompakte Symbol-/Titelkacheln ohne Beschreibung
 - Aktuelles gemeinsames Raster für Container und Compose-Stacks mit Karten/Liste/Minimal und persönlichen Layouts: siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand; weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
 - Suche/Filter, Status, CPU/RAM, Ports, WebUI, Start/Stopp und Schnellaktionen bleiben erhalten. Eigene Quellen werden täglich/per Knopf aktualisiert, externe Stores nur ausdrücklich hinzugefügt.
 - Installationspanel mit Herkunft je Feld, eigenen Variablen/Pfaden/Ports und erweiterten Rechtehinweisen. Daten auf dem ausgewählten Docker-Volume, niemals im RAM-Overlay; GPU-Nutzung ausdrücklich je Dienst.
-- Webadressen über `titanos.webui`, optional `titanos.public-url` und aktiven Tailscale-Host; dies richtet keinen Proxy oder Tunnel ein. Siehe `docs/APP-LINKS.md` und `docs/NATIVE-APPS.md`.
+- Webadressen über `titanos.webui`, optional `titanos.public-url` und aktiven Tailscale-Host; `titanos.public-url` richtet keinen Tunnel ein. Siehe `docs/APP-LINKS.md` und `docs/NATIVE-APPS.md`.
+- Eigener HTTPS-Name je App (Entscheidung des Projektinhabers, Paket `appproxy`, `docs/APP-PROXY.md`): titand leitet `https://<name>.<hostname>.local` bzw. `<name>.<domain>` selbst per `httputil.ReverseProxy` (WebSockets, `X-Forwarded-*`) an `127.0.0.1:<Port>` weiter, unbekannte Namen gehen an die Weboberfläche. Einstellungen in eigener Datei `/config/docker/proxy.json` (ältere titand ignorieren sie), API `/api/v1/docker/proxy` nur Besitzer/Admin, Abschnitt „HTTPS-Name“ im App-Editor ohne Neuerstellen des Containers. TitanOS-Sitzungscookies werden nie an Apps weitergereicht, Apps dürfen sie nicht setzen. Optional nur Heimnetz/Tailscale/NetBird (`netguard.Local`, ab Werk an). Zertifikat: importiertes, wenn es den Namen abdeckt, sonst eigenes selbst signiertes Platzhalterzertifikat `/config/tls/apps-cert.pem`. `.local`-Namen per generiertem `/etc/avahi/hosts` (avahi läuft dann auch ohne SMB); eigene Domain braucht einen Platzhalter im Router-DNS. Keine Firewall, kein Let's Encrypt; der Entwicklungsmodus fasst avahi nicht an.
 
 **Terminal und Konsolen**
 - Terminal-Symbol ohne Text in der Kopfzeile auf jeder Seite (zusätzlich Strg+`). Öffnet ein Panel am unteren Rand, Höhe ziehbar, Seite darüber bleibt bedienbar; auch als eigener Browser-Tab.
@@ -659,8 +660,9 @@ Die Einstellungsübersicht zeigt kompakte Symbol-/Titelkacheln ohne Beschreibung
 - Gemeinsame UI-Größen/Abstände und mobile Docker-Stacks, Filter, Formulare und
   Dialoge. Persönliche Schriftskalierung und Dashboard-Layouts bleiben erhalten.
 - Katalog-Icons über `x-titanos.icon`/CasaOS; neue Installationen übernehmen
-  `titanos.icon`. Weblinks: `titanos.webui`, aktiver Tailscale-Hostname und optionale
-  `titanos.public-url` für externe Proxys. Details: `docs/APP-LINKS.md`.
+  `titanos.icon`. Weblinks: `titanos.webui`, eigener HTTPS-Name (`proxyUrl`),
+  aktiver Tailscale-Hostname und optionale `titanos.public-url` für externe Proxys.
+  Details: `docs/APP-LINKS.md`, `docs/APP-PROXY.md`.
 - Storytold-Paketierung und App-Vorlagen bleiben ausschließlich in TitanOS-Apps.
 
 ## USB-Kopie, Konfigurationssicherung und Meldungstöne

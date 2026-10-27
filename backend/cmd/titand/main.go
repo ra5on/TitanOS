@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,6 +28,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -297,8 +299,19 @@ func run(opts options) error {
 	if err := folders.Load(); err != nil {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
+	// HTTPS names of Docker apps, served by titand itself (see below) and
+	// published over mDNS; avahi then runs even without SMB shares.
+	routes := appproxy.NewManager(store)
+	routes.Disabled = opts.dev
+	routes.HTTPSPort, routes.Reserved = proxyPorts(opts)
+	routes.OnChange = folders.Kick
+	if err := routes.Load(); err != nil {
+		slog.Warn("app HTTPS names not readable from /config", "err", err)
+	}
+	go routes.Run(ctx)
+
 	go folders.Run(ctx, func() shares.State {
-		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas}
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas, Discovery: routes.Publishing()}
 	})
 
 	// Runs the Docker engine while its volume is mounted.
@@ -943,6 +956,7 @@ func run(opts options) error {
 		Shares:             folders,
 		Files:              fileManager,
 		Docker:             containers,
+		AppProxy:           routes,
 		Catalog:            appCatalog,
 		Terminal:           shells,
 		VMs:                machines,
@@ -999,12 +1013,20 @@ func run(opts options) error {
 		}()
 	}
 
+	// Requests for the HTTPS name of an app go to the app, all others to
+	// the web UI; see package appproxy.
+	site := routes.Handler(handler)
 	if opts.dev {
-		serve(newServer(opts.devAddr, handler), false)
+		serve(newServer(opts.devAddr, site), false)
 		slog.Info("titand started in development mode", "version", version.Version, "listen", opts.devAddr, "config", opts.configDir, "webui", webui.Embedded)
 	} else {
-		https := newServer(opts.httpsAddr, handler)
-		https.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
+		https := newServer(opts.httpsAddr, site)
+		https.TLSConfig = &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if names := routes.CertificateNames(hello.ServerName); names != nil {
+				return certs.ForNames(hello.ServerName, names)
+			}
+			return certs.GetCertificate(hello)
+		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
 			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
@@ -1086,6 +1108,30 @@ func watchCertificate(ctx context.Context, certs *tlscert.Manager, notifier *not
 		case <-ticker.C:
 		}
 	}
+}
+
+// proxyPorts returns the HTTPS port for links to apps (0 for the usual
+// 443) and the ports of titand an app route must not point at.
+func proxyPorts(opts options) (int, []int) {
+	var https int
+	var reserved []int
+	addrs := []string{opts.httpsAddr, opts.httpAddr}
+	if opts.dev {
+		addrs = []string{opts.devAddr}
+	}
+	for _, addr := range addrs {
+		_, p, err := net.SplitHostPort(addr)
+		if err != nil {
+			continue
+		}
+		if port, err := strconv.Atoi(p); err == nil {
+			reserved = append(reserved, port)
+			if addr == opts.httpsAddr && port != 443 {
+				https = port
+			}
+		}
+	}
+	return https, reserved
 }
 
 func newServer(addr string, handler http.Handler) *http.Server {

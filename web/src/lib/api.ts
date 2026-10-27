@@ -383,11 +383,26 @@ export type DockerContainer = {
 	/** Value of the label titanos.webui: a host port, a port with a path or a URL. */
 	webui: string;
 	publicUrl: string;
+	/** The app's own HTTPS name through TitanOS, e.g. https://immich.nas.local; missing without one. */
+	proxyUrl?: string;
 	icon: string;
 	updateAvailable: boolean;
 	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
 	updateError?: string;
 };
+
+/** The HTTPS name of one app (GET /docker/proxy). */
+export type AppProxyRoute = {
+	app: string;
+	enabled: boolean;
+	name: string;
+	port: number;
+	scheme: 'http' | 'https';
+	localOnly?: boolean;
+	urls: string[];
+};
+
+export type AppProxyStatus = { domain?: string; suffixes: string[]; apps: AppProxyRoute[] };
 
 export type DockerStatus = {
 	settings: { enabled: boolean; volume: string };

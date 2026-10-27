@@ -398,3 +398,23 @@ func TestLockedAccountLosesSMB(t *testing.T) {
 		t.Errorf("retry: %v\n%s", err, strings.Join(runner.commands, "\n"))
 	}
 }
+
+// The .local names of apps need avahi even without any SMB share.
+func TestDiscoveryForApps(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Apply(ctx, State{}); err != nil {
+		t.Fatal(err)
+	}
+	if all := strings.Join(runner.commands, "\n"); !strings.Contains(all, "systemctl stop avahi-daemon.service") {
+		t.Fatalf("avahi runs without shares and apps:\n%s", all)
+	}
+	runner.commands = nil
+	if err := m.Apply(ctx, State{Discovery: true}); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(runner.commands, "\n")
+	if !strings.Contains(all, "systemctl start avahi-daemon.service") || !strings.Contains(all, "systemctl stop wsdd2.service") {
+		t.Fatalf("avahi not started for app names:\n%s", all)
+	}
+}

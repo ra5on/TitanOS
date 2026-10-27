@@ -427,6 +427,9 @@ type State struct {
 	Mounted []string
 	// Quotas tells about project quotas on a volume; nil leaves them alone.
 	Quotas VolumeQuotas
+	// Discovery keeps avahi running without SMB shares, for the .local
+	// names of apps (package appproxy).
+	Discovery bool
 }
 
 // Run keeps the system in line with the configuration until ctx is done.
@@ -486,7 +489,11 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	smbConf := renderSMBConf(offered, m.Path, m.shadowDir)
 	exports := renderExports(offered, m.nfsRoot)
 	passwords := renderSMBPasswd(users)
-	signature := sha256.Sum256([]byte(smbConf + "\x00" + exports + "\x00" + passwords))
+	discovery := ""
+	if state.Discovery {
+		discovery = "avahi"
+	}
+	signature := sha256.Sum256([]byte(smbConf + "\x00" + exports + "\x00" + passwords + "\x00" + discovery))
 	m.mu.Lock()
 	unchanged := signature == m.applied
 	m.mu.Unlock()
@@ -529,7 +536,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	}
 	// Discovery: wsdd2 for the Windows network view, avahi for macOS and Linux.
 	for _, unit := range []string{"wsdd2.service", "avahi-daemon.service"} {
-		if err := m.service(ctx, smb, unit, "start"); err != nil {
+		if err := m.service(ctx, smb || (unit == "avahi-daemon.service" && state.Discovery), unit, "start"); err != nil {
 			slog.Warn("network discovery", "unit", unit, "err", err)
 		}
 	}

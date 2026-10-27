@@ -17,6 +17,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -65,7 +66,9 @@ type Options struct {
 	Shares             *shares.Manager
 	Files              *files.Manager
 	Docker             *docker.Manager
-	Catalog            *catalog.Manager
+	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
+	AppProxy *appproxy.Manager
+	Catalog  *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
 	Terminal     *terminal.Manager
 	VMs          *vm.Manager
@@ -337,6 +340,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
 	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
+	mux.HandleFunc("GET /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxy))
+	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxyDomain))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRoute))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRemove))
 
 	// The app store: templates to install as Docker apps.
 	mux.HandleFunc("GET /api/v1/apps", s.requireAdmin(s.handleApps))
