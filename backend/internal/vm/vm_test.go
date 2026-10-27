@@ -70,6 +70,7 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	m.kvm = root // exists
 	m.runGid, m.runUid = os.Getgid(), os.Getuid()
 	m.autostartFile = filepath.Join(root, "run-titanos", "vms-autostarted")
+	m.powerFile = filepath.Join(root, "run-titanos", "vm-schedule.json")
 	runner := &fakeRunner{pidDir: m.pidDir}
 	m.runner = runner
 	for _, dir := range []string{m.pidDir, filepath.Join(m.mountRoot, "data", "media"), filepath.Join(m.mountRoot, "fast")} {

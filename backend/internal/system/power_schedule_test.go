@@ -140,3 +140,24 @@ func TestScheduleDisabledTouchesNothing(t *testing.T) {
 		t.Fatalf("alarm %q off %d", data, off)
 	}
 }
+
+func TestShutdownSoonForVMSchedules(t *testing.T) {
+	now := time.Date(2026, 10, 23, 22, 0, 0, 0, time.Local)
+	p, _, _ := newScheduler(t, now)
+	if p.ShutdownSoon(15 * time.Minute) {
+		t.Fatal("nothing scheduled")
+	}
+	p.Set(PowerSchedule{Off: ScheduleTime{Enabled: true, Days: []int{5}, Time: "22:10"}})
+	if !p.ShutdownSoon(15*time.Minute) || p.ShutdownSoon(5*time.Minute) {
+		t.Fatal("shutdown in ten minutes")
+	}
+	// A due shutdown waiting for work counts as well.
+	p.Busy = func() (bool, string) { return true, "backup" }
+	due := p.step(time.Time{})
+	now = now.Add(11 * time.Minute)
+	p.now = func() time.Time { return now }
+	p.step(due)
+	if !p.ShutdownSoon(time.Minute) {
+		t.Fatal("postponed shutdown not reported")
+	}
+}

@@ -16,6 +16,8 @@
 	import { storage } from '#lib/storage.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
+	import { nextScheduled } from '#lib/vm-schedule.ts';
+	import { formatDateTime } from '#lib/format.ts';
 	import { fitHeight, VNC_HEIGHT, vncHeight, vncWidth } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -788,6 +790,16 @@
 													>{t('vms.autostart')}</span
 												></span
 											>{/if}
+										{#if nextScheduled(vm.schedule)}
+											{@const next = nextScheduled(vm.schedule)!}
+											{@const label = t(
+												next.action === 'start' ? 'vms.sched.nextStartAt' : 'vms.sched.nextStopAt',
+												{ at: formatDateTime(new Date(next.at)) },
+											)}
+											<span class="autostart" title={label}
+												><Icon name="clock" size={12} /><span class="sr-only">{label}</span></span
+											>
+										{/if}
 									</span>
 								</a>
 								<div class="vm-actions">

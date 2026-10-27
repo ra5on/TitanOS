@@ -89,6 +89,7 @@ func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, moun
 	clone.CPUPin = nil
 	clone.Exclusive = false
 	clone.SnapshotSchedule = SnapshotSchedule{}
+	clone.PowerSchedule = PowerSchedule{}
 	clone.Created = time.Now().UTC()
 	clone.UUID = newUUID()
 	clone.MAC = newMAC()

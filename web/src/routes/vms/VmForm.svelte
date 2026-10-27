@@ -18,6 +18,8 @@
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
 import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
 	import IsoPicker from './IsoPicker.svelte';
+	import VmSchedule from './VmSchedule.svelte';
+	import { scheduleDraft, schedulePayload, scheduleProblems } from '#lib/vm-schedule.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -71,6 +73,7 @@ import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
 let virtioISO=$state(initial?.virtioISO??'');let virtioPending=$state(false);
 $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 	let autostart = $state(initial?.autostart ?? false);
+	let schedule = $state(scheduleDraft(initial?.powerSchedule));
 	let folders = $state((initial?.folders ?? []).map((folder) => ({ ...folder })));
 	let autoGPU = $state(initial?.autoGPU ?? false);
 	let pci = $state<string[]>(initial?.pci ?? []);
@@ -344,6 +347,14 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 		if (bridgePending) list.push(t('vms.form.openBridgePending'));
 		else if (net === 'bridge' && !status?.bridge) list.push(t('vms.form.openBridge'));
 		if (virtioPending) list.push(t('vms.form.openVirtio'));
+		for (const issue of scheduleProblems(schedule))
+			list.push(
+				t('vms.form.openSchedule', {
+					problem: t(`vms.sched.problem.${issue.key}` as 'vms.sched.problem.noRule', {
+						n: 'n' in issue ? issue.n : 0,
+					}),
+				}),
+			);
 		return list;
 	});
 	const blocked = $derived(busy || openPoints.length > 0);
@@ -371,6 +382,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 			iso,
 			virtioISO,
 			autostart,
+			schedule,
 			folders,
 			autoGPU,
 			pci,
@@ -450,6 +462,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 				template,
 				firmware,
 				autostart,
+				powerSchedule: schedulePayload(schedule),
 				tpm: secure,
 				secureBoot: secure,
 				...hardwareSettings(),
@@ -482,6 +495,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 				displayName: displayName.trim(),
 				description,
 				autostart,
+				powerSchedule: schedulePayload(schedule),
 				...hardwareSettings(),
 			});
 			await goto(`/vms?vm=${existing.name}`);
@@ -1198,6 +1212,13 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 				</details>
 			</fieldset>
 		</section>
+		<section class="tile vm-card card-1" aria-labelledby="vm-schedule-title">
+			<div class="step">
+				<span class="section-icon"><Icon name="clock" size={15} /></span>
+				<h2 id="vm-schedule-title">{t('vms.sched.title')}</h2>
+			</div>
+			<VmSchedule bind:draft={schedule} />
+		</section>
 	</div>
 
 	<aside class="tile" aria-labelledby="summary-title">
@@ -1241,6 +1262,14 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 			<div>
 				<dt>{t('vms.autostart')}</dt>
 				<dd>{t(autostart ? 'vms.ov.yes' : 'vms.ov.no')}</dd>
+			</div>
+			<div>
+				<dt>{t('vms.sched.title')}</dt>
+				<dd>
+					{schedule.enabled
+						? t('vms.sched.count', { n: schedule.rules.length })
+						: t('vms.ov.no')}
+				</dd>
 			</div>
 			<div>
 				<dt>{t('vms.new.medium')}</dt>

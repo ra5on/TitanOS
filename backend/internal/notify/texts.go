@@ -48,6 +48,15 @@ var texts = map[string]map[string][2]string{
 		"usb_formatted":           {"Laufwerk {s} formatiert", "Das neue Dateisystem steht unter Dateien › Weitere Laufwerke bereit."},
 		"usb_format_failed":       {"Formatieren von {s} fehlgeschlagen", "Unter Dateien › Laufwerk formatieren steht, woran es lag. Die Platte kann leer oder unvollständig sein."},
 		"disk_hot":                {"Platte {s} ist sehr warm", "Die Platte {s} ist wärmer als 55 °C. Prüfe die Lüftung."},
+
+		// Power schedules of VMs.
+		"vm_schedule_start_failed":  {"Geplanter Start von {s} fehlgeschlagen", "Die VM {s} ließ sich zur geplanten Zeit nicht starten. Einzelheiten stehen unter Werkzeuge › Protokoll."},
+		"vm_schedule_start_skipped": {"Geplanter Start von {s} ausgelassen", "Die VM {s} wurde nicht gestartet: Ihr Volume fehlte oder ein Snapshot, Klon oder eine Plattenkopie lief 30 Minuten lang."},
+		"vm_schedule_start_power":   {"Geplanter Start von {s} entfällt", "Das NAS fährt laut Energie-Zeitplan gleich herunter. Die VM {s} wurde deshalb nicht gestartet."},
+		"vm_schedule_stop_failed":   {"Geplantes Herunterfahren von {s} fehlgeschlagen", "Die VM {s} ließ sich zur geplanten Zeit nicht herunterfahren. Einzelheiten stehen unter Werkzeuge › Protokoll."},
+		"vm_schedule_stop_skipped":  {"Geplantes Herunterfahren von {s} ausgelassen", "Die VM {s} wurde nicht heruntergefahren, weil 30 Minuten lang ein Snapshot, Klon oder eine Plattenkopie lief."},
+		"vm_schedule_stop_timeout":  {"{s} läuft nach dem geplanten Herunterfahren weiter", "Der Gast der VM {s} hat nicht innerhalb der Wartezeit auf das Herunterfahren reagiert. „Danach ausschalten“ ist für diese VM nicht eingestellt."},
+		"vm_schedule_forced":        {"{s} ausgeschaltet", "Der Gast der VM {s} ist nicht innerhalb der Wartezeit heruntergefahren. TitanOS hat die VM ausgeschaltet (wie Stecker ziehen)."},
 	},
 	"en": {
 		"maintenance_failed":      {"Maintenance {s} failed", "The maintenance job needs attention. Details are under Tools › Maintenance."},
@@ -92,6 +101,15 @@ var texts = map[string]map[string][2]string{
 		"usb_formatted":           {"Drive {s} formatted", "The new filesystem is ready under Files › Other drives."},
 		"usb_format_failed":       {"Formatting {s} failed", "Files › Format drive says why. The drive may be empty or incomplete."},
 		"disk_hot":                {"Disk {s} is very warm", "The disk {s} is warmer than 55 °C. Check the ventilation."},
+
+		// Power schedules of VMs.
+		"vm_schedule_start_failed":  {"Scheduled start of {s} failed", "The VM {s} could not be started at the scheduled time. Details are under Tools › Log."},
+		"vm_schedule_start_skipped": {"Scheduled start of {s} skipped", "The VM {s} was not started: its volume was missing or a snapshot, clone or disk copy ran for 30 minutes."},
+		"vm_schedule_start_power":   {"Scheduled start of {s} left out", "The NAS shuts down shortly by its power schedule. The VM {s} was therefore not started."},
+		"vm_schedule_stop_failed":   {"Scheduled shutdown of {s} failed", "The VM {s} could not be shut down at the scheduled time. Details are under Tools › Log."},
+		"vm_schedule_stop_skipped":  {"Scheduled shutdown of {s} skipped", "The VM {s} was not shut down because a snapshot, clone or disk copy ran for 30 minutes."},
+		"vm_schedule_stop_timeout":  {"{s} still runs after the scheduled shutdown", "The guest of the VM {s} did not react to the shutdown within the waiting time. “Switch off afterwards” is not set for this VM."},
+		"vm_schedule_forced":        {"{s} switched off", "The guest of the VM {s} did not shut down within the waiting time. TitanOS switched the VM off (like pulling the plug)."},
 	},
 }
 

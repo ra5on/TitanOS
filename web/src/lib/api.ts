@@ -447,6 +447,10 @@ export type VM = {
 	/** RAM of the NAS the VM occupies right now. */
 	memoryBytes: number;
 	since: string;
+	/** Start and shut down at set times; missing means none. */
+	powerSchedule?: import('./vm-schedule.ts').VMPowerSchedule;
+	/** Next scheduled start/stop and what waits, while a schedule is on. */
+	schedule?: import('./vm-schedule.ts').VMScheduleView;
 };
 
 export type VMStatus = {

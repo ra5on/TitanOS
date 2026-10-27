@@ -15,6 +15,10 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
 - **Konsolen und sensible Downloads:** NAS-Konsole, Container-Konsole,
   serielle VM-Konsole, VM-Bildschirm, Download der Konfigurationssicherung und
   das Diagnosepaket.
+- **Zeitpläne von VMs:** Starten, Herunterfahren und erzwungenes Ausschalten
+  nach dem VM-Zeitplan (`vm_schedule_start`, `vm_schedule_stop`,
+  `vm_schedule_poweroff`) mit Herkunft „System“ und ohne Konto; ausgelassene
+  oder gescheiterte Termine als fehlgeschlagen. Siehe `docs/VM-SCHEDULE.md`.
 - **Herkunft:** Weboberfläche, API-Token oder Assistent/Home Assistant. Aufträge
   des Assistenten laufen über dieselbe API und stehen unter dem Konto, für das er
   handelt.
