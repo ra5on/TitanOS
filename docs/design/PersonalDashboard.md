@@ -35,7 +35,7 @@ Der Startseitenkopf entfällt. Oben rechts liegt eine gemeinsame kompakte Fläch
 
 Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
 
-Seit 0.26.0 liegen alle Editor-Bedienelemente in einer haftenden Leiste direkt
+Seit 0.27.0 liegen alle Editor-Bedienelemente in einer haftenden Leiste direkt
 unter der Kopfzeile: Kachel hinzufügen (öffnet die Auswahl in der Seitenleiste
 statt am Seitenende), Gesamtes Dashboard, Spalten und Mindestbreite, Rückgängig
 und Wiederholen mit eigenen Symbolen, Standard wiederherstellen (mit Rückfrage),
