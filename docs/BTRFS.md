@@ -31,7 +31,7 @@ Wiederherstellungen werden niemals überschrieben. Der konkrete Pfad erscheint
 nach dem Vorgang. Administratoren können benötigte Dateien über das NAS-Terminal
 oder SSH zurückkopieren und dabei deren Rechte erhalten. Der Wiederherstellungs-
 Ordner bleibt geschützt und wird nicht automatisch als Freigabe veröffentlicht.
-Zum Löschen eines Snapshots muss dessen Name eingegeben werden.
+Löschen eines Snapshots fragt mit einem einfachen Bestätigungsdialog nach; die Oberfläche schickt den Namen selbst.
 
 ## Prüfen und eine fehlende Platte ersetzen
 
