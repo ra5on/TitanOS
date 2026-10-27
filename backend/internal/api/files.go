@@ -145,6 +145,7 @@ func (s *Server) handleFileMkdir(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, req.Path))
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -161,6 +162,7 @@ func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, req.From)+" → "+req.To)
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -183,6 +185,7 @@ func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlaces(req.Root, req.Paths)...)
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -238,6 +241,7 @@ func (s *Server) handleTrash(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlaces(req.Root, req.Paths)...)
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -344,6 +348,7 @@ func (s *Server) handleUploadStart(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, path.Join(req.Dir, req.Name)))
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -483,6 +488,7 @@ func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBody(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, req.Path))
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -518,6 +524,7 @@ func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, append(filePlaces(req.Root, req.Paths), "→ "+filePlace(req.ToRoot, req.ToDir))...)
 	src, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return
@@ -643,6 +650,7 @@ func (s *Server) handleFileCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, filePlace(req.Root, req.Path))
 	root, ok := s.fileRoot(w, r, req.Root)
 	if !ok {
 		return

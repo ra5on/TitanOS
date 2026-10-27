@@ -72,6 +72,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	req.normalize()
 	actor := currentUser(r)
 	if !mayManage(actor, req.Role) {

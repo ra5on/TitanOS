@@ -55,6 +55,7 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &job) {
 		return
 	}
+	noteTarget(r, job.ID)
 	if err := s.opts.Backup.Create(job, s.opts.Storage.Names()); err != nil {
 		writeBackupJobError(w, err)
 		return

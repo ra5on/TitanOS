@@ -302,6 +302,32 @@ export function fixtureFactory(browser, errors) {
         });
         return json(data.maintenance);
       }
+      // Activity log: tests may replace data.activity; queries are kept.
+      if (path === "/activity") {
+        const log = (data.activity ??= {
+          settings: { enabled: true, volume: "", days: 90, maxMiB: 64 },
+          entries: [
+            { at: time, user: "alex", via: "web", ip: "192.168.1.20", action: "POST /api/v1/files/delete", target: "Media/alt.mkv", status: 200, ok: true },
+            { at: time, user: "sam", via: "web", ip: "192.168.1.31", action: "login_failed", ok: false },
+            { at: time, user: "alex", via: "token", action: "PUT /api/v1/system/timezone", status: 200, ok: true },
+          ],
+          queries: [],
+        });
+        const status = { settings: log.settings, volume: log.settings.enabled ? "Data" : "", pending: 0, dropped: 0, error: "" };
+        if (method === "PUT") {
+          log.settings = route.request().postDataJSON();
+          return json({ ...status, settings: log.settings });
+        }
+        log.queries.push(Object.fromEntries(url.searchParams));
+        if (url.searchParams.get("format")) {
+          data.exports++;
+          return route.fulfill({ body: "time,user\n", contentType: "text/csv" });
+        }
+        const user = url.searchParams.get("user"),
+          failed = url.searchParams.get("failed") === "1";
+        const entries = log.entries.filter((e) => (!user || e.user === user) && (!failed || !e.ok));
+        return json({ entries, more: false, stored: true, status });
+      }
       if (path === "/monitoring") {
         if (method === "PUT") data.monitor = route.request().postDataJSON();
         return json({

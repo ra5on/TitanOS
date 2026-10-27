@@ -168,7 +168,7 @@
 <PageHead title={t('nav.tools')} />
 
 <nav class="operation-links">
-	{#each [['tasks', '/tools/tasks'], ['maintenance', '/tools/maintenance'], ['monitoring', '/tools/monitoring'], ['import', '/storage/import']] as [key, href] (key)}<a
+	{#each [['tasks', '/tools/tasks'], ['maintenance', '/tools/maintenance'], ['monitoring', '/tools/monitoring'], ['activity', '/tools/activity'], ['import', '/storage/import']] as [key, href] (key)}<a
 			class="tile"
 			{href}>{t(`ops.${key}` as 'ops.tasks')} →</a
 		>{/each}

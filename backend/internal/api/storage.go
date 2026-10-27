@@ -89,6 +89,7 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	noteTarget(r, req.Name)
 	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "create volume", err)
