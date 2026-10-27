@@ -35,6 +35,14 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 	}
 	var total uint64
+	// Unlike restic, a copy follows the limit as the clock passes a window
+	// boundary; the page shows the limit that holds right now.
+	var pace *limiter
+	if job.Bandwidth != nil {
+		pace = newLimiter(func() int64 { return int64(job.Bandwidth.at(m.local(m.now()))) << 20 }, func(rate int64) {
+			m.update(job, func(s *State) { s.BandwidthLimit = int(rate >> 20) })
+		})
+	}
 	err := func() error {
 		for _, name := range job.Sources {
 			source := sources[name]
@@ -88,7 +96,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 						if err := copyDirectories(target, path.Dir(dst)); err != nil {
 							return err
 						}
-						n, err := copyFileProgress(ctx, root, rel, target, dst, func(done int64) {
+						n, err := copyFilePaced(ctx, root, rel, target, dst, pace, func(done int64) {
 							m.mu.Lock()
 							if state := m.states[job.ID]; state != nil {
 								state.BytesDone = total + uint64(done)
@@ -144,10 +152,12 @@ func copyDirectories(root *os.Root, dir string) error {
 }
 
 func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root, to string) (int64, error) {
-	return copyFileProgress(ctx, source, from, target, to, nil)
+	return copyFilePaced(ctx, source, from, target, to, nil, nil)
 }
 
-func copyFileProgress(ctx context.Context, source *os.Root, from string, target *os.Root, to string, progress func(int64)) (int64, error) {
+// copyFilePaced copies one file; pace (nil for none) limits what is written
+// and what is read back from the destination to compare.
+func copyFilePaced(ctx context.Context, source *os.Root, from string, target *os.Root, to string, pace *limiter, progress func(int64)) (int64, error) {
 	info, err := target.Lstat(to)
 	if err == nil && !info.Mode().IsRegular() {
 		return 0, fmt.Errorf("copy destination %s is not a regular file", to)
@@ -170,7 +180,7 @@ func copyFileProgress(ctx context.Context, source *os.Root, from string, target 
 	}
 	// Compare content even when timestamps match, without rewriting unchanged files.
 	if info != nil && info.Size() == before.Size() {
-		same, err := sameCopy(ctx, input, target, to)
+		same, err := sameCopy(ctx, input, target, to, pace)
 		if err != nil {
 			return 0, err
 		}
@@ -205,6 +215,9 @@ func copyFileProgress(ctx context.Context, source *os.Root, from string, target 
 		if n > 0 {
 			written, err := output.Write(buf[:n])
 			total += int64(written)
+			if err == nil {
+				err = pace.wait(ctx, written)
+			}
 			if progress != nil {
 				progress(total)
 			}
@@ -244,7 +257,7 @@ func copyFileProgress(ctx context.Context, source *os.Root, from string, target 
 	return total, nil
 }
 
-func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string) (bool, error) {
+func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string, pace *limiter) (bool, error) {
 	other, err := target.OpenFile(to, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return false, err
@@ -264,6 +277,9 @@ func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string) (
 		}
 		n, e1 := io.ReadFull(input, a)
 		k, e2 := io.ReadFull(other, b)
+		if err := pace.wait(ctx, k); err != nil {
+			return false, err
+		}
 		if e1 != nil && e1 != io.EOF && e1 != io.ErrUnexpectedEOF {
 			return false, e1
 		}

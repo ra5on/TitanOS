@@ -151,8 +151,14 @@ func (j Job) inWindow(at time.Time) bool {
 	if j.WindowFrom == "" {
 		return true
 	}
-	fromHour, fromMinute := clock(j.WindowFrom)
-	toHour, toMinute := clock(j.WindowTo)
+	return inClockWindow(j.WindowFrom, j.WindowTo, at)
+}
+
+// inClockWindow reports whether at lies from from to to (HH:MM); a window
+// whose end comes before its start passes midnight.
+func inClockWindow(fromText, toText string, at time.Time) bool {
+	fromHour, fromMinute := clock(fromText)
+	toHour, toMinute := clock(toText)
 	from, to, now := fromHour*60+fromMinute, toHour*60+toMinute, at.Hour()*60+at.Minute()
 	if from < to {
 		return now >= from && now < to
