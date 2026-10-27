@@ -110,6 +110,42 @@ type Settings struct {
 	// not offered in the web UI; whatever it serves still has to carry a
 	// valid signature.
 	Source string `json:"source,omitempty"`
+	// CheckEvery is how many minutes lie between two automatic checks:
+	// 0 (or missing) is once a day, CheckManual turns automatic checks off.
+	// Versions before it ignore the field and keep checking once a day.
+	CheckEvery int `json:"checkEvery,omitempty"`
+}
+
+const (
+	// CheckManual in CheckEvery leaves looking for updates to the button:
+	// no scheduled checks, none after a login and no automatic installation.
+	CheckManual = -1
+	// CheckDaily is the interval in minutes when CheckEvery is not set.
+	CheckDaily = 24 * 60
+	// MinCheckEvery and MaxCheckEvery bound a chosen interval: an hour to
+	// 30 days.
+	MinCheckEvery = 60
+	MaxCheckEvery = 30 * 24 * 60
+	// checkRetry is the longest wait after a failed check. A daily check
+	// waits a day as before; a weekly one does not wait a week to learn
+	// whether the network is back.
+	checkRetry = 24 * time.Hour
+	// checkStartDelay lets the network come up before the first check.
+	checkStartDelay = 5 * time.Minute
+)
+
+// Manual tells whether automatic checks are off.
+func (s Settings) Manual() bool {
+	return s.CheckEvery == CheckManual
+}
+
+// CheckInterval is the time between two automatic checks. A value out of
+// range, say from a file edited by hand, counts as once a day.
+func (s Settings) CheckInterval() time.Duration {
+	if s.CheckEvery < MinCheckEvery || s.CheckEvery > MaxCheckEvery {
+		return CheckDaily * time.Minute
+	}
+	return time.Duration(s.CheckEvery) * time.Minute
 }
 
 // File is one file of a system slot in a release.
@@ -206,8 +242,11 @@ type Status struct {
 	// be installed.
 	CanVerify bool `json:"canVerify"`
 	// Available is the newer release that was found, if any.
-	Available  *Manifest  `json:"available"`
-	LastCheck  *time.Time `json:"lastCheck"`
+	Available *Manifest  `json:"available"`
+	LastCheck *time.Time `json:"lastCheck"`
+	// NextCheck is when the next automatic check is due; nil when checks
+	// are manual or none are scheduled (development mode).
+	NextCheck  *time.Time `json:"nextCheck"`
 	CheckError string     `json:"checkError"`
 	Progress   Progress   `json:"progress"`
 	Pending    *Pending   `json:"pending"`
@@ -294,11 +333,14 @@ type Manager struct {
 	announced         string
 	loginCheckRunning bool
 	lastCheck         time.Time
-	checkError        string
-	progress          Progress
-	pending           *Pending
-	slotCache         []Slot
-	slotTime          time.Time
+	// started is when Run began; scheduled checks count from it until the
+	// first check is done.
+	started    time.Time
+	checkError string
+	progress   Progress
+	pending    *Pending
+	slotCache  []Slot
+	slotTime   time.Time
 }
 
 // NewManager returns a manager for the system that is running: its
@@ -396,6 +438,18 @@ var clockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 func (m *Manager) SetSettings(settings Settings) error {
 	if settings.Channel != "" && settings.Channel != ChannelStable && settings.Channel != ChannelBeta || !clockTime.MatchString(settings.InstallTime) {
 		return ErrInvalid
+	}
+	if settings.CheckEvery != 0 && settings.CheckEvery != CheckManual && (settings.CheckEvery < MinCheckEvery || settings.CheckEvery > MaxCheckEvery) {
+		return ErrInvalid
+	}
+	// Installing by itself needs something that finds the update.
+	if settings.Manual() && settings.AutoInstall {
+		return ErrInvalid
+	}
+	// Once a day is the default: leave the field out so the file stays as
+	// it was before the field existed.
+	if settings.CheckEvery == CheckDaily {
+		settings.CheckEvery = 0
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -743,6 +797,9 @@ func (m *Manager) Status() Status {
 		at := m.lastCheck
 		status.LastCheck = &at
 	}
+	if next, ok := m.nextCheckLocked(); ok {
+		status.NextCheck = &next
+	}
 	status.Base = m.Base
 	if m.available != nil {
 		status.Kind = KindSystem
@@ -896,9 +953,10 @@ func (m *Manager) latest(ctx context.Context, channel string) (Manifest, []byte,
 // CheckAfterLogin starts a bounded check without delaying authentication.
 // Concurrent administrator logins share one check; ordinary page reloads do
 // not trigger it. Check emits the existing, version-deduplicated notification.
+// With checks set to manual it does nothing.
 func (m *Manager) CheckAfterLogin() bool {
 	m.mu.Lock()
-	if m.Disabled || !m.loaded || m.loginCheckRunning {
+	if m.Disabled || !m.loaded || m.loginCheckRunning || m.settings.Manual() {
 		m.mu.Unlock()
 		return false
 	}
@@ -1308,20 +1366,55 @@ func (m *Manager) downloadOnce(ctx context.Context, url, part string, file File,
 	return have, f.Sync()
 }
 
-// Run looks for updates once a day and installs them at the set time if
-// that is wanted, until ctx is done.
+// nextCheckLocked tells when the next scheduled check is due: the set
+// interval after the last check of any kind (button, login or schedule),
+// at most checkRetry after a failed one, and a few minutes after the start
+// before the first. m.mu must be held.
+func (m *Manager) nextCheckLocked() (time.Time, bool) {
+	if m.Disabled || m.started.IsZero() || m.settings.Manual() {
+		return time.Time{}, false
+	}
+	if m.lastCheck.IsZero() {
+		return m.started.Add(checkStartDelay), true
+	}
+	wait := m.settings.CheckInterval()
+	if m.checkError != "" && wait > checkRetry {
+		wait = checkRetry
+	}
+	return m.lastCheck.Add(wait), true
+}
+
+// scheduledCheck checks for updates if the schedule says it is time.
+func (m *Manager) scheduledCheck(ctx context.Context) bool {
+	m.mu.Lock()
+	next, ok := m.nextCheckLocked()
+	m.mu.Unlock()
+	if !ok || m.now().Before(next) {
+		return false
+	}
+	if err := m.Check(ctx); err != nil && !errors.Is(err, ErrNoKey) {
+		slog.Warn("looking for updates failed", "err", err)
+	}
+	return true
+}
+
+// Run looks for updates as often as the settings say (once a day unless
+// set otherwise) and installs them at the set time if that is wanted,
+// until ctx is done.
 func (m *Manager) Run(ctx context.Context) {
 	if m.Disabled {
 		return
 	}
+	m.mu.Lock()
+	m.started = m.now()
+	m.mu.Unlock()
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-	var checked time.Time
 	// waiting is since when a scheduled app update waits for work that a
 	// restart of titand would break off; it is tried again every minute,
 	// for up to six hours.
 	var waiting time.Time
-	for minute := 0; ; minute++ {
+	for {
 		select {
 		case <-ctx.Done():
 			return
@@ -1331,18 +1424,14 @@ func (m *Manager) Run(ctx context.Context) {
 		if m.appOnTrial() {
 			m.settleApp()
 		}
-		// The first look a while after the start, when the network is up.
-		if minute >= 5 && m.now().Sub(checked) >= 24*time.Hour {
-			checked = m.now()
-			if err := m.Check(ctx); err != nil && !errors.Is(err, ErrNoKey) {
-				slog.Warn("looking for updates failed", "err", err)
-			}
-		}
+		m.scheduledCheck(ctx)
 		m.mu.Lock()
 		settings, available, phase, pending := m.settings, m.available, m.progress.Phase, m.pending
 		m.mu.Unlock()
 		retry := !waiting.IsZero() && m.now().Sub(waiting) < 6*time.Hour
-		if !settings.AutoInstall || (m.now().Format("15:04") != settings.InstallTime && !retry) {
+		// Manual checks rule out installing by itself, even if a file
+		// edited by hand asks for both.
+		if !settings.AutoInstall || settings.Manual() || (m.now().Format("15:04") != settings.InstallTime && !retry) {
 			continue
 		}
 		switch {
