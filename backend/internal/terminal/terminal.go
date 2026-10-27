@@ -138,6 +138,15 @@ func (m *Manager) Shell(ctx context.Context) (*Session, error) {
 	return start(m.command)
 }
 
+// Start runs a command behind a pseudo terminal, like the shell: the
+// consoles of system containers (lxc-attach, lxc-console) use it.
+func Start(command []string) (*Session, error) {
+	if len(command) == 0 {
+		return nil, ErrUnavailable
+	}
+	return start(command)
+}
+
 func start(command []string) (*Session, error) {
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {

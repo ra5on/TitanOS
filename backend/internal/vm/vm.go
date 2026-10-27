@@ -181,6 +181,9 @@ type Status struct {
 	Since       time.Time `json:"since"`
 	// Job is set while disks are copied, or if that failed.
 	Job *Job `json:"job"`
+	// IOError says QEMU paused the VM after a read or write error of one
+	// of its disks on the NAS; "resume" lets it go on once that is fixed.
+	IOError bool `json:"ioError,omitempty"`
 	// Schedule says when the power schedule starts and stops the VM next.
 	Schedule *PowerView `json:"schedule,omitempty"`
 }
@@ -252,7 +255,11 @@ type Manager struct {
 	vms             map[string]VM
 	samples         map[string]*sample
 	autostarted     map[string]bool
-	jobs            map[string]*Job
+	// ioPaused are the running VMs paused after a disk error; ioChecked
+	// is when that was last looked at.
+	ioPaused  map[string]bool
+	ioChecked time.Time
+	jobs      map[string]*Job
 	// reserved is the set of CPUs kept free for exclusive VMs right now.
 	reserved string
 	// borrowed are whole disks whose device node was opened to QEMU.
@@ -444,6 +451,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			m.runPowerSchedules(ctx, mounted(), time.Now())
 			m.autostart(ctx, mounted())
 			m.sample()
+			m.checkIOErrors(ctx)
 			if m.AfterPoll != nil {
 				if err := m.AfterPoll(ctx, m.RunningNames()); err != nil {
 					slog.Warn("return VM hardware", "err", err)
@@ -572,6 +580,7 @@ func (m *Manager) List(mounted []string) []Status {
 		}
 		if !m.Disabled && m.pid(name) != 0 {
 			status.State = "running"
+			status.IOError = m.ioPaused[name]
 			if s := m.samples[name]; s != nil {
 				status.CPUPercent, status.MemoryBytes, status.Since = s.percent, s.memory, s.since
 			}
@@ -1231,7 +1240,7 @@ func (m *Manager) Action(ctx context.Context, name, action string) error {
 		return err
 	}
 	// shutdown and reboot ask the guest; destroy is pulling the plug.
-	command, known := map[string]string{"shutdown": "shutdown", "reboot": "reboot", "poweroff": "destroy"}[action]
+	command, known := map[string]string{"shutdown": "shutdown", "reboot": "reboot", "poweroff": "destroy", "resume": "resume"}[action]
 	if !known {
 		return ErrNotFound
 	}
@@ -1377,4 +1386,38 @@ func (m *Manager) Busy() bool {
 		}
 	}
 	return false
+}
+
+// checkIOErrors asks libvirt every 30 seconds whether a running VM was
+// paused after a disk error (error_policy "stop") and reports each such
+// pause once. libvirt runs anyway while a VM does.
+func (m *Manager) checkIOErrors(ctx context.Context) {
+	now := m.clock()
+	if now.Sub(m.ioChecked) < 30*time.Second {
+		return
+	}
+	m.ioChecked = now
+	running := m.RunningNames()
+	paused := map[string]bool{}
+	for name := range running {
+		out, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domstate", name, "--reason")
+		if err == nil && strings.Contains(out, "paused") && strings.Contains(strings.ToLower(out), "i/o error") {
+			paused[name] = true
+		}
+	}
+	m.mu.Lock()
+	var fresh []string
+	for name := range paused {
+		if !m.ioPaused[name] {
+			fresh = append(fresh, name)
+		}
+	}
+	m.ioPaused = paused
+	m.mu.Unlock()
+	for _, name := range fresh {
+		slog.Error("VM paused after a disk error", "vm", name)
+		if m.Notify != nil {
+			m.Notify("error", "vm_io_error", name)
+		}
+	}
 }

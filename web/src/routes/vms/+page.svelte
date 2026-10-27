@@ -502,6 +502,10 @@
 					{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
 				</div>
 				{#if current.description}<span class="description muted">{current.description}</span>{/if}
+				{#if current.ioError}<p class="notice-error io-error" role="alert">
+						{t('vms.ioError')}
+						<button type="button" class="btn small" onclick={() => act(current, 'resume')}>{t('vms.resume')}</button>
+					</p>{/if}
 			</div>
 			<div class="buttons">
 				<TasksPanel compact />

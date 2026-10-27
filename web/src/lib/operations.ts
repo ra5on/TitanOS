@@ -16,6 +16,8 @@ export type MaintenanceJob = {
 	maxFiles: number;
 	keep: number;
 	allowPrune: boolean;
+	/** Days each snapshot of the job cannot be deleted; absent or 0 for none. */
+	lockDays?: number;
 };
 export type MaintenanceSettings = {
 	backupsFirst?: boolean;

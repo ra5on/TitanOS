@@ -86,7 +86,10 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 			kind, source = "block", el("source", "dev", disk.Path)
 		}
 		devices = devices.with(el("disk", "type", kind, "device", "disk").with(
-			el("driver", "name", "qemu", "type", disk.Format, "discard", "unmap"),
+			// A read or write error on the NAS pauses the VM instead of
+			// handing the guest I/O errors it writes its file system to
+			// pieces with; checkIOErrors reports it.
+			el("driver", "name", "qemu", "type", disk.Format, "discard", "unmap", "error_policy", "stop"),
 			source,
 			el("target", "dev", diskPrefix+string(letter), "bus", diskBus),
 		))

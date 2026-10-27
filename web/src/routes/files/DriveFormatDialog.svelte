@@ -21,6 +21,7 @@
 		type FormatJob,
 		type Scheme,
 	} from './drive-format.ts';
+	import PartitionEditor from './PartitionEditor.svelte';
 
 	type Props = { onclose: () => void; onformatted: () => void };
 	let { onclose, onformatted }: Props = $props();
@@ -38,7 +39,9 @@
 		busy = $state(false),
 		error = $state(''),
 		// The job this dialog started; its end reloads the drives of the page.
-		started = $state('');
+		started = $state(''),
+		// The drive whose partitions are shown instead of the list.
+		partitionsOf = $state<Drive | null>(null);
 
 	const drive = $derived(disks.find((d) => d.id === selected));
 	const labelError = $derived(labelProblem(filesystem, label));
@@ -121,155 +124,190 @@
 	}
 </script>
 
-<Dialog title={t('files.formatTitle')} {onclose} wide locked={busy}>
-	<p class="muted small">{t('files.formatIntro')}</p>
-
-	{#if job && (running || job.disk === started || job.phase === 'failed')}
-		<div
-			class={job.phase === 'failed' ? 'notice-error' : running ? 'notice-info' : 'notice-ok'}
-			role="status"
-			aria-live="polite"
-		>
-			<strong>{job.name}</strong> · <span class="mono">{job.filesystem}</span>
-			— {t(`files.formatPhase.${job.phase}`)}{#if job.error}<br /><span class="mono small"
-					>{job.error}</span
-				>{/if}
-		</div>
-	{/if}
-
-	{#if !loaded}<p class="muted">{t('common.loading')}</p>
-	{:else if loadError}<p class="notice-error" role="alert">{loadError}</p>
-	{:else if disks.length === 0}<p class="muted">{t('files.formatNone')}</p>
-	{:else}
-		<div class="drives" role="radiogroup" aria-label={t('files.formatChoose')}>
-			{#each disks as d (d.id)}
-				<button
-					type="button"
-					class="drive"
-					role="radio"
-					aria-checked={selected === d.id}
-					class:selected={selected === d.id}
-					disabled={!d.formattable || running}
-					onclick={() => choose(d)}
-				>
-					<Icon name="disk" size={18} />
-					<span class="drive-text">
-						<span class="drive-name">{driveName(d)}</span>
-						<span class="muted small mono"
-							>{[
-								t(`files.driveKind.${d.kind}`),
-								d.transport.toUpperCase(),
-								formatDiskBytes(d.size),
-								d.device,
-								d.serial,
-							]
-								.filter(Boolean)
-								.join(' · ')}</span
-						>
-						<span class="muted small">{partitionText(d)}</span>
-					</span>
-					{#if d.reason}<span class="chip"
-							>{t(`files.formatReason.${d.reason}`, { name: d.claimed ?? '' })}</span
-						>{/if}
-				</button>
-			{/each}
-		</div>
-	{/if}
-
-	{#if drive}
-		<form
-			onsubmit={(event) => {
-				event.preventDefault();
-				if (!labelError && !sizeError) confirming = true;
+<Dialog
+	title={partitionsOf
+		? t('files.partitions.title', { name: driveName(partitionsOf) })
+		: t('files.formatTitle')}
+	{onclose}
+	wide
+	locked={busy}
+>
+	{#if partitionsOf}
+		<PartitionEditor
+			drive={partitionsOf}
+			onback={() => {
+				partitionsOf = null;
+				load();
 			}}
-		>
-			<label
-				>{t('files.formatFilesystem')}
-				<select class="field" bind:value={filesystem} disabled={busy}>
-					{#each Object.keys(driveFilesystems) as DriveFilesystem[] as fs (fs)}
-						<option value={fs}>{t(`files.formatFs.${fs}` as MessageKey)}</option>
-					{/each}
-				</select></label
+			onchanged={() => {
+				load();
+				onformatted();
+			}}
+		/>
+	{:else}
+		<p class="muted small">{t('files.formatIntro')}</p>
+
+		{#if job && !job.action && (running || job.disk === started || job.phase === 'failed')}
+			<div
+				class={job.phase === 'failed' ? 'notice-error' : running ? 'notice-info' : 'notice-ok'}
+				role="status"
+				aria-live="polite"
 			>
-			<p class="muted small">{t(`files.formatFsHint.${filesystem}`)}</p>
-			{#if filesystem === 'vfat' && drive.size > 32 * 2 ** 30}<p class="notice-warn small">
-					{t('files.formatFatLarge')}
-				</p>{/if}
-			<label
-				>{t('files.formatLabel')}<input
-					class="field"
-					bind:value={label}
-					maxlength={driveFilesystems[filesystem].limit}
-					autocomplete="off"
-					spellcheck="false"
-					placeholder={t('files.urlOptional')}
-					disabled={busy}
-					aria-invalid={labelError !== ''}
-				/></label
-			>
-			{#if labelError}<p class="notice-warn small" role="status">
-					{t(labelError as MessageKey, { n: driveFilesystems[filesystem].limit })}
-				</p>{/if}
-			<details>
-				<summary>{t('files.formatAdvanced')}</summary>
-				<label
-					>{t('files.formatScheme')}
-					<select class="field" bind:value={scheme} disabled={busy}>
-						<option value="auto"
-							>{t('files.formatSchemeAuto', { scheme: table.toUpperCase() })}</option
+				<strong>{job.name}</strong> · <span class="mono">{job.filesystem}</span>
+				— {t(`files.formatPhase.${job.phase}`)}{#if job.error}<br /><span class="mono small"
+						>{job.error}</span
+					>{/if}
+			</div>
+		{/if}
+
+		{#if !loaded}<p class="muted">{t('common.loading')}</p>
+		{:else if loadError}<p class="notice-error" role="alert">{loadError}</p>
+		{:else if disks.length === 0}<p class="muted">{t('files.formatNone')}</p>
+		{:else}
+			<div class="drives" role="radiogroup" aria-label={t('files.formatChoose')}>
+				{#each disks as d (d.id)}
+					<div class="drive-row">
+						<button
+							type="button"
+							class="drive"
+							role="radio"
+							aria-checked={selected === d.id}
+							class:selected={selected === d.id}
+							disabled={!d.formattable || running}
+							onclick={() => choose(d)}
 						>
-						<option value="mbr">MBR</option>
-						<option value="gpt">GPT</option>
+							<Icon name="disk" size={18} />
+							<span class="drive-text">
+								<span class="drive-name">{driveName(d)}</span>
+								<span class="muted small mono"
+									>{[
+										t(`files.driveKind.${d.kind}`),
+										d.transport.toUpperCase(),
+										formatDiskBytes(d.size),
+										d.device,
+										d.serial,
+									]
+										.filter(Boolean)
+										.join(' · ')}</span
+								>
+								<span class="muted small">{partitionText(d)}</span>
+							</span>
+							{#if d.reason}<span class="chip"
+									>{t(`files.formatReason.${d.reason}`, { name: d.claimed ?? '' })}</span
+								>{/if}
+						</button>
+						<button
+							type="button"
+							class="btn partitions"
+							disabled={busy}
+							onclick={() => {
+								partitionsOf = d;
+								selected = '';
+								confirming = false;
+							}}>{t('files.partitions.open')}</button
+						>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		{#if drive}
+			<form
+				onsubmit={(event) => {
+					event.preventDefault();
+					if (!labelError && !sizeError) confirming = true;
+				}}
+			>
+				<label
+					>{t('files.formatFilesystem')}
+					<select class="field" bind:value={filesystem} disabled={busy}>
+						{#each Object.keys(driveFilesystems) as DriveFilesystem[] as fs (fs)}
+							<option value={fs}>{t(`files.formatFs.${fs}` as MessageKey)}</option>
+						{/each}
 					</select></label
 				>
-				<p class="muted small">{t('files.formatSchemeHint')}</p>
-			</details>
-			<label class="confirm"
-				><input type="checkbox" bind:checked={mount} disabled={busy} />{t(
-					'files.formatMount',
-				)}</label
-			>
-			{#if sizeError}<p class="notice-warn small" role="status">
-					{t(sizeError as MessageKey)}
-				</p>{/if}
-			{#if hasForeignData(drive)}<p class="notice-warn small">{t('files.formatForeign')}</p>{/if}
-
-			{#if confirming}
-				<div class="notice-error" role="alert">
-					<p>
-						{t('files.formatConfirm', {
-							name: driveName(drive),
-							size: formatDiskBytes(drive.size),
-							device: drive.device,
-						})}
-					</p>
-					<p class="small">{partitionText(drive)}</p>
-				</div>
-			{/if}
-			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			<div class="dialog-actions">
-				<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => (confirming ? (confirming = false) : onclose())}
-					>{t('common.cancel')}</button
+				<p class="muted small">{t(`files.formatFsHint.${filesystem}`)}</p>
+				{#if filesystem === 'vfat' && drive.size > 32 * 2 ** 30}<p class="notice-warn small">
+						{t('files.formatFatLarge')}
+					</p>{/if}
+				<label
+					>{t('files.formatLabel')}<input
+						class="field"
+						bind:value={label}
+						maxlength={driveFilesystems[filesystem].limit}
+						autocomplete="off"
+						spellcheck="false"
+						placeholder={t('files.urlOptional')}
+						disabled={busy}
+						aria-invalid={labelError !== ''}
+					/></label
 				>
+				{#if labelError}<p class="notice-warn small" role="status">
+						{t(labelError as MessageKey, { n: driveFilesystems[filesystem].limit })}
+					</p>{/if}
+				<details>
+					<summary>{t('files.formatAdvanced')}</summary>
+					<label
+						>{t('files.formatScheme')}
+						<select class="field" bind:value={scheme} disabled={busy}>
+							<option value="auto"
+								>{t('files.formatSchemeAuto', { scheme: table.toUpperCase() })}</option
+							>
+							<option value="mbr">MBR</option>
+							<option value="gpt">GPT</option>
+						</select></label
+					>
+					<p class="muted small">{t('files.formatSchemeHint')}</p>
+				</details>
+				<label class="confirm"
+					><input type="checkbox" bind:checked={mount} disabled={busy} />{t(
+						'files.formatMount',
+					)}</label
+				>
+				{#if sizeError}<p class="notice-warn small" role="status">
+						{t(sizeError as MessageKey)}
+					</p>{/if}
+				{#if hasForeignData(drive)}<p class="notice-warn small">{t('files.formatForeign')}</p>{/if}
+
 				{#if confirming}
-					<button type="button" class="btn btn-danger" disabled={busy} onclick={format}
-						>{t('files.formatNow')}</button
-					>
-				{:else}
-					<button class="btn btn-primary" disabled={busy || running || !!labelError || !!sizeError}
-						>{t('files.formatStart')}</button
-					>
+					<div class="notice-error" role="alert">
+						<p>
+							{t('files.formatConfirm', {
+								name: driveName(drive),
+								size: formatDiskBytes(drive.size),
+								device: drive.device,
+							})}
+						</p>
+						<p class="small">{partitionText(drive)}</p>
+					</div>
 				{/if}
+				{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+				<div class="dialog-actions">
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => (confirming ? (confirming = false) : onclose())}
+						>{t('common.cancel')}</button
+					>
+					{#if confirming}
+						<button type="button" class="btn btn-danger" disabled={busy} onclick={format}
+							>{t('files.formatNow')}</button
+						>
+					{:else}
+						<button
+							class="btn btn-primary"
+							disabled={busy || running || !!labelError || !!sizeError}
+							>{t('files.formatStart')}</button
+						>
+					{/if}
+				</div>
+			</form>
+		{:else}
+			<div class="dialog-actions">
+				<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
 			</div>
-		</form>
-	{:else}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
-		</div>
+		{/if}
 	{/if}
 </Dialog>
 
@@ -302,6 +340,14 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm, 8px);
 		cursor: pointer;
+	}
+	.drive-row {
+		display: flex;
+		align-items: stretch;
+		gap: 6px;
+	}
+	.partitions {
+		flex: none;
 	}
 	.drive:disabled {
 		cursor: default;

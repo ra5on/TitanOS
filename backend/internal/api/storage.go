@@ -30,6 +30,8 @@ var storageErrors = []struct {
 	{storage.ErrDiskTooSmall, http.StatusBadRequest, "disk_too_small"},
 	{storage.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
+	{storage.ErrLocked, http.StatusConflict, "snapshot_locked"},
+	{storage.ErrCacheConfigured, http.StatusConflict, "volume_cache_configured"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
 	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
@@ -202,13 +204,22 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 		Erase bool   `json:"erase"`
 		// Identity is the disk's identity from the disk list, optional.
 		Identity string `json:"identity"`
+		// Profile converts a Btrfs volume while the disk is added
+		// (single, raid1, raid1c3); empty keeps the profile.
+		Profile string `json:"profile"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	name := r.PathValue("name")
-	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.AddDisk(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
+	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
+	add := s.opts.Storage.AddDisk
+	if req.Profile != "" {
+		add = func(ctx context.Context, name, disk string, erase bool, identity string) error {
+			return s.opts.Storage.AddBtrfsDisk(ctx, name, disk, req.Profile, identity, erase)
+		}
+	}
+	if err := add(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
 		writeStorageError(w, r, "add disk", err)
 		return
 	}
@@ -339,5 +350,60 @@ func (s *Server) handleSetShareQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("share quotas changed", "volume", r.PathValue("name"), "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleBtrfsProfile changes the profile of a Btrfs volume in place.
+func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Profile string `json:"profile"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	slog.Info("Btrfs profile change requested", "volume", name, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if err := s.opts.Storage.ConvertBtrfs(context.WithoutCancel(r.Context()), name, req.Profile); err != nil {
+		writeStorageError(w, r, "change Btrfs profile", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleVolumeCache switches the SSD cache of a volume on (disk, erase) or
+// changes its mode (mode only, when it has one).
+func (s *Server) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Disk     string `json:"disk"`
+		Mode     string `json:"mode"`
+		Erase    bool   `json:"erase"`
+		Identity string `json:"identity"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	ctx := context.WithoutCancel(r.Context())
+	var err error
+	if req.Disk != "" {
+		slog.Info("SSD cache requested", "volume", name, "disk", req.Disk, "mode", req.Mode, "user", currentUser(r).Name, "ip", remoteIP(r))
+		err = s.opts.Storage.EnableCache(ctx, name, req.Disk, req.Mode, req.Identity, req.Erase)
+	} else {
+		err = s.opts.Storage.SetCacheMode(ctx, name, req.Mode)
+	}
+	if err != nil {
+		writeStorageError(w, r, "SSD cache", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	slog.Info("SSD cache removal requested", "volume", name, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if err := s.opts.Storage.DisableCache(context.WithoutCancel(r.Context()), name); err != nil {
+		writeStorageError(w, r, "SSD cache", err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

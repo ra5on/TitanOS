@@ -17,6 +17,7 @@
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, {type SmbTarget} from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
+	import ReplicationPanel from './ReplicationPanel.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
@@ -464,7 +465,7 @@
 
 {#if overview}
 	{#if !restoreOnly}<RecoveryPanel/>{/if}
- {#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /></div>{/if}
+ {#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /><ReplicationPanel /></div>{/if}
 	{#if !restoreOnly}<h2 id="backup-history" use:revealTarget>{t('safeguard.history')}</h2>{/if}
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}

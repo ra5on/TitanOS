@@ -40,6 +40,9 @@ type Job struct {
 	MaxFiles          int    `json:"maxFiles"`
 	Keep              int    `json:"keep"`
 	AllowPrune        bool   `json:"allowPrune"`
+	// LockDays keeps each snapshot of a snapshot job from being deleted for
+	// that many days (0 to 365); older versions ignore it.
+	LockDays int `json:"lockDays,omitempty"`
 }
 type Settings struct {
 	BackupsFirst bool   `json:"backupsFirst,omitempty"`
@@ -172,6 +175,9 @@ func validate(s Settings) error {
 		}
 		if j.Kind == "restore-probe" && (j.MaxBytes == 0 || j.MaxFiles == 0) {
 			return errors.New("probe limits required")
+		}
+		if j.LockDays < 0 || j.LockDays > 365 || j.LockDays > 0 && j.Kind != "snapshot" {
+			return errors.New("invalid snapshot lock")
 		}
 		if j.Kind == "snapshot" && (j.Keep < 1 || !j.AllowPrune) {
 			return errors.New("snapshot retention must be confirmed")

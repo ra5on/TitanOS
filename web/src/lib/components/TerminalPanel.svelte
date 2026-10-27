@@ -134,7 +134,7 @@
 	function status(): string {
 		if (!current) return '';
 		const time = formatDuration(Math.max(0, (now - current.started) / 1000));
-		return current.kind === 'nas' ? t('terminal.statusNas', { time }) : t(current.kind === 'vm' ? 'terminal.statusVm' : 'terminal.statusContainer', { name: current.title, time });
+		return current.kind === 'nas' ? t('terminal.statusNas', { time }) : t(current.kind === 'vm' ? 'terminal.statusVm' : current.kind === 'lxc' ? 'terminal.statusLxc' : 'terminal.statusContainer', { name: current.title, time });
 	}
 </script>
 
@@ -151,7 +151,7 @@
 			{#each terminal.sessions as session (session.id)}
 				<div class="tab" class:on={session.id === terminal.active}>
 					<button type="button" role="tab" aria-selected={session.id === terminal.active} onclick={() => (terminal.active = session.id)}>
-						<span class="kind" class:ct={session.kind === 'ct'} class:vm={session.kind === 'vm'} aria-hidden="true">{session.kind === 'nas' ? 'NAS' : session.kind === 'vm' ? 'VM' : 'CT'}</span>
+						<span class="kind" class:ct={session.kind === 'ct'} class:vm={session.kind === 'vm'} class:lxc={session.kind === 'lxc'} aria-hidden="true">{session.kind === 'nas' ? 'NAS' : session.kind === 'vm' ? 'VM' : session.kind === 'lxc' ? 'LXC' : 'CT'}</span>
 						<span class="mono">{session.title}</span>
 					</button>
 					<button type="button" class="x" aria-label={t('terminal.end', { name: session.title })} onclick={() => end(session.id, session.title, session.kind)}>✕</button>
@@ -344,6 +344,10 @@
 	.kind.vm {
 		background: var(--warn-bg);
 		color: var(--warn-text);
+	}
+	.kind.lxc {
+		background: var(--chip);
+		color: var(--text);
 	}
 	.plus {
 		width: 2.375rem;

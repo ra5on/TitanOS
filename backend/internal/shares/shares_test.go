@@ -168,7 +168,7 @@ func TestRenderSMBConf(t *testing.T) {
 		{Name: "backup", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite}, TimeMachine: TimeMachine{Enabled: true, SizeGB: 500}},
 		{Name: "nobody", Volume: "data", SMB: true},
 		{Name: "nfsonly", Volume: "data", NFS: NFS{Enabled: true, Clients: []string{"192.168.1.0/24"}}, Access: map[string]string{"alex": ReadWrite}},
-	}, path)
+	}, path, nil)
 
 	for _, want := range []string{
 		"map to guest = never",
@@ -194,7 +194,7 @@ func TestRenderSMBConf(t *testing.T) {
 		}
 	}
 
-	guest := renderSMBConf([]Share{{Name: "public", Volume: "data", SMB: true, Guest: true, Access: map[string]string{"alex": ReadWrite}}}, path)
+	guest := renderSMBConf([]Share{{Name: "public", Volume: "data", SMB: true, Guest: true, Access: map[string]string{"alex": ReadWrite}}}, path, nil)
 	if !strings.Contains(guest, "map to guest = bad user") || !strings.Contains(guest, "guest ok = yes") || strings.Contains(guest, "valid users") {
 		t.Errorf("guest share:\n%s", guest)
 	}
@@ -396,5 +396,25 @@ func TestLockedAccountLosesSMB(t *testing.T) {
 	runner.fail = ""
 	if err := m.Apply(ctx, state); err != nil || !strings.Contains(strings.Join(runner.commands, "\n"), "smbpasswd -d alex") {
 		t.Errorf("retry: %v\n%s", err, strings.Join(runner.commands, "\n"))
+	}
+}
+
+// The .local names of apps need avahi even without any SMB share.
+func TestDiscoveryForApps(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Apply(ctx, State{}); err != nil {
+		t.Fatal(err)
+	}
+	if all := strings.Join(runner.commands, "\n"); !strings.Contains(all, "systemctl stop avahi-daemon.service") {
+		t.Fatalf("avahi runs without shares and apps:\n%s", all)
+	}
+	runner.commands = nil
+	if err := m.Apply(ctx, State{Discovery: true}); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(runner.commands, "\n")
+	if !strings.Contains(all, "systemctl start avahi-daemon.service") || !strings.Contains(all, "systemctl stop wsdd2.service") {
+		t.Fatalf("avahi not started for app names:\n%s", all)
 	}
 }

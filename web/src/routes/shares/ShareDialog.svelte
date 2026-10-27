@@ -41,6 +41,8 @@
 		days: share?.recycle.days ?? 30,
 		timeMachine: share?.timeMachine.enabled ?? false,
 		sizeGB: share?.timeMachine.sizeGB ?? 0,
+		previousVersions: share?.previousVersions ?? false,
+		guard: share?.guard ?? false,
 		quotaGB: share?.quota ? Math.round(share.quota / 1e7) / 100 : 0
 	});
 	let working = $state(false);
@@ -60,6 +62,7 @@
  });
 
 	const nameError = $derived(draft.name !== '' && !validName(draft.name) ? errorText('invalid_share_name') : '');
+	const btrfs = $derived(storage.status?.volumes.find((v) => v.name === draft.volume)?.filesystem === 'btrfs');
 	const quotaState = $derived(storage.status?.volumes.find((v) => v.name === draft.volume)?.shareQuotas ?? 'off');
 	const quotaTooSmall = $derived(Number(draft.quotaGB) > 0 && Number(draft.quotaGB) * 1e9 < 16 * 2 ** 20);
 	const nobody = $derived(draft.smb && !draft.guest && Object.keys(draft.access).length === 0);
@@ -118,6 +121,8 @@
 			browseable: draft.browseable,
 			recycle: { enabled: draft.smb && draft.recycle, days: Number(draft.days) || 30 },
 			timeMachine: { enabled: draft.smb && draft.timeMachine, sizeGB: Number(draft.sizeGB) || 0 },
+			previousVersions: draft.smb && draft.previousVersions,
+			guard: draft.smb && draft.guard,
 			quota: Math.round((Number(draft.quotaGB) || 0) * 1e9)
 		};
 		try {
@@ -214,6 +219,10 @@
 				{#if draft.timeMachine}
 					<label class="inline indent"><span>{t('share.timeMachineSize')}</span><input class="field number" type="number" min="0" bind:value={draft.sizeGB} /></label>
 				{/if}
+				<label class="check"><input type="checkbox" bind:checked={draft.previousVersions} disabled={!btrfs} /><span>{t('share.previousVersions')}</span></label>
+				<p class="muted indent small">{t(btrfs ? 'share.previousVersionsHint' : 'share.previousVersionsBtrfs')}</p>
+				<label class="check"><input type="checkbox" bind:checked={draft.guard} /><span>{t('share.guard')}</span></label>
+				<p class="muted indent small">{t('share.guardHint')}</p>
 			</fieldset>
 		{:else if tab!=='general'}<p class="muted">{t('shares.smbOptions')}</p>
 		{/if}

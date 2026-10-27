@@ -195,15 +195,17 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if slices.ContainsFunc(m.configured(), func(v VolumeConfig) bool { return strings.EqualFold(v.Name, req.Name) }) {
 		return ErrExists
 	}
-	need, ok := minDisks[req.Level]
-	if !ok {
-		return ErrInvalidLevel
-	}
 	if !slices.Contains(filesystems, req.Filesystem) {
 		return ErrInvalidFS
 	}
-	if req.Filesystem == "btrfs" && (req.Level != "raid1" || len(req.Disks) != 2) {
-		return fmt.Errorf("%w: Btrfs mirrors require exactly two disks and RAID 1", ErrInvalidLevel)
+	need, ok := minDisks[req.Level]
+	if req.Filesystem == "btrfs" {
+		// Btrfs has its own profiles: single, raid1, raid1c3.
+		layout, known := btrfsLayouts[req.Level]
+		need, ok = layout.minDisks, known
+	}
+	if !ok {
+		return ErrInvalidLevel
 	}
 	if len(req.Disks) < need || (req.Level == "raid10" && len(req.Disks)%2 != 0) {
 		return ErrTooFewDisks
@@ -341,12 +343,16 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 			options += ",degraded"
 		}
 	}
-	_, err := m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, "UUID="+volume.FilesystemUUID, mountPoint)
+	source, err := m.mountSource(ctx, volume)
+	if err != nil {
+		return err
+	}
+	_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, source, mountPoint)
 	if err != nil && quotas != "" {
 		// Quotas never keep a volume from mounting.
 		slog.Warn("mount with project quotas failed, mounting without", "volume", volume.Name, "err", err)
 		m.setQuotaProblem(volume.Name, err.Error())
-		_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", strings.TrimSuffix(options, quotas), "UUID="+volume.FilesystemUUID, mountPoint)
+		_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", strings.TrimSuffix(options, quotas), source, mountPoint)
 	}
 	if err != nil {
 		return err
@@ -502,7 +508,16 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 		return ErrNotConfirmed
 	}
 	if volume.Filesystem == "btrfs" {
-		return m.replaceMissingBtrfs(ctx, volume, diskName, identity)
+		// A missing member is replaced; a complete volume grows by a disk
+		// and keeps its profile.
+		devices, err := m.blockDevices(ctx)
+		if err != nil {
+			return err
+		}
+		if len(btrfsParts(devices, volume.FilesystemUUID)) < btrfsDiskCount(volume) || m.btrfsState(volume.Name).Missing > 0 {
+			return m.replaceMissingBtrfs(ctx, volume, diskName, identity)
+		}
+		return m.addBtrfsDisk(ctx, volume, diskName, "", identity)
 	}
 	if volume.Level == "raid0" {
 		return fmt.Errorf("%w: RAID 0 has no redundancy to rebuild from", ErrNotPossible)
@@ -551,6 +566,9 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 // RemoveDisk takes a failed or spare disk out of a volume and wipes it.
 // A disk that is still doing its job cannot be removed this way.
 func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
+	if volume, ok := m.find(name); ok && volume.Filesystem == "btrfs" {
+		return m.RemoveBtrfsDisk(ctx, name, diskName)
+	}
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ReadOnly {
@@ -563,11 +581,6 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 	volume, ok := m.find(name)
 	if !ok {
 		return ErrNotFound
-	}
-	if volume.Filesystem == "btrfs" {
-		// A two-disk Btrfs mirror has no spare to take out; a missing member
-		// is replaced with "add disk" (btrfs replace).
-		return fmt.Errorf("%w: disks of a Btrfs mirror are replaced, not removed", ErrNotPossible)
 	}
 	a, running := m.arrayOf(ctx, volume)
 	if !running {

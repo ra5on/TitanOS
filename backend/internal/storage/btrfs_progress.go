@@ -52,8 +52,12 @@ func (m *Manager) refreshBtrfs(ctx context.Context) {
 		scrub, scrubErr := m.runner.Run(probe, "", "btrfs", "scrub", "status", "-R", m.MountPoint(volume.Name))
 		replace, replaceErr := m.runner.Run(probe, "", "btrfs", "replace", "status", "-1", m.MountPoint(volume.Name))
 		show, showErr := m.runner.Run(probe, "", "btrfs", "filesystem", "show", "--raw", m.MountPoint(volume.Name))
+		balance, balanceErr := m.runner.Run(probe, "", "btrfs", "balance", "status", m.MountPoint(volume.Name))
 		cancel()
 		state := parseBtrfsProgress(scrub, replace)
+		if running, percent := parseBtrfsBalance(balance); running {
+			state.State, state.Sync = VolumeReshaping, &Sync{Percent: percent, RemainingSeconds: -1}
+		}
 		m.mu.RLock()
 		previous := m.btrfsProgress[volume.Name]
 		m.mu.RUnlock()
@@ -63,7 +67,7 @@ func (m *Manager) refreshBtrfs(ctx context.Context) {
 		}
 		// An observation failure must not let the standby worker treat a
 		// previously busy mirror as idle.
-		if state.State == "" && (scrubErr != nil && previous.State == VolumeChecking || replaceErr != nil && previous.State == VolumeRebuilding) {
+		if state.State == "" && (scrubErr != nil && previous.State == VolumeChecking || replaceErr != nil && previous.State == VolumeRebuilding || balanceErr != nil && previous.State == VolumeReshaping) {
 			state = previous
 		}
 		states[volume.Name] = state

@@ -76,6 +76,19 @@
 	let disposed = false;
 	const shown = $derived(visibleShares(shares ?? [], view, query, i18n.locale));
 	const detail = $derived(shares?.find((s) => s.name === selected));
+	let unlocking = $state<Share | null>(null);
+	let unlockError = $state('');
+	async function unlock() {
+		if (!unlocking) return;
+		unlockError = '';
+		try {
+			await api.post(`/shares/${encodeURIComponent(unlocking.name)}/unlock`, {});
+			unlocking = null;
+			await load();
+		} catch (err) {
+			unlockError = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
+	}
 	const volumeOptions = $derived(
 		[
 			...new Set([
@@ -419,6 +432,18 @@
 						onclick={() => (selected = '')}>×</button
 					>
 				</div>
+				{#if detail.guardLocked}<div class="notice-error locked" role="alert">
+						<p>
+							{t('shares.guardLocked', {
+								time: new Date(detail.guardLocked.at).toLocaleString(),
+								user: detail.guardLocked.user,
+								files: detail.guardLocked.files,
+							})}
+						</p>
+						<button class="btn small" onclick={() => (unlocking = detail)}
+							>{t('shares.guardUnlock')}</button
+						>
+					</div>{/if}
 				<div class="tabs" role="tablist" aria-label={t('shares.details')}>
 					{#each detailTabs as id}<button
 							role="tab"
@@ -480,6 +505,10 @@
 									: t('shares.on')
 								: t('shares.off')}
 						</dd>
+						<dt>{t('share.previousVersions')}</dt>
+						<dd>{t(detail.previousVersions ? 'shares.on' : 'shares.off')}</dd>
+						<dt>{t('share.guard')}</dt>
+						<dd>{t(detail.guard ? 'shares.on' : 'shares.off')}</dd>
 						<dt>{t('share.browseable')}</dt>
 						<dd>{t(detail.browseable ? 'shares.on' : 'shares.off')}</dd>{/if}
 				</dl>
@@ -648,7 +677,33 @@
 	</Dialog>
 {/if}
 
+{#if unlocking}
+	<Dialog
+		title={t('shares.guardUnlockTitle', { name: unlocking.name })}
+		onclose={() => (unlocking = null)}
+	>
+		<p>{t('shares.guardUnlockText')}</p>
+		{#if unlockError}<p class="notice-error" role="alert">{unlockError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (unlocking = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-warn" onclick={unlock}>{t('shares.guardUnlock')}</button>
+		</div>
+	</Dialog>
+{/if}
+
 <style>
+	.locked {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		margin-bottom: 10px;
+	}
+	.locked p {
+		margin: 0;
+	}
 	.check {
 		display: flex;
 		gap: 8px;

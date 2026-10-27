@@ -99,6 +99,10 @@ func (m *Manager) GrowthPreview(ctx context.Context, name string, req GrowthRequ
 	if !slices.Contains([]string{"raid5", "raid6"}, v.Level) || !slices.Contains([]string{"ext4", "xfs"}, v.Filesystem) {
 		return Growth{}, fmt.Errorf("%w: expansion adds one member to RAID5/6 with ext4/XFS", ErrNotPossible)
 	}
+	// The cache device has the size of the array it was set up with.
+	if v.Cache != nil {
+		return Growth{}, ErrCacheConfigured
+	}
 	a, ok := m.arrayOf(ctx, v)
 	if !ok || a.degraded != 0 || a.syncAction != "idle" || !slices.Contains(m.Mounted(), name) {
 		return Growth{}, ErrBusy

@@ -6,7 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { filePreferences, folderPath, rangeSelection, previewKind, selectionType, type FolderView, type Favorite, type FileView } from '#lib/file-actions.ts';
+	import { filePreferences, folderPath, rangeSelection, previewKind, selectionType, thumbnailKind, type FolderView, type Favorite, type FileView } from '#lib/file-actions.ts';
 	import { beginFileDrag, endFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
 	import { fileList, type FileSort } from '#lib/file-list.ts';
 	import { preferredFileRoot } from '#lib/file-root.ts';
@@ -33,6 +33,7 @@
 	import Places from './Places.svelte';
 	import RenameBatchDialog from './RenameBatchDialog.svelte';
 	import SearchDialog from './SearchDialog.svelte';
+	import PhotoView from './PhotoView.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import TrashView from './TrashView.svelte';
 	import UndoPanel from './UndoPanel.svelte';
@@ -93,6 +94,7 @@
 	let favoriteManager = $state(false), creatingFile = $state(false), shortcuts = $state(false), downloadingLink = $state(false);
 	let selectionFilter = $state('images');
 	let downloadPaths = $state<string[] | null>(null), usage = $state(false), duplicates = $state(false);
+	let photos = $state(false);
 	let deepSearch = $state(false), comparison = $state(false), batchRename = $state(false), archive = $state<string | null>(null);
 	let properties = $state<{ root: FileRoot; path: string } | null>(null);
 	let preview = $state<FileEntry | null>(null), otherPreview = $state<{ root: string; path: string; size: number } | null>(null);
@@ -1159,6 +1161,7 @@
 							{#snippet children(close)}
 								<label><input type="checkbox" checked={showHidden} onchange={(event) => { showHidden = event.currentTarget.checked; selected = []; savePreferences(); }} />{t('files.showHidden')}</label>
 								{#if root?.kind !== 'stick'}<label><input type="checkbox" checked={folderViewSaved} disabled={!preferencesReady || (!folderViewSaved && folderViews.length >= 200)} onchange={toggleFolderView} />{t('files.rememberFolderView')}</label>{/if}
+								{#if root?.kind !== 'stick'}<button class="btn" onclick={() => { close(); photos = true; }}><Icon name="grid" size={16} /> {t('files.photoView')}</button>{/if}
 								<hr />
 								<button class="btn" onclick={() => { close(); shortcuts = true; }}>{t('files.shortcuts')} <kbd aria-hidden="true">F1</kbd></button>
 							{/snippet}
@@ -1222,7 +1225,7 @@
 									{#if entry.dir}
 										<button type="button" class="entry" onclick={(event) => folderClick(entry, event)}><FileIcon name={entry.name} dir size={view === 'large' ? 48 : view === 'small' ? 24 : 18} /><span>{entry.name}</span></button>
 									{:else}
-										<span class="entry">{#if view === 'large' && previewKind(entry.name, entry.size) === 'image'}<FileThumbnail root={rootId} path={join(dir, entry.name)} size={entry.size} />{:else}<FileIcon name={entry.name} dir={false} size={view === 'large' ? 48 : view === 'small' ? 24 : 18} />{/if}<span>{entry.name}</span></span>
+										<span class="entry">{#if view === 'large' && thumbnailKind(entry.name) && root?.kind !== 'stick'}<FileThumbnail root={rootId} path={join(dir, entry.name)} modified={entry.modified} />{:else}<FileIcon name={entry.name} dir={false} size={view === 'large' ? 48 : view === 'small' ? 24 : 18} />{/if}<span>{entry.name}</span></span>
 									{/if}
 									<span class="mono num muted">{entry.dir ? '–' : formatBytes(entry.size)}</span>
 									<span class="num muted">{date.format(new Date(entry.modified))}</span>
@@ -1398,6 +1401,7 @@
 {#if downloadPaths && root}<DownloadDialog {root} paths={downloadPaths} onclose={() => (downloadPaths = null)} />{/if}
 {#if duplicates && root}<DuplicatesDialog root={safeRoots.find((r) => r.id === rootId) ?? root} {dir} {showHidden} onclose={() => (duplicates = false)} onopen={(path) => { duplicates = false; open(rootId, path); }} onchanged={() => { load(); loadRoots(); jobsTick++; }} />{/if}
 {#if usage && root}<UsageDialog {root} {dir} {showHidden} onclose={() => (usage = false)} onopen={(path) => { usage = false; open(rootId, path); }} />{/if}
+{#if photos && root}<PhotoView root={rootId} {dir} onclose={() => (photos = false)} />{/if}
 {#if deepSearch && root}<SearchDialog {root} {dir} {showHidden} onclose={() => (deepSearch = false)} onopen={(path) => { deepSearch = false; open(rootId, path); }} />{/if}
 {#if comparison && root && rightRoot}<CompareDialog left={safeRoots.find((r) => r.id === rootId) ?? root} leftDir={dir} right={rightRoot} rightDir={right.path} {showHidden} ondone={() => { comparison = false; jobsTick++; }} onclose={() => (comparison = false)} onopen={(id, path) => { comparison = false; open(id, path); }} />{/if}
 {#if batchRename && root}<RenameBatchDialog {root} {dir} names={selected} onclose={() => { batchRename = false; load(); jobsTick++; }} ondone={() => { batchRename = false; selected = []; load(); jobsTick++; }} />{/if}

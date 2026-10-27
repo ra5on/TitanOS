@@ -27,3 +27,23 @@ func TestRules(t *testing.T) {
 		}
 	}
 }
+
+func TestLocal(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"192.168.1.10":       true,
+		"10.0.0.1":           true,
+		"100.100.1.1":        true, // Tailscale, NetBird
+		"fd7a:115c:a1e0::1":  true,
+		"fd00::1":            true,
+		"fe80::1":            true,
+		"127.0.0.1":          true,
+		"::ffff:192.168.0.2": true,
+		"8.8.8.8":            false,
+		"2001:db8::1":        false,
+		"::ffff:8.8.8.8":     false,
+	} {
+		if got := Local(netip.MustParseAddr(addr)); got != want {
+			t.Errorf("Local(%s) = %v, want %v", addr, got, want)
+		}
+	}
+}

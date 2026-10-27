@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { api, ApiError, type Disk, type Filesystem, type RaidLevel } from '#lib/api.ts';
+	import { api, ApiError, type BtrfsProfile, type Disk, type Filesystem, type RaidLevel } from '#lib/api.ts';
+	import { btrfsUsable } from './btrfs.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -19,10 +20,15 @@
 		{ id: 'raid10', min: 4 },
 		{ id: 'raid0', min: 1 }
 	];
+	const BTRFS: { id: BtrfsProfile; min: number }[] = [
+		{ id: 'raid1', min: 2 },
+		{ id: 'raid1c3', min: 3 },
+		{ id: 'single', min: 1 }
+	];
 	const FILESYSTEMS: Filesystem[] = ['ext4', 'xfs', 'btrfs'];
 
 	let name = $state('');
-	let level = $state<RaidLevel>('raid1');
+	let level = $state<RaidLevel | BtrfsProfile>('raid1');
 	let filesystem = $state<Filesystem>('ext4');
 	let selected = $state<string[]>([]);
     let selectionIdentities = $state<Record<string, string>>({});
@@ -37,16 +43,17 @@
 	const usable = $derived(disks.filter(isUsable));
 	const chosen = $derived(usable.filter((disk) => selected.includes(disk.name)));
 	const staleSelection = $derived(selected.length !== chosen.length || chosen.some(disk => disk.identity !== selectionIdentities[disk.name]));
-	const min = $derived(LEVELS.find((entry) => entry.id === level)!.min);
+	const levels = $derived<{ id: RaidLevel | BtrfsProfile; min: number }[]>(filesystem === 'btrfs' ? BTRFS : LEVELS);
+	const min = $derived(levels.find((entry) => entry.id === level)?.min ?? 1);
 
 	/** What the volume will hold; the same for every disk as the smallest one. */
 	const capacity = $derived.by(() => {
 		const n = chosen.length;
-		if (filesystem === 'btrfs' && (n !== 2 || level !== 'raid1')) return { text: t('snapshot.mirrorOnly'), ok: false };
 		if (n < min) return { text: t('create.capacityNeeds', { count: min }), ok: false };
+		if (filesystem === 'btrfs') return { text: formatDiskBytes(btrfsUsable(level as BtrfsProfile, chosen.map((disk) => disk.sizeBytes))), ok: true };
 		if (level === 'raid10' && n % 2 !== 0) return { text: t('create.capacityEven'), ok: false };
 		const smallest = Math.min(...chosen.map((disk) => disk.sizeBytes));
-		const data = { raid0: n, raid1: 1, raid5: n - 1, raid6: n - 2, raid10: n / 2 }[level];
+		const data = { raid0: n, raid1: 1, raid5: n - 1, raid6: n - 2, raid10: n / 2 }[level as RaidLevel];
 		return { text: formatDiskBytes(smallest * data), ok: true };
 	});
 
@@ -58,10 +65,10 @@
 	});
 	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && !working);
 
-	// Btrfs is offered only as a two-disk mirror, so picking it moves the level to RAID 1.
+	// Btrfs and mdadm have their own lists; switching keeps RAID 1, which both know.
 	function pickFilesystem(id: Filesystem) {
 		filesystem = id;
-		if (id === 'btrfs') level = 'raid1';
+		if (!levels.some((entry) => entry.id === level)) level = 'raid1';
 	}
 
 	// Whoever changes the selection has to confirm the erasing again.
@@ -110,15 +117,15 @@
 		<div class="field-row">
 			<span class="label" id="level-label">{t('create.level')}</span>
 			<div class="options" role="radiogroup" aria-labelledby="level-label" tabindex="-1" onkeydown={radioKeys}>
-				{#each LEVELS as entry (entry.id)}
-					<button type="button" class="option" role="radio" aria-checked={level === entry.id} tabindex={level === entry.id ? 0 : -1} disabled={filesystem === 'btrfs' && entry.id !== 'raid1'} onclick={() => (level = entry.id)}>
+				{#each levels as entry (entry.id)}
+					<button type="button" class="option" role="radio" aria-checked={level === entry.id} tabindex={level === entry.id ? 0 : -1} onclick={() => (level = entry.id)}>
 						<span class="option-name">{t(`level.${entry.id}`)}</span>
 						<span class="muted small">{t(`level.${entry.id}Desc`)}</span>
 					</button>
 				{/each}
 			</div>
-			{#if filesystem === 'btrfs'}<p class="muted small">{t('create.btrfsMirrorOnly')}</p>{/if}
-			{#if level === 'raid0'}<p class="notice-warn" role="alert">{t('create.raid0Warning')}</p>{/if}
+			{#if filesystem === 'btrfs'}<p class="muted small">{t('create.btrfsProfiles')}</p>{/if}
+			{#if level === 'raid0' || level === 'single'}<p class="notice-warn" role="alert">{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}</p>{/if}
 		</div>
 
 		<div class="field-row">

@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { api, ApiError, type Disk, type Volume } from '#lib/api.ts';
+	import { api, ApiError, type BtrfsProfile, type Disk, type Volume } from '#lib/api.ts';
+	import { BTRFS_MIN, btrfsUsable, profileOf } from './btrfs.ts';
+	import { formatDiskBytes } from '#lib/format.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import DiskPicker from './DiskPicker.svelte';
@@ -28,6 +30,14 @@
 	const incomplete = $derived(working_members < volume.raidDisks);
 	const chosen = $derived(usable.find((disk) => disk.name === selected[0]));
 	const staleSelection = $derived(selected.length === 1 && (!chosen || chosen.identity !== pickedIdentity));
+	// A complete Btrfs volume grows by the disk and may change its profile
+	// on the way, for example from RAID 1 to three copies.
+	const grows = $derived(volume.filesystem === 'btrfs' && !incomplete);
+	// svelte-ignore state_referenced_locally
+	let profile = $state<BtrfsProfile>(profileOf(volume));
+	const profiles = $derived((['raid1', 'raid1c3', 'single'] as BtrfsProfile[]).filter((p) => volume.members.length + 1 >= BTRFS_MIN[p]));
+	const memberSizes = $derived(disks.filter((disk) => disk.volume === volume.name).map((disk) => disk.sizeBytes));
+	const after = $derived(chosen ? btrfsUsable(profile, [...memberSizes, chosen.sizeBytes]) : 0);
 
 	$effect(() => {
 		selected;
@@ -40,7 +50,7 @@
 		working = true;
 		error = null;
 		try {
-			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true, identity: pickedIdentity });
+			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true, identity: pickedIdentity, profile: grows ? profile : undefined });
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
@@ -52,8 +62,19 @@
 
 <Dialog title={t('addDisk.title', { volume: volume.name })} wide locked={working} {onclose}>
 	<form onsubmit={(event) => event.preventDefault()}>
-		<p class="muted">{t(incomplete ? 'addDisk.rebuild' : 'addDisk.spare')}</p>
+		<p class="muted">{t(incomplete ? 'addDisk.rebuild' : grows ? 'addDisk.btrfsGrow' : 'addDisk.spare')}</p>
 		<DiskPicker disks={usable} bind:selected single name="add-disk" onselect={remember} />
+		{#if grows}
+			<label class="profile">
+				<span class="label">{t('btrfs.profileAfter')}</span>
+				<select class="field" bind:value={profile}>
+					{#each profiles as p (p)}<option value={p}>{t(`level.${p}`)}{p === profileOf(volume) ? ' · ' + t('btrfs.profileKeep') : ''}</option>{/each}
+				</select>
+				<small class="muted">{t(`level.${profile}Desc`)}{#if chosen} · {t('btrfs.capacityAfter', { size: formatDiskBytes(after) })}{/if}</small>
+			</label>
+			{#if profile === 'single'}<p class="notice-warn" role="alert">{t('create.singleWarning')}</p>{/if}
+			<p class="muted">{t('btrfs.balanceHint')}</p>
+		{/if}
 		{#if staleSelection}
 			<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
 			<button type="button" class="btn" onclick={() => ((selected = []), (pickedIdentity = undefined))}>{t('create.clearSelection')}</button>
@@ -81,6 +102,11 @@
 	}
 	p {
 		font-size: 0.875rem;
+	}
+	.profile {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 	}
 	pre {
 		margin: 8px 0 0;

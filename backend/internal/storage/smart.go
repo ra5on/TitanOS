@@ -552,3 +552,23 @@ func withoutIdentity(output string) json.RawMessage {
 	}
 	return clean
 }
+
+// WearWarnings are the SMART warnings that tell of wear or damage before a
+// disk fails: worth a notification while the data can still be copied.
+var WearWarnings = []string{SmartWarnReallocated, SmartWarnPending, SmartWarnUncorrectable, SmartWarnCRC,
+	SmartWarnAttribute, SmartWarnNVMeCritical, SmartWarnWear, SmartWarnMediaErrors, SmartWarnSpare}
+
+// smartDefects adds up reallocated, pending and uncorrectable sectors, CRC
+// errors and NVMe media errors: counters that only grow.
+func smartDefects(values *SmartValues) uint64 {
+	var total uint64
+	for _, value := range []*uint64{values.ReallocatedSectors, values.PendingSectors, values.UncorrectableSectors, values.CRCErrors} {
+		if value != nil {
+			total += *value
+		}
+	}
+	if values.NVMe != nil {
+		total += values.NVMe.MediaErrors
+	}
+	return total
+}

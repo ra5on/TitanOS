@@ -18,6 +18,8 @@ const keywords: Record<string, string> = {
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
+	files:
+		'dateisuche volltext index inhalt full text search content ocr vorschaubilder thumbnails miniaturen',
 	energy:
 		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc',
 	temperatures: 'temperatur temperature sensor wärme heat',
@@ -95,6 +97,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
 	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
 	{ id: 'memory', label: 'memoryPolicy.title', group: 'storage', icon: 'grid', admin: true },
+	{ id: 'files', label: 'fileIndex.title', group: 'storage', icon: 'search', admin: true },
 	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
 	{ id: 'temperatures', label: 'temperatures.title', group: 'personal', icon: 'activity' },
 	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },

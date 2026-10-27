@@ -391,3 +391,44 @@ func TestBackupBeyondTheRestoreLimitsFails(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRestoreLeavesOutThePendingUpdate(t *testing.T) {
+	e := newEnv(t)
+	e.write(t, "system/update-pending.json", `{"bootId":"x"}`)
+	e.write(t, ".accounts.lock", "")
+	e.write(t, "system/update.json", `{"auto":false}`)
+	name := e.create(t)
+	stick := newStick(t, e)
+	if _, err := stick.m.RestoreFound(context.Background(), "md127", name); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"system/update-pending.json", ".accounts.lock"} {
+		if _, err := stick.store.Read(file); err == nil {
+			t.Errorf("%s came back from the backup", file)
+		}
+	}
+	if _, err := stick.store.Read("system/update.json"); err != nil {
+		t.Errorf("the update settings did not come back: %v", err)
+	}
+}
+
+func TestNewerBackupIsMarked(t *testing.T) {
+	e := newEnv(t)
+	e.create(t) // made by 1.2.3
+	stick := newStick(t, e)
+	for running, newer := range map[string]bool{"1.2.2": true, "v1.1.9": true, "1.2.3": false, "1.10.0": false, "v0.23.2-2-gb36cbc4-dirty": true, "dev": false} {
+		stick.m.version = running
+		found := stick.m.Find(context.Background())
+		if len(found) != 1 || found[0].Newer != newer {
+			t.Errorf("running %s: %+v", running, found)
+		}
+	}
+}
+
+func TestWholeDiskBtrfsIsADevice(t *testing.T) {
+	for name, ok := range map[string]bool{"sdb": true, "sdb1": true, "vdc": true, "nvme0n1": true, "nvme0n1p2": true, "md127": true, "../sdb": false, "loop0": false, "sr0": false} {
+		if deviceName.MatchString(name) != ok {
+			t.Errorf("%s: want %v", name, ok)
+		}
+	}
+}

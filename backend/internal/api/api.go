@@ -17,6 +17,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -26,9 +27,11 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
@@ -36,12 +39,14 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
@@ -64,10 +69,14 @@ type Options struct {
 	Shares             *shares.Manager
 	Files              *files.Manager
 	Docker             *docker.Manager
-	Catalog            *catalog.Manager
+	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
+	AppProxy *appproxy.Manager
+	Catalog  *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
-	Terminal     *terminal.Manager
-	VMs          *vm.Manager
+	Terminal *terminal.Manager
+	VMs      *vm.Manager
+	// LXC runs system containers; nil makes one that does nothing.
+	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
 	Nvidia       *hardware.NvidiaControl
 	Accelerators *hardware.AcceleratorMonitor
@@ -92,6 +101,10 @@ type Options struct {
 	Backup *backup.Manager
 	// BackupTarget takes in the backups of other TitanOS over Tailscale.
 	BackupTarget *backuptarget.Manager
+	// Replication sends Btrfs volumes to other TitanOS; ReplicaReceiver
+	// holds what others sent here.
+	Replication     *replication.Manager
+	ReplicaReceiver *replication.Receiver
 	// USB lists and mounts unmanaged physical data drives; nil if unavailable.
 	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
@@ -114,6 +127,10 @@ type Options struct {
 	Assistant *assistant.Manager
 	// Activity records who changed what; nil records nothing.
 	Activity *activity.Manager
+	// Thumbs makes previews for the file manager; nil offers none.
+	Thumbs *thumbs.Manager
+	// FileIndex is the optional full-text index; nil offers no content search.
+	FileIndex *fileindex.Manager
 }
 
 // Server answers all HTTP requests.
@@ -162,6 +179,10 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
+	}
+	if s.opts.LXC == nil {
+		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
+		s.opts.LXC.Disabled = true
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -219,6 +240,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireHeavyAdmin(s.handleAddVolumeDisk))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", s.requireHeavyAdmin(s.handleRemoveVolumeDisk))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/profile", s.requireHeavyAdmin(s.handleBtrfsProfile))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCache))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCacheRemove))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireHeavyAdmin(s.handleCheckVolume))
 	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshots))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireHeavyAdmin(s.handleSnapshotAction))
@@ -260,6 +284,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
 	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
 	mux.HandleFunc("DELETE /api/v1/shares/{name}", s.requireAdmin(s.handleDeleteShare))
+	mux.HandleFunc("POST /api/v1/shares/{name}/unlock", s.requireAdmin(s.handleShareUnlock))
 	mux.HandleFunc("GET /api/v1/shares/{name}/delete-data", s.requireAdmin(s.handleShareDataPreview))
 	mux.HandleFunc("POST /api/v1/shares/{name}/delete-data", s.requireHeavyAdmin(s.handleShareDataDelete))
 
@@ -274,6 +299,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/files/text/previous", s.requireUser(s.handleFilePrevious))
 	mux.HandleFunc("POST /api/v1/files/duplicates", s.requireUser(s.handleFileDuplicates))
 	mux.HandleFunc("POST /api/v1/files/search", s.requireUser(s.handleFileSearch))
+	mux.HandleFunc("GET /api/v1/files/thumb", s.requireUser(s.handleFileThumb))
+	mux.HandleFunc("GET /api/v1/files/photos", s.requireUser(s.handleFilePhotos))
+	mux.HandleFunc("GET /api/v1/files/index", s.requireAdmin(s.handleFileIndex))
+	mux.HandleFunc("PUT /api/v1/files/index", s.requireAdmin(s.handleSetFileIndex))
+	mux.HandleFunc("POST /api/v1/files/index/run", s.requireAdmin(s.handleFileIndexRun))
+	mux.HandleFunc("DELETE /api/v1/files/index/{volume}", s.requireAdmin(s.handleFileIndexRemove))
+	mux.HandleFunc("DELETE /api/v1/files/thumbs/{volume}", s.requireAdmin(s.handleThumbCacheClear))
 	mux.HandleFunc("POST /api/v1/files/compare", s.requireUser(s.handleFileCompare))
 	mux.HandleFunc("GET /api/v1/files/properties", s.requireUser(s.handleFileProperties))
 	mux.HandleFunc("GET /api/v1/files/list", s.requireUser(s.handleFileList))
@@ -301,6 +333,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/usb/{id}/eject", s.requireAdmin(s.handleUSBEject))
 	mux.HandleFunc("GET /api/v1/usb/disks", s.requireAdmin(s.handleUSBDisks))
 	mux.HandleFunc("POST /api/v1/usb/disks/{id}/format", s.requireAdmin(s.handleUSBFormat))
+	mux.HandleFunc("GET /api/v1/usb/disks/{id}/partitions", s.requireAdmin(s.handleUSBPartitions))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/table", s.requireAdmin(s.handleUSBTable))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions", s.requireAdmin(s.handleUSBPartitionCreate))
+	mux.HandleFunc("DELETE /api/v1/usb/disks/{id}/partitions/{number}", s.requireAdmin(s.handleUSBPartitionDelete))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions/{number}/format", s.requireAdmin(s.handleUSBPartitionFormat))
+	mux.HandleFunc("PUT /api/v1/usb/disks/{id}/partitions/{number}/label", s.requireAdmin(s.handleUSBPartitionLabel))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions/{number}/grow", s.requireAdmin(s.handleUSBPartitionGrow))
 	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
@@ -328,6 +367,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
 	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
+	mux.HandleFunc("GET /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxy))
+	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxyDomain))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRoute))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRemove))
 
 	// The app store: templates to install as Docker apps.
 	mux.HandleFunc("GET /api/v1/apps", s.requireAdmin(s.handleApps))
@@ -375,6 +418,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
 	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
 
+	// System containers (LXC). Like VMs: administrators only.
+	mux.HandleFunc("GET /api/v1/lxc", s.requireAdmin(s.handleLXC))
+	mux.HandleFunc("GET /api/v1/lxc/images", s.requireAdmin(s.handleLXCImages))
+	mux.HandleFunc("POST /api/v1/lxc", s.requireHeavyAdmin(s.handleLXCCreate))
+	mux.HandleFunc("PUT /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCUpdate))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCDelete))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/config", s.requireAdmin(s.handleLXCConfig))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/console", s.requireAdmin(s.handleLXCConsole))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/snapshots", s.requireAdmin(s.handleLXCSnapshots))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots", s.requireHeavyAdmin(s.handleLXCSnapshotCreate))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots/{snapshot}/restore", s.requireHeavyAdmin(s.handleLXCSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}/snapshots/{snapshot}", s.requireHeavyAdmin(s.handleLXCSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/{action}", s.requireAdmin(s.handleLXCAction))
+
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
 	mux.HandleFunc("POST /api/v1/network/diagnostics", s.requireAdmin(s.handleNetworkDiagnostics))
@@ -415,6 +472,12 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.backupJobOr("target", s.handleBackupTargetSet)))
 	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
 	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
+	mux.HandleFunc("GET /api/v1/replication", s.requireAdmin(s.handleReplication))
+	mux.HandleFunc("POST /api/v1/replication", s.requireAdmin(s.handleReplicationSave))
+	mux.HandleFunc("PUT /api/v1/replication/{id}", s.requireAdmin(s.handleReplicationSave))
+	mux.HandleFunc("DELETE /api/v1/replication/{id}", s.requireAdmin(s.handleReplicationRemove))
+	mux.HandleFunc("POST /api/v1/replication/{id}/run", s.requireHeavyAdmin(s.handleReplicationRun))
+	mux.HandleFunc("POST /api/v1/replication/received/restore", s.requireHeavyAdmin(s.handleReplicaRestore))
 	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))
@@ -654,7 +717,7 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner or administrator")
 			return
 		}
-		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
+		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/") || r.URL.Path == "/api/v1/lxc" || strings.HasPrefix(r.URL.Path, "/api/v1/lxc/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
 			if !gate.Gate.TryRLock() {
 				writeError(w, http.StatusLocked, "application_backup_running", "application backup owns the application lifecycle")
 				return

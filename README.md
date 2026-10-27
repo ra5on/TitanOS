@@ -23,7 +23,7 @@
 
 ## Ein Server für Dateien, Apps und virtuelle Maschinen
 
-TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant und ein optionaler KI-Assistent.
+TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, LXC-Systemcontainer, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant und ein optionaler KI-Assistent.
 
 Die Startseite passt du an deinen Alltag an: Welche Informationen du siehst, wie viel Platz sie bekommen und wie sie aussehen, bestimmst du selbst. Jede Person hat ihr eigenes Dashboard und ihre eigenen Darstellungseinstellungen.
 
@@ -59,8 +59,9 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 ### Speicher und Laufwerke
 
 - **Klassisches RAID:** mdadm mit RAID 0, 1, 5, 6 und 10; Dateisysteme ext4 und XFS. Volumes anlegen, Zustand und Belegung sehen, Mitglieder ersetzen und Wiederaufbau oder Konsistenzprüfung verfolgen.
-- **Btrfs-Spiegel:** native RAID1-Volumes aus genau zwei Platten, schreibgeschützte Snapshots, Scrub und Plattenersatz. Fehlt beim Start ein Mitglied, wartet TitanOS 60 Sekunden auf langsam anlaufende Platten, bevor der Spiegel ohne Redundanz eingebunden und als solcher gemeldet wird. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots oder einzelner Dateien in neue Ordner.
+- **Btrfs-Volumes:** eine Platte, Spiegel (RAID 1) oder drei Kopien (RAID1C3), auch aus Platten unterschiedlicher Größe. Platten später hinzufügen oder entfernen und das Profil im laufenden Betrieb ändern. Schreibgeschützte Snapshots, Scrub und Plattenersatz. Fehlt beim Start ein Mitglied, wartet TitanOS 60 Sekunden auf langsam anlaufende Platten, bevor das Volume ohne Redundanz eingebunden und als solches gemeldet wird. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots, Ordner oder einzelner Dateien.
 - **Vorhandenen Speicher übernehmen:** lesende Vorschau unterstützter mdadm- und Btrfs-Volumes, danach Registrierung ohne Formatierung. RAID5/6 lässt sich um eine Platte erweitern; dafür ist ein separates Rettungs-Volume erforderlich. Hinzufügen, Erweitern und Ersetzen prüfen die gewählte Platte erneut und lassen fremde Arrays, LVM und eingebundene Dateisysteme auf anderen Platten unangetastet.
+- **SSD-Cache:** eine SSD vor ein bestehendes RAID setzen, ohne Neuformatieren. Wahlweise nur als Lesecache (sicher, falls die SSD ausfällt) oder als Lese- und Schreibcache; ab Werk aus. [Einzelheiten](docs/SSD-CACHE.md).
 - **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Einstellbarer Laufwerksruhezustand.
 - **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
@@ -72,6 +73,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 - **SMB:** Rechte je Konto, lesender Gastzugriff, Papierkorb mit Aufbewahrung und Time-Machine-Ziele. **NFS:** getrennt von SMB abschalten, nur lesend oder lesend/schreibend für ausgewählte Clients freigeben.
 - **Übersichtliche Shares:** suchen, filtern und sortieren; Details, Verbindungsadressen und Dateimanager direkt an der Freigabe öffnen.
+- **Vorgängerversionen und Ransomware-Schutz:** Btrfs-Snapshots erscheinen in Windows unter „Vorgängerversionen“. Benennt ein Konto plötzlich viele Dateien wie Ransomware um, wird die Freigabe sofort schreibgeschützt und ein Snapshot angelegt. Geplante Snapshots lassen sich für eine Frist gegen Löschen sperren. [Einzelheiten](docs/SHARE-PROTECTION.md).
 - **Besitzer, Administratoren und Benutzer:** das erste Besitzerkonto hat einen frei gewählten Namen. Benutzer sehen ihre freigegebenen Dateien; Systemverwaltung, Docker und VMs bleiben den Verwaltungsrollen vorbehalten.
 - **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner Sitzungen. Konten gelten auch für SMB.
 
@@ -83,20 +85,24 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Dateien und Ordner bearbeiten:** erstellen, hochladen, herunterladen, als ZIP laden, kopieren, verschieben, umbenennen und löschen. Ziehen zwischen Ansichten, Übertragungsvorschau und Entscheidungen bei Namenskonflikten.
 - **Von Link herunterladen:** eine HTTP(S)-Adresse, etwa ein ISO-Abbild, lädt das NAS selbst als Hintergrundauftrag in den geöffneten Ordner: optionale SHA-256-Prüfung, Fortsetzen nach Verbindungsabbruch, nie Überschreiben. Benutzerkonten erreichen dabei nur Adressen im Internet.
 - **Vorschau und Texteditor:** Bilder, PDF, Audio und Video ansehen; UTF-8-Textdateien bis 512 KiB bearbeiten, einschließlich Markdown, JSON und YAML. Vorige Fassung vergleichen und wiederherstellen.
+- **Vorschaubilder und Fotoansicht:** das NAS erzeugt Miniaturen für JPEG, PNG, GIF, WebP, PDF (erste Seite) und Videos (mit ffmpeg) und legt sie auf dem jeweiligen Daten-Volume ab. Die Fotoansicht zeigt einen Ordner als Raster nach Aufnahmedatum (EXIF) und im Großbild mit Pfeiltasten und Wischen.
+- **Volltextsuche (optional):** ein ab Werk ausgeschalteter Index je Volume findet Wörter in PDF-, Word-, Excel- und Textdateien, auf Wunsch auch in gescannten PDFs (OCR). Er arbeitet nur, während das Volume ohnehin benutzt wird oder zu einer gewählten Uhrzeit, und zeigt jedem Konto nur Treffer in seinen Freigaben.
 - **Werkzeuge:** Unterordnersuche, Sammelumbenennen, ZIP-Inhalte, Ordnervergleich, gezielte Übernahme von Unterschieden, Duplikatsuche und Speicheranalyse auf Anforderung.
 - **Papierkorb:** Originalpfad, Datum und Belegung sehen, filtern und vor der Wiederherstellung prüfen. Unterstützte Aktionen lassen sich innerhalb der Dienstlaufzeit rückgängig machen.
 - **Übertragungen steuern:** Warteschlange, Pause, Priorität, Geschwindigkeitslimit, Fortschritt und Restzeitschätzung. Dauerhaft gespeicherte Kopier-/Verschiebeaufträge auf Daten-Volumes lassen sich nach einem Dienstneustart geprüft fortsetzen. Unfertige Uploads können nach erneuter Dateiauswahl fortgesetzt werden.
 - **Große Kopieraufträge:** keine feste Datei- oder GB-Grenze pro Auftrag. Auf Daten-Volumes werden Plan und Wiederaufnahmestand stückweise in einer Datenbank gespeichert; Dateien und Metadaten benötigen ausreichend Zielplatz.
 - **Weitere Datenträger:** nicht verwaltete USB-, SATA-, SAS- und NVMe-Dateisysteme ausdrücklich einbinden; FAT32, exFAT, NTFS, ext2/3/4, XFS und Btrfs. Bei NTFS steht zusätzlich ein lesender Ausweichweg bereit. Jede Aktion berücksichtigt Kontorechte und Schreibschutz.
+- **Laufwerke formatieren und partitionieren:** ganze Platten außerhalb der Volumes neu formatieren oder im Partitionseditor Tabellen anlegen, Partitionen anlegen, löschen, formatieren, umbenennen und in direkt folgenden freien Platz vergrößern – mit erneuter Prüfung der Platte direkt vor dem Schreiben. [Partitionseditor](docs/PARTITIONS.md).
 
 [![Dateimanager mit Ortsauswahl, Ordnern, Dokumenten und Werkzeugleiste](docs/screenshots/current/dateien.png)](docs/screenshots/current/dateien.png)
 
-[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
+[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Vorschaubilder und Volltextsuche](docs/FILE-SEARCH.md) · [Partitionseditor](docs/PARTITIONS.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
 
 ### Docker und App-Store
 
 - **Container und Compose-Stacks:** Images und Tags einzeln je Dienst bearbeiten, Store-Vorgaben und Digests erhalten; Start, Stopp, Neustart, Logs und Browserkonsole; CPU, RAM, Ports und geprüfte Updatezustände im Blick. Suche, Filter sowie anpassbare Reihenfolge und Ansicht.
 - **Anwendungen schnell öffnen:** eigene App-Icons und Links zur WebUI, zur Tailscale-Adresse und zur öffentlichen Adresse. Bei Stacks bestimmt ein Hauptdienst die gemeinsamen Links.
+- **Eigener HTTPS-Name je App:** auf Wunsch erreichst du eine App unter `https://immich.<nas>.local` oder unter einer eigenen Domain. TitanOS leitet selbst weiter (auch WebSockets), gibt die Namen per mDNS im Heimnetz bekannt und hält die TitanOS-Anmeldung von den Apps fern; wahlweise nur aus Heimnetz, Tailscale und NetBird erreichbar.
 - **Eigene LAN-Adressen:** ipvlan L2 oder macvlan mit reserviertem IPv4-Pool, optional fester Adresse pro Dienst und eigenem NAS-Endpunkt; private Dienste eines Stacks bleiben privat. [Einrichtung](docs/NETWORKING.md#container-mit-eigener-lan-adresse).
 - **Apps als Formular oder Compose bearbeiten:** Ports, Datenpfade, Umgebungswerte und Hardware je Dienst zuweisen. Die Docker-Daten liegen auf einem ausgewählten Daten-Volume.
 - **App-Store mit eigenen Quellen:** offizieller [TitanOS-App-Katalog](https://github.com/ra5on/TitanOS-Apps), zusätzliche Repositories, Archive und Compose-Dateien; Unterstützung für CasaOS-kompatible Stores.
@@ -104,7 +110,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 [![Docker-Übersicht mit geschlossenen Stacks und einzelnen Anwendungen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
 
-[App-Links](docs/APP-LINKS.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
+[App-Links](docs/APP-LINKS.md) · [HTTPS-Namen für Apps](docs/APP-PROXY.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
 
 ### Virtuelle Maschinen
 
@@ -121,12 +127,19 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung. Die Heimnetz-Bridge `br0` wird bei der Ersteinrichtung automatisch vorbereitet und nach Verbindungsbestätigung dauerhaft übernommen; bestehende NAS aktivieren sie direkt aus der VM-Einrichtung.
 
+### LXC-Systemcontainer
+
+- **Ganze Linux-Systeme ohne VM:** Container aus den Abbildern von images.linuxcontainers.org (Debian, Ubuntu, Alpine und weitere) anlegen, starten, herunterfahren und automatisch starten. Das Root-Dateisystem liegt auf einem Daten-Volume.
+- **Sicher voreingestellt:** unprivilegiert mit eigenen IDs; privilegierte Container nur ausdrücklich und mit Warnung. CPU- und RAM-Grenzen, Netzwerk an den Bridges des NAS mit fester MAC-Adresse, NAS-Ordner wahlweise nur lesend.
+- **Konsole und Snapshots:** Shell und Textkonsole im Terminal-Panel; auf Btrfs-Volumes Snapshots anlegen und zurücksetzen. [Einzelheiten und Grenzen](docs/LXC.md).
+
 ### Sicherungen und Wiederherstellung
 
 - **Versionierte Backups mit restic:** Freigaben verschlüsselt auf ein anderes Volume, per SFTP, zu S3 oder zu einem restic-REST-Server sichern. Zeitpläne, Aufbewahrung, Zielprüfung und Fortschritt.
 - **Wiederherstellung prüfen:** Archivprüfungen und echte Wiederherstellungsproben; ganze Stände oder einzelne Dateien als neue Kopie in einen eigenen Ordner zurückholen.
 - **Anwendungen mit sichern:** ausgewählte Container und VMs sauber anhalten und anschließend wieder starten; optional PostgreSQL exportieren. Sicherungsabdeckung zeigt, welche ausgewählten Shares, Container und VMs berücksichtigt werden.
 - **Geführte Anwendungswiederherstellung:** Daten zuerst in einen neuen Ordner holen, vorhandene historische Anwendungsinformationen prüfen und die Übernahme ausdrücklich abschließen. Ungeklärte unterbrochene Vorgänge werden zur Prüfung angezeigt.
+- **Replikation auf ein zweites TitanOS:** Btrfs-Volumes Snapshot für Snapshot über Tailscale spiegeln; nach dem ersten Lauf nur Änderungen, mit Zeitplan, Aufbewahrung, Bandbreitengrenze und Wiederherstellung als neuer Ordner. [Einzelheiten](docs/REPLICATION.md).
 - **Direkt lesbare Kopie-Backups:** neue und geänderte Dateien auf USB oder ein SMB-Ziel übertragen, sofort oder nach Zeitplan. Keine Versionierung; am Ursprung gelöschte Dateien bleiben am Ziel. Die SMB-Ordnerkopie trägt ein Beta-Label.
 - **Systemkonfiguration sichern:** automatische gebündelte Sicherung auf einem Daten-Volume, Download und Wiederherstellung bei der Ersteinrichtung eines Ersatzsticks. Die Konfigurationssicherung enthält keine Nutzdaten.
 
@@ -252,7 +265,7 @@ Die Datenplatten nicht als neue Volumes anlegen oder formatieren. Ohne Konfigura
 
 | Thema | Einstieg |
 |---|---|
-| Speicher, Sicherungen und Wartung | [Abläufe und Grenzen](docs/WORKFLOWS.md), [Btrfs](docs/BTRFS.md), [VM-Snapshots](docs/VM-SNAPSHOTS.md) |
+| Speicher, Sicherungen und Wartung | [Abläufe und Grenzen](docs/WORKFLOWS.md), [Btrfs](docs/BTRFS.md), [VM-Snapshots](docs/VM-SNAPSHOTS.md), [LXC-Container](docs/LXC.md) |
 | Dateien und Übertragungen | [Dateieditor](docs/FILE-EDITOR.md), [RAM/Uploads](docs/MEMORY.md), [Windows-SMB](docs/WINDOWS-SMB.md) |
 | Hardware und Fernzugriff | [Plugins](docs/PLUGINS.md), [NVIDIA](docs/NVIDIA.md), [Tailscale](docs/TAILSCALE.md), [NetBird](docs/NETBIRD.md), [Netzwerk](docs/NETWORKING.md) |
 | API und Medien | [Öffentliche API/CLI](docs/PUBLIC-API.md), [VM-Medien](docs/VM-MEDIA.md), [Plugin-Aufräumen](docs/PLUGIN-CLEANUP.md) |

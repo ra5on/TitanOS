@@ -1,0 +1,18 @@
+# A system container of TitanOS (LXC). titand writes the container's
+# configuration from /config and /run/titanos-lxc/<name>.env with its
+# lxcpath on a volume before it starts the unit; it never starts by itself.
+# As a unit of its own the container keeps running when titand restarts.
+[Unit]
+Description=TitanOS system container %i
+Documentation=https://github.com/ra5on/TitanOS/blob/main/docs/LXC.md
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/run/titanos-lxc/%i.env
+ExecStart=/usr/bin/lxc-start -F -P ${LXC_PATH} -n %i
+# Asks the container to shut down; after a minute LXC pulls the plug.
+ExecStop=/usr/bin/lxc-stop -P ${LXC_PATH} -n %i -t 60
+TimeoutStopSec=90
+KillMode=mixed
+Delegate=yes

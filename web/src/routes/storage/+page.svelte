@@ -25,6 +25,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { refreshStorage, storage } from '#lib/storage.svelte.ts';
 	import AddDiskDialog from './AddDiskDialog.svelte';
+	import ProfileDialog from './ProfileDialog.svelte';
+	import { takesDisk } from './btrfs.ts';
 	import CreateVolumeDialog from './CreateVolumeDialog.svelte';
 	import DeleteVolumeDialog from './DeleteVolumeDialog.svelte';
 	import { diskStatus, diskType, smartText } from './labels.ts';
@@ -42,6 +44,7 @@
 		| { kind: 'add'; volume: string; disk?: Disk }
 		| { kind: 'delete'; volume: string }
 		| { kind: 'remove'; volume: string; disk: string }
+		| { kind: 'profile'; volume: string }
 		| null
 	>(null);
 	let busy = $state(false);
@@ -247,15 +250,7 @@
 
 	const hours = $derived(new Intl.NumberFormat(i18n.locale));
 	// Volumes that take another disk; the same rule as the button in VolumeCard.
-	const addTargets = $derived(
-		volumes.filter(
-			(v) =>
-				(v.filesystem !== 'btrfs' || v.state === 'degraded') &&
-				v.level !== 'raid0' &&
-				v.state !== 'failed' &&
-				v.state !== 'missing',
-		),
-	);
+	const addTargets = $derived(volumes.filter(takesDisk));
 
 	/** Runs an action that needs no dialog and shows what went wrong. */
 	async function run(action: () => Promise<unknown>) {
@@ -503,6 +498,7 @@
 				{busy}
 				oncheck={(start) => check(detail, start)}
 				onadd={() => (dialog = { kind: 'add', volume: detail.name })}
+				onprofile={() => (dialog = { kind: 'profile', volume: detail.name })}
 				ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
 				onremove={(disk) => (
 					(error = null),
@@ -687,6 +683,8 @@
 		onclose={() => (dialog = null)}
 		ondone={done}
 	/>
+{:else if dialog?.kind === 'profile' && dialogVolume}
+	<ProfileDialog volume={dialogVolume} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'delete' && dialogVolume}
 	<DeleteVolumeDialog
 		volume={dialogVolume}
@@ -701,7 +699,10 @@
 		onclose={() => (dialog = null)}
 	>
 		<p class="remove-text notice-warn">
-			{t('storage.removeDiskConfirm', { disk: dialog.disk, volume: dialog.volume })}
+			{t(
+				dialogVolume?.filesystem === 'btrfs' ? 'btrfs.removeConfirm' : 'storage.removeDiskConfirm',
+				{ disk: dialog.disk, volume: dialog.volume },
+			)}
 		</p>
 		{#if error}<div class="notice-error" role="alert">
 				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}

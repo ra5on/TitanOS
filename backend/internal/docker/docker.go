@@ -92,7 +92,10 @@ type Container struct {
 	// ("8096/admin") or a full URL. Empty if the label is not set.
 	WebUI     string `json:"webui"`
 	PublicURL string `json:"publicUrl"`
-	Icon      string `json:"icon"`
+	// ProxyURL is the app's own HTTPS name through titand, if it has one
+	// (see package appproxy); the API fills it in.
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	Icon     string `json:"icon"`
 	// UpdateAvailable is true when the registry has a newer image for the
 	// container's tag than the one it runs.
 	UpdateAvailable bool   `json:"updateAvailable"`

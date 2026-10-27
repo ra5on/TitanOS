@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,6 +28,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -36,9 +38,11 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
@@ -46,6 +50,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/replication"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
@@ -53,6 +58,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
@@ -292,11 +298,23 @@ func run(opts options) error {
 	// services in line with accounts, shares and mounted volumes.
 	folders := shares.NewManager(store)
 	folders.Disabled = opts.dev
+	folders.Shadow = volumes.ShadowDir
 	if err := folders.Load(); err != nil {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
+	// HTTPS names of Docker apps, served by titand itself (see below) and
+	// published over mDNS; avahi then runs even without SMB shares.
+	routes := appproxy.NewManager(store)
+	routes.Disabled = opts.dev
+	routes.HTTPSPort, routes.Reserved = proxyPorts(opts)
+	routes.OnChange = folders.Kick
+	if err := routes.Load(); err != nil {
+		slog.Warn("app HTTPS names not readable from /config", "err", err)
+	}
+	go routes.Run(ctx)
+
 	go folders.Run(ctx, func() shares.State {
-		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas}
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas, Discovery: routes.Publishing()}
 	})
 
 	// Runs the Docker engine while its volume is mounted.
@@ -358,6 +376,15 @@ func run(opts options) error {
 		}
 		return release, nil
 	}
+	// System containers (LXC); like VMs they join the bridges of the NAS.
+	systemContainers := lxc.NewManager(store, shares.UsersGID)
+	systemContainers.NetworkBridge = machines.NetworkBridge
+	systemContainers.BridgeReady = connection.BridgeReady
+	systemContainers.NetworkLease = machines.NetworkLease
+	systemContainers.Disabled = opts.dev
+	if err := systemContainers.Load(); err != nil {
+		slog.Warn("containers not readable from /config", "err", err)
+	}
 	connection.CheckChange = func(before, after network.Config) error {
 		refs := map[string]bool{}
 		legacy := false
@@ -371,7 +398,7 @@ func run(opts options) error {
 				}
 			}
 		}
-		for _, ref := range machines.NetworkReferences() {
+		for _, ref := range append(machines.NetworkReferences(), systemContainers.NetworkReferences()...) {
 			if ref == "bridge" {
 				legacy = true
 			} else {
@@ -525,6 +552,38 @@ func run(opts options) error {
 		}
 	}
 	// A test that a restart stopped and that waits to be continued.
+	// Ransomware guard: a share that looks attacked becomes read-only, and
+	// a Btrfs volume gets a snapshot of what was still intact.
+	go folders.FollowAudit(ctx, func(share shares.Share) {
+		notifier.Notify(notify.Error, "share_guard_locked", share.Name)
+		if volumes.FilesystemOf(share.Volume) == "btrfs" {
+			name := "guard-" + time.Now().UTC().Format("20060102T150405")
+			if err := volumes.SnapshotAction(context.WithoutCancel(ctx), share.Volume, name, "create", ""); err != nil {
+				slog.Error("snapshot after ransomware lock failed", "volume", share.Volume, "err", err)
+			}
+		}
+	})
+	// Previous versions for Windows follow the snapshots.
+	go func() {
+		for {
+			volumes.SyncShadowCopies(ctx, folders.PreviousVersionVolumes())
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Minute):
+			}
+		}
+	}()
+	volumes.OnCacheMissing = func(volume string) { notifier.Notify(notify.Error, "volume_cache_missing", volume) }
+	volumes.OnCacheRemoved = func(volume string) { notifier.Notify(notify.Info, "volume_cache_removed", volume) }
+	go volumes.RunCacheCleaner(ctx)
+	volumes.OnReshaped = func(volume string, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "volume_disk_remove_failed", volume)
+			return
+		}
+		notifier.Notify(notify.Info, "volume_disk_removed", volume)
+	}
 	volumes.OnTestInterrupted = func(test storage.DiskTest) {
 		disk := test.Disk
 		if test.Serial != "" {
@@ -679,8 +738,24 @@ func run(opts options) error {
 	backupTarget.Addresses = func() []string { return tailnet.Status().IPs }
 	backupTarget.Host = func() string { return tailnet.Status().Name }
 	backupTarget.Mounted = volumes.Mounted
+	// Btrfs replication: received over the same server, sent by jobs.
+	replicaReceiver := replication.NewReceiver()
+	replicaReceiver.Mounted, replicaReceiver.Filesystem = volumes.Mounted, volumes.FilesystemOf
+	backupTarget.Replicas = replicaReceiver.Serve
 	backupTarget.Load()
 	go backupTarget.Run(ctx)
+	replicas := replication.NewManager(store)
+	replicas.Disabled = opts.dev
+	replicas.Mounted, replicas.Filesystem = volumes.Mounted, volumes.FilesystemOf
+	replicas.OnResult = func(job replication.Job, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "replication_failed", job.Name)
+		}
+	}
+	if err := replicas.Load(); err != nil {
+		slog.Warn("replication jobs not readable from /config", "err", err)
+	}
+	go replicas.Run(ctx)
 	// Unmanaged data drives: shown, and mounted only on a click.
 	drives := usb.NewManager()
 	drives.Disabled = opts.dev
@@ -699,9 +774,14 @@ func run(opts options) error {
 	drives.Busy = func() bool { return volumes.ActionsRunning() || volumes.GrowthActive() }
 	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
 	drives.OnFormatted = func(job usb.FormatJob) {
-		if job.Phase == "done" {
+		switch {
+		case job.Action != "" && job.Phase == "done":
+			notifier.Notify(notify.Info, "usb_partitions_changed", job.Name)
+		case job.Action != "":
+			notifier.Notify(notify.Warning, "usb_partitions_failed", job.Name)
+		case job.Phase == "done":
 			notifier.Notify(notify.Info, "usb_formatted", job.Name)
-		} else {
+		default:
 			notifier.Notify(notify.Warning, "usb_format_failed", job.Name)
 		}
 	}
@@ -775,6 +855,29 @@ func run(opts options) error {
 	if !opts.dev {
 		go fileManager.RunUploadSweep(ctx, volumes.Mounted)
 	}
+	// Thumbnails are made on request and cached on the volume of the file.
+	previews := thumbs.New()
+	if !opts.dev {
+		previews.MountRoot, previews.Mounted = "/mnt", volumes.Mounted
+	}
+	// The full-text index is opt-in and runs only while a volume is in use.
+	fullText := fileindex.New(store)
+	fullText.Disabled = opts.dev
+	fullText.MountRoot, fullText.Mounted = "/mnt", volumes.Mounted
+	fullText.Protected = machines.ProtectFile
+	fullText.Timezone = settings.CurrentTimezone
+	fullText.ShareVolume = func(name string) (string, bool) {
+		for _, share := range folders.List() {
+			if share.Name == name {
+				return share.Volume, true
+			}
+		}
+		return "", false
+	}
+	if err := fullText.Load(); err != nil {
+		slog.Warn("file index settings unavailable", "err", err)
+	}
+	go fullText.Run(ctx)
 	history := monitoring.New(store)
 	history.Mounted = volumes.Mounted
 	history.Snapshot = func() (system.Info, storage.Status) {
@@ -818,7 +921,7 @@ func run(opts options) error {
 	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || replicas.Busy() || machines.Busy() || systemContainers.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -852,7 +955,11 @@ func run(opts options) error {
 		case "backup-check", "restore-probe":
 			return backups.MaintenanceRun(work, job.Target, job.Kind, job.ReadData, backup.ProbeRequest{MaxBytes: job.MaxBytes, MaxFiles: job.MaxFiles})
 		case "snapshot":
-			return volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep)
+			if err := volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays); err != nil {
+				return err
+			}
+			volumes.SyncShadowCopies(work, folders.PreviousVersionVolumes())
+			return nil
 		}
 		return errors.New("unknown maintenance kind")
 	}
@@ -863,9 +970,10 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || replicas.Busy() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || systemContainers.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
 	}
 	go machines.Run(ctx, volumes.Mounted)
+	go systemContainers.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
 	// Logins outlive a restart of titand in RAM, as after an app update.
 	sessions := auth.NewSessions()
@@ -888,10 +996,14 @@ func run(opts options) error {
 		Storage:            volumes,
 		Shares:             folders,
 		Files:              fileManager,
+		Thumbs:             previews,
+		FileIndex:          fullText,
 		Docker:             containers,
+		AppProxy:           routes,
 		Catalog:            appCatalog,
 		Terminal:           shells,
 		VMs:                machines,
+		LXC:                systemContainers,
 		Hardware:           devices,
 		Nvidia:             nvidia,
 		Accelerators:       hardware.NewAcceleratorMonitor(ctx, devices),
@@ -904,6 +1016,8 @@ func run(opts options) error {
 		ConfigBackup:       stickBackup,
 		USB:                drives,
 		BackupTarget:       backupTarget,
+		Replication:        replicas,
+		ReplicaReceiver:    replicaReceiver,
 		Diagnose:           diagnostics,
 		SSH:                access,
 		Update:             updates,
@@ -943,12 +1057,20 @@ func run(opts options) error {
 		}()
 	}
 
+	// Requests for the HTTPS name of an app go to the app, all others to
+	// the web UI; see package appproxy.
+	site := routes.Handler(handler)
 	if opts.dev {
-		serve(newServer(opts.devAddr, handler), false)
+		serve(newServer(opts.devAddr, site), false)
 		slog.Info("titand started in development mode", "version", version.Version, "listen", opts.devAddr, "config", opts.configDir, "webui", webui.Embedded)
 	} else {
-		https := newServer(opts.httpsAddr, handler)
-		https.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
+		https := newServer(opts.httpsAddr, site)
+		https.TLSConfig = &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if names := routes.CertificateNames(hello.ServerName); names != nil {
+				return certs.ForNames(hello.ServerName, names)
+			}
+			return certs.GetCertificate(hello)
+		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
 			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
@@ -1030,6 +1152,30 @@ func watchCertificate(ctx context.Context, certs *tlscert.Manager, notifier *not
 		case <-ticker.C:
 		}
 	}
+}
+
+// proxyPorts returns the HTTPS port for links to apps (0 for the usual
+// 443) and the ports of titand an app route must not point at.
+func proxyPorts(opts options) (int, []int) {
+	var https int
+	var reserved []int
+	addrs := []string{opts.httpsAddr, opts.httpAddr}
+	if opts.dev {
+		addrs = []string{opts.devAddr}
+	}
+	for _, addr := range addrs {
+		_, p, err := net.SplitHostPort(addr)
+		if err != nil {
+			continue
+		}
+		if port, err := strconv.Atoi(p); err == nil {
+			reserved = append(reserved, port)
+			if addr == opts.httpsAddr && port != 443 {
+				https = port
+			}
+		}
+	}
+	return https, reserved
 }
 
 func newServer(addr string, handler http.Handler) *http.Server {

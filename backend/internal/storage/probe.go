@@ -23,11 +23,12 @@ type blockDevice struct {
 	Label      string        `json:"label"`
 	UUID       string        `json:"uuid"`
 	Mountpoint string        `json:"mountpoint"`
+	PartUUID   string        `json:"partuuid"`
 	Children   []blockDevice `json:"children"`
 }
 
 var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output",
-	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,FSTYPE,LABEL,UUID,MOUNTPOINT"}
+	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,FSTYPE,LABEL,UUID,MOUNTPOINT,PARTUUID"}
 
 func parseLsblk(output string) ([]blockDevice, error) {
 	var result struct {

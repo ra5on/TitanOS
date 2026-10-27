@@ -23,6 +23,15 @@ Zugangsdaten werden als Link angeboten. Leer entfernt den Knopf. Diese Einstellu
 konfiguriert keinen Cloudflare-Tunnel, Reverse-Proxy oder Firewallzugang.
 Änderungen im Container-Editor werden wie bisher über Compose angewendet.
 
+Der Knopf „HTTPS-Name“ erscheint, wenn im App-Editor ein eigener HTTPS-Name
+eingeschaltet ist (`https://<name>.<nas>.local`, mit eigener Domain diese).
+Anders als `titanos.public-url` richtet diese Einstellung tatsächlich etwas ein:
+titand leitet Anfragen für den Namen an den Port der App weiter. Sie steht nicht
+in der Compose-Datei, sondern in `/config/docker/proxy.json`. Die API setzt die
+Adresse als `proxyUrl` an den Container, der den gewählten Port veröffentlicht
+(bei Host-Netzwerk an alle Container der App); bei Stacks dient sie dem
+Hauptdienst als letzter Rückfall. Details: [APP-PROXY.md](APP-PROXY.md).
+
 ## Darstellung
 
 Gemeinsame Variablen regeln Seitentitel, Text, Kontrollhöhe und Abstände. Die

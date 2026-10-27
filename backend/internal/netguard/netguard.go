@@ -35,3 +35,22 @@ func LAN(addr netip.Addr) bool {
 	addr = addr.Unmap()
 	return addr.IsValid() && !addr.IsLoopback() && !addr.IsUnspecified() && !addr.IsMulticast() && !addr.IsInterfaceLocalMulticast()
 }
+
+// overlay are the ranges of Tailscale and NetBird.
+var overlay = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fd7a:115c:a1e0::/48")}
+
+// Local reports whether a client is in the home network or comes over
+// Tailscale or NetBird: private, link-local and loopback addresses and the
+// overlay ranges, never a public address.
+func Local(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	if addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() {
+		return true
+	}
+	for _, prefix := range overlay {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}

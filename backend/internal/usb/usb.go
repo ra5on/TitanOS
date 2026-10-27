@@ -151,6 +151,10 @@ type Manager struct {
 
 	sysBlockDir string
 	pause       time.Duration
+	// lookPath finds a tool, exec.LookPath when nil; scratch is where XFS
+	// and Btrfs are mounted to grow, /run/titanos-partitions when empty.
+	lookPath func(string) (string, error)
+	scratch  string
 	// job is the last format; formatting holds operation until it ends.
 	job *FormatJob
 

@@ -188,6 +188,8 @@ export type MemberState = 'active' | 'rebuilding' | 'faulty' | 'spare';
 export type VolumeState =
 	'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
 export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
+/** Profiles of a Btrfs volume (internal/storage btrfsLayouts). */
+export type BtrfsProfile = 'single' | 'raid1' | 'raid1c3';
 export type Filesystem = 'ext4' | 'xfs' | 'btrfs';
 
 export type Disk = {
@@ -232,6 +234,22 @@ export type Volume = {
 	/** Limits for shares: ext4/XFS only, switched on take effect at the next start. */
 	shareQuotas: 'unsupported' | 'off' | 'pending' | 'active';
 	shareQuotasError?: string;
+	/** SSD cache of an mdadm volume (internal/storage cache.go). */
+	cache?: VolumeCache;
+};
+
+export type CacheMode = 'writethrough' | 'writeback';
+export type VolumeCache = {
+	mode: CacheMode;
+	disk: string;
+	active: boolean;
+	missing: boolean;
+	removing: boolean;
+	usedBlocks: number;
+	totalBlocks: number;
+	dirtyBlocks: number;
+	readHitRate: number;
+	blockBytes: number;
 };
 
 export type DiskSleepStatus = {
@@ -269,6 +287,11 @@ export type Share = {
 	quota?: number;
 	quotaID?: number;
 	quotaStatus?: ShareQuotaStatus;
+	/** Btrfs snapshots as "Previous Versions" in Windows. */
+	previousVersions?: boolean;
+	/** Ransomware guard over SMB; guardLocked is set by the NAS only. */
+	guard?: boolean;
+	guardLocked?: { at: string; user: string; reason: string; files: number };
 	path: string;
 	available: boolean;
 };
@@ -291,6 +314,8 @@ export type FileRoot = {
 	editable?: boolean;
 	totalBytes: number;
 	freeBytes: number;
+	/** The full-text index covers (part of) this root. */
+	indexed?: boolean;
 };
 
 export type CopyJob = {
@@ -360,11 +385,26 @@ export type DockerContainer = {
 	/** Value of the label titanos.webui: a host port, a port with a path or a URL. */
 	webui: string;
 	publicUrl: string;
+	/** The app's own HTTPS name through TitanOS, e.g. https://immich.nas.local; missing without one. */
+	proxyUrl?: string;
 	icon: string;
 	updateAvailable: boolean;
 	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
 	updateError?: string;
 };
+
+/** The HTTPS name of one app (GET /docker/proxy). */
+export type AppProxyRoute = {
+	app: string;
+	enabled: boolean;
+	name: string;
+	port: number;
+	scheme: 'http' | 'https';
+	localOnly?: boolean;
+	urls: string[];
+};
+
+export type AppProxyStatus = { domain?: string; suffixes: string[]; apps: AppProxyRoute[] };
 
 export type DockerStatus = {
 	settings: { enabled: boolean; volume: string };
@@ -448,6 +488,8 @@ export type VM = {
 	available: boolean;
 	/** Load in percent of the VM's own vCPUs. */
 	cpuPercent: number;
+	/** Paused by QEMU after a disk error on the NAS; "resume" goes on. */
+	ioError?: boolean;
 	/** RAM of the NAS the VM occupies right now. */
 	memoryBytes: number;
 	since: string;
