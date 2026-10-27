@@ -449,6 +449,26 @@ try {
   await page.mouse.up();
   await ready(page);
   await noOverlap(page);
+  // The whole head is a handle; dragging it never selects text the browser would drag instead.
+  const title = tile(page, "cpu").locator(".tile-title"),
+    titleBox = await title.boundingBox(),
+    cpuBefore = await tile(page, "cpu").evaluate((e) => e.style.left);
+  await page.mouse.move(titleBox.x + 20, titleBox.y + titleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    titleBox.x + 20 + (cpuBefore === "0px" ? 780 : -780),
+    titleBox.y + titleBox.height / 2 + 40,
+    { steps: 8 },
+  );
+  await page.locator(".placement-placeholder").waitFor();
+  assert.equal(await page.evaluate(() => String(getSelection())), "");
+  await page.mouse.up();
+  await ready(page);
+  assert.notEqual(
+    await tile(page, "cpu").evaluate((e) => e.style.left),
+    cpuBefore,
+  );
+  await noOverlap(page);
   const resize = tile(page, "system").locator(".resize-handle");
   await resize.scrollIntoViewIfNeeded();
   const sizeBefore = (await tile(page, "system").boundingBox()).height,
