@@ -28,6 +28,7 @@
 		onrefreshbackups: () => void;
 		onmanagefavorites: () => void;
 		onremovefavorite: (favorite: Favorite) => void;
+		onformat: () => void;
 	};
 	let {
 		roots,
@@ -49,6 +50,7 @@
 		onrefreshbackups,
 		onmanagefavorites,
 		onremovefavorite,
+		onformat,
 	}: Props = $props();
 
 	const kinds = ['share', 'volume', 'usb', 'stick'] as const;
@@ -187,6 +189,13 @@
 			{/if}
 		</div>
 	{/each}
+{/if}
+
+{#if admin}
+	<!-- Also for drives without a filesystem, which are not listed above. -->
+	<button type="button" class="note link format-link" onclick={onformat}
+		><Icon name="disk" size={14} />{t('files.formatDrive')}</button
+	>
 {/if}
 
 <!-- USB backups only take room when there are some; setting them up happens under Settings. -->
@@ -442,5 +451,16 @@
 	}
 	.link {
 		color: var(--accent);
+	}
+	.format-link {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		border: 0;
+		background: none;
+		text-align: left;
+		cursor: pointer;
+		font: inherit;
+		font-size: 0.8125rem;
 	}
 </style>

@@ -35,3 +35,42 @@ def check_usb_files(request, opener, url):
     request('/usb/' + drive['id'] + '/eject', {})
     assert not next(d for d in request('/usb') if d['id'] == drive['id'])['mounted']
     print('Real exFAT: mount, upload >64 KiB, atomic finish, text edit, conflict rejection, backup and eject passed', flush=True)
+
+
+def _format(request, disk, body, time):
+    request('/usb/disks/' + disk['id'] + '/format', body)
+    for _ in range(240):
+        job = request('/usb/disks')['job']
+        if job and job.get('finished'):
+            return job
+        time.sleep(0.5)
+    raise AssertionError('format did not end')
+
+
+def check_drive_format(request, remote, volume_members):
+    """Format the disposable exFAT drive with the real tools of the image."""
+    import time
+    listing = request('/usb/disks')
+    disks = listing['disks']
+    # The boot stick and the disks of the mirror volume are never offered.
+    assert not any(d['device'] in volume_members for d in disks), disks
+    assert not any(p['label'] == 'TITANOS' for d in disks for p in d['partitions']), disks
+    disk = next(d for d in disks if any(p['label'] == 'EXFAT-TEST' for p in d['partitions']))
+    assert disk['formattable'] and disk['transport'] == 'usb' and disk['kind'] == 'removable', disk
+    device = disk['device']
+    job = _format(request, disk, {'filesystem': 'vfat', 'label': 'fmt test', 'scheme': 'auto', 'mount': True}, time)
+    assert job['phase'] == 'done' and job['scheme'] == 'mbr' and job['label'] == 'FMT TEST', job
+    layout = json.loads(remote(f'lsblk -J -b -o NAME,PTTYPE,FSTYPE,LABEL,PARTTYPE,START {device}'))['blockdevices'][0]
+    part = layout['children'][0]
+    assert layout['pttype'] == 'dos' and len(layout['children']) == 1, layout
+    assert part['fstype'] == 'vfat' and part['label'] == 'FMT TEST' and part['parttype'] == '0xe' and int(part['start']) == 2048, layout
+    drive = next(d for d in request('/usb') if d['id'] == job['id'])
+    assert drive['mounted'] and not drive['readOnly'], drive
+    request('/usb/' + drive['id'] + '/eject', {})
+    disk = next(d for d in request('/usb/disks')['disks'] if d['device'] == device)
+    job = _format(request, disk, {'filesystem': 'ext4', 'label': 'linux', 'mount': False}, time)
+    assert job['phase'] == 'done' and job['scheme'] == 'gpt', job
+    layout = json.loads(remote(f'lsblk -J -o NAME,PTTYPE,FSTYPE,LABEL {device}'))['blockdevices'][0]
+    assert layout['pttype'] == 'gpt' and layout['children'][0]['fstype'] == 'ext4', layout
+    assert not next(d for d in request('/usb') if d['id'] == job['id'])['mounted']
+    print('Real drive format: FAT on MBR at 1 MiB (FAT16 type on a 128 MiB stick), mount, eject, ext4 on GPT passed', flush=True)

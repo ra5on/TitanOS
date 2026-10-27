@@ -8,7 +8,6 @@ package usb
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -45,14 +44,18 @@ var (
 // native Linux filesystems; do not weaken those checks for removable media.
 // File access remains mediated by the authenticated file-manager API.
 var filesystems = map[string]struct{ kind, options string }{
-	"vfat":  {"vfat", "iocharset=utf8,flush,uid=0,gid=0,fmask=0177,dmask=0077"},
-	"exfat": {"exfat", "uid=0,gid=0,fmask=0177,dmask=0077"},
-	"ntfs":  {"ntfs3", "uid=0,gid=0,fmask=0177,dmask=0077"},
-	"ext2":  {"ext2", ""},
-	"ext3":  {"ext3", ""},
-	"ext4":  {"ext4", ""},
-	"xfs":   {"xfs", ""},
-	"btrfs": {"btrfs", ""},
+	// Install and Mac media are only read: TitanOS never writes to them.
+	"iso9660": {"iso9660", "ro"},
+	"udf":     {"udf", "ro"},
+	"hfsplus": {"hfsplus", "ro"},
+	"vfat":    {"vfat", "iocharset=utf8,flush,uid=0,gid=0,fmask=0177,dmask=0077"},
+	"exfat":   {"exfat", "uid=0,gid=0,fmask=0177,dmask=0077"},
+	"ntfs":    {"ntfs3", "uid=0,gid=0,fmask=0177,dmask=0077"},
+	"ext2":    {"ext2", ""},
+	"ext3":    {"ext3", ""},
+	"ext4":    {"ext4", ""},
+	"xfs":     {"xfs", ""},
+	"btrfs":   {"btrfs", ""},
 }
 
 // Device is a filesystem on an unmanaged physical data drive.
@@ -90,9 +93,40 @@ type node struct {
 	UUID       string `json:"uuid"`
 	Mountpoint string `json:"mountpoint"`
 	Children   []node `json:"children"`
+	// Only read for whole disks, see disks.go.
+	Rotational flag   `json:"rota"`
+	Removable  flag   `json:"rm"`
+	ReadOnly   flag   `json:"ro"`
+	DiscGran   uint64 `json:"disc-gran"`
+	Serial     string `json:"serial"`
+	WWN        string `json:"wwn"`
+	PTType     string `json:"pttype"`
+	PTUUID     string `json:"ptuuid"`
 }
 
-var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output", "NAME,TYPE,SIZE,TRAN,MODEL,FSTYPE,LABEL,UUID,MOUNTPOINT"}
+// flag is a lsblk yes/no column: older versions print "0"/"1", newer ones
+// true/false.
+type flag bool
+
+func (f *flag) UnmarshalJSON(data []byte) error {
+	switch strings.Trim(string(data), `"`) {
+	case "true", "1":
+		*f = true
+	default:
+		*f = false
+	}
+	return nil
+}
+
+var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output", "NAME,TYPE,SIZE,TRAN,MODEL,FSTYPE,LABEL,UUID,MOUNTPOINT,ROTA,RM,RO,DISC-GRAN,SERIAL,WWN,PTTYPE,PTUUID"}
+
+// transports are the buses of local drives. An empty transport is what some
+// USB adapters and older kernels report. virtio and network disks stay out.
+var transports = []string{"", "usb", "sata", "sas", "nvme", "ata", "scsi", "mmc", "ieee1394"}
+
+// imageFilesystems are written to a whole stick as an install image. The
+// partitions inside are views of the same image and are not offered twice.
+var imageFilesystems = []string{"iso9660", "udf"}
 
 // Manager lists and mounts drives.
 type Manager struct {
@@ -109,6 +143,16 @@ type Manager struct {
 	Claimed func() map[string]string
 	// OnPlug is told of each drive that appeared since the last look.
 	OnPlug func(Device)
+	// Busy reports work of the storage manager that may pick free disks;
+	// no drive is formatted meanwhile.
+	Busy func() bool
+	// OnFormatted is told how a format ended.
+	OnFormatted func(FormatJob)
+
+	sysBlockDir string
+	pause       time.Duration
+	// job is the last format; formatting holds operation until it ends.
+	job *FormatJob
 
 	operation sync.Mutex
 	mu        sync.Mutex
@@ -132,23 +176,42 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	if n.Transport != "" {
 		transport = n.Transport
 	}
+	image := n.Type == "disk" && slices.Contains(imageFilesystems, n.FSType) && n.UUID != ""
 	// Some FAT superfloppies expose a whole-device partition alias. Prefer
 	// that partition, without accepting duplicate UUIDs on separate devices.
 	alias := n.Type == "disk" && slices.ContainsFunc(n.Children, func(child node) bool {
 		return child.Type == "part" && child.UUID == n.UUID && child.FSType == n.FSType && child.Size == n.Size
 	})
-	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && (transport == "usb" || transport == "sata" || transport == "sas" || transport == "nvme" || transport == "ata" || transport == "scsi" || transport == "") {
+	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && slices.Contains(transports, transport) {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
 			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {
 			_, supported := filesystems[n.FSType]
-			*out = append(*out, Device{ID: n.UUID, Label: n.Label, Model: strings.TrimSpace(n.Model), FSType: n.FSType, Size: n.Size, Supported: supported, Busy: n.Mountpoint != "" || len(n.Children) > 0, Transport: transport, path: n.Name})
+			// An image stick is read as a whole; it is only busy when a
+			// partition of it is in use.
+			busy := n.Mountpoint != "" || len(n.Children) > 0
+			if image {
+				busy = n.Mountpoint != "" || anyMounted(n.Children)
+			}
+			*out = append(*out, Device{ID: n.UUID, Label: n.Label, Model: strings.TrimSpace(n.Model), FSType: n.FSType, Size: n.Size, Supported: supported, Busy: busy, Transport: transport, path: n.Name})
 		}
 	}
 	for _, child := range n.Children {
+		if image && child.UUID == n.UUID {
+			continue
+		}
 		child.Model = firstNonEmpty(child.Model, n.Model)
 		collect(child, transport, out, reserved)
 	}
+}
+
+func anyMounted(nodes []node) bool {
+	for _, n := range nodes {
+		if n.Mountpoint != "" || anyMounted(n.Children) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {
@@ -194,14 +257,8 @@ func (m *Manager) mounts() map[string]string {
 
 // List returns the drives that are plugged in, by name.
 func (m *Manager) List(ctx context.Context) ([]Device, error) {
-	output, err := m.runner.Run(ctx, "", "lsblk", lsblkArgs...)
+	nodes, err := m.blockDevices(ctx)
 	if err != nil {
-		return nil, err
-	}
-	var parsed struct {
-		Blockdevices []node `json:"blockdevices"`
-	}
-	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
 		return nil, err
 	}
 	var devices []Device
@@ -209,7 +266,7 @@ func (m *Manager) List(ctx context.Context) ([]Device, error) {
 	if m.Claimed != nil {
 		claimed = m.Claimed()
 	}
-	for _, n := range parsed.Blockdevices {
+	for _, n := range nodes {
 		if n.Type != "disk" || claimed[filepath.Base(n.Name)] != "" || containsBoot(n) {
 			continue
 		}
@@ -371,7 +428,8 @@ func (m *Manager) Watch(ctx context.Context) {
 	defer ticker.Stop()
 	var last string
 	for {
-		listing := blockListing()
+		m.pollMedia()
+		listing := m.blockListing()
 		if listing != last {
 			last = listing
 			m.look(ctx)
@@ -385,12 +443,15 @@ func (m *Manager) Watch(ctx context.Context) {
 }
 
 // blockListing is a cheap fingerprint of the disks and partitions present.
-func blockListing() string {
+// The size is part of it: a card put into a reader that is already plugged in
+// changes no name, only the size of the reader from 0.
+func (m *Manager) blockListing() string {
 	var names []string
-	disks, _ := os.ReadDir("/sys/block")
+	disks, _ := os.ReadDir(m.sysBlock())
 	for _, disk := range disks {
-		names = append(names, disk.Name())
-		parts, _ := os.ReadDir(filepath.Join("/sys/block", disk.Name()))
+		size, _ := os.ReadFile(filepath.Join(m.sysBlock(), disk.Name(), "size"))
+		names = append(names, disk.Name()+"="+strings.TrimSpace(string(size)))
+		parts, _ := os.ReadDir(filepath.Join(m.sysBlock(), disk.Name()))
 		for _, part := range parts {
 			if strings.HasPrefix(part.Name(), disk.Name()) {
 				names = append(names, part.Name())
@@ -399,6 +460,33 @@ func blockListing() string {
 	}
 	slices.Sort(names)
 	return strings.Join(names, ",")
+}
+
+func (m *Manager) sysBlock() string {
+	if m.sysBlockDir != "" {
+		return m.sysBlockDir
+	}
+	return "/sys/block"
+}
+
+// pollMedia lets the kernel look for a new medium in card readers and other
+// removable drives every two seconds. Without a desktop daemon nothing asks,
+// and a card put into a reader that stays plugged in would never show up.
+// Drives that set their own interval keep it.
+func (m *Manager) pollMedia() {
+	disks, _ := os.ReadDir(m.sysBlock())
+	for _, disk := range disks {
+		dir := filepath.Join(m.sysBlock(), disk.Name())
+		removable, _ := os.ReadFile(filepath.Join(dir, "removable"))
+		events, _ := os.ReadFile(filepath.Join(dir, "events"))
+		interval, _ := os.ReadFile(filepath.Join(dir, "events_poll_msecs"))
+		if strings.TrimSpace(string(removable)) != "1" || !strings.Contains(string(events), "media_change") || strings.TrimSpace(string(interval)) != "-1" {
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(dir, "events_poll_msecs"), []byte("2000"), 0o644); err != nil {
+			slog.Debug("media polling not set", "disk", disk.Name(), "err", err)
+		}
+	}
 }
 
 func (m *Manager) look(ctx context.Context) {

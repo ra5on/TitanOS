@@ -445,3 +445,19 @@ func TestReadOnlyRefusesEveryAction(t *testing.T) {
 		t.Errorf("read-only mode ran commands: %v", runner.commands)
 	}
 }
+
+func TestOwnsMatchesArrayAndFilesystemSpellings(t *testing.T) {
+	m := &Manager{volumes: []VolumeConfig{{Name: "data", ArrayUUID: "0f0e0d0c:0b0a0908:07060504:03020100", FilesystemUUID: "5D2C-AA01"}}}
+	for uuid, want := range map[string]bool{
+		"0f0e0d0c-0b0a-0908-0706-050403020100": true, // lsblk on a member
+		"0F0E0D0C:0B0A0908:07060504:03020100":  true,
+		"5d2c-aa01":                            true,
+		"5D2CAA01":                             true,
+		"0f0e0d0c-0b0a-0908-0706-050403020101": false,
+		"":                                     false,
+	} {
+		if m.Owns(uuid) != want {
+			t.Errorf("Owns(%q) != %v", uuid, want)
+		}
+	}
+}

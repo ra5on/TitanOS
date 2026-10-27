@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from files_usb_smoke import check_usb_files
+from files_usb_smoke import check_drive_format, check_usb_files
 from smb_backup_smoke import check_smb_backup
 """Btrfs/optional-tool regression in disposable UEFI QEMU disks only.
 
@@ -237,6 +237,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         remote('test ! -e /mnt/mirror/vms/home-assistant')
                         if not workflows_only:
                             check_usb_files(request, opener, url)
+                            check_drive_format(request, remote, [m if m.startswith('/dev/') else '/dev/' + m for m in members])
                             check_uploads(request, opener, url, remote, password)
                             check_smb_share(request, remote, smb_port, password, directory)
                             check_smb_backup(request, remote, password)

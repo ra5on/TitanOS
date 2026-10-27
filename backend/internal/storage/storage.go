@@ -233,6 +233,21 @@ func (m *Manager) FilesystemUUIDs() []string {
 	return uuids
 }
 
+// Owns reports a filesystem or RAID array UUID of a configured volume, in
+// any of the spellings of lsblk and mdadm.
+func (m *Manager) Owns(uuid string) bool {
+	uuid = normalizeUUID(uuid)
+	if uuid == "" {
+		return false
+	}
+	for _, volume := range m.configured() {
+		if normalizeUUID(volume.FilesystemUUID) == uuid || normalizeUUID(volume.ArrayUUID) == uuid {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) find(name string) (VolumeConfig, bool) {
 	for _, volume := range m.configured() {
 		if volume.Name == name {

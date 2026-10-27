@@ -671,8 +671,16 @@ func run(opts options) error {
 	}
 	backups.WithUSB = drives.WithMounted
 	go backups.Run(ctx)
-	drives.Reserved = func(uuid string) bool { return slices.Contains(volumes.FilesystemUUIDs(), uuid) }
+	drives.Reserved = volumes.Owns
+	drives.Busy = func() bool { return volumes.ActionsRunning() || volumes.GrowthActive() }
 	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
+	drives.OnFormatted = func(job usb.FormatJob) {
+		if job.Phase == "done" {
+			notifier.Notify(notify.Info, "usb_formatted", job.Name)
+		} else {
+			notifier.Notify(notify.Warning, "usb_format_failed", job.Name)
+		}
+	}
 	go drives.Watch(ctx)
 
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.

@@ -281,6 +281,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/usb", s.requireAdmin(s.handleUSB))
 	mux.HandleFunc("POST /api/v1/usb/{id}/mount", s.requireAdmin(s.handleUSBMount))
 	mux.HandleFunc("POST /api/v1/usb/{id}/eject", s.requireAdmin(s.handleUSBEject))
+	mux.HandleFunc("GET /api/v1/usb/disks", s.requireAdmin(s.handleUSBDisks))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/format", s.requireAdmin(s.handleUSBFormat))
 	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
 	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
 	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))

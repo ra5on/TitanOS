@@ -675,6 +675,21 @@ export function fixtureFactory(browser, errors) {
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
       if (path === "/assistant") return json({ available: false });
+      // Formatting drives: tests set data.usbDisks and data.formatError and
+      // read data.formats; data.usbJob is the job the NAS reports.
+      if (path === "/usb/disks" && method === "GET")
+        return json({ disks: data.usbDisks ?? [], job: data.usbJob ?? null });
+      if (path.startsWith("/usb/disks/") && path.endsWith("/format") && method === "POST") {
+        const body = route.request().postDataJSON();
+        (data.formats ??= []).push({ id: decodeURIComponent(path.split("/")[3]), ...body });
+        if (data.formatError)
+          return route.fulfill({ status: 409, json: { error: { code: data.formatError, message: "usb: this drive cannot be formatted now: inuse" } } });
+        const disk = data.usbDisks.find((d) => d.id === decodeURIComponent(path.split("/")[3]));
+        data.usbJob = { disk: disk.id, device: disk.device, name: disk.model, filesystem: body.filesystem, label: body.label, scheme: "mbr", phase: "format", started: time };
+        disk.formattable = false;
+        disk.reason = "formatting";
+        return json({ disks: data.usbDisks, job: data.usbJob });
+      }
       // Downloads from a link: tests set data.urlProbe, data.urlConflict
       // (answer the first start with file_exists) and read data.urlDownloads.
       if (path === "/files/url-download/probe" && method === "POST") {

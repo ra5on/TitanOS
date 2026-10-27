@@ -43,6 +43,8 @@ var texts = map[string]map[string][2]string{
 		"certificate_expiring":  {"Das Zertifikat läuft bald ab", "Das eigene Zertifikat der Weboberfläche gilt nur noch bis {s}. Hinterlege unter Einstellungen › Zugang ein neues; sonst warnt der Browser."},
 		"config_backup_failed":  {"Sicherung des Sticks fehlgeschlagen", "Die Konfiguration konnte nicht auf das Volume {s} gesichert werden. Sieh unter Einstellungen › Sicherung des Sticks nach."},
 		"usb_plugged":           {"USB-Laufwerk {s} angeschlossen", "Unter Dateien › USB kannst du es einbinden und Dateien kopieren."},
+		"usb_formatted":         {"Laufwerk {s} formatiert", "Das neue Dateisystem steht unter Dateien › Weitere Laufwerke bereit."},
+		"usb_format_failed":     {"Formatieren von {s} fehlgeschlagen", "Unter Dateien › Laufwerk formatieren steht, woran es lag. Die Platte kann leer oder unvollständig sein."},
 		"disk_hot":              {"Platte {s} ist sehr warm", "Die Platte {s} ist wärmer als 55 °C. Prüfe die Lüftung."},
 	},
 	"en": {
@@ -83,6 +85,8 @@ var texts = map[string]map[string][2]string{
 		"certificate_expiring":  {"The certificate is about to expire", "The own certificate of the web interface is only valid until {s}. Put a new one in place under Settings › Access; otherwise the browser will warn."},
 		"config_backup_failed":  {"Backup of the stick failed", "The configuration could not be saved to the volume {s}. Have a look at Settings › Backup of the stick."},
 		"usb_plugged":           {"USB drive {s} plugged in", "Mount it under Files › USB to copy files."},
+		"usb_formatted":         {"Drive {s} formatted", "The new filesystem is ready under Files › Other drives."},
+		"usb_format_failed":     {"Formatting {s} failed", "Files › Format drive says why. The drive may be empty or incomplete."},
 		"disk_hot":              {"Disk {s} is very warm", "The disk {s} is warmer than 55 °C. Check the ventilation."},
 	},
 }

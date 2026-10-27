@@ -39,6 +39,7 @@
 	import UploadPanel from './UploadPanel.svelte';
 	import UploadReview from './UploadReview.svelte';
 	import UrlDownloadDialog from './UrlDownloadDialog.svelte';
+	import DriveFormatDialog from './DriveFormatDialog.svelte';
 	import UsageDialog from './UsageDialog.svelte';
 	import VirtualEntries from './VirtualEntries.svelte';
 	import WindowsPath from './WindowsPath.svelte';
@@ -321,6 +322,7 @@
 
 	let usbDevices = $state<UsbDevice[]>([]);
 	let usbBusy = $state('');
+	let formattingDrive = $state(false);
 	let usbLoadError = $state(false);
 	let usbBackups = $state<USBBackup[]>([]);
 	let backupLoadError = $state(false);
@@ -947,6 +949,7 @@
 				}}
 				onmanagefavorites={() => (favoriteManager = true)}
 				onremovefavorite={(favorite) => saveFavorites(favorites.filter((f) => f !== favorite))}
+				onformat={() => (formattingDrive = true)}
 			/>
 		</nav>
 {#if !trash}<div class="mobile-file-actions" role="toolbar" aria-label={t('files.moreActions')}>
@@ -1368,6 +1371,7 @@
 {#if properties}<FileProperties root={properties.root} path={properties.path} locked={properties.root.kind === 'usb' && !safeRoots.find((r) => r.id === properties?.root.id)?.writable && properties.root.writable} onclose={() => (properties = null)} />{/if}
 {#if uploadReview}<UploadReview root={uploadReview.root} dir={uploadReview.dir} files={uploadReview.files} onclose={() => (uploadReview = null)} onconfirm={startUpload} />{/if}
 {#if favoriteManager}<FavoritesDialog {favorites} onsave={saveFavorites} onclose={() => (favoriteManager = false)} />{/if}
+{#if formattingDrive && canAdminister}<DriveFormatDialog onclose={() => (formattingDrive = false)} onformatted={() => { loadUsb(); }} />{/if}
 {#if downloadingLink && root && writable}<UrlDownloadDialog root={rootId} {dir} confined={!canAdminister} onclose={() => (downloadingLink = false)} onstarted={() => { downloadingLink = false; jobsTick++; }} />{/if}
 {#if creatingFile && root && writable}<CreateFileDialog root={rootId} {dir} onclose={() => (creatingFile = false)} oncreated={(path) => { creatingFile = false; editing = path; load(); }} />{/if}
 {#if otherPreview}<FilePreview {...otherPreview} onclose={() => (otherPreview = null)} />{/if}

@@ -836,6 +836,12 @@ func TestFilesNeedARoot(t *testing.T) {
 	if res, body := ts.request("GET", "/api/v1/usb", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
 		t.Errorf("usb: %d %s", res.StatusCode, body)
 	}
+	if res, body := ts.request("GET", "/api/v1/usb/disks", nil); res.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != `{"disks":[],"job":null}` {
+		t.Errorf("usb disks: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/usb/disks/abc/format", map[string]string{"filesystem": "exfat"}); res.StatusCode != http.StatusNotFound {
+		t.Errorf("format without drives: %d %s", res.StatusCode, body)
+	}
 	if res, _ := ts.request("GET", "/api/v1/files/jobs", nil); res.StatusCode != http.StatusOK {
 		t.Errorf("jobs: %d", res.StatusCode)
 	}
