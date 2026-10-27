@@ -50,7 +50,7 @@
 							.filter((job) => job.state === 'running')
 							.map((job) => ({
 								id: `file-${job.id}`,
-								kind: 'ui.taskCopy',
+								kind: job.operation === 'download' ? 'files.jobDownload' : 'ui.taskCopy',
 								title: job.names.join(', '),
 								href: '/files',
 								percent: taskPercent(job.copied, job.bytes),

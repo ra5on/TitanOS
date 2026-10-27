@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -152,6 +153,13 @@ type Manager struct {
 	// MountRoot is where volumes are mounted ("/mnt" if empty).
 	MountRoot string
 	syncFile  func(*os.File) error
+	// DownloadClient returns the HTTP client for downloads from a link,
+	// confined to public addresses or not; nil uses the netguard rules.
+	DownloadClient func(confined bool) *http.Client
+	// Test hooks for downloads: free bytes, retry delay, stall limit.
+	downloadFree  func(*os.File) (uint64, error)
+	downloadDelay time.Duration
+	downloadStall time.Duration
 
 	undo    undoStore
 	jobs    jobs

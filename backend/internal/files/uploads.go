@@ -421,6 +421,10 @@ func (m *Manager) Uploads(root Root, dir, user string, uid int) ([]UploadStatus,
 	for {
 		entries, readErr := folder.ReadDir(128)
 		for _, entry := range entries {
+			if entry.Type().IsRegular() {
+				// Downloads of an earlier run on roots without a volume note.
+				m.sweepDownloadPart(r, dir, entry.Name())
+			}
 			if entry.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(entry.Name(), partSuffix+".json") {
 				continue
 			}

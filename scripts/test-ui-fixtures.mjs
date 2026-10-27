@@ -572,13 +572,55 @@ export function fixtureFactory(browser, errors) {
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
       if (path === "/assistant") return json({ available: false });
+      // Downloads from a link: tests set data.urlProbe, data.urlConflict
+      // (answer the first start with file_exists) and read data.urlDownloads.
+      if (path === "/files/url-download/probe" && method === "POST") {
+        (data.urlProbes ??= []).push(route.request().postDataJSON());
+        return json(
+          data.urlProbe ?? {
+            name: "",
+            size: -1,
+            exists: false,
+            free: 6e11,
+          },
+        );
+      }
+      if (path === "/files/url-download" && method === "POST") {
+        const body = route.request().postDataJSON();
+        (data.urlDownloads ??= []).push(body);
+        if (data.urlConflict && body.conflict !== "rename")
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: "file_exists", message: "fixture" } },
+          });
+        const job = {
+          id: "download-" + data.urlDownloads.length,
+          operation: "download",
+          move: false,
+          state: "running",
+          from: "https://example.test/isos/debian.iso",
+          to: body.root,
+          dir: body.dir,
+          names: [body.name],
+          files: 1,
+          done: 0,
+          bytes: 4e9,
+          copied: 1e9,
+          current: "",
+          error: "",
+          retryable: false,
+        };
+        (data.fileJobs ??= []).push(job);
+        return route.fulfill({ status: 202, json: job });
+      }
+      if (path === "/files/jobs") return json(data.fileJobs ?? []);
       if (path === "/files/roots")
         return json(
           data.shares.map((s) => ({
             id: "share/" + s.name,
             name: s.name,
             kind: "share",
-            writable: true,
+            writable: !(data.readOnlyShares ?? []).includes(s.name),
             recycle: true,
             totalBytes: 1e12,
             freeBytes: 6e11,

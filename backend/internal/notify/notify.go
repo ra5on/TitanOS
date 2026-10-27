@@ -31,6 +31,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
+
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
@@ -573,23 +575,6 @@ func confinedClient() *http.Client {
 	}
 }
 
-// nonPublic are ranges that are not the internet beyond what Go knows:
-// shared address space (Tailscale), benchmarking, documentation, reserved.
-var nonPublic = []netip.Prefix{
-	netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("192.0.0.0/24"),
-	netip.MustParsePrefix("198.18.0.0/15"), netip.MustParsePrefix("240.0.0.0/4"),
-	netip.MustParsePrefix("64:ff9b::/96"), netip.MustParsePrefix("fd7a:115c:a1e0::/48"),
-}
-
-func public(addr netip.Addr) bool {
-	addr = addr.Unmap()
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
-		return false
-	}
-	for _, prefix := range nonPublic {
-		if prefix.Contains(addr) {
-			return false
-		}
-	}
-	return true
-}
+// public is the rule for confined accounts; other outbound requests made for
+// an account (file downloads from a link) share it through netguard.
+func public(addr netip.Addr) bool { return netguard.Public(addr) }
