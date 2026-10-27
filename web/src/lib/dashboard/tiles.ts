@@ -57,6 +57,36 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 /** Tiles only owners and administrators can add; their data needs those rights. */
 export const ADMIN_TILES: readonly StaticTileId[] = ['docker', 'vms', 'tailscale', 'netbird'];
 
+/** Hardware tiles: all devices together, or one kind of device each. */
+export const HARDWARE_TILES: readonly StaticTileId[] = ['accelerators', 'igpu', 'npu', 'nvidia'];
+
+export type AddContext = {
+	admin: boolean;
+	/** Kinds of accelerators the NAS reports (`igpu`, `npu`, `nvidia`). */
+	hardware: readonly StaticTileId[];
+};
+
+/**
+ * Tiles that can be added. A kind of tile already on the dashboard is
+ * duplicated from its editor instead. Hardware tiles appear only for devices
+ * the NAS has, and a tile for one kind only when there is more than one kind:
+ * otherwise it would show the same as the tile with all devices.
+ */
+export function addableTiles(shown: readonly { id: TileId }[], context: AddContext) {
+	const present = new Set(shown.map((p) => sourceId(p.id)));
+	const kinds = new Set(context.hardware);
+	return TILE_IDS.filter((id) => {
+		if (present.has(id) || (!context.admin && ADMIN_TILES.includes(id))) return false;
+		if (HARDWARE_TILES.includes(id)) {
+			if (kinds.size > 1) return id === 'accelerators' || kinds.has(id);
+			return (
+				id === 'accelerators' && kinds.size === 1 && !HARDWARE_TILES.some((h) => present.has(h))
+			);
+		}
+		return true;
+	});
+}
+
 export function workload(
 	id: TileId,
 ): { kind: 'vm' | 'container' | 'app'; name: string } | undefined {

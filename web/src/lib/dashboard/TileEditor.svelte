@@ -17,6 +17,8 @@
 		networks = [],
 		devices = [],
 		items = [],
+		defaultItems,
+		sensors = [],
 		onchange,
 		onsize,
 		onauto,
@@ -33,6 +35,9 @@
 		networks: string[];
 		devices: { address: string; name: string }[];
 		items: { id: string; name: string }[];
+		/** Selection a tile starts with when it stops following all items. */
+		defaultItems?: string[];
+		sensors?: { id: string; name: string }[];
 		onchange: (key: keyof TileOptions, value: unknown) => void;
 		onsize: (w: number, h: number, autoHeight?: boolean, pixels?: number) => void;
 		onauto: (value: boolean) => void;
@@ -297,7 +302,18 @@
 						checked={settings.temperature}
 						onchange={(e) => onchange('temperature', e.currentTarget.checked)}
 					/>{t('dashboard.cpuTemperature')}</label
-				>{/if}
+				>{#if settings.temperature}<label
+						>{t('dashboard.editor.sensor')}<select
+							class="field"
+							value={settings.sensor}
+							onchange={(e) => onchange('sensor', e.currentTarget.value)}
+							><option value="">{t('dashboard.editor.sensorAuto')}</option
+							>{#if settings.sensor && !sensors.some((s) => s.id === settings.sensor)}<option
+									value={settings.sensor}>{t('temperatures.missing')}</option
+								>{/if}{#each sensors as sensor}<option value={sensor.id}>{sensor.name}</option
+								>{/each}</select
+						></label
+					>{/if}{/if}
 			{#if source === 'system'}
 				<fieldset>
 					<legend>{t('dashboard.systemFields')}</legend>
@@ -548,8 +564,15 @@
 							type="checkbox"
 							checked={settings.items === null}
 							onchange={(e) =>
-								onchange('items', e.currentTarget.checked ? null : items.map((i) => i.id))}
-						/>{t('dashboard.editor.allItems')}</label
+								onchange(
+									'items',
+									e.currentTarget.checked ? null : (defaultItems ?? items.map((i) => i.id)),
+								)}
+						/>{t(
+							source === 'temperatures'
+								? 'dashboard.editor.accountSensors'
+								: 'dashboard.editor.allItems',
+						)}</label
 					>{#if settings.items !== null}{#each [...new Set( [...items.map((i) => i.id), ...settings.items] )] as item}<label
 								class="check"
 								><input

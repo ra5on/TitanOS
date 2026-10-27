@@ -61,7 +61,14 @@ weiter auf dem NAS zu prüfen; synthetische Zähler ersetzen diese Prüfung nich
 
 Unter Einstellungen → Temperaturen wählt jedes Konto seine Sensoren und die
 Sichtbarkeit der Dashboard-Kachel. Die Auswahl liegt zusammen mit dem Layout
-in den bestehenden Dashboard-Präferenzen. Messwerte werden im Hintergrund aus
+in den bestehenden Dashboard-Präferenzen. Jede Temperaturkachel kann im Editor
+statt dieser Auswahl eigene Sensoren zeigen (`items` in `tileOptions`), damit
+Kopien der Kachel z. B. CPU und NVMe getrennt darstellen. Die CPU-Kachel nimmt
+ab Werk den Paketsensor (coretemp „Package id 0“, k10temp/zenpower „Tctl“),
+optional einen ausdrücklich gewählten Sensor (`sensor`); fehlt er, bleibt der
+Wert leer statt auf einen anderen zu wechseln. Die Beschleunigerkachel zeigt die
+GPU-Temperatur nur einmal: in den Details, ohne Details neben dem Zustand.
+Messwerte werden im Hintergrund aus
 hwmon gelesen und nur im RAM gehalten; keine zyklischen Zugriffe auf `/config`.
 
 Sensoren werden über Gerätepfad, Treibername und Kanal identifiziert, nicht über

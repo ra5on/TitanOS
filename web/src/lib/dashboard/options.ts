@@ -69,6 +69,7 @@ export type TileOptions = {
 	rates: boolean;
 	interface: string;
 	device: string;
+	sensor: string;
 	title: string;
 	showTitle: boolean;
 	showIcon: boolean;
@@ -160,6 +161,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		device: /^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$/i.test(text('device', 12))
 			? text('device', 12)
 			: '',
+		sensor: /^[a-f0-9]{32}$/.test(text('sensor', 32)) ? text('sensor', 32) : '',
 		title: text('title', 80),
 		showTitle: bool('showTitle', true),
 		showIcon: bool('showIcon', true),

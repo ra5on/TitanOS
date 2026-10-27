@@ -47,7 +47,8 @@
 					menu = { device, x: r.left, y: r.bottom };
 				}}>{device.name}</button
 			><span class="device-state" class:warn={device.state === 'driver_missing'}
-				>{t(`accelerator.state.${device.state}`)}{!options.hiddenFields.includes('temperature') &&
+				>{t(`accelerator.state.${device.state}`)}{!options.details &&
+				!options.hiddenFields.includes('temperature') &&
 				device.temperatureC !== null
 					? ' · ' + Math.round(device.temperatureC) + ' °C'
 					: ''}</span
