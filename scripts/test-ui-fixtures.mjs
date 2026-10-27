@@ -553,12 +553,20 @@ export function fixtureFactory(browser, errors) {
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);
+      // Share quotas per volume; PUT .../quotas switches them like titand.
+      const quotas = (data.volumeQuotas ??= { Data: "active", Fast: "unsupported", Safe: "off" });
+      const switched = /^\/storage\/volumes\/([^/]+)\/quotas$/.exec(path);
+      if (switched && method === "PUT") {
+        const on = route.request().postDataJSON().enabled;
+        quotas[decodeURIComponent(switched[1])] = on ? "pending" : "off";
+        return route.fulfill({ status: 204 });
+      }
       if (path === "/storage")
         return json({
           volumes: [
-            { ...volume, level: "raid5" },
-            { ...volume, name: "Fast", filesystem: "btrfs" },
-            { ...volume, name: "Safe" },
+            { ...volume, level: "raid5", shareQuotas: quotas.Data },
+            { ...volume, name: "Fast", filesystem: "btrfs", shareQuotas: quotas.Fast },
+            { ...volume, name: "Safe", shareQuotas: quotas.Safe },
           ],
           disks: [
             {
@@ -609,6 +617,7 @@ export function fixtureFactory(browser, errors) {
           return route.fulfill({ status: 204 });
         }
         if (data.failSave) return fail();
+        (data.shareSaves ??= []).push(route.request().postDataJSON());
         return route.fulfill({ status: 204 });
       }
       if (path === "/docker") {

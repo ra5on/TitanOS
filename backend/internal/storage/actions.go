@@ -333,7 +333,7 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 		return err
 	}
-	options := "noatime"
+	options := "noatime" + m.quotaMountOptions(ctx, volume)
 	if volume.Filesystem == "btrfs" {
 		options += ",subvolid=5"
 		if degraded {

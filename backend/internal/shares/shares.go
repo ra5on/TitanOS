@@ -60,6 +60,11 @@ type Share struct {
 	Browseable  bool        `json:"browseable"`
 	Recycle     Recycle     `json:"recycle"`
 	TimeMachine TimeMachine `json:"timeMachine"`
+	// Quota is the most the share may hold in bytes; 0 for no limit. It is
+	// enforced only on volumes with share quotas (ext4, XFS).
+	Quota uint64 `json:"quota,omitempty"`
+	// QuotaID is the project of the share's files, kept once given.
+	QuotaID uint32 `json:"quotaID,omitempty"`
 }
 
 // NFS exports the share to the listed hosts or networks. NFS knows no
@@ -158,6 +163,9 @@ type Manager struct {
 	loaded  bool
 	applied [sha256.Size]byte
 	kick    chan struct{}
+
+	quota       quotaState
+	quotaKernel quotaKernel
 }
 
 // NewManager returns a manager working on the real system.
@@ -276,6 +284,9 @@ func normalize(share *Share, volumes, users []string) error {
 	if share.Recycle.Days < 1 || share.Recycle.Days > 3650 || share.TimeMachine.SizeGB < 0 {
 		return ErrInvalidOption
 	}
+	if share.Quota != 0 && (share.Quota < MinQuota || share.Quota > MaxQuota) {
+		return ErrInvalidOption
+	}
 	return nil
 }
 
@@ -291,6 +302,10 @@ func (m *Manager) Create(share Share, volumes, users []string) error {
 	}
 	if slices.ContainsFunc(m.shares, func(s Share) bool { return sameName(s.Name, share.Name) }) {
 		return ErrExists
+	}
+	share.QuotaID = 0
+	if err := m.assignQuotaID(&share); err != nil {
+		return err
 	}
 	return m.save(append(slices.Clone(m.shares), share))
 }
@@ -310,6 +325,10 @@ func (m *Manager) Update(name string, share Share, volumes, users []string) erro
 	if m.shares[i].Volume != share.Volume {
 		return ErrVolumeChange
 	}
+	share.QuotaID = m.shares[i].QuotaID
+	if err := m.assignQuotaID(&share); err != nil {
+		return err
+	}
 	shares := slices.Clone(m.shares)
 	shares[i] = share
 	return m.save(shares)
@@ -323,7 +342,16 @@ func (m *Manager) Delete(name string) error {
 	if i < 0 {
 		return ErrNotFound
 	}
-	return m.save(slices.Delete(slices.Clone(m.shares), i, i+1))
+	gone := m.shares[i]
+	if err := m.save(slices.Delete(slices.Clone(m.shares), i, i+1)); err != nil {
+		return err
+	}
+	if gone.QuotaID != 0 {
+		m.quota.mu.Lock()
+		m.quota.released = append(m.quota.released, releasedQuota{gone.Volume, gone.QuotaID})
+		m.quota.mu.Unlock()
+	}
+	return nil
 }
 
 // ForgetUser takes a deleted account out of all shares.
@@ -365,6 +393,8 @@ type State struct {
 	// Mounted are the volumes that are mounted. Shares on other volumes are
 	// not offered: their folder would be an empty one in RAM.
 	Mounted []string
+	// Quotas tells about project quotas on a volume; nil leaves them alone.
+	Quotas VolumeQuotas
 }
 
 // Run keeps the system in line with the configuration until ctx is done.
@@ -382,8 +412,12 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 			if err := m.Load(); err == nil {
 				slog.Info("shares read from /config")
 			}
-		} else if err := m.Apply(ctx, state()); err != nil {
-			slog.Error("apply shares", "err", err)
+		} else {
+			current := state()
+			if err := m.Apply(ctx, current); err != nil {
+				slog.Error("apply shares", "err", err)
+			}
+			m.ApplyQuotas(current.Quotas, current.Mounted)
 		}
 		select {
 		case <-ctx.Done():

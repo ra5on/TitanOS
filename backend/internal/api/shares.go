@@ -14,6 +14,8 @@ type shareResponse struct {
 	Path string `json:"path"`
 	// Available is false while the share's volume is not mounted.
 	Available bool `json:"available"`
+	// QuotaStatus is set for shares with a limit.
+	QuotaStatus *shares.QuotaStatus `json:"quotaStatus,omitempty"`
 }
 
 var shareErrors = []struct {
@@ -67,7 +69,11 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 			share.Access = map[string]string{user.Name: share.Access[user.Name]}
 			share.NFS.Clients = nil
 		}
-		list = append(list, shareResponse{Share: share, Path: s.opts.Shares.Path(share), Available: slices.Contains(mounted, share.Volume)})
+		item := shareResponse{Share: share, Path: s.opts.Shares.Path(share), Available: slices.Contains(mounted, share.Volume)}
+		if st, ok := s.opts.Shares.Quota(share.Name); ok {
+			item.QuotaStatus = &st
+		}
+		list = append(list, item)
 	}
 	writeJSON(w, http.StatusOK, list)
 }

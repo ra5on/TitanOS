@@ -296,7 +296,7 @@ func run(opts options) error {
 		slog.Warn("shares not readable from /config", "err", err)
 	}
 	go folders.Run(ctx, func() shares.State {
-		return shares.State{Users: users.List(), Mounted: volumes.Mounted()}
+		return shares.State{Users: users.List(), Mounted: volumes.Mounted(), Quotas: volumes.ShareQuotas}
 	})
 
 	// Runs the Docker engine while its volume is mounted.
