@@ -589,13 +589,6 @@ func (m *Manager) finish(job *PurgeJob, err error, done func(PurgeJob)) {
 	} else {
 		job.Phase = "done"
 	}
-	m.purge.results = append(m.purge.results, *job)
-	if len(m.purge.results) > keepPurges {
-		m.purge.results = m.purge.results[len(m.purge.results)-keepPurges:]
-	}
-	if m.purge.running == job {
-		m.purge.running = nil
-	}
 	result := *job
 	m.purge.mu.Unlock()
 	if err != nil {
@@ -603,9 +596,20 @@ func (m *Manager) finish(job *PurgeJob, err error, done func(PurgeJob)) {
 	} else {
 		slog.Info("share data deleted", "share", result.Share, "volume", result.Volume, "files", result.Files, "bytes", result.Bytes, "by", result.By)
 	}
+	// The job stays running until its notification and activity entry are
+	// out, so nothing that waits for PurgeBusy misses them.
 	if done != nil {
 		done(result)
 	}
+	m.purge.mu.Lock()
+	m.purge.results = append(m.purge.results, result)
+	if len(m.purge.results) > keepPurges {
+		m.purge.results = m.purge.results[len(m.purge.results)-keepPurges:]
+	}
+	if m.purge.running == job {
+		m.purge.running = nil
+	}
+	m.purge.mu.Unlock()
 }
 
 func (m *Manager) runPurge(job *PurgeJob, share Share, req PurgeRequest) {
