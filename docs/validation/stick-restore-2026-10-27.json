@@ -57,7 +57,7 @@
     }
   ],
   "date": "2026-10-27",
-  "runner": "scripts/smoke-stick-restore.py",
+  "runner": "backend/tests/stick_restore_qemu.py",
   "acceleration": "tcg (no KVM on the test host)",
   "scope": "Published titanos-0.28.0.zip (SHA-256 04b6d805…648f): automatic configuration backup on the volume, fresh stick from the same ZIP, restore from the setup page, restart, login with the old owner.",
   "findings": [

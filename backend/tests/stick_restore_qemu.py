@@ -12,7 +12,7 @@ Disposable UEFI QEMU media only. For each case:
      volume is mounted, share and host name are back, and no update result
      is reported that never happened.
 
-Usage: smoke-stick-restore.py out/titanos-0.28.0.zip [--case btrfs|ext4|ext4-degraded] [--tcg]
+Usage: backend/tests/stick_restore_qemu.py out/titanos-0.28.0.zip [--case btrfs|ext4|ext4-degraded] [--tcg]
 """
 import argparse
 import http.cookiejar
@@ -30,7 +30,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).with_name('smoke-release.py'))
+spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).resolve().parents[2] / 'scripts' / 'smoke-release.py')
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 

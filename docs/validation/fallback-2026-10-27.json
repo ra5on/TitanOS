@@ -1,0 +1,67 @@
+{
+  "source": "https://github.com/ra5on/TitanOS",
+  "channel": "stable",
+  "from": "0.25.0",
+  "to": "0.28.0",
+  "toBase": "0.26.0",
+  "mirror": true,
+  "mode": "fallback after three failed starts",
+  "started": "2026-10-27T17:43:37Z",
+  "archiveSHA256": "dfd59840a3ecfd47450b3c1a489808500519ac82a99d11e327082c504fa41c38",
+  "oldZIPSigningKey": "titanos-release-1.pub",
+  "runnerSHA256": "03c1db33c62906da3f01e555500442947a4bc35af92f2d62cbb3d04de9e93b83",
+  "checks": [
+    {
+      "boot": 1,
+      "version": "0.25.0",
+      "slot": "a",
+      "account": "owner preserved",
+      "certificate": "preserved",
+      "confirmed": true
+    },
+    {
+      "boot": "fail-1",
+      "slot": "b",
+      "entry": "titanos-b+3.conf",
+      "result": "failed and restarted by itself"
+    },
+    {
+      "boot": "fail-2",
+      "slot": "b",
+      "entry": "titanos-b+2-1.conf",
+      "result": "failed and restarted by itself"
+    },
+    {
+      "boot": "fail-3",
+      "slot": "b",
+      "entry": "titanos-b+1-2.conf",
+      "result": "failed and restarted by itself"
+    },
+    {
+      "boot": 5,
+      "version": "0.25.0",
+      "slot": "a",
+      "account": "owner preserved",
+      "certificate": "preserved",
+      "confirmed": true
+    },
+    {
+      "boot": 5,
+      "fallback": "old slot running again",
+      "notification": "update_failed",
+      "entries": [
+        "titanos-a.conf",
+        "titanos-b+0-3.conf"
+      ]
+    }
+  ],
+  "acceleration": "tcg",
+  "completed": "2026-10-27T18:01:34Z",
+  "result": "passed",
+  "date": "2026-10-27",
+  "limits": [
+    "QEMU with TCG, no real hardware.",
+    "Release files served from a local mirror of the published, signed v0.28.0 assets because the test VM cannot reach GitHub in this environment; signature and hash checks unchanged.",
+    "Slot B was broken by masking titand on its kernel command line; a kernel that does not boot at all was not tested."
+  ]
+}
