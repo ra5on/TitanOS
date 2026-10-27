@@ -88,6 +88,41 @@ export function fixtureFactory(browser, errors) {
     self: false,
     ...extra,
   });
+  const netbirdPeer = (id, name, online, extra = {}) => ({
+    id,
+    name,
+    fqdn: name + ".netbird.cloud",
+    ipv4: "100.92.1." + (10 + name.length),
+    ipv6: "",
+    online,
+    lastSeen: null,
+    networks: [],
+    self: false,
+    ...extra,
+  });
+  // GET /plugins/netbird of a fresh installation: active, not registered.
+  const netbirdStatus = () => ({
+    settings: {
+      managementUrl: "",
+      acceptRoutes: false,
+      serveRoutes: false,
+      acceptDNS: false,
+    },
+    setupKeySet: false,
+    connect: false,
+    active: true,
+    readOnly: false,
+    state: "NeedsLogin",
+    version: "0.81.5",
+    fqdn: "",
+    ips: [],
+    management: "",
+    managementConnected: false,
+    signalConnected: false,
+    peersConnected: 0,
+    peersTotal: 0,
+    health: [],
+  });
   async function context(
     role = "owner",
     theme = "graphit",
@@ -196,6 +231,31 @@ export function fixtureFactory(browser, errors) {
           }),
         ],
       },
+      // Shaped like GET /plugins/netbird/peers; null = plugin not active.
+      netbirdPeers: {
+        active: true,
+        state: "Connected",
+        updated: time,
+        peers: [
+          netbirdPeer("dGl0YW4tc2VsZg==", "titan", true, {
+            self: true,
+            networks: ["192.168.10.0/24"],
+          }),
+          netbirdPeer("YWxleC1sYXB0b3A=", "alex-laptop", true, {
+            connection: "p2p",
+            lastSeen: time,
+          }),
+          netbirdPeer("b2ZmaWNlLXJvdXRlcg==", "office-router", true, {
+            connection: "relayed",
+            lastSeen: time,
+            networks: ["10.20.0.0/16"],
+          }),
+          netbirdPeer("cGhvbmU=", "phone", false),
+        ],
+      },
+      // GET /plugins/netbird; the handlers below change it like titand.
+      netbird: netbirdStatus(),
+      netbirdCalls: [],
     };
     await ctx.route("**/api/v1/**", async (route) => {
       const url = new URL(route.request().url()),
@@ -552,6 +612,49 @@ export function fixtureFactory(browser, errors) {
         data.plugins = data.pluginsAfterUpdate ?? data.plugins;
         return json(data.plugins);
       }
+      if (path === "/plugins/netbird/peers")
+        return json(
+          data.netbirdPeers ?? {
+            active: false,
+            state: "inactive",
+            peers: [],
+            updated: time,
+          },
+        );
+      if (path.startsWith("/plugins/netbird") && method !== "GET") {
+        const body = route.request().postDataJSON();
+        data.netbirdCalls.push([method, path, body]);
+        const nb = data.netbird;
+        if (path === "/plugins/netbird/setup-key")
+          nb.setupKeySet = body.setupKey !== "";
+        else if (path === "/plugins/netbird") {
+          nb.settings = body;
+          nb.pendingUntil = "2026-10-23T16:02:00Z";
+        } else if (path.endsWith("/connect")) {
+          if (!nb.setupKeySet)
+            return route.fulfill({
+              status: 409,
+              json: {
+                error: { code: "netbird_setup_key", message: "fixture" },
+              },
+            });
+          Object.assign(nb, {
+            connect: true,
+            state: "Connected",
+            fqdn: "titan.netbird.cloud",
+            ips: ["100.92.10.5"],
+            management: "https://api.netbird.io:443",
+            managementConnected: true,
+            peersConnected: 2,
+            peersTotal: 3,
+          });
+        } else if (path.endsWith("/disconnect"))
+          Object.assign(nb, { connect: false, state: "Idle" });
+        else if (path.endsWith("/confirm") || path.endsWith("/undo"))
+          delete nb.pendingUntil;
+        return json(nb);
+      }
+      if (path === "/plugins/netbird") return json(data.netbird);
       if (path === "/plugins/tailscale/devices")
         return json(
           data.tailnet ?? {

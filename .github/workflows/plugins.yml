@@ -2,7 +2,7 @@ name: Plugins
 
 # Builds the official plugins against a freshly built image and boots that
 # image with them: NVIDIA (open modules, NAS build SDK), Intel GPU Tools,
-# Coral USB and Tailscale. Only for pull requests that touch plugins; image
+# Coral USB, Tailscale and NetBird. Only for pull requests that touch plugins; image
 # changes are rehearsed by release.yml, and a tag builds and tests both.
 # Disposable signing key only, nothing is published.
 
@@ -22,8 +22,13 @@ on:
       - 'scripts/tools-plugin-stage.py'
       - 'scripts/make-tailscale-plugin.py'
       - 'scripts/tailscale_smoke.py'
+      - 'scripts/make-netbird-plugin.py'
+      - 'scripts/netbird-notices.py'
+      - 'scripts/netbird_smoke.py'
       - 'scripts/cdi_smoke.py'
       - 'backend/internal/plugins/**'
+      - 'backend/internal/netbird/**'
+      - 'backend/internal/api/netbird.go'
       - 'backend/internal/api/plugins.go'
       - 'web/src/routes/plugins/**'
       - '.github/actions/image-tools/**'
@@ -77,7 +82,7 @@ jobs:
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
-      - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
+      - name: Build Intel GPU Tools, Coral USB, Tailscale and NetBird plugins
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh "$VERSION"
           sudo chown -R "$(id -u):$(id -g)" out/plugins
@@ -92,7 +97,7 @@ jobs:
           python3 scripts/verify-release.py out/release build/mkosi.extra/usr/share/titanos/update-keys
           rm "$RUNNER_TEMP/rehearsal.key"
 
-      - name: NVIDIA and Tailscale plugins in UEFI QEMU
+      - name: NVIDIA, Tailscale and NetBird plugins in UEFI QEMU
         run: python3 scripts/smoke-release.py "out/release/titanos-$VERSION.zip" --plugins out/release --timeout 420
 
       - name: Intel GPU Tools, Coral USB and container devices in UEFI QEMU

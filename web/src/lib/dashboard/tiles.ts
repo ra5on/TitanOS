@@ -25,6 +25,7 @@ export const TILE_IDS = [
 	'vms',
 	'shares',
 	'tailscale',
+	'netbird',
 ] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type SourceId = StaticTileId | `vm:${string}` | `container:${string}` | `app:${string}`;
@@ -50,10 +51,11 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	vms: { title: 'dashboard.virtualMachines', minW: 3, minH: 2 },
 	shares: { title: 'nav.shares', minW: 3, minH: 2 },
 	tailscale: { title: 'tile.tailscale', minW: 3, minH: 2 },
+	netbird: { title: 'tile.netbird', minW: 3, minH: 2 },
 };
 
 /** Tiles only owners and administrators can add; their data needs those rights. */
-export const ADMIN_TILES: readonly StaticTileId[] = ['docker', 'vms', 'tailscale'];
+export const ADMIN_TILES: readonly StaticTileId[] = ['docker', 'vms', 'tailscale', 'netbird'];
 
 export function workload(
 	id: TileId,

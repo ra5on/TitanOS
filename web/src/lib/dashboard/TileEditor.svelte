@@ -6,6 +6,7 @@
 	import { sourceId } from './tiles.ts';
 	import { SYSTEM_FIELDS } from './system-fields.ts';
 	import { TAILSCALE_FIELDS } from './tailscale.ts';
+	import { NETBIRD_FIELDS } from './netbird.ts';
 	export type EditPart = 'tile' | 'heading' | 'value' | 'labels';
 	let {
 		id,
@@ -403,6 +404,54 @@
 					/>{t('dashboard.showLabels')}</label
 				>
 			{/if}
+			{#if source === 'netbird'}
+				<fieldset>
+					<legend>{t('netbird.fields')}</legend>
+					{#each [...settings.netbirdFields, ...NETBIRD_FIELDS.filter((f) => !settings.netbirdFields.includes(f))] as field, index (field)}
+						<div class="part-order">
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={settings.netbirdFields.includes(field)}
+									onchange={() =>
+										onchange(
+											'netbirdFields',
+											settings.netbirdFields.includes(field)
+												? settings.netbirdFields.filter((f) => f !== field)
+												: [...settings.netbirdFields, field],
+										)}
+								/>{t(`netbird.field.${field}`)}</label
+							>
+							{#if settings.netbirdFields.includes(field)}<button
+									class="btn"
+									aria-label={`${t(`netbird.field.${field}`)}: ${t('dashboard.editor.moveUp')}`}
+									disabled={index === 0}
+									onclick={() => {
+										const fields = [...settings.netbirdFields];
+										[fields[index], fields[index - 1]] = [fields[index - 1], fields[index]];
+										onchange('netbirdFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								><button
+									class="btn"
+									aria-label={`${t(`netbird.field.${field}`)}: ${t('dashboard.editor.moveDown')}`}
+									disabled={index === settings.netbirdFields.length - 1}
+									onclick={() => {
+										const fields = [...settings.netbirdFields];
+										[fields[index], fields[index + 1]] = [fields[index + 1], fields[index]];
+										onchange('netbirdFields', fields);
+									}}><Icon name="arrowUp" size={13} /></button
+								>{/if}
+						</div>
+					{/each}
+				</fieldset>
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={settings.showLabels}
+						onchange={(e) => onchange('showLabels', e.currentTarget.checked)}
+					/>{t('dashboard.showLabels')}</label
+				>
+			{/if}
 			{#if source === 'network'}
 				<label
 					>{t('dashboard.interface')}<select
@@ -460,8 +509,8 @@
 						)}</label
 					>{/each}
 			{/if}
-			{#if ['docker', 'vms', 'shares', 'disks', 'volumes', 'temperatures', 'tailscale'].includes(source)}
-				{#if ['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures', 'tailscale'].includes(source)}<label
+			{#if ['docker', 'vms', 'shares', 'disks', 'volumes', 'temperatures', 'tailscale', 'netbird'].includes(source)}
+				{#if ['docker', 'vms', 'shares', 'volumes', 'disks', 'temperatures', 'tailscale', 'netbird'].includes(source)}<label
 						>{t('dashboard.editor.list')}<select
 							class="field"
 							value={settings.list}
@@ -480,13 +529,18 @@
 							onchange={(e) => onchange('rows', Number(e.currentTarget.value))}
 						/></label
 					>{/if}
-				{#if source === 'docker' || source === 'vms' || source === 'tailscale'}<label class="check"
+				{#if source === 'docker' || source === 'vms' || source === 'tailscale' || source === 'netbird'}<label
+						class="check"
 						><input
 							type="checkbox"
 							checked={settings.runningOnly}
 							onchange={(e) => onchange('runningOnly', e.currentTarget.checked)}
 						/>{t(
-							source === 'tailscale' ? 'tailscale.onlineOnly' : 'dashboard.editor.runningOnly',
+							source === 'tailscale'
+								? 'tailscale.onlineOnly'
+								: source === 'netbird'
+									? 'netbird.onlineOnly'
+									: 'dashboard.editor.runningOnly',
 						)}</label
 					>{/if}
 				{#if items.length || settings.items !== null}<label class="check"

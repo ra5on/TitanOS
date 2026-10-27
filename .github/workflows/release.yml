@@ -150,7 +150,7 @@ jobs:
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
-      - name: Build Intel GPU Tools, Coral USB and Tailscale plugins
+      - name: Build Intel GPU Tools, Coral USB, Tailscale and NetBird plugins
         if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
