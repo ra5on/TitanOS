@@ -236,7 +236,9 @@ export function taskItems(data: Operations): TaskItem[] {
 					? 'done'
 					: job.result === 'cancelled'
 						? 'cancelled'
-						: 'failed',
+						: job.result === 'interrupted'
+							? 'paused'
+							: 'failed',
 			detail: job.result || job.phase,
 			progress: job.percent,
 			href: '/tools',

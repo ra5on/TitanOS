@@ -27,3 +27,7 @@ test('unloaded backup states and an unavailable enabled maintenance volume stay 
  assert.equal(tasks.filter(needsAttention).length,2);
  assert.equal(tasks.find(t=>t.id==='backup-unknown:unknown').state,'unknown');
 });
+test('a disk test that a restart stopped waits instead of counting as failed',()=>{
+	const items=taskItems({diskTests:[{disk:'sda',phase:'read',result:'interrupted',percent:40}]});
+	assert.equal(items.find(i=>i.id==='disk:sda').state,'paused');
+});
