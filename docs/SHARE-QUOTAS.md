@@ -19,10 +19,15 @@ Netzlaufwerks.
   - **XFS** wird dann mit `prjquota` eingebunden und zählt beim Einbinden selbst
     nach; das kann bei vielen Dateien einige Zeit dauern.
   - **ext4** erhält vor dem Einbinden einmalig die Funktionen `quota` und
-    `project` (`tune2fs -O quota,project -Q prjquota`). tune2fs verweigert das
-    bei einem nicht sauber ausgehängten Dateisystem; das Volume wird dann trotzdem
-    eingebunden, die Kontingente bleiben ausstehend und der Grund steht beim Volume.
-- Fehler beim Vorbereiten verhindern **nie** das Einbinden eines Volumes.
+    `project` (`tune2fs -O quota,project -Q prjquota`) und wird ebenfalls mit
+    `prjquota` eingebunden; ohne diese Option zählt ext4 nur mit, stoppt aber
+    keine Schreibzugriffe. tune2fs verweigert das bei einem nicht sauber
+    ausgehängten Dateisystem; das Volume wird dann trotzdem eingebunden, die
+    Kontingente bleiben ausstehend und der Grund steht beim Volume.
+- Fehler beim Vorbereiten verhindern **nie** das Einbinden eines Volumes:
+  Scheitert das Einbinden mit `prjquota`, bindet TitanOS ohne ein.
+- „Aktiv“ zeigt die Seite nur, wenn der Kernel die Grenzen tatsächlich
+  durchsetzt (`Q_XGETQSTATV`), nicht schon, wenn er nur mitzählt.
 
 ## Grenze setzen
 

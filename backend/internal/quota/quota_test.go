@@ -15,8 +15,8 @@ func TestKernelStructSizes(t *testing.T) {
 	if s := unsafe.Sizeof(fsxattr{}); s != 28 {
 		t.Fatalf("fsxattr is %d bytes", s)
 	}
-	if qcmd(qXSetQLim) != 0x580402 || qcmd(qGetInfo) != 0x80000502 {
-		t.Fatalf("%#x %#x", qcmd(qXSetQLim), qcmd(qGetInfo))
+	if qcmd(qXSetQLim) != 0x580402 || qcmd(qXGetQStatV) != 0x580802 {
+		t.Fatalf("%#x %#x", qcmd(qXSetQLim), qcmd(qXGetQStatV))
 	}
 }
 

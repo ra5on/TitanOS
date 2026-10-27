@@ -5,6 +5,7 @@
 package quota
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,9 +23,12 @@ var ErrInactive = errors.New("project quotas are not active on this volume")
 const (
 	prjQuota    = 2
 	subCmdShift = 8
-	qGetInfo    = 0x800005
 	qXGetQuota  = 'X'<<8 + 3
 	qXSetQLim   = 'X'<<8 + 4
+	qXGetQStatV = 'X'<<8 + 8
+
+	fsQStatVVersion = 1
+	fsQuotaPDQEnfd  = 1 << 5
 
 	fsDQuotVersion = 1
 	fsProjQuota    = 2
@@ -104,10 +108,13 @@ func Active(mountPoint string) (bool, error) {
 		return false, err
 	}
 	defer dir.Close()
-	var info [24]byte
-	switch err := quotactl(dir, qGetInfo, 0, unsafe.Pointer(&info)); {
+	// struct fs_quota_statv; counting alone (ext4 without prjquota) does
+	// not stop writes, so only enforcement counts as active.
+	var state [160]byte
+	state[0] = fsQStatVVersion
+	switch err := quotactl(dir, qXGetQStatV, 0, unsafe.Pointer(&state)); {
 	case err == nil:
-		return true, nil
+		return binary.NativeEndian.Uint16(state[2:4])&fsQuotaPDQEnfd != 0, nil
 	case errors.Is(err, unix.ESRCH), errors.Is(err, unix.ENOSYS), errors.Is(err, unix.EINVAL), errors.Is(err, unix.ENOTSUP):
 		return false, nil
 	default:

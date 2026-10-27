@@ -45,7 +45,7 @@ func TestShareQuotasSwitchAndMountOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	tune := slices.Index(runner.commands, "tune2fs -O quota,project -Q prjquota UUID=u2")
-	mount := slices.IndexFunc(runner.commands, func(c string) bool { return strings.HasPrefix(c, "mount -t ext4 -o noatime ") })
+	mount := slices.IndexFunc(runner.commands, func(c string) bool { return strings.HasPrefix(c, "mount -t ext4 -o noatime,prjquota ") })
 	if tune < 0 || mount < tune {
 		t.Fatalf("tune2fs must run before the mount: %q", runner.commands)
 	}
@@ -55,6 +55,9 @@ func TestShareQuotasSwitchAndMountOptions(t *testing.T) {
 	runner.mounted = map[string]bool{}
 	if err := m.mountWith(ctx, ext, false); err != nil {
 		t.Fatalf("mount blocked by quotas: %v", err)
+	}
+	if last := runner.commands[len(runner.commands)-1]; !strings.HasPrefix(last, "mount -t ext4 -o noatime UUID=u2 ") {
+		t.Fatalf("prjquota without the feature: %q", last)
 	}
 	m.quotaProbe = func(string) (bool, error) { return false, nil }
 	var v Volume
@@ -81,5 +84,21 @@ func TestExt4ProjectQuotaFeatureDetection(t *testing.T) {
 	}
 	if ext4HasProjectQuota("Filesystem features:      has_journal quota extent\n") || ext4HasProjectQuota("") {
 		t.Fatal("missing project accepted")
+	}
+}
+
+func TestQuotaMountOptionNeverBlocksTheMount(t *testing.T) {
+	m, runner, _ := newTestManager(t)
+	m.volumes = []VolumeConfig{{Name: "xfsvol", Filesystem: "xfs", FilesystemUUID: "u1", ShareQuotas: true}}
+	runner.fail = "mount -t xfs -o noatime,prjquota "
+	xfs, _ := m.find("xfsvol")
+	if err := m.mountWith(context.Background(), xfs, false); err != nil {
+		t.Fatalf("mount blocked by quotas: %v", err)
+	}
+	if last := runner.commands[len(runner.commands)-1]; !strings.HasPrefix(last, "mount -t xfs -o noatime UUID=u1 ") {
+		t.Fatalf("%q", runner.commands)
+	}
+	if m.quotaProblems["xfsvol"] == "" {
+		t.Fatal("problem not recorded")
 	}
 }

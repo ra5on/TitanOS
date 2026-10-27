@@ -53,7 +53,8 @@ func (m *Manager) quotaMountOptions(ctx context.Context, volume VolumeConfig) st
 		device := "UUID=" + volume.FilesystemUUID
 		out, err := m.runner.Run(ctx, "", "tune2fs", "-l", device)
 		if err == nil && ext4HasProjectQuota(out) {
-			return ""
+			// The quota feature only counts; prjquota makes ext4 enforce.
+			return ",prjquota"
 		}
 		// Adds the quota inodes and counts what is already there. tune2fs
 		// refuses a file system that was not cleanly unmounted; it is then
@@ -61,7 +62,9 @@ func (m *Manager) quotaMountOptions(ctx context.Context, volume VolumeConfig) st
 		if _, err := m.runner.Run(ctx, "", "tune2fs", "-O", "quota,project", "-Q", "prjquota", device); err != nil {
 			slog.Warn("project quotas not switched on", "volume", volume.Name, "err", err)
 			m.setQuotaProblem(volume.Name, err.Error())
+			return ""
 		}
+		return ",prjquota"
 	}
 	return ""
 }
