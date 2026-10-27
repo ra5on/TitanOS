@@ -40,16 +40,21 @@ const (
 	manifestName = "titanos-backup.json"
 	format       = 1
 
-	// Limits for what is taken in when restoring. /config is small: a
-	// backup far beyond this is not one.
-	maxArchive = 64 << 20
-	maxContent = 256 << 20
-	maxFiles   = 20000
-
 	defaultKeep = 14
 	// settle is how long the configuration must have been left alone
 	// before a change is saved: changes tend to come in groups.
 	settle = 5 * time.Minute
+	// noVolumeAfter is how long saving may wait for its volume before
+	// someone is told: the stick may die meanwhile.
+	noVolumeAfter = 24 * time.Hour
+)
+
+// Limits for what is taken in when restoring. /config is small: a backup far
+// beyond this is not one. A backup is not made beyond them either.
+var (
+	maxArchive int64 = 64 << 20
+	maxContent int64 = 256 << 20
+	maxFiles         = 20000
 )
 
 var (
@@ -137,6 +142,10 @@ type Manager struct {
 	Disabled bool
 	// OnResult is told how each attempt to save went (nil for success).
 	OnResult func(volume string, err error)
+	// OnNoVolume is told once when nothing could be saved for noVolumeAfter
+	// because the volume to save to is not mounted; volume is the chosen
+	// one, empty for "the first mounted".
+	OnNoVolume func(volume string)
 
 	// work serializes everything that touches backups.
 	work sync.Mutex
@@ -367,6 +376,15 @@ func (m *Manager) create(volume string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A backup that restoring would refuse is no backup: say so now, not
+	// when the stick has died.
+	var content int64
+	for _, f := range files {
+		content += f.info.Size()
+	}
+	if len(files) > maxFiles || content > maxContent {
+		return "", fmt.Errorf("%w: %d files, %d MiB", ErrTooLarge, len(files), content>>20)
+	}
 	dir := filepath.Join(m.mountRoot, volume, folder)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -423,6 +441,11 @@ func (m *Manager) create(volume string) (string, error) {
 	}
 	if err := zip.Close(); err != nil {
 		return "", err
+	}
+	if info, err := part.Stat(); err != nil {
+		return "", err
+	} else if info.Size() > maxArchive {
+		return "", fmt.Errorf("%w: archive of %d MiB", ErrTooLarge, info.Size()>>20)
 	}
 	short := hex.EncodeToString(digest.Sum(nil))[:12]
 
@@ -482,6 +505,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		retryAfter   time.Time
 		planned      *time.Time
 		previous     Settings
+		noVolume     outage
 	)
 	for tick := 0; ; tick++ {
 		select {
@@ -514,16 +538,42 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		switch {
 		case errors.Is(err, ErrNoVolume):
 			// Nothing to save to yet; the next minute may bring a volume.
+			// One that does not come is worth a word: backups stopped.
+			if noVolume.long(m.now()) && m.OnNoVolume != nil {
+				slog.Warn("configuration not saved for a day: no volume", "volume", settings.Volume)
+				m.OnNoVolume(settings.Volume)
+			}
 		case err != nil:
+			noVolume = outage{}
 			slog.Warn("configuration not saved", "err", err)
 			retryAfter = m.now().Add(time.Hour)
 		default:
+			noVolume = outage{}
 			saved, done, changedSince = changes, true, time.Time{}
 			if scheduled {
 				planned = nextScheduled(settings, m.now())
 			}
 		}
 	}
+}
+
+// outage remembers since when saving found no volume.
+type outage struct {
+	since time.Time
+	told  bool
+}
+
+// long notes another attempt without a volume and reports, once, that it has
+// lasted noVolumeAfter.
+func (o *outage) long(now time.Time) bool {
+	if o.since.IsZero() {
+		o.since = now
+	}
+	if o.told || now.Sub(o.since) < noVolumeAfter {
+		return false
+	}
+	o.told = true
+	return true
 }
 
 // --- restoring -------------------------------------------------------------

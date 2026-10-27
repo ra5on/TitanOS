@@ -10,6 +10,10 @@
 
 	let overview = $state<Overview | null>(null);
 	let error = $state('');
+	// A failed look is its own message: the next one that works clears it,
+	// without hiding what went wrong with a change.
+	let loadError = $state('');
+	let removeError = $state('');
 	let busy = $state(false);
 	let open = $state(false);
 	let volume = $state('');
@@ -25,24 +29,32 @@
 		try {
 			overview = await api.get<Overview>('/backups/target');
 			volume ||= overview.target.volume || overview.volumes?.[0] || '';
+			loadError = '';
 		} catch (err) {
-			error = fail(err);
+			loadError = fail(err);
 		}
 	}
 
+	// Looked at once, then again only while the panel is open.
 	$effect(() => {
+		load();
+	});
+	$effect(() => {
+		if (!open) return;
 		load();
 		const timer = setInterval(() => !document.hidden && load(), 20_000);
 		return () => clearInterval(timer);
 	});
 
-	async function configure(enabled: boolean) {
+	async function configure(enabled: boolean, box: HTMLInputElement) {
 		busy = true;
 		error = '';
 		try {
 			overview = await api.put<Overview>('/backups/target', { enabled, volume });
 		} catch (err) {
 			error = fail(err);
+			// The setting did not change; neither does the box.
+			box.checked = !enabled;
 		}
 		busy = false;
 	}
@@ -64,13 +76,14 @@
 	}
 
 	async function remove() {
-		if (!removing) return;
+		if (!removing || busy) return;
 		busy = true;
+		removeError = '';
 		try {
 			overview = await api.delete<Overview>(`/backups/target/sources/${encodeURIComponent(removing.name)}${deleteData ? '?deleteData=true' : ''}`);
 			removing = null;
 		} catch (err) {
-			error = fail(err);
+			removeError = fail(err);
 		}
 		busy = false;
 	}
@@ -93,16 +106,18 @@
 	</div>
 	<p class="muted">{t('backup.targetDesc')}</p>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if loadError}<p class="notice-error" role="alert">{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></p>{/if}
 	{#if open && overview}
 		{@const target = overview.target}
 		<div class="row">
-			<label class="check"><input type="checkbox" checked={target.enabled} disabled={busy || !volume} onchange={(event) => configure(event.currentTarget.checked)} /><span>{t('backup.targetOn')}</span></label>
+			<label class="check"><input type="checkbox" checked={target.enabled} disabled={busy || !volume} onchange={(event) => configure(event.currentTarget.checked, event.currentTarget)} /><span>{t('backup.targetOn')}</span></label>
 			<label class="narrow"><span>{t('backup.targetVolume')}</span>
 				<select class="field" bind:value={volume} disabled={target.enabled || busy}>
 					{#each overview.volumes ?? [] as name (name)}<option value={name}>{name}</option>{/each}
 				</select>
 			</label>
 		</div>
+		{#if !overview.volumes?.length}<p class="notice-warn">{t('backup.targetNoVolume')}</p>{/if}
 		{#if target.enabled}
 			{#if target.problem}
 				<p class="notice-warn">{t(`backup.targetProblem.${target.problem}` as 'backup.targetProblem.tailscale')}</p>
@@ -115,7 +130,7 @@
 			<div class="source">
 				<span class="mono name">{source.name}</span>
 				<span class="muted">{source.last ? t('backup.targetLast', { time: formatDateTime(new Date(source.last)) }) : t('backup.targetNever')} · {formatBytes(source.bytes)}</span>
-				<button type="button" class="btn small" onclick={() => ((removing = source), (deleteData = false))}>{t('backup.targetRemove')}</button>
+				<button type="button" class="btn small" aria-label={t('backup.removeNamed', { name: source.name })} onclick={() => ((removing = source), (deleteData = false), (removeError = ''))}>{t('backup.targetRemove')}</button>
 			</div>
 		{:else}
 			<p class="muted">{t('backup.targetNoSources')}</p>
@@ -141,12 +156,13 @@
 {/if}
 
 {#if removing}
-	<Dialog title={t('backup.targetRemoveTitle', { name: removing.name })} onclose={() => (removing = null)}>
+	<Dialog title={t('backup.targetRemoveTitle', { name: removing.name })} locked={busy} onclose={() => (removing = null)}>
 		<p>{t('backup.targetRemoveText')}</p>
 		<label class="check"><input type="checkbox" bind:checked={deleteData} /><span>{t('backup.targetDeleteData')}</span></label>
 		{#if deleteData}<p class="notice-error">{t('backup.targetDeleteWarn', { size: formatBytes(removing.bytes) })}</p>{/if}
+		{#if removeError}<p class="notice-error" role="alert">{removeError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (removing = null)}>{t('common.cancel')}</button>
 			<button type="button" class="btn {deleteData ? 'btn-danger' : 'btn-warn'}" disabled={busy} onclick={remove}>{t('backup.targetRemove')}</button>
 		</div>
 	</Dialog>

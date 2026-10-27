@@ -386,13 +386,13 @@ func New(opts Options) *Server {
 
 	// Backups of shares. They hold everyone's files: administrators only.
 	mux.HandleFunc("POST /api/v1/backups/smb/discover", s.requireAdmin(s.handleSMBDiscover))
-	mux.HandleFunc("PUT /api/v1/backups/smb", s.requireAdmin(s.handleSMBSave))
+	mux.HandleFunc("PUT /api/v1/backups/smb", s.requireAdmin(s.backupJobOr("smb", s.handleSMBSave)))
 	mux.HandleFunc("DELETE /api/v1/backups/smb/{target}", s.requireAdmin(s.handleSMBDelete))
 	mux.HandleFunc("GET /api/v1/backups/progress", s.requireAdmin(s.handleUSBBackupProgress))
 	mux.HandleFunc("GET /api/v1/backups", s.requireAdmin(s.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", s.requireAdmin(s.handleBackupCreate))
 	mux.HandleFunc("GET /api/v1/backups/target", s.requireAdmin(s.handleBackupTarget))
-	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.handleBackupTargetSet))
+	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.backupJobOr("target", s.handleBackupTargetSet)))
 	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
 	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
 	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))

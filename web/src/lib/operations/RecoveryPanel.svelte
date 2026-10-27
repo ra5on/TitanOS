@@ -20,11 +20,20 @@
 	let clones = $state<Clone[]>([]),
 		app = $state<Application | null>(null),
 		active = $state(false),
+		// The application backup and the VM copies are looked at apart: one
+		// volume whose copies cannot be read does not hide the other review.
+		appError = $state(''),
+		cloneError = $state(''),
 		error = $state(''),
+		journalMissing = $state(false),
 		busy = $state(false),
-		review = $state<{ kind: 'app' | 'clone'; id: string; volume: string; action: string } | null>(
-			null,
-		),
+		review = $state<{
+			kind: 'app' | 'clone';
+			id: string;
+			volume: string;
+			action: string;
+			vm?: string;
+		} | null>(null),
 		restart = $state(false);
 	async function load(details = false) {
 		try {
@@ -32,9 +41,16 @@
 				operation: Application | null;
 				active: boolean;
 				error?: string;
+				journalMissing?: boolean;
 			}>('/backups/application-recovery' + (details ? '?details=1' : ''));
 			app = recovery.operation;
 			active = recovery.active;
+			journalMissing = !!recovery.journalMissing;
+			appError = recovery.error ?? '';
+		} catch (e) {
+			appError = operationError(e, t);
+		}
+		try {
 			const storage = await api.get<StorageStatus>('/storage');
 			const responses = await Promise.allSettled(
 				storage.volumes
@@ -43,10 +59,9 @@
 			);
 			clones = responses.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 			const failed = responses.find((r) => r.status === 'rejected');
-			if (failed?.status === 'rejected') throw failed.reason;
-			error = recovery.error ?? '';
+			cloneError = failed?.status === 'rejected' ? operationError(failed.reason, t) : '';
 		} catch (e) {
-			error = operationError(e, t);
+			cloneError = operationError(e, t);
 		}
 	}
 	onMount(() => {
@@ -58,7 +73,8 @@
 	});
 	async function openApplication() {
 		await load(true);
-		if (error || !app) return;
+		if (appError || !app) return;
+		error = '';
 		review = { kind: 'app', id: app.id, volume: app.volume, action: 'review' };
 		restart = false;
 	}
@@ -71,7 +87,10 @@
 		error = '';
 		try {
 			if (review.kind === 'app')
-				await api.post('/backups/application-recovery', { confirm, restart });
+				await api.post('/backups/application-recovery', {
+					confirm,
+					restart: restart && !journalMissing,
+				});
 			else
 				await api.post(`/vm-clones/${encodeURIComponent(review.volume)}/${review.id}`, {
 					confirm,
@@ -87,12 +106,13 @@
 	}
 </script>
 
-{#if app || clones.length || error}<section class="tile recovery">
+{#if app || clones.length || appError || cloneError}<section class="tile recovery">
 		<div class="head">
 			<h2 class="tile-title">{t('ops.review')}</h2>
 			<button class="btn" disabled={busy} onclick={() => load()}>{t('ops.refresh')}</button>
 		</div>
-		{#if error}<p class="notice-warn">{error}</p>{/if}
+		{#if appError}<p class="notice-warn">{appError}</p>{/if}
+		{#if cloneError}<p class="notice-warn">{cloneError}</p>{/if}
 		{#if app}<div class="row">
 				<strong>{t('ops.appRecover')} · {app.job}</strong><span class="mono">{app.id}</span><button
 					class="btn"
@@ -109,20 +129,49 @@
 						class="btn"
 						disabled={busy}
 						onclick={() => {
-							review = { kind: 'clone', id: op.id, volume: op.vm.volume, action: 'finish' };
+							error = '';
+							review = {
+								kind: 'clone',
+								id: op.id,
+								volume: op.vm.volume,
+								action: 'finish',
+								vm: op.vm.name,
+							};
 						}}>{t('ops.finishClone')}</button
 					>{/if}{#if ['copying', 'verified', 'publishing', 'conflict'].includes(op.phase)}<button
 						class="btn"
 						disabled={busy}
 						onclick={() => {
-							review = { kind: 'clone', id: op.id, volume: op.vm.volume, action: 'discard' };
+							error = '';
+							review = {
+								kind: 'clone',
+								id: op.id,
+								volume: op.vm.volume,
+								action: 'discard',
+								vm: op.vm.name,
+							};
 						}}>{t('ops.discardClone')}</button
 					>{/if}
 			</div>{/each}
 	</section>{/if}
-{#if review}<Dialog title={t('ops.review')} locked={busy} onclose={() => (review = null)}
-		><p>{t('ops.reviewHint')}</p>
-		{#if review.kind === 'app'}<ul>
+{#if review}<Dialog
+		title={t(
+			review.kind === 'app'
+				? 'ops.appRecover'
+				: review.action === 'discard'
+					? 'ops.discardClone'
+					: 'ops.finishClone',
+		)}
+		locked={busy}
+		onclose={() => (review = null)}
+		>{#if review.kind === 'clone'}<p>
+				{t(review.action === 'discard' ? 'ops.discardCloneHint' : 'ops.finishCloneHint', {
+					vm: review.vm ?? '',
+				})}
+			</p>{:else if journalMissing}<p class="notice-warn">{t('ops.appJournalMissing')}</p>{:else}<p>
+				{t('ops.reviewHint')}
+			</p>{/if}
+		{#if review.kind === 'app' && !journalMissing}<ul>
 				{#each app?.members ?? [] as member (`${member.kind}:${member.name}`)}<li>
 						<strong>{member.name}</strong> · {member.kind} · {t(
 							member.running ? 'tasks.wasRunning' : 'tasks.wasStopped',
@@ -139,13 +188,24 @@
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={() => (review = null)}
 				>{t('common.cancel')}</button
-			><button class="btn btn-warn" disabled={busy} onclick={act}
+			><button
+				class="btn {review.kind === 'clone'
+					? review.action === 'discard'
+						? 'btn-danger'
+						: 'btn-primary'
+					: 'btn-warn'}"
+				disabled={busy}
+				onclick={act}
 				>{t(
-					review.kind === 'app' && !restart
-						? 'ops.ackOnly'
+					review.kind === 'app'
+						? journalMissing
+							? 'ops.forgetPointer'
+							: restart
+								? 'ops.review'
+								: 'ops.ackOnly'
 						: review.action === 'discard'
 							? 'ops.discardClone'
-							: 'ops.review',
+							: 'ops.finishClone',
 				)}</button
 			>
 		</div></Dialog

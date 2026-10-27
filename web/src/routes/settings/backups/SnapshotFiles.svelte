@@ -15,18 +15,24 @@
 	let cut = $state(false);
 	let loading = $state(false);
 	let error = $state('');
+	// Only the answer to the latest request counts: an older one belongs to
+	// another folder or another saved state.
+	let request = 0;
 
 	async function open(folder: string, offset = 0) {
+		const mine = ++request;
 		loading = true;
 		error = '';
 		try {
 			const res = await api.get<{ entries: Entry[]; total: number; cut: boolean; nextOffset?: number }>(`/backups/${encodeURIComponent(job)}/snapshots/${encodeURIComponent(snapshot)}/files?path=${encodeURIComponent(folder)}&offset=${offset}`);
+			if (mine !== request) return;
 			path = folder;
 			entries = offset ? [...entries, ...res.entries] : res.entries;
 			total = res.total;
 			cut = res.cut;
 			next = res.nextOffset ?? null;
 		} catch (err) {
+			if (mine !== request) return;
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
 		loading = false;
@@ -35,6 +41,8 @@
 	$effect(() => {
 		snapshot;
 		selected = [];
+		entries = [];
+		path = '';
 		open(start || '/');
 	});
 
@@ -53,16 +61,16 @@
 	<ul>
 		{#each entries as entry (entry.path)}
 			<li>
-				<label class="check"><input type="checkbox" checked={selected.includes(entry.path)} onchange={() => toggle(entry.path)} /></label>
+				<label class="check"><input type="checkbox" checked={selected.includes(entry.path)} onchange={() => toggle(entry.path)} aria-label={entry.name} /></label>
 				{#if entry.type === 'dir'}
-					<button type="button" class="link" onclick={() => open(entry.path)}>{entry.name}/</button>
+					<button type="button" class="link" disabled={loading} onclick={() => open(entry.path)}>{entry.name}/</button>
 				{:else}
 					<span>{entry.name}</span>
 				{/if}
 				<span class="muted mono size">{entry.type === 'dir' ? '' : formatBytes(entry.size)}</span>
 			</li>
 		{:else}
-			{#if !loading}<li class="muted">{t('backup.filesEmpty')}</li>{/if}
+			<li class="muted" role="status">{loading ? t('common.loading') : t('backup.filesEmpty')}</li>
 		{/each}
 	</ul>
 	{#if next !== null}<button type="button" class="btn" disabled={loading} onclick={() => open(path, next ?? 0)}>{t('backup.filesMore', { shown: entries.length, total })}</button>{/if}

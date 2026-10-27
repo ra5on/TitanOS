@@ -67,3 +67,39 @@ func TestPostgresExportUsesImageSuperuser(t *testing.T) {
 		}
 	}
 }
+
+// A pointer restored from a stick backup that was taken during a run names an
+// operation whose journal is gone. It must not fence application changes for
+// good: it can be forgotten, but nothing is restarted blindly.
+func TestPointerWithoutJournalCanBeForgotten(t *testing.T) {
+	store := config.Open(t.TempDir())
+	op := Operation{ID: "0123456789abcdef01234567", Volume: "data", Job: "daily"}
+	if err := store.WriteJSON(pointerFile, op); err != nil {
+		t.Fatal(err)
+	}
+	mnt := t.TempDir()
+	os.MkdirAll(filepath.Join(mnt, "data"), 0o755)
+	m := &Manager{Store: store, MountRoot: mnt, Mounted: func() []string { return []string{"data"} }}
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := m.Review(); !errors.Is(err, ErrJournalMissing) {
+		t.Fatalf("review: %v", err)
+	}
+	if err := m.Recover(context.Background(), op.ID, true); !errors.Is(err, ErrJournalMissing) {
+		t.Fatalf("restart without a journal: %v", err)
+	}
+	if !m.Busy() {
+		t.Fatal("a refused recovery released the fence")
+	}
+	if err := m.Recover(context.Background(), op.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if m.Busy() {
+		t.Fatal("the forgotten pointer still fences application changes")
+	}
+	var stored *Operation
+	if err := store.ReadJSON(pointerFile, &stored); err != nil || stored != nil {
+		t.Fatalf("pointer on the stick: %v %v", stored, err)
+	}
+}

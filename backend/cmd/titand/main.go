@@ -531,6 +531,9 @@ func run(opts options) error {
 		}
 		backupFailed = err != nil
 	}
+	stickBackup.OnNoVolume = func(volume string) {
+		notifier.Notify(notify.Warning, "config_backup_no_volume", volume)
+	}
 	go stickBackup.Run(ctx, volumes.Mounted)
 
 	// SSH is off unless switched on; then for administrators with a key.
@@ -641,6 +644,10 @@ func run(opts options) error {
 	backups.OnOverdue = func(job string) {
 		notifier.Notify(notify.Warning, "backup_overdue", job)
 	}
+	backups.OnIncomplete = func(job string) {
+		notifier.Notify(notify.Warning, "backup_incomplete", job)
+	}
+	backups.Timezone = settings.CurrentTimezone
 	appBackups := &appbackup.Manager{Store: store, Docker: containers, VMs: machines, Mounted: volumes.Mounted, MountRoot: "/mnt", Disabled: opts.dev}
 	if err := appBackups.Load(); err != nil {
 		slog.Error("application backup recovery unavailable", "err", err)

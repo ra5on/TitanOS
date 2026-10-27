@@ -351,3 +351,43 @@ func TestBtrfsRecoveryScansMirrorOnceWithoutLogReplay(t *testing.T) {
 		t.Fatal(commands)
 	}
 }
+
+// Saving that keeps finding no volume is told once a day has passed, not on
+// every attempt and not again until a backup worked.
+func TestMissingVolumeIsToldOnce(t *testing.T) {
+	start := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var o outage
+	if o.long(start) || o.long(start.Add(23*time.Hour)) {
+		t.Fatal("told before a day passed")
+	}
+	if !o.long(start.Add(24 * time.Hour)) {
+		t.Fatal("not told after a day")
+	}
+	if o.long(start.Add(48 * time.Hour)) {
+		t.Fatal("told twice")
+	}
+}
+
+// A configuration that restoring would refuse is not saved as if it were a
+// backup; the failure is reported now.
+func TestBackupBeyondTheRestoreLimitsFails(t *testing.T) {
+	e := newEnv(t)
+	old := maxFiles
+	maxFiles = 1
+	defer func() { maxFiles = old }()
+	var reported error
+	e.m.OnResult = func(volume string, err error) { reported = err }
+	if _, err := e.m.Create([]string{"tank"}); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("too many files: %v", err)
+	}
+	if !errors.Is(reported, ErrTooLarge) {
+		t.Errorf("not reported: %v", reported)
+	}
+	if backups := e.m.List([]string{"tank"}); len(backups) != 0 {
+		t.Errorf("a backup that cannot be restored was kept: %v", backups)
+	}
+	maxFiles = old
+	if _, err := e.m.Create([]string{"tank"}); err != nil {
+		t.Fatal(err)
+	}
+}
