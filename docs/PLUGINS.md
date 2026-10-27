@@ -11,6 +11,7 @@ zum Kernel seiner Systembasis:
 | `intel-gpu-tools` | Debian Intel GPU Tools, unter anderem `intel_gpu_top`, zusätzliche Bibliotheken und deren Lizenz-/Quellverzeichnis | Intel-GPU mit funktionierendem Kernel-Treiber; einzelne Tools benötigen bestimmte Generationen |
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
 | `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |
+| `netbird` | NetBird-Client (nur BSD-3-Clause-Client) mit Setup-Key-Anmeldung, eigenem Management-Server, Routen und DNS, siehe [NetBird](NETBIRD.md) | NetBird-Konto oder eigener NetBird-Server und Setup-Key |
 
 Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Releases.
 TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
@@ -36,7 +37,7 @@ echter Hardware.
 Beim Öffnen der Seite wird der Katalog abgerufen und für zehn Minuten im RAM
 zwischengespeichert. **Katalog und Freigaben aktualisieren** erzwingt einen neuen
 Versuch; die regelmäßige Statusanzeige ruft GitHub nicht ab. Während ein Abbild
-heruntergeladen wird, bleiben Plugin-Seite, Tailscale-Einstellungen und
+heruntergeladen wird, bleiben Plugin-Seite, Tailscale-/NetBird-Einstellungen und
 VM-Starts bedienbar; nur die eigentliche Installation danach wird kurz gesperrt
 und prüft vorher erneut Systemupdate-Sperre, Plugin-Volume und Treiberwechsel.
 Dasselbe Plugin wird nicht zweimal gleichzeitig heruntergeladen. Bei Verbindungsproblemen

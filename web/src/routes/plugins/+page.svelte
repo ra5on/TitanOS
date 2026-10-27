@@ -3,6 +3,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
+	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -46,8 +47,9 @@
 	// Likewise the update dialog: plugin and the version it was opened for.
 	let updating = $state<{ name: string; title: string; path: string; version: string; official: boolean } | null>(null);
 	let tailnetPending = $state(false);
+	let netbirdPending = $state(false);
 
-	const locked = $derived(busy || tailnetPending || !!status?.driverUpdate?.pending);
+	const locked = $derived(busy || tailnetPending || netbirdPending || !!status?.driverUpdate?.pending);
 	const plugins = $derived(status?.plugins ?? []);
 	const current = $derived(plugins.find((plugin) => plugin.name === picked) ?? plugins[0]);
 	const volumes = $derived((storage.status?.volumes ?? []).filter((entry) => entry.mounted).map((entry) => entry.name));
@@ -265,6 +267,7 @@
 						</div>
 					{/if}
 					{#if current.name === 'tailscale'}<TailscaleSettings onpending={(value) => tailnetPending = value} />{/if}
+					{#if current.name === 'netbird'}<NetbirdSettings onpending={(value) => netbirdPending = value} />{/if}
 					{#if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate}<DriverUpdates status={status.driverUpdate} {busy} action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))} />{/if}
 					{#if current.enabled && current.problem === 'activation'}<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}>{t('plugins.retry')}</button>{/if}
 				{/if}

@@ -68,6 +68,8 @@ var apiRoutes = []apiRoute{
 	{"DELETE", "/plugins/{name}", assistant.AreaSystem, assistant.LevelDestroy, "Remove a plugin."},
 	{"GET", "/plugins/tailscale", assistant.AreaSystem, "", "Tailscale settings and state."},
 	{"PUT", "/plugins/tailscale", assistant.AreaSystem, assistant.LevelDanger, "Change the Tailscale settings (body as GET › settings)."},
+	{"GET", "/plugins/netbird", assistant.AreaSystem, "", "NetBird settings and state; the setup key only as set or not."},
+	{"PUT", "/plugins/netbird", assistant.AreaSystem, assistant.LevelDanger, "Change the NetBird settings (body as GET › settings; the setup key is not part of it). Runs 2 minutes on trial; the person confirms it in the web UI or it goes back."},
 	{"GET", "/about", assistant.AreaSystem, "", "Version, kernel and licenses."},
 	// updates
 	{"GET", "/update", assistant.AreaUpdates, "", "Update state, channel, slots and an update that was found."},

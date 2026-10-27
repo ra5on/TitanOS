@@ -1,0 +1,93 @@
+{
+  "peers": {
+    "total": 4,
+    "connected": 2,
+    "details": [
+      {
+        "fqdn": "alex-laptop.netbird.cloud",
+        "netbirdIp": "100.92.41.7",
+        "publicKey": "Lp0tY2dhbGFjdGljc2Vh7l2Yk3n0aXNhZG1pbmJvb2s=",
+        "status": "Connected",
+        "lastStatusUpdate": "2026-10-26T10:58:12.401236+01:00",
+        "connectionType": "P2P",
+        "iceCandidateType": { "local": "host", "remote": "srflx" },
+        "iceCandidateEndpoint": { "local": "192.168.10.20:51820", "remote": "203.0.113.24:51820" },
+        "relayAddress": "",
+        "lastWireguardHandshake": "2026-10-26T10:59:47.118000+01:00",
+        "transferReceived": 182736,
+        "transferSent": 99120,
+        "latency": 21500000,
+        "quantumResistance": false,
+        "networks": []
+      },
+      {
+        "fqdn": "office-router.netbird.cloud",
+        "netbirdIp": "100.92.200.1",
+        "publicKey": "b2ZmaWNlcm91dGVyLXB1YmxpYy1rZXktZXhhbXBsZT0=",
+        "status": "Connected",
+        "lastStatusUpdate": "2026-10-26T10:41:03.002000+01:00",
+        "connectionType": "Relayed",
+        "iceCandidateType": { "local": "", "remote": "" },
+        "iceCandidateEndpoint": { "local": "", "remote": "" },
+        "relayAddress": "rels://streamline-de-fra1-0.relay.netbird.io:443",
+        "lastWireguardHandshake": "2026-10-26T10:59:30+01:00",
+        "transferReceived": 5120,
+        "transferSent": 4096,
+        "latency": 48000000,
+        "quantumResistance": false,
+        "networks": ["10.20.0.0/16"]
+      },
+      {
+        "fqdn": "phone.netbird.cloud",
+        "netbirdIp": "100.92.17.33",
+        "publicKey": "cGhvbmUtcHVibGljLWtleS1leGFtcGxlLXZhbHVlMDE=",
+        "status": "Idle",
+        "lastStatusUpdate": "2026-10-26T09:12:44+01:00",
+        "connectionType": "-",
+        "iceCandidateType": { "local": "", "remote": "" },
+        "iceCandidateEndpoint": { "local": "", "remote": "" },
+        "relayAddress": "",
+        "lastWireguardHandshake": "0001-01-01T00:00:00Z",
+        "transferReceived": 0,
+        "transferSent": 0,
+        "latency": 0,
+        "quantumResistance": false,
+        "networks": null
+      },
+      {
+        "fqdn": "bad.netbird.cloud",
+        "netbirdIp": "100.92.17.34",
+        "publicKey": "not a key\n",
+        "status": "Idle",
+        "lastStatusUpdate": "2026-10-26T09:12:44+01:00",
+        "connectionType": "-",
+        "lastWireguardHandshake": "0001-01-01T00:00:00Z",
+        "networks": null
+      }
+    ]
+  },
+  "cliVersion": "0.81.5",
+  "daemonVersion": "0.81.5",
+  "daemonStatus": "Connected",
+  "management": { "url": "https://api.netbird.io:443", "connected": true, "error": "" },
+  "signal": { "url": "https://signal.netbird.io:443", "connected": true, "error": "" },
+  "relays": {
+    "total": 1,
+    "available": 1,
+    "details": [{ "uri": "rels://streamline-de-fra1-0.relay.netbird.io:443", "available": true, "error": "" }]
+  },
+  "netbirdIp": "100.92.10.5/16",
+  "netbirdIpv6": "fd4e:4269:7264:0:a5c::1/64",
+  "publicKey": "dGl0YW4tbmFzLXB1YmxpYy1rZXktZXhhbXBsZS12YWw=",
+  "usesKernelInterface": true,
+  "wireguardPort": 51820,
+  "fqdn": "titan.netbird.cloud",
+  "quantumResistance": false,
+  "quantumResistancePermissive": false,
+  "networks": ["192.168.10.0/24"],
+  "dnsServers": [],
+  "events": [],
+  "lazyConnectionEnabled": true,
+  "profileName": "default",
+  "sshServer": { "enabled": false, "sessions": [] }
+}

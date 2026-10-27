@@ -152,7 +152,7 @@ without_plugins = os.environ["WITHOUT_PLUGINS"] == "1"
 for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin.json")):
     plugin = json.loads(path.read_text())
     name = plugin["name"]
-    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale"} or path.name != name + ".plugin.json":
+    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird"} or path.name != name + ".plugin.json":
         raise ValueError("unrecognized official plugin")
     if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
         raise ValueError("plugin kernel mismatch: " + name)

@@ -88,6 +88,41 @@ export function fixtureFactory(browser, errors) {
     self: false,
     ...extra,
   });
+  const netbirdPeer = (id, name, online, extra = {}) => ({
+    id,
+    name,
+    fqdn: name + ".netbird.cloud",
+    ipv4: "100.92.1." + (10 + name.length),
+    ipv6: "",
+    online,
+    lastSeen: null,
+    networks: [],
+    self: false,
+    ...extra,
+  });
+  // GET /plugins/netbird of a fresh installation: active, not registered.
+  const netbirdStatus = () => ({
+    settings: {
+      managementUrl: "",
+      acceptRoutes: false,
+      serveRoutes: false,
+      acceptDNS: false,
+    },
+    setupKeySet: false,
+    connect: false,
+    active: true,
+    readOnly: false,
+    state: "NeedsLogin",
+    version: "0.81.5",
+    fqdn: "",
+    ips: [],
+    management: "",
+    managementConnected: false,
+    signalConnected: false,
+    peersConnected: 0,
+    peersTotal: 0,
+    health: [],
+  });
   async function context(
     role = "owner",
     theme = "graphit",
@@ -143,6 +178,39 @@ export function fixtureFactory(browser, errors) {
       operations: null,
       recovery: null,
       exports: 0,
+      // Settings › Updates, shaped like GET /update. checkEvery is missing
+      // as in a file from before the field; the routes below apply the
+      // server's rules for it.
+      update: {
+        version: "0.24.0",
+        release: true,
+        slots: [],
+        settings: {
+          channel: "stable",
+          autoInstall: true,
+          installTime: "03:30",
+        },
+        canVerify: true,
+        available: null,
+        lastCheck: time,
+        nextCheck: "2026-10-24T16:00:00Z",
+        checkError: "",
+        progress: {
+          phase: "",
+          file: "",
+          percent: 0,
+          speedBytesPerSecond: 0,
+          error: "",
+        },
+        pending: null,
+        canRollback: false,
+        unconfirmed: false,
+        base: "0.24.0",
+        kind: "",
+        app: { current: "", previous: "", trial: false, canRollback: false },
+      },
+      updateChecks: 0,
+      updatePuts: [],
       // Shaped like GET /plugins/tailscale/devices; null = plugin not active.
       tailnet: {
         active: true,
@@ -163,6 +231,31 @@ export function fixtureFactory(browser, errors) {
           }),
         ],
       },
+      // Shaped like GET /plugins/netbird/peers; null = plugin not active.
+      netbirdPeers: {
+        active: true,
+        state: "Connected",
+        updated: time,
+        peers: [
+          netbirdPeer("dGl0YW4tc2VsZg==", "titan", true, {
+            self: true,
+            networks: ["192.168.10.0/24"],
+          }),
+          netbirdPeer("YWxleC1sYXB0b3A=", "alex-laptop", true, {
+            connection: "p2p",
+            lastSeen: time,
+          }),
+          netbirdPeer("b2ZmaWNlLXJvdXRlcg==", "office-router", true, {
+            connection: "relayed",
+            lastSeen: time,
+            networks: ["10.20.0.0/16"],
+          }),
+          netbirdPeer("cGhvbmU=", "phone", false),
+        ],
+      },
+      // GET /plugins/netbird; the handlers below change it like titand.
+      netbird: netbirdStatus(),
+      netbirdCalls: [],
     };
     await ctx.route("**/api/v1/**", async (route) => {
       const url = new URL(route.request().url()),
@@ -519,6 +612,49 @@ export function fixtureFactory(browser, errors) {
         data.plugins = data.pluginsAfterUpdate ?? data.plugins;
         return json(data.plugins);
       }
+      if (path === "/plugins/netbird/peers")
+        return json(
+          data.netbirdPeers ?? {
+            active: false,
+            state: "inactive",
+            peers: [],
+            updated: time,
+          },
+        );
+      if (path.startsWith("/plugins/netbird") && method !== "GET") {
+        const body = route.request().postDataJSON();
+        data.netbirdCalls.push([method, path, body]);
+        const nb = data.netbird;
+        if (path === "/plugins/netbird/setup-key")
+          nb.setupKeySet = body.setupKey !== "";
+        else if (path === "/plugins/netbird") {
+          nb.settings = body;
+          nb.pendingUntil = "2026-10-23T16:02:00Z";
+        } else if (path.endsWith("/connect")) {
+          if (!nb.setupKeySet)
+            return route.fulfill({
+              status: 409,
+              json: {
+                error: { code: "netbird_setup_key", message: "fixture" },
+              },
+            });
+          Object.assign(nb, {
+            connect: true,
+            state: "Connected",
+            fqdn: "titan.netbird.cloud",
+            ips: ["100.92.10.5"],
+            management: "https://api.netbird.io:443",
+            managementConnected: true,
+            peersConnected: 2,
+            peersTotal: 3,
+          });
+        } else if (path.endsWith("/disconnect"))
+          Object.assign(nb, { connect: false, state: "Idle" });
+        else if (path.endsWith("/confirm") || path.endsWith("/undo"))
+          delete nb.pendingUntil;
+        return json(nb);
+      }
+      if (path === "/plugins/netbird") return json(data.netbird);
       if (path === "/plugins/tailscale/devices")
         return json(
           data.tailnet ?? {
@@ -539,13 +675,55 @@ export function fixtureFactory(browser, errors) {
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
       if (path === "/assistant") return json({ available: false });
+      // Downloads from a link: tests set data.urlProbe, data.urlConflict
+      // (answer the first start with file_exists) and read data.urlDownloads.
+      if (path === "/files/url-download/probe" && method === "POST") {
+        (data.urlProbes ??= []).push(route.request().postDataJSON());
+        return json(
+          data.urlProbe ?? {
+            name: "",
+            size: -1,
+            exists: false,
+            free: 6e11,
+          },
+        );
+      }
+      if (path === "/files/url-download" && method === "POST") {
+        const body = route.request().postDataJSON();
+        (data.urlDownloads ??= []).push(body);
+        if (data.urlConflict && body.conflict !== "rename")
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: "file_exists", message: "fixture" } },
+          });
+        const job = {
+          id: "download-" + data.urlDownloads.length,
+          operation: "download",
+          move: false,
+          state: "running",
+          from: "https://example.test/isos/debian.iso",
+          to: body.root,
+          dir: body.dir,
+          names: [body.name],
+          files: 1,
+          done: 0,
+          bytes: 4e9,
+          copied: 1e9,
+          current: "",
+          error: "",
+          retryable: false,
+        };
+        (data.fileJobs ??= []).push(job);
+        return route.fulfill({ status: 202, json: job });
+      }
+      if (path === "/files/jobs") return json(data.fileJobs ?? []);
       if (path === "/files/roots")
         return json(
           data.shares.map((s) => ({
             id: "share/" + s.name,
             name: s.name,
             kind: "share",
-            writable: true,
+            writable: !(data.readOnlyShares ?? []).includes(s.name),
             recycle: true,
             totalBytes: 1e12,
             freeBytes: 6e11,
@@ -639,6 +817,39 @@ export function fixtureFactory(browser, errors) {
         });
       if (path === "/update/progress")
         return json({ progress: { phase: "idle" } });
+      if (path === "/update" && method === "GET") return json(data.update);
+      if (path === "/update/settings" && method === "PUT") {
+        const body = route.request().postDataJSON();
+        data.updatePuts.push(body);
+        const every = body.checkEvery ?? 0;
+        const valid =
+          every === 0 ||
+          (every === -1 && !body.autoInstall) ||
+          (every >= 60 && every <= 30 * 24 * 60);
+        if (!valid)
+          return route.fulfill({
+            status: 400,
+            json: {
+              error: { code: "invalid_update_settings", message: "invalid" },
+            },
+          });
+        const settings = { ...body, checkEvery: every === 24 * 60 ? 0 : every };
+        if (!settings.checkEvery) delete settings.checkEvery;
+        const next = new Date(
+          Date.parse(data.update.lastCheck) +
+            (every > 0 ? every : 24 * 60) * 60e3,
+        ).toISOString();
+        data.update = {
+          ...data.update,
+          settings,
+          nextCheck: every === -1 ? null : next,
+        };
+        return json(data.update);
+      }
+      if (path === "/update/check" && method === "POST") {
+        data.updateChecks++;
+        return json(data.update);
+      }
       return json({});
     });
     const page = await ctx.newPage();

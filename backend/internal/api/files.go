@@ -44,6 +44,9 @@ var fileErrors = []struct {
 	{files.ErrNoUpload, http.StatusNotFound, "upload_not_found"},
 	{files.ErrJobBusy, http.StatusConflict, "file_job_busy"},
 	{files.ErrNoJob, http.StatusNotFound, "job_not_found"},
+	{files.ErrDownloadLimit, http.StatusTooManyRequests, "download_limit"},
+	{files.ErrBlocked, http.StatusForbidden, "download_blocked"},
+	{files.ErrHashMismatch, http.StatusConflict, "download_hash_mismatch"},
 }
 
 func writeFileError(w http.ResponseWriter, err error) {
@@ -585,6 +588,20 @@ func (s *Server) handleFileJobRetry(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r)
 	for _, job := range s.opts.Files.Jobs(user.Name) {
+		if job.ID == r.PathValue("id") && job.Operation == "download" {
+			// A download has no source root; its target is checked again.
+			dst, ok := s.fileRoot(w, r, job.To)
+			if !ok {
+				return
+			}
+			result, err := s.opts.Files.RetryDownload(user.Name, job.ID, dst)
+			if err != nil {
+				writeFileError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusAccepted, result)
+			return
+		}
 		if job.ID == r.PathValue("id") {
 			src, ok := s.fileRoot(w, r, job.From)
 			if !ok {

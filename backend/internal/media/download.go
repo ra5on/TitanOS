@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
 )
 
 func hashFile(ctx context.Context, f *os.File) (string, error) {
@@ -102,27 +103,10 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 	}
 	// Only checkpointed bytes are known durable across power loss. Ignore an
 	// unjournaled tail even if its inode size was already committed by the FS.
-	offset := min(st.Size(), j.Bytes)
-	validator := j.ETag
-	if strings.HasPrefix(validator, "W/") {
-		validator = ""
-	}
-	if validator == "" {
-		validator = j.LastModified
-	}
-	if offset > 0 && (validator == "" || j.Bytes == 0) {
-		offset = 0
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, j.URL, nil)
-	if err != nil {
-		return ErrInvalid
-	}
+	resume := httpfetch.Resume{Offset: min(st.Size(), j.Bytes), ETag: j.ETag, LastModified: j.LastModified}
+	header := http.Header{}
 	if j.URL == VirtIOURL {
-		req.Header.Set("User-Agent", "TitanOS VM media importer")
-	}
-	if offset > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
-		req.Header.Set("If-Range", validator)
+		header.Set("User-Agent", "TitanOS VM media importer")
 	}
 	client := *m.Client
 	if j.URL == VirtIOURL {
@@ -145,31 +129,18 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 			return nil
 		}
 	}
-	res, err := client.Do(req)
+	if _, ok := httpfetch.ValidURL(j.URL); !ok {
+		return ErrInvalid
+	}
+	res, err := httpfetch.Open(ctx, &client, j.URL, header, resume)
+	if errors.Is(err, httpfetch.ErrChanged) {
+		return fmt.Errorf("%w; retry the import", err)
+	}
 	if err != nil {
-		if u, ok := err.(*url.Error); ok {
-			return fmt.Errorf("download failed: %w", u.Err)
-		}
-		return fmt.Errorf("download failed")
+		return err
 	}
 	defer res.Body.Close()
-	total := res.ContentLength
-	switch res.StatusCode {
-	case http.StatusOK:
-		offset = 0
-	case http.StatusPartialContent:
-		var start, end int64
-		var count int
-		count, err = fmt.Sscanf(res.Header.Get("Content-Range"), "bytes %d-%d/%d", &start, &end, &total)
-		if err != nil || count != 3 || start != offset || end < start || total <= end || (res.ContentLength >= 0 && res.ContentLength != end-start+1) {
-			return fmt.Errorf("invalid HTTP resume range")
-		}
-		if offset > 0 && ((j.ETag != "" && res.Header.Get("ETag") != j.ETag) || (j.ETag == "" && j.LastModified != "" && res.Header.Get("Last-Modified") != j.LastModified)) {
-			return fmt.Errorf("source changed during resume; retry the import")
-		}
-	default:
-		return fmt.Errorf("download returned HTTP %d", res.StatusCode)
-	}
+	offset, total := res.Offset, res.Total
 	if err = file.Truncate(offset); err != nil {
 		return err
 	}
@@ -185,8 +156,8 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 		j.SourceInode = inode
 		j.Bytes = offset
 		j.Total = max(0, total)
-		j.ETag = res.Header.Get("ETag")
-		j.LastModified = res.Header.Get("Last-Modified")
+		j.ETag = res.ETag
+		j.LastModified = res.LastModified
 	})
 	if err = m.save(e, root); err != nil {
 		return err

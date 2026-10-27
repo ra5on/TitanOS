@@ -184,7 +184,7 @@ class ReleaseTest(unittest.TestCase):
 
     def test_multiple_plugins_signed_and_verified(self):
         plugins = self.repo / "out/plugins"
-        for name in ["intel-gpu-tools", "coral-usb", "tailscale"]:
+        for name in ["intel-gpu-tools", "coral-usb", "tailscale", "netbird"]:
             data = name.encode()
             (plugins / (name + ".raw")).write_bytes(data)
             (plugins / (name + ".plugin.json")).write_text(json.dumps(dict(
@@ -193,7 +193,7 @@ class ReleaseTest(unittest.TestCase):
         self.pack()
         self.sign()
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
-        self.assertEqual(len(json.loads((self.release / "manifest.json").read_text())["plugins"]), 4)
+        self.assertEqual(len(json.loads((self.release / "manifest.json").read_text())["plugins"]), 5)
         (self.release / "intel-gpu-tools.plugin.json.minisig").unlink()
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)

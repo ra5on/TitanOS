@@ -24,6 +24,7 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { temperatureSelection } from './temperatures.ts';
 	import type { TailnetDevices } from './tailscale.ts';
+	import type { NetbirdPeers } from './netbird.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
@@ -64,6 +65,7 @@
 	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
 	import AssistantTile from './tiles/AssistantTile.svelte';
 	import TailscaleTile from './tiles/TailscaleTile.svelte';
+	import NetbirdTile from './tiles/NetbirdTile.svelte';
 	const CONTENT: Partial<Record<StaticTileId, Component<{ options?: TileOptions }>>> = {
 		volumes: VolumesTile,
 		disks: DisksTile,
@@ -213,7 +215,9 @@
 		shares = $state<Share[]>([]),
 		tailnet = $state<TailnetStatus | null>(null),
 		tailnetDevices = $state<TailnetDevices | null>(null),
-		tailnetDevicesError = $state('');
+		tailnetDevicesError = $state(''),
+		netbirdPeers = $state<NetbirdPeers | null>(null),
+		netbirdPeersError = $state('');
 	let containersReady = $state(false),
 		vmsReady = $state(false),
 		sharesReady = $state(false),
@@ -301,6 +305,38 @@
 				}
 			} catch (e) {
 				if (!disposed) tailnetDevicesError = fail(e);
+			} finally {
+				inflight = false;
+			}
+		}
+		void refresh();
+		const timer = setInterval(refresh, 15000);
+		return () => {
+			disposed = true;
+			clearInterval(timer);
+		};
+	});
+	// NetBird peers only while a NetBird tile is shown or being edited;
+	// the server answers from a short RAM cache.
+	const watchesNetbird = $derived(
+		admin && (editing || shown.some((p) => sourceId(p.id) === 'netbird')),
+	);
+	$effect(() => {
+		if (!watchesNetbird) return;
+		void refreshSerial;
+		let disposed = false,
+			inflight = false;
+		async function refresh() {
+			if (inflight || document.hidden) return;
+			inflight = true;
+			try {
+				const value = await api.get<NetbirdPeers>('/plugins/netbird/peers');
+				if (!disposed) {
+					netbirdPeers = value;
+					netbirdPeersError = '';
+				}
+			} catch (e) {
+				if (!disposed) netbirdPeersError = fail(e);
 			} finally {
 				inflight = false;
 			}
@@ -795,6 +831,16 @@
 						).length,
 					})
 				: '–';
+		if (kind === 'netbird') {
+			if (!netbirdPeers || netbirdPeersError) return '–';
+			if (!netbirdPeers.active) return t('netbird.states.inactive');
+			const o = tileOptions(options, id),
+				list = netbirdPeers.peers.filter((p) => o.items === null || o.items.includes(p.id));
+			return t('netbird.peer.summary', {
+				online: list.filter((p) => p.online === true).length,
+				count: list.length,
+			});
+		}
 		if (kind === 'tailscale') {
 			if (!tailnetDevices || tailnetDevicesError) return '–';
 			if (!tailnetDevices.active) return t('tailscale.states.inactive');
@@ -863,6 +909,11 @@
 				return shares.map((s) => ({ id: s.name, name: s.name }));
 			case 'volumes':
 				return (storage.status?.volumes ?? []).map((v) => ({ id: v.name, name: v.name }));
+			case 'netbird':
+				return (netbirdPeers?.peers ?? []).map((p) => ({
+					id: p.id,
+					name: p.self ? `${p.name} · ${t('netbird.peer.self')}` : p.name || p.fqdn,
+				}));
 			case 'tailscale':
 				return (tailnetDevices?.devices ?? []).map((d) => ({
 					id: d.id,
@@ -1088,6 +1139,11 @@
 											ondetails={() => runtimeOption(tile.id, 'details', !settings.details)}
 										/>
 									{:else if source === 'network'}<NetworkTile options={settings} />
+									{:else if source === 'netbird'}<NetbirdTile
+											options={settings}
+											value={netbirdPeers}
+											error={netbirdPeersError}
+										/>
 									{:else if source === 'tailscale'}<TailscaleTile
 											options={settings}
 											value={tailnetDevices}

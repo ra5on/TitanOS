@@ -172,6 +172,10 @@ func (s *Server) pluginsEditable(w http.ResponseWriter) bool {
 		writeError(w, 409, "tailscale_failed", "Confirm or undo the pending Tailscale settings first")
 		return false
 	}
+	if s.opts.Netbird != nil && s.opts.Netbird.Pending() {
+		writeError(w, 409, "netbird_failed", "Confirm or undo the pending NetBird settings first")
+		return false
+	}
 	if s.opts.Update == nil {
 		return true
 	}

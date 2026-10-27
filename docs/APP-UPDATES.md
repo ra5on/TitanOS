@@ -115,7 +115,7 @@ Diesen Teil muss **eine volle Basis-Version** einführen, zum Beispiel 0.8.0. Er
 
 ## Ablauf eines App-Updates
 
-1. **Prüfen**, einmal am Tag wie heute. Das Manifest hat `app`, `app.base` passt zur laufenden Basis, und die Version ist neuer: Die Oberfläche bietet ein „Update ohne Neustart“ an. Passt die Basis nicht, gibt es das bekannte volle Update.
+1. **Prüfen**, so oft wie unter „Häufigkeit der Suche“ eingestellt (Standard einmal am Tag, siehe „Oberfläche“). Das Manifest hat `app`, `app.base` passt zur laufenden Basis, und die Version ist neuer: Die Oberfläche bietet ein „Update ohne Neustart“ an. Passt die Basis nicht, gibt es das bekannte volle Update.
 2. **Warten, bis titand frei ist** (siehe „Was ein Neustart von titand unterbricht“). Mit „von selbst installieren“ zur eingestellten Uhrzeit, sonst auf Knopfdruck. Laufende Aufträge werden angezeigt.
 3. **Laden** nach `titanos/<slot>/app/` in eine Teildatei, mit Fortsetzen wie bei den Slot-Dateien. Danach SHA-256 prüfen und umbenennen; Manifest und Signatur liegen daneben.
 4. **`state.json` schreiben:** `current` ist die neue Version, `previous` die alte, `trial` ist wahr, `tries` steht auf 0. Atomar über eine temporäre Datei und Umbenennen.
@@ -169,6 +169,10 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
 - Läuft etwas, das ein Neustart von titand abbrechen würde, lehnt TitanOS das App-Update mit einer Meldung ab (`update_working`). „Von selbst installieren“ wartet stattdessen bis zu sechs Stunden ab der eingestellten Uhrzeit.
 - Nach dem Neustart von titand verbindet sich die Seite selbst neu und zeigt das Ergebnis der Probe.
 - „Auf vorherige Version zurück“ getrennt für App und System.
+- **Häufigkeit der Suche** (für App- und System-Updates gleich): alle 6 oder 12 Stunden, einmal am Tag (Standard), einmal pro Woche, benutzerdefiniert von 1 Stunde bis 30 Tage (Stunden oder Tage) oder „Nur manuell“. Gespeichert als optionales Feld `checkEvery` in `/config/system/update.json`, in **Minuten**: fehlend oder `0` bedeutet einmal am Tag, `-1` nur manuell, sonst 60–43200. Einmal am Tag wird als fehlendes Feld gespeichert. Andere Werte lehnt die API ab (`invalid_update_settings`); ein von Hand eingetragener Wert außerhalb des Bereichs gilt als einmal am Tag.
+- Der Abstand zählt ab der letzten Suche jeder Art (Zeitplan, Knopf, Anmeldung; nur im RAM). Die erste Suche läuft fünf Minuten nach dem Start von titand. Nach einer fehlgeschlagenen Suche wird spätestens nach einem Tag erneut gesucht, bei kürzerem Abstand nach diesem Abstand. Häufiger als eingestellt wird nur durch den Knopf, die Anmeldung und diese Wiederholung gesucht. Die Seite zeigt „Nächste Prüfung“ aus diesen RAM-Werten, ohne den Stick zu lesen.
+- **Nur manuell:** keine Suche nach Zeitplan und keine Suche nach der Anmeldung (`CheckAfterLogin`); „Nach Updates suchen“ funktioniert weiterhin. „Von selbst installieren“ braucht die automatische Suche: Die Oberfläche schaltet es bei „Nur manuell“ ab und sperrt den Schalter, die API lehnt die Kombination ab, und eine von Hand so geschriebene Datei installiert nicht von selbst.
+- **Rückweg:** Ältere Versionen (Basis und vorige App) kennen `checkEvery` nicht, ignorieren es und suchen einmal am Tag; „Nur manuell“ hat `autoInstall` immer aus, sie installieren also nicht von selbst. Speichert eine ältere Version die Einstellungen, fällt das Feld weg und es gilt wieder einmal am Tag. Test: `TestOlderVersionReadsTheNewSettings`.
 
 ## Umsetzung in Schritten (Entwurf)
 
