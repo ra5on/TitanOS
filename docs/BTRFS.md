@@ -1,16 +1,64 @@
-# Btrfs-Spiegel und Snapshots
+# Btrfs-Volumes und Snapshots
 
-Diese Funktionen sind ab `v0.1.0-beta.3` enthalten.
+Btrfs-Spiegel gibt es seit `v0.1.0-beta.3`, weitere Profile und das Hinzufügen
+und Entfernen von Platten seit 0.29.0.
 
-Unter **Speicher → Volume anlegen** `RAID 1`, `btrfs` und genau zwei freie
-Platten wählen. Die Bestätigung löscht beide ausgewählten Platten. Daten und
-Metadaten werden nativ von Btrfs gespiegelt; darunter liegt kein mdadm-Array.
-Die kleinere Platte bestimmt den Platz. TitanOS lässt wie bei mdadm 128 MiB
-Reserve und speichert die Dateisystem-UUID statt eines wechselnden Gerätenamens.
+Unter **Speicher → Volume anlegen** `btrfs` und eines der Profile wählen:
+
+| Profil | Platten | Kopien | darf ausfallen |
+|---|---|---|---|
+| RAID 1 | ab 2 | 2 | 1 Platte |
+| RAID 1 (3 Kopien), `raid1c3` | ab 3 | 3 | 2 Platten |
+| Einzeln, `single` | ab 1 | 1 (Metadaten doppelt auf jeder Platte) | keine |
+
+Die Bestätigung löscht alle ausgewählten Platten. Daten und Metadaten verteilt
+Btrfs selbst; darunter liegt kein mdadm-Array. Anders als bei mdadm werden
+Platten unterschiedlicher Größe ausgenutzt, soweit jede Kopie eines Blocks auf
+einer anderen Platte Platz findet (zum Beispiel RAID 1 aus 4 + 4 + 8 TB ergibt
+8 TB). Der Anlegen-Dialog zeigt den so geschätzten Platz. TitanOS lässt wie bei
+mdadm 128 MiB Reserve und speichert die Dateisystem-UUID statt eines
+wechselnden Gerätenamens; in `volumes.json` stehen zusätzlich `profile` und
+`devices` (die erwartete Zahl der Platten). Fehlen die Felder, ist es ein
+Spiegel aus zwei Platten wie vor 0.29.0.
+
 Bestehende ext4-/XFS-Volumes werden nicht umgewandelt. Neue VM-Verzeichnisse
 erhalten das Btrfs-NOCOW-Attribut; ihre neu angelegten virtuellen Platten
 vermeiden damit doppeltes Copy-on-Write. Für diese Dateien entfallen die
 Btrfs-Datenprüfsummen.
+
+## Platten hinzufügen, entfernen, Profil ändern (ab 0.29.0)
+
+- **Platte hinzufügen** bei einem vollständigen Volume: Die Platte kommt per
+  `btrfs device add` dazu, danach verteilt `btrfs balance` die Daten neu. Im
+  Dialog lässt sich dabei das Profil wechseln, etwa von RAID 1 auf drei Kopien.
+  Fehlt dem Volume eine Platte, wird sie stattdessen ersetzt (siehe unten).
+- **Platte entfernen** (Kreuz an einem Mitglied, nur bei vollständigem Volume
+  und nur, wenn das Profil danach noch genug Platten hat): `btrfs device
+  remove` verschiebt zuerst alle Daten auf die übrigen Platten. TitanOS prüft
+  vorher, dass die belegten Daten mit 5 % Reserve auf die übrigen Platten
+  passen, löscht die Platte danach und meldet das Ergebnis
+  (`volume_disk_removed` bzw. `volume_disk_remove_failed`).
+- **Profil ändern** ohne neue Platte (`PUT /api/v1/storage/volumes/{name}/profile`):
+  eine Balance mit `-dconvert`/`-mconvert` und dem Filter `soft`, damit schon
+  umgewandelte Blöcke nicht noch einmal geschrieben werden. Weniger Kopien
+  zeigen vorher eine Warnung.
+
+Während einer Balance oder einer Entfernung steht das Volume auf „Umbau“
+(`reshaping`) mit Fortschritt aus `btrfs balance status`. App-Updates, Wartung
+und andere Speicheränderungen warten so lange. Profil und Plattenzahl werden in
+`volumes.json` geschrieben, sobald die Platte zum Dateisystem gehört bzw. das
+Umwandeln beginnt. Eine Balance läuft im Kernel und überlebt einen Neustart von
+titand; nach einem NAS-Neustart setzt Btrfs sie beim Einbinden selbst fort. Ein
+Entfernen bricht bei einem NAS-Neustart ab; die Platte bleibt dann Mitglied und
+das Volume vollständig.
+
+Ein Volume ohne zweite Kopie (`single`) wird mit fehlender Platte nicht
+eingebunden: Es wartet, bis alle Platten wieder da sind.
+
+Ältere App-Versionen (Rückweg auf 0.28.x) kennen nur Spiegel aus zwei Platten:
+Ein Volume mit einer oder drei Platten zeigen sie als degradiert bzw. lassen es
+nicht löschen; ein einzelnes Volume binden sie nach 60 Sekunden degradiert ein.
+Daten gehen dabei nicht verloren.
 
 ## Snapshots
 
@@ -38,14 +86,13 @@ Löschen eines Snapshots fragt mit einem einfachen Bestätigungsdialog nach; die
 Die Volume-Prüfung startet einen Btrfs-Scrub. Nicht korrigierbare Fehler werden
 als Fehlerzähler angezeigt; ein Scrub ist kein Ersatz für ein Backup.
 
-Mit einer fehlenden Platte versucht TitanOS, den Spiegel beim Start degradiert
-einzubinden. Unter **Platte hinzufügen** eine mindestens ausreichend große
-Ersatzplatte auswählen und das Löschen bestätigen. TitanOS verwendet
-`btrfs replace`, damit Daten und Metadaten gespiegelt bleiben. Die bisherige,
-entfernte Platte nicht gleichzeitig wieder anschließen. Ein gesunder Spiegel
-nimmt keine dritte Platte oder Hot-Spare auf; andere Btrfs-RAID-Profile werden
-nicht angeboten. Zum vollständigen Löschen müssen beide Mitglieder erreichbar
-sein. Ein fehlendes Mitglied wird dabei nicht stillschweigend vergessen.
+Mit einer fehlenden Platte bindet TitanOS ein Volume mit mindestens zwei Kopien
+nach 60 Sekunden degradiert ein. Unter **Platte hinzufügen** eine mindestens
+ausreichend große Ersatzplatte auswählen und das Löschen bestätigen. TitanOS
+verwendet `btrfs replace`, damit die Kopien erhalten bleiben. Die bisherige,
+entfernte Platte nicht gleichzeitig wieder anschließen. Hot-Spares gibt es bei
+Btrfs nicht. Zum vollständigen Löschen müssen alle Mitglieder erreichbar sein.
+Ein fehlendes Mitglied wird dabei nicht stillschweigend vergessen.
 
 Der Test `scripts/smoke-storage.py` prüft diesen Ablauf in QEMU einschließlich
 Neustarts, Plattenausfall und Ersatz. Echte Platten, Stromausfälle und defekte
@@ -53,7 +100,9 @@ Sektoren sind damit noch nicht geprüft.
 
 ## Erweiterte Abläufe ab 0.16.0
 
-Native Spiegel lassen sich nach lesender Vorschau registrieren. Der neue
+Vorhandene Btrfs-Volumes (single, RAID 1, RAID1C3; alle Platten vorhanden,
+nicht eingebunden) lassen sich nach lesender Vorschau registrieren; RAID0,
+RAID5/6, RAID10 und halb umgewandelte Volumes werden abgelehnt. Der neue
 Snapshot-Dateibrowser kopiert ausgewählte reguläre Dateien in neue Ordner;
 Symlinks und interne Betriebsdaten bleiben ausgenommen. Wartungszeitpläne
 erzeugen und inventarisieren eigene Snapshots; ihre bestätigte Aufbewahrung

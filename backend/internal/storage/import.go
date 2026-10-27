@@ -169,8 +169,10 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 		}
 		node := btrfsDevices[uuid]
 		c := ImportCandidate{ID: "btrfs:" + uuid, Filesystem: "btrfs", FilesystemUUID: uuid, Level: "raid1", Size: node.Size, device: node.Name}
-		if len(disks) != 2 || btrfsCounts[uuid] != 2 || node.Mountpoint != "" {
-			c.Reason = "requires-unmounted-two-device-mirror"
+		// The profile is read in the preview; any of single, RAID1 and
+		// RAID1C3 is taken over as long as every disk is there.
+		if len(disks) == 0 || btrfsCounts[uuid] != len(disks) || node.Mountpoint != "" {
+			c.Reason = "requires-unmounted-complete-btrfs"
 		}
 		fingerprint(&c, disks)
 		out = append(out, c)
@@ -230,9 +232,11 @@ func (m *Manager) previewImport(ctx context.Context, c ImportCandidate) (preview
 		if e != nil {
 			return preview, e
 		}
-		if !strings.Contains(output, "Data, RAID1:") || !strings.Contains(output, "Metadata, RAID1:") {
-			return preview, fmt.Errorf("%w: only native RAID1 data and metadata profiles are supported", ErrInvalidLevel)
+		profile := importedProfile(output)
+		if profile == "" {
+			return preview, fmt.Errorf("%w: only single, RAID1 and RAID1C3 profiles are supported", ErrInvalidLevel)
 		}
+		preview.Candidate.Level = profile
 	}
 	root, e := os.OpenRoot(point)
 	if e != nil {
@@ -301,13 +305,44 @@ func (m *Manager) Import(ctx context.Context, req ImportRequest) error {
 	if err != nil {
 		return err
 	}
-	if _, err = m.previewImport(ctx, c); err != nil {
+	preview, err := m.previewImport(ctx, c)
+	if err != nil {
 		return err
 	}
 	// Registration writes only UUID configuration. No formatting, relabeling, folder creation or account import.
-	v := VolumeConfig{Name: req.Name, Filesystem: c.Filesystem, FilesystemUUID: c.FilesystemUUID, ArrayUUID: c.ArrayUUID, Level: c.Level, Created: time.Now().UTC()}
+	v := VolumeConfig{Name: req.Name, Filesystem: c.Filesystem, FilesystemUUID: c.FilesystemUUID, ArrayUUID: c.ArrayUUID, Level: preview.Candidate.Level, Created: time.Now().UTC()}
+	if c.Filesystem == "btrfs" {
+		v.Profile, v.Devices = preview.Candidate.Level, len(c.Disks)
+	}
 	if err := m.saveVolumes(append(m.configured(), v)); err != nil {
 		return err
 	}
 	return m.mount(ctx, v)
+}
+
+// importedProfile maps `btrfs filesystem df` to a TitanOS profile, or ""
+// for layouts TitanOS does not manage (RAID0, RAID5/6, RAID10, mixed).
+func importedProfile(df string) string {
+	profile := func(kind string) string {
+		found := ""
+		for line := range strings.SplitSeq(df, "\n") {
+			if rest, ok := strings.CutPrefix(strings.TrimSpace(line), kind+", "); ok {
+				p, _, _ := strings.Cut(rest, ":")
+				p = strings.ToLower(p)
+				if found != "" && found != p {
+					return "mixed"
+				}
+				found = p
+			}
+		}
+		return found
+	}
+	data, meta := profile("Data"), profile("Metadata")
+	switch {
+	case data == "single" && (meta == "dup" || meta == "single"):
+		return "single"
+	case data == "raid1" && meta == "raid1", data == "raid1c3" && meta == "raid1c3":
+		return data
+	}
+	return ""
 }

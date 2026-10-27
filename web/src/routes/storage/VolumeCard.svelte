@@ -7,6 +7,7 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { stateTone } from './labels.ts';
 	import { api, ApiError } from '#lib/api.ts';
+	import { canShrink, takesDisk } from './btrfs.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
 
 	type Props = {
@@ -17,8 +18,9 @@
 		onadd: () => void;
 		ondelete: () => void;
 		onremove: (disk: string) => void;
+		onprofile: () => void;
 	};
-	let { volume, canAdminister, busy, oncheck, onadd, ondelete, onremove }: Props = $props();
+	let { volume, canAdminister, busy, oncheck, onadd, ondelete, onremove, onprofile }: Props = $props();
 
 	const tone = $derived(stateTone(volume));
 	let quotaBusy = $state(false),
@@ -55,7 +57,8 @@
 		volume.state === 'degraded' ? t('storage.degradedNote') : volume.state === 'failed' ? t('storage.failedNote') : volume.state === 'missing' ? t('storage.missingNote') : ''
 	);
 	const canCheck = $derived(volume.level !== 'raid0' && (volume.state === 'ok' || volume.state === 'checking'));
-	const canAdd = $derived((volume.filesystem !== 'btrfs' || volume.state === 'degraded') && volume.level !== 'raid0' && volume.state !== 'failed' && volume.state !== 'missing');
+	const canAdd = $derived(takesDisk(volume));
+	const shrinks = $derived(canShrink(volume));
 </script>
 
 <article use:revealTarget id="volume-{volume.name}" class="tile" class:warn={tone === 'warn'} class:error={tone === 'error'} aria-label={volume.name}>
@@ -90,7 +93,7 @@
 					<span class="dot" class:ok={member.state === 'active'} class:warn={member.state === 'rebuilding'} class:error={member.state === 'faulty'} aria-hidden="true"></span>
 					<span class="mono">{member.disk || '?'}</span>
 					<span class="member-state">{t(`member.${member.state}`)}</span>
-					{#if canAdminister && (member.state === 'faulty' || member.state === 'spare') && member.disk}
+					{#if canAdminister && (member.state === 'faulty' || member.state === 'spare' || (shrinks && member.state === 'active')) && member.disk}
 						<button type="button" aria-label={t('storage.removeDisk', { disk: member.disk })} onclick={() => onremove(member.disk)} disabled={busy}><Icon name="close" size={14} /></button>
 					{/if}
 				</span>
@@ -134,6 +137,7 @@
 				</button>
 			{/if}
 			{#if canAdd}<button type="button" class="btn" onclick={onadd} disabled={busy}>{t('storage.addDisk')}</button>{/if}
+			{#if volume.filesystem === 'btrfs' && volume.state === 'ok'}<button type="button" class="btn" onclick={onprofile} disabled={busy}>{t('btrfs.profileChange')}</button>{/if}
 			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}>{t('storage.delete')}</button>
 		</div>
 	{/if}

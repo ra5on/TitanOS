@@ -42,6 +42,7 @@ const (
 	MemberRebuilding = "rebuilding"
 	MemberFaulty     = "faulty"
 	MemberSpare      = "spare"
+	MemberRemoving   = "removing" // Btrfs moves its data to the other disks
 )
 
 // States of a volume.
@@ -51,8 +52,9 @@ const (
 	VolumeRebuilding = "rebuilding" // a new disk is being filled
 	VolumeSyncing    = "syncing"    // first sync after creation
 	VolumeChecking   = "checking"
-	VolumeFailed     = "failed"  // too many disks missing
-	VolumeMissing    = "missing" // none of its disks found
+	VolumeReshaping  = "reshaping" // Btrfs: disks are added, removed or the profile changes
+	VolumeFailed     = "failed"    // too many disks missing
+	VolumeMissing    = "missing"   // none of its disks found
 )
 
 // Disk is a physical disk as shown in the UI.
@@ -101,6 +103,11 @@ type VolumeConfig struct {
 	InitializeFolders bool `json:"initializeFolders,omitempty"`
 	// ShareQuotas lets shares on an ext4 or XFS volume have a size limit.
 	ShareQuotas bool `json:"shareQuotas,omitempty"`
+	// Profile is the layout of a Btrfs volume: single, raid1 or raid1c3.
+	// Missing means raid1, the only layout before 0.29.0.
+	Profile string `json:"profile,omitempty"`
+	// Devices is how many disks a Btrfs volume has; missing means two.
+	Devices int `json:"devices,omitempty"`
 }
 
 // Volume is a configured volume with its live state.
@@ -224,7 +231,11 @@ type Manager struct {
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
 	btrfsSeen map[string]time.Time
-	clock     func() time.Time
+	// btrfsRemoving names the disk being taken out of a Btrfs volume.
+	btrfsRemoving map[string]string
+	// OnReshaped is told when taking a disk out of a Btrfs volume ended.
+	OnReshaped func(volume string, err error)
+	clock      func() time.Time
 }
 
 // NewManager returns a manager working on the real system.

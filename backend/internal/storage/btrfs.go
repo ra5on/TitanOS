@@ -14,8 +14,9 @@ import (
 	"time"
 )
 
-// Native Btrfs mirrors use RAID1 for both data and metadata. No md device is
-// involved. The filesystem UUID, not a Linux device name, identifies the pool.
+// Native Btrfs volumes use one of btrfsLayouts for data and metadata. No md
+// device is involved. The filesystem UUID, not a Linux device name,
+// identifies the pool.
 func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []blockDevice, sizeMiB uint64) error {
 	var parts []string
 	for _, name := range req.Disks {
@@ -26,7 +27,8 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 		}
 		parts = append(parts, part)
 	}
-	args := append([]string{"-f", "-L", req.Name, "-d", "raid1", "-m", "raid1"}, parts...)
+	layout := btrfsLayouts[req.Level]
+	args := append([]string{"-f", "-L", req.Name, "-d", layout.data, "-m", layout.meta}, parts...)
 	if _, err := m.runner.Run(ctx, "", "mkfs.btrfs", args...); err != nil {
 		return err
 	}
@@ -38,7 +40,7 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 	if uuid == "" {
 		return fmt.Errorf("%w: new Btrfs filesystem has no UUID", ErrNotPossible)
 	}
-	volume := VolumeConfig{Name: req.Name, Level: "raid1", Filesystem: "btrfs", FilesystemUUID: uuid, Created: time.Now().UTC().Truncate(time.Second)}
+	volume := VolumeConfig{Name: req.Name, Level: req.Level, Filesystem: "btrfs", FilesystemUUID: uuid, Profile: req.Level, Devices: len(parts), Created: time.Now().UTC().Truncate(time.Second)}
 	volume.InitializeFolders = len(m.configured()) == 0
 	if err := m.saveVolumes(append(m.configured(), volume)); err != nil {
 		return err
@@ -47,8 +49,6 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 }
 
 const (
-	// btrfsMirrorDisks is the number of members of a TitanOS Btrfs mirror.
-	btrfsMirrorDisks = 2
 	// btrfsGrace is how long mountAll waits for every member of a mirror
 	// to appear before it mounts with one missing.
 	btrfsGrace = 60 * time.Second
@@ -84,7 +84,7 @@ func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices [
 		m.btrfsSeen[volume.Name] = now
 	}
 	waited := now.Sub(first) >= btrfsGrace
-	if len(parts) >= btrfsMirrorDisks {
+	if len(parts) >= btrfsDiskCount(volume) {
 		err := m.mountWith(ctx, volume, false)
 		if err == nil {
 			delete(m.btrfsSeen, volume.Name)
@@ -96,7 +96,13 @@ func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices [
 			return
 		}
 	} else if !waited {
-		return // wait for the other member
+		return // wait for the other members
+	}
+	// Without a second copy, a missing disk means missing data: such a
+	// volume waits for its disks instead of being written to incomplete.
+	if btrfsLayouts[btrfsProfile(volume)].copies < 2 {
+		slog.Warn("Btrfs volume without redundancy misses a disk, not mounted", "name", volume.Name, "members", len(parts))
+		return
 	}
 	slog.Warn("mounting Btrfs mirror degraded", "name", volume.Name, "members", len(parts))
 	if err := m.mountWith(ctx, volume, true); err != nil {
@@ -148,7 +154,7 @@ func btrfsParts(devices []blockDevice, uuid string) []blockDevice {
 }
 
 func (m *Manager) btrfsStatus(volume *Volume, status *Status, devices []blockDevice, cfg VolumeConfig) {
-	volume.RaidDisks = 2
+	volume.RaidDisks = btrfsDiskCount(cfg)
 	for _, disk := range status.Disks {
 		if disk.Volume == cfg.Name {
 			volume.Members = append(volume.Members, Member{Disk: disk.Name, State: MemberActive})
@@ -161,7 +167,7 @@ func (m *Manager) btrfsStatus(volume *Volume, status *Status, devices []blockDev
 	switch {
 	case len(volume.Members) == 0:
 		volume.State = VolumeMissing
-	case len(volume.Members) < btrfsMirrorDisks || state.Missing > 0:
+	case len(volume.Members) < btrfsDiskCount(cfg) || state.Missing > 0:
 		// The mounted filesystem is authoritative: a mirror mounted degraded
 		// stays degraded even after the other disk is visible again.
 		volume.State = VolumeDegraded
@@ -172,12 +178,21 @@ func (m *Manager) btrfsStatus(volume *Volume, status *Status, devices []blockDev
 		volume.State, volume.Sync = state.State, state.Sync
 	}
 	volume.Mismatches = state.Errors
-	parts := btrfsParts(devices, cfg.FilesystemUUID)
-	for _, part := range parts {
-		if volume.SizeBytes == 0 || part.Size < volume.SizeBytes {
-			volume.SizeBytes = part.Size
+	var sizes []uint64
+	for _, part := range btrfsParts(devices, cfg.FilesystemUUID) {
+		sizes = append(sizes, part.Size)
+	}
+	volume.SizeBytes = btrfsUsable(btrfsProfile(cfg), sizes)
+	m.mu.RLock()
+	if disk := m.btrfsRemoving[cfg.Name]; disk != "" {
+		volume.State, volume.Sync = VolumeReshaping, &Sync{RemainingSeconds: -1}
+		for i := range volume.Members {
+			if volume.Members[i].Disk == disk {
+				volume.Members[i].State = MemberRemoving
+			}
 		}
 	}
+	m.mu.RUnlock()
 }
 
 func (m *Manager) deleteBtrfs(ctx context.Context, volume VolumeConfig) error {
@@ -186,10 +201,10 @@ func (m *Manager) deleteBtrfs(ctx context.Context, volume VolumeConfig) error {
 		return err
 	}
 	parts := btrfsParts(devices, volume.FilesystemUUID)
-	// Do not forget a missing mirror: a returning disk would retain an orphaned
-	// filesystem. The administrator must reconnect/replace it before deletion.
-	if len(parts) != 2 {
-		return fmt.Errorf("%w: reconnect both Btrfs members before deleting the mirror", ErrNotPossible)
+	// Do not forget a missing member: a returning disk would retain an
+	// orphaned filesystem. It must be reconnected or replaced first.
+	if len(parts) != btrfsDiskCount(volume) {
+		return fmt.Errorf("%w: reconnect every Btrfs member before deleting the volume", ErrNotPossible)
 	}
 	point := m.MountPoint(volume.Name)
 	if m.readMounts()[point] {
@@ -222,8 +237,9 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	if err != nil {
 		return err
 	}
-	if len(btrfsParts(devices, volume.FilesystemUUID)) != 1 {
-		return fmt.Errorf("%w: exactly one Btrfs member must be missing", ErrNotPossible)
+	present := len(btrfsParts(devices, volume.FilesystemUUID))
+	if present == 0 || present >= btrfsDiskCount(volume) {
+		return fmt.Errorf("%w: a Btrfs member must be missing", ErrNotPossible)
 	}
 	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
 	if err != nil {
@@ -248,14 +264,24 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	}
 	if missing == "" {
 		// A disconnected member is omitted by some btrfs-progs versions.
-		// New TitanOS mirrors have IDs 1 and 2; replace preserves the ID.
+		// With exactly one member gone, it is the one ID of 1..n that is not
+		// listed (new volumes number their disks from 1; replace keeps IDs).
 		matches := btrfsDeviceLine.FindAllStringSubmatch(output, -1)
-		if len(matches) == 1 && (matches[0][1] == "1" || matches[0][1] == "2") {
-			missing = "1"
-			if matches[0][1] == "1" {
-				missing = "2"
+		if len(matches) == btrfsDiskCount(volume)-1 {
+			listed := map[string]bool{}
+			for _, match := range matches {
+				listed[match[1]] = true
 			}
-			size = btrfsParts(devices, volume.FilesystemUUID)[0].Size
+			var gaps []string
+			for id := 1; id <= btrfsDiskCount(volume); id++ {
+				if !listed[strconv.Itoa(id)] {
+					gaps = append(gaps, strconv.Itoa(id))
+				}
+			}
+			if len(gaps) == 1 {
+				missing = gaps[0]
+				size = btrfsParts(devices, volume.FilesystemUUID)[0].Size
+			}
 		}
 	}
 	// btrfs-progs reports disconnected devices with size 0 and path MISSING.

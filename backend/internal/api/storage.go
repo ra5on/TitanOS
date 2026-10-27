@@ -202,13 +202,22 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 		Erase bool   `json:"erase"`
 		// Identity is the disk's identity from the disk list, optional.
 		Identity string `json:"identity"`
+		// Profile converts a Btrfs volume while the disk is added
+		// (single, raid1, raid1c3); empty keeps the profile.
+		Profile string `json:"profile"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	name := r.PathValue("name")
-	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.AddDisk(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
+	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
+	add := s.opts.Storage.AddDisk
+	if req.Profile != "" {
+		add = func(ctx context.Context, name, disk string, erase bool, identity string) error {
+			return s.opts.Storage.AddBtrfsDisk(ctx, name, disk, req.Profile, identity, erase)
+		}
+	}
+	if err := add(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
 		writeStorageError(w, r, "add disk", err)
 		return
 	}
@@ -339,5 +348,22 @@ func (s *Server) handleSetShareQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("share quotas changed", "volume", r.PathValue("name"), "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleBtrfsProfile changes the profile of a Btrfs volume in place.
+func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Profile string `json:"profile"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	slog.Info("Btrfs profile change requested", "volume", name, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if err := s.opts.Storage.ConvertBtrfs(context.WithoutCancel(r.Context()), name, req.Profile); err != nil {
+		writeStorageError(w, r, "change Btrfs profile", err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

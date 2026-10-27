@@ -188,6 +188,8 @@ export type MemberState = 'active' | 'rebuilding' | 'faulty' | 'spare';
 export type VolumeState =
 	'ok' | 'degraded' | 'rebuilding' | 'syncing' | 'checking' | 'failed' | 'missing';
 export type RaidLevel = 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
+/** Profiles of a Btrfs volume (internal/storage btrfsLayouts). */
+export type BtrfsProfile = 'single' | 'raid1' | 'raid1c3';
 export type Filesystem = 'ext4' | 'xfs' | 'btrfs';
 
 export type Disk = {
