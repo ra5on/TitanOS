@@ -311,6 +311,7 @@
 				{#snippet children(close)}
 					<a role="menuitem" href="/storage/import">{t('ops.import')}</a>
 					<a role="menuitem" href="/tools/maintenance">{t('ops.maintenance')}</a>
+					<a role="menuitem" href="/storage/smart">{t('smart.open')}</a>
 					<button
 						role="menuitem"
 						disabled={busy}
@@ -590,6 +591,9 @@
 			</dl>
 			{#if canAdminister}{@const disk = diskDetail}
 				<div class="disk-actions">
+					<a class="btn" href="/storage/smart?disk={encodeURIComponent(disk.name)}"
+						>{t('smart.details')}</a
+					>
 					{#if disk.volume}
 						<button
 							class="btn"
