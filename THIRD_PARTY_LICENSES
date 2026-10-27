@@ -36,6 +36,8 @@ libvirt                   LGPL-2.1-or-later       Debian source packages
 OVMF (EDK II)             BSD-2-Clause-Patent     Debian source packages
 swtpm, libtpms            BSD-3-Clause            Debian source packages
 virtiofsd                 Apache-2.0, BSD-3       Debian source packages
+LXC                       LGPL-2.1-or-later       Debian source packages
+GNU Wget                  GPL-3.0-or-later        Debian source packages
 restic                    BSD-2-Clause            Debian source packages
 NUT (Network UPS Tools)   GPL-2.0-or-later        Debian source packages
 OpenSSH                   BSD and others          Debian source packages

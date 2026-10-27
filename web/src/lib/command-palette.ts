@@ -6,7 +6,7 @@ export type PaletteEntry = { href: string; label: string; section: string; terms
 export const pages: {href:string;label:MessageKey;admin?:boolean;assistant?:boolean}[] = [
  {href:'/',label:'nav.dashboard'}, {href:'/storage',label:'nav.storage',admin:true}, {href:'/shares',label:'nav.shares',admin:true},
  {href:'/files',label:'nav.files'}, {href:'/users',label:'nav.users',admin:true}, {href:'/docker',label:'nav.docker',admin:true},
- {href:'/vms',label:'nav.vms',admin:true}, {href:'/apps',label:'nav.apps',admin:true}, {href:'/plugins',label:'nav.plugins',admin:true},
+ {href:'/vms',label:'nav.vms',admin:true}, {href:'/lxc',label:'nav.lxc',admin:true}, {href:'/apps',label:'nav.apps',admin:true}, {href:'/plugins',label:'nav.plugins',admin:true},
  {href:'/assistant',label:'assistant.title',assistant:true}, {href:'/assistant/automations',label:'automation.title',assistant:true},
  {href:'/settings',label:'nav.settings'}, {href:'/tools',label:'nav.tools',admin:true}, {href:'/tools/logs',label:'tools.logs',admin:true}, {href:'/tools/tasks',label:'ops.tasks',admin:true}, {href:'/tools/maintenance',label:'ops.maintenance',admin:true}, {href:'/tools/monitoring',label:'ops.monitoring',admin:true}, {href:'/tools/activity',label:'ops.activity',admin:true}, {href:'/storage/import',label:'ops.import',admin:true}, {href:'/storage/manage',label:'ops.usage',admin:true}, {href:'/storage/smart',label:'smart.title',admin:true}, {href:'/account',label:'menu.account'}
 ];

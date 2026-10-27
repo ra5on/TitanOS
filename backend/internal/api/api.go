@@ -29,6 +29,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
@@ -66,8 +67,10 @@ type Options struct {
 	Docker             *docker.Manager
 	Catalog            *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
-	Terminal     *terminal.Manager
-	VMs          *vm.Manager
+	Terminal *terminal.Manager
+	VMs      *vm.Manager
+	// LXC runs system containers; nil makes one that does nothing.
+	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
 	Nvidia       *hardware.NvidiaControl
 	Accelerators *hardware.AcceleratorMonitor
@@ -162,6 +165,10 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
+	}
+	if s.opts.LXC == nil {
+		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
+		s.opts.LXC.Disabled = true
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -374,6 +381,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", s.requireAdmin(s.handleVMMedium))
 	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
 	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
+
+	// System containers (LXC). Like VMs: administrators only.
+	mux.HandleFunc("GET /api/v1/lxc", s.requireAdmin(s.handleLXC))
+	mux.HandleFunc("GET /api/v1/lxc/images", s.requireAdmin(s.handleLXCImages))
+	mux.HandleFunc("POST /api/v1/lxc", s.requireHeavyAdmin(s.handleLXCCreate))
+	mux.HandleFunc("PUT /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCUpdate))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCDelete))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/config", s.requireAdmin(s.handleLXCConfig))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/console", s.requireAdmin(s.handleLXCConsole))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/snapshots", s.requireAdmin(s.handleLXCSnapshots))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots", s.requireHeavyAdmin(s.handleLXCSnapshotCreate))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots/{snapshot}/restore", s.requireHeavyAdmin(s.handleLXCSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}/snapshots/{snapshot}", s.requireHeavyAdmin(s.handleLXCSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/{action}", s.requireAdmin(s.handleLXCAction))
 
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
@@ -654,7 +675,7 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner or administrator")
 			return
 		}
-		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
+		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/") || r.URL.Path == "/api/v1/lxc" || strings.HasPrefix(r.URL.Path, "/api/v1/lxc/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
 			if !gate.Gate.TryRLock() {
 				writeError(w, http.StatusLocked, "application_backup_running", "application backup owns the application lifecycle")
 				return

@@ -39,6 +39,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
@@ -358,6 +359,15 @@ func run(opts options) error {
 		}
 		return release, nil
 	}
+	// System containers (LXC); like VMs they join the bridges of the NAS.
+	systemContainers := lxc.NewManager(store, shares.UsersGID)
+	systemContainers.NetworkBridge = machines.NetworkBridge
+	systemContainers.BridgeReady = connection.BridgeReady
+	systemContainers.NetworkLease = machines.NetworkLease
+	systemContainers.Disabled = opts.dev
+	if err := systemContainers.Load(); err != nil {
+		slog.Warn("containers not readable from /config", "err", err)
+	}
 	connection.CheckChange = func(before, after network.Config) error {
 		refs := map[string]bool{}
 		legacy := false
@@ -371,7 +381,7 @@ func run(opts options) error {
 				}
 			}
 		}
-		for _, ref := range machines.NetworkReferences() {
+		for _, ref := range append(machines.NetworkReferences(), systemContainers.NetworkReferences()...) {
 			if ref == "bridge" {
 				legacy = true
 			} else {
@@ -818,7 +828,7 @@ func run(opts options) error {
 	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || machines.Busy() || systemContainers.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -863,9 +873,10 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || systemContainers.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
 	}
 	go machines.Run(ctx, volumes.Mounted)
+	go systemContainers.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
 	// Logins outlive a restart of titand in RAM, as after an app update.
 	sessions := auth.NewSessions()
@@ -892,6 +903,7 @@ func run(opts options) error {
 		Catalog:            appCatalog,
 		Terminal:           shells,
 		VMs:                machines,
+		LXC:                systemContainers,
 		Hardware:           devices,
 		Nvidia:             nvidia,
 		Accelerators:       hardware.NewAcceleratorMonitor(ctx, devices),

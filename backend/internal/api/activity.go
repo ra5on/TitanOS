@@ -66,6 +66,7 @@ var activityReads = []string{
 	"GET /api/v1/docker/containers/{id}/console",
 	"GET /api/v1/vms/{name}/serial",
 	"GET /api/v1/vms/{name}/screen",
+	"GET /api/v1/lxc/{name}/console",
 	"GET /api/v1/config-backup/download",
 	"GET /api/v1/diagnostics/bundle",
 }

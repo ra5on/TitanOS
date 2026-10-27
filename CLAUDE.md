@@ -40,7 +40,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ## Funktionsumfang und offene Vorhaben
 
-- Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, Plugins, Netzwerk mit Rückfall, Backups, USV, Benachrichtigungen, Diagnose, Aktivitätsprotokoll, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
+- Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, LXC-Systemcontainer, Plugins, Netzwerk mit Rückfall, Backups, USV, Benachrichtigungen, Diagnose, Aktivitätsprotokoll, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
 - Ersteinrichtung: frei gewähltes Besitzerkonto, danach `/welcome` mit Sprache, Hostname, Zeitzone, automatischer Heimnetz-Bridge und nächsten Schritten. Das erste Volume wird auf der Speicher-Seite angelegt.
 - Deutsch und Englisch; alle Oberflächentexte über Übersetzungsdateien.
 - Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. Einzelheiten in den eigenen Abschnitten.
@@ -103,6 +103,7 @@ titanos/
 │       ├── shares/         # Samba, NFS, Nutzer
 │       ├── docker/         # Container, Compose, Vorlagen
 │       ├── vm/             # libvirt über virsh, QEMU-Abbilder über qemu-img
+│       ├── lxc/            # LXC-Systemcontainer über lxc-create/systemctl, cgroup-Messwerte
 │       ├── update/, app/   # System-/App-Updates und Rückfall
 │       ├── assistant/      # Ollama, Chat-Ablauf, Verlauf, Websuche, Handbuch
 │       ├── office/         # Word-, Excel-, PDF-Erzeugung und Dokumentlesen
@@ -203,7 +204,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 **Entwürfe:** `docs/design/` enthält die Quelltexte aller Entwurfsseiten (`*.dc.html`, Übersicht in `docs/design/README.md`). Vor der Arbeit an einer Seite die passende Datei lesen und Aufbau, Abstände, Farben (siehe `Appearance.dc.html` für alle Theme-Werte) und Verhalten übernehmen – nicht den Code, der nutzt ein Entwurfsformat mit eigener Laufzeit. Beispieldaten darin nie ins Produkt übernehmen. Screenshots, falls vorhanden, in `docs/design/screenshots/`.
 
 **Grundaufbau**
-- Kopfzeile: Logo (Symbol + Schriftzug, siehe „Marke“), Reiter-Navigation (Dashboard, Speicher, Shares, Dateien, Nutzer, Docker, VMs, Apps, Plugins, Einstellungen, Werkzeuge), gemeinsame kompakte Fläche für Suche, Terminal, Assistent, Meldungen und Dashboard-Bearbeiten (genau diese Reihenfolge), danach das separate Konto-Menü. Nicht berechtigte bzw. nicht verfügbare Funktionen entfallen; Bearbeiten nur auf der Startseite. Kein Hostname/IP-Badge neben dem Logo.
+- Kopfzeile: Logo (Symbol + Schriftzug, siehe „Marke“), Reiter-Navigation (Dashboard, Speicher, Shares, Dateien, Nutzer, Docker, VMs, Container, Apps, Plugins, Einstellungen, Werkzeuge), gemeinsame kompakte Fläche für Suche, Terminal, Assistent, Meldungen und Dashboard-Bearbeiten (genau diese Reihenfolge), danach das separate Konto-Menü. Nicht berechtigte bzw. nicht verfügbare Funktionen entfallen; Bearbeiten nur auf der Startseite. Kein Hostname/IP-Badge neben dem Logo.
 - **Konto-Menü** (Klick auf den eigenen Namen oben rechts, mit Initiale in Akzentfarbe): Name und Rolle, Mein Konto (Passwort, 2FA, SSH-Schlüssel), Darstellung, Angemeldete Geräte, NAS neu starten …, NAS herunterfahren …, Abmelden. Neustart/Herunterfahren nur für Besitzer/Administratoren und immer mit Bestätigungsdialog, der zeigt, was passiert: laufende Container/VMs werden sauber beendet, laufende Speicherwartung kann unterbrochen werden; Plattentests werden nach dem Neustart fortgesetzt bzw. warten auf Fortsetzen (siehe Werkzeuge), Option „erst nach Abschluss des Wiederaufbaus“ (`afterRebuild`: wartet im RAM, bis kein Wiederaufbau und keine Prüfung mehr läuft; `GET`/`DELETE /api/v1/system/power` zeigt bzw. hebt die Vormerkung auf, ein titand-Neustart verwirft sie), Hinweis auf Wake-on-LAN beim Herunterfahren.
 - Kopfzeile immer einzeilig mit fester Höhe (ca. 60 px). Reicht die Breite nicht, scrollt die Navigation seitlich mit sichtbarer Scrollleiste, Links-/Rechtspfeilen und Ziehen mit gedrückter Maustaste. Normale Link-Klicks, Tastatur und Touch bleiben bedienbar.
 - Statusleiste unten: Volume-Zustand, laufende Rebuilds/Prüfungen, Version und System-Slot.
@@ -693,6 +694,18 @@ Die Einstellungsübersicht zeigt kompakte Symbol-/Titelkacheln ohne Beschreibung
   Boot mit BIOS wird abgelehnt; Windows-11-Option nur unter UEFI.
 - Snapshots sichern bei BIOS keine UEFI-Variablen. RAM-Kompatibilität prüft
   die tatsächlich ausgewählte Firmware. TitanOS selbst bootet weiterhin nur UEFI.
+
+## LXC-Systemcontainer
+
+- Reiter „Container“ (`/lxc`, nur Besitzer/Administratoren), Paket `internal/lxc`, Routen `/api/v1/lxc…`, Doku `docs/LXC.md`. Mittelweg zwischen Docker-Apps und VMs: ganzes Linux-System mit dem Kernel des NAS.
+- Einstellungen je Container in `/config/lxc/<name>.json` (neue Datei, nur optionale Zusatzfelder); lxcpath `/mnt/<volume>/lxc`, Root-Dateisystem `/mnt/<volume>/lxc/<name>/rootfs`. Die LXC-Konfiguration `<lxcpath>/<name>/config` wird vor jedem Start aus `/config` neu geschrieben; Änderungen dort gehen verloren.
+- Abbilder nur von images.linuxcontainers.org über das `download`-Template (Liste sechs Stunden im RAM). Anlegen als Hintergrundauftrag mit Phasen; `LXC_CACHE_PATH` und `TMPDIR` zeigen auf das Volume, nie RAM/Overlay. Vorhandene Ordner werden nie überschrieben.
+- Ab Werk unprivilegiert (IDs 0–65535 → 100000–165535, Gruppe 100 des Containers = `users` des NAS für Schreibzugriff auf Freigaben); privilegiert nur ausdrücklich beim Anlegen mit Warnung, danach fest. Ohne `apparmor_parser` `lxc.apparmor.profile = unconfined`.
+- Grenzen über `lxc.cgroup2.cpu.max`/`memory.max`. Netz wie VMs: `bridge` (br0), `network:<id>` oder `none`; kein `lxc-net` (maskiert wie `lxc.service`, `lxc-monitord.service`), veth an den NAS-Bridges, feste MAC. Container-Netze zählen zu den geschützten Netzwerkanhängen.
+- Start über `titanos-lxc@<name>.service` (Umgebung `/run/titanos-lxc/<name>.env`), damit Container einen titand-Neustart überleben. Zustand/CPU/RAM nur aus cgroup-Dateien, ohne LXC/systemd zu wecken. Autostart einmal je NAS-Start (`/run/titanos/lxc-autostarted`), erst mit Volume und bereitem Netz.
+- Konsole (`lxc-attach`) und Textkonsole (`lxc-console`) als Terminal-Tab „LXC“ nach den gemeinsamen Konsolenregeln (bestehende Anmeldung, keine Passwortabfrage). Entfernen behält die Daten ab Werk; Häkchen „Auch die Daten löschen“ mit einfachem Bestätigungsdialog, verweigert, solange unter dem Ordner etwas eingebunden ist. Btrfs-Snapshots (Anlegen, Wiederherstellen nur ausgeschaltet, Löschen) nur für Container, die auf Btrfs angelegt wurden.
+- Anlegen/Snapshots melden `Busy` an App-Updates und Wartung; `/api/v1/lxc` liegt hinter der Sperre der Anwendungssicherungen. Container werden von Anwendungssicherungen noch nicht selbst angehalten. Entwicklungsmodus zeigt nur an.
+- Geprüft nur mit nachgebautem Runner und künstlichen cgroup-Dateien; echtes LXC im Abbild, cgroup-Pfade unter systemd, Herunterfahren, AppArmor und Konsolen auf echter Hardware/QEMU noch abzunehmen. Kein Dashboard-Kacheltyp.
 
 ## Datei-Editor und USB-Uploads
 

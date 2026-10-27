@@ -24,6 +24,7 @@
 		{ href: '/users', label: 'nav.users', roles: ['owner', 'admin'] },
 		{ href: '/docker', label: 'nav.docker', roles: ['owner', 'admin'] },
 		{ href: '/vms', label: 'nav.vms', roles: ['owner', 'admin'] },
+		{ href: '/lxc', label: 'nav.lxc', roles: ['owner', 'admin'] },
 		{ href: '/apps', label: 'nav.apps', roles: ['owner', 'admin'] },
 		{ href: '/plugins', label: 'nav.plugins', roles: ['owner', 'admin'] },
 		{ href: '/settings', label: 'nav.settings' },
