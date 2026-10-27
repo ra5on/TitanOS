@@ -365,3 +365,9 @@ func (m *Manager) btrfsState(name string) btrfsProgress {
 	defer m.mu.RUnlock()
 	return m.btrfsProgress[name]
 }
+
+// FilesystemOf names the file system of a configured volume, "" if unknown.
+func (m *Manager) FilesystemOf(name string) string {
+	volume, _ := m.find(name)
+	return volume.Filesystem
+}

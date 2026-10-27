@@ -112,7 +112,10 @@ type Manager struct {
 	Addresses func() []string
 	Host      func() string
 	// Mounted returns the volumes that are mounted.
-	Mounted   func() []string
+	Mounted func() []string
+	// Replicas answers /<name>/_replica/… for Btrfs replication (package
+	// replication); rest is the path after "_replica/".
+	Replicas  func(w http.ResponseWriter, r *http.Request, source, volume, rest string)
 	mountRoot string
 
 	mu        sync.Mutex
@@ -437,6 +440,10 @@ func (m *Manager) Handler() http.Handler {
 			// The same answer for a wrong name, a wrong token and someone else's folder.
 			w.Header().Set("WWW-Authenticate", `Basic realm="TitanOS backup"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if after, ok := strings.CutPrefix(rest, "_replica"); ok && (after == "" || after[0] == '/') && m.Replicas != nil {
+			m.Replicas(w, r, name, volume, strings.TrimPrefix(after, "/"))
 			return
 		}
 		// Each request pins the mounted volume. One that went away since the

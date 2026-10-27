@@ -36,6 +36,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -92,6 +93,10 @@ type Options struct {
 	Backup *backup.Manager
 	// BackupTarget takes in the backups of other TitanOS over Tailscale.
 	BackupTarget *backuptarget.Manager
+	// Replication sends Btrfs volumes to other TitanOS; ReplicaReceiver
+	// holds what others sent here.
+	Replication     *replication.Manager
+	ReplicaReceiver *replication.Receiver
 	// USB lists and mounts unmanaged physical data drives; nil if unavailable.
 	USB *usb.Manager
 	// UPS watches the uninterruptible power supply.
@@ -416,6 +421,12 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/backups/target", s.requireAdmin(s.backupJobOr("target", s.handleBackupTargetSet)))
 	mux.HandleFunc("POST /api/v1/backups/target/sources", s.requireAdmin(s.handleBackupTargetPair))
 	mux.HandleFunc("DELETE /api/v1/backups/target/sources/{name}", s.requireAdmin(s.handleBackupTargetRemove))
+	mux.HandleFunc("GET /api/v1/replication", s.requireAdmin(s.handleReplication))
+	mux.HandleFunc("POST /api/v1/replication", s.requireAdmin(s.handleReplicationSave))
+	mux.HandleFunc("PUT /api/v1/replication/{id}", s.requireAdmin(s.handleReplicationSave))
+	mux.HandleFunc("DELETE /api/v1/replication/{id}", s.requireAdmin(s.handleReplicationRemove))
+	mux.HandleFunc("POST /api/v1/replication/{id}/run", s.requireHeavyAdmin(s.handleReplicationRun))
+	mux.HandleFunc("POST /api/v1/replication/received/restore", s.requireHeavyAdmin(s.handleReplicaRestore))
 	mux.HandleFunc("GET /api/v1/backups/folders", s.requireAdmin(s.handleBackupFolders))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", s.requireAdmin(s.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", s.requireAdmin(s.handleBackupUpdate))

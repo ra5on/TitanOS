@@ -46,6 +46,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/replication"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
@@ -686,8 +687,24 @@ func run(opts options) error {
 	backupTarget.Addresses = func() []string { return tailnet.Status().IPs }
 	backupTarget.Host = func() string { return tailnet.Status().Name }
 	backupTarget.Mounted = volumes.Mounted
+	// Btrfs replication: received over the same server, sent by jobs.
+	replicaReceiver := replication.NewReceiver()
+	replicaReceiver.Mounted, replicaReceiver.Filesystem = volumes.Mounted, volumes.FilesystemOf
+	backupTarget.Replicas = replicaReceiver.Serve
 	backupTarget.Load()
 	go backupTarget.Run(ctx)
+	replicas := replication.NewManager(store)
+	replicas.Disabled = opts.dev
+	replicas.Mounted, replicas.Filesystem = volumes.Mounted, volumes.FilesystemOf
+	replicas.OnResult = func(job replication.Job, err error) {
+		if err != nil {
+			notifier.Notify(notify.Error, "replication_failed", job.Name)
+		}
+	}
+	if err := replicas.Load(); err != nil {
+		slog.Warn("replication jobs not readable from /config", "err", err)
+	}
+	go replicas.Run(ctx)
 	// Unmanaged data drives: shown, and mounted only on a click.
 	drives := usb.NewManager()
 	drives.Disabled = opts.dev
@@ -825,7 +842,7 @@ func run(opts options) error {
 	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || replicas.Busy() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -870,7 +887,7 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || volumes.Reshaping() || replicas.Busy() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working() || folders.PurgeBusy()
 	}
 	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)
@@ -911,6 +928,8 @@ func run(opts options) error {
 		ConfigBackup:       stickBackup,
 		USB:                drives,
 		BackupTarget:       backupTarget,
+		Replication:        replicas,
+		ReplicaReceiver:    replicaReceiver,
 		Diagnose:           diagnostics,
 		SSH:                access,
 		Update:             updates,
