@@ -6,7 +6,7 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Found = { name: string; device: string; label: string; time: string; hostname: string; version: string };
+	type Found = { name: string; device: string; label: string; time: string; hostname: string; version: string; newer?: boolean };
 	type Source = { kind: 'found'; backup: Found } | { kind: 'file'; file: File };
 
 	let found = $state<Found[]>([]);
@@ -17,8 +17,33 @@
 	let picker = $state<HTMLInputElement>();
 
 	// Looking at the disks takes a moment; the setup form does not wait for it.
+	// Right after the start, mdadm may still be assembling an array (a
+	// degraded one only after a while), so an empty answer is asked again
+	// for a few minutes before it counts.
+	let searching = $state(true);
+	let searchError = $state('');
+	const searchFor = 180_000;
 	$effect(() => {
-		api.get<{ backups: Found[] }>('/setup/backups').then((res) => (found = res.backups.slice(0, 10)), () => {});
+		const started = Date.now();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let stopped = false;
+		async function look() {
+			try {
+				const res = await api.get<{ backups: Found[] }>('/setup/backups');
+				found = res.backups.slice(0, 10);
+				searchError = '';
+			} catch (err) {
+				searchError = errorText(err instanceof ApiError ? err.code : 'internal');
+			}
+			if (stopped) return;
+			if (found.length === 0 && Date.now() - started < searchFor) timer = setTimeout(look, 10_000);
+			else searching = false;
+		}
+		look();
+		return () => {
+			stopped = true;
+			clearTimeout(timer);
+		};
 	});
 
 	function entry(backup: Found): string {
@@ -98,9 +123,12 @@
 			{:else}
 				<p>{entry(found[0])}</p>
 			{/if}
+			{#if found[chosen]?.newer}<p class="notice-warn" role="alert">{t('restore.newer', { version: found[chosen].version })}</p>{/if}
 			<button type="button" class="btn btn-primary" disabled={phase !== 'idle'} onclick={() => (source = { kind: 'found', backup: found[chosen] })}>{t('restore.button')}</button>
 		</div>
 	{/if}
+	{#if found.length === 0 && searching}<p class="muted" role="status">{t('restore.searching')}</p>{/if}
+	{#if found.length === 0 && searchError}<p class="notice-warn">{t('restore.searchFailed', { error: searchError })}</p>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<details>
 		<summary>{t('restore.fromFile')}</summary>
@@ -114,6 +142,7 @@
 	<Dialog title={t('restore.confirmTitle')} locked={phase === 'working'} onclose={cancel}>
 		<p class="mono what">{source.kind === 'found' ? entry(source.backup) : source.file.name}</p>
 		<p>{t('restore.confirmText')}</p>
+		{#if source.kind === 'found' && source.backup.newer}<p class="notice-warn">{t('restore.newer', { version: source.backup.version })}</p>{/if}
 		<p class="notice-warn">{t('restore.confirmAddress')}</p>
 		{#if phase === 'working'}<p class="muted" role="status">{t('restore.working')}</p>{/if}
 		<div class="dialog-actions">

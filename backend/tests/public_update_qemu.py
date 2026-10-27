@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Disposable three-boot test of the public GitHub Stable update and rollback.
 
+With --break-new-slot the updated slot is made unable to start (titand
+masked on its kernel command line, the stick edited between boots with
+mtools): the boot loader must try it three times and then fall back to the
+old slot on its own, which reports the update as failed.
+
 Verifies the old ZIP with the project's trusted public keys, then installs
 the expected current Stable release directly from GitHub and rolls back.
 No update mirror, host disks, host Docker or host network configuration.
@@ -40,7 +45,8 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def run(archive, from_version, to_version, log, result_path, force_tcg=False, timeout=600):
+def run(archive, from_version, to_version, log, result_path, force_tcg=False, timeout=600, to_base=None, break_new_slot=False):
+    to_base = to_base or to_version
     log.parent.mkdir(parents=True, exist_ok=True)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     for key in sorted((REPO / 'build/mkosi.extra/usr/share/titanos/update-keys').glob('*.pub')):
@@ -54,7 +60,8 @@ def run(archive, from_version, to_version, log, result_path, force_tcg=False, ti
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     evidence = {"source": "https://github.com/ra5on/TitanOS", "channel": "stable",
-                "from": from_version, "to": to_version, "mirror": False,
+                "from": from_version, "to": to_version, "toBase": to_base, "mirror": False,
+                "mode": "fallback after three failed starts" if break_new_slot else "update and manual rollback",
                 "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "archiveSHA256": archive_hash, "oldZIPSigningKey": key.name,
                 "runnerSHA256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -145,8 +152,51 @@ def run(archive, from_version, to_version, log, result_path, force_tcg=False, ti
             value = current["pending"]
             return current if value and value["version"] == version and value["slot"] == slot else None
 
+        def break_slot_b():
+            # The entry of slot B on trial, renamed by systemd-boot as it
+            # counts down: titanos-b+3.conf, titanos-b+2-1.conf, ...
+            part = str(disk) + "@@1M"
+            listing = subprocess.run(["mdir", "-b", "-i", part, "::/loader/entries"], check=True, capture_output=True, text=True).stdout.split()
+            names = [Path(item).name for item in listing if Path(item).name.startswith("titanos-b")]
+            assert len(names) == 1, listing
+            text = subprocess.run(["mtype", "-i", part, "::/loader/entries/" + names[0]], check=True, capture_output=True, text=True).stdout
+            lines = [line + " systemd.mask=titand.service" if line.startswith("options ") else line for line in text.splitlines()]
+            edited = directory / names[0]
+            edited.write_text("\n".join(lines) + "\n")
+            command("mcopy", "-o", "-i", part, str(edited), "::/loader/entries/" + names[0])
+            print(f"Slot B broken on purpose: {names[0]} starts without titand", flush=True)
+            return names[0]
+
+        if break_new_slot:
+            boots = ((1, from_version, "a"), ("fail-1", to_version, "b"), ("fail-2", to_version, "b"), ("fail-3", to_version, "b"), (5, from_version, "a"))
+        else:
+            boots = ((1, from_version, "a"), (2, to_version, "b"), (3, from_version, "a"))
         with log.open("wb") as serial:
-            for boot, version, slot in ((1, from_version, "a"), (2, to_version, "b"), (3, from_version, "a")):
+            for boot, version, slot in boots:
+                if isinstance(boot, str):
+                    # A start that must fail: no health, the boot check gives
+                    # up after five minutes and restarts (QEMU exits).
+                    entry = break_slot_b()
+                    print(f"Boot {boot}: broken slot B ({entry}) must fail and restart", flush=True)
+                    process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=serial, stderr=subprocess.STDOUT)
+                    deadline = time.monotonic() + timeout + 600
+                    try:
+                        while process.poll() is None:
+                            try:
+                                if request("/api/v1/health").get("ready"):
+                                    raise AssertionError("broken slot B became healthy")
+                            except (OSError, ValueError, http.client.HTTPException, RuntimeError):
+                                pass
+                            if time.monotonic() > deadline:
+                                raise TimeoutError("broken slot B did not restart by itself")
+                            time.sleep(5)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait()
+                    evidence["checks"].append({"boot": boot, "slot": "b", "entry": entry, "result": "failed and restarted by itself"})
+                    continue
+                print(f"Boot {boot}: public TitanOS {version}, slot {slot}", flush=True)
                 print(f"Boot {boot}: public TitanOS {version}, slot {slot}", flush=True)
                 process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=serial, stderr=subprocess.STDOUT)
                 try:
@@ -177,16 +227,23 @@ def run(archive, from_version, to_version, log, result_path, force_tcg=False, ti
                             state = status()
                         assert state["available"] and state["available"]["version"] == to_version, state
                         assert state["kind"] == "system" and state["canVerify"], state
-                        assert state["available"]["app"]["base"] == to_version, state
+                        assert (state["available"].get("app") or {}).get("base", to_version) == to_base, state
                         print(f"Signed GitHub Stable {to_version} found as full system update", flush=True)
                         request("/api/v1/update/install", {})
                         state = wait("GitHub files downloaded and slot B prepared", lambda: pending(to_version, "b"), 1800)
                         print("Slot B prepared from real GitHub release", flush=True)
                     elif boot == 2:
-                        assert state["base"] == to_version and state["canRollback"], state
+                        assert state["base"] == to_base and state["canRollback"], state
                         request("/api/v1/update/rollback", {})
                         wait("rollback to slot A prepared", lambda: pending(from_version, "a"))
                         print(f"Rollback to {from_version} prepared", flush=True)
+                    elif break_new_slot:
+                        kinds = [message.get("kind") for message in request("/api/v1/notifications")["messages"]]
+                        assert "update_failed" in kinds, kinds
+                        entries = subprocess.run(["mdir", "-b", "-i", str(disk) + "@@1M", "::/loader/entries"], capture_output=True, text=True).stdout
+                        evidence["checks"].append({"boot": boot, "fallback": "old slot running again", "notification": "update_failed",
+                                                   "entries": sorted(Path(item).name for item in entries.split())})
+                        print("Fallback after three failed starts confirmed, update reported as failed", flush=True)
                     else:
                         assert state["base"] == from_version, state
                         print("Rollback confirmed, owner and HTTPS certificate preserved", flush=True)
@@ -214,9 +271,12 @@ if __name__ == "__main__":
     parser.add_argument('--result', type=Path, default=REPO/'out/validation/public-update.json')
     parser.add_argument('--timeout', type=int, default=600, help='seconds per boot/confirmation')
     parser.add_argument('--tcg', action='store_true', help='force CPU emulation without KVM')
+    parser.add_argument('--to-base', help='system base of the target when it is an app release (e.g. 0.26.0 for 0.28.0)')
+    parser.add_argument('--break-new-slot', action='store_true', help='make the updated slot fail and expect the automatic fallback')
     args = parser.parse_args()
     if not all(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value) for value in [args.from_version, args.to_version]):
         parser.error('both versions must be Stable versions such as 0.22.0')
     if args.from_version == args.to_version or args.timeout < 1:
         parser.error('versions must differ and timeout must be positive')
-    run(args.zip.resolve(), args.from_version, args.to_version, args.log.resolve(), args.result.resolve(), args.tcg, args.timeout)
+    run(args.zip.resolve(), args.from_version, args.to_version, args.log.resolve(), args.result.resolve(), args.tcg, args.timeout,
+        args.to_base, args.break_new_slot)
