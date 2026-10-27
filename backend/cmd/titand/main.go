@@ -504,6 +504,14 @@ func run(opts options) error {
 	notifier.SetHomeAssistant(home)
 	go home.Run(ctx)
 	go notify.NewWatcher(notifier).Run(ctx, volumes.Status)
+	volumes.OnSnapshotRestoreDone = func(job storage.SnapshotFolderJob) {
+		switch job.State {
+		case storage.RestoreDone:
+			notifier.Notify(notify.Info, "snapshot_restore_done", job.Volume+"/"+job.Target)
+		case storage.RestoreFailed:
+			notifier.Notify(notify.Error, "snapshot_restore_failed", job.Volume+"/"+job.Path)
+		}
+	}
 	volumes.OnTestDone = func(test storage.DiskTest) {
 		disk := test.Disk
 		if test.Serial != "" {
@@ -804,7 +812,7 @@ func run(opts options) error {
 	defer mediaImports.Close()
 	upkeep.Mounted = volumes.Mounted
 	upkeep.ExternalBusy = func(job maintenance.Job) bool {
-		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() {
+		if appBackups.Busy() || containers.Busy() || backups.Busy() || volumes.TestsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || machines.Busy() || fileManager.Busy() || extensions.Busy() || mediaImports.Working() {
 			return true
 		}
 		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -849,7 +857,7 @@ func run(opts options) error {
 
 	// An app update restarts titand: it waits for work that would break off.
 	updates.Working = func() bool {
-		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working()
+		return upkeep.Busy() || appBackups.Busy() || volumes.ActionsRunning() || volumes.SnapshotRestoresRunning() || volumes.GrowthPending() || fileManager.Busy() || backups.Busy() || volumes.TestsRunning() || machines.Busy() || extensions.Busy() || mediaImports.Working()
 	}
 	go machines.Run(ctx, volumes.Mounted)
 	go updates.Run(ctx)

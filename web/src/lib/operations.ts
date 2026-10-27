@@ -145,6 +145,7 @@ export type Operations = {
 	growth?: GrowthStatus;
 	diskTests?: { disk: string; phase: string; result: string; percent: number }[];
 	plugins?: import('#lib/plugin-progress.ts').PluginProgress[];
+	snapshotRestores?: import('#lib/snapshot-restore.ts').FolderRestoreJob[];
 };
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 export const operationError = (error: unknown, translate?: (key: MessageKey) => string) =>

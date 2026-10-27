@@ -1,6 +1,7 @@
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { Operations } from '#lib/operations.ts';
 import { currentStep, downloadPercent, pluginStepKey } from '#lib/plugin-progress.ts';
+import { folderRestoreProgress } from '#lib/snapshot-restore.ts';
 
 export type TaskState =
 	| 'running'
@@ -24,6 +25,7 @@ export type TaskKind =
 	| 'upload'
 	| 'recovery'
 	| 'plugin'
+	| 'restore'
 	| 'system';
 export type TaskAction = {
 	label: 'pause' | 'resume' | 'stop' | 'retry';
@@ -261,6 +263,21 @@ export function taskItems(data: Operations): TaskItem[] {
 			stepKey: step ? pluginStepKey(step.id) : undefined,
 		});
 	}
+	for (const job of data.snapshotRestores ?? [])
+		result.push({
+			id: `snapshot-restore:${job.id}`,
+			name: `${job.volume}/${job.path}`,
+			kind: 'restore',
+			state: job.state,
+			detail: job.error || (job.state === 'done' ? `${job.volume}/${job.target}` : undefined),
+			at: job.finished ?? job.started,
+			progress: job.state === 'running' ? folderRestoreProgress(job) : undefined,
+			href: '/storage/manage?mode=snapshots',
+			actions:
+				job.state === 'running'
+					? [{ label: 'stop', path: `/storage/snapshot-restores/${path(job.id)}/cancel`, body: {} }]
+					: [],
+		});
 	if (data.growth?.pending)
 		result.push({
 			id: 'growth',

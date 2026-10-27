@@ -58,3 +58,71 @@ Snapshot-Dateibrowser kopiert ausgewählte reguläre Dateien in neue Ordner;
 Symlinks und interne Betriebsdaten bleiben ausgenommen. Wartungszeitpläne
 erzeugen und inventarisieren eigene Snapshots; ihre bestätigte Aufbewahrung
 löscht keine manuellen Kopien. Siehe [WORKFLOWS.md](WORKFLOWS.md).
+
+## Ganze Ordner aus einem Snapshot wiederherstellen (ab 0.28.0)
+
+Unter **Speicher → Verwalten → Snapshots** einen Snapshot wählen und neben
+einem Ordner (oder für den gerade geöffneten Ordner) **Wiederherstellen …**
+anklicken. Der Dialog bietet zwei Ziele:
+
+- **An den ursprünglichen Ort:** Der Ordner wird rekursiv in den laufenden
+  Ordner gleichen Pfads zurückgeführt; vorhandene Ordner werden
+  zusammengeführt. Für Namen, die es dort schon gibt, gilt eine Regel wie im
+  Kopierdialog: **Überspringen** (Standard), **Beide behalten** (`name (2).ext`)
+  oder **Ersetzen**. Ersetzen tauscht nur Dateien bzw. Links gegeneinander aus
+  und verlangt ein zusätzliches Häkchen, wenn etwas ersetzt würde. Ein Ordner
+  wird nie gelöscht, um Platz zu machen; trifft ein Ordner auf eine Datei oder
+  einen Link (oder umgekehrt), bleiben beide erhalten. Fehlt der Ordner oder
+  fehlen schon seine Elternordner, werden sie aus dem Snapshot neu angelegt.
+- **Als neuen Ordner daneben:** `<ordner> (<snapshot>)` neben dem Original,
+  bei Bedarf `… (2)`. Der Elternordner muss noch existieren.
+
+Vor dem Start zeigt eine Vorschau Dateien, Unterordner, Größe, Links,
+ausgelassene Sondereinträge, das Ziel und die Zahl der Konflikte; sie schreibt
+nichts, zählt höchstens zwei Minuten und bindet den Start an die
+Btrfs-UUID des Snapshots. Geänderte Optionen lösen eine neue Vorschau aus.
+
+Die Wiederherstellung läuft als Hintergrundauftrag (erst Zählen, dann
+Kopieren) mit Fortschritt nach Dateien und Bytes. Sie erscheint im Snapshot-
+Reiter und unter **Werkzeuge → Aufträge**, lässt sich abbrechen und meldet
+Abschluss (`snapshot_restore_done`) oder Fehler (`snapshot_restore_failed`).
+Es läuft höchstens eine Ordner-Wiederherstellung gleichzeitig. Solange sie
+läuft, warten App-Updates und Wartungsaufträge; der verwendete Snapshot und
+das Volume lassen sich nicht löschen. Der Start steht im Aktivitätsprotokoll
+(Volume, Snapshot, Pfad, Ziel und Regel).
+
+Sicherheit und Treue:
+
+- Der Snapshot wird nur lesend geöffnet. Geschrieben wird ausschließlich im
+  Zielordner; Pfade mit `..`, absolute Pfade, `.titanos`, `.recycle` und
+  interne `.titanos-*`-Namen werden abgelehnt bzw. ausgelassen.
+- Alle Zugriffe laufen über festgehaltene Verzeichnis-Deskriptoren mit
+  `O_NOFOLLOW`. Symlinks werden auf keiner Seite verfolgt: Ein Symlink im
+  Snapshot wird als Link wiederhergestellt, ein Symlink oder ein anderer Mount
+  auf dem Weg zum Ziel führt zur Ablehnung.
+- Jede Datei und jeder neue Ordner entsteht unter einem versteckten Namen
+  (`.titanos-restore-….titanos-part`) und wird erst vollständig per
+  `renameat2(RENAME_NOREPLACE)` veröffentlicht (bei „Ersetzen“ per
+  atomarem Umbenennen über die alte Datei). Ein neuer Ordner daneben wird
+  dadurch erst sichtbar, wenn er komplett ist.
+- Besitzer, Gruppe, Rechte (einschließlich setuid/setgid), Zugriffs- und
+  Änderungszeit sowie erweiterte Attribute einschließlich POSIX-ACLs werden
+  übernommen. Dateien werden auf demselben Btrfs-Volume per Reflink
+  (`FICLONE`) geklont und belegen keinen zusätzlichen Platz; ohne Reflink wird
+  normal kopiert. Jede Datei wird vor der Veröffentlichung mit `fsync`
+  gesichert.
+- Vorhandene Ordner am ursprünglichen Ort behalten ihre eigenen Rechte und
+  Zeiten.
+
+Grenzen: Aufträge liegen nur im RAM (die letzten 20 beendeten bleiben
+sichtbar) und überleben keinen titand-Neustart. Beim Abbruch oder Fehler
+bleiben bereits zurückgeführte Dateien am ursprünglichen Ort erhalten; die
+gerade geschriebene Datei bzw. der unfertige neue Ordner wird entfernt. Nach
+einem Absturz können versteckte `.titanos-restore-*`-Reste liegen bleiben.
+Hardlinks werden als getrennte Dateien wiederhergestellt; Geräte, Pipes und
+Sockets werden ausgelassen. Verschachtelte Subvolumes sind im Snapshot leer
+(siehe oben). Ohne Reflink-Unterstützung braucht die Kopie freien Platz; er
+wird nicht vorab geprüft. Unit-Tests prüfen Pfadsicherheit, Konfliktregeln,
+Metadaten und den Auftragsablauf auf einem gewöhnlichen Dateisystem; Reflinks
+auf echtem Btrfs und große Bäume sind in QEMU bzw. auf echter Hardware noch
+zu prüfen.

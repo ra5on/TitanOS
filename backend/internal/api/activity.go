@@ -52,6 +52,7 @@ var activityQuiet = []string{
 	"DELETE /api/v1/plugins/progress/{id}",
 	"POST /api/v1/storage/volumes/{name}/growth/preview",
 	"POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/preview",
+	"POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/preview",
 	"POST /api/v1/storage/import/preview",
 	"POST /api/v1/network/diagnostics",
 	"POST /api/v1/backups/smb/discover",
