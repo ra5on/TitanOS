@@ -123,10 +123,18 @@ async function addEveryTile() {
   await page
     .getByRole("button", { name: /^(Dashboard bearbeiten|Edit dashboard)$/ })
     .click();
+  const addButton = page
+    .locator(".editbar")
+    .getByRole("button", { name: /^(Kachel hinzufügen|Add a tile)$/ });
+  await addButton.click();
   const choices = page.locator(".add-tiles .tile-choices button:enabled");
   await choices.first().waitFor();
   let added = 0;
-  while ((await choices.count()) && added < 40) {
+  // Adding a tile opens its inspector; the toolbar button reopens the list.
+  while (added < 40) {
+    if (!(await page.locator(".add-tiles").count())) await addButton.click();
+    await page.locator(".add-tiles").waitFor();
+    if (!(await choices.count())) break;
     const label = (await choices.first().innerText()).trim();
     errors.length = 0;
     consoleErrors.length = 0;
@@ -145,6 +153,9 @@ async function addEveryTile() {
     .getByText(/^(Das NetBird-Plugin ist nicht aktiv\.|The NetBird plugin is not active\.)$/)
     .waitFor();
   await page.getByRole("button", { name: /^(Abbrechen|Cancel)$/ }).click();
+  // Unsaved changes: the editor asks before discarding them.
+  await page.getByRole("button", { name: /^(Verwerfen|Discard)$/ }).click();
+  await page.locator(".editbar").waitFor({ state: "detached" });
   console.log(`ok / editor (${added} tiles added)`);
 }
 

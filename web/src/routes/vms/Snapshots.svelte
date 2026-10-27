@@ -52,9 +52,17 @@
 		panel = '';
 		loadError = '';
 		load(url);
-		const timer = setInterval(() => {
-			if (!document.hidden) load(url);
-		}, 3000);
+	});
+	// Quick while a snapshot job runs, slow while nothing happens.
+	const polling = $derived(busy || status?.job?.state === 'running' || !!status?.pending);
+	$effect(() => {
+		const url = base;
+		const timer = setInterval(
+			() => {
+				if (!document.hidden) load(url);
+			},
+			polling ? 3000 : 15000,
+		);
 		return () => clearInterval(timer);
 	});
 

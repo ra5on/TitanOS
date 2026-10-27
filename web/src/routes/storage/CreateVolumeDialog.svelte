@@ -5,6 +5,7 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import DiskPicker from './DiskPicker.svelte';
 	import { isUsable } from './labels.ts';
+	import { radioKeys } from '#lib/radio-group.ts';
 
 	type Props = { disks: Disk[]; taken: string[]; onclose: () => void; ondone: () => void };
 	let { disks, taken, onclose, ondone }: Props = $props();
@@ -57,14 +58,20 @@
 	});
 	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && !working);
 
+	// Btrfs is offered only as a two-disk mirror, so picking it moves the level to RAID 1.
+	function pickFilesystem(id: Filesystem) {
+		filesystem = id;
+		if (id === 'btrfs') level = 'raid1';
+	}
+
 	// Whoever changes the selection has to confirm the erasing again.
 	$effect(() => {
 		selected;
 		confirmed = false;
 	});
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
+	// Erases disks: runs only from a click on its button, never from Enter in the name field.
+	async function submit() {
 		if (!ready) return;
 		working = true;
 		error = null;
@@ -80,7 +87,7 @@
 </script>
 
 <Dialog title={t('create.title')} wide locked={working} {onclose}>
-	<form onsubmit={submit}>
+	<form onsubmit={(event) => event.preventDefault()}>
 		<label class="field-row">
 			<span class="label">{t('create.name')}</span>
 			<!-- svelte-ignore a11y_autofocus -->
@@ -89,15 +96,28 @@
 		</label>
 
 		<div class="field-row">
+			<span class="label" id="fs-label">{t('create.filesystem')}</span>
+			<div class="options two" role="radiogroup" aria-labelledby="fs-label" tabindex="-1" onkeydown={radioKeys}>
+				{#each FILESYSTEMS as id (id)}
+					<button type="button" class="option" role="radio" aria-checked={filesystem === id} tabindex={filesystem === id ? 0 : -1} onclick={() => pickFilesystem(id)}>
+						<span class="option-name">{t(`fs.${id}`)}</span>
+						<span class="muted small">{t(`fs.${id}Desc`)}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="field-row">
 			<span class="label" id="level-label">{t('create.level')}</span>
-			<div class="options" role="radiogroup" aria-labelledby="level-label">
+			<div class="options" role="radiogroup" aria-labelledby="level-label" tabindex="-1" onkeydown={radioKeys}>
 				{#each LEVELS as entry (entry.id)}
-					<button type="button" class="option" role="radio" aria-checked={level === entry.id} onclick={() => (level = entry.id)}>
+					<button type="button" class="option" role="radio" aria-checked={level === entry.id} tabindex={level === entry.id ? 0 : -1} disabled={filesystem === 'btrfs' && entry.id !== 'raid1'} onclick={() => (level = entry.id)}>
 						<span class="option-name">{t(`level.${entry.id}`)}</span>
 						<span class="muted small">{t(`level.${entry.id}Desc`)}</span>
 					</button>
 				{/each}
 			</div>
+			{#if filesystem === 'btrfs'}<p class="muted small">{t('create.btrfsMirrorOnly')}</p>{/if}
 			{#if level === 'raid0'}<p class="notice-warn" role="alert">{t('create.raid0Warning')}</p>{/if}
 		</div>
 
@@ -108,18 +128,6 @@
                 <p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
                 <button type="button" class="btn" onclick={() => { selected = []; selectionIdentities = {}; }}>{t('create.clearSelection')}</button>
             {/if}
-		</div>
-
-		<div class="field-row">
-			<span class="label" id="fs-label">{t('create.filesystem')}</span>
-			<div class="options two" role="radiogroup" aria-labelledby="fs-label">
-				{#each FILESYSTEMS as id (id)}
-					<button type="button" class="option" role="radio" aria-checked={filesystem === id} onclick={() => (filesystem = id)}>
-						<span class="option-name">{t(`fs.${id}`)}</span>
-						<span class="muted small">{t(`fs.${id}Desc`)}</span>
-					</button>
-				{/each}
-			</div>
 		</div>
 
 		<div class="capacity">
@@ -142,7 +150,7 @@
 		<div class="dialog-actions">
 			<span class="working" role="status">{working ? t('create.working') : ''}</span>
 			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-warn" disabled={!ready}>{t('create.submit')}</button>
+			<button type="button" class="btn btn-warn" disabled={!ready} onclick={submit}>{t('create.submit')}</button>
 		</div>
 	</form>
 </Dialog>
@@ -195,6 +203,10 @@
 		color: var(--text);
 		font: inherit;
 		cursor: pointer;
+	}
+	.option:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 	.option[aria-checked='true'] {
 		border-color: var(--accent);

@@ -2,6 +2,7 @@
  import AppIcon from '#lib/components/AppIcon.svelte';
 	import { api, ApiError, type AppSource, type AppStore, type CatalogApp, type DockerStatus, type Share } from '#lib/api.ts';
  import EmptyState from '#lib/components/EmptyState.svelte';
+ import Dialog from '#lib/components/Dialog.svelte';
  import PageHead from '#lib/components/PageHead.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
@@ -29,6 +30,28 @@
 	let draft = $state({ url: '', name: '' });
 	let sourceError = $state('');
 	let busy = $state(false);
+	let onlyInstalled = $state(false);
+	// The catalog can hold hundreds of apps; they are shown in pages of 60.
+	const PAGE = 60;
+	let limit = $state(PAGE);
+	$effect(() => {
+		void [search, category, from, onlyInstalled];
+		limit = PAGE;
+	});
+	// The open install form has entries of the user; switching or closing asks first.
+	let panelDirty = $state(false);
+	let switching = $state<{ app: CatalogApp | null } | null>(null);
+	function choose(app: CatalogApp | null) {
+		if (app && selected && app.id === selected.id && app.source === selected.source) return;
+		if (panelDirty && selected) switching = { app };
+		else selected = app;
+	}
+	function confirmSwitch() {
+		if (!switching) return;
+		panelDirty = false;
+		selected = switching.app;
+		switching = null;
+	}
 
 	const code = (err: unknown) => (err instanceof ApiError ? err.code : 'internal');
 
@@ -51,11 +74,19 @@
 		return ['all', ...known, ...others, ...(present.has('other') ? ['other'] : [])];
 	});
 	const describe = (app: CatalogApp) => localize(app.description, i18n.locale) || app.image;
-	const visible = $derived.by(() => {
-		const query = search.trim().toLowerCase();
-		return apps.filter((app) => (from === 'all' || app.source === from) && (category === 'all' || categoryOf(app) === category) && (query === '' || `${app.name} ${app.id} ${describe(app)}`.toLowerCase().includes(query)));
-	});
 	const installed = (app: CatalogApp) => docker?.apps.includes(app.id) ?? false;
+	// Everything but the category: what the category buttons count.
+	const matching = $derived.by(() => {
+		const query = search.trim().toLowerCase();
+		return apps.filter((app) => (from === 'all' || app.source === from) && (!onlyInstalled || installed(app)) && (query === '' || `${app.name} ${app.id} ${describe(app)}`.toLowerCase().includes(query)));
+	});
+	const categoryCounts = $derived.by(() => {
+		const counts: Record<string, number> = { all: matching.length };
+		for (const app of matching) counts[categoryOf(app)] = (counts[categoryOf(app)] ?? 0) + 1;
+		return counts;
+	});
+	const visible = $derived(matching.filter((app) => category === 'all' || categoryOf(app) === category));
+	const installedCount = $derived(apps.filter(installed).length);
 	const ready = $derived(!!docker?.settings.enabled && docker.running);
 
 	function checked(source: AppSource): string {
@@ -171,16 +202,17 @@
 						{#each sources as source (source.id)}<option value={source.id}>{source.name} ({source.count})</option>{/each}
 					</select>
 				{/if}
+				<button type="button" class="toggle" aria-pressed={onlyInstalled} onclick={() => (onlyInstalled = !onlyInstalled)}>{t('apps.filterInstalled')} <span class="num">{installedCount}</span></button>
 				<span class="muted shown">{t('apps.shown', { count: visible.length })}</span>
 			</div>
 			<div class="categories" role="group" aria-label={t('apps.categories')}>
 				{#each categories as key (key)}
-					<button type="button" aria-pressed={category === key} onclick={() => (category = key)}>{categoryLabel(key)}</button>
+					<button type="button" aria-pressed={category === key} onclick={() => (category = key)}>{categoryLabel(key)} <span class="num">{categoryCounts[key] ?? 0}</span></button>
 				{/each}
 			</div>
 			<div class="cards">
-				{#each visible as app (`${app.source}/${app.id}`)}
-					<button type="button" class="tile card" aria-pressed={selected?.id === app.id && selected.source === app.source} onclick={() => (selected = app)}>
+				{#each visible.slice(0, limit) as app (`${app.source}/${app.id}`)}
+					<button type="button" class="tile card" aria-pressed={selected?.id === app.id && selected.source === app.source} onclick={() => choose(app)}>
 						<span class="card-head">
 							<span class="monogram" aria-hidden="true"><AppIcon src={app.icon} name={app.name} /></span>
 							<span class="names"><span class="name">{app.name}</span><span class="muted category">{categoryLabel(categoryOf(app))}</span></span>
@@ -193,18 +225,63 @@
 					</button>
 				{/each}
 			</div>
+			{#if visible.length > limit}
+				<div class="more">
+					<button type="button" class="btn" onclick={() => (limit += PAGE)}>{t('apps.showMore', { count: Math.min(PAGE, visible.length - limit) })}</button>
+					<span class="muted">{t('apps.showing', { shown: limit, total: visible.length })}</span>
+				</div>
+			{/if}
 			{#if visible.length === 0}<EmptyState inline title={t('apps.none')} />{/if}
 		</div>
 
 		{#if selected}
 			{#key `${selected.source}/${selected.id}`}
-				<InstallPanel app={selected} source={sourceName(selected.source)} description={describe(selected)} {docker} {shares} onclose={() => (selected = null)} />
+				<InstallPanel app={selected} source={sourceName(selected.source)} description={describe(selected)} {docker} {shares} bind:dirty={panelDirty} onclose={() => choose(null)} />
 			{/key}
 		{/if}
 	</div>
 {/if}
 
+{#if switching}
+	<Dialog title={t('apps.discardTitle')} onclose={() => (switching = null)}>
+		<p>{t('apps.discardText', { name: selected?.name ?? '' })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (switching = null)}>{t('shares.keepEditing')}</button><button type="button" class="btn btn-warn" onclick={confirmSwitch}>{t('shares.discard')}</button>
+		</div>
+	</Dialog>
+{/if}
+
 <style>
+	.more {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px;
+		font-size: 0.8125rem;
+	}
+	.num {
+		margin-left: 4px;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		opacity: 0.75;
+	}
+	.toggle {
+		height: 2.25rem;
+		padding: 0 14px;
+		background: var(--panel-bg);
+		border: 1px solid var(--panel-border);
+		border-radius: var(--radius-ctl);
+		color: var(--text);
+		font: inherit;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.toggle[aria-pressed='true'] {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: var(--on-accent);
+	}
 	.sources {
 		overflow: hidden;
 	}

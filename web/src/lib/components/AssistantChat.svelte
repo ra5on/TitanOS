@@ -16,6 +16,7 @@
 	} from '#lib/assistant.svelte.ts';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { formatNumber } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { page } from '$app/state';
 	import AssistantAction from './AssistantAction.svelte';
@@ -134,10 +135,23 @@
 	$effect(() => {
 		if (page.url.pathname === '/assistant') field?.focus();
 	});
+	// Screen readers hear the answer once it is complete.
+	let announce = $state('');
+	let wasBusy = false;
+	$effect(() => {
+		const busy = assistant.busy;
+		if (wasBusy && !busy) {
+			const last = assistant.messages.at(-1);
+			announce = last?.role === 'assistant' && last.content ? last.content.slice(0, 600) : '';
+		} else if (busy) announce = '';
+		wasBusy = busy;
+	});
 </script>
 
 <div class="chat">
-	<div class="log" bind:this={log} onscroll={scrolled} aria-live="polite">
+	<!-- Only the finished answer is announced, not every streamed token of the history. -->
+	<p class="sr-only" aria-live="polite">{announce}</p>
+	<div class="log" bind:this={log} onscroll={scrolled}>
 		{#each assistant.messages as message, index (`${assistant.chatId}:${index}:${message.action?.id ?? ''}`)}
 			{#if message.role === 'user'}
 				{#if editing?.index === index}
@@ -223,7 +237,7 @@
 		{/if}
 		{#if assistant.stats && !assistant.busy}
 			{@const st = assistant.stats}
-			<p class="muted stats">{t('assistant.stats', { rounds: st.rounds, prompt: st.prompt.toLocaleString(), generated: st.generated.toLocaleString(), model: (st.modelMs / 1000).toFixed(1), tools: st.tools, toolTime: (st.toolMs / 1000).toFixed(1) })}</p>
+			<p class="muted stats">{t('assistant.stats', { rounds: st.rounds, prompt: formatNumber(st.prompt), generated: formatNumber(st.generated), model: (st.modelMs / 1000).toFixed(1), tools: st.tools, toolTime: (st.toolMs / 1000).toFixed(1) })}</p>
 		{/if}
 		{#if assistant.error}<p class="notice-error" role="alert">{errorText(assistant.error)}</p>{/if}
 	</div>

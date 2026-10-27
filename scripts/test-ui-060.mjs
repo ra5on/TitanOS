@@ -77,7 +77,7 @@ try {
  await page.locator('.notifications > button').click();await page.getByRole('link',{name:'Details öffnen',exact:true}).click();
  await page.locator('#volume-data').waitFor();assert.equal(new URL(page.url()).hash,'#volume-data');
  offline=true;await page.getByText('Verbindung zum NAS unterbrochen',{exact:true}).waitFor({timeout:15000});await page.getByText(/Angezeigte Werte sind möglicherweise veraltet/).waitFor();await page.screenshot({path:out+'/connection-lost.png'});offline=false;
- await page.getByRole('button',{name:'Erneut versuchen',exact:true}).click();await page.getByText('Verbindung zum NAS unterbrochen',{exact:true}).waitFor({state:'hidden'});
+ await page.getByRole('status').filter({hasText:'Verbindung zum NAS'}).getByRole('button',{name:'Erneut versuchen',exact:true}).click();await page.getByText('Verbindung zum NAS unterbrochen',{exact:true}).waitFor({state:'hidden'});
  await page.goto(base+'/vms');await page.getByRole('heading',{name:'Linux Server',exact:true}).waitFor();
  failVM=true;await page.getByRole('button',{name:'Starten',exact:true}).click();await page.getByText(/Linux Server: Wird gestartet/).waitFor();await page.getByRole('button',{name:'Erneut versuchen',exact:true}).waitFor();
  failVM=false;await page.getByRole('button',{name:'Erneut versuchen',exact:true}).click();await page.getByText(/Aktion für Linux Server angenommen/).waitFor();
