@@ -189,7 +189,7 @@
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if status && draft}
-	<section class="tile" aria-labelledby="upd-now">
+	<section class="tile panel" aria-labelledby="upd-now">
 		<div class="head">
 			<h2 class="tile-title" id="upd-now">{t('update.installed')}</h2>
 			{#if !status.release}<span class="chip warn">{t('update.devBuild')}</span>{/if}
@@ -253,7 +253,7 @@
 	</section>
 
 	{#if status.app.current || status.app.previous}
-		<section class="tile" aria-labelledby="upd-app">
+		<section class="tile panel" aria-labelledby="upd-app">
 			<h2 class="tile-title" id="upd-app">{t('update.app.title')}</h2>
 			<p class="muted">{t('update.app.text', { version: status.base })}</p>
 			<ul class="slots">
@@ -267,7 +267,7 @@
 	{/if}
 
 	{#if status.slots.length > 0}
-	<section class="tile" aria-labelledby="upd-slots">
+	<section class="tile panel" aria-labelledby="upd-slots">
 		<h2 class="tile-title" id="upd-slots">{t('update.slots')}</h2>
 		<p class="muted">{t('update.slotsText')}</p>
 		<ul class="slots">
@@ -285,7 +285,7 @@
 	</section>
 	{/if}
 
-	<form class="tile" onsubmit={save}>
+	<form class="tile panel" onsubmit={save}>
 		<h2 class="tile-title">{t('update.settings')}</h2>
 		<p class="muted">{t('update.singleChannel')}</p>
 		<div class="interval">
@@ -316,7 +316,7 @@
 		{:else}
 			<p class="muted">{t('update.manualHint')}</p>
 		{/if}
-		<div class="actions"><button type="submit" class="btn btn-primary" disabled={!changed || customInvalid || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}</div>
+		<div class="row-actions"><button type="submit" class="btn btn-primary" disabled={!changed || customInvalid || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}</div>
 	</form>
 {/if}
 
@@ -360,14 +360,9 @@
 <style>
 	section,
 	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
 	}
 	p {
-		margin: 0;
 		max-width: 60rem;
 	}
 	.head,
@@ -490,20 +485,8 @@
 	}
 	label.check {
 		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		font-size: 0.875rem;
 	}
 	.check > span {
 		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.actions {
-		display: flex;
-		justify-content: flex-end;
 	}
 </style>

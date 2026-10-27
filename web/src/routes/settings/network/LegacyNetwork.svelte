@@ -106,20 +106,20 @@
 {#if lost}<p class="notice-warn" role="status">{t('netcfg.lost')}</p>{/if}
 
 {#if status && draft}
-	<section class="tile now" aria-labelledby="net-now">
+	<section class="tile panel" aria-labelledby="net-now">
 		<h2 class="tile-title" id="net-now">{t('netcfg.now')}</h2>
 		<dl>
 			<div><dt>{t('netcfg.device')}</dt><dd class="mono">{status.device || '–'}</dd></div>
-			<div><dt>{t('netcfg.address')}</dt><dd class="mono">{status.addresses.join(', ') || '–'}</dd></div>
+			<div class="wide"><dt>{t('netcfg.address')}</dt><dd class="mono">{#each status.addresses as address (address)}<span>{address}</span>{:else}–{/each}</dd></div>
 			<div><dt>{t('netcfg.gateway')}</dt><dd class="mono">{status.gateway || '–'}</dd></div>
-			<div><dt>{t('netcfg.dns')}</dt><dd class="mono">{status.dns.join(', ') || '–'}</dd></div>
+			<div><dt>{t('netcfg.dns')}</dt><dd class="mono">{#each status.dns as server (server)}<span>{server}</span>{:else}–{/each}</dd></div>
 		</dl>
 	</section>
 
 	{#if status.pending}
 		<p class="notice-warn" role="status">{t('netcfg.pendingHere')}</p>
 	{:else}
-		<form class="tile" onsubmit={apply}>
+		<form class="tile panel" onsubmit={apply}>
 			<label class="narrow"><span>{t('netcfg.hostname')}</span>
 				<input class="field mono" type="text" bind:value={draft.hostname} maxlength="63" autocapitalize="none" spellcheck="false" required />
 				<small>{t('netcfg.hostnameHint')}</small>
@@ -181,12 +181,6 @@
 {/if}
 
 <style>
-	.now {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		padding: 18px;
-	}
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -202,20 +196,22 @@
 		margin: 2px 0 0;
 		overflow-wrap: anywhere;
 	}
+	dd > span {
+		display: block;
+	}
+	dl > .wide {
+		grid-column: span 2;
+	}
+	@media (max-width: 760px) {
+		dl > .wide {
+			grid-column: auto;
+		}
+	}
 	form {
-		display: flex;
-		flex-direction: column;
 		gap: 18px;
-		padding: 18px;
 	}
 	fieldset {
-		display: flex;
-		flex-direction: column;
 		gap: 12px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: 0;
 	}
 	legend {
 		padding: 0;

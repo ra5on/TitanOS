@@ -99,8 +99,8 @@
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 {#if loading}<p role="status">{t('common.loading')}</p>{:else if !tokens.length}<EmptyState
 		title={t('api.empty')}
-	/>{:else}<section class="tile tokens" aria-label={t('api.mine')}>
-		<h2 class="tile-title">{t('api.mine')}</h2>
+	/>{:else}<section class="tile panel tokens" aria-labelledby="api-mine">
+		<h2 class="tile-title" id="api-mine">{t('api.mine')}</h2>
 		{#each tokens as token (token.id)}<div class="token">
 				<div>
 					<strong>{token.name}</strong>
@@ -114,9 +114,11 @@
 				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}>{t('api.revoke')}</button>
 			</div>{/each}
 	</section>{/if}
-<section class="tile docs">
-	<h2 class="tile-title">{t('api.documentation')}</h2>
-	<a class="btn" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">{t('api.openapi')}</a>
+<section class="tile panel" aria-labelledby="api-docs">
+	<h2 class="tile-title" id="api-docs">{t('api.documentation')}</h2>
+	<div class="row-actions">
+		<a class="btn" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">{t('api.openapi')}</a>
+	</div>
 	<p class="muted">{t('api.cliHint')}</p>
 </section>
 <p class="muted">{t('api.security')}</p>
@@ -176,9 +178,11 @@
 	>{/if}
 
 <style>
-	.tokens,
-	.docs {
-		padding: var(--tile-pad);
+	.tokens {
+		gap: 0;
+	}
+	.tokens h2 {
+		margin-bottom: 4px;
 	}
 	.token {
 		display: flex;
@@ -200,10 +204,6 @@
 	}
 	.token .btn {
 		flex: none;
-	}
-	.docs {
-		display: grid;
-		gap: var(--gap);
 	}
 	form,
 	.field-row {

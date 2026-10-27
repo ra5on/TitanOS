@@ -168,14 +168,14 @@
 		></EmptyState
 	>{/if}
 {#if ready && jobs.length && !watching && !result && !plan}<form
-		class="tile form"
+		class="tile panel form"
 		onsubmit={(e) => {
 			e.preventDefault();
 			preview();
 		}}
 	>
-		<label
-			>{t('applications.job')}<select
+		<label class="stack"
+			><span>{t('applications.job')}</span><select
 				class="field"
 				bind:value={job}
 				required
@@ -186,8 +186,8 @@
 					>{/each}</select
 			></label
 		>
-		<label
-			>{t('applications.snapshot')}<select
+		<label class="stack"
+			><span>{t('applications.snapshot')}</span><select
 				class="field"
 				bind:value={snapshot}
 				required
@@ -197,8 +197,12 @@
 					>{/each}</select
 			></label
 		>
-		<label
-			>{t('applications.volume')}<select class="field" bind:value={volume} required disabled={busy}
+		<label class="stack"
+			><span>{t('applications.volume')}</span><select
+				class="field"
+				bind:value={volume}
+				required
+				disabled={busy}
 				><option value="">{t('ops.choose')}</option>{#each volumes as v (v.name)}<option
 						value={v.name}>{v.name}</option
 					>{/each}</select
@@ -208,8 +212,8 @@
 			>{t('ops.preview')}</button
 		>
 	</form>{/if}
-{#if plan}<section class="tile plan">
-		<h2>{t('tasks.restorePreview')}</h2>
+{#if plan}<section class="tile panel plan">
+		<h2 class="tile-title">{t('tasks.restorePreview')}</h2>
 		<p class="mono">{job} · {plan.snapshot.id} · {formatDateTime(new Date(plan.snapshot.time))}</p>
 		<p>
 			{t('applications.size')}: {plan.snapshot.bytes
@@ -235,64 +239,56 @@
 		{#if plan.currentSelection}<p class="notice-warn">
 				{t('applications.currentSelectionHint')}
 			</p>{/if}
-		<div class="actions">
+		<div class="row-actions">
 			<button class="btn" disabled={busy} onclick={() => (plan = null)}>{t('common.cancel')}</button
 			><button class="btn btn-primary" disabled={busy} onclick={restore}
 				>{t('applications.restoreCopy')}</button
 			>
 		</div>
 	</section>{/if}
-{#if watching}<section class="tile plan">
-		<h2>{t('applications.running')}</h2>
+{#if watching}<section class="tile panel plan">
+		<h2 class="tile-title">{t('applications.running')}</h2>
 		<p class="mono">{target}</p>
 		<p>{t('applications.background')}</p>
 		<a href="/tools/tasks">{t('ops.openTasks')}</a>
 	</section>{/if}
-{#if result}<section class="tile plan">
-		<h2>{t(result.verified ? 'applications.done' : 'applications.failed')}</h2>
+{#if result}<section class="tile panel plan">
+		<h2 class="tile-title">{t(result.verified ? 'applications.done' : 'applications.failed')}</h2>
 		<p class="mono">{result.target}</p>
 		{#if result.error}<p class="notice-error">{result.error}</p>{/if}
 		{#if result.verified}<ol>
 				<li>{t('applications.reviewFiles')}</li>
 				<li>{t('applications.reviewConfig')}</li>
 				<li>{t('applications.testCopy')}</li>
-			</ol>
-			<a class="btn btn-primary" href={targetLink()}>{t('applications.openTarget')}</a>{/if}
-		<button
-			class="btn"
-			onclick={() => {
-				result = null;
-				target = '';
-			}}>{t('applications.another')}</button
-		>
+			</ol>{/if}
+		<div class="row-actions">
+			{#if result.verified}<a class="btn btn-primary" href={targetLink()}
+					>{t('applications.openTarget')}</a
+				>{/if}
+			<button
+				class="btn"
+				onclick={() => {
+					result = null;
+					target = '';
+				}}>{t('applications.another')}</button
+			>
+		</div>
 	</section>{/if}
 
 <style>
-	.form,
-	.plan {
-		padding: var(--tile-pad);
-		margin-bottom: var(--gap);
-	}
-	.form,
-	.actions {
-		display: flex;
+	.form {
+		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: end;
-		gap: 14px;
 	}
-	label {
-		display: flex;
+	.form .stack {
 		flex: 1 1 200px;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.875rem;
-	}
-	.plan h2 {
-		font-size: 1rem;
 	}
 	.plan h3 {
 		font-size: 0.875rem;
-		margin-top: 18px;
+	}
+	.plan :is(ul, ol) {
+		margin: 0;
 	}
 	.plan li {
 		margin: 8px 0;
@@ -300,8 +296,5 @@
 	}
 	.mono {
 		overflow-wrap: anywhere;
-	}
-	.plan .btn {
-		margin: 8px 8px 0 0;
 	}
 </style>

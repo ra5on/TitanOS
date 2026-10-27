@@ -160,8 +160,8 @@
 	>
 </div>
 <div class="groups">
-	<section class="tile">
-		<h2>{t('safeguard.data')}</h2>
+	<section class="tile panel">
+		<h2 class="tile-title">{t('safeguard.data')}</h2>
 		<p class="muted">{t('safeguard.dataHint')}</p>
 		<nav aria-label={t('safeguard.data')}>
 			<a href="/settings/backups/data">{t('safeguard.jobs')} <span aria-hidden="true">›</span></a><a
@@ -173,8 +173,8 @@
 		</nav>
 		<a class="btn" href="/settings/backups/data">{t('safeguard.manage')}</a>
 	</section>
-	<section class="tile">
-		<h2>{t('safeguard.config')}</h2>
+	<section class="tile panel">
+		<h2 class="tile-title">{t('safeguard.config')}</h2>
 		<p class="muted">{t('safeguard.configHint')}</p>
 		<nav aria-label={t('safeguard.config')}>
 			<a href="/settings/backups/configuration#config-schedule"
@@ -187,8 +187,8 @@
 		</nav>
 		<a class="btn" href="/settings/backups/configuration">{t('stick.title')}</a>
 	</section>
-	<section class="tile">
-		<h2>{t('safeguard.restore')}</h2>
+	<section class="tile panel">
+		<h2 class="tile-title">{t('safeguard.restore')}</h2>
 		<p class="muted">{t('safeguard.recoveryHint')}</p>
 		<nav aria-label={t('safeguard.restore')}>
 			<a href="/settings/backups/restore#restore-files"
@@ -211,7 +211,7 @@
 		gap: 20px;
 	}
 	.summary {
-		padding: var(--tile-pad);
+		padding: calc(var(--tile-pad) + 2px);
 	}
 	.summary > div {
 		display: grid;
@@ -224,18 +224,16 @@
 	strong {
 		font-weight: 500;
 	}
-	section {
-		display: flex;
-		flex-direction: column;
-		padding: var(--tile-pad);
-		gap: 14px;
-		min-width: 0;
-	}
-	h2 {
-		font-size: 1.125rem;
-	}
 	p {
 		margin: 0;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	section > .btn {
+		align-self: flex-start;
 	}
 	nav {
 		display: grid;

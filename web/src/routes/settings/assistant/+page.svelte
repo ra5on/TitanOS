@@ -161,15 +161,15 @@
 
 {#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{/if}
 {#if settings}
-	<form onsubmit={save} class="stack">
-		<section class="tile">
+	<form onsubmit={save} class="sections">
+		<section class="tile panel">
 			<label class="check">
 				<input type="checkbox" bind:checked={settings.enabled} />
 				<span>{t('assistant.enable')}</span>
 			</label>
 			<p class="muted">{t('assistant.settingsText')}</p>
 
-			<label>
+			<label class="stack">
 				<span>{t('assistant.ollama')}</span>
 				<div class="row">
 					<input class="field mono" bind:value={settings.ollama} aria-label={t('assistant.ollama')} placeholder="http://127.0.0.1:11434" spellcheck="false" autocapitalize="none" required />
@@ -189,7 +189,7 @@
 				<p class="ok" role="status">{t('assistant.reachable', { count: models.length })}</p>
 			{/if}
 
-			<label>
+			<label class="stack">
 				<span>{t('assistant.defaultModel')}</span>
 				<select class="field" bind:value={settings.model}>
 					<option value="">{t('assistant.pickModel')}</option>
@@ -199,8 +199,8 @@
 			</label>
 		</section>
 
-		<section class="tile">
-			<h2 class="tile-title">{t('assistant.access')}</h2>
+		<section class="tile panel" aria-labelledby="assistant-access">
+			<h2 class="tile-title" id="assistant-access">{t('assistant.access')}</h2>
 			<label class="check">
 				<input type="checkbox" bind:checked={settings.users} />
 				<span>{t('assistant.allowUsers')}</span>
@@ -238,9 +238,9 @@
 			<p class="muted small">{t('assistant.areasHint')}</p>
 		</section>
 
-		<section class="tile">
-			<h2 class="tile-title">{t('assistant.storageTitle')}</h2>
-			<label>
+		<section class="tile panel" aria-labelledby="assistant-storage">
+			<h2 class="tile-title" id="assistant-storage">{t('assistant.storageTitle')}</h2>
+			<label class="stack">
 				<span>{t('assistant.volume')}</span>
 				<select class="field" bind:value={settings.volume}>
 					<option value="">{t('assistant.volumeFirst')}</option>
@@ -251,20 +251,20 @@
 			</label>
 		</section>
 
-		<section class="tile">
-			<h2 class="tile-title">{t('assistant.advanced')}</h2>
-			<label>
+		<section class="tile panel" aria-labelledby="assistant-advanced">
+			<h2 class="tile-title" id="assistant-advanced">{t('assistant.advanced')}</h2>
+			<label class="stack">
 				<span>{t('assistant.prompt')}</span>
 				<textarea class="field" bind:value={settings.prompt} rows="4" maxlength="24000" placeholder={t('assistant.promptPlaceholder')}></textarea>
 				<span class="muted small">{t('assistant.promptHint')}</span>
 			</label>
 			<div class="pair">
-				<label>
+				<label class="stack">
 					<span>{t('assistant.numCtx')}</span>
 					<input class="field mono" type="number" min="0" max="1048576" step="1024" bind:value={settings.numCtx} />
 					<span class="muted small">{t('assistant.numCtxHint')}</span>
 				</label>
-				<label>
+				<label class="stack">
 					<span>{t('assistant.temperature')}</span>
 					<input class="field mono" type="number" min="0" max="2" step="0.1" bind:value={settings.temperature} placeholder="–" />
 					<span class="muted small">{t('assistant.temperatureHint')}</span>
@@ -281,8 +281,8 @@
 		</div>
 	</form>
 
-	<section class="tile">
-		<h2 class="tile-title">{t('assistant.models')}</h2>
+	<section class="tile panel" aria-labelledby="assistant-models">
+		<h2 class="tile-title" id="assistant-models">{t('assistant.models')}</h2>
 		{#if models}
 			<div class="table">
 				<table>
@@ -322,8 +322,8 @@
 	<p role="status">{t('common.loading')}</p>
 {/if}
 
-<section class="tile">
-	<h2 class="tile-title">{t('assistant.privacyTitle')}</h2>
+<section class="tile panel" aria-labelledby="assistant-privacy">
+	<h2 class="tile-title" id="assistant-privacy">{t('assistant.privacyTitle')}</h2>
 	<p class="muted">{t('assistant.privacy')}</p>
 </section>
 
@@ -339,36 +339,16 @@
 {/if}
 
 <style>
-	.stack {
+	.sections {
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
 	}
 	section {
-		display: grid;
-		gap: 14px;
-		padding: var(--tile-pad);
 		font-size: 0.875rem;
-	}
-	label {
-		display: grid;
-		gap: 8px;
-		max-width: 36rem;
-	}
-	label.check {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		font-weight: 600;
 	}
 	label.indent {
 		padding-left: 28px;
-		font-weight: 400;
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
 	}
 	.row {
 		display: flex;
@@ -390,10 +370,6 @@
 	textarea {
 		resize: vertical;
 		min-height: 90px;
-	}
-	p {
-		margin: 0;
-		max-width: 60rem;
 	}
 	.small {
 		font-size: 0.75rem;

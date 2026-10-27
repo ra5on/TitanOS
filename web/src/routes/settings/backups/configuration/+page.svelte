@@ -99,7 +99,7 @@
 {#if !status && !error}<p role="status">{t('common.loading')}</p>{/if}
 
 {#if status && draft}
-	<section class="tile" id="config-history" use:revealTarget aria-labelledby="stick-state">
+	<section class="tile panel" id="config-history" use:revealTarget aria-labelledby="stick-state">
 		<h2 class="tile-title" id="stick-state">{t('stick.state')}</h2>
 		{#if !status.settings.enabled}
 			<p class="notice-warn">{t('stick.off')}</p>
@@ -118,38 +118,42 @@
 			{#if status.next}<div><dt>{t('stick.next')}</dt><dd>{formatDateTime(new Date(status.next))}</dd></div>{/if}
 			<div><dt>{t('stick.count')}</dt><dd>{status.backups.length}</dd></div>
 		</dl>
-		<div class="actions start">
+		<div class="row-actions">
 			<button type="button" class="btn" disabled={busy !== null || !status.target} onclick={run}>{t(busy === 'run' ? 'stick.running' : 'stick.run')}</button>
 			{#if ran}<span class="muted" role="status">{t('stick.ran')}</span>{/if}
 		</div>
 	</section>
 
-	<form class="tile" id="config-schedule" use:revealTarget onsubmit={save}>
-		<h2 class="tile-title">{t('stick.settings')}</h2>
- <div class="row">
- <label><span>{t('stick.schedule')}</span><select class="field" bind:value={draft.schedule} onchange={() => { draft!.time ||= '03:00'; }}>
- <option value="">{t('stick.schedule.off')}</option><option value="daily">{t('stick.schedule.daily')}</option><option value="weekly">{t('stick.schedule.weekly')}</option></select></label>
- {#if draft.schedule}<label><span>{t('stick.schedule.time')}</span><input class="field" type="time" bind:value={draft.time} required /></label>{/if}
- {#if draft.schedule === 'weekly'}<label><span>{t('stick.schedule.day')}</span><select class="field" bind:value={draft.weekday}>{#each [1,2,3,4,5,6,0] as const as day}<option value={day}>{t(`backup.weekday.${day}`)}</option>{/each}</select></label>{/if}
- </div><p class="muted">{t('stick.schedule.hint')}</p>
-		<label class="check"><input type="checkbox" bind:checked={draft.enabled} /><span>{t('stick.enabled')}</span><small>{t('stick.enabledHint')}</small></label>
+	<form class="tile panel" id="config-schedule" use:revealTarget onsubmit={save} aria-labelledby="stick-settings">
+		<h2 class="tile-title" id="stick-settings">{t('stick.settings')}</h2>
 		<div class="row">
-			<label class="narrow"><span>{t('stick.volume')}</span>
+			<label class="stack narrow"><span>{t('stick.schedule')}</span><select class="field" bind:value={draft.schedule} onchange={() => { draft!.time ||= '03:00'; }}>
+				<option value="">{t('stick.schedule.off')}</option><option value="daily">{t('stick.schedule.daily')}</option><option value="weekly">{t('stick.schedule.weekly')}</option></select></label>
+			{#if draft.schedule}<label class="stack tiny"><span>{t('stick.schedule.time')}</span><input class="field" type="time" bind:value={draft.time} required /></label>{/if}
+			{#if draft.schedule === 'weekly'}<label class="stack tiny"><span>{t('stick.schedule.day')}</span><select class="field" bind:value={draft.weekday}>{#each [1,2,3,4,5,6,0] as const as day}<option value={day}>{t(`backup.weekday.${day}`)}</option>{/each}</select></label>{/if}
+		</div>
+		<p class="muted">{t('stick.schedule.hint')}</p>
+		<div class="option divided">
+			<label class="check"><input type="checkbox" bind:checked={draft.enabled} /><span>{t('stick.enabled')}</span></label>
+			<small>{t('stick.enabledHint')}</small>
+		</div>
+		<div class="row">
+			<label class="stack narrow"><span>{t('stick.volume')}</span>
 				<select class="field" bind:value={draft.volume}>
 					<option value="">{t('stick.volumeAuto')}</option>
 					{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
 				</select>
 			</label>
-			<label class="tiny"><span>{t('stick.keep')}</span>
+			<label class="stack tiny"><span>{t('stick.keep')}</span>
 				<input class="field mono" type="number" min="1" max="100" bind:value={draft.keep} required />
 			</label>
 		</div>
-		<div class="actions">
-			<button type="submit" class="btn btn-primary" disabled={!changed || busy !== null}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span role="status">{t('ui.saved')}</span>{/if}
+		<div class="row-actions">
+			<button type="submit" class="btn btn-primary" disabled={!changed || busy !== null}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
 		</div>
 	</form>
 
-	<section class="tile" id="config-downloads" use:revealTarget aria-labelledby="stick-list">
+	<section class="tile panel" id="config-downloads" use:revealTarget aria-labelledby="stick-list">
 		<h2 class="tile-title" id="stick-list">{t('stick.backups')}</h2>
 		{#if status.backups.length === 0}
 			<p class="muted">{t('stick.none')}</p>
@@ -183,14 +187,7 @@
 <style>
 	section,
 	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
-	}
-	section > p {
-		margin: 0;
 	}
 	dl {
 		display: grid;
@@ -206,15 +203,6 @@
 		margin: 2px 0 0;
 		overflow-wrap: anywhere;
 	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.8125rem;
-	}
-	label > span {
-		color: var(--muted);
-	}
 	.narrow {
 		flex: 0 1 320px;
 		max-width: 320px;
@@ -228,35 +216,15 @@
 		flex-wrap: wrap;
 		gap: 16px 24px;
 	}
-	input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
-	.check {
-		flex-direction: row;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px 10px;
-		font-size: 0.875rem;
-	}
-	.check > span {
-		color: var(--text);
-	}
-	.check small {
-		flex: 1 1 100%;
-		font-size: 0.75rem;
-		color: var(--muted);
-	}
-	.actions {
+	.option {
 		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
+		flex-direction: column;
+		gap: 4px;
 	}
-	.actions.start {
-		justify-content: flex-start;
+	.option small {
+		padding-left: 28px;
+		font-size: 0.8125rem;
+		color: var(--muted);
 	}
 	.scroll {
 		overflow-x: auto;

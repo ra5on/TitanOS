@@ -33,6 +33,8 @@ const keywords: Record<string, string> = {
 	dns: 'dns namensauflösung nameserver',
 	restore: 'wiederherstellung wiederherstellen restore ersetzen replace',
 	terminal: 'terminal shell konsole console bestätigung confirmation',
+	proxy:
+		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
 
 function normalize(text: string): string {
@@ -89,6 +91,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },

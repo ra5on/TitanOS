@@ -99,9 +99,9 @@
 	}
 </script>
 
-<section class="tile target">
+<section class="tile panel target" aria-labelledby="backup-target">
 	<div class="head">
-		<h2 class="tile-title">{t('backup.target')}</h2>
+		<h2 class="tile-title" id="backup-target">{t('backup.target')}</h2>
 		<button type="button" class="btn small" aria-expanded={open} onclick={() => (open = !open)}>{open ? t('backup.targetHide') : t('backup.targetShow')}</button>
 	</div>
 	<p class="muted">{t('backup.targetDesc')}</p>
@@ -111,7 +111,7 @@
 		{@const target = overview.target}
 		<div class="row">
 			<label class="check"><input type="checkbox" checked={target.enabled} disabled={busy || !volume} onchange={(event) => configure(event.currentTarget.checked, event.currentTarget)} /><span>{t('backup.targetOn')}</span></label>
-			<label class="narrow"><span>{t('backup.targetVolume')}</span>
+			<label class="stack narrow"><span>{t('backup.targetVolume')}</span>
 				<select class="field" bind:value={volume} disabled={target.enabled || busy}>
 					{#each overview.volumes ?? [] as name (name)}<option value={name}>{name}</option>{/each}
 				</select>
@@ -125,7 +125,7 @@
 				<p class="muted">{t('backup.targetListening')} <span class="mono">{target.listening.join(', ')}</span></p>
 			{/if}
 		{/if}
-		<h3>{t('backup.targetSources')}</h3>
+		<h3 class="divided">{t('backup.targetSources')}</h3>
 		{#each target.sources as source (source.name)}
 			<div class="source">
 				<span class="mono name">{source.name}</span>
@@ -136,7 +136,7 @@
 			<p class="muted">{t('backup.targetNoSources')}</p>
 		{/each}
 		<form class="row" onsubmit={pair}>
-			<label class="narrow"><span>{t('backup.targetName')}</span><input class="field mono" bind:value={name} pattern="[A-Za-z][A-Za-z0-9\-]*" maxlength="31" placeholder="keller" autocapitalize="none" spellcheck="false" required /></label>
+			<label class="stack narrow"><span>{t('backup.targetName')}</span><input class="field mono" bind:value={name} pattern="[A-Za-z][A-Za-z0-9\-]*" maxlength="31" placeholder="keller" autocapitalize="none" spellcheck="false" required /></label>
 			<button type="submit" class="btn" disabled={busy || !target.enabled || !!target.problem}>{t('backup.targetPair')}</button>
 		</form>
 		<p class="muted">{t('backup.targetPairHint')}</p>
@@ -169,15 +169,15 @@
 {/if}
 
 <style>
-	.target { margin-bottom: var(--gap); padding: var(--tile-pad); overflow-wrap: anywhere; }
+	.target { overflow-wrap: anywhere; }
 	.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
-	.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.8rem 1.2rem; margin: 0.6rem 0; }
+	.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.8rem 1.2rem; }
 	.source { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; padding: 0.4rem 0; border-top: 1px solid var(--border); }
 	.source .name { min-width: 8rem; }
-	.narrow { display: grid; gap: 0.3rem; width: min(100%, 20rem); min-width: 0; }
+	.narrow { width: min(100%, 20rem); }
 	.narrow .field { width: 100%; min-width: 0; }
 	.check { display: flex; align-items: center; gap: 0.5rem; }
 	.check input { flex-shrink: 0; }
-	h3 { margin: 1rem 0 0.3rem; font-size: 0.95rem; }
+	h3 { margin: 0; font-size: 0.875rem; }
 	textarea { width: 100%; box-sizing: border-box; }
 </style>

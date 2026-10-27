@@ -106,9 +106,9 @@
 	}
 </script>
 
-<section class="tile replication">
+<section class="tile panel replication" aria-labelledby="replication-title">
 	<div class="head">
-		<h2 class="tile-title">{t('replication.title')}</h2>
+		<h2 class="tile-title" id="replication-title">{t('replication.title')}</h2>
 		<button type="button" class="btn small" aria-expanded={open} onclick={() => (open = !open)}>{open ? t('backup.targetHide') : t('backup.targetShow')}</button>
 	</div>
 	<p class="muted">{t('replication.desc')}</p>
@@ -116,7 +116,7 @@
 	{#if loadError}<p class="notice-error" role="alert">{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></p>{/if}
 	{#if restored}<p class="notice-ok" role="status">{t('replication.restored', { path: restored })}</p>{/if}
 	{#if open && overview}
-		<h3>{t('replication.jobs')}</h3>
+		<h3 class="divided">{t('replication.jobs')}</h3>
 		{#each overview.jobs as job (job.id)}
 			<div class="job">
 				<span class="mono name">{job.name}</span>
@@ -135,10 +135,10 @@
 		{:else}
 			<p class="muted">{t('replication.noJobs')}</p>
 		{/each}
-		<button type="button" class="btn" disabled={btrfsVolumes.length === 0} onclick={add}>{t('replication.add')}</button>
+		<div class="row-actions"><button type="button" class="btn" disabled={btrfsVolumes.length === 0} onclick={add}>{t('replication.add')}</button></div>
 		{#if btrfsVolumes.length === 0}<p class="muted">{t('replication.needBtrfs')}</p>{/if}
 
-		<h3>{t('replication.received')}</h3>
+		<h3 class="divided">{t('replication.received')}</h3>
 		{#if !overview.receiveVolume}
 			<p class="muted">{t('replication.receiveHint')}</p>
 		{:else}
@@ -204,7 +204,7 @@
 {/if}
 
 <style>
-	.replication { margin-bottom: var(--gap); padding: var(--tile-pad); overflow-wrap: anywhere; }
+	.replication { overflow-wrap: anywhere; }
 	.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
 	.job { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; padding: 0.4rem 0; border-top: 1px solid var(--border); }
 	.job .name { min-width: 8rem; }
@@ -216,6 +216,6 @@
 	.narrow .field { width: 100%; }
 	.check { display: flex !important; align-items: center; gap: 0.5rem; }
 	.small { font-size: 0.8125rem; }
-	h3 { margin: 1rem 0 0.3rem; font-size: 0.95rem; }
+	h3 { margin: 0; font-size: 0.875rem; }
 	textarea { width: 100%; box-sizing: border-box; }
 </style>

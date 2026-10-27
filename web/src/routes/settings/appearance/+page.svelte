@@ -134,7 +134,7 @@
 
 <div class="columns">
 	<div class="editor">
-		<section class="tile" aria-labelledby="h-theme">
+		<section class="tile panel" aria-labelledby="h-theme">
 			<h2 class="tile-title" id="h-theme">{t('appearance.theme')}</h2>
 			<div class="themes" role="radiogroup" aria-labelledby="h-theme">
 				{#each THEME_IDS as id (id)}
@@ -165,7 +165,7 @@
 			{/if}
 		</section>
 
-		<section class="tile" aria-labelledby="h-accent">
+		<section class="tile panel" aria-labelledby="h-accent">
 			<h2 class="tile-title" id="h-accent">{t('appearance.accent')}</h2>
 			<div class="accents" role="radiogroup" aria-labelledby="h-accent">
 				{#each ACCENT_IDS as id (id)}
@@ -182,7 +182,7 @@
 			<p class="hint muted">{t('appearance.accentHint')}</p>
 		</section>
 
-		<section class="tile" aria-labelledby="h-style">
+		<section class="tile panel" aria-labelledby="h-style">
 			<h2 class="tile-title" id="h-style">{t('appearance.style')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-style">
 				{#each SURFACE_STYLES as id (id)}
@@ -200,7 +200,7 @@
 			{/if}
 		</section>
 
-		<section class="tile" aria-labelledby="h-shape">
+		<section class="tile panel" aria-labelledby="h-shape">
 			<h2 class="tile-title" id="h-shape">{t('appearance.shape')}</h2>
 			<Slider id="r-tile" label={t('appearance.radiusTile')} bind:value={draft.rTile} limit={LIMITS.rTile} unit="px" />
 			<Slider id="r-ctl" label={t('appearance.radiusCtl')} bind:value={draft.rCtl} limit={LIMITS.rCtl} unit="px" />
@@ -215,7 +215,7 @@
 			</div>
 		</section>
 
-		<section class="tile" aria-labelledby="h-bg">
+		<section class="tile panel" aria-labelledby="h-bg">
 			<h2 class="tile-title" id="h-bg">{t('appearance.background')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-bg">
 				{#each BACKGROUNDS as id (id)}
@@ -283,12 +283,6 @@
 		justify-content: space-between;
 		align-items: baseline;
 		gap: 12px;
-	}
-	section.tile {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 	}
 	.small {
 		font-size: 0.75rem;

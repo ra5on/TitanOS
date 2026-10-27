@@ -17,12 +17,19 @@ Administratoren, nur verwaltete Apps unter `/config/apps/<name>/`):
   veröffentlichte TCP-Port) und wie die App selbst antwortet (HTTP oder HTTPS
   mit eigenem Zertifikat der App).
 - **Nur aus dem Heimnetz, über Tailscale oder NetBird erreichbar** (ab Werk an).
-- **Eigene Domain (für alle Apps)**, z. B. `home.example.org`.
 - Die Einstellung wird mit „Speichern“ sofort übernommen; die Compose-Datei
   ändert sich nicht und kein Container wird neu erstellt. „HTTPS-Name entfernen“
   vergisst sie. Wird die App entfernt, verschwindet auch ihr HTTPS-Name.
 - In der Docker-Übersicht, im App-Editor und im Dashboard-Menü erscheint dann der
   Knopf „HTTPS-Name“ neben WebUI/Tailscale/Öffentlich (siehe `APP-LINKS.md`).
+
+Einstellungen › Netzwerk und Dienste › **HTTPS-Namen für Apps**
+(`/settings/proxy`, nur Besitzer und Administratoren, seit 0.30.0) bündelt alle
+HTTPS-Namen: je App Ein/Aus, Adressen, Ziel-Port, „nur Heimnetz“, Link in den
+App-Editor und Entfernen mit einfachem Bestätigungsdialog. Dort steht auch die
+**Eigene Domain (für alle Apps)**, z. B. `home.example.org`, sowie eine
+Erklärung zu mDNS, Router-DNS und Zertifikat. Der App-Editor verweist für die
+Domain auf diese Seite. Dieselbe API wie unten, keine neuen Felder.
 
 ## Ablauf in titand
 

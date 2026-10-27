@@ -7,11 +7,9 @@
 		type DockerContainer,
 	} from '#lib/api.ts';
 	import {
-		normalDomain,
 		proxyAddresses,
 		suggestedProxyName,
 		suggestedProxyPort,
-		validProxyDomain,
 		validProxyName,
 	} from '#lib/app-proxy.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -31,18 +29,13 @@
 		localOnly: true,
 	});
 	let saved = $state<AppProxyRoute | null>(null);
-	let domain = $state('');
 	let busy = $state(false);
 	let error = $state('');
 	let notice = $state('');
-	let domainBusy = $state(false);
-	let domainError = $state('');
-	let domainNotice = $state('');
 
 	function take(next: AppProxyStatus) {
 		status = next;
 		saved = next.apps.find((route) => route.app === app) ?? null;
-		domain = next.domain ?? '';
 		if (saved)
 			form = {
 				enabled: saved.enabled,
@@ -141,20 +134,6 @@
 			busy = false;
 		}
 	}
-
-	async function saveDomain() {
-		if (domainBusy || !validProxyDomain(domain)) return;
-		domainBusy = true;
-		domainError = domainNotice = '';
-		try {
-			take(await api.put<AppProxyStatus>('/docker/proxy', { domain: normalDomain(domain) }));
-			domainNotice = t('proxy.saved');
-		} catch (err) {
-			domainError = errorText(err instanceof ApiError ? err.code : 'internal');
-		} finally {
-			domainBusy = false;
-		}
-	}
 </script>
 
 <section class="tile" aria-labelledby="h-proxy">
@@ -241,33 +220,10 @@
 		</div>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
-		<div class="domain">
-			<label
-				><span>{t('proxy.domain')}</span><input
-					class="field mono"
-					type="text"
-					bind:value={domain}
-					placeholder="home.example.org"
-					spellcheck="false"
-					autocapitalize="off"
-				/><small>{t('proxy.domainHint')}</small>{#if !validProxyDomain(domain)}<small
-						class="problem"
-						role="alert">{t('proxy.domainInvalid')}</small
-					>{/if}</label
-			>
-			<div class="actions">
-				<button
-					type="button"
-					class="btn small"
-					disabled={domainBusy ||
-						!validProxyDomain(domain) ||
-						normalDomain(domain) === (status.domain ?? '')}
-					onclick={saveDomain}>{t('proxy.saveDomain')}</button
-				>
-				{#if domainNotice}<span class="muted" role="status">{domainNotice}</span>{/if}
-			</div>
-			{#if domainError}<p class="notice-error" role="alert">{domainError}</p>{/if}
-		</div>
+		<p class="muted hint domain">
+			{#if status.domain}{t('proxy.domainCurrent', { suffixes: status.suffixes.join(', ') })}{/if}
+			<a href="/settings/proxy">{t('proxy.settingsTitle')}</a>
+		</p>
 	{/if}
 </section>
 
@@ -339,8 +295,8 @@
 	}
 	.domain {
 		display: flex;
-		flex-direction: column;
-		gap: 10px;
+		flex-wrap: wrap;
+		gap: 4px 10px;
 		padding-top: 12px;
 		border-top: 1px solid var(--panel-border);
 	}

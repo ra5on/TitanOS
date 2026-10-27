@@ -17,7 +17,7 @@
  }
 </script>
 <form onsubmit={(event) => { event.preventDefault(); save(); }}>
- <label>{t('hardware.powerLimit')}<select class="field" bind:value={percent} disabled={!ready || busy} onchange={() => saved = false}>
+ <label class="stack"><span>{t('hardware.powerLimit')}</span><select class="field" bind:value={percent} disabled={!ready || busy} onchange={() => saved = false}>
   <option value={0}>{t('hardware.powerDefault')}</option>
   {#each [20,30,40,50,60,70,80,90,100] as value (value)}<option value={value}>{value} %</option>{/each}
  </select></label>
@@ -27,6 +27,5 @@
 </form>
 <style>
  form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-bottom: 10px; }
- label { display: flex; flex-direction: column; gap: 6px; }
  p { flex-basis: 100%; overflow-wrap: anywhere; }
 </style>

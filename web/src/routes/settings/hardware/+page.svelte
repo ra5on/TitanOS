@@ -27,7 +27,7 @@
 {#if data}
 	{#if !data.hardware.iommu}<p class="notice-warn" role="status">{t('hardware.noIommu')}</p>{/if}
 
-	<section class="tile" aria-labelledby="hw-pci">
+	<section class="tile panel" aria-labelledby="hw-pci">
 		<h2 class="tile-title" id="hw-pci">{t('hardware.pci')}</h2>
 		{#each data.hardware.pci as device (device.address)}
 			<div class="device">
@@ -57,7 +57,7 @@
 		{/each}
 	</section>
 
-	<section class="tile" aria-labelledby="hw-usb">
+	<section class="tile panel" aria-labelledby="hw-usb">
 		<h2 class="tile-title" id="hw-usb">{t('hardware.usb')}</h2>
 		{#each data.hardware.usb as device (device.port)}
 			<div class="device">
@@ -90,20 +90,12 @@
 		max-width: 60rem;
 		font-size: 0.875rem;
 	}
-	section {
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-	h2 {
-		padding: 14px 18px;
-	}
 	.device {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px 20px;
-		padding: 14px 18px;
+		padding-top: 14px;
 		border-top: 1px solid var(--panel-border);
 		font-size: 0.875rem;
 	}

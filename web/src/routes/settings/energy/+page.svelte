@@ -31,13 +31,13 @@
 	{#if status.error}<p class="notice-warn" role="status">{t('energy.startupError')} {status.error}</p>{/if}
 	{#if status.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
 	{#if status.controls.length === 0}
-		<section class="tile"><p>{t('energy.unsupported')}</p></section>
+		<section class="tile panel"><p>{t('energy.unsupported')}</p></section>
 	{:else}
 		<form onsubmit={save}>
 			{#each status.controls as control (control.key)}
-				<section class="tile">
-					<label for="energy-{control.key}">{t(`energy.${control.key}`)}</label>
-					<p class="muted">{t(`energy.${control.key}Hint`)}</p>
+				<section class="tile panel">
+					<label class="stack" for="energy-{control.key}"><span>{t(`energy.${control.key}`)}</span></label>
+					<p class="muted hint">{t(`energy.${control.key}Hint`)}</p>
 					<select id="energy-{control.key}" class="field" bind:value={draft[control.key]} disabled={busy || status.readOnly}>
 						<option value="">{t('energy.unmanaged')}</option>
 						{#if draft[control.key] && !control.choices.includes(draft[control.key])}<option value={draft[control.key]} disabled>{draft[control.key]} — {t('energy.noLongerAvailable')}</option>{/if}
@@ -47,18 +47,21 @@
 				</section>
 			{/each}
 			{#if status.drivers.length}<p class="muted">{t('energy.driver')}: <span class="mono">{status.drivers.join(', ')}</span></p>{/if}
-			<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
-			{#if saved}<p role="status">{t('energy.saved')}</p>{/if}
+			<div class="actions">
+				<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
+				{#if saved}<span class="muted" role="status">{t('energy.saved')}</span>{/if}
+			</div>
 		</form>
 	{/if}
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 <PowerSchedule />
 
 <style>
-	form { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
-	.tile { width: 100%; max-width: 640px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 10px; }
-	label { font-weight: 600; }
+	form { display: flex; flex-direction: column; gap: var(--gap); }
+	select { max-width: 32rem; }
+	.stack > span { color: var(--text); font-weight: 600; }
+	.hint, .current { font-size: 0.8125rem; }
 	p { margin: 0; }
-	.current { font-size: 0.8125rem; }
+	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 	.notice-error { white-space: pre-wrap; }
 </style>

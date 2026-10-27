@@ -193,10 +193,12 @@
 
 {#if !topology}
 	<LegacyNetwork />
-	{#if status}<section class="tile setup">
+	{#if status}<section class="tile panel">
 			<h2 class="tile-title">{t('netx.multiple')}</h2>
 			<p class="muted">{t('netx.migrationHint')}</p>
-			<button class="btn btn-primary" onclick={enable}>{t('netx.setup')}</button>
+			<div class="row-actions">
+				<button class="btn btn-primary" onclick={enable}>{t('netx.setup')}</button>
+			</div>
 		</section>{/if}
 {:else if draft}
 	<PageHead title={t('netcfg.title')} parent={{ href: '/settings', label: t('nav.settings') }}
@@ -245,7 +247,7 @@
 			</div>
 		</div>{/if}
 	{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
-	{#if tab === 'overview'}<section class="tile setup">
+	{#if tab === 'overview'}<section class="tile panel">
 			<h2 class="tile-title">{t('netx.networks')}</h2>
 			{#each draft.networks ?? [] as n (n.id)}<article class="net">
 					<div class="net-head">
@@ -294,7 +296,7 @@
 				</article>{/each}
 		</section>
 		<p class="muted">{t('netx.external')}</p>
-	{:else if tab === 'hardware'}<section class="tile setup">
+	{:else if tab === 'hardware'}<section class="tile panel">
 			<h2 class="tile-title">{t('netx.ports')}</h2>
 			{#each status?.interfaces ?? [] as port}<div class="net-head">
 					<div>
@@ -308,7 +310,7 @@
 					<span class="mono muted">{port.mac}</span>
 				</div>{/each}
 		</section>
-		<section class="tile setup">
+		<section class="tile panel">
 			<h2 class="tile-title">{t('netx.bonds')}</h2>
 			{#each draft.bonds ?? [] as bond}<div class="net-head">
 					<div>
@@ -318,22 +320,29 @@
 					<button class="btn" disabled={!!status?.pending} onclick={() => editBond(bond)}
 						>{t('netx.edit')}</button
 					>
-				</div>{/each}<button class="btn" disabled={!!status?.pending} onclick={() => editBond()}
-				>{t('netx.addBond')}</button
-			>
+				</div>{/each}<div class="row-actions">
+				<button class="btn" disabled={!!status?.pending} onclick={() => editBond()}
+					>{t('netx.addBond')}</button
+				>
+			</div>
 			<p class="muted">{t('netx.switchHint')}</p>
 		</section>
-	{:else if tab === 'diagnostics'}<section class="tile setup">
+	{:else if tab === 'diagnostics'}<section class="tile panel">
 			<h2 class="tile-title">{t('netx.tab.diagnostics')}</h2>
-			<label class="field-row"
+			<label class="stack"
 				><span>{t('netx.network')}</span><select class="field" bind:value={diagnosticNet}
 					><option value="">{t('netx.choose')}</option>{#each current?.networks ?? [] as n}<option
 							value={n.id}>{n.name}</option
 						>{/each}</select
 				></label
-			><button class="btn" disabled={busy || !diagnosticNet || !!status?.pending} onclick={diagnose}
-				>{t('netx.check')}</button
-			>{#each checks as check}<div class="net-head">
+			>
+			<div class="row-actions">
+				<button
+					class="btn"
+					disabled={busy || !diagnosticNet || !!status?.pending}
+					onclick={diagnose}>{t('netx.check')}</button
+				>
+			</div>{#each checks as check}<div class="net-head">
 					<div>
 						<strong>{check.name}</strong>
 						<p class="muted">{check.detail}</p>
@@ -341,19 +350,19 @@
 					<span class="chip">{check.ok ? t('netx.ok') : t('netx.warning')}</span>
 				</div>{/each}
 		</section>
-	{:else}<section class="tile setup">
+	{:else}<section class="tile panel">
 			<h2 class="tile-title">Tailscale</h2>
 			<p>{tailnet?.name ?? t('netx.notAvailable')}</p>
 			<p class="mono muted">{tailnet?.ips?.join(' · ') ?? ''}</p>
 			<p class="muted">{t('netx.tailscaleHint')}</p>
-			<a class="btn" href="/plugins">{t('nav.plugins')}</a>
+			<div class="row-actions"><a class="btn" href="/plugins">{t('nav.plugins')}</a></div>
 		</section>
-		<section class="tile setup">
+		<section class="tile panel">
 			<h2 class="tile-title">Cloudflare / Reverse-Proxy</h2>
 			<p class="muted">{t('netx.proxyHint')}</p>
-			<a class="btn" href="/docker">{t('netx.appLinks')}</a>
+			<div class="row-actions"><a class="btn" href="/settings/proxy">{t('proxy.settingsTitle')}</a><a class="btn" href="/docker">{t('netx.appLinks')}</a></div>
 		</section>
-		<section class="tile setup">
+		<section class="tile panel">
 			<h2 class="tile-title">{t('netx.dnsServices')}</h2>
 			<p class="muted">{t('netx.dnsHint')}</p>
 		</section>{/if}
@@ -553,13 +562,8 @@
 	>{/if}
 
 <style>
-	.setup {
-		padding: var(--tile-pad);
-		display: grid;
-		gap: var(--gap);
-	}
 	.net {
-		padding: var(--tile-pad) 0;
+		padding-bottom: 14px;
 		border-bottom: 1px solid var(--border);
 	}
 	.net:last-child {

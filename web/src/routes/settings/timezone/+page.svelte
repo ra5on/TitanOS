@@ -27,18 +27,13 @@
 	}
 </script>
 <PageHead title={t('settings.datetime')} parent={{ href: '/settings', label: t('nav.settings') }} />
-<section class="tile">
+<section class="tile panel">
 	{#if loading}<p role="status">{t('common.loading')}</p>{/if}
 	{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{/if}
 	{#if timezone !== null}
-		<label><span>{t('settings.timezone')}</span><select class="field" disabled={saving} value={timezone} onchange={async event => { const field = event.currentTarget; await save(field.value); field.value = timezone ?? ''; }}>{#each zones as zone}<option value={zone}>{zone}</option>{/each}</select></label>
+		<label class="stack"><span>{t('settings.timezone')}</span><select class="field" disabled={saving} value={timezone} onchange={async event => { const field = event.currentTarget; await save(field.value); field.value = timezone ?? ''; }}>{#each zones as zone}<option value={zone}>{zone}</option>{/each}</select></label>
 		{#if saving || saved}<p role="status">{t(saving ? 'ui.saving' : 'ui.saved')}</p>{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{/if}
 	<p class="muted">{t('settings.timeHint')}</p>
 </section>
-<style>
- section { display: grid; gap: 14px; padding: var(--tile-pad); }
- label { display: grid; gap: 8px; max-width: 28rem; }
- p { margin: 0; }
-</style>
