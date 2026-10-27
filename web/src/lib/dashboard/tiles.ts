@@ -64,9 +64,6 @@ export type AddContext = {
 	admin: boolean;
 	/** Kinds of accelerators the NAS reports (`igpu`, `npu`, `nvidia`). */
 	hardware: readonly StaticTileId[];
-	/** false once the plugin answered that it is not active; unknown counts as available. */
-	tailscale?: boolean;
-	netbird?: boolean;
 };
 
 /**
@@ -86,8 +83,6 @@ export function addableTiles(shown: readonly { id: TileId }[], context: AddConte
 				id === 'accelerators' && kinds.size === 1 && !HARDWARE_TILES.some((h) => present.has(h))
 			);
 		}
-		if (id === 'tailscale') return context.tailscale !== false;
-		if (id === 'netbird') return context.netbird !== false;
 		return true;
 	});
 }

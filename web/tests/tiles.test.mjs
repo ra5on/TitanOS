@@ -31,8 +31,7 @@ test('the add list offers no tile that would repeat another one', async () => {
 	const admin = { admin: true, hardware: [] };
 	const none = addableTiles([], admin);
 	for (const id of ['accelerators', 'igpu', 'npu', 'nvidia']) assert.ok(!none.includes(id), id);
-	assert.ok(none.includes('tailscale'), 'unknown plugin state stays addable');
-	assert.ok(!addableTiles([], { ...admin, tailscale: false, netbird: false }).includes('netbird'));
+	assert.ok(none.includes('tailscale') && none.includes('netbird'), 'they explain an inactive plugin');
 
 	// One kind of device: the all-devices tile is the same as the kind tile.
 	const one = addableTiles([], { ...admin, hardware: ['igpu'] });

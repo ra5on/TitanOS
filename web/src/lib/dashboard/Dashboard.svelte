@@ -226,14 +226,7 @@
 		sharesError = $state('');
 	const currentSettings = $derived(tileOptions(options, customize ?? 'cpu'));
 	const currentPlacement = $derived(shown.find((p) => p.id === customize));
-	const hidden = $derived(
-		addableTiles(shown, {
-			admin,
-			hardware: hardwareKinds(),
-			tailscale: tailnetDevices?.active,
-			netbird: netbirdPeers?.active,
-		}),
-	);
+	const hidden = $derived(addableTiles(shown, { admin, hardware: hardwareKinds() }));
 	// Stacks, VMs and single containers in their own groups; entries already on
 	// the dashboard are marked, adding them again creates an independent copy.
 	type WorkloadGroup = { label: MessageKey; choices: { id: TileId; name: string }[] };
