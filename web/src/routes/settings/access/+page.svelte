@@ -48,30 +48,16 @@
 		catch (err) { if (err instanceof ApiError && err.code === 'read_only') noTls = true; else problem(err); }
 	}
 	$effect(() => { loadSsh(); loadCertificate(); });
-	// The service follows the switch within a moment. Polling pauses while the
-	// page is hidden and gives up after a minute with a visible note.
-	const SSH_POLLS = 30;
-	let sshPolls = $state(0);
-	let sshStuck = $state(false);
+	// The service follows the switch within a moment.
 	$effect(() => {
-		if (!ssh || ssh.enabled === ssh.running || sshStuck) return;
-		const timer = setInterval(() => {
-			if (document.hidden) return;
-			if (++sshPolls >= SSH_POLLS) sshStuck = true;
-			else loadSsh();
-		}, 2000);
+		if (!ssh || ssh.enabled === ssh.running) return;
+		const timer = setInterval(loadSsh, 2000);
 		return () => clearInterval(timer);
 	});
-	function retrySsh() {
-		sshPolls = 0;
-		sshStuck = false;
-		loadSsh();
-	}
 
 	async function setSsh(enabled: boolean) {
 		if (sshBusy) return;
 		sshBusy = true; sshSaved = false; sshError = '';
-		sshPolls = 0; sshStuck = false;
 		try { ssh = await api.put<Ssh>('/system/ssh', { enabled }); sshSaved = true; }
 		catch (err) { sshError = errorText(err instanceof ApiError ? err.code : 'internal'); }
 		finally { sshBusy = false; }
@@ -149,7 +135,6 @@
 		{/if}
 		{#if sshBusy || sshSaved}<p role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
 		{#if sshError}<div class="notice-error" role="alert">{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button></div>{:else if !ssh}<p role="status">{t('common.loading')}</p>{/if}
-		{#if sshStuck && ssh && ssh.enabled !== ssh.running}<div class="notice-warn" role="alert">{t(ssh.enabled ? 'access.sshNotStarted' : 'access.sshNotStopped')} <button class="btn" onclick={retrySsh}>{t('ui.retry')}</button></div>{/if}
 	</section>
 
 <section class="tile" aria-labelledby="access-cert">

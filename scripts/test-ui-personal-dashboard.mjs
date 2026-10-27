@@ -226,11 +226,6 @@ try {
     .getByRole("textbox", { name: "Eigener Anzeigename", exact: true })
     .fill("Discard me");
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
-  // Unsaved changes: the editor asks before discarding them.
-  await page
-    .getByRole("dialog", { name: "Änderungen verwerfen?" })
-    .getByRole("button", { name: "Verwerfen", exact: true })
-    .click();
   assert.equal(
     await tile(page, "cpu")
       .getByRole("heading", { name: "Meine CPU", exact: true })
@@ -254,10 +249,6 @@ try {
   // Tailscale tile: add it, choose devices by stable ID and fields in order.
   await page
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
-    .click();
-  await page
-    .locator(".editbar")
-    .getByRole("button", { name: "Kachel hinzufügen", exact: true })
     .click();
   await page
     .locator(".add-tiles")

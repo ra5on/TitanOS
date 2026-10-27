@@ -2,7 +2,6 @@
 	// The head of a page: where it sits (optional), the title, a line or two
 	// below it and the page's buttons on the right.
 	import type { Snippet } from 'svelte';
-	import { pageTitle } from '#lib/page-title.svelte.ts';
 
 	type Props = {
 		title: string;
@@ -14,15 +13,6 @@
 		actions?: Snippet;
 	};
 	let { title, parent, crumb, id, children, actions }: Props = $props();
-
-	// The browser tab shows the title of the page; the last head that leaves clears it.
-	$effect(() => {
-		const shown = title;
-		pageTitle.value = shown;
-		return () => {
-			if (pageTitle.value === shown) pageTitle.value = '';
-		};
-	});
 </script>
 
 <div class="page-head">

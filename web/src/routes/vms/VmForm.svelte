@@ -2,7 +2,7 @@
 	// The form a VM is made and changed with. With `existing` it edits that
 	// VM: the internal identifier, template and firmware stay fixed.
 	import { untrack } from 'svelte';
-	import { beforeNavigate, goto } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import {
 		api,
 		ApiError,
@@ -12,7 +12,6 @@
 		type VMHost,
 		type VMStatus,
 	} from '#lib/api.ts';
-	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
@@ -325,87 +324,17 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 			? t('vms.new.memoryOver', { free: formatBytes(freeMemory) })
 			: '',
 	);
-	// Everything that still keeps the form from being sent, said in words
-	// right above the buttons instead of a silently disabled button.
-	const openPoints = $derived.by(() => {
-		const list: string[] = [];
-		if (displayName.trim() === '') list.push(t('vms.form.openName'));
-		else if (!validVMDisplayName(displayName)) list.push(t('vms.displayNameInvalid'));
-		else if (duplicateName) list.push(t('vms.new.nameExists'));
-		if (!existing && disks.length === 0 && iso.trim() === '') list.push(t('vms.form.openDisk'));
-		disks.forEach((disk, index) => {
-			if (diskBlocked(disk)) list.push(t('vms.form.openDiskInvalid', { n: index + 1 }));
-		});
-		if (pinning && pinned.length === 0) list.push(t('vms.form.warnNone'));
-		folders.forEach((folder, index) => {
-			const issue = folderProblem(folder, index);
-			if (issue) list.push(t('vms.form.openFolder', { n: index + 1, problem: issue }));
-		});
-		if (bridgePending) list.push(t('vms.form.openBridgePending'));
-		else if (net === 'bridge' && !status?.bridge) list.push(t('vms.form.openBridge'));
-		if (virtioPending) list.push(t('vms.form.openVirtio'));
-		return list;
-	});
-	const blocked = $derived(busy || openPoints.length > 0);
-
-	// --- unsaved changes ---------------------------------------------------
-
-	// What the form shows, as one value. Until the user touches the form,
-	// values filled in by the page itself (defaults, loaded data) only move
-	// the starting point along.
-	const formState = $derived(
-		JSON.stringify({
-			template,
-			chosenDirectory,
-			reuseImageFolder,
-			displayName,
-			description,
-			vcpus,
-			memoryGiB,
-			pinning,
-			pinned,
-			exclusive,
-			firmware,
-			secure,
-			disks,
-			iso,
-			virtioISO,
-			autostart,
-			folders,
-			autoGPU,
-			pci,
-			usb,
-			net,
-		}),
+	const blocked = $derived(
+		busy || virtioPending ||
+			bridgePending ||
+			(net === 'bridge' && !status?.bridge) ||
+			!validVMDisplayName(displayName) ||
+			duplicateName ||
+			(!existing && disks.length === 0 && iso.trim() === '') ||
+			disks.some(diskBlocked) ||
+			(pinning && pinned.length === 0) ||
+			folders.some((folder, index) => folderProblem(folder, index) !== ''),
 	);
-	let baseline = $state('');
-	let edited = false;
-	$effect(() => {
-		const current = formState;
-		if (!edited) baseline = current;
-	});
-	const markEdited = () => (edited = true);
-	const dirty = $derived(formState !== baseline);
-	let leaving = $state<URL | null>(null),
-		allowNavigation = false;
-	beforeNavigate((navigation) => {
-		if (!dirty || busy || allowNavigation || navigation.willUnload) return;
-		navigation.cancel();
-		leaving = navigation.to?.url ?? null;
-	});
-	function unload(event: BeforeUnloadEvent) {
-		if (dirty && !busy) {
-			event.preventDefault();
-			event.returnValue = '';
-		}
-	}
-	function discard() {
-		const url = leaving;
-		leaving = null;
-		if (!url) return;
-		allowNavigation = true;
-		void goto(url.href).finally(() => (allowNavigation = false));
-	}
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -492,8 +421,6 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 	}
 </script>
 
-<svelte:window onbeforeunload={unload} />
-
 <PageHead
 	title={existing ? t('vms.dialog.edit', { name: vmLabel(existing) }) : t('vms.new.title')}
 	parent={{ href: '/vms', label: t('vms.title') }}
@@ -507,14 +434,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 {#if running}<p class="notice-warn" role="status">{t('vms.form.running')}</p>{/if}
 
 <div class="layout">
-	<div
-		class="steps"
-		oninput={markEdited}
-		onchange={markEdited}
-		onpointerdown={markEdited}
-		onkeydown={markEdited}
-		role="presentation"
-	>
+	<div class="steps">
 		<section class="tile vm-card card-1" aria-labelledby="s1">
 			<div class="step">
 				<span class="section-icon"><Icon name="monitor" size={15} /></span>
@@ -770,7 +690,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 										max="16384"
 										bind:value={grow[index]}
 										placeholder={String(Math.ceil(disk.sizeBytes / GIB))}
-									/><span class="muted">GiB</span>
+									/><span class="muted">GB</span>
 									<button
 										type="button"
 										class="btn small"
@@ -895,7 +815,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 										min="1"
 										max="16384"
 										bind:value={disk.sizeGiB}
-									/><span class="muted">GiB</span>
+									/><span class="muted">GB</span>
 								</div>
 								{#if disk.mode === 'new'}
 									<details class="size-presets">
@@ -905,7 +825,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 												<button
 													type="button"
 													aria-pressed={disk.sizeGiB === size}
-													onclick={() => (disk.sizeGiB = size)}>{size} GiB</button
+													onclick={() => (disk.sizeGiB = size)}>{size} GB</button
 												>
 											{/each}
 										</div>
@@ -1220,7 +1140,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 			</div>
 			<div>
 				<dt>{t('vms.new.memory')}</dt>
-				<dd class="mono">{memoryGiB} GiB</dd>
+				<dd class="mono">{memoryGiB} GB</dd>
 			</div>
 			{#if !existing}<div>
 					<dt>{t('vms.new.step3')}</dt>
@@ -1229,7 +1149,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 							.map((disk) =>
 								disk.mode === 'block' || disk.mode === 'direct'
 									? disk.path.split('/').at(-1)
-									: `${disk.sizeGiB} GiB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
+									: `${disk.sizeGiB} GB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
 							)
 							.join(', ') || '–'}
 					</dd>
@@ -1258,14 +1178,6 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 		{#if error}<div class="notice-error" role="alert">
 				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 			</div>{/if}
-		{#if openPoints.length > 0 && !busy}
-			<div class="open-points" role="status">
-				<span>{t('vms.form.open')}</span>
-				<ul>
-					{#each openPoints as point, index (index)}<li>{point}</li>{/each}
-				</ul>
-			</div>
-		{/if}
 		{#if existing}
 			<button type="button" class="btn btn-primary" onclick={save} disabled={blocked}
 				>{t('vms.submit.edit')}</button
@@ -1287,29 +1199,7 @@ $effect(()=>{if(template!=='windows'){virtioISO='';virtioPending=false;}});
 	</aside>
 </div>
 
-{#if leaving}
-	<Dialog title={t('shares.unsaved')} onclose={() => (leaving = null)}>
-		<p>{t(existing ? 'vms.form.unsavedEdit' : 'vms.form.unsavedNew')}</p>
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (leaving = null)}
-				>{t('shares.keepEditing')}</button
-			><button type="button" class="btn btn-warn" onclick={discard}>{t('shares.discard')}</button>
-		</div>
-	</Dialog>
-{/if}
-
 <style>
-	.open-points {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-size: 0.8125rem;
-		color: var(--warn-text);
-	}
-	.open-points ul {
-		margin: 0;
-		padding-left: 1.1rem;
-	}
 	.layout {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 310px;

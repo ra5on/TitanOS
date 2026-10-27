@@ -6,7 +6,6 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
-	import { radioKeys } from '#lib/radio-group.ts';
 
 	type Props = {
 		/** The share to edit; undefined creates a new one. */
@@ -64,39 +63,6 @@
 	const quotaTooSmall = $derived(Number(draft.quotaGB) > 0 && Number(draft.quotaGB) * 1e9 < 16 * 2 ** 20);
 	const nobody = $derived(draft.smb && !draft.guest && Object.keys(draft.access).length === 0);
 
-	// NFS clients as exportfs takes them: an IPv4/IPv6 address or network, or a
-	// host name (wildcards allowed). The backend checks again.
-	const lines = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean);
-	function validClient(client: string): boolean {
-		if (!/^[A-Za-z0-9*][A-Za-z0-9.:/*_-]{0,99}$/.test(client)) return false;
-		const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(client);
-		if (ipv4) return ipv4.slice(1, 5).every((part) => Number(part) <= 255) && (ipv4[5] === undefined || Number(ipv4[5]) <= 32);
-		if (/^[\d./]+$/.test(client)) return false;
-		if (client.includes(':')) {
-			const [address, prefix, ...rest] = client.split('/');
-			if (rest.length || (prefix !== undefined && !(/^\d{1,3}$/.test(prefix) && Number(prefix) <= 128))) return false;
-			const halves = address.split('::');
-			if (halves.length > 2) return false;
-			const groups = halves.flatMap((half) => (half ? half.split(':') : []));
-			return groups.every((group) => /^[0-9A-Fa-f]{1,4}$/.test(group)) && (halves.length === 2 ? groups.length < 8 : groups.length === 8);
-		}
-		if (client.includes('/')) return false;
-		return client.split('.').every((label) => /^[A-Za-z0-9*_](?:[A-Za-z0-9*_-]{0,61}[A-Za-z0-9*_])?$/.test(label));
-	}
-	const badClients = $derived(draft.nfs === 'off' ? [] : lines(draft.clients).filter((client) => !validClient(client)));
-	const noClients = $derived(draft.nfs !== 'off' && lines(draft.clients).length === 0);
-
-	// The tab that holds the field a refusal from the NAS is about.
-	const ERROR_TABS: Record<string, typeof tab> = {
-		invalid_share_name: 'general',
-		share_exists: 'general',
-		unknown_volume: 'general',
-		volume_change: 'general',
-		invalid_nfs_client: 'general',
-		unknown_user: 'access',
-		invalid_access: 'access'
-	};
-
 	function setAccess(user: string, level: '' | AccessLevel) {
 		if (level === '') delete draft.access[user];
 		else draft.access[user] = level;
@@ -104,15 +70,14 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (!validName(draft.name)) return void ((error = errorText('invalid_share_name')), (tab = 'general'));
-		if (badClients.length || noClients) return void ((error = errorText('invalid_nfs_client')), (tab = 'general'));
+		if (!validName(draft.name)) return void (error = errorText('invalid_share_name'));
 		working = true;
 		error = '';
 		const body = {
 			name: draft.name,
 			volume: draft.volume,
 			smb: draft.smb,
-			nfs: { enabled: draft.nfs !== 'off', mode: draft.nfs, clients: lines(draft.clients) },
+			nfs: { enabled: draft.nfs !== 'off', mode: draft.nfs, clients: draft.clients.split('\n').map((line) => line.trim()).filter(Boolean) },
 			access: $state.snapshot(draft.access),
 			guest: draft.smb && draft.guest,
 			browseable: draft.browseable,
@@ -127,11 +92,7 @@
 			ondone();
    if(pendingURL) void goto(pendingURL);
 		} catch (err) {
-			const code = err instanceof ApiError ? err.code : 'internal';
-			error = errorText(code);
-			// Out-of-range values are the quota (general) or the SMB options.
-			const where = ERROR_TABS[code] ?? (code === 'invalid_option' ? (Number(draft.quotaGB) > 0 && !draft.smb ? 'general' : 'options') : undefined);
-			if (where && (where === 'general' || draft.smb)) tab = where;
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
 			working = false;
 		}
 	}
@@ -174,8 +135,7 @@
 			{#if draft.nfs !== 'off'}
 				<label class="field-row indent">
 					<span class="label">{t('share.nfsClients')}</span>
-					<textarea class="field mono" rows="3" bind:value={draft.clients} placeholder="192.168.1.0/24" spellcheck="false" aria-invalid={badClients.length > 0 || noClients} aria-describedby="{formID}-clients"></textarea>
-					<small id="{formID}-clients" class:problem={badClients.length > 0 || noClients}>{badClients.length ? t('share.nfsClientsInvalid', { clients: badClients.join(', ') }) : noClients ? t('share.nfsClientsNone') : t('share.nfsClientsHint')}</small>
+					<textarea class="field mono" rows="3" bind:value={draft.clients} placeholder="192.168.1.0/24" spellcheck="false"></textarea>
 				</label>
 				<p class="notice-warn">{t('share.nfsWarning')}</p>
 				{#if draft.nfs === 'ro'}<p class="muted">{t('share.nfsReadOnlyHint')}</p>{/if}
@@ -190,9 +150,9 @@
 					<div class="access">
 						<span class="mono">{account.name}</span>
 						<span class="muted role">{t(`role.${account.role}`)}</span>
-						<div class="segments" role="radiogroup" aria-label={account.name} tabindex="-1" onkeydown={radioKeys}>
+						<div class="segments" role="radiogroup" aria-label={account.name}>
 							{#each LEVELS as level (level)}
-								<button type="button" role="radio" aria-checked={(draft.access[account.name] ?? '') === level} tabindex={(draft.access[account.name] ?? '') === level ? 0 : -1} onclick={() => setAccess(account.name, level)}>
+								<button type="button" role="radio" aria-checked={(draft.access[account.name] ?? '') === level} onclick={() => setAccess(account.name, level)}>
 									{t(level === '' ? 'share.none' : `share.${level}`)}
 								</button>
 							{/each}

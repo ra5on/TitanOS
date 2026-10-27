@@ -5,17 +5,14 @@
 	import DiskPicker from './DiskPicker.svelte';
 	import { isUsable } from './labels.ts';
 
-	type Props = { volume: Volume; disks: Disk[]; preselect?: Disk; onclose: () => void; ondone: () => void };
-	let { volume, disks, preselect, onclose, ondone }: Props = $props();
+	type Props = { volume: Volume; disks: Disk[]; onclose: () => void; ondone: () => void };
+	let { volume, disks, onclose, ondone }: Props = $props();
 
-	// Opened from a disk's details: that disk is already picked.
-	// svelte-ignore state_referenced_locally
-	let selected = $state<string[]>(preselect ? [preselect.name] : []);
+	let selected = $state<string[]>([]);
 	// What the chosen disk was when it was picked. The NAS takes only the
 	// name, so the dialog refuses to go on when a hot-plug changed the disk
 	// behind that name meanwhile.
-	// svelte-ignore state_referenced_locally
-	let pickedIdentity = $state<string | undefined>(preselect?.identity);
+	let pickedIdentity = $state<string | undefined>(undefined);
 	function remember(disk: Disk, checked: boolean) {
 		pickedIdentity = checked ? disk.identity : undefined;
 	}
@@ -34,8 +31,8 @@
 		confirmed = false;
 	});
 
-	// Erases the disk: runs only from a click on its button, never from Enter.
-	async function submit() {
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
 		if (selected.length !== 1 || !confirmed || staleSelection) return;
 		working = true;
 		error = null;
@@ -51,7 +48,7 @@
 </script>
 
 <Dialog title={t('addDisk.title', { volume: volume.name })} wide locked={working} {onclose}>
-	<form onsubmit={(event) => event.preventDefault()}>
+	<form onsubmit={submit}>
 		<p class="muted">{t(incomplete ? 'addDisk.rebuild' : 'addDisk.spare')}</p>
 		<DiskPicker disks={usable} bind:selected single name="add-disk" onselect={remember} />
 		{#if staleSelection}
@@ -68,7 +65,7 @@
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || staleSelection || working} onclick={submit}>{t('addDisk.submit')}</button>
+			<button type="submit" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || staleSelection || working}>{t('addDisk.submit')}</button>
 		</div>
 	</form>
 </Dialog>

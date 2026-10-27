@@ -9,13 +9,9 @@
 	import {
 		api,
 		ApiError,
-		type Disk,
 		type DiskSleepStatus,
-		type DockerStatus,
-		type Share,
 		type StorageStatus,
 		type Volume,
-		type VMStatus,
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -39,8 +35,7 @@
 
 	let dialog = $state<
 		| { kind: 'create' }
-		| { kind: 'add'; volume: string; disk?: Disk }
-		| { kind: 'delete'; volume: string }
+		| { kind: 'add' | 'delete'; volume: string }
 		| { kind: 'remove'; volume: string; disk: string }
 		| null
 	>(null);
@@ -151,66 +146,7 @@
 	onMount(() => {
 		if (!location.hash && !location.search)
 			requestAnimationFrame(() => window.scrollTo({ top: navigation.scroll }));
-		if (!storage.status) void loadStatus();
 	});
-
-	// The shared poller stays quiet about failures; the first load here shows
-	// them, so an empty list never stands for "no volumes".
-	let statusError = $state(''),
-		statusLoading = $state(false);
-	async function loadStatus() {
-		statusLoading = true;
-		statusError = '';
-		try {
-			storage.status = await api.get<StorageStatus>('/storage');
-		} catch (err) {
-			statusError = errorText(err instanceof ApiError ? err.code : 'internal');
-		}
-		statusLoading = false;
-	}
-
-	// What lives on the volume shown in the details: shares, VMs and Docker.
-	// Read when a volume is opened, from the lists the other pages use.
-	type Usage = { shares: string[]; vms: string[]; docker: string[] | null; failed: boolean };
-	let usage = $state<{ volume: string; data: Usage | null }>({ volume: '', data: null });
-	async function loadUsage(volume: string) {
-		usage = { volume, data: null };
-		const [shares, vms, docker] = await Promise.allSettled([
-			api.get<Share[]>('/shares'),
-			api.get<VMStatus>('/vms'),
-			api.get<DockerStatus>('/docker'),
-		]);
-		if (usage.volume !== volume) return;
-		// Answers of an unexpected shape count as failed reads, not as "nothing".
-		const shareList =
-			shares.status === 'fulfilled' && Array.isArray(shares.value) ? shares.value : null;
-		const vmList =
-			vms.status === 'fulfilled' && Array.isArray(vms.value?.vms) ? vms.value.vms : null;
-		const engine = docker.status === 'fulfilled' ? docker.value : null;
-		usage = {
-			volume,
-			data: {
-				shares: (shareList ?? [])
-					.filter((share) => share.volume === volume)
-					.map((share) => share.name),
-				vms: (vmList ?? [])
-					.filter(
-						(vm) => vm.volume === volume || (vm.disks ?? []).some((disk) => disk.volume === volume),
-					)
-					.map((vm) => vm.displayName || vm.name),
-				docker:
-					engine?.settings?.volume === volume && Array.isArray(engine.apps) ? engine.apps : null,
-				failed: !shareList || !vmList || !engine,
-			},
-		};
-	}
-	// A string, so the 4-second storage poll does not read the lists again.
-	const detailName = $derived(detail?.name ?? '');
-	$effect(() => {
-		const name = detailName;
-		if (canAdminister && name && tab === 'volumes') untrack(() => loadUsage(name));
-	});
-	const usageFor = (volume: string) => (usage.volume === volume ? usage.data : null);
 
 	$effect(() => {
 		if (!pendingDisk) return;
@@ -246,16 +182,6 @@
 	});
 
 	const hours = $derived(new Intl.NumberFormat(i18n.locale));
-	// Volumes that take another disk; the same rule as the button in VolumeCard.
-	const addTargets = $derived(
-		volumes.filter(
-			(v) =>
-				(v.filesystem !== 'btrfs' || v.state === 'degraded') &&
-				v.level !== 'raid0' &&
-				v.state !== 'failed' &&
-				v.state !== 'missing',
-		),
-	);
 
 	/** Runs an action that needs no dialog and shows what went wrong. */
 	async function run(action: () => Promise<unknown>) {
@@ -379,15 +305,7 @@
 </div>
 <div class="storage-layout" class:with-detail={tab === 'volumes' ? !!detail : !!diskDetail}>
 	<div class="tile table">
-		{#if !storage.status}
-			{#if statusError}<div class="notice-error table-state" role="alert">
-					<span>{statusError}</span><button
-						class="btn"
-						disabled={statusLoading}
-						onclick={loadStatus}>{t('common.retry')}</button
-					>
-				</div>{:else}<p class="muted table-state" role="status">{t('common.loading')}</p>{/if}
-		{:else if tab === 'volumes'}
+		{#if tab === 'volumes'}
 			<table>
 				<thead
 					><tr
@@ -508,47 +426,6 @@
 					(dialog = { kind: 'remove', volume: detail.name, disk })
 				)}
 			/>
-			{#if canAdminister}{@const used = usageFor(detail.name)}
-				<section class="tile usage" aria-labelledby="volume-usage">
-					<h3 id="volume-usage">{t('storage.onVolume')}</h3>
-					{#if !used}<p class="muted" role="status">{t('common.loading')}</p>
-					{:else}
-						<dl>
-							<div>
-								<dt>{t('storage.onVolumeShares')}</dt>
-								<dd>
-									{#each used.shares as share, i (share)}{i ? ', ' : ''}<a
-											class="mono"
-											href="/shares?share={encodeURIComponent(share)}">{share}</a
-										>{:else}<span class="muted">{t('storage.onVolumeNone')}</span>{/each}
-								</dd>
-							</div>
-							<div>
-								<dt>{t('storage.onVolumeVms')}</dt>
-								<dd>
-									{used.vms.join(', ') || t('storage.onVolumeNone')}
-								</dd>
-							</div>
-							<div>
-								<dt>{t('storage.onVolumeDocker')}</dt>
-								<dd>
-									{used.docker
-										? used.docker.length
-											? t('storage.onVolumeDockerApps', { apps: used.docker.join(', ') })
-											: t('storage.onVolumeDockerEngine')
-										: t('storage.onVolumeNone')}
-								</dd>
-							</div>
-						</dl>
-						{#if used.failed}<div class="notice-warn usage-failed" role="alert">
-								<span>{t('storage.onVolumeIncomplete')}</span><button
-									class="btn"
-									onclick={() => loadUsage(detail.name)}>{t('common.retry')}</button
-								>
-							</div>{/if}
-					{/if}
-				</section>
-			{/if}
 		</aside>
 	{:else if tab === 'disks' && diskDetail}
 		<aside class="tile disk-details" use:revealTarget id="disk-{diskDetail.name}">
@@ -588,37 +465,15 @@
 					</dd>
 				</div>
 			</dl>
-			{#if canAdminister}{@const disk = diskDetail}
-				<div class="disk-actions">
-					{#if disk.volume}
-						<button
-							class="btn"
-							onclick={() => {
-								tab = 'volumes';
-								query = '';
-								filter = 'all';
-								selected = disk.volume ?? '';
-							}}>{t('storage.openVolume', { volume: disk.volume })}</button
-						>
-					{:else if disk.role === 'free'}
-						<a class="btn" href="/tools#tools-disks">{t('storage.testDisk')}</a>
-						{#each addTargets as volume (volume.name)}
-							<button
-								class="btn"
-								disabled={busy || disk.testing}
-								onclick={() => (dialog = { kind: 'add', volume: volume.name, disk })}
-								>{t('storage.addToVolume', { volume: volume.name })}</button
-							>
-						{/each}
-					{/if}
-				</div>
-			{/if}
 		</aside>
 	{/if}
 </div>
 {#if sleepOpen}<Dialog title={t('storage.sleepTitle')} onclose={() => (sleepOpen = false)}>
-		<div class="disk-sleep">
-			<p class="muted sleep-copy">{t('storage.sleepHint')}</p>
+		<section class="tile disk-sleep" aria-labelledby="disk-sleep-title">
+			<div class="sleep-copy">
+				<h2 class="tile-title" id="disk-sleep-title">{t('storage.sleepTitle')}</h2>
+				<p class="muted">{t('storage.sleepHint')}</p>
+			</div>
 			<div class="sleep-controls">
 				<label for="disk-sleep-time">{t('storage.sleepAfter')}</label>
 				<select
@@ -662,7 +517,7 @@
 						</p>{/each}
 				</div>
 			{/if}
-		</div>
+		</section>
 		<div class="dialog-actions">
 			<button class="btn" onclick={() => (sleepOpen = false)}>{t('common.close')}</button>
 		</div>
@@ -676,20 +531,9 @@
 		ondone={done}
 	/>
 {:else if dialog?.kind === 'add' && dialogVolume}
-	<AddDiskDialog
-		volume={dialogVolume}
-		{disks}
-		preselect={dialog.disk}
-		onclose={() => (dialog = null)}
-		ondone={done}
-	/>
+	<AddDiskDialog volume={dialogVolume} {disks} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'delete' && dialogVolume}
-	<DeleteVolumeDialog
-		volume={dialogVolume}
-		usage={usageFor(dialogVolume.name)}
-		onclose={() => (dialog = null)}
-		ondone={done}
-	/>
+	<DeleteVolumeDialog volume={dialogVolume} onclose={() => (dialog = null)} ondone={done} />
 {:else if dialog?.kind === 'remove'}
 	<Dialog
 		title={t('storage.removeDisk', { disk: dialog.disk })}
@@ -830,45 +674,6 @@
 	.disk-details {
 		padding: 20px;
 	}
-	.disk-actions,
-	.usage-failed,
-	.table-state {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px;
-	}
-	.disk-actions {
-		margin-top: 18px;
-	}
-	.table-state {
-		justify-content: space-between;
-		margin: 16px;
-	}
-	.usage {
-		margin-top: 16px;
-		padding: 16px 20px;
-		display: grid;
-		gap: 12px;
-		font-size: 0.875rem;
-	}
-	.usage h3 {
-		margin: 0;
-		font-size: 0.9375rem;
-	}
-	.usage dl {
-		display: grid;
-		gap: 10px;
-		margin: 0;
-	}
-	.usage dt {
-		color: var(--muted);
-		font-size: 0.8rem;
-	}
-	.usage dd {
-		margin: 2px 0 0;
-		overflow-wrap: anywhere;
-	}
 	.disk-details dl {
 		display: grid;
 		gap: 16px;
@@ -887,6 +692,9 @@
 		overflow-wrap: anywhere;
 	}
 	.disk-sleep {
+		padding: 0;
+		border: 0;
+		background: transparent;
 		display: grid;
 		gap: 16px;
 	}
@@ -899,7 +707,10 @@
 	.sleep-controls select {
 		width: auto;
 	}
-	.sleep-copy,
+	.sleep-copy h2 {
+		display: none;
+	}
+	.sleep-copy p,
 	.sleep-detail {
 		font-size: 0.875rem;
 	}

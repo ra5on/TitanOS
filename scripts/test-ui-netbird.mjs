@@ -139,10 +139,6 @@ try {
       .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
       .click();
     await page
-      .locator(".editbar")
-      .getByRole("button", { name: "Kachel hinzufügen", exact: true })
-      .click();
-    await page
       .locator(".add-tiles")
       .getByRole("button", { name: "NetBird", exact: true })
       .click();
@@ -222,10 +218,6 @@ try {
     await page.goto(base + "/");
     await page
       .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
-      .click();
-    await page
-      .locator(".editbar")
-      .getByRole("button", { name: "Kachel hinzufügen", exact: true })
       .click();
     await page.locator(".add-tiles").waitFor();
     assert.equal(

@@ -65,19 +65,17 @@
 			>{/each}</tbody
 	>
 </table>
-{#if storage.status && !volumes.length}<div class="collection-footer">
-		<a href="/storage">{t('dashboard.createVolume')}<Icon name="arrowRight" size={12} /></a>
-	</div>{:else}<div class="collection-footer">
-		<span
-			>{t('dashboard.visibleItems', {
-				count: Math.min(volumes.length, showAll ? volumes.length : options.rows),
-				total: volumes.length,
-			})}</span
-		>{#if !showAll && volumes.length > options.rows}<button
-				class="link"
-				onclick={() => (showAll = true)}>{t('dashboard.showAll')}</button
-			>{/if}
-	</div>{/if}
+<div class="collection-footer">
+	<span
+		>{t('dashboard.visibleItems', {
+			count: Math.min(volumes.length, showAll ? volumes.length : options.rows),
+			total: volumes.length,
+		})}</span
+	>{#if !showAll && volumes.length > options.rows}<button
+			class="link"
+			onclick={() => (showAll = true)}>{t('dashboard.showAll')}</button
+		>{/if}
+</div>
 {#if menu}{@const v = menu.volume}<ContextMenu
 		label={t('dashboard.menu', { name: v.name })}
 		x={menu.x}

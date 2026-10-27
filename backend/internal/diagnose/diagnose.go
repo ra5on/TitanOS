@@ -55,8 +55,6 @@ type Query struct {
 	// After is the cursor a former answer ended at; only newer lines come back.
 	After  string
 	Search string
-	// Since, when set, leaves out lines older than this moment.
-	Since time.Time
 }
 
 // Logs is the answer to a query.
@@ -104,9 +102,6 @@ func (m *Manager) Logs(ctx context.Context, q Query) (Logs, error) {
 	fetch := q.Lines
 	if q.Search != "" {
 		fetch = 5000
-	}
-	if !q.Since.IsZero() {
-		args = append(args, "--since=@"+strconv.FormatInt(q.Since.Unix(), 10))
 	}
 	if q.After != "" {
 		args = append(args, "--after-cursor="+q.After)

@@ -16,22 +16,17 @@
 	} from '#lib/notifications.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
-	import Dialog from './Dialog.svelte';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	let { compact = false }: { compact?: boolean } = $props();
 	let open = $state(false);
 	let busy = $state(false);
 	let error = $state('');
-	// The IDs "delete all" would remove, while its confirmation is open.
-	let confirmAll = $state<number[] | null>(null);
-	let trigger = $state<HTMLButtonElement>();
 	async function dismiss(ids: number[]) {
 		busy = true;
 		error = '';
 		try {
 			await dismissNotifications(ids);
-			confirmAll = null;
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		} finally {
@@ -66,16 +61,11 @@
 	}
 
 	function onWindowClick(event: MouseEvent) {
-		if (open && !confirmAll && !root?.contains(event.target as Node)) open = false;
+		if (open && !root?.contains(event.target as Node)) open = false;
 	}
 
-	// Escape closes the list and hands the focus back to the bell; an open
-	// confirmation handles its own Escape.
 	function onKeydown(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || !open || confirmAll) return;
-		const inside = root?.contains(document.activeElement);
-		open = false;
-		if (inside) trigger?.focus();
+		if (event.key === 'Escape') open = false;
 	}
 
 	const SEVERITY = {
@@ -99,7 +89,6 @@
 	<button
 		type="button"
 		class="trigger"
-		bind:this={trigger}
 		class:open
 		aria-haspopup="dialog"
 		aria-expanded={open}
@@ -119,12 +108,7 @@
 		<div class="panel" role="dialog" aria-label={t('notify.title')}>
 			<div class="head">
 				<span class="name">{t('notify.title')}</span>
-				<span class="links"
-					><a href="/account#bell" onclick={() => (open = false)}>{t('notify.filterSound')}</a><a
-						href="/settings/notifications"
-						onclick={() => (open = false)}>{t('notify.channels')}</a
-					></span
-				>
+				<a href="/settings/notifications" onclick={() => (open = false)}>{t('notify.configure')}</a>
 			</div>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if shown.length > 0}
@@ -132,10 +116,7 @@
 					class="btn clear"
 					type="button"
 					disabled={busy}
-					onclick={() => {
-						error = '';
-						confirmAll = shown.map((notice) => notice.id);
-					}}>{t('notify.deleteAll')}</button
+					onclick={() => dismiss(shown.map((notice) => notice.id))}>{t('notify.deleteAll')}</button
 				>
 			{/if}
 			{#if hidden > 0}
@@ -167,20 +148,8 @@
 							</div>
 							<span class="what">{text.title}</span>
 							<span class="muted">{text.text}</span>
-							<!-- Docker pages stay as in 0.5.9 at the owner's request (docs/design/README.md,
-							     "Bedienung und Rückmeldungen (0.6.0)"; screenshots are compared against it),
-							     so the links added in 0.6.0 are left out there. -->
-							{#if !page.url.pathname.startsWith('/docker') && (href || notice.subject)}
-								<span class="notice-links">
-									{#if href}<a class="notice-link" {href} onclick={() => (open = false)}
-											>{t('ui.open')}</a
-										>{/if}
-									{#if notice.subject}<a
-											class="notice-link"
-											href={'/tools/logs?' + new URLSearchParams({ search: notice.subject, range: '24h' })}
-											onclick={() => (open = false)}>{t('notify.inLogs')}</a
-										>{/if}
-								</span>
+							{#if href && !page.url.pathname.startsWith('/docker')}
+								<a class="notice-link" {href} onclick={() => (open = false)}>{t('ui.open')}</a>
 							{/if}
 							{#if assistant.status?.available}
 								<button
@@ -204,23 +173,6 @@
 				<p class="foot muted">{t('notify.sinceStart')}</p>
 			{/if}
 		</div>
-	{/if}
-	{#if confirmAll}
-	<Dialog title={t('notify.deleteAllTitle')} locked={busy} onclose={() => (confirmAll = null)}>
-		<p>{t('notify.deleteAllText', { count: confirmAll.length })}</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (confirmAll = null)}
-				>{t('common.cancel')}</button
-			>
-			<button
-				type="button"
-				class="btn btn-danger"
-				disabled={busy}
-				onclick={() => confirmAll && dismiss(confirmAll)}>{t('notify.deleteAllConfirm')}</button
-			>
-		</div>
-	</Dialog>
 	{/if}
 </div>
 
@@ -268,7 +220,7 @@
 		width: var(--quick-button-size, 36px);
 		height: 36px;
 		border: 0;
-		border-radius: var(--radius-small);
+		border-radius: 6px;
 	}
 	.compact .trigger:focus-visible {
 		outline: 2px solid var(--accent);
@@ -342,12 +294,6 @@
 		gap: 12px;
 		padding: 12px 14px;
 		border-bottom: 1px solid var(--panel-border);
-	}
-	.links,
-	.notice-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px 14px;
 	}
 	.name {
 		font-size: 0.9375rem;

@@ -2,10 +2,9 @@
 	import UsageBreakdown from '#lib/operations/UsageBreakdown.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
 	import { api, type StorageStatus } from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { t, tOr } from '#lib/i18n/index.svelte.ts';
+	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -55,26 +54,6 @@
 		targetVolume: string;
 	} | null>(null);
 	const selectedVolume = $derived(storage?.volumes.find((v) => v.name === volume));
-	// Why the chosen volume cannot take another disk, or '' when it can.
-	const growBlocked = $derived.by(() => {
-		const v = selectedVolume;
-		if (!v) return '';
-		if (v.filesystem === 'btrfs') return t('ops.growNoBtrfs');
-		if (!['raid5', 'raid6'].includes(v.level))
-			return t('ops.growNoLevel', { level: t(`level.${v.level}`) });
-		if (v.state !== 'ok') return t('ops.growNotHealthy', { state: t(`state.${v.state}`) });
-		return '';
-	});
-	const files = $derived(entries.filter((entry) => !entry.directory).map((entry) => entry.path));
-	const phase = (value: string) => tOr(`ops.growthPhase.${value}`, value);
-	// The tab and volume live in the address, so reloading or sharing keeps them.
-	function remember() {
-		const url = new URL(page.url.href);
-		url.searchParams.set('mode', mode);
-		if (volume) url.searchParams.set('volume', volume);
-		// Only the address changes; the page, its scroll position and focus stay.
-		void goto(url, { replace: true, shallow: true });
-	}
 	const candidates = $derived(
 		storage?.disks.filter(
 			(d) =>
@@ -125,9 +104,6 @@
 		disk = '';
 		erase = false;
 		growthAction = null;
-		restored = '';
-		restorePreview = null;
-		remember();
 		if (mode === 'snapshots') run(loadSnapshots);
 	}
 	async function run(work: () => Promise<unknown>) {
@@ -270,7 +246,7 @@
 	<label class="volume"
 		>{t('ops.volume')}<select class="field" bind:value={volume} disabled={busy} onchange={reset}
 			>{#each storage?.volumes ?? [] as v (v.name)}<option value={v.name}
-					>{v.name} · {t(`level.${v.level}`)} · {t(`fs.${v.filesystem}`)}</option
+					>{v.name} · {v.level} · {v.filesystem}</option
 				>{/each}</select
 		></label
 	>
@@ -306,9 +282,7 @@
 	{:else if mode === 'grow'}<p class="muted">{t('ops.growHint')}</p>
 		{#if growth?.pending}<section class="tile results">
 				<p class="notice-warn">{t('ops.growthPending')}</p>
-				<p>
-					<span class="mono">{growth.operation.volume}</span> · {phase(growth.operation.phase)}
-				</p>
+				<p class="mono">{growth.operation.volume} · {growth.operation.phase}</p>
 				<p>{growth.error || growth.operation.error}</p>
 				<p>
 					{t('ops.members', {
@@ -333,7 +307,6 @@
 						onclick={() => (growthAction = 'cancel')}>{t('ops.cancelGrowth')}</button
 					>{/if}
 			</section>
-		{:else if growBlocked}<p class="notice-warn" role="status">{growBlocked}</p>
 		{:else}<form
 				class="tile results"
 				onsubmit={(e) => {
@@ -409,22 +382,6 @@
 					{#if next}<button class="btn" disabled={busy} onclick={() => browse(folder, next)}
 							>{t('ops.more')}</button
 						>{/if}
-					{#if files.length}<div class="toolbar">
-							<button
-								class="btn"
-								disabled={busy || files.every((f) => selected.includes(f))}
-								onclick={() => (selected = [...new Set([...selected, ...files])])}
-								>{t('ops.selectFolderFiles', { count: files.length })}</button
-							>{#if selected.length}<button
-									class="btn"
-									disabled={busy}
-									onclick={() => (selected = [])}>{t('ops.selectNone')}</button
-								>{/if}
-						</div>
-						<p class="muted">{t('ops.foldersHint')}</p>
-						{#if selected.length > 200}<p class="notice-warn" role="alert">
-								{t('ops.selectTooMany', { count: selected.length })}
-							</p>{/if}{/if}
 					<form
 						onsubmit={(e) => {
 							e.preventDefault();

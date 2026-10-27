@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, ApiError, type Account, type Role, type Share } from '#lib/api.ts';
+	import { api, ApiError, type Account, type Role } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
@@ -12,16 +12,11 @@
 
 	const me = $derived(session.data?.user);
 	let accounts = $state<Account[] | null>(null);
-	// Which shares each account reaches; read from the list of shares.
-	let shares = $state<Share[] | null>(null);
-	let loading = $state(false);
-	let loadError = $state('');
 	let error = $state('');
 	let dialog = $state<
 		| { kind: 'create' }
 		| { kind: 'password' | 'delete'; name: string }
 		| { kind: 'twoFactor'; account: Account }
-		| { kind: 'role'; account: Account; role: Role }
 		| null
 	>(null);
 
@@ -38,55 +33,27 @@
 	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }));
 
 	async function load() {
-		loading = true;
-		loadError = '';
-		const [users, list] = await Promise.allSettled([api.get<Account[]>('/users'), api.get<Share[]>('/shares')]);
-		if (users.status === 'fulfilled') accounts = users.value;
-		else loadError = errorText(users.reason instanceof ApiError ? users.reason.code : 'internal');
-		// Without the shares the page still works; the column says it is unknown.
-		shares = list.status === 'fulfilled' ? list.value : null;
-		loading = false;
+		try {
+			accounts = await api.get<Account[]>('/users');
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
 	}
-	const reach = (name: string) =>
-		(shares ?? [])
-			.filter((share) => share.access[name])
-			.map((share) => ({ name: share.name, level: share.access[name] }))
-			.sort((a, b) => a.name.localeCompare(b.name, i18n.locale));
 	$effect(() => {
 		load();
 	});
 
-	/** Making someone an owner gives full rights over everything, so it is asked first. */
-	function pickRole(account: Account, role: Role, select: HTMLSelectElement) {
-		if (role === 'owner' && account.role !== 'owner') {
-			select.value = account.role;
-			dialogError = '';
-			dialog = { kind: 'role', account, role };
-			return;
-		}
-		setRole(account, role, select);
-	}
-
-	async function setRole(account: Account, role: Role, select?: HTMLSelectElement) {
-		if (working) return;
-		working = true;
+	async function setRole(account: Account, role: Role, select: HTMLSelectElement) {
 		error = '';
-		dialogError = '';
-		let failed = false;
 		try {
 			await api.put(`/users/${account.name}`, { role });
 		} catch (err) {
-			failed = true;
-			const text = errorText(err instanceof ApiError ? err.code : 'internal');
-			if (dialog?.kind === 'role') dialogError = text;
-			else error = text;
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
-		working = false;
-		if (!failed && dialog?.kind === 'role') dialog = null;
 		await load();
 		// The select shows what the NAS has; a refused role is turned back
 		// (the value bound to it may not have changed, so set it directly).
-		if (select) select.value = accounts?.find((entry) => entry.name === account.name)?.role ?? account.role;
+		select.value = accounts?.find((entry) => entry.name === account.name)?.role ?? account.role;
 	}
 
 	/** For someone who lost the phone and the recovery codes. */
@@ -130,20 +97,15 @@
 		working = false;
 	}
 
-	// A failed removal keeps the dialog open with the reason.
 	async function remove(name: string) {
-		if (working) return;
-		working = true;
-		dialogError = '';
+		dialog = null;
+		error = '';
 		try {
 			await api.delete(`/users/${name}`);
-			dialog = null;
-			await load();
 		} catch (err) {
-			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
-		} finally {
-			working = false;
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
+		await load();
 	}
 </script>
 
@@ -155,26 +117,19 @@
 </PageHead>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-{#if loadError}
-	<div class="notice-error failed" role="alert"><span>{loadError}</span><button type="button" class="btn" disabled={loading} onclick={load}>{t('common.retry')}</button></div>
-{/if}
 
-{#if accounts === null}
-	{#if !loadError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
-{:else}
 <div class="tile table">
 	<table>
 		<thead>
 			<tr>
 				<th scope="col">{t('users.name')}</th>
 				<th scope="col">{t('users.role')}</th>
-				<th scope="col">{t('users.shares')}</th>
 				<th scope="col">{t('users.created')}</th>
 				<th scope="col"></th>
 			</tr>
 		</thead>
 		<tbody>
-			{#each accounts as account (account.name)}
+			{#each accounts ?? [] as account (account.name)}
 				{@const manageable = mayManage(account.role)}
 				<tr>
 					<td>
@@ -188,23 +143,12 @@
 						</span>
 					</td>
 					<td>
-						{#if manageable && account.name !== me?.name}
-							<select class="field role" aria-label="{t('users.role')}: {account.name}" value={account.role} disabled={working} onchange={(event) => pickRole(account, event.currentTarget.value as Role, event.currentTarget)}>
+						{#if manageable}
+							<select class="field role" aria-label="{t('users.role')}: {account.name}" value={account.role} onchange={(event) => setRole(account, event.currentTarget.value as Role, event.currentTarget)}>
 								{#each offeredRoles as role (role)}<option value={role}>{t(`role.${role}`)}</option>{/each}
 							</select>
 						{:else}
 							{t(`role.${account.role}`)}
-						{/if}
-					</td>
-					<td class="reach">
-						{#if shares === null}
-							<span class="muted">{t('users.sharesUnknown')}</span>
-						{:else}
-							{#each reach(account.name) as entry (entry.name)}
-								<a class="chip" href="/shares?share={encodeURIComponent(entry.name)}&tab=access" title={t(`share.${entry.level}`)}><span class="mono">{entry.name}</span> · {t(entry.level === 'rw' ? 'users.shareRw' : 'users.shareRo')}</a>
-							{:else}
-								<span class="muted">{t('users.sharesNone')}</span>
-							{/each}
 						{/if}
 					</td>
 					<td class="muted">{date.format(new Date(account.created))}</td>
@@ -216,7 +160,7 @@
 							{/if}
 						{/if}
 						{#if manageable && account.name !== me?.name}
-							<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'delete', name: account.name }))}>{t('users.delete')}</button>
+							<button type="button" class="btn" onclick={() => (dialog = { kind: 'delete', name: account.name })}>{t('users.delete')}</button>
 						{/if}
 					</td>
 				</tr>
@@ -224,7 +168,6 @@
 		</tbody>
 	</table>
 </div>
-{/if}
 
 {#if dialog?.kind === 'create'}
 	<Dialog title={t('users.createTitle')} locked={working} onclose={() => (dialog = null)}>
@@ -262,24 +205,11 @@
 	<PasswordDialog name={dialog.name} self={dialog.name === me?.name} onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'delete'}
 	{@const name = dialog.name}
-	{@const reached = reach(name)}
-	<Dialog title={t('users.deleteTitle', { name })} locked={working} onclose={() => (dialog = null)}>
+	<Dialog title={t('users.deleteTitle', { name })} onclose={() => (dialog = null)}>
 		<p class="text">{t('users.deleteText')}</p>
-		{#if reached.length}<p class="text">{t('users.deleteShares', { shares: reached.map((entry) => entry.name).join(', ') })}</p>{/if}
-		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={working} onclick={() => remove(name)}>{t('users.delete')}</button>
-		</div>
-	</Dialog>
-{:else if dialog?.kind === 'role'}
-	{@const change = dialog}
-	<Dialog title={t('users.ownerTitle', { name: change.account.name })} locked={working} onclose={() => (dialog = null)}>
-		<p class="text">{t('users.ownerText', { name: change.account.name })}</p>
-		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={working} onclick={() => setRole(change.account, change.role)}>{t('users.ownerSubmit')}</button>
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-danger" onclick={() => remove(name)}>{t('users.delete')}</button>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'twoFactor'}
@@ -353,26 +283,6 @@
 		width: auto;
 		height: 2.25rem;
 		font-size: 0.875rem;
-	}
-	.failed {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-	}
-	.reach {
-		max-width: 22rem;
-	}
-	.reach a {
-		display: inline-block;
-		margin: 2px 4px 2px 0;
-		color: var(--text);
-		text-decoration: none;
-		font-size: 0.75rem;
-	}
-	.reach a:hover {
-		text-decoration: underline;
 	}
 	.actions {
 		text-align: right;

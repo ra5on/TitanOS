@@ -573,7 +573,7 @@ try {
   {
     const { ctx, page, state } = await context();
     await page.goto(`${base}/logs?source=network`);
-    await page.waitForURL("**/tools/logs?source=network");
+    await page.waitForURL("**/tools?source=network#tools-logs");
     await page
       .getByText("Test journal entry · TitanOS 0.19.0 started", { exact: true })
       .waitFor();

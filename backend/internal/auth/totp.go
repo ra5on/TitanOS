@@ -146,29 +146,6 @@ func (u *Users) EnableTwoFactor(name, code string) ([]string, error) {
 	return codes, nil
 }
 
-// NewRecoveryCodes replaces the recovery codes of an account that has
-// two-factor login on with fresh ones, so the old ones stop working. Like
-// EnableTwoFactor it returns them this once and keeps only their hashes.
-func (u *Users) NewRecoveryCodes(name string) ([]string, error) {
-	codes := make([]string, recoveryCodes)
-	hashes := make([]string, recoveryCodes)
-	for i := range codes {
-		codes[i] = newRecoveryCode()
-		hashes[i] = hashRecoveryCode(codes[i])
-	}
-	_, err := u.update(name, func(user *User) error {
-		if user.TOTPSecret == "" {
-			return ErrNoTwoFactor
-		}
-		user.RecoveryCodes = hashes
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return codes, nil
-}
-
 // DisableTwoFactor switches two-factor login off for an account.
 func (u *Users) DisableTwoFactor(name string) error {
 	_, err := u.update(name, func(user *User) error {

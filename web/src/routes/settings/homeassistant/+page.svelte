@@ -4,7 +4,6 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { formatDateTime } from '#lib/format.ts';
 
 	type MQTTDevice = { group: string; id: string; name: string };
 	type MQTT = {
@@ -441,13 +440,13 @@
 				<p>
 					{t('ha.lastConnected')}: {diagnostics.lastConnected &&
 					!diagnostics.lastConnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastConnected))
+						? new Date(diagnostics.lastConnected).toLocaleString()
 						: '—'}
 				</p>
 				<p>
 					{t('ha.lastDisconnected')}: {diagnostics.lastDisconnected &&
 					!diagnostics.lastDisconnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastDisconnected))
+						? new Date(diagnostics.lastDisconnected).toLocaleString()
 						: '—'}
 				</p>
 				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>

@@ -10,12 +10,11 @@ await mkdir(out, { recursive: true });
 const browser = await chromium.launch({headless:true, executablePath:process.env.BROWSER_EXECUTABLE});
 const errors = [];
 // The tile counts follow the settings hub's own area list instead of a number that goes stale.
-// The list lives in settings-search.ts, shared with the command palette.
-const settingsSource=await readFile(new URL('../web/src/lib/settings-search.ts',import.meta.url),'utf8');
-const areaList=settingsSource.match(/export const settingsAreas:[^=]*=\s*\[([\s\S]*?)\n\];/)?.[1]??'';
-const areaEntries=areaList.match(/\{\s*id:[^}]*\}/g)??[];
+const settingsSource=await readFile(new URL('../web/src/routes/settings/+page.svelte',import.meta.url),'utf8');
+const areaList=settingsSource.match(/const areas:[^=]*=\s*\[([\s\S]*?)\n\t\];/)?.[1]??'';
+const areaEntries=areaList.match(/\{\s*href:[^}]*\}/g)??[];
 const allAreas=areaEntries.length, userAreas=areaEntries.filter(entry=>!/admin:\s*true/.test(entry)).length;
-assert.ok(allAreas>0&&userAreas>0&&userAreas<allAreas,'settings areas parsed from settings-search.ts');
+assert.ok(allAreas>0&&userAreas>0&&userAreas<allAreas,'settings areas parsed from +page.svelte');
 const time = '2026-10-20T09:00:00Z';
 const system = { hostname:'titan-test',version:'0.6.0',kernel:'test',uptimeSeconds:1000,cpu:{model:'Test CPU',threads:8,usagePercent:12},memory:{totalBytes:16e9,usedBytes:3e9,freeBytes:13e9,availableBytes:13e9},temperatures:[],accelerators:[],image:{slot:'a',sizeBytes:1e9,overlayUsedBytes:0,overlayTotalBytes:512e6},stick:{present:true,label:'TITANOS'},network:null,networks:[],networkPendingSeconds:0,notificationsLatest:1};
 const volume={name:'data',level:'raid1',filesystem:'ext4',mountPoint:'/mnt/data',mounted:true,state:'checking',sizeBytes:1e12,usedBytes:4e11,raidDisks:2,members:[],sync:{percent:32,speedBytesPerSecond:1e8,remainingSeconds:500},mismatches:0};

@@ -675,8 +675,8 @@
 		width: 320px;
 		flex: none;
 		position: sticky;
-		top: var(--dashboard-sticky-top, 76px);
-		max-height: calc(100vh - var(--dashboard-sticky-top, 76px) - 19px);
+		top: 76px;
+		max-height: calc(100vh - 95px);
 		min-width: 0;
 	}
 	.inspector-head {

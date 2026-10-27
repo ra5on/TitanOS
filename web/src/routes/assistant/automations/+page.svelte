@@ -50,8 +50,8 @@
  async function remove(){if(!removing)return;busy=true;try{await api.delete(`/assistant/automations/${removing.id}`);removing=null;await load();}catch(e){error=failure(e);}finally{busy=false;}}
 </script>
 
-<PageHead title={label('title')} parent={{href:'/assistant',label:t('assistant.title')}}>
- {#snippet actions()}<button class="btn" onclick={load} disabled={busy}>{label('refresh')}</button><button class="btn btn-primary" onclick={()=>edit()} disabled={busy}>{label('create')}</button>{/snippet}
+<PageHead title={label('title')}>
+ {#snippet actions()}<a class="btn" href="/assistant">{t('assistant.title')}</a><button class="btn" onclick={load} disabled={busy}>{label('refresh')}</button><button class="btn btn-primary" onclick={()=>edit()} disabled={busy}>{label('create')}</button>{/snippet}
 </PageHead>
 <p class="muted intro">{label('intro')}</p>
 {#if error && !editing && !removing}<p class="notice-error" role="alert">{error}</p>{/if}

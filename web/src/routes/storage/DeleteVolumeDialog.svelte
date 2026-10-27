@@ -3,10 +3,8 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	/** What lives on the volume, when the page knows it (see the volume details). */
-	type Usage = { shares: string[]; vms: string[]; docker: string[] | null };
-	type Props = { volume: Volume; usage?: Usage | null; onclose: () => void; ondone: () => void };
-	let { volume, usage, onclose, ondone }: Props = $props();
+	type Props = { volume: Volume; onclose: () => void; ondone: () => void };
+	let { volume, onclose, ondone }: Props = $props();
 
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -40,16 +38,6 @@
 <Dialog title={t('delete.title', { volume: volume.name })} locked={working} {onclose}>
 	<div class="body">
 		<p class="notice-error">{t('delete.warning', { volume: volume.name })}</p>
-		{#if usage && (usage.shares.length || usage.vms.length || usage.docker)}
-			<div class="affected">
-				<p>{t('delete.affected')}</p>
-				<ul>
-					{#if usage.shares.length}<li>{t('delete.affectedShares', { shares: usage.shares.join(', ') })}</li>{/if}
-					{#if usage.vms.length}<li>{t('delete.affectedVms', { vms: usage.vms.join(', ') })}</li>{/if}
-					{#if usage.docker}<li>{usage.docker.length ? t('storage.onVolumeDockerApps', { apps: usage.docker.join(', ') }) : t('storage.onVolumeDockerEngine')}</li>{/if}
-				</ul>
-			</div>
-		{/if}
 		{#if error}
 			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 		{/if}
@@ -65,17 +53,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-	}
-	.affected {
-		font-size: 0.875rem;
-	}
-	.affected p,
-	.affected ul {
-		margin: 0;
-	}
-	.affected ul {
-		padding-left: 18px;
-		overflow-wrap: anywhere;
 	}
 	pre {
 		margin: 8px 0 0;

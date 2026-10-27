@@ -25,10 +25,6 @@
 	const canAdminister = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const volumes = $derived((storage.status?.volumes ?? []).map((v) => v.name));
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || system.info?.hostname || 'nas');
-	// The name over mDNS works without knowing the address and survives a new DHCP lease.
-	const mdnsHost = $derived(
-		system.info?.hostname && system.info.hostname !== host ? `${system.info.hostname}.local` : '',
-	);
 	const account = session.data?.user?.name ?? '';
 	const navigation = shareNavigation(account);
 	let view = $state(sanitizeShareView(session.shares));
@@ -56,8 +52,7 @@
 		preferenceError = $state(''),
 		deleteError = $state('');
 	let deleting = $state(false),
-		copied = $state(''),
-		copyFailed = $state('');
+		copied = $state('');
 	let dialog = $state<
 		{ kind: 'create' } | { kind: 'edit' | 'delete' | 'connect'; share: Share } | null
 	>(null);
@@ -170,22 +165,18 @@
 			deleting = false;
 		}
 	}
-	function addresses(share: Share, host: string) {
+	function addresses(share: Share) {
 		const list: { label: string; value: string }[] = [];
 		if (share.smb)
 			list.push(
 				{ label: t('shares.windows'), value: `\\\\${host}\\${share.name}` },
-				// Finder: Go › Connect to Server.
 				{ label: t('shares.mac'), value: `smb://${host}/${encodeURIComponent(share.name)}` },
-				// File managers (GNOME, KDE) take the URL, mount.cifs the UNC form.
 				{ label: t('shares.linux'), value: `smb://${host}/${encodeURIComponent(share.name)}` },
-				{ label: t('shares.linuxMount'), value: `//${host}/${share.name}` },
 			);
 		if (share.nfs.enabled) list.push({ label: t('shares.nfs'), value: `${host}:/${share.name}` });
 		return list;
 	}
-	async function copy(value: string, code: Element | null) {
-		copyFailed = '';
+	async function copy(value: string) {
 		try {
 			await navigator.clipboard.writeText(value);
 			copied = value;
@@ -193,10 +184,7 @@
 				if (!disposed) copied = '';
 			}, 1500);
 		} catch {
-			// No clipboard (plain http, refused): select the address for copying by hand.
 			copied = '';
-			copyFailed = value;
-			if (code) getSelection()?.selectAllChildren(code);
 		}
 	}
 	function accessSummary(s: Share) {
@@ -496,23 +484,15 @@
 {:else if dialog?.kind === 'connect'}
 	<Dialog
 		title={t('shares.connectTitle', { name: dialog.share.name })}
-		onclose={() => ((dialog = null), (copyFailed = ''))}
+		onclose={() => (dialog = null)}
 	>
-		{#each [host, mdnsHost].filter(Boolean) as via, index (via)}
-			{#if mdnsHost}<h3 class="via">
-					{t(index === 0 ? 'shares.viaAddress' : 'shares.viaName')}
-				</h3>{/if}
-			{#each addresses(dialog.share, via) as address (address.label)}<div class="address">
-					<span>{address.label}</span><code class="mono">{address.value}</code><button
-						class="btn"
-						onclick={(event) => copy(address.value, event.currentTarget.previousElementSibling)}
-						>{t(copied === address.value ? 'shares.copied' : 'shares.copy')}</button
-					>
-					{#if copyFailed === address.value}<p class="notice-warn copy-failed" role="alert">
-							{t('shares.copyFailed')}
-						</p>{/if}
-				</div>{/each}
-		{/each}
+		{#each addresses(dialog.share) as address}<div class="address">
+				<span>{address.label}</span><code class="mono">{address.value}</code><button
+					class="btn"
+					onclick={() => copy(address.value)}
+					>{t(copied === address.value ? 'shares.copied' : 'shares.copy')}</button
+				>
+			</div>{/each}
 		{#if !dialog.share.smb && !dialog.share.nfs.enabled}<p>{t('shares.noProtocol')}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" onclick={() => (dialog = null)}>{t('common.done')}</button>
@@ -748,14 +728,8 @@
 		align-items: center;
 		font-size: 0.8125rem;
 	}
-	.address > span,
-	.copy-failed {
+	.address > span {
 		width: 100%;
-	}
-	.via {
-		margin: 4px 0 0;
-		font-size: 0.8125rem;
-		font-weight: 600;
 	}
 	.address code {
 		flex: 1;

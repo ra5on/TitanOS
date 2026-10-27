@@ -219,7 +219,6 @@ try {
     .click();
   await tile(page, "app:photos").waitFor();
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
-  await page.getByRole("button", { name: "Verwerfen", exact: true }).click();
   assert.equal(await tile(page, "app:photos").count(), 0);
   await page
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
@@ -372,7 +371,6 @@ try {
     .getByRole("combobox", { name: "Spalten", exact: true })
     .selectOption("4");
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
-  await page.getByRole("button", { name: "Verwerfen", exact: true }).click();
   assert.equal(data.prefs.dashboard.columns, 3);
   await ctx.close();
   const regular = await context("user", "hell", 390, "en");

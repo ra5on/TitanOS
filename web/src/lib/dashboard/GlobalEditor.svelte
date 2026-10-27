@@ -463,10 +463,7 @@
 <style>
 	.effects-panel {
 		position: sticky;
-		top: var(--dashboard-sticky-top, 76px);
-		max-height: calc(100vh - var(--dashboard-sticky-top, 76px) - 19px);
-		overflow: auto;
-		box-sizing: border-box;
+		top: 76px;
 		width: 340px;
 		flex: none;
 		padding: 20px;
@@ -827,7 +824,6 @@
 	@media (max-width: 760px) {
 		.effects-panel {
 			position: static;
-			max-height: none;
 			width: 100%;
 			max-width: none;
 			box-sizing: border-box;

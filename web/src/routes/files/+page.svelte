@@ -56,9 +56,6 @@
 	let rootId = $state('');
 	let dir = $state(''); // folder inside the root, "" for its top
 	let entries = $state<FileEntry[] | null>(null);
-	// Why the open folder could not be listed; shown in the list instead of "empty".
-	let listError = $state('');
-	let listLoading = $state(false);
 	let selected = $state<string[]>([]);
 	let anchor = $state('');
 	let error = $state('');
@@ -103,7 +100,6 @@
 	let confirmed = $state(false);
 	let permanent = $state(false);
 	let dialogError = $state('');
-	let dialogBusy = $state(false);
 	let unlockDialog = $state(false);
 	/** The floating menus: one for entries, one for the empty part of the folder. */
 	let menu = $state<{ entry: FileEntry; x: number; y: number } | null>(null);
@@ -455,7 +451,6 @@
 			return;
 		}
 		const requestedRoot = rootId, requestedDir = dir;
-		listLoading = true;
 		try {
 			const query = `root=${encodeURIComponent(requestedRoot)}&path=${encodeURIComponent(requestedDir)}`;
 			const [listing, parts] = await Promise.all([
@@ -467,14 +462,11 @@
 			pending = parts;
 			const names = new Set(entries.map((entry) => entry.name));
 			selected = selected.filter((name) => names.has(name));
-			listError = '';
 			error = '';
 		} catch (err) {
 			if (rootId !== requestedRoot || dir !== requestedDir) return;
-			entries = null;
-			listError = fail(err);
-		} finally {
-			if (rootId === requestedRoot && dir === requestedDir) listLoading = false;
+			entries = [];
+			error = fail(err);
 		}
 	}
 
@@ -582,7 +574,6 @@
 		trash = false;
 		selected = [];
 		entries = null;
-		listError = '';
 		pending = [];
 		await load();
 		if (rootId !== id || dir !== path) return;
@@ -757,8 +748,6 @@
 			event.preventDefault();
 			if (entry.dir && key === 'enter') open(rootId, join(dir, entry.name));
 			else if (!entry.dir && previewKind(entry.name, entry.size)) preview = entry;
-			// Like a double click: a file without a preview opens in the editor.
-			else if (!entry.dir && key === 'enter' && editable) editing = join(dir, entry.name);
 			return;
 		}
 		// Shift+F10 and the menu key open the menu of the focused entry.
@@ -819,7 +808,7 @@
 		location.href = '/api/v1/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) });
 	}
 	function show(kind: 'mkdir' | 'rename' | 'delete') {
-		if (!writable || dialogBusy) return;
+		if (!writable) return;
 		dialogError = '';
 		confirmed = false;
 		permanent = !root?.recycle;
@@ -831,13 +820,10 @@
 			dialog = { kind };
 		}
 	}
-	// Enter submits only "new folder" and "rename"; deleting runs from its button alone.
-	async function submitDialog(event?: SubmitEvent) {
-		event?.preventDefault();
-		if (!dialog || !writable || dialogBusy) return;
-		if (event && dialog.kind === 'delete') return;
+	async function submitDialog(event: SubmitEvent) {
+		event.preventDefault();
+		if (!dialog || !writable) return;
 		dialogError = '';
-		dialogBusy = true;
 		try {
 			if (dialog.kind === 'mkdir') {
 				await api.post('/files/mkdir', { root: rootId, path: join(dir, typed.trim()) });
@@ -854,8 +840,6 @@
 			loadRoots();
 		} catch (err) {
 			dialogError = fail(err);
-		} finally {
-			dialogBusy = false;
 		}
 	}
 
@@ -894,22 +878,18 @@
 		input.value = '';
 		upload(files);
 	}
-	/** Reads a dropped folder with everything below it. What the browser cannot read is noted in `failed`. */
-	async function readEntry(entry: FileSystemEntry, prefix: string, out: { file: File; path: string }[], failed: string[]) {
-		try {
-			if (entry.isFile) {
-				const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
-				out.push({ file, path: prefix + entry.name });
-			} else if (entry.isDirectory) {
-				const reader = (entry as FileSystemDirectoryEntry).createReader();
-				for (;;) {
-					const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-					if (batch.length === 0) break;
-					for (const child of batch) await readEntry(child, prefix + entry.name + '/', out, failed);
-				}
+	/** Reads a dropped folder with everything below it. */
+	async function readEntry(entry: FileSystemEntry, prefix: string, out: { file: File; path: string }[]) {
+		if (entry.isFile) {
+			const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
+			out.push({ file, path: prefix + entry.name });
+		} else if (entry.isDirectory) {
+			const reader = (entry as FileSystemDirectoryEntry).createReader();
+			for (;;) {
+				const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+				if (batch.length === 0) break;
+				for (const child of batch) await readEntry(child, prefix + entry.name + '/', out);
 			}
-		} catch {
-			failed.push(prefix + entry.name);
 		}
 	}
 	async function dropped(event: DragEvent) {
@@ -923,12 +903,9 @@
 		// The entries have to be taken before the first await; the list is gone afterwards.
 		const items = [...event.dataTransfer.items].map((item) => item.webkitGetAsEntry?.()).filter((entry): entry is FileSystemEntry => !!entry);
 		const plain = [...event.dataTransfer.files];
-		const files: { file: File; path: string }[] = [],
-			failed: string[] = [];
-		if (items.length > 0) for (const entry of items) await readEntry(entry, '', files, failed);
+		const files: { file: File; path: string }[] = [];
+		if (items.length > 0) for (const entry of items) await readEntry(entry, '', files);
 		else files.push(...plain.map((file) => ({ file, path: file.name })));
-		// The rest is still offered for upload; the unreadable ones are named.
-		if (failed.length) error = t('files.dropUnreadable', { count: failed.length, names: failed.slice(0, 5).join(', ') + (failed.length > 5 ? ' …' : '') });
 		upload(files);
 	}
 </script>
@@ -1231,7 +1208,7 @@
 							{/snippet}
 						</VirtualEntries>
 						{#if !visibleEntries.length}
-							{#if !root}<EmptyState inline title={t('files.chooseRoot')} />{:else if listError}<div class="notice-error list-state" role="alert"><span>{listError}</span><button type="button" class="btn" disabled={listLoading} onclick={load}>{t('common.retry')}</button></div>{:else if entries}<EmptyState inline title={t(search && entries.length > 0 ? 'files.noMatches' : 'files.empty')} />{:else}<p class="muted list-state" role="status">{t('common.loading')}</p>{/if}
+							{#if !root}<EmptyState inline title={t('files.chooseRoot')} />{:else if entries}<EmptyState inline title={t(search && entries.length > 0 ? 'files.noMatches' : 'files.empty')} />{/if}
 						{/if}
 					</div>
 
@@ -1348,23 +1325,13 @@
 				: selected.length === 1
 					? t('files.deleteTitleOne', { name: selected[0] })
 					: t('files.deleteTitleMany', { count: selected.length })}
-		locked={dialogBusy}
 		onclose={() => (dialog = null)}
 	>
 		<form onsubmit={submitDialog}>
 			{#if kind === 'delete'}
-				<div class="delete-summary">
-					<p>{t('files.deleteSummary', { files: selectedEntries.length - selectedFolders, folders: selectedFolders })} · <span class="mono">{formatBytes(measured?.key === selectionKey ? measured.bytes : selectedBytes)}</span>{#if selectedFolders && measured?.key !== selectionKey} <span class="muted">({t('files.foldersNotCounted', { count: selectedFolders })})</span>{/if}</p>
-					{#if selected.length > 1}
-						<ul class="mono">
-							{#each selected.slice(0, 10) as name (name)}<li>{name}</li>{/each}
-						</ul>
-						{#if selected.length > 10}<p class="muted">{t('files.deleteMore', { count: selected.length - 10 })}</p>{/if}
-					{/if}
-				</div>
 				{#if root?.recycle}
 					<label class="field-row"><span>{t('files.deleteAction')}</span>
-						<select class="field" bind:value={permanent} disabled={dialogBusy} onchange={() => { confirmed = false; }}>
+						<select class="field" bind:value={permanent} onchange={() => { confirmed = false; }}>
 							<option value={false}>{t('files.moveToTrash')}</option>
 							<option value={true}>{t('files.trashDeleteForever')}</option>
 						</select>
@@ -1372,23 +1339,22 @@
 				{/if}
 				<p class={permanent ? 'notice-error' : 'text'}>{t(permanent ? (root?.recycle ? 'files.trashForeverText' : 'files.deletePermanent') : 'files.deleteRecycle')}</p>
 				{#if permanent}
-					<label class="confirm"><input type="checkbox" bind:checked={confirmed} disabled={dialogBusy} /><span>{t('files.deleteConfirm')}</span></label>
+					<label class="confirm"><input type="checkbox" bind:checked={confirmed} /><span>{t('files.deleteConfirm')}</span></label>
 				{/if}
 			{:else}
 				<label class="field-row">
 					<span>{t(kind === 'mkdir' ? 'files.name' : 'files.newName')}</span>
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="field" type="text" bind:value={typed} maxlength="255" autocomplete="off" spellcheck="false" required autofocus readonly={dialogBusy} />
+					<input class="field" type="text" bind:value={typed} maxlength="255" autocomplete="off" spellcheck="false" required autofocus />
 				</label>
 			{/if}
 			{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
 			<div class="dialog-actions">
-				{#if dialogBusy}<span class="dialog-busy" role="status">{t('files.dialogBusy')}</span>{/if}
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}>{t('common.cancel')}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button>
 				{#if kind === 'delete'}
-					<button type="button" class="btn {permanent ? 'btn-danger' : 'btn-warn'}" disabled={(permanent && !confirmed) || dialogBusy} onclick={() => submitDialog()}>{t(permanent ? 'files.trashDeleteForever' : 'files.moveToTrash')}</button>
+					<button type="submit" class="btn {permanent ? 'btn-danger' : 'btn-warn'}" disabled={permanent && !confirmed}>{t(permanent ? 'files.trashDeleteForever' : 'files.moveToTrash')}</button>
 				{:else}
-					<button type="submit" class="btn btn-primary" disabled={dialogBusy}>{t(kind === 'mkdir' ? 'files.create' : 'files.rename')}</button>
+					<button type="submit" class="btn btn-primary">{t(kind === 'mkdir' ? 'files.create' : 'files.rename')}</button>
 				{/if}
 			</div>
 		</form>
@@ -1431,35 +1397,6 @@
 {/if}
 
 <style>
-	.delete-summary {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.875rem;
-	}
-	.delete-summary ul {
-		margin: 0;
-		padding-left: 18px;
-		font-size: 0.8125rem;
-		max-height: 14rem;
-		overflow-y: auto;
-		overflow-wrap: anywhere;
-	}
-	.list-state {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		margin: 12px;
-	}
-	.dialog-busy {
-		order: -2;
-		margin-right: auto;
-		align-self: center;
-		font-size: 0.8125rem;
-		color: var(--muted);
-	}
 	.layout {
 		display: grid;
 		grid-template-columns: 240px minmax(0, 1fr);

@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { formatDateTime } from '#lib/format.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { operationError, type BackupView } from '#lib/operations.ts';
 	type Coverage = {
@@ -27,7 +26,7 @@
 		error = $state(''),
 		busy = $state(false);
 	const date = (value: string | null | undefined) =>
-		value ? formatDateTime(new Date(value)) : '—';
+		value ? new Date(value).toLocaleString() : '—';
 	async function load() {
 		busy = true;
 		error = '';

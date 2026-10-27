@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -72,15 +71,10 @@
 		error = { text: errorText(code), detail: (code === 'plugin_failed' || code === 'invalid_plugin' || code === 'plugin_download_failed') && err instanceof ApiError ? err.message : '' };
 	}
 
-	// Polling goes on during a change, so the page keeps showing what the
-	// NAS does; an answer that started before the change ended is dropped.
-	let changes = 0;
 	async function load() {
-		if (document.hidden) return;
-		const started = changes;
+		if (document.hidden || busy) return;
 		try {
-			const next = await api.get<Status>('/plugins');
-			if (started === changes) status = next;
+			status = await api.get<Status>('/plugins');
 		} catch (err) {
 			if (!status) problem(err);
 		}
@@ -106,7 +100,6 @@
 	async function run(action: () => Promise<Status>) {
 		busy = true;
 		error = null;
-		changes++;
 		try {
 			status = await action();
 			asking = false;
@@ -116,7 +109,6 @@
 			problem(err);
 		}
 		busy = false;
-		changes++;
 		await load();
 	}
 
@@ -145,17 +137,11 @@
 		asking = true;
 	}
 
-	let details: HTMLElement | undefined = $state();
-	async function pick(name: string) {
+	function pick(name: string) {
 		if (busy) return;
 		picked = name;
 		asking = false;
 		error = null;
-		// On a phone the details lie below the list: bring them into view.
-		if (window.matchMedia('(max-width: 760px)').matches) {
-			await tick();
-			details?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-		}
 	}
 </script>
 
@@ -206,7 +192,7 @@
 			<p class="muted note">{status.volume ? t('plugins.where', { volume: status.volume }) : t('plugins.whereNone')}</p>
 		</div>
 
-		<aside class="tile" aria-labelledby="plugin-title" bind:this={details}>
+		<aside class="tile" aria-labelledby="plugin-title">
 			<div class="head">
 				<span class="monogram large" style:background="hsl({hue(current)} 45% 42%)" aria-hidden="true">{monogram(current)}</span>
 				<div class="about">
@@ -263,12 +249,6 @@
 						<label class="check"><input type="checkbox" bind:checked={activate} disabled={busy} /><span>{t('plugins.activateNow')}</span></label>
 						<p class="muted note">{t('plugins.activateLaterHint')}</p>
 						{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
-						{#if busy}
-							<div class="progress" role="status">
-								<progress aria-label={t(current.download ? 'plugins.downloadingChecking' : 'plugins.installing')}></progress>
-								<span class="muted">{t(current.download ? 'plugins.downloadingChecking' : 'plugins.installing')}</span>
-							</div>
-						{/if}
 						<div class="row">
 							<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
 							<button type="button" class="btn btn-primary" disabled={busy || !volume || current.problem === 'kernel'} onclick={() => run(() => api.post<Status>('/plugins', current.download ? { name: current.name, volume, activate } : { path: current.path, volume, confirm: current.name, activate }))}>{t(busy ? (current.download ? 'plugins.downloading' : 'plugins.installing') : 'plugins.allow')}</button>
@@ -517,15 +497,5 @@
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-	.progress {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.8125rem;
-	}
-	.progress progress {
-		width: 100%;
-		accent-color: var(--accent);
 	}
 </style>

@@ -8,7 +8,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import AgentSettings from '#lib/components/AgentSettings.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { formatBytes, formatNumber } from '#lib/format.ts';
+	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 
@@ -291,7 +291,7 @@
 						{#each models as model (model.name)}
 							<tr>
 								<td class="mono">{model.name}{#if model.parameters}<span class="muted">{` · ${model.parameters}`}</span>{/if}</td>
-								<td class="mono">{formatBytes(model.sizeBytes)}{#if model.contextLength}<span class="muted">{` · ${t('assistant.context', { count: formatNumber(model.contextLength) })}`}</span>{/if}</td>
+								<td class="mono">{formatBytes(model.sizeBytes)}{#if model.contextLength}<span class="muted">{` · ${t('assistant.context', { count: model.contextLength.toLocaleString() })}`}</span>{/if}</td>
 								<td>
 									{#each model.capabilities.filter((c) => c !== 'completion') as cap (cap)}<span class="chip">{capability(cap)}</span>{/each}
 									{#if model.capabilities.length > 0 && !model.capabilities.includes('tools')}<span class="warn">{t('assistant.noToolsModel')}</span>{/if}

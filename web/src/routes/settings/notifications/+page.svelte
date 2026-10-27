@@ -1,5 +1,6 @@
 <script lang="ts">
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -44,12 +45,8 @@
 		clear = [];
 	}
 
-	function load() {
-		error = null;
-		api.get<Answer>('/notifications/settings').then(take, problem);
-	}
 	$effect(() => {
-		load();
+		api.get<Answer>('/notifications/settings').then(take, problem);
 		api.get<{ services: string[] }>('/homeassistant/notify-services').then((res) => (haServices = res.services), () => (haServices = []));
 	});
 
@@ -117,9 +114,9 @@
 <PageHead title={t('notify.settingsTitle')} parent={{ href: '/settings', label: t('nav.settings') }}>
 	<p class="muted">{t('notify.intro')}</p>
 </PageHead>
-<p class="muted"><a href="/account#bell">{t('notify.personalHint')}</a></p>
+<SoundSettings />
 
-{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}{#if !draft} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>{/if}</div>{/if}
+{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if draft}
 	<form onsubmit={save}>

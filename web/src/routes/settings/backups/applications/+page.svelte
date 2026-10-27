@@ -6,7 +6,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
-	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { formatBytes } from '#lib/format.ts';
 	import { operationError } from '#lib/operations.ts';
 	type Result = { at: string; snapshot: string; target: string; verified: boolean; error: string };
 	type Job = {
@@ -193,7 +193,7 @@
 				required
 				disabled={busy || !job}
 				><option value="">{t('ops.choose')}</option>{#each snapshots as saved (saved.id)}<option
-						value={saved.id}>{formatDateTime(new Date(saved.time))} · {saved.id}</option
+						value={saved.id}>{new Date(saved.time).toLocaleString()} · {saved.id}</option
 					>{/each}</select
 			></label
 		>
@@ -210,7 +210,7 @@
 	</form>{/if}
 {#if plan}<section class="tile plan">
 		<h2>{t('tasks.restorePreview')}</h2>
-		<p class="mono">{job} · {plan.snapshot.id} · {formatDateTime(new Date(plan.snapshot.time))}</p>
+		<p class="mono">{job} · {plan.snapshot.id} · {new Date(plan.snapshot.time).toLocaleString()}</p>
 		<p>
 			{t('applications.size')}: {plan.snapshot.bytes
 				? formatBytes(plan.snapshot.bytes)

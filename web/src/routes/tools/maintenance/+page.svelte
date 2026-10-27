@@ -2,14 +2,13 @@
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
-	import { formatDateTime } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import {
 		newMaintenanceJob,
+		operationError,
 		type MaintenanceJob,
 		type MaintenanceSettings,
 		type MaintenanceStatus,
@@ -21,20 +20,13 @@
 		backups = $state<BackupView[]>([]);
 	let draftVolume = $state(''),
 		savedSettings = $state('');
-	let error = $state<Problem | null>(null),
+	let error = $state(''),
 		busy = $state(false),
 		saved = $state(false),
 		draft = $state<MaintenanceJob | null>(null),
 		initial = $state(''),
 		discard = $state(false),
 		review = $state('');
-	// The NAS's own time zone comes first; the list is the one /welcome offers.
-	let nasZone = $state('');
-	const zones = $derived(
-		[
-			...new Set([nasZone, settings?.timezone, 'UTC', ...Intl.supportedValuesOf('timeZone')]),
-		].filter((zone): zone is string => !!zone),
-	);
 	const kinds = ['raid-check', 'smart-long', 'backup-check', 'restore-probe', 'snapshot'] as const;
 	const targets = $derived(
 		draft?.kind === 'smart-long'
@@ -52,35 +44,31 @@
 	async function load() {
 		try {
 			status = await api.get('/maintenance');
-			error = null;
+			error = '';
 			if (!settings) {
 				settings = structuredClone($state.snapshot(status!.settings));
 				savedSettings = JSON.stringify(settings);
 			}
 		} catch (e) {
-			error = requestProblem(e, t);
+			error = operationError(e, t);
 		}
 	}
 	onMount(() => {
-		api
-			.get<{ timezone: string }>('/network')
-			.then((res) => (nasZone = res.timezone))
-			.catch(() => {});
 		load();
 		Promise.all([api.get<StorageStatus>('/storage'), api.get<{ jobs: BackupView[] }>('/backups')])
 			.then(([s, b]) => {
 				storage = s;
 				backups = b.jobs;
 			})
-			.catch((e) => (error = requestProblem(e, t)));
+			.catch((e) => (error = operationError(e, t)));
 		const timer = setInterval(() => {
 			if (!document.hidden && !draft && !busy) load();
 		}, 10000);
 		return () => clearInterval(timer);
 	});
-	async function save(next: MaintenanceSettings): Promise<boolean> {
+	async function save(next: MaintenanceSettings) {
 		busy = true;
-		error = null;
+		error = '';
 		saved = false;
 		try {
 			status = await api.put('/maintenance', next);
@@ -88,10 +76,8 @@
 			draft = null;
 			savedSettings = JSON.stringify(settings);
 			saved = true;
-			return true;
 		} catch (e) {
-			error = requestProblem(e, t);
-			return false;
+			error = operationError(e, t);
 		} finally {
 			busy = false;
 		}
@@ -103,10 +89,9 @@
 			draft.weekdays ??= [0];
 			draft.monthDay ||= 1;
 		}
-		// The dialog starts from what is stored, not from unsaved changes above it.
-		draftVolume = stored()?.volume ?? '';
+		draftVolume = settings?.volume ?? '';
 		initial = JSON.stringify({ job: draft, volume: draftVolume });
-		error = null;
+		error = '';
 	}
 	const jobDirty = $derived(
 		!!draft && JSON.stringify({ job: draft, volume: draftVolume }) !== initial,
@@ -116,40 +101,14 @@
 		if (jobDirty) discard = true;
 		else draft = null;
 	}
-	/** The settings as stored on the NAS, without unsaved changes of the form. */
-	function stored(): MaintenanceSettings | null {
-		return savedSettings ? (JSON.parse(savedSettings) as MaintenanceSettings) : null;
-	}
-	/**
-	 * Saves a job on top of the stored settings. Unsaved changes of the global
-	 * form stay a draft of their own and are kept after saving.
-	 */
-	async function saveJobs(change: (jobs: MaintenanceJob[]) => MaintenanceJob[], volume?: string) {
-		const base = stored();
-		if (!base || !settings) return;
-		const pending = settingsDirty ? $state.snapshot(settings) : null;
-		const ok = await save({
-			...base,
-			volume: volume ?? base.volume,
-			jobs: change(base.jobs),
-		});
-		if (ok && pending && settings) {
-			const now = $state.snapshot(settings);
-			settings = {
-				...pending,
-				jobs: now.jobs,
-				volume: pending.volume === base.volume ? now.volume : pending.volume,
-			};
-		}
-	}
 	async function saveJob() {
-		const job = draft ? $state.snapshot(draft) : null;
-		if (!job) return;
-		await saveJobs((jobs) => [...jobs.filter((j) => j.id !== job.id), job], draftVolume);
+		if (!settings || !draft) return;
+		const existing = settings.jobs.filter((j) => j.id !== draft!.id);
+		await save({ ...settings, volume: draftVolume, jobs: [...existing, draft] });
 	}
 	async function action(id: string, kind: string) {
 		busy = true;
-		error = null;
+		error = '';
 		try {
 			status = await api.post(
 				`/maintenance/${encodeURIComponent(id)}/${kind}`,
@@ -158,14 +117,15 @@
 			);
 			review = '';
 		} catch (e) {
-			error = requestProblem(e, t);
+			error = operationError(e, t);
 		} finally {
 			busy = false;
 		}
 	}
-	// Times of the schedule are shown in the NAS's maintenance time zone.
 	const time = (value: string | null | undefined) =>
-		value ? formatDateTime(new Date(value), status?.settings.timezone || undefined) : '—';
+		value
+			? new Date(value).toLocaleString(undefined, { timeZone: status?.settings.timezone ?? 'UTC' })
+			: '—';
 </script>
 
 <NavigationGuard dirty={settingsDirty || jobDirty} />
@@ -175,13 +135,7 @@
 			>{t('ops.add')}</button
 		>{/snippet}</PageHead
 >
-{#snippet problemLine(problem: Problem)}{problem.text}{#if problem.detail}<code class="detail"
-			>{problem.detail}</code
-		>{/if}{/snippet}
-{#if error && !draft && !review}<p class="notice-error" role="alert">
-		{@render problemLine(error)}
-		<button class="btn small" disabled={busy} onclick={load}>{t('ui.retry')}</button>
-	</p>{/if}
+{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 <p class="muted">{t('ops.maintenanceHint')}</p>
 {#if settings}<form
 		class="tile configuration"
@@ -210,14 +164,7 @@
 				'tasks.backupsFirst',
 			)}</label
 		>
-		<label
-			>{t('ops.timezone')}<select class="field" bind:value={settings.timezone} required
-				>{#each zones as zone (zone)}<option value={zone}
-						>{zone === nasZone ? t('ops.timezoneNas', { zone }) : zone}</option
-					>{/each}</select
-			>{#if nasZone && settings.timezone !== nasZone}<small class="muted"
-					>{t('ops.timezoneDiffers', { zone: nasZone })}</small
-				>{/if}</label
+		<label>{t('ops.timezone')}<input class="field" bind:value={settings.timezone} required /></label
 		>
 		<label
 			>{t('ops.from')}<input
@@ -237,9 +184,7 @@
 		<button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
 		>{#if saved && !settingsDirty && !jobDirty}<span role="status">{t('notify.saved')}</span>{/if}
 	</form>{/if}
-{#if status?.error}<p class="notice-warn">
-		{@render problemLine(problemText(status.error, t))}
-	</p>{/if}
+{#if status?.error}<p class="notice-warn">{status.error}</p>{/if}
 <section class="tile schedules">
 	<div class="table-wrap">
 		<table>
@@ -266,7 +211,7 @@
 							)}{#if view.wait && !view.state.running}<p class="muted">
 									{t(`tasks.wait.${view.wait}` as MessageKey)}
 								</p>{/if}{#if view.state.error}<p class="notice-warn">
-									{@render problemLine(problemText(view.state.error, t))}
+									{view.state.error}
 								</p>{/if}</td
 						><td
 							><div class="actions">
@@ -301,9 +246,7 @@
 			class="result"
 		>
 			<strong>{result.name}</strong><time>{time(result.finished)}</time><span
-				>{#if result.error}{@render problemLine(problemText(result.error, t))}{:else}{t(
-						'ops.finished',
-					)}{/if}</span
+				>{result.error || t('ops.finished')}</span
 			>
 		</div>{:else}<p class="muted">{t('ops.none')}</p>{/each}
 </section>
@@ -454,15 +397,15 @@
 				><input type="checkbox" bind:checked={draft.enabled} />{t('ops.enabled')}</label
 			>
 		</form>
-		{#if error}<p class="notice-error" role="alert">{@render problemLine(error)}</p>{/if}
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={close}>{t('common.cancel')}</button
 			>{#if draft.id}<button
 					class="btn btn-warn"
 					disabled={busy}
 					onclick={() => {
-						const id = draft?.id;
-						if (id) saveJobs((jobs) => jobs.filter((j) => j.id !== id));
+						if (settings && draft)
+							save({ ...settings, jobs: settings.jobs.filter((j) => j.id !== draft!.id) });
 					}}>{t('ops.remove')}</button
 				>{/if}<button form="maintenance-form" class="btn btn-primary" disabled={busy}
 				>{t('ops.save')}</button
@@ -484,7 +427,7 @@
 {#if review}<Dialog title={t('ops.review')} locked={busy} onclose={() => (review = '')}
 		><p>{t('ops.reviewHint')}</p>
 		<p class="mono">{review}</p>
-		{#if error}<p class="notice-error" role="alert">{@render problemLine(error)}</p>{/if}
+		{#if error}<p class="notice-error">{error}</p>{/if}
 		<div class="dialog-actions">
 			<button class="btn" disabled={busy} onclick={() => (review = '')}>{t('common.cancel')}</button
 			><button class="btn btn-warn" disabled={busy} onclick={() => action(review, 'review')}
@@ -556,12 +499,6 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.result span {
-		overflow-wrap: anywhere;
-	}
-	.detail {
-		display: block;
-		margin-top: 4px;
-		font-size: 0.75rem;
 		overflow-wrap: anywhere;
 	}
 	.schedules {

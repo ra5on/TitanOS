@@ -146,11 +146,6 @@
 		else search?.findNext(text);
 	}
 
-	/** Whether the connection to the shell is still open. */
-	export function connected(): boolean {
-		return phase === 'open';
-	}
-
 	export function focus() {
 		term?.focus();
 	}

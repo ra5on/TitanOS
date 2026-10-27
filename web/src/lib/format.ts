@@ -55,24 +55,8 @@ export function formatTime(date: Date): string {
 	return new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-/** A date without time in the language of the interface. */
-export function formatDate(date: Date): string {
-	return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }).format(date);
-}
-
-/** A whole number with the grouping of the interface language. */
-export function formatNumber(value: number): string {
-	return new Intl.NumberFormat(i18n.locale).format(value);
-}
-
-/** Date and time in the language of the interface; optionally in another time zone (e.g. the NAS's). */
-export function formatDateTime(date: Date, timeZone?: string): string {
-	try {
-		return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(date);
-	} catch {
-		// An unknown zone falls back to the browser's.
-		return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-	}
+export function formatDateTime(date: Date): string {
+	return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 /**

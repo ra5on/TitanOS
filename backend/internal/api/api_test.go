@@ -1135,7 +1135,7 @@ func TestRestoreOnlyOnANewStick(t *testing.T) {
 func TestDiagnosticsAreForAdministrators(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	for _, query := range []string{"source=nonsense", "priority=9", "priority=x", "after=a%20--file%3D/etc/shadow", "since=x", "since=-5", "since=99999999999"} {
+	for _, query := range []string{"source=nonsense", "priority=9", "priority=x", "after=a%20--file%3D/etc/shadow"} {
 		if res, body := ts.request("GET", "/api/v1/logs?"+query, nil); res.StatusCode != http.StatusBadRequest {
 			t.Errorf("logs?%s: %d %s", query, res.StatusCode, body)
 		}

@@ -4,7 +4,6 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	type Token = { id: string; name: string; scopes: string[]; created: string; lastUsed?: string };
 	const labels: Record<string, MessageKey> = {
@@ -107,8 +106,8 @@
 					<p class="muted">{token.scopes.map((s) => t(labels[s])).join(' · ')}</p>
 					<small class="muted"
 						>{t('api.created')}
-						{formatDate(new Date(token.created))}{#if token.lastUsed}
-							· {t('api.lastUsed')} {formatDateTime(new Date(token.lastUsed))}{/if}</small
+						{new Date(token.created).toLocaleDateString()}{#if token.lastUsed}
+							· {t('api.lastUsed')} {new Date(token.lastUsed).toLocaleString()}{/if}</small
 					>
 				</div>
 				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}>{t('api.revoke')}</button>
