@@ -33,6 +33,10 @@ var shareErrors = []struct {
 	{shares.ErrInvalidClient, http.StatusBadRequest, "invalid_nfs_client"},
 	{shares.ErrInvalidOption, http.StatusBadRequest, "invalid_option"},
 	{shares.ErrVolumeChange, http.StatusConflict, "volume_change"},
+	{shares.ErrPurgeRunning, http.StatusConflict, "share_purge_running"},
+	{shares.ErrPurgeUnsafe, http.StatusConflict, "share_path_unsafe"},
+	{shares.ErrPurgeChanged, http.StatusConflict, "share_changed"},
+	{shares.ErrPurgeBlocked, http.StatusConflict, "share_in_use"},
 }
 
 func writeShareError(w http.ResponseWriter, err error) {

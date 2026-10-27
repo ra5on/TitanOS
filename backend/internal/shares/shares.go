@@ -154,6 +154,7 @@ type Manager struct {
 	Disabled bool
 
 	mountRoot string
+	mounts    func() map[string]bool
 	gid       int // group that owns the shares
 	sambaConf string
 	exports   string
@@ -168,12 +169,17 @@ type Manager struct {
 
 	quota       quotaState
 	quotaKernel quotaKernel
+
+	// gen counts saved changes; appliedGen is the newest one Apply has
+	// brought to the system. Deleting a share's data waits for it.
+	gen, appliedGen uint64
+	purge           purgeState
 }
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
-		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: UsersGID,
+		store: store, runner: run.Exec{}, mountRoot: "/mnt", gid: UsersGID, mounts: mountPoints,
 		sambaConf: "/etc/samba/smb.conf", exports: "/etc/exports", nfsRoot: "/srv/nfs", runDir: "/run/titanos",
 		kick: make(chan struct{}, 1),
 	}
@@ -230,6 +236,7 @@ func (m *Manager) save(shares []Share) error {
 		return err
 	}
 	m.shares = shares
+	m.gen++
 	select {
 	case m.kick <- struct{}{}:
 	default:
@@ -420,6 +427,7 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 				slog.Error("apply shares", "err", err)
 			}
 			m.ApplyQuotas(current.Quotas, current.Mounted)
+			m.resumePurges(current.Mounted)
 		}
 		select {
 		case <-ctx.Done():
@@ -435,7 +443,11 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 // Apply makes accounts, configuration files and services match the shares.
 // It does nothing if nothing changed since the last time.
 func (m *Manager) Apply(ctx context.Context, state State) error {
+	m.mu.Lock()
+	gen := m.gen
+	m.mu.Unlock()
 	if m.Disabled {
+		m.markApplied(gen)
 		return nil
 	}
 	shares := m.List()
@@ -459,6 +471,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 		// A share taken off NFS may still have been busy when its mount
 		// was to be removed; try again until it is gone.
 		m.unbindShares(ctx, offered)
+		m.markApplied(gen)
 		return nil
 	}
 
@@ -514,6 +527,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	m.mu.Lock()
 	m.applied = signature
 	m.mu.Unlock()
+	m.markApplied(gen)
 	slog.Info("shares applied", "shares", len(offered), "accounts", len(users), "smb", smb, "nfs", nfs)
 	return nil
 }

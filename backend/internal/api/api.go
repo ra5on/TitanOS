@@ -157,6 +157,9 @@ func New(opts Options) *Server {
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
+	if s.opts.Shares != nil {
+		s.opts.Shares.OnPurgeResumed(s.sharePurgeDone)
+	}
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
 	}
@@ -257,6 +260,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/shares", s.requireAdmin(s.handleCreateShare))
 	mux.HandleFunc("PUT /api/v1/shares/{name}", s.requireAdmin(s.handleUpdateShare))
 	mux.HandleFunc("DELETE /api/v1/shares/{name}", s.requireAdmin(s.handleDeleteShare))
+	mux.HandleFunc("GET /api/v1/shares/{name}/delete-data", s.requireAdmin(s.handleShareDataPreview))
+	mux.HandleFunc("POST /api/v1/shares/{name}/delete-data", s.requireHeavyAdmin(s.handleShareDataDelete))
 
 	// The file manager. Every request names a root the account has access to.
 	mux.HandleFunc("GET /api/v1/files/roots", s.requireUser(s.handleFileRoots))

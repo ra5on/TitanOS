@@ -492,6 +492,9 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 		// RAM only and under its own lock: a running activation does not hold this up.
 		out["plugins"] = s.opts.Plugins.Progress()
 	}
+	if s.opts.Shares != nil {
+		out["shareDeletions"] = s.opts.Shares.PurgeJobs()
+	}
 	if s.opts.Backup != nil {
 		out["backups"] = s.opts.Backup.CachedViews()
 	}

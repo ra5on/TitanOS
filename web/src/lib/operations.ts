@@ -110,6 +110,7 @@ export type BackupView = {
 };
 export type Operations = {
 	media?: import('#lib/media.ts').MediaJob[];
+	shareDeletions?: import('#lib/share-delete.ts').ShareDeletion[];
 	storageActive?: boolean;
 	clones?: {
 		id: string;
