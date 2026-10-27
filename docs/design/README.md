@@ -169,7 +169,10 @@ Sie filtert Namen, Endungen, Größe und Änderungszeit, zeigt vollständige
 relative Pfade und öffnet den zugehörigen Ordner. Sie verfolgt keine Symlinks
 und blendet interne, geheime und VM-geschützte Pfade aus. Pro Suche gelten
 30 Sekunden, 50.000 geprüfte Einträge und 1.000 Treffer; eine begrenzte
-Ergebnisliste wird ausdrücklich gekennzeichnet. Keine Hintergrundindexierung.
+Ergebnisliste wird ausdrücklich gekennzeichnet. Die Namenssuche bleibt ohne
+Index. „Im Inhalt suchen“ nutzt den optionalen, ab Werk ausgeschalteten
+Volltextindex (Einstellungen › Dateisuche, siehe `docs/FILE-SEARCH.md`) und ist
+nur auswählbar, wenn der Index den Speicherort abdeckt.
 
 „Mehrere umbenennen“ zeigt eine Vorschau für Textersetzung, Präfix, Suffix und
 Nummerierung. Dateiendungen und die nicht ausdrücklich geänderte Schreibweise

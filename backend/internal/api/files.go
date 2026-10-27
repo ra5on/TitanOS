@@ -17,6 +17,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/system"
+	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 )
 
 var fileErrors = []struct {
@@ -113,6 +114,8 @@ type rootResponse struct {
 	files.Root
 	TotalBytes uint64 `json:"totalBytes"`
 	FreeBytes  uint64 `json:"freeBytes"`
+	// Indexed: the full-text index covers (part of) this root.
+	Indexed bool `json:"indexed,omitempty"`
 }
 
 func (s *Server) handleFileRoots(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +125,13 @@ func (s *Server) handleFileRoots(w http.ResponseWriter, r *http.Request) {
 		if root.Kind != "stick" {
 			total, free = files.Usage(root)
 		}
-		list = append(list, rootResponse{Root: root, TotalBytes: total, FreeBytes: free})
+		indexed := false
+		if index := s.opts.FileIndex; index != nil && (root.Kind == "share" || root.Kind == "volume") {
+			if rel := thumbs.VolumeRel(index.MountRoot, root.Volume, root.Dir, ""); rel != "" {
+				indexed = index.Covers(root.Volume, strings.TrimPrefix(rel, "."))
+			}
+		}
+		list = append(list, rootResponse{Root: root, TotalBytes: total, FreeBytes: free, Indexed: indexed})
 	}
 	writeJSON(w, http.StatusOK, list)
 }

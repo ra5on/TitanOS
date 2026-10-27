@@ -27,6 +27,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
@@ -44,6 +45,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
+	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
@@ -122,6 +124,10 @@ type Options struct {
 	Assistant *assistant.Manager
 	// Activity records who changed what; nil records nothing.
 	Activity *activity.Manager
+	// Thumbs makes previews for the file manager; nil offers none.
+	Thumbs *thumbs.Manager
+	// FileIndex is the optional full-text index; nil offers no content search.
+	FileIndex *fileindex.Manager
 }
 
 // Server answers all HTTP requests.
@@ -286,6 +292,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/files/text/previous", s.requireUser(s.handleFilePrevious))
 	mux.HandleFunc("POST /api/v1/files/duplicates", s.requireUser(s.handleFileDuplicates))
 	mux.HandleFunc("POST /api/v1/files/search", s.requireUser(s.handleFileSearch))
+	mux.HandleFunc("GET /api/v1/files/thumb", s.requireUser(s.handleFileThumb))
+	mux.HandleFunc("GET /api/v1/files/photos", s.requireUser(s.handleFilePhotos))
+	mux.HandleFunc("GET /api/v1/files/index", s.requireAdmin(s.handleFileIndex))
+	mux.HandleFunc("PUT /api/v1/files/index", s.requireAdmin(s.handleSetFileIndex))
+	mux.HandleFunc("POST /api/v1/files/index/run", s.requireAdmin(s.handleFileIndexRun))
+	mux.HandleFunc("DELETE /api/v1/files/index/{volume}", s.requireAdmin(s.handleFileIndexRemove))
+	mux.HandleFunc("DELETE /api/v1/files/thumbs/{volume}", s.requireAdmin(s.handleThumbCacheClear))
 	mux.HandleFunc("POST /api/v1/files/compare", s.requireUser(s.handleFileCompare))
 	mux.HandleFunc("GET /api/v1/files/properties", s.requireUser(s.handleFileProperties))
 	mux.HandleFunc("GET /api/v1/files/list", s.requireUser(s.handleFileList))

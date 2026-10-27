@@ -40,9 +40,12 @@ restic                    BSD-2-Clause            Debian source packages
 NUT (Network UPS Tools)   GPL-2.0-or-later        Debian source packages
 OpenSSH                   BSD and others          Debian source packages
 sudo                      ISC                     Debian source packages
+FFmpeg                    GPL-2.0-or-later and    Debian source packages
+                          LGPL-2.1-or-later
 Svelte / SvelteKit        MIT                     https://github.com/sveltejs
 Go standard library       BSD-3-Clause            https://go.dev
 golang.org/x/crypto, sys  BSD-3-Clause            https://pkg.go.dev/golang.org/x/crypto
+golang.org/x/image        BSD-3-Clause            https://pkg.go.dev/golang.org/x/image
 coder/websocket           ISC                     https://github.com/coder/websocket
 bbolt                     MIT                     https://github.com/etcd-io/bbolt
 go.yaml.in/yaml           MIT and Apache-2.0      https://github.com/yaml/go-yaml
