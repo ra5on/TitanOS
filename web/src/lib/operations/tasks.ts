@@ -1,5 +1,6 @@
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { Operations } from '#lib/operations.ts';
+import { deletionPercent } from '#lib/share-delete.ts';
 
 export type TaskState =
 	| 'running'
@@ -74,6 +75,17 @@ export function taskItems(data: Operations): TaskItem[] {
 				: undefined,
 		});
 	}
+	for (const job of data.shareDeletions ?? [])
+		result.push({
+			id: `share-delete:${job.id}`,
+			name: job.path,
+			kind: 'files',
+			state: job.phase === 'done' ? 'done' : job.phase === 'failed' ? 'failed' : 'running',
+			href: '/shares',
+			detail: job.error,
+			at: job.finished ?? job.started,
+			progress: deletionPercent(job),
+		});
 	for (const job of data.transfers ?? []) {
 		const state = job.blocked
 			? 'blocked'

@@ -483,6 +483,9 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Maintenance != nil {
 		out["maintenance"] = s.opts.Maintenance.Status()
 	}
+	if s.opts.Shares != nil {
+		out["shareDeletions"] = s.opts.Shares.PurgeJobs()
+	}
 	if s.opts.Backup != nil {
 		out["backups"] = s.opts.Backup.CachedViews()
 	}
