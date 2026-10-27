@@ -255,10 +255,13 @@ func diskKind(n node) string {
 		return "nvme"
 	case n.Transport == "mmc" || strings.HasPrefix(filepath.Base(n.Name), "mmcblk"):
 		return "sd"
-	case bool(n.Rotational):
-		return "hdd"
+	// usb-storage marks every drive as rotating unless it says otherwise,
+	// sticks included; removable is the better hint. USB disks are not
+	// removable.
 	case bool(n.Removable):
 		return "removable"
+	case bool(n.Rotational):
+		return "hdd"
 	}
 	return "ssd"
 }

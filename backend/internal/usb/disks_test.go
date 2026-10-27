@@ -16,7 +16,7 @@ import (
 const disksListing = `{"blockdevices":[
  {"name":"/dev/sda","type":"disk","size":4000787030016,"tran":"sata","model":"WDC WD40EFRX","serial":"WD-1","rota":true,"rm":false,"ro":false,"disc-gran":0,"pttype":null,"children":[]},
  {"name":"/dev/nvme0n1","type":"disk","size":1000204886016,"tran":"nvme","model":"Samsung SSD 980","serial":"S6","rota":false,"rm":false,"ro":false,"disc-gran":512,"pttype":"gpt","ptuuid":"p-1"},
- {"name":"/dev/sdb","type":"disk","size":32010928128,"tran":"usb","model":"Ultra Fit","serial":"4C53","rota":"0","rm":"1","ro":"0","disc-gran":0,"pttype":"dos","children":[
+ {"name":"/dev/sdb","type":"disk","size":32010928128,"tran":"usb","model":"Ultra Fit","serial":"4C53","rota":"1","rm":"1","ro":"0","disc-gran":0,"pttype":"dos","children":[
    {"name":"/dev/sdb1","type":"part","size":32009879552,"fstype":"BitLocker","uuid":""}]},
  {"name":"/dev/sdc","type":"disk","size":2000398934016,"tran":"sata","model":"Old RAID","rota":true,"pttype":"gpt","children":[
    {"name":"/dev/sdc1","type":"part","size":2000397868544,"fstype":"linux_raid_member","uuid":"0f0e0d0c-0b0a-0908-0706-050403020100","label":"other:0"}]},
