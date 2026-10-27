@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,14 @@ var (
 	ErrTooLarge = errors.New("configbackup: too large for a backup of the configuration")
 
 	backupName = regexp.MustCompile(`^config-(\d{8}T\d{6}Z)-([0-9a-f]{12})\.tar\.gz$`)
-	deviceName = regexp.MustCompile(`^(?:md[0-9]+|sd[a-z]+[0-9]+|vd[a-z]+[0-9]+|nvme[0-9]+n[0-9]+p[0-9]+)$`)
+	// Btrfs may also sit on a whole disk, without a partition.
+	deviceName = regexp.MustCompile(`^(?:md[0-9]+|sd[a-z]+[0-9]*|vd[a-z]+[0-9]*|nvme[0-9]+n[0-9]+(?:p[0-9]+)?)$`)
+	release    = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)`)
+
+	// skipped are files of a backup that describe the moment it was made,
+	// not the configuration: an update waiting for its restart would be
+	// reported as failed or installed on the new stick.
+	skipped = []string{"system/update-pending.json", ".accounts.lock"}
 )
 
 const timeLayout = "20060102T150405Z"
@@ -112,6 +120,10 @@ type Backup struct {
 	SizeBytes int64     `json:"sizeBytes"`
 	Hostname  string    `json:"hostname"`
 	Version   string    `json:"version"`
+	// Newer says the backup was made by a newer TitanOS than the one
+	// running: the stick should be updated to that version first, or
+	// settings that only the newer version knows may be lost.
+	Newer bool `json:"newer,omitempty"`
 }
 
 // State is what the settings page shows.
@@ -465,6 +477,12 @@ func (m *Manager) create(volume string) (string, error) {
 	if err := os.Rename(part.Name(), filepath.Join(dir, name)); err != nil {
 		return "", err
 	}
+	// The new name has to survive a power cut too: it is what a new
+	// stick looks for.
+	if d, err := os.Open(dir); err == nil {
+		d.Sync()
+		d.Close()
+	}
 	slog.Info("configuration saved", "volume", volume, "backup", name, "files", len(files))
 
 	// The oldest go once there are more than wanted.
@@ -664,7 +682,7 @@ func (m *Manager) restore(r io.ReadSeeker) (Manifest, error) {
 			if err != nil {
 				return Manifest{}, ErrNotABackup
 			}
-			if header.Typeflag != tar.TypeReg || header.Name == manifestName || strings.HasPrefix(header.Name, "users/") != accounts {
+			if header.Typeflag != tar.TypeReg || header.Name == manifestName || slices.Contains(skipped, header.Name) || strings.HasPrefix(header.Name, "users/") != accounts {
 				continue
 			}
 			data, err := io.ReadAll(io.LimitReader(archive, maxContent))
@@ -775,6 +793,7 @@ func (m *Manager) Find(ctx context.Context) []Backup {
 		err := m.look(ctx, device, func(dir, label string) error {
 			for _, backup := range readFolder(dir) {
 				backup.Device, backup.Label = device, label
+				backup.Newer = newerRelease(backup.Version, m.version)
 				list = append(list, backup)
 			}
 			return nil
@@ -837,6 +856,23 @@ func (m *Manager) candidates(ctx context.Context) []string {
 		}
 	}
 	return names
+}
+
+// newerRelease says whether version a is a newer release than b. Versions
+// that are not releases (development builds) are never newer.
+func newerRelease(a, b string) bool {
+	x, y := release.FindStringSubmatch(a), release.FindStringSubmatch(b)
+	if x == nil || y == nil {
+		return false
+	}
+	for i := 1; i <= 3; i++ {
+		p, _ := strconv.Atoi(x[i])
+		q, _ := strconv.Atoi(y[i])
+		if p != q {
+			return p > q
+		}
+	}
+	return false
 }
 
 // nextScheduled uses NAS local time and calendar days (including DST changes).
