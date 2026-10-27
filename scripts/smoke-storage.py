@@ -217,7 +217,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                             raise TimeoutError('SSH')
                         time.sleep(1)
                     disks = {d['serial']: d['name'] for d in request('/storage')['disks']}
-                    check_share_quotas(boot, request, remote, disks)
+                    if boot != 1:
+                        check_share_quotas(boot, request, remote, disks)
                     if boot == 1:
                         members = [disks['BTRFS1'], disks['BTRFS2']]
                         # Exercise real foreign RAID release, only on these fresh
@@ -234,6 +235,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members})
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
+                        # After mirror: the first new volume gets the default folders.
+                        check_share_quotas(boot, request, remote, disks)
                         profiles = remote('btrfs filesystem usage /mnt/mirror')
                         assert 'Data,RAID1' in profiles and 'Metadata,RAID1' in profiles, profiles
                         request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})
