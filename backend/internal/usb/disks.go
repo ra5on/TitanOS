@@ -51,6 +51,7 @@ type Disk struct {
 
 	path    string
 	discard bool
+	node    node
 }
 
 // Partition is what a disk holds, as far as lsblk can tell.
@@ -83,7 +84,13 @@ type FormatJob struct {
 	Filesystem string `json:"filesystem"`
 	Label      string `json:"label"`
 	Scheme     string `json:"scheme"`
-	// Phase is wipe, discard, partition, format, mount, done or failed.
+	// Action is empty for a whole-drive format; partition editor jobs say
+	// table, create, delete, format, label or grow (see partitions.go).
+	Action string `json:"action,omitempty"`
+	// Partition is the device of the partition an action is about.
+	Partition string `json:"partition,omitempty"`
+	// Phase is check, wipe, discard, partition, format, label, resize,
+	// mount, done or failed.
 	Phase    string     `json:"phase"`
 	Error    string     `json:"error,omitempty"`
 	Started  time.Time  `json:"started"`
@@ -151,6 +158,12 @@ func (m *Manager) blockDevices(ctx context.Context, args ...string) ([]node, err
 // format. The boot stick, disks of NAS volumes, virtual and network disks
 // and empty card readers are left out.
 func (m *Manager) Disks(ctx context.Context) ([]Disk, *FormatJob, error) {
+	return m.disks(ctx, nil)
+}
+
+// disks lists the drives; self is a job that checks its own drive again and
+// does not count as running there.
+func (m *Manager) disks(ctx context.Context, self *FormatJob) ([]Disk, *FormatJob, error) {
 	nodes, err := m.blockDevices(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -165,6 +178,7 @@ func (m *Manager) Disks(ctx context.Context) ([]Disk, *FormatJob, error) {
 	}
 	m.mu.Lock()
 	var job *FormatJob
+	running := m.job != nil && m.job.Running() && m.job != self
 	if m.job != nil {
 		copy := *m.job
 		job = &copy
@@ -178,7 +192,7 @@ func (m *Manager) Disks(ctx context.Context) ([]Disk, *FormatJob, error) {
 		d := Disk{
 			Device: n.Name, Model: strings.TrimSpace(n.Model), Serial: strings.TrimSpace(n.Serial), Size: n.Size,
 			Transport: n.Transport, Kind: diskKind(n), ReadOnly: bool(n.ReadOnly), Table: n.PTType,
-			Partitions: []Partition{}, path: n.Name, discard: !bool(n.Rotational) && n.DiscGran > 0,
+			Partitions: []Partition{}, path: n.Name, discard: !bool(n.Rotational) && n.DiscGran > 0, node: n,
 		}
 		d.ID = diskID(n)
 		if n.FSType != "" {
@@ -190,7 +204,7 @@ func (m *Manager) Disks(ctx context.Context) ([]Disk, *FormatJob, error) {
 			}
 		}
 		switch {
-		case job != nil && job.Running() && job.Device == n.Name:
+		case running && job.Device == n.Name:
 			d.Reason = "formatting"
 		case claimed[filepath.Base(n.Name)] != "":
 			d.Reason, d.Claimed = "claimed", claimed[filepath.Base(n.Name)]
@@ -386,24 +400,29 @@ func (m *Manager) Format(ctx context.Context, id string, req FormatRequest) erro
 		work, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 		defer cancel()
 		newID, err := m.format(work, job, d, req, scheme)
-		m.mu.Lock()
-		now := m.now()
-		job.Finished, job.ID = &now, newID
-		if err != nil {
-			job.Phase, job.Error = "failed", err.Error()
-			slog.Warn("formatting failed", "device", d.path, "err", err)
-		} else {
-			job.Phase = "done"
-			slog.Info("drive formatted", "device", d.path, "fs", req.Filesystem, "uuid", newID)
-		}
-		ended := *job
-		m.mu.Unlock()
-		if m.OnFormatted != nil {
-			m.OnFormatted(ended)
-		}
-		close(job.done)
+		m.finish(job, newID, err)
 	}()
 	return nil
+}
+
+// finish ends a format or partition job and tells OnFormatted.
+func (m *Manager) finish(job *FormatJob, newID string, err error) {
+	m.mu.Lock()
+	now := m.now()
+	job.Finished, job.ID = &now, newID
+	if err != nil {
+		job.Phase, job.Error = "failed", err.Error()
+		slog.Warn("drive job failed", "device", job.Device, "action", job.Action, "err", err)
+	} else {
+		job.Phase = "done"
+		slog.Info("drive job done", "device", job.Device, "action", job.Action, "partition", job.Partition, "fs", job.Filesystem, "uuid", newID)
+	}
+	ended := *job
+	m.mu.Unlock()
+	if m.OnFormatted != nil {
+		m.OnFormatted(ended)
+	}
+	close(job.done)
 }
 
 func (m *Manager) now() time.Time { return time.Now().UTC() }

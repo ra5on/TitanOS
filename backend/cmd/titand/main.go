@@ -699,9 +699,14 @@ func run(opts options) error {
 	drives.Busy = func() bool { return volumes.ActionsRunning() || volumes.GrowthActive() }
 	drives.OnPlug = func(d usb.Device) { notifier.Notify(notify.Info, "usb_plugged", d.Name) }
 	drives.OnFormatted = func(job usb.FormatJob) {
-		if job.Phase == "done" {
+		switch {
+		case job.Action != "" && job.Phase == "done":
+			notifier.Notify(notify.Info, "usb_partitions_changed", job.Name)
+		case job.Action != "":
+			notifier.Notify(notify.Warning, "usb_partitions_failed", job.Name)
+		case job.Phase == "done":
 			notifier.Notify(notify.Info, "usb_formatted", job.Name)
-		} else {
+		default:
 			notifier.Notify(notify.Warning, "usb_format_failed", job.Name)
 		}
 	}

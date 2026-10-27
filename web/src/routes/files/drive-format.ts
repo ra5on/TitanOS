@@ -30,7 +30,20 @@ export type FormatJob = {
 	filesystem: string;
 	label: string;
 	scheme: string;
-	phase: 'wipe' | 'discard' | 'partition' | 'format' | 'mount' | 'done' | 'failed';
+	/** Set for partition editor jobs: table, create, delete, format, label, grow. */
+	action?: 'table' | 'create' | 'delete' | 'format' | 'label' | 'grow';
+	partition?: string;
+	phase:
+		| 'check'
+		| 'wipe'
+		| 'discard'
+		| 'partition'
+		| 'format'
+		| 'label'
+		| 'resize'
+		| 'mount'
+		| 'done'
+		| 'failed';
 	error?: string;
 	started: string;
 	finished?: string;
