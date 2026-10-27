@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -47,6 +48,20 @@ func writePluginError(w http.ResponseWriter, err error) {
 
 func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.opts.Plugins.Status(s.opts.Storage.Mounted()))
+}
+
+// handlePluginProgress returns the steps of running and recently finished
+// installations, updates and removals. RAM only, never waits for an action.
+func (s *Server) handlePluginProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"operations": s.opts.Plugins.Progress()})
+}
+
+func (s *Server) handlePluginProgressForget(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Plugins.ForgetProgress(r.PathValue("id")); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handlePluginOldReleases(w http.ResponseWriter, r *http.Request) {
@@ -106,11 +121,14 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activate := req.Activate == nil || *req.Activate
+	// The steps are followed in the jobs list: leaving the page or closing the
+	// tab does not abort a download or activation half-way.
+	ctx := context.WithoutCancel(r.Context())
 	var err error
 	if req.Name != "" {
-		err = s.opts.Plugins.InstallOfficialWithActivation(r.Context(), req.Name, req.Volume, s.opts.Storage.Mounted(), activate)
+		err = s.opts.Plugins.InstallOfficialWithActivation(ctx, req.Name, req.Volume, s.opts.Storage.Mounted(), activate)
 	} else {
-		err = s.opts.Plugins.InstallWithActivation(r.Context(), req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted(), activate)
+		err = s.opts.Plugins.InstallWithActivation(ctx, req.Path, req.Volume, req.Confirm, s.opts.Storage.Mounted(), activate)
 	}
 	if err != nil {
 		writePluginError(w, err)
@@ -146,7 +164,7 @@ func (s *Server) handlePluginUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.Plugins.Update(r.Context(), name, req.Path, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if err := s.opts.Plugins.Update(context.WithoutCancel(r.Context()), name, req.Path, req.Confirm, s.opts.Storage.Mounted()); err != nil {
 		writePluginError(w, err)
 		return
 	}
@@ -160,7 +178,7 @@ func (s *Server) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.Plugins.Remove(r.Context(), name, s.opts.Storage.Mounted()); err != nil {
+	if err := s.opts.Plugins.Remove(context.WithoutCancel(r.Context()), name, s.opts.Storage.Mounted()); err != nil {
 		writePluginError(w, err)
 		return
 	}

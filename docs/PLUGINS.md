@@ -59,6 +59,46 @@ sind. Die Statusabfrage alle fünf Sekunden liest die Platten nicht erneut und
 weckt ruhende Festplatten deshalb nicht auf. Neu abgelegte Dateien erscheinen
 nach dem Aktualisieren.
 
+## Fortschritt in Schritten
+
+Installieren, Aktualisieren und Entfernen zeigen auf der Plugin-Seite die
+tatsächlichen Schritte, die das NAS gerade ausführt, jeweils mit Markierung
+(ausstehend, läuft, erledigt, fehlgeschlagen, entfällt):
+
+| Vorgang | Schritte |
+| --- | --- |
+| Installation von GitHub | Signatur prüfen (signiertes Release-Inventar und Manifest), Herunterladen (Bytes, Gesamtgröße und Tempo), Prüfsumme prüfen, Auf das Daten-Volume schreiben |
+| Installation aus einer Freigabe | Signatur prüfen (bei Community-Plugins „entfällt“, die Installation ist dann per Klick bestätigt), Prüfsumme prüfen, Auf das Daten-Volume schreiben |
+| Aktualisieren | wie aus einer Freigabe, danach Plugin anhalten |
+| Entfernen | Plugin anhalten, Systemerweiterung aktivieren (sysext ohne das Plugin), Dateien vom Daten-Volume löschen |
+
+Wird das Plugin dabei aktiviert, folgen Systemerweiterung aktivieren
+(`systemd-sysext refresh`), Kernelmodule laden und Dienste starten (nur wenn
+das Manifest Module bzw. Dienste nennt) sowie der Healthcheck: Das Plugin muss
+danach aktiv sein, wie es auch die Startprüfung für eingeschaltete Plugins
+verlangt. Ohne „Direkt aktivieren“ entfallen diese Schritte.
+
+Scheitert ein Schritt, ist genau dieser markiert und zeigt seine Fehlermeldung;
+spätere Schritte bleiben ausstehend. Startet eine aktualisierte Fassung nicht,
+folgt der eigene Schritt **Bisherige Version zurückholen**. Ein abgewiesener
+Auftrag (etwa während eines Systemupdates oder bei bereits installiertem
+Plugin) erzeugt keinen Eintrag; die Seite zeigt dann nur die Fehlermeldung.
+
+Die Schritte liegen nur im RAM von titand (`GET /api/v1/plugins/progress`,
+zusätzlich in `GET /api/v1/operations` unter `plugins`) und unter einer eigenen
+Sperre: Sie lassen sich auch verfolgen, während eine Aktivierung die
+Plugin-Sperre hält. Behalten werden alle laufenden und die letzten zehn
+beendeten Vorgänge; `DELETE /api/v1/plugins/progress/{id}` blendet einen
+beendeten aus. Es wird nichts nach `/config` oder auf ein Volume geschrieben,
+nach einem titand-Neustart ist die Liste leer. Der Vorgang läuft unabhängig von
+der Browserverbindung weiter: Wer die Seite verlässt oder den Tab schließt,
+findet ihn unter **Werkzeuge › Aufträge** (Art „Plugin“ mit aktuellem Schritt,
+Downloadbalken und bei Fehlern der Meldung) und beim Zurückkehren wieder auf der
+Plugin-Seite. Fehlgeschlagene Vorgänge bleiben dort sichtbar, bis sie
+ausgeblendet werden. Abbrechen lässt sich ein laufender Vorgang nicht; ein
+Download ohne Daten endet weiterhin nach zwei Minuten. Der lokale NVIDIA-Bau
+unter **Treiber vorbereiten** behält seine eigene Fortschrittsanzeige.
+
 ## Plugins aktualisieren
 
 Offizielle Plugins gehören zur Systembasis: Ein volles Systemupdate bringt die
@@ -183,6 +223,12 @@ laufender Download Statusabfrage, Healthcheck und Tailscale nicht blockiert.
 `plugins_test.go` prüft Aktualisieren aus einer Freigabe einschließlich Rückweg
 bei Fehlstart, belegtem Plugin und ausgeschlossenem NVIDIA; die Browserprüfung
 `scripts/test-ui-plugins.mjs` den Dialog mit isolierten Daten.
+`progress_test.go` prüft die gemeldeten Schritte: vollständige Installation,
+Fehler in einem mittleren Schritt (sysext, Module, Dienste) mit Fehlermeldung
+genau dort, falsche Prüfsumme lokal und beim Download, Bytes während eines
+laufenden Downloads bei gehaltener Plugin-Sperre, Rückweg einer Aktualisierung
+als eigener Schritt, belegtes Entfernen und die Begrenzung auf zehn beendete
+Vorgänge.
 
 ### Installation bei laufenden VMs und Containern
 

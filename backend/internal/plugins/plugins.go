@@ -181,6 +181,9 @@ type Manager struct {
 	catalogLoading bool
 	// Official images being downloaded, without holding actions.
 	downloading map[string]bool
+	// Steps of installations, updates and removals, RAM only; own lock so
+	// the page can follow them while actions is held.
+	progress progressLog
 	// Plugin files found in shares. Status polling reuses the last search;
 	// it runs again when the page asks (ScanShares) or the volumes change.
 	shareFiles   []shareFile
@@ -581,7 +584,10 @@ func (m *Manager) Install(ctx context.Context, manifestPath, volume, confirm str
 func (m *Manager) InstallWithActivation(ctx context.Context, manifestPath, volume, confirm string, mounted []string, activate bool) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
-	return m.install(ctx, manifestPath, volume, confirm, mounted, activate)
+	tr := m.track("", "install", StepSignature, StepChecksum, StepWrite)
+	err := m.install(withTracker(ctx, tr), manifestPath, volume, confirm, mounted, activate)
+	tr.finish(err)
+	return err
 }
 
 // install is shared by local files and verified downloads. Caller holds actions.
@@ -603,6 +609,8 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if err != nil {
 		return err
 	}
+	tr := trackerOf(ctx)
+	tr.name(manifest.Name, manifest.Title)
 	// Nothing vouches for an unsigned plugin; whoever installs it says so by name.
 	signed := m.official(real)
 	if !signed && confirm != manifest.Name {
@@ -618,11 +626,21 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if _, exists := m.installed(settings.Volume)[manifest.Name]; exists {
 		return ErrExists
 	}
+	if activate && m.compatible(manifest) {
+		tr.expect(activationSteps(manifest)...)
+	}
+	if signed {
+		tr.begin(StepSignature)
+	} else {
+		tr.skip(StepSignature)
+	}
+	tr.begin(StepChecksum)
 	image := filepath.Join(filepath.Dir(real), manifest.Name+".raw")
 	if sum, size, err := hashFile(image, maxImageBytes); err != nil || size != manifest.Size || sum != strings.ToLower(manifest.SHA256) {
 		return fmt.Errorf("%w: the image is not the one the manifest describes", ErrInvalid)
 	}
 
+	tr.begin(StepWrite)
 	if err := m.ensureReleaseSet(settings.Volume); err != nil {
 		return err
 	}
@@ -686,7 +704,40 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if !activate {
 		return nil
 	}
-	return m.apply(ctx, mounted)
+	return m.checkActive(ctx, manifest, m.apply(ctx, mounted))
+}
+
+// activationSteps are the steps laying a plugin over the running system.
+func activationSteps(manifest Manifest) []string {
+	steps := []string{StepSysext}
+	if len(manifest.Modules) > 0 {
+		steps = append(steps, StepModules)
+	}
+	if len(manifest.Services) > 0 {
+		steps = append(steps, StepServices)
+	}
+	return append(steps, StepHealth)
+}
+
+// checkActive is the health step after an activation: the plugin must be part
+// of the running system, as the boot healthcheck expects of enabled plugins.
+// err is what apply returned; a failure of another plugin is passed on
+// without marking a step of this one.
+func (m *Manager) checkActive(ctx context.Context, manifest Manifest, err error) error {
+	if !m.compatible(manifest) {
+		return err // installed for another kernel: nothing to activate
+	}
+	tr := trackerOf(ctx)
+	if _, active := m.active[manifest.Name]; !active {
+		if err == nil {
+			tr.begin(StepHealth)
+			return fmt.Errorf("%s is not active after activation", manifest.Name)
+		}
+		return err
+	}
+	tr.begin(StepHealth)
+	tr.complete()
+	return err
 }
 
 func copyFile(from, to string, mode os.FileMode) error {
@@ -766,9 +817,30 @@ func (m *Manager) Remove(ctx context.Context, name string, mounted []string) err
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
 		return ErrUpdatePending
 	}
+	tr := m.track(name, "remove", StepStop, StepSysext, StepRemove)
+	err := m.remove(withTracker(ctx, tr), name, mounted)
+	tr.finish(err)
+	return err
+}
+
+func (m *Manager) remove(ctx context.Context, name string, mounted []string) error {
+	tr := trackerOf(ctx)
+	if m.Disabled {
+		return ErrDisabled
+	}
+	if !slices.Contains(mounted, m.current().Volume) {
+		return ErrUnknownVolume
+	}
+	manifest, exists := m.installed(m.current().Volume)[name]
+	if !exists {
+		return ErrNotFound
+	}
+	tr.name(name, manifest.Title)
+	tr.begin(StepStop)
 	if err := m.setEnabled(ctx, name, false, mounted); err != nil {
 		return err
 	}
+	tr.begin(StepRemove)
 	dir := m.dir(m.current().Volume)
 	// The manifest goes first: without it the plugin no longer counts as
 	// installed, even if removing the rest fails.
@@ -857,6 +929,9 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 		}
 		m.applied = key
 	}()
+	tr := trackerOf(ctx)
+	target, tracked := wanted[tr.plugin()]
+	tr.begin(StepSysext)
 	if err := os.MkdirAll(m.extDir, 0o755); err != nil {
 		return err
 	}
@@ -919,6 +994,9 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 		needsModules = needsModules || len(manifest.Modules) > 0
 	}
 	if needsModules {
+		if tracked && len(target.Modules) > 0 {
+			tr.begin(StepModules)
+		}
 		if err := m.prepareModules(ctx); err != nil {
 			return err
 		}
@@ -931,6 +1009,12 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			continue
 		}
 		var failure error
+		mine := tracked && name == target.Name
+		if mine && len(manifest.Modules) > 0 {
+			tr.begin(StepModules)
+		} else if mine && len(manifest.Services) > 0 {
+			tr.begin(StepServices)
+		}
 		if m.PrepareRuntime != nil {
 			failure = m.PrepareRuntime(name, settings.Volume)
 		}
@@ -943,6 +1027,9 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			}
 		}
 		if failure == nil {
+			if mine && len(manifest.Services) > 0 {
+				tr.begin(StepServices)
+			}
 			for _, service := range manifest.Services {
 				if _, failure = m.runner.Run(ctx, "", "systemctl", "start", service); failure != nil {
 					break
@@ -1051,6 +1138,14 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
 		return ErrUpdatePending
 	}
+	tr := m.track(name, "update", StepSignature, StepChecksum, StepWrite, StepStop)
+	err := m.update(withTracker(ctx, tr), name, manifestPath, confirm, mounted)
+	tr.finish(err)
+	return err
+}
+
+func (m *Manager) update(ctx context.Context, name, manifestPath, confirm string, mounted []string) error {
+	tr := trackerOf(ctx)
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -1080,10 +1175,22 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 	if !signed && confirm != name {
 		return ErrNotConfirmed
 	}
+	tr.name(name, manifest.Title)
+	enabled := slices.Contains(settings.Enabled, name)
+	if enabled {
+		tr.expect(activationSteps(manifest)...)
+	}
+	if signed {
+		tr.begin(StepSignature)
+	} else {
+		tr.skip(StepSignature)
+	}
+	tr.begin(StepChecksum)
 	image := filepath.Join(filepath.Dir(real), name+".raw")
 	if sum, size, err := hashFile(image, maxImageBytes); err != nil || size != manifest.Size || sum != strings.ToLower(manifest.SHA256) {
 		return fmt.Errorf("%w: the image is not the one the manifest describes", ErrInvalid)
 	}
+	tr.begin(StepWrite)
 	if err := m.ensureReleaseSet(settings.Volume); err != nil {
 		return err
 	}
@@ -1120,6 +1227,7 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 	}
 	defer os.RemoveAll(previous)
 
+	tr.begin(StepStop)
 	if err := m.deactivate(ctx, name); err != nil {
 		return err // still running as before, nothing was replaced
 	}
@@ -1133,6 +1241,13 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 		return syncDirectory(dir)
 	}
 	putBack := func(cause error) error {
+		// The failing step keeps its mark; bringing the old files back is a
+		// step of its own, not followed by the steps of the new version.
+		if trackerOf(ctx) != nil {
+			tr.fail(cause)
+			tr.begin(StepRollback)
+			ctx = withTracker(ctx, nil)
+		}
 		// Stop what of the new version may have started, without the
 		// restart-on-failure of deactivate: it is not going to stay.
 		if manifest, resident := m.resident[name]; resident {
@@ -1151,7 +1266,21 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 		}
 		err := move(previous, dir)
 		m.applied = "-"
-		return errors.Join(fmt.Errorf("the new version was not installed, the previous one is back: %w", cause), err, m.apply(ctx, mounted))
+		err = errors.Join(err, m.apply(ctx, mounted))
+		if tr != nil {
+			if err != nil {
+				tr.fail(err)
+			} else {
+				tr.complete()
+			}
+		}
+		return errors.Join(fmt.Errorf("the new version was not installed, the previous one is back: %w", cause), err)
+	}
+	// Swapping the files is part of laying the new version over the system.
+	if enabled {
+		tr.begin(StepSysext)
+	} else {
+		tr.complete()
 	}
 	if err := move(dir, previous); err != nil {
 		return putBack(err)
@@ -1162,8 +1291,15 @@ func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string
 	m.applied = "-"
 	err = m.apply(ctx, mounted)
 	// An error of another plugin is reported, but does not undo this one.
-	if _, active := m.active[name]; slices.Contains(settings.Enabled, name) && !active {
+	if _, active := m.active[name]; enabled && !active {
+		if err == nil {
+			tr.begin(StepHealth)
+		}
 		return putBack(errors.Join(errors.New("activation failed"), err))
+	}
+	if enabled {
+		tr.begin(StepHealth)
+		tr.complete()
 	}
 	return err
 }

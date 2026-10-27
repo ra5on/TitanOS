@@ -1,5 +1,6 @@
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { Operations } from '#lib/operations.ts';
+import { currentStep, downloadPercent, pluginStepKey } from '#lib/plugin-progress.ts';
 
 export type TaskState =
 	| 'running'
@@ -22,6 +23,7 @@ export type TaskKind =
 	| 'automation'
 	| 'upload'
 	| 'recovery'
+	| 'plugin'
 	| 'system';
 export type TaskAction = {
 	label: 'pause' | 'resume' | 'stop' | 'retry';
@@ -40,6 +42,8 @@ export type TaskItem = {
 	progress?: number;
 	actions?: TaskAction[];
 	wait?: string;
+	/** The running or failed step of a stepped operation. */
+	stepKey?: MessageKey;
 };
 const path = encodeURIComponent;
 const percent = (done: number, total: number) =>
@@ -241,6 +245,20 @@ export function taskItems(data: Operations): TaskItem[] {
 			progress: job.percent,
 			href: '/tools',
 		});
+	for (const operation of data.plugins ?? []) {
+		const step = currentStep(operation);
+		result.push({
+			id: `plugin:${operation.id}`,
+			name: operation.title || operation.plugin,
+			kind: 'plugin',
+			state: operation.state,
+			href: '/plugins',
+			detail: operation.state === 'failed' ? step?.error || operation.error : undefined,
+			at: operation.finished || operation.started,
+			progress: downloadPercent(operation),
+			stepKey: step ? pluginStepKey(step.id) : undefined,
+		});
+	}
 	if (data.growth?.pending)
 		result.push({
 			id: 'growth',
