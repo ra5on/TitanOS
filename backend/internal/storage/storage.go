@@ -177,6 +177,13 @@ type Manager struct {
 	testMu sync.Mutex
 	tests  map[string]*DiskTest
 
+	// OnSnapshotRestoreDone is told about every folder restore that ends.
+	OnSnapshotRestoreDone func(SnapshotFolderJob)
+	restoreMu             sync.Mutex
+	restores              []*SnapshotFolderJob
+	// restoreStep is called before each file of a folder restore (tests).
+	restoreStep func(name string)
+
 	mu      sync.RWMutex
 	volumes []VolumeConfig
 	// quotaProblems are why share quotas could not start, by volume.

@@ -144,6 +144,7 @@ export type Operations = {
 	vms?: VM[];
 	growth?: GrowthStatus;
 	diskTests?: { disk: string; phase: string; result: string; percent: number }[];
+	snapshotRestores?: import('#lib/snapshot-restore.ts').FolderRestoreJob[];
 };
 import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 export const operationError = (error: unknown, translate?: (key: MessageKey) => string) =>

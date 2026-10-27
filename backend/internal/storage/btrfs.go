@@ -406,6 +406,9 @@ func (m *Manager) snapshotAction(ctx context.Context, volume, name, action, conf
 		if confirm != name {
 			return ErrNotConfirmed
 		}
+		if m.restoreUses(volume, name) {
+			return fmt.Errorf("%w: a folder is being restored from this snapshot", ErrBusy)
+		}
 		_, err = m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", "--commit-after", path)
 	case "restore":
 		restored := filepath.Join(m.MountPoint(volume), "restored")

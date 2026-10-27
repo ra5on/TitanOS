@@ -52,6 +52,7 @@ const named: Record<string, string> = {
 	'DELETE /api/v1/shares/{name}': 'shareDelete',
 	'POST /api/v1/storage/volumes': 'volumeCreate',
 	'DELETE /api/v1/storage/volumes/{name}': 'volumeDelete',
+	'POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore': 'snapshotFolderRestore',
 	'GET /api/v1/terminal/shell': 'consoleShell',
 	'GET /api/v1/docker/containers/{id}/console': 'consoleContainer',
 	'GET /api/v1/vms/{name}/serial': 'consoleSerial',

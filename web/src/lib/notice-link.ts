@@ -3,6 +3,7 @@ export function noticeLink(kind: string, subject: string): string | null {
 	if(kind.startsWith('maintenance_'))return '/tools/maintenance';
  if (kind.startsWith('volume_')) return `/storage#volume-${encodeURIComponent(subject)}`;
 	if (kind.startsWith('disk_test_')) return '/tools';
+	if (kind.startsWith('snapshot_restore_')) return '/storage/manage?mode=snapshots';
 	if (kind.startsWith('disk_')) return `/storage#disk-${encodeURIComponent(subject)}`;
 	if (kind.startsWith('config_backup_')) return '/settings/backups/configuration';
 	if (kind.startsWith('backup_')) return `/settings/backups/data#backup-${encodeURIComponent(subject)}`;

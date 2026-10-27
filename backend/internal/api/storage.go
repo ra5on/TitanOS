@@ -26,6 +26,7 @@ var storageErrors = []struct {
 	{storage.ErrDiskUnavailable, http.StatusConflict, "disk_unavailable"},
 	{storage.ErrTestRunning, http.StatusConflict, "disk_test_running"},
 	{storage.ErrNoTest, http.StatusNotFound, "disk_test_not_found"},
+	{storage.ErrNoRestore, http.StatusNotFound, "snapshot_restore_not_found"},
 	{storage.ErrDiskTooSmall, http.StatusBadRequest, "disk_too_small"},
 	{storage.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},

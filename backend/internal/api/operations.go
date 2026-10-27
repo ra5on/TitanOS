@@ -49,6 +49,11 @@ func (s *Server) operationsRoutes(mux *http.ServeMux) {
 	admin("GET /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files", s.handleSnapshotFiles)
 	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/restore", s.handleSnapshotFilesRestore)
 	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/preview", s.handleSnapshotRestorePreview)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/preview", s.handleSnapshotFolderPreview)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore", s.handleSnapshotFolderRestore)
+	admin("GET /api/v1/storage/snapshot-restores", s.handleSnapshotRestores)
+	admin("POST /api/v1/storage/snapshot-restores/{id}/cancel", s.handleSnapshotRestoreCancel)
+	admin("DELETE /api/v1/storage/snapshot-restores/{id}", s.handleSnapshotRestoreForget)
 	heavy("POST /api/v1/backups/{id}/probe", s.handleBackupProbe)
 	admin("GET /api/v1/backups/coverage", s.handleBackupCoverage)
 	heavy("POST /api/v1/backups/{id}/applications/{step}", s.handleApplicationRestore)
@@ -503,6 +508,7 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 			out["growthError"] = err.Error()
 		}
 		out["diskTests"] = s.opts.Storage.Tests()
+		out["snapshotRestores"] = s.opts.Storage.SnapshotRestores()
 		out["storageActive"] = s.opts.Storage.ActionsRunning()
 	}
 	slices.Sort(problems)

@@ -6,6 +6,7 @@ export type BellSettings = { minSeverity: Severity; groups: Record<BellGroup, bo
 
 const prefixes: [string, BellGroup][] = [
 	['volume_', 'storage'],
+	['snapshot_restore_', 'storage'],
 	['disk_', 'disks'],
 	['backup_', 'backups'],
 	['config_backup_', 'backups'],
