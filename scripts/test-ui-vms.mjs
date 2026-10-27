@@ -46,6 +46,18 @@ async function context(theme = 'graphit', width = 1440, locale = 'de') {
 		if (path === '/vms') return json({ kvm: true, bridge: true, host: { cpus: 8, memoryBytes: 32e9, usedMemoryBytes: 12e9 }, vms });
 		if (path === '/vms/media') return json({ media });
 		if (path === '/hardware') return json(hardware);
+		if (path === '/files/roots') return json(volumes.map((v) => ({ id: `volume/${v.name}`, name: v.name, kind: 'volume', writable: true })));
+		if (path === '/files/list') {
+			const where = `/mnt/${url.searchParams.get('root').slice('volume/'.length)}/${url.searchParams.get('path')}`.replace(/\/$/, '');
+			const names = new Map();
+			for (const m of media) {
+				if (!m.path.startsWith(where + '/')) continue;
+				const [first, ...rest] = m.path.slice(where.length + 1).split('/');
+				names.set(first, rest.length ? { name: first, dir: true, size: 0 } : { name: first, dir: false, size: m.sizeBytes });
+			}
+			if (!names.size && url.searchParams.get('path')) return json({ error: 'not_found' }, 404);
+			return json([...names.values(), ...(url.searchParams.get('path') ? [] : [{ name: 'notes.txt', dir: false, size: 10 }])].map((e) => ({ ...e, modified: time })));
+		}
 		const medium = path.match(/^\/vms\/([^/]+)\/medium$/);
 		if (medium && method === 'PUT') {
 			const vm = vms.find((v) => v.name === medium[1]);
@@ -102,9 +114,24 @@ try {
 		await page.getByText('CD-Laufwerk leer').waitFor();
 		assert.deepEqual(JSON.parse(requests.findLast(([m, p]) => m === 'PUT' && p === '/vms/windows-11/medium')[2]), { path: '' });
 		await page.getByRole('button', { name: 'Einlegen …' }).click();
-		await page.locator('select').selectOption('/mnt/tank/isos/debian-13.iso');
+		// Browse: volumes, folders and only ISO files; then search across all.
+		const picker = page.getByRole('dialog');
+		await picker.getByRole('group', { name: 'Volumes' }).getByRole('button', { name: 'fast' }).click();
+		await picker.getByText('In diesem Ordner liegen keine', { exact: false }).waitFor();
+		await picker.getByRole('group', { name: 'Volumes' }).getByRole('button', { name: 'tank' }).click();
+		assert.equal(await picker.getByText('notes.txt').count(), 0, 'other files stay hidden');
+		await picker.getByRole('button', { name: 'isos', exact: true }).click();
+		await picker.getByRole('button', { name: /debian-13\.iso/ }).waitFor();
+		await picker.getByRole('button', { name: /debian-13\.iso/ }).click();
+		assert.ok(await picker.getByText('/mnt/tank/isos/debian-13.iso').isVisible());
 		await shot(page, 'medium-dialog-graphit-1440');
-		await page.getByRole('button', { name: 'Einlegen', exact: true }).click();
+		await picker.getByRole('searchbox').fill('virtio');
+		assert.equal(await picker.getByRole('button', { name: /debian-13/ }).count(), 0);
+		assert.ok(await picker.getByRole('button', { name: /virtio-win\.iso/ }).isVisible());
+		await picker.getByRole('searchbox').fill('');
+		await picker.getByRole('button', { name: 'Einlegen', exact: true }).click();
+		await picker.waitFor({ state: 'detached' });
+		assert.deepEqual(JSON.parse(requests.findLast(([m, p]) => m === 'PUT' && p === '/vms/windows-11/medium')[2]), { path: '/mnt/tank/isos/debian-13.iso' });
 		await page.getByText('debian-13.iso').waitFor();
 
 		// The row menu of a VM in the list.
