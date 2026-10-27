@@ -5133,5 +5133,7 @@
 	"cache.disableSubmit": "Ausschalten",
 	"cache.disableText": "Der Cache wird nicht mehr verwendet; spätestens nach dem nächsten Start greift das Volume wieder direkt auf die Platten zu. Daten gehen dabei nicht verloren.",
 	"cache.disableWriteback": "Zuerst werden alle Daten aus dem Schreibcache auf die Platten zurückgeschrieben; das Volume bleibt dabei nutzbar. Danach wird der Cache entfernt, und es gibt eine Meldung.",
-	"error.volume_cache_configured": "Das Volume hat einen SSD-Cache. Schalte ihn zuerst aus."
+	"error.volume_cache_configured": "Das Volume hat einen SSD-Cache. Schalte ihn zuerst aus.",
+	"notify.kind.disk_wear.title": "Platte {subject} zeigt Verschleiß",
+	"notify.kind.disk_wear.text": "Die SMART-Werte zeigen neue Anzeichen von Verschleiß oder Schäden. Sichere die Daten und plane einen Ersatz. Einzelheiten unter Speicher › SMART."
 }

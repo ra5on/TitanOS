@@ -59,15 +59,19 @@ const (
 
 // Disk is a physical disk as shown in the UI.
 type Disk struct {
-	Identity          string `json:"identity"`
-	UnavailableReason string `json:"unavailableReason,omitempty"`
-	Name              string `json:"name"` // sda
-	Path              string `json:"path"` // /dev/sda
-	Model             string `json:"model"`
-	Serial            string `json:"serial"`
-	SizeBytes         uint64 `json:"sizeBytes"`
-	Kind              string `json:"kind"` // hdd, ssd, nvme, usb
-	Role              string `json:"role"`
+	// SmartWarnings are the codes of judgeSmart (smart.go); SmartDefects
+	// adds up the counters that only grow on a wearing disk.
+	SmartWarnings     []string `json:"smartWarnings,omitempty"`
+	SmartDefects      uint64   `json:"smartDefects,omitempty"`
+	Identity          string   `json:"identity"`
+	UnavailableReason string   `json:"unavailableReason,omitempty"`
+	Name              string   `json:"name"` // sda
+	Path              string   `json:"path"` // /dev/sda
+	Model             string   `json:"model"`
+	Serial            string   `json:"serial"`
+	SizeBytes         uint64   `json:"sizeBytes"`
+	Kind              string   `json:"kind"` // hdd, ssd, nvme, usb
+	Role              string   `json:"role"`
 	// Volume and MemberState are set for members.
 	Volume      string `json:"volume,omitempty"`
 	MemberState string `json:"memberState,omitempty"`
@@ -376,6 +380,11 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		disk := classify(device, volumeByArray)
 		m.mu.RLock()
 		disk.Smart = m.smart[disk.Path]
+		if entry := m.smartDisks[disk.Path]; entry != nil && entry.values != nil {
+			values := *entry.values
+			_, warnings := judgeSmart(&values, disk.Kind)
+			disk.SmartWarnings, disk.SmartDefects = warnings, smartDefects(&values)
+		}
 		m.mu.RUnlock()
 		disk.Testing = testing[disk.Name]
 		status.Disks = append(status.Disks, disk)

@@ -2,6 +2,10 @@ package notify
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -28,6 +32,10 @@ type Watcher struct {
 	checking       map[string]bool
 	// full, hot and unhealthy are the warnings that are standing.
 	full, hot, unhealthy map[string]bool
+	// worn is what was last reported about the wear of a disk (by serial);
+	// it is kept in wornFile so that a restart of titand does not repeat it.
+	worn     map[string]wear
+	wornFile string
 }
 
 // NewWatcher returns a watcher that reports through m.
@@ -35,6 +43,7 @@ func NewWatcher(m *Manager) *Watcher {
 	return &Watcher{
 		notify: m, reported: map[string]string{}, seen: map[string]string{}, known: map[string]bool{},
 		checking: map[string]bool{}, full: map[string]bool{}, hot: map[string]bool{}, unhealthy: map[string]bool{},
+		worn: map[string]wear{}, wornFile: "/run/titanos/disk-wear.json",
 	}
 }
 
@@ -128,11 +137,61 @@ func (w *Watcher) Observe(status storage.Status) {
 		} else if disk.Smart.Healthy {
 			delete(w.unhealthy, key)
 		}
+		w.observeWear(key, label, disk.SmartWarnings, disk.SmartDefects)
 		if disk.Smart.TemperatureC >= hotCelsius && !w.hot[key] {
 			w.hot[key] = true
 			w.notify.Notify(Warning, "disk_hot", label)
 		} else if disk.Smart.TemperatureC < coolCelsius {
 			delete(w.hot, key)
 		}
+	}
+}
+
+// wear is what was reported about a disk: its warnings and defect count.
+type wear struct {
+	Warnings []string `json:"warnings"`
+	Defects  uint64   `json:"defects"`
+}
+
+// observeWear reports a disk that shows a new sign of wear (a SMART warning
+// it did not have) or whose defect counters grew since the last report.
+// The SMART self-assessment "failed" has its own message (disk_unhealthy).
+func (w *Watcher) observeWear(key, label string, warnings []string, defects uint64) {
+	var now []string
+	for _, code := range warnings {
+		if slices.Contains(storage.WearWarnings, code) {
+			now = append(now, code)
+		}
+	}
+	if len(w.worn) == 0 && w.wornFile != "" {
+		if data, err := os.ReadFile(w.wornFile); err == nil {
+			json.Unmarshal(data, &w.worn)
+		}
+	}
+	before, known := w.worn[key]
+	if len(now) == 0 {
+		if known {
+			delete(w.worn, key)
+			w.saveWorn()
+		}
+		return
+	}
+	fresh := slices.ContainsFunc(now, func(code string) bool { return !slices.Contains(before.Warnings, code) })
+	if !fresh && defects <= before.Defects {
+		return
+	}
+	w.worn[key] = wear{Warnings: now, Defects: defects}
+	w.saveWorn()
+	w.notify.Notify(Warning, "disk_wear", label)
+}
+
+func (w *Watcher) saveWorn() {
+	if w.wornFile == "" {
+		return
+	}
+	data, _ := json.Marshal(w.worn)
+	os.MkdirAll(filepath.Dir(w.wornFile), 0o755)
+	if err := os.WriteFile(w.wornFile+".tmp", data, 0o600); err == nil {
+		os.Rename(w.wornFile+".tmp", w.wornFile)
 	}
 }
