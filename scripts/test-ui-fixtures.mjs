@@ -883,6 +883,38 @@ export function fixtureFactory(browser, errors) {
           hardware: { pci: [], usb: [], iommu: false },
           usedBy: {},
         });
+      // Settings › Access: SSH off, nobody with a key, the self-signed certificate.
+      if (path === "/system/ssh")
+        return json({
+          enabled: false,
+          running: false,
+          fingerprint: "",
+          accounts: [],
+          allowedNetworks: [],
+          homeNetworks: ["192.168.1.0/24"],
+          tailscaleNetworks: ["100.64.0.0/10"],
+          netbirdNetworks: [],
+          clientAddress: "192.168.1.50",
+        });
+      if (path === "/system/certificate")
+        return json({
+          kind: "self-signed",
+          names: ["titan-test.local"],
+          issuer: "titan-test",
+          notBefore: time,
+          notAfter: "2036-10-23T16:00:00Z",
+          fingerprint: "ab:cd",
+        });
+      // No LXC containers; the command palette lists them for admins.
+      if (path === "/lxc")
+        return json({
+          installed: true,
+          dev: false,
+          host: { cpus: 8, memoryBytes: 16e9 },
+          bridge: true,
+          networks: [],
+          containers: [],
+        });
       if (path === "/vms/imports")
         return json({ jobs: [], chunkBytes: 8 << 20 });
       if (path === "/vms/media") return json({ media: [] });
