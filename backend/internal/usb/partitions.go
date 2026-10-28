@@ -386,7 +386,6 @@ func (m *Manager) startPartitionJob(ctx context.Context, id string, a partitionA
 	started = true
 	slog.Info("changing partitions", "device", d.path, "model", d.Model, "action", a.name, "target", target)
 	go func() {
-		defer m.operation.Unlock()
 		work, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 		defer cancel()
 		// The drive may have been swapped or changed since the click.
