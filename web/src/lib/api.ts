@@ -421,7 +421,7 @@ export type AppProxyRoute = {
 	networks?: string[];
 	tailscale?: boolean;
 	tailscaleName?: string;
-	/** Full domains of their own, e.g. photos.nas.ipv64.de (Settings › IPv64 › Assignments). */
+	/** Full domains of their own, e.g. photos.example.org. */
 	domains?: string[];
 	urls: string[];
 	/** The route's own device in the tailnet (0.30.0 and later). */

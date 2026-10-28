@@ -5,14 +5,9 @@ import (
 	"slices"
 )
 
-// WireGuardInterface is the tunnel of the NAS into an IPv64 Cloud Router
-// (package ipv64); it counts as VPN like Tailscale and NetBird.
-const WireGuardInterface = "ipv64wg"
-
-// VPN: the interfaces and address ranges of Tailscale and NetBird, and the
-// WireGuard tunnel to IPv64.
+// VPN: the interfaces and address ranges of Tailscale and NetBird.
 var (
-	vpnInterfaces = []string{"tailscale0", "wt0", WireGuardInterface}
+	vpnInterfaces = []string{"tailscale0", "wt0"}
 	vpnPrefixes   = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fd7a:115c:a1e0::/48")}
 	// privatePrefixes always count as home network: RFC 1918, link-local,
 	// unique local IPv6.

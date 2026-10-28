@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { showsNew } from '#lib/settings-seen.svelte.ts';
 	// The overview: every area as a compact row with its state, in the groups
 	// and order of the sidebar. On phones it is the navigation, with the search
 	// above it; on wider screens the sidebar holds the search.
@@ -57,9 +58,10 @@
 							onclick={clear}
 							><span class="setting-icon"><Icon name={entry.icon} size={16} /></span><span
 								class="name">{entry.label}</span
-							>{#if entry.isNew}<span class="new">{t('settings.new')}</span>{/if}{#if state}<span
-									class="chip {state.tone}">{t(state.text)}</span
-								>{/if}<span class="chevron"><Icon name="arrowRight" size={14} /></span></a
+							>{#if showsNew(entry)}<span class="new">{t('settings.new')}</span
+								>{/if}{#if state}<span class="chip {state.tone}">{t(state.text)}</span>{/if}<span
+								class="chevron"><Icon name="arrowRight" size={14} /></span
+							></a
 						>
 					</li>
 				{/each}

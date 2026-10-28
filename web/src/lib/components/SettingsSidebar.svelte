@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { showsNew } from '#lib/settings-seen.svelte.ts';
 	// The navigation beside every settings page (decision of 28 Oct 2026,
 	// "Entwurf A – Seitenleiste"): search on top, then the groups with compact
 	// rows. The current page is highlighted; a dot marks areas with a state.
@@ -53,7 +54,7 @@
 						>
 							<Icon name={entry.icon} size={16} />
 							<span class="label">{entry.label}</span>
-							{#if entry.isNew}<span class="new">{t('settings.new')}</span>{/if}
+							{#if showsNew(entry)}<span class="new">{t('settings.new')}</span>{/if}
 							{#if state}<span class="marker {state.tone}" title={t(state.text)}
 									><span class="sr-only">{t(state.text)}</span></span
 								>{/if}

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { noticeLink } from '../src/lib/notice-link.ts';
-import { matchesSetting } from '../src/lib/settings-search.ts';
+import { matchesSetting, settingsAreaOf } from '../src/lib/settings-search.ts';
 import { taskPercent } from '../src/lib/task-progress.ts';
 
 test('notifications link to existing local destinations and encode untrusted subjects', () => {
@@ -56,17 +56,23 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
  assert.deepEqual(admin.map(g => [g.group, g.entries.map(e => e.id)]), [
   ['system', ['updates', 'timezone', 'notifications', 'about']],
   ['hardware', ['hardware', 'temperatures', 'memory', 'energy', 'ups', 'power-button']],
-  ['network', ['network', 'firewall', 'letsencrypt', 'ddns', 'ipv64', 'proxy', 'access']],
+  ['network', ['network', 'firewall', 'letsencrypt', 'ddns', 'proxy', 'access']],
   ['data', ['backups', 'files']],
   ['integrations', ['homeassistant', 'assistant', 'api']],
   ['personal', ['appearance']],
  ]);
  const fresh = admin.flatMap(g => g.entries).filter(e => e.isNew).map(e => e.id);
- assert.deepEqual(fresh, ['firewall', 'letsencrypt', 'ddns', 'ipv64']);
+ assert.deepEqual(fresh, ['firewall', 'letsencrypt', 'ddns']);
  const user = settingsEntries('', false, label).flatMap(g => g.entries.map(e => e.id));
  assert.deepEqual(user, ['about', 'temperatures', 'api', 'appearance']);
  const ssh = settingsEntries('SSH', true, label).flatMap(g => g.entries);
  assert.deepEqual(ssh.map(e => [e.href, e.section]), [['/settings/access#access-ssh', true]]);
  assert.equal(settingsEntries('SSH', false, label).length, 0);
  assert.deepEqual(settingsEntries('zeitzone', true, label).flatMap(g => g.entries.map(e => e.href)), ['/settings/timezone']);
+});
+test('a settings path names the area whose "new" badge it takes away', () => {
+ assert.equal(settingsAreaOf('/settings/ddns'), 'ddns');
+ assert.equal(settingsAreaOf('/settings/backups/data/'), 'backups');
+ assert.equal(settingsAreaOf('/settings'), '');
+ assert.equal(settingsAreaOf('/settings/'), '');
 });

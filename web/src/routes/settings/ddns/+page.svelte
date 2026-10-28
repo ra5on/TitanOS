@@ -19,7 +19,6 @@
 	import DdnsStatusPanel from '#lib/ddns/DdnsStatus.svelte';
 	import UpdaterFields from '#lib/ddns/UpdaterFields.svelte';
 	import { MAX_HOSTS, updaterForm, updaterPayload, type DdnsStatus, type UpdaterForm } from '#lib/ddns/ddns.ts';
-	import Ipv64Panel from './Ipv64Panel.svelte';
 
 	let status = $state<DdnsStatus | null>(null);
 	let loadError = $state('');
@@ -92,8 +91,6 @@
 				hostnames,
 				...updaterPayload(updater),
 				provider: providerPayload(provider, 'address'),
-				// The healthcheck is switched on and off in its own section.
-				heartbeat: { ...status.settings.heartbeat },
 				clearSecrets: cleared,
 			});
 			status = next;
@@ -107,10 +104,6 @@
 		} finally {
 			busy = false;
 		}
-	}
-
-	function addHost(name: string) {
-		if (!hostnames.includes(name)) names = [...hostnames, name].join('\n');
 	}
 </script>
 
@@ -164,10 +157,6 @@
 			{#if busy || saved}<span class="muted" role="status">{t(busy ? 'ui.saving' : 'ui.saved')}</span>{/if}
 		</div>
 	</form>
-
-	{#if provider.type === 'ipv64'}
-		<Ipv64Panel {status} apiKey={provider.token ?? ''} hostnames={hostnames} onhost={addHost} onstatus={(next) => (status = next)} />
-	{/if}
 {/if}
 
 <style>

@@ -74,9 +74,6 @@ type Settings struct {
 	LookupURL string `json:"lookupURL,omitempty"`
 	// Interface takes the IPv6 address from this interface only.
 	Interface string `json:"interface,omitempty"`
-	// Heartbeat pings a healthcheck of IPv64.net (heartbeat.go). Off
-	// unless switched on.
-	Heartbeat Heartbeat `json:"heartbeat"`
 }
 
 // Status is what the settings page shows.
@@ -95,8 +92,6 @@ type Status struct {
 	NextCheck     *time.Time `json:"nextCheck,omitempty"`
 	Running       bool       `json:"running"`
 	Disabled      bool       `json:"disabled,omitempty"`
-	// Heartbeat is the state of the pings; the token is only "set".
-	Heartbeat HeartbeatStatus `json:"heartbeat"`
 }
 
 // Manager looks at the addresses and updates the records.
@@ -133,9 +128,6 @@ type Manager struct {
 	retryAfter time.Duration
 	limitKnown bool
 	kick       chan bool
-
-	// The healthcheck of IPv64 (heartbeat.go).
-	beat beatState
 }
 
 // New returns a manager for the configuration in store.
@@ -152,7 +144,6 @@ func New(store *config.Store) *Manager {
 		},
 		now:  time.Now,
 		kick: make(chan bool, 1),
-		beat: beatState{kick: make(chan struct{}, 1)},
 	}
 }
 
@@ -172,7 +163,6 @@ func (m *Manager) Load() error {
 	}
 	m.mu.Lock()
 	m.settings, m.loaded = settings, true
-	m.loadPaused()
 	m.mu.Unlock()
 	return nil
 }
@@ -224,9 +214,6 @@ func normalize(s Settings) (Settings, error) {
 			}
 		}
 	}
-	if err := normalizeHeartbeat(&s); err != nil {
-		return s, err
-	}
 	if s.Enabled {
 		if len(hosts) == 0 {
 			return s, invalid("no host name")
@@ -247,10 +234,6 @@ func (m *Manager) Set(s Settings, clear []string) error {
 		return ErrNotLoaded
 	}
 	s.Provider = s.Provider.Normalize().KeepSecrets(m.settings.Provider, clear)
-	if s.Heartbeat.Token == "" && !slices.Contains(clear, "heartbeat") {
-		s.Heartbeat.Token = m.settings.Heartbeat.Token
-		s.Heartbeat.Check = m.settings.Heartbeat.Check
-	}
 	return m.keep(s)
 }
 
@@ -268,71 +251,7 @@ func (m *Manager) keep(s Settings) error {
 	m.published4, m.published6, m.seeded = netip.Addr{}, netip.Addr{}, false
 	m.lastError, m.failing, m.retryAfter, m.limitKnown = "", false, 0, false
 	m.poke(false)
-	m.pokeBeat()
 	return nil
-}
-
-// ErrOtherProvider means the names are kept up to date by a provider other
-// than IPv64.net, so a name of IPv64 cannot join them.
-var ErrOtherProvider = errors.New("ddns: another provider is in use")
-
-// AddHostname adds one name to those kept up to date, leaving everything
-// else as it is (Settings › IPv64 assigns domains this way). Without a
-// provider, IPv64.net with ipv64Key becomes it. With IPv64.net and a key
-// or update token, dynamic DNS is switched on (with IPv4 and IPv6 if
-// neither was chosen). At most maxHosts names.
-func (m *Manager) AddHostname(host, ipv64Key string) error {
-	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.loaded {
-		return ErrNotLoaded
-	}
-	next := m.settings
-	next.Hostnames = slices.Clone(m.settings.Hostnames)
-	switch next.Provider.Type {
-	case "":
-		if ipv64Key == "" {
-			return invalid("no provider and no API key of IPv64")
-		}
-		next.Provider = dnsprovider.Config{Type: dnsprovider.IPv64Net, Token: ipv64Key}
-	case dnsprovider.IPv64Net:
-	default:
-		return ErrOtherProvider
-	}
-	if slices.Contains(next.Hostnames, host) && next.Enabled {
-		return nil
-	}
-	if !slices.Contains(next.Hostnames, host) {
-		next.Hostnames = append(next.Hostnames, host)
-	}
-	if next.Provider.Token != "" || next.Provider.UpdateToken != "" {
-		next.Enabled = true
-		if !next.IPv4 && !next.IPv6 {
-			next.IPv4, next.IPv6 = true, true
-		}
-	}
-	return m.keep(next)
-}
-
-// RemoveHostname takes one name out of those kept up to date; the record
-// at the provider stays. Without names left, dynamic DNS switches off.
-func (m *Manager) RemoveHostname(host string) error {
-	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.loaded {
-		return ErrNotLoaded
-	}
-	if !slices.Contains(m.settings.Hostnames, host) {
-		return nil
-	}
-	next := m.settings
-	next.Hostnames = slices.DeleteFunc(slices.Clone(m.settings.Hostnames), func(h string) bool { return h == host })
-	if len(next.Hostnames) == 0 {
-		next.Enabled = false
-	}
-	return m.keep(next)
 }
 
 // Hostnames returns the names kept up to date.
@@ -379,7 +298,6 @@ func (s Settings) interval() time.Duration {
 
 // Run looks at the addresses every interval until ctx ends.
 func (m *Manager) Run(ctx context.Context) {
-	go m.runHeartbeat(ctx)
 	force := false
 	for {
 		m.check(ctx, force)
@@ -626,9 +544,6 @@ func (m *Manager) Status() Status {
 	s := m.settings
 	st := Status{Settings: s, Secrets: s.Provider.Secrets(), LastError: m.lastError, Running: m.running, Disabled: m.Disabled}
 	st.Settings.Provider = s.Provider.Public()
-	st.Secrets["heartbeat"] = s.Heartbeat.Token != ""
-	st.Settings.Heartbeat.Token = ""
-	st.Heartbeat = m.beatStatus()
 	text := func(a netip.Addr) string {
 		if a.IsValid() {
 			return a.String()
@@ -756,4 +671,24 @@ func pickIPv6(r io.Reader, iface string) (netip.Addr, error) {
 		return netip.Addr{}, fmt.Errorf("no stable global address on %s", iface)
 	}
 	return netip.Addr{}, errors.New("the NAS has no stable global address")
+}
+
+// learnLimit asks IPv64 once for the daily update limit of the plan, so
+// that the updater keeps well below it.
+func (m *Manager) learnLimit(ctx context.Context, s Settings) {
+	m.mu.Lock()
+	known := m.limitKnown
+	m.limitKnown = true
+	m.mu.Unlock()
+	if known || s.Provider.Type != dnsprovider.IPv64Net || s.Provider.Token == "" {
+		return
+	}
+	account, err := dnsprovider.NewIPv64(s.Provider.Token, "", m.IPv64Options).Account(ctx)
+	if err != nil {
+		slog.Warn("limits of the IPv64 account not read", "err", err)
+		return
+	}
+	if usage, ok := account.Usage["dyndns_updates_24h"]; ok && usage.Limit != nil {
+		dnsprovider.SetIPv64DailyLimit(*usage.Limit)
+	}
 }

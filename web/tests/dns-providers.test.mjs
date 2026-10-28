@@ -10,9 +10,7 @@ import {
 	providerTypes,
 	sameAccount,
 	validHostName,
-	validIpv64Wish,
 } from '../src/lib/dns-providers.ts';
-import { recordProblem, usageText } from '../src/lib/ddns/ddns.ts';
 
 const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url)));
 const en = JSON.parse(readFileSync(new URL('../src/lib/i18n/en.json', import.meta.url)));
@@ -54,9 +52,6 @@ test('IPv64 needs the API key for the challenge, either key for DynDNS', () => {
 	// The update token and the prefix belong to DynDNS only.
 	assert.deepEqual(providerPayload({ type: 'ipv64', token: 'k', updateToken: 'u', ipv6Prefix: 'auto' }, 'challenge'), { type: 'ipv64', token: 'k' });
 	assert.deepEqual(providerPayload({ type: 'ipv64', updateToken: 'u', ipv6Prefix: 'auto' }, 'address'), { type: 'ipv64', updateToken: 'u', ipv6Prefix: 'auto' });
-	assert.ok(validIpv64Wish('mein-nas'));
-	assert.ok(!validIpv64Wish('a.b'));
-	assert.ok(!validIpv64Wish('-x'));
 });
 
 test('names, wildcards and records', () => {
@@ -66,10 +61,4 @@ test('names, wildcards and records', () => {
 	assert.ok(validHostName('*.example.org', true));
 	assert.ok(!validHostName('nas.local'));
 	assert.ok(!validHostName('nas'));
-	assert.ok(!recordProblem('A', '203.0.113.1'));
-	assert.ok(recordProblem('A', '2001:db8::1'));
-	assert.ok(!recordProblem('CAA', '0 issue "letsencrypt.org"'));
-	assert.ok(recordProblem('MX', 'mail.example.org'));
-	assert.equal(usageText({ used: 3, limit: 48 }, (u, l) => `${u}/${l}`), '3/48');
-	assert.equal(usageText({ used: 3, limit: null }, () => 'x'), '3');
 });

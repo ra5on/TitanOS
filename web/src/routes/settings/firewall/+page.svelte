@@ -294,7 +294,7 @@
 				</div>
 				<div>
 					<dt>{zoneLabel('vpn')}</dt>
-					<dd><span class="mono">{(status.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg</dd>
+					<dd><span class="mono">{(status.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0</dd>
 				</div>
 				<div><dt>{zoneLabel('internet')}</dt><dd>{t('firewall.internetText')}</dd></div>
 				<div><dt>{zoneLabel('docker')}</dt><dd>{t('firewall.dockerText')}</dd></div>

@@ -11,11 +11,6 @@ die Weboberfläche; titand unterscheidet am Namen). Ein Zertifikat von Let's
 Encrypt für `*.<domain>` holt auf Wunsch Einstellungen › Let's Encrypt
 (`docs/LETSENCRYPT.md`).
 
-Unabhängig davon kann eine App unter „Öffentlich über IPv64“ im App-Editor über
-das CDN von IPv64.net aus dem Internet erreichbar werden (Reverse Proxy von IPv64
-mit HTTPS direkt an den Port der App, nicht über den Proxy von titand; nie für
-die Ports der Weboberfläche). Einzelheiten und Warnungen: `docs/IPV64.md`.
-
 ## Bedienung
 
 Docker › App bearbeiten › Abschnitt „HTTPS-Name“ (nur Besitzer und
@@ -79,12 +74,13 @@ NAS. Öffentliche Ziele werden abgelehnt.
 
 **Volle Domains je Route** (Feld `domains`, bis 8 je Route): Neben
 `<name>.<suffix>` antwortet eine App oder ein Ziel auf ganze Hostnamen wie
-`photos.nas.ipv64.de`. Jede Domain gehört genau einer Route (über Apps und Ziele
+`fotos.example.org`. Jede Domain gehört genau einer Route (über Apps und Ziele
 eindeutig), mindestens zwei Teile, keine Platzhalter, nie `.local`. Eine volle
-Domain wird vor `<name>.<suffix>` erkannt. Gesetzt werden sie unter
-Einstellungen › IPv64 › Zuweisungen (`docs/IPV64.md`), das zugleich den Namen
-per dynamischem DNS auf das NAS zeigen lässt; Formulare ohne `domains` (App-Editor,
-Bearbeiten-Dialog dieser Seite) behalten die gespeicherten. Die Adressen der
+Domain wird vor `<name>.<suffix>` erkannt. Gesetzt werden sie im Feld „Eigene
+Domains“ des App-Editors bzw. des Bearbeiten-Dialogs dieser Seite (seit 0.34.0;
+vorher unter Einstellungen › IPv64 › Zuweisungen). Auf das NAS zeigen muss der
+Name im DNS selbst, z. B. über Dynamisches DNS. Formulare ohne `domains`
+behalten die gespeicherten. Die Adressen der
 Route nennen sie (`urls`).
 
 ## Ablauf in titand
@@ -154,9 +150,7 @@ Zertifikats. Ändern sich die Routen, sieht Let's Encrypt gleich nach
 Browser verlangen die Ausnahme für selbst signierte Zertifikate je Name. Wer das
 vermeiden will, lässt unter Einstellungen › Let's Encrypt ein Zertifikat für
 `*.<domain>` holen, importiert unter Einstellungen › Zugang ein eigenes
-Platzhalterzertifikat oder vertraut dem App-Zertifikat im Betriebssystem. Mit
-IPv64.net kann Einstellungen › Dynamisches DNS die Wildcard der Domain
-einschalten und sie hier als Domain eintragen (`docs/DDNS.md`).
+Platzhalterzertifikat oder vertraut dem App-Zertifikat im Betriebssystem.
 
 ## Namen im Netz
 

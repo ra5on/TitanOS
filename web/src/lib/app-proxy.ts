@@ -118,6 +118,8 @@ export type ProxyForm = {
 	enabled: boolean;
 	name: string;
 	aliases: string;
+	/** Full host names of their own (photos.example.org), comma separated. */
+	domains: string;
 	short: boolean;
 	host: string;
 	port: number;
@@ -133,6 +135,7 @@ type Stored = {
 	enabled: boolean;
 	name: string;
 	aliases?: string[];
+	domains?: string[];
 	short?: boolean;
 	host?: string;
 	port: number;
@@ -149,6 +152,7 @@ export function proxyForm(route: Stored | null, name = ''): ProxyForm {
 		enabled: route?.enabled ?? false,
 		name: route?.name ?? name,
 		aliases: (route?.aliases ?? []).join(', '),
+		domains: (route?.domains ?? []).join(', '),
 		short: !!route?.short,
 		host: route?.host ?? '',
 		port: route?.port ?? 0,
@@ -176,6 +180,7 @@ export function proxyBody(form: ProxyForm, target: boolean) {
 		enabled: form.enabled,
 		name: form.name.trim().toLowerCase(),
 		aliases: splitList(form.aliases.toLowerCase()),
+		domains: splitList(form.domains).map(normalDomain),
 		short: form.short,
 		...(target ? { host: normalDomain(form.host) } : {}),
 		port: form.port,
@@ -197,6 +202,8 @@ export type ProxyProblem =
 	| { key: 'proxy.nameInvalid' }
 	| { key: 'proxy.aliasInvalid'; alias: string }
 	| { key: 'proxy.aliasTooMany' }
+	| { key: 'proxy.domainInvalid'; domain: string }
+	| { key: 'proxy.domainTooMany' }
 	| { key: 'proxy.nameTaken'; app: string }
 	| { key: 'proxy.portInvalid' }
 	| { key: 'proxy.hostInvalid' }
@@ -229,6 +236,9 @@ export function proxyProblems(
 	const bad = body.aliases.find((alias) => !validProxyName(alias));
 	if (bad) out.push({ key: 'proxy.aliasInvalid', alias: bad });
 	if (body.aliases.length > 8) out.push({ key: 'proxy.aliasTooMany' });
+	const wrongDomain = body.domains.find((domain) => !validProxyDomain(domain));
+	if (wrongDomain) out.push({ key: 'proxy.domainInvalid', domain: wrongDomain });
+	if (body.domains.length > 8) out.push({ key: 'proxy.domainTooMany' });
 	const mine = [body.name, ...body.aliases];
 	const owner = others.find((other) => routeNames(other).some((name) => mine.includes(name)));
 	if (owner) out.push({ key: 'proxy.nameTaken', app: owner.app });

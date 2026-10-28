@@ -46,9 +46,7 @@ const keywords: Record<string, string> = {
 	letsencrypt:
 		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
 	ddns:
-		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
-	ipv64:
-		'ipv64 ipv64.net konto account api key schlüssel domain dns dyndns ddns zuweisung zuweisungen assignment assignments record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
+		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -80,17 +78,6 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	ddns: [
 		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
 		{ id: 'ddns-settings', label: 'ddns.settingsTitle', href: '/settings/ddns#ddns-settings' },
-	],
-	ipv64: [
-		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
-		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
-		{ id: 'ipv64-dyndns', label: 'ipv64x.tab.dyndns', href: '/settings/ipv64?tab=dyndns' },
-		{ id: 'ipv64-assignments', label: 'ipv64x.tab.assignments', href: '/settings/ipv64?tab=assignments' },
-		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
-		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
-		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
-		{ id: 'ipv64-router', label: 'ipv64x.tab.router', href: '/settings/ipv64?tab=router' },
-		{ id: 'ipv64-blocklist', label: 'ipv64x.tab.blocklist', href: '/settings/ipv64?tab=blocklist' },
 	],
 	firewall: [
 		{ id: 'firewall-zones', label: 'firewall.zones', href: '/settings/firewall?tab=zones#firewall-zones' },
@@ -148,7 +135,6 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'firewall', label: 'firewall.title', group: 'network', icon: 'shield', admin: true, isNew: true },
 	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true, isNew: true },
 	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
-	{ id: 'ipv64', label: 'ipv64x.title', group: 'network', icon: 'globe', admin: true, isNew: true },
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
@@ -158,6 +144,11 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
 	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
 ];
+
+/** The area a settings path belongs to ("/settings/ddns/x" → "ddns"), or "" for the overview. */
+export function settingsAreaOf(pathname: string): string {
+	return pathname.replace(/\/$/, '').split('/')[2] ?? '';
+}
 
 /** Settings paths that accounts with the role "user" may open. */
 export const userSettingsPaths = [
