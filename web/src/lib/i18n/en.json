@@ -6282,5 +6282,6 @@
 	"webdav.user": "User",
 	"webdav.password": "Password",
 	"webdav.copy": "Copy password",
-	"webdav.title": "WebDAV"
+	"webdav.title": "WebDAV",
+	"nav.back": "Back"
 }
