@@ -14,6 +14,7 @@
 		telegram: { enabled: boolean; token?: string; chatID: string };
 		discord: { enabled: boolean; webhook?: string };
 		homeAssistant: { enabled: boolean; service: string };
+		digest: { enabled: boolean; time: string; errorsNow: boolean };
 	};
 	type Answer = { settings: Settings; secretSet: Record<Channel, boolean> };
 
@@ -40,7 +41,8 @@
 			ntfy: { ...res.settings.ntfy, token: '' },
 			telegram: { ...res.settings.telegram, token: '' },
 			discord: { ...res.settings.discord, webhook: '' },
-			homeAssistant: res.settings.homeAssistant ?? { enabled: false, service: '' }
+			homeAssistant: res.settings.homeAssistant ?? { enabled: false, service: '' },
+			digest: res.settings.digest?.time ? res.settings.digest : { enabled: false, time: '19:00', errorsNow: true }
 		};
 		secretSet = res.secretSet;
 		clear = [];
@@ -145,6 +147,14 @@
 					</select>
 				</label>
 			</div>
+			<label class="check"><input type="checkbox" bind:checked={draft.digest.enabled} /><span>{t('digest.enabled')}</span></label>
+			{#if draft.digest.enabled}
+				<div class="row">
+					<label class="narrow"><span>{t('digest.time')}</span><input class="field" type="time" bind:value={draft.digest.time} /></label>
+				</div>
+				<label class="check"><input type="checkbox" bind:checked={draft.digest.errorsNow} /><span>{t('digest.errorsNow')}</span></label>
+				<p class="muted small">{t('digest.hint')}</p>
+			{/if}
 		</section>
 
 		<section class="tile panel">

@@ -41,6 +41,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fans"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
@@ -545,6 +546,13 @@ func run(opts options) error {
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
+	// The daily summary of the ways out, at the time in the NAS time zone.
+	go notifier.RunDigest(ctx, func() *time.Location {
+		if zone, err := time.LoadLocation(settings.CurrentTimezone()); err == nil {
+			return zone
+		}
+		return time.Local
+	})
 	// Notifications on phones and browsers (Web Push): what the bell shows,
 	// to owners and administrators who subscribed a device.
 	pushes := webpush.New(store)
@@ -1071,6 +1079,7 @@ func run(opts options) error {
 		d := healthreport.Data{Version: version.Version, MemoryPercent: -1, Since: time.Unix(0, reportSince.Load())}
 		info := monitor.Info()
 		d.Uptime = time.Duration(info.UptimeSeconds) * time.Second
+		d.CPUWatts = info.CPU.PowerWatts
 		if mem := monitor.Memory(); mem.TotalBytes > 0 {
 			d.MemoryPercent = int((mem.TotalBytes - mem.AvailableBytes) * 100 / mem.TotalBytes)
 		}
@@ -1122,6 +1131,26 @@ func run(opts options) error {
 		slog.Warn("health report settings not readable from /config", "err", err)
 	}
 	go report.Run(ctx)
+	// Fans: left to the BIOS unless a fan gets a speed or a curve.
+	coolers := fans.New(store)
+	coolers.Disabled = opts.dev
+	coolers.Temperatures = func() map[string]float64 {
+		out := map[string]float64{}
+		for _, sensor := range monitor.Info().Temperatures {
+			if sensor.Celsius != nil {
+				out[sensor.ID] = *sensor.Celsius
+			}
+		}
+		return out
+	}
+	coolers.DiskMax = func() (float64, bool) {
+		c, ok := volumes.HottestDisk()
+		return float64(c), ok
+	}
+	if err := coolers.Load(); err != nil {
+		slog.Warn("fan settings not readable from /config", "err", err)
+	}
+	go coolers.Run(ctx)
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1225,6 +1254,7 @@ func run(opts options) error {
 		WebPush:            pushes,
 		WireGuard:          vpnServer,
 		HealthReport:       report,
+		Fans:               coolers,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
 		USB:                drives,

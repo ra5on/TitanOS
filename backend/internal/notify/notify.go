@@ -133,6 +133,9 @@ type Settings struct {
 	Discord     Discord  `json:"discord"`
 	// HomeAssistant is missing in files of older versions: off.
 	HomeAssistant HomeAssistant `json:"homeAssistant"`
+	// Digest collects the messages and sends them once a day (digest.go);
+	// missing in files of older versions: every message at once.
+	Digest Digest `json:"digest"`
 }
 
 // Manager keeps the messages and sends them out.
@@ -162,6 +165,9 @@ type Manager struct {
 	settings Settings
 	messages []Message
 	nextID   int
+	// pending are the messages waiting for the daily summary (RAM only).
+	pending    []Message
+	digestSent time.Time
 }
 
 // NewManager returns a manager without any channel set up.
@@ -293,6 +299,9 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 	if settings.HomeAssistant.Enabled && !haService.MatchString(settings.HomeAssistant.Service) {
 		return invalid("Home Assistant service, e.g. notify.mobile_app_phone")
 	}
+	if d := settings.Digest; d.Enabled && !digestTime.MatchString(d.Time) {
+		return invalid("time of the daily summary")
+	}
 	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
 		return err
 	}
@@ -354,6 +363,9 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	m.mu.Unlock()
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
 	if rank[severity] >= rank[settings.MinSeverity] {
+		if m.collect(settings, message) {
+			return
+		}
 		m.deliver(settings, message, nil)
 		if m.Push != nil {
 			hostname, _ := os.Hostname()

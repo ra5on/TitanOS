@@ -36,6 +36,8 @@ const named: Record<string, string> = {
 	firewall_reverted: 'firewallReverted',
 	'PUT /api/v1/firewall': 'firewallChange',
 	'PUT /api/v1/app-icon': 'appIcon',
+	'PUT /api/v1/system/fans': 'fans',
+	'PUT /api/v1/docker/auto-update': 'autoUpdate',
 	'POST /api/v1/storage/volumes/{name}/replace': 'diskReplace',
 	'PUT /api/v1/health-report': 'healthReport',
 	'POST /api/v1/health-report/send': 'healthReportSend',

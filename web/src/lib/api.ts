@@ -134,6 +134,8 @@ export type SystemInfo = {
 		threads: number;
 		usagePercent: number;
 		threadUsage?: { id: string; usagePercent: number | null }[];
+		/** What the CPU packages draw (RAPL); null when unknown. */
+		powerWatts?: number | null;
 	};
 	memory: {
 		totalBytes: number;
