@@ -6230,5 +6230,16 @@
 	"activity.do.pushAdd": "Mitteilungen auf einem Gerät eingeschaltet",
 	"activity.do.pushRemove": "Gerät für Mitteilungen entfernt",
 	"tailscale.httpsOffLink": "Unter {name} zeigt TitanOS noch sein selbst signiertes Zertifikat. Ein Klick schaltet bei Tailscale HTTPS-Zertifikate für dein Tailnet ein; danach holt TitanOS das gültige Zertifikat von selbst (nötig für Passkeys und Mitteilungen auf dem iPhone). Der Name erscheint dabei in öffentlichen Zertifikatsprotokollen.",
-	"tailscale.httpsEnable": "HTTPS im Tailnet einschalten"
+	"tailscale.httpsEnable": "HTTPS im Tailnet einschalten",
+	"appIcon.title": "App-Symbol",
+	"appIcon.intro": "Das Symbol von TitanOS auf dem Home-Bildschirm und in Mitteilungen, für das ganze NAS.",
+	"appIcon.preview": "Vorschau des App-Symbols",
+	"appIcon.default": "Standard",
+	"appIcon.color": "Logo auf eigener Farbe",
+	"appIcon.image": "Eigenes Bild",
+	"appIcon.imageHint": "JPEG, PNG oder WebP bis 5 MiB, mindestens 64 × 64 Pixel. TitanOS schneidet die Mitte quadratisch zu.",
+	"appIcon.pick": "Bild auswählen …",
+	"appIcon.ios": "iPhone und iPad übernehmen das Symbol nur beim Hinzufügen zum Home-Bildschirm: nach einer Änderung TitanOS dort entfernen und neu hinzufügen. Auf dem iPhone zeigen Mitteilungen immer dieses Symbol.",
+	"error.invalid_app_icon": "Das App-Symbol ließ sich nicht übernehmen.",
+	"activity.do.appIcon": "App-Symbol geändert"
 }

@@ -6230,5 +6230,16 @@
 	"activity.do.pushAdd": "Notifications turned on for a device",
 	"activity.do.pushRemove": "Device for notifications removed",
 	"tailscale.httpsOffLink": "At {name} TitanOS still shows its self-signed certificate. One click turns on HTTPS certificates for your tailnet at Tailscale; TitanOS then gets the valid certificate by itself (needed for passkeys and notifications on the iPhone). The name then appears in public certificate logs.",
-	"tailscale.httpsEnable": "Turn on HTTPS in the tailnet"
+	"tailscale.httpsEnable": "Turn on HTTPS in the tailnet",
+	"appIcon.title": "App symbol",
+	"appIcon.intro": "The symbol of TitanOS on the home screen and in notifications, for the whole NAS.",
+	"appIcon.preview": "Preview of the app symbol",
+	"appIcon.default": "Default",
+	"appIcon.color": "Logo on a color of your own",
+	"appIcon.image": "Own picture",
+	"appIcon.imageHint": "JPEG, PNG or WebP up to 5 MiB, at least 64 × 64 pixels. TitanOS crops the middle to a square.",
+	"appIcon.pick": "Choose picture …",
+	"appIcon.ios": "iPhone and iPad take the symbol only when TitanOS is added to the home screen: after a change remove TitanOS there and add it again. On the iPhone, notifications always show this symbol.",
+	"error.invalid_app_icon": "The app symbol could not be taken.",
+	"activity.do.appIcon": "App symbol changed"
 }

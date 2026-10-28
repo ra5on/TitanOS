@@ -157,6 +157,7 @@ type Server struct {
 	limiter     *auth.Limiter
 	prefs       *preferences
 	loginLook   loginLook
+	appIcon     appIcons
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -248,6 +249,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
 	// The look of the login page is public; changing it is not.
 	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
+	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)
+	mux.HandleFunc("GET /api/v1/app-icon", s.requireAdmin(s.handleAppIcon))
+	mux.HandleFunc("PUT /api/v1/app-icon", s.requireAdmin(s.handlePutAppIcon))
 	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", s.handleLoginBackground)
 	mux.HandleFunc("PUT /api/v1/login-appearance", s.requireAdmin(s.handlePutLoginAppearance))
 	mux.HandleFunc("DELETE /api/v1/login-appearance", s.requireAdmin(s.handleDeleteLoginAppearance))
