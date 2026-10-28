@@ -432,3 +432,10 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 .panel .check input { width: 18px; height: 18px; margin: 0; flex: none; }
 .panel .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .panel .divided { padding-top: 14px; border-top: 1px solid var(--panel-border); }
+/* Tables in settings (firewall, IPv64, network): wrapped in .table-wrap they
+   scroll sideways on narrow screens instead of squeezing every cell. */
+.table-wrap { overflow-x: auto; min-width: 0; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.data-table :is(th, td) { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.data-table th { color: var(--muted); font-weight: 500; font-size: 0.75rem; }
+.data-table td.actions { white-space: nowrap; text-align: right; }

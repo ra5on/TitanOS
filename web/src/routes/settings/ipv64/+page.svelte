@@ -7,6 +7,7 @@
 	import { page } from '$app/state';
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import Tabs from '#lib/components/Tabs.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { TABS, tabFrom, type Status, type Tab } from './ipv64.ts';
 	import { failure } from './ui.ts';
@@ -94,11 +95,7 @@
 		{#if status.status.readOnly}<p class="notice-warn">{t('ipv64x.devMode')}</p>{/if}
 	</section>
 
-	<div class="tabs" role="tablist" aria-label={t('ipv64x.title')}>
-		{#each TABS as value (value)}
-			<button class="btn" role="tab" aria-selected={tab === value} data-tab={value} onclick={() => choose(value)}>{t(`ipv64x.tab.${value}` as MessageKey)}</button>
-		{/each}
-	</div>
+	<Tabs tabs={TABS.map((id) => ({ id, label: t(`ipv64x.tab.${id}` as MessageKey) }))} value={tab} label={t('ipv64x.title')} onchange={choose} />
 
 	{#if !hasKey}
 		<p class="muted">{t('ipv64x.needKeyForTabs')}</p>
@@ -129,34 +126,12 @@
 	form.row-actions {
 		align-items: flex-end;
 	}
-	.tabs {
-		display: flex;
-		flex-wrap: wrap;
-		border-bottom: 1px solid var(--border);
-	}
-	.tabs button {
-		border: 0;
-		border-radius: 0;
-		min-height: 44px;
-	}
-	.tabs [aria-selected='true'] {
-		color: var(--accent);
-		border-bottom: 2px solid var(--accent);
-	}
 	@media (max-width: 760px) {
 		:global(main .ipv64-tab table td),
 		:global(main .ipv64-tab table td.actions),
 		:global(main .ipv64-tab table td .btn) {
 			white-space: nowrap;
 			overflow-wrap: normal;
-		}
-		.tabs {
-			flex-wrap: nowrap;
-			overflow-x: auto;
-		}
-		.tabs button {
-			white-space: nowrap;
-			padding: 0 8px;
 		}
 	}
 	:global(.ipv64-tab) {
