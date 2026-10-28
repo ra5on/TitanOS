@@ -594,6 +594,17 @@ func (m *Manager) unlockable(ctx context.Context, volume VolumeConfig) bool {
 	return err == nil && len(luksNodes(devices, volume.Encryption.UUIDs)) > 0
 }
 
+// Encrypted returns the names of the configured volumes with LUKS.
+func (m *Manager) Encrypted() []string {
+	var names []string
+	for _, volume := range m.configured() {
+		if volume.Encryption != nil {
+			names = append(names, volume.Name)
+		}
+	}
+	return names
+}
+
 // WaitingForPassword returns the locked volumes whose disks are there.
 func (m *Manager) WaitingForPassword(ctx context.Context) []string {
 	var names []string

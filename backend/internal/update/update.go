@@ -297,7 +297,11 @@ type Manager struct {
 	// Reboot restarts the NAS after a scheduled installation.
 	Reboot func() error
 	// Mounted returns the volumes that are mounted right now.
-	Mounted        func() []string
+	Mounted func() []string
+	// Encrypted names the volumes with LUKS encryption. A system before
+	// encryptionSince cannot open them; going back to one must not wait for
+	// them, or its boot check fails and the stick returns to this system.
+	Encrypted      func() []string
 	PreparePlugins func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
@@ -1153,6 +1157,10 @@ func (m *Manager) switchTo(target, content string, pending Pending) error {
 	pending.Slot, pending.From, pending.Since, pending.BootID = target, m.version, m.now(), m.bootID
 	if m.Mounted != nil {
 		pending.Volumes = m.Mounted()
+		if m.Encrypted != nil && !knowsEncryption(pending.Version) {
+			encrypted := m.Encrypted()
+			pending.Volumes = slices.DeleteFunc(pending.Volumes, func(name string) bool { return slices.Contains(encrypted, name) })
+		}
 	}
 	if err := m.store.WriteJSON(pendingFile, pending); err != nil {
 		return err
@@ -1478,4 +1486,16 @@ func (m *Manager) Run(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+// encryptionSince is the first version that opens encrypted volumes.
+var encryptionSince = "0.31.0"
+
+// knowsEncryption tells whether a target version can open encrypted
+// volumes; a version that is no release number (a development build) is
+// taken to be new.
+func knowsEncryption(target string) bool {
+	v, ok := parseVersion(target)
+	since, _ := parseVersion(encryptionSince)
+	return !ok || v.compare(since) >= 0
 }

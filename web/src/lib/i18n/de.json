@@ -1972,6 +1972,7 @@
 	"update.rollbackTitle": "Zurück auf TitanOS {version}?",
 	"update.rollbackText": "Beim nächsten Neustart startet wieder das andere System. Deine Einstellungen und Daten bleiben, wie sie sind.",
 	"update.rollbackWarn": "Eine ältere Version kennt Einstellungen nicht, die erst die neuere eingeführt hat. Sie werden dann nicht angewendet.",
+	"update.rollbackEncrypted": "{version} kann verschlüsselte Volumes nicht öffnen. Dort ausgehängt bleiben, mit allen Freigaben, Apps, VMs und Containern darauf: {volumes}. Die Daten bleiben unverändert und sind wieder da, sobald ein System ab 0.31.0 läuft. Liegen Plugins auf einem verschlüsselten Volume, startet {version} nicht sauber und der Stick kehrt nach drei Versuchen zu dieser Version zurück – vorher ein anderes Plugin-Volume wählen oder die Plugins ausschalten.",
 	"update.rollbackDo": "Zurückwechseln",
 	"update.settings": "Einstellungen",
 	"update.channel": "Kanal",

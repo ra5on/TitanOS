@@ -685,6 +685,9 @@ func run(opts options) error {
 	// back) just because nobody entered it within five minutes. It counts
 	// as back, and so do plugins on it.
 	updates.Mounted = func() []string { return append(volumes.Mounted(), volumes.WaitingForPassword(ctx)...) }
+	// Going back to a system before encryption: it cannot open them, so
+	// its boot check must not wait for them (see update.Pending.Volumes).
+	updates.Encrypted = volumes.Encrypted
 	updates.PluginsHealthy = func() bool {
 		return extensions.Healthy() || slices.Contains(volumes.WaitingForPassword(ctx), extensions.Volume())
 	}

@@ -1972,6 +1972,7 @@
 	"update.rollbackTitle": "Back to TitanOS {version}?",
 	"update.rollbackText": "With the next restart the other system starts again. Your settings and data stay as they are.",
 	"update.rollbackWarn": "An older version does not know settings that only the newer one introduced. They are not applied then.",
+	"update.rollbackEncrypted": "{version} cannot open encrypted volumes. Unmounted there, with all shares, apps, VMs and containers on them: {volumes}. The data stays as it is and is back as soon as a system from 0.31.0 runs. If plugins live on an encrypted volume, {version} does not start cleanly and the stick returns to this version after three tries – choose another plugin volume or switch the plugins off first.",
 	"update.rollbackDo": "Switch back",
 	"update.settings": "Settings",
 	"update.channel": "Channel",
