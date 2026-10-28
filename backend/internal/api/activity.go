@@ -69,6 +69,7 @@ var activityReads = []string{
 	"GET /api/v1/lxc/{name}/console",
 	"GET /api/v1/config-backup/download",
 	"GET /api/v1/diagnostics/bundle",
+	"GET /api/v1/storage/volumes/{name}/luks-header",
 }
 
 var activityParam = regexp.MustCompile(`\{([A-Za-z]+)\.{0,3}\}`)

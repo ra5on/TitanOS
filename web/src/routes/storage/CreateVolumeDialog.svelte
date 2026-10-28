@@ -37,6 +37,19 @@
         else delete selectionIdentities[disk.name];
     }
 	let confirmed = $state(false);
+	// Optional LUKS2 encryption, off by default. The password is needed
+	// after every start; nothing can recover it.
+	let encrypt = $state(false);
+	let password = $state('');
+	let repeat = $state('');
+	let understood = $state(false);
+	const passwordProblem = $derived.by(() => {
+		if (!encrypt) return '';
+		if (password.length > 0 && password.length < 8) return t('crypt.tooShort');
+		if (repeat !== '' && repeat !== password) return t('crypt.mismatch');
+		return '';
+	});
+	const encryptionReady = $derived(!encrypt || (password.length >= 8 && password.length <= 512 && repeat === password && understood));
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 
@@ -63,7 +76,7 @@
 		if (taken.some(existing => existing.toLowerCase() === name.toLowerCase())) return errorText('volume_exists');
 		return '';
 	});
-	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && !working);
+	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && encryptionReady && !working);
 
 	// Btrfs and mdadm have their own lists; switching keeps RAID 1, which both know.
 	function pickFilesystem(id: Filesystem) {
@@ -83,7 +96,9 @@
 		working = true;
 		error = null;
 		try {
-			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected), identities: $state.snapshot(selectionIdentities) });
+			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected), identities: $state.snapshot(selectionIdentities), encrypt: encrypt || undefined, password: encrypt ? password : undefined });
+			password = '';
+			repeat = '';
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
@@ -135,6 +150,29 @@
                 <p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
                 <button type="button" class="btn" onclick={() => { selected = []; selectionIdentities = {}; }}>{t('create.clearSelection')}</button>
             {/if}
+		</div>
+
+		<div class="field-row">
+			<label class="confirm">
+				<input type="checkbox" bind:checked={encrypt} />
+				<span><strong>{t('crypt.createEncrypt')}</strong> <span class="muted small">{t('crypt.createEncryptDesc')}</span></span>
+			</label>
+			{#if encrypt}
+				<label class="field-row">
+					<span class="label">{t('crypt.password')}</span>
+					<input class="field" type="password" autocomplete="new-password" bind:value={password} maxlength="512" />
+				</label>
+				<label class="field-row">
+					<span class="label">{t('crypt.repeat')}</span>
+					<input class="field" type="password" autocomplete="new-password" bind:value={repeat} maxlength="512" />
+					{#if passwordProblem}<small class="problem">{passwordProblem}</small>{/if}
+				</label>
+				<p class="notice-warn" role="alert">{t('crypt.createWarning')}</p>
+				<label class="confirm">
+					<input type="checkbox" bind:checked={understood} />
+					<span>{t('crypt.createUnderstood')}</span>
+				</label>
+			{/if}
 		</div>
 
 		<div class="capacity">
@@ -229,6 +267,12 @@
 		padding: 12px 14px;
 		background: var(--chip);
 		border-radius: var(--radius-ctl);
+		font-size: 0.875rem;
+	}
+	.confirm {
+		display: flex;
+		gap: 8px;
+		align-items: flex-start;
 		font-size: 0.875rem;
 	}
 	.working {

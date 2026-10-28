@@ -419,6 +419,24 @@ func (m *Manager) Kick() {
 	}
 }
 
+// LetGo asks for the shares of a volume to be taken down now and ends the
+// open SMB connections to them, before the volume is locked. The caller
+// has already stopped reporting the volume as mounted.
+func (m *Manager) LetGo(ctx context.Context, volume string) {
+	m.Kick()
+	if m.Disabled {
+		return
+	}
+	for _, share := range m.List() {
+		if share.Volume != volume {
+			continue
+		}
+		if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", share.Name); err != nil {
+			slog.Debug("close share before locking", "share", share.Name, "err", err)
+		}
+	}
+}
+
 // State is what the system is derived from.
 type State struct {
 	Users []auth.User

@@ -348,8 +348,18 @@ func (m *Manager) grow(ctx context.Context, root *os.Root, g Growth, diskName st
 				return err
 			}
 		}
+		fsDevice := "/dev/" + a.device
+		if v.Encryption != nil {
+			// LUKS grows with the array first (no password needed: the
+			// key is in the dm-crypt table, opened with --disable-keyring).
+			name := cryptName(v, "")
+			if _, err := m.runner.Run(ctx, "", "cryptsetup", "resize", name); err != nil {
+				return err
+			}
+			fsDevice = m.mapperPath(name)
+		}
 		if v.Filesystem == "ext4" {
-			_, err := m.runner.Run(ctx, "", "resize2fs", "/dev/"+a.device)
+			_, err := m.runner.Run(ctx, "", "resize2fs", fsDevice)
 			if err != nil {
 				return err
 			}

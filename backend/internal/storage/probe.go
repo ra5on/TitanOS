@@ -114,6 +114,8 @@ func classify(d blockDevice, volumeByArray map[string]string) Disk {
 				}
 				disk.Contents = appendUnique(disk.Contents, kind)
 			}
+		case node.FSType == "crypto_LUKS" && volumeByArray[normalizeUUID(node.UUID)] != "":
+			disk.Volume = volumeByArray[normalizeUUID(node.UUID)]
 		case node.FSType != "":
 			disk.Contents = appendUnique(disk.Contents, node.FSType)
 		}

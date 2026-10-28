@@ -9,6 +9,8 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { canShrink, takesDisk } from './btrfs.ts';
 	import CachePanel from './CachePanel.svelte';
+	import EncryptionPanel from './EncryptionPanel.svelte';
+	import { isLocked, lockedBlocks } from './crypt.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
 
 	type Props = {
@@ -57,8 +59,10 @@
 	const problem = $derived(
 		volume.state === 'degraded' ? t('storage.degradedNote') : volume.state === 'failed' ? t('storage.failedNote') : volume.state === 'missing' ? t('storage.missingNote') : ''
 	);
-	const canCheck = $derived(volume.level !== 'raid0' && (volume.state === 'ok' || volume.state === 'checking'));
-	const canAdd = $derived(takesDisk(volume));
+	// A locked volume waits for its password: nothing that needs it mounted.
+	const locked = $derived(isLocked(volume));
+	const canCheck = $derived(volume.level !== 'raid0' && (volume.state === 'ok' || volume.state === 'checking') && !lockedBlocks(volume));
+	const canAdd = $derived(takesDisk(volume) && !lockedBlocks(volume));
 	const shrinks = $derived(canShrink(volume));
 </script>
 
@@ -68,7 +72,8 @@
 		<span class="chip">{t(`level.${volume.level}`)}</span>
 		<span class="chip">{t(`fs.${volume.filesystem}`)}</span>
 		<span class="chip {tone}">{t(`state.${volume.state}`)}</span>
-		<span class="mono mount">{volume.mounted ? volume.mountPoint : t('storage.notMounted')}</span>
+		{#if volume.encryption}<span class="chip" class:warn={locked}>{t(locked ? 'crypt.chipLocked' : 'crypt.chip')}</span>{/if}
+		<span class="mono mount">{volume.mounted ? volume.mountPoint : t(locked ? 'crypt.waiting' : 'storage.notMounted')}</span>
 	</div>
 
 	{#if volume.sync}
@@ -138,10 +143,11 @@
 				</button>
 			{/if}
 			{#if canAdd}<button type="button" class="btn" onclick={onadd} disabled={busy}>{t('storage.addDisk')}</button>{/if}
-			{#if volume.filesystem === 'btrfs' && volume.state === 'ok'}<button type="button" class="btn" onclick={onprofile} disabled={busy}>{t('btrfs.profileChange')}</button>{/if}
+			{#if volume.filesystem === 'btrfs' && volume.state === 'ok' && !locked}<button type="button" class="btn" onclick={onprofile} disabled={busy}>{t('btrfs.profileChange')}</button>{/if}
 			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}>{t('storage.delete')}</button>
 		</div>
 	{/if}
+	{#if canAdminister && volume.encryption}<EncryptionPanel {volume} {busy} />{/if}
 	{#if canAdminister && volume.filesystem !== 'btrfs'}<CachePanel {volume} />{/if}
 	{#if canAdminister && volume.mounted && volume.filesystem === 'btrfs'}<Snapshots volume={volume.name} />{/if}
 </article>
