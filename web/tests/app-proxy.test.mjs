@@ -88,7 +88,8 @@ test('local name, networks and target addresses follow the rules of the NAS', as
 		await import('../src/lib/app-proxy.ts');
 	assert.equal(normalLocalName(' Apps.local. '), 'apps');
 	for (const name of ['', 'apps', 'home.lan', 'a.b.c']) assert.ok(validLocalName(name), name);
-	for (const name of ['a b', 'local', 'a.b.c.d', '-x', 'a_b']) assert.ok(!validLocalName(name), name);
+	for (const name of ['a b', 'local', 'a.b.c.d', '-x', 'a_b'])
+		assert.ok(!validLocalName(name), name);
 	for (const net of ['192.168.1.0/24', '10.0.0.1', 'fd7a:115c:a1e0::/48', '::1', '0.0.0.0/0'])
 		assert.ok(validNetwork(net), net);
 	for (const net of ['192.168.1.0/33', '300.1.1.1', 'nonsense', '10.0.0.0/8/1', 'fd00::/129', ''])
@@ -114,7 +115,12 @@ test('the route form round-trips and reports what the NAS would refuse', async (
 	};
 	const form = proxyForm(stored);
 	assert.equal(form.access, 'networks');
-	assert.deepEqual(proxyBody(form, false), { ...stored, localOnly: true });
+	assert.deepEqual(proxyBody(form, false), {
+		...stored,
+		localOnly: true,
+		tailscale: false,
+		tailscaleName: '',
+	});
 	// A new route is local only; plain HTTP has no certificate to check.
 	assert.equal(proxyForm(null, 'x').access, 'local');
 	assert.equal(proxyBody({ ...form, scheme: 'http' }, false).verifyTLS, false);
@@ -133,4 +139,44 @@ test('the route form round-trips and reports what the NAS would refuse', async (
 	assert.deepEqual(keys(form, false, 'fotos'), ['proxy.shortIsNas']);
 	assert.deepEqual(keys({ ...form, host: '' }, true), ['proxy.hostInvalid']);
 	assert.equal(proxyBody({ ...form, host: 'HA.lan.' }, true).host, 'ha.lan');
+});
+
+test('a name in the tailnet is a label of its own and unique among devices', async () => {
+	const { proxyForm, proxyBody, proxyProblems, tailnetName } =
+		await import('../src/lib/app-proxy.ts');
+	const form = {
+		...proxyForm(null, 'immich'),
+		port: 2283,
+		tailscale: true,
+		tailscaleName: ' Photos ',
+	};
+	assert.deepEqual(
+		[proxyBody(form, false).tailscale, proxyBody(form, false).tailscaleName],
+		[true, 'photos'],
+	);
+	// Off: no name is sent along.
+	assert.equal(proxyBody({ ...form, tailscale: false }, false).tailscaleName, '');
+	assert.equal(tailnetName({ name: 'immich' }), 'immich');
+	assert.equal(tailnetName({ name: 'immich', tailscaleName: 'photos' }), 'photos');
+	const others = [{ app: 'other', name: 'other', tailscale: true, tailscaleName: 'photos' }];
+	assert.deepEqual(
+		proxyProblems(form, false, others, 'nas').map((p) => p.key),
+		['proxy.tailnetNameTaken'],
+	);
+	// The same device name is fine when the other route is not in the tailnet.
+	assert.deepEqual(proxyProblems(form, false, [{ ...others[0], tailscale: false }], 'nas'), []);
+	assert.deepEqual(
+		proxyProblems({ ...form, tailscaleName: 'a.b' }, false, [], 'nas').map((p) => p.key),
+		['proxy.tailnetNameInvalid'],
+	);
+	// A stored route comes back into the form.
+	const back = proxyForm({
+		enabled: true,
+		name: 'immich',
+		port: 2283,
+		scheme: 'http',
+		tailscale: true,
+		tailscaleName: 'photos',
+	});
+	assert.deepEqual([back.tailscale, back.tailscaleName], [true, 'photos']);
 });

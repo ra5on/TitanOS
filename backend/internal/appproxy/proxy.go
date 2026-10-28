@@ -45,16 +45,51 @@ var upstream = &http.Transport{
 func (m *Manager) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key, route, ok := m.match(r.Host)
+		tailnet := false
+		if !ok {
+			// A name in the tailnet comes only from its own tailscaled on
+			// this NAS; anyone else asking for it would bypass the tailnet.
+			if k, found := m.tailnetMatch(hostOnly(r.Host)); found {
+				if !fromLoopback(r.RemoteAddr) {
+					http.Error(w, "This name is only reachable through Tailscale.", http.StatusMisdirectedRequest)
+					return
+				}
+				key, tailnet = k, true
+				route, ok = m.routeByKey(k)
+			}
+		}
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !allowed(route, r.RemoteAddr) {
-			http.Error(w, "This app is not reachable from your network.", http.StatusForbidden)
-			return
+		// Through the tailnet, its own access rules decide; Serve has set
+		// who asks in Tailscale-User-*. Anyone else may not claim that.
+		if !tailnet {
+			if !allowed(route, r.RemoteAddr) {
+				http.Error(w, "This app is not reachable from your network.", http.StatusForbidden)
+				return
+			}
+			for _, name := range []string{"Tailscale-User-Login", "Tailscale-User-Name", "Tailscale-User-Profile-Pic", "Tailscale-App-Capabilities"} {
+				r.Header.Del(name)
+			}
 		}
 		m.handlerFor(key, route).proxy.ServeHTTP(w, r)
 	})
+}
+
+// hostOnly is a Host header without port and final dot, in lower case.
+func hostOnly(host string) string {
+	host = strings.ToLower(host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
+// fromLoopback tells whether a request comes from this NAS itself.
+func fromLoopback(remoteAddr string) bool {
+	addr, ok := remoteIP(remoteAddr)
+	return ok && addr.IsLoopback()
 }
 
 // allowed tells whether a client may reach a route: own networks if the

@@ -29,9 +29,19 @@ func (s *Server) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.AppProxy.SetGeneral(req); err != nil {
-		writeAppProxyError(w, err)
-		return
+	if req.Domain != nil || req.LocalName != nil || req.MDNS != nil || req.Off != nil {
+		if err := s.opts.AppProxy.SetGeneral(req); err != nil {
+			writeAppProxyError(w, err)
+			return
+		}
+	}
+	if req.TailscaleKey != nil {
+		// The key itself is never logged or noted, only that it changed.
+		if err := s.opts.AppProxy.SetTailnetKey(*req.TailscaleKey); err != nil {
+			writeAppProxyError(w, err)
+			return
+		}
+		noteTarget(r, "tailscale-key")
 	}
 	if req.Domain != nil {
 		noteTarget(r, *req.Domain)
@@ -114,7 +124,7 @@ func (s *Server) handleAppProxyRemove(w http.ResponseWriter, r *http.Request) {
 
 func writeAppProxyError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, appproxy.ErrInvalid):
+	case errors.Is(err, appproxy.ErrInvalid), errors.Is(err, appproxy.ErrTailnetKey):
 		writeError(w, http.StatusBadRequest, "proxy_invalid", err.Error())
 	case errors.Is(err, appproxy.ErrNameTaken):
 		writeError(w, http.StatusConflict, "proxy_name_taken", err.Error())

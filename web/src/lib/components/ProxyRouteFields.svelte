@@ -2,12 +2,7 @@
 	// The fields of one HTTPS name, shared by the app editor and the dialog
 	// on Settings › HTTPS names for apps. The form is the caller's; problems
 	// come from proxyProblems, so both places check alike.
-	import {
-		proxyAddresses,
-		splitList,
-		type ProxyForm,
-		type ProxyProblem,
-	} from '#lib/app-proxy.ts';
+	import { proxyAddresses, splitList, type ProxyForm, type ProxyProblem } from '#lib/app-proxy.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 
 	let {
@@ -16,6 +11,7 @@
 		problems = [],
 		suffixes = [],
 		mdns = true,
+		tailnet,
 		disabled = false,
 	}: {
 		form: ProxyForm;
@@ -23,6 +19,8 @@
 		problems?: ProxyProblem[];
 		suffixes?: string[];
 		mdns?: boolean;
+		/** What the NAS offers for names in the tailnet; undefined = an older NAS. */
+		tailnet?: { available: boolean; keySet: boolean };
 		disabled?: boolean;
 	} = $props();
 
@@ -113,6 +111,36 @@
 		>
 		<small>{mdns ? t('proxy.shortHint') : t('proxy.shortNoMdns')}</small>
 	</div>
+	{#if tailnet}
+		<div class="option">
+			<label class="check"
+				><input type="checkbox" bind:checked={form.tailscale} {disabled} /><span
+					>{t('proxy.tailscale')}</span
+				></label
+			>
+			<small>{t('proxy.tailscaleHint')}</small>
+		</div>
+		{#if form.tailscale}
+			<label class="tailnet-name"
+				><span>{t('proxy.tailscaleName')}</span><input
+					class="field mono"
+					type="text"
+					bind:value={form.tailscaleName}
+					placeholder={name || 'app'}
+					spellcheck="false"
+					autocapitalize="off"
+					maxlength="63"
+					{disabled}
+				/><small
+					>{t('proxy.tailscaleNameHint', {
+						name: form.tailscaleName.trim().toLowerCase() || name || 'app',
+					})}</small
+				></label
+			>
+			{#if !tailnet.available}<p class="notice-warn">{t('proxy.tailscaleNoPlugin')}</p>
+			{:else if !tailnet.keySet}<p class="notice-warn">{t('proxy.tailscaleNoKey')}</p>{/if}
+		{/if}
+	{/if}
 	<label class="access"
 		><span>{t('proxy.access')}</span>
 		<select class="field" bind:value={form.access} {disabled}
@@ -129,8 +157,7 @@
 				bind:value={form.networks}
 				placeholder={'192.168.1.0/24\n100.64.0.0/10'}
 				spellcheck="false"
-				{disabled}
-			></textarea><small>{t('proxy.networksHint')}</small></label
+				{disabled}></textarea><small>{t('proxy.networksHint')}</small></label
 		>
 	{:else if form.access === 'all'}
 		<p class="notice-warn" role="alert">{t('proxy.localOnlyOff')}</p>
@@ -153,7 +180,9 @@
 								? t(problem.key, { network: problem.network })
 								: problem.key === 'proxy.shortIsNas'
 									? t(problem.key, { name: problem.name })
-									: t(problem.key)}
+									: problem.key === 'proxy.tailnetNameTaken'
+										? t(problem.key, { app: problem.app })
+										: t(problem.key)}
 				</li>
 			{/each}
 		</ul>
@@ -181,7 +210,8 @@
 	label > span {
 		color: var(--muted);
 	}
-	.access {
+	.access,
+	.tailnet-name {
 		max-width: 32rem;
 	}
 	small {

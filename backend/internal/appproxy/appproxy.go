@@ -65,6 +65,10 @@ type Route struct {
 	// Paused is only on the stick: the route is on, but every name is
 	// switched off (Settings.Off). Older versions see it as off.
 	Paused bool `json:"paused,omitempty"`
+	// Tailscale makes the route a device of its own in the tailnet
+	// (see tailnet.go); TailscaleName is its name there, Name if empty.
+	Tailscale     bool   `json:"tailscale,omitempty"`
+	TailscaleName string `json:"tailscaleName,omitempty"`
 }
 
 // Settings are the content of /config/docker/proxy.json. Every field after
@@ -95,6 +99,9 @@ type General struct {
 	LocalName *string `json:"localName"`
 	MDNS      *bool   `json:"mdns"`
 	Off       *bool   `json:"off"`
+	// TailscaleKey is the auth key for names in the tailnet; "" removes
+	// it. It is never sent back.
+	TailscaleKey *string `json:"tailscaleKey"`
 }
 
 const (
@@ -135,11 +142,16 @@ type Manager struct {
 	address   func() string
 	// kick asks Run to publish the names now.
 	kick chan struct{}
+
+	// Tailnet runs the devices of routes with "via Tailscale".
+	Tailnet     *Tailnet
+	tailnetKey  string
+	tailnetKick chan struct{}
 }
 
 // NewManager returns a manager with no routes; Load reads them.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", kick: make(chan struct{}, 1)}
+	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", kick: make(chan struct{}, 1), Tailnet: newTailnet(), tailnetKick: make(chan struct{}, 1)}
 }
 
 // Load reads the routes from /config. A missing file means none.
@@ -153,6 +165,7 @@ func (m *Manager) Load() error {
 	m.settings = fromDisk(settings)
 	m.proxies = map[string]*appHandler{}
 	m.mu.Unlock()
+	m.loadTailnetKey()
 	return nil
 }
 
@@ -290,6 +303,10 @@ func (m *Manager) SetTarget(id string, route Route) error {
 
 func (m *Manager) setRoute(target bool, key string, route Route) error {
 	route.Name = strings.ToLower(strings.TrimSpace(route.Name))
+	route.TailscaleName = strings.ToLower(strings.TrimSpace(route.TailscaleName))
+	if !route.Tailscale || route.TailscaleName == route.Name {
+		route.TailscaleName = ""
+	}
 	route.Paused = false
 	if route.Scheme == "" {
 		route.Scheme = "http"
@@ -326,6 +343,19 @@ func (m *Manager) setRoute(target bool, key string, route Route) error {
 				}
 				for _, name := range names(r) {
 					if slices.Contains(mine, name) {
+						return fmt.Errorf("%w: %s", ErrNameTaken, other)
+					}
+				}
+			}
+		}
+		if route.Tailscale {
+			name := tailnetName(route)
+			for _, kind := range []struct {
+				target bool
+				routes map[string]Route
+			}{{false, s.Apps}, {true, s.Targets}} {
+				for other, r := range kind.routes {
+					if !(kind.target == target && other == key) && r.Tailscale && tailnetName(r) == name {
 						return fmt.Errorf("%w: %s", ErrNameTaken, other)
 					}
 				}
@@ -377,6 +407,30 @@ func (m *Manager) remove(target bool, key string) error {
 	})
 }
 
+// tailnetName is a route's device name in the tailnet.
+func tailnetName(route Route) string {
+	if route.TailscaleName != "" {
+		return route.TailscaleName
+	}
+	return route.Name
+}
+
+// routeByKey returns an enabled route by its key ("app:…", "target:…").
+func (m *Manager) routeByKey(key string) (Route, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.settings.Off {
+		return Route{}, false
+	}
+	kind, name, _ := strings.Cut(key, ":")
+	routes := m.settings.Apps
+	if kind == "target" {
+		routes = m.settings.Targets
+	}
+	route, ok := routes[name]
+	return route, ok && route.Enabled
+}
+
 // names are the first labels a route answers to.
 func names(route Route) []string {
 	return append([]string{route.Name}, route.Aliases...)
@@ -402,6 +456,7 @@ func (m *Manager) change(fn func(*Settings) error) error {
 	case m.kick <- struct{}{}:
 	default:
 	}
+	m.kickTailnet()
 	if m.OnChange != nil {
 		m.OnChange()
 	}
@@ -422,6 +477,9 @@ func (m *Manager) validRoute(app string, route Route) error {
 		return fmt.Errorf("%w: port %d belongs to the web UI of TitanOS", ErrInvalid, route.Port)
 	case route.Scheme != "http" && route.Scheme != "https":
 		return fmt.Errorf("%w: scheme", ErrInvalid)
+	}
+	if route.TailscaleName != "" && !labelRE.MatchString(route.TailscaleName) {
+		return fmt.Errorf("%w: the name in the tailnet may only hold a-z, 0-9 and hyphens, at most 63 characters", ErrInvalid)
 	}
 	for _, alias := range route.Aliases {
 		if !labelRE.MatchString(alias) {
@@ -729,6 +787,8 @@ type AppInfo struct {
 	Route
 	App  string   `json:"app"`
 	URLs []string `json:"urls"`
+	// Tailnet is the state of its device in the tailnet, if it has one.
+	Tailnet *TailnetNode `json:"tailnet,omitempty"`
 }
 
 // Status is everything the settings page shows.
@@ -736,13 +796,14 @@ type Status struct {
 	Domain string `json:"domain"`
 	// LocalName is the chosen local name ("" = the NAS's name, which
 	// DefaultLocalName tells).
-	LocalName        string    `json:"localName"`
-	DefaultLocalName string    `json:"defaultLocalName"`
-	MDNS             bool      `json:"mdns"`
-	Off              bool      `json:"off"`
-	Suffixes         []string  `json:"suffixes"`
-	Apps             []AppInfo `json:"apps"`
-	Targets          []AppInfo `json:"targets"`
+	LocalName        string        `json:"localName"`
+	DefaultLocalName string        `json:"defaultLocalName"`
+	MDNS             bool          `json:"mdns"`
+	Off              bool          `json:"off"`
+	Suffixes         []string      `json:"suffixes"`
+	Apps             []AppInfo     `json:"apps"`
+	Targets          []AppInfo     `json:"targets"`
+	Tailnet          TailnetStatus `json:"tailnet"`
 }
 
 // Info lists every route with its addresses, sorted by app and target.
@@ -752,19 +813,31 @@ func (m *Manager) Info() Status {
 		Domain: settings.Domain, LocalName: settings.LocalName, DefaultLocalName: m.host(),
 		MDNS: !settings.NoMDNS, Off: settings.Off, Suffixes: m.Suffixes(),
 	}
-	list := func(routes map[string]Route) []AppInfo {
+	list := func(prefix string, routes map[string]Route) []AppInfo {
 		out := []AppInfo{}
 		for key, route := range routes {
 			if route.Scheme == "" {
 				route.Scheme = "http"
 			}
-			out = append(out, AppInfo{Route: route, App: key, URLs: m.urls(route)})
+			info := AppInfo{Route: route, App: key, URLs: m.urls(route)}
+			if route.Tailscale {
+				info.Tailnet = m.tailnetNode(prefix + key)
+				if info.Tailnet == nil {
+					// Not looked at yet: it starts if the plugin runs.
+					info.Tailnet = &TailnetNode{State: "stopped", Error: "plugin"}
+					if _, ok := m.Tailnet.available(); ok {
+						info.Tailnet = &TailnetNode{State: "starting"}
+					}
+				}
+			}
+			out = append(out, info)
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].App < out[j].App })
 		return out
 	}
-	status.Apps = list(settings.Apps)
-	status.Targets = list(settings.Targets)
+	status.Apps = list("app:", settings.Apps)
+	status.Targets = list("target:", settings.Targets)
+	status.Tailnet = m.TailnetInfo()
 	if status.Suffixes == nil {
 		status.Suffixes = []string{}
 	}

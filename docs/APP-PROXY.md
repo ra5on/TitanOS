@@ -196,6 +196,46 @@ App-Zertifikat Kurznamen einzeln (`immich.local`). Kommt ein Kurzname dazu, wird
 das selbst signierte App-Zertifikat neu erzeugt, und Browser fragen für jeden
 Namen erneut nach der Ausnahme.
 
+## Namen im Tailnet (seit 0.30.0)
+
+Eine App oder ein Ziel mit **„Über Tailscale erreichbar“** wird ein eigenes
+Gerät im Tailnet, mit Namen `<name>.<tailnet>.ts.net` (wählbar über
+`tailscaleName`, sonst der HTTPS-Name) und einem Zertifikat, das Tailscale selbst
+von Let's Encrypt holt und erneuert. Entscheidung vom 28.10.2026: für diesen Weg
+ist das die Ausnahme von „kein Let's Encrypt“, weil TitanOS dafür keinen
+ACME-Client betreibt.
+
+- `internal/appproxy/tailnet.go`. Je Route ein `tailscaled` aus dem Plugin
+  (`/usr/sbin/tailscaled`) als transiente systemd-Einheit
+  `titanos-ts-<app|target>-<name>` (`systemd-run --collect`, Neustart bei
+  Fehlern), mit `--tun=userspace-networking` (keine Schnittstelle, keine
+  Firewall-Regeln), `--port=0`, `--socket=/run/titanos-ts-names/<id>.sock` und
+  `--statedir=/mnt/<plugin-volume>/.titanos/tailscale-names/<id>` (0700, root,
+  wie beim Plugin geprüft). Die Einheit überlebt einen titand-Neustart.
+- Anmelden nur, solange das Gerät keinen Schlüssel hat, und nur mit dem
+  gespeicherten Auth-Key (`/config/docker/proxy-tailscale.key`, über die API nur
+  `keySet`), übergeben als `--auth-key=file:` aus einer RAM-Datei, die danach
+  gelöscht wird; `--accept-dns=false --accept-routes=false --ssh=false`.
+- `tailscale serve --bg --https=443 https+insecure://127.0.0.1:<HTTPS-Port>`:
+  Serve terminiert HTTPS und reicht an den Proxy von titand weiter. Serve behält
+  den Host-Kopf (`ipn/ipnlocal/serve.go`), setzt `X-Forwarded-*` und
+  `Tailscale-User-*`. titand ordnet die Anfrage über den gemeldeten
+  `Self.DNSName` der Route zu und nimmt `ts.net`-Namen **nur von Loopback** an
+  (sonst 421): Wer aus dem Heimnetz direkt danach fragt, umginge die
+  Zugriffsregeln des Tailnets. Für diese Anfragen gelten die Regeln des Tailnets
+  statt „nur Heimnetz“/eigener Netze; auf allen anderen Wegen werden
+  `Tailscale-User-*` und `Tailscale-App-Capabilities` entfernt.
+- Abgleich beim Start, nach jeder Änderung und jede Minute: ausgeschaltete Route
+  oder Hauptschalter aus → Einheit anhalten, Schlüssel bleibt; „Über Tailscale“
+  abgewählt oder Route entfernt → `tailscale logout`, anhalten, Zustandsordner
+  löschen; Plugin nicht aktiv → nichts starten. Zustände `starting`, `login`
+  (kein Auth-Key), `running`, `https-off` (HTTPS-Zertifikate im Tailnet aus),
+  `stopped`, `error` im RAM, über die API je Route als `tailnet`.
+- Felder in `proxy.json`: `tailscale`, `tailscaleName` je Route (optional).
+  API: `PUT /api/v1/docker/proxy` mit `{tailscaleKey}` (`""` entfernt ihn),
+  `GET` liefert `tailnet: {available, keySet}`.
+- Entwicklungsmodus startet keine Instanzen.
+
 ## Prüfstand und Grenzen
 
 Geprüft mit Go-Tests (`internal/appproxy`, `internal/tlscert/apps_test.go`,

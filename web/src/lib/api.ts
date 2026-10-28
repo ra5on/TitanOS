@@ -406,7 +406,11 @@ export type AppProxyRoute = {
 	verifyTLS?: boolean;
 	localOnly?: boolean;
 	networks?: string[];
+	tailscale?: boolean;
+	tailscaleName?: string;
 	urls: string[];
+	/** The route's own device in the tailnet (0.30.0 and later). */
+	tailnet?: { state: 'starting' | 'login' | 'running' | 'https-off' | 'stopped' | 'error'; url?: string; error?: string };
 };
 
 export type AppProxyStatus = {
@@ -419,6 +423,7 @@ export type AppProxyStatus = {
 	mdns?: boolean;
 	off?: boolean;
 	targets?: AppProxyRoute[];
+	tailnet?: { available: boolean; keySet: boolean };
 };
 
 export type DockerStatus = {

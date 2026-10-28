@@ -131,6 +131,7 @@
 			problems={changed ? problems : []}
 			suffixes={status.suffixes}
 			{mdns}
+			tailnet={status.tailnet}
 			disabled={busy}
 		/>
 		{#if saved?.enabled && !changed && saved.urls.length && !status.off}

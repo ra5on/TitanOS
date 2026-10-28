@@ -36,14 +36,16 @@
 	let removing = $state<{ kind: Kind; route: AppProxyRoute } | null>(null);
 	let editing = $state<Editing | null>(null);
 	let editError = $state('');
+	let tailnetKey = $state('');
+	let tailnetBusy = $state(false);
+	let tailnetError = $state('');
+	let tailnetNotice = $state('');
 
 	const apps = $derived(status?.apps ?? []);
 	const targets = $derived(status?.targets ?? []);
 	// An older titand (before 0.30.0) knows none of the new options.
 	const extended = $derived(status?.mdns !== undefined);
-	const localLabel = $derived(
-		normalLocalName(general.localName) || status?.defaultLocalName || '',
-	);
+	const localLabel = $derived(normalLocalName(general.localName) || status?.defaultLocalName || '');
 	const savedGeneral = $derived({
 		domain: status?.domain ?? '',
 		localName: status?.localName ?? '',
@@ -60,7 +62,8 @@
 	const unreachable = $derived(!general.mdns && !normalDomain(general.domain));
 
 	function failure(err: unknown) {
-		return err instanceof ApiError && (err.code === 'proxy_invalid' || err.code === 'proxy_name_taken')
+		return err instanceof ApiError &&
+			(err.code === 'proxy_invalid' || err.code === 'proxy_name_taken')
 			? err.code === 'proxy_name_taken'
 				? errorText(err.code)
 				: err.message
@@ -199,6 +202,22 @@
 		}
 	}
 
+	// The auth key is sent once and never shown again; "" removes it.
+	async function saveTailnetKey(key: string) {
+		if (tailnetBusy) return;
+		tailnetBusy = true;
+		tailnetError = tailnetNotice = '';
+		try {
+			take(await api.put<AppProxyStatus>('/docker/proxy', { tailscaleKey: key }));
+			tailnetKey = '';
+			tailnetNotice = t(key ? 'proxy.tailscaleKeySaved' : 'proxy.tailscaleKeyRemoved');
+		} catch (err) {
+			tailnetError = failure(err);
+		} finally {
+			tailnetBusy = false;
+		}
+	}
+
 	function access(route: AppProxyRoute) {
 		if (route.networks?.length) return t('proxy.networksChip', { count: route.networks.length });
 		return t(route.localOnly ? 'proxy.localChip' : 'proxy.publicChip');
@@ -240,6 +259,27 @@
 						>{:else}<span class="mono muted">{url}</span>{/if}
 				{/each}
 			</div>
+			{#if route.tailnet}
+				<div class="urls">
+					<span
+						class="chip"
+						class:ok={route.tailnet.state === 'running'}
+						class:warn={['login', 'https-off', 'error'].includes(route.tailnet.state)}
+						>Tailscale · {t(
+							`proxy.tailnetState.${route.tailnet.state}` as 'proxy.tailnetState.running',
+						)}</span
+					>
+					{#if route.tailnet.url && route.tailnet.state === 'running'}<a
+							class="mono"
+							href={route.tailnet.url}
+							target="_blank"
+							rel="noreferrer">{route.tailnet.url}</a
+						>{/if}
+					{#if route.tailnet.error && route.tailnet.error !== 'plugin'}<span class="muted small"
+							>{route.tailnet.error}</span
+						>{/if}
+				</div>
+			{/if}
 			{#if route.aliases?.length}<span class="muted small"
 					>{t('proxy.aliasesList')}: <span class="mono">{route.aliases.join(', ')}</span></span
 				>{/if}
@@ -381,6 +421,47 @@
 		</section>
 	{/if}
 
+	{#if status.tailnet}
+		<form
+			class="tile panel"
+			aria-labelledby="proxy-tailnet"
+			onsubmit={(event) => {
+				event.preventDefault();
+				void saveTailnetKey(tailnetKey.trim());
+			}}
+		>
+			<h2 class="tile-title" id="proxy-tailnet">{t('proxy.tailnetTitle')}</h2>
+			<p class="muted hint">{t('proxy.tailnetIntro')}</p>
+			{#if !status.tailnet.available}<p class="notice-warn">{t('proxy.tailscaleNoPlugin')}</p>{/if}
+			<label class="stack"
+				><span>{t('proxy.tailscaleKey')}</span><input
+					class="field mono"
+					type="password"
+					autocomplete="off"
+					bind:value={tailnetKey}
+					placeholder={status.tailnet.keySet ? t('proxy.tailscaleKeySet') : 'tskey-auth-…'}
+					disabled={tailnetBusy}
+				/></label
+			>
+			<p class="muted hint">{t('proxy.tailscaleKeyHint')}</p>
+			{#if tailnetError}<p class="notice-error" role="alert">{tailnetError}</p>{/if}
+			<div class="row-actions">
+				<button
+					class="btn btn-primary"
+					disabled={tailnetBusy || !tailnetKey.trim().startsWith('tskey-')}
+					>{t('proxy.tailscaleKeySave')}</button
+				>
+				{#if status.tailnet.keySet}<button
+						type="button"
+						class="btn"
+						disabled={tailnetBusy}
+						onclick={() => saveTailnetKey('')}>{t('proxy.tailscaleKeyRemove')}</button
+					>{/if}
+				{#if tailnetNotice}<span class="muted" role="status">{tailnetNotice}</span>{/if}
+			</div>
+		</form>
+	{/if}
+
 	<section class="tile panel" aria-labelledby="proxy-how">
 		<h2 class="tile-title" id="proxy-how">{t('proxy.howTitle')}</h2>
 		<p class="hint">{t('proxy.howLocal')}</p>
@@ -413,6 +494,7 @@
 				problems={editProblems}
 				suffixes={status.suffixes}
 				mdns={status.mdns ?? true}
+				tailnet={status.tailnet}
 				disabled={!!busyKey}
 			/>
 			{#if editError}<p class="notice-error" role="alert">{editError}</p>{/if}

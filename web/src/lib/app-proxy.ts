@@ -59,7 +59,9 @@ export function proxyAddresses(name: string, suffixes: string[]): string[] {
 
 /** "apps.local", " Apps " and "apps" mean the same local name. */
 export function normalLocalName(name: string): string {
-	return normalDomain(name).replace(/\.local$/, '').replace(/\.$/, '');
+	return normalDomain(name)
+		.replace(/\.local$/, '')
+		.replace(/\.$/, '');
 }
 
 /** A local name: one to three labels, empty for the NAS's name. */
@@ -123,6 +125,8 @@ export type ProxyForm = {
 	verifyTLS: boolean;
 	access: ProxyAccess;
 	networks: string;
+	tailscale: boolean;
+	tailscaleName: string;
 };
 
 type Stored = {
@@ -136,6 +140,8 @@ type Stored = {
 	verifyTLS?: boolean;
 	localOnly?: boolean;
 	networks?: string[];
+	tailscale?: boolean;
+	tailscaleName?: string;
 };
 
 export function proxyForm(route: Stored | null, name = ''): ProxyForm {
@@ -154,7 +160,14 @@ export function proxyForm(route: Stored | null, name = ''): ProxyForm {
 				? 'local'
 				: 'all',
 		networks: (route?.networks ?? []).join('\n'),
+		tailscale: !!route?.tailscale,
+		tailscaleName: route?.tailscaleName ?? '',
 	};
+}
+
+/** A route's device name in the tailnet: its own, else the main name. */
+export function tailnetName(route: { name: string; tailscale?: boolean; tailscaleName?: string }) {
+	return route.tailscaleName || route.name;
 }
 
 /** What PUT /docker/proxy/apps|targets/{id} takes. */
@@ -170,6 +183,8 @@ export function proxyBody(form: ProxyForm, target: boolean) {
 		verifyTLS: form.scheme === 'https' && form.verifyTLS,
 		localOnly: form.access !== 'all',
 		networks: form.access === 'networks' ? splitList(form.networks) : [],
+		tailscale: form.tailscale,
+		tailscaleName: form.tailscale ? form.tailscaleName.trim().toLowerCase() : '',
 	};
 }
 
@@ -187,7 +202,9 @@ export type ProxyProblem =
 	| { key: 'proxy.hostInvalid' }
 	| { key: 'proxy.networksInvalid'; network: string }
 	| { key: 'proxy.networksEmpty' }
-	| { key: 'proxy.shortIsNas'; name: string };
+	| { key: 'proxy.shortIsNas'; name: string }
+	| { key: 'proxy.tailnetNameInvalid' }
+	| { key: 'proxy.tailnetNameTaken'; app: string };
 
 /**
  * What is wrong with a form before saving; the NAS checks the same again.
@@ -197,7 +214,13 @@ export type ProxyProblem =
 export function proxyProblems(
 	form: ProxyForm,
 	target: boolean,
-	others: { app: string; name: string; aliases?: string[] }[],
+	others: {
+		app: string;
+		name: string;
+		aliases?: string[];
+		tailscale?: boolean;
+		tailscaleName?: string;
+	}[],
 	localLabel: string,
 ): ProxyProblem[] {
 	const out: ProxyProblem[] = [];
@@ -219,5 +242,12 @@ export function proxyProblems(
 	}
 	if (body.short && localLabel && mine.includes(localLabel))
 		out.push({ key: 'proxy.shortIsNas', name: localLabel });
+	if (body.tailscale) {
+		if (body.tailscaleName && !validProxyName(body.tailscaleName))
+			out.push({ key: 'proxy.tailnetNameInvalid' });
+		const device = body.tailscaleName || body.name;
+		const holder = others.find((other) => other.tailscale && tailnetName(other) === device);
+		if (holder) out.push({ key: 'proxy.tailnetNameTaken', app: holder.app });
+	}
 	return out;
 }
