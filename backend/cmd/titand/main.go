@@ -69,6 +69,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
 )
 
@@ -540,6 +541,19 @@ func run(opts options) error {
 	}
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
+	}
+	// Notifications on phones and browsers (Web Push): what the bell shows,
+	// to owners and administrators who subscribed a device.
+	pushes := webpush.New(store)
+	pushes.Allowed = func(name string) bool {
+		user, ok := users.Get(name)
+		return ok && user.Role.CanAdminister() && !user.Disabled
+	}
+	if err := pushes.Load(); err != nil {
+		slog.Warn("web push settings not readable from /config", "err", err)
+	}
+	notifier.Push = func(message notify.Message, title string) {
+		pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: "/", Urgent: message.Severity == notify.Error})
 	}
 	// Once per plugin and kind of device; installing stays a click.
 	extensions.Notify = func(title string) { notifier.Notify(notify.Info, "plugin_recommended", title) }
@@ -1129,6 +1143,7 @@ func run(opts options) error {
 		Network:            connection,
 		Firewall:           packetFilter,
 		Notify:             notifier,
+		WebPush:            pushes,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
 		USB:                drives,

@@ -24,6 +24,7 @@
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
+	import { registerServiceWorker } from '#lib/web-push.ts';
 
 	let { children } = $props();
 
@@ -31,6 +32,7 @@
 		initAppearance();
 		refreshSession();
 		loadLoginLook();
+		registerServiceWorker();
 	});
 
 	$effect(() => {

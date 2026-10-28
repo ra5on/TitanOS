@@ -27,6 +27,9 @@ func uiHandler(ui fs.FS) http.Handler {
 			return
 		}
 
+		if strings.HasSuffix(name, ".webmanifest") {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		if strings.HasPrefix(name, "_app/immutable/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {

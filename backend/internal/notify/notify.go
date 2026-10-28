@@ -151,6 +151,8 @@ type Manager struct {
 
 	// ha reaches Home Assistant; nil without one.
 	ha HASender
+	// Push sends to subscribed browsers (package webpush); nil without.
+	Push func(message Message, title string)
 	// now is the clock; tests replace it.
 	now    func() time.Time
 	people personalStore
@@ -353,7 +355,20 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
 	if rank[severity] >= rank[settings.MinSeverity] {
 		m.deliver(settings, message, nil)
+		if m.Push != nil {
+			hostname, _ := os.Hostname()
+			m.Push(message, "["+hostname+"] "+message.Title)
+		}
 	}
+}
+
+// Wording is the title and text of a kind of message in the language of
+// the settings.
+func (m *Manager) Wording(kind, subject string) (string, string) {
+	m.mu.Lock()
+	language := m.settings.Language
+	m.mu.Unlock()
+	return wording(language, kind, subject)
 }
 
 // Test sends a test message through one channel and reports what went wrong.
