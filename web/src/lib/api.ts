@@ -586,17 +586,36 @@ export type Hardware = {
 	usedBy: Record<string, string[]>;
 };
 
-/** The packet filter (internal/firewall). */
-export type FirewallZone = 'home' | 'vpn' | 'internet';
-export type FirewallZones = Record<FirewallZone, boolean>;
-export type FirewallRule = {
+/** The packet filter (internal/firewall), settings version 2. */
+/** The built-in zones; own zones have IDs like "z3k9". */
+export type FirewallBuiltinZone = 'home' | 'vpn' | 'internet' | 'docker';
+export type FirewallZones = Record<'home' | 'vpn' | 'internet', boolean>;
+export type FirewallZoneDef = {
+	id: string;
+	/** Name of an own zone; the built-in ones are named by the page. */
+	name?: string;
+	builtin?: boolean;
+	/** net:<id>, docker:<name>, vm:<device>. */
+	networks: string[];
+	sources: string[];
+};
+export type FirewallPolicy = {
 	action: 'allow' | 'deny';
 	protocol: 'tcp' | 'udp' | 'any';
 	ports?: string;
+	service?: string;
+	app?: string;
 	source?: string;
-	zone?: FirewallZone | '';
+	destination?: string;
 	comment?: string;
 	disabled?: boolean;
+};
+/** to: 'nas', 'apps' or the ID of a zone. */
+export type FirewallCell = {
+	from: string;
+	to: string;
+	policies: FirewallPolicy[];
+	default: 'allow' | 'deny';
 };
 export type FirewallAutoBlock = {
 	enabled: boolean;
@@ -609,11 +628,18 @@ export type FirewallAutoBlock = {
 };
 export type FirewallConfig = {
 	enabled: boolean;
-	services: Record<string, FirewallZones>;
-	apps: Record<string, FirewallZones>;
-	newApps: FirewallZones;
-	rules: FirewallRule[];
+	zones: FirewallZoneDef[];
+	cells: FirewallCell[];
 	autoBlock: FirewallAutoBlock;
+};
+export type FirewallNetwork = {
+	id: string;
+	kind: 'network' | 'docker' | 'vm' | 'dockerlan';
+	name: string;
+	device?: string;
+	parent?: string;
+	subnets: string[];
+	missing?: boolean;
 };
 export type FirewallService = {
 	id: string;
@@ -636,11 +662,15 @@ export type FirewallBlock = {
 export type FirewallDrop = {
 	at: string;
 	source: string;
-	zone: FirewallZone | 'blocked';
+	/** A zone ID or 'blocked'. */
+	zone: string;
 	protocol: string;
 	port?: number;
 	app?: boolean;
+	forward?: boolean;
+	destination?: string;
 	interface?: string;
+	out?: string;
 };
 export type FirewallStatus = {
 	config: FirewallConfig;
@@ -652,8 +682,10 @@ export type FirewallStatus = {
 	apps: FirewallApp[];
 	homeNetworks: string[] | null;
 	vpnNetworks: string[] | null;
+	networks: FirewallNetwork[];
+	dockerError?: string;
 	clientAddress: string;
-	clientZone: FirewallZone | '';
+	clientZone: string;
 	blocked: FirewallBlock[];
 	recent: FirewallDrop[];
 };
