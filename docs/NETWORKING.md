@@ -68,14 +68,18 @@ manuellem VM-Start prüfen.
   Entwurf an `PUT /api/v1/network` und startet die Probe. Der gewählte Reiter
   steht in `?tab=`.
 - `GET /api/v1/network` liefert zusätzlich `live` (je Netz-ID Schnittstelle,
-  Link und globale Adressen, aus einem einzigen `ip -j address show`) und
-  `migrated` (siehe nächster Abschnitt).
+  Link und globale Adressen, aus einem einzigen `ip -j address show`),
+  `migrated` sowie `topology` und `pendingTopology` (siehe nächster Abschnitt).
+  `config` und `pending` bleiben genau so, wie sie gespeichert sind; ältere
+  Clients und Skripte, die die flachen Felder senden und zurückerwarten,
+  arbeiten unverändert.
 
 ### Übernahme bestehender Einstellungen
 
 Eine `network.json` ohne `networks[]` (alle NAS aus der Zeit der
-Einzelnetz-Ansicht und ohne gespeicherte Netzwerkeinstellung) wird beim Lesen
-des Status in genau ein bevorzugtes Verwaltungsnetz übersetzt (`migrateLegacy`
+Einzelnetz-Ansicht und ohne gespeicherte Netzwerkeinstellung) erscheint im
+Status unter `topology` (und eine Probe unter `pendingTopology`) als genau ein
+bevorzugtes Verwaltungsnetz (`migrateLegacy`
 in `internal/network/migrate.go`):
 
 - Kennung `admin`, Name „LAN“, Zweck Verwaltung, dieselbe VLAN-ID und Bridge.

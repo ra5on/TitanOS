@@ -15,7 +15,7 @@ async function fixture(theme='graphit',width=1440,locale='de',appearance={}) {
  f.data.prefs.appearance={theme,...appearance}; f.data.system.version='0.31.0';
  await f.page.setViewportSize({width,height:width<761?844:1000});
  const config={hostname:'titan-test',ports:['enp1s0'],bondMode:'',vlan:0,bridge:true,dhcp:true,address:'',gateway:'',dns:[],bonds:[],networks:[net('admin','Verwaltung','enp1s0','192.168.1.20/24',true),net('apps','Anwendungen','enp2s0','192.168.30.20/24',false,30)]};
- const network={config,pending:null,pendingSeconds:0,interfaces:[{name:'enp1s0',mac:'52:54:00:00:00:01',carrier:true,speedMbps:2500},{name:'enp2s0',mac:'52:54:00:00:00:02',carrier:true,speedMbps:2500}],device:'br0',addresses:['192.168.1.20/24'],gateway:'192.168.1.1',dns:['192.168.1.1'],configured:true,bridgeReady:true};
+ const network={config,pending:null,topology:config,pendingTopology:null,pendingSeconds:0,interfaces:[{name:'enp1s0',mac:'52:54:00:00:00:01',carrier:true,speedMbps:2500},{name:'enp2s0',mac:'52:54:00:00:00:02',carrier:true,speedMbps:2500}],device:'br0',addresses:['192.168.1.20/24'],gateway:'192.168.1.1',dns:['192.168.1.1'],configured:true,bridgeReady:true};
  const tokens=[], jobs=[];
  await f.ctx.route('**/api/v1/**',async route=>{
   const path=new URL(route.request().url()).pathname.slice(7), method=route.request().method();

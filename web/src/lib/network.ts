@@ -19,8 +19,9 @@ export type NASNetwork = {
 };
 export type NetworkConfig = {
 	hostname: string;
-	// The flat fields of network.json. The NAS derives networks[] from them
-	// for older configurations (`migrated`); the page only edits networks[].
+	// The flat fields of network.json. For older configurations (`migrated`)
+	// the NAS derives networks[] from them in `topology`; the page only edits
+	// networks[].
 	ports: string[];
 	bondMode: string;
 	vlan: number;
@@ -46,6 +47,10 @@ export type NetworkStatus = {
 	configured: boolean;
 	bridgeReady: boolean;
 	migrated?: boolean;
+	// config and pending in the multi-network form (older configurations
+	// converted, others unchanged); config and pending stay as stored.
+	topology: NetworkConfig;
+	pendingTopology: NetworkConfig | null;
 	live?: Record<string, NetworkLive>;
 };
 

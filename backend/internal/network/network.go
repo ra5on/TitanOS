@@ -110,9 +110,13 @@ type Status struct {
 	Gateway   string   `json:"gateway"`
 	DNS       []string `json:"dns"`
 	// Migrated says that Config (and Pending) only have the flat fields on
-	// disk; their networks[] were derived for display and editing and take
-	// effect only through the next change on trial.
-	Migrated bool `json:"migrated"`
+	// disk. Config and Pending stay exactly as stored, so older clients and
+	// scripts keep the flat form; Topology and PendingTopology are the
+	// multi-network form the page shows and edits. It takes effect only
+	// through the next change on trial.
+	Migrated        bool    `json:"migrated"`
+	Topology        Config  `json:"topology"`
+	PendingTopology *Config `json:"pendingTopology"`
 	// Live is, per network ID, the interface carrying it with its link state
 	// and global addresses right now.
 	Live map[string]Live `json:"live"`
@@ -786,18 +790,14 @@ func (m *Manager) Status(ctx context.Context) Status {
 	}
 	up := uplink(status.Interfaces, routeDevice)
 	var devices map[string]string
-	if len(status.Config.Networks) == 0 {
-		status.Migrated = true
-		status.Config = migrateLegacy(status.Config, up)
-	}
-	if status.Pending != nil && len(status.Pending.Networks) == 0 {
-		migrated := migrateLegacy(*status.Pending, up)
-		status.Pending = &migrated
-		devices = liveDevices(shown, migrated, routeDevice)
-	} else if status.Pending != nil {
-		devices = liveDevices(shown, *status.Pending, routeDevice)
+	status.Migrated = len(status.Config.Networks) == 0
+	status.Topology = migrateLegacy(status.Config, up)
+	if status.Pending != nil {
+		pending := migrateLegacy(*status.Pending, up)
+		status.PendingTopology = &pending
+		devices = liveDevices(shown, pending, routeDevice)
 	} else {
-		devices = liveDevices(shown, status.Config, routeDevice)
+		devices = liveDevices(shown, status.Topology, routeDevice)
 	}
 	status.Live = m.readLive(ctx, devices)
 	if status.Device != "" {

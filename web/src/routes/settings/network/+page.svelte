@@ -53,7 +53,7 @@
 		discard = $state(false),
 		destination = '';
 
-	const current = $derived(status?.pending ?? status?.config ?? null);
+	const current = $derived(status?.pendingTopology ?? status?.topology ?? null);
 	const dirty = $derived(!!draft && !!current && JSON.stringify(draft) !== JSON.stringify(current));
 	const locked = $derived(busy || !!status?.pending);
 	const ports = $derived(status?.interfaces ?? []);
@@ -78,7 +78,7 @@
 		status = r.network;
 		modes = r.bondModes;
 		if (r.timezone !== undefined) timezone = r.timezone;
-		if (!keep) draft = structuredClone(r.network.pending ?? r.network.config);
+		if (!keep) draft = structuredClone(r.network.pendingTopology ?? r.network.topology);
 		if (!r.network.pending) lost = false;
 	}
 	async function load() {
@@ -127,7 +127,7 @@
 				);
 			} else {
 				status = res.network;
-				draft = structuredClone(res.network.pending ?? res.network.config);
+				draft = structuredClone(res.network.pendingTopology ?? res.network.topology);
 			}
 		} catch (e) {
 			if (e instanceof ApiError && e.code === 'unreachable') lost = true;
@@ -145,14 +145,14 @@
 				{},
 			);
 			status = res.network;
-			draft = structuredClone(res.network.pending ?? res.network.config);
+			draft = structuredClone(res.network.pendingTopology ?? res.network.topology);
 		} catch (e) {
 			// While bonds or VLANs settle, the answer to "confirm" can be cut
 			// off after the NAS stored it: what counts is the state now.
 			if (kind === 'confirm' && !(e instanceof ApiError && e.status >= 400)) {
 				await load();
 				if (status && !status.pending) {
-					draft = structuredClone($state.snapshot(status.config));
+					draft = structuredClone($state.snapshot(status.topology));
 					return;
 				}
 			}
@@ -219,7 +219,7 @@
 		onconfirm={() => settle('confirm')}
 		onrevert={() => settle('revert')}
 	>
-		{#each status.pending.networks ?? [] as n (n.id)}{#if n.management && managementURL(n, location.href)}<a
+		{#each status.pendingTopology?.networks ?? [] as n (n.id)}{#if n.management && managementURL(n, location.href)}<a
 					href={managementURL(n, location.href)}>{t('netx.openManagement')}</a
 				>{/if}{/each}
 	</TrialBanner>
@@ -288,7 +288,7 @@
 		/>
 	{:else if tab === 'diagnostics'}
 		<DiagnosticsTab
-			networks={status.pending ? [] : (status.config.networks ?? [])}
+			networks={status.pending ? [] : (status.topology.networks ?? [])}
 			pending={!!status.pending}
 			bind:selected={diagnose}
 		/>

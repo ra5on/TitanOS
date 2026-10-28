@@ -108,7 +108,7 @@ func TestLegacyStatusMigratesWithoutTouchingTheSystem(t *testing.T) {
 	before := files(t, m)
 	runner.commands = nil
 	status := m.Status(ctx)
-	if !status.Migrated || len(status.Config.Networks) != 1 || status.Config.Networks[0].Parent != "enp1s0" || !status.Config.Bridge {
+	if !status.Migrated || len(status.Topology.Networks) != 1 || status.Topology.Networks[0].Parent != "enp1s0" || !status.Config.Bridge {
 		t.Fatalf("%+v", status)
 	}
 	if live := status.Live["admin"]; live.Device != "br0" {
@@ -154,8 +154,13 @@ func TestApplyingTheMigrationIsOnTrialAndRevertible(t *testing.T) {
 	}
 	legacyFiles := files(t, m)
 
-	// What the page sends back is the status' config, with networks[].
-	draft := m.Status(ctx).Config
+	// What the page sends back is the status' topology, with networks[];
+	// config itself stays in the stored flat form for older clients.
+	status := m.Status(ctx)
+	if len(status.Config.Networks) != 0 {
+		t.Fatalf("config rewritten: %+v", status.Config)
+	}
+	draft := status.Topology
 	if err := m.Change(ctx, draft); err != nil {
 		t.Fatal(err)
 	}
