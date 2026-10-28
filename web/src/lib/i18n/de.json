@@ -6335,5 +6335,7 @@
 	"swap.doneText": "{volume} ist wieder vollständig.",
 	"swap.pullNow": "{disk} (Seriennummer {serial}) kann jetzt ausgebaut werden.",
 	"swap.toStorage": "Zum Speicher",
-	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht"
+	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht",
+	"terminal.user": "Benutzer",
+	"terminal.userDefault": "wie das Image"
 }

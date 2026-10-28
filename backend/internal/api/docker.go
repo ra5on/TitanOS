@@ -299,10 +299,14 @@ func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 
 // handleContainerConsole connects a WebSocket to a shell inside a container.
 func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) {
-	id, shell := r.PathValue("id"), r.URL.Query().Get("shell")
+	id, shell, user := r.PathValue("id"), r.URL.Query().Get("shell"), r.URL.Query().Get("user")
 	// The short form of the ID, as Docker's own tools show it.
-	s.serveConsole(w, r, "container "+id[:min(len(id), 12)], func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
-		return s.opts.Docker.Console(ctx, id, shell)
+	target := "container " + id[:min(len(id), 12)]
+	if user != "" {
+		target += " as " + user
+	}
+	s.serveConsole(w, r, target, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		return s.opts.Docker.Console(ctx, id, shell, user)
 	})
 }
 

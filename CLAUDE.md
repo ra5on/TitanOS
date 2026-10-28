@@ -490,7 +490,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Terminal-Symbol ohne Text in der Kopfzeile auf jeder Seite (zusätzlich Strg+`). Öffnet ein Panel am unteren Rand, Höhe ziehbar, Seite darüber bleibt bedienbar; auch als eigener Browser-Tab.
 - Mehrere Sitzungen als Tabs, gekennzeichnet nach Art:
   - **NAS** – root-Shell auf dem Host (PTY im Backend). Hinweis beim Start: Änderungen im RAM-Rootfs gehen beim NAS-Neustart verloren; Systemkonfiguration gehört nach `/config`, Nutzdaten auf gemountete Daten-Volumes.
-  - **CT** – Container-Konsole per `docker exec`, Shell automatisch/bash/sh wählbar; eine Benutzerwahl ist noch nicht umgesetzt. Auch aus dem Schnellmenü der Docker-Übersicht („Konsole“).
+  - **CT** – Container-Konsole per `docker exec`, Shell automatisch/bash/sh wählbar, Benutzer wählbar (Name, UID oder UID:GID; leer = wie das Image, seit 0.35.0, im Protokoll vermerkt). Auch aus dem Schnellmenü der Docker-Übersicht („Konsole“).
 - „+“ öffnet: neue NAS-Shell, Konsole eines laufenden Containers, VM-Konsole.
 - Werkzeuge: Suchen im Verlauf, Kopieren, Einfügen, Schriftgröße. Farben folgen dem Theme. Sitzungen laufen weiter, wenn das Panel minimiert oder die Seite gewechselt wird.
 - Technik: xterm.js im Browser, WebSocket zu titand, PTY über `golang.org/x/sys` bzw. Docker-Exec-API.
@@ -499,7 +499,7 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 - Umgesetzt: Panel am unteren Rand (Knopf in der Kopfzeile, Strg+`), Höhe ziehbar, Tabs für NAS-Shell und Container-Konsolen, „+“-Menü, Shell-Auswahl (automatisch/bash/sh) für Container, Suchen, Kopieren, Einfügen, Schriftgröße, eigener Browser-Tab (`/terminal`). Sitzungen laufen weiter, wenn das Panel minimiert oder die Seite gewechselt wird – nicht aber über ein Neuladen der Seite hinweg. Abschalten unter „Einstellungen“ (`/config/system/terminal.json`) beendet offene Sitzungen sofort.
 - Die NAS-Shell ist `bash --login` als root hinter einem Pseudo-Terminal (`backend/internal/terminal`, nur `golang.org/x/sys`, kein creack/pty). Im Entwicklungsmodus gibt es sie nicht – es wäre eine Shell auf dem Rechner des Entwicklers.
 - Umgesetzt: Die erneute Passwort-Eingabe vor dem Herunterladen von Sticksicherungen ist unter „Einstellungen“ abschaltbar (`/config/system/terminal.json`, `noConfirm`; ab Werk bleibt sie an). Ausgeschaltet genügt der Anmelde-Cookie; Beschränkung auf Administratoren, Abbruch nach 15 Minuten ohne Eingabe und das Protokoll bleiben. Die Seite nennt das Risiko (ein gestohlener Cookie genügt dann auch für diese sensiblen Zugriffe). Das Passwort für das Backup-Passwort eines Auftrags bleibt unberührt.
-- Erneute Bestätigung berücksichtigt bei aktivierter 2FA auch TOTP. Benutzerwahl für Container-Konsolen bleibt offen.
+- Erneute Bestätigung berücksichtigt bei aktivierter 2FA auch TOTP.
 
 **VMs: Stand der Umsetzung**
 - Erstellen/Bearbeiten verwenden den bestätigten Kachelentwurf vom 24. Oktober 2026: Allgemein, CPU/RAM, Datenträger, Installation/Start sowie Netzwerk/Erweiterungen; Zusammenfassung rechts, mobil darunter. VM-Ordner, Firmware, Größenvorgaben, Datenträgerhinweise, PCI/USB und NAS-Ordner sind am passenden Ort aufklappbar. Bestehende Funktions- und Laufzeitbeschränkungen gelten weiter.
