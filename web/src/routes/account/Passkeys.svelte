@@ -147,17 +147,21 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		padding: 18px;
+		font-size: 0.875rem;
 	}
 	section p {
 		margin: 0;
 	}
 	.key {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
-		padding: 10px 0;
-		border-top: 1px solid var(--border);
+		gap: 10px 16px;
+		padding: 10px 12px;
+		border: 1px solid var(--panel-border);
+		border-radius: var(--radius-ctl);
 	}
 	.key > div {
 		display: flex;
