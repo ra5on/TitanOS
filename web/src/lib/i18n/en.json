@@ -6335,5 +6335,19 @@
 	"swap.doneText": "{volume} is complete again.",
 	"swap.pullNow": "{disk} (serial {serial}) can be pulled now.",
 	"swap.toStorage": "To storage",
-	"activity.do.diskReplace": "Disk swapped while running"
+	"activity.do.diskReplace": "Disk swapped while running",
+	"dashboard.templates.button": "Template …",
+	"dashboard.templates.title": "Template",
+	"dashboard.templates.intro": "Replaces the tiles in the editor with a ready-made arrangement. Undo brings the previous one back; nothing is stored before \"Save\". Appearance and background stay.",
+	"dashboard.templates.use": "Use",
+	"dashboard.templates.default": "Overview",
+	"dashboard.templates.defaultText": "The default arrangement: system, apps, processor, VMs, memory, volumes, shares, network, temperatures.",
+	"dashboard.templates.storage": "Storage",
+	"dashboard.templates.storageText": "Volumes, disks, shares and temperatures at a glance.",
+	"dashboard.templates.apps": "Apps and VMs",
+	"dashboard.templates.appsText": "Docker apps and VMs large, with load and network.",
+	"dashboard.templates.remote": "Remote access",
+	"dashboard.templates.remoteText": "Devices in Tailscale and NetBird, network and system.",
+	"dashboard.templates.minimal": "Plain",
+	"dashboard.templates.minimalText": "Only system, volumes and apps."
 }

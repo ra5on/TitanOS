@@ -6335,5 +6335,19 @@
 	"swap.doneText": "{volume} ist wieder vollständig.",
 	"swap.pullNow": "{disk} (Seriennummer {serial}) kann jetzt ausgebaut werden.",
 	"swap.toStorage": "Zum Speicher",
-	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht"
+	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht",
+	"dashboard.templates.button": "Vorlage …",
+	"dashboard.templates.title": "Vorlage",
+	"dashboard.templates.intro": "Ersetzt die Kacheln im Editor durch eine fertige Anordnung. Rückgängig holt die vorige zurück; gespeichert wird erst mit „Speichern“. Darstellung und Hintergrund bleiben.",
+	"dashboard.templates.use": "Übernehmen",
+	"dashboard.templates.default": "Übersicht",
+	"dashboard.templates.defaultText": "Die Standard-Anordnung: System, Apps, Prozessor, VMs, Speicher, Volumes, Freigaben, Netzwerk, Temperaturen.",
+	"dashboard.templates.storage": "Speicher",
+	"dashboard.templates.storageText": "Volumes, Platten, Freigaben und Temperaturen im Blick.",
+	"dashboard.templates.apps": "Apps und VMs",
+	"dashboard.templates.appsText": "Docker-Apps und VMs groß, dazu Auslastung und Netzwerk.",
+	"dashboard.templates.remote": "Fernzugriff",
+	"dashboard.templates.remoteText": "Geräte in Tailscale und NetBird, Netzwerk und System.",
+	"dashboard.templates.minimal": "Schlicht",
+	"dashboard.templates.minimalText": "Nur System, Volumes und Apps."
 }

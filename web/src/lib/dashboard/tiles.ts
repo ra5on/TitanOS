@@ -211,3 +211,25 @@ export function sanitizeLayout(input: unknown): TilePlacement[] {
 	}
 	return layout;
 }
+
+/** Ready-made dashboards to start from (Dashboard editor › Template). */
+export const DASHBOARD_TEMPLATES = {
+	storage: ['system', 'volumes', 'disks', 'shares', 'temperatures', 'network'],
+	apps: ['docker', 'vms', 'cpu', 'memory', 'network', 'volumes'],
+	remote: ['tailscale', 'netbird', 'network', 'system', 'cpu', 'memory'],
+	minimal: ['system', 'volumes', 'docker'],
+} as const satisfies Record<string, readonly StaticTileId[]>;
+export type DashboardTemplate = keyof typeof DASHBOARD_TEMPLATES;
+
+/** The tiles of a template the account may have, in its order; the first one wide. */
+export function templateLayout(template: DashboardTemplate, admin: boolean): TilePlacement[] {
+	return DASHBOARD_TEMPLATES[template]
+		.filter((id) => admin || !ADMIN_TILES.includes(id))
+		.map((id, i) => ({
+			id,
+			w: 6,
+			h: 2,
+			span: i === 0 && template !== 'minimal' ? 2 : 1,
+			autoHeight: true,
+		}));
+}
