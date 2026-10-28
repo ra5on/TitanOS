@@ -6874,5 +6874,7 @@
 	"error.passkey_failed": "The passkey was not accepted.",
 	"error.passkey_exists": "This passkey is already registered.",
 	"error.passkey_not_found": "This passkey no longer exists.",
-	"error.too_many_passkeys": "This account already holds the most passkeys allowed (10)."
+	"error.too_many_passkeys": "This account already holds the most passkeys allowed (10).",
+	"tailscale.httpsOffLink": "At {name} TitanOS still shows its self-signed certificate. One click turns on HTTPS certificates for your tailnet at Tailscale; TitanOS then gets the valid certificate by itself (needed for passkeys and notifications on the iPhone). The name then appears in public certificate logs.",
+	"tailscale.httpsEnable": "Turn on HTTPS in the tailnet"
 }
