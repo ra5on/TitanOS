@@ -140,7 +140,9 @@ func TestDownloadStallTimeoutKeepsPartForResume(t *testing.T) {
 
 func TestDownloadSlowButSteadyHasNoTotalDeadline(t *testing.T) {
 	old := downloadStall
-	downloadStall = 200 * time.Millisecond
+	// Five times the pause between chunks: a busy CI runner must not turn a
+	// steady download into a stall.
+	downloadStall = 500 * time.Millisecond
 	t.Cleanup(func() { downloadStall = old })
 	var data []byte
 	m, _, data, manifest, url := downloadFixture(t, func(_ *rangeServer, w http.ResponseWriter, r *http.Request) {

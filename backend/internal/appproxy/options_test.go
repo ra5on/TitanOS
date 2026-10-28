@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -304,5 +305,88 @@ func TestVerifyTLS(t *testing.T) {
 	m.SetRoute("vault", Route{Enabled: true, Name: "vault", Port: port, VerifyTLS: true})
 	if m.Settings().Apps["vault"].VerifyTLS {
 		t.Error("certificate check stored for HTTP")
+	}
+}
+
+func TestFullDomains(t *testing.T) {
+	m, store := newTestManager(t)
+	if err := m.SetGeneral(General{Domain: ptr("home.example.org")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRoute("immich", Route{Enabled: true, Name: "immich", Port: 2283, Domains: []string{"Photos.NAS.ipv64.de.", "photos.nas.ipv64.de"}}); err != nil {
+		t.Fatal(err)
+	}
+	if key, _, ok := m.match("photos.nas.ipv64.de:443"); !ok || key != "app:immich" {
+		t.Fatalf("full domain not matched: %q %v", key, ok)
+	}
+	if _, _, ok := m.match("other.nas.ipv64.de"); ok {
+		t.Fatal("a name under the full domain matched")
+	}
+	// The app editor sends no domains: they stay.
+	if err := m.SetRoute("immich", Route{Enabled: true, Name: "immich", Port: 2284}); err != nil {
+		t.Fatal(err)
+	}
+	route, _ := m.Route("immich")
+	if len(route.Domains) != 1 || route.Domains[0] != "photos.nas.ipv64.de" {
+		t.Fatalf("domains lost: %v", route.Domains)
+	}
+	// Unique over apps and targets, validated, at most eight.
+	if err := m.SetTarget("ha", Route{Enabled: true, Name: "ha", Host: "192.168.1.30", Port: 8123, Domains: []string{"photos.nas.ipv64.de"}}); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("domain taken twice: %v", err)
+	}
+	for _, bad := range []string{"nas", "x.local", "*.nas.ipv64.de", "a_b.example.org"} {
+		if err := m.SetTarget("ha", Route{Enabled: true, Name: "ha", Host: "192.168.1.30", Port: 8123, Domains: []string{bad}}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%q taken: %v", bad, err)
+		}
+	}
+	if err := m.SetTarget("ha", Route{Enabled: true, Name: "ha", Host: "192.168.1.30", Port: 8123}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddDomain(true, "ha", "ha.nas.ipv64.de"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddDomain(true, "ha", "photos.nas.ipv64.de"); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("add taken domain: %v", err)
+	}
+	if err := m.AddDomain(false, "missing", "x.nas.ipv64.de"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("add to missing route: %v", err)
+	}
+	if target, key, ok := m.DomainRoute("HA.nas.ipv64.de"); !ok || !target || key != "ha" {
+		t.Fatalf("owner: %v %q %v", target, key, ok)
+	}
+	// Addresses, certificate names and the list for Let's Encrypt.
+	info := m.Info()
+	if urls := info.Targets[0].URLs; urls[len(urls)-1] != "https://ha.nas.ipv64.de" {
+		t.Fatalf("urls %v", urls)
+	}
+	names := m.CertificateNames("ha.nas.ipv64.de")
+	if !slices.Contains(names, "ha.nas.ipv64.de") || !slices.Contains(names, "photos.nas.ipv64.de") || !slices.Contains(names, "*.home.example.org") {
+		t.Fatalf("certificate names %v", names)
+	}
+	if got := m.Domains(); !slices.Equal(got, []string{"ha.nas.ipv64.de", "photos.nas.ipv64.de"}) {
+		t.Fatalf("domains %v", got)
+	}
+	// Kept on the stick and read back.
+	again := NewManager(store)
+	again.Hostname = m.Hostname
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := again.match("ha.nas.ipv64.de"); !ok {
+		t.Fatal("domain lost after a restart")
+	}
+	// Switched off, a route answers to none of its domains.
+	if err := m.RemoveDomain("photos.nas.ipv64.de"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := m.match("photos.nas.ipv64.de"); ok {
+		t.Fatal("removed domain still answers")
+	}
+	if err := m.RemoveDomain("photos.nas.ipv64.de"); err != nil {
+		t.Fatalf("removing twice: %v", err)
+	}
+	m.SetGeneral(General{Off: ptr(true)})
+	if _, _, ok := m.match("ha.nas.ipv64.de"); ok || len(m.Domains()) != 0 {
+		t.Fatal("domain answers with every name off")
 	}
 }

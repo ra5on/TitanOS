@@ -7,7 +7,37 @@
 	import { userSettingsPaths } from '#lib/settings-search.ts';
 	import { loadSettingsStates } from '#lib/settings-states.svelte.ts';
 	import SettingsSidebar from '#lib/components/SettingsSidebar.svelte';
+	import { terminal } from '#lib/terminal.svelte.ts';
 	let { children }: { children: Snippet } = $props();
+	// The sidebar starts below banners and the tasks row, not right under the
+	// header, and an open terminal covers the bottom: its height follows the
+	// space that is really visible, so the last entry can always be reached.
+	let aside = $state<HTMLElement>();
+	let room = $state(0);
+	function measure() {
+		if (!aside) return;
+		const covered = terminal.open && !terminal.full ? terminal.height : 0;
+		const pad = parseFloat(getComputedStyle(aside).getPropertyValue('--page-pad')) || 20;
+		room = Math.max(160, window.innerHeight - Math.max(aside.getBoundingClientRect().top, 0) - covered - pad);
+	}
+	$effect(() => {
+		void terminal.open;
+		void terminal.height;
+		void terminal.full;
+		measure();
+		let frame = 0;
+		const later = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(measure);
+		};
+		window.addEventListener('scroll', later, { passive: true });
+		window.addEventListener('resize', later);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener('scroll', later);
+			window.removeEventListener('resize', later);
+		};
+	});
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const allowed = $derived(admin || userSettingsPaths.includes(page.url.pathname.replace(/\/$/, '')));
 	const overview = $derived(page.url.pathname.replace(/\/$/, '') === '/settings');
@@ -19,7 +49,9 @@
 <!-- A sidebar beside every settings page (desktop); on phones the overview is
      the list and the pages behind it get a way back instead. -->
 <div class="settings-shell" class:overview>
-	<div class="settings-aside tile"><SettingsSidebar /></div>
+	<div class="settings-aside tile" bind:this={aside} style:max-height={room ? `${room}px` : undefined}>
+		<SettingsSidebar />
+	</div>
 	<div class="settings-main">
 		{#if !overview}<a class="settings-back" href="/settings">‹ {t('nav.settings')}</a>{/if}
 		{#if allowed}<div class="settings-page column">{@render children()}</div>{:else}<p
@@ -44,7 +76,7 @@
 		top: calc(60px + var(--page-pad));
 		max-height: calc(100dvh - 60px - 2 * var(--page-pad));
 		overflow-y: auto;
-		overscroll-behavior: contain;
+		/* At its end the wheel moves the page on (no overscroll-behavior: contain). */
 		/* A surface of its own keeps the list readable over a background image. */
 		padding: 10px 8px 12px;
 	}

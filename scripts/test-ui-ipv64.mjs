@@ -80,6 +80,12 @@ function ipv64Data() {
       }],
     }],
     app: { ports: [2283], firewall: true, zones: { home: true, vpn: true, internet: false }, keySource: "ddns" },
+    ddns: {
+      settings: { enabled: true, hostnames: ["nas.ipv64.de"], provider: { type: "ipv64" }, ipv4: true, ipv6: true, interval: 10, heartbeat: { enabled: false } },
+      secrets: { token: true }, currentIPv4: "203.0.113.10", publishedIPv4: "203.0.113.10", lastCheck: time, lastUpdate: time, running: false, heartbeat: {},
+    },
+    assignments: [{ domain: "nas.ipv64.de", zone: "nas.ipv64.de", target: "nas", dns: "ddns", url: "https://nas.ipv64.de" }],
+    proxy: { domain: "", suffixes: ["titan-test.local"], apps: [], targets: [{ app: "ha", enabled: true, name: "ha", host: "192.168.1.30", port: 8123, scheme: "http", urls: [] }], mdns: true, defaultLocalName: "titan-test", tailnet: { available: false, keySet: false } },
   };
 }
 
@@ -146,6 +152,23 @@ async function routeIPv64(ctx, d) {
       d.status.status.tunnel = { up: true, routes: ["10.64.0.0/24"] };
       return json(d.status.status.tunnel);
     }
+    const assignList = () => ({ domains: d.domains, assignments: d.assignments, zones: d.status.zones, ddns: { enabled: true, provider: "ipv64", hostnames: d.ddns.settings.hostnames, max: 8 }, firewall: true });
+    if (path === "/ipv64/assignments") return json(assignList());
+    if (path.startsWith("/ipv64/assignments/")) {
+      const name = decodeURIComponent(path.split("/")[3]);
+      d.assignments = d.assignments.filter((a) => a.domain !== name);
+      if (method === "PUT") {
+        const body = route.request().postDataJSON();
+        const target = body.public ? "public" : body.target;
+        d.assignments.push({ domain: name, zone: "nas.ipv64.de", target, app: body.app || body.targetId, port: body.port, dns: target === "public" ? "" : "wildcard", url: `https://${name}` });
+      }
+      return json(assignList());
+    }
+    if (path === "/ipv64/ddns" && method === "PUT") {
+      const body = route.request().postDataJSON();
+      Object.assign(d.ddns.settings, body, { provider: { type: "ipv64", ipv6Prefix: body.ipv6Prefix } });
+      return json(d.ddns);
+    }
     if (path.startsWith("/ipv64/apps/")) {
       if (method === "PUT") {
         const body = route.request().postDataJSON();
@@ -158,6 +181,8 @@ async function routeIPv64(ctx, d) {
     }
     return json({});
   });
+  await ctx.route("**/api/v1/network/ddns", (route) => route.fulfill({ json: d.ddns }));
+  await ctx.route("**/api/v1/docker/proxy", (route) => route.fulfill({ json: d.proxy }));
   await ctx.route("**/api/v1/docker/apps/photos", (route) =>
     route.fulfill({ json: { compose: "services:\n  server:\n    image: immich:test\n    ports:\n      - 2283:2283\n" } }),
   );
@@ -210,6 +235,62 @@ try {
   await page.getByRole("dialog").getByText("TitanOS übernimmt den neuen Token automatisch").waitFor();
   await page.getByRole("dialog").getByRole("button", { name: "Neuen Token erzeugen" }).click();
   await page.getByText("TitanOS hat ihn für dynamisches DNS übernommen").waitFor();
+
+  // 2b DynDNS: the settings of dynamic DNS with IPv64, no second key.
+  await page.getByRole("row", { name: /nas\.ipv64\.de/ }).getByRole("link", { name: "dyn. DNS" }).click();
+  await page.getByRole("tab", { name: "DynDNS", exact: true, selected: true }).waitFor();
+  await page.getByText("DynDNS mit IPv64").waitFor();
+  assert.equal(await page.locator("form[aria-labelledby=ipv64-dyn-settings] input[type=password]").count(), 0, "no second key field");
+  await page.getByLabel("Name unter einer Domain").fill("photos.nas.ipv64.de");
+  await page.getByRole("button", { name: "Aufnehmen", exact: true }).last().click();
+  await page.getByLabel(/^Präfix/).selectOption("auto");
+  await page.locator("form[aria-labelledby=ipv64-dyn-settings]").getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.getByText("Gespeichert.").first().waitFor();
+  const saved = JSON.parse(d.calls.findLast(([m, p]) => m === "PUT" && p === "/ipv64/ddns")[2]);
+  assert.deepEqual(saved.hostnames, ["nas.ipv64.de", "photos.nas.ipv64.de"]);
+  assert.equal(saved.ipv6Prefix, "auto");
+  await page.getByRole("row", { name: /example\.org/ }).getByRole("button", { name: "Router-Update …" }).click();
+  await page.getByRole("dialog").getByText("nic/update?key=<update-token>&domain=example.org").waitFor();
+  await page.screenshot({ path: `${out}/2b-dyndns-router.png` });
+  await page.getByRole("dialog").getByRole("button", { name: "Schließen" }).click();
+  await page.getByText("Erreichbarkeit überwachen").first().waitFor();
+  await page.screenshot({ path: `${out}/2b-dyndns.png`, fullPage: true });
+
+  // 2c Assignments: a name under the domain to a VM/device, then to an app over the CDN.
+  await tab(page, "Zuweisungen");
+  await page.getByRole("row", { name: /nas\.ipv64\.de/ }).first().getByText("Weboberfläche dieses NAS").waitFor();
+  await page.getByLabel("Name davor").fill("ha");
+  await page.getByRole("button", { name: "Zuweisen", exact: true }).last().click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: "VM oder Gerät" }).click();
+  await dialog.getByRole("combobox", { name: /^VM oder Gerät/ }).selectOption("ha");
+  await page.screenshot({ path: `${out}/2c-assign-dialog.png` });
+  await dialog.getByRole("button", { name: "Zuweisen", exact: true }).click();
+  await page.getByText("ha.nas.ipv64.de zugewiesen.").waitFor();
+  let sent = JSON.parse(d.calls.findLast(([m, p]) => m === "PUT" && p.startsWith("/ipv64/assignments/"))[2]);
+  assert.deepEqual(sent, { target: "target", targetId: "ha" });
+  await page.getByRole("row", { name: /ha\.nas\.ipv64\.de/ }).getByRole("button", { name: "Ändern …" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: "App", exact: true }).click();
+  await dialog.getByRole("combobox", { name: /^App/ }).selectOption("photos");
+  await dialog.getByRole("radio", { name: "Aus dem Internet über das CDN" }).click();
+  await dialog.getByText("Jeder im Internet kann https://ha.nas.ipv64.de aufrufen.").waitFor();
+  const button = dialog.getByRole("button", { name: "Zuweisen", exact: true });
+  assert.ok(await button.isDisabled(), "needs the own-login box");
+  await dialog.getByLabel("Die App verlangt eine eigene Anmeldung").check();
+  await page.screenshot({ path: `${out}/2c-assign-public.png` });
+  await button.click();
+  await page.getByText("ha.nas.ipv64.de zugewiesen.").waitFor();
+  sent = JSON.parse(d.calls.findLast(([m, p]) => m === "PUT" && p.startsWith("/ipv64/assignments/"))[2]);
+  assert.equal(sent.public, true);
+  assert.equal(sent.confirm, true);
+  assert.equal(sent.port, 2283);
+  await page.getByRole("row", { name: /ha\.nas\.ipv64\.de/ }).getByRole("button", { name: "Zuweisung entfernen" }).click();
+  dialog = page.getByRole("dialog");
+  assert.equal(await dialog.locator("input[type=text]").count(), 0, "no typed confirmation");
+  await dialog.getByRole("button", { name: "Zuweisung entfernen" }).click();
+  await page.getByText("Zuweisung von ha.nas.ipv64.de entfernt.").waitFor();
+  await page.screenshot({ path: `${out}/2c-assignments.png`, fullPage: true });
 
   // 3 Monitoring
   await tab(page, "Überwachung");

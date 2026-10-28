@@ -455,3 +455,25 @@ func TestSettingsValidation(t *testing.T) {
 		t.Fatal("stored token", err)
 	}
 }
+
+func TestAppNamesJoinTheCertificate(t *testing.T) {
+	m := New(config.Open(t.TempDir()))
+	m.AppDomain = func() string { return "home.example.org" }
+	m.AppNames = func() []string {
+		return []string{"photos.home.example.org", "deep.photos.home.example.org", "photos.nas.ipv64.de", "nas.example.org"}
+	}
+	s := Settings{Domains: []string{"nas.example.org"}, Apps: true, Challenge: ChallengeDNS, Provider: dnsprovider.Config{Type: dnsprovider.Cloudflare}}
+	names, _ := m.names(s)
+	// The wildcard covers photos.home…; IPv64 names need IPv64 as provider.
+	if want := []string{"nas.example.org", "*.home.example.org", "deep.photos.home.example.org"}; !slices.Equal(names, want) {
+		t.Fatalf("cloudflare: %v", names)
+	}
+	s.Provider.Type = dnsprovider.IPv64Net
+	if names, _ := m.names(s); !slices.Contains(names, "photos.nas.ipv64.de") {
+		t.Fatalf("ipv64: %v", names)
+	}
+	s.Apps = false
+	if names, _ := m.names(s); !slices.Equal(names, []string{"nas.example.org"}) {
+		t.Fatalf("without apps: %v", names)
+	}
+}

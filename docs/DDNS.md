@@ -67,7 +67,11 @@ OpenAPI-Beschreibung `https://ipv64.net/api/v2/openapi.json` sowie
   Löschen/Zurücksetzen, neuer Update-Token, Überwachung, Ausfallschutz, CDN,
   Cloud Router, Blocklist) stehen seit dem Bereich **Einstellungen › IPv64**
   dort (`docs/IPV64.md`); die Seite Dynamisches DNS verlinkt ihn und behält ihre
-  Updater-Einstellungen. Erzeugt man dort einen neuen Update-Token für eine
+  Updater-Einstellungen. Dieselben Einstellungen (mit IPv64 als festem Anbieter
+  und dem Key des IPv64-Bereichs) lassen sich auch unter Einstellungen › IPv64 ›
+  DynDNS bearbeiten; beide Seiten zeigen sofort dasselbe. Unter IPv64 ›
+  Zuweisungen kommen Namen einzeln dazu oder heraus (`AddHostname`/
+  `RemoveHostname`, der Rest bleibt). Erzeugt man dort einen neuen Update-Token für eine
   Domain, deren Token dynamisches DNS benutzt, übernimmt TitanOS ihn selbst.
 - **Erreichbarkeit überwachen** (Healthcheck, **ab Werk aus**): Erst beim
   Einschalten legt TitanOS bei IPv64 einen Push-Healthcheck an (Name

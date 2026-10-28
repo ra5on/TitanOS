@@ -33,12 +33,27 @@ function firewallData() {
     { id: "backuptarget", ports: [{ protocol: "tcp", ports: ["8750"] }], default: local },
     { id: "vpn", ports: [{ protocol: "udp", ports: ["41641", "51820"] }], default: zones(true, true, true) },
   ];
+  // Settings version 2: built-in zones, one own zone for a lab VLAN with
+  // a Docker network, and every cell as the backend fills them in.
+  const builtin = (id) => ({ id, builtin: true, networks: [], sources: [] });
+  const zoneList = [builtin("home"), builtin("vpn"), builtin("internet"), builtin("docker"), { id: "zlab", name: "Labor", networks: ["net:lab", "docker:media"], sources: ["10.30.0.0/16"] }];
+  const allow = (service) => ({ action: "allow", protocol: "any", service });
+  const cells = [];
+  for (const zone of ["home", "vpn", "internet"]) {
+    cells.push({ from: zone, to: "nas", default: "deny", policies: services.filter((s) => s.default[zone]).map((s) => allow(s.id)) });
+    cells.push({ from: zone, to: "apps", default: zone === "internet" ? "deny" : "allow", policies: [] });
+  }
+  cells.push({ from: "docker", to: "nas", default: "deny", policies: [allow("apps"), { action: "allow", protocol: "any", ports: "53", comment: "DNS" }] });
+  cells.push({ from: "docker", to: "apps", default: "allow", policies: [] });
+  cells.push({ from: "zlab", to: "nas", default: "deny", policies: [allow("ping")] });
+  cells.push({ from: "zlab", to: "apps", default: "deny", policies: [] });
+  for (const from of ["docker", "zlab"])
+    for (const to of zoneList.map((z) => z.id))
+      cells.push({ from, to, default: to === "docker" || to === "zlab" ? "deny" : "allow", policies: [] });
   const config = {
     enabled: false,
-    services: Object.fromEntries(services.map((s) => [s.id, { ...s.default }])),
-    apps: {},
-    newApps: { ...local },
-    rules: [],
+    zones: zoneList,
+    cells,
     autoBlock: { enabled: false, attempts: 10, within: 5, minutes: 60, permanent: false, exemptLocal: true, exempt: [] },
   };
   return {
@@ -53,12 +68,21 @@ function firewallData() {
       apps: [{ key: "photos", name: "Photos", ports: [{ port: 2283, protocol: "tcp" }] }],
       homeNetworks: ["192.168.1.0/24", "fd00:1::/64"],
       vpnNetworks: ["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
+      networks: [
+        { id: "net:lan", kind: "network", name: "LAN", device: "br0", subnets: ["192.168.1.0/24"] },
+        { id: "net:lab", kind: "network", name: "Labor", device: "tvlab", subnets: ["192.168.40.0/24"] },
+        { id: "net:iot", kind: "network", name: "IoT", device: "tviot", subnets: ["192.168.50.0/24"] },
+        { id: "docker:bridge", kind: "docker", name: "bridge", device: "docker0", subnets: ["172.17.0.0/16"] },
+        { id: "docker:media", kind: "docker", name: "media", device: "br-0123456789ab", subnets: ["172.19.0.0/16"] },
+        { id: "docker:titanos-lan-apps", kind: "dockerlan", name: "titanos-lan-apps", parent: "tnapps", subnets: ["192.168.30.0/24"] },
+      ],
       clientAddress: "192.168.1.50",
       clientZone: "home",
       blocked: [{ address: "203.0.113.9", since: time, until: "2026-10-28T09:00:00Z", source: "web", attempts: 10 }],
       recent: [
         { at: time, source: "198.51.100.4", zone: "internet", protocol: "tcp", port: 22, interface: "br0" },
         { at: time, source: "203.0.113.9", zone: "blocked", protocol: "tcp", port: 443, interface: "br0" },
+        { at: time, source: "172.19.0.5", zone: "zlab", protocol: "tcp", port: 22, forward: true, destination: "192.168.1.9", interface: "br-0123456789ab", out: "br0" },
       ],
     },
   };
@@ -166,7 +190,7 @@ try {
     await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
     assert.equal(await nav(page).locator('a[aria-current="page"]').getAttribute("href"), "/settings/firewall");
     assert.equal(await page.locator(".crumbs").first().isVisible(), false, "no breadcrumb beside the sidebar");
-    const button = page.locator(".settings-page .btn").first();
+    const button = page.locator(".settings-page .tile .btn").first();
     await button.waitFor();
     assert.ok((await button.boundingBox()).height <= 32, "compact settings buttons");
     const aside = await page.locator(".settings-aside").boundingBox();
@@ -185,6 +209,55 @@ try {
     assert.deepEqual(fw.actions, ["confirm"]);
     await page.screenshot({ path: `${out}/firewall-desktop-on.png`, fullPage: true });
 
+    // Zone matrix: cells with their state, grey where traffic does not
+    // pass the NAS, the policies of a cell below on click.
+    const cell = (from, to) => page.locator(`[data-cell="${from}>${to}"]`);
+    assert.match(await cell("home", "nas").innerText(), /Teilweise/);
+    assert.match(await cell("internet", "apps").innerText(), /Blockiert/);
+    assert.match(await cell("docker", "internet").innerText(), /Erlaubt/);
+    assert.equal(await cell("home", "internet").count(), 0, "home → internet does not pass the NAS");
+    assert.ok((await page.getByTitle("Läuft nicht über das NAS").count()) > 0);
+    await cell("docker", "zlab").click();
+    await page.getByRole("heading", { name: "Docker → Labor" }).waitFor();
+    await page.getByRole("button", { name: "Richtlinie hinzufügen" }).click();
+    await page.locator("[data-policy='0'] input").nth(1).fill("5432");
+    await page.screenshot({ path: `${out}/firewall-desktop-cell.png`, fullPage: true });
+    assert.match(await cell("docker", "zlab").innerText(), /Teilweise/);
+    // A new zone with the IoT VLAN; on trial with the policy above.
+    await page.getByRole("button", { name: "Zone anlegen" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Name").fill("IoT");
+    await dialog.getByRole("checkbox", { name: /IoT/ }).check();
+    assert.equal(await dialog.getByRole("checkbox", { name: /titanos-lan-apps/ }).isDisabled(), true, "macvlan/ipvlan cannot be assigned");
+    await page.screenshot({ path: `${out}/firewall-desktop-zone-dialog.png`, fullPage: true });
+    await dialog.getByRole("button", { name: "Übernehmen" }).click();
+    await page.getByRole("rowheader", { name: /IoT/ }).waitFor();
+    await page.getByRole("button", { name: "Auf Probe übernehmen" }).click();
+    await page.getByRole("button", { name: "Regeln behalten" }).waitFor();
+    const sent = fw.puts.at(-1);
+    const iot = sent.zones.find((z) => z.name === "IoT");
+    assert.ok(iot && iot.networks.includes("net:iot") && /^z[a-z0-9]+$/.test(iot.id), "new zone sent");
+    assert.deepEqual(sent.cells.find((c) => c.from === "docker" && c.to === "zlab").policies.map((p) => p.ports), ["5432"]);
+    await page.getByRole("button", { name: "Regeln behalten" }).click();
+    await page.getByText("Die neuen Regeln gelten jetzt dauerhaft.").waitFor();
+
+    // Networks: zone per network, Docker by default in the zone Docker.
+    await page.getByRole("tab", { name: "Netze" }).click();
+    await page.locator("[data-network='docker:bridge']").waitFor();
+    assert.equal(await page.locator("[data-network='docker:bridge'] select").inputValue(), "");
+    assert.match(await page.locator("[data-network='docker:bridge'] select option:checked").innerText(), /Standard-Zone Docker/);
+    assert.equal(await page.locator("[data-network='docker:media'] select").inputValue(), "zlab");
+    assert.equal(await page.locator("[data-network='docker:titanos-lan-apps'] select").count(), 0);
+    await page.screenshot({ path: `${out}/firewall-desktop-networks.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Richtlinien" }).click();
+    await page.locator("[data-policy]").first().waitFor();
+    await page.screenshot({ path: `${out}/firewall-desktop-policies.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Auto-Sperre" }).click();
+    await page.getByText("203.0.113.9").waitFor();
+    await page.getByRole("tab", { name: "Protokoll" }).click();
+    await page.getByText("nach 192.168.1.9").waitFor();
+    await page.waitForURL(/tab=recent/);
+
     // Let's Encrypt with HTTP-01 and the firewall off: no hint.
     await page.goto(base + "/settings/letsencrypt");
     await page.getByRole("heading", { level: 1, name: "Let's Encrypt" }).waitFor();
@@ -195,7 +268,7 @@ try {
     const hint = page.getByTestId("le-firewall-http");
     await hint.waitFor();
     await hint.getByText("Port 80 gehört zur Weboberfläche").waitFor();
-    assert.equal(await hint.getByRole("link", { name: "Zur Firewall" }).getAttribute("href"), "/settings/firewall#firewall-rules");
+    assert.equal(await hint.getByRole("link", { name: "Zur Firewall" }).getAttribute("href"), "/settings/firewall?tab=policies#firewall-policies");
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({ path: `${out}/letsencrypt-desktop-http01-firewall.png`, fullPage: true });
     // "Use the DNS challenge" only changes the form; nothing is saved.
@@ -243,6 +316,13 @@ try {
       if (name === "letsencrypt") await page.getByTestId("le-firewall-http").waitFor();
       assert.ok((await overflow(page)) <= 1, `${name}: horizontal scroll`);
       await page.screenshot({ path: `${out}/${name}-mobile.png`, fullPage: true });
+      if (name === "firewall")
+        for (const tab of ["networks", "policies", "autoblock", "recent"]) {
+          await page.goto(`${base}/settings/firewall?tab=${tab}`);
+          await page.getByRole("tab", { selected: true }).waitFor();
+          assert.ok((await overflow(page)) <= 1, `firewall ${tab}: horizontal scroll`);
+          await page.screenshot({ path: `${out}/firewall-mobile-${tab}.png`, fullPage: true });
+        }
     }
     await page.goto(base + "/settings");
     await page.locator(".settings-group").first().waitFor();

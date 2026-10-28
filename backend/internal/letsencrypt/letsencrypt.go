@@ -121,6 +121,10 @@ type Manager struct {
 	HTTPPort bool
 	// AppDomain returns the domain of the app HTTPS names, "" without one.
 	AppDomain func() string
+	// AppNames returns the full domains of single app routes (such as
+	// photos.nas.ipv64.de); with "names for apps" they join the
+	// certificate where the DNS challenge can prove them (see names).
+	AppNames func() []string
 	// Install serves a certificate from now on; nil stops serving one.
 	Install func(*tls.Certificate)
 	// OnEvent reports to the notifications; Activity to the activity log.
@@ -404,7 +408,53 @@ func (m *Manager) names(s Settings) (names []string, appDomain string) {
 			names = append(names, wildcard)
 		}
 	}
+	if s.Apps && s.Challenge == ChallengeDNS && m.AppNames != nil {
+		for _, name := range m.AppNames() {
+			if len(names) >= maxSANs || slices.Contains(names, name) || covered(names, name) || !provable(s, appDomain, name) {
+				continue
+			}
+			names = append(names, name)
+		}
+	}
 	return names, appDomain
+}
+
+// maxSANs is the limit of Let's Encrypt for names in one certificate.
+const maxSANs = 100
+
+// covered tells whether a wildcard in names already holds name.
+func covered(names []string, name string) bool {
+	_, parent, ok := strings.Cut(name, ".")
+	return ok && slices.Contains(names, "*."+parent)
+}
+
+// provable tells whether the DNS provider of the certificate can be
+// expected to answer for an app's full domain: always with IPv64 (whose
+// domains these are), else only under a name the certificate holds
+// anyway. A name it cannot prove would break the whole certificate.
+func provable(s Settings, appDomain, name string) bool {
+	if s.Provider.Type == dnsprovider.IPv64Net {
+		return true
+	}
+	under := func(base string) bool {
+		base = strings.TrimPrefix(base, "*.")
+		return base != "" && (name == base || strings.HasSuffix(name, "."+base))
+	}
+	if under(appDomain) {
+		return true
+	}
+	for _, d := range s.Domains {
+		if under(d) {
+			return true
+		}
+	}
+	return false
+}
+
+// NamesChanged looks again soon whether the certificate still covers
+// every name, e.g. after the routes of apps changed.
+func (m *Manager) NamesChanged() {
+	m.poke(false)
 }
 
 // renewAt is when a certificate should be replaced: 30 days before the end,

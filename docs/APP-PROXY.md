@@ -77,6 +77,16 @@ titand verbindet sich nur mit Adressen im Heimnetz, über Tailscale oder NetBird
 Adresse, auch nach DNS-Auflösung) und nie mit den Ports von titand selbst auf dem
 NAS. Öffentliche Ziele werden abgelehnt.
 
+**Volle Domains je Route** (Feld `domains`, bis 8 je Route): Neben
+`<name>.<suffix>` antwortet eine App oder ein Ziel auf ganze Hostnamen wie
+`photos.nas.ipv64.de`. Jede Domain gehört genau einer Route (über Apps und Ziele
+eindeutig), mindestens zwei Teile, keine Platzhalter, nie `.local`. Eine volle
+Domain wird vor `<name>.<suffix>` erkannt. Gesetzt werden sie unter
+Einstellungen › IPv64 › Zuweisungen (`docs/IPV64.md`), das zugleich den Namen
+per dynamischem DNS auf das NAS zeigen lässt; Formulare ohne `domains` (App-Editor,
+Bearbeiten-Dialog dieser Seite) behalten die gespeicherten. Die Adressen der
+Route nennen sie (`urls`).
+
 ## Ablauf in titand
 
 - Paket `backend/internal/appproxy`. titand bindet weiterhin selbst :443 und :80.
@@ -129,7 +139,17 @@ eingeschalteter Apps:
    dazukommen oder gehen; neu erzeugt wird es nur, wenn sich Hostname oder Domain
    ändern oder es in weniger als 30 Tagen abläuft. Gelesen wird es beim ersten
    Aufruf eines App-Namens nach dem Start, danach nur aus dem RAM. Schlägt das
-   Speichern fehl, gilt es bis zum nächsten Start aus dem RAM.
+   Speichern fehl, gilt es bis zum nächsten Start aus dem RAM. Volle Domains
+   der Routen stehen darin einzeln.
+
+**Volle Domains bei Let's Encrypt:** Mit „Auch HTTPS-Namen der Apps abdecken“
+(nur DNS-01) nimmt Let's Encrypt die vollen Domains eingeschalteter Routen in
+die SAN-Liste auf (`letsencrypt.Manager.AppNames`, höchstens 100 Namen), außer
+ein Platzhalter der Liste deckt sie schon ab. Weil ein Name, den der
+DNS-Anbieter nicht beweisen kann, das ganze Zertifikat scheitern ließe, nur bei
+IPv64 als Anbieter oder für Namen unter der App-Domain bzw. einem Namen des
+Zertifikats. Ändern sich die Routen, sieht Let's Encrypt gleich nach
+(`NamesChanged`).
 
 Browser verlangen die Ausnahme für selbst signierte Zertifikate je Name. Wer das
 vermeiden will, lässt unter Einstellungen › Let's Encrypt ein Zertifikat für
@@ -178,7 +198,7 @@ einfach keine HTTPS-Namen):
 
 Alles außer `apps` mit `enabled`/`name`/`port` ist optional. Felder seit 0.30.0:
 `localName`, `noMDNS`, `off`, `targets` sowie je Route `aliases`, `short`, `host`
-(nur Ziele), `verifyTLS`, `networks`, `paused`. Rücksicht auf 0.29.0, das die
+(nur Ziele), `verifyTLS`, `networks`, `paused`, dazu `domains` (volle Domains). Rücksicht auf 0.29.0, das die
 neuen Felder nicht kennt:
 
 - **Hauptschalter aus:** `off: true`, und jede eingeschaltete Route steht als
@@ -188,6 +208,8 @@ neuen Felder nicht kennt:
   nächstliegende Regel, die 0.29.0 kennt.
 - **Ziele** stehen in einer eigenen Liste `targets`, damit 0.29.0 sie nie als App
   an `127.0.0.1:<Port>` weiterleitet.
+- Ältere titand ignorieren `domains` (die vollen Domains antworten dann mit
+  der Weboberfläche) und verlieren sie beim Speichern der Datei.
 - 0.29.0 ignoriert die übrigen Felder (weitere Namen, Kurznamen, lokaler Name,
   mDNS aus, Zertifikatsprüfung) und verliert sie, wenn es die Datei speichert.
 
@@ -195,9 +217,9 @@ neuen Felder nicht kennt:
 
 Nur Besitzer/Administratoren, jede Änderung im Aktivitätsprotokoll:
 
-- `GET /api/v1/docker/proxy` → `{domain, localName, defaultLocalName, mdns, off, suffixes, apps: [...], targets: [...]}`; je Route `{app, enabled, name, aliases, short, host, port, scheme, verifyTLS, localOnly, networks, urls}` (bei Zielen ist `app` die Kennung)
+- `GET /api/v1/docker/proxy` → `{domain, localName, defaultLocalName, mdns, off, suffixes, apps: [...], targets: [...]}`; je Route `{app, enabled, name, aliases, short, host, port, scheme, verifyTLS, localOnly, networks, domains, urls}` (bei Zielen ist `app` die Kennung)
 - `PUT /api/v1/docker/proxy` mit `{domain?, localName?, mdns?, off?}`; nicht gesendete Felder bleiben unverändert (ältere Seiten schicken nur `domain`)
-- `PUT /api/v1/docker/proxy/apps/{app}` und `PUT /api/v1/docker/proxy/targets/{id}` mit der Route
+- `PUT /api/v1/docker/proxy/apps/{app}` und `PUT /api/v1/docker/proxy/targets/{id}` mit der Route (ohne `domains` bleiben die gespeicherten, `[]` leert sie)
 - `DELETE /api/v1/docker/proxy/apps/{app}`, `DELETE /api/v1/docker/proxy/targets/{id}`
 
 Fehler: `proxy_invalid` (400), `proxy_name_taken` (409). `GET /api/v1/docker`
@@ -261,7 +283,10 @@ Zertifikatsnamen und Hosts-Datei, weitere Namen und ihre Eindeutigkeit über App
 und Ziele, Hauptschalter einschließlich der Sicht von 0.29.0 auf die Datei, eigene
 Netze (auch IPv4 in IPv6), Ziele samt Ablehnung öffentlicher Adressen und der
 Ports von titand bei jeder Verbindung, Zertifikatsprüfung gegen ein selbst
-signiertes Zertifikat. Webtest `web/tests/app-proxy.test.mjs`.
+signiertes Zertifikat. Volle Domains (`TestFullDomains`: Erkennung, Eindeutigkeit,
+Prüfung, Behalten ohne Feld, Zertifikatsnamen, Neustart, Hauptschalter) und ihre
+Aufnahme bei Let's Encrypt (`TestAppNamesJoinTheCertificate`). Webtest
+`web/tests/app-proxy.test.mjs`.
 
 Nicht geprüft: echtes avahi (Neuladen von `/etc/avahi/hosts`, Namenskonflikte im
 Netz, ein von avahi umbenannter NAS-Name wie `nas-2.local`), Browser mit echten

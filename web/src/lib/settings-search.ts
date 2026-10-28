@@ -6,8 +6,10 @@ const keywords: Record<string, string> = {
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
 	firewall:
 		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
-	'firewall-apps': 'docker apps container port ports veröffentlicht published',
-	'firewall-rules': 'regel rule regeln rules eigene own erlauben allow verbieten deny',
+	'firewall-zones': 'zone zonen matrix vlan eigene own docker netz network ziel destination',
+	'firewall-networks': 'netz netze network networks vlan bridge docker br0 docker0 virbr subnetz subnet',
+	'firewall-policies':
+		'richtlinie richtlinien policy policies regel rule regeln rules erlauben allow verbieten deny docker apps port ports',
 	'firewall-autoblock':
 		'auto block automatisch sperren blockieren fehlgeschlagen failed login anmeldung brute force',
 	'firewall-recent': 'gesperrt blocked verworfen dropped pakete packets zuletzt recent',
@@ -46,7 +48,7 @@ const keywords: Record<string, string> = {
 	ddns:
 		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
 	ipv64:
-		'ipv64 ipv64.net konto account api key schlüssel domain dns record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
+		'ipv64 ipv64.net konto account api key schlüssel domain dns dyndns ddns zuweisung zuweisungen assignment assignments record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -82,6 +84,8 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	ipv64: [
 		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
 		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
+		{ id: 'ipv64-dyndns', label: 'ipv64x.tab.dyndns', href: '/settings/ipv64?tab=dyndns' },
+		{ id: 'ipv64-assignments', label: 'ipv64x.tab.assignments', href: '/settings/ipv64?tab=assignments' },
 		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
 		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
 		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
@@ -89,10 +93,11 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'ipv64-blocklist', label: 'ipv64x.tab.blocklist', href: '/settings/ipv64?tab=blocklist' },
 	],
 	firewall: [
-		{ id: 'firewall-apps', label: 'firewall.apps', href: '/settings/firewall#firewall-apps' },
-		{ id: 'firewall-rules', label: 'firewall.rules', href: '/settings/firewall#firewall-rules' },
-		{ id: 'firewall-autoblock', label: 'firewall.autoBlock', href: '/settings/firewall#firewall-autoblock' },
-		{ id: 'firewall-recent', label: 'firewall.recent', href: '/settings/firewall#firewall-recent' },
+		{ id: 'firewall-zones', label: 'firewall.zones', href: '/settings/firewall?tab=zones#firewall-zones' },
+		{ id: 'firewall-networks', label: 'firewall.tab.networks', href: '/settings/firewall?tab=networks#firewall-networks' },
+		{ id: 'firewall-policies', label: 'firewall.tab.policies', href: '/settings/firewall?tab=policies#firewall-policies' },
+		{ id: 'firewall-autoblock', label: 'firewall.autoBlock', href: '/settings/firewall?tab=autoblock#firewall-autoblock' },
+		{ id: 'firewall-recent', label: 'firewall.recent', href: '/settings/firewall?tab=recent#firewall-recent' },
 	],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },

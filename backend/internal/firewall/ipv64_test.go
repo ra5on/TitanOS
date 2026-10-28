@@ -44,10 +44,13 @@ func TestAppZonesAndBlocklistForIPv64(t *testing.T) {
 	if !m.AppZones("immich").Internet {
 		t.Fatal("zones not kept")
 	}
-	var stored Config
+	var stored fileConfig
 	store.ReadJSON(settingsFile, &stored)
-	if !stored.Apps["immich"].Internet {
+	if stored.V2 == nil || !appAllowed(fromFile(stored).Cell(Internet, ToApps), "immich") {
 		t.Fatal("zones not stored")
+	}
+	if !stored.Apps["immich"].Internet {
+		t.Fatal("the view for older titand lacks the app")
 	}
 	if _, err := m.SetAppZones(ctx, "bad key!", Zones{}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("bad key accepted")

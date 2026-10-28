@@ -396,7 +396,6 @@ func (m *Manager) Format(ctx context.Context, id string, req FormatRequest) erro
 	started = true
 	slog.Info("formatting drive", "device", d.path, "model", d.Model, "fs", req.Filesystem, "scheme", scheme)
 	go func() {
-		defer m.operation.Unlock()
 		work, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 		defer cancel()
 		newID, err := m.format(work, job, d, req, scheme)
@@ -405,7 +404,9 @@ func (m *Manager) Format(ctx context.Context, id string, req FormatRequest) erro
 	return nil
 }
 
-// finish ends a format or partition job and tells OnFormatted.
+// finish ends a format or partition job, frees the operation lock and tells
+// OnFormatted. The lock is free before job.done closes, so whoever waited for
+// the job can start the next one right away.
 func (m *Manager) finish(job *FormatJob, newID string, err error) {
 	m.mu.Lock()
 	now := m.now()
@@ -419,6 +420,7 @@ func (m *Manager) finish(job *FormatJob, newID string, err error) {
 	}
 	ended := *job
 	m.mu.Unlock()
+	m.operation.Unlock()
 	if m.OnFormatted != nil {
 		m.OnFormatted(ended)
 	}

@@ -149,6 +149,14 @@ def smoke(archive, output, timeout, force_tcg=False):
         def firewall():
             return request('/firewall')
 
+        # Settings version 2: zones × destinations as cells with policies.
+        def nas_cell(cfg, zone):
+            return next(c for c in cfg['cells'] if c['from'] == zone and c['to'] == 'nas')
+
+        def smb_home(cfg):
+            return any(p.get('service') == 'smb' and p['action'] == 'allow' and not p.get('disabled')
+                       for p in nas_cell(cfg, 'home')['policies'])
+
         def health_from_host():
             return request('/health', timeout=10).get('ready')
 
@@ -237,7 +245,9 @@ def smoke(archive, output, timeout, force_tcg=False):
 
                         # c) SMB from home blocked on trial: dropped, recent list, revert; then automatic revert.
                         blocked = json.loads(json.dumps(confirmed['config']))
-                        blocked['services']['smb'] = {'home': False, 'vpn': False, 'internet': False}
+                        for cell in blocked['cells']:
+                            if cell['to'] == 'nas':
+                                cell['policies'] = [p for p in cell['policies'] if p.get('service') != 'smb']
                         request('/firewall/recent', method='DELETE')
                         request('/firewall', blocked, 'PUT')
                         ns_445 = tcp_from_ns(445)
@@ -246,7 +256,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                         assert ns_445 == 'dropped', ns_445
                         assert any(d.get('port') == 445 and d.get('source') == CLIENT for d in drops), drops
                         reverted = request('/firewall/revert', {})
-                        assert not reverted['pending'] and reverted['config']['services']['smb']['home'], reverted
+                        assert not reverted['pending'] and smb_home(reverted['config']), reverted
                         after_revert = tcp_from_ns(445)
                         assert after_revert == 'refused', after_revert
                         # Confirmed block: the host's hostfwd now gets no answer either.
@@ -266,7 +276,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                         auto_seconds = round(time.monotonic() - started, 1)
                         notices = request('/notifications')
                         kinds = [n.get('kind') for n in notices.get('messages') or []]
-                        assert firewall()['config']['services']['smb']['home'] and tcp_from_ns(445) == 'refused'
+                        assert smb_home(firewall()['config']) and tcp_from_ns(445) == 'refused'
                         record('c', namespace445OnTrial=ns_445, droppedInRecentList=True, revert=True, afterRevert=after_revert,
                                host445Blocked=host_445, host445Restored=host_445_open, autoRevertSeconds=auto_seconds,
                                firewallRevertedNotice='firewall_reverted' in kinds, ok=True)
