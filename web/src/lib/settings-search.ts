@@ -16,6 +16,7 @@ const keywords: Record<string, string> = {
 	homeassistant:
 		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation',
 	hardware: 'gpu npu pci usb passthrough hardware',
+	'intel-guc': 'intel igpu grafik graphics guc huc firmware quick sync qsv i915 xe',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
 	files:
@@ -55,6 +56,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 	],
+	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
