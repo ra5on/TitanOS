@@ -188,6 +188,21 @@
 					<option value="sh">sh</option>
 				</select>
 			</label>
+			<label class="shell"><span class="muted">{t('terminal.user')}</span>
+				<input
+					class="field mono user"
+					list="terminal-users"
+					value={current.user ?? ''}
+					placeholder={t('terminal.userDefault')}
+					spellcheck="false"
+					autocapitalize="off"
+					onchange={(event) => {
+						const value = event.currentTarget.value.trim();
+						if (current && value !== (current.user ?? '')) current.user = value || undefined;
+					}}
+				/>
+				<datalist id="terminal-users"><option value="root"></option><option value="1000:1000"></option></datalist>
+			</label>
 		{/if}
 
 		<div class="tools">
@@ -221,7 +236,7 @@
 			<p class="message">{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}</p>
 		{/if}
 		{#each terminal.sessions as session (session.id)}
-			{#key session.shell}
+			{#key `${session.shell}|${session.user ?? ''}`}
 				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active} fontSize={terminal.fontSize} confirmed={info?.enabled === true} onrefused={() => check()} />
 			{/key}
 		{/each}
@@ -416,6 +431,9 @@
 		align-items: center;
 		gap: 6px;
 		font-size: 0.75rem;
+	}
+	.shell .user {
+		width: 8rem;
 	}
 	.shell select {
 		width: auto;

@@ -6402,5 +6402,7 @@
 	"welcome.todoRemoteText": "Tailscale (plugin) or the built-in WireGuard server.",
 	"welcome.todoPush": "Notifications on the phone",
 	"welcome.todoPushText": "Add TitanOS to the home screen and turn on notifications.",
-	"about.setupList": "Open the setup list"
+	"about.setupList": "Open the setup list",
+	"terminal.user": "User",
+	"terminal.userDefault": "as the image"
 }

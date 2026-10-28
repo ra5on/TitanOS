@@ -6402,5 +6402,7 @@
 	"welcome.todoRemoteText": "Tailscale (Plugin) oder der eingebaute WireGuard-Server.",
 	"welcome.todoPush": "Mitteilungen aufs Handy",
 	"welcome.todoPushText": "TitanOS auf den Home-Bildschirm legen und Mitteilungen einschalten.",
-	"about.setupList": "Einrichtungsliste öffnen"
+	"about.setupList": "Einrichtungsliste öffnen",
+	"terminal.user": "Benutzer",
+	"terminal.userDefault": "wie das Image"
 }

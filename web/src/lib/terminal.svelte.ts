@@ -10,6 +10,8 @@ export type TerminalSession = {
 	container: string;
 	/** '' picks bash where the image has it and sh everywhere else. */
 	shell: '' | 'bash' | 'sh';
+	/** For `ct`: the user the shell runs as; empty is the one of the image. */
+	user?: string;
 	started: number;
 };
 

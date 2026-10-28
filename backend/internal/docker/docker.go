@@ -633,7 +633,7 @@ func (m *Manager) CheckUpdates(ctx context.Context) error {
 // Console opens a shell inside a running container: "bash", "sh" or, with
 // an empty name, bash where the image has it and sh everywhere else. The
 // returned function tells the shell the size of the terminal.
-func (m *Manager) Console(ctx context.Context, id, shell string) (io.ReadWriteCloser, func(cols, rows int), error) {
+func (m *Manager) Console(ctx context.Context, id, shell, user string) (io.ReadWriteCloser, func(cols, rows int), error) {
 	if m.Disabled {
 		return nil, nil, ErrDisabled
 	}
@@ -648,7 +648,12 @@ func (m *Manager) Console(ctx context.Context, id, shell string) (io.ReadWriteCl
 	default:
 		return nil, nil, ErrNotFound
 	}
-	exec, err := m.api.execCreate(ctx, id, command)
+	// The user to run the shell as: empty is the one of the image; else a
+	// name, UID or UID:GID that Docker resolves inside the container.
+	if user != "" && !consoleUserRE.MatchString(user) {
+		return nil, nil, ErrInvalid
+	}
+	exec, err := m.api.execCreate(ctx, id, command, user)
 	if err != nil {
 		return nil, nil, mapAPIError(err)
 	}
@@ -675,6 +680,9 @@ func (m *Manager) AppsWithUpdates(ctx context.Context) []string {
 	}
 	return apps
 }
+
+// consoleUserRE is a user name, a UID or UID:GID for a container console.
+var consoleUserRE = regexp.MustCompile(`^([a-z_][a-z0-9_-]{0,31}|[0-9]{1,10})(:[0-9]{1,10})?$`)
 
 var errBackupRunning = fmt.Errorf("%w: an app backup is running", ErrBusy)
 
