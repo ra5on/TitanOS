@@ -6395,5 +6395,12 @@
 	"dashboard.templates.remote": "Remote access",
 	"dashboard.templates.remoteText": "Devices in Tailscale and NetBird, network and system.",
 	"dashboard.templates.minimal": "Plain",
-	"dashboard.templates.minimalText": "Only system, volumes and apps."
+	"dashboard.templates.minimalText": "Only system, volumes and apps.",
+	"welcome.todoBackup": "Back up the data",
+	"welcome.todoBackupText": "A backup job for the shares, to another volume, a second NAS, USB or the cloud.",
+	"welcome.todoRemote": "Access from anywhere",
+	"welcome.todoRemoteText": "Tailscale (plugin) or the built-in WireGuard server.",
+	"welcome.todoPush": "Notifications on the phone",
+	"welcome.todoPushText": "Add TitanOS to the home screen and turn on notifications.",
+	"about.setupList": "Open the setup list"
 }
