@@ -6265,5 +6265,6 @@
 	"error.invalid_health_report": "The schedule of the report is invalid.",
 	"error.no_notify_channel": "No notification channel is switched on yet.",
 	"activity.do.healthReport": "Report about the NAS set up",
-	"activity.do.healthReportSend": "Report about the NAS sent"
+	"activity.do.healthReportSend": "Report about the NAS sent",
+	"nav.back": "Back"
 }
