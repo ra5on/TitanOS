@@ -26,6 +26,10 @@ const (
 const (
 	KindSelfSigned = "self-signed" // made by TitanOS; browsers warn
 	KindCustom     = "custom"      // put in by an administrator
+	// KindLetsEncrypt is fetched by package letsencrypt. It is served to
+	// clients that ask for one of its names; others (by IP address, by
+	// .local name) keep getting the custom or self-signed one.
+	KindLetsEncrypt = "letsencrypt"
 )
 
 // ErrInvalid means a certificate or key is not usable; the message says why.
@@ -41,6 +45,9 @@ type Info struct {
 	NotAfter  time.Time `json:"notAfter"`
 	// Fingerprint is the SHA-256 of the certificate, as browsers show it.
 	Fingerprint string `json:"fingerprint"`
+	// LetsEncrypt describes the certificate from Let's Encrypt that is
+	// served besides, for its names.
+	LetsEncrypt *Info `json:"letsEncrypt,omitempty"`
 }
 
 // Manager holds the certificate of the web UI and swaps it while titand runs.
@@ -52,6 +59,8 @@ type Manager struct {
 	mu      sync.Mutex
 	current atomic.Pointer[tls.Certificate]
 	kind    atomic.Value // string
+	// acme is the certificate from Let's Encrypt, nil without one.
+	acme atomic.Pointer[tls.Certificate]
 	// apps serves the HTTPS names of Docker apps; see apps.go.
 	apps appsCert
 }
@@ -76,9 +85,24 @@ func NewManager(store *config.Store, hostname string) (*Manager, error) {
 	return m, err
 }
 
-// GetCertificate is what the TLS server asks for every connection.
-func (m *Manager) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+// GetCertificate is what the TLS server asks for every connection: the
+// certificate from Let's Encrypt for its names, else the one in use.
+func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if acme := m.acme.Load(); acme != nil && hello != nil && hello.ServerName != "" && covers(acme, hello.ServerName) {
+		return acme, nil
+	}
 	return m.current.Load(), nil
+}
+
+// SetACME serves a certificate from Let's Encrypt from now on, or none
+// with nil. It takes effect with the next connection, without a restart.
+func (m *Manager) SetACME(cert *tls.Certificate) {
+	if cert != nil && cert.Leaf == nil && len(cert.Certificate) > 0 {
+		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
+			cert.Leaf = leaf
+		}
+	}
+	m.acme.Store(cert)
 }
 
 func (m *Manager) loadCustom() (tls.Certificate, error) {
@@ -174,8 +198,22 @@ func (m *Manager) RemoveCustom() error {
 
 // Info describes the certificate in use.
 func (m *Manager) Info() Info {
-	cert := m.current.Load()
-	info := Info{Kind: m.kind.Load().(string), Names: []string{}}
+	info := Describe(m.current.Load())
+	info.Kind = m.kind.Load().(string)
+	if acme := m.acme.Load(); acme != nil {
+		described := Describe(acme)
+		described.Kind = KindLetsEncrypt
+		info.LetsEncrypt = &described
+	}
+	return info
+}
+
+// Describe tells the names, issuer and validity of a certificate.
+func Describe(cert *tls.Certificate) Info {
+	info := Info{Names: []string{}}
+	if cert == nil || len(cert.Certificate) == 0 {
+		return info
+	}
 	leaf := cert.Leaf
 	if leaf == nil {
 		parsed, err := x509.ParseCertificate(cert.Certificate[0])

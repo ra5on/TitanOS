@@ -36,12 +36,14 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -643,6 +645,17 @@ func run(opts options) error {
 	if opts.dev {
 		power = system.NoPower{}
 	}
+	// A shutdown after a power failure (UPS) is no planned one: the
+	// healthcheck of IPv64 keeps watching then.
+	upsPower := power
+	// Planned shutdowns and restarts first pause the healthcheck of IPv64
+	// (dynamic DNS, set further down), so that it raises no alarm.
+	var beforePowerOff func()
+	power = announcedPower{Power: power, before: func() {
+		if beforePowerOff != nil {
+			beforePowerOff()
+		}
+	}}
 
 	// New versions go into the other slot of the stick and start on trial.
 	slot := system.BootSlot()
@@ -794,7 +807,7 @@ func run(opts options) error {
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.
 	supply := ups.NewManager(store)
 	supply.Disabled = opts.dev
-	supply.Poweroff = power.Poweroff
+	supply.Poweroff = upsPower.Poweroff
 	supply.OnEvent = func(kind, subject string) {
 		severity := notify.Warning
 		switch kind {
@@ -919,6 +932,35 @@ func run(opts options) error {
 	machines.Activity = func(action, target string, ok bool) {
 		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
 	}
+	// Certificates from Let's Encrypt, served next to the own or
+	// self-signed one without a restart; renewed by themselves.
+	acmeCerts := letsencrypt.New(store)
+	acmeCerts.Disabled = opts.dev || certs == nil
+	acmeCerts.HTTPPort = !opts.dev && opts.httpAddr != ""
+	acmeCerts.AppDomain = func() string { return routes.Settings().Domain }
+	acmeCerts.Install = func(cert *tls.Certificate) {
+		if certs != nil {
+			certs.SetACME(cert)
+		}
+	}
+	acmeCerts.OnEvent = func(severity, kind, subject string) { notifier.Notify(severity, kind, subject) }
+	acmeCerts.Activity = func(action, target string, ok bool) {
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
+	}
+	if err := acmeCerts.Load(); err != nil {
+		slog.Warn("Let's Encrypt settings not readable from /config", "err", err)
+	}
+	go acmeCerts.Run(ctx)
+	// Dynamic DNS: host names at the public addresses of the NAS.
+	dynamicDNS := ddns.New(store)
+	dynamicDNS.Disabled = opts.dev
+	dynamicDNS.OnEvent = acmeCerts.OnEvent
+	dynamicDNS.Activity = acmeCerts.Activity
+	if err := dynamicDNS.Load(); err != nil {
+		slog.Warn("dynamic DNS settings not readable from /config", "err", err)
+	}
+	go dynamicDNS.Run(ctx)
+	beforePowerOff = func() { dynamicDNS.PauseForShutdown(context.Background()) }
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1028,6 +1070,8 @@ func run(opts options) error {
 		Backup:             backups,
 		UPS:                supply,
 		Certificate:        certs,
+		LetsEncrypt:        acmeCerts,
+		DDNS:               dynamicDNS,
 		Settings:           settings,
 		Energy:             energy,
 		PowerSchedule:      schedule,
@@ -1077,7 +1121,8 @@ func run(opts options) error {
 		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
-			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
+			// Port 80 also answers the HTTP challenge of Let's Encrypt.
+			serve(newServer(opts.httpAddr, acmeCerts.HTTPHandler(redirectToHTTPS(opts.httpsAddr))), false)
 		}
 		slog.Info("titand started", "version", version.Version, "https", opts.httpsAddr, "http", opts.httpAddr, "config", opts.configDir, "webui", webui.Embedded)
 	}
@@ -1205,4 +1250,20 @@ func redirectToHTTPS(httpsAddr string) http.Handler {
 		}
 		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 	})
+}
+
+// announcedPower runs before first, for planned shutdowns and restarts.
+type announcedPower struct {
+	system.Power
+	before func()
+}
+
+func (p announcedPower) Reboot() error {
+	p.before()
+	return p.Power.Reboot()
+}
+
+func (p announcedPower) Poweroff() error {
+	p.before()
+	return p.Power.Poweroff()
 }

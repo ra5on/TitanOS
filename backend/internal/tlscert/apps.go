@@ -23,11 +23,16 @@ type appsCert struct {
 	cert *tls.Certificate
 }
 
-// ForNames returns the certificate for an app's host name serverName. The
+// ForNames returns the certificate for an app's host name serverName. One
+// from Let's Encrypt is used when it covers the name, then the
 // administrator's own certificate is used when it covers the name (an
 // imported wildcard certificate); else the one TitanOS makes for apps,
 // which must name every wildcard in names.
 func (m *Manager) ForNames(serverName string, names []string) (*tls.Certificate, error) {
+	// One from Let's Encrypt for "*.<domain>" serves the names under it.
+	if acme := m.acme.Load(); acme != nil && covers(acme, serverName) {
+		return acme, nil
+	}
 	if current := m.current.Load(); m.kind.Load() == KindCustom && covers(current, serverName) {
 		return current, nil
 	}

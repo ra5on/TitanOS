@@ -202,11 +202,12 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall. Eine Dashboard-Kachel listet die Geräte des Tailnets.
 - **NetBird als Plugin:** Fernzugriff über NetBird Cloud oder einen eigenen Management-Server, Anmeldung per Setup-Key (wird nie wieder angezeigt), Routen, Routing-Peer/Exit Node und DNS mit zweiminütigem Rückfall; Dashboard-Kachel mit den Geräten. Ausgeliefert wird nur der BSD-lizenzierte Client.
 - **Energie und USV:** CPU-Profile, Herunterfahren und Einschalten per RTC-Zeitplan, Wake-on-LAN und Verhalten des physischen Ein-/Ausschalters. USB- oder Netzwerk-USV über NUT, Abschalten bei Stromausfall und Weitergabe des USV-Status.
-- **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start oder eigene PEM-Zertifikate samt Schlüssel und Kette importieren.
+- **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start, eigene PEM-Zertifikate samt Schlüssel und Kette importieren oder automatische Zertifikate von Let's Encrypt per DNS-Challenge (Cloudflare, deSEC, Hetzner, IONOS, Netcup, INWX, DuckDNS, IPv64, RFC 2136; auch als Platzhalter für die HTTPS-Namen der Apps) oder über Port 80, mit selbständiger Erneuerung.
+- **Dynamisches DNS:** Namen auf die öffentliche IPv4-Adresse des Anschlusses und die IPv6-Adresse des NAS halten, bei denselben Anbietern oder per dyndns2 (Strato, No-IP …); für IPv64.net zusätzlich Domains, DNS-Einträge und optional eine Überwachung der Erreichbarkeit.
 - **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
 - **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse. Eigene ntfy-/Discord-Ziele normaler Benutzerkonten erreichen nur öffentliche Adressen, nicht das Heimnetz.
 
-[Netzwerk](docs/NETWORKING.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
+[Netzwerk](docs/NETWORKING.md) · [Let's Encrypt](docs/LETSENCRYPT.md) · [Dynamisches DNS](docs/DDNS.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
 
 ### Einstellungen, Darstellung und mobile Bedienung
 
@@ -244,7 +245,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 RAID ersetzt kein Backup. Unterstützung und Messwerte hängen von Kernel, Firmware und konkreter Hardware ab; das gilt auch für GPUs, NPUs, USVs und externe Backupziele. Die Release-Prüfungen umfassen automatisierte Tests und virtuelle NAS-Systeme, keine vollständige Abnahme aller Geräte und Dienste. Die genauen Ergebnisse stehen in den [Release-Berichten](docs/releases/).
 
-ARM, ZFS, LUKS-Volume-Verschlüsselung, automatische Let's-Encrypt-Zertifikate sind nicht enthalten. Der Bootloader wird bei Updates nicht automatisch ersetzt; volle Systemupdates aus einer hochgeladenen Datei sind nicht umgesetzt. TitanOS ist für ein vertrauenswürdiges lokales Netz gedacht; eine konfigurierbare Paketfilter-Firewall ist derzeit nicht enthalten. [Netzwerkverhalten](docs/NETWORKING.md#firewall-derzeit-ausgeschaltet).
+ARM, ZFS und LUKS-Volume-Verschlüsselung sind nicht enthalten. Der Bootloader wird bei Updates nicht automatisch ersetzt; volle Systemupdates aus einer hochgeladenen Datei sind nicht umgesetzt. TitanOS ist für ein vertrauenswürdiges lokales Netz gedacht; eine konfigurierbare Paketfilter-Firewall ist derzeit nicht enthalten. [Netzwerkverhalten](docs/NETWORKING.md#firewall-derzeit-ausgeschaltet).
 
 ## Installation
 

@@ -10,6 +10,8 @@ export function noticeLink(kind: string, subject: string): string | null {
 	if (kind.startsWith('update_')) return '/settings/updates';
 	if (kind.startsWith('ups_')) return '/settings/ups';
 	if (kind === 'certificate_expiring') return '/settings/access';
+	if (kind.startsWith('letsencrypt_')) return '/settings/letsencrypt';
+	if (kind.startsWith('ddns_')) return '/settings/ddns';
 	if (kind === 'usb_plugged') return '/files';
 	return null;
 }

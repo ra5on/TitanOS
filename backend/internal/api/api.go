@@ -25,12 +25,14 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -95,6 +97,10 @@ type Options struct {
 	// the web UI and is nil in development mode, where there is no TLS.
 	SSH         *sshd.Manager
 	Certificate *tlscert.Manager
+	// LetsEncrypt fetches certificates over ACME; DDNS keeps host names
+	// at the addresses of the NAS. Both nil leave the pages without data.
+	LetsEncrypt *letsencrypt.Manager
+	DDNS        *ddns.Manager
 	// Update installs new versions into the other slot of the stick.
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
@@ -503,6 +509,25 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
 	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
+	mux.HandleFunc("GET /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncrypt))
+	mux.HandleFunc("PUT /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncryptChange))
+	mux.HandleFunc("POST /api/v1/system/letsencrypt/renew", s.requireAdmin(s.handleLetsEncryptRenew))
+	mux.HandleFunc("GET /api/v1/network/ddns", s.requireAdmin(s.handleDDNS))
+	mux.HandleFunc("PUT /api/v1/network/ddns", s.requireAdmin(s.handleDDNSChange))
+	mux.HandleFunc("POST /api/v1/network/ddns/update", s.requireAdmin(s.handleDDNSUpdate))
+	// IPv64.net: POST everywhere, so that a typed-in API key stays out of addresses.
+	mux.HandleFunc("POST /api/v1/network/ipv64/account", s.requireAdmin(s.handleIPv64Account))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains", s.requireAdmin(s.handleIPv64Domains))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/create", s.requireAdmin(s.handleIPv64DomainCreate))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/change", s.requireAdmin(s.handleIPv64DomainChange))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records", s.requireAdmin(s.handleIPv64Records))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/add", s.requireAdmin(s.handleIPv64RecordAdd))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/delete", s.requireAdmin(s.handleIPv64RecordDelete))
+	mux.HandleFunc("POST /api/v1/network/ipv64/healthchecks", s.requireAdmin(s.handleIPv64Healthchecks))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/on", s.requireAdmin(s.handleIPv64HeartbeatOn))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/off", s.requireAdmin(s.handleIPv64HeartbeatOff))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/status", s.requireAdmin(s.handleIPv64HeartbeatStatus))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/test", s.requireAdmin(s.handleIPv64HeartbeatTest))
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 	// The chat in the web UI. Its settings are for administrators; who may

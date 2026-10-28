@@ -80,6 +80,10 @@ const named: Record<string, string> = {
 	vm_schedule_start: 'vmScheduleStart',
 	vm_schedule_stop: 'vmScheduleStop',
 	vm_schedule_poweroff: 'vmSchedulePoweroff',
+	letsencrypt_issued: 'letsencryptIssued',
+	letsencrypt_failed: 'letsencryptFailed',
+	ddns_updated: 'ddnsUpdated',
+	ddns_failed: 'ddnsFailed',
 };
 
 const areas: Record<string, string> = {

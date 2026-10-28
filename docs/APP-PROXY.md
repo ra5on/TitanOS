@@ -4,7 +4,8 @@ Eine Docker-App kann zusätzlich zu `http://<NAS>:<Port>` unter einem eigenen
 Namen erreichbar sein, z. B. `https://immich.nas.local`. Entscheidung des
 Projektinhabers: Weiterleitung durch titand selbst, Namen per mDNS (avahi),
 optional eine eigene Domain mit Platzhaltereintrag im DNS des Routers. Es gibt
-keine Firewall-Änderung und kein Let's Encrypt.
+keine Firewall-Änderung. Ein Zertifikat von Let's Encrypt für `*.<domain>` holt
+auf Wunsch Einstellungen › Let's Encrypt (`docs/LETSENCRYPT.md`).
 
 ## Bedienung
 
@@ -109,9 +110,11 @@ NAS. Öffentliche Ziele werden abgelehnt.
 `tlscert.Manager.ForNames`, aufgerufen aus `GetCertificate` nur für SNI-Namen
 eingeschalteter Apps:
 
-1. Deckt das importierte eigene Zertifikat den Namen ab (z. B. ein
-   Platzhalterzertifikat `*.home.example.org`), wird es verwendet.
-2. Sonst ein eigenes selbst signiertes Zertifikat für Apps, das nur Platzhalter
+1. Deckt das Zertifikat von Let's Encrypt den Namen ab (Option „Auch HTTPS-Namen
+   der Apps abdecken“, Platzhalter `*.<domain>`), wird es verwendet.
+2. Sonst das importierte eigene Zertifikat, wenn es den Namen abdeckt (z. B. ein
+   Platzhalterzertifikat `*.home.example.org`).
+3. Sonst ein eigenes selbst signiertes Zertifikat für Apps, das nur Platzhalter
    nennt: `*.<hostname>.local` und ggf. `*.<domain>`
    (`/config/tls/apps-cert.pem`, `apps-key.pem`). Es bleibt gleich, wenn Apps
    dazukommen oder gehen; neu erzeugt wird es nur, wenn sich Hostname oder Domain
@@ -120,9 +123,11 @@ eingeschalteter Apps:
    Speichern fehl, gilt es bis zum nächsten Start aus dem RAM.
 
 Browser verlangen die Ausnahme für selbst signierte Zertifikate je Name. Wer das
-vermeiden will, importiert unter Einstellungen › Zugang ein eigenes
-Platzhalterzertifikat für die eigene Domain oder vertraut dem App-Zertifikat im
-Betriebssystem.
+vermeiden will, lässt unter Einstellungen › Let's Encrypt ein Zertifikat für
+`*.<domain>` holen, importiert unter Einstellungen › Zugang ein eigenes
+Platzhalterzertifikat oder vertraut dem App-Zertifikat im Betriebssystem. Mit
+IPv64.net kann Einstellungen › Dynamisches DNS die Wildcard der Domain
+einschalten und sie hier als Domain eintragen (`docs/DDNS.md`).
 
 ## Namen im Netz
 
@@ -201,9 +206,7 @@ Namen erneut nach der Ausnahme.
 Eine App oder ein Ziel mit **„Über Tailscale erreichbar“** wird ein eigenes
 Gerät im Tailnet, mit Namen `<name>.<tailnet>.ts.net` (wählbar über
 `tailscaleName`, sonst der HTTPS-Name) und einem Zertifikat, das Tailscale selbst
-von Let's Encrypt holt und erneuert. Entscheidung vom 28.10.2026: für diesen Weg
-ist das die Ausnahme von „kein Let's Encrypt“, weil TitanOS dafür keinen
-ACME-Client betreibt.
+von Let's Encrypt holt und erneuert (unabhängig vom ACME-Client von TitanOS).
 
 - `internal/appproxy/tailnet.go`. Je Route ein `tailscaled` aus dem Plugin
   (`/usr/sbin/tailscaled`) als transiente systemd-Einheit
