@@ -6335,5 +6335,12 @@
 	"swap.doneText": "{volume} ist wieder vollständig.",
 	"swap.pullNow": "{disk} (Seriennummer {serial}) kann jetzt ausgebaut werden.",
 	"swap.toStorage": "Zum Speicher",
-	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht"
+	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht",
+	"welcome.todoBackup": "Daten sichern",
+	"welcome.todoBackupText": "Ein Sicherungsauftrag für die Freigaben, auf ein anderes Volume, ein zweites NAS, USB oder in die Cloud.",
+	"welcome.todoRemote": "Von unterwegs zugreifen",
+	"welcome.todoRemoteText": "Tailscale (Plugin) oder der eingebaute WireGuard-Server.",
+	"welcome.todoPush": "Mitteilungen aufs Handy",
+	"welcome.todoPushText": "TitanOS auf den Home-Bildschirm legen und Mitteilungen einschalten.",
+	"about.setupList": "Einrichtungsliste öffnen"
 }

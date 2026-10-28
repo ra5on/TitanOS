@@ -32,17 +32,21 @@
 	const address = $derived(system.info?.network?.ipv4.split('/')[0] ?? location.hostname);
 
 	// What is already done; null while unknown (not loaded or not readable).
-	type Todo = { href: string; key: 'welcome.todoVolume' | 'welcome.todoShare' | 'welcome.todoTwoFactor' | 'welcome.todoNotify' | 'welcome.todoStick' | 'welcome.todoApps' | 'welcome.todoDrivers'; done: boolean | null };
+	type Todo = { href: string; key: 'welcome.todoVolume' | 'welcome.todoShare' | 'welcome.todoTwoFactor' | 'welcome.todoNotify' | 'welcome.todoStick' | 'welcome.todoApps' | 'welcome.todoDrivers' | 'welcome.todoBackup' | 'welcome.todoRemote' | 'welcome.todoPush'; done: boolean | null };
 	let todos = $state<Todo[]>([]);
 	let checkFailed = $state(false);
 	async function check() {
 		checkFailed = false;
-		const [storage, shares, notify, stick, plugins] = await Promise.allSettled([
+		const [storage, shares, notify, stick, plugins, backups, tailnet, wireguard, push] = await Promise.allSettled([
 			api.get<{ volumes: unknown[] }>('/storage'),
 			api.get<unknown[]>('/shares'),
 			api.get<{ settings: Record<string, unknown> }>('/notifications/settings'),
 			api.get<{ backup: { lastError: string; backups: unknown[] } }>('/config-backup'),
 			api.get<{ recommendations?: unknown[] | null }>('/plugins'),
+			api.get<{ jobs: { job: { enabled: boolean } }[] }>('/backups'),
+			api.get<{ state: string }>('/plugins/tailscale'),
+			api.get<{ enabled: boolean }>('/network/wireguard'),
+			api.get<{ devices: unknown[] }>('/notifications/push'),
 		]);
 		const value = <T,>(result: PromiseSettledResult<T>, test: (value: T) => boolean) =>
 			result.status === 'fulfilled' ? test(result.value) : null;
@@ -56,6 +60,18 @@
 			{ href: '/account', key: 'welcome.todoTwoFactor', done: session.data?.user ? session.data.user.twoFactor : null },
 			{ href: '/settings/notifications', key: 'welcome.todoNotify', done: value(notify, (n) => channel(n.settings)) },
 			{ href: '/settings/backups/configuration', key: 'welcome.todoStick', done: value(stick, (c) => c.backup.backups.length > 0 && !c.backup.lastError) },
+			{ href: '/settings/backups/data', key: 'welcome.todoBackup', done: value(backups, (b) => b.jobs.some((j) => j.job.enabled)) },
+			{
+				href: '/settings/network?tab=remote',
+				key: 'welcome.todoRemote',
+				done:
+					(tailnet.status === 'fulfilled' && tailnet.value.state === 'Running') || (wireguard.status === 'fulfilled' && wireguard.value.enabled)
+						? true
+						: tailnet.status === 'rejected' && wireguard.status === 'rejected'
+							? null
+							: false,
+			},
+			{ href: '/settings/notifications#push', key: 'welcome.todoPush', done: value(push, (p) => p.devices.length > 0) },
 			{ href: '/docker', key: 'welcome.todoApps', done: null },
 		];
 		// Plugins for detected hardware (drivers, tools): only when there are any.

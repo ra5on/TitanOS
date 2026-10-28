@@ -6335,5 +6335,12 @@
 	"swap.doneText": "{volume} is complete again.",
 	"swap.pullNow": "{disk} (serial {serial}) can be pulled now.",
 	"swap.toStorage": "To storage",
-	"activity.do.diskReplace": "Disk swapped while running"
+	"activity.do.diskReplace": "Disk swapped while running",
+	"welcome.todoBackup": "Back up the data",
+	"welcome.todoBackupText": "A backup job for the shares, to another volume, a second NAS, USB or the cloud.",
+	"welcome.todoRemote": "Access from anywhere",
+	"welcome.todoRemoteText": "Tailscale (plugin) or the built-in WireGuard server.",
+	"welcome.todoPush": "Notifications on the phone",
+	"welcome.todoPushText": "Add TitanOS to the home screen and turn on notifications.",
+	"about.setupList": "Open the setup list"
 }
