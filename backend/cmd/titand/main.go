@@ -71,6 +71,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
+	"github.com/ra5on/TitanOS/backend/internal/wgserver"
 )
 
 type options struct {
@@ -1043,6 +1044,21 @@ func run(opts options) error {
 		slog.Warn("dynamic DNS settings not readable from /config", "err", err)
 	}
 	go dynamicDNS.Run(ctx)
+	// The WireGuard server of the NAS, off unless switched on.
+	vpnServer := wgserver.New(store)
+	vpnServer.Disabled = opts.dev
+	vpnServer.HomeNetworks = sshd.HomeNetworks
+	vpnServer.SuggestEndpoint = func() string {
+		if names := dynamicDNS.Hostnames(); len(names) > 0 {
+			return names[0]
+		}
+		return ""
+	}
+	if err := vpnServer.Load(); err != nil {
+		slog.Warn("WireGuard settings not readable from /config", "err", err)
+	} else if err := vpnServer.Apply(ctx); err != nil {
+		slog.Warn("WireGuard server not up", "err", err)
+	}
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1144,6 +1160,7 @@ func run(opts options) error {
 		Firewall:           packetFilter,
 		Notify:             notifier,
 		WebPush:            pushes,
+		WireGuard:          vpnServer,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
 		USB:                drives,

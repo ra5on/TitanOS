@@ -15,7 +15,7 @@ Reihenfolge (die erste passende gilt):
 |---|---|
 | eigene Zonen (bis 16, in der Reihenfolge der Liste) | Netze des NAS, die der Zone zugeordnet sind (Anschluss **und** Subnetz, siehe unten), und ihre Quellnetze (Adressen/Netze, egal über welchen Anschluss) |
 | Docker | alle Docker-Bridge-Netze (`docker0`, `br-<id>`), die keiner eigenen Zone gehören – auch jedes neu angelegte |
-| VPN | Schnittstellen `tailscale0` und `wt0`, Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
+| VPN | Schnittstellen `tailscale0`, `wt0` und `titanoswg` (WireGuard-Server des NAS, `docs/WIREGUARD.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
 | Heimnetz | private Bereiche (10/8, 172.16/12, 192.168/16, 169.254/16, `fc00::/7`, `fe80::/10`) und die Netze der eigenen Anschlüsse des NAS (Bridge `br0`, VLANs, Bonds), damit auch das öffentliche IPv6-Präfix des Heimnetzes |
 | Internet | alles andere, ausdrücklich auch öffentliche IPv6-Adressen außerhalb des eigenen Präfixes |
 

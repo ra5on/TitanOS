@@ -5,9 +5,10 @@ import (
 	"slices"
 )
 
-// VPN: the interfaces and address ranges of Tailscale and NetBird.
+// VPN: the interfaces and address ranges of Tailscale and NetBird, and the
+// WireGuard server of the NAS (package wgserver).
 var (
-	vpnInterfaces = []string{"tailscale0", "wt0"}
+	vpnInterfaces = []string{"tailscale0", "wt0", "titanoswg"}
 	vpnPrefixes   = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fd7a:115c:a1e0::/48")}
 	// privatePrefixes always count as home network: RFC 1918, link-local,
 	// unique local IPv6.

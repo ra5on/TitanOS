@@ -47,6 +47,7 @@ const keywords: Record<string, string> = {
 		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
 	ddns:
 		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2',
+	wireguard: 'wireguard vpn tunnel fernzugriff remote access qr handy phone smartphone laptop server',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -74,6 +75,10 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	letsencrypt: [
 		{ id: 'letsencrypt-status', label: 'letsencrypt.statusTitle', href: '/settings/letsencrypt#le-status' },
 		{ id: 'letsencrypt-settings', label: 'letsencrypt.settingsTitle', href: '/settings/letsencrypt#le-settings' },
+	],
+	wireguard: [
+		{ id: 'wg-server', label: 'wg.server', href: '/settings/wireguard#wg-server' },
+		{ id: 'wg-devices', label: 'wg.devices', href: '/settings/wireguard#wg-devices' },
 	],
 	ddns: [
 		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
@@ -135,6 +140,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'firewall', label: 'firewall.title', group: 'network', icon: 'shield', admin: true, isNew: true },
 	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true, isNew: true },
 	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
+	{ id: 'wireguard', label: 'wg.title', group: 'network', icon: 'key', admin: true, isNew: true },
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
