@@ -26,6 +26,7 @@
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
 	import { dashboardVisual, type DashboardVisual } from '#lib/dashboard/visual.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import LoginAppearanceEditor from '#lib/login/LoginAppearanceEditor.svelte';
 	import { onDestroy } from 'svelte';
 
 	const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -51,6 +52,8 @@
 		dashboardScene.urls = {};
 	});
 
+	// The login page is one setting for the whole NAS.
+	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty);
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
 	const ratio = $derived(textContrast(palette));
@@ -311,6 +314,8 @@
 				{#if message}{message.text}{:else if dirty}{t('appearance.unsaved')}{/if}
 			</span>
 		</div>
+
+		{#if canAdminister}<LoginAppearanceEditor />{/if}
 	</div>
 
 	<section class="preview" aria-labelledby="h-preview">

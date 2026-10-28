@@ -69,6 +69,8 @@ const named: Record<string, string> = {
 	'GET /api/v1/config-backup/download': 'configDownload',
 	'GET /api/v1/diagnostics/bundle': 'diagnostics',
 	'POST /api/v1/system/power': 'power',
+	'PUT /api/v1/login-appearance': 'loginAppearance',
+	'DELETE /api/v1/login-appearance': 'loginAppearanceReset',
 	'POST /api/v1/update/{action}': 'update',
 	'POST /api/v1/vms/{name}/{action}': 'vmAction',
 	'POST /api/v1/docker/containers/{id}/{action}': 'containerAction',

@@ -212,6 +212,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 - **Geordnete Einstellungen:** fünf Themenbereiche, kompakte alphabetisch sortierte Kacheln und gezielte Suche. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
 - **Themes:** Graphit, Schwarz, Mitternacht, Hell, Automatik und eigene Farben; Akzent, Hintergrund, Transparenz, Glas-Effekt, Unschärfe, Eckenradius, Dichte und Schriftgröße einstellen. Darstellung exportieren und importieren.
+- **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Theme, Akzent, Glas/Flach/Kontur, ein Galerie-Motiv oder eigenes Bild, Position und Breite der Karte, Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung, mobile Navigation und rollenabhängige Befehlspalette per Strg/⌘+K.
 
 [![Einstellungen mit fünf übersichtlichen Gruppen und kompakten Kacheln](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
