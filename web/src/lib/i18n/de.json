@@ -6265,5 +6265,6 @@
 	"error.invalid_health_report": "Der Zeitplan des Berichts ist ungültig.",
 	"error.no_notify_channel": "Es ist noch kein Benachrichtigungsweg eingeschaltet.",
 	"activity.do.healthReport": "Bericht über das NAS eingestellt",
-	"activity.do.healthReportSend": "Bericht über das NAS verschickt"
+	"activity.do.healthReportSend": "Bericht über das NAS verschickt",
+	"nav.back": "Zurück"
 }
