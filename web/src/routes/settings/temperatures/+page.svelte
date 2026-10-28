@@ -3,6 +3,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import FanControl from '#lib/components/FanControl.svelte';
 	import { system } from '#lib/system.svelte.ts';
 	import { sanitizeLayout } from '#lib/dashboard/tiles.ts';
 	import { temperatureSelection, withTemperatures, type SelectedTemperature } from '#lib/dashboard/temperatures.ts';
@@ -57,6 +58,7 @@
 	{#if saved}<p role="status">{t('temperatures.saved')}</p>{/if}
 	<div class="row-actions"><button class="btn btn-primary" disabled={saving || (show && selected.length === 0)} onclick={save}>{t('common.save')}</button><a class="btn" href="/">{t('dashboard.title')}</a></div>
 </section>
+{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<FanControl />{/if}
 
 <style>
 	p { font-size: 0.875rem; }

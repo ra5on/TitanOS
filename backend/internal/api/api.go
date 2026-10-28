@@ -28,6 +28,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fans"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
@@ -100,6 +101,8 @@ type Options struct {
 	WireGuard *wgserver.Manager
 	// HealthReport sends the regular summary; nil makes one that is off.
 	HealthReport *healthreport.Manager
+	// Fans drives the fans; nil makes one that only reads.
+	Fans *fans.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -215,6 +218,11 @@ func New(opts Options) *Server {
 		s.opts.WireGuard = wgserver.New(opts.Store)
 		s.opts.WireGuard.Disabled = true
 		s.opts.WireGuard.Load()
+	}
+	if s.opts.Fans == nil {
+		s.opts.Fans = fans.New(opts.Store)
+		s.opts.Fans.Disabled = true
+		s.opts.Fans.Load()
 	}
 	if s.opts.HealthReport == nil {
 		s.opts.HealthReport = healthreport.New(opts.Store)
@@ -537,6 +545,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/network/wireguard", s.requireAdmin(s.handleWireGuardSet))
 	mux.HandleFunc("POST /api/v1/network/wireguard/peers", s.requireAdmin(s.handleWireGuardAdd))
 	mux.HandleFunc("POST /api/v1/network/wireguard/peers/remove", s.requireAdmin(s.handleWireGuardRemove))
+	mux.HandleFunc("GET /api/v1/system/fans", s.requireAdmin(s.handleFans))
+	mux.HandleFunc("PUT /api/v1/system/fans", s.requireAdmin(s.handleFansSet))
 	mux.HandleFunc("GET /api/v1/health-report", s.requireAdmin(s.handleHealthReport))
 	mux.HandleFunc("PUT /api/v1/health-report", s.requireAdmin(s.handleHealthReportSet))
 	mux.HandleFunc("POST /api/v1/health-report/send", s.requireAdmin(s.handleHealthReportSend))

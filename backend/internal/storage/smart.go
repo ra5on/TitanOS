@@ -572,3 +572,17 @@ func smartDefects(values *SmartValues) uint64 {
 	}
 	return total
 }
+
+// HottestDisk is the highest temperature in the SMART cache (RAM only; a
+// sleeping disk keeps its last reading). For the fan control.
+func (m *Manager) HottestDisk() (int, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	hottest, found := 0, false
+	for _, s := range m.smart {
+		if s != nil && s.TemperatureC > 0 && (!found || s.TemperatureC > hottest) {
+			hottest, found = s.TemperatureC, true
+		}
+	}
+	return hottest, found
+}
