@@ -353,7 +353,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap);
+		gap: 16px;
 	}
 	.preview {
 		flex: 1 1 520px;
@@ -441,6 +441,7 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 10px;
+		padding-top: 6px;
 	}
 	.color {
 		display: flex;
@@ -472,6 +473,7 @@
 	.accents {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: flex-start;
 		gap: 12px;
 	}
 	.accent {
