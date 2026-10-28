@@ -56,6 +56,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
+	"github.com/ra5on/TitanOS/backend/internal/wgserver"
 )
 
 // Options are the parts the API works with.
@@ -94,6 +95,8 @@ type Options struct {
 	Notify   *notify.Manager
 	// WebPush reaches subscribed browsers; nil makes one in RAM only.
 	WebPush *webpush.Manager
+	// WireGuard is the VPN server of the NAS; nil makes one that is off.
+	WireGuard *wgserver.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -202,6 +205,11 @@ func New(opts Options) *Server {
 	if s.opts.Firewall == nil {
 		s.opts.Firewall = firewall.NewManager(opts.Store)
 		s.opts.Firewall.Disabled = true
+	}
+	if s.opts.WireGuard == nil {
+		s.opts.WireGuard = wgserver.New(opts.Store)
+		s.opts.WireGuard.Disabled = true
+		s.opts.WireGuard.Load()
 	}
 	if s.opts.WebPush == nil {
 		s.opts.WebPush = webpush.New(opts.Store)
@@ -497,6 +505,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
 	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
 	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
+	mux.HandleFunc("GET /api/v1/network/wireguard", s.requireAdmin(s.handleWireGuard))
+	mux.HandleFunc("PUT /api/v1/network/wireguard", s.requireAdmin(s.handleWireGuardSet))
+	mux.HandleFunc("POST /api/v1/network/wireguard/peers", s.requireAdmin(s.handleWireGuardAdd))
+	mux.HandleFunc("POST /api/v1/network/wireguard/peers/remove", s.requireAdmin(s.handleWireGuardRemove))
 	mux.HandleFunc("GET /api/v1/notifications/push", s.requireAdmin(s.handlePushDevices))
 	mux.HandleFunc("POST /api/v1/notifications/push", s.requireAdmin(s.handlePushSubscribe))
 	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", s.requireAdmin(s.handlePushRemove))
