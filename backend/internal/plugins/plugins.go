@@ -88,6 +88,9 @@ type Manifest struct {
 	// Modules are loaded and Services started once the plugin is in place.
 	Modules  []string `json:"modules"`
 	Services []string `json:"services"`
+	// Catalog information, all optional; older TitanOS ignore it. The
+	// signature of the manifest covers it like everything else.
+	Catalog
 }
 
 // Settings is /config/plugins/settings.json.
@@ -122,6 +125,8 @@ type Plugin struct {
 	Problem string `json:"problem"`
 	// Update is another version of this installed plugin found in a share.
 	Update *PluginUpdate `json:"update,omitempty"`
+	// Devices is the present hardware the plugin is meant for.
+	Devices []Device `json:"devices,omitempty"`
 }
 
 // PluginUpdate describes the version an installed plugin can be replaced with.
@@ -139,6 +144,10 @@ type Status struct {
 	Plugins      []Plugin           `json:"plugins"`
 	Catalog      CatalogStatus      `json:"catalog"`
 	DriverUpdate DriverUpdateStatus `json:"driverUpdate"`
+	// Recommendations are plugins for present hardware that nothing handles yet.
+	Recommendations []Recommendation `json:"recommendations"`
+	// Dismissed counts recommendations the owner asked not to see again.
+	Dismissed int `json:"dismissed"`
 }
 
 // Manager installs plugins and keeps the system in line with the settings.
@@ -200,6 +209,15 @@ type Manager struct {
 	driverAttempt  time.Time
 	driverVolume   string
 	bootID         string
+	// Hardware recommendations (recommend.go): sysfs root, pci.ids and the
+	// image's catalog table; empty paths switch detection off (tests).
+	sysRoot      string
+	pciIDsPath   string
+	catalogTable string
+	hwMu         sync.Mutex
+	hw           hardwareState
+	// Notify is told the title of a plugin newly recommended for hardware.
+	Notify func(title string)
 }
 
 // RuntimeAction keeps configuration changes from racing sysext removal or an
@@ -226,7 +244,8 @@ func (m *Manager) RuntimeAction(name string, action func() error) error {
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
 	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	return &Manager{driverRequests: make(chan string, 1), bootID: strings.TrimSpace(string(boot)), store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS"}
+	return &Manager{driverRequests: make(chan string, 1), bootID: strings.TrimSpace(string(boot)), store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS",
+		sysRoot: "/sys", pciIDsPath: "/usr/share/misc/pci.ids", catalogTable: catalogTableDir}
 }
 
 // Load reads the settings from /config.
@@ -250,6 +269,10 @@ func (m *Manager) Load() error {
 	}
 	if err := m.loadDriverSelection(&settings); err != nil {
 		return err
+	}
+	// Recommendations are a hint; an unreadable list must not stop plugins.
+	if err := m.loadRecommendations(); err != nil {
+		slog.Warn("plugin recommendations not readable from /config", "err", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -334,6 +357,9 @@ func parseManifest(data []byte, filename string) (Manifest, error) {
 		if !unitRE.MatchString(unit) {
 			return manifest, fmt.Errorf("%w: odd name of a module or service", ErrInvalid)
 		}
+	}
+	if err := manifest.Catalog.validate(); err != nil {
+		return manifest, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if manifest.Title == "" {
 		manifest.Title = manifest.Name
@@ -452,6 +478,7 @@ func (m *Manager) Status(mounted []string) Status {
 		}
 	}
 	sort.Slice(status.Plugins, func(i, j int) bool { return status.Plugins[i].Name < status.Plugins[j].Name })
+	m.addHardware(&status)
 	return status
 }
 
@@ -861,6 +888,8 @@ func (m *Manager) remove(ctx context.Context, name string, mounted []string) err
 // mounted and takes them away before it goes, until ctx is done.
 func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 	go m.runDriverUpdates(ctx, mounted)
+	m.DetectHardware()
+	go m.watchDevices(ctx)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -870,9 +899,11 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		if !loaded {
 			m.Load()
 		} else if !m.Disabled {
-			if err := m.Apply(ctx, mounted()); err != nil {
+			volumes := mounted()
+			if err := m.Apply(ctx, volumes); err != nil {
 				slog.Error("plugins", "err", err)
 			}
+			m.notifyRecommendations(volumes)
 		}
 		select {
 		case <-ctx.Done():

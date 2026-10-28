@@ -526,6 +526,8 @@ func run(opts options) error {
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
+	// Once per plugin and kind of device; installing stays a click.
+	extensions.Notify = func(title string) { notifier.Notify(notify.Info, "plugin_recommended", title) }
 	// Home Assistant: the assistant switches entities released to it, and
 	// messages can go to the Home Assistant app.
 	home := homeassistant.NewManager(store)

@@ -10,7 +10,7 @@
 	import PluginSteps from '#lib/components/PluginSteps.svelte';
 	import { latestFor, type PluginProgress } from '#lib/plugin-progress.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 
 	type Plugin = {
@@ -33,8 +33,25 @@
 		licenseUrl?: string;
 		problem: string;
 		update?: { path: string; version: string; official: boolean } | null;
+		category?: string;
+		license?: string;
+		upstream?: { name?: string; url?: string; version?: string } | null;
+		details?: Record<string, Details> | null;
+		sources?: string[] | null;
+		devices?: Device[] | null;
 	};
-	type Status = { driverUpdate: DriverStatus; volume: string; kernel: string; plugins: Plugin[]; catalog: { release: string; state: string; error?: string } };
+	type Device = { key: string; bus: string; address?: string; name: string; driver?: string };
+	type Details = { when?: string; hardware?: string[] | null; changes?: string; limits?: string[] | null; footprint?: string };
+	type Recommendation = { plugin: string; title: string; category?: string; devices: Device[] };
+	type Status = {
+		driverUpdate: DriverStatus;
+		volume: string;
+		kernel: string;
+		plugins: Plugin[];
+		catalog: { release: string; state: string; error?: string };
+		recommendations?: Recommendation[] | null;
+		dismissed?: number;
+	};
 
 	let status = $state<Status | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -66,6 +83,50 @@
 	const contains = (plugin: Plugin) => plugin.contains?.[i18n.locale] ?? plugin.contains?.en ?? [];
 	const monogram = (plugin: Plugin) => plugin.title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).replace(/^./, (c) => c.toUpperCase()) || '?';
 	const hue = (plugin: Plugin) => [...plugin.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
+
+	// Areas of the catalog, in this order; unknown categories are "other".
+	const CATEGORIES = ['network', 'graphics', 'sensors', 'storage', 'tools', 'remote', 'other'] as const;
+	type Category = (typeof CATEGORIES)[number];
+	const categoryKey: Record<Category, MessageKey> = {
+		network: 'plugins.category.network',
+		graphics: 'plugins.category.graphics',
+		sensors: 'plugins.category.sensors',
+		storage: 'plugins.category.storage',
+		tools: 'plugins.category.tools',
+		remote: 'plugins.category.remote',
+		other: 'plugins.category.other',
+	};
+	const categoryOf = (plugin: { category?: string }): Category =>
+		(CATEGORIES as readonly string[]).includes(plugin.category ?? '') ? (plugin.category as Category) : 'other';
+	const about = (plugin: Plugin): Details | null => plugin.details?.[i18n.locale] ?? plugin.details?.en ?? null;
+	let query = $state('');
+	let area = $state<Category | ''>('');
+	function matches(plugin: Plugin, words: string) {
+		if (!words) return true;
+		const info = about(plugin);
+		const haystack = [plugin.title, plugin.name, text(plugin.description), ...(info?.hardware ?? []), info?.when ?? '', ...(plugin.devices ?? []).map((device) => device.name)]
+			.join(' ')
+			.toLowerCase();
+		return words.split(/\s+/).every((word) => haystack.includes(word));
+	}
+	const shownPlugins = $derived(plugins.filter((plugin) => (!area || categoryOf(plugin) === area) && matches(plugin, query.trim().toLowerCase())));
+	const groups = $derived(
+		CATEGORIES.map((id) => ({ id, plugins: shownPlugins.filter((plugin) => categoryOf(plugin) === id) })).filter((group) => group.plugins.length > 0),
+	);
+	const usedAreas = $derived(CATEGORIES.filter((id) => plugins.some((plugin) => categoryOf(plugin) === id)));
+	const recommendations = $derived(status?.recommendations ?? []);
+	const fits = (plugin: Plugin) => !plugin.installed && recommendations.some((entry) => entry.plugin === plugin.name);
+	const link = (value: string) => /^https:\/\/\S+$/.test(value);
+
+	// Opens the plugin and, if it can be installed right away, its install form.
+	async function showRecommended(name: string) {
+		const plugin = plugins.find((entry) => entry.name === name);
+		if (!plugin || busy) return;
+		query = '';
+		area = '';
+		await pick(name);
+		if (!plugin.installed) ask();
+	}
 
 	function stepsFor(name: string): PluginProgress | undefined {
 		const entry = latestFor(operations, name);
@@ -238,6 +299,42 @@
 	<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
 {/if}
 
+{#if status && recommendations.length > 0}
+	<section class="tile panel recommended" aria-labelledby="recommended-title">
+		<h2 class="tile-title" id="recommended-title">{t('plugins.recommendedTitle')}</h2>
+		<p class="muted note">{t('plugins.recommendedIntro')}</p>
+		<ul class="recommendations">
+			{#each recommendations as entry (entry.plugin)}
+				{@const offered = plugins.find((plugin) => plugin.name === entry.plugin)}
+				<li class="recommendation">
+					<div class="about">
+						<span class="name-row"
+							><span class="name">{offered?.title ?? entry.title}</span><span class="muted source">{t(categoryKey[categoryOf(entry)])}</span></span
+						>
+						{#each entry.devices as device (device.key + (device.address ?? ''))}
+							<span class="description">{device.name}{#if device.address}<span class="muted mono"> · {device.address}</span>{/if}</span>
+						{/each}
+						{#if !offered}<span class="muted note">{t('plugins.recommendedUnavailable')}</span>{/if}
+					</div>
+					<div class="row-actions">
+						<button type="button" class="btn" disabled={busy} onclick={() => run(() => api.post<Status>(`/plugins/recommendations/${encodeURIComponent(entry.plugin)}/dismiss`, {}))}
+							>{t('plugins.recommendedDismiss')}</button
+						>
+						<button type="button" class="btn btn-primary" disabled={busy || !offered} onclick={() => showRecommended(entry.plugin)}>{t('plugins.recommendedShow')}</button>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	</section>
+{/if}
+{#if status?.dismissed}
+	<p class="muted note">
+		<button type="button" class="btn small" disabled={busy} onclick={() => run(() => api.delete<Status>('/plugins/recommendations/dismissed'))}
+			>{t('plugins.recommendedRestore', { count: status.dismissed })}</button
+		>
+	</p>
+{/if}
+
 {#if status && plugins.length === 0}
 	<EmptyState
 		title={t(refreshing ? 'plugins.catalogLoading' : 'plugins.emptyTitle')}
@@ -246,17 +343,30 @@
 {:else if status && current}
 	<div class="layout">
 		<div class="list">
-			{#each plugins as plugin (plugin.name)}
-				{@const state = badge(plugin)}
-				<button type="button" class="tile card" aria-pressed={plugin.name === current.name} onclick={() => pick(plugin.name)}>
-					<span class="monogram" style:background="hsl({hue(plugin)} 45% 42%)" aria-hidden="true">{monogram(plugin)}</span>
-					<span class="about">
-						<span class="name-row"><span class="name">{plugin.title}</span><span class="muted source">{t(plugin.local ? 'plugins.driverLocal' : plugin.official ? 'plugins.official' : 'plugins.community')}</span></span>
-						<span class="description">{text(plugin.description)}</span>
-					</span>
-					{#if plugin.update}<span class="chip">{t('plugins.updateChip')}</span>{/if}
-					<span class="chip {state.kind}">{state.text}</span>
-				</button>
+			<div class="filters">
+				<input class="field" type="search" placeholder={t('plugins.search')} aria-label={t('plugins.search')} bind:value={query} />
+				<select class="field" aria-label={t('plugins.categoryAll')} bind:value={area}>
+					<option value="">{t('plugins.categoryAll')}</option>
+					{#each usedAreas as id (id)}<option value={id}>{t(categoryKey[id])}</option>{/each}
+				</select>
+			</div>
+			{#each groups as group (group.id)}
+				<h2 class="group">{t(categoryKey[group.id])}</h2>
+				{#each group.plugins as plugin (plugin.name)}
+					{@const state = badge(plugin)}
+					<button type="button" class="tile card" aria-pressed={plugin.name === current.name} onclick={() => pick(plugin.name)}>
+						<span class="monogram" style:background="hsl({hue(plugin)} 45% 42%)" aria-hidden="true">{monogram(plugin)}</span>
+						<span class="about">
+							<span class="name-row"><span class="name">{plugin.title}</span><span class="muted source">{t(plugin.local ? 'plugins.driverLocal' : plugin.official ? 'plugins.official' : 'plugins.community')}</span></span>
+							<span class="description">{text(plugin.description)}</span>
+						</span>
+						{#if fits(plugin)}<span class="chip ok">{t('plugins.fits')}</span>{/if}
+						{#if plugin.update}<span class="chip">{t('plugins.updateChip')}</span>{/if}
+						<span class="chip {state.kind}">{state.text}</span>
+					</button>
+				{/each}
+			{:else}
+				<p class="muted note">{t('plugins.noMatch')}</p>
 			{/each}
 			<p class="muted note">{status.volume ? t('plugins.where', { volume: status.volume }) : t('plugins.whereNone')}</p>
 		</div>
@@ -278,6 +388,35 @@
 						<div class="chips">{#each contains(current) as entry (entry)}<span class="chip">{entry}</span>{/each}</div>
 					</div>
 				{/if}
+				{#if about(current)?.when}
+					<div class="block">
+						<h3>{t('plugins.when')}</h3>
+						<p>{about(current)?.when}</p>
+					</div>
+				{/if}
+				{#if about(current)?.hardware?.length}
+					<div class="block">
+						<h3>{t('plugins.hardware')}</h3>
+						<ul>{#each about(current)?.hardware ?? [] as entry (entry)}<li>{entry}</li>{/each}</ul>
+					</div>
+				{/if}
+				{#if current.devices?.length || about(current)?.hardware?.length}
+					<div class="block">
+						<h3>{t('plugins.detected')}</h3>
+						{#if current.devices?.length}
+							<ul>
+								{#each current.devices as device (device.key + (device.address ?? ''))}
+									<li>
+										{device.name}{#if device.address}<span class="muted mono"> · {device.address}</span>{/if}
+										{#if device.bus !== 'dmi'}<span class="muted"> · {device.driver ? t('plugins.detectedDriver', { driver: device.driver }) : t('plugins.detectedNoDriver')}</span>{/if}
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="muted">{t('plugins.detectedNone')}</p>
+						{/if}
+					</div>
+				{/if}
 				<div class="block">
 					<h3>{t('plugins.does')}</h3>
 					<ul>
@@ -286,7 +425,36 @@
 						{#if current.services?.length}<li>{t('plugins.doesServices')} <span class="mono">{current.services.join(', ')}</span></li>{/if}
 						{#if current.kernel}<li>{t('plugins.forKernel', { kernel: current.kernel })}</li>{/if}
 					</ul>
+					{#if about(current)?.changes}<p>{about(current)?.changes}</p>{/if}
 				</div>
+				{#if about(current)?.limits?.length}
+					<div class="block">
+						<h3>{t('plugins.limits')}</h3>
+						<ul>{#each about(current)?.limits ?? [] as entry (entry)}<li>{entry}</li>{/each}</ul>
+					</div>
+				{/if}
+				{#if current.license || current.upstream || about(current)?.footprint || current.sources?.length}
+					<div class="block">
+						<h3>{t('plugins.facts')}</h3>
+						<dl class="facts">
+							{#if current.license}<dt>{t('plugins.license')}</dt><dd>{current.license}</dd>{/if}
+							{#if current.upstream}
+								<dt>{t('plugins.upstream')}</dt>
+								<dd>
+									{#if current.upstream.url && link(current.upstream.url)}<a href={current.upstream.url} rel="noreferrer">{current.upstream.name || current.upstream.url}</a>{:else}{current.upstream.name}{/if}{#if current.upstream.version}<span class="mono"> · {current.upstream.version}</span>{/if}
+								</dd>
+							{/if}
+							<dt>{t('plugins.footprint')}</dt>
+							<dd>{t('plugins.diskSize', { size: formatBytes(current.size) })}{#if about(current)?.footprint}. {about(current)?.footprint}{/if}</dd>
+							{#if current.sources?.length}
+								<dt>{t('plugins.sources')}</dt>
+								<dd>
+									<ul class="plain">{#each current.sources as source (source)}<li class="mono">{#if link(source)}<a href={source} rel="noreferrer">{source}</a>{:else}{source}{/if}</li>{/each}</ul>
+								</dd>
+							{/if}
+						</dl>
+					</div>
+				{/if}
 
 				{#if current.problem === 'kernel'}
 					<p class="notice-warn" role="status">{t('plugins.kernelMismatch', { built: current.kernel, running: status.kernel })}</p>
@@ -431,6 +599,59 @@
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+	}
+	.recommended {
+		margin-bottom: 16px;
+	}
+	.recommendations {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.recommendation {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 0;
+		border-top: 1px solid var(--panel-border);
+	}
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.filters input {
+		flex: 1 1 14rem;
+	}
+	.group {
+		margin-top: 8px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.facts {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 6px 12px;
+		margin: 0;
+	}
+	.facts dt {
+		color: var(--muted);
+	}
+	.facts dd {
+		margin: 0;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.plain {
+		list-style: none;
+		padding: 0;
 	}
 	.card[aria-pressed='true'] {
 		border-color: var(--accent);

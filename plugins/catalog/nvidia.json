@@ -1,0 +1,45 @@
+{
+  "title": "NVIDIA",
+  "category": "graphics",
+  "license": "MIT OR GPL-2.0-only (kernel modules); NVIDIA license (libraries, GSP firmware); Apache-2.0 (Container Toolkit)",
+  "upstream": {
+    "name": "NVIDIA open-gpu-kernel-modules, NVIDIA Container Toolkit",
+    "url": "https://github.com/NVIDIA/open-gpu-kernel-modules"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn eine NVIDIA-Grafikkarte ab Turing im NAS steckt und Container sie für CUDA, Transkodierung (NVENC/NVDEC) oder KI nutzen sollen. Für eine Karte, die nur an eine VM durchgereicht wird, ist das Plugin nicht nötig.",
+      "hardware": [
+        "NVIDIA-GPUs ab Turing mit den offenen Kernelmodulen, z. B. GeForce RTX 20/30/40/50, GTX 16 und Rechenzentrumskarten derselben Generationen",
+        "Nicht unterstützt: Pascal, Maxwell und älter (z. B. GTX 10, GTX 9), Volta",
+        "Erkannt werden NVIDIA-Grafikgeräte mit PCI-Geräte-IDs ab 1E00, ohne gebundenen Treiber"
+      ],
+      "changes": "Lädt die offenen NVIDIA-Kernelmodule und startet titanos-nvidia.service, das die CDI-Geräte für Docker im RAM erzeugt. Bringt CUDA-, NVENC/NVDEC-Bibliotheken, NVML, nvidia-smi, GSP-Firmware und das Container Toolkit mit. Optional lässt sich ein neuerer Treiber auf dem NAS bauen (Treiber vorbereiten).",
+      "limits": [
+        "Kein Desktop-/Xorg-Treiber, keine OpenGL-/Vulkan-Laufzeit, kein CUDA-Entwicklungs-SDK; Anwendungen bringen ihre CUDA-Laufzeit im Container mit.",
+        "Eine Karte, die einer laufenden VM gehört, steht Containern nicht zur Verfügung; der optionale Wechsel stoppt betroffene Container.",
+        "CUDA, NVENC und VM-Wechsel sind auf echter Hardware nur eingeschränkt geprüft (siehe Dokumentation)."
+      ],
+      "footprint": "Das Abbild bleibt auf dem Daten-Volume. RAM belegen die geladenen Module, Bibliotheken der laufenden Container und der Dateicache; nicht gemessen."
+    },
+    "en": {
+      "when": "When an NVIDIA graphics card from Turing on is in the NAS and containers should use it for CUDA, transcoding (NVENC/NVDEC) or AI. A card that is only passed through to a VM does not need the plugin.",
+      "hardware": [
+        "NVIDIA GPUs from Turing on with the open kernel modules, e.g. GeForce RTX 20/30/40/50, GTX 16 and data center cards of the same generations",
+        "Not supported: Pascal, Maxwell and older (e.g. GTX 10, GTX 9), Volta",
+        "Detected are NVIDIA display devices with PCI device IDs from 1E00 on, without a bound driver"
+      ],
+      "changes": "Loads the open NVIDIA kernel modules and starts titanos-nvidia.service, which creates the CDI devices for Docker in RAM. Brings CUDA and NVENC/NVDEC libraries, NVML, nvidia-smi, GSP firmware and the Container Toolkit. Optionally a newer driver can be built on the NAS (Prepare driver).",
+      "limits": [
+        "No desktop/Xorg driver, no OpenGL/Vulkan runtime, no CUDA development SDK; applications bring their CUDA runtime in the container.",
+        "A card that belongs to a running VM is not available to containers; the optional switch stops affected containers.",
+        "CUDA, NVENC and VM switching are only partially tested on real hardware (see the documentation)."
+      ],
+      "footprint": "The image stays on the data volume. RAM is used by the loaded modules, the libraries of running containers and the file cache; not measured."
+    }
+  },
+  "hardware": [
+    {"modalias": "pci:v000010DEd00001[EF]*sv*sd*bc03sc*i*", "unbound": true},
+    {"modalias": "pci:v000010DEd0000[2-9A-F]*sv*sd*bc03sc*i*", "unbound": true}
+  ]
+}

@@ -32,16 +32,17 @@
 	const address = $derived(system.info?.network?.ipv4.split('/')[0] ?? location.hostname);
 
 	// What is already done; null while unknown (not loaded or not readable).
-	type Todo = { href: string; key: 'welcome.todoVolume' | 'welcome.todoShare' | 'welcome.todoTwoFactor' | 'welcome.todoNotify' | 'welcome.todoStick' | 'welcome.todoApps'; done: boolean | null };
+	type Todo = { href: string; key: 'welcome.todoVolume' | 'welcome.todoShare' | 'welcome.todoTwoFactor' | 'welcome.todoNotify' | 'welcome.todoStick' | 'welcome.todoApps' | 'welcome.todoDrivers'; done: boolean | null };
 	let todos = $state<Todo[]>([]);
 	let checkFailed = $state(false);
 	async function check() {
 		checkFailed = false;
-		const [storage, shares, notify, stick] = await Promise.allSettled([
+		const [storage, shares, notify, stick, plugins] = await Promise.allSettled([
 			api.get<{ volumes: unknown[] }>('/storage'),
 			api.get<unknown[]>('/shares'),
 			api.get<{ settings: Record<string, unknown> }>('/notifications/settings'),
 			api.get<{ backup: { lastError: string; backups: unknown[] } }>('/config-backup'),
+			api.get<{ recommendations?: unknown[] | null }>('/plugins'),
 		]);
 		const value = <T,>(result: PromiseSettledResult<T>, test: (value: T) => boolean) =>
 			result.status === 'fulfilled' ? test(result.value) : null;
@@ -57,6 +58,10 @@
 			{ href: '/settings/backups/configuration', key: 'welcome.todoStick', done: value(stick, (c) => c.backup.backups.length > 0 && !c.backup.lastError) },
 			{ href: '/docker', key: 'welcome.todoApps', done: null },
 		];
+		// Plugins for detected hardware (drivers, tools): only when there are any.
+		if (plugins.status === 'fulfilled' && (plugins.value.recommendations?.length ?? 0) > 0) {
+			todos.splice(1, 0, { href: '/plugins', key: 'welcome.todoDrivers', done: false });
+		}
 		checkFailed = [storage, shares, notify, stick].some((result) => result.status === 'rejected');
 	}
 	$effect(() => {

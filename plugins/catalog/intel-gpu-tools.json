@@ -1,0 +1,40 @@
+{
+  "title": "Intel GPU Tools",
+  "category": "tools",
+  "license": "MIT and others (see the Debian copyright files in the plugin)",
+  "upstream": {
+    "name": "igt-gpu-tools (Debian package intel-gpu-tools)",
+    "url": "https://gitlab.freedesktop.org/drm/igt-gpu-tools"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn du die Auslastung oder Frequenz der Intel-Grafik von Hand ansehen willst, etwa um zu prüfen, ob eine App wirklich Quick Sync zum Transkodieren nutzt. Für die GPU-Nutzung in Containern ist das Plugin nicht nötig.",
+      "hardware": [
+        "Intel-Grafik mit funktionierendem Kernel-Treiber (i915 oder xe)",
+        "Einzelne Werkzeuge setzen bestimmte GPU-Generationen voraus"
+      ],
+      "changes": "Legt die Programme aus dem Debian-Paket intel-gpu-tools (u. a. intel_gpu_top) und fehlende Zusatzbibliotheken unter /usr ab. Kein Kernelmodul, kein Dienst.",
+      "limits": [
+        "Diagnosewerkzeuge für die NAS-Shell; die Werte des Dashboards kommen ohne das Plugin aus.",
+        "Einige Werkzeuge können die GPU belasten oder Register schreiben; nur gezielt verwenden."
+      ],
+      "footprint": "RAM nur, solange ein Werkzeug läuft."
+    },
+    "en": {
+      "when": "When you want to look at the load or frequency of the Intel graphics by hand, for instance to check whether an app really uses Quick Sync for transcoding. Using the GPU in containers does not need the plugin.",
+      "hardware": [
+        "Intel graphics with a working kernel driver (i915 or xe)",
+        "Individual tools require particular GPU generations"
+      ],
+      "changes": "Places the programs of the Debian package intel-gpu-tools (including intel_gpu_top) and missing additional libraries below /usr. No kernel module, no service.",
+      "limits": [
+        "Diagnostic tools for the NAS shell; the dashboard's readings do not need the plugin.",
+        "Some tools can load the GPU or write registers; use them deliberately."
+      ],
+      "footprint": "RAM only while a tool runs."
+    }
+  },
+  "hardware": [
+    {"modalias": "pci:v00008086d*sv*sd*bc03sc*i*"}
+  ]
+}

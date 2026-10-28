@@ -1,0 +1,31 @@
+{
+  "title": "Tailscale",
+  "category": "remote",
+  "license": "BSD-3-Clause",
+  "upstream": {
+    "name": "Tailscale",
+    "url": "https://github.com/tailscale/tailscale"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn du von unterwegs auf das NAS zugreifen willst, ohne Ports im Router zu öffnen, und ein Tailscale-Konto hast oder anlegen willst.",
+      "hardware": ["Keine besondere Hardware"],
+      "changes": "Startet titanos-tailscale.service (tailscaled). Gerätezustand und Schlüssel liegen auf dem Daten-Volume. Subnet-Routing, Exit Node und die Übernahme von Routen/DNS sind wählbar und anfangs aus; Änderungen gelten zwei Minuten auf Probe.",
+      "limits": [
+        "Anmeldung und Freigabe des Geräts erfolgen bei Tailscale; die Zugriffsregeln des Tailnets gelten.",
+        "Verbindungen laufen über die Infrastruktur von Tailscale (Koordination, ggf. Relays)."
+      ],
+      "footprint": "Ein dauerhaft laufender Dienst; RAM je nach Größe des Tailnets."
+    },
+    "en": {
+      "when": "When you want to reach the NAS from anywhere without opening ports on the router, and have or want a Tailscale account.",
+      "hardware": ["No special hardware"],
+      "changes": "Starts titanos-tailscale.service (tailscaled). Device state and keys live on the data volume. Subnet routing, exit node and accepting routes/DNS are selectable and off at first; changes are on trial for two minutes.",
+      "limits": [
+        "Logging in and approving the device happen at Tailscale; the tailnet's access rules apply.",
+        "Connections use Tailscale's infrastructure (coordination, relays where needed)."
+      ],
+      "footprint": "One permanently running service; RAM depends on the size of the tailnet."
+    }
+  }
+}

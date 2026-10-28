@@ -1,0 +1,55 @@
+{
+  "title": "Intel QuickAssist Gen 4",
+  "description": {
+    "de": "Treiber qat_4xxx und qat_420xx für Intel QuickAssist Technology der vierten Generation, mit der passenden Firmware aus linux-firmware.",
+    "en": "qat_4xxx and qat_420xx drivers for 4th generation Intel QuickAssist Technology, with the matching firmware from linux-firmware."
+  },
+  "contains": {
+    "de": ["Kernelmodule qat_4xxx und qat_420xx (BSD-3-Clause/GPL-2.0)", "Firmware qat_4xxx.bin und qat_4xxx_mmp.bin aus linux-firmware (Intel, weitergabefähig)", "Unveränderte Quellen aus Debian linux-source"],
+    "en": ["Kernel modules qat_4xxx and qat_420xx (BSD-3-Clause/GPL-2.0)", "Firmware qat_4xxx.bin and qat_4xxx_mmp.bin from linux-firmware (Intel, redistributable)", "Unmodified sources from Debian linux-source"]
+  },
+  "category": "graphics",
+  "license": "(BSD-3-Clause OR GPL-2.0-only) AND LicenseRef-LICENCE.qat_firmware",
+  "upstream": {
+    "name": "Linux (Debian linux-source), drivers/crypto/intel/qat; linux-firmware",
+    "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/crypto/intel/qat"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn der Prozessor bzw. Chipsatz eine QAT-Gen4-Einheit hat (PCI 8086:4940, 4942, 4944 oder 4946) und du sie über die Kernel-Crypto-API nutzen willst. Debians Kernel 6.12 bringt für diese Geräte keinen Treiber mit; ältere QAT-Generationen (C62x, C3xxx, DH895xCC) unterstützt das System bereits.",
+      "hardware": [
+        "qat_4xxx: QAT-Geräte 4xxx (8086:4940), 401xx (8086:4942) und 402xx (8086:4944); 4xxx steckt u. a. in Intel-Xeon-Scalable-Prozessoren der 4. Generation mit QAT",
+        "qat_420xx: QAT-Gerät 420xx (8086:4946)",
+        "Welche Prozessoren 401xx, 402xx und 420xx tragen, ist hier nicht geprüft; maßgeblich ist die erkannte PCI-ID."
+      ],
+      "changes": "Legt die Module qat_4xxx und qat_420xx in /usr/lib/modules/<kernel>/updates/ und die Firmware qat_4xxx.bin/qat_4xxx_mmp.bin in /usr/lib/firmware/ ab und lädt die Module. Das vorhandene Modul intel_qat des Systems wird mitbenutzt. Die Geräte melden ihre Krypto- und Kompressionsfunktionen bei der Kernel-Crypto-API an.",
+      "limits": [
+        "TitanOS nutzt QAT nicht gezielt. Kernel-Nutzer der Crypto-API können es verwenden; Anwendungen in Containern brauchen eigene Bibliotheken (etwa QATlib) und Gerätezugang, den TitanOS nicht einrichtet.",
+        "Auf echter Hardware mit TitanOS nicht geprüft. Module nicht mit dem Debian-Schlüssel signiert (Kernel meldet „tainted“).",
+        "Die Firmware stammt von Intel und ist ohne Quelltext weitergabefähig (LICENCE.qat_firmware liegt bei)."
+      ],
+      "footprint": "Modulcode etwa 30 KiB, Firmware etwa 800 KiB auf dem Daten-Volume; das Gerät belegt im Betrieb zusätzlich Ringpuffer im RAM."
+    },
+    "en": {
+      "when": "When the processor or chipset has a QAT Gen 4 unit (PCI 8086:4940, 4942, 4944 or 4946) and you want to use it through the kernel crypto API. Debian's kernel 6.12 has no driver for these devices; older QAT generations (C62x, C3xxx, DH895xCC) are already supported by the system.",
+      "hardware": [
+        "qat_4xxx: QAT devices 4xxx (8086:4940), 401xx (8086:4942) and 402xx (8086:4944); 4xxx is found among others in 4th generation Intel Xeon Scalable processors with QAT",
+        "qat_420xx: QAT device 420xx (8086:4946)",
+        "Which processors carry 401xx, 402xx and 420xx is not checked here; the detected PCI ID is what counts."
+      ],
+      "changes": "Places the modules qat_4xxx and qat_420xx in /usr/lib/modules/<kernel>/updates/ and the firmware qat_4xxx.bin/qat_4xxx_mmp.bin in /usr/lib/firmware/, then loads the modules. The system's own intel_qat module is used alongside. The devices register their crypto and compression functions with the kernel crypto API.",
+      "limits": [
+        "TitanOS does not use QAT on purpose. Kernel users of the crypto API may; applications in containers need their own libraries (such as QATlib) and device access, which TitanOS does not set up.",
+        "Not tested with TitanOS on real hardware. Modules are not signed with Debian's key (the kernel reports \"tainted\").",
+        "The firmware is Intel's and redistributable without source (LICENCE.qat_firmware is included)."
+      ],
+      "footprint": "About 30 KiB of module code and about 800 KiB of firmware on the data volume; the device also uses ring buffers in RAM."
+    }
+  },
+  "hardware": [
+    {"modalias": "pci:v00008086d00004940sv*sd*bc*sc*i*", "unbound": true},
+    {"modalias": "pci:v00008086d00004942sv*sd*bc*sc*i*", "unbound": true},
+    {"modalias": "pci:v00008086d00004944sv*sd*bc*sc*i*", "unbound": true},
+    {"modalias": "pci:v00008086d00004946sv*sd*bc*sc*i*", "unbound": true}
+  ]
+}

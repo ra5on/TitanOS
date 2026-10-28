@@ -11,5 +11,6 @@ export function noticeLink(kind: string, subject: string): string | null {
 	if (kind.startsWith('ups_')) return '/settings/ups';
 	if (kind === 'certificate_expiring') return '/settings/access';
 	if (kind === 'usb_plugged') return '/files';
+	if (kind === 'plugin_recommended') return '/plugins';
 	return null;
 }

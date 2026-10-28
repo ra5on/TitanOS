@@ -12,6 +12,10 @@ zum Kernel seiner Systembasis:
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
 | `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |
 | `netbird` | NetBird-Client (nur BSD-3-Clause-Client) mit Setup-Key-Anmeldung, eigenem Management-Server, Routen und DNS, siehe [NetBird](NETBIRD.md) | NetBird-Konto oder eigener NetBird-Server und Setup-Key |
+| `wangxun-nic` | Treiber `ngbe`/`txgbe` (mit `libwx`) aus den Kernelquellen des Systems | Netzwerkkarte mit Wangxun WX1860 (1 GbE) oder SP1000/WX1820 (10 GbE) |
+| `tehuti-tn40` | Treiber `tn40xx` aus den Kernelquellen des Systems; unter Kernel 6.12 nur eingeschränkt nutzbar (siehe unten) | Tehuti-TN4010-Karte aus der Gerätetabelle des Treibers |
+| `intel-qat` | Treiber `qat_4xxx`/`qat_420xx` und Firmware `qat_4xxx*.bin` aus linux-firmware | Intel QuickAssist Gen 4 (PCI 8086:4940/4942/4944/4946) |
+| `it87-extended` | externer Sensortreiber `it87` (frankcrawford/it87, fester Commit), ersetzt den it87 des Systems | Mainboard mit neuerem ITE-Super-I/O-Chip (z. B. IT8689E, IT8696E) |
 
 Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Releases.
 TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
@@ -58,6 +62,152 @@ bei **Katalog und Freigaben aktualisieren** und wenn andere Volumes eingebunden
 sind. Die Statusabfrage alle fünf Sekunden liest die Platten nicht erneut und
 weckt ruhende Festplatten deshalb nicht auf. Neu abgelegte Dateien erscheinen
 nach dem Aktualisieren.
+
+## Bereiche, Suche und Details
+
+Die Plugin-Seite gruppiert den Katalog nach Bereichen (Netzwerkkarten, Grafik
+und Beschleuniger, Sensoren und Mainboard, Speicher-Controller, Werkzeuge,
+Fernzugriff und VPN, Sonstige) und lässt sich durchsuchen (Name, Beschreibung,
+unterstützte Hardware, erkannte Geräte). Die Detailansicht eines Plugins zeigt,
+soweit das Manifest es angibt: „Wann brauche ich das?“, unterstützte Hardware,
+die auf diesem NAS erkannten passenden Geräte samt gebundenem Treiber, was es am
+System ändert, Grenzen und Risiken, Lizenz, Herkunft mit fester Version,
+Platzbedarf (Größe des Abbilds auf dem Daten-Volume und RAM-Hinweis) sowie die
+Quellen.
+
+## Empfehlungen für deine Hardware
+
+TitanOS vergleicht die Geräte des NAS mit den Hardware-Regeln der offiziellen
+Plugins und zeigt oben auf der Plugin-Seite **Für deine Hardware empfohlen**:
+das Plugin, die erkannten Geräte (Name aus `pci.ids` bzw. vom USB-Gerät,
+PCI-Adresse) und die Knöpfe **Ansehen und installieren** und **Nicht mehr
+vorschlagen**. Installiert wird nie von selbst; der Knopf öffnet nur den
+gewohnten Installationsdialog.
+
+- **Was passt:** Jede Regel ist ein Modalias-Muster wie in `modinfo` (`pci:…`,
+  `usb:…`, `dmi*:…`), verglichen wie `fnmatch(3)` mit `/sys/bus/pci/devices/*/modalias`,
+  `/sys/bus/usb/devices/*:*/modalias` und `/sys/class/dmi/id/modalias`. Für
+  Treiber-Plugins stammen die Regeln aus der Aliastabelle des gebauten Moduls;
+  der Bau bricht ab, wenn Katalog und Modul nicht übereinstimmen.
+- **Wann empfohlen wird:** nur wenn das Plugin nicht installiert ist und – bei
+  Regeln mit `"unbound": true` (Treiber) – kein Kerneltreiber das Gerät schon
+  übernommen hat. Werkzeuge wie Intel GPU Tools arbeiten neben dem vorhandenen
+  Treiber und haben diese Bedingung nicht. NVIDIA wird nur für Grafikgeräte ab
+  Turing (PCI-Geräte-ID ab 1E00) empfohlen, wie das Plugin sie unterstützt;
+  eine an eine VM übergebene Karte (vfio-pci) gilt als übernommen. Coral wird nur
+  für den USB Accelerator empfohlen (PCIe/M.2 unterstützt das Plugin nicht).
+  `it87-extended` wird nur für die Boards empfohlen, die der Treiber selbst
+  nennt (DMI-Tabelle); auf anderen Boards mit unterstütztem Chip kann er ebenfalls
+  helfen.
+- **Wann geprüft wird:** beim Start von titand, bei udev-„add“-Ereignissen von
+  PCI- und USB-Geräten (gebündelt nach drei Sekunden) und beim Aktualisieren des
+  Katalogs. Gelesen wird nur sysfs; die Statusabfrage der Seite rechnet aus dem
+  gespeicherten Ergebnis im RAM, ohne erneut zu suchen. Ohne Netz genügt die
+  Katalogtabelle des Abbilds (`/usr/share/titanos/plugin-catalog/<name>.json`,
+  aus `plugins/catalog/`); der signierte Release-Katalog und installierte
+  Manifeste haben Vorrang.
+- **Meldung:** Für jede neue Kombination aus Plugin und Geräteart (Hersteller-
+  und Geräte-ID bzw. Board) gibt es einmal die Meldung `plugin_recommended`
+  (Hinweis, Link auf **Plugins**) – etwa nach dem Einbau einer Karte oder wenn ein
+  Update ein neues Plugin mitbringt. Gemeldet wird erst, wenn das Plugin-Volume
+  eingebunden ist, damit ein installiertes Plugin nicht fälschlich empfohlen wird.
+- **Nicht mehr vorschlagen:** merkt sich die aktuellen Geräte dieses Plugins in
+  `/config/plugins/recommendations.json` (`dismissed`; dazu `notified` für die
+  einmalige Meldung). Geschrieben wird nur bei einer Änderung, nie zyklisch.
+  **Ausgeblendete Vorschläge wieder anzeigen** leert die Liste. API:
+  `POST /api/v1/plugins/recommendations/{name}/dismiss`,
+  `DELETE /api/v1/plugins/recommendations/dismissed` (Besitzer/Administratoren);
+  `GET /api/v1/plugins` enthält `recommendations`, `dismissed` und je Plugin
+  `devices`.
+- Die Ersteinrichtung (`/welcome`) zeigt im letzten Schritt den Punkt
+  „Plugins für deine Hardware“, wenn es Empfehlungen gibt.
+
+## Treiber-Plugins
+
+`scripts/make-driver-plugins.py` baut `wangxun-nic`, `tehuti-tn40`, `intel-qat`
+und `it87-extended` in jedem vollen Release (und in `plugins.yml`) gegen den
+exakten Kernel des Abbilds:
+
+- In einem Wegwerf-mkosi-Root (`plugins/drivers/build`) werden
+  `linux-headers-<kernel>` und `linux-source-<x.y>` genau in der Version des
+  `linux-image`-Pakets aus dem Abbild installiert. Abweichende Paketversionen,
+  eine andere Kernelversion im Quellbaum, ein falsches `vermagic` eines Moduls,
+  andere als die erwarteten Module oder Modulaliase, die nicht den
+  Hardware-Regeln in `plugins/catalog/<name>.json` entsprechen, brechen den Bau
+  ab.
+- Kerneltreiber stammen unverändert aus dem Debian-Quellpaket; externe Quellen
+  (it87) und Firmware (QAT) sind mit Commit und SHA-256 in
+  `plugins/drivers/drivers.json` festgelegt.
+- Module liegen unter `/usr/lib/modules/<kernel>/updates/titanos-<name>/` und
+  haben damit Vorrang vor gleichnamigen Modulen des Systems; das Manifest nennt
+  den Kernel und die zu ladenden Module. Geladen wird beim Aktivieren und bei
+  jedem Start nach dem Einbinden des Plugin-Volumes, entladen beim Abschalten
+  oder Entfernen; für einen anderen Kernel wird das Plugin nicht geladen
+  (Hinweis „Anderer Kernel“).
+- Die Module sind nicht mit Debians Schlüssel signiert. Der Kernel lädt sie,
+  weil Secure Boot bei TitanOS aus ist, und meldet dabei „tainted“.
+- Jedes Release enthält `<name>-sources.tar.gz` (genau die kompilierten Quellen
+  und das Baurezept) und `<name>-licenses.tar.gz`; `titanos-<version>-sources.txt`
+  nennt zusätzlich das Debian-Quellpaket bzw. den Upstream-Commit.
+
+**Grenzen:** Keines der Treiber-Plugins ist bisher auf echter Hardware mit
+TitanOS geprüft. `tehuti-tn40` ist unter Debians Kernel 6.12 nur eingeschränkt
+nutzbar: Karten mit QT2025-PHY brauchen einen in Rust geschriebenen PHY-Treiber,
+den Debian nicht baut; Karten mit AQR105-PHY brauchen ggf. die PHY-Firmware
+`tehuti/aqr105-tn40xx.cld`, die nicht in linux-firmware enthalten ist. Wie alle
+Plugins liegen sie auf dem Daten-Volume und werden erst nach dessen Einbinden
+geladen; eine Netzwerkkarte aus einem Plugin eignet sich deshalb nicht als
+einziger Verwaltungsanschluss.
+
+**it87-extended:** ersetzt den it87 des Systems, solange das Plugin aktiv ist
+(der Dienst `titanos-it87-extended` entlädt einen bereits geladenen System-it87).
+Meldet der Treiber einen ACPI-Ressourcenkonflikt, lädt er nicht und das Plugin
+zeigt „Nicht geladen“. TitanOS setzt weder `acpi_enforce_resources=lax` noch
+`ignore_resource_conflict=1` und bietet dafür keinen Schalter an: Greifen
+Firmware und Treiber gleichzeitig auf den Chip zu, sind falsche Werte,
+Lüfterprobleme oder ein instabiles System möglich. Wer das bewusst testen will,
+kann es bis zum nächsten Neustart in der NAS-Shell tun:
+`modprobe -r it87; modprobe -d /run/titanos-plugin-modules it87 ignore_resource_conflict=1`.
+
+## Katalogangaben im Manifest
+
+Alle Felder sind optional und werden von älteren TitanOS-Versionen ignoriert;
+die Signatur des Manifests deckt sie wie alles andere ab. Für offizielle Plugins
+liegen sie in `plugins/catalog/<name>.json` und werden von
+`scripts/make-plugin.sh` mit dem beim Bau erzeugten `plugin.json` zusammengeführt
+(Bauwerte wie Version, Kernel und Module haben Vorrang). Dieselben Dateien
+kommen als Katalogtabelle ins Abbild.
+
+```json
+{
+  "title": "Wangxun-Netzwerkkarten",
+  "description": {"de": "…", "en": "…"},
+  "category": "network",
+  "license": "GPL-2.0-only",
+  "upstream": {"name": "…", "url": "https://…", "version": "vom Bau gesetzt"},
+  "details": {
+    "de": {"when": "Wann brauche ich das?", "hardware": ["Chip/Karte …"],
+           "changes": "Was es am System ändert", "limits": ["Grenze/Risiko …"],
+           "footprint": "RAM-Hinweis"},
+    "en": {"…": "…"}
+  },
+  "hardware": [{"modalias": "pci:v00008088d00001001sv*sd*bc*sc*i*", "unbound": true}],
+  "sources": ["https://snapshot.debian.org/package/linux/…/", "wangxun-nic-sources.tar.gz"]
+}
+```
+
+- `category`: `network`, `graphics` (Grafik und Beschleuniger), `sensors`,
+  `storage`, `tools`, `remote`; Unbekanntes erscheint unter „Sonstige“.
+- `hardware`: höchstens 1000 Regeln, je höchstens 512 Zeichen. Verglichen werden
+  `pci`, `usb` und `dmi`; Regeln für andere Busse bleiben gültig, passen aber nie
+  (damit ein neuerer Regeltyp ein signiertes Manifest nicht unbrauchbar macht).
+  `unbound: true` für Treiber (siehe oben).
+- Neues Treiber-Plugin: Eintrag in `plugins/drivers/drivers.json` (Kernel-
+  Verzeichnis und Kconfig-Werte bzw. externe Quelle mit Commit und SHA-256,
+  erwartete Module, zu ladende Module, ggf. Firmware), Beschreibung in
+  `plugins/catalog/<name>.json` mit den Aliasen des Moduls als `hardware`.
+  Die Liste offizieller Plugins in `make-release.sh` und `verify-release.py`
+  folgt `drivers.json` von selbst.
 
 ## Fortschritt in Schritten
 
