@@ -230,8 +230,22 @@ loggt der Kernel den Port nach der Umsetzung, also den Port im Container.
   Freigabe von Weboberfläche und HTTPS-Namen, Webtests der Hilfsfunktionen und
   Übersetzungen.
 
-**Nicht geprüft** (weder in QEMU noch auf echter Hardware): tatsächliches
-Filtern im Abbild, Docker-Portweiterleitungen mit IPv4/IPv6 und userland-proxy,
+**In QEMU geprüft** (28.10.2026, `scripts/smoke-firewall.py`, Ergebnis
+`docs/validation/release-0.31.0-qemu-2026-10-28.json`): echtes Abbild aus
+`make zip`, zwei UEFI-Starts mit Usermode-Netz, Host aus Sicht des Gasts im
+Heimnetz (10.0.2.2), ein zweiter Client in einem Netzwerk-Namespace des Gasts
+(veth, 192.168.77.2). Ab Werk aus, keine Tabelle, `titanos-firewall-open`
+vorne; Einschalten auf Probe (Regel „admin on trial“ für den Host) und
+Bestätigen; Weboberfläche und SSH vom Host danach erreichbar. SMB im Heimnetz
+gesperrt: vom Namespace verworfen statt abgewiesen, über hostfwd keine Antwort,
+Eintrag in „Zuletzt gesperrt“; Zurücknehmen von Hand und nach 120 s von selbst
+mit Meldung `firewall_reverted`. Drei falsche Web-Anmeldungen aus dem Namespace
+sperren ihn (Weboberfläche und Ping verworfen, Host weiter erreichbar),
+„Freigeben“ hebt das auf. Nach Neustart wieder an, Ausschalten entfernt die
+Tabelle, die offenen iptables-Regeln bleiben vorn.
+
+**Nicht geprüft** (weder in QEMU noch auf echter Hardware): die Zone Internet
+mit echten öffentlichen Absendern, Docker-Portweiterleitungen mit IPv4/IPv6 und userland-proxy,
 Zusammenspiel mit laufendem Tailscale/NetBird, die festen NFS-Hilfsports mit
 einem NFSv3-Client, die Meldezeilen echter sshd-/Samba-Versionen (nur
 nachgebildete Zeilen) und die Kernel-Logzeilen in journald.

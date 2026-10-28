@@ -324,3 +324,11 @@ Die Go-Tests prüfen die signierte Plugin-Mitnahme, falsche Signaturen/Kernel/
 Versionen, unveränderte Rückfall-Dateien bei Fehlern, getrennte Einstellungen
 pro Release, GPU-Reservierungen und Wiederanlauf nach einem titand-Neustart.
 Echte GPU-/TPU- und PCIe-Reset-Tests sind weiterhin nötig.
+
+`scripts/smoke-firewall.py <installations.zip>` prüft die Firewall im echten
+Abbild (zwei Starts, Usermode-Netz, keine Datenplatten): ab Werk aus,
+Einschalten auf Probe und Bestätigen, verworfener Dienst aus einem
+Netzwerk-Namespace des Gasts und über die Portweiterleitung, Zurücknehmen von
+Hand und nach Ablauf, automatisches Sperren nach falschen Web-Anmeldungen samt
+Freigeben, Tabelle nach Neustart, Ausschalten. Er läuft bisher lokal, nicht im
+Release-Workflow; vor einem vollen Release mit Firewall-Änderungen ausführen.
