@@ -1,0 +1,31 @@
+{
+  "title": "NetBird",
+  "category": "remote",
+  "license": "BSD-3-Clause",
+  "upstream": {
+    "name": "NetBird (client only)",
+    "url": "https://github.com/netbirdio/netbird"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn du das NAS in ein NetBird-Netz aufnehmen willst, mit NetBird Cloud oder einem eigenen Management-Server.",
+      "hardware": ["Keine besondere Hardware"],
+      "changes": "Startet titanos-netbird.service. Anmeldung nur per Setup-Key; Schlüssel und Zustand liegen auf dem Daten-Volume. Routen, Routing-Peer/Exit Node und DNS sind wählbar und anfangs aus; Änderungen gelten zwei Minuten auf Probe. NetBird filtert in eigenen nftables-Tabellen.",
+      "limits": [
+        "Nur der Client (BSD-3-Clause), keine NetBird-Server-Komponenten.",
+        "Keine SSO-Anmeldung im Browser; NetBird-SSH und Fernaufträge bleiben aus."
+      ],
+      "footprint": "Ein dauerhaft laufender Dienst; RAM je nach Zahl der Geräte im Netz."
+    },
+    "en": {
+      "when": "When you want to add the NAS to a NetBird network, with NetBird Cloud or your own management server.",
+      "hardware": ["No special hardware"],
+      "changes": "Starts titanos-netbird.service. Login by setup key only; keys and state live on the data volume. Routes, routing peer/exit node and DNS are selectable and off at first; changes are on trial for two minutes. NetBird filters in its own nftables tables.",
+      "limits": [
+        "Client only (BSD-3-Clause), no NetBird server components.",
+        "No SSO login in the browser; NetBird SSH and remote jobs stay off."
+      ],
+      "footprint": "One permanently running service; RAM depends on the number of devices in the network."
+    }
+  }
+}

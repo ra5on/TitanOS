@@ -1,0 +1,117 @@
+{
+  "title": "Wangxun-Netzwerkkarten",
+  "description": {
+    "de": "Treiber ngbe und txgbe für Netzwerkkarten mit Wangxun-Chips (1 GbE WX1860, 10 GbE SP1000/WX1820), gebaut aus den Kernelquellen des Systems.",
+    "en": "ngbe and txgbe drivers for network cards with Wangxun chips (1 GbE WX1860, 10 GbE SP1000/WX1820), built from the system's kernel sources."
+  },
+  "contains": {
+    "de": [
+      "Kernelmodule libwx, ngbe, txgbe (GPL-2.0)",
+      "Unveränderte Quellen aus Debian linux-source",
+      "Keine Firmware nötig"
+    ],
+    "en": [
+      "Kernel modules libwx, ngbe, txgbe (GPL-2.0)",
+      "Unmodified sources from Debian linux-source",
+      "No firmware needed"
+    ]
+  },
+  "category": "network",
+  "license": "GPL-2.0-only",
+  "upstream": {
+    "name": "Linux (Debian linux-source), drivers/net/ethernet/wangxun",
+    "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/net/ethernet/wangxun"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn eine Netzwerkkarte mit Wangxun-Chip (PCI-Hersteller 8088) eingebaut ist und unter Netzwerk nicht erscheint. Debians Kernel 6.12 enthält diese Treiber nicht.",
+      "hardware": [
+        "ngbe: Wangxun WX1860 (1 GbE, PCI-IDs 8088:0100–010b; Varianten WX1860AL_W, A2, A2S, A4, A4S, AL2, AL2S, AL4, AL4S, LC, A1, A1L)",
+        "txgbe: Wangxun SP1000 und WX1820 (10 GbE, PCI-IDs 8088:1001 und 8088:2001)",
+        "Welche Karten im Handel diese Chips tragen, prüft TitanOS nicht; maßgeblich ist die PCI-ID, die die Hardware-Erkennung anzeigt."
+      ],
+      "changes": "Legt die Kernelmodule libwx, ngbe und txgbe in /usr/lib/modules/<kernel>/updates/ ab und lädt ngbe und txgbe. Neue Netzwerkschnittstellen erscheinen danach unter Einstellungen › Netzwerk. Sonst ändert sich nichts.",
+      "limits": [
+        "Gebaut aus den unveränderten Quellen des Systemkernels; die Treiber sind auf echter Hardware mit TitanOS noch nicht geprüft.",
+        "Die Module sind nicht mit dem Debian-Schlüssel signiert; der Kernel meldet beim Laden „tainted“ (Secure Boot ist bei TitanOS aus).",
+        "Neuere Wangxun-Chips (AML, 10/25 GbE, im Treiber AML5010 bis AML5140) unterstützt erst Linux 6.15; sie werden hier nicht erkannt.",
+        "Plugins liegen auf dem Daten-Volume und werden bei jedem Start erst nach dessen Einbinden geladen. Als einziger Netzwerkanschluss für die Verwaltung des NAS ist die Karte deshalb ungeeignet."
+      ],
+      "footprint": "Modulcode zusammen etwa 130 KiB; dazu Empfangs-/Sendepuffer je Anschluss."
+    },
+    "en": {
+      "when": "When a network card with a Wangxun chip (PCI vendor 8088) is installed and does not show up under Network. Debian's kernel 6.12 does not include these drivers.",
+      "hardware": [
+        "ngbe: Wangxun WX1860 (1 GbE, PCI IDs 8088:0100–010b; variants WX1860AL_W, A2, A2S, A4, A4S, AL2, AL2S, AL4, AL4S, LC, A1, A1L)",
+        "txgbe: Wangxun SP1000 and WX1820 (10 GbE, PCI IDs 8088:1001 and 8088:2001)",
+        "TitanOS does not track which retail cards carry these chips; the PCI ID shown by hardware detection is what counts."
+      ],
+      "changes": "Places the kernel modules libwx, ngbe and txgbe in /usr/lib/modules/<kernel>/updates/ and loads ngbe and txgbe. New network interfaces then appear under Settings › Network. Nothing else changes.",
+      "limits": [
+        "Built from the unmodified sources of the system kernel; not yet tested with TitanOS on real hardware.",
+        "The modules are not signed with Debian's key; the kernel reports \"tainted\" when loading them (Secure Boot is off on TitanOS).",
+        "Newer Wangxun chips (AML, 10/25 GbE, AML5010 to AML5140 in the driver) need Linux 6.15; they are not recognized here.",
+        "Plugins live on the data volume and load on every start only after it is mounted. The card is therefore unsuitable as the NAS's only management connection."
+      ],
+      "footprint": "About 130 KiB of module code together, plus receive/transmit buffers per port."
+    }
+  },
+  "hardware": [
+    {
+      "modalias": "pci:v00008088d00000100sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000101sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000102sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000103sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000104sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000105sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000106sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000107sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000108sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00000109sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d0000010Asv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d0000010Bsv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00001001sv*sd*bc*sc*i*",
+      "unbound": true
+    },
+    {
+      "modalias": "pci:v00008088d00002001sv*sd*bc*sc*i*",
+      "unbound": true
+    }
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "title": "IT87 Sensoren (erweitert)",
+  "description": {
+    "de": "Gepflegter externer Treiber it87 (Frank Crawford) für Temperatur-, Spannungs- und Lüftersensoren neuerer ITE-Super-I/O-Chips, z. B. IT8689E und IT8696E auf aktuellen Gigabyte-Boards. Ersetzt den it87 des Systems, solange das Plugin aktiv ist.",
+    "en": "Maintained out-of-tree it87 driver (Frank Crawford) for temperature, voltage and fan sensors of newer ITE Super I/O chips, e.g. IT8689E and IT8696E on recent Gigabyte boards. Replaces the system's it87 while the plugin is active."
+  },
+  "contains": {
+    "de": [
+      "Kernelmodul it87 aus github.com/frankcrawford/it87 (GPL-2.0-or-later), fester Commit",
+      "Dienst, der sicherstellt, dass genau dieses Modul geladen ist",
+      "Quelltext liegt dem Release bei"
+    ],
+    "en": [
+      "Kernel module it87 from github.com/frankcrawford/it87 (GPL-2.0-or-later), pinned commit",
+      "Service that makes sure exactly this module is loaded",
+      "Source code accompanies the release"
+    ]
+  },
+  "category": "sensors",
+  "license": "GPL-2.0-or-later",
+  "upstream": {
+    "name": "frankcrawford/it87",
+    "url": "https://github.com/frankcrawford/it87"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn Einstellungen › Temperaturen keine Mainboard-Sensoren zeigt und das Board einen ITE-Chip trägt, den der it87 von Linux 6.12 nicht kennt. Von selbst empfohlen wird das Plugin nur für Boards, die der Treiber ausdrücklich nennt; auf anderen Boards mit unterstütztem Chip kann es ebenfalls helfen.",
+      "hardware": [
+        "Zusätzlich zu den Chips des it87 in Linux 6.12: IT8606E, IT8607E, IT8613E, IT8625E, IT8655E, IT8665E, IT8686E, IT8688E, IT8689E, IT8696E, IT8698E, IT8736F, IT8738E, IT8785E",
+        "Der it87 von Linux 6.12 kennt bereits IT8603E, IT8620E, IT8622E, IT8623E, IT8628E, IT8705F, IT8712F, IT8716F, IT8718F, IT8720F, IT8721F, IT8726F, IT8728F, IT8732F, IT8771E, IT8772E, IT8781F, IT8782F, IT8783E, IT8786E, IT8790E, IT8792E und IT87952E; dafür ist das Plugin nicht nötig.",
+        "Vom Treiber ausdrücklich genannte Boards (Erkennung über DMI): 39 Einträge, überwiegend Gigabyte (z. B. X870E AORUS MASTER, X670E AORUS MASTER, Z790 AORUS MASTER, B650M GAMING X AX, X570 AORUS ELITE) sowie ASUS PRIME B350-PLUS und nVIDIA FN68PT"
+      ],
+      "changes": "Legt das Modul it87 in /usr/lib/modules/<kernel>/updates/ ab, wo es Vorrang vor dem it87 des Systems hat, und lädt es. Ist bereits der it87 des Systems geladen, entlädt der Dienst titanos-it87-extended ihn und lädt das Plugin-Modul. Abschalten oder Entfernen entlädt das Modul wieder; der it87 des Systems wird danach nicht von selbst geladen. Bootparameter werden nicht verändert.",
+      "limits": [
+        "Auf vielen Boards reserviert die ACPI-Firmware die Ports des Super-I/O-Chips. Der Treiber meldet dann einen Ressourcenkonflikt und lädt nicht (das Plugin zeigt „nicht geladen“). TitanOS setzt weder acpi_enforce_resources=lax noch ignore_resource_conflict=1: Gleichzeitige Zugriffe von Firmware und Treiber können falsche Werte, Lüfterfehler oder im schlimmsten Fall ein instabiles System verursachen.",
+        "Wer das Risiko bewusst eingeht, kann bis zum nächsten Neustart in der NAS-Shell testen: modprobe -r it87; modprobe -d /run/titanos-plugin-modules it87 ignore_resource_conflict=1. Das wird nicht gespeichert.",
+        "Externer Treiber, nicht Teil von Linux; Änderungen kommen nur mit neuen TitanOS-Releases (fester Commit). Modul nicht mit dem Debian-Schlüssel signiert (Kernel meldet „tainted“).",
+        "Lüftersteuerung bietet TitanOS nicht an; das Plugin liefert nur Messwerte. Auf echter Hardware mit TitanOS nicht geprüft."
+      ],
+      "footprint": "Modulcode etwa 100 KiB RAM, sobald geladen."
+    },
+    "en": {
+      "when": "When Settings › Temperatures shows no mainboard sensors and the board carries an ITE chip the it87 of Linux 6.12 does not know. The plugin is recommended on its own only for boards the driver names explicitly; it may also help on other boards with a supported chip.",
+      "hardware": [
+        "In addition to the chips of the it87 in Linux 6.12: IT8606E, IT8607E, IT8613E, IT8625E, IT8655E, IT8665E, IT8686E, IT8688E, IT8689E, IT8696E, IT8698E, IT8736F, IT8738E, IT8785E",
+        "The it87 of Linux 6.12 already knows IT8603E, IT8620E, IT8622E, IT8623E, IT8628E, IT8705F, IT8712F, IT8716F, IT8718F, IT8720F, IT8721F, IT8726F, IT8728F, IT8732F, IT8771E, IT8772E, IT8781F, IT8782F, IT8783E, IT8786E, IT8790E, IT8792E and IT87952E; those do not need the plugin.",
+        "Boards the driver names explicitly (detected through DMI): 39 entries, mostly Gigabyte (e.g. X870E AORUS MASTER, X670E AORUS MASTER, Z790 AORUS MASTER, B650M GAMING X AX, X570 AORUS ELITE) plus ASUS PRIME B350-PLUS and nVIDIA FN68PT"
+      ],
+      "changes": "Places the module it87 in /usr/lib/modules/<kernel>/updates/, where it takes precedence over the system's it87, and loads it. If the system's it87 is loaded already, the service titanos-it87-extended unloads it and loads the plugin's module. Switching off or removing unloads the module again; the system's it87 is not loaded on its own afterwards. Boot parameters are not changed.",
+      "limits": [
+        "On many boards the ACPI firmware reserves the ports of the Super I/O chip. The driver then reports a resource conflict and does not load (the plugin shows \"not loaded\"). TitanOS sets neither acpi_enforce_resources=lax nor ignore_resource_conflict=1: concurrent access by firmware and driver can cause wrong readings, fan problems or, at worst, an unstable system.",
+        "If you knowingly take the risk, you can try it until the next reboot in the NAS shell: modprobe -r it87; modprobe -d /run/titanos-plugin-modules it87 ignore_resource_conflict=1. This is not saved.",
+        "Out-of-tree driver, not part of Linux; changes arrive only with new TitanOS releases (pinned commit). Module not signed with Debian's key (the kernel reports \"tainted\").",
+        "TitanOS offers no fan control; the plugin only provides readings. Not tested with TitanOS on real hardware."
+      ],
+      "footprint": "About 100 KiB of module code in RAM once loaded."
+    }
+  },
+  "hardware": [
+    {
+      "modalias": "dmi*:rvn*nVIDIA*:rn*FN68PT*:"
+    },
+    {
+      "modalias": "dmi*:rvn*ASUSTeKCOMPUTERINC.*:rn*PRIMEB350-PLUS*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870EAGLEWIFI7*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870EAORUSMASTER*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870GAMINGWIFI6*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870AORUSELITEWIFI7ICE*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870AORUSELITEWIFI7*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X870IAORUSPROICE*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z790AORUSMASTER*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z790AORUSELITEAX*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z690AORUSPRO*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z690AORUSPRODDR4*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*H610MS2HV2*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*H610MHDDR4*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X670EAORUSMASTER*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X670AORUSELITEAX*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*B660MDS3HDDR4*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*B650MGAMINGXAX*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570SAEROG*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570IAORUSPROWIFI*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSULTRA*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSPROWIFI*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSPRO*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSMASTER*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSELITEWIFI*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X570AORUSELITE*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*B560IAORUSPROAX*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*B550AORUSPROAC*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z490AORUSELITEAC*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*B450AORUSPRO-CF*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*X399DESIGNAREEX-CF*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z390AORUSULTRA-CF*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*TRX40AORUSXTREME*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Z97X-GamingG1*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*A520IAC*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*Q370MD3HGSMPLUS*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*AX370*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*AB350*:"
+    },
+    {
+      "modalias": "dmi*:rvn*GigabyteTechnologyCo.,Ltd.*:rn*A320M-S2HV2-CF*:"
+    }
+  ]
+}

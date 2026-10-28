@@ -97,10 +97,32 @@ func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Plugins.RefreshCatalog(r.Context(), req.Force); err != nil {
 		slog.Warn("plugin catalog unavailable", "err", err)
 	}
+	// The catalog may bring plugins for hardware the NAS has; sysfs only.
+	s.opts.Plugins.DetectHardware()
 	// Opening or refreshing the page also looks for new files in shares;
 	// the status poll in between does not read the volumes.
 	s.opts.Plugins.ScanShares(s.opts.Storage.Mounted())
 	// An unavailable catalog must not hide installed or locally uploaded plugins.
+	s.handlePlugins(w, r)
+}
+
+// handlePluginDismiss stops recommending a plugin for the hardware it is
+// recommended for now; it never installs or removes anything.
+func (s *Server) handlePluginDismiss(w http.ResponseWriter, r *http.Request) {
+	noteTarget(r, r.PathValue("name"))
+	if err := s.opts.Plugins.Dismiss(r.PathValue("name"), s.opts.Storage.Mounted()); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	s.handlePlugins(w, r)
+}
+
+// handlePluginRestoreDismissed shows dismissed recommendations again.
+func (s *Server) handlePluginRestoreDismissed(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Plugins.RestoreDismissed(); err != nil {
+		writePluginError(w, err)
+		return
+	}
 	s.handlePlugins(w, r)
 }
 

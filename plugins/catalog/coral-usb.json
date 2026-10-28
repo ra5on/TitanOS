@@ -1,0 +1,41 @@
+{
+  "title": "Coral USB",
+  "category": "graphics",
+  "license": "FSL-1.1-ALv2",
+  "upstream": {
+    "name": "TitanOS (own helper)",
+    "url": "https://github.com/ra5on/TitanOS/tree/main/plugins/coral"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn ein Coral USB Accelerator angeschlossen ist und eine App (z. B. für Objekterkennung) ihn im Container nutzen soll.",
+      "hardware": [
+        "Google Coral USB Accelerator: USB 1a6e:089a vor dem Laden der Firmware, 18d1:9302 danach",
+        "Nicht unterstützt: Coral als PCIe- oder M.2-Karte (bräuchte den Treiber gasket/apex)"
+      ],
+      "changes": "Bringt titanos-coral-info (Erkennung vor und nach der Firmwareinitialisierung) und die Geräteauswahl „Coral USB“ für Container. Es wird kein Kernelmodul geladen; der USB-Zugriff des Containers umfasst den ganzen USB-Bus.",
+      "limits": [
+        "Keine Edge-TPU-Laufzeit und keine Firmware von Google im Plugin; die App bringt beides mit.",
+        "Der Container bekommt Zugriff auf /dev/bus/usb, also auf alle USB-Geräte des NAS."
+      ],
+      "footprint": "Wenige KiB; kein Dienst läuft dauerhaft."
+    },
+    "en": {
+      "when": "When a Coral USB Accelerator is connected and an app (e.g. for object detection) should use it in a container.",
+      "hardware": [
+        "Google Coral USB Accelerator: USB 1a6e:089a before its firmware is loaded, 18d1:9302 afterwards",
+        "Not supported: Coral as a PCIe or M.2 card (would need the gasket/apex driver)"
+      ],
+      "changes": "Brings titanos-coral-info (detection before and after firmware initialization) and the device choice \"Coral USB\" for containers. No kernel module is loaded; the container's USB access covers the whole USB bus.",
+      "limits": [
+        "No Edge TPU runtime and no Google firmware in the plugin; the app brings both.",
+        "The container gets access to /dev/bus/usb, i.e. to all USB devices of the NAS."
+      ],
+      "footprint": "A few KiB; no service runs permanently."
+    }
+  },
+  "hardware": [
+    {"modalias": "usb:v1A6Ep089A*"},
+    {"modalias": "usb:v18D1p9302*"}
+  ]
+}

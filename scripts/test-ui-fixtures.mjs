@@ -637,6 +637,30 @@ export function fixtureFactory(browser, errors) {
       // Shaped like GET /plugins; tests set data.plugins.
       if ((path === "/plugins" || path === "/plugins/catalog") && data.plugins)
         return json(data.plugins);
+      // Hardware recommendations: dismiss one, show dismissed ones again.
+      if (path.startsWith("/plugins/recommendations/") && data.plugins) {
+        (data.recommendationCalls ??= []).push([method, path]);
+        const name = decodeURIComponent(path.split("/")[3]);
+        if (method === "POST" && path.endsWith("/dismiss")) {
+          data.hiddenRecommendations = [
+            ...(data.hiddenRecommendations ?? []),
+            ...data.plugins.recommendations.filter((r) => r.plugin === name),
+          ];
+          data.plugins = {
+            ...data.plugins,
+            recommendations: data.plugins.recommendations.filter((r) => r.plugin !== name),
+            dismissed: (data.plugins.dismissed ?? 0) + 1,
+          };
+        } else if (method === "DELETE") {
+          data.plugins = {
+            ...data.plugins,
+            recommendations: [...data.plugins.recommendations, ...(data.hiddenRecommendations ?? [])],
+            dismissed: 0,
+          };
+          data.hiddenRecommendations = [];
+        }
+        return json(data.plugins);
+      }
       if (path.endsWith("/update") && path.startsWith("/plugins/") && method === "POST") {
         (data.pluginUpdates ??= []).push([path, route.request().postDataJSON()]);
         if (data.failPluginUpdate)

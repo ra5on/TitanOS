@@ -2,7 +2,7 @@ name: Plugins
 
 # Builds the official plugins against a freshly built image and boots that
 # image with them: NVIDIA (open modules, NAS build SDK), Intel GPU Tools,
-# Coral USB, Tailscale and NetBird. Only for pull requests that touch plugins; image
+# Coral USB, Tailscale, NetBird and the driver plugins. Only for pull requests that touch plugins; image
 # changes are rehearsed by release.yml, and a tag builds and tests both.
 # Disposable signing key only, nothing is published.
 
@@ -19,6 +19,7 @@ on:
       - 'scripts/nvidia-update-release.py'
       - 'scripts/update-nvidia-lock.py'
       - 'scripts/make-tools-plugins.sh'
+      - 'scripts/make-driver-plugins.py'
       - 'scripts/tools-plugin-stage.py'
       - 'scripts/make-tailscale-plugin.py'
       - 'scripts/tailscale_smoke.py'
@@ -87,6 +88,11 @@ jobs:
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh "$VERSION"
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
+      - name: Build the driver plugins against the image kernel
+        run: |
+          sudo env PATH="$PATH" python3 scripts/make-driver-plugins.py "$VERSION"
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
       - name: Pack, sign and verify with the disposable key
         run: |
           printf '%s\n' 'Plugin rehearsal. Disposable signing key. Not for distribution.' > changelog.txt
@@ -100,7 +106,7 @@ jobs:
       - name: NVIDIA, Tailscale and NetBird plugins in UEFI QEMU
         run: python3 scripts/smoke-release.py "out/release/titanos-$VERSION.zip" --plugins out/release --timeout 420
 
-      - name: Intel GPU Tools, Coral USB and container devices in UEFI QEMU
+      - name: Intel GPU Tools, Coral USB, driver plugins and container devices in UEFI QEMU
         run: python3 scripts/smoke-storage.py "out/release/titanos-$VERSION.zip" --plugins out/release --timeout 420
 
       - uses: actions/upload-artifact@v7

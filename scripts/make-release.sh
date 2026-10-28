@@ -147,12 +147,15 @@ manifest = {
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
 # Kernel plugins are separate downloads; they must match this exact system.
+# Driver plugins (make-driver-plugins.py) carry their compiled sources.
+DRIVERS = set(json.loads(Path("plugins/drivers/drivers.json").read_text())["plugins"])
 manifest["plugins"] = []
+plugin_sources = []
 without_plugins = os.environ["WITHOUT_PLUGINS"] == "1"
 for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin.json")):
     plugin = json.loads(path.read_text())
     name = plugin["name"]
-    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird"} or path.name != name + ".plugin.json":
+    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird", *DRIVERS} or path.name != name + ".plugin.json":
         raise ValueError("unrecognized official plugin")
     if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
         raise ValueError("plugin kernel mismatch: " + name)
@@ -163,6 +166,12 @@ for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin
     assets = [name + ".raw", path.name, name + "-licenses.tar.gz"]
     if name == "nvidia":
         assets.append("nvidia-kernel-sources.tar.gz")
+    if name in DRIVERS:
+        if plugin.get("kernel") != manifest["kernel"] or not plugin.get("sources"):
+            raise ValueError("driver plugin without kernel or sources: " + name)
+        assets.append(name + "-sources.tar.gz")
+    if plugin.get("sources"):
+        plugin_sources.append((name, plugin["version"], plugin["sources"]))
     for asset in assets:
         shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
     manifest["plugins"].append({"name": name, "asset": path.name})
@@ -191,6 +200,8 @@ with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding
     f.write("Includes browser/build dependencies; firmware may contain binary-only blobs.\n\n")
     for c in components:
         f.write(f"{c['ecosystem']}: {c['name']} {c['version']}\n  {c['source']}\n")
+    for name, plugin_version, links in plugin_sources:
+        f.write(f"Plugin: {name} {plugin_version}\n" + "".join(f"  {link}\n" for link in links))
 with tarfile.open(os.path.join(release, f"titanos-{version}-licenses.tar.gz"), "w:gz") as archive:
     for name in ["LICENSE.md", "THIRD_PARTY_LICENSES", "components.json", "licenses"]:
         archive.add(notices / name, arcname=name)
