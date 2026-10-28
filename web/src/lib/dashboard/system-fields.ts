@@ -5,6 +5,7 @@ export const SYSTEM_FIELDS = [
 	'mainboard',
 	'bios',
 	'cpu',
+	'power',
 	'memory',
 	'kernel',
 	'slot',

@@ -45,6 +45,8 @@
 				return info.inventory?.bios || '–';
 			case 'cpu':
 				return `${info.cpu.model} · ${info.cpu.threads} Threads`;
+			case 'power':
+				return info.cpu.powerWatts == null ? '–' : `${info.cpu.powerWatts.toFixed(1)} W`;
 			case 'memory':
 				return formatBytes(info.memory.totalBytes);
 			case 'kernel':

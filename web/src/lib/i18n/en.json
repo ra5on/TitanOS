@@ -6376,5 +6376,6 @@
 	"notify.kind.docker_update_rolled_back.text": "After the update {subject} did not run properly; the previous images run again.",
 	"notify.kind.docker_update_failed.title": "App update failed",
 	"notify.kind.docker_update_failed.text": "The automatic update of {subject} could not be fully undone.",
-	"activity.do.autoUpdate": "Automatic app updates set"
+	"activity.do.autoUpdate": "Automatic app updates set",
+	"dashboard.field.power": "CPU power"
 }

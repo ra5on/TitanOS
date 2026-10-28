@@ -1072,6 +1072,7 @@ func run(opts options) error {
 		d := healthreport.Data{Version: version.Version, MemoryPercent: -1, Since: time.Unix(0, reportSince.Load())}
 		info := monitor.Info()
 		d.Uptime = time.Duration(info.UptimeSeconds) * time.Second
+		d.CPUWatts = info.CPU.PowerWatts
 		if mem := monitor.Memory(); mem.TotalBytes > 0 {
 			d.MemoryPercent = int((mem.TotalBytes - mem.AvailableBytes) * 100 / mem.TotalBytes)
 		}

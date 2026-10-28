@@ -6376,5 +6376,6 @@
 	"notify.kind.docker_update_rolled_back.text": "Nach dem Update lief {subject} nicht richtig; die vorigen Images laufen wieder.",
 	"notify.kind.docker_update_failed.title": "App-Update fehlgeschlagen",
 	"notify.kind.docker_update_failed.text": "Das automatische Update von {subject} ließ sich nicht vollständig zurücknehmen.",
-	"activity.do.autoUpdate": "Automatische App-Updates eingestellt"
+	"activity.do.autoUpdate": "Automatische App-Updates eingestellt",
+	"dashboard.field.power": "CPU-Leistung"
 }

@@ -147,3 +147,14 @@ Monitoring-Daten und MQTT-Werte bleiben unverändert. Fehlende Werte bleiben
 unbekannt bzw. Lücken. Feste Verlaufsslots verhindern Strecksprünge bei kurzen
 Verläufen; die Docker-Skala wächst bei Bedarf weich und bleibt während der
 Anzeige stabil. Verdeckte Seiten beenden ihre laufenden Übergänge.
+
+## CPU-Leistung (seit 0.35.0)
+
+Die Leistung der CPU-Pakete kommt aus den Energiezählern des Kernels
+(powercap/RAPL, `/sys/class/powercap/*rapl:N/energy_uj`, nur die
+Paket-Zonen, Überlauf über `max_energy_range_uj`), gemittelt über das
+Messintervall des Systemmonitors (fünf Sekunden). Es ist nur die CPU, nicht
+das ganze NAS: Platten, Lüfter, Mainboard und Netzteil fehlen. Auf Intel und
+AMD ab Zen; ohne Zähler (auch in VMs) bleibt der Wert unbekannt. Anzeige als
+Feld „CPU-Leistung“ der Systeminfo-Kachel und im Bericht über das NAS; API
+`cpu.powerWatts` in der Systeminfo.
