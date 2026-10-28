@@ -37,6 +37,8 @@ type CPU struct {
 	Threads      int           `json:"threads"`
 	UsagePercent float64       `json:"usagePercent"`
 	ThreadUsage  []ThreadUsage `json:"threadUsage"`
+	// PowerWatts is what the CPU packages draw (RAPL, power.go); nil unknown.
+	PowerWatts *float64 `json:"powerWatts"`
 }
 type ThreadUsage struct {
 	ID           string   `json:"id"`
@@ -105,6 +107,7 @@ type Monitor struct {
 	temperatures []Temperature
 	threadUsage  []ThreadUsage
 	memory       Memory
+	cpuWatts     *float64
 }
 
 // NewMonitor starts sampling until ctx is done.
@@ -122,6 +125,8 @@ func (m *Monitor) run(ctx context.Context) {
 	defer ticker.Stop()
 
 	prevCPU, _ := readCPUTimes()
+	zones := raplZones("/sys")
+	prevRapl, raplOK := readRapl(zones, time.Now())
 	previousThreads := parseCPUThreads(readString("/proc/stat"))
 	prevIface := defaultRoute().iface
 	prevRx, prevTx := readNetBytes(prevIface)
@@ -173,6 +178,12 @@ func (m *Monitor) run(ctx context.Context) {
 			m.rates = rates
 			m.threadUsage = threadUsage
 			m.cpu, m.rx, m.tx, m.network = usage, rxRate, txRate, iface
+			if raplOK {
+				if sample, ok := readRapl(zones, time.Now()); ok {
+					m.cpuWatts = raplWatts(zones, prevRapl, sample)
+					prevRapl = sample
+				}
+			}
 			m.temperatures = temperatures
 			m.mu.Unlock()
 		}
@@ -183,6 +194,7 @@ func (m *Monitor) run(ctx context.Context) {
 func (m *Monitor) Info() Info {
 	m.mu.RLock()
 	usage, rx, tx := m.cpu, m.rx, m.tx
+	watts := m.cpuWatts
 	temperatures := slices.Clone(m.temperatures)
 	threads := slices.Clone(m.threadUsage)
 	rates := m.rates
@@ -194,7 +206,7 @@ func (m *Monitor) Info() Info {
 		Hostname:      hostname,
 		Kernel:        readTrimmed("/proc/sys/kernel/osrelease"),
 		UptimeSeconds: readUptime(),
-		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage, ThreadUsage: threads},
+		CPU:           CPU{Model: cpuModel(readString("/proc/cpuinfo")), Threads: runtime.NumCPU(), UsagePercent: usage, ThreadUsage: threads, PowerWatts: watts},
 		Memory:        m.Memory(),
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},

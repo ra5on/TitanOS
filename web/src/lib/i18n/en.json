@@ -6318,5 +6318,6 @@
 	"swap.pullNow": "{disk} (serial {serial}) can be pulled now.",
 	"swap.toStorage": "To storage",
 	"activity.do.diskReplace": "Disk swapped while running",
-	"nav.back": "Back"
+	"nav.back": "Back",
+	"dashboard.field.power": "CPU power"
 }

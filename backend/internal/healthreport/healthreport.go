@@ -56,9 +56,11 @@ type Data struct {
 	Uptime  time.Duration
 	// MemoryPercent is the RAM in use (MemTotal − MemAvailable); -1 unknown.
 	MemoryPercent int
-	Volumes       []Volume
-	Disks         []Disk
-	Backups       []Backup
+	// CPUWatts is what the CPU packages draw now (RAPL); nil unknown.
+	CPUWatts *float64
+	Volumes  []Volume
+	Disks    []Disk
+	Backups  []Backup
 	// UpdateAvailable is the version of a newer release, if one was found.
 	UpdateAvailable string
 	// UPS is nil without one.
@@ -249,6 +251,9 @@ func Build(d Data, language string, now time.Time) Report {
 	system.Lines = append(system.Lines, fmt.Sprintf("TitanOS %s · %s %s", d.Version, w["uptime"], duration(w, d.Uptime)))
 	if d.MemoryPercent >= 0 {
 		system.Lines = append(system.Lines, fmt.Sprintf("%s %d %%", w["memory"], d.MemoryPercent))
+	}
+	if d.CPUWatts != nil {
+		system.Lines = append(system.Lines, fmt.Sprintf("%s %.0f W", w["cpuPower"], *d.CPUWatts))
 	}
 	if d.UpdateAvailable != "" {
 		system.Status = Warning
