@@ -13,7 +13,7 @@ const makeJob=(id,state='done')=>({id,state,move:false,durable:true,blocked:fals
 try {
  for (const [width,theme,locale] of [[1440,'graphit','de'],[390,'graphit','de'],[1440,'light','en']]) {
   const {ctx,page,data}=await create('owner',theme,width,locale);
-  data.system.version='0.21.0-dev';
+  data.system.version='0.31.0';
   let jobs=[makeJob('active','running'),makeJob('done1'),makeJob('done2')],fail=false,holdPoll=false,releasePoll=null;
   const deleted=[];
   await ctx.route('**/api/v1/files/jobs',async route=>{

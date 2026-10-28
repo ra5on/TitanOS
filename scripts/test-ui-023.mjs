@@ -12,7 +12,7 @@ const context=fixtureFactory(browser,errors);
 const net=(id,name,parent,address,management=false,vlan=0)=>({id,name,parent,address,management,vlan,purpose:management?'management':'apps',bridge:true,ipv4:'static',gateway:management?'192.168.1.1':'',ipv6:'auto',address6:'',gateway6:'',dns:[],routes:[]});
 async function fixture(theme='graphit',width=1440,locale='de',appearance={}) {
  const f=await context('owner',theme,width,locale);
- f.data.prefs.appearance={theme,...appearance}; f.data.system.version='0.23.0';
+ f.data.prefs.appearance={theme,...appearance}; f.data.system.version='0.31.0';
  await f.page.setViewportSize({width,height:width<761?844:1000});
  const config={hostname:'titan-test',ports:['enp1s0'],bondMode:'',vlan:0,bridge:true,dhcp:true,address:'',gateway:'',dns:[],bonds:[],networks:[net('admin','Verwaltung','enp1s0','192.168.1.20/24',true),net('apps','Anwendungen','enp2s0','192.168.30.20/24',false,30)]};
  const network={config,pending:null,pendingSeconds:0,interfaces:[{name:'enp1s0',mac:'52:54:00:00:00:01',carrier:true,speedMbps:2500},{name:'enp2s0',mac:'52:54:00:00:00:02',carrier:true,speedMbps:2500}],device:'br0',addresses:['192.168.1.20/24'],gateway:'192.168.1.1',dns:['192.168.1.1'],configured:true,bridgeReady:true};
@@ -28,7 +28,7 @@ async function fixture(theme='graphit',width=1440,locale='de',appearance={}) {
   if(path==='/account/tokens/fixture'){tokens.splice(0);return route.fulfill({status:204});}
   if(path==='/docker/networks')return json({networks:[{name:'apps',parent:'apps',driver:'ipvlan',subnet:'192.168.30.0/24',gateway:'192.168.30.1',range:'192.168.30.128/26',hostAccess:false}],parents:config.networks});
   if(path==='/vms/imports')return json({jobs,chunkBytes:8<<20});
-  if(path==='/plugins/releases')return json({releases:[{version:'0.23.0',bytes:600e6,protected:true,reason:'current',fingerprint:'current'},{version:'0.22.0',bytes:600e6,protected:true,reason:'fallback',fingerprint:'fallback'},{version:'0.20.0',bytes:600e6,protected:false,fingerprint:'old'}]});
+  if(path==='/plugins/releases')return json({releases:[{version:'0.31.0',bytes:600e6,protected:true,reason:'current',fingerprint:'current'},{version:'0.30.0',bytes:600e6,protected:true,reason:'fallback',fingerprint:'fallback'},{version:'0.28.0',bytes:600e6,protected:false,fingerprint:'old'}]});
   if(path==='/files/list')return json([{name:'Dokumente',dir:true,size:0,modified:'2026-10-26T12:00:00Z'},{name:'Jahresbericht – langer Dateiname.pdf',dir:false,size:123456,modified:'2026-10-26T12:00:00Z'},{name:'Notizen.txt',dir:false,size:128,modified:'2026-10-26T12:00:00Z'}]);
   return route.fallback();
  });

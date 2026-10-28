@@ -644,7 +644,8 @@ VM-Gastagent-/Freeze-Sicherung bleibt ein eigener späterer Ausbau.
 ### Persönliche Startseite, Speicher und Einstellungen (0.20.0)
 
 [Bestätigter Folgeentwurf](PersonalDashboard.md): eine anpassbare Startseite mit
-visuellem Editor, globalen Glasreglern und persönlicher Hintergrundgalerie,
+visuellem Editor, persönlicher Hintergrundgalerie (seit 0.30.0 wie alle
+Gestaltung unter Einstellungen › Darstellung),
 kompakte Speicherlisten und thematisch gruppierte Einstellungen. Die zehn lokalen
 Motive und ihre Herkunft stehen in [DashboardBackgrounds.md](DashboardBackgrounds.md).
 Er ersetzt die älteren Dashboard-/Editor- und Übersichtsregeln einschließlich

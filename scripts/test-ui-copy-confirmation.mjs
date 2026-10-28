@@ -16,7 +16,7 @@ const errors = [],
   create = fixtureFactory(browser, errors);
 try {
   const { ctx, page, data } = await create();
-	data.system.version = "0.21.0";
+	data.system.version = "0.31.0";
   const pending = [],
     copies = [];
   const file = {
