@@ -820,6 +820,13 @@ func run(opts options) error {
 		slog.Warn("NVIDIA settings unavailable", "err", err)
 	}
 	go nvidia.Run(ctx)
+	// GuC/HuC of Intel graphics (Gen9 to Gen11): a kernel parameter in the
+	// boot entries, written only when the setting changes.
+	intelGuc := hardware.NewIntelGuc(store, devices, updates, opts.dev || updates.Disabled)
+	if err := intelGuc.Load(); err != nil {
+		slog.Warn("Intel GuC/HuC setting unavailable", "err", err)
+	}
+	go intelGuc.Run(ctx)
 	powerButton := system.NewPowerButtonManager(store)
 	powerButton.Disabled = opts.dev
 	if err := powerButton.Load(); err != nil {
@@ -988,6 +995,7 @@ func run(opts options) error {
 	}
 	diagnostics := diagnose.NewManager(store, version.Version)
 	diagnostics.SMART = func(ctx context.Context) any { return volumes.SmartDumps(ctx) }
+	diagnostics.IntelGPU = intelGuc.Report
 	handler := api.New(api.Options{
 		Media:              mediaImports,
 		UI:                 webui.FS(),
@@ -1010,6 +1018,7 @@ func run(opts options) error {
 		LXC:                systemContainers,
 		Hardware:           devices,
 		Nvidia:             nvidia,
+		IntelGuc:           intelGuc,
 		Accelerators:       hardware.NewAcceleratorMonitor(ctx, devices),
 		Plugins:            extensions,
 		Tailscale:          tailnet,

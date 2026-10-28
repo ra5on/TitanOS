@@ -1,0 +1,12 @@
+Linux version 6.12.113+deb13-amd64 (debian-kernel@lists.debian.org)
+Command line: BOOT_IMAGE=/titanos/a/vmlinuz boot=live i915.enable_guc=3
+i915 0000:00:02.0: [drm] Found kabylake/ulx (device ID 591c) display version 9.00 stepping C0
+i915 0000:00:02.0: [drm] GT0: Incompatible option enable_guc=3 - GuC submission is N/A
+i915 0000:00:02.0: [drm] Finished loading DMC firmware i915/kbl_dmc_ver1_04.bin (v1.4)
+i915 0000:00:02.0: [drm] GT0: GuC firmware i915/kbl_guc_70.1.1.bin version 70.1.1
+i915 0000:00:02.0: [drm] GT0: HuC firmware i915/kbl_huc_4.0.0.bin version 4.0.0
+i915 0000:00:02.0: [drm] GT0: HuC: authenticated for all workloads
+i915 0000:00:02.0: [drm] GT0: GUC: submission disabled
+i915 0000:00:02.0: [drm] GT0: GUC: SLPC disabled
+i915 0000:03:00.0: [drm] GT0: HuC: authentication failed -ETIMEDOUT
+[drm] Initialized i915 1.6.0 for 0000:00:02.0 on minor 0

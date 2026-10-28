@@ -79,6 +79,9 @@ type Manager struct {
 	// SMART returns the SMART answers of the disks for smart.json, without
 	// waking sleeping disks and without serial numbers. Nil leaves it out.
 	SMART func(context.Context) any
+	// IntelGPU returns what the kernel loaded of GuC/HuC on Intel graphics
+	// and the GuC/HuC setting, for intel-gpu.json. Nil leaves it out.
+	IntelGPU func(context.Context) any
 }
 
 // NewManager returns a manager working on the real system.
@@ -235,6 +238,9 @@ smart.json holds what smartctl reported per disk, without serial numbers
 and world wide names. Disks in standby were not woken; they show the last
 values read while awake, or none.
 
+intel-gpu.json holds the Intel graphics devices with their render node,
+driver and the GuC/HuC firmware the kernel loaded, and the GuC/HuC setting.
+
 Not in here at all: accounts and password hashes, the compose files and
 secrets of apps, certificates, notification settings, and no file of yours.
 
@@ -295,6 +301,19 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 			data = []byte(fmt.Sprintf("(%v)", err))
 		}
 		if err := add("smart.json", redactor.Text(string(data)+"\n")); err != nil {
+			return err
+		}
+	}
+
+	if m.IntelGPU != nil {
+		gpuCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		state := m.IntelGPU(gpuCtx)
+		cancel()
+		data, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			data = []byte(fmt.Sprintf("(%v)", err))
+		}
+		if err := add("intel-gpu.json", redactor.Text(string(data)+"\n")); err != nil {
 			return err
 		}
 	}

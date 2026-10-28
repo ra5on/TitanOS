@@ -5,6 +5,18 @@ from pathlib import Path
 
 MICROCODE = ("kernel/x86/microcode/GenuineIntel.bin", "kernel/x86/microcode/AuthenticAMD.bin")
 FIRMWARE = ("i915/*guc*.bin*", "i915/*huc*.bin*", "i915/*dmc*.bin*", "xe/*guc*.bin*", "intel/vpu/*.bin*", "amdgpu/*.bin*")
+# The exact GuC/HuC files i915 of Linux 6.12 asks for on Gen9 to Tiger Lake,
+# where Settings > Hardware can turn HuC loading on (intel_uc_fw.c).
+FIRMWARE += tuple(
+    f"i915/{prefix}_{kind}.bin*"
+    for prefix, versions in (
+        ("skl", ("guc_70.1.1", "huc_2.0.0")), ("bxt", ("guc_70.1.1", "huc_2.0.0")),
+        ("kbl", ("guc_70.1.1", "huc_4.0.0")), ("cml", ("guc_70.1.1", "huc_4.0.0")),
+        ("glk", ("guc_70.1.1", "huc_4.0.0")), ("icl", ("guc_70.1.1", "huc_9.0.0")),
+        ("ehl", ("guc_70.1.1", "huc_9.0.0")), ("tgl", ("guc_70.1.1", "huc_7.9.3")),
+    )
+    for kind in versions
+)
 MODULES = (
     "i915", "xe", "intel_vpu", "amdgpu", "coretemp", "k10temp",
     "e1000e", "igb", "igc", "ixgbe", "i40e", "ice", "r8169", "tg3", "bnx2", "bnx2x",

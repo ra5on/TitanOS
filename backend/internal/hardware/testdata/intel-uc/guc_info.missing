@@ -1,0 +1,5 @@
+GuC firmware: i915/kbl_guc_70.1.1.bin
+	status: MISSING
+	version: wanted 70.1.1, found 0.0.0
+	uCode: 0 bytes
+	RSA: 0 bytes
