@@ -30,6 +30,7 @@
 		...(form.short && mdns ? proxyAddresses(name, ['local']) : []),
 	]);
 	const aliasCount = $derived(splitList(form.aliases).length);
+	const domainCount = $derived(splitList(form.domains).length);
 </script>
 
 <div class="fields">
@@ -60,6 +61,17 @@
 				autocapitalize="off"
 				{disabled}
 			/><small>{t('proxy.aliasesHint', { count: aliasCount })}</small></label
+		>
+		<label
+			><span>{t('proxy.domains')}</span><input
+				class="field mono"
+				type="text"
+				bind:value={form.domains}
+				placeholder="fotos.example.org"
+				spellcheck="false"
+				autocapitalize="off"
+				{disabled}
+			/><small>{t('proxy.domainsHint', { count: domainCount })}</small></label
 		>
 		{#if target}
 			<label
@@ -182,7 +194,9 @@
 									? t(problem.key, { name: problem.name })
 									: problem.key === 'proxy.tailnetNameTaken'
 										? t(problem.key, { app: problem.app })
-										: t(problem.key)}
+										: problem.key === 'proxy.domainInvalid'
+											? t(problem.key, { domain: problem.domain })
+											: t(problem.key)}
 				</li>
 			{/each}
 		</ul>

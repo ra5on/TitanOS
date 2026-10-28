@@ -180,15 +180,18 @@ try {
     const hrefs = await nav(page).locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
     const network = hrefs.slice(hrefs.indexOf("/settings/network"), hrefs.indexOf("/settings/access") + 1);
     assert.deepEqual(network, [
-      "/settings/network", "/settings/firewall", "/settings/letsencrypt", "/settings/ddns", "/settings/ipv64", "/settings/proxy", "/settings/access",
+      "/settings/network", "/settings/firewall", "/settings/letsencrypt", "/settings/ddns", "/settings/proxy", "/settings/access",
     ]);
-    for (const area of ["firewall", "letsencrypt", "ddns", "ipv64"])
+    for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await nav(page).locator(`a[href="/settings/${area}"]`).getByText("neu", { exact: true }).count(), 1, area);
 
     // Firewall: inside the sidebar, compact controls, switch on with trial.
     await page.goto(base + "/settings/firewall");
     await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
     assert.equal(await nav(page).locator('a[aria-current="page"]').getAttribute("href"), "/settings/firewall");
+    // Opening an area once takes its "new" badge away; the others keep theirs.
+    assert.equal(await nav(page).locator('a[href="/settings/firewall"]').getByText("neu", { exact: true }).count(), 0, "seen");
+    assert.equal(await nav(page).locator('a[href="/settings/ddns"]').getByText("neu", { exact: true }).count(), 1, "not seen yet");
     assert.equal(await page.locator(".crumbs").first().isVisible(), false, "no breadcrumb beside the sidebar");
     const button = page.locator(".settings-page .tile .btn").first();
     await button.waitFor();
@@ -335,7 +338,7 @@ try {
     const { ctx, page } = await create("user");
     await page.goto(base + "/settings");
     await page.locator(".settings-page").first().waitFor();
-    for (const area of ["firewall", "letsencrypt", "ddns", "ipv64"])
+    for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await page.locator(`a[href="/settings/${area}"]`).count(), 0, area);
     await ctx.close();
   }

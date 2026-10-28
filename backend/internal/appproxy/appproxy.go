@@ -69,7 +69,7 @@ type Route struct {
 	// (see tailnet.go); TailscaleName is its name there, Name if empty.
 	Tailscale     bool   `json:"tailscale,omitempty"`
 	TailscaleName string `json:"tailscaleName,omitempty"`
-	// Domains are full host names of their own (e.g. photos.nas.ipv64.de),
+	// Domains are full host names of their own (e.g. photos.example.org),
 	// answered next to <name>.<suffix>; each belongs to one route only.
 	// Older versions ignore them. Not sent (nil) keeps the stored ones.
 	Domains []string `json:"domains,omitempty"`

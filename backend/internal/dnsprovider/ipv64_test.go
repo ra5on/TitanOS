@@ -16,24 +16,21 @@ import (
 )
 
 // fakeIPv64 follows the OpenAPI description of ipv64.net/api/v2 for the
-// parts TitanOS uses, plus /nic/update and /health.
+// parts TitanOS uses, plus /nic/update.
 type fakeIPv64 struct {
 	t       *testing.T
 	mu      sync.Mutex
 	key     string
 	domains []ipv64WireDomain
 	records []ipv64WireRecord
-	checks  []ipv64WireCheck
-	paused  map[string]bool
 	updates []string
-	pings   int
 	nextID  int64
 	pending int // GETs of records that still say pending_dns
 	limited bool
 }
 
 func newFakeIPv64(t *testing.T) (*fakeIPv64, *httptest.Server) {
-	f := &fakeIPv64{t: t, key: "api-key", paused: map[string]bool{},
+	f := &fakeIPv64{t: t, key: "api-key",
 		domains: []ipv64WireDomain{{ID: 1, Name: "nas.ipv64.de", Kind: "dyndns", Zone: "ipv64.de", UpdateToken: "domain-token", Active: true}}}
 	server := httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(server.Close)
@@ -72,14 +69,6 @@ func (f *fakeIPv64) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.updates = append(f.updates, "legacy "+r.URL.Query().Encode())
 		io.WriteString(w, "good")
-		return
-	case "/health":
-		if auth != "hc-token" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		f.pings++
-		w.WriteHeader(http.StatusOK)
 		return
 	case "/api/v2/ip":
 		f.data(w, 200, map[string]string{"ip": "203.0.113.64", "family": "ipv4"})
@@ -168,44 +157,6 @@ func (f *fakeIPv64) serve(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(parts[1], 10, 64)
 		f.records = slices.DeleteFunc(f.records, func(rec ipv64WireRecord) bool { return rec.ID == id })
 		w.WriteHeader(204)
-	case r.Method == "GET" && path == "/healthchecks":
-		f.data(w, 200, f.checks)
-	case r.Method == "POST" && path == "/healthchecks":
-		c := ipv64WireCheck{Token: "hc-token", Name: str("name"), Type: "push", Status: "new"}
-		c.Push = &struct {
-			Period     int        `json:"period_seconds"`
-			Grace      int        `json:"grace_seconds"`
-			ExpectedBy *time.Time `json:"expected_by"`
-		}{Period: int(body["period_seconds"].(float64)), Grace: int(body["grace_seconds"].(float64))}
-		f.checks = append(f.checks, c)
-		f.data(w, 201, c)
-	case len(parts) >= 2 && parts[0] == "healthchecks":
-		action := ""
-		if len(parts) == 3 {
-			action = parts[2]
-		}
-		switch {
-		case action == "pause":
-			f.paused[parts[1]] = true
-		case action == "resume":
-			delete(f.paused, parts[1])
-		case r.Method == "DELETE":
-			f.checks = nil
-			w.WriteHeader(204)
-			return
-		}
-		for _, c := range f.checks {
-			if c.Token == parts[1] {
-				f.data(w, 200, c)
-				return
-			}
-		}
-		f.problem(w, 404, "not_found", "Healthcheck not found.")
-	case r.Method == "GET" && path == "/integrations":
-		if r.URL.Query().Get("include_secrets") != "false" {
-			f.t.Error("integrations asked with secrets")
-		}
-		f.data(w, 200, []map[string]any{{"id": 0, "type": "account_email", "name": "E-Mail", "status": "active", "options": map[string]string{"to": "m***"}}, {"id": 5, "type": "ntfy", "name": "Handy", "status": "active"}})
 	default:
 		f.t.Errorf("fake IPv64: unexpected %s %s", r.Method, r.URL)
 		f.problem(w, 404, "not_found", "Unknown endpoint.")
@@ -317,89 +268,5 @@ func TestIPv64Addresses(t *testing.T) {
 	ipv64Budget.updates, ipv64Budget.recent = nil, nil
 	if err := bad.(Updater).SetAddresses(ctx(t), "nas.ipv64.de", v4, netip.Addr{}); err == nil || strings.Contains(err.Error(), "wrong-token") {
 		t.Fatal(err)
-	}
-}
-
-func TestIPv64AccountDomainsHealthchecks(t *testing.T) {
-	f, server := newFakeIPv64(t)
-	c := NewIPv64("api-key", "", Options{BaseURL: server.URL})
-	account, err := c.Account(ctx(t))
-	if err != nil || account.Plan != "Free" || *account.Usage["dyndns_updates_24h"].Limit != 48 || account.KeyName != "titanos" {
-		t.Fatal(account, err)
-	}
-	domains, err := c.Domains(ctx(t))
-	if err != nil || len(domains) != 1 || domains[0].Name != "nas.ipv64.de" {
-		t.Fatal(domains, err)
-	}
-	data, _ := json.Marshal(domains)
-	if strings.Contains(string(data), "domain-token") {
-		t.Fatal("update token leaves the package")
-	}
-	if _, err := c.CreateDomain(ctx(t), "evil.example.com"); err == nil {
-		t.Fatal("foreign zone")
-	}
-	if d, err := c.CreateDomain(ctx(t), "titan.home64.de"); err != nil || d.Name != "titan.home64.de" {
-		t.Fatal(d, err)
-	}
-	on := true
-	if d, err := c.ChangeDomain(ctx(t), "nas.ipv64.de", IPv64DomainChange{Wildcard: &on}); err != nil || !d.Wildcard {
-		t.Fatal(d, err)
-	}
-	ip, err := c.PublicIP(ctx(t), "tcp4")
-	if err != nil || ip != netip.MustParseAddr("203.0.113.64") {
-		t.Fatal(ip, err)
-	}
-
-	integrations, err := c.Integrations(ctx(t))
-	if err != nil || len(integrations) != 2 || integrations[1].Name != "Handy" {
-		t.Fatal(integrations, err)
-	}
-	if _, err := c.CreateHealthcheck(ctx(t), "titanos-nas", 30*time.Second, time.Minute, nil); err == nil {
-		t.Fatal("period below a minute")
-	}
-	check, err := c.CreateHealthcheck(ctx(t), "titanos-nas", 30*time.Minute, 10*time.Minute, []int{0, 5})
-	if err != nil || check.Token() != "hc-token" || check.Period != 1800 || check.ID != HealthcheckID("hc-token") {
-		t.Fatal(check, err)
-	}
-	data, _ = json.Marshal(check)
-	if strings.Contains(string(data), "hc-token") {
-		t.Fatal("token in JSON")
-	}
-	list, err := c.Healthchecks(ctx(t))
-	if err != nil || len(list) != 1 {
-		t.Fatal(list, err)
-	}
-	if err := c.PauseHealthcheck(ctx(t), "hc-token"); err != nil || !f.paused["hc-token"] {
-		t.Fatal(err)
-	}
-	if err := c.ResumeHealthcheck(ctx(t), "hc-token"); err != nil || f.paused["hc-token"] {
-		t.Fatal(err)
-	}
-	ipv64Budget.recent = nil
-	if err := c.Ping(ctx(t), "hc-token"); err != nil || f.pings != 1 {
-		t.Fatal(err)
-	}
-	if err := c.DeleteHealthcheck(ctx(t), "hc-token"); err != nil || len(f.checks) != 0 {
-		t.Fatal(err)
-	}
-
-	f.limited = true
-	_, err = c.Domains(ctx(t))
-	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.Status != 429 || apiErr.RetryAfter != 7*time.Second || apiErr.Code != "rate_limited" {
-		t.Fatal(err)
-	}
-	wrong := NewIPv64("nope", "", Options{BaseURL: server.URL})
-	if _, err := wrong.Account(ctx(t)); err == nil || !strings.Contains(err.Error(), "API key is invalid") {
-		t.Fatal(err)
-	}
-	if err := (Config{Type: IPv64Net, UpdateToken: "x"}).Validate(ForChallenge); err == nil {
-		t.Fatal("the DNS challenge needs the API key")
-	}
-	if err := (Config{Type: IPv64Net, UpdateToken: "x"}).Validate(ForAddress); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Config{Type: IPv64Net, Token: "x", IPv6Prefix: "10.0.0.0/8"}).Validate(ForAddress); err == nil {
-		t.Fatal("IPv4 prefix")
 	}
 }

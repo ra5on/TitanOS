@@ -6,6 +6,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { userSettingsPaths } from '#lib/settings-search.ts';
 	import { loadSettingsStates } from '#lib/settings-states.svelte.ts';
+	import { markAreaSeen } from '#lib/settings-seen.svelte.ts';
 	import SettingsSidebar from '#lib/components/SettingsSidebar.svelte';
 	import { terminal } from '#lib/terminal.svelte.ts';
 	let { children }: { children: Snippet } = $props();
@@ -44,6 +45,8 @@
 	// The states beside some areas are read once when the settings open, not
 	// on every page change inside them and never on a timer.
 	onMount(() => loadSettingsStates(admin));
+	// Opening an area once takes its "new" badge away.
+	$effect(() => markAreaSeen(page.url.pathname));
 </script>
 
 <!-- A sidebar beside every settings page (desktop); on phones the overview is

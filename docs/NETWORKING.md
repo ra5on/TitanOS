@@ -79,7 +79,7 @@ Die Option ändert keine Netzwerkdateien und braucht keinen Probelauf.
 - **Diagnose** (siehe unten) und **Fernzugriff**: Tailscale und NetBird mit
   ihren vollständigen Plugin-Einstellungen, sobald das Plugin installiert ist,
   sonst ein Verweis auf Plugins; dazu Verweise auf HTTPS-Namen, App-Links,
-  dynamisches DNS und IPv64.
+  dynamisches DNS.
 - Der Editor eines Netzes gliedert sich in Allgemein, IPv4, IPv6 (Modus jeweils
   als Umschalter), DNS und Routen. DNS-Server werden als einzelne Einträge
   gesammelt; Leerzeichen, Komma oder Semikolon trennen (höchstens drei).
