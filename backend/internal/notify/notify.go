@@ -362,6 +362,29 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	}
 }
 
+// ErrNoChannel means no way out is switched on.
+var ErrNoChannel = errors.New("notify: no channel switched on")
+
+// SendReport sends a summary (the health report) through every channel that
+// is on, whatever "send from" says, and to subscribed devices. It does not
+// go into the bell.
+func (m *Manager) SendReport(title, text string) error {
+	m.mu.Lock()
+	settings := m.settings
+	m.mu.Unlock()
+	message := Message{Time: time.Now(), Severity: Info, Kind: "health_report", Title: title, Text: text}
+	any := settings.Email.Enabled || settings.Ntfy.Enabled || settings.Telegram.Enabled || settings.Discord.Enabled || settings.HomeAssistant.Enabled
+	if !any && m.Push == nil {
+		return ErrNoChannel
+	}
+	m.deliver(settings, message, nil)
+	if m.Push != nil {
+		hostname, _ := os.Hostname()
+		m.Push(message, "["+hostname+"] "+title)
+	}
+	return nil
+}
+
 // Wording is the title and text of a kind of message in the language of
 // the settings.
 func (m *Manager) Wording(kind, subject string) (string, string) {

@@ -32,6 +32,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -97,6 +98,8 @@ type Options struct {
 	WebPush *webpush.Manager
 	// WireGuard is the VPN server of the NAS; nil makes one that is off.
 	WireGuard *wgserver.Manager
+	// HealthReport sends the regular summary; nil makes one that is off.
+	HealthReport *healthreport.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -211,6 +214,17 @@ func New(opts Options) *Server {
 		s.opts.WireGuard = wgserver.New(opts.Store)
 		s.opts.WireGuard.Disabled = true
 		s.opts.WireGuard.Load()
+	}
+	if s.opts.HealthReport == nil {
+		s.opts.HealthReport = healthreport.New(opts.Store)
+		s.opts.HealthReport.Collect = func() healthreport.Data { return healthreport.Data{MemoryPercent: -1} }
+		s.opts.HealthReport.Send = func(title, text, status string) error {
+			if s.opts.Notify == nil {
+				return notify.ErrNoChannel
+			}
+			return s.opts.Notify.SendReport(title, text)
+		}
+		s.opts.HealthReport.Load()
 	}
 	if s.opts.WebPush == nil {
 		s.opts.WebPush = webpush.New(opts.Store)
@@ -513,6 +527,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/network/wireguard", s.requireAdmin(s.handleWireGuardSet))
 	mux.HandleFunc("POST /api/v1/network/wireguard/peers", s.requireAdmin(s.handleWireGuardAdd))
 	mux.HandleFunc("POST /api/v1/network/wireguard/peers/remove", s.requireAdmin(s.handleWireGuardRemove))
+	mux.HandleFunc("GET /api/v1/health-report", s.requireAdmin(s.handleHealthReport))
+	mux.HandleFunc("PUT /api/v1/health-report", s.requireAdmin(s.handleHealthReportSet))
+	mux.HandleFunc("POST /api/v1/health-report/send", s.requireAdmin(s.handleHealthReportSend))
 	mux.HandleFunc("GET /api/v1/notifications/push", s.requireAdmin(s.handlePushDevices))
 	mux.HandleFunc("POST /api/v1/notifications/push", s.requireAdmin(s.handlePushSubscribe))
 	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", s.requireAdmin(s.handlePushRemove))

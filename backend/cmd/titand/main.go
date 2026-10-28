@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -44,6 +45,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -1059,6 +1061,67 @@ func run(opts options) error {
 	} else if err := vpnServer.Apply(ctx); err != nil {
 		slog.Warn("WireGuard server not up", "err", err)
 	}
+	// A summary of the NAS, weekly or monthly, off unless switched on.
+	report := healthreport.New(store)
+	report.Timezone = settings.CurrentTimezone
+	report.Language = func() string { general, _ := notifier.Settings(); return general.Language }
+	var reportSince atomic.Int64 // the last report, Unix nanoseconds
+	reportSince.Store(time.Now().UnixNano())
+	report.Collect = func() healthreport.Data {
+		d := healthreport.Data{Version: version.Version, MemoryPercent: -1, Since: time.Unix(0, reportSince.Load())}
+		info := monitor.Info()
+		d.Uptime = time.Duration(info.UptimeSeconds) * time.Second
+		if mem := monitor.Memory(); mem.TotalBytes > 0 {
+			d.MemoryPercent = int((mem.TotalBytes - mem.AvailableBytes) * 100 / mem.TotalBytes)
+		}
+		check, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if status, err := volumes.Status(check); err == nil {
+			for _, v := range status.Volumes {
+				d.Volumes = append(d.Volumes, healthreport.Volume{Name: v.Name, State: v.State, Mounted: v.Mounted, Locked: v.Encryption != nil && v.Encryption.Locked, Size: v.SizeBytes, Used: v.UsedBytes})
+			}
+			for _, disk := range status.Disks {
+				x := healthreport.Disk{Name: disk.Name, Model: disk.Model, Volume: disk.Volume, Warnings: len(disk.SmartWarnings)}
+				if disk.Smart != nil {
+					healthy := disk.Smart.Healthy
+					x.Healthy, x.TempC = &healthy, disk.Smart.TemperatureC
+				}
+				d.Disks = append(d.Disks, x)
+			}
+		}
+		for _, view := range backups.CachedViews() {
+			d.Backups = append(d.Backups, healthreport.Backup{Name: view.Job.ID, Enabled: view.Job.Enabled, LastOK: view.State.LastOK, LastError: view.State.LastError, Overdue: backups.Overdue(view)})
+		}
+		if available := updates.Status().Available; available != nil {
+			d.UpdateAvailable = available.Version
+		}
+		if u := supply.Status(); u.Mode != "" && u.Mode != "none" {
+			d.UPS = &healthreport.UPS{Connected: u.Connected, OnBattery: u.OnBattery, Charge: u.Charge}
+		}
+		for _, message := range notifier.Messages() {
+			if message.Time.Before(d.Since) {
+				continue
+			}
+			switch message.Severity {
+			case notify.Error:
+				d.Errors++
+			case notify.Warning:
+				d.Warnings++
+			}
+		}
+		return d
+	}
+	report.Send = func(title, text, status string) error {
+		if err := notifier.SendReport(title, text); err != nil {
+			return err
+		}
+		reportSince.Store(time.Now().UnixNano())
+		return nil
+	}
+	if err := report.Load(); err != nil {
+		slog.Warn("health report settings not readable from /config", "err", err)
+	}
+	go report.Run(ctx)
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1161,6 +1224,7 @@ func run(opts options) error {
 		Notify:             notifier,
 		WebPush:            pushes,
 		WireGuard:          vpnServer,
+		HealthReport:       report,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
 		USB:                drives,
