@@ -161,6 +161,7 @@ type Server struct {
 	prefs       *preferences
 	loginLook   loginLook
 	appIcon     appIcons
+	dav         davState
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -264,6 +265,13 @@ func New(opts Options) *Server {
 	// The look of the login page is public; changing it is not.
 	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
 	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)
+	mux.HandleFunc("/dav/", s.handleWebDAV)
+	mux.HandleFunc("/dav", s.handleWebDAV)
+	mux.HandleFunc("GET /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettings))
+	mux.HandleFunc("PUT /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettingsSet))
+	mux.HandleFunc("GET /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAV))
+	mux.HandleFunc("POST /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAVNew))
+	mux.HandleFunc("DELETE /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAVDelete))
 	mux.HandleFunc("GET /api/v1/app-icon", s.requireAdmin(s.handleAppIcon))
 	mux.HandleFunc("PUT /api/v1/app-icon", s.requireAdmin(s.handlePutAppIcon))
 	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", s.handleLoginBackground)
