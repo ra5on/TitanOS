@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 
-# Firewall filtering is deliberately off until TitanOS has a firewall UI.
-# Keep netfilter and Docker's NAT/conntrack rules: disabling Docker's iptables
-# support would also break masquerading and published container ports.
+# The iptables chains stay open. Filtering, when switched on under Settings ›
+# Firewall, is titand's own nftables table inet titanos: a drop in any base
+# chain drops the packet, whatever these ACCEPT rules say. Keep netfilter and
+# Docker's NAT/conntrack rules: disabling Docker's iptables support would also
+# break masquerading and published container ports.
 mkdir -p /run/lock
 exec 9>/run/lock/titanos-firewall-open.lock
 flock 9

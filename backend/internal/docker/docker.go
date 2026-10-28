@@ -79,6 +79,9 @@ type Container struct {
 	// Since is when the container started, or stopped if it is not running.
 	Since time.Time `json:"since"`
 	Ports []Port    `json:"ports"`
+	// HostNetwork containers use the NAS's network directly and publish no
+	// ports; the firewall cannot tell which of the NAS's ports are theirs.
+	HostNetwork bool `json:"hostNetwork,omitempty"`
 	// App is the Compose project the container belongs to, if any.
 	App     string `json:"app"`
 	Service string `json:"service"`
@@ -461,6 +464,7 @@ func (m *Manager) Status(ctx context.Context) Status {
 			container.Name = strings.TrimPrefix(c.Names[0], "/")
 		}
 		container.Managed = slices.Contains(apps, container.App)
+		container.HostNetwork = c.HostConfig.NetworkMode == "host"
 		container.WebUI = c.Labels[WebUILabel]
 		container.PublicURL = c.Labels["titanos.public-url"]
 		container.Icon = c.Labels["titanos.icon"]

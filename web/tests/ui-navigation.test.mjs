@@ -56,11 +56,13 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
  assert.deepEqual(admin.map(g => [g.group, g.entries.map(e => e.id)]), [
   ['system', ['updates', 'timezone', 'notifications', 'about']],
   ['hardware', ['hardware', 'temperatures', 'memory', 'energy', 'ups', 'power-button']],
-  ['network', ['network', 'proxy', 'access']],
+  ['network', ['network', 'firewall', 'letsencrypt', 'ddns', 'ipv64', 'proxy', 'access']],
   ['data', ['backups', 'files']],
   ['integrations', ['homeassistant', 'assistant', 'api']],
   ['personal', ['appearance']],
  ]);
+ const fresh = admin.flatMap(g => g.entries).filter(e => e.isNew).map(e => e.id);
+ assert.deepEqual(fresh, ['firewall', 'letsencrypt', 'ddns', 'ipv64']);
  const user = settingsEntries('', false, label).flatMap(g => g.entries.map(e => e.id));
  assert.deepEqual(user, ['about', 'temperatures', 'api', 'appearance']);
  const ssh = settingsEntries('SSH', true, label).flatMap(g => g.entries);

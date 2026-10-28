@@ -4,6 +4,13 @@ import type { IconName } from '#lib/components/Icon.svelte';
 const keywords: Record<string, string> = {
 	appearance: 'theme design farbe color font schrift hintergrund background',
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
+	firewall:
+		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
+	'firewall-apps': 'docker apps container port ports veröffentlicht published',
+	'firewall-rules': 'regel rule regeln rules eigene own erlauben allow verbieten deny',
+	'firewall-autoblock':
+		'auto block automatisch sperren blockieren fehlgeschlagen failed login anmeldung brute force',
+	'firewall-recent': 'gesperrt blocked verworfen dropped pakete packets zuletzt recent',
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access',
@@ -34,6 +41,12 @@ const keywords: Record<string, string> = {
 	dns: 'dns namensauflösung nameserver',
 	restore: 'wiederherstellung wiederherstellen restore ersetzen replace',
 	terminal: 'terminal shell konsole console bestätigung confirmation',
+	letsencrypt:
+		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
+	ddns:
+		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
+	ipv64:
+		'ipv64 ipv64.net konto account api key schlüssel domain dns record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -58,6 +71,29 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	letsencrypt: [
+		{ id: 'letsencrypt-status', label: 'letsencrypt.statusTitle', href: '/settings/letsencrypt#le-status' },
+		{ id: 'letsencrypt-settings', label: 'letsencrypt.settingsTitle', href: '/settings/letsencrypt#le-settings' },
+	],
+	ddns: [
+		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
+		{ id: 'ddns-settings', label: 'ddns.settingsTitle', href: '/settings/ddns#ddns-settings' },
+	],
+	ipv64: [
+		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
+		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
+		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
+		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
+		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
+		{ id: 'ipv64-router', label: 'ipv64x.tab.router', href: '/settings/ipv64?tab=router' },
+		{ id: 'ipv64-blocklist', label: 'ipv64x.tab.blocklist', href: '/settings/ipv64?tab=blocklist' },
+	],
+	firewall: [
+		{ id: 'firewall-apps', label: 'firewall.apps', href: '/settings/firewall#firewall-apps' },
+		{ id: 'firewall-rules', label: 'firewall.rules', href: '/settings/firewall#firewall-rules' },
+		{ id: 'firewall-autoblock', label: 'firewall.autoBlock', href: '/settings/firewall#firewall-autoblock' },
+		{ id: 'firewall-recent', label: 'firewall.recent', href: '/settings/firewall#firewall-recent' },
+	],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
@@ -104,6 +140,10 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
 	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
 	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
+	{ id: 'firewall', label: 'firewall.title', group: 'network', icon: 'shield', admin: true, isNew: true },
+	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true, isNew: true },
+	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
+	{ id: 'ipv64', label: 'ipv64x.title', group: 'network', icon: 'globe', admin: true, isNew: true },
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },

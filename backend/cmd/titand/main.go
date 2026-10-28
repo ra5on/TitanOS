@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,12 +37,16 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
+	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -285,6 +290,16 @@ func run(opts options) error {
 	if err := connection.Load(ctx); err != nil {
 		slog.Warn("network configuration not put in place", "err", err)
 	}
+	// The packet filter: off unless switched on in the web UI, then its own
+	// nftables table; the automatic blocking after failed logins can be on
+	// without it. Off, titanos-firewall-open keeps everything open.
+	packetFilter := firewall.NewManager(store)
+	packetFilter.Disabled = opts.dev
+	packetFilter.Web = webPorts(opts)
+	packetFilter.HomeNetworks = sshd.HomeNetworks
+	if err := packetFilter.Load(ctx); err != nil {
+		slog.Warn("firewall settings not put in place", "err", err)
+	}
 
 	volumes := storage.NewManager(store)
 	volumes.ReadOnly = opts.dev
@@ -308,6 +323,7 @@ func run(opts options) error {
 	routes.Disabled = opts.dev
 	routes.HTTPSPort, routes.Reserved = proxyPorts(opts)
 	routes.OnChange = folders.Kick
+	routes.Gate = packetFilter.AllowHTTP
 	if err := routes.Load(); err != nil {
 		slog.Warn("app HTTPS names not readable from /config", "err", err)
 	}
@@ -648,6 +664,17 @@ func run(opts options) error {
 	if opts.dev {
 		power = system.NoPower{}
 	}
+	// A shutdown after a power failure (UPS) is no planned one: the
+	// healthcheck of IPv64 keeps watching then.
+	upsPower := power
+	// Planned shutdowns and restarts first pause the healthcheck of IPv64
+	// (dynamic DNS, set further down), so that it raises no alarm.
+	var beforePowerOff func()
+	power = announcedPower{Power: power, before: func() {
+		if beforePowerOff != nil {
+			beforePowerOff()
+		}
+	}}
 
 	// New versions go into the other slot of the stick and start on trial.
 	slot := system.BootSlot()
@@ -805,7 +832,7 @@ func run(opts options) error {
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.
 	supply := ups.NewManager(store)
 	supply.Disabled = opts.dev
-	supply.Poweroff = power.Poweroff
+	supply.Poweroff = upsPower.Poweroff
 	supply.OnEvent = func(kind, subject string) {
 		severity := notify.Warning
 		switch kind {
@@ -934,9 +961,72 @@ func run(opts options) error {
 		}
 		audit.Record(activity.Entry{At: login.At, User: login.User, Via: activity.ViaSSH, IP: login.IP, Action: action, Target: login.Target(), OK: !login.Blocked})
 	})
+	// The firewall learns the published ports of Docker apps and reports
+	// automatic blocks and changes that went back.
+	packetFilter.Apps = func(ctx context.Context) ([]firewall.App, bool) {
+		status := containers.Status(ctx)
+		if !status.Running {
+			return nil, false
+		}
+		return firewallApps(status.Containers), true
+	}
+	packetFilter.OnBlock = func(block firewall.Block) {
+		notifier.Notify(notify.Warning, "firewall_blocked", block.Address)
+		audit.Record(activity.Entry{Via: activity.ViaSystem, IP: block.Address, Action: "firewall_block", Target: block.Source, OK: true})
+	}
+	packetFilter.OnRevert = func() {
+		notifier.Notify(notify.Warning, "firewall_reverted", "")
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: "firewall_reverted", OK: true})
+	}
+	packetFilter.OnFailure = func(err error) {
+		notifier.Notify(notify.Error, "firewall_failed", "")
+	}
+	go packetFilter.Run(ctx)
+	go packetFilter.FollowJournal(ctx)
 	machines.Activity = func(action, target string, ok bool) {
 		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
 	}
+	// Certificates from Let's Encrypt, served next to the own or
+	// self-signed one without a restart; renewed by themselves.
+	acmeCerts := letsencrypt.New(store)
+	acmeCerts.Disabled = opts.dev || certs == nil
+	acmeCerts.HTTPPort = !opts.dev && opts.httpAddr != ""
+	acmeCerts.AppDomain = func() string { return routes.Settings().Domain }
+	acmeCerts.Install = func(cert *tls.Certificate) {
+		if certs != nil {
+			certs.SetACME(cert)
+		}
+	}
+	acmeCerts.OnEvent = func(severity, kind, subject string) { notifier.Notify(severity, kind, subject) }
+	acmeCerts.Activity = func(action, target string, ok bool) {
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
+	}
+	if err := acmeCerts.Load(); err != nil {
+		slog.Warn("Let's Encrypt settings not readable from /config", "err", err)
+	}
+	go acmeCerts.Run(ctx)
+	// Dynamic DNS: host names at the public addresses of the NAS.
+	dynamicDNS := ddns.New(store)
+	dynamicDNS.Disabled = opts.dev
+	dynamicDNS.OnEvent = acmeCerts.OnEvent
+	dynamicDNS.Activity = acmeCerts.Activity
+	if err := dynamicDNS.Load(); err != nil {
+		slog.Warn("dynamic DNS settings not readable from /config", "err", err)
+	}
+	go dynamicDNS.Run(ctx)
+	beforePowerOff = func() { dynamicDNS.PauseForShutdown(context.Background()) }
+	// The IPv64.net account beyond dynamic DNS: notifications from polling,
+	// the v64 blocklist for the firewall and the WireGuard tunnel into a
+	// Cloud Router; all off until switched on.
+	account64 := ipv64.NewManager(store)
+	account64.Disabled = opts.dev
+	account64.Fallback = func() (string, string) { return dynamicDNS.IPv64Key(), acmeCerts.IPv64Key() }
+	account64.Notify = func(severity, kind, subject string) { notifier.Notify(severity, kind, subject) }
+	account64.Firewall = packetFilter
+	if err := account64.Load(ctx); err != nil {
+		slog.Warn("IPv64 settings not readable from /config", "err", err)
+	}
+	go account64.Run(ctx)
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1035,6 +1125,9 @@ func run(opts options) error {
 		Tailscale:          tailnet,
 		Netbird:            mesh,
 		Network:            connection,
+		Firewall:           packetFilter,
+		IPv64:              account64,
+		IPv64Reserved:      reservedPorts(opts),
 		Notify:             notifier,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
@@ -1048,6 +1141,8 @@ func run(opts options) error {
 		Backup:             backups,
 		UPS:                supply,
 		Certificate:        certs,
+		LetsEncrypt:        acmeCerts,
+		DDNS:               dynamicDNS,
 		Settings:           settings,
 		Energy:             energy,
 		PowerSchedule:      schedule,
@@ -1097,7 +1192,8 @@ func run(opts options) error {
 		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {
-			serve(newServer(opts.httpAddr, redirectToHTTPS(opts.httpsAddr)), false)
+			// Port 80 also answers the HTTP challenge of Let's Encrypt.
+			serve(newServer(opts.httpAddr, acmeCerts.HTTPHandler(redirectToHTTPS(opts.httpsAddr))), false)
 		}
 		slog.Info("titand started", "version", version.Version, "https", opts.httpsAddr, "http", opts.httpAddr, "config", opts.configDir, "webui", webui.Embedded)
 	}
@@ -1202,6 +1298,65 @@ func proxyPorts(opts options) (int, []int) {
 	return https, reserved
 }
 
+// reservedPorts are the ports of titand that are never published.
+func reservedPorts(opts options) []int {
+	_, reserved := proxyPorts(opts)
+	return reserved
+}
+
+// webPorts are the ports of the web UI for the firewall.
+func webPorts(opts options) firewall.WebPorts {
+	ports := firewall.WebPorts{HTTP: -1}
+	if _, p, err := net.SplitHostPort(opts.httpsAddr); err == nil {
+		ports.HTTPS, _ = strconv.Atoi(p)
+	}
+	if opts.httpAddr != "" {
+		if _, p, err := net.SplitHostPort(opts.httpAddr); err == nil {
+			ports.HTTP, _ = strconv.Atoi(p)
+		}
+	}
+	return ports
+}
+
+// firewallApps groups the published ports of containers by app: the
+// Compose project, or the container itself.
+func firewallApps(containers []docker.Container) []firewall.App {
+	byKey := map[string]*firewall.App{}
+	var keys []string
+	for _, c := range containers {
+		key, name := c.App, c.App
+		if key == "" {
+			key, name = "container:"+c.Name, c.Name
+		}
+		app := byKey[key]
+		if app == nil {
+			app = &firewall.App{Key: key, Name: name, Ports: []firewall.AppPort{}}
+			byKey[key] = app
+			keys = append(keys, key)
+		}
+		app.HostNetwork = app.HostNetwork || c.HostNetwork
+		for _, p := range c.Ports {
+			port := firewall.AppPort{Port: p.Host, Protocol: p.Protocol}
+			if !slices.Contains(app.Ports, port) {
+				app.Ports = append(app.Ports, port)
+			}
+		}
+	}
+	sort.Strings(keys)
+	out := make([]firewall.App, 0, len(keys))
+	for _, key := range keys {
+		app := byKey[key]
+		sort.Slice(app.Ports, func(i, j int) bool {
+			if app.Ports[i].Port != app.Ports[j].Port {
+				return app.Ports[i].Port < app.Ports[j].Port
+			}
+			return app.Ports[i].Protocol < app.Ports[j].Protocol
+		})
+		out = append(out, *app)
+	}
+	return out
+}
+
 func newServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -1225,4 +1380,20 @@ func redirectToHTTPS(httpsAddr string) http.Handler {
 		}
 		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 	})
+}
+
+// announcedPower runs before first, for planned shutdowns and restarts.
+type announcedPower struct {
+	system.Power
+	before func()
+}
+
+func (p announcedPower) Reboot() error {
+	p.before()
+	return p.Power.Reboot()
+}
+
+func (p announcedPower) Poweroff() error {
+	p.before()
+	return p.Power.Poweroff()
 }

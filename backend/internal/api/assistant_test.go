@@ -370,7 +370,7 @@ func TestAssistantAPIRoutes(t *testing.T) {
 			t.Errorf("%s is not a route of the server", route)
 		}
 	}
-	for _, secret := range []string{"/backups/{id}/password", "/config-backup/download", "/network/confirm", "/system/certificate", "/terminal/shell", "/files/download", "/users"} {
+	for _, secret := range []string{"/backups/{id}/password", "/config-backup/download", "/network/confirm", "/firewall/confirm", "/system/certificate", "/terminal/shell", "/files/download", "/users"} {
 		for _, r := range apiRoutes {
 			if r.Path == secret && (secret != "/users" || r.Method != "GET") {
 				t.Errorf("%s %s is in the list", r.Method, r.Path)

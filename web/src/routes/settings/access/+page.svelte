@@ -16,7 +16,15 @@
 		allowedNetworks: string[]; networksError?: string;
 		homeNetworks: string[]; tailscaleNetworks: string[]; netbirdNetworks: string[]; clientAddress: string;
 	};
-	type Certificate = { kind: 'self-signed' | 'custom'; names: string[]; issuer: string; notBefore: string; notAfter: string; fingerprint: string };
+	type Certificate = {
+		kind: 'self-signed' | 'custom';
+		names: string[];
+		issuer: string;
+		notBefore: string;
+		notAfter: string;
+		fingerprint: string;
+		letsEncrypt?: { names: string[]; notAfter: string };
+	};
 
 	let ssh = $state<Ssh | null>(null);
 	let certificate = $state<Certificate | null>(null);
@@ -213,6 +221,10 @@
 			<p class="notice-warn">{t('access.certExpiring', { days: Math.max(daysLeft, 0) })}</p>
 		{/if}
 		{#if saved}<p class="notice-ok" role="status">{t('access.certSaved')}</p>{/if}
+		{#if certificate.letsEncrypt}<p class="notice-ok">
+				{t('access.letsEncryptActive', { names: certificate.letsEncrypt.names.join(', '), date: formatDateTime(new Date(certificate.letsEncrypt.notAfter)) })}
+				<a href="/settings/letsencrypt">{t('letsencrypt.title')}</a>
+			</p>{:else}<p class="muted"><a href="/settings/letsencrypt">{t('access.letsEncryptLink')}</a></p>{/if}
 		<dl>
 			<div><dt>{t('access.certKind')}</dt><dd>{t(`access.certKind.${certificate.kind}`)}</dd></div>
 			<div><dt>{t('access.certIssuer')}</dt><dd>{certificate.issuer || '–'}</dd></div>

@@ -70,6 +70,7 @@
 		battery: 'M3 8h15v8H3ZM18 10.5h2.5v3H18ZM6 11v2M9 11v2',
 		home: 'M3 11.5 12 4l9 7.5M5.5 9.5V20h13V9.5M10 20v-5.5h4V20',
 		zap: 'M13 3 5 13.5h6L10 21l8-10.5h-6Z',
+		shield: 'M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6ZM9 12l2 2 4-4',
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

@@ -20,6 +20,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { isRunning, webLinks } from '../../container.ts';
 	import AppProxy from './AppProxy.svelte';
+	import AppIpv64 from './AppIpv64.svelte';
 	import {
 		check,
 		NETWORKS,
@@ -584,7 +585,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	<p class="notice-warn">{t('editor.noServices')}</p>
 {/if}
 
-{#if loaded}<AppProxy app={name} {members} />{/if}
+{#if loaded}<AppProxy app={name} {members} /><AppIpv64 app={name} />{/if}
 
 {#if result}
 	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">

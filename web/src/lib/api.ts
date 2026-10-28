@@ -73,6 +73,7 @@ export const api = {
 	post: <T>(path: string, body?: Body, signal?: AbortSignal) =>
 		request<T>('POST', path, body, signal),
 	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
+	patch: <T>(path: string, body?: Body) => request<T>('PATCH', path, body),
 	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body),
 };
 
@@ -583,4 +584,76 @@ export type USBDevice = {
 export type Hardware = {
 	hardware: { iommu: boolean; pci: PCIDevice[]; usb: USBDevice[] };
 	usedBy: Record<string, string[]>;
+};
+
+/** The packet filter (internal/firewall). */
+export type FirewallZone = 'home' | 'vpn' | 'internet';
+export type FirewallZones = Record<FirewallZone, boolean>;
+export type FirewallRule = {
+	action: 'allow' | 'deny';
+	protocol: 'tcp' | 'udp' | 'any';
+	ports?: string;
+	source?: string;
+	zone?: FirewallZone | '';
+	comment?: string;
+	disabled?: boolean;
+};
+export type FirewallAutoBlock = {
+	enabled: boolean;
+	attempts: number;
+	within: number;
+	minutes: number;
+	permanent: boolean;
+	exemptLocal: boolean;
+	exempt: string[];
+};
+export type FirewallConfig = {
+	enabled: boolean;
+	services: Record<string, FirewallZones>;
+	apps: Record<string, FirewallZones>;
+	newApps: FirewallZones;
+	rules: FirewallRule[];
+	autoBlock: FirewallAutoBlock;
+};
+export type FirewallService = {
+	id: string;
+	ports: { protocol: 'tcp' | 'udp' | 'icmp'; ports: string[] | null }[];
+	default: FirewallZones;
+};
+export type FirewallApp = {
+	key: string;
+	name: string;
+	ports: { port: number; protocol: string }[];
+	hostNetwork?: boolean;
+};
+export type FirewallBlock = {
+	address: string;
+	since: string;
+	until?: string;
+	source: string;
+	attempts: number;
+};
+export type FirewallDrop = {
+	at: string;
+	source: string;
+	zone: FirewallZone | 'blocked';
+	protocol: string;
+	port?: number;
+	app?: boolean;
+	interface?: string;
+};
+export type FirewallStatus = {
+	config: FirewallConfig;
+	pending: FirewallConfig | null;
+	pendingSeconds: number;
+	active: boolean;
+	error?: string;
+	services: FirewallService[];
+	apps: FirewallApp[];
+	homeNetworks: string[] | null;
+	vpnNetworks: string[] | null;
+	clientAddress: string;
+	clientZone: FirewallZone | '';
+	blocked: FirewallBlock[];
+	recent: FirewallDrop[];
 };

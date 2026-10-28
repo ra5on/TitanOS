@@ -4,7 +4,8 @@ Ab 0.23.0 kann TitanOS mehrere benannte NAS-Netze verwalten. Bestehende NAS
 behalten ihre gespeicherte Konfiguration, bis unter **Einstellungen › Netzwerk**
 ausdrücklich „Mehrere Netze einrichten“ gewählt wird. Router, DHCP-Server und
 übergreifende Zugriffsregeln bleiben extern. TitanOS wird dadurch kein Router
-oder DHCP-Server und erhält keine konfigurierbare Firewall.
+oder DHCP-Server. Was das NAS selbst annimmt, regelt die eigene, ab Werk
+ausgeschaltete [Firewall](FIREWALL.md).
 
 ## Mehrere NAS-Netze
 
@@ -123,8 +124,9 @@ Loopback, Link-local, Docker-, VM- und VPN-Schnittstellen), **Tailscale**
 - Durchgesetzt wird die Liste von sshd selbst, nicht von einer Firewall:
   titand schreibt `/etc/ssh/sshd_config.d/20-titanos-networks.conf` mit
   `AllowUsers *@<netz> …`. `AllowGroups titanos-ssh` aus der Grundkonfiguration
-  gilt weiter; beide müssen eine Anmeldung zulassen. Die Firewall,
-  nftables.service (maskiert) und die bestehenden Regeln bleiben unverändert.
+  gilt weiter; beide müssen eine Anmeldung zulassen. Die Netzliste ändert
+  keine Firewall-Regeln; ist die [Firewall](FIREWALL.md) eingeschaltet, muss
+  zusätzlich deren Dienst SSH für die Zone erlaubt sein.
 - Vor dem Übernehmen prüft `sshd -t` die gesamte Konfiguration. Lehnt sshd sie
   ab, bleibt die vorige Datei bestehen, sshd wird nicht neu geladen, und die
   Seite zeigt den Fehler. Eine geänderte Liste lädt sshd per
@@ -216,31 +218,41 @@ erst nach erfolgreicher Bestätigung geschrieben.
 Grundlage: [systemd-networkd unter Debian 13](https://manpages.debian.org/trixie/systemd/systemd.network.5.en.html)
 und [networkctl](https://manpages.debian.org/trixie/systemd/networkctl.1.en.html).
 
-## Firewall derzeit ausgeschaltet
+## Firewall
 
-Auf Entscheidung des Projektinhabers vom 15. Oktober 2026 ist die
-Paketfilterung vorerst vollständig freigegeben. Eine konfigurierbare Firewall
-in der Oberfläche folgt später. Dies ersetzt die frühere, nur für `br0`
-geltende Ausnahme.
+Die konfigurierbare Firewall unter Einstellungen › Firewall ist ab Werk aus;
+Zonen, Dienste, Docker-Apps, eigene Regeln, Probe und automatisches Sperren
+beschreibt [Firewall](FIREWALL.md).
 
-`titanos-firewall-open.service` setzt vor dem Netzwerkstart für IPv4 und IPv6
-`INPUT`, `OUTPUT` und `FORWARD` auf `ACCEPT` und stellt eine unbedingte
-Freigabe an den Anfang. Auch `DOCKER-USER` bekommt diese Freigabe, damit neu
-angelegte Docker-Netze den Verkehr nicht wieder sperren. Dieselbe Einrichtung
-läuft vor Netzwerkkonfigurationsänderungen und nach jedem Docker-Start.
-Wiederholte Aufrufe erzeugen keine doppelten Freigaben. Die Regeln werden
-bei jedem Boot neu erzeugt; dafür gibt es keine zyklischen Stickzugriffe.
+**Ausgeschaltet** (Stand bis zum ausdrücklichen Einschalten, auch nach einem
+Update) ist die Paketfilterung vollständig freigegeben, wie vom Projektinhaber am
+15. Oktober 2026 entschieden. `titanos-firewall-open.service` setzt vor dem
+Netzwerkstart für IPv4 und IPv6 `INPUT`, `OUTPUT` und `FORWARD` auf `ACCEPT` und
+stellt eine unbedingte Freigabe an den Anfang. Auch `DOCKER-USER` bekommt diese
+Freigabe, damit neu angelegte Docker-Netze den Verkehr nicht wieder sperren.
+Dieselbe Einrichtung läuft vor Netzwerkkonfigurationsänderungen und nach jedem
+Docker-Start. Wiederholte Aufrufe erzeugen keine doppelten Freigaben. Die Regeln
+werden bei jedem Boot neu erzeugt; dafür gibt es keine zyklischen
+Stickzugriffe. Ist nur das automatische Sperren eingeschaltet, enthält die
+Tabelle `inet titanos` nur die gesperrten Absender.
+
+**Eingeschaltet** bleibt diese offene iptables-Einrichtung unverändert
+bestehen. titand lädt zusätzlich seine eigene Tabelle `inet titanos`; weil in
+nftables ein `drop` in irgendeiner Basiskette das Paket verwirft, filtert sie
+unabhängig von den `ACCEPT`-Regeln der iptables-Ketten. Docker-NAT, die
+Tailscale-Hooks und NetBirds Tabellen bleiben unberührt.
 
 Netfilter bleibt für NAT, Connection Tracking und Docker-Portweiterleitungen
 verfügbar. Die NAT-Tabellen werden nicht geleert, Docker läuft weiterhin mit
-seiner iptables-Unterstützung. `nftables.service` ist maskiert; libvirts
-unbenutztes Standard-NAT-Netz startet nicht automatisch. TitanOS verwendet
-für VMs `br0` oder QEMU-User-Networking. Die Regelung ist für den mit Debian 13
-ausgelieferten Docker-/libvirt-Stack ausgelegt; zusätzlich von Hand eingerichtete
-native nftables-Regelsätze werden nicht automatisch entfernt. Das NetBird-Plugin
-legt eigene nftables-Tabellen `netbird` an, deren Regeln nur `wt0` betreffen
-und von der offenen Freigabe nicht aufgehoben werden; NetBird entfernt sie beim
-Beenden selbst.
+seiner iptables-Unterstützung. `nftables.service` ist maskiert; das Paket
+`nftables` liefert nur das Werkzeug `nft`, mit dem titand seine Tabelle lädt.
+libvirts unbenutztes Standard-NAT-Netz startet nicht automatisch. TitanOS
+verwendet für VMs `br0` oder QEMU-User-Networking. Die Regelung ist für den mit
+Debian 13 ausgelieferten Docker-/libvirt-Stack ausgelegt; zusätzlich von Hand
+eingerichtete native nftables-Regelsätze werden nicht automatisch entfernt. Das
+NetBird-Plugin legt eigene nftables-Tabellen `netbird` an, deren Regeln nur
+`wt0` betreffen und von der offenen Freigabe nicht aufgehoben werden; NetBird
+entfernt sie beim Beenden selbst.
 
 Grundlage: [Docker: iptables](https://docs.docker.com/engine/network/firewall-iptables/)
 und [Docker: Paketfilterung und NAT](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
