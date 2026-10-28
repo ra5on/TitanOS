@@ -295,4 +295,3 @@ func TestPickIPv6(t *testing.T) {
 		t.Fatal("no address on wlan0")
 	}
 }
-
