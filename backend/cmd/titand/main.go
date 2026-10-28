@@ -1015,6 +1015,11 @@ func run(opts options) error {
 		slog.Warn("Let's Encrypt settings not readable from /config", "err", err)
 	}
 	go acmeCerts.Run(ctx)
+	// The NAS's own name in the tailnet gets the certificate Tailscale hands
+	// out once HTTPS is on in the tailnet (passkeys and web push need it).
+	if certs != nil {
+		go tailnet.RunCertificate(ctx, certs.SetTailnet)
+	}
 	// Dynamic DNS: host names at the public addresses of the NAS.
 	dynamicDNS := ddns.New(store)
 	dynamicDNS.Disabled = opts.dev

@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -135,5 +136,33 @@ func TestExpiredCustomCertificateFallsBack(t *testing.T) {
 	later.now = func() time.Time { return time.Now().Add(24 * time.Hour) }
 	if _, err := later.loadCustom(); !errors.Is(err, ErrInvalid) {
 		t.Errorf("expired certificate loaded: %v", err)
+	}
+}
+
+func TestTailnetCertificateOnlyForItsName(t *testing.T) {
+	m, err := NewManager(config.Open(t.TempDir()), "titan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM, keyPEM, err := generateFor("titan.bleak-locrian.ts.net", []string{"titan.bleak-locrian.ts.net"}, nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.SetTailnet(&cert)
+	if got, _ := m.GetCertificate(&tls.ClientHelloInfo{ServerName: "titan.bleak-locrian.ts.net"}); got != &cert {
+		t.Fatal("tailnet name without the certificate from Tailscale")
+	}
+	for _, name := range []string{"titan.local", "192.168.1.10", ""} {
+		if got, _ := m.GetCertificate(&tls.ClientHelloInfo{ServerName: name}); got == &cert {
+			t.Fatalf("%q got the certificate from Tailscale", name)
+		}
+	}
+	m.SetTailnet(nil)
+	if got, _ := m.GetCertificate(&tls.ClientHelloInfo{ServerName: "titan.bleak-locrian.ts.net"}); got == &cert {
+		t.Fatal("certificate kept after removal")
 	}
 }

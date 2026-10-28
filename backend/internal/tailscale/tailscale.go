@@ -57,6 +57,8 @@ type Status struct {
 	Health       []string   `json:"health"`
 	PendingUntil *time.Time `json:"pendingUntil,omitempty"`
 	Error        string     `json:"error,omitempty"`
+	// HTTPS is the certificate of the NAS's own name in the tailnet (cert.go).
+	HTTPS HTTPSStatus `json:"https"`
 }
 type Manager struct {
 	Disabled       bool
@@ -72,6 +74,7 @@ type Manager struct {
 	timer          *time.Timer
 	problem        string
 	devices        deviceCache
+	cert           certState
 }
 
 func NewManager(store *config.Store) *Manager {
@@ -136,7 +139,7 @@ func loginURL(raw string) string {
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	s := Status{Settings: m.settings, ReadOnly: m.Disabled || !m.loaded, IPs: []string{}, ExitNodes: []Peer{}, Health: []string{}, Error: m.problem, State: "inactive"}
+	s := Status{Settings: m.settings, ReadOnly: m.Disabled || !m.loaded, IPs: []string{}, ExitNodes: []Peer{}, Health: []string{}, Error: m.problem, State: "inactive", HTTPS: m.cert.status()}
 	s.Settings.Routes = slices.Clone(s.Settings.Routes)
 	if m.pending != nil {
 		d := m.deadline

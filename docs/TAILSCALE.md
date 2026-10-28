@@ -37,6 +37,35 @@ Online-Zustände bei getrenntem Backend) bleiben leer. Geprüft mit
 aufgezeichneter Statusausgabe und Browser-Fixtures, noch nicht mit einem echten
 Tailnet.
 
+## Weboberfläche unter dem Tailnet-Namen (HTTPS)
+
+TitanOS ist im Tailnet unter `https://<name>.<tailnet>.ts.net` erreichbar
+(MagicDNS). Seit 0.34.0 liefert titand dort ein **gültiges Zertifikat** aus,
+sobald in der Tailscale-Admin-Konsole unter DNS „HTTPS Certificates“
+eingeschaltet ist; sonst bleibt es beim selbst signierten Zertifikat mit
+Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
+
+- titand fragt `tailscale status --json` (`CertDomains`, eigener `DNSName`) und
+  lässt sich mit `tailscale cert --cert-file … --key-file … <name>` das
+  Zertifikat geben (Let's Encrypt über Tailscale). Die Dateien liegen nur kurz
+  in `/run/titanos-tailscale/cert` (0700) und werden sofort nach dem Lesen
+  gelöscht; der Schlüssel bleibt im RAM von titand. tailscaled selbst hält und
+  erneuert das Zertifikat in seinem Zustand auf dem Daten-Volume.
+- Ausgeliefert per SNI nur für genau diesen Namen
+  (`tlscert.Manager.SetTailnet`, nach Let's Encrypt und vor dem eigenen bzw.
+  selbst signierten Zertifikat), ohne Neustart. IP-Adressen, `.local` und andere
+  Namen bleiben wie bisher.
+- Abfrage 20 Sekunden nach dem Start, danach alle 12 Stunden; ohne Zertifikat
+  (Plugin aus, nicht verbunden, HTTPS im Tailnet aus, Fehler) alle 5 Minuten.
+  Ein fehlgeschlagener Abruf behält ein noch gültiges Zertifikat. Nichts davon
+  greift auf `/config` zu; im Entwicklungsmodus passiert nichts.
+- Kein eigener Schalter in TitanOS: Das Einschalten von HTTPS im Tailnet ist
+  die Entscheidung des Besitzers. Der Name erscheint dabei in öffentlichen
+  Certificate-Transparency-Protokollen; die Plugin-Einstellungen sagen das.
+- Zustand in `GET /api/v1/plugins/tailscale` unter `https` (`state`
+  inactive/disabled/ok/error, `name`, `notAfter`, `error`) und in den
+  Tailscale-Einstellungen mit Link auf die Adresse.
+
 ## Ablage und Netzwerk
 
 Nur Besitzer und Administratoren erhalten Zugriff auf diese API. Einstellungen
