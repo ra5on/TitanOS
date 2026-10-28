@@ -135,7 +135,8 @@ const nav = (page) => page.getByRole("navigation", { name: "Einstellungsbereiche
 try {
   // Desktop.
   {
-    const { ctx, page } = await create("owner");
+    const { ctx, page, data } = await create("owner");
+    data.system.version = "0.31.0";
     await page.setViewportSize({ width: 1440, height: 1000 });
     const fw = firewallData();
     const acme = { value: acmeData("http-01") };
@@ -223,7 +224,8 @@ try {
 
   // Phone width: no sidebar, way back, no horizontal scroll.
   {
-    const { ctx, page } = await create("owner", "graphit", 390);
+    const { ctx, page, data } = await create("owner", "graphit", 390);
+    data.system.version = "0.31.0";
     const fw = firewallData();
     fw.status.config.enabled = true;
     fw.status.active = true;

@@ -210,16 +210,18 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
 - **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse. Eigene ntfy-/Discord-Ziele normaler Benutzerkonten erreichen nur öffentliche Adressen, nicht das Heimnetz.
 
+[Firewall-Seite mit Zonen, Docker-Apps, eigenen Regeln und automatischem Sperren](docs/screenshots/current/firewall.png)
+
 [Netzwerk](docs/NETWORKING.md) · [Firewall](docs/FIREWALL.md) · [Let's Encrypt](docs/LETSENCRYPT.md) · [Dynamisches DNS](docs/DDNS.md) · [IPv64](docs/IPV64.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
 
 ### Einstellungen, Darstellung und mobile Bedienung
 
-- **Geordnete Einstellungen:** fünf Themenbereiche, kompakte alphabetisch sortierte Kacheln und gezielte Suche. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
+- **Geordnete Einstellungen:** eine Seitenleiste neben jeder Einstellungsseite mit sechs festen Gruppen (System; Hardware und Energie; Netzwerk und Zugriff; Daten; Integrationen; Persönlich), Zuständen wie „Update verfügbar“ und einer Suche, die direkt zum passenden Abschnitt springt; auf dem Smartphone eine Liste mit Rückweg. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
 - **Themes:** Graphit, Schwarz, Mitternacht, Hell, Automatik und eigene Farben; Akzent, Hintergrund, Transparenz, Glas-Effekt, Unschärfe, Eckenradius, Dichte und Schriftgröße einstellen. Darstellung exportieren und importieren.
 - **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Theme, Akzent, Glas/Flach/Kontur, ein Galerie-Motiv oder eigenes Bild, Position und Breite der Karte, Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung, mobile Navigation und rollenabhängige Befehlspalette per Strg/⌘+K.
 
-[![Einstellungen mit fünf übersichtlichen Gruppen und kompakten Kacheln](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+[![Einstellungen mit Seitenleiste und sechs Gruppen; Firewall, Let's Encrypt, Dynamisches DNS und IPv64 als neu markiert](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
 
 <p align="center">
   <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="300"></a>

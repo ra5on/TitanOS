@@ -21,7 +21,8 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [vm-erstellen.png](current/vm-erstellen.png) | Bestätigtes Formular mit fünf Kacheln und Zusammenfassung | Desktop, Entwicklungsstand |
 | [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular in Lesereihenfolge gestapelt | Smartphone, vollständige Seite, Entwicklungsstand |
 | [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter und originaler historischer Versionsmeldung | Desktop, Entwicklungsstand |
-| [einstellungen.png](current/einstellungen.png) | Fünf Einstellungsgruppen | Desktop |
+| [einstellungen.png](current/einstellungen.png) | Einstellungsübersicht mit Seitenleiste, sechs Gruppen und „neu“-Abzeichen | Desktop 1440, Stand 0.31.0 |
+| [firewall.png](current/firewall.png) | Firewall eingeschaltet: Zonen und Dienste, Docker-Apps, eigene Regeln, automatisches Sperren, zuletzt verworfene Pakete | Desktop 1440, vollständige Seite, Stand 0.31.0 |
 | [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone |
 | [arbeitsspeicher.png](current/arbeitsspeicher.png) | Verfügbarer RAM trotz hoher Cachebelegung | Desktop, Entwicklungsstand 0.21.0 |
 | [app-images.png](current/app-images.png) | Eigene Image-Tags je Compose-Dienst | Desktop, Entwicklungsstand 0.21.0 |
@@ -56,6 +57,15 @@ veraltete Statusantworten, Neuladen, Fehler/Wiederholen, laufende Aufträge sowi
 Englisch/Hell und horizontalen Überlauf. Die Bilder wurden unverändert aus der
 Testausgabe übernommen. [Aufnahmedaten](current/drive-transfers-capture.json)
 nennen Quell-Datei- und Bildprüfsummen. Das ist keine Hardwareabnahme.
+
+Einstellungs- und Firewall-Bild wurden am **28. Oktober 2026** aus dem gebauten
+Stand von 0.31.0 aufgenommen (Chromium, Graphit, Deutsch, 1440 CSS-Pixel,
+vollständige Seite) und unverändert aus der Ausgabe von
+`scripts/test-ui-firewall.mjs` übernommen (`settings-overview-desktop.png`,
+`firewall-desktop-on.png`). Alle Werte – Netze, Apps, gesperrte und verworfene
+Adressen – sind isolierte API-Beispiele aus dem Skript. Das Skript prüft
+zusätzlich die Mobilansicht, die Rollen und den Let's-Encrypt-Hinweis bei
+eingeschalteter Firewall. Das ist keine Funktions- oder Hardwareabnahme.
 
 ## Neu aufnehmen
 
