@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IntelGuc from './IntelGuc.svelte';
 	import NvidiaPower from './NvidiaPower.svelte';
 	import { api, ApiError, type Hardware } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -56,6 +57,8 @@
 			<EmptyState inline title={t('hardware.nonePci')} />
 		{/each}
 	</section>
+
+	<IntelGuc />
 
 	<section class="tile panel" aria-labelledby="hw-usb">
 		<h2 class="tile-title" id="hw-usb">{t('hardware.usb')}</h2>

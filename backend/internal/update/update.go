@@ -341,6 +341,9 @@ type Manager struct {
 	pending    *Pending
 	slotCache  []Slot
 	slotTime   time.Time
+	// kernelParams are the kernel parameters settings of the NAS ask for;
+	// every boot entry written carries them. "" means: take it out.
+	kernelParams map[string]string
 }
 
 // NewManager returns a manager for the system that is running: its
@@ -1130,6 +1133,7 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 	}
 	content := fmt.Sprintf("title    TitanOS\nversion  %s\nsort-key %s\nlinux    /titanos/%s/vmlinuz\ninitrd   /titanos/%s/initrd.img\noptions  %s\n",
 		manifest.Version, keyPreferred, target, target, strings.ReplaceAll(manifest.Cmdline, "@SLOT@", target))
+	content = withParams(content, m.params())
 	return m.switchTo(target, content, Pending{Kind: "update", Version: manifest.Version})
 }
 
@@ -1191,7 +1195,7 @@ func (m *Manager) Rollback() error {
 	if running, ok := entries[m.slot]; ok && running.left != nil {
 		return ErrUnconfirmed
 	}
-	return m.switchTo(target, e.content, Pending{Kind: "rollback", Version: m.slotVersion(target)})
+	return m.switchTo(target, withParams(e.content, m.params()), Pending{Kind: "rollback", Version: m.slotVersion(target)})
 }
 
 // Cancel takes back a pending switch: the running system stays the one

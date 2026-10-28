@@ -79,6 +79,7 @@ type Options struct {
 	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
 	Nvidia       *hardware.NvidiaControl
+	IntelGuc     *hardware.IntelGuc // GuC/HuC setting of Intel graphics; nil leaves it out
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
 	Tailscale    *tailscale.Manager
@@ -404,6 +405,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
 	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
+	mux.HandleFunc("GET /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGuc))
+	mux.HandleFunc("PUT /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGucSet))
 	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshots))
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAdmin(s.handleVMSnapshotCreate))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAdmin(s.handleVMSnapshotSchedule))
