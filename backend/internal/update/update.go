@@ -297,7 +297,11 @@ type Manager struct {
 	// Reboot restarts the NAS after a scheduled installation.
 	Reboot func() error
 	// Mounted returns the volumes that are mounted right now.
-	Mounted        func() []string
+	Mounted func() []string
+	// Encrypted names the volumes with LUKS encryption. A system before
+	// encryptionSince cannot open them; going back to one must not wait for
+	// them, or its boot check fails and the stick returns to this system.
+	Encrypted      func() []string
 	PreparePlugins func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
@@ -341,6 +345,9 @@ type Manager struct {
 	pending    *Pending
 	slotCache  []Slot
 	slotTime   time.Time
+	// kernelParams are the kernel parameters settings of the NAS ask for;
+	// every boot entry written carries them. "" means: take it out.
+	kernelParams map[string]string
 }
 
 // NewManager returns a manager for the system that is running: its
@@ -1130,6 +1137,7 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 	}
 	content := fmt.Sprintf("title    TitanOS\nversion  %s\nsort-key %s\nlinux    /titanos/%s/vmlinuz\ninitrd   /titanos/%s/initrd.img\noptions  %s\n",
 		manifest.Version, keyPreferred, target, target, strings.ReplaceAll(manifest.Cmdline, "@SLOT@", target))
+	content = withParams(content, m.params())
 	return m.switchTo(target, content, Pending{Kind: "update", Version: manifest.Version})
 }
 
@@ -1149,6 +1157,10 @@ func (m *Manager) switchTo(target, content string, pending Pending) error {
 	pending.Slot, pending.From, pending.Since, pending.BootID = target, m.version, m.now(), m.bootID
 	if m.Mounted != nil {
 		pending.Volumes = m.Mounted()
+		if m.Encrypted != nil && !knowsEncryption(pending.Version) {
+			encrypted := m.Encrypted()
+			pending.Volumes = slices.DeleteFunc(pending.Volumes, func(name string) bool { return slices.Contains(encrypted, name) })
+		}
 	}
 	if err := m.store.WriteJSON(pendingFile, pending); err != nil {
 		return err
@@ -1191,7 +1203,7 @@ func (m *Manager) Rollback() error {
 	if running, ok := entries[m.slot]; ok && running.left != nil {
 		return ErrUnconfirmed
 	}
-	return m.switchTo(target, e.content, Pending{Kind: "rollback", Version: m.slotVersion(target)})
+	return m.switchTo(target, withParams(e.content, m.params()), Pending{Kind: "rollback", Version: m.slotVersion(target)})
 }
 
 // Cancel takes back a pending switch: the running system stays the one
@@ -1474,4 +1486,16 @@ func (m *Manager) Run(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+// encryptionSince is the first version that opens encrypted volumes.
+var encryptionSince = "0.31.0"
+
+// knowsEncryption tells whether a target version can open encrypted
+// volumes; a version that is no release number (a development build) is
+// taken to be new.
+func knowsEncryption(target string) bool {
+	v, ok := parseVersion(target)
+	since, _ := parseVersion(encryptionSince)
+	return !ok || v.compare(since) >= 0
 }

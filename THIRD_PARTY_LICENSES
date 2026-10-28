@@ -21,6 +21,7 @@ CPU microcode             vendor-specific         Debian intel-microcode / amd64
 systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
 mdadm                     GPL-2.0-or-later        Debian source packages
 btrfs-progs               GPL-2.0-only and others Debian source packages
+cryptsetup                GPL-2.0-or-later, LGPL  Debian source packages
 e2fsprogs, xfsprogs       GPL-2.0, LGPL-2.1       Debian source packages
 smartmontools             GPL-2.0-or-later        Debian source packages
 hd-idle                   GPL-3.0-or-later        Debian source packages
@@ -87,6 +88,18 @@ Source: https://github.com/netbirdio/netbird/tree/v0.81.5
 NVIDIA build SDK: Debian build tools and exact kernel headers retain their original
 licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lists
 the corresponding Debian source packages. The SDK is separate from the NAS RAM image.
+Driver plugins (separate downloads, built by scripts/make-driver-plugins.py for the
+exact kernel of each release; pins in plugins/drivers/drivers.json):
+- wangxun-nic (libwx, ngbe, txgbe), intel-qat (qat_4xxx, qat_420xx): unmodified Linux kernel sources from Debian's linux-source package of
+  the image's kernel version, GPL-2.0-only (qat: BSD-3-Clause OR GPL-2.0-only).
+  Each release ships <name>-sources.tar.gz with the exact compiled sources and the
+  build recipe; sources.txt links the Debian source package.
+- intel-qat also ships Intel's qat_4xxx.bin/qat_4xxx_mmp.bin from linux-firmware
+  (pinned commit and SHA-256), binary-only under LICENCE.qat_firmware (redistributable,
+  no source code); the licence text is in intel-qat-licenses.tar.gz.
+- it87-extended: it87 from https://github.com/frankcrawford/it87 at a pinned commit,
+  GPL-2.0-or-later; it87-extended-sources.tar.gz holds the compiled files and COPYING.
+  Its helper service is TitanOS code under FSL-1.1-ALv2.
 # App-Katalog
 # Die App-Vorlagen liegen nicht im Abbild, sondern im Repository
 # https://github.com/ra5on/TitanOS-Apps und werden zur Laufzeit geladen

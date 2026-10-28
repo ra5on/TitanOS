@@ -15,6 +15,7 @@ const slots = [{ name: 'a', version: '0.8.0', running: true, complete: true, nex
 const manifest = { version: '0.8.1', channel: 'stable', kernel: '6.12.48', released: time, changelog: 'Kleinere Verbesserungen der VM-Seite.', files: [{ size: 300e6 }, { size: 40e6 }, { size: 10e6 }], app: { base: '0.8.0', size: 19e6 } };
 let state;
 let installs = 0, appRollbacks = 0, failRestart = 0;
+let volumes = [];
 const progress = (phase) => ({ phase, file: '', percent: phase === 'restart' ? 100 : 0, speedBytesPerSecond: 0, error: '' });
 function reset() {
 	state = { version: '0.8.0', release: true, slots, settings: { channel: 'stable', autoInstall: false, installTime: '03:30' }, canVerify: true, available: manifest, lastCheck: time, checkError: '', progress: progress(''), pending: null, canRollback: true, unconfirmed: false, base: '0.8.0', kind: 'app', app: { current: '', previous: '', trial: false, canRollback: false } };
@@ -31,7 +32,7 @@ async function context(theme = 'graphit', width = 1440) {
 		if (path === '/session') return json({ configAvailable: true, setupRequired: false, user: { name: 'tester', role: 'owner', twoFactor: false }, hostname: 'titan-test', version: state.version });
 		if (path === '/preferences') return json({ appearance: { theme }, dashboard: null, docker: null, vnc: null, sound: null });
 		if (path === '/system') return json({ ...system, version: state.version });
-		if (path === '/storage') return json({ volumes: [], disks: [], diskSleep: { idleMinutes: 0, available: true, errors: [] } });
+		if (path === '/storage') return json({ volumes, disks: [], diskSleep: { idleMinutes: 0, available: true, errors: [] } });
 		if (path === '/notifications') return json({ messages: [] });
 		if (path === '/update' && method === 'GET') {
 			// While titand restarts it does not answer.
@@ -104,6 +105,31 @@ try {
 		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 		assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
 		await ctx.close();
+	}
+	{
+		// Going back from 0.31.0 to 0.30.0 with an encrypted volume: the
+		// dialog says that 0.30.0 cannot open it.
+		reset();
+		state = { ...state, version: '0.31.0', base: '0.31.0', available: null, kind: '', slots: [{ ...slots[0], version: '0.31.0' }, { ...slots[1], version: '0.30.0' }] };
+		volumes = [{ name: 'Data', mounted: true, state: 'ok' }, { name: 'vault', mounted: true, state: 'ok', encryption: { locked: false, members: 1, unlocked: 1 } }];
+		const { ctx, page } = await context();
+		await page.goto(`${base}/settings/updates`);
+		await page.getByRole('button', { name: /0\.30\.0/ }).first().click();
+		const warning = page.getByTestId('rollback-encrypted');
+		await warning.waitFor();
+		assert.ok((await warning.textContent()).includes('vault'));
+		assert.ok(!(await warning.textContent()).includes('Data'));
+		await page.screenshot({ path: `${out}/rollback-encrypted-graphit-1440.png`, fullPage: true });
+		await ctx.close();
+		// Without encrypted volumes there is nothing to warn about.
+		volumes = [{ name: 'Data', mounted: true, state: 'ok' }];
+		const second = await context();
+		await second.page.goto(`${base}/settings/updates`);
+		await second.page.getByRole('button', { name: /0\.30\.0/ }).first().click();
+		await second.page.locator('.dialog-actions').waitFor();
+		await second.page.waitForTimeout(500);
+		assert.equal(await second.page.getByTestId('rollback-encrypted').count(), 0);
+		await second.ctx.close();
 	}
 	assert.deepEqual(errors, []);
 	console.log(`ok – screenshots in ${out}`);

@@ -1,0 +1,6 @@
+HuC firmware: i915/kbl_huc_4.0.0.bin
+	status: RUNNING
+	version: found 4.0.0
+	uCode: 220032 bytes
+	RSA: 256 bytes
+HuC status: 0x00090001

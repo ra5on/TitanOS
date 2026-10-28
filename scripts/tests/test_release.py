@@ -79,6 +79,8 @@ class ReleaseTest(unittest.TestCase):
         for name in ["make-release.sh", "sign-release.sh"]:
             shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
         shutil.copytree(REPO / "boot", self.repo / "boot")
+        (self.repo / "plugins/drivers").mkdir(parents=True)
+        shutil.copy2(REPO / "plugins/drivers/drivers.json", self.repo / "plugins/drivers/drivers.json")
         self.root = self.repo / "build/mkosi.output/rootfs"
         self.root.mkdir(parents=True)
         self.slot = self.repo / "out/stick/titanos/a"
@@ -197,6 +199,29 @@ class ReleaseTest(unittest.TestCase):
         (self.release / "intel-gpu-tools.plugin.json.minisig").unlink()
         with self.assertRaisesRegex(ValueError, "trusted key"):
             verify.verify(self.release, self.keys)
+
+    def test_driver_plugin_ships_sources(self):
+        plugins = self.repo / "out/plugins"
+        data = b"driver image"
+        manifest = dict(name="wangxun-nic", version="0.1.0-beta.1", kernel="6.12-test", sha256=hashlib.sha256(data).hexdigest(),
+                        size=len(data), modules=["ngbe", "txgbe"], sources=["https://snapshot.debian.org/package/linux/6.12-1/", "wangxun-nic-sources.tar.gz"])
+        (plugins / "wangxun-nic.raw").write_bytes(data)
+        (plugins / "wangxun-nic.plugin.json").write_text(json.dumps(manifest))
+        (plugins / "wangxun-nic-licenses.tar.gz").write_bytes(b"notices")
+        # Without the compiled sources the release is refused.
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        self.assertIn("wangxun-nic", self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False))
+        (plugins / "wangxun-nic-sources.tar.gz").write_bytes(b"sources")
+        self.pack()
+        self.assertTrue((self.release / "wangxun-nic-sources.tar.gz").is_file())
+        listed = (self.release / "titanos-0.1.0-beta.1-sources.txt").read_text()
+        self.assertIn("Plugin: wangxun-nic 0.1.0-beta.1\n  https://snapshot.debian.org/package/linux/6.12-1/\n  wangxun-nic-sources.tar.gz\n", listed)
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        # A driver for another kernel is never packed.
+        manifest["kernel"] = "6.13-test"
+        (plugins / "wangxun-nic.plugin.json").write_text(json.dumps(manifest))
+        self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
 
     def test_wrong_key_rejected(self):
         self.pack()

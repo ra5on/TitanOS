@@ -450,7 +450,18 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.source-tabs button {
-		padding: 10px 0 13px;
+		font: inherit;
+		font-size: 12px;
+		background: none;
+		border: 0;
+		color: var(--muted);
+		padding: 10px 0 11px;
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+	}
+	.source-tabs button[aria-selected='true'] {
+		color: var(--text);
+		border-bottom-color: var(--accent);
 	}
 	.source-tabs span {
 		color: var(--accent);

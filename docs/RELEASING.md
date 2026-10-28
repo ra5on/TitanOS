@@ -217,6 +217,7 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `nvidia-build-sdk.tar.zst`, `nvidia-build-sdk-sources.txt` | exakte Kernelheader und abgeschlossene Bauumgebung mit Original-Lizenztexten und Debian-Quellpaketlinks; SHA-256 im signierten Manifest |
 | `tailscale.raw`, `tailscale.plugin.json`, `.minisig`, `tailscale-licenses.tar.gz` | Tailscale, Subnet-/Exit-Node-Einstellungen und Original-Lizenztexte |
 | `netbird.raw`, `netbird.plugin.json`, `.minisig`, `netbird-licenses.tar.gz` | NetBird-Client (BSD-3-Clause, ohne AGPL-Server), Original-Lizenz und Hinweise der Go-Module |
+| `<treiber>.raw`, `<treiber>.plugin.json`, `.minisig`, `<treiber>-licenses.tar.gz`, `<treiber>-sources.tar.gz` für `wangxun-nic`, `intel-qat`, `it87-extended` | Treiber-Plugins aus `scripts/make-driver-plugins.py` für genau den Kernel des Releases; die Quellarchive enthalten die kompilierten GPL-Quellen und das Baurezept, `titanos-<version>-sources.txt` nennt Debian-Quellpaket bzw. Upstream-Commit. `make-release.sh` verweigert ein Treiber-Plugin ohne Kernel, Quellenangabe oder Quellarchiv |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-cli-linux-amd64` | statische öffentliche CLI, durch signierte SHA256SUMS abgedeckt |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
@@ -323,3 +324,11 @@ Die Go-Tests prüfen die signierte Plugin-Mitnahme, falsche Signaturen/Kernel/
 Versionen, unveränderte Rückfall-Dateien bei Fehlern, getrennte Einstellungen
 pro Release, GPU-Reservierungen und Wiederanlauf nach einem titand-Neustart.
 Echte GPU-/TPU- und PCIe-Reset-Tests sind weiterhin nötig.
+
+`scripts/smoke-firewall.py <installations.zip>` prüft die Firewall im echten
+Abbild (zwei Starts, Usermode-Netz, keine Datenplatten): ab Werk aus,
+Einschalten auf Probe und Bestätigen, verworfener Dienst aus einem
+Netzwerk-Namespace des Gasts und über die Portweiterleitung, Zurücknehmen von
+Hand und nach Ablauf, automatisches Sperren nach falschen Web-Anmeldungen samt
+Freigeben, Tabelle nach Neustart, Ausschalten. Er läuft bisher lokal, nicht im
+Release-Workflow; vor einem vollen Release mit Firewall-Änderungen ausführen.

@@ -90,7 +90,7 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 		// stay hidden; /config is a link, so that listing the roots does not
 		// wake the stick up.
 		roots = append(roots, files.Root{ID: "stick", Name: "TITANOS", Kind: "stick", Dir: s.opts.Store.Dir(), Editable: true,
-			Hide: []string{"users", "tls", "ssh", "notify", "backup"}})
+			Hide: []string{"users", "tls", "ssh", "notify", "backup", "ddns"}})
 		for _, volume := range mounted {
 			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Volume: volume, Writable: true})
 		}

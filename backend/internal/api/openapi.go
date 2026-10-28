@@ -16,7 +16,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		ops[method] = operation
 	}
-	for _, path := range []string{"system", "storage", "network", "plugins", "openapi.json"} {
+	for _, path := range []string{"system", "storage", "network", "firewall", "plugins", "openapi.json"} {
 		add("get", "/"+path, "system:read")
 	}
 	for _, path := range []string{"shares", "files/roots", "files/list", "files/download", "files/properties", "files/text", "files/jobs"} {
@@ -73,7 +73,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, 200, map[string]any{"openapi": "3.1.0", "info": map[string]any{"title": "TitanOS public API", "version": s.opts.Version, "description": "Personal scoped tokens. Account and share permissions are evaluated on every request. Tokens cannot manage credentials, sessions, shells, network confirmation or updates. Last-used timestamps are in memory and reset on service restart."}, "servers": []any{map[string]any{"url": "/api/v1"}}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"bearerAuth": map[string]any{"type": "http", "scheme": "bearer"}}}})
+	writeJSON(w, 200, map[string]any{"openapi": "3.1.0", "info": map[string]any{"title": "TitanOS public API", "version": s.opts.Version, "description": "Personal scoped tokens. Account and share permissions are evaluated on every request. Tokens cannot manage credentials, sessions, shells, network or firewall confirmation or updates. Last-used timestamps are in memory and reset on service restart."}, "servers": []any{map[string]any{"url": "/api/v1"}}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"bearerAuth": map[string]any{"type": "http", "scheme": "bearer"}}}})
 }
 
 func containsPlaceholder(path, name string) bool {

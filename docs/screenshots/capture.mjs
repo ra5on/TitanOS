@@ -41,17 +41,18 @@ const browser = await chromium.launch({
   headless: true,
   executablePath: process.env.BROWSER_EXECUTABLE,
 });
-const { ctx, page, data } = await fixtureFactory(browser, errors)(
+const { ctx, page: firstPage, data } = await fixtureFactory(browser, errors)(
   "owner",
   "graphit",
   1600,
 );
+let page = firstPage;
 await ctx.route("**/*", (r) =>
   new URL(r.request().url()).origin === new URL(base).origin
     ? r.fallback()
     : r.abort(),
 );
-await page.clock.setFixedTime(new Date("2026-10-24T15:40:00+02:00"));
+await page.clock.setFixedTime(new Date("2026-10-28T15:40:00+01:00"));
 const apps = [
   ["immich", "immich.svg", 3],
   ["AdGuard Home", "adguard-home.png"],
@@ -207,7 +208,7 @@ data.shares = ["Dokumente", "Medien", "Fotos", "Projekte"].map((name, i) => ({
 data.system = {
   ...data.system,
   hostname: "titan-nas",
-  version: "0.20.2",
+  version: "0.31.0",
   kernel: "6.12.113+deb13-amd64",
   uptimeSeconds: 20 * 3600 + 41 * 60,
   inventory: { mainboard: "ASRock B560M Pro4", bios: "P2.30 · 12.09.2025" },
@@ -317,7 +318,7 @@ for (const [i, v] of vms.entries())
     pci: [],
     usb: [],
     cpuPin: [],
-    since: "2026-10-24T09:15:00Z",
+    since: "2026-10-28T09:15:00Z",
     iso: "",
     volume: "fast",
     mac: "52:54:00:00:00:0" + (i + 1),
@@ -361,7 +362,7 @@ await ctx.route("**/api/v1/files/list?*", (r) =>
         name,
         dir: true,
         size: 0,
-        modified: "2026-10-24T08:30:00Z",
+        modified: "2026-10-28T08:30:00Z",
       })),
       ...[
         ["Haushaltsplan.xlsx", 28672],
@@ -373,7 +374,7 @@ await ctx.route("**/api/v1/files/list?*", (r) =>
         name,
         dir: false,
         size,
-        modified: "2026-10-23T16:20:00Z",
+        modified: "2026-10-27T16:20:00Z",
       })),
     ],
   }),
@@ -428,37 +429,65 @@ try {
   await page
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
     .click();
+  // The editor arranges tiles and their content; the look is set in
+  // Settings › Appearance (since 0.30.0 there is no design per tile).
   await page
-    .getByRole("complementary", { name: "Gesamtes Dashboard", exact: true })
+    .getByRole("toolbar", { name: "Dashboard bearbeiten", exact: true })
     .waitFor();
-  await shot("dashboard-editor");
   await page
+    .locator("[gs-id=docker]")
+    .getByRole("button", { name: /^Kachel anpassen: / })
+    .click();
+  await page
+    .getByRole("complementary", { name: "Kachel anpassen", exact: true })
+    .getByText("Symbolgröße", { exact: false })
+    .first()
+    .waitFor();
+  await page.mouse.move(0, 0);
+  await shot("dashboard-editor");
+  await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
+  await page
+    .getByRole("toolbar", { name: "Dashboard bearbeiten", exact: true })
+    .waitFor({ state: "detached" });
+  // Settings › Appearance: one place for the look of all tiles.
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(base + "/settings/appearance");
+  await page.locator("#h-theme").waitFor();
+  await shot("darstellung", false);
+  const background = page.locator("section[aria-labelledby=h-dashboard-bg]");
+  await background.scrollIntoViewIfNeeded();
+  await background
     .getByRole("button", {
       name: "Bild auswählen oder hinzufügen …",
       exact: true,
     })
     .click();
-  await page
-    .getByRole("dialog", { name: "Hintergrund auswählen", exact: true })
-    .waitFor();
-  await shot("dashboard-hintergruende");
-  await page
+  const gallery = page.getByRole("dialog", {
+    name: "Hintergrund auswählen",
+    exact: true,
+  });
+  await gallery.waitFor();
+  await shot("dashboard-hintergruende", false);
+  await gallery
     .getByRole("button", { name: "Eigenes Bild hinzufügen", exact: true })
     .click();
-  await page
-    .locator("input[type=file]")
-    .setInputFiles("web/static/backgrounds/bergsee.webp");
-  await page.locator(".personal-image").waitFor();
-  await shot("dashboard-bild-upload");
-  await page
+  await gallery.locator("input[type=file]").setInputFiles({
+    name: "Urlaub am Bergsee.webp",
+    mimeType: "image/webp",
+    buffer: await readFile("web/static/backgrounds/bergsee.webp"),
+  });
+  await gallery.locator(".personal-image").waitFor();
+  await shot("dashboard-bild-upload", false);
+  await gallery
     .getByRole("button", { name: "Abbrechen", exact: true })
     .last()
     .click();
-  await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
-  await page.setViewportSize({ width: 1600, height: 780 });
+  await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(base + "/storage#volume-data");
   await page.locator("article#volume-data").waitFor();
-  await shot("speicher");
+  await page.evaluate(() => scrollTo(0, 0));
+  await shot("speicher", false);
+  await page.setViewportSize({ width: 1600, height: 780 });
   await page.goto(base + "/shares");
   await page.getByRole("button", { name: "Dokumente", exact: true }).waitFor();
   await shot("shares");
@@ -473,10 +502,6 @@ try {
   await page.goto(base + "/vms?vm=vm1&tab=overview");
   await page.locator("#vm-title").waitFor();
   await shot("vms");
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.goto(base + "/settings");
-  await page.locator(".settings-group").first().waitFor();
-  await shot("einstellungen");
   await page.goto(base + "/files?root=share%2FDokumente");
   await page.getByText("Sicherungskonzept.docx", { exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -494,10 +519,76 @@ try {
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   );
+  // The login page as owners can set it up for the whole NAS, logged out.
+  {
+    const login = await fixtureFactory(browser, errors)("owner", "graphit", 1600);
+    await login.ctx.route("**/*", (r) =>
+      new URL(r.request().url()).origin === new URL(base).origin
+        ? r.fallback()
+        : r.abort(),
+    );
+    await login.page.clock.setFixedTime(new Date("2026-10-28T15:40:00+01:00"));
+    await login.page.setViewportSize({ width: 1600, height: 900 });
+    await login.ctx.route("**/api/v1/login-appearance**", (r) =>
+      r.fulfill({
+        json: {
+          configured: true,
+          theme: "mitternacht",
+          accent: "tuerkis",
+          customAccent: "#E5B92E",
+          style: "glass",
+          glass: 45,
+          blur: 18,
+          background: {
+            source: "builtin",
+            id: "nordlicht",
+            fit: "cover",
+            x: 50,
+            y: 50,
+            zoom: 100,
+            dim: 30,
+          },
+          image: null,
+          position: "center",
+          width: "normal",
+          texts: {
+            de: {
+              title: "Willkommen zu Hause",
+              notice: "Nur für die Familie.",
+            },
+          },
+          hideHost: false,
+          hideLogo: false,
+          clock: true,
+        },
+      }),
+    );
+    await login.ctx.route("**/api/v1/session", (r) =>
+      r.fulfill({
+        json: {
+          configAvailable: true,
+          setupRequired: false,
+          user: null,
+          hostname: "titan-nas",
+        },
+      }),
+    );
+    await login.page.goto(base + "/");
+    await login.page
+      .locator("h1", { hasText: "Willkommen zu Hause" })
+      .waitFor();
+    await login.page.locator(".clock time").waitFor();
+    const saved = page;
+    page = login.page;
+    await shot("anmeldeseite", false);
+    page = saved;
+    await login.ctx.close();
+  }
   assert.deepEqual(errors, []);
   const names = [
     "dashboard",
     "dashboard-editor",
+    "darstellung",
     "dashboard-hintergruende",
     "dashboard-bild-upload",
     "dashboard-vm-details",
@@ -506,15 +597,46 @@ try {
     "dateien",
     "docker",
     "vms",
-    "einstellungen",
     "dateien-mobil",
     "dashboard-mobil",
+    "anmeldeseite",
   ];
+  // Images taken by the UI test scripts and copied unchanged into this
+  // folder (see README.md); recorded here so one file lists every image.
+  const copied = {
+    "einstellungen.png": ["scripts/test-ui-firewall.mjs", "settings-overview-desktop.png"],
+    "firewall.png": ["scripts/test-ui-firewall.mjs", "firewall-desktop-on.png"],
+    "vm-erstellen.png": ["scripts/test-ui-vm-create.mjs", "graphit-1600-de.png"],
+    "vm-erstellen-mobil.png": ["scripts/test-ui-vm-create.mjs", "graphit-390-de.png"],
+    "protokoll.png": ["scripts/test-ui-vm-create.mjs", "system-logs.png"],
+    "arbeitsspeicher.png": ["scripts/test-ui-memory-images.mjs", "ram-cache.png"],
+    "app-images.png": ["scripts/test-ui-memory-images.mjs", "stack-images.png"],
+    "app-images-mobil.png": ["scripts/test-ui-memory-images.mjs", "stack-images-mobile.png"],
+    "dateien-ersetzen.png": ["scripts/test-ui-copy-confirmation.mjs", "replace-before-copy.png"],
+    "dateien-auftraege-1440.png": ["scripts/test-ui-drive-transfers.mjs", "dateien-auftraege-1440.png"],
+    "dateien-auftraege-390.png": ["scripts/test-ui-drive-transfers.mjs", "dateien-auftraege-390.png"],
+    "netzwerk.png": ["scripts/test-ui-023.mjs", "settings-network-1440-graphit.png"],
+    "netzwerk-mobil.png": ["scripts/test-ui-023.mjs", "settings-network-390-graphit.png"],
+    "netzwerk-mobil-hell.png": ["scripts/test-ui-023.mjs", "settings-network-390-hell.png"],
+    "docker-lan.png": ["scripts/test-ui-023.mjs", "docker-networks-1440-graphit.png"],
+    "api-zugaenge.png": ["scripts/test-ui-023.mjs", "settings-api-1440-graphit.png"],
+    "vm-medien-mobil.png": ["scripts/test-ui-023.mjs", "vms-media-390-graphit.png"],
+    "plugin-aufraeumen.png": ["scripts/test-ui-023.mjs", "plugins-cleanup-1440-graphit.png"],
+  };
   const images = [];
-  for (const name of names) {
-    const bytes = await readFile(out + "/" + name + ".png");
+  for (const file of [...names.map((n) => n + ".png"), ...Object.keys(copied)]) {
+    let bytes;
+    try {
+      bytes = await readFile(out + "/" + file);
+    } catch (error) {
+      if (error.code === "ENOENT" && copied[file]) continue;
+      throw error;
+    }
     images.push({
-      file: name + ".png",
+      file,
+      ...(copied[file]
+        ? { script: copied[file][0], scriptOutput: copied[file][1] }
+        : { script: "docs/screenshots/capture.mjs" }),
       width: bytes.readUInt32BE(16),
       height: bytes.readUInt32BE(20),
       bytes: bytes.length,
@@ -531,7 +653,7 @@ try {
           { encoding: "utf8" },
         ).trim(),
         version: data.system.version,
-        captured: "2026-10-24",
+        captured: "2026-10-28",
         demoData: true,
         theme: "Graphit / Blau / Glas",
         browserErrors: errors,
@@ -543,7 +665,7 @@ try {
     ) + "\n",
   );
   console.log(
-    "13 current WebUI screenshots captured; fonts, Docker logos, mobile width and browser runtime checked.",
+    "14 current WebUI screenshots captured; fonts, Docker logos, mobile width and browser runtime checked.",
   );
 } catch (error) {
   await page.screenshot({

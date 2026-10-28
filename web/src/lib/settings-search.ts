@@ -4,6 +4,13 @@ import type { IconName } from '#lib/components/Icon.svelte';
 const keywords: Record<string, string> = {
 	appearance: 'theme design farbe color font schrift hintergrund background',
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
+	firewall:
+		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
+	'firewall-apps': 'docker apps container port ports veröffentlicht published',
+	'firewall-rules': 'regel rule regeln rules eigene own erlauben allow verbieten deny',
+	'firewall-autoblock':
+		'auto block automatisch sperren blockieren fehlgeschlagen failed login anmeldung brute force',
+	'firewall-recent': 'gesperrt blocked verworfen dropped pakete packets zuletzt recent',
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access',
@@ -16,6 +23,7 @@ const keywords: Record<string, string> = {
 	homeassistant:
 		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation',
 	hardware: 'gpu npu pci usb passthrough hardware',
+	'intel-guc': 'intel igpu grafik graphics guc huc firmware quick sync qsv i915 xe',
 	'power-button': 'power button taste knopf ausschalten shutdown',
 	memory: 'ram memory speicher cache',
 	files:
@@ -33,6 +41,12 @@ const keywords: Record<string, string> = {
 	dns: 'dns namensauflösung nameserver',
 	restore: 'wiederherstellung wiederherstellen restore ersetzen replace',
 	terminal: 'terminal shell konsole console bestätigung confirmation',
+	letsencrypt:
+		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
+	ddns:
+		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
+	ipv64:
+		'ipv64 ipv64.net konto account api key schlüssel domain dns record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -55,7 +69,31 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 	],
+	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	letsencrypt: [
+		{ id: 'letsencrypt-status', label: 'letsencrypt.statusTitle', href: '/settings/letsencrypt#le-status' },
+		{ id: 'letsencrypt-settings', label: 'letsencrypt.settingsTitle', href: '/settings/letsencrypt#le-settings' },
+	],
+	ddns: [
+		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
+		{ id: 'ddns-settings', label: 'ddns.settingsTitle', href: '/settings/ddns#ddns-settings' },
+	],
+	ipv64: [
+		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
+		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
+		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
+		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
+		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
+		{ id: 'ipv64-router', label: 'ipv64x.tab.router', href: '/settings/ipv64?tab=router' },
+		{ id: 'ipv64-blocklist', label: 'ipv64x.tab.blocklist', href: '/settings/ipv64?tab=blocklist' },
+	],
+	firewall: [
+		{ id: 'firewall-apps', label: 'firewall.apps', href: '/settings/firewall#firewall-apps' },
+		{ id: 'firewall-rules', label: 'firewall.rules', href: '/settings/firewall#firewall-rules' },
+		{ id: 'firewall-autoblock', label: 'firewall.autoBlock', href: '/settings/firewall#firewall-autoblock' },
+		{ id: 'firewall-recent', label: 'firewall.recent', href: '/settings/firewall#firewall-recent' },
+	],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
@@ -74,36 +112,46 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 };
 
-export type SettingsGroup = 'system' | 'network' | 'storage' | 'integrations' | 'personal';
+/** The groups of the settings navigation, in the order they are shown. */
+export const settingsGroups = ['system', 'hardware', 'network', 'data', 'integrations', 'personal'] as const;
+export type SettingsGroup = (typeof settingsGroups)[number];
 export type SettingsArea = {
 	id: string;
 	label: MessageKey;
 	group: SettingsGroup;
 	icon: IconName;
 	admin?: boolean;
+	/** Shows a small "new" badge next to the area in the navigation. */
+	isNew?: boolean;
 };
 
-// One list for the settings overview, the command palette and the route guard.
+// One list for the settings navigation (sidebar and overview), the command
+// palette and the route guard. Within a group the areas appear in exactly
+// this order; adding an area is one line in the right place.
 export const settingsAreas: SettingsArea[] = [
-	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
-	{ id: 'api', label: 'api.title', group: 'personal', icon: 'key' },
-	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
-	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
-	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
-	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
-	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
-	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'system', icon: 'battery', admin: true },
-	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
-	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'storage', icon: 'grid', admin: true },
-	{ id: 'files', label: 'fileIndex.title', group: 'storage', icon: 'search', admin: true },
-	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'personal', icon: 'activity' },
+	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
+	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'grid', admin: true },
+	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
+	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
+	{ id: 'firewall', label: 'firewall.title', group: 'network', icon: 'shield', admin: true, isNew: true },
+	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true, isNew: true },
+	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
+	{ id: 'ipv64', label: 'ipv64x.title', group: 'network', icon: 'globe', admin: true, isNew: true },
+	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
+	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
+	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
+	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
+	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
+	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
 ];
 
 /** Settings paths that accounts with the role "user" may open. */
@@ -111,3 +159,50 @@ export const userSettingsPaths = [
 	'/settings',
 	...settingsAreas.filter((area) => !area.admin).map((area) => `/settings/${area.id}`),
 ];
+
+/** One row of the settings navigation: an area, or a section of it while searching. */
+export type SettingsEntry = {
+	href: string;
+	id: string;
+	label: string;
+	group: SettingsGroup;
+	icon: IconName;
+	isNew?: boolean;
+	section?: boolean;
+};
+
+/**
+ * The rows of the settings navigation for an account, grouped and in the fixed
+ * order. With a search, matching sections replace their area (they lead
+ * straight to the anchor); areas without matching sections show if they match.
+ */
+export function settingsEntries(
+	query: string,
+	admin: boolean,
+	translate: (key: MessageKey) => string,
+): { group: SettingsGroup; entries: SettingsEntry[] }[] {
+	const searching = query.trim() !== '';
+	const entries = settingsAreas
+		.filter((area) => !area.admin || admin)
+		.flatMap((area): SettingsEntry[] => {
+			const base = { id: area.id, group: area.group, icon: area.icon, isNew: area.isNew };
+			const sections = searching
+				? (settingSections[area.id] ?? []).filter((section) =>
+						matchesSetting(query, `${translate(area.label)} ${translate(section.label)}`, section.id),
+					)
+				: [];
+			if (sections.length)
+				return sections.map((section) => ({
+					...base,
+					href: section.href,
+					label: `${translate(area.label)} › ${translate(section.label)}`,
+					section: true,
+				}));
+			return !searching || matchesSetting(query, translate(area.label), area.id)
+				? [{ ...base, href: `/settings/${area.id}`, label: translate(area.label) }]
+				: [];
+		});
+	return settingsGroups
+		.map((group) => ({ group, entries: entries.filter((entry) => entry.group === group) }))
+		.filter((group) => group.entries.length);
+}

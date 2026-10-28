@@ -21,6 +21,7 @@ on:
       - 'boot/**'
       - 'scripts/make-zip.sh'
       - 'scripts/check-image-hardware.py'
+      - 'plugins/catalog/**'
       - 'scripts/normalize-image-tmpfiles.py'
       - 'scripts/make-release.sh'
       - 'scripts/sign-release.sh'
@@ -158,6 +159,12 @@ jobs:
         if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
         run: |
           sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
+          sudo chown -R "$(id -u):$(id -g)" out/plugins
+
+      - name: Build the driver plugins against the image kernel
+        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
+        run: |
+          sudo env PATH="$PATH" python3 scripts/make-driver-plugins.py ${{ steps.version.outputs.version }}
           sudo chown -R "$(id -u):$(id -g)" out/plugins
 
       - name: Pack the release

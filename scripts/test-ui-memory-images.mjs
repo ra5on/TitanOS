@@ -30,7 +30,7 @@ services:
 `;
 try {
   const { ctx, page, data } = await create();
-  data.system.version = "0.21.0";
+  data.system.version = "0.31.0";
   data.system.memory = {
     totalBytes: 16e9,
     usedBytes: 15e9,
@@ -131,9 +131,7 @@ try {
   delete data.system.memory.pressure;
   await page.goto(base + "/settings/memory");
   await page.getByText("Nicht verfügbar", { exact: true }).waitFor();
-  await page
-    .getByLabel("Schreibpufferbudget für Dateiübertragungen", { exact: true })
-    .selectOption("30");
+  await page.locator("#cache-budget").selectOption("30");
   await page.goto(base + "/apps");
   await page.getByRole("button", { name: /Fixture Stack/ }).click();
   const panel = page.getByRole("complementary");

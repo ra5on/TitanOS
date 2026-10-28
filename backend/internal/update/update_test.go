@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -377,6 +378,13 @@ func TestGoingBackAndCancelling(t *testing.T) {
 	os.WriteFile(filepath.Join(e.boot, "loader/entries/titanos-b.conf"), []byte("title TitanOS\nsort-key titanos-1\n"), 0o644)
 	os.WriteFile(filepath.Join(e.boot, "loader/entries/titanos-a.conf"), []byte("title TitanOS\nsort-key titanos-2\n"), 0o644)
 	current := e.manager(t, "1.1.0", "b", "boot-2")
+	// 1.0.0 predates encryption (here 1.1.0): it must not wait for the
+	// encrypted volume.
+	since := encryptionSince
+	encryptionSince = "1.1.0"
+	t.Cleanup(func() { encryptionSince = since })
+	current.Mounted = func() []string { return []string{"tank", "vault"} }
+	current.Encrypted = func() []string { return []string{"vault"} }
 	if err := current.Rollback(); err != nil {
 		t.Fatal(err)
 	}
@@ -387,6 +395,9 @@ func TestGoingBackAndCancelling(t *testing.T) {
 		t.Errorf("pending: %+v", pending)
 	}
 	os.Rename(filepath.Join(e.boot, "loader/entries/titanos-a+3.conf"), filepath.Join(e.boot, "loader/entries/titanos-a.conf"))
+	if pending := current.Status().Pending; !slices.Equal(pending.Volumes, []string{"tank"}) {
+		t.Errorf("volumes to wait for on 1.0.0: %v", pending.Volumes)
+	}
 	old := e.manager(t, "1.0.0", "a", "boot-3")
 	old.Confirm()
 	if got := e.event(t); got != "update_rolled_back:1.0.0" {
@@ -692,5 +703,14 @@ func TestCompletePartIsNotRequestedAgain(t *testing.T) {
 	have, err := m.downloadOnce(context.Background(), srv.URL, part, File{Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}, func(int64, uint64) {})
 	if err != nil || have != int64(len(data)) {
 		t.Fatalf("have=%d err=%v", have, err)
+	}
+}
+
+// TestKnowsEncryption: which target versions can open encrypted volumes.
+func TestKnowsEncryption(t *testing.T) {
+	for target, want := range map[string]bool{"0.30.0": false, "0.29.0": false, "0.31.0-beta.1": false, "0.31.0": true, "0.32.0": true, "dev": true, "": true} {
+		if got := knowsEncryption(target); got != want {
+			t.Errorf("%q: %v", target, got)
+		}
 	}
 }

@@ -27,17 +27,17 @@ Die Referenz des Besitzers bestimmt Informationsdichte und Hierarchie: ruhiger H
 - RAM: verfügbarer Speicher steht im Vordergrund, Verlauf ebenfalls verfügbar. Physische Belegung separat nach Dateicache und übriger Belegung; `MemAvailable` überlappt diese Werte und wird nicht addiert. Cache allein ist keine Warnung; knapper RAM erst nach serverseitiger Hysterese. Optionale PSI-Wartezeiten und Grenzen in `docs/MEMORY.md`.
 - CPU/RAM/GPU/iGPU/NPU: standardmäßig beschriftete Balken mit bündiger Zahl plus Einheit, keine riesigen Ringe. Die einzelnen CPU-Kernbalken erhalten dieselbe Rundung wie der Gesamtbalken. Ring als wählbare Alternative; Zahl und Prozentzeichen bleiben zusammen und mittig. Schrift muss bei 0/99/100 %, großer Benutzerschrift und schmaler Kachel passen. Unbekannte NPU-Werte sind kein 0 %.
 - Volumes, Shares, Netzwerk, Temperaturen: kompakte Tabellen/Zeilen mit optionalen Zusatzspalten und direktem Link zu Details.
-- Klickbare Volume-, Share- und Geräteeinträge bekommen eigene fachlich passende Menüs, keine identische globale Aktionsliste. Außenklick/Escape schließen, Tastatur und Touch funktionieren. Im Bearbeiten-Modus gilt die Auswahl zur Gestaltung; Betriebsaktionen dürfen nicht versehentlich beim Verschieben auslösen.
+- Klickbare Volume-, Share- und Geräteeinträge bekommen eigene fachlich passende Menüs, keine identische globale Aktionsliste. Außenklick/Escape schließen, Tastatur und Touch funktionieren. Im Bearbeiten-Modus wählt ein Klick die Kachel zum Anpassen aus; Betriebsaktionen dürfen nicht versehentlich beim Verschieben auslösen.
 
 ### Editor
 
 Der Startseitenkopf entfällt. Oben rechts liegt eine gemeinsame kompakte Fläche in der Reihenfolge Suche, Terminal, Assistent, Benachrichtigungen, Bearbeiten. Der Editor-Knopf steht damit ganz rechts in dieser Fläche und erscheint nur auf der Startseite. Das Konto-Menü bleibt daneben separat. Nicht berechtigte bzw. nicht verfügbare Funktionen entfallen ohne leere Plätze. Einzelne Funktionen behalten eigene Fokus-, Hover- und Aktivzustände; der Meldungszähler bleibt sichtbar. Abschnittsköpfe zeigen optional eine aktuelle Zusammenfassung; Kacheln lassen sich einklappen. Eintragsbegrenzungen zeigen Anzahl und „Alle anzeigen“. Laufend-Filter und CPU-Threads sind direkt bedienbar. App-Symbolgröße, Eintragsbreite und Namenszeilen sind pro Kachel einstellbar.
 
-Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector Inhalt / Darstellung / Größe. Systemfelder per Häkchen und Reihenfolge. Darstellung mit unabhängiger Typografie für Titel/Werte/Beschriftungen, Listen-/Rastermodus, Symbole, Flächen, Rahmen und Abstand. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
+Ein Bearbeiten-Modus: Auswahl direkt an der Kachel; Inspector „Kachel anpassen“ mit den Reitern Inhalt und Größe (seit 0.30.0 ohne Gestaltung je Kachel, Entscheidung des Projektinhabers vom 27.10.2026). Inhalt: Darstellungsmodus der Messwerte, Auswahl und Reihenfolge der Felder bzw. Einträge, App-Symbolgröße, Eintragsbreite, Namenszeilen, Titel, Symbol und Zusatzwerte. Verschieben, Größenänderung, Duplizieren, Ausblenden, Wiederherstellen, Undo/Redo sowie Vorschau/Speichern/Abbrechen erhalten. Änderungen pro Konto, Tastaturbedienung und DE/EN.
 
 Seit 0.27.0 liegen alle Editor-Bedienelemente in einer haftenden Leiste direkt
 unter der Kopfzeile: Kachel hinzufügen (öffnet die Auswahl in der Seitenleiste
-statt am Seitenende), Gesamtes Dashboard, Spalten und Mindestbreite, Rückgängig
+statt am Seitenende), Link „Darstellung“, Spalten und Mindestbreite, Rückgängig
 und Wiederholen mit eigenen Symbolen, Standard wiederherstellen (mit Rückfrage),
 Abbrechen (Rückfrage nur bei ungespeicherten Änderungen) und Speichern.
 Strg/⌘+Z, Strg/⌘+Y bzw. Umschalt+Strg/⌘+Z und Strg/⌘+S; Esc schließt zuerst die
@@ -51,19 +51,19 @@ Spalten nicht springen. Leere Docker-, VM- und Volume-Kacheln verweisen auf
 
 ### Globale Darstellung, Hintergrund und Bewegung
 
-Der Editor öffnet „Gesamtes Dashboard“ mit den Reitern Oberfläche, Hintergrund
-und Animationen. Transparenz (0–90 %), Blur (0–40 px), Glow (0–100 %, eigene
-Farbe) und Abdunklung (0–80 %) haben Schieberegler und sichtbare Werte. Nur die
-Kachelflächen werden transparent; Schrift und Icons bleiben deckend. Einzelne
-Kacheln können diese Flächenwerte ausdrücklich überschreiben. Eine komplette
-Reglerbewegung zählt als ein Rückgängig-Schritt.
+Seit 0.30.0 gibt es dafür genau einen Ort: Einstellungen › Darstellung. Dort
+gelten Theme, Akzent, Flach/Glas/Kontur mit Transparenz, Unschärfe und Glanz,
+Leuchten mit Farbe, Ecken, Schriftgröße, Dichte und Bewegung für alle Kacheln und
+die ganze Oberfläche; Dashboard-Kacheln haben keine eigenen Flächenwerte mehr.
+Der Hintergrund des Dashboards wird im Abschnitt „Hintergrund des Dashboards“
+gewählt. Der Editor verlinkt dorthin mit „Darstellung“.
 
 Zehn lokal ausgelieferte Originalmotive stehen in einer Galerie bereit; Herkunft
 und Prompts in [DashboardBackgrounds.md](DashboardBackgrounds.md). Bis zu fünf
 eigene Bilder je Konto lassen sich per Dateiauswahl oder Drag-and-drop ergänzen
 (JPEG/PNG/WebP, je maximal 10 MiB). Bildvorschau, Auswahl und Entfernen sind
 zunächst Entwürfe. „Hintergrund verwenden“ übernimmt die Galerie in die
-Dashboard-Vorschau; erst „Speichern“ überträgt neue Bilder und übernimmt die
+Vorschau; erst „Übernehmen“ überträgt neue Bilder und übernimmt die
 Auswahl atomar. Fehler erhalten den vorherigen gespeicherten Stand. Abbrechen
 verwirft die Vorschau. Andere Konten erhalten keinen Zugriff auf eigene Bilder.
 

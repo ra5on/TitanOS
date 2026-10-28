@@ -37,24 +37,25 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 ### Deine persönliche Startseite
 
-- **Ein frei gestaltbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
+- **Ein frei anpassbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
 - **Anpassbare Aufteilung:** ein bis vier Spalten und eine Mindestbreite festlegen. Bei schmaleren Fenstern wandern die Inhalte in ihrer Lesereihenfolge nach unten; Kacheln können automatisch wachsen oder eine feste Höhe mit scrollbarem Inhalt bekommen.
-- **Gestaltung je Kachel:** Schriftgrößen für Titel, Werte und Beschriftungen, Messwertdarstellung, Farben, Hintergrund, Rahmen, Ecken, Schatten und Abstände. Bei Apps zusätzlich Symbolgröße, Eintragsbreite und Namenszeilen. Stile lassen sich übertragen.
-- **Hintergrund und Glas selbst gestalten:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto. Das ganze Bild anzeigen oder Ausschnitt, Position und Zoom wählen. Globale Schieberegler für Transparenz, Blur, Glow mit Farbe und Abdunklung; einzelne Kacheln können eigene Werte behalten.
-- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe; die Bewegungsreduktion des Browsers wird berücksichtigt.
+- **Inhalt je Kachel:** Messwerte als Zahl, Balken, Ring oder Verlauf; Felder und Einträge auswählen und sortieren; bei Apps und VMs Symbolgröße, Eintragsbreite und Namenszeilen; eigener Titel und Symbol.
+- **Aussehen an einem Ort:** Theme, Akzent, Flach, Glas oder Kontur mit Transparenz, Unschärfe und Glanz, Leuchten mit eigener Farbe, Ecken, Schriftgröße, Dichte und Bewegung stellst du unter Einstellungen › Darstellung ein; sie gelten für alle Kacheln und die ganze Oberfläche. Der Editor führt mit „Darstellung“ direkt dorthin.
+- **Eigener Hintergrund:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto, ganzes Bild oder Ausschnitt mit Position und Zoom, feststehend oder mitlaufend und abdunkelbar; gewählt unter Einstellungen › Darstellung › Hintergrund des Dashboards.
+- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe (Einstellungen › Darstellung); die Bewegungsreduktion des Browsers wird berücksichtigt.
 - **Kompakter Schnellzugriff:** Suche, Terminal, Assistent, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
 - **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
 - **Tailnet im Blick:** Die Kachel „Tailscale“ (Besitzer/Administratoren) zeigt die Geräte des Tailnets. Pro Kachel wählst du Geräte und sortierbare Angaben: Online/Offline, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen, Betriebssystem, Exit Node, Subnet-Routen und eine Markierung für dieses NAS.
 - **NetBird-Netz im Blick:** Die Kachel „NetBird“ (Besitzer/Administratoren) zeigt die Geräte des NetBird-Netzes mit wählbaren, sortierbaren Angaben: verbunden, dieses NAS, NetBird-IP/IPv6, Name (FQDN), letzter Handshake, Verbindungsart (direkt oder über Relay) und Netze; optional nur verbundene Geräte.
 - **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus.
-- **Visueller Editor mit Vorschau:** Änderungen direkt sehen, rückgängig machen, wiederholen, speichern oder verwerfen.
+- **Visueller Editor mit Vorschau:** eine haftende Leiste bündelt Kachel hinzufügen, Spalten, Mindestbreite, Rückgängig, Wiederholen, Standard, Abbrechen und Speichern (auch per Strg/⌘+Z/Y/S); Änderungen siehst du sofort.
 
-[![Dashboard-Editor mit globalen Schiebereglern für Transparenz, Blur und Glow](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
+[![Dashboard-Editor mit haftender Editorleiste und den Inhaltsoptionen der ausgewählten Docker-Kachel](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
 
-[![Hintergrundgalerie mit zehn lokalen Motiven und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
+[![Einstellungen › Darstellung mit geöffneter Hintergrundgalerie: zehn lokale Motive und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
 
-[Eigene Bilder hinzufügen und auswählen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
+[Eigenes Bild als Hintergrund hinzufügen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
 
 ### Speicher und Laufwerke
 
@@ -62,6 +63,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Btrfs-Volumes:** eine Platte, Spiegel (RAID 1) oder drei Kopien (RAID1C3), auch aus Platten unterschiedlicher Größe. Platten später hinzufügen oder entfernen und das Profil im laufenden Betrieb ändern. Schreibgeschützte Snapshots, Scrub und Plattenersatz. Fehlt beim Start ein Mitglied, wartet TitanOS 60 Sekunden auf langsam anlaufende Platten, bevor das Volume ohne Redundanz eingebunden und als solches gemeldet wird. Snapshot-Zeitpläne mit Aufbewahrung sowie Wiederherstellung ganzer Snapshots, Ordner oder einzelner Dateien.
 - **Vorhandenen Speicher übernehmen:** lesende Vorschau unterstützter mdadm- und Btrfs-Volumes, danach Registrierung ohne Formatierung. RAID5/6 lässt sich um eine Platte erweitern; dafür ist ein separates Rettungs-Volume erforderlich. Hinzufügen, Erweitern und Ersetzen prüfen die gewählte Platte erneut und lassen fremde Arrays, LVM und eingebundene Dateisysteme auf anderen Platten unangetastet.
 - **SSD-Cache:** eine SSD vor ein bestehendes RAID setzen, ohne Neuformatieren. Wahlweise nur als Lesecache (sicher, falls die SSD ausfällt) oder als Lese- und Schreibcache; ab Werk aus. [Einzelheiten](docs/SSD-CACHE.md).
+- **Verschlüsselung (optional):** ein Volume beim Anlegen mit LUKS2 verschlüsseln, ab Werk aus. Nach jedem Start bleibt es gesperrt, bis jemand das Passwort in der Weboberfläche eingibt; erst dann starten Freigaben, Apps, VMs und Container darauf. Passwörter ändern oder ergänzen, sperren und Header-Sicherung herunterladen auf der Speicher-Seite. [Einzelheiten](docs/ENCRYPTION.md).
 - **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Einstellbarer Laufwerksruhezustand.
 - **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
@@ -75,7 +77,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Übersichtliche Shares:** suchen, filtern und sortieren; Details, Verbindungsadressen und Dateimanager direkt an der Freigabe öffnen.
 - **Vorgängerversionen und Ransomware-Schutz:** Btrfs-Snapshots erscheinen in Windows unter „Vorgängerversionen“. Benennt ein Konto plötzlich viele Dateien wie Ransomware um, wird die Freigabe sofort schreibgeschützt und ein Snapshot angelegt. Geplante Snapshots lassen sich für eine Frist gegen Löschen sperren. [Einzelheiten](docs/SHARE-PROTECTION.md).
 - **Besitzer, Administratoren und Benutzer:** das erste Besitzerkonto hat einen frei gewählten Namen. Benutzer sehen ihre freigegebenen Dateien; Systemverwaltung, Docker und VMs bleiben den Verwaltungsrollen vorbehalten.
-- **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner Sitzungen. Konten gelten auch für SMB.
+- **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner oder aller anderen Sitzungen. Konten lassen sich sperren, ohne sie zu löschen; das wirkt auch für SMB, SSH und API-Tokens. [Konten sperren](docs/ACCOUNT-LOCK.md).
 
 [![Shares mit kompakter Freigabenliste, Diensten und Zugriffsrechten](docs/screenshots/current/shares.png)](docs/screenshots/current/shares.png)
 
@@ -159,10 +161,10 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 ### GPU, iGPU, NPU und Plugins
 
-- **Stabile Hardwarebasis:** Intel-/AMD-CPU-Microcode für frühes Laden, gezielte Netzwerk-/HBA-Firmware und geprüfte Intel-i915/xe-/NPU- sowie AMD-Grafikmodule und Firmware. [Umfang und Hardware-Prüfgrenzen](docs/HARDWARE-COMPATIBILITY.md).
+- **Stabile Hardwarebasis:** Intel-/AMD-CPU-Microcode für frühes Laden, gezielte Netzwerk-/HBA-Firmware und geprüfte Intel-i915/xe-/NPU- sowie AMD-Grafikmodule und Firmware. Für Intel-Grafik von Skylake bis Tiger/Rocket Lake lässt sich unter Einstellungen › Hardware HuC (Low-Power-Encodierung) bzw. GuC-Submission mit HuC laden; ab Werk gilt der Kernelstandard, wirksam nach einem Neustart, nicht auf echter Gen9–11-Hardware geprüft. [Umfang und Hardware-Prüfgrenzen](docs/HARDWARE-COMPATIBILITY.md).
 
 - **Hardware für Apps auswählen:** stabile Gerätekennungen für Intel-/AMD-Grafik, NVIDIA, NPU und Coral USB; Zuordnung je Container-Dienst.
-- **Treiber und Werkzeuge als Plugins:** signierter Katalog, Installation auf einem Daten-Volume und zur Systembasis passende Pakete. Plugin-Dateien und Einstellungen bleiben beim System-Rückfall getrennt erhalten. Neuere Fassungen aus einer Freigabe lassen sich auf der Plugin-Seite aktualisieren, mit Rückweg, falls sie nicht starten.
+- **Treiber und Werkzeuge als Plugins:** signierter Katalog nach Bereichen mit Suche und ausführlicher Beschreibung, Vorschläge für die erkannte Hardware (nie automatisch installiert), Installation auf einem Daten-Volume und zur Systembasis passende Pakete. Zusätzliche Treiber, die Debians Kernel nicht baut (Wangxun-Netzwerkkarten, Intel QAT Gen 4, neuere ITE-Sensorchips), gibt es als eigene Plugins für genau den Kernel des Releases. Plugin-Dateien und Einstellungen bleiben beim System-Rückfall getrennt erhalten. Neuere Fassungen aus einer Freigabe lassen sich auf der Plugin-Seite aktualisieren, mit Rückweg, falls sie nicht starten.
 - **Beschleuniger beobachten:** Auslastung, Temperatur, Leistung, Speicher, Takt und Engines, soweit Gerät und Treiber diese Werte liefern. Nicht verfügbare Messwerte werden nicht als null ausgegeben.
 - **NVIDIA:** passendes Treiber-Plugin, Leistungslimit und optionaler geregelter Wechsel zwischen VM und GPU-Containern. Öffentliche Treiber lassen sich auf dem NAS vorbereiten und ausdrücklich beim Neustart aktivieren.
 - **Intel GPU Tools und Coral USB:** zusätzliche Diagnose und Geräteerkennung. Die Coral-Laufzeit stellt die jeweilige Container-App bereit; PCIe-/M.2-Coral ist nicht unterstützt.
@@ -202,19 +204,29 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall. Eine Dashboard-Kachel listet die Geräte des Tailnets.
 - **NetBird als Plugin:** Fernzugriff über NetBird Cloud oder einen eigenen Management-Server, Anmeldung per Setup-Key (wird nie wieder angezeigt), Routen, Routing-Peer/Exit Node und DNS mit zweiminütigem Rückfall; Dashboard-Kachel mit den Geräten. Ausgeliefert wird nur der BSD-lizenzierte Client.
 - **Energie und USV:** CPU-Profile, Herunterfahren und Einschalten per RTC-Zeitplan, Wake-on-LAN und Verhalten des physischen Ein-/Ausschalters. USB- oder Netzwerk-USV über NUT, Abschalten bei Stromausfall und Weitergabe des USV-Status.
-- **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start oder eigene PEM-Zertifikate samt Schlüssel und Kette importieren.
+- **Firewall:** ab Werk aus; eingeschaltet Zonen Heimnetz, VPN und Internet (auch öffentliches IPv6) mit Freigaben je Dienst und je Docker-App, eigenen Regeln, zweiminütiger Probe mit Rückfall und Liste zuletzt verworfener Pakete. Optional automatisches Sperren von Absendern nach fehlgeschlagenen Anmeldungen an Weboberfläche, SSH und SMB.
+- **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start, eigene PEM-Zertifikate samt Schlüssel und Kette importieren oder automatische Zertifikate von Let's Encrypt per DNS-Challenge (Cloudflare, deSEC, Hetzner, IONOS, Netcup, INWX, DuckDNS, IPv64, RFC 2136; auch als Platzhalter für die HTTPS-Namen der Apps) oder über Port 80, mit selbständiger Erneuerung.
+- **Dynamisches DNS:** Namen auf die öffentliche IPv4-Adresse des Anschlusses und die IPv6-Adresse des NAS halten, bei denselben Anbietern oder per dyndns2 (Strato, No-IP …); optional eine Überwachung der Erreichbarkeit bei IPv64.net.
+- **IPv64.net-Konto:** Paket, Verbrauch, Log und API-Keys, Domains und DNS-Einträge, Healthchecks aller Arten mit Statistik, Integrationen und Statusseiten, Offline-Seiten und DNS-Failover samt Wartungsseite für den Ausfall des NAS, CDN/Reverse Proxy und Portmapper, Docker-Apps „Öffentlich über IPv64“, Cloud Router mit optionalem WireGuard-Tunnel des NAS und die v64 Blocklist für die Firewall – alles ab Werk aus.
 - **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
 - **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord und Home-Assistant-App für Systemereignisse. Eigene ntfy-/Discord-Ziele normaler Benutzerkonten erreichen nur öffentliche Adressen, nicht das Heimnetz.
 
-[Netzwerk](docs/NETWORKING.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
+[Firewall-Seite mit Zonen, Docker-Apps, eigenen Regeln und automatischem Sperren](docs/screenshots/current/firewall.png)
+
+[Netzwerk](docs/NETWORKING.md) · [Firewall](docs/FIREWALL.md) · [Let's Encrypt](docs/LETSENCRYPT.md) · [Dynamisches DNS](docs/DDNS.md) · [IPv64](docs/IPV64.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
 
 ### Einstellungen, Darstellung und mobile Bedienung
 
-- **Geordnete Einstellungen:** fünf Themenbereiche, kompakte alphabetisch sortierte Kacheln und gezielte Suche. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
-- **Themes:** Graphit, Schwarz, Mitternacht, Hell, Automatik und eigene Farben; Akzent, Hintergrund, Transparenz, Glas-Effekt, Unschärfe, Eckenradius, Dichte und Schriftgröße einstellen. Darstellung exportieren und importieren.
+- **Geordnete Einstellungen:** eine Seitenleiste neben jeder Einstellungsseite mit sechs festen Gruppen (System; Hardware und Energie; Netzwerk und Zugriff; Daten; Integrationen; Persönlich), Zuständen wie „Update verfügbar“ und einer Suche, die direkt zum passenden Abschnitt springt; auf dem Smartphone eine Liste mit Rückweg. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
+- **Darstellung an einem Ort:** Themes Graphit, Schwarz, Mitternacht, Hell, Automatisch und Eigenes; Akzentfarbe, Flach/Glas/Kontur mit Transparenz, Unschärfe und Glanz, Leuchten, Ecken, Schriftgröße, Dichte, Bewegung, allgemeiner Hintergrund und der Hintergrund des Dashboards. Gilt pro Konto für die ganze Oberfläche; exportieren und importieren.
+- **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Theme, Akzent, Glas/Flach/Kontur, ein Galerie-Motiv oder eigenes Bild, Position und Breite der Karte, Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung, mobile Navigation und rollenabhängige Befehlspalette per Strg/⌘+K.
 
-[![Einstellungen mit fünf übersichtlichen Gruppen und kompakten Kacheln](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+[![Einstellungen mit Seitenleiste und sechs Gruppen; Firewall, Let's Encrypt, Dynamisches DNS und IPv64 als neu markiert](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+
+[![Gestaltete Anmeldeseite: Glaskarte mit Uhr und Begrüßung „Willkommen zu Hause“ über dem Motiv Nordlicht](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
+
+[Einstellungen › Darstellung mit Seitenleiste, Theme, Akzent und Vorschau](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
 
 <p align="center">
   <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="300"></a>
@@ -244,7 +256,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 RAID ersetzt kein Backup. Unterstützung und Messwerte hängen von Kernel, Firmware und konkreter Hardware ab; das gilt auch für GPUs, NPUs, USVs und externe Backupziele. Die Release-Prüfungen umfassen automatisierte Tests und virtuelle NAS-Systeme, keine vollständige Abnahme aller Geräte und Dienste. Die genauen Ergebnisse stehen in den [Release-Berichten](docs/releases/).
 
-ARM, ZFS, LUKS-Volume-Verschlüsselung, automatische Let's-Encrypt-Zertifikate sind nicht enthalten. Der Bootloader wird bei Updates nicht automatisch ersetzt; volle Systemupdates aus einer hochgeladenen Datei sind nicht umgesetzt. TitanOS ist für ein vertrauenswürdiges lokales Netz gedacht; eine konfigurierbare Paketfilter-Firewall ist derzeit nicht enthalten. [Netzwerkverhalten](docs/NETWORKING.md#firewall-derzeit-ausgeschaltet).
+ARM und ZFS sind nicht enthalten. Der Bootloader wird bei Updates nicht automatisch ersetzt; volle Systemupdates aus einer hochgeladenen Datei sind nicht umgesetzt. Die Firewall ist ab Werk aus und filtert eingeschaltet nur, was das NAS selbst und veröffentlichte App-Ports erreicht, nicht VMs, LXC-Container und Apps mit eigener LAN-Adresse; [Firewall](docs/FIREWALL.md).
 
 ## Installation
 

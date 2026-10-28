@@ -38,7 +38,16 @@ def check_usb_files(request, opener, url):
 
 
 def _format(request, disk, body, time):
-    request('/usb/disks/' + disk['id'] + '/format', body)
+    # A storage action of titand (e.g. a share quota round) can hold the lock
+    # for a moment; the drive manager then answers usb_busy. Try again briefly.
+    for attempt in range(30):
+        try:
+            request('/usb/disks/' + disk['id'] + '/format', body)
+            break
+        except RuntimeError as error:
+            if 'usb_busy' not in str(error) or attempt == 29:
+                raise
+            time.sleep(1)
     for _ in range(240):
         job = request('/usb/disks')['job']
         if job and job.get('finished'):

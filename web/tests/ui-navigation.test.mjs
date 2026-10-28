@@ -47,3 +47,26 @@ test('the HTTPS names of apps have their own admin-only settings page', async ()
  assert.ok(!userSettingsPaths.includes('/settings/proxy'));
  for (const q of ['proxy', 'Reverse Proxy', 'mdns', 'domain']) assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
 });
+
+test('the settings navigation keeps its fixed groups, order and role filter', async () => {
+ const { settingsEntries, settingsGroups } = await import('../src/lib/settings-search.ts');
+ const label = key => key;
+ const admin = settingsEntries('', true, label);
+ assert.deepEqual(admin.map(g => g.group), [...settingsGroups]);
+ assert.deepEqual(admin.map(g => [g.group, g.entries.map(e => e.id)]), [
+  ['system', ['updates', 'timezone', 'notifications', 'about']],
+  ['hardware', ['hardware', 'temperatures', 'memory', 'energy', 'ups', 'power-button']],
+  ['network', ['network', 'firewall', 'letsencrypt', 'ddns', 'ipv64', 'proxy', 'access']],
+  ['data', ['backups', 'files']],
+  ['integrations', ['homeassistant', 'assistant', 'api']],
+  ['personal', ['appearance']],
+ ]);
+ const fresh = admin.flatMap(g => g.entries).filter(e => e.isNew).map(e => e.id);
+ assert.deepEqual(fresh, ['firewall', 'letsencrypt', 'ddns', 'ipv64']);
+ const user = settingsEntries('', false, label).flatMap(g => g.entries.map(e => e.id));
+ assert.deepEqual(user, ['about', 'temperatures', 'api', 'appearance']);
+ const ssh = settingsEntries('SSH', true, label).flatMap(g => g.entries);
+ assert.deepEqual(ssh.map(e => [e.href, e.section]), [['/settings/access#access-ssh', true]]);
+ assert.equal(settingsEntries('SSH', false, label).length, 0);
+ assert.deepEqual(settingsEntries('zeitzone', true, label).flatMap(g => g.entries.map(e => e.href)), ['/settings/timezone']);
+});

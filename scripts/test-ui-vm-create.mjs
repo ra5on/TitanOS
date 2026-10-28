@@ -39,7 +39,7 @@ async function context({
   const { ctx, page, data } = result;
   last = page;
   await page.setViewportSize({ width, height: 1050 });
-  data.system.version = "0.20.2-vm-ui-test";
+  data.system.version = "0.31.0";
   data.system.cpu.threads = 16;
   data.system.memory.totalBytes = 32 * GIB;
   const network = {
@@ -348,7 +348,7 @@ try {
       document.querySelector(".bridge-setup")?.textContent?.includes("br0"),
     );
     assert.equal(await page.locator(".netsel select").inputValue(), "bridge");
-    assert.equal(await page.locator(".vm-card").count(), 5);
+    assert.equal(await page.locator(".vm-card").count(), 6);
     await shot(page, `${theme}-${width}-${locale}`);
     assert.ok(
       await page.evaluate(

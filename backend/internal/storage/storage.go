@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -114,6 +115,9 @@ type VolumeConfig struct {
 	Devices int `json:"devices,omitempty"`
 	// Cache is the SSD cache of an mdadm volume (cache.go), off when nil.
 	Cache *CacheConfig `json:"cache,omitempty"`
+	// Encryption is LUKS2 below the file system (crypt.go), off when nil.
+	// Older titand ignore it; they cannot mount such a volume and leave it be.
+	Encryption *EncryptionConfig `json:"encryption,omitempty"`
 }
 
 // Volume is a configured volume with its live state.
@@ -128,9 +132,11 @@ type Volume struct {
 	UsedBytes  uint64 `json:"usedBytes"`
 	RaidDisks  int    `json:"raidDisks"`
 	// Cache is the SSD cache, if the volume has one.
-	Cache   *CacheView `json:"cache,omitempty"`
-	Members []Member   `json:"members"`
-	Sync    *Sync      `json:"sync"`
+	Cache *CacheView `json:"cache,omitempty"`
+	// Encryption is set for an encrypted volume.
+	Encryption *EncryptionView `json:"encryption,omitempty"`
+	Members    []Member        `json:"members"`
+	Sync       *Sync           `json:"sync"`
 	// Mismatches is what the last check found: blocks whose copies differ.
 	Mismatches uint64 `json:"mismatches"`
 	// ShareQuotas is one of the Quotas* states.
@@ -249,6 +255,21 @@ type Manager struct {
 	partUUIDDir                    string
 	zero                           func(part string) error
 	clock                          func() time.Time
+
+	// Encryption (crypt.go). OnLocked is told once per start that an
+	// encrypted volume waits for its password, OnUnlocked when it was
+	// unlocked. BeforeLock stops what runs on a volume before it is locked
+	// and returns how to start it again if locking fails.
+	OnLocked, OnUnlocked func(volume string)
+	BeforeLock           func(ctx context.Context, volume string) (undo func(), err error)
+	// Protected by mu.
+	cryptAttempts map[string]cryptAttempt
+	cryptSlots    map[string]int
+	lockNotified  map[string]bool
+	locking       map[string]bool
+	// mapperDir, cryptTemp and lockWait are replaced in tests.
+	mapperDir, cryptTemp string
+	lockWait             time.Duration
 }
 
 // NewManager returns a manager working on the real system.
@@ -299,6 +320,9 @@ func (m *Manager) Owns(uuid string) bool {
 	}
 	for _, volume := range m.configured() {
 		if normalizeUUID(volume.FilesystemUUID) == uuid || normalizeUUID(volume.ArrayUUID) == uuid {
+			return true
+		}
+		if volume.Encryption != nil && slices.ContainsFunc(volume.Encryption.UUIDs, func(u string) bool { return normalizeUUID(u) == uuid }) {
 			return true
 		}
 	}
@@ -367,6 +391,12 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 		}
 		if uuid = normalizeUUID(uuid); uuid != "" {
 			volumeByArray[uuid] = volume.Name
+		}
+		// A locked Btrfs member shows only its LUKS container.
+		if volume.Encryption != nil && volume.Filesystem == "btrfs" {
+			for _, uuid := range volume.Encryption.UUIDs {
+				volumeByArray[normalizeUUID(uuid)] = volume.Name
+			}
 		}
 	}
 
@@ -440,7 +470,8 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 				})
 			}
 		}
-		if mounts[volume.MountPoint] {
+		volume.Encryption = m.encryptionView(cfg)
+		if mounts[volume.MountPoint] && !m.isLocking(cfg.Name) {
 			volume.Mounted = true
 			var stat syscall.Statfs_t
 			if syscall.Statfs(volume.MountPoint, &stat) == nil {
@@ -627,7 +658,8 @@ func (m *Manager) Mounted() []string {
 	mounts := m.readMounts()
 	var names []string
 	for _, volume := range m.configured() {
-		if mounts[m.mountRoot+"/"+volume.Name] {
+		// A volume being locked is let go of by everything that asks.
+		if mounts[m.mountRoot+"/"+volume.Name] && !m.isLocking(volume.Name) {
 			names = append(names, volume.Name)
 		}
 	}

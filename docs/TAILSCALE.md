@@ -56,10 +56,12 @@ Tailscale benutzt `--netfilter-mode=on` und die iptables-Schnittstelle für IPv4
 und IPv6. Seine `ts-input`-/`ts-forward`-Hooks stehen vor der temporären
 TitanOS-Freigabe. Das ist auch für die Paketmarkierungen des Subnet-SNAT nötig.
 Der Firewall-Helfer erhält diese Reihenfolge nach einem Docker-/Netzwerkstart.
-Eine spätere optionale Firewall muss diese Hooks, UDP 41641, ausgehendes HTTPS
-und die Tailscale-Weiterleitung berücksichtigen; pauschale neue LAN-Freigaben
-legt das Plugin nicht an. Die aktuell global offene TitanOS-Firewall bleibt
-ansonsten unverändert. Ist zusätzlich das NetBird-Plugin installiert, ruft der
+Die optionale [Firewall](FIREWALL.md) lässt diese Hooks unberührt, filtert in
+ihrer eigenen Tabelle `inet titanos`, zählt `tailscale0` und `100.64.0.0/10`
+zur Zone VPN, lässt UDP 41641 ab Werk aus allen Zonen zu (Dienst „VPN-Tunnel“)
+und filtert weder ausgehenden Verkehr noch die Tailscale-Weiterleitung; pauschale
+neue LAN-Freigaben legt das Plugin nicht an. Ausgeschaltet bleibt die
+TitanOS-Freigabe global offen. Ist zusätzlich das NetBird-Plugin installiert, ruft der
 Firewall-Helfer am Ende dessen Hook auf: NetBirds Interface `wt0` wird vor
 `ts-input` angenommen, weil beide Netze 100.64.0.0/10 nutzen (siehe
 [NetBird](NETBIRD.md)).

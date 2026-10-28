@@ -226,9 +226,13 @@ func (s *Server) handleImportPreview(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	if req.Password != "" && !s.requireWebSession(w, r) {
+		return
+	}
 	out, err := s.opts.Storage.PreviewImport(r.Context(), req)
+	req.Password = ""
 	if err != nil {
-		writeStorageError(w, r, "import preview", err)
+		writeCryptError(w, r, "import preview", err)
 		return
 	}
 	writeJSON(w, 200, out)
@@ -238,8 +242,11 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	if req.Password != "" && !s.requireWebSession(w, r) {
+		return
+	}
 	if err := s.opts.Storage.Import(context.WithoutCancel(r.Context()), req); err != nil {
-		writeStorageError(w, r, "import registration", err)
+		writeCryptError(w, r, "import registration", err)
 		return
 	}
 	w.WriteHeader(201)

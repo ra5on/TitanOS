@@ -1,173 +1,154 @@
 <script lang="ts">
-	import { matchesSetting, settingSections, settingsAreas } from '#lib/settings-search.ts';
+	// The overview: every area as a compact row with its state, in the groups
+	// and order of the sidebar. On phones it is the navigation, with the search
+	// above it; on wider screens the sidebar holds the search.
+	import { settingsEntries } from '#lib/settings-search.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import SettingsSearch from '#lib/components/SettingsSearch.svelte';
+	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { api } from '#lib/api.ts';
-	import { notifications } from '#lib/notifications.svelte.ts';
-	import { onMount } from 'svelte';
+	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
 
+	const prefix = 'settings-list';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	const groups = ['system', 'network', 'storage', 'integrations', 'personal'] as const;
-	const sortedAreas = $derived(
-		settingsAreas
-			.filter((area) => !area.admin || admin)
-			.toSorted((a, b) => t(a.label).localeCompare(t(b.label), i18n.locale)),
+	const groups = $derived(settingsEntries(settingsSearch.query, admin, t));
+	const flat = $derived(groups.flatMap((group) => group.entries));
+	const searching = $derived(settingsSearch.query.trim() !== '');
+	const states = $derived(settingsStates());
+	const active = $derived(
+		searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1,
 	);
 
-	// A short state on some tiles. Read once when the page opens, only from
-	// answers titand keeps in RAM (no polling, no stick or volume access);
-	// overdue backups come from the messages the bell has loaded anyway.
-	type TileState = { text: MessageKey; tone: 'warn' | 'error' | 'info' };
-	let readStates = $state<Record<string, TileState>>({});
-	onMount(() => {
-		if (!admin) return;
-		void Promise.allSettled([
-			api.get<{ available: unknown; pending?: unknown }>('/update'),
-			api.get<{ status?: { onBattery?: boolean; lowBattery?: boolean } }>('/ups'),
-			api.get<{ notAfter: string }>('/system/certificate'),
-		]).then(([update, ups, certificate]) => {
-			const next: Record<string, TileState> = {};
-			if (update.status === 'fulfilled' && update.value?.available)
-				next.updates = { text: 'settings.state.update', tone: 'info' };
-			const power = ups.status === 'fulfilled' ? ups.value?.status : undefined;
-			if (power?.onBattery)
-				next.ups = {
-					text: power.lowBattery ? 'settings.state.lowBattery' : 'settings.state.onBattery',
-					tone: power.lowBattery ? 'error' : 'warn',
-				};
-			if (certificate.status === 'fulfilled' && certificate.value?.notAfter) {
-				const days = (Date.parse(certificate.value.notAfter) - Date.now()) / 86_400_000;
-				if (days < 0) next.access = { text: 'settings.state.certExpired', tone: 'error' };
-				else if (days < 14) next.access = { text: 'settings.state.certExpiring', tone: 'warn' };
-			}
-			readStates = next;
-		});
-	});
-	const tileStates = $derived.by(() => {
-		const states = { ...readStates };
-		// Per backup job, the newest of its messages tells whether it is overdue.
-		const newest = new Map<string, string>();
-		for (const notice of notifications.list)
-			if (notice.kind.startsWith('backup_') && !newest.has(notice.subject))
-				newest.set(notice.subject, notice.kind);
-		if ([...newest.values()].includes('backup_overdue'))
-			states.backups = { text: 'settings.state.backupOverdue', tone: 'warn' };
-		return states;
-	});
-
-	let search = $state('');
-	const visibleAreas = $derived(
-		sortedAreas.flatMap((area) => {
-			const sections = search.trim()
-				? (settingSections[area.id] ?? []).filter((section) =>
-						matchesSetting(search, `${t(area.label)} ${t(section.label)}`, section.id),
-					)
-				: [];
-			return sections.length
-				? sections.map((section) => ({
-						href: section.href,
-						id: area.id,
-						label: `${t(area.label)} › ${t(section.label)}`,
-						group: area.group,
-						icon: area.icon,
-					}))
-				: matchesSetting(search, t(area.label), area.id)
-					? [
-							{
-								href: `/settings/${area.id}`,
-								id: area.id,
-								label: t(area.label),
-								group: area.group,
-								icon: area.icon,
-							},
-						]
-					: [];
-		}),
-	);
-	const resultCount = $derived(visibleAreas.length);
+	function clear() {
+		settingsSearch.query = '';
+		settingsSearch.active = 0;
+	}
 </script>
 
 <PageHead title={t('settings.title')} />
 
-<label class="search"
-	><span>{t('ui.searchSettings')}</span><input
-		class="field"
-		type="search"
-		bind:value={search}
-		placeholder={t('ui.searchHint')}
-	/></label
->
-{#if search}<div class="search-result">
-		<span role="status">{t('ui.results', { count: resultCount })}</span><button
+<div class="phone-search">
+	<SettingsSearch results={flat} idPrefix={prefix} visibleLabel />
+</div>
+{#if searching}<div class="search-result">
+		<span role="status">{t('ui.results', { count: flat.length })}</span><button
 			class="btn"
 			type="button"
-			onclick={() => (search = '')}>{t('ui.clear')}</button
+			onclick={clear}>{t('ui.clear')}</button
 		>
 	</div>{/if}
-{#if search && resultCount === 0}<p>{t('ui.noSettings')}</p>{/if}
-{#each groups as group}
-	{@const entries = visibleAreas.filter((area) => area.group === group)}
-	{#if entries.length}<section class="settings-group" aria-labelledby="group-{group}">
-			<h2 class="tile-title" id="group-{group}">{t(`settings.group.${group}` as MessageKey)}</h2>
-			<div class="areas">
-				{#each entries as area (area.href)}
-					<a class="tile" href={area.href}
-						><span class="setting-icon"><Icon name={area.icon ?? 'tool'} size={26} /></span><span
-							class="name">{area.label}</span
-						>{#if tileStates[area.id] && !search}<span class="chip {tileStates[area.id].tone}"
-								>{t(tileStates[area.id].text)}</span
-							>{/if}</a
-					>
+{#if searching && flat.length === 0}<p>{t('ui.noSettings')}</p>{/if}
+<div class="groups" id="{prefix}-results">
+	{#each groups as group (group.group)}
+		{@const offset = flat.indexOf(group.entries[0])}
+		<section class="tile settings-group" aria-labelledby="group-{group.group}">
+			<h2 class="tile-title" id="group-{group.group}">
+				{t(`settings.group.${group.group}` as MessageKey)}
+			</h2>
+			<ul class="areas">
+				{#each group.entries as entry, i (entry.href)}
+					{@const state = entry.section ? undefined : states[entry.id]}
+					<li>
+						<a
+							id="{prefix}-{offset + i}"
+							href={entry.href}
+							class:highlight={offset + i === active}
+							onclick={clear}
+							><span class="setting-icon"><Icon name={entry.icon} size={16} /></span><span
+								class="name">{entry.label}</span
+							>{#if entry.isNew}<span class="new">{t('settings.new')}</span>{/if}{#if state}<span
+									class="chip {state.tone}">{t(state.text)}</span
+								>{/if}<span class="chevron"><Icon name="arrowRight" size={14} /></span></a
+						>
+					</li>
 				{/each}
-			</div>
-		</section>{/if}
-{/each}
+			</ul>
+		</section>
+	{/each}
+</div>
 
 <style>
+	.groups {
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap);
+	}
 	.settings-group {
-		display: grid;
-		gap: 14px;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		overflow: hidden;
+	}
+	.settings-group h2 {
+		padding: 10px var(--tile-pad);
+		border-bottom: 1px solid var(--panel-border);
+	}
+	ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	li + li {
+		border-top: 1px solid var(--panel-border);
+	}
+	a {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 44px;
+		padding: 6px var(--tile-pad);
+		color: var(--text);
+		text-decoration: none;
+	}
+	a:hover,
+	a.highlight {
+		background: var(--chip);
+	}
+	a:focus-visible {
+		outline-offset: -2px;
 	}
 	.setting-icon {
-		color: var(--accent);
-		display: flex;
-	}
-	.search {
 		display: grid;
-		gap: 8px;
-		width: 100%;
+		place-items: center;
+		flex: none;
+		width: 28px;
+		height: 28px;
+		border-radius: var(--radius-small);
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--accent);
+	}
+	.name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 500;
+		overflow-wrap: anywhere;
+	}
+	.new {
+		flex: none;
+		padding: 0 5px;
+		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+		border-radius: var(--radius-small);
+		color: color-mix(in srgb, var(--accent) 60%, var(--text));
+		font-size: 0.6875rem;
+	}
+	.chip {
+		flex: none;
+	}
+	.chevron {
+		display: flex;
+		flex: none;
+		color: var(--muted);
 	}
 	.search-result {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 	}
-	.areas {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
-		gap: 10px;
-	}
-	a {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		min-height: 96px;
-		flex-direction: column;
-		text-align: center;
-		padding: 10px 14px;
-		color: var(--text);
-		text-decoration: none;
-		font-size: 0.875rem;
-	}
-	a:hover,
-	a:focus-visible {
-		border-color: var(--accent);
-	}
-	.name {
-		font-size: 0.9375rem;
-		font-weight: 500;
+	/* Wider screens search in the sidebar. */
+	@media (min-width: 761px) {
+		.phone-search {
+			display: none;
+		}
 	}
 </style>

@@ -38,11 +38,15 @@
 						}}>{v.name}<Icon name="chevronDown" size={11} /></button
 					></td
 				><td
-					><span class:ok={v.state === 'ok'} class:warn={v.state !== 'ok'}
-						>{t(`level.${v.level}`)} · {t(`state.${v.state}`)}{v.sync
-							? ' ' + formatPercent(v.sync.percent)
-							: ''}</span
-					></td
+					>{#if v.encryption?.locked}<a
+							class="warn"
+							href="/storage#volume-{encodeURIComponent(v.name)}"
+							>{t('crypt.chipLocked')} · {t('crypt.unlock')}</a
+						>{:else}<span class:ok={v.state === 'ok'} class:warn={v.state !== 'ok'}
+							>{t(`level.${v.level}`)} · {t(`state.${v.state}`)}{v.sync
+								? ' ' + formatPercent(v.sync.percent)
+								: ''}</span
+						>{/if}</td
 				><td
 					><div
 						class="track"

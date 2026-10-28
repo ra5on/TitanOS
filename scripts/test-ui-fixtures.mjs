@@ -637,6 +637,30 @@ export function fixtureFactory(browser, errors) {
       // Shaped like GET /plugins; tests set data.plugins.
       if ((path === "/plugins" || path === "/plugins/catalog") && data.plugins)
         return json(data.plugins);
+      // Hardware recommendations: dismiss one, show dismissed ones again.
+      if (path.startsWith("/plugins/recommendations/") && data.plugins) {
+        (data.recommendationCalls ??= []).push([method, path]);
+        const name = decodeURIComponent(path.split("/")[3]);
+        if (method === "POST" && path.endsWith("/dismiss")) {
+          data.hiddenRecommendations = [
+            ...(data.hiddenRecommendations ?? []),
+            ...data.plugins.recommendations.filter((r) => r.plugin === name),
+          ];
+          data.plugins = {
+            ...data.plugins,
+            recommendations: data.plugins.recommendations.filter((r) => r.plugin !== name),
+            dismissed: (data.plugins.dismissed ?? 0) + 1,
+          };
+        } else if (method === "DELETE") {
+          data.plugins = {
+            ...data.plugins,
+            recommendations: [...data.plugins.recommendations, ...(data.hiddenRecommendations ?? [])],
+            dismissed: 0,
+          };
+          data.hiddenRecommendations = [];
+        }
+        return json(data.plugins);
+      }
       if (path.endsWith("/update") && path.startsWith("/plugins/") && method === "POST") {
         (data.pluginUpdates ??= []).push([path, route.request().postDataJSON()]);
         if (data.failPluginUpdate)
@@ -840,10 +864,56 @@ export function fixtureFactory(browser, errors) {
         });
       if (path.endsWith("/addresses"))
         return json({ addresses: [], source: "" });
+      // No Intel GPU in the fixtures: the GuC/HuC tile stays hidden.
+      if (path === "/hardware/intel-gpu")
+        return json({
+          mode: "auto",
+          managed: false,
+          active: "",
+          param: "",
+          entries: {},
+          deferred: false,
+          restartNeeded: false,
+          writable: true,
+          gpus: [],
+          problem: "",
+        });
       if (path === "/hardware")
         return json({
           hardware: { pci: [], usb: [], iommu: false },
           usedBy: {},
+        });
+      // Settings › Access: SSH off, nobody with a key, the self-signed certificate.
+      if (path === "/system/ssh")
+        return json({
+          enabled: false,
+          running: false,
+          fingerprint: "",
+          accounts: [],
+          allowedNetworks: [],
+          homeNetworks: ["192.168.1.0/24"],
+          tailscaleNetworks: ["100.64.0.0/10"],
+          netbirdNetworks: [],
+          clientAddress: "192.168.1.50",
+        });
+      if (path === "/system/certificate")
+        return json({
+          kind: "self-signed",
+          names: ["titan-test.local"],
+          issuer: "titan-test",
+          notBefore: time,
+          notAfter: "2036-10-23T16:00:00Z",
+          fingerprint: "ab:cd",
+        });
+      // No LXC containers; the command palette lists them for admins.
+      if (path === "/lxc")
+        return json({
+          installed: true,
+          dev: false,
+          host: { cpus: 8, memoryBytes: 16e9 },
+          bridge: true,
+          networks: [],
+          containers: [],
         });
       if (path === "/vms/imports")
         return json({ jobs: [], chunkBytes: 8 << 20 });

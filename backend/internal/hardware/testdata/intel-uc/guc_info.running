@@ -1,0 +1,10 @@
+GuC firmware: i915/kbl_guc_70.1.1.bin
+	status: RUNNING
+	version: found 70.1.1
+	uCode: 337856 bytes
+	RSA: 256 bytes
+
+GuC status 0x8002f0ec:
+	Bootrom status = 0x76
+	uKernel status = 0xf0
+	MIA Core status = 0x2

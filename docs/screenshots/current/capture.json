@@ -1,7 +1,7 @@
 {
-  "source": "6e555a30dfdfd7234f5361020322f3fe9c5c1530",
-  "version": "0.20.2",
-  "captured": "2026-10-24",
+  "source": "e923e2c1ea538e2e7a854b76d2613487299377a0",
+  "version": "0.31.0",
+  "captured": "2026-10-28",
   "demoData": true,
   "theme": "Graphit / Blau / Glas",
   "browserErrors": [],
@@ -9,94 +9,277 @@
   "images": [
     {
       "file": "dashboard.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 1366,
-      "bytes": 652067,
-      "sha256": "1a20e222b1d4591ffd5a51ea697d7acb1201895c984f044526acdcb4cbbf46df"
+      "height": 1416,
+      "bytes": 728515,
+      "sha256": "497444cbda3438991446701ea0c1c2c8a78a9a60997508aab6effe28efe0a447"
     },
     {
       "file": "dashboard-editor.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 1810,
-      "bytes": 736174,
-      "sha256": "5a892b6c3f8b84f6c102f8ac8354e75ee4b0667529801ad8e72262775bc4c083"
+      "height": 1546,
+      "bytes": 840297,
+      "sha256": "25da678d94ad22a79ac0329812c7d23f8c71de6cc73c0e25b3cd2dc8131035e2"
+    },
+    {
+      "file": "darstellung.png",
+      "script": "docs/screenshots/capture.mjs",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 501546,
+      "sha256": "113395844037261d2a6caa0c30edb24a1097c22143cb01fe48d211c6b525a208"
     },
     {
       "file": "dashboard-hintergruende.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 1810,
-      "bytes": 618013,
-      "sha256": "6c6c9515a7c8bad87e35da7363b0d37d442b1580bbceda45b472c6917944c7df"
+      "height": 1000,
+      "bytes": 463788,
+      "sha256": "4720883d8289fbea08084cc894ddfda7216726a74ad59d1b0726aa5000989afe"
     },
     {
       "file": "dashboard-bild-upload.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 1810,
-      "bytes": 397340,
-      "sha256": "cc5a4f81a71ce95c839787cbd622200ec1e2d90a0eea8882f1abbde8b7bbee00"
+      "height": 1000,
+      "bytes": 258843,
+      "sha256": "8fd754619f7288a052bec493e4068aaee6b4148dd9972b763d76f32d4d454511"
     },
     {
       "file": "dashboard-vm-details.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 1733,
-      "bytes": 681778,
-      "sha256": "6270124f7cbcdd6d3e15a8dbbb96ca9cb12e1cfa3767fb538e86036c51269537"
+      "height": 1783,
+      "bytes": 743655,
+      "sha256": "7db204ba6d8ac63e9e7055790c09e9b324fc9b9c73ccb7f7b44e600857a2608f"
     },
     {
       "file": "speicher.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 780,
-      "bytes": 288358,
-      "sha256": "c1756baf1fc5e75d7d1c57882fa0312087152b4b4c8c8f9db45bd323b41de7e6"
+      "height": 1000,
+      "bytes": 327798,
+      "sha256": "2210a18b08743b80e1b47fc0e9acf470b98807065589d6fcee44e7877ea47c36"
     },
     {
       "file": "shares.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 780,
-      "bytes": 251512,
-      "sha256": "1c7aa2c6c9c326238b95670933673b480d44ff734844fa04982cdcf948251ec4"
+      "bytes": 261127,
+      "sha256": "1c2fad21afaefccd92f3f13abaada5b123ede139bc843ed143ae81293e63bbcb"
     },
     {
       "file": "dateien.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1000,
-      "bytes": 300882,
-      "sha256": "a0830db523f0f47220cf73a9b93f810c1f276610d3a65382a5b2f046c7326d8c"
+      "bytes": 307315,
+      "sha256": "c66196db150e4a08a5d6b741cdf29bf2814087c4adae04611bbc99da1dc6c01a"
     },
     {
       "file": "docker.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1175,
-      "bytes": 395820,
-      "sha256": "6d27e885d6af592d6273159d038b8fe3ae8c3a013620c35090ba9a8f023a61c6"
+      "bytes": 389391,
+      "sha256": "5e165abf0968cd2b9b4a7ef2e1351e644e048441cce344d6805e9c6b49d52420"
     },
     {
       "file": "vms.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1600,
-      "height": 815,
-      "bytes": 316374,
-      "sha256": "709de3ccc9bc4a11a848c3461733fe107d7824a845cc45839b42cfa2572c4781"
-    },
-    {
-      "file": "einstellungen.png",
-      "width": 1600,
-      "height": 1013,
-      "bytes": 327073,
-      "sha256": "02d42f52562158693517130242f50b0c3e8e003769f4987f17d14f5cfdb38106"
+      "height": 842,
+      "bytes": 363648,
+      "sha256": "02c03053fd50690b06780e8aefbeb2e2e5447c15a940d5763023b5e90ce171ba"
     },
     {
       "file": "dateien-mobil.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 390,
       "height": 844,
-      "bytes": 112253,
-      "sha256": "d37d0167064a0044091440e5ee9be34aa0ca68c301666bf0d71f302c67fd6e08"
+      "bytes": 127163,
+      "sha256": "eeb534b6a2874d094f1422201b48c06cfe0f8e20ec65d6af564bff1129f30e26"
     },
     {
       "file": "dashboard-mobil.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 390,
       "height": 844,
-      "bytes": 102930,
-      "sha256": "ed7042990d942b1dba5243f36ecb9931f1e3b230d8afcca8bdb721245b4ab7d6"
+      "bytes": 107116,
+      "sha256": "08d3ac01a6bd39a5c3f82c61ee146386511c05b03b4bc645c10c5e097c9b8a53"
+    },
+    {
+      "file": "anmeldeseite.png",
+      "script": "docs/screenshots/capture.mjs",
+      "width": 1600,
+      "height": 900,
+      "bytes": 795122,
+      "sha256": "f27c4614c7e0b514ea10d15b6a18fd03a357a16d1bb249748c1568aa0d4f6dbe"
+    },
+    {
+      "file": "einstellungen.png",
+      "script": "scripts/test-ui-firewall.mjs",
+      "scriptOutput": "settings-overview-desktop.png",
+      "width": 1440,
+      "height": 1584,
+      "bytes": 375192,
+      "sha256": "991769f247051be0e197a4f29d34a87979e718756aac4d6f55e5e793605c0d27"
+    },
+    {
+      "file": "firewall.png",
+      "script": "scripts/test-ui-firewall.mjs",
+      "scriptOutput": "firewall-desktop-on.png",
+      "width": 1440,
+      "height": 2925,
+      "bytes": 568820,
+      "sha256": "98c9a68127ce1bd310d3eaa758db3eda267b8dc8a6108a6e3d2931ea9589363f"
+    },
+    {
+      "file": "vm-erstellen.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "scriptOutput": "graphit-1600-de.png",
+      "width": 1600,
+      "height": 1459,
+      "bytes": 433223,
+      "sha256": "1b4c7d0d390cabcb7f2d9d88ad88ee3c56d633673ac15f8f4f7da57d681416a6"
+    },
+    {
+      "file": "vm-erstellen-mobil.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "scriptOutput": "graphit-390-de.png",
+      "width": 390,
+      "height": 3153,
+      "bytes": 277552,
+      "sha256": "212b5f69a576f37a063050074dde3ebbdad9ee764aef28b4fe9ce142327fe582"
+    },
+    {
+      "file": "protokoll.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "scriptOutput": "system-logs.png",
+      "width": 1600,
+      "height": 1094,
+      "bytes": 134727,
+      "sha256": "f82a0a1329d32569b010af2d3369249b2be0230221c19dbdf7ee9fbb131af86d"
+    },
+    {
+      "file": "arbeitsspeicher.png",
+      "script": "scripts/test-ui-memory-images.mjs",
+      "scriptOutput": "ram-cache.png",
+      "width": 1440,
+      "height": 1186,
+      "bytes": 383546,
+      "sha256": "10782c436a3444a6b378b3b88ee4434e1dc6342012e222ee62b4d6bfabb1a5d3"
+    },
+    {
+      "file": "app-images.png",
+      "script": "scripts/test-ui-memory-images.mjs",
+      "scriptOutput": "stack-images.png",
+      "width": 1440,
+      "height": 2296,
+      "bytes": 396319,
+      "sha256": "2a2b6acd4dc98b52a366e0285c4d0ba029ac3ef7aab48673ddc8bf1049d408f0"
+    },
+    {
+      "file": "app-images-mobil.png",
+      "script": "scripts/test-ui-memory-images.mjs",
+      "scriptOutput": "stack-images-mobile.png",
+      "width": 390,
+      "height": 3329,
+      "bytes": 265996,
+      "sha256": "8123fbec5ce659f70492a0bd1cc6ce9136dcf8340f5262c14b60e213f545fede"
+    },
+    {
+      "file": "dateien-ersetzen.png",
+      "script": "scripts/test-ui-copy-confirmation.mjs",
+      "scriptOutput": "replace-before-copy.png",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 160361,
+      "sha256": "bbe77e546833947216185a684a3fe2f395792bc29b2552aecd497c7a1c930e8f"
+    },
+    {
+      "file": "dateien-auftraege-1440.png",
+      "script": "scripts/test-ui-drive-transfers.mjs",
+      "scriptOutput": "dateien-auftraege-1440.png",
+      "width": 1440,
+      "height": 1303,
+      "bytes": 357317,
+      "sha256": "569a24e5fb449d34c83f96fb1e8c5f1b7a6611eee5d00ad93d5c9e8d744b25ec"
+    },
+    {
+      "file": "dateien-auftraege-390.png",
+      "script": "scripts/test-ui-drive-transfers.mjs",
+      "scriptOutput": "dateien-auftraege-390.png",
+      "width": 390,
+      "height": 2106,
+      "bytes": 231412,
+      "sha256": "5c4c0c89a4bed3fe2ee38824ca248aba3928812ecea6bdc096bda8499313991c"
+    },
+    {
+      "file": "netzwerk.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "settings-network-1440-graphit.png",
+      "width": 1440,
+      "height": 1095,
+      "bytes": 346977,
+      "sha256": "ce868b5a40c602d371002287210229cfcccc49a2c445e800a091237ce4d72ec6"
+    },
+    {
+      "file": "netzwerk-mobil.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "settings-network-390-graphit.png",
+      "width": 390,
+      "height": 1007,
+      "bytes": 152578,
+      "sha256": "5e42454d08be242d70679db846b010854903c17b86181bf2798db6c02c4ed486"
+    },
+    {
+      "file": "netzwerk-mobil-hell.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "settings-network-390-hell.png",
+      "width": 390,
+      "height": 1007,
+      "bytes": 166585,
+      "sha256": "2f16a53db4953f010232b74bd0daac68b0b1645f53ecb82a96f9afb795d03afb"
+    },
+    {
+      "file": "docker-lan.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "docker-networks-1440-graphit.png",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 261435,
+      "sha256": "8addff745adee346c20271b07eba636ad643ae1001509e363a55765f754a1dde"
+    },
+    {
+      "file": "api-zugaenge.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "settings-api-1440-graphit.png",
+      "width": 1440,
+      "height": 1095,
+      "bytes": 341277,
+      "sha256": "2544a5f2c93e018a26b9175ed1e24970ce78c0c798f5aca8ed2918068ad29c03"
+    },
+    {
+      "file": "vm-medien-mobil.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "vms-media-390-graphit.png",
+      "width": 390,
+      "height": 844,
+      "bytes": 146477,
+      "sha256": "5d20750b8e8d755806624760138f2f56ee9feb726ad8e5d9cc8b8778ec9dd65f"
+    },
+    {
+      "file": "plugin-aufraeumen.png",
+      "script": "scripts/test-ui-023.mjs",
+      "scriptOutput": "plugins-cleanup-1440-graphit.png",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 276379,
+      "sha256": "6e7beed30a636fbeb03f12f093226185f94f49e661ed97ed6fd0fc4f0a338aa1"
     }
   ]
 }

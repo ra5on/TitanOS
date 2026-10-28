@@ -56,6 +56,36 @@ lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
 erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
 Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
 
+### Einstellungen mit Seitenleiste (28. Oktober 2026)
+
+Vom Projektinhaber am 28. Oktober 2026 bestätigter Entwurf „A – Seitenleiste“.
+Er ersetzt die Kachelübersicht der Abschnitte 0.6.1 und 0.30.0 (Gerüst der
+Seiten bleibt). Desktop: links eine Seitenleiste von etwa 250 px auf eigener
+Kachelfläche, unter der 60-px-Kopfzeile haftend und eigenständig scrollend.
+Oben die Einstellungssuche (Bereiche und Abschnitte wie bisher; Pfeiltasten
+wählen, Enter öffnet, Treffer springen zum Abschnittsanker, Escape leert),
+darunter die Gruppen mit kleiner Großbuchstaben-Überschrift und Zeilen von
+etwa 32 px mit 16-px-Symbol und Titel. Die aktuelle Seite trägt eine
+Akzenttönung (Text aus Akzent und Textfarbe gemischt, damit auch Hell 4,5:1
+erreicht) und `aria-current="page"`; die Leiste ist ein `nav` mit
+`aria-label`. Gruppen in fester Reihenfolge (`settingsAreas`): System,
+Hardware und Energie, Netzwerk und Zugriff, Daten, Integrationen, Persönlich;
+innerhalb der Gruppen nicht alphabetisch. Bereiche mit Zustand bekommen einen
+Punkt mit Tooltip und Screenreader-Text, optional ein „neu“-Abzeichen
+(`isNew`). Rechts die bisherigen Seiten unverändert (`.settings-page.column`,
+höchstens 64rem); der Brotkrumen zu „Einstellungen“ entfällt.
+
+`/settings` zeigt rechts alle Bereiche als kompakte Zeilen je Gruppe
+(Symbol in Akzenttönung, Titel, Zustand als Chip mit Text, Pfeil), eine
+Spalte. Mobil bis 760 px: keine Seitenleiste; `/settings` ist dieselbe Liste
+in voller Breite mit Suchfeld darüber, Unterseiten haben oben den Rückweg
+„‹ Einstellungen“ (44 px hoch). Kein seitliches Scrollen. Knöpfe und Felder
+sind innerhalb der Einstellungen auf dem Desktop kompakter (etwa 30 px,
+13 px Text, über `--control-height` und die Dichte); Touch bleibt bei 44 px.
+Zustände werden einmal beim Öffnen der Einstellungen gelesen, nicht je Seite
+und nicht zyklisch. Browserprüfung: `scripts/test-ui-settings-sidebar.mjs`
+(Bilder unter `out/validation/ui-settings-sidebar/`).
+
 ### Einstellungsseiten aufgeräumt (0.30.0)
 
 Auftrag des Projektinhabers vom 27. Oktober 2026: alle Seiten hinter der
@@ -65,6 +95,11 @@ Großbuchstaben-Überschrift `.tile-title`; Felder mit Beschriftung darüber und
 lesbarer Breite (`label.stack`), Häkchen mit Hinweis eingerückt darunter,
 Knopfleisten `.row-actions`, Unterteilungen mit Linie (`.divided`). Neu:
 „HTTPS-Namen für Apps“ unter Netzwerk und Dienste (siehe `docs/APP-PROXY.md`).
+Ebenso „Firewall“ (Symbol Schild): Hauptschalter, Zonenmatrix als Tabelle mit
+Häkchen je Zone, Docker-Apps mit „Neue Apps“, eigene Regeln als bearbeitbare
+Tabellenzeilen, eine haftende Leiste „Auf Probe übernehmen“ und darüber der
+Probe-Hinweis mit Countdown, automatisches Sperren mit Sperrliste und „Zuletzt
+gesperrt“ (siehe `docs/FIREWALL.md`).
 
 ### Einstellungen und Sicherungen (0.6.1)
 
@@ -609,7 +644,8 @@ VM-Gastagent-/Freeze-Sicherung bleibt ein eigener späterer Ausbau.
 ### Persönliche Startseite, Speicher und Einstellungen (0.20.0)
 
 [Bestätigter Folgeentwurf](PersonalDashboard.md): eine anpassbare Startseite mit
-visuellem Editor, globalen Glasreglern und persönlicher Hintergrundgalerie,
+visuellem Editor, persönlicher Hintergrundgalerie (seit 0.30.0 wie alle
+Gestaltung unter Einstellungen › Darstellung),
 kompakte Speicherlisten und thematisch gruppierte Einstellungen. Die zehn lokalen
 Motive und ihre Herkunft stehen in [DashboardBackgrounds.md](DashboardBackgrounds.md).
 Er ersetzt die älteren Dashboard-/Editor- und Übersichtsregeln einschließlich

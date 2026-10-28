@@ -2,7 +2,17 @@
 	import { ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { login, session } from '#lib/session.svelte.ts';
+	import type { LoginLook } from '#lib/login/look.ts';
 	import AuthCard from './AuthCard.svelte';
+
+	type Props = {
+		/** Only shows the page (preview of Settings › Appearance): nothing is sent. */
+		preview?: boolean;
+		look?: LoginLook | null;
+		imageURL?: string;
+		hostname?: string;
+	};
+	let { preview = false, look, imageURL = '', hostname }: Props = $props();
 
 	let name = $state('');
 	let password = $state('');
@@ -14,6 +24,7 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
+		if (preview) return;
 		busy = true;
 		error = '';
 		try {
@@ -42,7 +53,7 @@
 	}
 </script>
 
-<AuthCard title={t('auth.loginTitle')} hostname={session.data?.hostname}>
+<AuthCard title={t('auth.loginTitle')} hostname={hostname ?? session.data?.hostname} texts {look} {imageURL}>
 	<form onsubmit={submit}>
 		{#if needsCode}
 			<p class="hint">{t('auth.codeHint')}</p>

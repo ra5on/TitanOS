@@ -31,7 +31,7 @@ func TestBearerScopesRevocationAndCurrentRole(t *testing.T) {
 	if code := call("GET", "/api/v1/system"); code != 200 {
 		t.Fatal(code)
 	}
-	for _, v := range []struct{ method, path string }{{"GET", "/api/v1/account/tokens"}, {"GET", "/api/v1/users"}, {"GET", "/api/v1/terminal/shell"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/docker/containers/abc/start"}, {"GET", "/api/v1/files/list"}} {
+	for _, v := range []struct{ method, path string }{{"GET", "/api/v1/account/tokens"}, {"GET", "/api/v1/users"}, {"GET", "/api/v1/terminal/shell"}, {"POST", "/api/v1/network/confirm"}, {"POST", "/api/v1/firewall/confirm"}, {"PUT", "/api/v1/firewall"}, {"POST", "/api/v1/docker/containers/abc/start"}, {"GET", "/api/v1/files/list"}} {
 		if code := call(v.method, v.path); code != 403 {
 			t.Fatalf("%s %s: %d", v.method, v.path, code)
 		}

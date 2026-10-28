@@ -1,0 +1,569 @@
+{
+  "date": "2026-10-28",
+  "started": "2026-10-28T08:45:43Z",
+  "completed": "2026-10-28T08:52:16Z",
+  "branch": "release-0.31.0-wip",
+  "testedCommit": "f094f82ae23383081714b64b60acfc939b0f819e",
+  "zip": {
+    "name": "titanos-0.31.0.zip",
+    "sha256": "001a95262ae5a537ea2be58935f654e6b9409cd6e9ff5a7441455f71776f7977",
+    "build": "make zip VERSION=0.31.0 (mkosi in a user namespace, local, unsigned)"
+  },
+  "command": "python3 scripts/smoke-encryption.py out/titanos-0.31.0.zip --output out/validation/encryption",
+  "host": {
+    "accel": "kvm",
+    "disks": "fresh qcow2 files only (11 data disks of 1-2 GiB), no host block devices"
+  },
+  "guest": {
+    "boots": [
+      {
+        "boot": 1,
+        "ram": "4G"
+      },
+      {
+        "boot": 2,
+        "ram": "4G"
+      },
+      {
+        "boot": 3,
+        "ram": "4G"
+      },
+      {
+        "boot": 4,
+        "ram": "2G"
+      }
+    ],
+    "cpus": 2,
+    "kernel": "6.12.113+deb13-amd64",
+    "cryptsetup": "cryptsetup 2.7.5 flags: UDEV BLKID KEYRING KERNEL_CAPI HW_OPAL",
+    "dmCrypt": "loaded"
+  },
+  "result": "passed",
+  "checks": {
+    "a_create": {
+      "result": "passed",
+      "summary": "encrypted mdadm RAID1 ext4 (secure), Btrfs RAID1 (vault, one LUKS container per member) and RAID5 ext4 (grow5) created via the API; 48 MiB random data each; Docker data folder on secure",
+      "evidence": {
+        "secureCreated": {
+          "level": "raid1",
+          "filesystem": "ext4",
+          "seconds": 11.9,
+          "encryption": {
+            "locked": false,
+            "members": 1,
+            "unlocked": 1,
+            "passwords": 0
+          }
+        },
+        "vaultCreated": {
+          "level": "raid1",
+          "filesystem": "btrfs",
+          "seconds": 22.4,
+          "encryption": {
+            "locked": false,
+            "members": 2,
+            "unlocked": 2,
+            "passwords": 0
+          }
+        },
+        "grow5Created": {
+          "level": "raid5",
+          "filesystem": "ext4",
+          "seconds": 17.5,
+          "encryption": {
+            "locked": false,
+            "members": 1,
+            "unlocked": 1,
+            "passwords": 0
+          }
+        },
+        "luksDumpSecure": {
+          "pbkdf": "argon2id",
+          "memoryKiB": 262144,
+          "threads": 2,
+          "guestCPUs": 2,
+          "timeCost": "21",
+          "cipher": "aes-xts-plain64",
+          "keyBits": "512 bits"
+        },
+        "mapper": [
+          "titanos-crypt-grow5",
+          "titanos-crypt-secure",
+          "titanos-crypt-vault-0813e098",
+          "titanos-crypt-vault-7de5a508"
+        ],
+        "mounts": [
+          "/dev/mapper/titanos-crypt-secure /mnt/secure ext4",
+          "/dev/dm-1 /mnt/vault btrfs",
+          "/dev/mapper/titanos-crypt-grow5 /mnt/grow5 ext4"
+        ],
+        "btrfsDevices": [
+          "devid    1 size 1.86GiB used 454.25MiB path /dev/mapper/titanos-crypt-vault-0813e098",
+          "\tdevid    2 size 1.86GiB used 454.25MiB path /dev/mapper/titanos-crypt-vault-7de5a508"
+        ],
+        "dataWritten": {
+          "secure": "6e44b1c2e22c71c53e1e6aaf44144e8e99a43bc4e4cac7866b70dbce132acf53",
+          "vault": "8675b902b5be493cd038bb1f24eb997dbea46107d216dca16a907f5a4be625f5",
+          "grow5": "092ab8d9921d34b05a2226f58edb2c31949f8edd5fefe4fef95326b645732638"
+        },
+        "dockerRoot": "/mnt/secure/.titanos/docker",
+        "ok": true
+      }
+    },
+    "b_lockedAfterReboot": {
+      "result": "passed",
+      "summary": "all three locked and unmounted, exactly one volume_locked notice each (also after 35 s more), shares not in smb.conf or the SMB listing, Docker inactive, /health ready and titanos-boot-check.service successful while locked",
+      "evidence": {
+        "state": {
+          "secure": {
+            "mounted": false,
+            "encryption": {
+              "locked": true,
+              "members": 1,
+              "unlocked": 0,
+              "passwords": 0
+            }
+          },
+          "vault": {
+            "mounted": false,
+            "encryption": {
+              "locked": true,
+              "members": 2,
+              "unlocked": 0,
+              "passwords": 0
+            }
+          },
+          "grow5": {
+            "mounted": false,
+            "encryption": {
+              "locked": true,
+              "members": 1,
+              "unlocked": 0,
+              "passwords": 0
+            }
+          }
+        },
+        "notices": {
+          "secure": 1,
+          "vault": 1,
+          "grow5": 1
+        },
+        "smbSharesOffered": [],
+        "docker": "inactive",
+        "mountSecure": "not-mounted",
+        "health": {
+          "ready": true,
+          "status": "ok"
+        },
+        "healthReadySeconds": 21.4,
+        "bootCheckService": [
+          "Result=success",
+          "ActiveState=active"
+        ],
+        "ok": true
+      }
+    },
+    "c_passwords": {
+      "result": "passed",
+      "summary": "five wrong passwords 400 volume_wrong_password (about 2 s each), sixth and the right one during the wait 429 with Retry-After 30; right password after the wait unlocks; checksums, SMB share and Docker root with its volume back",
+      "evidence": {
+        "wrongAttempts": [
+          {
+            "status": 400,
+            "seconds": 2.44,
+            "retryAfter": null,
+            "code": {
+              "code": "volume_wrong_password",
+              "message": "storage: wrong password"
+            }
+          },
+          {
+            "status": 400,
+            "seconds": 2.05,
+            "retryAfter": null,
+            "code": {
+              "code": "volume_wrong_password",
+              "message": "storage: wrong password"
+            }
+          },
+          {
+            "status": 400,
+            "seconds": 1.99,
+            "retryAfter": null,
+            "code": {
+              "code": "volume_wrong_password",
+              "message": "storage: wrong password"
+            }
+          },
+          {
+            "status": 400,
+            "seconds": 1.96,
+            "retryAfter": null,
+            "code": {
+              "code": "volume_wrong_password",
+              "message": "storage: wrong password"
+            }
+          },
+          {
+            "status": 400,
+            "seconds": 2.03,
+            "retryAfter": null,
+            "code": {
+              "code": "volume_wrong_password",
+              "message": "storage: wrong password"
+            }
+          },
+          {
+            "status": 429,
+            "seconds": 0.0,
+            "retryAfter": "30",
+            "code": {
+              "code": "volume_password_attempts",
+              "message": "storage: too many wrong passwords; wait before trying again (30 s)"
+            }
+          }
+        ],
+        "rightPasswordDuringBackoff": {
+          "status": 429,
+          "retryAfter": 30
+        },
+        "retryAfterSecondsInView": 30,
+        "vaultUnlockSeconds": 4.91,
+        "grow5UnlockSeconds": 2.28,
+        "unlockSeconds": 2.29,
+        "checksumsMatch": true,
+        "smbAfterUnlock": true,
+        "dockerRoot": "/mnt/secure/.titanos/docker",
+        "dockerVolumeKept": true,
+        "passwordsKnown": 1,
+        "ok": true
+      }
+    },
+    "d_lockWithSmbClient": {
+      "result": "passed",
+      "summary": "lock with a connected smbclient session on the share: 204 after about 6 s, session closed (NT_STATUS_NETWORK_NAME_DELETED), unmounted, LUKS closed, Docker stopped, no new notice; unlock restores data, SMB and Docker",
+      "evidence": {
+        "smbSessionBeforeLock": [
+          "Service      pid     Machine       Connected at                     Encryption   Signing     ",
+          "---------------------------------------------------------------------------------------------",
+          "docs         3060    10.0.2.2      Wed Oct 28 08:49:05 2026 UTC     -            -"
+        ],
+        "lockSeconds": 6.4,
+        "afterLock": {
+          "smbstatus": "Service      pid     Machine       Connected at                     Encryption   Signing     \n---------------------------------------------------------------------------------------------",
+          "mounted": "no",
+          "mapper": "closed",
+          "docker": "inactive"
+        },
+        "clientAfterLock": [
+          "  blob.bin                            N 50331648  Wed Oct 28 09:47:03 2026",
+          "",
+          "\t\t1877580 blocks of size 1024. 1811252 blocks available",
+          "NT_STATUS_NETWORK_NAME_DELETED listing \\*"
+        ],
+        "volumeLockedNoticesForSecure": 1,
+        "unlockSeconds": 2.29,
+        "ok": true
+      }
+    },
+    "e_passwordsAndHeaderBackup": {
+      "result": "passed",
+      "summary": "change, add second password (2 key slots), old password rejected, unlock with the second password, header backups are tar archives with one LUKS2 header per device plus README",
+      "evidence": {
+        "changed": true,
+        "added": true,
+        "keySlots": 2,
+        "removeWithOldPasswordRejected": true,
+        "oldPasswordAfterChange": 400,
+        "unlockWithSecondPassword": 204,
+        "newPasswordTest": "ok",
+        "headerBackups": {
+          "secure": {
+            "bytes": 16780288,
+            "files": [
+              "README.txt",
+              "secure-luks-a03ac80b-454c-4d76-a31f-64dbb3bc23a6.img"
+            ],
+            "luksHeaders": 1
+          },
+          "vault": {
+            "bytes": 33558016,
+            "files": [
+              "README.txt",
+              "vault-luks-0813e098-0c05-4aa9-b232-cc6dc40d3f5a.img",
+              "vault-luks-7de5a508-f05c-476c-becb-4e141442a19e.img"
+            ],
+            "luksHeaders": 2
+          }
+        },
+        "ok": true
+      }
+    },
+    "f_disks": {
+      "result": "passed",
+      "summary": "spare added to the encrypted RAID1; RAID5 grown 3→4 disks with recovery volume vault: cryptsetup resize then resize2fs (LUKS and ext4 about +50 %), data intact; Btrfs disk with wrong password refused before the disk was touched, with the right password added as third LUKS member",
+      "note": "RAID1→RAID5 conversion is not offered by TitanOS; the growth check uses a separate encrypted RAID5",
+      "evidence": {
+        "mdadmSpare": {
+          "vda": "active",
+          "vdb": "active",
+          "vdc": "spare"
+        },
+        "raid5Preview": {
+          "currentBytes": 1787813888,
+          "plannedBytes": 2681720832,
+          "targetDisks": 4
+        },
+        "raid5Before": {
+          "luksSectors": "3624960",
+          "fsBytes": "1787813888"
+        },
+        "raid5After": {
+          "luksSectors": "5453824",
+          "fsBytes": "2709626880",
+          "raidDisks": "4"
+        },
+        "btrfsWrongPasswordRejected": true,
+        "btrfsDiskUntouchedAfterWrongPassword": "blank",
+        "btrfsDevices": [
+          "devid    1 size 1.86GiB used 454.25MiB path /dev/mapper/titanos-crypt-vault-0813e098",
+          "\tdevid    2 size 1.86GiB used 454.25MiB path /dev/mapper/titanos-crypt-vault-7de5a508",
+          "\tdevid    3 size 1.86GiB used 0.00B path /dev/mapper/titanos-crypt-vault-a82993ee"
+        ],
+        "btrfsEncryption": {
+          "locked": false,
+          "members": 3,
+          "unlocked": 3,
+          "passwords": 1
+        },
+        "ok": true
+      }
+    },
+    "g_ssdCache": {
+      "result": "passed",
+      "summary": "read cache (writethrough) enabled on the encrypted RAID1, after reboot and unlock: titanos-crypt-secure → titanos-cache-secure → md127 + SSD partitions, data intact",
+      "evidence": {
+        "cacheConfigured": {
+          "mode": "writethrough",
+          "disk": "SSD1",
+          "active": false,
+          "missing": false,
+          "removing": false,
+          "usedBlocks": 0,
+          "totalBlocks": 0,
+          "dirtyBlocks": 0,
+          "readHitRate": -1,
+          "blockBytes": 0
+        },
+        "dmsetupTree": [
+          "titanos-crypt-secure (252:1)",
+          " └─titanos-cache-secure (252:0)",
+          "    ├─ (9:127)",
+          "    ├─ (254:162)",
+          "    └─ (254:161)"
+        ],
+        "cryptDeps": [
+          "1 dependencies\t: (titanos-cache-secure)",
+          "3 dependencies\t: (md127) (vdk2) (vdk1)"
+        ],
+        "cacheStatus": [
+          "0",
+          "3926016",
+          "cache",
+          "8",
+          "15/16384",
+          "512",
+          "47/3832",
+          "143",
+          "430",
+          "1",
+          "0",
+          "0"
+        ],
+        "cryptTarget": [
+          "0",
+          "3893248",
+          "crypt"
+        ],
+        "unlockSeconds": 4.58,
+        "checksumsMatch": true,
+        "healthReadyWhileLocked": true,
+        "ok": true
+      }
+    },
+    "h_delete": {
+      "result": "passed",
+      "summary": "deleted the unlocked RAID5 and the locked Btrfs volume: no former member is LUKS (cryptsetup isLuks) and no LUKS magic in the first 64 MiB of any member disk",
+      "bugFound": "before f094f82 the LUKS header (with erased key slots) stayed inside a deleted mdadm array: the text LUKS was still found in the first 64 MiB of the first RAID5 member (earlier run of the same test, plain grep; the final run checks the binary LUKS1/LUKS2 magic); fixed by wipefs on the array device after cryptsetup erase",
+      "earlierRunBeforeFix": {
+        "R1": {
+          "devices": [
+            "/dev/vdg"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 1
+        },
+        "R2": {
+          "devices": [
+            "/dev/vdh"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        },
+        "R3": {
+          "devices": [
+            "/dev/vdi"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        },
+        "R4": {
+          "devices": [
+            "/dev/vdj"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        },
+        "BT1": {
+          "devices": [
+            "/dev/vdd",
+            "/dev/vdd1"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        },
+        "BT2": {
+          "devices": [
+            "/dev/vde",
+            "/dev/vde1"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        },
+        "BT3": {
+          "devices": [
+            "/dev/vdf",
+            "/dev/vdf1"
+          ],
+          "isLuks": [],
+          "linesWithLUKS": 0
+        }
+      },
+      "oldHeaderBackupReopensErasedMember": true,
+      "oldHeaderBackupNote": "restoring the header backup from e) at the former partition start of a deleted Btrfs member let the old password open it again; documented in docs/ENCRYPTION.md (data is not overwritten)",
+      "evidence": {
+        "mdMembers": [
+          "/dev/vdg1",
+          "/dev/vdh1",
+          "/dev/vdi1",
+          "/dev/vdj1"
+        ],
+        "mdLuksOffsetSectors": "32768",
+        "btrfsMemberParts": [
+          "/dev/vdd1",
+          "/dev/vde1",
+          "/dev/vdf1"
+        ],
+        "deletedVolumes": [
+          "grow5",
+          "vault"
+        ],
+        "afterDelete": {
+          "R1": {
+            "devices": [
+              "/dev/vdg"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "R2": {
+            "devices": [
+              "/dev/vdh"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "R3": {
+            "devices": [
+              "/dev/vdi"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "R4": {
+            "devices": [
+              "/dev/vdj"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "BT1": {
+            "devices": [
+              "/dev/vdd",
+              "/dev/vdd1"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "BT2": {
+            "devices": [
+              "/dev/vde",
+              "/dev/vde1"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          },
+          "BT3": {
+            "devices": [
+              "/dev/vdf",
+              "/dev/vdf1"
+            ],
+            "isLuks": [],
+            "luksMagicIn64MiB": 0
+          }
+        },
+        "oldHeaderBackupRestoreAtFormerOffset": "Warning: keyslot operation could fail as it requires more than available memory.\nopened-with-7de5a508-f05c-476c-becb-4e141442a19e",
+        "ok": true
+      }
+    },
+    "i_memory2GiB": {
+      "result": "passed",
+      "summary": "guest with 2 GiB RAM: three unlocks (Btrfs with three members, RAID1 with cache, RAID5), cryptsetup peak RSS about 266 MiB, lowest MemAvailable about 700 MiB, no OOM in the kernel log",
+      "evidence": {
+        "guestRAM": "2G",
+        "meminfoBeforeUnlock": [
+          "MemTotal: 2014808",
+          "MemAvailable: 1059704"
+        ],
+        "cryptsetupPeakRSSKiB": 272136,
+        "samples": 490,
+        "minMemAvailableKiB": 716320,
+        "oomEvents": 0,
+        "unlockSeconds": {
+          "vault": 6.7,
+          "secure": 4.62,
+          "grow5": 2.63
+        },
+        "keySlotPBKDF": [
+          "PBKDF:      argon2id",
+          "\tMemory:     262144",
+          "\tPBKDF:      argon2id",
+          "\tMemory:     262144"
+        ],
+        "titandState": "active",
+        "healthReadyWhileLocked": true,
+        "ok": true
+      }
+    }
+  },
+  "notTested": [
+    "real NAS hardware, real SSD/HDD and their unlock times",
+    "write-back cache below dm-crypt and a missing cache SSD",
+    "Btrfs replace of a missing encrypted member, Btrfs disk removal",
+    "taking over existing encrypted arrays (Speicher › Übernehmen)",
+    "lock with running VMs or LXC containers on the volume",
+    "XFS inside LUKS, RAID6 growth",
+    "interrupted growth or reboot during a reshape of an encrypted array",
+    "the web UI dialogs (unit/UI tests only)"
+  ]
+}

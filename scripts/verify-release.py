@@ -14,6 +14,11 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+# The official plugins: tools and remote access, plus the driver plugins.
+OFFICIAL = {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird",
+            *json.loads((Path(__file__).resolve().parent.parent / "plugins/drivers/drivers.json").read_text())["plugins"]}
+
+
 def verify(release, keys, without_plugins=False):
     manifest = json.loads((release / "manifest.json").read_text())
     version = manifest["version"]
@@ -24,7 +29,7 @@ def verify(release, keys, without_plugins=False):
     names = set()
     for plugin in plugins:
         name = plugin.get("name")
-        if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird"} or name in names or plugin.get("asset") != name + ".plugin.json":
+        if name not in OFFICIAL or name in names or plugin.get("asset") != name + ".plugin.json":
             raise ValueError("invalid plugin inventory")
         names.add(name)
         signed.append(name + ".plugin.json")

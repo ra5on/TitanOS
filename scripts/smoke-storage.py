@@ -32,6 +32,14 @@ spec = importlib.util.spec_from_file_location('release_smoke', Path(__file__).wi
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 
+# Driver plugins whose modules load without hardware (PCI drivers register and
+# wait for devices); it87-extended needs a Super I/O chip.
+DRIVER_MODULES = {'wangxun-nic': ('libwx', 'ngbe', 'txgbe'), 'intel-qat': ('qat_4xxx', 'qat_420xx')}
+
+
+def driver_plugins(plugins):
+    return [name for name in DRIVER_MODULES if (plugins / (name + '.raw')).is_file()]
+
 
 def check_smb_share(request, remote, smb_port, password, directory):
     # A new share with capitals and a blank, created without naming anyone:
@@ -284,7 +292,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         assert remote('cat /mnt/mirror/documents/file') == 'after'
                         if plugins:
                             remote('mkdir /mnt/mirror/plugin-input; chown storagetester /mnt/mirror/plugin-input')
-                            for name in ('intel-gpu-tools', 'coral-usb'):
+                            for name in ('intel-gpu-tools', 'coral-usb', *driver_plugins(plugins)):
                                 files = [plugins / (name + suffix) for suffix in ('.raw', '.plugin.json')]
                                 signed = (plugins / (name + '.plugin.json.minisig')).is_file()
                                 if signed:
@@ -326,9 +334,23 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         request('/storage/volumes/mirror/snapshots', {'action': 'delete', 'name': 'before', 'confirm': 'before'})
                         assert request('/storage/volumes/mirror/snapshots') == []
                     if plugins:
-                        installed = {p['name']: p for p in request('/plugins')['plugins'] if p['installed']}
-                        assert all(installed[n]['active'] for n in ('intel-gpu-tools', 'coral-usb')), installed
+                        # Plugins load once the volume is mounted (degraded Btrfs: after its
+                        # wait); module plugins rebuild the RAM module index first.
+                        deadline = time.monotonic() + 90
+                        while True:
+                            installed = {p['name']: p for p in request('/plugins')['plugins'] if p['installed']}
+                            if all(installed[n]['active'] for n in ('intel-gpu-tools', 'coral-usb', *driver_plugins(plugins))):
+                                break
+                            if time.monotonic() > deadline:
+                                raise AssertionError({n: (p['active'], p['problem']) for n, p in installed.items()})
+                            time.sleep(2)
                         remote('for tool in /usr/bin/intel_gpu_top /usr/bin/intel_gpu_frequency; do test -x "$tool"; ! ldd "$tool" | grep -q "not found"; done; test -x /usr/bin/titanos-coral-info')
+                        # Driver plugins load their modules without matching hardware, at every boot.
+                        for name, modules in DRIVER_MODULES.items():
+                            if name in driver_plugins(plugins):
+                                remote(' && '.join(f'test -d /sys/module/{m}' for m in modules))
+                        # No matching hardware in QEMU: no recommendation for it.
+                        assert not any(r['plugin'] in DRIVER_MODULES for r in request('/plugins')['recommendations']), request('/plugins')['recommendations']
                     print(f'Btrfs boot {boot}: data, snapshots, membership and tools passed', flush=True)
                     request('/system/power', {'action': 'reboot'})
                     process.wait(timeout=90)

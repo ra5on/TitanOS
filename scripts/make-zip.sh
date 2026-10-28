@@ -40,6 +40,10 @@ python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"
 install -m 0644 scripts/third-party-licenses.py "$extra/usr/share/titanos/build-licenses.py"
 install -m 0644 scripts/normalize-image-tmpfiles.py "$extra/usr/share/titanos/normalize-image-tmpfiles.py"
 install -m 0644 scripts/check-image-hardware.py "$extra/usr/share/titanos/check-image-hardware.py"
+# Catalog descriptions and hardware rules of the official plugins: the NAS
+# recommends a plugin for its hardware without asking GitHub first.
+install -d "$extra/usr/share/titanos/plugin-catalog"
+install -m 0644 plugins/catalog/*.json "$extra/usr/share/titanos/plugin-catalog/"
 
 # Without root, mkosi would map everything to a single user and every file in
 # the image would end up owned by root. A user namespace with the full subuid

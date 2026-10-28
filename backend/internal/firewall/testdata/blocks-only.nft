@@ -1,0 +1,32 @@
+# Written by titand from /config/firewall/settings.json.
+add table inet titanos
+delete table inet titanos
+table inet titanos {
+	set blocked4 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+		elements = { 198.51.100.7 }
+	}
+	set blocked6 {
+		type ipv6_addr
+		flags interval
+		auto-merge
+		elements = { 2001:db8:bad::/64 }
+	}
+	chain blocked {
+		limit rate 5/second burst 20 packets log prefix "titanos-fw blocked " level info
+		drop
+	}
+	chain input {
+		type filter hook input priority filter; policy accept;
+		iif "lo" accept
+		ip saddr @blocked4 jump blocked
+		ip6 saddr @blocked6 jump blocked
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		ct status dnat ip saddr @blocked4 jump blocked
+		ct status dnat ip6 saddr @blocked6 jump blocked
+	}
+}

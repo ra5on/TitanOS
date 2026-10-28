@@ -25,12 +25,16 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
+	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -79,12 +83,19 @@ type Options struct {
 	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
 	Nvidia       *hardware.NvidiaControl
+	IntelGuc     *hardware.IntelGuc // GuC/HuC setting of Intel graphics; nil leaves it out
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
 	Tailscale    *tailscale.Manager
 	Netbird      *netbird.Manager
 	Network      *network.Manager
-	Notify       *notify.Manager
+	// Firewall is the packet filter; nil makes one that is off.
+	Firewall *firewall.Manager
+	// IPv64 is the account area of IPv64.net; nil makes one that is off.
+	IPv64 *ipv64.Manager
+	// IPv64Reserved are ports of titand that are never published.
+	IPv64Reserved []int
+	Notify        *notify.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -95,6 +106,10 @@ type Options struct {
 	// the web UI and is nil in development mode, where there is no TLS.
 	SSH         *sshd.Manager
 	Certificate *tlscert.Manager
+	// LetsEncrypt fetches certificates over ACME; DDNS keeps host names
+	// at the addresses of the NAS. Both nil leave the pages without data.
+	LetsEncrypt *letsencrypt.Manager
+	DDNS        *ddns.Manager
 	// Update installs new versions into the other slot of the stick.
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
@@ -140,6 +155,7 @@ type Server struct {
 	tokens      *auth.Tokens
 	limiter     *auth.Limiter
 	prefs       *preferences
+	loginLook   loginLook
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -160,6 +176,7 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
+	ipv64       ipv64Area
 }
 
 // New returns the handler for all requests.
@@ -183,6 +200,26 @@ func New(opts Options) *Server {
 	if s.opts.LXC == nil {
 		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
 		s.opts.LXC.Disabled = true
+	}
+	if s.opts.Firewall == nil {
+		s.opts.Firewall = firewall.NewManager(opts.Store)
+		s.opts.Firewall.Disabled = true
+	}
+	if s.opts.IPv64 == nil {
+		s.opts.IPv64 = ipv64.NewManager(opts.Store)
+		s.opts.IPv64.Disabled = true
+		s.opts.IPv64.Options = ipv64Options
+		s.opts.IPv64.Fallback = func() (string, string) {
+			var ddns, le string
+			if s.opts.DDNS != nil {
+				ddns = s.opts.DDNS.IPv64Key()
+			}
+			if s.opts.LetsEncrypt != nil {
+				le = s.opts.LetsEncrypt.IPv64Key()
+			}
+			return ddns, le
+		}
+		s.opts.IPv64.Load(context.Background())
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -213,6 +250,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/setup/restore/upload", s.handleSetupRestoreUpload)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	// The look of the login page is public; changing it is not.
+	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
+	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", s.handleLoginBackground)
+	mux.HandleFunc("PUT /api/v1/login-appearance", s.requireAdmin(s.handlePutLoginAppearance))
+	mux.HandleFunc("DELETE /api/v1/login-appearance", s.requireAdmin(s.handleDeleteLoginAppearance))
 
 	mux.HandleFunc("GET /api/v1/preferences", s.requireUser(s.handleGetPreferences))
 	mux.HandleFunc("PUT /api/v1/preferences/{kind}", s.requireUser(s.handlePutPreferences))
@@ -243,6 +285,12 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/profile", s.requireHeavyAdmin(s.handleBtrfsProfile))
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCache))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCacheRemove))
+	// Encrypted volumes: browser sessions only, never in the assistant
+	// catalog or the public API (storage_crypt.go).
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/unlock", s.requireAdmin(s.handleVolumeUnlock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/lock", s.requireHeavyAdmin(s.handleVolumeLock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/passwords", s.requireAdmin(s.handleVolumePasswords))
+	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/luks-header", s.requireAdmin(s.handleVolumeHeaderBackup))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireHeavyAdmin(s.handleCheckVolume))
 	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshots))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireHeavyAdmin(s.handleSnapshotAction))
@@ -404,6 +452,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
 	mux.HandleFunc("GET /api/v1/hardware/nvidia", s.requireAdmin(s.handleNvidia))
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
+	mux.HandleFunc("GET /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGuc))
+	mux.HandleFunc("PUT /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGucSet))
 	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshots))
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAdmin(s.handleVMSnapshotCreate))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAdmin(s.handleVMSnapshotSchedule))
@@ -441,6 +491,14 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
+	// The packet filter; changes are on trial like network changes.
+	mux.HandleFunc("GET /api/v1/firewall", s.requireAdmin(s.handleFirewall))
+	mux.HandleFunc("PUT /api/v1/firewall", s.requireAdmin(s.handleFirewallChange))
+	mux.HandleFunc("POST /api/v1/firewall/confirm", s.requireAdmin(s.handleFirewallConfirm))
+	mux.HandleFunc("POST /api/v1/firewall/revert", s.requireAdmin(s.handleFirewallRevert))
+	mux.HandleFunc("PUT /api/v1/firewall/autoblock", s.requireAdmin(s.handleFirewallAutoBlock))
+	mux.HandleFunc("POST /api/v1/firewall/unblock", s.requireAdmin(s.handleFirewallUnblock))
+	mux.HandleFunc("DELETE /api/v1/firewall/recent", s.requireAdmin(s.handleFirewallClearRecent))
 	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))
 	mux.HandleFunc("POST /api/v1/notifications/dismiss", s.requireAdmin(s.handleDismissNotifications))
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
@@ -503,6 +561,26 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
 	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
+	mux.HandleFunc("GET /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncrypt))
+	mux.HandleFunc("PUT /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncryptChange))
+	mux.HandleFunc("POST /api/v1/system/letsencrypt/renew", s.requireAdmin(s.handleLetsEncryptRenew))
+	mux.HandleFunc("GET /api/v1/network/ddns", s.requireAdmin(s.handleDDNS))
+	mux.HandleFunc("PUT /api/v1/network/ddns", s.requireAdmin(s.handleDDNSChange))
+	mux.HandleFunc("POST /api/v1/network/ddns/update", s.requireAdmin(s.handleDDNSUpdate))
+	// IPv64.net: POST everywhere, so that a typed-in API key stays out of addresses.
+	mux.HandleFunc("POST /api/v1/network/ipv64/account", s.requireAdmin(s.handleIPv64Account))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains", s.requireAdmin(s.handleIPv64Domains))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/create", s.requireAdmin(s.handleIPv64DomainCreate))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/change", s.requireAdmin(s.handleIPv64DomainChange))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records", s.requireAdmin(s.handleIPv64Records))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/add", s.requireAdmin(s.handleIPv64RecordAdd))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/delete", s.requireAdmin(s.handleIPv64RecordDelete))
+	mux.HandleFunc("POST /api/v1/network/ipv64/healthchecks", s.requireAdmin(s.handleIPv64Healthchecks))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/on", s.requireAdmin(s.handleIPv64HeartbeatOn))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/off", s.requireAdmin(s.handleIPv64HeartbeatOff))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/status", s.requireAdmin(s.handleIPv64HeartbeatStatus))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/test", s.requireAdmin(s.handleIPv64HeartbeatTest))
+	s.ipv64Routes(mux)
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 	// The chat in the web UI. Its settings are for administrators; who may
@@ -562,6 +640,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/plugins/cleanup", s.requireAdmin(s.handlePluginCleanup))
 	mux.HandleFunc("POST /api/v1/plugins/nvidia/updates", s.requireAdmin(s.handleDriverUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
+	mux.HandleFunc("POST /api/v1/plugins/recommendations/{name}/dismiss", s.requireAdmin(s.handlePluginDismiss))
+	mux.HandleFunc("DELETE /api/v1/plugins/recommendations/dismissed", s.requireAdmin(s.handlePluginRestoreDismissed))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireHeavyAdmin(s.handlePluginInstall))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/update", s.requireHeavyAdmin(s.handlePluginUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))

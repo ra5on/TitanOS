@@ -52,8 +52,9 @@ ln -sf /dev/null /etc/systemd/system/mdmonitor.service
 # Never start hd-idle's independent daemon with its default ten-minute timer.
 ln -sf /dev/null /etc/systemd/system/hd-idle.service
 
-# Filtering is off by project policy. Do not load an independent ruleset;
-# Docker still manages NAT and port publishing through iptables.
+# Never load /etc/nftables.conf: titand alone loads its table inet titanos
+# (the firewall of the web UI, off by default). Docker still manages NAT and
+# port publishing through iptables-nft.
 ln -sf /dev/null /etc/systemd/system/nftables.service
 # TitanOS uses br0 or QEMU user networking, never libvirt's default NAT network.
 # Its automatic startup would introduce a second, independent firewall owner.

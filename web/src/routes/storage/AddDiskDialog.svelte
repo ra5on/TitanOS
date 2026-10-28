@@ -22,6 +22,10 @@
 		pickedIdentity = checked ? disk.identity : undefined;
 	}
 	let confirmed = $state(false);
+	// An encrypted Btrfs volume: the new disk gets its own LUKS container
+	// with the volume's password (an mdadm volume needs none).
+	const needsPassword = $derived(volume.filesystem === 'btrfs' && !!volume.encryption);
+	let password = $state('');
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 
@@ -46,11 +50,12 @@
 
 	// Erases the disk: runs only from a click on its button, never from Enter.
 	async function submit() {
-		if (selected.length !== 1 || !confirmed || staleSelection) return;
+		if (selected.length !== 1 || !confirmed || staleSelection || (needsPassword && !password)) return;
 		working = true;
 		error = null;
 		try {
-			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true, identity: pickedIdentity, profile: grows ? profile : undefined });
+			await api.post(`/storage/volumes/${volume.name}/disks`, { disk: selected[0], erase: true, identity: pickedIdentity, profile: grows ? profile : undefined, password: needsPassword ? password : undefined });
+			password = '';
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
@@ -75,6 +80,13 @@
 			{#if profile === 'single'}<p class="notice-warn" role="alert">{t('create.singleWarning')}</p>{/if}
 			<p class="muted">{t('btrfs.balanceHint')}</p>
 		{/if}
+		{#if needsPassword}
+			<label class="profile">
+				<span class="label">{t('crypt.password')}</span>
+				<input class="field" type="password" autocomplete="off" bind:value={password} />
+				<small class="muted">{t('crypt.addDiskHint')}</small>
+			</label>
+		{/if}
 		{#if staleSelection}
 			<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
 			<button type="button" class="btn" onclick={() => ((selected = []), (pickedIdentity = undefined))}>{t('create.clearSelection')}</button>
@@ -89,7 +101,7 @@
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || staleSelection || working} onclick={submit}>{t('addDisk.submit')}</button>
+			<button type="button" class="btn btn-warn" disabled={selected.length !== 1 || !confirmed || staleSelection || working || (needsPassword && !password)} onclick={submit}>{t('addDisk.submit')}</button>
 		</div>
 	</form>
 </Dialog>

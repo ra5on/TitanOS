@@ -1,0 +1,310 @@
+{
+  "date": "2026-10-28",
+  "branch": "release-0.31.0-wip",
+  "release": "0.31.0",
+  "kind": "full system release (new packages nftables, cryptsetup-bin, wireguard-tools)",
+  "host": {
+    "accel": "kvm",
+    "firmware": "OVMF (UEFI)",
+    "network": "QEMU user-mode with hostfwd; host seen as 10.0.2.2 (zone home)",
+    "disks": "fresh qcow2 files only, no host block devices"
+  },
+  "images": [
+    {
+      "id": "run1",
+      "testedCommit": "9888c7b",
+      "zip": "titanos-0.31.0.zip",
+      "sha256": "1e025761e066dd0b3e47d08083765c6b2c7812d2ad82164d2d2514b69b4e525a",
+      "build": "make zip VERSION=0.31.0 (mkosi in a user namespace, local, unsigned)"
+    },
+    {
+      "id": "final",
+      "testedCommit": "bdfabb9",
+      "zip": "titanos-0.31.0.zip",
+      "sha256": "b137317e0dfee91e3c0d012ca22bf357200a27da3a529f6f3a95f14d97f9bb5c",
+      "build": "make zip VERSION=0.31.0 (mkosi in a user namespace, local, unsigned); includes the rollback fix dfd392f"
+    }
+  ],
+  "suites": {
+    "firewall": {
+      "command": "python3 scripts/smoke-firewall.py <zip> --output <dir>",
+      "boots": 2,
+      "guestRAM": "3G",
+      "runs": [
+        {
+          "image": "run1",
+          "started": "2026-10-28T09:29:37Z",
+          "completed": "2026-10-28T09:32:54Z",
+          "result": "passed",
+          "phases": {
+            "a": {
+              "tools": [
+                "nft=/usr/sbin/nft",
+                "cryptsetup=/usr/sbin/cryptsetup",
+                "wg=/usr/bin/wg",
+                "iptables=/usr/sbin/iptables",
+                "wireguard-tools v1.0.20210914 - https://git.zx2c4.com/wireguard-tools/",
+                "nftables v1.1.3 (Commodore Bullmoose #4)",
+                "cryptsetup 2.7.5 flags: UDEV BLKID KEYRING KERNEL_CAPI HW_OPAL"
+              ],
+              "defaultEnabled": false,
+              "tableWhileOff": false,
+              "openRules": [
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "active"
+              ],
+              "port445FromNamespace": "refused",
+              "ok": true
+            },
+            "b": {
+              "trialPending": 119,
+              "webUIOnTrial": true,
+              "adminOnTrialRule": true,
+              "confirmed": true,
+              "webUIAfterConfirm": true,
+              "sshAfterConfirm": true,
+              "namespaceWebUI": true,
+              "clientZone": "home",
+              "ok": true
+            },
+            "c": {
+              "namespace445OnTrial": "dropped",
+              "droppedInRecentList": true,
+              "revert": true,
+              "afterRevert": "refused",
+              "host445Blocked": "silence",
+              "host445Restored": "closed",
+              "autoRevertSeconds": 120.1,
+              "firewallRevertedNotice": true,
+              "ok": true
+            },
+            "d": {
+              "wrongLogins": 3,
+              "loginExitCodes": [
+                "6",
+                "6",
+                "6"
+              ],
+              "blocked": {
+                "address": "192.168.77.2",
+                "since": "2026-10-28T09:32:19.866953302Z",
+                "until": "2026-10-28T10:02:19.866953302Z",
+                "source": "web",
+                "attempts": 3
+              },
+              "namespaceWebUIWhileBlocked": false,
+              "namespacePingWhileBlocked": false,
+              "hostStillReachable": true,
+              "unblocked": true,
+              "ok": true
+            },
+            "e": {
+              "enabledAfterReboot": true,
+              "tableAfterReboot": true,
+              "webUI": true,
+              "ok": true
+            },
+            "f": {
+              "pendingWhenSwitchingOff": false,
+              "tableAfterOff": false,
+              "openRules": [
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT"
+              ],
+              "port445": "refused",
+              "ok": true
+            }
+          }
+        },
+        {
+          "image": "final",
+          "started": "2026-10-28T09:46:47Z",
+          "completed": "2026-10-28T09:50:05Z",
+          "result": "passed",
+          "phases": {
+            "a": {
+              "tools": [
+                "nft=/usr/sbin/nft",
+                "cryptsetup=/usr/sbin/cryptsetup",
+                "wg=/usr/bin/wg",
+                "iptables=/usr/sbin/iptables",
+                "wireguard-tools v1.0.20210914 - https://git.zx2c4.com/wireguard-tools/",
+                "nftables v1.1.3 (Commodore Bullmoose #4)",
+                "cryptsetup 2.7.5 flags: UDEV BLKID KEYRING KERNEL_CAPI HW_OPAL"
+              ],
+              "defaultEnabled": false,
+              "tableWhileOff": false,
+              "openRules": [
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "active"
+              ],
+              "port445FromNamespace": "refused",
+              "ok": true
+            },
+            "b": {
+              "trialPending": 119,
+              "webUIOnTrial": true,
+              "adminOnTrialRule": true,
+              "confirmed": true,
+              "webUIAfterConfirm": true,
+              "sshAfterConfirm": true,
+              "namespaceWebUI": true,
+              "clientZone": "home",
+              "ok": true
+            },
+            "c": {
+              "namespace445OnTrial": "dropped",
+              "droppedInRecentList": true,
+              "revert": true,
+              "afterRevert": "refused",
+              "host445Blocked": "silence",
+              "host445Restored": "closed",
+              "autoRevertSeconds": 120.1,
+              "firewallRevertedNotice": true,
+              "ok": true
+            },
+            "d": {
+              "wrongLogins": 3,
+              "loginExitCodes": [
+                "6",
+                "6",
+                "6"
+              ],
+              "blocked": {
+                "address": "192.168.77.2",
+                "since": "2026-10-28T09:49:30.785526115Z",
+                "until": "2026-10-28T10:19:30.785526115Z",
+                "source": "web",
+                "attempts": 3
+              },
+              "namespaceWebUIWhileBlocked": false,
+              "namespacePingWhileBlocked": false,
+              "hostStillReachable": true,
+              "unblocked": true,
+              "ok": true
+            },
+            "e": {
+              "enabledAfterReboot": true,
+              "tableAfterReboot": true,
+              "webUI": true,
+              "ok": true
+            },
+            "f": {
+              "pendingWhenSwitchingOff": false,
+              "tableAfterOff": false,
+              "openRules": [
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT",
+                "-A INPUT -m comment --comment titanos-firewall-open -j ACCEPT"
+              ],
+              "port445": "refused",
+              "ok": true
+            }
+          }
+        }
+      ],
+      "notes": [
+        "run1 of the script itself failed on a test bug (sh -e swallowed the exit code of the namespace TCP probe, every probe read as refused); fixed in the script before the recorded runs"
+      ]
+    },
+    "storage": {
+      "command": "python3 scripts/smoke-storage.py <zip> --plugins out/plugins-0.31.0",
+      "image": "run1",
+      "boots": 4,
+      "plugins": "intel-gpu-tools, coral-usb, wangxun-nic, intel-qat, it87-extended (unsigned, built for kernel 6.12.113+deb13-amd64 from the extra-drivers branch; it87-extended is copied but not installed by the smoke)",
+      "result": "passed",
+      "output": [
+        "Btrfs boot 1 (kvm)",
+        "Share quotas switched on, pending until the next start",
+        "Real exFAT: mount, upload >64 KiB, atomic finish, text edit, conflict rejection, backup and eject passed",
+        "Real drive format: FAT on MBR at 1 MiB (FAT16 type on a 128 MiB stick), mount, eject, ext4 on GPT passed",
+        "SMB: writable share, 255-byte filename and nested path longer than 260 characters passed",
+        "SMB backup: encrypted discovery, auth/readonly rejection, selected tree, unchanged/changed files, retained deletions, restore and cleanup passed",
+        "Shipped Docker/Compose: CDI device request, failed legacy-container repair and retained app data passed",
+        "Live RAM, qcow2 disk, UEFI and TPM snapshot/resume/restore passed",
+        "VM RAM/disk/UEFI/TPM restore on Btrfs and metadata persistence passed",
+        "Foreign RAID reuse, upload durability/recovery, memory budget and direct VM folder passed",
+        "Btrfs boot 1: data, snapshots, membership and tools passed",
+        "Btrfs boot 2 (kvm)",
+        "Share quota enforced on xfs: 67108864 bytes written, share size 67108864",
+        "Share quota enforced on ext4: 67104768 bytes written, share size 67108864",
+        "Btrfs boot 2: data, snapshots, membership and tools passed",
+        "Btrfs boot 3 (kvm)",
+        "Btrfs boot 3: data, snapshots, membership and tools passed",
+        "Btrfs boot 4 (kvm)",
+        "Btrfs boot 4: data, snapshots, membership and tools passed",
+        "Btrfs and tools smoke test passed",
+        "rc=0"
+      ]
+    },
+    "encryption": {
+      "command": "python3 scripts/smoke-encryption.py <zip> --output <dir>",
+      "image": "run1",
+      "boots": 4,
+      "started": "2026-10-28T09:38:47Z",
+      "completed": "2026-10-28T09:45:13Z",
+      "result": "passed",
+      "phases": {
+        "environment": {
+          "ok": true
+        },
+        "a": {
+          "ok": true
+        },
+        "b": {
+          "ok": true
+        },
+        "c": {
+          "ok": true
+        },
+        "d": {
+          "ok": true
+        },
+        "e": {
+          "ok": true
+        },
+        "f": {
+          "ok": true
+        },
+        "g": {
+          "ok": true
+        },
+        "i": {
+          "ok": true
+        },
+        "h": {
+          "ok": true
+        }
+      },
+      "environment": {
+        "guestRAM": "4G",
+        "kernel": "6.12.113+deb13-amd64",
+        "cryptsetup": "cryptsetup 2.7.5 flags: UDEV BLKID KEYRING KERNEL_CAPI HW_OPAL",
+        "dmCrypt": "loaded"
+      },
+      "oldHeaderBackupReopensErasedMember": true,
+      "details": "full evidence in the result file of the run (out/validation/release-0.31.0/encryption/encryption-result.json, not committed); same phases as docs/validation/encryption-qemu-2026-10-28.json"
+    }
+  },
+  "imageTools": [
+    "nft=/usr/sbin/nft",
+    "cryptsetup=/usr/sbin/cryptsetup",
+    "wg=/usr/bin/wg",
+    "iptables=/usr/sbin/iptables",
+    "wireguard-tools v1.0.20210914 - https://git.zx2c4.com/wireguard-tools/",
+    "nftables v1.1.3 (Commodore Bullmoose #4)",
+    "cryptsetup 2.7.5 flags: UDEV BLKID KEYRING KERNEL_CAPI HW_OPAL"
+  ],
+  "notTested": [
+    "rollback 0.31.0 -> 0.30.0 in QEMU",
+    "firewall zone internet with real public senders",
+    "Docker port forwarding through the firewall",
+    "Tailscale/NetBird running together with the firewall",
+    "WireGuard tunnel to the IPv64 Cloud Router",
+    "Let's Encrypt, DNS providers, dyndns2 and IPv64.net against the real services",
+    "NFSv3 client against the pinned helper ports",
+    "real sshd/Samba log lines for auto block",
+    "real hardware of any kind"
+  ]
+}

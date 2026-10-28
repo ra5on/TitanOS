@@ -133,6 +133,36 @@ func TestLocalOnly(t *testing.T) {
 	}
 }
 
+// TestFirewallGate: the firewall decides separately for the web UI and the
+// HTTPS names of apps, which share one port.
+func TestFirewallGate(t *testing.T) {
+	m, _ := newTestManager(t)
+	port := upstreamPort(t, echo)
+	if err := m.SetRoute("vault", Route{Enabled: true, Name: "vault", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	m.Gate = func(remote string, app bool) bool { return app == strings.HasPrefix(remote, "8.8.8.8") }
+	ui := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	h := m.Handler(ui)
+	for _, c := range []struct {
+		host, remote string
+		want         int
+	}{
+		{"vault.nas.local", "8.8.8.8:1", 200},
+		{"vault.nas.local", "192.168.1.5:1", 403},
+		{"nas.local", "192.168.1.5:1", http.StatusTeapot},
+		{"nas.local", "8.8.8.8:1", 403},
+	} {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Host, req.RemoteAddr = c.host, c.remote
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("%s from %s: %d, want %d", c.host, c.remote, rec.Code, c.want)
+		}
+	}
+}
+
 func TestAppDown(t *testing.T) {
 	m, _ := newTestManager(t)
 	// A port nothing listens on.

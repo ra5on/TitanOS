@@ -41,6 +41,21 @@
 	let busy = $state<'' | 'check' | 'save' | 'action'>('');
 	let asking = $state<'' | 'install' | 'rollback' | 'app-rollback'>('');
 	let restarting = $state(false);
+	// Encrypted volumes, looked up when going back is asked for: a system
+	// before 0.31.0 cannot open them (they stay unmounted there).
+	let encrypted = $state<string[]>([]);
+	const beforeEncryption = (target: string) => {
+		const [major, minor] = target.replace(/^v/, '').split('.').map(Number);
+		return Number.isInteger(major) && Number.isInteger(minor) && (major === 0 && minor < 31);
+	};
+	$effect(() => {
+		if (asking !== 'rollback') return;
+		encrypted = [];
+		api
+			.get<{ volumes: { name: string; encryption?: unknown }[] }>('/storage')
+			.then((s) => (encrypted = s.volumes.filter((v) => v.encryption).map((v) => v.name)))
+			.catch(() => {});
+	});
 	let checked = $state(false);
 
 	function problem(err: unknown) {
@@ -335,6 +350,11 @@
 	<Dialog title={t('update.rollbackTitle', { version: other.version || '?' })} onclose={() => (asking = '')}>
 		<p>{t('update.rollbackText')}</p>
 		<p class="notice-warn">{t('update.rollbackWarn')}</p>
+		{#if encrypted.length && beforeEncryption(other.version || '')}
+			<p class="notice-error" role="alert" data-testid="rollback-encrypted">
+				{t('update.rollbackEncrypted', { version: other.version, volumes: encrypted.join(', ') })}
+			</p>
+		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => act('rollback')}>{t('update.rollbackDo')}</button>
