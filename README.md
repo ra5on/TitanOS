@@ -37,24 +37,25 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 ### Deine persönliche Startseite
 
-- **Ein frei gestaltbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
+- **Ein frei anpassbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
 - **Anpassbare Aufteilung:** ein bis vier Spalten und eine Mindestbreite festlegen. Bei schmaleren Fenstern wandern die Inhalte in ihrer Lesereihenfolge nach unten; Kacheln können automatisch wachsen oder eine feste Höhe mit scrollbarem Inhalt bekommen.
-- **Gestaltung je Kachel:** Schriftgrößen für Titel, Werte und Beschriftungen, Messwertdarstellung, Farben, Hintergrund, Rahmen, Ecken, Schatten und Abstände. Bei Apps zusätzlich Symbolgröße, Eintragsbreite und Namenszeilen. Stile lassen sich übertragen.
-- **Hintergrund und Glas selbst gestalten:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto. Das ganze Bild anzeigen oder Ausschnitt, Position und Zoom wählen. Globale Schieberegler für Transparenz, Blur, Glow mit Farbe und Abdunklung; einzelne Kacheln können eigene Werte behalten.
-- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe; die Bewegungsreduktion des Browsers wird berücksichtigt.
+- **Inhalt je Kachel:** Messwerte als Zahl, Balken, Ring oder Verlauf; Felder und Einträge auswählen und sortieren; bei Apps und VMs Symbolgröße, Eintragsbreite und Namenszeilen; eigener Titel und Symbol.
+- **Aussehen an einem Ort:** Theme, Akzent, Flach, Glas oder Kontur mit Transparenz, Unschärfe und Glanz, Leuchten mit eigener Farbe, Ecken, Schriftgröße, Dichte und Bewegung stellst du unter Einstellungen › Darstellung ein; sie gelten für alle Kacheln und die ganze Oberfläche. Der Editor führt mit „Darstellung“ direkt dorthin.
+- **Eigener Hintergrund:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto, ganzes Bild oder Ausschnitt mit Position und Zoom, feststehend oder mitlaufend und abdunkelbar; gewählt unter Einstellungen › Darstellung › Hintergrund des Dashboards.
+- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe (Einstellungen › Darstellung); die Bewegungsreduktion des Browsers wird berücksichtigt.
 - **Kompakter Schnellzugriff:** Suche, Terminal, Assistent, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
 - **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
 - **Tailnet im Blick:** Die Kachel „Tailscale“ (Besitzer/Administratoren) zeigt die Geräte des Tailnets. Pro Kachel wählst du Geräte und sortierbare Angaben: Online/Offline, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen, Betriebssystem, Exit Node, Subnet-Routen und eine Markierung für dieses NAS.
 - **NetBird-Netz im Blick:** Die Kachel „NetBird“ (Besitzer/Administratoren) zeigt die Geräte des NetBird-Netzes mit wählbaren, sortierbaren Angaben: verbunden, dieses NAS, NetBird-IP/IPv6, Name (FQDN), letzter Handshake, Verbindungsart (direkt oder über Relay) und Netze; optional nur verbundene Geräte.
 - **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus.
-- **Visueller Editor mit Vorschau:** Änderungen direkt sehen, rückgängig machen, wiederholen, speichern oder verwerfen.
+- **Visueller Editor mit Vorschau:** eine haftende Leiste bündelt Kachel hinzufügen, Spalten, Mindestbreite, Rückgängig, Wiederholen, Standard, Abbrechen und Speichern (auch per Strg/⌘+Z/Y/S); Änderungen siehst du sofort.
 
-[![Dashboard-Editor mit globalen Schiebereglern für Transparenz, Blur und Glow](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
+[![Dashboard-Editor mit haftender Editorleiste und den Inhaltsoptionen der ausgewählten Docker-Kachel](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
 
-[![Hintergrundgalerie mit zehn lokalen Motiven und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
+[![Einstellungen › Darstellung mit geöffneter Hintergrundgalerie: zehn lokale Motive und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
 
-[Eigene Bilder hinzufügen und auswählen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
+[Eigenes Bild als Hintergrund hinzufügen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
 
 ### Speicher und Laufwerke
 
@@ -76,7 +77,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Übersichtliche Shares:** suchen, filtern und sortieren; Details, Verbindungsadressen und Dateimanager direkt an der Freigabe öffnen.
 - **Vorgängerversionen und Ransomware-Schutz:** Btrfs-Snapshots erscheinen in Windows unter „Vorgängerversionen“. Benennt ein Konto plötzlich viele Dateien wie Ransomware um, wird die Freigabe sofort schreibgeschützt und ein Snapshot angelegt. Geplante Snapshots lassen sich für eine Frist gegen Löschen sperren. [Einzelheiten](docs/SHARE-PROTECTION.md).
 - **Besitzer, Administratoren und Benutzer:** das erste Besitzerkonto hat einen frei gewählten Namen. Benutzer sehen ihre freigegebenen Dateien; Systemverwaltung, Docker und VMs bleiben den Verwaltungsrollen vorbehalten.
-- **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner Sitzungen. Konten gelten auch für SMB.
+- **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner oder aller anderen Sitzungen. Konten lassen sich sperren, ohne sie zu löschen; das wirkt auch für SMB, SSH und API-Tokens. [Konten sperren](docs/ACCOUNT-LOCK.md).
 
 [![Shares mit kompakter Freigabenliste, Diensten und Zugriffsrechten](docs/screenshots/current/shares.png)](docs/screenshots/current/shares.png)
 
@@ -160,7 +161,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 ### GPU, iGPU, NPU und Plugins
 
-- **Stabile Hardwarebasis:** Intel-/AMD-CPU-Microcode für frühes Laden, gezielte Netzwerk-/HBA-Firmware und geprüfte Intel-i915/xe-/NPU- sowie AMD-Grafikmodule und Firmware. Für Intel-Grafik von Skylake bis Tiger/Rocket Lake lässt sich das Laden der GuC/HuC-Firmware (Low-Power-Encodierung) unter Einstellungen › Hardware einschalten, ab Werk aus und nicht auf echter Gen9-Hardware geprüft. [Umfang und Hardware-Prüfgrenzen](docs/HARDWARE-COMPATIBILITY.md).
+- **Stabile Hardwarebasis:** Intel-/AMD-CPU-Microcode für frühes Laden, gezielte Netzwerk-/HBA-Firmware und geprüfte Intel-i915/xe-/NPU- sowie AMD-Grafikmodule und Firmware. Für Intel-Grafik von Skylake bis Tiger/Rocket Lake lässt sich unter Einstellungen › Hardware HuC (Low-Power-Encodierung) bzw. GuC-Submission mit HuC laden; ab Werk gilt der Kernelstandard, wirksam nach einem Neustart, nicht auf echter Gen9–11-Hardware geprüft. [Umfang und Hardware-Prüfgrenzen](docs/HARDWARE-COMPATIBILITY.md).
 
 - **Hardware für Apps auswählen:** stabile Gerätekennungen für Intel-/AMD-Grafik, NVIDIA, NPU und Coral USB; Zuordnung je Container-Dienst.
 - **Treiber und Werkzeuge als Plugins:** signierter Katalog nach Bereichen mit Suche und ausführlicher Beschreibung, Vorschläge für die erkannte Hardware (nie automatisch installiert), Installation auf einem Daten-Volume und zur Systembasis passende Pakete. Zusätzliche Treiber, die Debians Kernel nicht baut (Wangxun-Netzwerkkarten, Intel QAT Gen 4, neuere ITE-Sensorchips), gibt es als eigene Plugins für genau den Kernel des Releases. Plugin-Dateien und Einstellungen bleiben beim System-Rückfall getrennt erhalten. Neuere Fassungen aus einer Freigabe lassen sich auf der Plugin-Seite aktualisieren, mit Rückweg, falls sie nicht starten.
@@ -217,11 +218,15 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 ### Einstellungen, Darstellung und mobile Bedienung
 
 - **Geordnete Einstellungen:** eine Seitenleiste neben jeder Einstellungsseite mit sechs festen Gruppen (System; Hardware und Energie; Netzwerk und Zugriff; Daten; Integrationen; Persönlich), Zuständen wie „Update verfügbar“ und einer Suche, die direkt zum passenden Abschnitt springt; auf dem Smartphone eine Liste mit Rückweg. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
-- **Themes:** Graphit, Schwarz, Mitternacht, Hell, Automatik und eigene Farben; Akzent, Hintergrund, Transparenz, Glas-Effekt, Unschärfe, Eckenradius, Dichte und Schriftgröße einstellen. Darstellung exportieren und importieren.
+- **Darstellung an einem Ort:** Themes Graphit, Schwarz, Mitternacht, Hell, Automatisch und Eigenes; Akzentfarbe, Flach/Glas/Kontur mit Transparenz, Unschärfe und Glanz, Leuchten, Ecken, Schriftgröße, Dichte, Bewegung, allgemeiner Hintergrund und der Hintergrund des Dashboards. Gilt pro Konto für die ganze Oberfläche; exportieren und importieren.
 - **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Theme, Akzent, Glas/Flach/Kontur, ein Galerie-Motiv oder eigenes Bild, Position und Breite der Karte, Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung, mobile Navigation und rollenabhängige Befehlspalette per Strg/⌘+K.
 
 [![Einstellungen mit Seitenleiste und sechs Gruppen; Firewall, Let's Encrypt, Dynamisches DNS und IPv64 als neu markiert](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+
+[![Gestaltete Anmeldeseite: Glaskarte mit Uhr und Begrüßung „Willkommen zu Hause“ über dem Motiv Nordlicht](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
+
+[Einstellungen › Darstellung mit Seitenleiste, Theme, Akzent und Vorschau](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
 
 <p align="center">
   <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="300"></a>
