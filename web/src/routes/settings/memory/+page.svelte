@@ -86,14 +86,17 @@
 	{#if status.memory.lowAvailable}<p class="notice-warn" role="status">
 			{t('memoryPolicy.lowAvailable')}
 		</p>{/if}
-	<form class="tile" onsubmit={save}>
-		<label for="cache-budget">{t('memoryPolicy.percent')}</label>
-		<select id="cache-budget" class="field" bind:value={percent} disabled={busy || status.readOnly}>
-			{#each [10, 20, 30, 40, 50, 60, 70, 80, 90] as value (value)}<option {value}>{value} %</option
-				>{/each}
-		</select>
+	<form class="tile panel" onsubmit={save}>
+		<label class="stack"
+			><span>{t('memoryPolicy.percent')}</span>
+			<select id="cache-budget" class="field" bind:value={percent} disabled={busy || status.readOnly}>
+				{#each [10, 20, 30, 40, 50, 60, 70, 80, 90] as value (value)}<option {value}
+						>{value} %</option
+					>{/each}
+			</select></label
+		>
 		<p class="muted">{t('memoryPolicy.hint')}</p>
-		<dl>
+		<dl class="divided">
 			<div>
 				<dt>{t('memoryPolicy.budget')}</dt>
 				<dd>{formatBytes(status.budgetBytes)}</dd>
@@ -130,21 +133,20 @@
 		{#if status.paused}<p class="notice-warn" role="status">
 				{t('error.upload_memory_pressure')}
 			</p>{/if}
-		<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
-		{#if saved}<p role="status">{t('memoryPolicy.saved')}</p>{/if}
+		<div class="row-actions">
+			<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
+			{#if saved}<span class="muted" role="status">{t('memoryPolicy.saved')}</span>{/if}
+		</div>
 	</form>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 
 <style>
-	.tile {
-		max-width: 680px;
-		padding: var(--tile-pad);
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
-	label {
+	.stack > span {
+		color: var(--text);
 		font-weight: 600;
+	}
+	select {
+		max-width: 12rem;
 	}
 	p,
 	dl {
@@ -167,9 +169,6 @@
 	}
 	dt {
 		color: var(--muted);
-	}
-	button {
-		align-self: flex-start;
 	}
 	.notice-error {
 		white-space: pre-wrap;

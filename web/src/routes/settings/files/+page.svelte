@@ -107,21 +107,23 @@
 		{loadError} <button class="btn" onclick={refresh}>{t('common.retry')}</button>
 	</p>{/if}
 {#if answer}
-	<form class="tile" onsubmit={save}>
-		<h2>{t('fileIndex.settings')}</h2>
-		<label class="check"
-			><input
-				type="checkbox"
-				bind:checked={draft.enabled}
-				onchange={() => {
-					dirty = true;
-					saved = false;
-				}}
-			/>
-			{t('fileIndex.enabled')}</label
-		>
-		<p class="muted">{t('fileIndex.enabledHint')}</p>
-		<fieldset disabled={!draft.enabled || busy}>
+	<form class="tile panel" onsubmit={save} aria-labelledby="index-settings">
+		<h2 class="tile-title" id="index-settings">{t('fileIndex.settings')}</h2>
+		<div class="option">
+			<label class="check"
+				><input
+					type="checkbox"
+					bind:checked={draft.enabled}
+					onchange={() => {
+						dirty = true;
+						saved = false;
+					}}
+				/>
+				{t('fileIndex.enabled')}</label
+			>
+			<p class="muted hint">{t('fileIndex.enabledHint')}</p>
+		</div>
+		<fieldset class="divided" disabled={!draft.enabled || busy}>
 			<legend>{t('fileIndex.volumes')}</legend>
 			{#each answer.volumes as volume (volume)}
 				<label class="check"
@@ -149,11 +151,11 @@
 				>
 			{:else}<p class="muted">{t('fileIndex.noShares')}</p>{/each}
 		</fieldset>
-		<fieldset disabled={!draft.enabled || busy}>
+		<fieldset class="divided" disabled={!draft.enabled || busy}>
 			<legend>{t('fileIndex.when')}</legend>
-			<p class="muted">{t('fileIndex.whenHint')}</p>
-			<label
-				>{t('fileIndex.time')}
+			<p class="muted hint">{t('fileIndex.whenHint')}</p>
+			<label class="stack time"
+				><span>{t('fileIndex.time')}</span>
 				<input
 					class="field"
 					type="time"
@@ -165,36 +167,40 @@
 				/></label
 			>
 			{#if draft.time}<p class="notice-warn">{t('fileIndex.timeWarning')}</p>{/if}
-			<label class="check"
-				><input
-					type="checkbox"
-					bind:checked={draft.ocr}
-					disabled={!answer.status.ocrAvailable}
-					onchange={() => {
-						dirty = true;
-						saved = false;
-					}}
-				/>
-				{t('fileIndex.ocr')}</label
-			>
-			<p class="muted">
-				{answer.status.ocrAvailable ? t('fileIndex.ocrHint') : t('fileIndex.ocrMissing')}
-			</p>
+			<div class="option">
+				<label class="check"
+					><input
+						type="checkbox"
+						bind:checked={draft.ocr}
+						disabled={!answer.status.ocrAvailable}
+						onchange={() => {
+							dirty = true;
+							saved = false;
+						}}
+					/>
+					{t('fileIndex.ocr')}</label
+				>
+				<p class="muted hint">
+					{answer.status.ocrAvailable ? t('fileIndex.ocrHint') : t('fileIndex.ocrMissing')}
+				</p>
+			</div>
 		</fieldset>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="actions">
+		<div class="row-actions">
 			<button class="btn btn-primary" disabled={busy || !dirty}>{t('common.save')}</button>
 			{#if saved}<span role="status" class="muted">{t('fileIndex.saved')}</span>{/if}
 		</div>
 	</form>
 
-	<section class="tile">
-		<h2>{t('fileIndex.status')}</h2>
+	<section class="tile panel" aria-labelledby="index-status">
+		<h2 class="tile-title" id="index-status">{t('fileIndex.status')}</h2>
 		{#each answer.status.indexes as index (index.volume)}
 			<div class="row">
-				<div>
-					<strong class="mono">{index.volume}</strong>
-					<span class="chip">{t(indexStateLabel(index.state))}</span>
+				<div class="row-text">
+					<div class="row-name">
+						<strong class="mono">{index.volume}</strong>
+						<span class="chip">{t(indexStateLabel(index.state))}</span>
+					</div>
 					<p class="muted">
 						{#if index.known}{t('fileIndex.files', { count: index.files })} · {formatBytes(
 								index.bytes,
@@ -211,7 +217,7 @@
 					{#if index.lastError}<p class="notice-warn">{index.lastError}</p>{/if}
 					{#if index.truncated}<p class="notice-warn">{t('fileIndex.truncated')}</p>{/if}
 				</div>
-				<div class="buttons">
+				<div class="row-actions">
 					<button
 						class="btn"
 						disabled={index.state !== 'idle' || dirty}
@@ -226,19 +232,21 @@
 				</div>
 			</div>
 		{:else}<p class="muted">{t('fileIndex.none')}</p>{/each}
-		<p class="muted">{t('fileIndex.runHint')}</p>
+		<p class="muted hint">{t('fileIndex.runHint')}</p>
 	</section>
 
-	<section class="tile">
-		<h2>{t('fileIndex.thumbs')}</h2>
-		<p class="muted">{t('fileIndex.thumbsHint')}</p>
-		<div class="buttons">
-			{#each answer.mounted ?? [] as volume (volume)}
-				<button class="btn" disabled={busy} onclick={() => (confirm = { kind: 'thumbs', volume })}
-					>{t('fileIndex.clearThumbs', { volume })}</button
-				>
-			{/each}
-		</div>
+	<section class="tile panel" aria-labelledby="index-thumbs">
+		<h2 class="tile-title" id="index-thumbs">{t('fileIndex.thumbs')}</h2>
+		<p class="muted hint">{t('fileIndex.thumbsHint')}</p>
+		{#if answer.mounted?.length}
+			<div class="row-actions">
+				{#each answer.mounted as volume (volume)}
+					<button class="btn" disabled={busy} onclick={() => (confirm = { kind: 'thumbs', volume })}
+						>{t('fileIndex.clearThumbs', { volume })}</button
+					>
+				{/each}
+			</div>
+		{/if}
 	</section>
 {/if}
 
@@ -268,51 +276,38 @@
 {/if}
 
 <style>
-	form,
-	section {
+	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		margin-bottom: 16px;
+		gap: 4px;
 	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
+	.option .hint {
+		padding-left: 28px;
 	}
-	legend {
-		font-weight: 600;
-		margin-bottom: 4px;
+	.hint {
+		font-size: 0.8125rem;
 	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: 8px;
-	}
-	.actions,
-	.buttons {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		align-items: center;
+	.time input {
+		max-width: 10rem;
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
+		align-items: center;
 		gap: 12px;
-		padding: 12px 0;
-		border-top: 1px solid var(--border);
+		padding-top: 14px;
+		border-top: 1px solid var(--panel-border);
 	}
-	.row p {
-		margin: 4px 0 0;
+	.row-text {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		min-width: 0;
+	}
+	.row-name {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 </style>

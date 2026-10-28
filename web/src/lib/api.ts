@@ -393,18 +393,38 @@ export type DockerContainer = {
 	updateError?: string;
 };
 
-/** The HTTPS name of one app (GET /docker/proxy). */
+/** The HTTPS name of one app or target (GET /docker/proxy). For a target, app is its id. */
 export type AppProxyRoute = {
 	app: string;
 	enabled: boolean;
 	name: string;
+	aliases?: string[];
+	short?: boolean;
+	host?: string;
 	port: number;
 	scheme: 'http' | 'https';
+	verifyTLS?: boolean;
 	localOnly?: boolean;
+	networks?: string[];
+	tailscale?: boolean;
+	tailscaleName?: string;
 	urls: string[];
+	/** The route's own device in the tailnet (0.30.0 and later). */
+	tailnet?: { state: 'starting' | 'login' | 'running' | 'https-off' | 'stopped' | 'error'; url?: string; error?: string };
 };
 
-export type AppProxyStatus = { domain?: string; suffixes: string[]; apps: AppProxyRoute[] };
+export type AppProxyStatus = {
+	domain?: string;
+	suffixes: string[];
+	apps: AppProxyRoute[];
+	// Fields of 0.30.0; an older titand does not send them.
+	localName?: string;
+	defaultLocalName?: string;
+	mdns?: boolean;
+	off?: boolean;
+	targets?: AppProxyRoute[];
+	tailnet?: { available: boolean; keySet: boolean };
+};
 
 export type DockerStatus = {
 	settings: { enabled: boolean; volume: string };

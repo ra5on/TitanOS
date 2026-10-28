@@ -1,11 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-	dashboardVisual,
-	backgroundURL,
-	visualStyle,
-	BACKGROUND_IDS,
-} from '../src/lib/dashboard/visual.ts';
+import { dashboardVisual, backgroundURL, BACKGROUND_IDS } from '../src/lib/dashboard/visual.ts';
 import { historySlots, historyPath, historyFrame } from '../src/lib/metric-history.ts';
 import { tileOptions, tileStyle } from '../src/lib/dashboard/options.ts';
 test('backgrounds reject injected URLs and missing image references', () => {
@@ -28,16 +23,28 @@ test('backgrounds reject injected URLs and missing image references', () => {
 	assert.equal(backgroundURL(v), '/api/v1/background/' + 'a'.repeat(64));
 	assert.equal(v.transparency, 90);
 	assert.equal(v.blur, 14);
-	assert.ok(!visualStyle(v).includes('display:none'));
+	assert.equal(v.glowColor, '');
 });
-test('old default opacity inherits global settings, deliberate tile overrides survive', () => {
-	assert.equal(tileOptions({ cpu: { opacity: 100 } }, 'cpu').surfaceOverride, false);
-	assert.equal(tileOptions({ cpu: { opacity: 70 } }, 'cpu').surfaceOverride, true);
-	assert.match(tileStyle(tileOptions({ cpu: { opacity: 100 } }, 'cpu')), /var\(--dashboard-alpha/);
-	assert.match(
-		tileStyle(tileOptions({ cpu: { surfaceOverride: true, opacity: 60 } }, 'cpu')),
-		/60%,transparent/,
+test('tiles have no design of their own: stored design values are ignored', () => {
+	const style = tileStyle(
+		tileOptions(
+			{
+				cpu: {
+					surfaceOverride: true,
+					opacity: 60,
+					radius: 30,
+					valueSize: 56,
+					titleColor: '#123456',
+				},
+			},
+			'cpu',
+		),
+		'cpu',
 	);
+	assert.doesNotMatch(style, /60%|30px|56px|#123456|--tile-radius|--tile-background/);
+	// Sizes in rem follow the font size of Settings › Appearance.
+	assert.match(style, /--tile-value-size:[\d.]+rem/);
+	assert.match(style, /--tile-padding:var\(--tile-pad\)/);
 });
 test('history retains time slots and unknown gaps without animating missing samples as zero', () => {
 	assert.deepEqual(historySlots([12, null, 18], 5), [null, null, 12, null, 18]);
@@ -50,4 +57,26 @@ test('history retains time slots and unknown gaps without animating missing samp
 		historyPath([200], 200),
 		'container usage above 100 remains distinguishable',
 	);
+});
+
+test('glow and animation belong to the appearance; older dashboard values are taken over once', async () => {
+	const { sanitizeAppearance, cssVariables, defaultAppearance } =
+		await import('../src/lib/theme/themes.ts');
+	const fresh = sanitizeAppearance({});
+	assert.equal(fresh.glow, 0);
+	assert.equal(fresh.motion, true);
+	const legacy = sanitizeAppearance(
+		{ theme: 'graphit' },
+		{ glow: 40, motion: false, duration: 800, glowColor: '#112233' },
+	);
+	assert.deepEqual(
+		[legacy.glow, legacy.motion, legacy.duration, legacy.glowColor],
+		[40, false, 800, '#112233'],
+	);
+	// Once the appearance has its own values, the dashboard ones no longer count.
+	assert.equal(sanitizeAppearance({ glow: 10 }, { glow: 40 }).glow, 10);
+	const vars = cssVariables({ ...defaultAppearance(), glow: 50, motion: false }, false);
+	assert.match(vars['--panel-glow'], /50%/);
+	assert.equal(vars['--metric-duration'], '0ms');
+	assert.equal(cssVariables(defaultAppearance(), false)['--panel-glow'], '0 0 0 transparent');
 });

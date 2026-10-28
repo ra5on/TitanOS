@@ -23,21 +23,21 @@
 {#if status}
  {#if status.error}<p class="notice-warn" role="status">{status.error}</p>{/if}
  {#if status.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
- <form class="tile" onsubmit={save}>
-  <label for="power-action">{t('powerButton.press')}</label>
-  <select id="power-action" class="field" bind:value={action} disabled={busy || status.readOnly}>
+ <form class="tile panel" onsubmit={save} aria-labelledby="power-action-title">
+  <h2 class="tile-title" id="power-action-title">{t('powerButton.press')}</h2>
+  <select id="power-action" class="field" aria-labelledby="power-action-title" bind:value={action} disabled={busy || status.readOnly}>
    {#each (['ignore', 'reboot', 'poweroff'] as const) as value (value)}<option value={value}>{t(`powerButton.${value}`)}</option>{/each}
   </select>
-  <p class="muted">{t('powerButton.shutdownHint')}</p>
-  <p class="muted">{t('powerButton.longPress')}</p>
-  <button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
-  {#if saved}<p role="status">{t('powerButton.saved')}</p>{/if}
+  <p class="muted hint">{t('powerButton.shutdownHint')}</p>
+  <p class="muted hint">{t('powerButton.longPress')}</p>
+  <div class="row-actions">
+   <button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
+   {#if saved}<span class="muted" role="status">{t('powerButton.saved')}</span>{/if}
+  </div>
  </form>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 <style>
- .tile { max-width: 640px; padding: var(--tile-pad); display: flex; flex-direction: column; gap: 14px; }
- label { font-weight: 600; }
- p { margin: 0; }
- button { align-self: flex-start; }
+ select { max-width: 32rem; }
+ .hint { font-size: 0.875rem; }
  .notice-error { white-space: pre-wrap; }
 </style>

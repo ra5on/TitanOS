@@ -104,6 +104,3 @@ export function backgroundURL(v: DashboardVisual, urls: Record<string, string> =
 		return urls[v.background.id] || '/api/v1/background/' + v.background.id;
 	return '';
 }
-export function visualStyle(v: DashboardVisual): string {
-	return `--dashboard-alpha:${1 - v.transparency / 100};--dashboard-blur:${v.blur}px;--dashboard-glow:${v.glow / 100};--dashboard-glow-color:${v.glowColor || 'var(--accent)'};--metric-duration:${v.motion ? v.duration : 0}ms;`;
-}

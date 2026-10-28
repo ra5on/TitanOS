@@ -92,7 +92,7 @@
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
 {#if status && status.mode !== 'off'}
-	<section class="tile" aria-labelledby="ups-now">
+	<section class="tile panel" aria-labelledby="ups-now">
 		<div class="head">
 			<h2 class="tile-title" id="ups-now">{t('ups.state')}</h2>
 			{#if !status.connected}<span class="chip warn">{t('ups.notConnected')}</span>
@@ -118,7 +118,7 @@
 {/if}
 
 {#if draft && answer}
-	<form class="tile" onsubmit={save}>
+	<form class="tile panel" onsubmit={save}>
 		<h2 class="tile-title">{t('ups.settings')}</h2>
 		<div class="segments" role="radiogroup" aria-label={t('ups.settings')}>
 			{#each ['off', 'local', 'network'] as const as mode (mode)}
@@ -172,7 +172,7 @@
 		{/if}
 
 		{#if draft.mode !== 'off'}
-			<fieldset>
+			<fieldset class="divided">
 				<legend>{t('ups.when')}</legend>
 				<label class="check"><input type="radio" name="when" checked={!byTime} onchange={() => (byTime = false)} /><span>{t('ups.whenLow')}</span></label>
 				<label class="check"><input type="radio" name="when" checked={byTime} onchange={() => (byTime = true)} /><span>{t('ups.whenTime')}</span>
@@ -181,9 +181,9 @@
 				<p class="muted">{t('ups.whenHint')}</p>
 			</fieldset>
 		{/if}
-		<div class="actions">
-			{#if saved}<span class="muted" role="status">{t('notify.saved')}</span>{/if}
+		<div class="row-actions">
 			<button type="submit" class="btn btn-primary" disabled={busy}>{t('notify.save')}</button>
+			{#if saved}<span class="muted" role="status">{t('notify.saved')}</span>{/if}
 		</div>
 	</form>
 {/if}
@@ -191,14 +191,9 @@
 <style>
 	section,
 	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
 	}
 	p {
-		margin: 0;
 		max-width: 60rem;
 	}
 	.head {
@@ -247,16 +242,9 @@
 		font-size: 0.8125rem;
 	}
 	fieldset {
-		display: flex;
-		flex-direction: column;
 		gap: 10px;
-		margin: 0;
-		padding: 0;
-		border: 0;
 	}
 	legend {
-		padding: 0;
-		margin-bottom: 6px;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		letter-spacing: 0.04em;
@@ -279,21 +267,14 @@
 	label.check {
 		flex-direction: row;
 		flex-wrap: wrap;
-		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
 	}
 	.check > span {
 		color: var(--text);
 	}
-	.check input[type='checkbox'],
-	.check input[type='radio'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.minutes {
+	.check input.minutes {
 		width: 6rem;
+		height: auto;
 	}
 	.segments {
 		display: inline-flex;
@@ -318,12 +299,6 @@
 	.segments button[aria-checked='true'] {
 		background: var(--accent);
 		color: var(--on-accent);
-	}
-	.actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
 	}
 	pre {
 		margin: 0;

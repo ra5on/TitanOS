@@ -59,7 +59,7 @@
 		{t('coverage.unavailable', { source })}
 	</p>{/each}
 {#each items as item (`${item.kind}:${item.name}`)}
-	<section class="tile item">
+	<section class="tile panel item">
 		<div class="head">
 			<h2>{item.name}</h2>
 			<span>{t(`coverage.status.${item.status}` as MessageKey)}</span>
@@ -95,16 +95,15 @@
 							job.state.probe?.error}
 					</p>{/if}
 			</div>{/each}
-		{#if !item.jobs.length}<a class="btn" href="/settings/backups/data">{t('coverage.configure')}</a
-			>{/if}
+		{#if !item.jobs.length}<div class="row-actions">
+				<a class="btn" href="/settings/backups/data">{t('coverage.configure')}</a>
+			</div>{/if}
 	</section>
-{:else}{#if !busy && !error}<p class="muted">{t('ops.none')}</p>{/if}{/each}
+{:else}{#if !busy && !error}<div class="tile panel">
+			<p class="muted">{t('ops.none')}</p>
+		</div>{/if}{/each}
 
 <style>
-	.item {
-		padding: var(--tile-pad);
-		margin-bottom: var(--gap);
-	}
 	.head,
 	.dates {
 		display: flex;
@@ -121,7 +120,7 @@
 		font-size: 0.875rem;
 	}
 	.job {
-		padding: 14px 0;
+		padding-top: 14px;
 		border-top: 1px solid var(--border);
 		font-size: 0.875rem;
 	}

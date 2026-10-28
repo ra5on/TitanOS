@@ -14,28 +14,75 @@ func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
-	domain, suffixes, apps := s.opts.AppProxy.Info()
-	writeJSON(w, http.StatusOK, map[string]any{"domain": domain, "suffixes": suffixes, "apps": apps})
+	writeJSON(w, http.StatusOK, s.opts.AppProxy.Info())
 }
 
-// handleAppProxyDomain sets the domain of one's own for all apps.
+// handleAppProxyDomain sets what holds for all names: the domain of one's
+// own, the local name, mDNS and the switch for all names. A field that is
+// not sent stays as it is (older pages only send the domain).
 func (s *Server) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
 	if s.opts.AppProxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
-	var req struct {
-		Domain string `json:"domain"`
-	}
+	var req appproxy.General
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.AppProxy.SetDomain(req.Domain); err != nil {
+	if req.Domain != nil || req.LocalName != nil || req.MDNS != nil || req.Off != nil {
+		if err := s.opts.AppProxy.SetGeneral(req); err != nil {
+			writeAppProxyError(w, err)
+			return
+		}
+	}
+	if req.TailscaleKey != nil {
+		// The key itself is never logged or noted, only that it changed.
+		if err := s.opts.AppProxy.SetTailnetKey(*req.TailscaleKey); err != nil {
+			writeAppProxyError(w, err)
+			return
+		}
+		noteTarget(r, "tailscale-key")
+	}
+	if req.Domain != nil {
+		noteTarget(r, *req.Domain)
+	}
+	slog.Info("app proxy settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleAppProxy(w, r)
+}
+
+// handleAppProxyTarget sets the HTTPS name of a target outside Docker.
+func (s *Server) handleAppProxyTarget(w http.ResponseWriter, r *http.Request) {
+	if s.opts.AppProxy == nil {
+		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
+		return
+	}
+	var route appproxy.Route
+	if !readJSON(w, r, &route) {
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.opts.AppProxy.SetTarget(id, route); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
-	noteTarget(r, req.Domain)
-	slog.Info("app proxy domain changed", "domain", req.Domain, "by", currentUser(r).Name, "ip", remoteIP(r))
+	noteTarget(r, id, route.Name, route.Host)
+	slog.Info("app proxy target changed", "target", id, "name", route.Name, "host", route.Host, "port", route.Port, "enabled", route.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleAppProxy(w, r)
+}
+
+// handleAppProxyTargetRemove forgets a target outside Docker.
+func (s *Server) handleAppProxyTargetRemove(w http.ResponseWriter, r *http.Request) {
+	if s.opts.AppProxy == nil {
+		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.opts.AppProxy.RemoveTarget(id); err != nil {
+		writeAppProxyError(w, err)
+		return
+	}
+	noteTarget(r, id)
+	slog.Info("app proxy target removed", "target", id, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleAppProxy(w, r)
 }
 
@@ -77,7 +124,7 @@ func (s *Server) handleAppProxyRemove(w http.ResponseWriter, r *http.Request) {
 
 func writeAppProxyError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, appproxy.ErrInvalid):
+	case errors.Is(err, appproxy.ErrInvalid), errors.Is(err, appproxy.ErrTailnetKey):
 		writeError(w, http.StatusBadRequest, "proxy_invalid", err.Error())
 	case errors.Is(err, appproxy.ErrNameTaken):
 		writeError(w, http.StatusConflict, "proxy_name_taken", err.Error())

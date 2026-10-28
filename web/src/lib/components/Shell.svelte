@@ -4,7 +4,6 @@
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
 	import TasksPanel from './TasksPanel.svelte';
-	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -86,7 +85,6 @@
 	const fab = $derived(
 		!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant',
 	);
-	const motion = $derived(dashboardVisual(session.dashboard?.visual));
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -109,7 +107,6 @@
 {/if}
 <div
 	class="shell"
-	style:--metric-duration={`${motion.motion ? motion.duration : 0}ms`}
 	style:padding-bottom={admin && terminal.open && !terminal.full
 		? `${terminal.height}px`
 		: undefined}

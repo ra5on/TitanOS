@@ -455,7 +455,7 @@
 
 {#if !restoreOnly}<PageHead title={t('safeguard.data')} parent={{ href: '/settings/backups', label: t('safeguard.title') }}>
 	<p class="muted">{t('backup.intro')}</p>
-</PageHead>{:else}<h2 id="restore-files" use:revealTarget>{t('safeguard.filesRestore')}</h2>{/if}
+</PageHead>{:else}<h2 class="tile-title" id="restore-files" use:revealTarget>{t('safeguard.filesRestore')}</h2>{/if}
 
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
@@ -465,13 +465,13 @@
 
 {#if overview}
 	{#if !restoreOnly}<RecoveryPanel/>{/if}
- {#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /><ReplicationPanel /></div>{/if}
-	{#if !restoreOnly}<h2 id="backup-history" use:revealTarget>{t('safeguard.history')}</h2>{/if}
+	{#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget><SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /><ReplicationPanel /></div>{/if}
+	{#if !restoreOnly}<h2 class="tile-title" id="backup-history" use:revealTarget>{t('safeguard.history')}</h2>{/if}
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
 		{@const state = view.state}
 		{@const next = view.next}
-		<section class="tile" use:revealTarget id="backup-{job.id}">
+		<section class="tile panel" use:revealTarget id="backup-{job.id}">
 			<div class="head">
 				<div>
 					<h2 class="name mono">{job.id}</h2>{#if job.destination.type === 'smb-copy'}<span class="chip warn">{t('backup.beta')}</span>{/if}
@@ -516,7 +516,7 @@
 					{#if !restoreOnly}<button type="button" class="btn btn-primary" disabled={!!pending[job.id]} onclick={() => act(job, 'run')}>{t('backup.run')}</button>{/if}
 					{#if !plainCopy(job.destination.type)}<button type="button" class="btn" onclick={() => openRestore(job)}>{t('backup.restore')}</button>
 					<button type="button" class="btn" onclick={()=>probing=job.id}>{t('ops.probe')}</button>
- <button type="button" class="btn" onclick={() => ((checking = { job, readData: 0 }), (dialogError = ''))}>{t('backup.check')}</button>
+					<button type="button" class="btn" onclick={() => ((checking = { job, readData: 0 }), (dialogError = ''))}>{t('backup.check')}</button>
 					<button type="button" class="btn" onclick={() => showPassword(job)}>{t('backup.showPassword')}</button>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
 					{#if !restoreOnly}<button type="button" class="btn" aria-label={t('backup.editNamed', { name: job.id })} onclick={() => edit(view)}>{t('backup.edit')}</button>
 					<button type="button" class="btn" aria-label={t('backup.removeNamed', { name: job.id })} onclick={() => ((removing = job), (removeError = ''))}>{t('backup.remove')}</button>{/if}
@@ -524,7 +524,7 @@
 			</div>
 		</section>
 	{:else}
-		{#if !draft}<p class="muted">{t('backup.none')}</p>{/if}
+		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}
 	{/each}
 
 	{#if !draft && !restoreOnly}
@@ -537,7 +537,7 @@
 {/if}
 
 {#if draft && overview}
-	<form class="tile" onsubmit={save}>
+	<form class="tile panel" onsubmit={save}>
 		<h2 class="tile-title">{isNew ? t('backup.add') : t('backup.editTitle', { name: draft.id })}</h2>
 		{#if isNew}
 			<label class="narrow"><span>{t('backup.name')}</span>
@@ -577,7 +577,7 @@
 			</label>
 			<p class="muted">{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}</p>
 		</fieldset>
-		<fieldset>
+		<fieldset class="divided">
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
 				{#each ['local', 'usb-copy', 'smb-copy', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
@@ -646,7 +646,7 @@
  {#if secretSet.password && !secretKept.password}<p class="notice-warn">{t('backup.secretAgain')}</p>{/if}
 			{/if}
 		</fieldset>
-		<fieldset>
+		<fieldset class="divided">
 			<legend>{t('backup.schedule')}</legend>
 			<label class="check"><input type="checkbox" bind:checked={draft.enabled} /><span>{t('backup.enabled')}</span></label>
 			{#if draft.enabled}
@@ -706,7 +706,7 @@
 				<p class="muted">{t('backup.catchUp')}</p>
 			{/if}
 		</fieldset>
-		<fieldset>
+		<fieldset class="divided">
 			<legend>{t('backup.bandwidth')}</legend>
 			<label class="check"><input type="checkbox" bind:checked={bandwidth.on} /><span>{t('backup.bandwidthLimit')}</span></label>
 			{#if bandwidth.on}
@@ -724,7 +724,7 @@
 				<p class="muted">{t(plainCopy(draft.destination.type) ? 'backup.bandwidthHintCopy' : 'backup.bandwidthHintRestic')}</p>
 			{/if}
 		</fieldset>
-		{#if !plainCopy(draft.destination.type)}<fieldset>
+		{#if !plainCopy(draft.destination.type)}<fieldset class="divided">
 			<legend>{t('backup.keeps')}</legend>
 			<div class="row">
 				<label class="tiny"><span>{t('backup.keepDaily')}</span><input class="field mono" type="number" min="0" max="999" bind:value={draft.keep.daily} /></label>
@@ -734,7 +734,7 @@
 			<p class="muted">{t('backup.keepHint')}</p>
 		</fieldset>{/if}
 		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
-		<div class="actions">
+		<div class="row-actions">
 			<button type="button" class="btn" onclick={() => ((draft = null), (error = null))} disabled={busy}>{t('common.cancel')}</button>
 			<button type="submit" class="btn btn-primary" disabled={busy || (draft.sources.length === 0 && !draft.extras?.length && !draft.applications?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button>
 		</div>
@@ -833,13 +833,9 @@
 <style>
 	.mode { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; border: 0; }
 	.mode .check { flex-direction: row; align-items: center; gap: 8px; }
-	.targets { display: grid; gap: 16px; }
+	.targets { display: grid; gap: var(--gap); }
 	section,
 	form.tile {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
 	}
 	form.plain {
@@ -884,22 +880,7 @@
 		gap: 12px 20px;
 	}
 	fieldset {
-		display: flex;
-		flex-direction: column;
 		gap: 12px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: 0;
-	}
-	legend {
-		padding: 0;
-		margin-bottom: 6px;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--muted);
 	}
 	label {
 		display: flex;
@@ -969,11 +950,6 @@
 		padding: 10px 12px;
 		font-size: 0.75rem;
 		resize: none;
-	}
-	.actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 10px;
 	}
 	pre {
 		margin: 6px 0 0;

@@ -477,6 +477,10 @@ func run(opts options) error {
 	if err := tailnet.Load(); err != nil {
 		slog.Warn("Tailscale settings not readable from /config", "err", err)
 	}
+	// HTTPS names in the tailnet: one device per app, beside the plugin's.
+	routes.Tailnet.Disabled = opts.dev
+	routes.Tailnet.Volume = tailnet.Volume
+	go routes.RunTailnet(ctx)
 	mesh := netbird.NewManager(store)
 	mesh.Disabled = opts.dev
 	if err := mesh.Load(); err != nil {

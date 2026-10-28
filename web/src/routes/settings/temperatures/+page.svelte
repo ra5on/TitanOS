@@ -34,7 +34,7 @@
 <PageHead title={t('temperatures.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
 	<p class="muted">{t('temperatures.description')}</p>
 </PageHead>
-<section class="tile options">
+<section class="tile panel">
 	<label class="check"><input type="checkbox" bind:checked={show} disabled={saving} onchange={() => saved = false} /><strong>{t('temperatures.show')}</strong></label>
 	<p class="muted">{t('temperatures.perAccount')}</p>
 	{#if !system.info}<p>{t('accelerator.loading')}</p>
@@ -55,19 +55,17 @@
 	{#if show && selected.length === 0}<p class="notice-warn">{t('temperatures.choose')}</p>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if saved}<p role="status">{t('temperatures.saved')}</p>{/if}
-	<div class="actions"><button class="btn btn-primary" disabled={saving || (show && selected.length === 0)} onclick={save}>{t('common.save')}</button><a class="btn" href="/">{t('dashboard.title')}</a></div>
+	<div class="row-actions"><button class="btn btn-primary" disabled={saving || (show && selected.length === 0)} onclick={save}>{t('common.save')}</button><a class="btn" href="/">{t('dashboard.title')}</a></div>
 </section>
 
 <style>
-	.options { padding: var(--tile-pad); display: flex; flex-direction: column; gap: 16px; }
-	p { margin: 0; font-size: 0.875rem; }
-	.check, .sensor, .actions { display: flex; align-items: center; gap: 12px; }
-	input { width: 18px; height: 18px; flex: none; }
+	p { font-size: 0.875rem; }
+	.sensor { display: flex; align-items: center; gap: 12px; }
+	.sensor input { width: 18px; height: 18px; margin: 0; flex: none; }
 	.sensors { display: flex; flex-direction: column; }
 	.sensor { padding: 12px 0; border-bottom: 1px solid var(--panel-border); }
 	.name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 	.name strong { font-weight: 500; }
 	.name .muted { font-size: 0.75rem; }
 	.value { white-space: nowrap; }
-	.actions { flex-wrap: wrap; }
 </style>

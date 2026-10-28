@@ -26,7 +26,7 @@
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 {#if about}
-	<section class="tile">
+	<section class="tile panel">
 		<Logo size={40} />
 		<dl>
 			<div><dt>{t('about.version')}</dt><dd class="mono">{about.version}</dd></div>
@@ -37,7 +37,7 @@
 		<p><a href="https://github.com/ra5on/TitanOS" target="_blank" rel="noreferrer">github.com/ra5on/TitanOS</a></p>
 	</section>
 
-	<section class="tile" aria-labelledby="about-license">
+	<section class="tile panel" aria-labelledby="about-license">
 		<h2 class="tile-title" id="about-license">{t('about.license')}</h2>
 		<p>{t('about.licenseText')}</p>
 		<p class="muted">{t('about.licenseLater')}</p>
@@ -49,7 +49,7 @@
 		{/if}
 	</section>
 
-	<section class="tile" aria-labelledby="about-third">
+	<section class="tile panel" aria-labelledby="about-third">
 		<h2 class="tile-title" id="about-third">{t('about.thirdParty')}</h2>
 		<p class="muted">{t('about.thirdPartyText')}</p>
 		{#if about.thirdParty}<pre class="scroll">{about.thirdParty}</pre>{/if}
@@ -58,15 +58,7 @@
 
 <style>
 	section {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
-	}
-	p {
-		margin: 0;
-		max-width: 60rem;
 	}
 	dl {
 		display: grid;

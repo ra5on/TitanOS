@@ -60,7 +60,7 @@
 	</div>
 {/snippet}
 
-<section class="tile schedule" id="power-schedule">
+<section class="tile panel schedule" id="power-schedule">
 	<h2 class="tile-title">{t('powerSchedule.title')}</h2>
 	<p class="muted">{t('powerSchedule.intro')}</p>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -91,13 +91,7 @@
 
 <style>
 	.schedule {
-		width: 100%;
-		max-width: 640px;
-		padding: var(--tile-pad);
-		display: flex;
-		flex-direction: column;
 		gap: 10px;
-		margin-top: var(--gap);
 	}
 	form {
 		display: flex;

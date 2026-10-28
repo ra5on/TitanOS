@@ -38,3 +38,12 @@ test('settings sections resolve specific search terms to distinct destinations',
   assert.deepEqual(settingSections[area].filter(s => matchesSetting(query, '', s.id)).map(s => s.href), [href]);
  }
 });
+
+test('the HTTPS names of apps have their own admin-only settings page', async () => {
+ const { settingsAreas, userSettingsPaths } = await import('../src/lib/settings-search.ts');
+ const area = settingsAreas.find(a => a.id === 'proxy');
+ assert.ok(area?.admin);
+ assert.equal(area.group, 'network');
+ assert.ok(!userSettingsPaths.includes('/settings/proxy'));
+ for (const q of ['proxy', 'Reverse Proxy', 'mdns', 'domain']) assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
+});

@@ -56,6 +56,16 @@ lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
 erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
 Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
 
+### Einstellungsseiten aufgeräumt (0.30.0)
+
+Auftrag des Projektinhabers vom 27. Oktober 2026: alle Seiten hinter der
+Einstellungsübersicht einheitlich. Eine Spalte von höchstens 64rem; jeder
+Abschnitt ist eine Kachel mit Innenabstand (`.tile.panel`) und der kleinen
+Großbuchstaben-Überschrift `.tile-title`; Felder mit Beschriftung darüber und
+lesbarer Breite (`label.stack`), Häkchen mit Hinweis eingerückt darunter,
+Knopfleisten `.row-actions`, Unterteilungen mit Linie (`.divided`). Neu:
+„HTTPS-Namen für Apps“ unter Netzwerk und Dienste (siehe `docs/APP-PROXY.md`).
+
 ### Einstellungen und Sicherungen (0.6.1)
 
 Vom Projektinhaber am 20. Oktober 2026 bestätigter Folgeentwurf: Die

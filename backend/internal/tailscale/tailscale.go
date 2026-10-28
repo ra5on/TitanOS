@@ -369,4 +369,13 @@ func (m *Manager) Action(action string) error {
 }
 
 // Pending prevents plugin removal or system updates during the access trial.
+// Volume is the data volume the plugin keeps its keys on, once it has
+// been prepared there; other devices of this NAS in the tailnet (the
+// HTTPS names of apps) keep theirs beside it.
+func (m *Manager) Volume() (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.volume, m.volume != "" && !m.Disabled
+}
+
 func (m *Manager) Pending() bool { m.mu.Lock(); defer m.mu.Unlock(); return m.pending != nil }

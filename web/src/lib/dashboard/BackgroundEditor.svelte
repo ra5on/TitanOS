@@ -2,7 +2,6 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { resolveAccent, resolvePalette } from '#lib/theme/themes.ts';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import EffectSlider from './EffectSlider.svelte';
@@ -20,7 +19,6 @@
 		onchange,
 		onpreview,
 		onupload,
-		onclose,
 	}: {
 		value: DashboardVisual;
 		urls: Record<string, string>;
@@ -28,9 +26,7 @@
 		onchange: (v: DashboardVisual) => void;
 		onpreview: (v: DashboardVisual | null) => void;
 		onupload: (id: string, file: File, url: string) => void;
-		onclose: () => void;
 	} = $props();
-	let tab = $state<'surface' | 'background' | 'motion'>('surface');
 	let gallery = $state<DashboardVisual | null>(null),
 		source = $state<'builtin' | 'own'>('builtin');
 	let uploadError = $state(''),
@@ -151,176 +147,79 @@
 	}
 </script>
 
-<aside class="effects-panel tile" aria-label={t('dashboard.visual.all')}>
-	<div class="panel-head">
+<!-- The background of the dashboard (Settings › Appearance). Surfaces, glow
+     and animation are set there for the whole UI since 0.30.0. -->
+<section class="tile panel" aria-labelledby="h-dashboard-bg">
+	<h2 class="tile-title" id="h-dashboard-bg">{t('dashboard.visual.background')}</h2>
+	<p class="hint">{t('dashboard.visual.backgroundIntro')}</p>
+	<div class="selected-wallpaper">
+		{#if thumb(value)}<img src={thumb(value)} alt={name(value)} />{:else}<span class="no-image"
+				><Icon name="image" size={28} /></span
+			>{/if}
 		<div>
-			<div class="effects-eyebrow">{t('dashboard.visual.all')}</div>
-			<h2>{t('dashboard.visual.title')}</h2>
-			<p>{t('dashboard.visual.intro')}</p>
+			<strong>{name(value)}</strong><small
+				>{t(
+					value.background.source === 'custom' ? 'dashboard.visual.own' : 'dashboard.visual.local',
+				)}</small
+			>
 		</div>
-		<button class="icon-button" aria-label={t('common.close')} onclick={onclose}
-			><Icon name="close" size={17} /></button
+	</div>
+	<button class="btn wide-btn" onclick={open}>{t('dashboard.visual.choose')}</button>
+	<label class="effect-field"
+		>{t('dashboard.visual.fit')}<select
+			class="field"
+			value={value.background.fit}
+			onchange={(e) => background({ fit: e.currentTarget.value as 'contain' | 'cover', zoom: 100 })}
+			><option value="contain">{t('dashboard.visual.contain')}</option><option value="cover"
+				>{t('dashboard.visual.cover')}</option
+			></select
+		></label
+	>
+	{#if value.background.fit === 'cover'}
+		<EffectSlider
+			label={t('dashboard.visual.zoom')}
+			value={value.background.zoom}
+			min={100}
+			max={200}
+			{onbegin}
+			onchange={(v) => onchange({ ...value, background: { ...value.background, zoom: v } })}
+		/>
+		<EffectSlider
+			label={t('dashboard.visual.positionX')}
+			value={value.background.x}
+			{onbegin}
+			onchange={(v) => onchange({ ...value, background: { ...value.background, x: v } })}
+		/>
+		<EffectSlider
+			label={t('dashboard.visual.positionY')}
+			value={value.background.y}
+			{onbegin}
+			onchange={(v) => onchange({ ...value, background: { ...value.background, y: v } })}
+		/>
+	{/if}
+	<EffectSlider
+		label={t('dashboard.visual.dim')}
+		value={value.dim}
+		max={80}
+		{onbegin}
+		onchange={(v) => set('dim', v)}
+	/>
+	<label class="effects-check"
+		><input
+			type="checkbox"
+			checked={value.background.fixed}
+			onchange={(e) => background({ fixed: e.currentTarget.checked })}
+		/>{t('dashboard.visual.fixed')}</label
+	>
+	<div class="background-modes">
+		<button class="link" onclick={() => background({ source: 'inherit', id: '' })}
+			>{t('dashboard.visual.inherit')}</button
+		><button class="link" onclick={() => background({ source: 'none', id: '' })}
+			>{t('dashboard.visual.none')}</button
 		>
 	</div>
-	<div class="effects-tabs" role="tablist" aria-label={t('dashboard.visual.title')}>
-		{#each ['surface', 'background', 'motion'] as id}<button
-				role="tab"
-				aria-selected={tab === id}
-				onclick={() => (tab = id as typeof tab)}>{t(`dashboard.visual.${id}` as MessageKey)}</button
-			>{/each}
-	</div>
-	{#if tab === 'surface'}
-		<div class="effect-heading">
-			{t('dashboard.visual.surfaces')}<button
-				onclick={() => {
-					onbegin();
-					onchange({ ...value, transparency: 48, blur: 14, glow: 18, glowColor: '' });
-				}}>{t('dashboard.visual.reset')}</button
-			>
-		</div>
-		<EffectSlider
-			label={t('dashboard.visual.transparency')}
-			value={value.transparency}
-			max={90}
-			hint={t('dashboard.visual.transparencyHint')}
-			{onbegin}
-			onchange={(v) => set('transparency', v)}
-		/>
-		<EffectSlider
-			label={t('dashboard.visual.blur')}
-			value={value.blur}
-			max={40}
-			unit="px"
-			hint={t('dashboard.visual.blurHint')}
-			{onbegin}
-			onchange={(v) => set('blur', v)}
-		/>
-		<EffectSlider
-			label={t('dashboard.visual.glow')}
-			value={value.glow}
-			hint={t('dashboard.visual.glowHint')}
-			{onbegin}
-			onchange={(v) => set('glow', v)}
-		/>
-		<label class="color-choice"
-			><input
-				type="color"
-				aria-label={t('dashboard.visual.glowColor')}
-				value={value.glowColor ||
-					resolveAccent(
-						appearance.current,
-						resolvePalette(appearance.current, appearance.systemLight),
-					)}
-				onfocus={onbegin}
-				oninput={(e) => set('glowColor', e.currentTarget.value)}
-			/>{t('dashboard.visual.glowColor')}</label
-		>
-		{#if value.transparency > 65}<p class="hint">{t('dashboard.visual.contrastHint')}</p>{/if}
-		<hr />
-		<div class="effect-heading">{t('dashboard.visual.background')}</div>
-	{/if}
-	{#if tab !== 'motion'}
-		<div class="selected-wallpaper">
-			{#if thumb(value)}<img src={thumb(value)} alt={name(value)} />{:else}<span class="no-image"
-					><Icon name="image" size={28} /></span
-				>{/if}
-			<div>
-				<strong>{name(value)}</strong><small
-					>{t(
-						value.background.source === 'custom'
-							? 'dashboard.visual.own'
-							: 'dashboard.visual.local',
-					)}</small
-				>
-			</div>
-		</div>
-		<button class="btn wide-btn" onclick={open}>{t('dashboard.visual.choose')}</button>
-		{#if tab === 'background'}
-			<label class="effect-field"
-				>{t('dashboard.visual.fit')}<select
-					class="field"
-					value={value.background.fit}
-					onchange={(e) =>
-						background({ fit: e.currentTarget.value as 'contain' | 'cover', zoom: 100 })}
-					><option value="contain">{t('dashboard.visual.contain')}</option><option value="cover"
-						>{t('dashboard.visual.cover')}</option
-					></select
-				></label
-			>
-			{#if value.background.fit === 'cover'}
-				<EffectSlider
-					label={t('dashboard.visual.zoom')}
-					value={value.background.zoom}
-					min={100}
-					max={200}
-					{onbegin}
-					onchange={(v) => onchange({ ...value, background: { ...value.background, zoom: v } })}
-				/>
-				<EffectSlider
-					label={t('dashboard.visual.positionX')}
-					value={value.background.x}
-					{onbegin}
-					onchange={(v) => onchange({ ...value, background: { ...value.background, x: v } })}
-				/>
-				<EffectSlider
-					label={t('dashboard.visual.positionY')}
-					value={value.background.y}
-					{onbegin}
-					onchange={(v) => onchange({ ...value, background: { ...value.background, y: v } })}
-				/>
-			{/if}
-		{/if}
-		<EffectSlider
-			label={t('dashboard.visual.dim')}
-			value={value.dim}
-			max={80}
-			{onbegin}
-			onchange={(v) => set('dim', v)}
-		/>
-		{#if tab === 'background'}<label class="effects-check"
-				><input
-					type="checkbox"
-					checked={value.background.fixed}
-					onchange={(e) => background({ fixed: e.currentTarget.checked })}
-				/>{t('dashboard.visual.fixed')}</label
-			>
-			<div class="background-modes">
-				<button class="link" onclick={() => background({ source: 'inherit', id: '' })}
-					>{t('dashboard.visual.inherit')}</button
-				><button class="link" onclick={() => background({ source: 'none', id: '' })}
-					>{t('dashboard.visual.none')}</button
-				>
-			</div>
-			<p class="hint">{t('dashboard.visual.containHint')}</p>{:else}<p class="hint">
-				{t('dashboard.visual.globalHint')}
-			</p>{/if}
-	{:else}
-		<div class="effect-heading">{t('dashboard.visual.metrics')}</div>
-		<label class="effects-check"
-			><input
-				type="checkbox"
-				checked={value.motion}
-				onchange={(e) => {
-					onbegin();
-					set('motion', e.currentTarget.checked);
-				}}
-			/>{t('dashboard.visual.smooth')}</label
-		>
-		<EffectSlider
-			label={t('dashboard.visual.duration')}
-			value={value.duration}
-			min={150}
-			max={1000}
-			step={50}
-			unit="ms"
-			hint={t('dashboard.visual.durationHint')}
-			{onbegin}
-			onchange={(v) => set('duration', v)}
-		/>
-		<p class="hint">{t('dashboard.visual.motionHint')}</p>
-	{/if}
-	<p class="effects-footer">{t('dashboard.editor.preview')}</p>
-</aside>
+	<p class="hint">{t('dashboard.visual.containHint')}</p>
+</section>
 {#if gallery}<Dialog
 		title={t('dashboard.visual.gallery')}
 		wide
@@ -461,25 +360,6 @@
 	</Dialog>{/if}
 
 <style>
-	.effects-panel {
-		position: sticky;
-		top: var(--dashboard-sticky-top, 76px);
-		max-height: calc(100vh - var(--dashboard-sticky-top, 76px) - 19px);
-		overflow: auto;
-		box-sizing: border-box;
-		width: 340px;
-		flex: none;
-		padding: 20px;
-		min-width: 0;
-		background: var(--surface);
-		align-self: flex-start;
-	}
-	.panel-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 8px;
-	}
 	h2 {
 		margin: 4px 0 5px;
 		font-size: 20px;
@@ -489,57 +369,6 @@
 		line-height: 1.5;
 		font-size: 12px;
 		margin: 0;
-	}
-	.effects-eyebrow {
-		color: var(--accent);
-		letter-spacing: 0.08em;
-		font-size: 10px;
-		font-weight: 600;
-	}
-	.effects-tabs {
-		display: flex;
-		border-bottom: 1px solid var(--border);
-		gap: 17px;
-		margin: 18px 0;
-	}
-	.effects-tabs button,
-	.source-tabs button {
-		font: inherit;
-		font-size: 12px;
-		background: none;
-		border: 0;
-		color: var(--muted);
-		padding: 0 0 11px;
-		cursor: pointer;
-		border-bottom: 2px solid transparent;
-	}
-	.effects-tabs button[aria-selected='true'],
-	.source-tabs button[aria-selected='true'] {
-		color: var(--text);
-		border-bottom-color: var(--accent);
-	}
-	.effect-heading {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin: 21px 0 16px;
-		font-size: 11px;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text);
-	}
-	.effect-heading button {
-		font: inherit;
-		font-size: 11px;
-		color: var(--accent);
-		border: 0;
-		background: none;
-		cursor: pointer;
-	}
-	hr {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 22px 0;
 	}
 	.selected-wallpaper {
 		display: flex;
@@ -593,12 +422,6 @@
 		border: 1px solid var(--border);
 		font-size: 11px;
 	}
-	.effects-footer {
-		font-size: 11px;
-		margin-top: 18px;
-		padding-top: 14px;
-		border-top: 1px solid var(--border);
-	}
 	.effects-check {
 		display: flex;
 		align-items: center;
@@ -608,22 +431,6 @@
 	}
 	.effects-check input {
 		accent-color: var(--accent);
-	}
-	.color-choice {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 11px;
-		color: var(--muted);
-		margin-bottom: 18px;
-	}
-	.color-choice input {
-		width: 25px;
-		height: 25px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-small);
-		background: none;
-		padding: 2px;
 	}
 	.background-modes {
 		display: flex;
@@ -820,18 +627,8 @@
 		.wallpaper-grid {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
-		.effects-panel {
-			width: 300px;
-		}
 	}
 	@media (max-width: 760px) {
-		.effects-panel {
-			position: static;
-			max-height: none;
-			width: 100%;
-			max-width: none;
-			box-sizing: border-box;
-		}
 		.gallery-content {
 			grid-template-columns: 1fr;
 		}

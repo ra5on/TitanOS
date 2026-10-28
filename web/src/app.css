@@ -107,11 +107,13 @@
 	--gap: 12px;
 	--tile-pad: 16px;
 	--row-pad: 7px;
+	--tile-row-gap: 10px;
 }
 [data-density='compact'] {
 	--gap: 8px;
 	--tile-pad: 12px;
 	--row-pad: 5px;
+	--tile-row-gap: 6px;
 }
 
 /* Style of surfaces. Each style sets every panel variable, so that a preview
@@ -120,7 +122,7 @@
 	--panel-bg: var(--surface);
 	--panel-border: var(--border);
 	--panel-backdrop: none;
-	--panel-shadow: none;
+	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--surface);
 }
 [data-surface='glass'] {
@@ -134,7 +136,7 @@
 	--panel-bg: transparent;
 	--panel-border: var(--outline-border);
 	--panel-backdrop: none;
-	--panel-shadow: none;
+	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--bg);
 }
 
@@ -211,7 +213,7 @@ input[type='checkbox'] {
 	border-radius: var(--radius-tile);
 	-webkit-backdrop-filter: var(--panel-backdrop);
 	backdrop-filter: var(--panel-backdrop);
-	box-shadow: var(--panel-shadow);
+	box-shadow: var(--panel-shadow), var(--panel-glow, 0 0 0 transparent);
 }
 
 .tile-title {
@@ -414,3 +416,19 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 .metric-ring-level { transition:stroke-dasharray var(--metric-duration,450ms) cubic-bezier(.22,.65,.32,1); }
 .metric-level.unknown { visibility:hidden;transition:none; }
 @media(prefers-reduced-motion:reduce) { .metric-level,.metric-ring-level { transition:none!important; } }
+
+/* Settings pages (one readable column of sections). A section is
+   `.tile.panel`; its heading is `h2.tile-title`; fields stay readable width. */
+.settings-page { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.settings-page.column { width: 100%; max-width: 64rem; }
+.panel { display: flex; flex-direction: column; gap: 14px; padding: calc(var(--tile-pad) + 2px); min-width: 0; }
+.panel > :is(h2, h3) { margin: 0; }
+.panel :is(p, fieldset) { margin: 0; }
+.panel fieldset { border: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.panel legend { float: left; width: 100%; padding: 0; margin-bottom: 2px; font-weight: 600; font-size: 0.875rem; }
+.panel .stack { display: flex; flex-direction: column; gap: 6px; max-width: 32rem; font-size: 0.875rem; }
+.panel .stack > span:first-child { color: var(--muted); }
+.panel .check { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; }
+.panel .check input { width: 18px; height: 18px; margin: 0; flex: none; }
+.panel .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.panel .divided { padding-top: 14px; border-top: 1px solid var(--panel-border); }

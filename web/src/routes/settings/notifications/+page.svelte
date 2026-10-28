@@ -123,7 +123,7 @@
 
 {#if draft}
 	<form onsubmit={save}>
-		<section class="tile">
+		<section class="tile panel">
 			<h2 class="tile-title">{t('notify.general')}</h2>
 			<div class="row">
 				<label class="narrow"><span>{t('notify.minSeverity')}</span>
@@ -142,7 +142,7 @@
 			</div>
 		</section>
 
-		<section class="tile">
+		<section class="tile panel">
 			<div class="head">
 				<h2 class="tile-title">{t('notify.email')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.email.enabled} /><span>{t('notify.enabled')}</span></label>
@@ -174,7 +174,7 @@
 			{@render testRow('email')}
 		</section>
 
-		<section class="tile">
+		<section class="tile panel">
 			<div class="head">
 				<h2 class="tile-title">{t('notify.ntfy')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.ntfy.enabled} /><span>{t('notify.enabled')}</span></label>
@@ -190,7 +190,7 @@
 			{@render testRow('ntfy')}
 		</section>
 
-		<section class="tile">
+		<section class="tile panel">
 			<div class="head">
 				<h2 class="tile-title">{t('notify.telegram')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.telegram.enabled} /><span>{t('notify.enabled')}</span></label>
@@ -206,7 +206,7 @@
 			{@render testRow('telegram')}
 		</section>
 
-		<section class="tile">
+		<section class="tile panel">
 			<div class="head">
 				<h2 class="tile-title">{t('notify.discord')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.discord.enabled} /><span>{t('notify.enabled')}</span></label>
@@ -221,7 +221,7 @@
 			{@render testRow('discord')}
 		</section>
 
-		<section class="tile">
+		<section class="tile panel">
 			<div class="head">
 				<h2 class="tile-title">{t('notify.homeassistant')}</h2>
 				<label class="check"><input type="checkbox" bind:checked={draft.homeAssistant.enabled} disabled={!haServices?.length && !draft.homeAssistant.enabled} /><span>{t('notify.enabled')}</span></label>
@@ -239,9 +239,9 @@
 			{@render testRow('homeassistant')}
 		</section>
 
-		<div class="actions">
-			{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
+		<div class="row-actions">
 			<button type="submit" class="btn btn-primary" disabled={busy !== null}>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button>
+			{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
 		</div>
 	</form>
 {/if}
@@ -253,14 +253,7 @@
 		gap: var(--gap);
 	}
 	section {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
-	}
-	section > p {
-		margin: 0;
 	}
 	.head {
 		display: flex;
@@ -295,17 +288,8 @@
 		flex-wrap: wrap;
 		gap: 16px 24px;
 	}
-	input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
 	.check {
 		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		font-size: 0.875rem;
 	}
 	.check > span {
 		color: var(--text);
@@ -332,13 +316,13 @@
 		margin: 0;
 		flex: 1 1 280px;
 	}
-	.actions {
+	.row-actions {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		justify-content: flex-end;
-		gap: 16px;
+		gap: 10px 16px;
 	}
-	.actions p {
+	.row-actions p {
 		margin: 0;
 	}
 	pre {

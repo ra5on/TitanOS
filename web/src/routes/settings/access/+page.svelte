@@ -157,9 +157,7 @@
 
 <PageHead title={t('access.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
-
-
-<section class="tile" aria-labelledby="access-ssh">
+<section class="tile panel" aria-labelledby="access-ssh">
 		<h2 class="tile-title" id="access-ssh" use:revealTarget>{t('access.ssh')}</h2>
 		{#if ssh}
 		<div class="head">
@@ -179,13 +177,13 @@
 			{#if ssh.accounts.length === 0}<p class="notice-warn">{t('access.sshNoKeys')} <a href="/account">{t('menu.account')}</a></p>{/if}
 			<p class="muted">{t('access.sshNote')}</p>
 		{/if}
-		<div class="networks">
+		<div class="networks divided">
 			<h3 id="access-ssh-networks">{t('access.sshNetworks')}</h3>
 			<p class="muted">{t('access.sshNetworksText')}</p>
 			<p>{ssh.allowedNetworks.length ? t('access.sshNetworksActive', { list: ssh.allowedNetworks.join(', ') }) : t('access.sshNetworksAll')}</p>
 			{#if ssh.networksError}<p class="notice-error" role="alert">{t('access.sshNetworksError', { detail: ssh.networksError })}</p>{/if}
 			<textarea class="field mono" rows="4" aria-labelledby="access-ssh-networks" placeholder="192.168.1.0/24" spellcheck="false" bind:value={netText} oninput={() => (netEdited = true)} disabled={netBusy}></textarea>
-			<div class="actions start">
+			<div class="row-actions">
 				<button type="button" class="btn" disabled={netBusy || ssh.homeNetworks.length === 0} title={ssh.homeNetworks.length ? ssh.homeNetworks.join(', ') : t('access.sshNetworksNoHome')} onclick={() => addPreset(ssh?.homeNetworks ?? [])}>{t('access.sshNetworksHome')}</button>
 				<button type="button" class="btn" disabled={netBusy} title={ssh.tailscaleNetworks.join(', ')} onclick={() => addPreset(ssh?.tailscaleNetworks ?? [])}>{t('access.sshNetworksTailscale')}</button>
 				<button type="button" class="btn" disabled={netBusy} title={ssh.netbirdNetworks.join(', ')} onclick={() => addPreset(ssh?.netbirdNetworks ?? [])}>{t('access.sshNetworksNetbird')}</button>
@@ -203,7 +201,7 @@
 		{#if sshStuck && ssh && ssh.enabled !== ssh.running}<div class="notice-warn" role="alert">{t(ssh.enabled ? 'access.sshNotStarted' : 'access.sshNotStopped')} <button class="btn" onclick={retrySsh}>{t('ui.retry')}</button></div>{/if}
 	</section>
 
-<section class="tile" aria-labelledby="access-cert">
+<section class="tile panel" aria-labelledby="access-cert">
 	<h2 class="tile-title" id="access-cert" use:revealTarget>{t('access.cert')}</h2>
 	{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}<button class="btn" onclick={loadCertificate}>{t('ui.retry')}</button></div>{/if}
 	{#if noTls}
@@ -223,24 +221,24 @@
 			<div class="wide"><dt>{t('access.certFingerprint')}</dt><dd class="mono small">{fingerprint}</dd></div>
 		</dl>
 		{#if replacing}
-			<form onsubmit={saveCertificate}>
+			<form class="divided" onsubmit={saveCertificate}>
 				<p class="muted">{t('access.certFormHint')}</p>
-				<label><span>{t('access.certChain')}</span>
+				<label class="stack"><span>{t('access.certChain')}</span>
 					<textarea class="field mono" bind:value={certPem} rows="6" placeholder="-----BEGIN CERTIFICATE-----" spellcheck="false" required></textarea>
 					<input type="file" accept=".pem,.crt,.cer,.txt" onchange={(event) => readFile(event, 'cert')} />
 				</label>
-				<label><span>{t('access.certKey')}</span>
+				<label class="stack"><span>{t('access.certKey')}</span>
 					<textarea class="field mono" bind:value={keyPem} rows="6" placeholder="-----BEGIN PRIVATE KEY-----" spellcheck="false" autocomplete="off" required></textarea>
 					<input type="file" accept=".pem,.key,.txt" onchange={(event) => readFile(event, 'key')} />
 				</label>
 				<p class="muted">{t('access.certKeyNote')}</p>
-				<div class="actions">
+				<div class="row-actions">
 					<button type="button" class="btn" onclick={() => ((replacing = false), (certPem = keyPem = ''), (error = null))} disabled={busy}>{t('common.cancel')}</button>
 					<button type="submit" class="btn btn-primary" disabled={busy}>{t('access.certUse')}</button>
 				</div>
 			</form>
 		{:else}
-			<div class="actions start">
+			<div class="row-actions">
 				<button type="button" class="btn" onclick={() => ((replacing = true), (saved = false))}>{t(certificate.kind === 'custom' ? 'access.certReplace' : 'access.certOwn')}</button>
 				{#if certificate.kind === 'custom'}<button type="button" class="btn" onclick={() => ((removing = true), (error = null))} disabled={busy}>{t('access.certRemove')}</button>{/if}
 			</div>
@@ -273,33 +271,13 @@
 
 <style>
 	section {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
-	}
-	p {
-		margin: 0;
-		max-width: 60rem;
 	}
 	.head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-	}
-	label.check {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		font-weight: 600;
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
 	}
 	dl {
 		display: grid;
@@ -311,8 +289,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding-top: 14px;
-		border-top: 1px solid var(--border);
 	}
 	.networks h3 {
 		margin: 0;
@@ -320,7 +296,6 @@
 	}
 	.networks textarea {
 		max-width: 32rem;
-		resize: vertical;
 	}
 	.wide {
 		grid-column: 1 / -1;
@@ -336,20 +311,10 @@
 	.small {
 		font-size: 0.75rem;
 	}
-	form,
-	label {
+	form {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-	}
-	form {
 		gap: 14px;
-		padding-top: 14px;
-		border-top: 1px solid var(--panel-border);
-	}
-	label > span {
-		font-size: 0.8125rem;
-		color: var(--muted);
 	}
 	textarea {
 		height: auto;
@@ -361,14 +326,6 @@
 		font: inherit;
 		font-size: 0.8125rem;
 		color: var(--muted);
-	}
-	.actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 10px;
-	}
-	.actions.start {
-		justify-content: flex-start;
 	}
 	pre {
 		margin: 6px 0 0;

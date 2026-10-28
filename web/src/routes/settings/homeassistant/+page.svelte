@@ -222,7 +222,7 @@
 
 {#if draft}
 	<form onsubmit={save}>
-		<section class="tile" id="connection">
+		<section class="tile panel" id="connection">
 			<div class="head">
 				<h2 class="tile-title">{t('ha.connection')}</h2>
 				<label class="check"
@@ -289,7 +289,7 @@
 			</div>
 		</section>
 
-		<section class="tile" id="release">
+		<section class="tile panel" id="release">
 			<h2 class="tile-title">{t('ha.release')}</h2>
 			<p class="muted">
 				{t('ha.releaseIntro')} <a href="/settings/assistant">{t('ha.releaseArea')}</a>
@@ -403,7 +403,7 @@
 			</div>
 		</section>
 
-		<section class="tile" id="account">
+		<section class="tile panel" id="account">
 			<h2 class="tile-title">{t('ha.account')}</h2>
 			<p>{t('ha.nasID')}: <span class="mono">{draft.mqtt.id ?? '—'}</span></p>
 			<p class="muted">{t('ha.accountIntro')}</p>
@@ -436,7 +436,7 @@
 				</p>{/if}
 		</section>
 
-		{#if diagnostics}<section class="tile">
+		{#if diagnostics}<section class="tile panel">
 				<h2 class="tile-title">{t('ha.diagnostics')}</h2>
 				<p>
 					{t('ha.lastConnected')}: {diagnostics.lastConnected &&
@@ -453,7 +453,7 @@
 				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>
 				<p class="muted">{t('ha.gaps')}</p>
 			</section>{/if}
-		<section class="tile" id="mqtt">
+		<section class="tile panel" id="mqtt">
 			<div class="head">
 				<h2 class="tile-title">{t('ha.mqtt')}</h2>
 				<label class="check"
@@ -612,14 +612,7 @@
 		gap: var(--gap);
 	}
 	section {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: 18px;
 		font-size: 0.875rem;
-	}
-	section > p {
-		margin: 0;
 	}
 	.head {
 		display: flex;
@@ -689,6 +682,7 @@
 		border: 0;
 	}
 	legend {
+		grid-column: 1 / -1;
 		margin-bottom: 8px;
 		color: var(--muted);
 		font-size: 0.8125rem;
