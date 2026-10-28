@@ -761,7 +761,9 @@ func renderSMBConf(shares []Share, path func(Share) string, shadow func(Share) s
 		{"disable netbios", "yes"},
 		{"smb ports", "445"},
 		{"logging", "systemd"},
-		{"log level", "1"},
+		// auth_audit:2 logs failed logins (with the client's address) for
+		// the firewall's automatic blocking; successes stay unlogged.
+		{"log level", "1 auth_audit:2"},
 		{"load printers", "no"},
 		{"printing", "bsd"},
 		{"printcap name", "/dev/null"},

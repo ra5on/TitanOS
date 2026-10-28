@@ -29,6 +29,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -84,7 +85,9 @@ type Options struct {
 	Tailscale    *tailscale.Manager
 	Netbird      *netbird.Manager
 	Network      *network.Manager
-	Notify       *notify.Manager
+	// Firewall is the packet filter; nil makes one that is off.
+	Firewall *firewall.Manager
+	Notify   *notify.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -183,6 +186,10 @@ func New(opts Options) *Server {
 	if s.opts.LXC == nil {
 		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
 		s.opts.LXC.Disabled = true
+	}
+	if s.opts.Firewall == nil {
+		s.opts.Firewall = firewall.NewManager(opts.Store)
+		s.opts.Firewall.Disabled = true
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -441,6 +448,14 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
+	// The packet filter; changes are on trial like network changes.
+	mux.HandleFunc("GET /api/v1/firewall", s.requireAdmin(s.handleFirewall))
+	mux.HandleFunc("PUT /api/v1/firewall", s.requireAdmin(s.handleFirewallChange))
+	mux.HandleFunc("POST /api/v1/firewall/confirm", s.requireAdmin(s.handleFirewallConfirm))
+	mux.HandleFunc("POST /api/v1/firewall/revert", s.requireAdmin(s.handleFirewallRevert))
+	mux.HandleFunc("PUT /api/v1/firewall/autoblock", s.requireAdmin(s.handleFirewallAutoBlock))
+	mux.HandleFunc("POST /api/v1/firewall/unblock", s.requireAdmin(s.handleFirewallUnblock))
+	mux.HandleFunc("DELETE /api/v1/firewall/recent", s.requireAdmin(s.handleFirewallClearRecent))
 	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))
 	mux.HandleFunc("POST /api/v1/notifications/dismiss", s.requireAdmin(s.handleDismissNotifications))
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 )
 
 // cookieName uses the __Host- prefix over HTTPS: browsers then only accept
@@ -180,6 +181,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.opts.Users.Verify(req.Name, req.Password)
 	if !ok {
 		s.limiter.Fail(userKey, ipKey)
+		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
 		s.recordEvent(r, req.Name, "login_failed", "", false)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "wrong name or password")
@@ -194,6 +196,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
 			s.limiter.Fail(userKey, ipKey)
+			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
 			s.recordEvent(r, req.Name, "login_failed", "2fa", false)
 			writeError(w, http.StatusUnauthorized, "invalid_code", "the code is wrong or was used already")

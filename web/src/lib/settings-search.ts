@@ -4,6 +4,13 @@ import type { IconName } from '#lib/components/Icon.svelte';
 const keywords: Record<string, string> = {
 	appearance: 'theme design farbe color font schrift hintergrund background',
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
+	firewall:
+		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
+	'firewall-apps': 'docker apps container port ports veröffentlicht published',
+	'firewall-rules': 'regel rule regeln rules eigene own erlauben allow verbieten deny',
+	'firewall-autoblock':
+		'auto block automatisch sperren blockieren fehlgeschlagen failed login anmeldung brute force',
+	'firewall-recent': 'gesperrt blocked verworfen dropped pakete packets zuletzt recent',
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access',
@@ -56,6 +63,12 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 	],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	firewall: [
+		{ id: 'firewall-apps', label: 'firewall.apps', href: '/settings/firewall#firewall-apps' },
+		{ id: 'firewall-rules', label: 'firewall.rules', href: '/settings/firewall#firewall-rules' },
+		{ id: 'firewall-autoblock', label: 'firewall.autoBlock', href: '/settings/firewall#firewall-autoblock' },
+		{ id: 'firewall-recent', label: 'firewall.recent', href: '/settings/firewall#firewall-recent' },
+	],
 	homeassistant: [
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
@@ -91,6 +104,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'firewall', label: 'firewall.title', group: 'network', icon: 'shield', admin: true },
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },

@@ -59,7 +59,15 @@ func (m *Manager) Handler(next http.Handler) http.Handler {
 			}
 		}
 		if !ok {
+			if m.Gate != nil && !m.Gate(r.RemoteAddr, false) {
+				http.Error(w, "The firewall of this NAS does not let your network reach its web interface.", http.StatusForbidden)
+				return
+			}
 			next.ServeHTTP(w, r)
+			return
+		}
+		if !tailnet && m.Gate != nil && !m.Gate(r.RemoteAddr, true) {
+			http.Error(w, "The firewall of this NAS does not let your network reach this app.", http.StatusForbidden)
 			return
 		}
 		// Through the tailnet, its own access rules decide; Serve has set

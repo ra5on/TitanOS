@@ -22,7 +22,7 @@ neu; API-Aufrufe schreiben nicht regelmäßig auf den USB-Stick.
 
 | Bereich | Freigegebene Aufrufe |
 |---|---|
-| `system:read` | System, Speicherstatus, Netzwerkstatus, Plugins, OpenAPI |
+| `system:read` | System, Speicherstatus, Netzwerkstatus, Firewall-Status, Plugins, OpenAPI |
 | `files:read` | eigene Shares/Dateiwurzeln, Liste, Download/Range, Eigenschaften, Text und eigene Kopieraufträge |
 | `files:write` | Ordner/kleine Textdatei anlegen, Kopieren/Verschieben, Umbenennen, Löschen und versionierter Texteditor |
 | `docker:read` | Docker-Status und Containerprotokolle |
@@ -30,13 +30,13 @@ neu; API-Aufrufe schreiben nicht regelmäßig auf den USB-Stick.
 | `vms:read` | VM-Status |
 | `vms:write` | Start, sauberes Herunterfahren, Neustart |
 
-Docker und VM benötigen weiterhin Besitzer-/Administratorrechte. Netzwerk-
-und Pluginstatus ebenfalls. Dateioperationen beachten aktuelle Share-Rechte;
+Docker und VM benötigen weiterhin Besitzer-/Administratorrechte. Netzwerk-,
+Firewall- und Pluginstatus ebenfalls. Dateioperationen beachten aktuelle Share-Rechte;
 Administratoren sehen zusätzlich ihre erlaubten erweiterten Dateiwurzeln.
 Ein `*:write`-Bereich schließt `*:read` nicht automatisch ein.
 
 Tokens öffnen weder Konten/Geheimnisse, Sitzungen oder Shells noch Updates,
-Netzwerkbestätigung, Assistent oder beliebige neue API-Routen. Verwaltung der
+Netzwerk- und Firewall-Bestätigung, Firewall-Änderungen, Assistent oder beliebige neue API-Routen. Verwaltung der
 Tokens selbst erfordert eine normale angemeldete Sitzung. Eine fehlerhafte
 Authorization-Kopfzeile fällt nicht auf Browser-Cookies zurück.
 

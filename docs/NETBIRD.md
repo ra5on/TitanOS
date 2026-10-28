@@ -124,8 +124,10 @@ Netzwerkstart über `titanos-firewall-open`; beim Stoppen wird die Regel
 entfernt. Weitergeleitete Pakete von `wt0` passieren `ts-forward` ohne Treffer
 und brauchen keine Regel. Einzelne Adressen beider Netze können sich im
 gemeinsamen Bereich überschneiden; dann den NetBird-Netzbereich in der
-NetBird-Verwaltung ändern. Eine spätere optionale Firewall muss NetBirds
-Tabellen, UDP 51820, ausgehendes HTTPS und `wt0` berücksichtigen.
+NetBird-Verwaltung ändern. Die optionale [Firewall](FIREWALL.md) fasst NetBirds
+Tabellen nicht an, zählt `wt0` zur Zone VPN, lässt UDP 51820 ab Werk aus allen
+Zonen zu (Dienst „VPN-Tunnel“), lässt von NetBird umgeleitetes DNS (`wt0`,
+`ct status dnat`) durch und filtert keinen ausgehenden Verkehr.
 
 **Weiterleitung:** Ist „Routing-Peer bzw. Exit Node zulassen“ eingeschaltet,
 schaltet `titanos-netbird-runtime` IPv4-/IPv6-Forwarding vor NetBird ein und

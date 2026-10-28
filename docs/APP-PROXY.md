@@ -3,8 +3,11 @@
 Eine Docker-App kann zusätzlich zu `http://<NAS>:<Port>` unter einem eigenen
 Namen erreichbar sein, z. B. `https://immich.nas.local`. Entscheidung des
 Projektinhabers: Weiterleitung durch titand selbst, Namen per mDNS (avahi),
-optional eine eigene Domain mit Platzhaltereintrag im DNS des Routers. Es gibt
-keine Firewall-Änderung und kein Let's Encrypt.
+optional eine eigene Domain mit Platzhaltereintrag im DNS des Routers. Die
+Weiterleitung ändert keine Firewall-Regeln und nutzt kein Let's Encrypt. Ist die
+[Firewall](FIREWALL.md) eingeschaltet, entscheidet ihr Dienst „HTTPS-Namen für
+Apps“ je Zone zusätzlich zu den erlaubten Netzen der Route (gleicher Port wie
+die Weboberfläche; titand unterscheidet am Namen).
 
 ## Bedienung
 
