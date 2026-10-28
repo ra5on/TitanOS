@@ -334,8 +334,16 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         request('/storage/volumes/mirror/snapshots', {'action': 'delete', 'name': 'before', 'confirm': 'before'})
                         assert request('/storage/volumes/mirror/snapshots') == []
                     if plugins:
-                        installed = {p['name']: p for p in request('/plugins')['plugins'] if p['installed']}
-                        assert all(installed[n]['active'] for n in ('intel-gpu-tools', 'coral-usb', *driver_plugins(plugins))), installed
+                        # Plugins load once the volume is mounted (degraded Btrfs: after its
+                        # wait); module plugins rebuild the RAM module index first.
+                        deadline = time.monotonic() + 90
+                        while True:
+                            installed = {p['name']: p for p in request('/plugins')['plugins'] if p['installed']}
+                            if all(installed[n]['active'] for n in ('intel-gpu-tools', 'coral-usb', *driver_plugins(plugins))):
+                                break
+                            if time.monotonic() > deadline:
+                                raise AssertionError({n: (p['active'], p['problem']) for n, p in installed.items()})
+                            time.sleep(2)
                         remote('for tool in /usr/bin/intel_gpu_top /usr/bin/intel_gpu_frequency; do test -x "$tool"; ! ldd "$tool" | grep -q "not found"; done; test -x /usr/bin/titanos-coral-info')
                         # Driver plugins load their modules without matching hardware, at every boot.
                         for name, modules in DRIVER_MODULES.items():
