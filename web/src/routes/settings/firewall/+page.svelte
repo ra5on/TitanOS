@@ -474,7 +474,7 @@
 		</div>
 	</section>
 
-	{#if dirty || error || notice}<div class="save-bar {dirty ? 'notice-warn' : ''}">
+	{#if dirty || error || notice}<div class="save-bar {dirty ? 'notice-warn pinned' : ''}">
 			{#if dirty}<p>{t(draft.enabled ? 'firewall.unsavedTrial' : 'firewall.unsaved')}</p>{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if notice}<p role="status">{notice}</p>{/if}
@@ -649,8 +649,11 @@
 	.table {
 		overflow-x: auto;
 	}
+	/* Narrow screens scroll the table sideways (inside .table) instead of
+	   squeezing names and ports into one letter per line. */
 	table {
 		width: 100%;
+		min-width: 34rem;
 		border-collapse: collapse;
 	}
 	th,
@@ -716,7 +719,9 @@
 	.numbers .stack {
 		flex: 1 1 10rem;
 	}
-	.save-bar {
+	/* Only unsaved changes stick to the bottom: a plain message has no
+	   background of its own and would float over the tables. */
+	.save-bar.pinned {
 		position: sticky;
 		bottom: 12px;
 		z-index: 2;
