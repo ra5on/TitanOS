@@ -402,3 +402,24 @@ func (s *Server) confirmed(r *http.Request) bool {
 	cookie, err := r.Cookie(s.cookieName())
 	return err == nil && s.sessions.Confirmed(cookie.Value)
 }
+
+// handleAutoUpdates shows the automatic app updates.
+func (s *Server) handleAutoUpdates(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.opts.Docker.AutoUpdates())
+}
+
+func (s *Server) handleAutoUpdatesSet(w http.ResponseWriter, r *http.Request) {
+	var req docker.AutoUpdateSettings
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Docker.SetAutoUpdates(req); err != nil {
+		if errors.Is(err, docker.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, "invalid_auto_update", err.Error())
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.opts.Docker.AutoUpdates())
+}

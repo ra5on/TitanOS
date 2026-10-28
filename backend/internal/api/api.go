@@ -433,6 +433,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireHeavyAdmin(s.handleAppUpdate))
 	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/job", s.requireAdmin(s.handleAppJobDismiss))
 	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
+	mux.HandleFunc("GET /api/v1/docker/auto-update", s.requireAdmin(s.handleAutoUpdates))
+	mux.HandleFunc("PUT /api/v1/docker/auto-update", s.requireAdmin(s.handleAutoUpdatesSet))
 	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
 	mux.HandleFunc("GET /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxy))

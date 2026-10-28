@@ -161,6 +161,13 @@ type Manager struct {
 	api    *client
 	// Disabled leaves the system alone. Set in development mode.
 	Disabled bool
+	// Timezone names the time zone of the NAS for the update window.
+	Timezone func() string
+	// ExternalBusy holds automatic updates back while other NAS work runs.
+	ExternalBusy func() bool
+	// OnEvent reports automatic updates (notifications).
+	OnEvent func(severity, kind, subject string)
+	auto    autoUpdates
 	// configDir is where /config lives, for the paths given to docker compose.
 	configDir    string
 	mountRoot    string

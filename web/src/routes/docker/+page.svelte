@@ -9,6 +9,7 @@
 	import { dockerName } from '#lib/docker-name.ts';
 	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import AutoUpdateDialog from './AutoUpdateDialog.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
@@ -35,6 +36,7 @@
  const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 	let status = $state<DockerStatus | null>(null);
+	let autoUpdates = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	// What has a request on its way: `container:<id>`, `app:<name>` or `global`
 	// for actions on everything. Other cards stay usable meanwhile.
@@ -397,6 +399,7 @@
 			{#if updatable}
 				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}>{t('docker.updateAll')}</button>
 			{/if}
+			<button type="button" class="btn" onclick={() => (autoUpdates = true)} disabled={!status.running}>{t('autoUpdate.button')}</button>
 			<a class="btn btn-primary" href="/apps">{t('docker.installApp')}</a>
 		{/if}
 	{/snippet}
@@ -704,6 +707,8 @@
 		</form>
 	</Dialog>
 {/if}
+
+{#if autoUpdates}<AutoUpdateDialog apps={[...new Set(containers.filter((c) => c.managed && c.app).map((c) => c.app))].sort()} onclose={() => (autoUpdates = false)} />{/if}
 
 <style>
  .stack-links{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px}.stack-links .small{min-height:30px;padding:4px 8px;font-size:.75rem}.stack-problems{color:var(--warn-text)}.missing-primary{font-size:.75rem;padding:3px 6px}.matches{font-size:.75rem}.field-row{display:flex;flex-direction:column;gap:6px}.notice-warn{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
