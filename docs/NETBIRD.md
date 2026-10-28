@@ -110,8 +110,9 @@ global offenen TitanOS-Freigabe: In nftables beendet ein `accept` in einer
 anderen Tabelle die Prüfung nicht, ein `drop` der NetBird-Tabelle wirkt immer.
 Zusätzlich setzt NetBird `-i wt0 -j ACCEPT` an den Anfang von `INPUT`/`FORWARD`
 der iptables-Tabelle `filter`; `titanos-firewall-open` stellt seine Freigabe
-davor, was nichts ändert, weil beide annehmen. Docker-NAT, `DOCKER-USER` und
-`nftables.service` (maskiert) bleiben unberührt; NetBird entfernt seine Tabellen
+davor, was nichts ändert, weil beide annehmen. Docker-NAT, `DOCKER-USER` (bis
+auf den Sprung der Firewall in ihre Kette `TITANOS-FWD`, siehe
+[Firewall](FIREWALL.md)) und `nftables.service` (maskiert) bleiben unberührt; NetBird entfernt seine Tabellen
 beim Beenden selbst.
 
 Ein eigener Hook ist nur für das Zusammenspiel mit Tailscale nötig: Tailscales
