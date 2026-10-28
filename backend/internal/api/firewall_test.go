@@ -18,8 +18,19 @@ func TestFirewallRoutes(t *testing.T) {
 	}
 	var status struct {
 		Config struct {
-			Enabled   bool                       `json:"enabled"`
-			Services  map[string]map[string]bool `json:"services"`
+			Enabled bool `json:"enabled"`
+			Zones   []struct {
+				ID      string `json:"id"`
+				Builtin bool   `json:"builtin"`
+			} `json:"zones"`
+			Cells []struct {
+				From     string `json:"from"`
+				To       string `json:"to"`
+				Default  string `json:"default"`
+				Policies []struct {
+					Service string `json:"service"`
+				} `json:"policies"`
+			} `json:"cells"`
 			AutoBlock struct {
 				Enabled bool `json:"enabled"`
 			} `json:"autoBlock"`
@@ -27,8 +38,9 @@ func TestFirewallRoutes(t *testing.T) {
 		Services []struct {
 			ID string `json:"id"`
 		} `json:"services"`
-		Blocked []any `json:"blocked"`
-		Recent  []any `json:"recent"`
+		Blocked  []any `json:"blocked"`
+		Recent   []any `json:"recent"`
+		Networks []any `json:"networks"`
 	}
 	if err := json.Unmarshal(body, &status); err != nil {
 		t.Fatal(err)
@@ -37,8 +49,29 @@ func TestFirewallRoutes(t *testing.T) {
 	if status.Config.Enabled || status.Config.AutoBlock.Enabled || status.Blocked == nil || status.Recent == nil {
 		t.Errorf("defaults: %s", body)
 	}
-	if !status.Config.Services["discovery"]["home"] || status.Config.Services["discovery"]["vpn"] || status.Config.Services["webui"]["internet"] {
-		t.Errorf("default matrix: %v", status.Config.Services)
+	var zones []string
+	for _, z := range status.Config.Zones {
+		if z.Builtin {
+			zones = append(zones, z.ID)
+		}
+	}
+	if !slices.Equal(zones, []string{"home", "vpn", "internet", "docker"}) || status.Networks == nil {
+		t.Errorf("zones: %s", body)
+	}
+	allowed := func(from, service string) bool {
+		for _, c := range status.Config.Cells {
+			if c.From == from && c.To == "nas" {
+				for _, p := range c.Policies {
+					if p.Service == service {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+	if !allowed("home", "discovery") || allowed("vpn", "discovery") || allowed("internet", "webui") || !allowed("docker", "apps") || allowed("docker", "smb") {
+		t.Errorf("default matrix: %s", body)
 	}
 	if !slices.ContainsFunc(status.Services, func(s struct {
 		ID string `json:"id"`

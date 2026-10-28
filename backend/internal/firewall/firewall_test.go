@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"maps"
 	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,17 +19,66 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
-// fakeNft records the scripts and answers like nft.
+// fakeNft records the scripts and answers like nft; iptables calls are
+// recorded and answered like a filter table with Docker's DOCKER-USER
+// (when docker is set).
 type fakeNft struct {
 	mu      sync.Mutex
 	scripts []string
 	fail    bool
 	listErr bool
+	docker  bool
+	ipt     []string
+	chains  map[string]bool
+	jump    map[string]bool
+}
+
+func (f *fakeNft) iptables(name string, args []string) (string, error) {
+	f.ipt = append(f.ipt, name+" "+strings.Join(args, " "))
+	if f.chains == nil {
+		f.chains, f.jump = map[string]bool{}, map[string]bool{}
+	}
+	if len(args) < 2 || args[0] != "-w" {
+		return "", errors.New("no -w")
+	}
+	op, chain := args[1], ""
+	if len(args) > 2 {
+		chain = name + ":" + args[2]
+	}
+	exists := f.chains[chain] || (strings.HasSuffix(chain, ":DOCKER-USER") && f.docker)
+	switch op {
+	case "-L", "-F", "-A":
+		if !exists {
+			return "", errors.New("No chain/target/match by that name")
+		}
+	case "-N":
+		f.chains[chain] = true
+	case "-X":
+		delete(f.chains, chain)
+	case "-C":
+		if !f.jump[name] {
+			return "", errors.New("Bad rule")
+		}
+	case "-I":
+		if !exists {
+			return "", errors.New("No chain")
+		}
+		f.jump[name] = true
+	case "-D":
+		if !f.jump[name] {
+			return "", errors.New("Bad rule")
+		}
+		f.jump[name] = false
+	}
+	return "", nil
 }
 
 func (f *fakeNft) Run(_ context.Context, stdin string, name string, args ...string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if name == "iptables" || name == "ip6tables" {
+		return f.iptables(name, args)
+	}
 	if name != "nft" {
 		return "", errors.New("unexpected command " + name)
 	}
@@ -67,19 +116,28 @@ func newTestManager(t *testing.T) (*Manager, *fakeNft, *config.Store) {
 	return m, nft, store
 }
 
-func sampleRuleset() ruleset {
-	cfg := Defaults()
-	cfg.Enabled = true
-	cfg.Apps["jellyfin"] = Zones{Home: true, VPN: true, Internet: true}
-	cfg.Apps["container:pihole"] = Zones{Home: true}
-	cfg.Rules = []Rule{
+// sampleLegacy are settings of version 1 (the source of testdata/
+// enabled.nft, which version 1 rendered).
+func sampleLegacy() legacyConfig {
+	old := emptyFile().legacyConfig
+	old.Enabled = true
+	old.Services = map[string]Zones{}
+	for _, s := range Services(nil) {
+		old.Services[s.ID] = s.Default
+	}
+	old.Apps = map[string]Zones{"jellyfin": {Home: true, VPN: true, Internet: true}, "container:pihole": {Home: true}}
+	old.Rules = []Rule{
 		{Action: "allow", Protocol: "tcp", Ports: "8443", Source: "203.0.113.0/24", Comment: "office"},
 		{Action: "deny", Protocol: "any", Source: "192.168.1.66", Zone: Home},
 		{Action: "allow", Protocol: "udp", Ports: "60000-60100", Zone: Internet},
 		{Action: "allow", Protocol: "any", Ports: "9000", Disabled: true},
 	}
+	return old
+}
+
+func sampleRuleset() ruleset {
 	return ruleset{
-		cfg:  normal(cfg),
+		cfg:  migrate(sampleLegacy()),
 		web:  WebPorts{HTTP: 80, HTTPS: 443},
 		home: homeNetworks([]string{"192.168.1.0/24", "2001:db8:1:2::/64"}),
 		apps: []App{
@@ -111,8 +169,59 @@ func golden(t *testing.T, name, got string) {
 	}
 }
 
+// withPolicies puts policies in front of a cell.
+func withPolicies(cfg Config, from Zone, to string, policies ...Policy) Config {
+	cfg = clone(cfg)
+	c := cfg.Cell(from, to)
+	c.Policies = append(slices.Clone(policies), c.Policies...)
+	cfg.setCell(c)
+	return cfg
+}
+
+// withService allows or removes a service in a cell to the NAS.
+func withService(cfg Config, from Zone, id string, allow bool) Config {
+	cfg = clone(cfg)
+	c := cfg.Cell(from, ToNAS)
+	c.Policies = slices.DeleteFunc(slices.Clone(c.Policies), func(p Policy) bool { return p.Service == id })
+	if allow {
+		c.Policies = append(c.Policies, Policy{Action: Allow, Protocol: "any", Service: id})
+	}
+	cfg.setCell(c)
+	return cfg
+}
+
+// sortAppRuns sorts each run of lines for apps in a chain: their ports
+// never overlap, so their order does not change what the rules do.
+func sortAppRuns(script string) string {
+	lines := strings.Split(script, "\n")
+	for i := 0; i < len(lines); {
+		j := i
+		for j < len(lines) && strings.Contains(lines[j], `comment "app `) {
+			j++
+		}
+		if j > i {
+			slices.Sort(lines[i:j])
+			i = j
+			continue
+		}
+		i++
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestRenderGolden(t *testing.T) {
-	golden(t, "enabled.nft", render(sampleRuleset()))
+	// testdata/enabled.nft is what version 1 rendered from sampleLegacy;
+	// it is never rewritten. Migrated to version 2, the same settings must
+	// filter the same way: equal but for the order of app lines.
+	v1, err := os.ReadFile(filepath.Join("testdata", "enabled.nft"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := render(sampleRuleset())
+	if sortAppRuns(got) != sortAppRuns(string(v1)) {
+		t.Errorf("migrated settings render differently from version 1:\n%s", got)
+	}
+	golden(t, "migrated.nft", got)
 
 	blocksOnly := sampleRuleset()
 	blocksOnly.cfg.Enabled = false
@@ -173,7 +282,7 @@ func TestRealNft(t *testing.T) {
 	}
 	blocksOnly := sampleRuleset()
 	blocksOnly.cfg.Enabled = false
-	for name, script := range map[string]string{"enabled": render(sampleRuleset()), "blocks-only": render(blocksOnly), "off": offScript(), "defaults": render(ruleset{cfg: func() Config { c := Defaults(); c.Enabled = true; return c }(), home: homeNetworks(nil)})} {
+	for name, script := range map[string]string{"enabled": render(sampleRuleset()), "blocks-only": render(blocksOnly), "off": offScript(), "zones": render(zonesRuleset()), "defaults": render(ruleset{cfg: func() Config { c := Defaults(); c.Enabled = true; return c }(), home: homeNetworks(nil)})} {
 		cmd := exec.Command(unshare, "-rn", nft, "-f", "-")
 		cmd.Stdin = strings.NewReader(script)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -213,30 +322,54 @@ func TestClassify(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	ok := normal(Defaults())
-	ok.Rules = []Rule{{Action: "ALLOW", Protocol: "tcp", Ports: "1-65535", Source: "2001:db8::/32"}}
-	if err := validate(normal(ok)); err != nil {
+	ok := withPolicies(Defaults(), Home, ToNAS, Policy{Action: "ALLOW", Protocol: "tcp", Ports: "1-65535", Source: "2001:db8::/32"})
+	ok.Zones = append(ok.Zones, ZoneDef{ID: "ziot", Name: "IoT", Networks: []string{"net:iot", "docker:media"}, Sources: []string{"10.9.0.0/24"}})
+	ok = normal(ok)
+	if err := validate(ok); err != nil {
 		t.Fatal(err)
 	}
-	for name, r := range map[string]Rule{
-		"action":  {Action: "reject", Protocol: "tcp"},
-		"proto":   {Action: "allow", Protocol: "sctp"},
-		"port":    {Action: "allow", Protocol: "tcp", Ports: "70000"},
-		"range":   {Action: "allow", Protocol: "tcp", Ports: "90-80"},
-		"source":  {Action: "allow", Protocol: "tcp", Source: "example.org"},
-		"zone":    {Action: "allow", Protocol: "tcp", Zone: "dmz"},
-		"comment": {Action: "allow", Protocol: "tcp", Comment: `a"b`},
+	if !ok.Hosted("ziot") || ok.Cell("ziot", "docker").Default != Deny || ok.Cell("ziot", string(Internet)).Default != Allow {
+		t.Error("an own zone with a Docker network gets cells to the other zones")
+	}
+	for name, c := range map[string]struct {
+		to string
+		p  Policy
+	}{
+		"action":      {ToNAS, Policy{Action: "reject", Protocol: "tcp"}},
+		"proto":       {ToNAS, Policy{Action: "allow", Protocol: "sctp"}},
+		"port":        {ToNAS, Policy{Action: "allow", Protocol: "tcp", Ports: "70000"}},
+		"range":       {ToNAS, Policy{Action: "allow", Protocol: "tcp", Ports: "90-80"}},
+		"source":      {ToNAS, Policy{Action: "allow", Protocol: "tcp", Source: "example.org"}},
+		"comment":     {ToNAS, Policy{Action: "allow", Protocol: "tcp", Comment: `a"b`}},
+		"service":     {ToNAS, Policy{Action: "allow", Service: "telnet"}},
+		"app at nas":  {ToNAS, Policy{Action: "allow", App: "immich"}},
+		"app key":     {ToApps, Policy{Action: "allow", App: "bad name;"}},
+		"destination": {ToApps, Policy{Action: "allow", Protocol: "any", Destination: "10.0.0.1"}},
 	} {
-		cfg := normal(Defaults())
-		cfg.Rules = []Rule{r}
-		if err := validate(normal(cfg)); !errors.Is(err, ErrInvalid) {
+		if err := validate(normal(withPolicies(Defaults(), Home, c.to, c.p))); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	cfg := normal(Defaults())
-	cfg.Apps["bad name;"] = Zones{}
-	if !errors.Is(validate(cfg), ErrInvalid) {
-		t.Error("app key not checked")
+	for name, z := range map[string]ZoneDef{
+		"id":       {ID: "dmz", Name: "DMZ"},
+		"name":     {ID: "zdmz", Name: ""},
+		"quotes":   {ID: "zdmz", Name: `a"b`},
+		"network":  {ID: "zdmz", Name: "DMZ", Networks: []string{"eth0"}},
+		"source":   {ID: "zdmz", Name: "DMZ", Sources: []string{"nas"}},
+		"twice":    {ID: "zdmz", Name: "DMZ", Networks: []string{"net:iot"}},
+		"builtins": {ID: Home, Networks: []string{"net:iot"}},
+	} {
+		cfg := Defaults()
+		cfg.Zones = append(cfg.Zones, ZoneDef{ID: "zfirst", Name: "First", Networks: []string{"net:iot"}}, z)
+		cfg = normal(cfg)
+		if name == "builtins" {
+			// normal drops networks of built-in zones; validate refuses
+			// them where they come in anyway.
+			cfg.Zones[0].Networks = []string{"net:iot"}
+		}
+		if err := validate(cfg); !errors.Is(err, ErrInvalid) {
+			t.Errorf("zone %s: %v", name, err)
+		}
 	}
 }
 
@@ -293,7 +426,7 @@ func TestChangeOnTrialAndRollback(t *testing.T) {
 	}
 
 	// Revert gives up at once; switching off needs no trial.
-	cfg.Services["ssh"] = Zones{}
+	cfg = withService(cfg, Home, "ssh", false)
 	if err := m.Change(context.Background(), cfg, "192.168.1.20"); err != nil {
 		t.Fatal(err)
 	}
@@ -321,17 +454,41 @@ func TestChangeRefusesToLockOutTheAdmin(t *testing.T) {
 	if err := m.Change(context.Background(), cfg, "203.0.113.5"); !errors.Is(err, ErrExcludesYou) {
 		t.Errorf("internet admin: %v", err)
 	}
-	cfg.Rules = []Rule{{Action: "deny", Protocol: "tcp", Ports: "443", Source: "192.168.1.20"}}
-	if err := m.Change(context.Background(), cfg, "192.168.1.20"); !errors.Is(err, ErrExcludesYou) {
-		t.Errorf("own deny rule: %v", err)
+	deny := withPolicies(cfg, Home, ToNAS, Policy{Action: "deny", Protocol: "tcp", Ports: "443", Source: "192.168.1.20"})
+	if err := m.Change(context.Background(), deny, "192.168.1.20"); !errors.Is(err, ErrExcludesYou) {
+		t.Errorf("own deny policy: %v", err)
 	}
-	cfg.Rules = []Rule{{Action: "allow", Protocol: "tcp", Ports: "443", Source: "203.0.113.0/24"}}
-	if err := m.Change(context.Background(), cfg, "203.0.113.5"); err != nil {
-		t.Errorf("an own allow rule should do: %v", err)
+	if err := m.Change(context.Background(), withService(cfg, Home, "webui", false), "192.168.1.20"); !errors.Is(err, ErrExcludesYou) {
+		t.Errorf("web UI not allowed: %v", err)
+	}
+	// Only the name of the web UI is denied: titand refuses it by name.
+	byName := withPolicies(cfg, Home, ToNAS, Policy{Action: "deny", Service: "webui"})
+	if err := m.Change(context.Background(), byName, "192.168.1.20"); !errors.Is(err, ErrExcludesYou) {
+		t.Errorf("web UI denied by name: %v", err)
+	}
+	allow := withPolicies(cfg, Internet, ToNAS, Policy{Action: "allow", Protocol: "tcp", Ports: "443", Source: "203.0.113.0/24"})
+	if err := m.Change(context.Background(), allow, "203.0.113.5"); err != nil {
+		t.Errorf("an own allow policy should do: %v", err)
 	}
 	m.Revert(context.Background())
+
+	// An own zone with the admin's network: its cell decides.
+	m.networks = []Network{{ID: "net:lan", Kind: KindNetwork, Name: "LAN", Device: "br0", Subnets: []string{"192.168.1.0/24"}}}
+	own := cfg
+	own.Zones = append(slices.Clone(cfg.Zones), ZoneDef{ID: "zlan", Name: "LAN", Networks: []string{"net:lan"}})
+	if err := m.Change(context.Background(), own, "192.168.1.20"); !errors.Is(err, ErrExcludesYou) {
+		t.Errorf("own zone without the web UI: %v", err)
+	}
+	own = withService(normal(own), "zlan", "webui", true)
+	if err := m.Change(context.Background(), own, "192.168.1.20"); err != nil {
+		t.Errorf("own zone with the web UI: %v", err)
+	}
+	if !strings.Contains(nft.last(), `iifname "br0" ip saddr 192.168.1.0/24 goto zlan`) {
+		t.Errorf("own zone not in the rules:\n%s", nft.last())
+	}
+	m.Revert(context.Background())
+	m.networks = nil
 	nft.fail = true
-	cfg.Rules = nil
 	if err := m.Change(context.Background(), cfg, "192.168.1.20"); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("nft failing: %v", err)
 	}
@@ -348,8 +505,8 @@ func TestAllowHTTP(t *testing.T) {
 	}
 	cfg := Defaults()
 	cfg.Enabled = true
-	cfg.Services["webui"] = Zones{Home: true}
-	cfg.Services["apps"] = Zones{Home: true, VPN: true, Internet: true}
+	cfg = withService(cfg, VPN, "webui", false)
+	cfg = withService(cfg, Internet, "apps", true)
 	if err := m.Change(context.Background(), cfg, "192.168.1.20"); err != nil {
 		t.Fatal(err)
 	}
@@ -618,31 +775,26 @@ func TestInternetHTTP(t *testing.T) {
 	if internetReaches(cfg, services, "tcp", 80) {
 		t.Error("the defaults block port 80 from the internet")
 	}
-	allow := Rule{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Internet}
+	allow := Policy{Action: "allow", Protocol: "tcp", Ports: "80"}
 	for _, c := range []struct {
-		name  string
-		rules []Rule
-		want  bool
+		name     string
+		policies []Policy
+		want     bool
 	}{
-		{"own rule", []Rule{allow}, true},
-		{"range of any protocol in all zones", []Rule{{Action: "allow", Protocol: "any", Ports: "79-81"}}, true},
-		{"only one source", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Source: "203.0.113.7", Zone: Internet}}, false},
-		{"disabled", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Internet, Disabled: true}}, false},
-		{"other zone", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Home}}, false},
-		{"deny before", []Rule{{Action: "deny", Protocol: "tcp", Ports: "80"}, allow}, false},
-		{"udp", []Rule{{Action: "allow", Protocol: "udp", Ports: "80", Zone: Internet}}, false},
+		{"own policy", []Policy{allow}, true},
+		{"range of any protocol", []Policy{{Action: "allow", Protocol: "any", Ports: "79-81"}}, true},
+		{"only one source", []Policy{{Action: "allow", Protocol: "tcp", Ports: "80", Source: "203.0.113.7"}}, false},
+		{"disabled", []Policy{{Action: "allow", Protocol: "tcp", Ports: "80", Disabled: true}}, false},
+		{"deny before", []Policy{{Action: "deny", Protocol: "tcp", Ports: "80"}, allow}, false},
+		{"udp", []Policy{{Action: "allow", Protocol: "udp", Ports: "80"}}, false},
+		{"web UI", []Policy{{Action: "allow", Service: "webui"}}, true},
 	} {
-		with := cfg
-		with.Rules = c.rules
-		if got := internetReaches(with, services, "tcp", 80); got != c.want {
+		if got := internetReaches(normal(withPolicies(cfg, Internet, ToNAS, c.policies...)), services, "tcp", 80); got != c.want {
 			t.Errorf("%s: got %v", c.name, got)
 		}
 	}
-	web := cfg
-	web.Services = maps.Clone(cfg.Services)
-	web.Services["webui"] = Zones{Home: true, VPN: true, Internet: true}
-	if !internetReaches(web, services, "tcp", 80) {
-		t.Error("web UI allowed from the internet opens port 80")
+	if internetReaches(normal(withPolicies(cfg, Home, ToNAS, allow)), services, "tcp", 80) {
+		t.Error("a policy of another zone opened port 80")
 	}
 
 	m := &Manager{}
