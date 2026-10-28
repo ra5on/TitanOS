@@ -1,5 +1,6 @@
 <script lang="ts">
 	import PushDevices from '#lib/components/PushDevices.svelte';
+	import HealthReport from '#lib/components/HealthReport.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -123,6 +124,7 @@
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}{#if !draft} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>{/if}</div>{/if}
 
 <PushDevices />
+<HealthReport />
 
 {#if draft}
 	<form onsubmit={save}>
