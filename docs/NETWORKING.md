@@ -1,8 +1,11 @@
 # Netzwerk, VLANs, Bonds und Anwendungen
 
-Ab 0.23.0 kann TitanOS mehrere benannte NAS-Netze verwalten. Bestehende NAS
-behalten ihre gespeicherte Konfiguration, bis unter **Einstellungen › Netzwerk**
-ausdrücklich „Mehrere Netze einrichten“ gewählt wird. Router, DHCP-Server und
+Ab 0.23.0 kann TitanOS mehrere benannte NAS-Netze verwalten. Seit der
+Überarbeitung der Seite **Einstellungen › Netzwerk** gibt es nur noch diese
+Ansicht; die frühere Einzelnetz-Ansicht entfällt. Bestehende NAS behalten ihre
+gespeicherte Konfiguration unverändert in Betrieb, die Seite zeigt sie bereits
+als benanntes Netz (siehe [Übernahme bestehender Einstellungen](#übernahme-bestehender-einstellungen)).
+Router, DHCP-Server und
 übergreifende Zugriffsregeln bleiben extern. TitanOS wird dadurch kein Router
 oder DHCP-Server. Was das NAS selbst annimmt, regelt die eigene, ab Werk
 ausgeschaltete [Firewall](FIREWALL.md).
@@ -37,6 +40,73 @@ damit ihre vorherige Konfiguration. Benannte VM-Netze werden für alte Versionen
 mit deaktiviertem Autostart gespeichert. Beim aktuellen Laden wird der
 Autostartwunsch wiederhergestellt; nach einem Rückfall benannte Netze vor
 manuellem VM-Start prüfen.
+
+### Aufbau der Seite
+
+- **Übersicht:** Kachel „System“ mit dem Namen des NAS (`PUT /api/v1/system/hostname`,
+  sofort wirksam, nicht Teil des Entwurfs, während einer Probe gesperrt) und
+  der Zeitzone (Link zu Datum und Uhrzeit). Darunter je Netz eine Karte mit
+  Zweck, Zustand (verbunden, ohne Adresse, kein Link oder „noch nicht
+  übernommen“), Verbindung und tatsächlicher Schnittstelle, aktuellen Adressen,
+  IPv4/IPv6-Modus, Gateway und DNS. Das Menü „⋯“ bietet Bearbeiten, Diagnose
+  und Entfernen; das bevorzugte Verwaltungsnetz lässt sich nicht entfernen.
+  Der Suchtreffer „DNS“ springt zur DNS-Zeile des Verwaltungsnetzes
+  (`#network-dns`).
+- **Schnittstellen:** Anschlüsse mit Link, Tempo, MAC und „Verwendet von“
+  (Bond oder Netze direkt am Anschluss); Bonds mit übersetztem Modus,
+  Bearbeiten und Entfernen. Ein Bond, auf dem noch ein Netz liegt, lässt sich
+  nicht entfernen; ein Anschluss, der ein Netz direkt trägt, nicht in einen
+  Bond aufnehmen.
+- **Diagnose** (siehe unten) und **Fernzugriff**: Tailscale und NetBird mit
+  ihren vollständigen Plugin-Einstellungen, sobald das Plugin installiert ist,
+  sonst ein Verweis auf Plugins; dazu Verweise auf HTTPS-Namen, App-Links,
+  dynamisches DNS und IPv64.
+- Der Editor eines Netzes gliedert sich in Allgemein, IPv4, IPv6 (Modus jeweils
+  als Umschalter), DNS und Routen. DNS-Server werden als einzelne Einträge
+  gesammelt; Leerzeichen, Komma oder Semikolon trennen (höchstens drei).
+  Änderungen landen im Entwurf; erst „Prüfen und testen“ schickt den ganzen
+  Entwurf an `PUT /api/v1/network` und startet die Probe. Der gewählte Reiter
+  steht in `?tab=`.
+- `GET /api/v1/network` liefert zusätzlich `live` (je Netz-ID Schnittstelle,
+  Link und globale Adressen, aus einem einzigen `ip -j address show`) und
+  `migrated` (siehe nächster Abschnitt).
+
+### Übernahme bestehender Einstellungen
+
+Eine `network.json` ohne `networks[]` (alle NAS aus der Zeit der
+Einzelnetz-Ansicht und ohne gespeicherte Netzwerkeinstellung) wird beim Lesen
+des Status in genau ein bevorzugtes Verwaltungsnetz übersetzt (`migrateLegacy`
+in `internal/network/migrate.go`):
+
+- Kennung `admin`, Name „LAN“, Zweck Verwaltung, dieselbe VLAN-ID und Bridge.
+- Mehrere Anschlüsse werden der Bond `uplink` mit demselben Modus und derselben
+  Reihenfolge der Ports; ein Anschluss bleibt direkter Anschluss. Ohne
+  gespeicherten Anschluss (jeder Port per DHCP) wird der Port mit der
+  Standardroute gewählt, sonst der erste mit Kabel.
+- DHCP wird IPv4 DHCP und IPv6 DHCPv6/RA (networkd `DHCP=yes` fragte beides),
+  eine feste Adresse bleibt fest mit Gateway und IPv6 SLAAC/RA. DNS-Server
+  bleiben.
+
+Diese Fassung ist nur Anzeige und Entwurf (`migrated: true`): titand legt
+weiter die bisherigen networkd-Dateien an, VMs, Container und Docker sehen
+weiter die bisherige Konfiguration, und auf den Stick wird nichts geschrieben.
+Gespeichert wird erst, wenn eine Änderung über „Prüfen und testen“ auf Probe
+geht und über die neue Verwaltungsadresse bestätigt wird: dann entsteht
+`topology.json`, die bestätigte alte Fassung landet in `last-good.json`,
+`network.json` bleibt für ältere Systemslots unverändert. Ohne Bestätigung
+kehrt die alte Konfiguration zurück. Die Bridge des Verwaltungsnetzes heißt
+weiter `br0` und übernimmt die MAC des ersten Ports; VMs und LXC an `br0`
+behalten so Anschluss, VLAN und DHCP-Adresse. Untere Schnittstellen bekommen
+dabei die Namen der Netz-Topologie (`tbuplink` statt `bond0`, `tvadmin` statt
+`vlan<ID>`), was während der Probe kurz die Verbindung unterbrechen kann.
+Legacy-Felder werden in `topology.json` nicht mehr geschrieben;
+`GET /api/v1/network` liefert sie für ältere Leser weiter, solange
+`network.json` gilt. Ältere Clients können weiterhin eine reine
+Legacy-Konfiguration an `PUT /api/v1/network` schicken, solange keine
+Topologie bestätigt ist (`POST /api/v1/network/bridge` nutzt diesen Weg).
+Geprüft mit Unit-Tests (`migrate_test.go`): Übersetzung, gleiche Bridge-Datei,
+Schutz für Legacy-VMs, Status ohne Systemänderung, Probe/Zurücknehmen und
+Bestätigen samt Dateien; echte Hardware mit Bond/VLAN nicht.
 
 ### Probelauf und lokale Rettung
 
@@ -97,7 +167,9 @@ sind nicht durch einen QEMU-Test abgedeckt.
 
 ### Fernzugriff und Diagnose
 
-Der Reiter Fernzugriff verlinkt Tailscale und zeigt den bekannten Tailnet-Stand.
+Der Reiter Fernzugriff zeigt die Einstellungen der installierten Tailscale-
+und NetBird-Plugins (dieselben Komponenten wie unter Plugins, mit ihren
+eigenen Fristen) und verlinkt sonst die Plugin-Seite.
 Bestehende Tailscale-Hooks und Docker-NAT/Portweiterleitungen bleiben erhalten.
 Das NetBird-Plugin filtert in eigenen nftables-Tabellen; sein einziger Hook
 nimmt `wt0` vor den Tailscale-Hooks an (siehe [NetBird](NETBIRD.md)).
@@ -106,7 +178,10 @@ eine URL richtet keinen Tunnel ein. Cloudflare-Zero-Trust-/Tailnet-ACLs und
 Router-Firewalls werden weiterhin im jeweiligen externen System verwaltet.
 
 Die Diagnose prüft tatsächlichen Link/Adressen, konfigurierte Gateways und
-DNS-Auflösung. Ein erfolgreicher `ip`-Aufruf allein bedeutet keinen gesunden
+DNS-Auflösung. Sie gilt nur übernommenen Netzen (auch dem übersetzten
+Verwaltungsnetz einer alten Konfiguration, dann an deren tatsächlicher
+Schnittstelle) und ist während einer Probe gesperrt; einen Entwurf prüft man
+nach „Prüfen und testen“ über den neuen Zugang. Ein erfolgreicher `ip`-Aufruf allein bedeutet keinen gesunden
 Link. DNS-/Ping-Fehler bleiben sichtbar; eine fehlgeschlagene Diagnose ist kein
 allgemeiner Ausfallnachweis aller Netzwerkdienste.
 

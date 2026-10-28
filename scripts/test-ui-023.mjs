@@ -75,9 +75,15 @@ try {
  await page.getByRole('dialog').getByRole('button',{name:'Widerrufen',exact:true}).click();
  assert.equal(tokens.length,0);
  await page.goto(base+'/settings/network');
- await page.getByRole('button',{name:'Netz bearbeiten',exact:true}).first().click();
- await page.getByRole('dialog').waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'Name des NAS'}).inputValue(),'titan-test');
+ await page.getByRole('button',{name:'Aktionen für Verwaltung',exact:true}).click();
+ assert.ok(await page.getByRole('menuitem',{name:'Entfernen',exact:true}).isDisabled(),'management network removable');
+ await page.getByRole('menuitem',{name:'Bearbeiten',exact:true}).click();
+ await page.getByRole('dialog',{name:'Netz bearbeiten'}).waitFor();
  await page.getByRole('dialog').getByRole('button',{name:'Abbrechen',exact:true}).click();
+ await page.getByRole('tab',{name:'Schnittstellen',exact:true}).click();
+ await page.getByRole('cell',{name:'Verwaltung',exact:true}).waitFor();
+ assert.match(page.url(),/tab=interfaces/);
  await page.getByRole('tab',{name:'Fernzugriff',exact:true}).click();
  await page.getByRole('heading',{name:/Cloudflare/}).waitFor();
  await page.goto(base+'/docker/networks');
