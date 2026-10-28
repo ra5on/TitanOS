@@ -109,6 +109,13 @@ type Status struct {
 	Addresses []string `json:"addresses"`
 	Gateway   string   `json:"gateway"`
 	DNS       []string `json:"dns"`
+	// Migrated says that Config (and Pending) only have the flat fields on
+	// disk; their networks[] were derived for display and editing and take
+	// effect only through the next change on trial.
+	Migrated bool `json:"migrated"`
+	// Live is, per network ID, the interface carrying it with its link state
+	// and global addresses right now.
+	Live map[string]Live `json:"live"`
 }
 
 // Manager applies the configuration and keeps changes on trial.
@@ -183,7 +190,7 @@ func (m *Manager) Load(ctx context.Context) error {
 
 func normal(cfg Config) Config {
 	if len(cfg.Networks) > 0 {
-		return cloneTopology(cfg)
+		return stripLegacy(cloneTopology(cfg))
 	}
 	if cfg.Ports == nil {
 		cfg.Ports = []string{}
@@ -553,7 +560,7 @@ func (m *Manager) EnsureBridge(ctx context.Context, port string, onlyUnconfigure
 	if onlyUnconfigured && m.configured {
 		return nil
 	}
-	if m.active.Bridge && m.HasBridge() {
+	if (m.active.Bridge || topologyHasBridge(m.active)) && m.HasBridge() {
 		return nil
 	}
 	cfg := m.active
@@ -763,6 +770,7 @@ func (m *Manager) Status(ctx context.Context) Status {
 			}
 		}
 	}
+	routeDevice := status.Device
 	if status.Device == "" {
 		cfg := status.Config
 		if status.Pending != nil {
@@ -770,6 +778,28 @@ func (m *Manager) Status(ctx context.Context) Status {
 		}
 		status.Device = device(cfg)
 	}
+	// Legacy configurations are shown in the multi-network form; the same
+	// form is what the page sends back, on trial, to migrate.
+	shown := status.Config
+	if status.Pending != nil {
+		shown = *status.Pending
+	}
+	up := uplink(status.Interfaces, routeDevice)
+	var devices map[string]string
+	if len(status.Config.Networks) == 0 {
+		status.Migrated = true
+		status.Config = migrateLegacy(status.Config, up)
+	}
+	if status.Pending != nil && len(status.Pending.Networks) == 0 {
+		migrated := migrateLegacy(*status.Pending, up)
+		status.Pending = &migrated
+		devices = liveDevices(shown, migrated, routeDevice)
+	} else if status.Pending != nil {
+		devices = liveDevices(shown, *status.Pending, routeDevice)
+	} else {
+		devices = liveDevices(shown, status.Config, routeDevice)
+	}
+	status.Live = m.readLive(ctx, devices)
 	if status.Device != "" {
 		if out, err := m.runner.Run(ctx, "", "ip", "-o", "addr", "show", "dev", status.Device); err == nil {
 			for _, line := range strings.Split(out, "\n") {

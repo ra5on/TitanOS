@@ -19,14 +19,15 @@ func (m *Manager) Diagnostics(ctx context.Context, id string) ([]Check, error) {
 		return nil, ErrDisabled
 	}
 	device, ok := m.Device(id, false)
-	if !ok {
-		return nil, ErrInvalid
-	}
 	var cfg LogicalNetwork
-	for _, n := range m.Connections() {
-		if n.ID == id {
-			cfg = n
+	if ok {
+		for _, n := range m.Connections() {
+			if n.ID == id {
+				cfg = n
+			}
 		}
+	} else if cfg, device, ok = m.legacyNetwork(ctx, id); !ok {
+		return nil, ErrInvalid
 	}
 	checks := []Check{}
 	run := func(name, command string, args ...string) {
@@ -83,4 +84,37 @@ func addressCheck(out string, err error) Check {
 		check.Detail = check.Detail[:2048]
 	}
 	return check
+}
+
+// legacyNetwork returns the migrated view of a confirmed legacy configuration
+// and the device its files actually configure, so that it can be diagnosed
+// before the multi-network form was ever applied.
+func (m *Manager) legacyNetwork(ctx context.Context, id string) (LogicalNetwork, string, bool) {
+	m.mu.Lock()
+	ready := m.loaded && m.pending == nil && len(m.active.Networks) == 0
+	active := cloneTopology(m.active)
+	m.mu.Unlock()
+	if !ready {
+		return LogicalNetwork{}, "", false
+	}
+	routeDevice := ""
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	out, err := m.runner.Run(bounded, "", "ip", "-4", "route", "show", "default")
+	cancel()
+	if err == nil {
+		fields := strings.Fields(strings.SplitN(out, "\n", 2)[0])
+		for i := 0; i+1 < len(fields); i++ {
+			if fields[i] == "dev" {
+				routeDevice = fields[i+1]
+			}
+		}
+	}
+	migrated := migrateLegacy(active, uplink(m.Interfaces(), routeDevice))
+	devices := liveDevices(active, migrated, routeDevice)
+	for _, n := range migrated.Networks {
+		if n.ID == id && devices[id] != "" {
+			return n, devices[id], true
+		}
+	}
+	return LogicalNetwork{}, "", false
 }
