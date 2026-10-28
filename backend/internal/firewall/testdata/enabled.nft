@@ -1,0 +1,175 @@
+# Written by titand from /config/firewall/settings.json.
+add table inet titanos
+delete table inet titanos
+table inet titanos {
+	set blocked4 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+		elements = { 198.51.100.7 }
+	}
+	set blocked6 {
+		type ipv6_addr
+		flags interval
+		auto-merge
+		elements = { 2001:db8:bad::/64 }
+	}
+	chain blocked {
+		limit rate 5/second burst 20 packets log prefix "titanos-fw blocked " level info
+		drop
+	}
+	set home4 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+		elements = { 10.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 }
+	}
+	set home6 {
+		type ipv6_addr
+		flags interval
+		auto-merge
+		elements = { 2001:db8:1:2::/64, fc00::/7, fe80::/10 }
+	}
+	chain input {
+		type filter hook input priority filter; policy accept;
+		iif "lo" accept
+		ip saddr @blocked4 jump blocked
+		ip6 saddr @blocked6 jump blocked
+		ct state established,related accept
+		ct state invalid drop
+		meta l4proto icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+		meta l4proto ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept
+		udp sport 67 udp dport 68 accept
+		ip6 saddr fe80::/10 udp sport 547 udp dport 546 accept
+		iifname "wt0" ct status dnat accept comment "netbird"
+		ip saddr 192.168.1.20 accept comment "admin on trial"
+		iifname { "tailscale0", "wt0" } goto vpn
+		ip saddr 100.64.0.0/10 goto vpn
+		ip6 saddr fd7a:115c:a1e0::/48 goto vpn
+		ip saddr @home4 goto home
+		ip6 saddr @home6 goto home
+		goto internet
+	}
+	chain home {
+		ip saddr 203.0.113.0/24 tcp dport 8443 accept comment "office"
+		ip saddr 192.168.1.66 goto drop_home
+		tcp dport { 80, 443 } accept comment "webui"
+		tcp dport 443 accept comment "apps"
+		tcp dport { 139, 445 } accept comment "smb"
+		udp dport 137-138 accept comment "smb"
+		tcp dport { 111, 2049, 20048, 32765-32766, 32768 } accept comment "nfs"
+		udp dport { 111, 2049, 20048, 32765-32766, 32768 } accept comment "nfs"
+		tcp dport 22 accept comment "ssh"
+		udp dport { 3702, 5353, 5355 } accept comment "discovery"
+		tcp dport { 5355, 5357 } accept comment "discovery"
+		meta l4proto icmp icmp type echo-request accept comment "ping"
+		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
+		tcp dport 3493 accept comment "ups"
+		tcp dport 8750 accept comment "backuptarget"
+		udp dport { 41641, 51820 } accept comment "vpn"
+		tcp dport { 53, 8053 } accept comment "app container:pihole"
+		udp dport 53 accept comment "app container:pihole"
+		tcp dport 2283 accept comment "app immich"
+		tcp dport 8096 accept comment "app jellyfin"
+		udp dport 7359 accept comment "app jellyfin"
+		goto drop_home
+	}
+	chain drop_home {
+		fib daddr type { broadcast, multicast } drop
+		limit rate 5/second burst 20 packets log prefix "titanos-fw home " level info
+		drop
+	}
+	chain vpn {
+		ip saddr 203.0.113.0/24 tcp dport 8443 accept comment "office"
+		tcp dport { 80, 443 } accept comment "webui"
+		tcp dport 443 accept comment "apps"
+		tcp dport { 139, 445 } accept comment "smb"
+		udp dport 137-138 accept comment "smb"
+		tcp dport { 111, 2049, 20048, 32765-32766, 32768 } accept comment "nfs"
+		udp dport { 111, 2049, 20048, 32765-32766, 32768 } accept comment "nfs"
+		tcp dport 22 accept comment "ssh"
+		meta l4proto icmp icmp type echo-request accept comment "ping"
+		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
+		tcp dport 3493 accept comment "ups"
+		tcp dport 8750 accept comment "backuptarget"
+		udp dport { 41641, 51820 } accept comment "vpn"
+		tcp dport 2283 accept comment "app immich"
+		tcp dport 8096 accept comment "app jellyfin"
+		udp dport 7359 accept comment "app jellyfin"
+		goto drop_vpn
+	}
+	chain drop_vpn {
+		fib daddr type { broadcast, multicast } drop
+		limit rate 5/second burst 20 packets log prefix "titanos-fw vpn " level info
+		drop
+	}
+	chain internet {
+		ip saddr 203.0.113.0/24 tcp dport 8443 accept comment "office"
+		udp dport 60000-60100 accept
+		udp dport { 41641, 51820 } accept comment "vpn"
+		tcp dport 8096 accept comment "app jellyfin"
+		udp dport 7359 accept comment "app jellyfin"
+		goto drop_internet
+	}
+	chain drop_internet {
+		fib daddr type { broadcast, multicast } drop
+		limit rate 5/second burst 20 packets log prefix "titanos-fw internet " level info
+		drop
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		ct status dnat ip saddr @blocked4 jump blocked
+		ct status dnat ip6 saddr @blocked6 jump blocked
+		ct state established,related accept
+		ct state new ct status dnat jump published
+	}
+	chain published {
+		iifname { "tailscale0", "wt0" } goto app_vpn
+		ip saddr 100.64.0.0/10 goto app_vpn
+		ip6 saddr fd7a:115c:a1e0::/48 goto app_vpn
+		ip saddr @home4 goto app_home
+		ip6 saddr @home6 goto app_home
+		goto app_internet
+	}
+	chain app_home {
+		ip saddr 203.0.113.0/24 meta l4proto tcp ct original proto-dst 8443 accept comment "office"
+		ip saddr 192.168.1.66 goto drop_app_home
+		meta l4proto tcp ct original proto-dst { 53, 8053 } accept comment "app container:pihole"
+		meta l4proto udp ct original proto-dst 53 accept comment "app container:pihole"
+		meta l4proto tcp ct original proto-dst 2283 accept comment "app immich"
+		meta l4proto tcp ct original proto-dst 8096 accept comment "app jellyfin"
+		meta l4proto udp ct original proto-dst 7359 accept comment "app jellyfin"
+		accept comment "new apps"
+	}
+	chain drop_app_home {
+		limit rate 5/second burst 20 packets log prefix "titanos-fw app-home " level info
+		drop
+	}
+	chain app_vpn {
+		ip saddr 203.0.113.0/24 meta l4proto tcp ct original proto-dst 8443 accept comment "office"
+		meta l4proto tcp ct original proto-dst { 53, 8053 } goto drop_app_vpn comment "app container:pihole"
+		meta l4proto udp ct original proto-dst 53 goto drop_app_vpn comment "app container:pihole"
+		meta l4proto tcp ct original proto-dst 2283 accept comment "app immich"
+		meta l4proto tcp ct original proto-dst 8096 accept comment "app jellyfin"
+		meta l4proto udp ct original proto-dst 7359 accept comment "app jellyfin"
+		accept comment "new apps"
+	}
+	chain drop_app_vpn {
+		limit rate 5/second burst 20 packets log prefix "titanos-fw app-vpn " level info
+		drop
+	}
+	chain app_internet {
+		ip saddr 203.0.113.0/24 meta l4proto tcp ct original proto-dst 8443 accept comment "office"
+		meta l4proto udp ct original proto-dst 60000-60100 accept
+		meta l4proto tcp ct original proto-dst { 53, 8053 } goto drop_app_internet comment "app container:pihole"
+		meta l4proto udp ct original proto-dst 53 goto drop_app_internet comment "app container:pihole"
+		meta l4proto tcp ct original proto-dst 2283 goto drop_app_internet comment "app immich"
+		meta l4proto tcp ct original proto-dst 8096 accept comment "app jellyfin"
+		meta l4proto udp ct original proto-dst 7359 accept comment "app jellyfin"
+		goto drop_app_internet
+	}
+	chain drop_app_internet {
+		limit rate 5/second burst 20 packets log prefix "titanos-fw app-internet " level info
+		drop
+	}
+}

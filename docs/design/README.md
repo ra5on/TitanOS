@@ -65,6 +65,11 @@ Großbuchstaben-Überschrift `.tile-title`; Felder mit Beschriftung darüber und
 lesbarer Breite (`label.stack`), Häkchen mit Hinweis eingerückt darunter,
 Knopfleisten `.row-actions`, Unterteilungen mit Linie (`.divided`). Neu:
 „HTTPS-Namen für Apps“ unter Netzwerk und Dienste (siehe `docs/APP-PROXY.md`).
+Ebenso „Firewall“ (Symbol Schild): Hauptschalter, Zonenmatrix als Tabelle mit
+Häkchen je Zone, Docker-Apps mit „Neue Apps“, eigene Regeln als bearbeitbare
+Tabellenzeilen, eine haftende Leiste „Auf Probe übernehmen“ und darüber der
+Probe-Hinweis mit Countdown, automatisches Sperren mit Sperrliste und „Zuletzt
+gesperrt“ (siehe `docs/FIREWALL.md`).
 
 ### Einstellungen und Sicherungen (0.6.1)
 

@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
@@ -287,6 +289,16 @@ func run(opts options) error {
 	if err := connection.Load(ctx); err != nil {
 		slog.Warn("network configuration not put in place", "err", err)
 	}
+	// The packet filter: off unless switched on in the web UI, then its own
+	// nftables table; the automatic blocking after failed logins can be on
+	// without it. Off, titanos-firewall-open keeps everything open.
+	packetFilter := firewall.NewManager(store)
+	packetFilter.Disabled = opts.dev
+	packetFilter.Web = webPorts(opts)
+	packetFilter.HomeNetworks = sshd.HomeNetworks
+	if err := packetFilter.Load(ctx); err != nil {
+		slog.Warn("firewall settings not put in place", "err", err)
+	}
 
 	volumes := storage.NewManager(store)
 	volumes.ReadOnly = opts.dev
@@ -310,6 +322,7 @@ func run(opts options) error {
 	routes.Disabled = opts.dev
 	routes.HTTPSPort, routes.Reserved = proxyPorts(opts)
 	routes.OnChange = folders.Kick
+	routes.Gate = packetFilter.AllowHTTP
 	if err := routes.Load(); err != nil {
 		slog.Warn("app HTTPS names not readable from /config", "err", err)
 	}
@@ -929,6 +942,28 @@ func run(opts options) error {
 		}
 		audit.Record(activity.Entry{At: login.At, User: login.User, Via: activity.ViaSSH, IP: login.IP, Action: action, Target: login.Target(), OK: !login.Blocked})
 	})
+	// The firewall learns the published ports of Docker apps and reports
+	// automatic blocks and changes that went back.
+	packetFilter.Apps = func(ctx context.Context) ([]firewall.App, bool) {
+		status := containers.Status(ctx)
+		if !status.Running {
+			return nil, false
+		}
+		return firewallApps(status.Containers), true
+	}
+	packetFilter.OnBlock = func(block firewall.Block) {
+		notifier.Notify(notify.Warning, "firewall_blocked", block.Address)
+		audit.Record(activity.Entry{Via: activity.ViaSystem, IP: block.Address, Action: "firewall_block", Target: block.Source, OK: true})
+	}
+	packetFilter.OnRevert = func() {
+		notifier.Notify(notify.Warning, "firewall_reverted", "")
+		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: "firewall_reverted", OK: true})
+	}
+	packetFilter.OnFailure = func(err error) {
+		notifier.Notify(notify.Error, "firewall_failed", "")
+	}
+	go packetFilter.Run(ctx)
+	go packetFilter.FollowJournal(ctx)
 	machines.Activity = func(action, target string, ok bool) {
 		audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
 	}
@@ -1057,6 +1092,7 @@ func run(opts options) error {
 		Tailscale:          tailnet,
 		Netbird:            mesh,
 		Network:            connection,
+		Firewall:           packetFilter,
 		Notify:             notifier,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
@@ -1225,6 +1261,59 @@ func proxyPorts(opts options) (int, []int) {
 		}
 	}
 	return https, reserved
+}
+
+// webPorts are the ports of the web UI for the firewall.
+func webPorts(opts options) firewall.WebPorts {
+	ports := firewall.WebPorts{HTTP: -1}
+	if _, p, err := net.SplitHostPort(opts.httpsAddr); err == nil {
+		ports.HTTPS, _ = strconv.Atoi(p)
+	}
+	if opts.httpAddr != "" {
+		if _, p, err := net.SplitHostPort(opts.httpAddr); err == nil {
+			ports.HTTP, _ = strconv.Atoi(p)
+		}
+	}
+	return ports
+}
+
+// firewallApps groups the published ports of containers by app: the
+// Compose project, or the container itself.
+func firewallApps(containers []docker.Container) []firewall.App {
+	byKey := map[string]*firewall.App{}
+	var keys []string
+	for _, c := range containers {
+		key, name := c.App, c.App
+		if key == "" {
+			key, name = "container:"+c.Name, c.Name
+		}
+		app := byKey[key]
+		if app == nil {
+			app = &firewall.App{Key: key, Name: name, Ports: []firewall.AppPort{}}
+			byKey[key] = app
+			keys = append(keys, key)
+		}
+		app.HostNetwork = app.HostNetwork || c.HostNetwork
+		for _, p := range c.Ports {
+			port := firewall.AppPort{Port: p.Host, Protocol: p.Protocol}
+			if !slices.Contains(app.Ports, port) {
+				app.Ports = append(app.Ports, port)
+			}
+		}
+	}
+	sort.Strings(keys)
+	out := make([]firewall.App, 0, len(keys))
+	for _, key := range keys {
+		app := byKey[key]
+		sort.Slice(app.Ports, func(i, j int) bool {
+			if app.Ports[i].Port != app.Ports[j].Port {
+				return app.Ports[i].Port < app.Ports[j].Port
+			}
+			return app.Ports[i].Protocol < app.Ports[j].Protocol
+		})
+		out = append(out, *app)
+	}
+	return out
 }
 
 func newServer(addr string, handler http.Handler) *http.Server {

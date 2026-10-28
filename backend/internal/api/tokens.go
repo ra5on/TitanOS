@@ -12,11 +12,11 @@ import (
 type apiTokenIdentity struct{}
 
 // Public routes are an explicit contract. A token never opens account, shell,
-// credential, update, network-confirmation or assistant endpoints.
+// credential, update, network/firewall confirmation or assistant endpoints.
 func publicScope(method, path string) string {
 	if method == "GET" {
 		switch path {
-		case "/api/v1/system", "/api/v1/storage", "/api/v1/network", "/api/v1/plugins", "/api/v1/openapi.json":
+		case "/api/v1/system", "/api/v1/storage", "/api/v1/network", "/api/v1/firewall", "/api/v1/plugins", "/api/v1/openapi.json":
 			return "system:read"
 		case "/api/v1/shares", "/api/v1/files/roots", "/api/v1/files/list", "/api/v1/files/download", "/api/v1/files/properties", "/api/v1/files/text", "/api/v1/files/jobs":
 			return "files:read"

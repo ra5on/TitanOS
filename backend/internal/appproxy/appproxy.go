@@ -123,6 +123,10 @@ type Manager struct {
 	// HTTPSPort is the port of the web UI when it is not 443; it is part
 	// of the links.
 	HTTPSPort int
+	// Gate is the firewall's say on a client: app true for the HTTPS name
+	// of an app, false for the web UI. Both share one port, so only titand
+	// can tell them apart. nil lets everyone through.
+	Gate func(remoteAddr string, app bool) bool
 	// Reserved are the ports of titand itself: a route to them would send
 	// requests back to the proxy.
 	Reserved []int
