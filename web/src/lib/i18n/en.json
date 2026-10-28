@@ -6317,5 +6317,6 @@
 	"swap.doneText": "{volume} is complete again.",
 	"swap.pullNow": "{disk} (serial {serial}) can be pulled now.",
 	"swap.toStorage": "To storage",
-	"activity.do.diskReplace": "Disk swapped while running"
+	"activity.do.diskReplace": "Disk swapped while running",
+	"nav.back": "Back"
 }
