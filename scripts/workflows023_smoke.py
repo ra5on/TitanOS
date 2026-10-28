@@ -114,6 +114,8 @@ ip -n titan-peer link set peer30 up
 
     # Real NFSv4 service: the client asks for RW and the server must reject writes.
     request('/shares', dict(name='NFSReadOnly', volume='mirror', smb=True, nfs=dict(mode='ro', clients=['127.0.0.1'])))
+    # The folder comes from the apply loop after the share is saved.
+    wait(lambda: remote('test -d /mnt/mirror/NFSReadOnly && echo yes || echo no') == 'yes', 'share folder')
     remote('printf nfs-marker > /mnt/mirror/NFSReadOnly/marker.txt; chmod 664 /mnt/mirror/NFSReadOnly/marker.txt; mkdir -p /root/nfs-client')
     wait(lambda: 'NFSReadOnly' in remote('exportfs -v'), 'NFS export')
     remote('mount -t nfs -o vers=4,rw 127.0.0.1:/NFSReadOnly /root/nfs-client; test "$(cat /root/nfs-client/marker.txt)" = nfs-marker; if touch /root/nfs-client/denied; then exit 1; fi; umount /root/nfs-client')
