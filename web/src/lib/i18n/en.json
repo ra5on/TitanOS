@@ -6838,5 +6838,14 @@
 	"shortcuts.dashboardSave": "Editing the dashboard: save",
 	"shortcuts.files": "Files: shortcuts of the file list",
 	"shortcuts.escape": "Close a dialog, menu or selection",
-	"shortcuts.hint": "Can be switched off under Settings › Appearance › Effects."
+	"shortcuts.hint": "Can be switched off under Settings › Appearance › Effects.",
+	"netx.vlans.title": "VLANs",
+	"netx.vlans.use": "Use VLANs",
+	"netx.vlans.hint": "Off by default. VLANs need a router or switch that understands tagged networks. While off, the network editor offers no VLAN ID.",
+	"netx.vlans.inUse": "A network uses a VLAN. To switch this off, remove the VLAN IDs from the networks first.",
+	"netx.vlans.confirmTitle": "Use VLANs?",
+	"netx.vlans.confirmText": "VLANs only work if your router or a managed switch understands them. A simple router or switch drops tagged packets, and the NAS would not be reachable in that network.",
+	"netx.vlans.confirmLocal": "If this is only about VMs, LXC or Docker, networks inside the NAS are enough (bridges and Docker networks as firewall zones). They need no VLANs. Every network change still runs on trial for two minutes.",
+	"netx.vlans.confirm": "Switch VLANs on",
+	"error.vlans_in_use": "A network still uses a VLAN. Remove the VLAN IDs first."
 }

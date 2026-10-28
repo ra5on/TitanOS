@@ -6838,5 +6838,14 @@
 	"shortcuts.dashboardSave": "Dashboard bearbeiten: speichern",
 	"shortcuts.files": "Dateien: Tastenkürzel der Dateiliste",
 	"shortcuts.escape": "Dialog, Menü oder Auswahl schließen",
-	"shortcuts.hint": "Abschaltbar unter Einstellungen › Darstellung › Effekte."
+	"shortcuts.hint": "Abschaltbar unter Einstellungen › Darstellung › Effekte.",
+	"netx.vlans.title": "VLANs",
+	"netx.vlans.use": "VLANs verwenden",
+	"netx.vlans.hint": "Ab Werk aus. VLANs brauchen einen Router oder Switch, der getaggte Netze versteht. Ausgeschaltet bietet der Netzwerk-Editor keine VLAN-ID an.",
+	"netx.vlans.inUse": "Ein Netz verwendet ein VLAN. Zum Ausschalten zuerst die VLAN-IDs aus den Netzen entfernen.",
+	"netx.vlans.confirmTitle": "VLANs verwenden?",
+	"netx.vlans.confirmText": "VLANs funktionieren nur, wenn dein Router oder ein verwalteter Switch sie versteht. Ein einfacher Router oder Switch verwirft markierte Pakete, und das NAS wäre in diesem Netz nicht erreichbar.",
+	"netx.vlans.confirmLocal": "Geht es nur um VMs, LXC oder Docker, reichen eigene Netze innerhalb des NAS (Bridges und Docker-Netze als Firewall-Zonen). Dafür sind keine VLANs nötig. Jede Netzwerkänderung läuft weiterhin zwei Minuten auf Probe.",
+	"netx.vlans.confirm": "VLANs einschalten",
+	"error.vlans_in_use": "Ein Netz verwendet noch ein VLAN. Entferne zuerst die VLAN-IDs."
 }

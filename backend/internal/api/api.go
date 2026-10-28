@@ -488,6 +488,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
 	mux.HandleFunc("POST /api/v1/network/diagnostics", s.requireAdmin(s.handleNetworkDiagnostics))
 	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
+	mux.HandleFunc("PUT /api/v1/network/options", s.requireAdmin(s.handleNetworkOptions))
 	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
 	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))

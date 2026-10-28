@@ -41,6 +41,25 @@ mit deaktiviertem Autostart gespeichert. Beim aktuellen Laden wird der
 Autostartwunsch wiederhergestellt; nach einem Rückfall benannte Netze vor
 manuellem VM-Start prüfen.
 
+### VLANs ein- und ausschalten
+
+VLANs sind ab Werk ausgeblendet (Schnittstellen › VLANs › „VLANs verwenden“).
+Ein VLAN markiert jedes Paket; die Gegenseite muss diese Markierung verstehen.
+Ein einfacher Router oder nicht verwalteter Switch verwirft markierte Pakete
+oder reicht sie ungeprüft weiter. Ohne VLAN-fähigen Router reicht oft ein
+verwalteter Switch; für VMs, LXC und Docker genügen eigene Netze innerhalb des
+NAS (Bridges, Docker-Netze) als Firewall-Zonen.
+
+Ausgeschaltet bietet der Netzwerk-Editor keine VLAN-ID an. Einschalten fragt
+einmal mit einem einfachen Bestätigungsdialog. Die Wahl steht NAS-weit in
+`/config/network/options.json` (`vlans`), wird nur beim Start gelesen und nur
+beim Ändern geschrieben; ältere titand ignorieren die Datei. Eine
+Konfiguration, die bereits ein VLAN verwendet (aktiv oder auf Probe), gilt als
+eingeschaltet; Ausschalten wird dann mit `vlans_in_use` abgelehnt, bis die
+VLAN-IDs entfernt sind. API: `PUT /api/v1/network/options` mit
+`{"vlans": true|false}`, Status `vlans`/`vlansInUse` in `GET /api/v1/network`.
+Die Option ändert keine Netzwerkdateien und braucht keinen Probelauf.
+
 ### Aufbau der Seite
 
 - **Übersicht:** Kachel „System“ mit dem Namen des NAS (`PUT /api/v1/system/hostname`,

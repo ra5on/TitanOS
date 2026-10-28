@@ -22,6 +22,8 @@ func writeNetworkError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 	case errors.Is(err, network.ErrPending), errors.Is(err, network.ErrReverting):
 		writeError(w, http.StatusConflict, "network_pending", err.Error())
+	case errors.Is(err, network.ErrVLANsInUse):
+		writeError(w, http.StatusConflict, "vlans_in_use", err.Error())
 	case errors.Is(err, network.ErrNoPending):
 		writeError(w, http.StatusConflict, "network_not_pending", err.Error())
 	default:
@@ -52,6 +54,20 @@ func (s *Server) handleNetwork(w http.ResponseWriter, r *http.Request) {
 		"bondModes": network.BondModes,
 		"timezone":  s.opts.Settings.CurrentTimezone(),
 	})
+}
+
+// handleNetworkOptions saves the choices of the network page (VLANs on/off).
+func (s *Server) handleNetworkOptions(w http.ResponseWriter, r *http.Request) {
+	var opts network.Options
+	if !readJSON(w, r, &opts) {
+		return
+	}
+	if err := s.opts.Network.SetOptions(opts); err != nil {
+		writeNetworkError(w, err)
+		return
+	}
+	slog.Info("network options changed", "vlans", opts.VLANs, "by", currentUser(r).Name)
+	s.handleNetwork(w, r)
 }
 
 func (s *Server) handleNetworkDiagnostics(w http.ResponseWriter, r *http.Request) {

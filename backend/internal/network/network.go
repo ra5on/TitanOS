@@ -120,6 +120,10 @@ type Status struct {
 	// Live is, per network ID, the interface carrying it with its link state
 	// and global addresses right now.
 	Live map[string]Live `json:"live"`
+	// VLANs says whether the page offers VLANs (switched on, or in use);
+	// VLANsInUse that a network uses one, so they cannot be switched off.
+	VLANs      bool `json:"vlans"`
+	VLANsInUse bool `json:"vlansInUse"`
 }
 
 // Manager applies the configuration and keeps changes on trial.
@@ -148,6 +152,7 @@ type Manager struct {
 	reverting bool
 	// Remember retired netdevs until deletion succeeds, including rollback retries.
 	retired map[string]bool
+	options Options
 }
 
 // NewManager returns a manager working on the real system.
@@ -163,6 +168,7 @@ func defaults() Config {
 // Load reads the configuration and puts it in place. It is called once
 // at the start, before anyone could have changed anything.
 func (m *Manager) Load(ctx context.Context) error {
+	m.loadOptions()
 	cfg := defaults()
 	err := m.store.ReadJSON(configFile, &cfg)
 	missing := errors.Is(err, fs.ErrNotExist)
@@ -758,6 +764,8 @@ func (m *Manager) Status(ctx context.Context) Status {
 		status.Pending = &pending
 		status.PendingSeconds = max(1, int(time.Until(m.deadline).Seconds()))
 	}
+	status.VLANsInUse = m.vlansInUseLocked()
+	status.VLANs = m.options.VLANs || status.VLANsInUse
 	m.mu.Unlock()
 	status.Interfaces = m.Interfaces()
 
