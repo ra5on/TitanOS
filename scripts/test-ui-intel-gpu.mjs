@@ -118,6 +118,25 @@ try {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
+    // Firmware file names wrap only after "/" or "_", never inside a word.
+    const badBreaks = await page.locator(".mono.file").evaluateAll((spans) =>
+      spans.flatMap((span) => {
+        const chars = [];
+        const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode())
+          for (let i = 0; i < node.data.length; i++) {
+            const range = document.createRange();
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            chars.push([node.data[i], range.getBoundingClientRect().top]);
+          }
+        return chars.flatMap(([, top], i) =>
+          i && top > chars[i - 1][1] + 2 && !"/_".includes(chars[i - 1][0]) ? [span.textContent] : [],
+        );
+      }),
+    );
+    assert.equal((await page.locator(".mono.file").count()) > 0, true);
+    assert.deepEqual(badBreaks, [], "firmware names broken mid-word");
     // From the top, so the sticky header is not drawn in the middle.
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `${out}/hardware-${lang}-${width}.png`, fullPage: true });

@@ -54,6 +54,9 @@
 		else save();
 	}
 
+	// Firmware file names (i915/kbl_guc_70.1.1.bin) may only wrap after a
+	// separator, never in the middle of a word or version.
+	const fileParts = (file: string) => file.split(/(?<=[/_])/);
 	const firmwareText = (gpu: IntelGPU, kind: 'guc' | 'huc') => {
 		const fw = gpu[kind];
 		if (fw.loaded && fw.version) return t('intelGuc.fwLoaded', { file: fw.loaded, version: fw.version });
@@ -92,9 +95,15 @@
 						{/if}
 						{#if gpu.platform}
 							<dt>{t('intelGuc.files')}</dt>
-							<dd class="mono">
-								{gpu.huc.file} {gpu.huc.present ? t('intelGuc.present') : t('intelGuc.absent')}<br />
-								{gpu.guc.file} {gpu.guc.present ? t('intelGuc.present') : t('intelGuc.absent')}
+							<dd class="files">
+								{#each [gpu.huc, gpu.guc] as fw, n (n)}
+									<span
+										><span class="mono file" title={fw.file}
+											>{#each fileParts(fw.file) as part, i (i)}{#if i}<wbr />{/if}{part}{/each}</span
+										>
+										<span class="muted">{fw.present ? t('intelGuc.present') : t('intelGuc.absent')}</span></span
+									>
+								{/each}
 							</dd>
 						{/if}
 						<dt>{t('intelGuc.source')}</dt>
@@ -173,6 +182,15 @@
 	}
 	.mono {
 		overflow-wrap: anywhere;
+	}
+	dd.files {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+	}
+	.mono.file {
+		overflow-wrap: normal;
+		word-break: keep-all;
 	}
 	.small {
 		font-size: 0.75rem;
