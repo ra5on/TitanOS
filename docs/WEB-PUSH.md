@@ -28,6 +28,19 @@ Dieselben Meldungen wie in der Glocke, ab der Stufe unter „Verschicken ab“
 hoher Dringlichkeit geschickt. Ein Tippen öffnet TitanOS. Jedes Gerät hat
 „Testmitteilung“ und „Entfernen“; die Liste zeigt nur die eigenen Geräte.
 
+## App-Symbol
+
+Einstellungen › Darstellung › **App-Symbol** (nur Besitzer und Administratoren,
+für das ganze NAS): Standard, das Logo auf einer eigenen Farbe (dunkles oder
+weißes „T“, je nach Kontrast) oder ein eigenes Bild (JPEG/PNG/WebP bis 5 MiB,
+mindestens 64 × 64 Pixel, mittig quadratisch zugeschnitten, auf Schwarz
+gelegt, neu kodiert ohne Metadaten). titand zeichnet daraus
+`/icons/app-180|192|512.png` selbst; ohne Wahl antworten die eingebauten
+Dateien. Die Dateien sind ohne Anmeldung abrufbar (Home-Bildschirme holen sie
+ohne). Ablage `/config/system/app-icon.json` und `app-icon.png`, nur beim
+Speichern geschrieben. iOS übernimmt das Symbol nur beim Hinzufügen zum
+Home-Bildschirm und zeigt es auch in Mitteilungen.
+
 ## Technik
 
 - Paket `webpush`: RFC 8030 (Zustellung), RFC 8291 (Verschlüsselung,

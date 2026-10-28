@@ -28,6 +28,7 @@
 	import { dashboardVisual, type DashboardVisual } from '#lib/dashboard/visual.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import LoginAppearanceEditor from '#lib/login/LoginAppearanceEditor.svelte';
+	import AppIconEditor from '#lib/components/AppIconEditor.svelte';
 	import { onDestroy } from 'svelte';
 
 	const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -332,7 +333,7 @@
 			</span>
 		</div>
 
-		{#if canAdminister}<LoginAppearanceEditor />{/if}
+		{#if canAdminister}<AppIconEditor /><LoginAppearanceEditor />{/if}
 	</div>
 
 	<section class="preview" aria-labelledby="h-preview">
