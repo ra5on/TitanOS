@@ -11,6 +11,7 @@
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import SshKeys from './SshKeys.svelte';
+	import Passkeys from './Passkeys.svelte';
 
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
 
@@ -230,6 +231,8 @@
 			</form>
 		{/if}
 	</section>
+
+	<Passkeys />
 
 	<SshKeys />
 

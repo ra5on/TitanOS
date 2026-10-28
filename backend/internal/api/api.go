@@ -173,6 +173,7 @@ type Server struct {
 	push           pushTokens
 	assistSessions assistSessions
 	haUndo         haUndoStore
+	passkeys       passkeyChallenges
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -249,6 +250,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/setup/restore", s.handleSetupRestore)
 	mux.HandleFunc("POST /api/v1/setup/restore/upload", s.handleSetupRestoreUpload)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/login/passkey/begin", s.handlePasskeyLoginBegin)
+	mux.HandleFunc("POST /api/v1/login/passkey", s.handlePasskeyLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
 	// The look of the login page is public; changing it is not.
 	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
@@ -318,6 +321,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("DELETE /api/v1/account/sessions/{id}", s.requireUser(s.handleAccountSessionEnd))
 	mux.HandleFunc("DELETE /api/v1/account/sessions", s.requireUser(s.handleAccountSessionsEndOthers))
 	mux.HandleFunc("POST /api/v1/account/2fa/begin", s.requireUser(s.handleTwoFactorBegin))
+	mux.HandleFunc("GET /api/v1/account/passkeys", s.requireUser(s.handlePasskeys))
+	mux.HandleFunc("POST /api/v1/account/passkeys/begin", s.requireUser(s.handlePasskeyBegin))
+	mux.HandleFunc("POST /api/v1/account/passkeys", s.requireUser(s.handlePasskeyFinish))
+	mux.HandleFunc("DELETE /api/v1/account/passkeys/{id}", s.requireUser(s.handlePasskeyDelete))
 	mux.HandleFunc("POST /api/v1/account/2fa/enable", s.requireUser(s.handleTwoFactorEnable))
 	mux.HandleFunc("POST /api/v1/account/2fa/disable", s.requireUser(s.handleTwoFactorDisable))
 	mux.HandleFunc("POST /api/v1/account/2fa/recovery", s.requireUser(s.handleTwoFactorRecovery))
