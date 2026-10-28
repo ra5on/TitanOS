@@ -142,6 +142,9 @@ def repack(base_dir, manifest, version, titand, work):
         assets = [name + ".raw", name + ".plugin.json", name + "-licenses.tar.gz"]
         if name == "nvidia":
             assets.append("nvidia-kernel-sources.tar.gz")
+        # Driver plugins (since 0.32.0) bring the sources they were built from.
+        if (base_dir / (name + "-sources.tar.gz")).exists():
+            assets.append(name + "-sources.tar.gz")
         for asset in assets:
             shutil.copy2(base_dir / asset, plugins / asset)
     if sdk := manifest.get("nvidiaBuildSDK"):

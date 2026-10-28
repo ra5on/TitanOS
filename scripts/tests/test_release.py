@@ -330,6 +330,15 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.2")
 
     def test_repack_an_app_release_from_the_published_base(self):
+        # A driver plugin in the base brings its sources along (0.33.0 failed there).
+        plugins = self.repo / "out/plugins"
+        data = b"driver image"
+        (plugins / "wangxun-nic.raw").write_bytes(data)
+        (plugins / "wangxun-nic.plugin.json").write_text(json.dumps(dict(
+            name="wangxun-nic", version="0.1.0-beta.1", kernel="6.12-test", sha256=hashlib.sha256(data).hexdigest(),
+            size=len(data), modules=["ngbe"], sources=["wangxun-nic-sources.tar.gz"])))
+        (plugins / "wangxun-nic-licenses.tar.gz").write_bytes(b"notices")
+        (plugins / "wangxun-nic-sources.tar.gz").write_bytes(b"sources")
         self.pack()
         self.sign()
         # The base as GitHub serves it.
@@ -380,7 +389,8 @@ else:
         self.assertEqual(cat("usr/share/titanos/base-version"), b"0.1.0-beta.1\n")
         self.assertIn(b"https://example.org/go", cat("usr/share/titanos/components.json"))
         # The plugins of the base came along.
-        self.assertEqual([p["name"] for p in manifest["plugins"]], ["nvidia"])
+        self.assertEqual(sorted(p["name"] for p in manifest["plugins"]), ["nvidia", "wangxun-nic"])
+        self.assertEqual((self.release / "wangxun-nic-sources.tar.gz").read_bytes(), b"sources")
         self.assertEqual(manifest["nvidiaBuildSDK"], base["nvidiaBuildSDK"])
 
     def test_repack_refuses_a_base_with_a_foreign_signature(self):
