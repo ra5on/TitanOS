@@ -152,7 +152,10 @@ func TestEnableLinkWhileHTTPSIsOff(t *testing.T) {
 	}
 	// With HTTPS on there is no link.
 	m := certFixture(t, &certRunner{status: runningStatus, name: "titan.bleak-locrian.ts.net"})
-	m.queryFeature = func(context.Context, string) ([]byte, error) { t.Fatal("asked for a link with HTTPS on"); return nil, nil }
+	m.queryFeature = func(context.Context, string) ([]byte, error) {
+		t.Fatal("asked for a link with HTTPS on")
+		return nil, nil
+	}
 	m.refreshCertificate(context.Background(), nil)
 }
 
