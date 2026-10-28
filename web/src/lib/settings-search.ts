@@ -44,6 +44,8 @@ const keywords: Record<string, string> = {
 		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
 	ddns:
 		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
+	ipv64:
+		'ipv64 ipv64.net konto account api key schlüssel domain dns record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -74,6 +76,15 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	ddns: [
 		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
 		{ id: 'ddns-settings', label: 'ddns.settingsTitle', href: '/settings/ddns#ddns-settings' },
+	],
+	ipv64: [
+		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
+		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
+		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
+		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
+		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
+		{ id: 'ipv64-router', label: 'ipv64x.tab.router', href: '/settings/ipv64?tab=router' },
+		{ id: 'ipv64-blocklist', label: 'ipv64x.tab.blocklist', href: '/settings/ipv64?tab=blocklist' },
 	],
 	firewall: [
 		{ id: 'firewall-apps', label: 'firewall.apps', href: '/settings/firewall#firewall-apps' },
@@ -120,6 +131,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true },
 	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true },
+	{ id: 'ipv64', label: 'ipv64x.title', group: 'network', icon: 'globe', admin: true },
 	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },

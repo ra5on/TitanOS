@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -128,6 +129,42 @@ func (m *Manager) SetHeartbeat(token, name string, interval int, autoPause bool)
 	m.beat.lastError = ""
 	m.pokeBeat()
 	return nil
+}
+
+// ReplaceTokens follows a new token made at IPv64 (rotate-token): a domain
+// update token or a healthcheck token that this NAS keeps is swapped for
+// the new one. It says whether anything was kept and changed.
+func (m *Manager) ReplaceTokens(oldUpdate, newUpdate, oldCheck, newCheck string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return false, ErrNotLoaded
+	}
+	s := m.settings
+	changed := false
+	if oldUpdate != "" && newUpdate != "" && s.Provider.Type == dnsprovider.IPv64Net && s.Provider.UpdateToken == oldUpdate {
+		s.Provider.UpdateToken, changed = newUpdate, true
+	}
+	if oldCheck != "" && newCheck != "" && s.Heartbeat.Token == oldCheck {
+		s.Heartbeat.Token, changed = newCheck, true
+	}
+	if !changed {
+		return false, nil
+	}
+	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+		return false, err
+	}
+	m.settings = s
+	m.beat.lastError = ""
+	m.pokeBeat()
+	return true, nil
+}
+
+// Addresses are the public addresses found at the last look, if any.
+func (m *Manager) Addresses() (netip.Addr, netip.Addr) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.current4, m.current6
 }
 
 // StopHeartbeat ends the pings; forget also drops the healthcheck (after

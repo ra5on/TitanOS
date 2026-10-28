@@ -13,7 +13,7 @@ Jede neue Verbindung wird nach ihrem Absender einer Zone zugeordnet:
 | Zone | Absender |
 |---|---|
 | Heimnetz | private Bereiche (10/8, 172.16/12, 192.168/16, 169.254/16, `fc00::/7`, `fe80::/10`) und die Netze der eigenen Anschlüsse des NAS (Bridge `br0`, VLANs, Bonds), damit auch das öffentliche IPv6-Präfix des Heimnetzes |
-| VPN | Schnittstellen `tailscale0` und `wt0`, Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
+| VPN | Schnittstellen `tailscale0`, `wt0` und `ipv64wg` (Tunnel zu einem IPv64 Cloud Router, `docs/IPV64.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
 | Internet | alles andere, ausdrücklich auch öffentliche IPv6-Adressen außerhalb des eigenen Präfixes |
 
 Die Netze der eigenen Anschlüsse liest titand alle 15 Sekunden aus dem Kernel
@@ -90,6 +90,25 @@ Nicht gefiltert werden: ausgehende Verbindungen der Container, Container
 untereinander, Apps mit eigener LAN-Adresse (macvlan/ipvlan) und Apps im
 Host-Netzwerk. Letztere veröffentlichen keine Ports; die Seite markiert sie, ihre
 Ports gibt man mit eigenen Regeln frei.
+
+## IPv64: veröffentlichte Apps und v64 Blocklist
+
+- **„Öffentlich über IPv64“** im App-Editor (`docs/IPV64.md`): Ist die Firewall
+  eingeschaltet, lässt TitanOS auf Wunsch (Häkchen, ab Werk an) die
+  veröffentlichten Ports **genau dieser App** aus der Zone Internet zu
+  (`Manager.SetAppZones`, ohne Probezeit: die Ports einer App tragen nie die
+  Weboberfläche, niemand kann sich damit aussperren; während eine andere
+  Änderung auf Probe läuft, wird abgelehnt). Die vorige Einstellung wird
+  gemerkt und beim Zurücknehmen wiederhergestellt. Ist die Firewall aus, ändert
+  sich nichts. IPv64 dokumentiert keine Quelladressbereiche des CDN; die
+  Freigabe gilt deshalb für die ganze Zone Internet, nur für die Ports der App.
+  Die Ports der Weboberfläche (und 22, 8750) werden nie veröffentlicht.
+- **v64 Blocklist** (ab Werk aus, Einstellungen › IPv64 › Blocklist): titand
+  holt die Liste höchstens einmal am Tag (nur im RAM, höchstens 200.000
+  Einträge, ohne private/VPN-Bereiche und Netze größer als /16 bzw. /32) und legt
+  sie als Mengen `blocklist4`/`blocklist6` in die Tabelle. Verworfen wird nur in
+  der Zone Internet (`internet` und `app_internet`), und nur, solange die
+  Firewall eingeschaltet ist.
 
 ## Eigene Regeln
 

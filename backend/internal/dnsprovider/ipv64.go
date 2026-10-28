@@ -111,49 +111,172 @@ func (c *IPv64) roundTrip(req *http.Request, client *http.Client) (int, http.Hea
 
 // call sends one request to API v2 and decodes data into out.
 func (c *IPv64) call(ctx context.Context, method, path string, query url.Values, body, out any) error {
+	answer, err := c.Do(ctx, method, path, query, body)
+	if err != nil {
+		return err
+	}
+	if out != nil && answer.Status != http.StatusNoContent {
+		if len(answer.Data) == 0 {
+			return &APIError{Provider: "IPv64", Message: "unexpected answer"}
+		}
+		if err := json.Unmarshal(answer.Data, out); err != nil {
+			return &APIError{Provider: "IPv64", Message: "unexpected answer"}
+		}
+	}
+	return nil
+}
+
+// IPv64Answer is a successful answer of API v2: the envelope {data, meta}
+// and the status (202 means the change is carried out in the background).
+type IPv64Answer struct {
+	Status int
+	Data   json.RawMessage
+	Meta   json.RawMessage
+}
+
+// Do sends one request to API v2 with the API key. Every request goes
+// through the shared token bucket (ipv64Limiter), which also follows the
+// RateLimit-Remaining and Retry-After headers of the answers.
+func (c *IPv64) Do(ctx context.Context, method, path string, query url.Values, body any) (IPv64Answer, error) {
+	var data []byte
+	contentType := ""
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return IPv64Answer{}, err
+		}
+		data, contentType = encoded, "application/json"
+	}
+	return c.send(ctx, method, path, query, data, contentType)
+}
+
+func (c *IPv64) send(ctx context.Context, method, path string, query url.Values, data []byte, contentType string) (IPv64Answer, error) {
 	if c.key == "" {
-		return &APIError{Provider: "IPv64", Message: "this needs the API key of the account"}
+		return IPv64Answer{}, &APIError{Provider: "IPv64", Message: "this needs the API key of the account"}
 	}
 	address := c.base + "/api/v2" + path
 	if len(query) > 0 {
 		address += "?" + query.Encode()
 	}
+	if err := ipv64Limiter.wait(ctx); err != nil {
+		return IPv64Answer{}, err
+	}
 	var reader io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
+	if data != nil {
 		reader = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, address, reader)
 	if err != nil {
-		return errors.New("IPv64: request could not be built")
+		return IPv64Answer{}, errors.New("IPv64: request could not be built")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.key)
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
-	status, header, data, err := c.roundTrip(req, c.client)
+	status, header, answer, err := c.roundTrip(req, c.client)
 	if err != nil {
-		return err
+		return IPv64Answer{}, err
 	}
+	ipv64Limiter.observe(header, status)
 	if status >= 300 {
-		return ipv64Error(status, header, data)
+		return IPv64Answer{}, ipv64Error(status, header, answer)
 	}
-	if out != nil && status != http.StatusNoContent {
+	out := IPv64Answer{Status: status}
+	if status != http.StatusNoContent && len(bytes.TrimSpace(answer)) > 0 {
 		var envelope struct {
 			Data json.RawMessage `json:"data"`
+			Meta json.RawMessage `json:"meta"`
 		}
-		if err := json.Unmarshal(data, &envelope); err != nil || len(envelope.Data) == 0 {
-			return &APIError{Provider: "IPv64", Message: "unexpected answer"}
+		if err := json.Unmarshal(answer, &envelope); err != nil {
+			return IPv64Answer{}, &APIError{Provider: "IPv64", Message: "unexpected answer"}
 		}
-		if err := json.Unmarshal(envelope.Data, out); err != nil {
-			return &APIError{Provider: "IPv64", Message: "unexpected answer"}
-		}
+		out.Data, out.Meta = envelope.Data, envelope.Meta
 	}
-	return nil
+	return out, nil
+}
+
+// ipv64Limiter keeps all API v2 requests of this NAS under the limits of
+// IPv64: a token bucket of 300 requests per account refilled with 10 a
+// second (from the documentation, section "Limits"). An answer with fewer
+// remaining requests (RateLimit-Remaining) lowers the bucket; a 429 holds
+// every request back for Retry-After seconds.
+var ipv64Limiter = newTokenBucket(300, 10)
+
+type tokenBucket struct {
+	mu       sync.Mutex
+	capacity float64
+	rate     float64
+	tokens   float64
+	last     time.Time
+	hold     time.Time
+	now      func() time.Time
+}
+
+func newTokenBucket(capacity, rate float64) *tokenBucket {
+	return &tokenBucket{capacity: capacity, rate: rate, tokens: capacity, now: time.Now}
+}
+
+func (b *tokenBucket) refill(now time.Time) {
+	if !b.last.IsZero() {
+		b.tokens = min(b.capacity, b.tokens+now.Sub(b.last).Seconds()*b.rate)
+	}
+	b.last = now
+}
+
+// reserve takes one token and says how long to wait before using it.
+func (b *tokenBucket) reserve() time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	b.refill(now)
+	wait := time.Duration(0)
+	if b.hold.After(now) {
+		wait = b.hold.Sub(now)
+	}
+	b.tokens--
+	if b.tokens < 0 {
+		wait = max(wait, time.Duration(-b.tokens/b.rate*float64(time.Second)))
+	}
+	return wait
+}
+
+// wait takes a token, sleeping as long as needed (at most a minute).
+func (b *tokenBucket) wait(ctx context.Context) error {
+	wait := b.reserve()
+	if wait <= 0 {
+		return nil
+	}
+	if wait > time.Minute {
+		return &APIError{Provider: "IPv64", Status: http.StatusTooManyRequests, Message: "too many requests to IPv64, try again later", RetryAfter: wait}
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// observe follows the rate limit headers of an answer.
+func (b *tokenBucket) observe(header http.Header, status int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	b.refill(now)
+	if remaining, err := strconv.Atoi(header.Get("RateLimit-Remaining")); err == nil && remaining >= 0 {
+		b.tokens = min(b.tokens, float64(remaining))
+	}
+	if status == http.StatusTooManyRequests {
+		seconds, err := strconv.Atoi(header.Get("Retry-After"))
+		if err != nil || seconds <= 0 {
+			seconds = 10
+		}
+		b.hold = now.Add(time.Duration(seconds) * time.Second)
+		b.tokens = min(b.tokens, 0)
+	}
 }
 
 // --- account ---

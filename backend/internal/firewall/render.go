@@ -40,6 +40,9 @@ type ruleset struct {
 	home    []netip.Prefix
 	apps    []App
 	blocked []netip.Prefix
+	// blocklist are the addresses of the v64 blocklist of IPv64 (package
+	// ipv64), dropped in the internet zone only.
+	blocklist []netip.Prefix
 	// admin is let in completely while a change is on trial.
 	admin netip.Addr
 }
@@ -80,6 +83,9 @@ func render(rs ruleset) string {
 	h4, h6 := split(rs.home)
 	writeSet(&b, "home4", "ipv4_addr", h4)
 	writeSet(&b, "home6", "ipv6_addr", h6)
+	l4, l6 := split(rs.blocklist)
+	writeSet(&b, "blocklist4", "ipv4_addr", l4)
+	writeSet(&b, "blocklist6", "ipv6_addr", l6)
 
 	b.WriteString("\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n")
 	for _, line := range []string{
@@ -113,6 +119,9 @@ func render(rs ruleset) string {
 	for _, zone := range AllZones {
 		// Packets to the NAS itself.
 		fmt.Fprintf(&b, "\tchain %s {\n", zone)
+		if zone == Internet {
+			b.WriteString("\t\tip saddr @blocklist4 goto drop_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_internet comment \"v64 blocklist\"\n")
+		}
 		for _, r := range rs.cfg.Rules {
 			if line := ruleLine(r, zone, false); line != "" {
 				b.WriteString("\t\t" + line + "\n")
@@ -163,6 +172,9 @@ func render(rs ruleset) string {
 	b.WriteString("\t}\n")
 	for _, zone := range AllZones {
 		fmt.Fprintf(&b, "\tchain app_%s {\n", zone)
+		if zone == Internet {
+			b.WriteString("\t\tip saddr @blocklist4 goto drop_app_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_app_internet comment \"v64 blocklist\"\n")
+		}
 		for _, r := range rs.cfg.Rules {
 			if line := ruleLine(r, zone, true); line != "" {
 				b.WriteString("\t\t" + line + "\n")

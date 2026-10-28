@@ -1,26 +1,15 @@
 <script lang="ts">
-	// What IPv64.net offers beyond the update of addresses: account and
-	// limits, domains (pick, create, wildcard), their DNS records and the
-	// healthcheck that watches whether the NAS is reachable. Every call
+	// What IPv64.net offers for the updater: picking and creating domains
+	// and the healthcheck that watches whether the NAS is reachable. Account,
+	// records and everything else are under Settings › IPv64. Every call
 	// counts against the limits of the account, so nothing is fetched by
 	// itself: each part loads on a click.
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { IPV64_ZONES, validIpv64Wish } from '#lib/dns-providers.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import {
-		CAA_LETSENCRYPT,
-		USAGE_KEYS,
-		recordProblem,
-		usageText,
-		type DdnsStatus,
-		type Ipv64Account,
-		type Ipv64Domain,
-		type Ipv64Healthcheck,
-		type Ipv64Integration,
-		type Ipv64Record,
-	} from './ddns.ts';
+	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { type DdnsStatus, type Ipv64Domain, type Ipv64Healthcheck, type Ipv64Integration } from './ddns.ts';
 
 	let {
 		status,
@@ -46,22 +35,6 @@
 		return errorText(err instanceof ApiError ? err.code : 'internal');
 	}
 	const when = (value?: string) => (value ? formatDateTime(new Date(value)) : '–');
-
-	// --- account ---
-	let account = $state<Ipv64Account | null>(null);
-	let accountError = $state('');
-	let accountBusy = $state(false);
-	async function loadAccount() {
-		accountBusy = true;
-		accountError = '';
-		try {
-			account = await api.post<Ipv64Account>('/network/ipv64/account', body());
-		} catch (err) {
-			accountError = failure(err);
-		} finally {
-			accountBusy = false;
-		}
-	}
 
 	// --- domains ---
 	let domains = $state<Ipv64Domain[] | null>(null);
@@ -125,57 +98,6 @@
 			domainsError = failure(err);
 		} finally {
 			domainsBusy = false;
-		}
-	}
-
-	// --- records ---
-	let recordsOf = $state('');
-	let records = $state<Ipv64Record[]>([]);
-	let types = $state<string[]>(['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'TLSA', 'CAA']);
-	let recordsError = $state('');
-	let recordsBusy = $state(false);
-	let newRecord = $state({ type: 'A', prefix: '', content: '' });
-	let removing = $state<Ipv64Record | null>(null);
-	async function loadRecords(domain: string) {
-		recordsOf = domain;
-		recordsBusy = true;
-		recordsError = '';
-		try {
-			const answer = await api.post<{ records: Ipv64Record[]; types: string[] }>('/network/ipv64/records', body({ domain }));
-			records = answer.records;
-			if (answer.types?.length) types = answer.types;
-		} catch (err) {
-			recordsError = failure(err);
-		} finally {
-			recordsBusy = false;
-		}
-	}
-	const recordBad = $derived(recordProblem(newRecord.type, newRecord.content));
-	async function addRecord(event: SubmitEvent) {
-		event.preventDefault();
-		if (recordBad) return;
-		recordsBusy = true;
-		recordsError = '';
-		try {
-			await api.post('/network/ipv64/records/add', body({ domain: recordsOf, ...newRecord }));
-			newRecord = { type: newRecord.type, prefix: '', content: '' };
-			await loadRecords(recordsOf);
-		} catch (err) {
-			recordsError = failure(err);
-			recordsBusy = false;
-		}
-	}
-	async function removeRecord() {
-		if (!removing) return;
-		recordsBusy = true;
-		recordsError = '';
-		try {
-			await api.post('/network/ipv64/records/delete', body({ domain: recordsOf, id: removing.id }));
-			removing = null;
-			await loadRecords(recordsOf);
-		} catch (err) {
-			recordsError = failure(err);
-			recordsBusy = false;
 		}
 	}
 
@@ -284,29 +206,9 @@
 	<p class="muted">{t('ipv64.intro')}</p>
 	{#if !keyKnown}<p class="notice-warn">{t('ipv64.needsKey')}</p>{/if}
 
-	<div class="part">
-		<h3>{t('ipv64.account')}</h3>
-		<div class="row-actions">
-			<button type="button" class="btn" disabled={!keyKnown || accountBusy} onclick={loadAccount}>{t('ipv64.accountLoad')}</button>
-		</div>
-		{#if accountError}<p class="notice-error" role="alert">{accountError}</p>{/if}
-		{#if account}
-			<dl>
-				<div><dt>{t('ipv64.plan')}</dt><dd>{account.plan || '–'}{#if account.validUntil} ({t('ipv64.validUntil', { date: when(account.validUntil) })}){/if}</dd></div>
-				{#if account.keyName}<div><dt>{t('ipv64.keyName')}</dt><dd>{account.keyName}</dd></div>{/if}
-				{#each USAGE_KEYS as key (key)}
-					{#if account.usage[key]}
-						<div>
-							<dt>{t(`ipv64.usage.${key}` as MessageKey)}</dt>
-							<dd>{usageText(account.usage[key], (used, limit) => t('ipv64.usedOf', { used, limit }))}</dd>
-						</div>
-					{/if}
-				{/each}
-			</dl>
-		{/if}
-	</div>
+	<p class="muted hint">{t('ipv64.moved')} <a href="/settings/ipv64?tab=domains">{t('ipv64.movedLink')}</a></p>
 
-	<div class="part divided">
+	<div class="part">
 		<h3>{t('ipv64.domains')}</h3>
 		<div class="row-actions">
 			<button type="button" class="btn" disabled={!keyKnown || domainsBusy} onclick={loadDomains}>{t('ipv64.domainsLoad')}</button>
@@ -331,7 +233,6 @@
 										>{t(domain.wildcard ? 'ipv64.wildcardOff' : 'ipv64.wildcardTurnOn')}</button
 									>
 									<button type="button" class="btn" disabled={domainsBusy} onclick={() => (proxyDomain = domain.name)}>{t('ipv64.forApps')}</button>
-									<button type="button" class="btn" onclick={() => loadRecords(domain.name)}>{t('ipv64.records')}</button>
 								</td>
 							</tr>
 						{/each}
@@ -354,49 +255,6 @@
 			</div>
 		{/if}
 	</div>
-
-	{#if recordsOf}
-		<div class="part divided">
-			<h3>{t('ipv64.recordsOf', { domain: recordsOf })}</h3>
-			{#if recordsError}<p class="notice-error" role="alert">{recordsError}</p>{/if}
-			<div class="table-wrap">
-				<table>
-					<thead><tr><th>{t('ipv64.recordType')}</th><th>{t('ipv64.recordPrefix')}</th><th>{t('ipv64.recordContent')}</th><th></th></tr></thead>
-					<tbody>
-						{#each records as record (record.id)}
-							<tr>
-								<td class="mono">{record.type}</td>
-								<td class="mono">{record.prefix || '@'}</td>
-								<td class="mono content">{record.content}{#if record.pendingDNS} <span class="chip">{t('ipv64.pending')}</span>{/if}</td>
-								<td class="actions"><button type="button" class="btn" disabled={recordsBusy} onclick={() => (removing = record)}>{t('ipv64.recordDelete')}</button></td>
-							</tr>
-						{:else}
-							<tr><td colspan="4" class="muted">{t('ipv64.noRecords')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<form class="create" onsubmit={addRecord}>
-				<label class="stack"
-					><span>{t('ipv64.recordType')}</span><select class="field mono" bind:value={newRecord.type}>
-						{#each types as type (type)}<option value={type}>{type}</option>{/each}
-					</select></label
-				>
-				<label class="stack"
-					><span>{t('ipv64.recordPrefix')}</span><input class="field mono" type="text" bind:value={newRecord.prefix} placeholder="@" spellcheck="false" autocapitalize="off" /></label
-				>
-				<label class="stack grow"
-					><span>{t('ipv64.recordContent')}</span><input class="field mono" type="text" bind:value={newRecord.content} spellcheck="false" autocapitalize="off" /></label
-				>
-				<button class="btn" disabled={recordsBusy || recordBad}>{t('ipv64.recordAdd')}</button>
-			</form>
-			<p class="muted hint">{t('ipv64.recordHint')}</p>
-			<div class="row-actions">
-				<button type="button" class="btn" onclick={() => (newRecord = { type: 'CAA', prefix: '', content: CAA_LETSENCRYPT })}>{t('ipv64.caa')}</button>
-			</div>
-			<p class="muted hint">{t('ipv64.caaHint')}</p>
-		</div>
-	{/if}
 
 	<div class="part divided">
 		<h3 id="ipv64-heartbeat">{t('ipv64.heartbeat')}</h3>
@@ -453,16 +311,6 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" disabled={domainsBusy} onclick={() => (proxyDomain = null)}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" disabled={domainsBusy} onclick={() => proxyDomain && useForApps(proxyDomain)}>{t('ipv64.forApps')}</button>
-		</div>
-	</Dialog>
-{/if}
-
-{#if removing}
-	<Dialog title={t('ipv64.recordDeleteTitle')} locked={recordsBusy} onclose={() => (removing = null)}>
-		<p>{t('ipv64.recordDeleteText', { type: removing.type, name: removing.fqdn || recordsOf, content: removing.content })}</p>
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={recordsBusy} onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={recordsBusy} onclick={removeRecord}>{t('ipv64.recordDelete')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -552,21 +400,11 @@
 		width: 100%;
 		border-collapse: collapse;
 	}
-	th,
 	td {
 		text-align: left;
 		padding: 6px 8px;
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
-	}
-	th {
-		color: var(--muted);
-		font-weight: 500;
-		font-size: 0.75rem;
-	}
-	.content {
-		overflow-wrap: anywhere;
-		max-width: 28rem;
 	}
 	.actions {
 		text-align: right;
@@ -580,9 +418,6 @@
 		flex-wrap: wrap;
 		align-items: flex-end;
 		gap: 10px;
-	}
-	.grow {
-		flex: 1 1 14rem;
 	}
 	.short {
 		max-width: 10rem;

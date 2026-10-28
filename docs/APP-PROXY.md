@@ -11,6 +11,11 @@ die Weboberfläche; titand unterscheidet am Namen). Ein Zertifikat von Let's
 Encrypt für `*.<domain>` holt auf Wunsch Einstellungen › Let's Encrypt
 (`docs/LETSENCRYPT.md`).
 
+Unabhängig davon kann eine App unter „Öffentlich über IPv64“ im App-Editor über
+das CDN von IPv64.net aus dem Internet erreichbar werden (Reverse Proxy von IPv64
+mit HTTPS direkt an den Port der App, nicht über den Proxy von titand; nie für
+die Ports der Weboberfläche). Einzelheiten und Warnungen: `docs/IPV64.md`.
+
 ## Bedienung
 
 Docker › App bearbeiten › Abschnitt „HTTPS-Name“ (nur Besitzer und

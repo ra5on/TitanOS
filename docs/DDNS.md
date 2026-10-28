@@ -58,17 +58,17 @@ OpenAPI-Beschreibung `https://ipv64.net/api/v2/openapi.json` sowie
   Tageslimits ein (aus `/me` gelesen, sonst 48 am Tag) und höchstens drei
   Anfragen in 10 Sekunden. Den Update-Token einer Domain holt TitanOS mit dem
   API-Key selbst aus `/domains`; er geht nie an die Oberfläche.
-- **Konto:** „Verbindung prüfen“ zeigt Paket, Laufzeit und Verbrauch (DynDNS-
-  Updates und Healthcheck-Pings der letzten 24 h, Domains, Healthchecks).
 - **Domains:** Liste zum Übernehmen statt Eintippen; **neue Subdomain** als
   `<name>.<zone>` mit Auswahl der Zonen von IPv64 (einfacher
   Bestätigungsdialog); **Wildcard** an/aus; **für App-HTTPS-Namen verwenden**
   setzt die Domain unter Einstellungen › HTTPS-Namen für Apps (mit Wildcard sind
   Apps dann unter `<app>.<domain>` erreichbar).
-- **DNS-Einträge** einer Domain: Liste, Anlegen (A, AAAA, CNAME, MX, TXT, NS,
-  SRV, TLSA, CAA mit Prüfung des Formats, TTL bei IPv64 fest 60 s), Löschen mit
-  einfachem Bestätigungsdialog. „CAA für Let's Encrypt vorbereiten“ füllt
-  `0 issue "letsencrypt.org"` vor (optional).
+- **Konto, DNS-Einträge und alles Weitere** (API-Keys, Log, eigene Domains,
+  Löschen/Zurücksetzen, neuer Update-Token, Überwachung, Ausfallschutz, CDN,
+  Cloud Router, Blocklist) stehen seit dem Bereich **Einstellungen › IPv64**
+  dort (`docs/IPV64.md`); die Seite Dynamisches DNS verlinkt ihn und behält ihre
+  Updater-Einstellungen. Erzeugt man dort einen neuen Update-Token für eine
+  Domain, deren Token dynamisches DNS benutzt, übernimmt TitanOS ihn selbst.
 - **Erreichbarkeit überwachen** (Healthcheck, **ab Werk aus**): Erst beim
   Einschalten legt TitanOS bei IPv64 einen Push-Healthcheck an (Name
   `titanos-<hostname>`, Abstand ab 20 Minuten, Vorgabe 30, wegen 72 Pings am
@@ -86,11 +86,15 @@ OpenAPI-Beschreibung `https://ipv64.net/api/v2/openapi.json` sowie
   `pending_dns` meldet, und löscht danach genau diesen Eintrag
   (`DELETE /domains/{d}/records?type=TXT&prefix=…&content=…`). Domain und
   Platzhalter verwenden denselben Namen.
-- Nicht eingebunden: CDN, Cloud Router/VPN, DNS64, DNS-Failover und
-  Blocklisten, die IPv64 ebenfalls anbietet.
+- CDN, Cloud Router, DNS-Failover, Statusseiten und die v64 Blocklist: unter
+  Einstellungen › IPv64. Der Healthcheck „Erreichbarkeit überwachen“ bleibt hier
+  und erscheint dort als „dieses NAS“; „Neuer Token“ dort übernimmt TitanOS für
+  die Pings selbst.
 
-Alle Aufrufe von IPv64 zählen zum Token-Bucket des Kontos; die Seite lädt
-deshalb nichts von selbst, nur auf Klick.
+Alle Aufrufe von IPv64 zählen zum Token-Bucket des Kontos (300, 10 je
+Sekunde); der Client von TitanOS hält ihn für alle Aufrufe gemeinsam ein und
+folgt `RateLimit-Remaining` und `Retry-After`. Die Seite lädt deshalb nichts von
+selbst, nur auf Klick.
 
 ## Ablage und Geheimnisse
 

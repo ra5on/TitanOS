@@ -45,6 +45,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -996,6 +997,18 @@ func run(opts options) error {
 	}
 	go dynamicDNS.Run(ctx)
 	beforePowerOff = func() { dynamicDNS.PauseForShutdown(context.Background()) }
+	// The IPv64.net account beyond dynamic DNS: notifications from polling,
+	// the v64 blocklist for the firewall and the WireGuard tunnel into a
+	// Cloud Router; all off until switched on.
+	account64 := ipv64.NewManager(store)
+	account64.Disabled = opts.dev
+	account64.Fallback = func() (string, string) { return dynamicDNS.IPv64Key(), acmeCerts.IPv64Key() }
+	account64.Notify = func(severity, kind, subject string) { notifier.Notify(severity, kind, subject) }
+	account64.Firewall = packetFilter
+	if err := account64.Load(ctx); err != nil {
+		slog.Warn("IPv64 settings not readable from /config", "err", err)
+	}
+	go account64.Run(ctx)
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1093,6 +1106,8 @@ func run(opts options) error {
 		Netbird:            mesh,
 		Network:            connection,
 		Firewall:           packetFilter,
+		IPv64:              account64,
+		IPv64Reserved:      reservedPorts(opts),
 		Notify:             notifier,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
@@ -1261,6 +1276,12 @@ func proxyPorts(opts options) (int, []int) {
 		}
 	}
 	return https, reserved
+}
+
+// reservedPorts are the ports of titand that are never published.
+func reservedPorts(opts options) []int {
+	_, reserved := proxyPorts(opts)
+	return reserved
 }
 
 // webPorts are the ports of the web UI for the firewall.
