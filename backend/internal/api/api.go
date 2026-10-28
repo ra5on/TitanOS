@@ -141,6 +141,7 @@ type Server struct {
 	tokens      *auth.Tokens
 	limiter     *auth.Limiter
 	prefs       *preferences
+	loginLook   loginLook
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -214,6 +215,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/setup/restore/upload", s.handleSetupRestoreUpload)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	// The look of the login page is public; changing it is not.
+	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
+	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", s.handleLoginBackground)
+	mux.HandleFunc("PUT /api/v1/login-appearance", s.requireAdmin(s.handlePutLoginAppearance))
+	mux.HandleFunc("DELETE /api/v1/login-appearance", s.requireAdmin(s.handleDeleteLoginAppearance))
 
 	mux.HandleFunc("GET /api/v1/preferences", s.requireUser(s.handleGetPreferences))
 	mux.HandleFunc("PUT /api/v1/preferences/{kind}", s.requireUser(s.handlePutPreferences))

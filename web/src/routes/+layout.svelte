@@ -17,6 +17,8 @@
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
 	import Setup from '#lib/pages/Setup.svelte';
+	import LoginPreview from '#lib/login/LoginPreview.svelte';
+	import { loadLoginLook } from '#lib/login/state.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
@@ -26,6 +28,7 @@
 	onMount(() => {
 		initAppearance();
 		refreshSession();
+		loadLoginLook();
 	});
 
 	$effect(() => {
@@ -61,6 +64,8 @@
 		<Setup />
 	{:else if !session.data.user}
 		<Login />
+	{:else if page.url.pathname === '/login-preview'}
+		<LoginPreview />
 	{:else}
 		<Shell>{@render children()}</Shell>
 	{/if}

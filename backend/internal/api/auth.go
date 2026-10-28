@@ -97,6 +97,9 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		answer := userOf(user)
 		res.User = &answer
 		res.Version = s.opts.Version
+	} else if look, _ := s.loginAppearance(); look.HideHost {
+		// The login page was set not to name the NAS.
+		res.Hostname = ""
 	}
 	writeJSON(w, http.StatusOK, res)
 }
