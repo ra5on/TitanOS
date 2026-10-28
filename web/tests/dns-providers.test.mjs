@@ -12,7 +12,7 @@ import {
 	validHostName,
 	validIpv64Wish,
 } from '../src/lib/dns-providers.ts';
-import { recordProblem, usageText } from '../src/routes/settings/ddns/ddns.ts';
+import { recordProblem, usageText } from '../src/lib/ddns/ddns.ts';
 
 const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url)));
 const en = JSON.parse(readFileSync(new URL('../src/lib/i18n/en.json', import.meta.url)));

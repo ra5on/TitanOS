@@ -46,7 +46,7 @@ const keywords: Record<string, string> = {
 	ddns:
 		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2 healthcheck erreichbarkeit',
 	ipv64:
-		'ipv64 ipv64.net konto account api key schlüssel domain dns record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
+		'ipv64 ipv64.net konto account api key schlüssel domain dns dyndns ddns zuweisung zuweisungen assignment assignments record healthcheck überwachung monitoring statusseite status page offline failover ausfallschutz wartung maintenance cdn reverse proxy portmapper cloud router wireguard vpn gateway peer blocklist honeypot',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -82,6 +82,8 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	ipv64: [
 		{ id: 'ipv64-overview', label: 'ipv64x.tab.overview', href: '/settings/ipv64?tab=overview' },
 		{ id: 'ipv64-domains', label: 'ipv64x.tab.domains', href: '/settings/ipv64?tab=domains' },
+		{ id: 'ipv64-dyndns', label: 'ipv64x.tab.dyndns', href: '/settings/ipv64?tab=dyndns' },
+		{ id: 'ipv64-assignments', label: 'ipv64x.tab.assignments', href: '/settings/ipv64?tab=assignments' },
 		{ id: 'ipv64-monitoring', label: 'ipv64x.tab.monitoring', href: '/settings/ipv64?tab=monitoring' },
 		{ id: 'ipv64-failover', label: 'ipv64x.tab.failover', href: '/settings/ipv64?tab=failover' },
 		{ id: 'ipv64-public', label: 'ipv64x.tab.public', href: '/settings/ipv64?tab=public' },
