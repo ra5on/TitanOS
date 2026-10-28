@@ -163,9 +163,13 @@ volle Release baut sie gegen genau seinen Kernel; Bau, Prüfungen und Grenzen:
 | Plugin | Treiber | Hardware | Stand |
 | --- | --- | --- | --- |
 | `wangxun-nic` | `ngbe`, `txgbe` (`libwx`) | Wangxun WX1860 (1 GbE, 8088:0100–010b), SP1000/WX1820 (10 GbE, 8088:1001/2001) | baut ohne Warnungen, keine Firmware nötig; Hardware ungeprüft |
-| `tehuti-tn40` | `tn40xx` | Tehuti TN4010 (1fc9:4022/4025, nur die Subsystem-IDs der Treibertabelle) | eingeschränkt: QT2025-Karten brauchen den Rust-PHY-Treiber `AMCC_QT2025_PHY`, den Debian nicht baut; AQR105-Karten ggf. PHY-Firmware `tehuti/aqr105-tn40xx.cld`, die nicht in linux-firmware liegt |
 | `intel-qat` | `qat_4xxx`, `qat_420xx` | Intel QAT Gen 4 (8086:4940/4942/4944/4946) | Firmware `qat_4xxx*.bin` aus linux-firmware (Debian liefert sie nicht mit), `qat_402xx`/`qat_420xx` bereits in `firmware-intel-misc`; TitanOS nutzt QAT nicht gezielt |
 | `it87-extended` | `it87` von frankcrawford/it87 (fester Commit) | ITE IT8606E, IT8607E, IT8613E, IT8625E, IT8655E, IT8665E, IT8686E, IT8688E, IT8689E, IT8696E, IT8698E, IT8736F, IT8738E, IT8785E zusätzlich zum it87 des Kernels | ersetzt den System-it87; ACPI-Konflikte werden nicht umgangen |
+
+Tehuti TN40xx: nicht unterstützt – braucht QT2025-PHY-Treiber (Rust, von Debian
+nicht gebaut) bzw. nicht verteilbare AQR105-Firmware; ggf. mit neuerem Kernel
+neu prüfen. Das zwischenzeitlich vorbereitete Plugin `tehuti-tn40` wurde vor
+der Veröffentlichung entfernt.
 
 Der it87 von Linux 6.12 kennt IT87952E bereits; dafür ist das Plugin nicht
 nötig. Welche Plugins zur vorhandenen Hardware passen, zeigt die Plugin-Seite
@@ -225,7 +229,7 @@ Echte Intel-/AMD-Microcode-Aktivierung, Intel-NPU, CUDA/NVENC sowie physische
 Netzwerk-/HBA-/USB-Adapter sind separat auf konkreter Hardware zu prüfen.
 Die Treiber-Plugins sind gebaut und gegen den Modulindex des Abbilds
 aufgelöst (Abhängigkeiten, `vermagic`, Aliase); im QEMU-Storage-Test laden
-`wangxun-nic`, `intel-qat` und `tehuti-tn40` ihre Module ohne passende
+`wangxun-nic` und `intel-qat` ihre Module ohne passende
 Hardware. Mit echten Karten, QAT-Geräten oder ITE-Chips sind sie nicht geprüft.
 Keine neue pauschale Hardwareabnahme und keine Unterstützung älterer
 NVIDIA-Karten werden aus diesen Tests abgeleitet. Abbildgrößen und konkrete

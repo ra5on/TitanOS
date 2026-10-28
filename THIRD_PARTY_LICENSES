@@ -90,8 +90,7 @@ licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lis
 the corresponding Debian source packages. The SDK is separate from the NAS RAM image.
 Driver plugins (separate downloads, built by scripts/make-driver-plugins.py for the
 exact kernel of each release; pins in plugins/drivers/drivers.json):
-- tehuti-tn40 (tn40xx), wangxun-nic (libwx, ngbe, txgbe), intel-qat (qat_4xxx,
-  qat_420xx): unmodified Linux kernel sources from Debian's linux-source package of
+- wangxun-nic (libwx, ngbe, txgbe), intel-qat (qat_4xxx, qat_420xx): unmodified Linux kernel sources from Debian's linux-source package of
   the image's kernel version, GPL-2.0-only (qat: BSD-3-Clause OR GPL-2.0-only).
   Each release ships <name>-sources.tar.gz with the exact compiled sources and the
   build recipe; sources.txt links the Debian source package.

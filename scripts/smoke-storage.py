@@ -33,8 +33,8 @@ helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 
 # Driver plugins whose modules load without hardware (PCI drivers register and
-# wait for devices). tehuti-tn40 likewise, it87-extended needs a Super I/O chip.
-DRIVER_MODULES = {'wangxun-nic': ('libwx', 'ngbe', 'txgbe'), 'intel-qat': ('qat_4xxx', 'qat_420xx'), 'tehuti-tn40': ('tn40xx',)}
+# wait for devices); it87-extended needs a Super I/O chip.
+DRIVER_MODULES = {'wangxun-nic': ('libwx', 'ngbe', 'txgbe'), 'intel-qat': ('qat_4xxx', 'qat_420xx')}
 
 
 def driver_plugins(plugins):

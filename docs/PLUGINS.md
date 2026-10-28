@@ -13,7 +13,6 @@ zum Kernel seiner Systembasis:
 | `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |
 | `netbird` | NetBird-Client (nur BSD-3-Clause-Client) mit Setup-Key-Anmeldung, eigenem Management-Server, Routen und DNS, siehe [NetBird](NETBIRD.md) | NetBird-Konto oder eigener NetBird-Server und Setup-Key |
 | `wangxun-nic` | Treiber `ngbe`/`txgbe` (mit `libwx`) aus den Kernelquellen des Systems | Netzwerkkarte mit Wangxun WX1860 (1 GbE) oder SP1000/WX1820 (10 GbE) |
-| `tehuti-tn40` | Treiber `tn40xx` aus den Kernelquellen des Systems; unter Kernel 6.12 nur eingeschränkt nutzbar (siehe unten) | Tehuti-TN4010-Karte aus der Gerätetabelle des Treibers |
 | `intel-qat` | Treiber `qat_4xxx`/`qat_420xx` und Firmware `qat_4xxx*.bin` aus linux-firmware | Intel QuickAssist Gen 4 (PCI 8086:4940/4942/4944/4946) |
 | `it87-extended` | externer Sensortreiber `it87` (frankcrawford/it87, fester Commit), ersetzt den it87 des Systems | Mainboard mit neuerem ITE-Super-I/O-Chip (z. B. IT8689E, IT8696E) |
 
@@ -124,8 +123,8 @@ gewohnten Installationsdialog.
 
 ## Treiber-Plugins
 
-`scripts/make-driver-plugins.py` baut `wangxun-nic`, `tehuti-tn40`, `intel-qat`
-und `it87-extended` in jedem vollen Release (und in `plugins.yml`) gegen den
+`scripts/make-driver-plugins.py` baut `wangxun-nic`, `intel-qat` und
+`it87-extended` in jedem vollen Release (und in `plugins.yml`) gegen den
 exakten Kernel des Abbilds:
 
 - In einem Wegwerf-mkosi-Root (`plugins/drivers/build`) werden
@@ -151,10 +150,10 @@ exakten Kernel des Abbilds:
   nennt zusätzlich das Debian-Quellpaket bzw. den Upstream-Commit.
 
 **Grenzen:** Keines der Treiber-Plugins ist bisher auf echter Hardware mit
-TitanOS geprüft. `tehuti-tn40` ist unter Debians Kernel 6.12 nur eingeschränkt
-nutzbar: Karten mit QT2025-PHY brauchen einen in Rust geschriebenen PHY-Treiber,
-den Debian nicht baut; Karten mit AQR105-PHY brauchen ggf. die PHY-Firmware
-`tehuti/aqr105-tn40xx.cld`, die nicht in linux-firmware enthalten ist. Wie alle
+TitanOS geprüft. Tehuti TN40xx wird nicht angeboten: Karten mit QT2025-PHY
+brauchen einen in Rust geschriebenen PHY-Treiber, den Debian nicht baut, Karten
+mit AQR105-PHY ggf. die nicht verteilbare PHY-Firmware `tehuti/aqr105-tn40xx.cld`
+(siehe [Hardware-Kompatibilität](HARDWARE-COMPATIBILITY.md)). Wie alle
 Plugins liegen sie auf dem Daten-Volume und werden erst nach dessen Einbinden
 geladen; eine Netzwerkkarte aus einem Plugin eignet sich deshalb nicht als
 einziger Verwaltungsanschluss.
