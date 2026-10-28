@@ -6318,5 +6318,9 @@
 	"swap.pullNow": "{disk} (Seriennummer {serial}) kann jetzt ausgebaut werden.",
 	"swap.toStorage": "Zum Speicher",
 	"activity.do.diskReplace": "Platte im laufenden Betrieb getauscht",
-	"nav.back": "Zurück"
+	"nav.back": "Zurück",
+	"digest.enabled": "Einmal täglich gesammelt schicken statt jede Meldung einzeln",
+	"digest.time": "Uhrzeit",
+	"digest.errorsNow": "Fehler trotzdem sofort schicken",
+	"digest.hint": "Gilt für alle Wege unten und für Mitteilungen auf Geräten; die Glocke zeigt weiter alles sofort. Gesammelt wird im Arbeitsspeicher: Ein Neustart des NAS vor der Uhrzeit verliert die gesammelten Meldungen."
 }

@@ -6318,5 +6318,9 @@
 	"swap.pullNow": "{disk} (serial {serial}) can be pulled now.",
 	"swap.toStorage": "To storage",
 	"activity.do.diskReplace": "Disk swapped while running",
-	"nav.back": "Back"
+	"nav.back": "Back",
+	"digest.enabled": "Send once a day as a summary instead of every message on its own",
+	"digest.time": "Time",
+	"digest.errorsNow": "Still send errors at once",
+	"digest.hint": "Applies to all ways below and to notifications on devices; the bell still shows everything at once. Messages are collected in memory: a restart of the NAS before the time loses them."
 }

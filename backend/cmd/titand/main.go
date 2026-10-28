@@ -545,6 +545,13 @@ func run(opts options) error {
 	if err := notifier.Load(); err != nil {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
+	// The daily summary of the ways out, at the time in the NAS time zone.
+	go notifier.RunDigest(ctx, func() *time.Location {
+		if zone, err := time.LoadLocation(settings.CurrentTimezone()); err == nil {
+			return zone
+		}
+		return time.Local
+	})
 	// Notifications on phones and browsers (Web Push): what the bell shows,
 	// to owners and administrators who subscribed a device.
 	pushes := webpush.New(store)
