@@ -74,36 +74,42 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 };
 
-export type SettingsGroup = 'system' | 'network' | 'storage' | 'integrations' | 'personal';
+/** The groups of the settings navigation, in the order they are shown. */
+export const settingsGroups = ['system', 'hardware', 'network', 'data', 'integrations', 'personal'] as const;
+export type SettingsGroup = (typeof settingsGroups)[number];
 export type SettingsArea = {
 	id: string;
 	label: MessageKey;
 	group: SettingsGroup;
 	icon: IconName;
 	admin?: boolean;
+	/** Shows a small "new" badge next to the area in the navigation. */
+	isNew?: boolean;
 };
 
-// One list for the settings overview, the command palette and the route guard.
+// One list for the settings navigation (sidebar and overview), the command
+// palette and the route guard. Within a group the areas appear in exactly
+// this order; adding an area is one line in the right place.
 export const settingsAreas: SettingsArea[] = [
-	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
-	{ id: 'api', label: 'api.title', group: 'personal', icon: 'key' },
-	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
-	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
-	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
-	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
-	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
-	{ id: 'backups', label: 'safeguard.title', group: 'storage', icon: 'archive', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'system', icon: 'battery', admin: true },
-	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
-	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'storage', icon: 'grid', admin: true },
-	{ id: 'files', label: 'fileIndex.title', group: 'storage', icon: 'search', admin: true },
-	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'personal', icon: 'activity' },
+	{ id: 'notifications', label: 'notify.settingsTitle', group: 'system', icon: 'bell', admin: true },
 	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
+	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'grid', admin: true },
+	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
+	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
+	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
+	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
+	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
+	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{ id: 'assistant', label: 'assistant.settingsTitle', group: 'integrations', icon: 'chat', admin: true },
+	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
+	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
 ];
 
 /** Settings paths that accounts with the role "user" may open. */
@@ -111,3 +117,50 @@ export const userSettingsPaths = [
 	'/settings',
 	...settingsAreas.filter((area) => !area.admin).map((area) => `/settings/${area.id}`),
 ];
+
+/** One row of the settings navigation: an area, or a section of it while searching. */
+export type SettingsEntry = {
+	href: string;
+	id: string;
+	label: string;
+	group: SettingsGroup;
+	icon: IconName;
+	isNew?: boolean;
+	section?: boolean;
+};
+
+/**
+ * The rows of the settings navigation for an account, grouped and in the fixed
+ * order. With a search, matching sections replace their area (they lead
+ * straight to the anchor); areas without matching sections show if they match.
+ */
+export function settingsEntries(
+	query: string,
+	admin: boolean,
+	translate: (key: MessageKey) => string,
+): { group: SettingsGroup; entries: SettingsEntry[] }[] {
+	const searching = query.trim() !== '';
+	const entries = settingsAreas
+		.filter((area) => !area.admin || admin)
+		.flatMap((area): SettingsEntry[] => {
+			const base = { id: area.id, group: area.group, icon: area.icon, isNew: area.isNew };
+			const sections = searching
+				? (settingSections[area.id] ?? []).filter((section) =>
+						matchesSetting(query, `${translate(area.label)} ${translate(section.label)}`, section.id),
+					)
+				: [];
+			if (sections.length)
+				return sections.map((section) => ({
+					...base,
+					href: section.href,
+					label: `${translate(area.label)} › ${translate(section.label)}`,
+					section: true,
+				}));
+			return !searching || matchesSetting(query, translate(area.label), area.id)
+				? [{ ...base, href: `/settings/${area.id}`, label: translate(area.label) }]
+				: [];
+		});
+	return settingsGroups
+		.map((group) => ({ group, entries: entries.filter((entry) => entry.group === group) }))
+		.filter((group) => group.entries.length);
+}

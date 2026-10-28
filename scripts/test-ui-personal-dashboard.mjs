@@ -365,16 +365,18 @@ try {
   await page.screenshot({ path: out + "/storage.png", fullPage: true });
   await page.goto(base + "/settings");
   await page.locator(".settings-group").first().waitFor();
-  assert.equal(await page.locator(".settings-group").count(), 5);
-  for (const group of await page.locator(".settings-group").all()) {
-    const labels = await group.locator(".name").allTextContents();
-    assert.deepEqual(
-      labels,
-      [...labels].sort((a, b) => a.localeCompare(b, "de")),
-    );
-  }
+  // Six groups in the fixed order of settings-search.ts (decision of 28 Oct 2026).
+  assert.equal(await page.locator(".settings-group").count(), 6);
+  assert.deepEqual(
+    await page
+      .locator(".settings-group:first-child .name")
+      .allTextContents(),
+    ["Updates", "Datum und Uhrzeit", "Benachrichtigungen", "Über TitanOS"],
+  );
   await page.getByRole("searchbox").fill("SSH");
-  await page.locator('a[href="/settings/access#access-ssh"]').waitFor();
+  await page
+    .locator('.settings-page a[href="/settings/access#access-ssh"]')
+    .waitFor();
   await page.getByRole("searchbox").fill("");
   await page.screenshot({ path: out + "/settings.png", fullPage: true });
   data.ha = {

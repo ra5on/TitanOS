@@ -38,7 +38,7 @@ async function context(role='owner',theme='graphit',width=1440) {
   if(path==='/storage')return json({volumes:role==='user'?[]:[volume],disks:[],diskSleep:{idleMinutes:0,available:true,errors:[]}});
   if(path==='/notifications')return json({messages:[{id:1,time,severity:'warning',kind:'volume_full',subject:'data',title:'Volume',text:'Full'}]});
   if(path==='/terminal') { if(failLoad || (method==='PUT' && failTerminal))return fail(); if(method==='PUT') {await new Promise(r=>setTimeout(r,200));terminalValue={...terminalValue,...route.request().postDataJSON()};} return json(terminalValue); }
-  if(path==='/system/ssh')return json({enabled:false,running:false,fingerprint:'',accounts:[]});
+  if(path==='/system/ssh')return json({enabled:false,running:false,fingerprint:'',accounts:[],allowedNetworks:[],homeNetworks:[]});
   if(path==='/system/certificate')return json({kind:'self-signed',names:['nas'],issuer:'nas',notAfter:'2027-10-20T00:00:00Z',fingerprint:'abc'});
   if(path==='/config-backup') { if(failConfig)return fail(); return json({backup:{settings:{enabled:true,volume:'data',keep:7,schedule:'daily',time:'03:00',weekday:0},target:'data',lastCheck:time,lastError:'',backups:[{name:'test.tar.gz',volume:'data',time,sizeBytes:1234,hostname:'nas',version:'0.6.0'}],next:'2026-10-21T03:00:00Z'},volumes:['data']}); }
   if(path==='/backups/daily/snapshots')return json({snapshots:[{id:'abc123',time,paths:['documents'],bytes:100}]});
@@ -101,9 +101,10 @@ try {
  await page.goto(base+'/settings');
  const search=page.getByRole('searchbox');await search.waitFor();
  assert.equal(await page.locator('main select, main input[type=checkbox]').count(),0);
- assert.equal(await page.locator('.areas > a').count(),allAreas);
+ assert.equal(await page.locator('.settings-page .areas a').count(),allAreas);
  for(const [query,href] of [['SSH','/settings/access#access-ssh'],['Zertifikat','/settings/access#access-cert'],['Terminal','/settings/access#access-terminal'],['DNS','/settings/network#network-dns'],['Zeitzone','/settings/timezone']]) {
-  await search.fill(query);assert.equal(await page.locator('.areas > a').count(),1);assert.equal(await page.locator('.areas > a').getAttribute('href'),href);
+  // The specific section is among the results; other areas may match too (HTTPS names know "Zertifikat" and mDNS).
+  await search.fill(query);assert.ok((await page.locator('.settings-page .areas a').evaluateAll(a=>a.map(x=>x.getAttribute('href')))).includes(href),query);
  }
  await search.fill('Backup');assert.ok(await page.locator('.areas a[href="/settings/backups/data"]').count());
  await search.fill('');await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
@@ -143,7 +144,7 @@ try {
   }
   await ctx.close();
  }
- const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.locator('.areas > a').count(),userAreas);
+ const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.locator('.settings-page .areas a').count(),userAreas);
  for(const path of ['backups','backups/data','backups/configuration','backups/restore','timezone','access']) { await user.page.goto(base+'/settings/'+path);await user.page.getByText('Dafür fehlen diesem Konto die Rechte.',{exact:true}).waitFor(); }
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/config-backup','/network','/system/ssh','/system/certificate'].includes(path)));
  await user.ctx.close();assert.deepEqual(errors,[]);console.log('UI 0.6.1 checks passed: grouping, deep links, legacy links, restore dialog, errors/retry, local feedback, no archive polling, roles and responsive themes.');

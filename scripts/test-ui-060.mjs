@@ -63,12 +63,12 @@ try {
  const {ctx,page}=await context();
  await page.goto(base+'/settings');
  const search=page.getByRole('searchbox',{name:'Einstellungen suchen'});await search.waitFor();
- await search.fill('SSH');assert.equal(await page.locator('.areas > a').count(),1);assert.match(await page.locator('.areas').innerText(),/Zugang/);
+ await search.fill('SSH');assert.equal(await page.locator('.settings-page .areas a').count(),1);assert.match(await page.locator('.areas').innerText(),/Zugang/);
  await search.fill('DNS');assert.match(await page.locator('.areas').innerText(),/Netzwerk/);
- await search.fill('Zeitzone');await page.locator('.areas > a').click();await page.locator('select').selectOption('UTC');await page.getByText('Gespeichert',{exact:true}).waitFor();
+ await search.fill('Zeitzone');await page.locator('.settings-page .areas a').click();await page.locator('select').selectOption('UTC');await page.getByText('Gespeichert',{exact:true}).waitFor();
  failZone=true;await page.locator('select').selectOption('Europe/Berlin');await page.locator('[role=alert]').waitFor();assert.equal(await page.locator('select').inputValue(),'UTC');failZone=false;
  await page.goto(base+'/settings');await search.fill('unknown-no-match');await page.getByText('Keine passenden Einstellungen gefunden.').waitFor();
- await search.fill('Zeitzone');await page.locator('.areas > a').click();await page.locator('select').selectOption('Europe/Berlin');await page.getByText('Gespeichert',{exact:true}).waitFor();await page.goto(base+'/settings');await search.waitFor();await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
+ await search.fill('Zeitzone');await page.locator('.settings-page .areas a').click();await page.locator('select').selectOption('Europe/Berlin');await page.getByText('Gespeichert',{exact:true}).waitFor();await page.goto(base+'/settings');await search.waitFor();await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
  await page.getByRole('button',{name:/Laufende Aufgaben/}).click();await page.getByRole('dialog').waitFor();
  assert.equal(await page.locator('dialog progress').count(),4);
  failTasks=true;await page.getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/).waitFor({timeout:15000});assert.equal(await page.locator('dialog progress').count(),4);
@@ -95,7 +95,7 @@ try {
   await page.goto(base+'/vms');await page.getByRole('heading',{name:'Linux Server',exact:true}).waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'VM mobile overflow');await page.screenshot({path:out+`/vms-${theme}-mobile.png`,fullPage:true});await ctx.close();
  }
- const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();await user.page.getByRole('searchbox').fill('SSH');assert.equal(await user.page.locator('.areas > a').count(),0);
+ const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();await user.page.getByRole('searchbox').fill('SSH');assert.equal(await user.page.locator('.settings-page .areas a').count(),0);
  await user.page.getByRole('button',{name:/Laufende Aufgaben/}).click();await user.page.getByRole('dialog').waitFor();assert.equal(await user.page.locator('dialog progress').count(),1);
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/update/progress','/vms'].includes(path)));await user.ctx.close();
  assert.deepEqual(errors,[]);console.log('UI 0.6.0 browser checks passed (desktop, 390px, Graphit/Hell, roles, errors, tasks, Docker isolation).');
