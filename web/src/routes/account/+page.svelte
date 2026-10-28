@@ -12,6 +12,7 @@
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import SshKeys from './SshKeys.svelte';
 	import Passkeys from './Passkeys.svelte';
+	import WebDav from './WebDav.svelte';
 
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
 
@@ -233,6 +234,7 @@
 	</section>
 
 	<Passkeys />
+	<WebDav />
 
 	<SshKeys />
 

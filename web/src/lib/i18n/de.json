@@ -6265,5 +6265,22 @@
 	"error.invalid_health_report": "Der Zeitplan des Berichts ist ungültig.",
 	"error.no_notify_channel": "Es ist noch kein Benachrichtigungsweg eingeschaltet.",
 	"activity.do.healthReport": "Bericht über das NAS eingestellt",
-	"activity.do.healthReportSend": "Bericht über das NAS verschickt"
+	"activity.do.healthReportSend": "Bericht über das NAS verschickt",
+	"webdav.intro": "Freigaben über HTTPS als Netzlaufwerk, etwa in der Dateien-App des iPhones, im Finder oder im Windows-Explorer – auch von unterwegs über den Tailnet-Namen. Es gelten dieselben Rechte wie bei SMB; jedes Konto braucht dafür ein eigenes WebDAV-Passwort unter „Mein Konto“.",
+	"webdav.enabled": "WebDAV einschalten",
+	"webdav.address": "Adresse:",
+	"webdav.passwordLink": "WebDAV-Passwort anlegen",
+	"webdav.accountIntro": "Apps melden sich bei WebDAV mit deinem Kontonamen und einem eigenen WebDAV-Passwort an. TitanOS erzeugt es und zeigt es nur einmal; dein Kontopasswort und der zweite Faktor bleiben aus den Apps heraus.",
+	"webdav.since": "Passwort angelegt am {time}",
+	"webdav.create": "WebDAV-Passwort erzeugen",
+	"webdav.renew": "Neues WebDAV-Passwort erzeugen",
+	"webdav.remove": "WebDAV-Passwort löschen",
+	"webdav.removeText": "Apps, die das WebDAV-Passwort benutzen, können sich danach nicht mehr anmelden.",
+	"webdav.createdTitle": "Neues WebDAV-Passwort",
+	"webdav.createdHint": "Diese Angaben in der App eintragen. Das Passwort wird nur jetzt angezeigt; ein vorheriges gilt nicht mehr.",
+	"webdav.server": "Server",
+	"webdav.user": "Benutzer",
+	"webdav.password": "Passwort",
+	"webdav.copy": "Passwort kopieren",
+	"webdav.title": "WebDAV"
 }

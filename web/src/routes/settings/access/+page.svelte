@@ -1,5 +1,6 @@
 <script lang="ts">
 	import TerminalSettings from '#lib/components/TerminalSettings.svelte';
+	import WebDavSettings from '#lib/components/WebDavSettings.svelte';
 	import { revealTarget } from '#lib/reveal-target.ts';
 	// SSH access and the certificate of the web UI.
 	import { api, ApiError } from '#lib/api.ts';
@@ -280,6 +281,7 @@
 {/if}
 
 <TerminalSettings />
+<WebDavSettings />
 
 <style>
 	section {

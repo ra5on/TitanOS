@@ -6265,5 +6265,22 @@
 	"error.invalid_health_report": "The schedule of the report is invalid.",
 	"error.no_notify_channel": "No notification channel is switched on yet.",
 	"activity.do.healthReport": "Report about the NAS set up",
-	"activity.do.healthReportSend": "Report about the NAS sent"
+	"activity.do.healthReportSend": "Report about the NAS sent",
+	"webdav.intro": "Shares over HTTPS as a network drive, for example in the Files app of the iPhone, in Finder or Windows Explorer – also from outside through the tailnet name. The same rights as for SMB apply; every account needs a WebDAV password of its own under \"My account\".",
+	"webdav.enabled": "Turn on WebDAV",
+	"webdav.address": "Address:",
+	"webdav.passwordLink": "Create a WebDAV password",
+	"webdav.accountIntro": "Apps sign in to WebDAV with your account name and a WebDAV password of its own. TitanOS makes it and shows it only once; your account password and second factor stay out of the apps.",
+	"webdav.since": "Password created on {time}",
+	"webdav.create": "Create WebDAV password",
+	"webdav.renew": "Create new WebDAV password",
+	"webdav.remove": "Delete WebDAV password",
+	"webdav.removeText": "Apps using the WebDAV password can no longer sign in.",
+	"webdav.createdTitle": "New WebDAV password",
+	"webdav.createdHint": "Enter these in the app. The password is only shown now; an earlier one no longer works.",
+	"webdav.server": "Server",
+	"webdav.user": "User",
+	"webdav.password": "Password",
+	"webdav.copy": "Copy password",
+	"webdav.title": "WebDAV"
 }
