@@ -292,7 +292,7 @@
 							}}
 						/>
 					</div>
-					{#if uploading}<p role="status">{t('common.loading')}</p>{/if}
+					{#if uploading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 					{#if uploadError}<p class="notice-error" role="alert">{uploadError}</p>{/if}
 					<div class="personal-images">
 						{#each gallery.images as image}<div class="personal-image">

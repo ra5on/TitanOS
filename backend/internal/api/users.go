@@ -126,6 +126,11 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			writeAccountError(w, err)
 			return
 		}
+		// Passkeys are factors of the lost devices too.
+		if err := s.opts.Users.ClearPasskeys(target.Name); err != nil {
+			writeAccountError(w, err)
+			return
+		}
 		// Whoever had the lost phone is logged out as well.
 		s.sessions.DeleteUser(target.Name, "")
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))

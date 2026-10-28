@@ -464,7 +464,7 @@
 		{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>
 {:else if !status}
-	<p class="muted" role="status">{t('common.loading')}</p>
+	<p class="muted loading" role="status">{t('common.loading')}</p>
 {/if}
 {#if status && refreshError}
 	<div class="notice-warn" role="alert">

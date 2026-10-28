@@ -52,6 +52,10 @@ export type NetworkStatus = {
 	topology: NetworkConfig;
 	pendingTopology: NetworkConfig | null;
 	live?: Record<string, NetworkLive>;
+	// Whether the page offers VLANs (switched on or in use); missing from
+	// older titand, which always showed them.
+	vlans?: boolean;
+	vlansInUse?: boolean;
 };
 
 /** Translation keys of the bond modes the NAS offers. */

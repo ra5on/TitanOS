@@ -192,7 +192,7 @@
 {/if}
 
 {#if accounts === null}
-	{#if !loadError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+	{#if !loadError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {:else}
 <div class="toolbar">
 	<label>

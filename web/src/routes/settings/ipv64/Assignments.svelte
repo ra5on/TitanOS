@@ -187,7 +187,7 @@
 	{#if loadError}
 		<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button></div>
 	{:else if !data}
-		<p class="muted" role="status">{t('common.loading')}</p>
+		<p class="muted loading" role="status">{t('common.loading')}</p>
 	{:else}
 		<section class="tile panel" aria-labelledby="ipv64-assign">
 			<h2 class="tile-title" id="ipv64-assign">{t('ipv64x.assign.title')}</h2>

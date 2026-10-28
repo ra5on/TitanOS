@@ -2,7 +2,7 @@
 // Values follow docs/design/Appearance.dc.html. The identifiers (graphit,
 // blau, kompakt, …) are part of the exported theme files; do not rename them.
 
-import { contrast, darkenFor, isHex, luminance, shade, withAlpha, type Hex } from './color.ts';
+import { contrast, darkenFor, isHex, luminance, rotateHue, shade, withAlpha, type Hex } from './color.ts';
 
 export type Palette = {
 	bg: Hex;
@@ -50,6 +50,32 @@ export type Density = (typeof DENSITIES)[number];
 
 export type CustomColors = { bg: Hex; surface: Hex; header: Hex; text: Hex; border: Hex };
 
+/**
+ * Optional effects (Settings › Appearance › Effects). `enabled` is the main
+ * switch; the others only count while it is on. Movement always stops for
+ * `prefers-reduced-motion`, whatever is set here.
+ */
+export type Effects = {
+	enabled: boolean;
+	/** Content fades over when the page changes; header and navigation stay. */
+	transitions: boolean;
+	/** Placeholder bars instead of "Loading…" while a page fetches its data. */
+	skeleton: boolean;
+	/** Small movements: pressed buttons, opening dialogs and menus, busy bars. */
+	micro: boolean;
+	/** Warnings and errors pulse gently (they always say so in text as well). */
+	pulse: boolean;
+	/** Accent as a gradient of two neighbouring hues instead of one color. */
+	gradient: boolean;
+	/** Drawings on pages that have nothing to show yet. */
+	illustrations: boolean;
+	/** "?" opens a list of the keyboard shortcuts. */
+	shortcuts: boolean;
+};
+
+export const EFFECT_IDS = ['transitions', 'skeleton', 'micro', 'pulse', 'gradient', 'illustrations', 'shortcuts'] as const;
+export type EffectId = (typeof EFFECT_IDS)[number];
+
 export type Appearance = {
 	theme: ThemeId;
 	accent: AccentId;
@@ -82,6 +108,7 @@ export type Appearance = {
 	motion: boolean;
 	/** Length of that movement in ms, 150–1000. */
 	duration: number;
+	fx: Effects;
 };
 
 export const LIMITS = {
@@ -116,8 +143,38 @@ export function defaultAppearance(): Appearance {
 		glow: 0,
 		glowColor: '',
 		motion: true,
-		duration: 450
+		duration: 450,
+		fx: defaultEffects()
 	};
+}
+
+export function defaultEffects(): Effects {
+	return {
+		enabled: true,
+		transitions: true,
+		skeleton: true,
+		micro: true,
+		pulse: false,
+		gradient: false,
+		illustrations: true,
+		shortcuts: true
+	};
+}
+
+function sanitizeEffects(input: unknown): Effects {
+	const d = defaultEffects();
+	if (typeof input !== 'object' || input === null) return d;
+	const v = input as Record<string, unknown>;
+	const out = { ...d };
+	for (const key of ['enabled', ...EFFECT_IDS] as const) {
+		if (typeof v[key] === 'boolean') out[key] = v[key] as boolean;
+	}
+	return out;
+}
+
+/** Whether an effect is in use: switched on and the main switch on too. */
+export function effectOn(a: Appearance, id: EffectId): boolean {
+	return a.fx.enabled && a.fx[id];
 }
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -171,7 +228,8 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		glow: inRange(v.glow, LIMITS.glow, d.glow),
 		glowColor: isHex(v.glowColor) ? v.glowColor.toUpperCase() : '',
 		motion: typeof v.motion === 'boolean' ? v.motion : d.motion,
-		duration: inRange(v.duration, LIMITS.duration, d.duration)
+		duration: inRange(v.duration, LIMITS.duration, d.duration),
+		fx: sanitizeEffects(v.fx)
 	};
 }
 
@@ -265,7 +323,9 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--panel-glow': a.glow
 			? `0 0 24px color-mix(in srgb, ${a.glowColor || accent} ${a.glow}%, transparent)`
 			: '0 0 0 transparent',
-		'--metric-duration': `${a.motion ? a.duration : 0}ms`
+		'--metric-duration': `${a.motion ? a.duration : 0}ms`,
+		'--accent-2': rotateHue(accent, 38),
+		'--accent-fill': effectOn(a, 'gradient') ? `linear-gradient(135deg, ${accent}, ${rotateHue(accent, 38)})` : accent
 	};
 }
 
@@ -275,6 +335,7 @@ export function dataAttributes(a: Appearance, systemLight: boolean): Record<stri
 		'data-theme': a.theme,
 		'data-mode': resolvePalette(a, systemLight).dark ? 'dark' : 'light',
 		'data-surface': a.style,
-		'data-density': a.density === 'kompakt' ? 'compact' : 'normal'
+		'data-density': a.density === 'kompakt' ? 'compact' : 'normal',
+		...Object.fromEntries(EFFECT_IDS.map((id) => [`data-fx-${id}`, effectOn(a, id) ? 'on' : 'off']))
 	};
 }

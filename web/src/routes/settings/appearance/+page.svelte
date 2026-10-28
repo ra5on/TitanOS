@@ -10,6 +10,7 @@
 		BACKGROUNDS,
 		defaultAppearance,
 		DENSITIES,
+		EFFECT_IDS,
 		LIMITS,
 		pickedAccent,
 		resolvePalette,
@@ -271,6 +272,22 @@
 			<p class="hint muted">{t('dashboard.visual.motionHint')}</p>
 		</section>
 
+		<section class="tile panel" aria-labelledby="h-fx" id="effects">
+			<h2 class="tile-title" id="h-fx">{t('appearance.fx.title')}</h2>
+			<label class="check"><input type="checkbox" bind:checked={draft.fx.enabled} />{t('appearance.fx.enabled')}</label>
+			{#if draft.fx.enabled}
+				<div class="fx-list">
+					{#each EFFECT_IDS as id (id)}
+						<label class="check fx">
+							<input type="checkbox" bind:checked={draft.fx[id]} />
+							<span><span>{t(`appearance.fx.${id}`)}</span><span class="muted small">{t(`appearance.fx.${id}Desc`)}</span></span>
+						</label>
+					{/each}
+				</div>
+			{/if}
+			<p class="hint muted">{t('appearance.fx.hint')}</p>
+		</section>
+
 		<section class="tile panel" aria-labelledby="h-bg">
 			<h2 class="tile-title" id="h-bg">{t('appearance.background')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-bg">
@@ -328,6 +345,20 @@
 </div>
 
 <style>
+	.fx-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding-left: 4px;
+	}
+	.check.fx {
+		align-items: flex-start;
+	}
+	.check.fx > span {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
 	.color-field {
 		display: flex;
 		align-items: center;

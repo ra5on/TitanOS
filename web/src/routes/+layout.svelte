@@ -8,6 +8,7 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { onNavigate } from '$app/navigation';
 	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
 	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
@@ -21,6 +22,7 @@
 	import { loadLoginLook } from '#lib/login/state.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
+	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 
 	let { children } = $props();
@@ -33,6 +35,20 @@
 
 	$effect(() => {
 		document.documentElement.lang = i18n.locale;
+	});
+
+	// Page transitions (Settings › Appearance › Effects): only between pages,
+	// not for a changed query on the same page, and never for reduced motion.
+	onNavigate((navigation) => {
+		if (!document.startViewTransition || !effectOn(appearance.current, 'transitions')) return;
+		if (navigation.from?.url.pathname === navigation.to?.url.pathname) return;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
 	});
 
 	// Pages without a PageHead (the dashboard) are named by their place in the navigation.

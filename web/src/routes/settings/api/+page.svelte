@@ -97,7 +97,7 @@
 		>{/snippet}
 </PageHead>
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
-{#if loading}<p role="status">{t('common.loading')}</p>{:else if !tokens.length}<EmptyState
+{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !tokens.length}<EmptyState
 		title={t('api.empty')}
 	/>{:else}<section class="tile panel tokens" aria-labelledby="api-mine">
 		<h2 class="tile-title" id="api-mine">{t('api.mine')}</h2>

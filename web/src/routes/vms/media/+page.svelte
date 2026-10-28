@@ -246,7 +246,7 @@
 	>
 		{verifyProgress}
 	</p>{/if}
-{#if loading}<p role="status">{t('common.loading')}</p>{:else if !jobs.length}<EmptyState
+{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !jobs.length}<EmptyState
 		title={t('media.empty')}
 	/>{:else}{#each jobs as job (job.id)}<section class="tile job">
 			<div class="row">
@@ -331,7 +331,7 @@
 			<span>{mediaError}</span>
 			<button class="btn" onclick={loadMedia}>{t('common.retry')}</button>
 		</div>{/if}
-	{#if media === null && !mediaError}<p class="muted" role="status">{t('common.loading')}</p>
+	{#if media === null && !mediaError}<p class="muted loading" role="status">{t('common.loading')}</p>
 	{:else if media && media.length === 0}<p class="muted">{t('media.filesEmpty')}</p>
 	{:else if media}<ul class="file-list">
 			{#each media as entry (entry.path)}

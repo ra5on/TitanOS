@@ -11,6 +11,7 @@
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import SshKeys from './SshKeys.svelte';
+	import Passkeys from './Passkeys.svelte';
 
 	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
 
@@ -231,6 +232,8 @@
 		{/if}
 	</section>
 
+	<Passkeys />
+
 	<SshKeys />
 
 	<section class="tile" aria-labelledby="acc-devices">
@@ -243,7 +246,7 @@
 		{#if devicesError}
 			<div class="notice-error row" role="alert"><span>{devicesError}</span><button type="button" class="btn" onclick={loadDevices}>{t('common.retry')}</button></div>
 		{:else if !devices}
-			<p class="muted" role="status">{t('common.loading')}</p>
+			<p class="muted loading" role="status">{t('common.loading')}</p>
 		{:else}
 			{#each devices as device (device.id)}
 				<div class="device">

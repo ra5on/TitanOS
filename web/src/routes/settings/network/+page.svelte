@@ -12,6 +12,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
+	import VlanOption from './VlanOption.svelte';
 	import TrialBanner from '#lib/components/TrialBanner.svelte';
 	import { countdown } from '#lib/trial.ts';
 	import {
@@ -286,6 +287,12 @@
 			oneditbond={editBond}
 			onremovebond={(b) => (removeBond = b)}
 		/>
+		<VlanOption
+			enabled={status.vlans ?? true}
+			inUse={!!status.vlansInUse}
+			disabled={locked}
+			onchanged={(next) => (status = next)}
+		/>
 	{:else if tab === 'diagnostics'}
 		<DiagnosticsTab
 			networks={status.pending ? [] : (status.topology.networks ?? [])}
@@ -303,6 +310,7 @@
 		isNew={editor.isNew}
 		config={draft}
 		{ports}
+		vlans={status?.vlans ?? true}
 		onsave={saveNetwork}
 		onclose={() => (editor = null)}
 	/>

@@ -18,6 +18,7 @@
 		isNew,
 		config,
 		ports,
+		vlans = true,
 		onsave,
 		onclose,
 	}: {
@@ -25,6 +26,8 @@
 		isNew: boolean;
 		config: NetworkConfig;
 		ports: NetworkPort[];
+		/** Offer the VLAN ID (Interfaces › VLANs); a network that has one keeps it visible. */
+		vlans?: boolean;
 		onsave: (n: NASNetwork) => void;
 		onclose: () => void;
 	} = $props();
@@ -85,15 +88,15 @@
 							>{/each}</select
 					></label
 				>
-				<label class="stack"
-					><span>{t('netx.vlan')}</span><input
-						class="field mono"
-						type="number"
-						min="0"
-						max="4094"
-						bind:value={n.vlan}
-					/><small class="muted">{t('netx.optional')}</small></label
-				>
+				{#if vlans || n.vlan}<label class="stack"
+						><span>{t('netx.vlan')}</span><input
+							class="field mono"
+							type="number"
+							min="0"
+							max="4094"
+							bind:value={n.vlan}
+						/><small class="muted">{t('netx.optional')}</small></label
+					>{/if}
 			</div>
 			{#if clash}<p class="notice-warn" role="alert">
 					{t('netx.clash', { name: clash.name })}

@@ -205,7 +205,7 @@
 		</div>
 		{/if}
 		{#if sshBusy || sshSaved}<p role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
-		{#if sshError}<div class="notice-error" role="alert">{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button></div>{:else if !ssh}<p role="status">{t('common.loading')}</p>{/if}
+		{#if sshError}<div class="notice-error" role="alert">{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button></div>{:else if !ssh}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 		{#if sshStuck && ssh && ssh.enabled !== ssh.running}<div class="notice-warn" role="alert">{t(ssh.enabled ? 'access.sshNotStarted' : 'access.sshNotStopped')} <button class="btn" onclick={retrySsh}>{t('ui.retry')}</button></div>{/if}
 	</section>
 

@@ -410,7 +410,7 @@
 {/if}
 
 {#if refreshError}<div class="notice-warn" role="alert"><span>{refreshError} {lastRefresh?t('docker.stale',{time:new Date(lastRefresh).toLocaleTimeString()}):t('docker.noCurrentData')}</span><button class="btn" disabled={refreshing} onclick={load}>{t('common.retry')}</button></div>{/if}
-{#if !status&&!refreshError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+{#if !status&&!refreshError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {#if status && !status.settings.enabled}
 	<section class="tile setup">
 		<h2>{t('docker.setupTitle')}</h2>

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { login, session } from '#lib/session.svelte.ts';
+	import { login, refreshSession, session } from '#lib/session.svelte.ts';
+	import { loginWithPasskey, passkeysPossible } from '#lib/passkeys.ts';
 	import type { LoginLook } from '#lib/login/look.ts';
 	import AuthCard from './AuthCard.svelte';
 
@@ -21,6 +22,28 @@
 	// Set once the password was right and the account asks for a second factor.
 	let needsCode = $state(false);
 	let code = $state('');
+
+	const passkeys = passkeysPossible();
+
+	async function withPasskey() {
+		if (preview) return;
+		busy = true;
+		error = '';
+		try {
+			await loginWithPasskey();
+			await refreshSession();
+		} catch (err) {
+			if (err instanceof DOMException || (err instanceof Error && err.message === 'cancelled')) {
+				error = t(err instanceof DOMException && err.name !== 'NotAllowedError' ? 'passkeys.browserError' : 'passkeys.cancelled');
+			} else if (err instanceof ApiError && err.code === 'rate_limited') {
+				error = t('auth.rateLimited', { seconds: err.retryAfter });
+			} else {
+				error = errorText(err instanceof ApiError ? err.code : 'internal');
+			}
+		} finally {
+			busy = false;
+		}
+	}
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -75,6 +98,9 @@
 		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<button class="btn btn-primary" type="submit" disabled={busy}>{t('auth.login')}</button>
+		{#if passkeys && !needsCode}
+			<button class="btn" type="button" disabled={busy} onclick={withPasskey}>{t('passkeys.login')}</button>
+		{/if}
 	</form>
 </AuthCard>
 

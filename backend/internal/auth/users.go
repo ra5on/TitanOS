@@ -52,6 +52,10 @@ type User struct {
 	// SSHKeys are the public keys the account may log in with over SSH,
 	// one line each as in an authorized_keys file.
 	SSHKeys []string `json:"sshKeys,omitempty"`
+	// Passkeys log in without password and second factor (see passkeys.go);
+	// WebAuthnID is the random user handle authenticators know the account by.
+	Passkeys   []Passkey `json:"passkeys,omitempty"`
+	WebAuthnID []byte    `json:"webauthnId,omitempty"`
 	// Disabled locks the account without removing it: no login to the web
 	// interface, API tokens, SSH or SMB, while its files, shares and rights
 	// stay. DisabledAt and DisabledBy say when and by whom. In the file the

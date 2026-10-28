@@ -322,7 +322,7 @@
 		>
 	</div>
 {:else if !status}
-	<p class="muted" role="status">{t('common.loading')}</p>
+	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
 	<form class="tile panel" aria-labelledby="proxy-general" onsubmit={saveGeneral}>
 		<h2 class="tile-title" id="proxy-general">{t('proxy.generalTitle')}</h2>

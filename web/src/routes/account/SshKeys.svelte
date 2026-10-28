@@ -68,7 +68,7 @@
 		{#if loadError}
 			<div class="notice-error failed" role="alert"><span>{loadError}</span><button type="button" class="btn" onclick={load}>{t('common.retry')}</button></div>
 		{:else}
-			<p class="muted" role="status">{t('common.loading')}</p>
+			<p class="muted loading" role="status">{t('common.loading')}</p>
 		{/if}
 	{:else}
 		{#if !state_.mayLogin}

@@ -28,7 +28,7 @@
 </script>
 <PageHead title={t('settings.datetime')} parent={{ href: '/settings', label: t('nav.settings') }} />
 <section class="tile panel">
-	{#if loading}<p role="status">{t('common.loading')}</p>{/if}
+	{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 	{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{/if}
 	{#if timezone !== null}
 		<label class="stack"><span>{t('settings.timezone')}</span><select class="field" disabled={saving} value={timezone} onchange={async event => { const field = event.currentTarget; await save(field.value); field.value = timezone ?? ''; }}>{#each zones as zone}<option value={zone}>{zone}</option>{/each}</select></label>

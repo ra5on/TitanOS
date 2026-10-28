@@ -28,7 +28,7 @@
 </script>
 <section class="tile panel" id="access-terminal" use:revealTarget aria-labelledby="terminal-title">
 	<h2 class="tile-title" id="terminal-title">{t('settings.consoles')}</h2>
-	{#if loading}<p role="status">{t('common.loading')}</p>{/if}
+	{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 	{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{/if}
 	{#if value}
 		{#each ['enabled', 'confirm'] as const as key}

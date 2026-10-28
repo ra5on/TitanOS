@@ -18,6 +18,9 @@
 	import TerminalPanel from './TerminalPanel.svelte';
 	import Icon from './Icon.svelte';
 	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
+	import ShortcutsDialog from './ShortcutsDialog.svelte';
+	import { appearance } from '#lib/theme/appearance.svelte.ts';
+	import { effectOn } from '#lib/theme/themes.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -27,7 +30,29 @@
 	);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
+	let shortcutsOpen = $state(false);
+
+	/** Whether a key press belongs to a field, an editor or the terminal. */
+	function typing(target: EventTarget | null) {
+		const el = target as HTMLElement | null;
+		return !!el?.closest?.('input, textarea, select, [contenteditable], .xterm, .terminal, canvas');
+	}
+
 	function hotkey(event: KeyboardEvent) {
+		// "?" lists the shortcuts, unless someone is typing or a dialog is open.
+		if (
+			event.key === '?' &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			!event.altKey &&
+			effectOn(appearance.current, 'shortcuts') &&
+			!typing(event.target) &&
+			!document.querySelector('dialog[open]')
+		) {
+			event.preventDefault();
+			shortcutsOpen = true;
+			return;
+		}
 		if (
 			(event.ctrlKey || event.metaKey) &&
 			!event.altKey &&
@@ -121,6 +146,7 @@
 </div>
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
+{#if shortcutsOpen}<ShortcutsDialog {admin} assistant={!!assistant.status?.available} onclose={() => (shortcutsOpen = false)} />{/if}
 {#if fab}
 	<button
 		type="button"
