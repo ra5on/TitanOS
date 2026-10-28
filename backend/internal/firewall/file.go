@@ -107,9 +107,10 @@ func toFile(cfg Config) fileConfig {
 // and to the apps), then the allowed services, then the apps with an own
 // setting; what is left follows the default (services: blocked, apps: "new
 // apps"). The zone Docker did not exist: its networks counted as home
-// network. For a firewall that was on, the Docker zone gets the cells of
-// the home network so nothing changes; for one that was off, the defaults
-// of a new installation.
+// network, and their traffic to other zones was not filtered at all. For a
+// firewall that was on, the Docker zone gets the cells of the home network
+// and allows everything to other zones, so nothing changes; for one that
+// was off, the defaults of a new installation.
 func migrate(old legacyConfig) Config {
 	cfg := Config{Enabled: old.Enabled, AutoBlock: old.AutoBlock}
 	services := map[string]Zones{}
@@ -165,6 +166,14 @@ func migrate(old legacyConfig) Config {
 				c.Policies = slices.Clone(c.Policies)
 				cfg.Cells = append(cfg.Cells, c)
 			}
+		}
+	}
+	if old.Enabled {
+		// Out of Docker networks nothing was filtered, not even between
+		// them: titanos-firewall-open accepts first in FORWARD and in
+		// DOCKER-USER, before Docker's own isolation.
+		for _, to := range append(slices.Clone(legacyZones), Docker) {
+			cfg.Cells = append(cfg.Cells, Cell{From: Docker, To: string(to), Policies: []Policy{}, Default: Allow})
 		}
 	}
 	return normal(cfg)

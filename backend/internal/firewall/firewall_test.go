@@ -79,6 +79,22 @@ func (f *fakeNft) Run(_ context.Context, stdin string, name string, args ...stri
 	if name == "iptables" || name == "ip6tables" {
 		return f.iptables(name, args)
 	}
+	if name == "iptables-restore" || name == "ip6tables-restore" {
+		tool := strings.TrimSuffix(name, "-restore")
+		f.ipt = append(f.ipt, name+" "+strings.Join(args, " "))
+		if f.chains == nil {
+			f.chains, f.jump = map[string]bool{}, map[string]bool{}
+		}
+		for _, line := range strings.Split(strings.TrimSpace(stdin), "\n") {
+			if chain, ok := strings.CutPrefix(line, ":"); ok {
+				f.chains[tool+":"+strings.Fields(chain)[0]] = true
+			}
+			if strings.HasPrefix(line, "-") {
+				f.ipt = append(f.ipt, tool+" -w "+line)
+			}
+		}
+		return "", nil
+	}
 	if name != "nft" {
 		return "", errors.New("unexpected command " + name)
 	}

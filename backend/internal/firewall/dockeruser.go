@@ -11,7 +11,11 @@ import (
 // iptables(-nft) chains. The table inet titanos can only drop on top of
 // that; to let one Docker network reach another, as a cell between zones
 // allows, Docker's isolation must be passed in DOCKER-USER, the chain
-// Docker leaves to the administrator. titand keeps its own chain
+// Docker leaves to the administrator. On TitanOS titanos-firewall-open
+// already accepts first in FORWARD and DOCKER-USER, so the isolation does
+// not apply as long as that rule is there; TITANOS-FWD keeps the open
+// pairs working should it be missing, and the cells themselves are always
+// enforced by inet titanos. titand keeps its own chain
 // TITANOS-FWD there, jumped to from DOCKER-USER, and touches nothing else
 // of Docker's tables: no rule of Docker's own chains, not DOCKER-USER
 // itself beyond its jump. The exact policies of the cell stay in inet
@@ -129,18 +133,16 @@ func (m *Manager) loadDockerUser(ctx context.Context, tool string, pairs [][2]st
 	if err := run("-L", "DOCKER-USER", "-n"); err != nil {
 		return fmt.Errorf("%s: no DOCKER-USER chain (Docker not running?)", tool)
 	}
-	if run("-L", dockerUserChain, "-n") != nil {
-		if err := run("-N", dockerUserChain); err != nil {
-			return fmt.Errorf("%s: %v", tool, err)
-		}
-	}
-	if err := run("-F", dockerUserChain); err != nil {
-		return fmt.Errorf("%s: %v", tool, err)
-	}
+	// The whole chain in one go: one process however many networks, and
+	// never half of it.
+	var script strings.Builder
+	fmt.Fprintf(&script, "*filter\n:%s - [0:0]\n-F %s\n", dockerUserChain, dockerUserChain)
 	for _, rule := range dockerUserRules(pairs) {
-		if err := run(append([]string{"-A", dockerUserChain}, rule...)...); err != nil {
-			return fmt.Errorf("%s: %v", tool, err)
-		}
+		fmt.Fprintf(&script, "-A %s %s\n", dockerUserChain, strings.Join(rule, " "))
+	}
+	script.WriteString("COMMIT\n")
+	if _, err := m.runner.Run(ctx, script.String(), tool+"-restore", "-w", "--noflush"); err != nil {
+		return fmt.Errorf("%s-restore: %v", tool, err)
 	}
 	if run("-C", "DOCKER-USER", "-j", dockerUserChain) != nil {
 		if err := run("-I", "DOCKER-USER", "1", "-j", dockerUserChain); err != nil {

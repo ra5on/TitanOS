@@ -194,8 +194,21 @@ func TestMigrationAndWayBack(t *testing.T) {
 			t.Errorf("Docker → %s should be the home network's cell: %+v", to, docker)
 		}
 	}
-	if cfg.Cell(Docker, string(Internet)).Default != Allow || cfg.Cell(Docker, string(Docker)).Default != Deny {
-		t.Error("Docker networks reach out, but not each other (as Docker itself isolates them)")
+	// Nothing out of Docker networks was filtered before, not even between
+	// them (titanos-firewall-open accepts before Docker's isolation).
+	for _, to := range []Zone{Home, VPN, Internet, Docker} {
+		if cfg.Cell(Docker, string(to)).Default != Allow {
+			t.Errorf("Docker → %s must stay open after the migration", to)
+		}
+	}
+	if !strings.HasSuffix(strings.Split(strings.Split(nft.last(), "chain fwd_docker_docker {")[1], "\n\t}")[0], "accept") {
+		t.Error("Docker networks must keep reaching each other")
+	}
+	// Off before: the defaults of a new installation.
+	off := sampleLegacy()
+	off.Enabled = false
+	if migrate(off).Cell(Docker, string(Docker)).Default != Deny {
+		t.Error("a firewall that was off gets the new defaults")
 	}
 	if !strings.Contains(nft.last(), `iifname "docker0" ip saddr 172.17.0.0/16 goto docker`) || !strings.Contains(nft.last(), `tcp dport 22 accept comment "ssh"`) {
 		t.Errorf("rules after migration:\n%s", nft.last())
@@ -312,8 +325,13 @@ func TestDockerUser(t *testing.T) {
 		}
 	}
 	// Nothing of Docker's own tables but the jump in DOCKER-USER.
+	restores := 0
 	for _, call := range nft.ipt {
 		fields := strings.Fields(call)
+		if strings.HasSuffix(fields[0], "-restore") {
+			restores++
+			continue
+		}
 		chain := fields[3]
 		if chain != dockerUserChain && chain != "DOCKER-USER" {
 			t.Errorf("touched another chain: %s", call)
@@ -324,6 +342,9 @@ func TestDockerUser(t *testing.T) {
 		if chain == "DOCKER-USER" && (fields[2] == "-I" || fields[2] == "-D") && fields[len(fields)-1] != dockerUserChain {
 			t.Errorf("DOCKER-USER rule other than the jump: %s", call)
 		}
+	}
+	if restores != 2 {
+		t.Errorf("one restore per family, got %d", restores)
 	}
 	// Idempotent: a refresh only checks the jump.
 	nft.ipt = nil
