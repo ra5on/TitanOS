@@ -72,7 +72,6 @@ func TestPasskeyRegisterLoginAndRemove(t *testing.T) {
 		t.Errorf("no session after the passkey login: %d", res.StatusCode)
 	}
 
-
 	res, body = ts.request("DELETE", "/api/v1/account/passkeys/"+list.Passkeys[0].ID, nil)
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"passkeys":[]`) {
 		t.Fatalf("remove: %d %s", res.StatusCode, body)

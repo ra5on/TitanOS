@@ -130,13 +130,31 @@ func TestLoginRejects(t *testing.T) {
 	good := clientJSON("webauthn.get", want.Challenge, want.Origin)
 	ad := a.authData(want.RPID, flagUP|flagUV, false)
 	cases := map[string]func() (cd, ad, sig []byte){
-		"origin":    func() ([]byte, []byte, []byte) { c := clientJSON("webauthn.get", want.Challenge, "https://evil.example"); return c, ad, a.sign(ad, c) },
-		"challenge": func() ([]byte, []byte, []byte) { c := clientJSON("webauthn.get", []byte("another-challenge-123"), want.Origin); return c, ad, a.sign(ad, c) },
-		"type":      func() ([]byte, []byte, []byte) { c := clientJSON("webauthn.create", want.Challenge, want.Origin); return c, ad, a.sign(ad, c) },
-		"rpid":      func() ([]byte, []byte, []byte) { d := a.authData("evil.example", flagUP|flagUV, false); return good, d, a.sign(d, good) },
-		"no-uv":     func() ([]byte, []byte, []byte) { d := a.authData(want.RPID, flagUP, false); return good, d, a.sign(d, good) },
+		"origin": func() ([]byte, []byte, []byte) {
+			c := clientJSON("webauthn.get", want.Challenge, "https://evil.example")
+			return c, ad, a.sign(ad, c)
+		},
+		"challenge": func() ([]byte, []byte, []byte) {
+			c := clientJSON("webauthn.get", []byte("another-challenge-123"), want.Origin)
+			return c, ad, a.sign(ad, c)
+		},
+		"type": func() ([]byte, []byte, []byte) {
+			c := clientJSON("webauthn.create", want.Challenge, want.Origin)
+			return c, ad, a.sign(ad, c)
+		},
+		"rpid": func() ([]byte, []byte, []byte) {
+			d := a.authData("evil.example", flagUP|flagUV, false)
+			return good, d, a.sign(d, good)
+		},
+		"no-uv": func() ([]byte, []byte, []byte) {
+			d := a.authData(want.RPID, flagUP, false)
+			return good, d, a.sign(d, good)
+		},
 		"signature": func() ([]byte, []byte, []byte) { s := a.sign(ad, good); s[len(s)-1] ^= 1; return good, ad, s },
-		"trailing":  func() ([]byte, []byte, []byte) { d := append(append([]byte(nil), ad...), 0); return good, d, a.sign(d, good) },
+		"trailing": func() ([]byte, []byte, []byte) {
+			d := append(append([]byte(nil), ad...), 0)
+			return good, d, a.sign(d, good)
+		},
 	}
 	for name, build := range cases {
 		cd, d, sig := build()
