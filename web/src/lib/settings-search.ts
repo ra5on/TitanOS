@@ -32,7 +32,7 @@ const keywords: Record<string, string> = {
 		'dateisuche volltext index inhalt full text search content ocr vorschaubilder thumbnails miniaturen',
 	energy:
 		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc',
-	temperatures: 'temperatur temperature sensor wärme heat',
+	temperatures: 'temperatur temperature sensor wärme heat lüfter fan pwm drehzahl kurve curve',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',
 	coverage: 'abdeckung coverage geschützt protected ungesichert unprotected',

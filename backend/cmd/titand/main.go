@@ -41,6 +41,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/fans"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
@@ -1122,6 +1123,26 @@ func run(opts options) error {
 		slog.Warn("health report settings not readable from /config", "err", err)
 	}
 	go report.Run(ctx)
+	// Fans: left to the BIOS unless a fan gets a speed or a curve.
+	coolers := fans.New(store)
+	coolers.Disabled = opts.dev
+	coolers.Temperatures = func() map[string]float64 {
+		out := map[string]float64{}
+		for _, sensor := range monitor.Info().Temperatures {
+			if sensor.Celsius != nil {
+				out[sensor.ID] = *sensor.Celsius
+			}
+		}
+		return out
+	}
+	coolers.DiskMax = func() (float64, bool) {
+		c, ok := volumes.HottestDisk()
+		return float64(c), ok
+	}
+	if err := coolers.Load(); err != nil {
+		slog.Warn("fan settings not readable from /config", "err", err)
+	}
+	go coolers.Run(ctx)
 	upkeep.Disabled = opts.dev
 	mediaImports := media.New(ctx, volumes.Mounted, shares.UsersGID)
 	mediaImports.Disabled = opts.dev
@@ -1225,6 +1246,7 @@ func run(opts options) error {
 		WebPush:            pushes,
 		WireGuard:          vpnServer,
 		HealthReport:       report,
+		Fans:               coolers,
 		HomeAssistant:      home,
 		ConfigBackup:       stickBackup,
 		USB:                drives,
