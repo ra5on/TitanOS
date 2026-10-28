@@ -50,6 +50,7 @@ import (
 var testUI = fstest.MapFS{
 	"index.html":                  {Data: []byte("<!doctype html><title>index</title>")},
 	"favicon.svg":                 {Data: []byte("<svg/>")},
+	"manifest.webmanifest":        {Data: []byte(`{"name":"TitanOS"}`)},
 	"_app/immutable/entry/app.js": {Data: []byte("console.log(1)")},
 }
 
@@ -670,6 +671,9 @@ func TestUI(t *testing.T) {
 	}
 	if res, _ := ts.request("POST", "/", nil); res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST /: %d, want 405", res.StatusCode)
+	}
+	if res, _ := ts.request("GET", "/manifest.webmanifest", nil); res.Header.Get("Content-Type") != "application/manifest+json" {
+		t.Errorf("manifest served as %q", res.Header.Get("Content-Type"))
 	}
 }
 

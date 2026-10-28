@@ -5,7 +5,7 @@
  import Dialog from './Dialog.svelte';
  let { onpending = (_pending: boolean) => {} } = $props<{ onpending?: (pending: boolean) => void }>();
  type Settings = { routes: string[]; advertiseExit: boolean; exitNode: string; acceptRoutes: boolean; acceptDNS: boolean };
- type Status = { settings: Settings; active: boolean; readOnly: boolean; state: string; version: string; name: string; ips: string[]; authUrl?: string; exitNodes: { id: string; name: string; ip: string; online: boolean }[]; health: string[]; pendingUntil?: string; error?: string };
+ type Status = { settings: Settings; active: boolean; readOnly: boolean; state: string; version: string; name: string; ips: string[]; authUrl?: string; exitNodes: { id: string; name: string; ip: string; online: boolean }[]; health: string[]; pendingUntil?: string; error?: string; https?: { name?: string; state: string; notAfter?: string; error?: string; enableUrl?: string } };
  let status = $state<Status | null>(null), busy = $state(false), error = $state(''), dirty = $state(false), loggingOut = $state(false);
  let routes = $state(''), mode = $state('none'), exitNode = $state(''), acceptRoutes = $state(false), acceptDNS = $state(false);
  const stateKeys = { inactive: 'tailscale.states.inactive', Running: 'tailscale.states.Running', Stopped: 'tailscale.states.Stopped', NeedsLogin: 'tailscale.states.NeedsLogin', NeedsMachineAuth: 'tailscale.states.NeedsMachineAuth', Starting: 'tailscale.states.Starting', NoState: 'tailscale.states.NoState', InUseOtherUser: 'tailscale.states.InUseOtherUser' } as const;
@@ -33,6 +33,9 @@
   <div class="meta"><span class="chip" class:ok={status.state === 'Running'}>{status.state in stateKeys ? t(stateKeys[status.state as keyof typeof stateKeys]) : status.state}</span><span class="mono">{status.version}</span></div>
   {#if status.name}<strong>{status.name}</strong>{/if}
   {#each status.ips as ip (ip)}<span class="mono address">{ip}</span>{/each}
+  {#if status.https?.state === 'ok' && status.https.name}<p class="https"><span>{t('tailscale.httpsReady')}</span> <a class="mono address" href="https://{status.https.name}">https://{status.https.name}</a>{#if status.https.notAfter}<span class="muted"> · {t('tailscale.httpsUntil', { date: formatTime(new Date(status.https.notAfter)) })}</span>{/if}</p>
+  {:else if status.https?.state === 'disabled'}<div class="notice-warn https-off"><p>{t(status.https.enableUrl ? 'tailscale.httpsOffLink' : 'tailscale.httpsDisabled', { name: status.https.name ?? '' })}</p>{#if status.https.enableUrl}<a class="btn btn-primary" href={status.https.enableUrl} target="_blank" rel="noopener noreferrer">{t('tailscale.httpsEnable')}</a>{/if}</div>
+  {:else if status.https?.state === 'error'}<p class="notice-warn">{t('tailscale.httpsError')} {status.https.error ?? ''}</p>{/if}
   {#if status.error}<p class="notice-warn">{status.error}</p>{/if}
   {#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
   {#if !status.active}<p class="muted">{t('tailscale.activateHint')}</p>{/if}
@@ -82,5 +85,6 @@
  .actions, .meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
  .mono { font-family: var(--font-mono); } .address { overflow-wrap: anywhere; }
  p { margin: 0; } textarea { resize: vertical; } .notice-error { white-space: pre-wrap; }
+ .https-off { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
  summary { cursor: pointer; } details p { margin-top: 10px; } button { align-self: flex-start; }
 </style>

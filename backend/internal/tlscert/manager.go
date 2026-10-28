@@ -61,6 +61,9 @@ type Manager struct {
 	kind    atomic.Value // string
 	// acme is the certificate from Let's Encrypt, nil without one.
 	acme atomic.Pointer[tls.Certificate]
+	// tailnet is the certificate of the NAS's name in the tailnet
+	// (Tailscale, <name>.<tailnet>.ts.net), nil without one.
+	tailnet atomic.Pointer[tls.Certificate]
 	// apps serves the HTTPS names of Docker apps; see apps.go.
 	apps appsCert
 }
@@ -86,10 +89,16 @@ func NewManager(store *config.Store, hostname string) (*Manager, error) {
 }
 
 // GetCertificate is what the TLS server asks for every connection: the
-// certificate from Let's Encrypt for its names, else the one in use.
+// certificate from Let's Encrypt or from Tailscale for their names, else
+// the one in use.
 func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if acme := m.acme.Load(); acme != nil && hello != nil && hello.ServerName != "" && covers(acme, hello.ServerName) {
-		return acme, nil
+	if hello != nil && hello.ServerName != "" {
+		if acme := m.acme.Load(); acme != nil && covers(acme, hello.ServerName) {
+			return acme, nil
+		}
+		if tailnet := m.tailnet.Load(); tailnet != nil && covers(tailnet, hello.ServerName) {
+			return tailnet, nil
+		}
 	}
 	return m.current.Load(), nil
 }
@@ -103,6 +112,18 @@ func (m *Manager) SetACME(cert *tls.Certificate) {
 		}
 	}
 	m.acme.Store(cert)
+}
+
+// SetTailnet serves the certificate Tailscale handed out for the NAS's
+// name in the tailnet from now on, or none with nil; like SetACME without
+// a restart.
+func (m *Manager) SetTailnet(cert *tls.Certificate) {
+	if cert != nil && cert.Leaf == nil && len(cert.Certificate) > 0 {
+		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
+			cert.Leaf = leaf
+		}
+	}
+	m.tailnet.Store(cert)
 }
 
 func (m *Manager) loadCustom() (tls.Certificate, error) {

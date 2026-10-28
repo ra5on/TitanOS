@@ -55,6 +55,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
 
 // Options are the parts the API works with.
@@ -91,6 +92,8 @@ type Options struct {
 	// Firewall is the packet filter; nil makes one that is off.
 	Firewall *firewall.Manager
 	Notify   *notify.Manager
+	// WebPush reaches subscribed browsers; nil makes one in RAM only.
+	WebPush *webpush.Manager
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -199,6 +202,10 @@ func New(opts Options) *Server {
 	if s.opts.Firewall == nil {
 		s.opts.Firewall = firewall.NewManager(opts.Store)
 		s.opts.Firewall.Disabled = true
+	}
+	if s.opts.WebPush == nil {
+		s.opts.WebPush = webpush.New(opts.Store)
+		s.opts.WebPush.Load()
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -490,6 +497,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
 	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
 	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
+	mux.HandleFunc("GET /api/v1/notifications/push", s.requireAdmin(s.handlePushDevices))
+	mux.HandleFunc("POST /api/v1/notifications/push", s.requireAdmin(s.handlePushSubscribe))
+	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", s.requireAdmin(s.handlePushRemove))
+	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", s.requireAdmin(s.handlePushTest))
 	mux.HandleFunc("GET /api/v1/homeassistant/settings", s.requireAdmin(s.handleHASettings))
 	mux.HandleFunc("PUT /api/v1/homeassistant/settings", s.requireAdmin(s.handleHASettingsChange))
 	mux.HandleFunc("POST /api/v1/homeassistant/check", s.requireAdmin(s.handleHACheck))

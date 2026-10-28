@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PushDevices from '#lib/components/PushDevices.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -120,6 +121,8 @@
 <p class="muted"><a href="/account#bell">{t('notify.personalHint')}</a></p>
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}{#if !draft} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>{/if}</div>{/if}
+
+<PushDevices />
 
 {#if draft}
 	<form onsubmit={save}>
