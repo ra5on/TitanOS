@@ -6,6 +6,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,8 +25,10 @@ import (
 // in the tailnet see a trusted certificate: no warning, and passkeys and
 // web push work. Nothing to switch on in TitanOS: turning on HTTPS in the
 // tailnet is the owner's choice (it puts the name into the public
-// certificate logs). tailscaled keeps and renews the certificate in its
-// state on the data volume; titand asks for it at the start and twice a
+// certificate logs). While it is off, the plugin hands out the one-click
+// link of Tailscale to turn it on (LocalAPI query-feature, the same link
+// `tailscale serve` shows). tailscaled keeps and renews the certificate in
+// its state on the data volume; titand asks for it at the start and twice a
 // day and holds it in RAM only.
 
 // HTTPSStatus tells the settings page about the certificate.
@@ -34,17 +40,24 @@ type HTTPSStatus struct {
 	State    string     `json:"state"`
 	NotAfter *time.Time `json:"notAfter,omitempty"`
 	Error    string     `json:"error,omitempty"`
+	// EnableURL turns HTTPS on in the tailnet with one click at Tailscale
+	// (state "disabled" only).
+	EnableURL string `json:"enableUrl,omitempty"`
 }
 
 type certState struct {
-	name     string
-	state    string
-	notAfter time.Time
-	err      string
+	name      string
+	state     string
+	notAfter  time.Time
+	err       string
+	enableURL string
+	tried     time.Time
+	// kick asks RunCertificate to look again now.
+	kick chan struct{}
 }
 
 func (c certState) status() HTTPSStatus {
-	s := HTTPSStatus{Name: c.name, State: c.state, Error: c.err}
+	s := HTTPSStatus{Name: c.name, State: c.state, Error: c.err, EnableURL: c.enableURL}
 	if s.State == "" {
 		s.State = "inactive"
 	}
@@ -66,7 +79,53 @@ const (
 	// Without a certificate titand looks again soon: the plugin may just
 	// have been switched on or HTTPS turned on in the tailnet.
 	certRetry = 5 * time.Minute
+	// While the settings page is open and HTTPS is still off, titand looks
+	// this often, so the certificate follows the click at Tailscale.
+	certWatch   = 20 * time.Second
+	localSocket = "/run/tailscale/tailscaled.sock"
 )
+
+// enableLink asks tailscaled for the link that turns HTTPS on in the
+// tailnet. Only a link to the Tailscale login service is passed on.
+func (m *Manager) enableLink(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	raw, err := m.queryFeature(ctx, "serve")
+	if err != nil {
+		return ""
+	}
+	var answer struct {
+		Complete bool
+		URL      string
+	}
+	if json.Unmarshal(raw, &answer) != nil || answer.Complete {
+		return ""
+	}
+	return loginURL(answer.URL)
+}
+
+// queryFeature is POST /localapi/v0/query-feature on the socket of the
+// plugin's tailscaled.
+func queryFeature(ctx context.Context, feature string) ([]byte, error) {
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", localSocket)
+	}}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://local-tailscaled.sock/localapi/v0/query-feature?feature="+url.QueryEscape(feature), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Sec-Tailscale", "localapi")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("tailscaled answered " + resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+}
 
 // certificateName asks tailscaled for the name to get a certificate for:
 // the NAS's own name if the tailnet offers certificates for it.
@@ -151,6 +210,7 @@ func (m *Manager) refreshCertificate(ctx context.Context, previous *tls.Certific
 		next.state = "inactive"
 	case errors.Is(err, errNoHTTPS):
 		next.state = "disabled"
+		next.enableURL = m.enableLink(ctx)
 	case err != nil:
 		next.state, next.err = "error", err.Error()
 	default:
@@ -166,6 +226,7 @@ func (m *Manager) refreshCertificate(ctx context.Context, previous *tls.Certific
 		}
 	}
 	m.mu.Lock()
+	next.tried, next.kick = time.Now(), m.cert.kick
 	m.cert = next
 	m.mu.Unlock()
 	return cert, next.state == "ok"
@@ -184,6 +245,7 @@ func (m *Manager) RunCertificate(ctx context.Context, use func(*tls.Certificate)
 		case <-ctx.Done():
 			return
 		case <-time.After(wait):
+		case <-m.cert.kick:
 		}
 		cert, ok := m.refreshCertificate(ctx, current)
 		if cert != current {
@@ -194,5 +256,17 @@ func (m *Manager) RunCertificate(ctx context.Context, use func(*tls.Certificate)
 		if ok {
 			wait = certEvery
 		}
+	}
+}
+
+// watchCertificate is called with mu held whenever the settings page reads
+// the status: while HTTPS is still off in the tailnet, look again soon.
+func (m *Manager) watchCertificate() {
+	if m.cert.state != "disabled" || time.Since(m.cert.tried) < certWatch {
+		return
+	}
+	select {
+	case m.cert.kick <- struct{}{}:
+	default:
 	}
 }

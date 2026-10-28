@@ -75,10 +75,12 @@ type Manager struct {
 	problem        string
 	devices        deviceCache
 	cert           certState
+	// queryFeature reaches the LocalAPI of tailscaled (cert.go).
+	queryFeature func(ctx context.Context, feature string) ([]byte, error)
 }
 
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, runtime: config.Open("/run/titanos-tailscale"), runner: run.Exec{}, mountRoot: "/mnt", settings: Settings{Routes: []string{}}}
+	return &Manager{store: store, runtime: config.Open("/run/titanos-tailscale"), runner: run.Exec{}, mountRoot: "/mnt", settings: Settings{Routes: []string{}}, cert: certState{kick: make(chan struct{}, 1)}, queryFeature: queryFeature}
 }
 func normalize(s Settings) (Settings, error) {
 	if len(s.Routes) > 32 || (s.AdvertiseExit && s.ExitNode != "") {
@@ -140,6 +142,7 @@ func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := Status{Settings: m.settings, ReadOnly: m.Disabled || !m.loaded, IPs: []string{}, ExitNodes: []Peer{}, Health: []string{}, Error: m.problem, State: "inactive", HTTPS: m.cert.status()}
+	m.watchCertificate()
 	s.Settings.Routes = slices.Clone(s.Settings.Routes)
 	if m.pending != nil {
 		d := m.deadline

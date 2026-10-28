@@ -6228,5 +6228,7 @@
 	"activity.do.wireguardAdd": "WireGuard-Gerät hinzugefügt",
 	"activity.do.wireguardRemove": "WireGuard-Gerät entfernt",
 	"activity.do.pushAdd": "Mitteilungen auf einem Gerät eingeschaltet",
-	"activity.do.pushRemove": "Gerät für Mitteilungen entfernt"
+	"activity.do.pushRemove": "Gerät für Mitteilungen entfernt",
+	"tailscale.httpsOffLink": "Unter {name} zeigt TitanOS noch sein selbst signiertes Zertifikat. Ein Klick schaltet bei Tailscale HTTPS-Zertifikate für dein Tailnet ein; danach holt TitanOS das gültige Zertifikat von selbst (nötig für Passkeys und Mitteilungen auf dem iPhone). Der Name erscheint dabei in öffentlichen Zertifikatsprotokollen.",
+	"tailscale.httpsEnable": "HTTPS im Tailnet einschalten"
 }

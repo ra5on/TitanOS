@@ -6228,5 +6228,7 @@
 	"activity.do.wireguardAdd": "WireGuard device added",
 	"activity.do.wireguardRemove": "WireGuard device removed",
 	"activity.do.pushAdd": "Notifications turned on for a device",
-	"activity.do.pushRemove": "Device for notifications removed"
+	"activity.do.pushRemove": "Device for notifications removed",
+	"tailscale.httpsOffLink": "At {name} TitanOS still shows its self-signed certificate. One click turns on HTTPS certificates for your tailnet at Tailscale; TitanOS then gets the valid certificate by itself (needed for passkeys and notifications on the iPhone). The name then appears in public certificate logs.",
+	"tailscale.httpsEnable": "Turn on HTTPS in the tailnet"
 }
