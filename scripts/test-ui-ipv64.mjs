@@ -174,7 +174,8 @@ try {
 
   // The settings overview lists the area under network.
   await page.goto(base + "/settings");
-  await page.getByRole("link", { name: "IPv64", exact: true }).first().waitFor();
+  // The area carries the "neu" badge in 0.31.0, which is part of the link name.
+  await page.getByRole("link", { name: /^IPv64( neu)?$/ }).first().waitFor();
 
   // 1 Overview
   await page.goto(base + "/settings/ipv64");
