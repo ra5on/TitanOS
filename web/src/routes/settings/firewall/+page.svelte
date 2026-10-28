@@ -351,7 +351,7 @@
 	{#if trialTab && (dirty || error || notice)}<div class="save-bar {dirty ? 'notice-warn pinned' : ''}">
 			{#if dirty}<p>{t(draft.enabled ? 'firewall.unsavedTrial' : 'firewall.unsaved')}</p>{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			{#if notice}<p role="status">{notice}</p>{/if}
+			{#if notice && !dirty}<p role="status">{notice}</p>{/if}
 			{#if dirty}<div class="row-actions">
 					<button class="btn" disabled={busy} onclick={discard}>{t('common.cancel')}</button
 					><button class="btn btn-primary" disabled={busy || !valid} onclick={apply}
