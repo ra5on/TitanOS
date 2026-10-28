@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TemplateDialog from './TemplateDialog.svelte';
+	import { templateLayout, type DashboardTemplate } from './tiles.ts';
 	import { tick, untrack, onDestroy, type Component } from 'svelte';
 	import {
 		api,
@@ -482,6 +484,13 @@
 	function openAdd() {
 		customize = null;
 		adding = true;
+	}
+	let choosingTemplate = $state(false);
+	function useTemplate(template: DashboardTemplate | 'default') {
+		checkpoint();
+		rebuild(template === 'default' ? defaults() : templateLayout(template, admin));
+		customize = null;
+		choosingTemplate = false;
 	}
 	function restoreDefaults() {
 		checkpoint();
@@ -1035,6 +1044,8 @@
 					title={`${t('dashboard.editor.redo')} (Strg+Y)`}
 					aria-label={t('dashboard.editor.redo')}
 					onclick={() => step('redo')}><Icon name="redo" size={15} /></button
+				><button class="btn" disabled={saving} onclick={() => (choosingTemplate = true)}
+					>{t('dashboard.templates.button')}</button
 				><button class="btn" disabled={saving} onclick={() => (confirmRestore = true)}
 					>{t('dashboard.restore')}</button
 				><button class="btn" disabled={saving} onclick={requestCancel}>{t('common.cancel')}</button
@@ -1359,6 +1370,10 @@
 				>
 			</div></Dialog
 		>{/if}
+	{#if choosingTemplate}<TemplateDialog
+			onpick={useTemplate}
+			onclose={() => (choosingTemplate = false)}
+		/>{/if}
 	{#if confirmRestore}<Dialog
 			title={t('dashboard.restore')}
 			onclose={() => (confirmRestore = false)}
