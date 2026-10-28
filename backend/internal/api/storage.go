@@ -428,3 +428,43 @@ func (s *Server) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleReplaceVolumeDisk swaps a working disk of an mdadm volume for a new
+// one without losing redundancy (assistant for swapping a disk).
+func (s *Server) handleReplaceVolumeDisk(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Old      string `json:"old"`
+		New      string `json:"new"`
+		Erase    bool   `json:"erase"`
+		Identity string `json:"identity"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := r.PathValue("name")
+	noteTarget(r, name+": "+req.Old+" → "+req.New)
+	slog.Info("replace disk requested", "volume", name, "old", req.Old, "new", req.New, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if err := s.opts.Storage.ReplaceDisk(context.WithoutCancel(r.Context()), name, req.Old, req.New, req.Identity, req.Erase); err != nil {
+		writeStorageError(w, r, "replace disk", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleIdentifyDisk makes the activity light of a disk flicker for a while.
+func (s *Server) handleIdentifyDisk(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Seconds int `json:"seconds"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.Seconds == 0 {
+		req.Seconds = 30
+	}
+	if err := s.opts.Storage.IdentifyDisk(r.Context(), r.PathValue("disk"), req.Seconds); err != nil {
+		writeStorageError(w, r, "identify disk", err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
