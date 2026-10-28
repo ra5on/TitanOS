@@ -483,6 +483,13 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 				device = "/dev/" + a.device
 			}
 			m.eraseLUKS(ctx, device)
+			// erase leaves the LUKS header with empty key slots inside
+			// the array; wipefs on the members below cannot see it (it
+			// starts at the data offset). Remove its signatures here, so
+			// that a reassembled array is not offered as LUKS again.
+			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", device); err != nil {
+				slog.Warn("wipe LUKS header", "device", device, "err", err)
+			}
 		}
 		// The cache device holds the array open.
 		if volume.Cache != nil {

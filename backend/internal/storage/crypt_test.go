@@ -36,7 +36,7 @@ func (r *cryptRunner) Run(ctx context.Context, stdin, name string, args ...strin
 	if name == "cryptsetup" || name == "dmsetup" {
 		return r.RunSecret(ctx, []byte(stdin), nil, name, args...)
 	}
-	if name == "btrfs" {
+	if name == "btrfs" || name == "wipefs" || name == "mdadm" {
 		r.crypt = append(r.crypt, name+" "+strings.Join(args, " "))
 	}
 	if _, tree := r.base.(*treeRunner); tree && name == "blkid" && slices.Contains(args, "UUID") {
@@ -460,6 +460,11 @@ func TestDeleteEncryptedArrayDestroysTheKeySlots(t *testing.T) {
 	}
 	crypt := runner.commands()
 	if !strings.Contains(crypt, "cryptsetup close titanos-crypt-tank") || !strings.Contains(crypt, "cryptsetup erase --batch-mode /dev/md127") {
+		t.Fatal(crypt)
+	}
+	// The header signatures go as well, before the array is stopped.
+	wipe := strings.Index(crypt, "wipefs --all --force /dev/md127")
+	if wipe < 0 || wipe > strings.Index(crypt, "mdadm --stop") {
 		t.Fatal(crypt)
 	}
 }
