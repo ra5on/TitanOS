@@ -591,40 +591,46 @@ func (m *Manager) AddDiskWithPassword(ctx context.Context, name, diskName string
 		return fmt.Errorf("%w: the volume is not running", ErrNotPossible)
 	}
 
-	devices, err := m.blockDevices(ctx)
+	slog.Info("adding disk to volume", "name", name, "disk", diskName)
+	part, err := m.prepareMember(ctx, name, a, diskName, identity)
 	if err != nil {
 		return err
+	}
+	_, err = m.runner.Run(ctx, "", "mdadm", "--manage", "/dev/"+a.device, "--add", part)
+	return err
+}
+
+// prepareMember checks a new disk for array a and gives it the one RAID
+// partition, at least as large as the members' (called with actions held).
+func (m *Manager) prepareMember(ctx context.Context, name string, a array, diskName, identity string) (string, error) {
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return "", err
 	}
 	disk, err := m.usable(m.status(devices, []array{a}), diskName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := checkIdentity(devices, diskName, identity); err != nil {
-		return err
+		return "", err
 	}
 	// The new partition must be at least as large as the existing ones.
 	sizeMiB := (m.memberSectors(a)*512 + mebibyte - 1) / mebibyte
 	if sizeMiB == 0 || disk.SizeBytes < (sizeMiB+1)*mebibyte+mebibyte {
-		return fmt.Errorf("%w: %s", ErrDiskTooSmall, diskName)
+		return "", fmt.Errorf("%w: %s", ErrDiskTooSmall, diskName)
 	}
 
 	// Same guard as Create: refuse holders, mounts and foreign arrays that
 	// also live on other disks; stop an old array that lives only here.
 	devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := checkIdentity(devices, diskName, identity); err != nil {
-		return err
+		return "", err
 	}
-	slog.Info("adding disk to volume", "name", name, "disk", diskName)
 	device, _ := findDevice(devices, diskName)
-	part, err := m.prepareDisk(ctx, device, name, sizeMiB)
-	if err != nil {
-		return err
-	}
-	_, err = m.runner.Run(ctx, "", "mdadm", "--manage", "/dev/"+a.device, "--add", part)
-	return err
+	return m.prepareDisk(ctx, device, name, sizeMiB)
 }
 
 // RemoveDisk takes a failed or spare disk out of a volume and wipes it.
