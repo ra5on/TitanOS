@@ -20,9 +20,27 @@ func (s *Server) letsEncrypt(w http.ResponseWriter) bool {
 	return true
 }
 
+// letsEncryptStatus adds what the firewall means for HTTP-01: with the
+// firewall on, port 80 usually is not reachable from the internet (it
+// belongs to the web UI, allowed from home and VPN only). The page then says
+// so; TitanOS never opens the port by itself.
+func (s *Server) letsEncryptStatus() any {
+	st := s.opts.LetsEncrypt.Status()
+	out := struct {
+		letsencrypt.Status
+		Firewall     bool `json:"firewall"`
+		InternetHTTP bool `json:"internetHttp"`
+	}{Status: st, InternetHTTP: st.HTTPPort}
+	if s.opts.Firewall != nil {
+		out.Firewall = s.opts.Firewall.Enabled()
+		out.InternetHTTP = st.HTTPPort && s.opts.Firewall.InternetHTTP()
+	}
+	return out
+}
+
 func (s *Server) handleLetsEncrypt(w http.ResponseWriter, r *http.Request) {
 	if s.letsEncrypt(w) {
-		writeJSON(w, http.StatusOK, s.opts.LetsEncrypt.Status())
+		writeJSON(w, http.StatusOK, s.letsEncryptStatus())
 	}
 }
 
@@ -47,7 +65,7 @@ func (s *Server) handleLetsEncryptChange(w http.ResponseWriter, r *http.Request)
 	}
 	slog.Info("Let's Encrypt settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
 	noteTarget(r, s.opts.LetsEncrypt.Status().Settings.Domains...)
-	writeJSON(w, http.StatusOK, s.opts.LetsEncrypt.Status())
+	writeJSON(w, http.StatusOK, s.letsEncryptStatus())
 }
 
 func (s *Server) handleLetsEncryptRenew(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +82,7 @@ func (s *Server) handleLetsEncryptRenew(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slog.Info("Let's Encrypt certificate renewal asked for", "by", currentUser(r).Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusAccepted, s.opts.LetsEncrypt.Status())
+	writeJSON(w, http.StatusAccepted, s.letsEncryptStatus())
 }
 
 func (s *Server) dynamicDNS(w http.ResponseWriter) bool {

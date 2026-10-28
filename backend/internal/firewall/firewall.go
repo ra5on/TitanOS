@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -569,4 +570,55 @@ func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (boo
 	}
 	slog.Info("firewall zones of an app changed", "app", key, "internet", zones.Internet)
 	return true, nil
+}
+
+// InternetHTTP tells whether the plain HTTP port of titand (where Let's
+// Encrypt checks an HTTP-01 challenge) is reachable from the internet zone
+// for anyone: the firewall is off, the web UI is allowed from the internet,
+// or an own rule without a source allows the port there before any deny.
+// Rules limited to a source never count: Let's Encrypt checks from
+// addresses nobody knows in advance. With plain HTTP off it is false.
+func (m *Manager) InternetHTTP() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	port := m.Web.or().HTTP
+	if port <= 0 {
+		return false
+	}
+	cfg := m.current()
+	if !m.loaded || !cfg.Enabled {
+		return true
+	}
+	return internetReaches(cfg, Services(&m.Web), "tcp", port)
+}
+
+// internetReaches follows the order of the internet chain in render: own
+// rules first (first match decides), then the services.
+func internetReaches(cfg Config, services []Service, protocol string, port int) bool {
+	for _, r := range cfg.Rules {
+		if r.Disabled || (r.Zone != "" && r.Zone != Internet) || r.Source != "" {
+			continue
+		}
+		if r.Protocol != "any" && r.Protocol != protocol {
+			continue
+		}
+		if r.Ports != "" {
+			low, high, err := parsePorts(r.Ports)
+			if err != nil || port < low || port > high {
+				continue
+			}
+		}
+		return r.Action != "deny"
+	}
+	for _, s := range services {
+		if !cfg.Services[s.ID].Has(Internet) {
+			continue
+		}
+		for _, set := range s.Ports {
+			if set.Protocol == protocol && slices.Contains(set.Ports, strconv.Itoa(port)) {
+				return true
+			}
+		}
+	}
+	return false
 }

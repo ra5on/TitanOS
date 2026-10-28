@@ -48,6 +48,11 @@ func TestLetsEncryptAndDDNSKeepTokens(t *testing.T) {
 	if res, body := ts.request("GET", "/api/v1/system/letsencrypt", nil); res.StatusCode != 200 || strings.Contains(string(body), "very-secret-token") {
 		t.Fatalf("get: %d %s", res.StatusCode, body)
 	}
+	// The page learns whether the firewall keeps port 80 from the internet
+	// (HTTP-01); with the firewall off nothing is in the way.
+	if _, body := ts.request("GET", "/api/v1/system/letsencrypt", nil); !strings.Contains(string(body), `"firewall":false`) || !strings.Contains(string(body), `"internetHttp":`) {
+		t.Fatalf("firewall fields: %s", body)
+	}
 	acme["domains"] = []string{"*.example.org"}
 	acme["challenge"] = "http-01"
 	if res, body := ts.request("PUT", "/api/v1/system/letsencrypt", acme); res.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "invalid_letsencrypt") {

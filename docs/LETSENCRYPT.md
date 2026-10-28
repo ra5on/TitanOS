@@ -20,7 +20,14 @@ Platzhalter `*.<domain>` – für die HTTPS-Namen der Apps, und erneuert es selb
     `/.well-known/acme-challenge/` auf Port 80 (sonst Weiterleitung auf HTTPS).
     **Port 80 muss aus dem Internet zum NAS erreichbar sein** (Weiterleitung im
     Router; eine Firewall auf dem NAS muss Port 80 erlauben). Keine Platzhalter,
-    keine App-Namen. Die Seite warnt, wenn titand ohne `-http` läuft.
+    keine App-Namen. Die Seite warnt, wenn titand ohne `-http` läuft, und
+    ebenso, wenn die TitanOS-Firewall eingeschaltet ist und Port 80 aus dem
+    Internet nicht für jeden erlaubt (Normalfall: Port 80 gehört zur
+    „Weboberfläche“, die nur Heimnetz und VPN erlaubt). Ausweg: DNS-Challenge
+    oder unter Firewall › Eigene Regeln „Erlauben, TCP, Port 80, Zone Internet“
+    ohne Absender. TitanOS öffnet Port 80 nie von selbst. Eine Regel mit
+    Absender zählt nicht, weil Let's Encrypt von wechselnden Adressen prüft
+    (`firewall.Manager.InternetHTTP`, Feld `internetHttp` der Status-API).
 - **Auch HTTPS-Namen der Apps abdecken** (nur DNS-Challenge): fügt
   `*.<domain>` hinzu, wobei `<domain>` die eigene Domain unter Einstellungen ›
   HTTPS-Namen für Apps ist. Ändert sich diese Domain, wird ein neues Zertifikat

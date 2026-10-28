@@ -43,7 +43,10 @@ Netzwerkumgebung nur aus dem Heimnetz.
 Let's Encrypt über HTTP-01 braucht Port 80 aus dem Internet. Bei
 eingeschalteter Firewall gehört Port 80 zum Dienst „Weboberfläche“, der im
 Internet gesperrt ist: dann DNS-01 verwenden oder eine eigene Regel „TCP 80 aus
-dem Internet“ anlegen ([Let's Encrypt](LETSENCRYPT.md)).
+dem Internet“ ohne Absender anlegen ([Let's Encrypt](LETSENCRYPT.md)). Die
+Let's-Encrypt-Seite zeigt diesen Hinweis, sobald HTTP-01 gewählt ist und die
+Firewall den Port aus dem Internet nicht erlaubt; TitanOS öffnet Port 80 nicht
+automatisch.
 
 Abweichung von „nichts aus dem Internet“: die VPN-Tunnel. Ihre Gegenstellen
 kommen naturgemäß aus dem Internet, das VPN prüft sie selbst kryptografisch,

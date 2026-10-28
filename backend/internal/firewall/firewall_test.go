@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"maps"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -605,5 +606,55 @@ func TestLoadInvalidStaysOff(t *testing.T) {
 	}
 	if nft.last() != offScript() || m.Status("").Config.Enabled {
 		t.Error("invalid settings must leave the firewall off")
+	}
+}
+
+// TestInternetHTTP decides whether Let's Encrypt can reach port 80 for an
+// HTTP-01 challenge.
+func TestInternetHTTP(t *testing.T) {
+	services := Services(nil)
+	cfg := normal(Defaults())
+	cfg.Enabled = true
+	if internetReaches(cfg, services, "tcp", 80) {
+		t.Error("the defaults block port 80 from the internet")
+	}
+	allow := Rule{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Internet}
+	for _, c := range []struct {
+		name  string
+		rules []Rule
+		want  bool
+	}{
+		{"own rule", []Rule{allow}, true},
+		{"range of any protocol in all zones", []Rule{{Action: "allow", Protocol: "any", Ports: "79-81"}}, true},
+		{"only one source", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Source: "203.0.113.7", Zone: Internet}}, false},
+		{"disabled", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Internet, Disabled: true}}, false},
+		{"other zone", []Rule{{Action: "allow", Protocol: "tcp", Ports: "80", Zone: Home}}, false},
+		{"deny before", []Rule{{Action: "deny", Protocol: "tcp", Ports: "80"}, allow}, false},
+		{"udp", []Rule{{Action: "allow", Protocol: "udp", Ports: "80", Zone: Internet}}, false},
+	} {
+		with := cfg
+		with.Rules = c.rules
+		if got := internetReaches(with, services, "tcp", 80); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+	web := cfg
+	web.Services = maps.Clone(cfg.Services)
+	web.Services["webui"] = Zones{Home: true, VPN: true, Internet: true}
+	if !internetReaches(web, services, "tcp", 80) {
+		t.Error("web UI allowed from the internet opens port 80")
+	}
+
+	m := &Manager{}
+	if !m.InternetHTTP() {
+		t.Error("an unloaded (off) firewall blocks nothing")
+	}
+	m.loaded, m.active = true, cfg
+	if m.InternetHTTP() {
+		t.Error("the loaded defaults block port 80")
+	}
+	m.Web = WebPorts{HTTP: -1}
+	if m.InternetHTTP() {
+		t.Error("without plain HTTP there is nothing to reach")
 	}
 }

@@ -46,6 +46,9 @@
 		nextAttempt?: string;
 		renewAt?: string;
 		httpPort: boolean;
+		/** The firewall is on, and whether it lets anyone reach port 80 from the internet. */
+		firewall?: boolean;
+		internetHttp?: boolean;
 		disabled?: boolean;
 	};
 
@@ -262,6 +265,18 @@
 			>
 			<p class="muted hint">{t('letsencrypt.challengeHttpHint')}</p>
 			{#if challenge === 'http-01' && !status.httpPort}<p class="notice-warn">{t('letsencrypt.noHttpPort')}</p>{/if}
+			{#if challenge === 'http-01' && status.httpPort && status.firewall && !status.internetHttp}
+				<div class="notice-warn" role="note" data-testid="le-firewall-http">
+					<p>{t('letsencrypt.firewallHttp')}</p>
+					<p>{t('letsencrypt.firewallHttpWays')}</p>
+					<div class="row-actions">
+						<a class="btn" href="/settings/firewall#firewall-rules">{t('letsencrypt.toFirewall')}</a>
+						<button type="button" class="btn" disabled={busy} onclick={() => (challenge = 'dns-01')}
+							>{t('letsencrypt.useDns')}</button
+						>
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		{#if challenge === 'dns-01'}
@@ -386,6 +401,9 @@
 	input[type='email'],
 	input[type='url'] {
 		max-width: 32rem;
+	}
+	.notice-warn p {
+		margin: 0 0 6px;
 	}
 	pre {
 		margin: 6px 0 0;
