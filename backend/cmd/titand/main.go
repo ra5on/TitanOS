@@ -995,6 +995,15 @@ func run(opts options) error {
 	acmeCerts.Disabled = opts.dev || certs == nil
 	acmeCerts.HTTPPort = !opts.dev && opts.httpAddr != ""
 	acmeCerts.AppDomain = func() string { return routes.Settings().Domain }
+	acmeCerts.AppNames = routes.Domains
+	// New full domains of app routes join the certificate soon.
+	kickFolders := routes.OnChange
+	routes.OnChange = func() {
+		if kickFolders != nil {
+			kickFolders()
+		}
+		acmeCerts.NamesChanged()
+	}
 	acmeCerts.Install = func(cert *tls.Certificate) {
 		if certs != nil {
 			certs.SetACME(cert)

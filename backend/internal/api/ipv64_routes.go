@@ -84,6 +84,11 @@ func (s *Server) ipv64Routes(mux *http.ServeMux) {
 	change("POST /api/v1/ipv64/cdn/{token}/access-list", s.handleIPv64AccessAdd)
 	change("DELETE /api/v1/ipv64/cdn/{token}/access-list/{id}", s.handleIPv64AccessRemove)
 
+	read("GET /api/v1/ipv64/assignments", s.handleIPv64Assignments)
+	change("PUT /api/v1/ipv64/assignments/{domain}", s.handleIPv64Assign)
+	change("DELETE /api/v1/ipv64/assignments/{domain}", s.handleIPv64Unassign)
+	change("PUT /api/v1/ipv64/ddns", s.handleIPv64DDNS)
+
 	read("GET /api/v1/ipv64/apps/{app}", s.handleIPv64App)
 	change("PUT /api/v1/ipv64/apps/{app}", s.handleIPv64Publish)
 	change("DELETE /api/v1/ipv64/apps/{app}", s.handleIPv64Unpublish)

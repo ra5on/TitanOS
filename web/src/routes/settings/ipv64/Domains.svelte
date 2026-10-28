@@ -6,7 +6,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { validIpv64Wish } from '#lib/dns-providers.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { CAA_LETSENCRYPT, recordProblem } from '../ddns/ddns.ts';
+	import { CAA_LETSENCRYPT, recordProblem } from '#lib/ddns/ddns.ts';
 	import type { DnsRecord, Domain, DomainDetail, Status } from './ipv64.ts';
 	import { failure } from './ui.ts';
 
@@ -130,7 +130,7 @@
 <div class="ipv64-tab">
 	<section class="tile panel" aria-labelledby="ipv64-domains">
 		<h2 class="tile-title" id="ipv64-domains">{t('ipv64x.domains')}</h2>
-		<p class="muted hint">{t('ipv64x.domainsHint')} <a href="/settings/ddns">{t('ipv64x.toDdns')}</a></p>
+		<p class="muted hint">{t('ipv64x.domainsHint')} <a href="/settings/ipv64?tab=dyndns">{t('ipv64x.toDynTab')}</a> · <a href="/settings/ipv64?tab=assignments">{t('ipv64x.tab.assignments')}</a></p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
 		<div class="table-wrap">
@@ -140,7 +140,7 @@
 					{#each domains as d (d.name)}
 						<tr>
 							<td class="mono"
-								>{d.name}{#if d.wildcard}<span class="chip ok">*</span>{/if}{#if ddnsHosts.includes(d.name)}<span class="chip">{t('ipv64x.inDdns')}</span>{/if}{#if !d.active}<span class="chip error"
+								>{d.name}{#if d.wildcard}<span class="chip ok">*</span>{/if}{#if ddnsHosts.includes(d.name)}<a class="chip" href="/settings/ipv64?tab=dyndns">{t('ipv64x.inDdns')}</a>{/if}{#if !d.active}<span class="chip error"
 										>{t('ipv64x.inactive')}</span
 									>{/if}</td
 							>

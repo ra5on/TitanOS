@@ -17,6 +17,12 @@ import {
 	integrationProblems,
 	statusPageURL,
 	tabFrom,
+	assignBody,
+	assignForm,
+	assignName,
+	assignProblems,
+	assignRows,
+	validAssignPrefix,
 	tone,
 	usagePercent,
 	usageText,
@@ -124,6 +130,7 @@ test('every text of the IPv64 pages exists in German and English', () => {
 	const files = readdirSync(dir).filter((f) => f.endsWith('.svelte')).map((f) => new URL(f, dir));
 	files.push(new URL('../src/routes/docker/apps/[name]/AppIpv64.svelte', import.meta.url));
 	files.push(new URL('../src/routes/settings/ddns/Ipv64Panel.svelte', import.meta.url));
+	for (const f of ['Heartbeat.svelte', 'DdnsStatus.svelte', 'UpdaterFields.svelte']) files.push(new URL(`../src/lib/ddns/${f}`, import.meta.url));
 	const keys = new Set(files.flatMap(keysIn));
 	// Keys built from the enums of the description.
 	for (const tab of TABS) keys.add(`ipv64x.tab.${tab}`);
@@ -140,11 +147,48 @@ test('every text of the IPv64 pages exists in German and English', () => {
 	for (const c of ['default', 'letsencrypt', 'issuing']) keys.add(`ipv64x.cert.${c}`);
 	for (const st of ['active', 'inactive', 'cdn_record', 'cdn_proxied', 'cdn_partial', 'failover_record', 'failover_replaced']) keys.add(`ipv64x.recordState.${st}`);
 	for (const s of ['own', 'ddns', 'letsencrypt']) keys.add(`ipv64x.keySource.${s}`), keys.add(`ipv64x.usedBy.${s}`);
+	for (const s of ['own', 'ddns', 'letsencrypt', 'none']) keys.add(`ipv64x.dyn.key.${s}`);
+	for (const k of ['nas', 'app', 'target', 'public']) keys.add(`ipv64x.assign.kind.${k}`);
+	for (const d of ['ddns', 'wildcard', 'cdn', 'none']) keys.add(`ipv64x.assign.dns.${d}`);
 	for (const kind of ['delete', 'reset', 'rotate', 'record', 'deleteCheck', 'rotateCheck', 'deleteIntegration', 'deletePage'])
 		for (const part of ['title', 'text', 'button']) keys.add(`ipv64x.confirm.${kind}.${part}`);
 	for (const kind of ['ipv64_failover', 'ipv64_fallback', 'ipv64_check_down', 'ipv64_cdn_traffic']) keys.add(`notify.kind.${kind}.title`), keys.add(`notify.kind.${kind}.text`);
-	for (const code of ['ipv64_not_found', 'ipv64_conflict', 'ipv64_limit', 'ipv64_invalid', 'ipv64_exists', 'ipv64_reserved_port', 'ipv64_port_not_published', 'browser_session_required', 'ipv64_confirm_required'])
+	for (const code of ['ipv64_not_found', 'ipv64_conflict', 'ipv64_limit', 'ipv64_invalid', 'ipv64_exists', 'ipv64_reserved_port', 'ipv64_port_not_published', 'browser_session_required', 'ipv64_confirm_required', 'ddns_other_provider'])
 		keys.add(`error.${code}`);
 	const missing = [...keys].filter((k) => !(k in de) || !(k in en) || !de[k] || !en[k]);
 	assert.deepEqual(missing, []);
+});
+
+test('assignments list every domain with the names below it', () => {
+	const rows = assignRows({
+		domains: [{ name: 'nas.ipv64.de' }, { name: 'b.ipv64.net' }],
+		assignments: [
+			{ domain: 'photos.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'app', app: 'immich', port: 2283 },
+			{ domain: 'nas.ipv64.de', zone: 'nas.ipv64.de', target: 'nas' },
+			{ domain: 'a.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'public', app: 'x', port: 80 },
+		],
+	});
+	assert.deepEqual(
+		rows.map((r) => [r.name, r.assignment?.target ?? null]),
+		[['b.ipv64.net', null], ['nas.ipv64.de', 'nas'], ['a.nas.ipv64.de', 'public'], ['photos.nas.ipv64.de', 'app']],
+	);
+	assert.equal(assignName(' Photos ', 'nas.ipv64.de'), 'photos.nas.ipv64.de');
+	assert.equal(assignName('', 'nas.ipv64.de'), 'nas.ipv64.de');
+	assert.ok(validAssignPrefix('a.b') && !validAssignPrefix('a.b', true) && !validAssignPrefix('-x'));
+});
+
+test('the assignment form sends what the target needs', () => {
+	const form = assignForm(null);
+	assert.deepEqual(assignBody(form, false), { target: 'nas' });
+	const app = { ...form, kind: 'app', app: 'immich', port: 0 };
+	assert.deepEqual(assignProblems(app, false), ['port']);
+	assert.deepEqual(assignProblems(app, true), []);
+	assert.deepEqual(assignBody({ ...app, port: 2283 }, true), { target: 'app', app: 'immich', port: 2283, scheme: 'http', localOnly: true });
+	const pub = { ...app, port: 2283, via: 'public' };
+	assert.deepEqual(assignProblems(pub, true), ['ownLogin']);
+	assert.deepEqual(assignBody({ ...pub, ownLogin: true }, false), { target: 'app', app: 'immich', public: true, port: 2283, scheme: 'http', firewall: false, confirm: true });
+	assert.deepEqual(assignProblems({ ...form, kind: 'target' }, false), ['target']);
+	const back = assignForm({ domain: 'a.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'public', app: 'x', port: 80 });
+	assert.equal(back.kind, 'app');
+	assert.equal(back.via, 'public');
 });

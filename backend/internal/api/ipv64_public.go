@@ -289,163 +289,188 @@ func untilReady(ctx context.Context, call func() error) error {
 	}
 }
 
-// handleIPv64Publish makes an app reachable from the internet: A/AAAA for
-// the name (created with the addresses of dynamic DNS, or the one the
-// request comes from), the domain in the CDN, the records routed through
-// it, the reverse proxy on with HTTPS to the app's port, and, if the
-// firewall is on and the owner allows it, the app's ports open from the
-// internet zone.
-func (s *Server) handleIPv64Publish(w http.ResponseWriter, r *http.Request) {
-	app := r.PathValue("app")
-	var req struct {
-		Domain   string `json:"domain"`
-		Prefix   string `json:"prefix"`
-		Port     int    `json:"port"`
-		Scheme   string `json:"scheme"`
-		Firewall bool   `json:"firewall"`
-		// Confirm is the click in the warning dialog.
-		Confirm bool `json:"confirm"`
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
+// publishRequest is how an app is to be published through IPv64.
+type publishRequest struct {
+	Domain   string `json:"domain"`
+	Prefix   string `json:"prefix"`
+	Port     int    `json:"port"`
+	Scheme   string `json:"scheme"`
+	Firewall bool   `json:"firewall"`
+	// Confirm is the click in the warning dialog.
+	Confirm bool `json:"confirm"`
+}
+
+// publishRefusal is why a request to publish cannot go ahead.
+type publishRefusal struct {
+	status        int
+	code, message string
+}
+
+// checkPublish normalizes a request and returns why it cannot be
+// published, or nil. replacing allows an app that is published already
+// (its publication is taken back before the new one).
+func (s *Server) checkPublish(ctx context.Context, app string, req *publishRequest, replacing bool) *publishRefusal {
 	req.Domain, req.Prefix = strings.ToLower(strings.TrimSpace(req.Domain)), strings.ToLower(strings.TrimSpace(req.Prefix))
 	if req.Scheme == "" {
 		req.Scheme = "http"
 	}
 	switch {
 	case !req.Confirm:
-		writeError(w, http.StatusBadRequest, "ipv64_confirm_required", "publishing an app needs the confirmation")
-		return
+		return &publishRefusal{http.StatusBadRequest, "ipv64_confirm_required", "publishing an app needs the confirmation"}
 	case !dnsprovider.ValidHost(req.Domain) || (req.Prefix != "" && !dnsprovider.ValidHost(req.Prefix+"."+req.Domain)) || strings.Contains(req.Prefix, "."):
-		writeError(w, http.StatusBadRequest, "invalid_ipv64", "domain or prefix")
-		return
+		return &publishRefusal{http.StatusBadRequest, "invalid_ipv64", "domain or prefix"}
 	case req.Scheme != "http" && req.Scheme != "https":
-		writeError(w, http.StatusBadRequest, "invalid_ipv64", "scheme")
-		return
+		return &publishRefusal{http.StatusBadRequest, "invalid_ipv64", "scheme"}
 	case s.reservedPort(req.Port):
-		writeError(w, http.StatusBadRequest, "ipv64_reserved_port", "the ports of the TitanOS web UI are never published")
-		return
+		return &publishRefusal{http.StatusBadRequest, "ipv64_reserved_port", "the ports of the TitanOS web UI are never published"}
 	}
-	if _, ok := s.opts.IPv64.PublishedApp(app); ok {
-		writeError(w, http.StatusConflict, "ipv64_exists", "the app is already published")
-		return
+	if _, ok := s.opts.IPv64.PublishedApp(app); ok && !replacing {
+		return &publishRefusal{http.StatusConflict, "ipv64_exists", "the app is already published"}
 	}
-	ports, found := s.appPorts(r.Context(), app)
+	ports, found := s.appPorts(ctx, app)
 	if !found || !slices.Contains(ports, req.Port) {
-		writeError(w, http.StatusBadRequest, "ipv64_port_not_published", "the app publishes no such TCP port on the NAS")
+		return &publishRefusal{http.StatusBadRequest, "ipv64_port_not_published", "the app publishes no such TCP port on the NAS"}
+	}
+	return nil
+}
+
+// handleIPv64Publish makes an app reachable from the internet (see
+// publishApp).
+func (s *Server) handleIPv64Publish(w http.ResponseWriter, r *http.Request) {
+	app := r.PathValue("app")
+	var req publishRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if refusal := s.checkPublish(r.Context(), app, &req, false); refusal != nil {
+		writeError(w, refusal.status, refusal.code, refusal.message)
 		return
 	}
 	noteTarget(r, app, req.Domain)
 	s.ipv64Run(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
-		entry := ipv64.Published{App: app, Port: req.Port, Domain: req.Domain, Prefix: req.Prefix, At: time.Now().UTC(), Records: []string{}}
-		names := func() ([]dnsprovider.IPv64FullRecord, error) {
-			all, err := c.FullRecords(ctx, req.Domain)
-			var out []dnsprovider.IPv64FullRecord
-			for _, rec := range all {
-				if rec.Prefix == req.Prefix && (rec.Type == "A" || rec.Type == "AAAA") {
-					out = append(out, rec)
-				}
-			}
-			return out, err
-		}
-		records, err := names()
+		entry, err := s.publishApp(ctx, c, app, req, currentUser(r).Name)
 		if err != nil {
 			return 0, nil, err
 		}
-		if len(records) == 0 {
-			v4, v6 := s.ddnsAddresses()
-			if _, err := c.UpdatePrefix(ctx, req.Domain, req.Prefix, v4, v6); err != nil {
-				return 0, nil, err
-			}
-			if records, err = names(); err != nil {
-				return 0, nil, err
-			}
-		}
-		cdns, err := c.CDNs(ctx)
-		if err != nil {
-			return 0, nil, err
-		}
-		for _, cdn := range cdns {
-			if cdn.Domain != nil && *cdn.Domain == req.Domain {
-				entry.CDN = cdn.ID
-				detail, err := c.CDN(ctx, cdn.ID)
-				if err != nil {
-					return 0, nil, err
-				}
-				if detail.Proxy.State == "on" && detail.Proxy.Backend.Port != 0 && detail.Proxy.Backend.Port != req.Port {
-					return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusConflict, Code: "cdn_in_use", Message: "the CDN of this domain already sends to another port; a domain has one backend port"}
-				}
-			}
-		}
-		if entry.CDN == "" {
-			cdn, err := c.CreateCDN(ctx, req.Domain)
-			if err != nil {
-				return 0, nil, err
-			}
-			entry.CDN, entry.CreatedCDN = cdn.ID, true
-		}
-		// "Fertig ist die Änderung, wenn bei CDN-Domains die Liste pending
-		// leer ist": wait for the server, looking every few seconds.
-		if err := waitForServer(ctx, c, entry.CDN); err != nil {
-			s.unpublish(context.WithoutCancel(ctx), c, entry)
-			return 0, nil, err
-		}
-		for _, rec := range records {
-			ref := rec.Token
-			if ref == "" {
-				continue
-			}
-			err := untilReady(ctx, func() error {
-				_, err := c.CDNRecord(ctx, entry.CDN, ref, "full")
-				return err
-			})
-			if err != nil && !isCode(err, "already_enabled") {
-				s.unpublish(context.WithoutCancel(ctx), c, entry)
-				return 0, nil, err
-			}
-			entry.Records = append(entry.Records, ref)
-		}
-		if err := untilReady(ctx, func() error {
-			_, _, err := c.CDNAction(ctx, entry.CDN, "proxy/enable")
-			if isCode(err, "invalid_state") {
-				return nil
-			}
-			return err
-		}); err != nil {
-			s.unpublish(context.WithoutCancel(ctx), c, entry)
-			return 0, nil, err
-		}
-		frontend, on := "https_redirect", true
-		in := dnsprovider.CDNInput{Frontend: &frontend, BackendScheme: &req.Scheme, BackendPort: &req.Port, Websocket: &on}
-		var detail dnsprovider.IPv64CDN
-		if err := untilReady(ctx, func() error {
-			var err error
-			detail, err = c.ChangeCDN(ctx, entry.CDN, in)
-			return err
-		}); err != nil {
-			s.unpublish(context.WithoutCancel(ctx), c, entry)
-			return 0, nil, err
-		}
-		entry.Pending = detail.Pending
-		if req.Firewall && s.opts.Firewall.Enabled() {
-			before := s.opts.Firewall.AppZones(app)
-			zones := before
-			zones.Internet = true
-			changed, err := s.opts.Firewall.SetAppZones(ctx, app, zones)
-			if err != nil {
-				slog.Error("firewall zones of a published app not changed", "app", app, "err", err)
-			} else if changed {
-				entry.Firewall = true
-				entry.Before = &ipv64.AppZones{Home: before.Home, VPN: before.VPN, Internet: before.Internet}
-			}
-		}
-		if err := s.opts.IPv64.AddPublished(entry); err != nil {
-			return 0, nil, err
-		}
-		slog.Info("app published through IPv64", "app", app, "domain", req.Domain, "port", req.Port, "by", currentUser(r).Name)
 		return http.StatusCreated, entry, nil
 	})
+}
+
+// publishApp makes an app reachable from the internet: A/AAAA for the
+// name (created with the addresses of dynamic DNS, or the one the request
+// comes from), the domain in the CDN, the records routed through it, the
+// reverse proxy on with HTTPS to the app's port, and, if the firewall is
+// on and the owner allows it, the app's ports open from the internet
+// zone. req must have passed checkPublish.
+func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app string, req publishRequest, by string) (ipv64.Published, error) {
+	fail := func(err error) (ipv64.Published, error) { return ipv64.Published{}, err }
+	entry := ipv64.Published{App: app, Port: req.Port, Domain: req.Domain, Prefix: req.Prefix, At: time.Now().UTC(), Records: []string{}}
+	names := func() ([]dnsprovider.IPv64FullRecord, error) {
+		all, err := c.FullRecords(ctx, req.Domain)
+		var out []dnsprovider.IPv64FullRecord
+		for _, rec := range all {
+			if rec.Prefix == req.Prefix && (rec.Type == "A" || rec.Type == "AAAA") {
+				out = append(out, rec)
+			}
+		}
+		return out, err
+	}
+	records, err := names()
+	if err != nil {
+		return fail(err)
+	}
+	if len(records) == 0 {
+		v4, v6 := s.ddnsAddresses()
+		if _, err := c.UpdatePrefix(ctx, req.Domain, req.Prefix, v4, v6); err != nil {
+			return fail(err)
+		}
+		if records, err = names(); err != nil {
+			return fail(err)
+		}
+	}
+	cdns, err := c.CDNs(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	for _, cdn := range cdns {
+		if cdn.Domain != nil && *cdn.Domain == req.Domain {
+			entry.CDN = cdn.ID
+			detail, err := c.CDN(ctx, cdn.ID)
+			if err != nil {
+				return fail(err)
+			}
+			if detail.Proxy.State == "on" && detail.Proxy.Backend.Port != 0 && detail.Proxy.Backend.Port != req.Port {
+				return fail(&dnsprovider.APIError{Provider: "IPv64", Status: http.StatusConflict, Code: "cdn_in_use", Message: "the CDN of this domain already sends to another port; a domain has one backend port"})
+			}
+		}
+	}
+	if entry.CDN == "" {
+		cdn, err := c.CreateCDN(ctx, req.Domain)
+		if err != nil {
+			return fail(err)
+		}
+		entry.CDN, entry.CreatedCDN = cdn.ID, true
+	}
+	// "Fertig ist die Änderung, wenn bei CDN-Domains die Liste pending
+	// leer ist": wait for the server, looking every few seconds.
+	if err := waitForServer(ctx, c, entry.CDN); err != nil {
+		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		return fail(err)
+	}
+	for _, rec := range records {
+		ref := rec.Token
+		if ref == "" {
+			continue
+		}
+		err := untilReady(ctx, func() error {
+			_, err := c.CDNRecord(ctx, entry.CDN, ref, "full")
+			return err
+		})
+		if err != nil && !isCode(err, "already_enabled") {
+			s.unpublish(context.WithoutCancel(ctx), c, entry)
+			return fail(err)
+		}
+		entry.Records = append(entry.Records, ref)
+	}
+	if err := untilReady(ctx, func() error {
+		_, _, err := c.CDNAction(ctx, entry.CDN, "proxy/enable")
+		if isCode(err, "invalid_state") {
+			return nil
+		}
+		return err
+	}); err != nil {
+		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		return fail(err)
+	}
+	frontend, on := "https_redirect", true
+	in := dnsprovider.CDNInput{Frontend: &frontend, BackendScheme: &req.Scheme, BackendPort: &req.Port, Websocket: &on}
+	var detail dnsprovider.IPv64CDN
+	if err := untilReady(ctx, func() error {
+		var err error
+		detail, err = c.ChangeCDN(ctx, entry.CDN, in)
+		return err
+	}); err != nil {
+		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		return fail(err)
+	}
+	entry.Pending = detail.Pending
+	if req.Firewall && s.opts.Firewall.Enabled() {
+		before := s.opts.Firewall.AppZones(app)
+		zones := before
+		zones.Internet = true
+		changed, err := s.opts.Firewall.SetAppZones(ctx, app, zones)
+		if err != nil {
+			slog.Error("firewall zones of a published app not changed", "app", app, "err", err)
+		} else if changed {
+			entry.Firewall = true
+			entry.Before = &ipv64.AppZones{Home: before.Home, VPN: before.VPN, Internet: before.Internet}
+		}
+	}
+	if err := s.opts.IPv64.AddPublished(entry); err != nil {
+		return fail(err)
+	}
+	slog.Info("app published through IPv64", "app", app, "domain", req.Domain, "port", req.Port, "by", by)
+	return entry, nil
 }
 
 func (s *Server) ddnsAddresses() (v4, v6 netip.Addr) {

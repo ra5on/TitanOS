@@ -251,6 +251,11 @@ func (m *Manager) Set(s Settings, clear []string) error {
 		s.Heartbeat.Token = m.settings.Heartbeat.Token
 		s.Heartbeat.Check = m.settings.Heartbeat.Check
 	}
+	return m.keep(s)
+}
+
+// keep checks and stores new settings; called with mu held.
+func (m *Manager) keep(s Settings) error {
 	s, err := normalize(s)
 	if err != nil {
 		return err
@@ -265,6 +270,76 @@ func (m *Manager) Set(s Settings, clear []string) error {
 	m.poke(false)
 	m.pokeBeat()
 	return nil
+}
+
+// ErrOtherProvider means the names are kept up to date by a provider other
+// than IPv64.net, so a name of IPv64 cannot join them.
+var ErrOtherProvider = errors.New("ddns: another provider is in use")
+
+// AddHostname adds one name to those kept up to date, leaving everything
+// else as it is (Settings › IPv64 assigns domains this way). Without a
+// provider, IPv64.net with ipv64Key becomes it. With IPv64.net and a key
+// or update token, dynamic DNS is switched on (with IPv4 and IPv6 if
+// neither was chosen). At most maxHosts names.
+func (m *Manager) AddHostname(host, ipv64Key string) error {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	next := m.settings
+	next.Hostnames = slices.Clone(m.settings.Hostnames)
+	switch next.Provider.Type {
+	case "":
+		if ipv64Key == "" {
+			return invalid("no provider and no API key of IPv64")
+		}
+		next.Provider = dnsprovider.Config{Type: dnsprovider.IPv64Net, Token: ipv64Key}
+	case dnsprovider.IPv64Net:
+	default:
+		return ErrOtherProvider
+	}
+	if slices.Contains(next.Hostnames, host) && next.Enabled {
+		return nil
+	}
+	if !slices.Contains(next.Hostnames, host) {
+		next.Hostnames = append(next.Hostnames, host)
+	}
+	if next.Provider.Token != "" || next.Provider.UpdateToken != "" {
+		next.Enabled = true
+		if !next.IPv4 && !next.IPv6 {
+			next.IPv4, next.IPv6 = true, true
+		}
+	}
+	return m.keep(next)
+}
+
+// RemoveHostname takes one name out of those kept up to date; the record
+// at the provider stays. Without names left, dynamic DNS switches off.
+func (m *Manager) RemoveHostname(host string) error {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	if !slices.Contains(m.settings.Hostnames, host) {
+		return nil
+	}
+	next := m.settings
+	next.Hostnames = slices.DeleteFunc(slices.Clone(m.settings.Hostnames), func(h string) bool { return h == host })
+	if len(next.Hostnames) == 0 {
+		next.Enabled = false
+	}
+	return m.keep(next)
+}
+
+// Hostnames returns the names kept up to date.
+func (m *Manager) Hostnames() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.settings.Hostnames)
 }
 
 // UpdateNow sends the addresses even if they did not change.

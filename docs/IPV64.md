@@ -61,9 +61,73 @@ ignorierte Adressfamilie, fester IPv6-Präfix, DNS-Einträge anlegen/ändern/
 löschen (vom CDN oder Failover verwaltete sind gesperrt). Neuer Update-Token
 (Warnung: Router und andere Updater brauchen den neuen; nutzt dynamisches DNS
 den alten, übernimmt TitanOS den neuen selbst), Zone zurücksetzen (deutlicher
-einfacher Bestätigungsdialog) und Domain löschen (nennt die Folgen). Die Seite
-Dynamisches DNS behält Domainauswahl, Updater-Einstellungen und „Erreichbarkeit
-überwachen“ und verlinkt hierher.
+einfacher Bestätigungsdialog) und Domain löschen (nennt die Folgen). Das Chip
+„dyn. DNS“ führt in den Reiter DynDNS.
+
+### 2a. DynDNS
+Alles, was Einstellungen › Dynamisches DNS kann, mit IPv64 als festem Anbieter.
+Beide Seiten arbeiten auf derselben Datei (`/config/ddns/settings.json`);
+Änderungen sind auf beiden sofort sichtbar. Dynamisches DNS bleibt für andere
+Anbieter, und nutzt es gerade einen anderen, sagt der Reiter, dass Speichern es
+auf IPv64 umstellt.
+
+- **Zustand:** gefundene und eingetragene IPv4/IPv6, letzter/nächster Blick,
+  letzter Fehler, „Jetzt aktualisieren“ (`POST /network/ddns/update`).
+- **Key:** keine zweite Eingabe. `PUT /api/v1/ipv64/ddns` behält einen Key, den
+  dynamisches DNS für IPv64 schon hat; sonst übernimmt es den Key dieses
+  Bereichs (eigener, sonst der von Let's Encrypt). Ein reiner Update-Token
+  bleibt nutzbar.
+- **Namen** (höchstens 8): Liste mit Entfernen, Aufnehmen aus den eigenen
+  Domains oder als Name darunter (z. B. `photos.nas.ipv64.de`), „Anlegen und
+  aufnehmen“ für eine neue DynDNS-Domain (einfacher Bestätigungsdialog).
+- **IPv6-Präfix mitschicken** (keiner, automatisch, fest), IPv4/IPv6,
+  Intervall (Standard, 5 Minuten bis 1 Tag), eigener Abfragedienst,
+  Schnittstelle.
+- **Je Domain:** Platzhalter, ignorierte Adressfamilie und fester IPv6-Präfix
+  (sofort bei IPv64), „Für App-HTTPS-Namen verwenden“ (`PUT /docker/proxy`) und
+  „Router-Update …“: die Adresse für Router und andere Updater
+  (`https://ipv64.net/nic/update?key=<update-token>&domain=…&ip=<ipaddr>&ip6=<ip6addr>`)
+  mit „Neuer Update-Token“. Den Token selbst zeigt TitanOS nie an (er steht bei
+  ipv64.net).
+- **Erreichbarkeit überwachen** wie unter Dynamisches DNS (dieselbe Komponente,
+  `web/src/lib/ddns/`); einschaltbar, sobald DynDNS hier mit IPv64 gespeichert
+  ist.
+
+### 2b. Zuweisungen
+Eine Tabelle „Domain → Ziel“ für jede Domain des Kontos und jeden Namen darunter.
+„Ändern …“ öffnet einen Dialog mit der Ziel-Art:
+
+- **NAS:** der Name kommt in dynamisches DNS (`ddns.AddHostname`); unter ihm
+  antwortet die Weboberfläche.
+- **App über das NAS:** volle Domain im HTTPS-Namen der App
+  (`appproxy` `Route.Domains`, siehe `docs/APP-PROXY.md`) und der Name in
+  dynamischem DNS. Hat die App noch keinen HTTPS-Namen, legt TitanOS einen an
+  (Port aus den veröffentlichten TCP-Ports der App, nie die von TitanOS, ab
+  Werk nur Heimnetz/Tailscale/NetBird; für das Internet Häkchen weg und Port
+  443 weiterleiten).
+- **App aus dem Internet über das CDN:** dieselbe Veröffentlichung wie im
+  App-Editor (Warnung, Häkchen „eigene Anmeldung“, `confirm`, optional
+  Firewall), nur für einen Namen direkt unter einer Domain des Kontos. Der Name
+  verlässt dabei dynamisches DNS und die HTTPS-Namen, damit kein Updater die
+  CDN-Einträge überschreibt.
+- **VM oder Gerät:** volle Domain an einem Ziel der HTTPS-Namen; ein neues Ziel
+  lässt sich im Dialog anlegen (Felder wie unter HTTPS-Namen für Apps).
+
+Unter einer Domain mit Platzhalter, die selbst in dynamischem DNS steht, braucht
+ein Name keinen eigenen DynDNS-Eintrag (Spalte DNS: „Platzhalter“). Neue Namen
+unter einer Domain entstehen beim Zuweisen; „Anlegen und zuweisen“ legt zuvor
+eine neue DynDNS-Domain an. Ändern nimmt den Namen vom bisherigen Ziel (zuerst
+aus dem CDN zurück, dann DynDNS, dann HTTPS-Namen); „Zuweisung entfernen“
+(einfacher Bestätigungsdialog) nimmt alles zurück und lässt Domain und
+DNS-Einträge bei IPv64. Nutzt dynamisches DNS einen anderen Anbieter, lehnt
+TitanOS NAS/App/Gerät mit `ddns_other_provider` ab.
+
+API (nur Besitzer/Admin, Änderungen nur aus einer Websitzung):
+`GET /api/v1/ipv64/assignments` → `{domains, assignments: [{domain, zone, prefix, target: nas|app|target|public, app, port, scheme, dns: ddns|wildcard|"", url}], zones, ddns: {enabled, provider, hostnames, max}, firewall}`;
+`PUT /api/v1/ipv64/assignments/{domain}` mit `{target: "nas"|"app"|"target", app?, targetId?, port?, scheme?, localOnly?, public?, firewall?, confirm?}`;
+`DELETE /api/v1/ipv64/assignments/{domain}`; `PUT /api/v1/ipv64/ddns` mit
+`{enabled, hostnames, ipv4, ipv6, interval, lookupURL, interface, ipv6Prefix}`.
+Beide Änderungen und der Reiter DynDNS stehen im Aktivitätsprotokoll.
 
 ### 3. Überwachung
 Healthchecks aller Arten (`push`, `icmp`, `tcp`, `http`, `keyword`) anlegen,
@@ -193,7 +257,10 @@ Go-Tests: Client (`dnsprovider/ipv64_v2_test.go`: jedes Feld und jede
 Aufzählung der genutzten Endpunkte, keine Geheimnisse in Antworten,
 Token-Bucket), Manager (`ipv64/ipv64_test.go`: Blocklist, Abfragen,
 WireGuard mit nachgebauten Befehlen), API (`api/ipv64_area_test.go`: Rechte,
-Websitzung, Keys, Domains, Checks, Wartungsseite, Veröffentlichen, CDN, Router),
+Websitzung, Keys, Domains, Checks, Wartungsseite, Veröffentlichen, CDN, Router;
+`api/ipv64_assign_test.go`: Zuweisungen an NAS, App, Ziel, Platzhalter, CDN,
+Zurücknehmen, anderer DDNS-Anbieter, Reiter DynDNS), DDNS-Teilupdates
+(`ddns/ddns_test.go`), volle Domains im App-Proxy (`appproxy/options_test.go`),
 Firewall (`firewall/ipv64_test.go`). Webtests `web/tests/ipv64.test.mjs`
 (Helfer, Texte in beiden Sprachen), Browserprüfung `scripts/test-ui-ipv64.mjs`.
 Nicht geprüft: echtes IPv64, echtes WireGuard/`wg`, echte nftables-Mengen mit

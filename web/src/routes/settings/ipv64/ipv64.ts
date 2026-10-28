@@ -3,7 +3,7 @@
 // titand passes them on; secrets (tokens, push URLs, update tokens, keys of
 // integrations, WireGuard keys) are never part of them.
 
-export const TABS = ['overview', 'domains', 'monitoring', 'failover', 'public', 'router', 'blocklist'] as const;
+export const TABS = ['overview', 'domains', 'dyndns', 'assignments', 'monitoring', 'failover', 'public', 'router', 'blocklist'] as const;
 export type Tab = (typeof TABS)[number];
 
 export function tabFrom(value: string | null): Tab {
@@ -465,4 +465,110 @@ export function iconProblem(file: { type: string; size: number }): '' | 'type' |
 /** A prefix of a record: empty or one DNS label. */
 export function validPrefix(prefix: string): boolean {
 	return prefix === '' || /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(prefix);
+}
+
+// --- Assignments: one domain of the account → NAS, app, target or CDN ---
+
+export type AssignTarget = 'nas' | 'app' | 'target' | 'public';
+export type Assignment = {
+	domain: string;
+	zone: string;
+	prefix?: string;
+	target: AssignTarget;
+	app?: string;
+	port?: number;
+	scheme?: string;
+	/** How the name points at the NAS: a name of dynamic DNS, a wildcard above it, or "" (records of its own). */
+	dns?: '' | 'ddns' | 'wildcard';
+	url?: string;
+};
+export type Assignments = {
+	domains: Domain[];
+	assignments: Assignment[];
+	zones: string[];
+	ddns: { enabled: boolean; provider: string; hostnames: string[]; max: number };
+	firewall: boolean;
+};
+
+/** One row of the table: a domain of the account or an assigned name below it. */
+export type AssignRow = { name: string; zone: string; assignment: Assignment | null };
+
+/** The rows: every domain of the account, each followed by the assigned names below it. */
+export function assignRows(data: Pick<Assignments, 'domains' | 'assignments'>): AssignRow[] {
+	const byName = new Map(data.assignments.map((a) => [a.domain, a]));
+	const rows: AssignRow[] = [];
+	for (const d of [...data.domains].sort((a, b) => a.name.localeCompare(b.name))) {
+		rows.push({ name: d.name, zone: d.name, assignment: byName.get(d.name) ?? null });
+		for (const a of data.assignments.filter((x) => x.zone === d.name && x.domain !== d.name).sort((x, y) => x.domain.localeCompare(y.domain)))
+			rows.push({ name: a.domain, zone: d.name, assignment: a });
+	}
+	return rows;
+}
+
+/** The full name of a prefix under a domain ("" is the domain itself). */
+export function assignName(prefix: string, domain: string): string {
+	const p = prefix.trim().toLowerCase().replace(/\.$/, '');
+	return p ? `${p}.${domain}` : domain;
+}
+
+/** A prefix before a domain: labels of a-z, 0-9 and hyphens; through the CDN only one. */
+export function validAssignPrefix(prefix: string, publicName = false): boolean {
+	const p = prefix.trim().toLowerCase();
+	if (p === '') return true;
+	const labels = p.split('.');
+	if (publicName && labels.length > 1) return false;
+	return labels.every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l));
+}
+
+export type AssignForm = {
+	kind: 'nas' | 'app' | 'target';
+	app: string;
+	/** For an app: through the HTTPS name of the NAS or over the internet through the CDN. */
+	via: 'local' | 'public';
+	port: number;
+	scheme: 'http' | 'https';
+	localOnly: boolean;
+	targetId: string;
+	firewall: boolean;
+	ownLogin: boolean;
+};
+
+export function assignForm(current: Assignment | null): AssignForm {
+	return {
+		kind: current ? (current.target === 'public' ? 'app' : current.target) : 'nas',
+		app: current && (current.target === 'app' || current.target === 'public') ? (current.app ?? '') : '',
+		via: current?.target === 'public' ? 'public' : 'local',
+		port: current?.port ?? 0,
+		scheme: current?.scheme === 'https' ? 'https' : 'http',
+		localOnly: true,
+		targetId: current?.target === 'target' ? (current.app ?? '') : '',
+		firewall: true,
+		ownLogin: false,
+	};
+}
+
+/** What PUT /ipv64/assignments/{domain} takes. */
+export function assignBody(form: AssignForm, firewall: boolean) {
+	switch (form.kind) {
+		case 'nas':
+			return { target: 'nas' };
+		case 'target':
+			return { target: 'target', targetId: form.targetId };
+		default:
+			return form.via === 'public'
+				? { target: 'app', app: form.app, public: true, port: form.port, scheme: form.scheme, firewall: firewall && form.firewall, confirm: true }
+				: { target: 'app', app: form.app, port: form.port, scheme: form.scheme, localOnly: form.localOnly };
+	}
+}
+
+/** What is still missing before the form can be sent; hasRoute says the app has an HTTPS name already. */
+export function assignProblems(form: AssignForm, hasRoute: boolean): string[] {
+	const out: string[] = [];
+	if (form.kind === 'target' && !form.targetId) out.push('target');
+	if (form.kind === 'app') {
+		if (!form.app) out.push('app');
+		else if ((form.via === 'public' || !hasRoute) && !(form.port > 0 && form.port < 65536)) out.push('port');
+		if (form.via === 'public' && !form.ownLogin) out.push('ownLogin');
+	}
+	return out;
 }

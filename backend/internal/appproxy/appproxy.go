@@ -69,6 +69,10 @@ type Route struct {
 	// (see tailnet.go); TailscaleName is its name there, Name if empty.
 	Tailscale     bool   `json:"tailscale,omitempty"`
 	TailscaleName string `json:"tailscaleName,omitempty"`
+	// Domains are full host names of their own (e.g. photos.nas.ipv64.de),
+	// answered next to <name>.<suffix>; each belongs to one route only.
+	// Older versions ignore them. Not sent (nil) keeps the stored ones.
+	Domains []string `json:"domains,omitempty"`
 }
 
 // Settings are the content of /config/docker/proxy.json. Every field after
@@ -107,6 +111,7 @@ type General struct {
 const (
 	maxAliases  = 8
 	maxNetworks = 32
+	maxDomains  = 8
 )
 
 var (
@@ -192,6 +197,7 @@ func copyRoutes(in map[string]Route) map[string]Route {
 	for key, route := range in {
 		route.Aliases = slices.Clone(route.Aliases)
 		route.Networks = slices.Clone(route.Networks)
+		route.Domains = slices.Clone(route.Domains)
 		out[key] = route
 	}
 	return out
@@ -327,6 +333,12 @@ func (m *Manager) setRoute(target bool, key string, route Route) error {
 		return err
 	}
 	route.Networks = networks
+	keep := route.Domains == nil
+	if !keep {
+		if route.Domains, err = normalDomains(route.Domains); err != nil {
+			return err
+		}
+	}
 	if err := m.validRoute(key, route); err != nil {
 		return err
 	}
@@ -336,6 +348,17 @@ func (m *Manager) setRoute(target bool, key string, route Route) error {
 		route.VerifyTLS = false
 	}
 	return m.change(func(s *Settings) error {
+		if keep {
+			// A form that knows nothing of domains (the app editor) keeps them.
+			stored := s.Apps[key]
+			if target {
+				stored = s.Targets[key]
+			}
+			route.Domains = slices.Clone(stored.Domains)
+		}
+		if err := domainsFree(s, target, key, route.Domains); err != nil {
+			return err
+		}
 		mine := names(route)
 		for _, kind := range []struct {
 			target bool
@@ -593,6 +616,141 @@ func validDomain(domain string) error {
 	return nil
 }
 
+// NormalDomain writes a full host name the way routes keep it.
+func NormalDomain(domain string) string {
+	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+}
+
+// validFullDomain checks a full host name of a route: at least two
+// labels, no wildcard, never .local (those come from mDNS).
+func validFullDomain(domain string) error {
+	labels := strings.Split(domain, ".")
+	if len(domain) > 253 || len(labels) < 2 || labels[len(labels)-1] == "local" || !validHostName(domain) {
+		return fmt.Errorf("%w: domain %q", ErrInvalid, domain)
+	}
+	return nil
+}
+
+// normalDomains checks and dedups the full host names of a route.
+func normalDomains(in []string) ([]string, error) {
+	out := []string{}
+	for _, domain := range in {
+		domain = NormalDomain(domain)
+		if domain == "" || slices.Contains(out, domain) {
+			continue
+		}
+		if err := validFullDomain(domain); err != nil {
+			return nil, err
+		}
+		out = append(out, domain)
+	}
+	if len(out) > maxDomains {
+		return nil, fmt.Errorf("%w: at most %d domains", ErrInvalid, maxDomains)
+	}
+	return out, nil
+}
+
+// domainsFree says whether no other route holds one of the domains.
+func domainsFree(s *Settings, target bool, key string, domains []string) error {
+	for _, kind := range []struct {
+		target bool
+		routes map[string]Route
+	}{{false, s.Apps}, {true, s.Targets}} {
+		for other, r := range kind.routes {
+			if kind.target == target && other == key {
+				continue
+			}
+			for _, domain := range r.Domains {
+				if slices.Contains(domains, domain) {
+					return fmt.Errorf("%w: %s", ErrNameTaken, other)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// AddDomain gives the route of an app (or a target) one more full host
+// name. The route must exist; a domain held by another route is refused.
+func (m *Manager) AddDomain(target bool, key, domain string) error {
+	domain = NormalDomain(domain)
+	if err := validFullDomain(domain); err != nil {
+		return err
+	}
+	return m.change(func(s *Settings) error {
+		routes := s.Apps
+		if target {
+			routes = s.Targets
+		}
+		route, ok := routes[key]
+		if !ok {
+			return fmt.Errorf("%w: no such route", ErrInvalid)
+		}
+		if slices.Contains(route.Domains, domain) {
+			return nil
+		}
+		if len(route.Domains) >= maxDomains {
+			return fmt.Errorf("%w: at most %d domains", ErrInvalid, maxDomains)
+		}
+		if err := domainsFree(s, target, key, []string{domain}); err != nil {
+			return err
+		}
+		route.Domains = append(slices.Clone(route.Domains), domain)
+		routes[key] = route
+		return nil
+	})
+}
+
+// RemoveDomain takes a full host name from whichever route holds it; a
+// domain no route holds is no error.
+func (m *Manager) RemoveDomain(domain string) error {
+	domain = NormalDomain(domain)
+	if _, _, ok := m.DomainRoute(domain); !ok {
+		return nil
+	}
+	return m.change(func(s *Settings) error {
+		for _, routes := range []map[string]Route{s.Apps, s.Targets} {
+			for key, route := range routes {
+				if slices.Contains(route.Domains, domain) {
+					route.Domains = slices.DeleteFunc(slices.Clone(route.Domains), func(d string) bool { return d == domain })
+					routes[key] = route
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// DomainRoute names the route holding a full host name: whether it is a
+// target and its key.
+func (m *Manager) DomainRoute(domain string) (target bool, key string, ok bool) {
+	domain = NormalDomain(domain)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for app, route := range m.settings.Apps {
+		if slices.Contains(route.Domains, domain) {
+			return false, app, true
+		}
+	}
+	for id, route := range m.settings.Targets {
+		if slices.Contains(route.Domains, domain) {
+			return true, id, true
+		}
+	}
+	return false, "", false
+}
+
+// Domains are the full host names of the routes that answer now, sorted
+// (for the certificate of Let's Encrypt).
+func (m *Manager) Domains() []string {
+	var out []string
+	for _, e := range m.enabled() {
+		out = append(out, e.route.Domains...)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // host returns the first label of the NAS's name in lower case.
 func (m *Manager) host() string {
 	var name string
@@ -681,6 +839,12 @@ func (m *Manager) match(host string) (string, Route, bool) {
 		host = h
 	}
 	host = strings.TrimSuffix(host, ".")
+	// A full domain of a route comes first.
+	for _, e := range m.enabled() {
+		if slices.Contains(e.route.Domains, host) {
+			return e.key, e.route, true
+		}
+	}
 	label, rest, ok := strings.Cut(host, ".")
 	if !ok {
 		return "", Route{}, false
@@ -723,8 +887,8 @@ func (m *Manager) shortNames() []string {
 
 // CertificateNames returns the names a certificate for the TLS server
 // name must cover, as wildcards ("*.nas.local") plus every short name
-// ("immich.local": a wildcard right under .local would not do), or nil if
-// the name is not the one of an app.
+// ("immich.local": a wildcard right under .local would not do) and every
+// full domain of a route, or nil if the name is not the one of an app.
 func (m *Manager) CertificateNames(serverName string) []string {
 	if _, _, ok := m.match(serverName); !ok {
 		return nil
@@ -733,7 +897,8 @@ func (m *Manager) CertificateNames(serverName string) []string {
 	for _, suffix := range m.Suffixes() {
 		names = append(names, "*."+suffix)
 	}
-	return append(names, m.shortNames()...)
+	names = append(names, m.shortNames()...)
+	return append(names, m.Domains()...)
 }
 
 // Route returns the route of an app if it is enabled.
@@ -774,11 +939,17 @@ func (m *Manager) urls(route Route) []string {
 	if route.Short && !noMDNS {
 		out = append(out, m.url(route.Name, "local"))
 	}
+	for _, domain := range route.Domains {
+		out = append(out, m.hostURL(domain))
+	}
 	return out
 }
 
 func (m *Manager) url(name, suffix string) string {
-	host := name + "." + suffix
+	return m.hostURL(name + "." + suffix)
+}
+
+func (m *Manager) hostURL(host string) string {
 	if m.HTTPSPort != 0 && m.HTTPSPort != 443 {
 		host = net.JoinHostPort(host, strconv.Itoa(m.HTTPSPort))
 	}

@@ -13,6 +13,8 @@
 	import { failure } from './ui.ts';
 	import Overview from './Overview.svelte';
 	import Domains from './Domains.svelte';
+	import DynDns from './DynDns.svelte';
+	import Assignments from './Assignments.svelte';
 	import Monitoring from './Monitoring.svelte';
 	import Failover from './Failover.svelte';
 	import PublicAccess from './PublicAccess.svelte';
@@ -35,6 +37,10 @@
 		}
 	}
 	onMount(load);
+	// Links inside the page (e.g. "in DDNS" → ?tab=dyndns) change the tab too.
+	$effect(() => {
+		tab = tabFrom(page.url.searchParams.get('tab'));
+	});
 
 	function choose(next: Tab) {
 		tab = next;
@@ -103,6 +109,10 @@
 		<Overview {status} />
 	{:else if tab === 'domains'}
 		<Domains {status} />
+	{:else if tab === 'dyndns'}
+		<DynDns {status} />
+	{:else if tab === 'assignments'}
+		<Assignments {status} />
 	{:else if tab === 'monitoring'}
 		<Monitoring {status} />
 	{:else if tab === 'failover'}
