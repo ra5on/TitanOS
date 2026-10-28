@@ -6377,5 +6377,9 @@
 	"notify.kind.docker_update_failed.title": "App-Update fehlgeschlagen",
 	"notify.kind.docker_update_failed.text": "Das automatische Update von {subject} ließ sich nicht vollständig zurücknehmen.",
 	"activity.do.autoUpdate": "Automatische App-Updates eingestellt",
-	"dashboard.field.power": "CPU-Leistung"
+	"dashboard.field.power": "CPU-Leistung",
+	"digest.enabled": "Einmal täglich gesammelt schicken statt jede Meldung einzeln",
+	"digest.time": "Uhrzeit",
+	"digest.errorsNow": "Fehler trotzdem sofort schicken",
+	"digest.hint": "Gilt für alle Wege unten und für Mitteilungen auf Geräten; die Glocke zeigt weiter alles sofort. Gesammelt wird im Arbeitsspeicher: Ein Neustart des NAS vor der Uhrzeit verliert die gesammelten Meldungen."
 }
