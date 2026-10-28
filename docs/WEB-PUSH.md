@@ -21,6 +21,15 @@ Besitzer und Administratoren (wie die Glocke).
   Microsoft) und von dort aufs Gerät. Das Gerät muss das NAS dafür nicht
   erreichen; Tailscale braucht es nur zum Öffnen von TitanOS.
 
+## App-Modus
+
+Läuft TitanOS vom Home-Bildschirm (`display-mode: standalone`), hat die
+Kopfzeile einen eigenen Zurück-Knopf (es gibt keine Browserleiste) und auf
+schmalen Bildschirmen (≤ 760 px) eine untere Leiste mit Start, Speicher,
+Docker, Dateien und Einstellungen (normale Konten: Start, Dateien,
+Einstellungen), mit Abstand für den Home-Indikator. Im Browser ändert sich
+nichts.
+
 ## Was ankommt
 
 Dieselben Meldungen wie in der Glocke, ab der Stufe unter „Verschicken ab“

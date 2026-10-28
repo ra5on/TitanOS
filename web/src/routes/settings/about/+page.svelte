@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { session } from '#lib/session.svelte.ts';
 	// What is running, and under which licenses.
 	import { api, ApiError } from '#lib/api.ts';
 	import Logo from '#lib/components/Logo.svelte';
@@ -35,6 +36,7 @@
 			<div><dt>{t('about.base')}</dt><dd>{t('about.baseText')}</dd></div>
 		</dl>
 		<p><a href="https://github.com/ra5on/TitanOS" target="_blank" rel="noreferrer">github.com/ra5on/TitanOS</a></p>
+		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<p><a href="/welcome?step=3">{t('about.setupList')}</a></p>{/if}
 	</section>
 
 	<section class="tile panel" aria-labelledby="about-license">

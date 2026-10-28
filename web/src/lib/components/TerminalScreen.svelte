@@ -1,4 +1,12 @@
 <script lang="ts">
+	// The query of a container console: shell and user, both optional.
+	function containerQuery(shell: string, user?: string): string {
+		const query = new URLSearchParams();
+		if (shell) query.set('shell', shell);
+		if (user) query.set('user', user);
+		const text = query.toString();
+		return text ? `?${text}` : '';
+	}
 	// One session of the terminal panel: xterm.js in the browser, a WebSocket
 	// to titand, a shell behind it.
 	import '@xterm/xterm/css/xterm.css';
@@ -76,7 +84,7 @@
 	$effect(() => {
 		if (!confirmed || !term || socket || phase === 'ended') return;
 		const terminal = term;
-		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : session.kind === 'lxc' ? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}` : `/docker/containers/${session.container}/console${session.shell ? `?shell=${session.shell}` : ''}`;
+		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : session.kind === 'lxc' ? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}` : `/docker/containers/${session.container}/console${containerQuery(session.shell, session.user)}`;
 		const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1${path}`);
 		connection.binaryType = 'arraybuffer';
 		socket = connection;

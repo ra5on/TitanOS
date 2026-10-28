@@ -253,11 +253,16 @@ func (c *client) remoteDigest(ctx context.Context, ref string) (string, error) {
 }
 
 // execCreate prepares a command to run inside a container, with a terminal.
-func (c *client) execCreate(ctx context.Context, id string, cmd []string) (string, error) {
-	body, _ := json.Marshal(map[string]any{
+func (c *client) execCreate(ctx context.Context, id string, cmd []string, user string) (string, error) {
+	request := map[string]any{
 		"AttachStdin": true, "AttachStdout": true, "AttachStderr": true, "Tty": true, "Cmd": cmd,
 		"Env": []string{"TERM=xterm-256color"},
-	})
+	}
+	// Empty is the user of the image; Docker takes a name, UID or UID:GID.
+	if user != "" {
+		request["User"] = user
+	}
+	body, _ := json.Marshal(request)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/v1.43/containers/"+id+"/exec", bytes.NewReader(body))
 	if err != nil {
 		return "", err
