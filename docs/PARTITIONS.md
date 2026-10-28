@@ -12,8 +12,9 @@ Code: `backend/internal/usb/partitions.go`, Oberfläche
 ## Welche Platten
 
 Genau dieselben wie beim Formatieren (`GET /api/v1/usb/disks`): Der Boot-Stick,
-Platten mit Dateisystem- oder Array-UUID eines Volumes (`storage.Owns`),
-virtio-/Netzplatten und leere Kartenleser erscheinen nicht und haben keine ID.
+Platten mit Dateisystem-, Array- oder LUKS-UUID eines Volumes (`storage.Owns`;
+die LUKS-UUIDs halten auch gesperrte verschlüsselte Volumes fern, siehe
+[ENCRYPTION.md](ENCRYPTION.md)), virtio-/Netzplatten und leere Kartenleser erscheinen nicht und haben keine ID.
 Schreibgeschützte Platten, Platten einer VM oder eines Plattentests und eine
 Platte, an der gerade ein Auftrag läuft, werden angezeigt, lassen sich aber
 nicht ändern.

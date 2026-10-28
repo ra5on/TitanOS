@@ -55,6 +55,10 @@ das Volume vollständig.
 Ein Volume ohne zweite Kopie (`single`) wird mit fehlender Platte nicht
 eingebunden: Es wartet, bis alle Platten wieder da sind.
 
+Ein verschlüsseltes Btrfs-Volume hat je Platte einen eigenen LUKS2-Container mit
+demselben Passwort; Platte hinzufügen und Ersetzen verlangen dieses Passwort.
+Einzelheiten in [ENCRYPTION.md](ENCRYPTION.md).
+
 Ältere App-Versionen (Rückweg auf 0.28.x) kennen nur Spiegel aus zwei Platten:
 Ein Volume mit einer oder drei Platten zeigen sie als degradiert bzw. lassen es
 nicht löschen; ein einzelnes Volume binden sie nach 60 Sekunden degradiert ein.

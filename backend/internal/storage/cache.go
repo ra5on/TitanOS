@@ -88,9 +88,23 @@ func cacheTable(sectors uint64, meta, data, origin, mode, policy string) string 
 
 // mountSource is what mountWith mounts for an mdadm volume: the cache
 // device when the volume has a cache, else its file system by UUID. An
-// error keeps the volume unmounted (a writeback cache without its SSD).
+// error keeps the volume unmounted (a writeback cache without its SSD). An
+// encrypted volume mounts its opened LUKS device; the cache, if any, lies
+// below that (crypt.go).
 func (m *Manager) mountSource(ctx context.Context, volume VolumeConfig) (string, error) {
-	plain := "UUID=" + volume.FilesystemUUID
+	if volume.Encryption != nil && volume.Filesystem != "btrfs" {
+		name := cryptName(volume, "")
+		if !m.mapperOpen(name) {
+			return "", ErrVolumeLocked
+		}
+		return m.mapperPath(name), nil
+	}
+	return m.lowerDevice(ctx, volume, "UUID="+volume.FilesystemUUID)
+}
+
+// lowerDevice is what lies on top of the array of an mdadm volume: its
+// cache device when it has a cache (set up here), else plain.
+func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain string) (string, error) {
 	if volume.Cache == nil || volume.Filesystem == "btrfs" {
 		return plain, nil
 	}

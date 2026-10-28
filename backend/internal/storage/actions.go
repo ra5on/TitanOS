@@ -56,6 +56,10 @@ type CreateRequest struct {
 	// everything on them, so the caller has to say so explicitly.
 	Erase      []string          `json:"erase"`
 	Identities map[string]string `json:"identities,omitempty"`
+	// Encrypt puts LUKS2 below the file system (crypt.go), with Password
+	// as its first password. Never stored, never logged.
+	Encrypt  bool   `json:"encrypt,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 func sameSet(a, b []string) bool {
@@ -216,6 +220,14 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if _, err := os.Stat(filepath.Join(m.mountRoot, req.Name)); err == nil && m.readMounts()[filepath.Join(m.mountRoot, req.Name)] {
 		return ErrExists
 	}
+	var password []byte
+	if req.Encrypt {
+		password = []byte(req.Password)
+		defer wipe(password)
+		if err := validPassword(password); err != nil {
+			return err
+		}
+	}
 
 	devices, err := m.blockDevices(ctx)
 	if err != nil {
@@ -241,7 +253,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 
 	slog.Info("creating volume", "name", req.Name, "level", req.Level, "filesystem", req.Filesystem, "disks", req.Disks)
 	if req.Filesystem == "btrfs" {
-		return m.createBtrfs(ctx, req, devices, sizeMiB)
+		return m.createBtrfs(ctx, req, devices, sizeMiB, password)
 	}
 	var parts []string
 	for _, name := range req.Disks {
@@ -282,14 +294,23 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 		return errors.New("storage: new array has no UUID")
 	}
 
-	mkfs := []string{"-F", "-q", "-L", req.Name, "-m", "0", arrayPath}
+	// An encrypted volume has its file system inside LUKS on the array.
+	target := arrayPath
+	var encryption *EncryptionConfig
+	if req.Encrypt {
+		target, encryption, err = m.encryptArray(ctx, req.Name, arrayPath, password)
+		if err != nil {
+			return err
+		}
+	}
+	mkfs := []string{"-F", "-q", "-L", req.Name, "-m", "0", target}
 	if req.Filesystem == "xfs" {
-		mkfs = []string{"-f", "-q", "-L", req.Name, arrayPath}
+		mkfs = []string{"-f", "-q", "-L", req.Name, target}
 	}
 	if _, err := m.runner.Run(ctx, "", "mkfs."+req.Filesystem, mkfs...); err != nil {
 		return err
 	}
-	fsUUID, err := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", arrayPath)
+	fsUUID, err := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", target)
 	if err != nil {
 		return err
 	}
@@ -299,6 +320,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 		ArrayUUID: arrayUUID, FilesystemUUID: strings.TrimSpace(fsUUID),
 		Created:           time.Now().UTC().Truncate(time.Second),
 		InitializeFolders: len(m.configured()) == 0,
+		Encryption:        encryption,
 	}
 	// Record the volume before mounting: if the stick cannot be written,
 	// the array exists but is not lost – it shows up as a foreign RAID.
@@ -382,6 +404,15 @@ func (m *Manager) mountAll(ctx context.Context) {
 			if err := m.initializeFolders(volume); err != nil {
 				slog.Warn("initialize volume folders", "name", volume.Name, "err", err)
 			}
+			// Unlocked before titand started: learn its key slots once.
+			if volume.Encryption != nil && !m.knowsPasswords(volume.Name) {
+				m.readPasswords(ctx, volume)
+			}
+			continue
+		}
+		// An encrypted volume waits for its password (Unlock).
+		if m.isLocked(volume) {
+			m.noticeLocked(ctx, volume)
 			continue
 		}
 		if volume.Filesystem == "btrfs" {
@@ -441,6 +472,24 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 	}
 
 	if a, running := m.arrayOf(ctx, volume); running {
+		if volume.Encryption != nil {
+			// Close LUKS and destroy its key slots: nothing on the array
+			// can be read again.
+			if err := m.luksClose(ctx, cryptName(volume, "")); err != nil {
+				return fmt.Errorf("%w: %v", ErrBusy, err)
+			}
+			device, err := m.lowerDevice(ctx, volume, "/dev/"+a.device)
+			if err != nil {
+				device = "/dev/" + a.device
+			}
+			m.eraseLUKS(ctx, device)
+		}
+		// The cache device holds the array open.
+		if volume.Cache != nil {
+			if _, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name)); err == nil {
+				m.runner.Run(ctx, "", "dmsetup", "remove", cacheName(name))
+			}
+		}
 		if _, err := m.runner.Run(ctx, "", "mdadm", "--stop", "/dev/"+a.device); err != nil {
 			return err
 		}
@@ -491,6 +540,14 @@ func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
 // identity, if not empty, is the disk identity the caller picked (as the disk
 // list shows it); the disk is refused when it no longer matches.
 func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool, identity string) error {
+	return m.AddDiskWithPassword(ctx, name, diskName, erase, identity, nil)
+}
+
+// AddDiskWithPassword is AddDisk for encrypted volumes as well. A new
+// member of an encrypted Btrfs volume gets its own LUKS container with
+// password, which must open the volume; an mdadm volume needs none (the
+// disk joins the array below the encryption).
+func (m *Manager) AddDiskWithPassword(ctx context.Context, name, diskName string, erase bool, identity string, password []byte) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ReadOnly {
@@ -515,9 +572,9 @@ func (m *Manager) AddDisk(ctx context.Context, name, diskName string, erase bool
 			return err
 		}
 		if len(btrfsParts(devices, volume.FilesystemUUID)) < btrfsDiskCount(volume) || m.btrfsState(volume.Name).Missing > 0 {
-			return m.replaceMissingBtrfs(ctx, volume, diskName, identity)
+			return m.replaceMissingBtrfs(ctx, volume, diskName, identity, password)
 		}
-		return m.addBtrfsDisk(ctx, volume, diskName, "", identity)
+		return m.addBtrfsDisk(ctx, volume, diskName, "", identity, password)
 	}
 	if volume.Level == "raid0" {
 		return fmt.Errorf("%w: RAID 0 has no redundancy to rebuild from", ErrNotPossible)

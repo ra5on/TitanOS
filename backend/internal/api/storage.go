@@ -35,6 +35,14 @@ var storageErrors = []struct {
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
 	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
+	{storage.ErrVolumeLocked, http.StatusConflict, "volume_locked"},
+	{storage.ErrWrongPassword, http.StatusBadRequest, "volume_wrong_password"},
+	{storage.ErrTooManyAttempts, http.StatusTooManyRequests, "volume_password_attempts"},
+	{storage.ErrWeakPassword, http.StatusBadRequest, "volume_weak_password"},
+	{storage.ErrPasswordRequired, http.StatusBadRequest, "volume_password_required"},
+	{storage.ErrLastPassword, http.StatusConflict, "volume_last_password"},
+	{storage.ErrNotEncrypted, http.StatusConflict, "volume_not_encrypted"},
+	{storage.ErrEncryptionMembers, http.StatusConflict, "volume_encryption_members"},
 }
 
 func writeStorageError(w http.ResponseWriter, r *http.Request, action string, err error) {
@@ -122,7 +130,10 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "user", currentUser(r).Name, "ip", remoteIP(r))
+	if req.Encrypt && !s.requireWebSession(w, r) {
+		return
+	}
+	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "encrypted", req.Encrypt, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "create volume", err)
 		return
@@ -207,20 +218,30 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 		// Profile converts a Btrfs volume while the disk is added
 		// (single, raid1, raid1c3); empty keeps the profile.
 		Profile string `json:"profile"`
+		// Password of an encrypted Btrfs volume: the new disk gets its own
+		// LUKS container with it. Only from a browser session.
+		Password string `json:"password"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
+	password := []byte(req.Password)
+	req.Password = ""
+	defer wipeBytes(password)
+	if len(password) > 0 && !s.requireWebSession(w, r) {
+		return
+	}
 	name := r.PathValue("name")
 	slog.Info("add disk requested", "volume", name, "disk", req.Disk, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
-	add := s.opts.Storage.AddDisk
+	ctx := context.WithoutCancel(r.Context())
+	var err error
 	if req.Profile != "" {
-		add = func(ctx context.Context, name, disk string, erase bool, identity string) error {
-			return s.opts.Storage.AddBtrfsDisk(ctx, name, disk, req.Profile, identity, erase)
-		}
+		err = s.opts.Storage.AddBtrfsDiskWithPassword(ctx, name, req.Disk, req.Profile, req.Identity, req.Erase, password)
+	} else {
+		err = s.opts.Storage.AddDiskWithPassword(ctx, name, req.Disk, req.Erase, req.Identity, password)
 	}
-	if err := add(context.WithoutCancel(r.Context()), name, req.Disk, req.Erase, req.Identity); err != nil {
-		writeStorageError(w, r, "add disk", err)
+	if err != nil {
+		writeCryptError(w, r, "add disk", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

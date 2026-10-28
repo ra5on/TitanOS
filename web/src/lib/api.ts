@@ -236,6 +236,18 @@ export type Volume = {
 	shareQuotasError?: string;
 	/** SSD cache of an mdadm volume (internal/storage cache.go). */
 	cache?: VolumeCache;
+	/** LUKS2 encryption (internal/storage crypt.go), set for encrypted volumes. */
+	encryption?: VolumeEncryption;
+};
+
+export type VolumeEncryption = {
+	/** Waits for its password; nothing on it runs. */
+	locked: boolean;
+	members: number;
+	unlocked: number;
+	/** Key slots in use; 0 while not known. */
+	passwords: number;
+	retryAfterSeconds?: number;
 };
 
 export type CacheMode = 'writethrough' | 'writeback';

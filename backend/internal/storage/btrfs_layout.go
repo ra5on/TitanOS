@@ -120,6 +120,13 @@ func balanceArgs(profile, point string) []string {
 // mounted again. The configuration names the new layout as soon as the
 // disk is part of the file system.
 func (m *Manager) AddBtrfsDisk(ctx context.Context, name, diskName, profile, identity string, erase bool) error {
+	return m.AddBtrfsDiskWithPassword(ctx, name, diskName, profile, identity, erase, nil)
+}
+
+// AddBtrfsDiskWithPassword is AddBtrfsDisk for an encrypted volume as well:
+// the new member gets a LUKS container with password, which must open the
+// volume.
+func (m *Manager) AddBtrfsDiskWithPassword(ctx context.Context, name, diskName, profile, identity string, erase bool, password []byte) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.ReadOnly {
@@ -135,11 +142,11 @@ func (m *Manager) AddBtrfsDisk(ctx context.Context, name, diskName, profile, ide
 	if !erase {
 		return ErrNotConfirmed
 	}
-	return m.addBtrfsDisk(ctx, volume, diskName, profile, identity)
+	return m.addBtrfsDisk(ctx, volume, diskName, profile, identity, password)
 }
 
 // addBtrfsDisk is AddBtrfsDisk with the storage actions held.
-func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskName, profile, identity string) error {
+func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskName, profile, identity string, password []byte) error {
 	name := volume.Name
 	if m.Reshaping() {
 		return ErrBusy
@@ -170,6 +177,9 @@ func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskNam
 	if err := checkIdentity(devices, diskName, identity); err != nil {
 		return err
 	}
+	if err := m.checkNewMemberPassword(ctx, volume, password); err != nil {
+		return err
+	}
 	devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
 	if err != nil {
 		return err
@@ -182,6 +192,11 @@ func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskNam
 	part, err := m.prepareDisk(ctx, device, "btrfs:"+volume.Name, memberSizeMiB(disk.SizeBytes))
 	if err != nil {
 		return err
+	}
+	if volume.Encryption != nil {
+		if part, err = m.encryptNewMember(ctx, volume, part, password, nil); err != nil {
+			return err
+		}
 	}
 	if _, err := m.runner.Run(ctx, "", "btrfs", "device", "add", "-f", part, point); err != nil {
 		return err
@@ -264,11 +279,21 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 	}
 	var part blockDevice
 	var others []uint64
+	onDevice := map[string]bool{}
+	device.walk(func(node blockDevice) { onDevice[node.KName] = true })
 	for _, p := range parts {
-		if slices.ContainsFunc(device.partitions(), func(d blockDevice) bool { return d.KName == p.KName }) {
+		// p is the partition, or the opened LUKS device on it.
+		if onDevice[p.KName] {
 			part = p
 		} else {
 			others = append(others, p.Size)
+		}
+	}
+	// The LUKS container below the Btrfs device of an encrypted member.
+	luksUUID, luksPart := "", ""
+	if volume.Encryption != nil {
+		for uuid, node := range luksNodes([]blockDevice{device}, volume.Encryption.UUIDs) {
+			luksUUID, luksPart = uuid, node
 		}
 	}
 	if part.KName == "" {
@@ -301,6 +326,18 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 				slog.Error("Btrfs layout not saved after removing a disk", "name", name, "err", err)
 			}
 			m.runner.Run(ctx, "", "wipefs", "--all", "--force", part.KName)
+			if luksUUID != "" {
+				m.luksClose(ctx, cryptName(volume, luksUUID))
+				m.eraseLUKS(ctx, luksPart)
+				m.runner.Run(ctx, "", "wipefs", "--all", "--force", luksPart)
+				if err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
+					if v.Encryption != nil {
+						v.Encryption.UUIDs = uuidsWithout(v.Encryption.UUIDs, luksUUID)
+					}
+				}); err != nil {
+					slog.Error("LUKS UUID of a removed disk not forgotten", "name", name, "err", err)
+				}
+			}
 			m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)
 			m.runner.Run(ctx, "", "udevadm", "settle")
 			slog.Info("disk removed from Btrfs volume", "name", name, "disk", diskName)

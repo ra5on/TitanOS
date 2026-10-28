@@ -20,7 +20,7 @@
 		if (volumes.length === 0) return t('status.noVolumes');
 		return volumes
 			.map((volume) => {
-				const state = t(`state.${volume.state}`);
+				const state = volume.encryption?.locked ? t('crypt.chipLocked') : t(`state.${volume.state}`);
 				return volume.sync
 					? t('status.volumeSync', { name: volume.name, state, percent: formatPercent(volume.sync.percent) })
 					: t('status.volume', { name: volume.name, state });

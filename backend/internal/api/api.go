@@ -243,6 +243,12 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/profile", s.requireHeavyAdmin(s.handleBtrfsProfile))
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCache))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCacheRemove))
+	// Encrypted volumes: browser sessions only, never in the assistant
+	// catalog or the public API (storage_crypt.go).
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/unlock", s.requireAdmin(s.handleVolumeUnlock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/lock", s.requireHeavyAdmin(s.handleVolumeLock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/passwords", s.requireAdmin(s.handleVolumePasswords))
+	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/luks-header", s.requireAdmin(s.handleVolumeHeaderBackup))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", s.requireHeavyAdmin(s.handleCheckVolume))
 	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", s.requireAdmin(s.handleSnapshots))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", s.requireHeavyAdmin(s.handleSnapshotAction))

@@ -1,5 +1,6 @@
 import type { Disk, Volume } from '#lib/api.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
+import { lockedTone } from './crypt.ts';
 
 /** "HDD · 7200 U/min", "NVMe-SSD", … */
 export function diskType(disk: Disk): string {
@@ -41,6 +42,8 @@ export function smartText(disk: Disk): string {
 
 /** The color of a volume's state chip. */
 export function stateTone(volume: Volume): 'ok' | 'warn' | 'error' {
+	const locked = lockedTone(volume);
+	if (locked) return locked;
 	switch (volume.state) {
 		case 'ok':
 			return 'ok';

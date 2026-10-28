@@ -17,13 +17,26 @@ import (
 // Native Btrfs volumes use one of btrfsLayouts for data and metadata. No md
 // device is involved. The filesystem UUID, not a Linux device name,
 // identifies the pool.
-func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []blockDevice, sizeMiB uint64) error {
+func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []blockDevice, sizeMiB uint64, password []byte) error {
 	var parts []string
+	var encryption *EncryptionConfig
+	if req.Encrypt {
+		encryption = &EncryptionConfig{UUIDs: []string{}}
+	}
 	for _, name := range req.Disks {
 		device, _ := findDevice(devices, name)
 		part, err := m.prepareDisk(ctx, device, "btrfs:"+req.Name, sizeMiB)
 		if err != nil {
 			return err
+		}
+		// Encrypted: one LUKS container per member, Btrfs on the opened ones.
+		if encryption != nil {
+			opened, uuid, err := m.encryptMember(ctx, req.Name, part, password)
+			if err != nil {
+				return err
+			}
+			encryption.UUIDs = append(encryption.UUIDs, uuid)
+			part = opened
 		}
 		parts = append(parts, part)
 	}
@@ -40,7 +53,7 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 	if uuid == "" {
 		return fmt.Errorf("%w: new Btrfs filesystem has no UUID", ErrNotPossible)
 	}
-	volume := VolumeConfig{Name: req.Name, Level: req.Level, Filesystem: "btrfs", FilesystemUUID: uuid, Profile: req.Level, Devices: len(parts), Created: time.Now().UTC().Truncate(time.Second)}
+	volume := VolumeConfig{Name: req.Name, Level: req.Level, Filesystem: "btrfs", FilesystemUUID: uuid, Profile: req.Level, Devices: len(parts), Created: time.Now().UTC().Truncate(time.Second), Encryption: encryption}
 	volume.InitializeFolders = len(m.configured()) == 0
 	if err := m.saveVolumes(append(m.configured(), volume)); err != nil {
 		return err
@@ -200,6 +213,9 @@ func (m *Manager) deleteBtrfs(ctx context.Context, volume VolumeConfig) error {
 	if err != nil {
 		return err
 	}
+	if volume.Encryption != nil {
+		return m.deleteEncryptedBtrfs(ctx, volume, devices)
+	}
 	parts := btrfsParts(devices, volume.FilesystemUUID)
 	// Do not forget a missing member: a returning disk would retain an
 	// orphaned filesystem. It must be reconnected or replaced first.
@@ -224,11 +240,40 @@ func (m *Manager) deleteBtrfs(ctx context.Context, volume VolumeConfig) error {
 	return nil
 }
 
+// deleteEncryptedBtrfs closes every member and destroys its key slots;
+// locked or not, the data cannot be read again afterwards.
+func (m *Manager) deleteEncryptedBtrfs(ctx context.Context, volume VolumeConfig, devices []blockDevice) error {
+	nodes := luksNodes(devices, volume.Encryption.UUIDs)
+	if len(nodes) != len(volume.Encryption.UUIDs) {
+		return fmt.Errorf("%w: reconnect every Btrfs member before deleting the volume", ErrNotPossible)
+	}
+	point := m.MountPoint(volume.Name)
+	if m.readMounts()[point] {
+		if _, err := m.runner.Run(ctx, "", "umount", point); err != nil {
+			return fmt.Errorf("%w: %v", ErrBusy, err)
+		}
+	}
+	for _, entry := range orderedDevices(volume, nodes) {
+		if err := m.luksClose(ctx, cryptName(volume, entry[0])); err != nil {
+			return fmt.Errorf("%w: %v", ErrBusy, err)
+		}
+		m.eraseLUKS(ctx, entry[1])
+		if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", entry[1]); err != nil {
+			return err
+		}
+	}
+	if err := m.saveVolumes(slices.DeleteFunc(m.configured(), func(v VolumeConfig) bool { return v.Name == volume.Name })); err != nil {
+		return err
+	}
+	os.Remove(point)
+	return nil
+}
+
 var btrfsDeviceLine = regexp.MustCompile(`(?m)^\s*devid\s+(\d+)\s+size\s+(\d+)\s+used\s+\d+\s+path\s+(.+)$`)
 
 // AddDisk replaces the one missing member, rather than changing the RAID profile
 // or reducing the number of copies. A healthy mirror does not accept a spare.
-func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, diskName, identity string) error {
+func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, diskName, identity string, password []byte) error {
 	point := m.MountPoint(volume.Name)
 	if !m.readMounts()[point] {
 		return fmt.Errorf("%w: mirror is not mounted", ErrNotPossible)
@@ -294,8 +339,15 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 		return fmt.Errorf("%w: missing Btrfs device could not be identified", ErrNotPossible)
 	}
 	sizeMiB := (size + mebibyte - 1) / mebibyte
+	if volume.Encryption != nil {
+		// The LUKS header takes room the Btrfs device needs again.
+		sizeMiB += luksHeaderMiB
+	}
 	if memberSizeMiB(disk.SizeBytes) < sizeMiB {
 		return ErrDiskTooSmall
+	}
+	if err := m.checkNewMemberPassword(ctx, volume, password); err != nil {
+		return err
 	}
 	devices, err = m.releaseOldArrays(ctx, devices, []string{diskName})
 	if err != nil {
@@ -308,6 +360,15 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	part, err := m.prepareDisk(ctx, device, "btrfs:"+volume.Name, sizeMiB)
 	if err != nil {
 		return err
+	}
+	if volume.Encryption != nil {
+		// The missing member is replaced for good: only the members that
+		// are there stay in the configuration, plus the new one.
+		present := luksNodes(devices, volume.Encryption.UUIDs)
+		part, err = m.encryptNewMember(ctx, volume, part, password, func(uuid string) bool { _, ok := present[uuid]; return ok })
+		if err != nil {
+			return err
+		}
 	}
 	_, err = m.runner.Run(ctx, "", "btrfs", "replace", "start", missing, part, point)
 	if err == nil {

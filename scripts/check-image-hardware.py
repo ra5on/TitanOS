@@ -11,7 +11,7 @@ MODULES = (
     "qla2xxx", "mpt3sas", "megaraid_sas", "aacraid", "hpsa",
     "nvme", "nvme_core", "vmd", "ahci", "ata_piix", "sata_mv", "sata_sil24",
     "sd_mod", "scsi_mod", "usb_storage", "uas", "xhci_pci",
-    "ntfs3", "fuse", "exfat", "vfat", "ext4", "xfs", "btrfs",
+    "ntfs3", "fuse", "exfat", "vfat", "ext4", "xfs", "btrfs", "dm_crypt",
     "virtio_pci", "virtio_blk", "virtio_net", "vfio_pci", "kvm_intel", "kvm_amd",
 )
 

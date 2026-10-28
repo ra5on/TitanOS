@@ -28,6 +28,10 @@ type ImportCandidate struct {
 	Size           uint64   `json:"size"`
 	Fingerprint    string   `json:"fingerprint"`
 	Reason         string   `json:"reason"`
+	// Encrypted is an array with LUKS on it: preview and import need its
+	// password. EncryptionUUID is the LUKS UUID.
+	Encrypted      bool   `json:"encrypted,omitempty"`
+	EncryptionUUID string `json:"encryptionUUID,omitempty"`
 	device         string
 }
 type ImportPreview struct {
@@ -41,6 +45,8 @@ type ImportRequest struct {
 	Fingerprint string `json:"fingerprint"`
 	Name        string `json:"name"`
 	Confirm     string `json:"confirm"`
+	// Password opens an encrypted array; never stored or logged.
+	Password string `json:"password,omitempty"`
 }
 
 // ImportCandidates only describes unregistered, assembled arrays and two-device Btrfs filesystems.
@@ -130,9 +136,9 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 			}
 		}
 		data, _ := json.Marshal(struct {
-			ID, FS, UUID      string
-			Disks, Identities []string
-		}{c.ID, c.Filesystem, c.FilesystemUUID, c.Disks, identities})
+			ID, FS, UUID, LUKS string
+			Disks, Identities  []string
+		}{c.ID, c.Filesystem, c.FilesystemUUID, c.EncryptionUUID, c.Disks, identities})
 		hash := sha256.Sum256(data)
 		c.Fingerprint = hex.EncodeToString(hash[:])
 	}
@@ -145,10 +151,14 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 			continue
 		}
 		c := ImportCandidate{ID: "md:" + a.uuid, Filesystem: node.FSType, FilesystemUUID: node.UUID, ArrayUUID: a.uuid, Level: a.level, Size: node.Size, device: "/dev/" + a.device}
+		if node.FSType == "crypto_LUKS" {
+			// The file system is known only once the password opened it.
+			c.Encrypted, c.EncryptionUUID, c.Filesystem, c.FilesystemUUID = true, node.UUID, "", ""
+		}
 		if node.Mountpoint != "" || len(node.Children) > 0 {
 			c.Reason = "mounted-or-partitioned"
 		}
-		if !slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || c.FilesystemUUID == "" {
+		if !c.Encrypted && (!slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || c.FilesystemUUID == "") {
 			c.Reason = "unsupported-filesystem"
 		}
 		if _, ok := minDisks[c.Level]; !ok {
@@ -163,15 +173,42 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 		fingerprint(&c, owners[a.device])
 		out = append(out, c)
 	}
+	// LUKS directly on disks or partitions (an encrypted Btrfs member, or
+	// anything else) cannot be taken over: TitanOS would have to guess
+	// which containers belong together. Shown so that the reason is clear.
+	for _, d := range devices {
+		if !isDisk(d) {
+			continue
+		}
+		d.walk(func(node blockDevice) {
+			if node.FSType != "crypto_LUKS" || !ownedByDisk(node) || node.UUID == "" || registered[normalizeUUID(node.UUID)] || m.Owns(node.UUID) {
+				return
+			}
+			var disks []Disk
+			for _, candidate := range status.Disks {
+				if candidate.Path == d.Name {
+					disks = append(disks, candidate)
+				}
+			}
+			c := ImportCandidate{ID: "luks:" + node.UUID, Encrypted: true, EncryptionUUID: node.UUID, Size: node.Size, Reason: "encrypted-partition", device: node.Name}
+			fingerprint(&c, disks)
+			out = append(out, c)
+		})
+	}
 	for uuid, disks := range btrfs {
 		if registered[normalizeUUID(uuid)] {
 			continue
 		}
 		node := btrfsDevices[uuid]
 		c := ImportCandidate{ID: "btrfs:" + uuid, Filesystem: "btrfs", FilesystemUUID: uuid, Level: "raid1", Size: node.Size, device: node.Name}
+		if node.Type == "crypt" {
+			// Opened by someone else; after a restart TitanOS could not
+			// open it again.
+			c.Reason = "encrypted-partition"
+		}
 		// The profile is read in the preview; any of single, RAID1 and
 		// RAID1C3 is taken over as long as every disk is there.
-		if len(disks) == 0 || btrfsCounts[uuid] != len(disks) || node.Mountpoint != "" {
+		if c.Reason == "" && (len(disks) == 0 || btrfsCounts[uuid] != len(disks) || node.Mountpoint != "") {
 			c.Reason = "requires-unmounted-complete-btrfs"
 		}
 		fingerprint(&c, disks)
@@ -198,7 +235,48 @@ func (m *Manager) importCandidate(ctx context.Context, req ImportRequest) (Impor
 	}
 	return ImportCandidate{}, ErrNotFound
 }
-func (m *Manager) previewImport(ctx context.Context, c ImportCandidate) (preview ImportPreview, err error) {
+
+// openImport opens the LUKS container of an encrypted candidate under
+// mapper and fills in the file system found inside.
+func (m *Manager) openImport(ctx context.Context, c *ImportCandidate, password []byte, mapper string, readOnly bool) error {
+	if len(password) == 0 {
+		return ErrPasswordRequired
+	}
+	key := "import:" + c.ID
+	if err := m.checkAttempt(key); err != nil {
+		return err
+	}
+	err := m.luksOpen(ctx, password, c.device, mapper, readOnly)
+	m.noteAttempt(key, err)
+	if err != nil {
+		return err
+	}
+	device := m.mapperPath(mapper)
+	fsType, _ := m.runner.Run(ctx, "", "blkid", "--match-tag", "TYPE", "--output", "value", device)
+	uuid, _ := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", device)
+	c.Filesystem, c.FilesystemUUID = strings.TrimSpace(fsType), strings.TrimSpace(uuid)
+	if !slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || c.FilesystemUUID == "" {
+		m.luksClose(ctx, mapper)
+		return fmt.Errorf("%w: unsupported-filesystem", ErrNotPossible)
+	}
+	c.device = device
+	return nil
+}
+
+// importMapper is the temporary name of an encrypted candidate's preview.
+func importMapper(c ImportCandidate) string {
+	short := strings.ReplaceAll(c.EncryptionUUID, "-", "")
+	return "titanos-import-" + short[:min(8, len(short))]
+}
+
+func (m *Manager) previewImport(ctx context.Context, c ImportCandidate, password []byte) (preview ImportPreview, err error) {
+	if c.Encrypted {
+		mapper := importMapper(c)
+		if err := m.openImport(ctx, &c, password, mapper, true); err != nil {
+			return ImportPreview{Candidate: c, Folders: []string{}, ReadOnly: true}, err
+		}
+		defer m.luksClose(context.WithoutCancel(ctx), mapper)
+	}
 	preview = ImportPreview{Candidate: c, Folders: []string{}, ReadOnly: true}
 	point, err := os.MkdirTemp("", "titanos-import-")
 	if err != nil {
@@ -273,7 +351,9 @@ func (m *Manager) PreviewImport(ctx context.Context, req ImportRequest) (ImportP
 	if err != nil {
 		return ImportPreview{}, err
 	}
-	return m.previewImport(ctx, c)
+	password := []byte(req.Password)
+	defer wipe(password)
+	return m.previewImport(ctx, c, password)
 }
 func (m *Manager) Import(ctx context.Context, req ImportRequest) error {
 	m.actions.Lock()
@@ -305,12 +385,26 @@ func (m *Manager) Import(ctx context.Context, req ImportRequest) error {
 	if err != nil {
 		return err
 	}
-	preview, err := m.previewImport(ctx, c)
+	password := []byte(req.Password)
+	defer wipe(password)
+	preview, err := m.previewImport(ctx, c, password)
 	if err != nil {
 		return err
 	}
 	// Registration writes only UUID configuration. No formatting, relabeling, folder creation or account import.
-	v := VolumeConfig{Name: req.Name, Filesystem: c.Filesystem, FilesystemUUID: c.FilesystemUUID, ArrayUUID: c.ArrayUUID, Level: preview.Candidate.Level, Created: time.Now().UTC()}
+	v := VolumeConfig{Name: req.Name, Filesystem: preview.Candidate.Filesystem, FilesystemUUID: preview.Candidate.FilesystemUUID, ArrayUUID: c.ArrayUUID, Level: preview.Candidate.Level, Created: time.Now().UTC()}
+	if c.Encrypted {
+		// Opened for good under the volume's own name and mounted from
+		// there; from now on it is locked after every start.
+		v.Encryption = &EncryptionConfig{UUIDs: []string{c.EncryptionUUID}}
+		if err := m.openImport(ctx, &c, password, cryptName(v, ""), false); err != nil {
+			return err
+		}
+		if c.FilesystemUUID != v.FilesystemUUID {
+			m.luksClose(ctx, cryptName(v, ""))
+			return fmt.Errorf("%w: device identity changed", ErrDiskUnavailable)
+		}
+	}
 	if c.Filesystem == "btrfs" {
 		v.Profile, v.Devices = preview.Candidate.Level, len(c.Disks)
 	}

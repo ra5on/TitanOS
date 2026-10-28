@@ -40,6 +40,12 @@ wechseln (`dmsetup reload` mit kurzem `suspend`/`resume`).
 - `dmsetup` und das Kernelmodul `dm-cache` sind im Abbild; es ist kein neues
   Paket nötig.
 
+Mit einem verschlüsselten Volume liegt der Cache **unter** der
+Verschlüsselung (`md → titanos-cache-… → titanos-crypt-… → Dateisystem`): Die
+SSD hält nur verschlüsselte Blöcke. Der Cache wird beim Entsperren eingerichtet
+und wird damit erst nach dem nächsten Entsperren wirksam; siehe
+[ENCRYPTION.md](ENCRYPTION.md).
+
 Eine Sicherung des Sticks, die bei einem Stickwechsel von einem Volume mit
 Schreibcache gelesen wird, kommt direkt vom Array und kann älter sein als der
 letzte Stand auf der SSD.

@@ -578,6 +578,9 @@ func run(opts options) error {
 			}
 		}
 	}()
+	// Encrypted volumes: notice after a start, stopping and restarting
+	// what runs on them around locking (encryption.go).
+	wireEncryption(volumes, folders, machines, systemContainers, notifier)
 	volumes.OnCacheMissing = func(volume string) { notifier.Notify(notify.Error, "volume_cache_missing", volume) }
 	volumes.OnCacheRemoved = func(volume string) { notifier.Notify(notify.Info, "volume_cache_removed", volume) }
 	go volumes.RunCacheCleaner(ctx)
@@ -648,8 +651,14 @@ func run(opts options) error {
 	slot := system.BootSlot()
 	updates := update.NewManager(store, version.Version, slot)
 	updates.Disabled = opts.dev || slot == ""
-	updates.Mounted = volumes.Mounted
-	updates.PluginsHealthy = extensions.Healthy
+	// An encrypted volume waits for its password after the switch to a new
+	// system: it must not make the boot check fail (and the update roll
+	// back) just because nobody entered it within five minutes. It counts
+	// as back, and so do plugins on it.
+	updates.Mounted = func() []string { return append(volumes.Mounted(), volumes.WaitingForPassword(ctx)...) }
+	updates.PluginsHealthy = func() bool {
+		return extensions.Healthy() || slices.Contains(volumes.WaitingForPassword(ctx), extensions.Volume())
+	}
 	updates.PreparePlugins = func(ctx context.Context, version, kernel, base string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
 		return extensions.PrepareUpdate(ctx, version, kernel, base, assets, volumes.Mounted(), fetch, download)
 	}
