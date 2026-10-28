@@ -359,7 +359,7 @@
 					>
 				</div>{/if}
 		</div>{/if}
-{:else if !loadError}<p role="status">{t('common.loading')}</p>{/if}
+{:else if !loadError}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 
 {#if editing && draft && status}
 	<ZoneDialog

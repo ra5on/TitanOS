@@ -161,7 +161,7 @@
 {#if actionError}<p class="notice-error" role="alert">{actionError}</p>{/if}
 
 {#if !list}
-	{#if !loadError}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+	{#if !loadError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {:else if list.containers.length === 0}
 	<EmptyState title={t('lxc.empty')} text={t('lxc.emptyText')} />
 {:else}

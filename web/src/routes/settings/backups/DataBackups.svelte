@@ -459,7 +459,7 @@
 
 {#if error && !draft}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
 
-{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{:else if !overview}<p role="status">{t('common.loading')}</p>{/if}
+{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{:else if !overview}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 {#if feedback}<p class="notice-ok" role="status">{feedback}</p>{/if}
 {#if retry && error}<button type="button" class="btn" onclick={() => retry && act(retry.job, retry.action)}>{t('ui.retry')}</button>{/if}
 

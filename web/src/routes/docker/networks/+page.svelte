@@ -94,7 +94,7 @@
 {#if !parents.length && !loading}<p class="notice-warn">
 		{t('lan.needParent')} <a href="/settings/network">{t('netcfg.title')}</a>
 	</p>{/if}
-{#if loading}<p role="status">{t('common.loading')}</p>{:else if !networks.length}<EmptyState
+{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !networks.length}<EmptyState
 		title={t('lan.empty')}
 	/>{:else}<section class="tile content">
 		{#each networks as n (n.name)}<article>

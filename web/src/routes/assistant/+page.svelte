@@ -89,7 +89,7 @@
 		<button type="button" class="btn" disabled={loading} onclick={start}>{t('common.retry')}</button>
 	</div>
 {:else if !assistant.status}
-	<p class="muted" role="status">{t('common.loading')}</p>
+	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else if assistant.status && !assistant.status.available}
 	<EmptyState title={t('assistant.unavailable')} text={t(admin ? 'assistant.unavailableAdmin' : 'assistant.unavailableUser')}>
 		{#if admin}<a class="btn btn-primary" href="/settings/assistant">{t('assistant.settings')}</a>{/if}

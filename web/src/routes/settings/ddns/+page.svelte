@@ -119,7 +119,7 @@
 {#if loadError}
 	<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button></div>
 {:else if !status}
-	<p class="muted" role="status">{t('common.loading')}</p>
+	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
 	<DdnsStatusPanel {status} intro={t('ddns.intro')} onstatus={(next) => (status = next)} onrefresh={() => load(false)} />
 

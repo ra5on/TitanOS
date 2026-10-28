@@ -319,7 +319,7 @@
 		<p class="muted small">{t('assistant.pullHint')}</p>
 	</section>
 {:else if !loadError}
-	<p role="status">{t('common.loading')}</p>
+	<p class="loading" role="status">{t('common.loading')}</p>
 {/if}
 
 <section class="tile panel" aria-labelledby="assistant-privacy">

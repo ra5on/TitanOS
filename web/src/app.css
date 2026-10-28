@@ -439,3 +439,111 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 .data-table :is(th, td) { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
 .data-table th { color: var(--muted); font-weight: 500; font-size: 0.75rem; }
 .data-table td.actions { white-space: nowrap; text-align: right; }
+
+/* Optional effects (Settings › Appearance › Effects). Each one hangs on its
+   own data-fx-* attribute on <html>, set from the account's appearance;
+   movement always stops for prefers-reduced-motion. */
+
+/* Gradient accent: filled controls and bars use --accent-fill. */
+:root[data-fx-gradient='on'] :is(.btn-primary, .btn-primary:hover:not(:disabled), .bar > span, .fab) {
+	background: var(--accent-fill);
+}
+
+/* Page transitions: the header keeps its place, the content fades over. */
+:root[data-fx-transitions='on'] header {
+	view-transition-name: titanos-header;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 160ms;
+	animation-timing-function: ease-out;
+}
+::view-transition-group(titanos-header) {
+	animation: none;
+}
+
+/* Placeholder bars while a page loads ("p.loading" keeps its text for screen readers). */
+:root[data-fx-skeleton='on'] p.loading {
+	position: relative;
+	min-height: 3.75rem;
+	margin: 0;
+	color: transparent;
+	user-select: none;
+	background:
+		linear-gradient(var(--track), var(--track)) 0 0.25rem / 60% 0.75rem no-repeat,
+		linear-gradient(var(--track), var(--track)) 0 1.5rem / 85% 0.75rem no-repeat,
+		linear-gradient(var(--track), var(--track)) 0 2.75rem / 40% 0.75rem no-repeat;
+	border-radius: var(--radius-bar);
+}
+:root[data-fx-skeleton='on'] p.loading::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text) 8%, transparent) 50%, transparent 70%);
+	background-size: 200% 100%;
+	animation: fx-shimmer 1.4s linear infinite;
+}
+
+/* Small movements. */
+:root[data-fx-micro='on'] .btn {
+	transition: transform 90ms ease-out, background-color 120ms, filter 120ms;
+}
+:root[data-fx-micro='on'] .btn:active:not(:disabled) {
+	transform: scale(0.97);
+}
+:root[data-fx-micro='on'] dialog[open] {
+	animation: fx-pop 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+:root[data-fx-micro='on'] :is([role='menu'], [popover]:popover-open) {
+	animation: fx-fade 120ms ease-out;
+}
+:root[data-fx-micro='on'] .bar:is(.busy, [role='progressbar']) > span {
+	background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+	background-size: 200% 100%;
+	animation: fx-shimmer 1.2s linear infinite;
+}
+:root[data-fx-micro='on'] :is(input[type='checkbox'], input[type='radio']) {
+	transition: box-shadow 120ms, transform 90ms;
+}
+:root[data-fx-micro='on'] :is(input[type='checkbox'], input[type='radio']):active {
+	transform: scale(0.9);
+}
+
+/* Warnings and errors pulse gently. */
+:root[data-fx-pulse='on'] :is(.chip.warn, .chip.error, .dot.warn, .dot.error) {
+	animation: fx-pulse 2s ease-in-out infinite;
+}
+:root[data-fx-pulse='on'] :is(.chip.error, .dot.error) {
+	--fx-pulse-color: var(--status-error);
+}
+
+@keyframes fx-shimmer {
+	from { background-position: 150% 0; }
+	to { background-position: -50% 0; }
+}
+@keyframes fx-pop {
+	from { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+@keyframes fx-fade {
+	from { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes fx-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 transparent; }
+	50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--fx-pulse-color, var(--status-warn)) 35%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root[data-fx-skeleton='on'] p.loading::after,
+	:root[data-fx-micro='on'] :is(dialog[open], [role='menu'], [popover]:popover-open, .bar:is(.busy, [role='progressbar']) > span),
+	:root[data-fx-pulse='on'] :is(.chip.warn, .chip.error, .dot.warn, .dot.error) {
+		animation: none;
+	}
+	:root[data-fx-micro='on'] :is(.btn, input) {
+		transition: none;
+		transform: none !important;
+	}
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation: none;
+	}
+}

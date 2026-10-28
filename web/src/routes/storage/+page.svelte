@@ -508,7 +508,7 @@
 			{#if canAdminister}{@const used = usageFor(detail.name)}
 				<section class="tile usage" aria-labelledby="volume-usage">
 					<h3 id="volume-usage">{t('storage.onVolume')}</h3>
-					{#if !used}<p class="muted" role="status">{t('common.loading')}</p>
+					{#if !used}<p class="muted loading" role="status">{t('common.loading')}</p>
 					{:else}
 						<dl>
 							<div>

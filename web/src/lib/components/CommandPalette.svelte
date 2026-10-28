@@ -45,7 +45,7 @@
 <Dialog title={t('palette.title')} {onclose}>
  <label class="search"><span>{t('palette.search')}</span><!-- svelte-ignore a11y_autofocus --><input class="field" type="search" role="combobox" aria-expanded={entries.length>0} aria-autocomplete="list" aria-controls="palette-results" aria-activedescendant={entries[index]?'palette-result-'+index:undefined} bind:value={query} oninput={()=>index=0} onkeydown={keys} autofocus/></label>
  <p class="keys muted">{t('palette.keys',{open:isMac?'⌘K':'Ctrl+K'})}</p>
- {#if loading}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+ {#if loading}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
  {#if partial}<p class="notice-warn" role="alert">{t('palette.partial')} <button class="btn" disabled={loading} onclick={load}>{t('common.retry')}</button></p>{/if}
  <div id="palette-results" class="results" role="listbox" aria-label={t('palette.results')}>
  {#each entries as entry,i(entry.section+entry.href)}<div id={'palette-result-'+i} role="option" tabindex="-1" aria-selected={i===index} class="result" class:current={i===index} onclick={()=>visit(entry)} onkeydown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();visit(entry);}}} onmousemove={()=>index=i}><span>{entry.label}</span><small>{entry.section}</small></div>{/each}

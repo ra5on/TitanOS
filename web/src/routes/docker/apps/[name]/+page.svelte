@@ -332,7 +332,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			>{t('common.retry')}</button
 		>
 	</div>
-{:else if !loaded}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+{:else if !loaded}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {#if yamlError}<div class="notice-error" role="alert">
 		{t('editor.yamlError')}
 		<pre>{yamlError}</pre>

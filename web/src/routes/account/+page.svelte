@@ -243,7 +243,7 @@
 		{#if devicesError}
 			<div class="notice-error row" role="alert"><span>{devicesError}</span><button type="button" class="btn" onclick={loadDevices}>{t('common.retry')}</button></div>
 		{:else if !devices}
-			<p class="muted" role="status">{t('common.loading')}</p>
+			<p class="muted loading" role="status">{t('common.loading')}</p>
 		{:else}
 			{#each devices as device (device.id)}
 				<div class="device">

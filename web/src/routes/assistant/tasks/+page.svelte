@@ -32,7 +32,7 @@
 <p class="muted">{label('intro')}</p>
 <label class="filter">{label('filter')}<select class="field" bind:value={filter}>{#each ['open','finished','all'] as option}<option value={option}>{label(option)}</option>{/each}</select></label>
 {#if error&&!editing}<div class="notice-error load-error" role="alert"><span>{error}</span><button class="btn" disabled={busy} onclick={load}>{t('common.retry')}</button></div>{/if}
-{#if !loaded&&!error}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+{#if !loaded&&!error}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {#if loaded&&!shown.length}<EmptyState title={label('empty')}/>{/if}
 <div class="tasks">{#each shown as task (task.id)}<section class="tile"><div class="head"><h2><a href={`/assistant?chat=${task.id}`}>{task.title}</a></h2><span>{task.run?tOr(`agent.state.${task.run.state}`,task.run.state):'—'}</span></div>
 {#if task.run?.stage}<p>{tOr(`agent.stage.${task.run.stage}`,task.run.stage)} {task.run.tool??''}</p>{/if}

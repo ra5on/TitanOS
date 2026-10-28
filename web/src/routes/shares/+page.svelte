@@ -331,7 +331,7 @@
 		{preferenceError}
 		<button class="btn" onclick={saveView} disabled={savingView}>{t('common.retry')}</button>
 	</div>{/if}
-{#if shares === null && loading}<p class="muted" role="status">{t('common.loading')}</p>
+{#if shares === null && loading}<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else if shares?.length === 0}<EmptyState
 		title={t('shares.empty')}
 		text={volumes.length === 0 ? t('shares.needVolume') : t('shares.emptyHint')}

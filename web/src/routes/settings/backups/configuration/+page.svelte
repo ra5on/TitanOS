@@ -96,7 +96,7 @@
 </PageHead>
 
 {#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}{#if !status}<button class="btn" onclick={load}>{t('ui.retry')}</button>{/if}</div>{/if}
-{#if !status && !error}<p role="status">{t('common.loading')}</p>{/if}
+{#if !status && !error}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 
 {#if status && draft}
 	<section class="tile panel" id="config-history" use:revealTarget aria-labelledby="stick-state">

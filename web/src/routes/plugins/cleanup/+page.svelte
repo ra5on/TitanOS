@@ -62,7 +62,7 @@
 	><p class="muted">{t('cleanup.intro')}</p></PageHead
 >
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-{#if loading}<p role="status">{t('common.loading')}</p>{:else if !releases.length}<EmptyState
+{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !releases.length}<EmptyState
 		title={t('cleanup.empty')}
 	/>{:else}<section class="tile content">
 		<h2 class="tile-title">{t('cleanup.versions')}</h2>
