@@ -118,6 +118,8 @@ try {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
+    // From the top, so the sticky header is not drawn in the middle.
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `${out}/hardware-${lang}-${width}.png`, fullPage: true });
     await ctx.close();
   }

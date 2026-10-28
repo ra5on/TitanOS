@@ -864,6 +864,20 @@ export function fixtureFactory(browser, errors) {
         });
       if (path.endsWith("/addresses"))
         return json({ addresses: [], source: "" });
+      // No Intel GPU in the fixtures: the GuC/HuC tile stays hidden.
+      if (path === "/hardware/intel-gpu")
+        return json({
+          mode: "auto",
+          managed: false,
+          active: "",
+          param: "",
+          entries: {},
+          deferred: false,
+          restartNeeded: false,
+          writable: true,
+          gpus: [],
+          problem: "",
+        });
       if (path === "/hardware")
         return json({
           hardware: { pci: [], usb: [], iommu: false },
