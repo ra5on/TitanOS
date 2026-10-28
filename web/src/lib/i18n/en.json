@@ -6180,5 +6180,7 @@
 	"error.invalid_push_subscription": "The browser did not hand over a valid subscription for notifications.",
 	"error.too_many_push_devices": "20 devices are on already. Remove one first.",
 	"error.push_device_not_found": "The device is no longer registered.",
-	"error.push_device_gone": "The push service no longer knows the device; it was removed. Turn notifications on there again."
+	"error.push_device_gone": "The push service no longer knows the device; it was removed. Turn notifications on there again.",
+	"tailscale.httpsOffLink": "At {name} TitanOS still shows its self-signed certificate. One click turns on HTTPS certificates for your tailnet at Tailscale; TitanOS then gets the valid certificate by itself (needed for passkeys and notifications on the iPhone). The name then appears in public certificate logs.",
+	"tailscale.httpsEnable": "Turn on HTTPS in the tailnet"
 }

@@ -6180,5 +6180,7 @@
 	"error.invalid_push_subscription": "Der Browser hat keine gültige Anmeldung für Mitteilungen geliefert.",
 	"error.too_many_push_devices": "Es sind schon 20 Geräte eingeschaltet. Entferne zuerst eines.",
 	"error.push_device_not_found": "Das Gerät ist nicht mehr eingetragen.",
-	"error.push_device_gone": "Der Push-Dienst kennt das Gerät nicht mehr; es wurde entfernt. Schalte Mitteilungen dort neu ein."
+	"error.push_device_gone": "Der Push-Dienst kennt das Gerät nicht mehr; es wurde entfernt. Schalte Mitteilungen dort neu ein.",
+	"tailscale.httpsOffLink": "Unter {name} zeigt TitanOS noch sein selbst signiertes Zertifikat. Ein Klick schaltet bei Tailscale HTTPS-Zertifikate für dein Tailnet ein; danach holt TitanOS das gültige Zertifikat von selbst (nötig für Passkeys und Mitteilungen auf dem iPhone). Der Name erscheint dabei in öffentlichen Zertifikatsprotokollen.",
+	"tailscale.httpsEnable": "HTTPS im Tailnet einschalten"
 }

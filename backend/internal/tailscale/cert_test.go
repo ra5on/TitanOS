@@ -58,6 +58,7 @@ func certFixture(t *testing.T, f *certRunner) *Manager {
 	m := NewManager(config.Open(t.TempDir()))
 	m.runtime = config.Open(t.TempDir())
 	m.runner = f
+	m.queryFeature = func(context.Context, string) ([]byte, error) { return nil, errors.New("no tailscaled") }
 	return m
 }
 
@@ -130,5 +131,43 @@ func TestRunCertificateHandsItOver(t *testing.T) {
 	m.RunCertificate(ctx, func(c *tls.Certificate) { got <- c })
 	if len(got) != 0 {
 		t.Fatal("development mode fetched a certificate")
+	}
+}
+
+func TestEnableLinkWhileHTTPSIsOff(t *testing.T) {
+	off := `{"BackendState":"Running","Self":{"DNSName":"titan.bleak-locrian.ts.net."},"CertDomains":null}`
+	for _, c := range []struct{ answer, want string }{
+		{`{"Complete":false,"Text":"Serve is not enabled","URL":"https://login.tailscale.com/f/serve?node=nXYZ"}`, "https://login.tailscale.com/f/serve?node=nXYZ"},
+		{`{"Complete":false,"URL":"https://evil.example.org/f/serve"}`, ""},
+		{`{"Complete":true,"URL":"https://login.tailscale.com/f/serve?node=n"}`, ""},
+		{`not json`, ""},
+	} {
+		m := certFixture(t, &certRunner{status: off})
+		var asked string
+		m.queryFeature = func(_ context.Context, feature string) ([]byte, error) { asked = feature; return []byte(c.answer), nil }
+		m.refreshCertificate(context.Background(), nil)
+		if got := m.Status().HTTPS; got.State != "disabled" || got.EnableURL != c.want || asked != "serve" {
+			t.Fatalf("answer %s: %+v (asked %q)", c.answer, got, asked)
+		}
+	}
+	// With HTTPS on there is no link.
+	m := certFixture(t, &certRunner{status: runningStatus, name: "titan.bleak-locrian.ts.net"})
+	m.queryFeature = func(context.Context, string) ([]byte, error) { t.Fatal("asked for a link with HTTPS on"); return nil, nil }
+	m.refreshCertificate(context.Background(), nil)
+}
+
+func TestOpenPageLooksAgainSoon(t *testing.T) {
+	m := certFixture(t, &certRunner{status: `{"BackendState":"Running","Self":{"DNSName":"t.x.ts.net."},"CertDomains":null}`})
+	m.refreshCertificate(context.Background(), nil)
+	m.Status()
+	if len(m.cert.kick) != 0 {
+		t.Fatal("looked again right after the last look")
+	}
+	m.mu.Lock()
+	m.cert.tried = time.Now().Add(-time.Minute)
+	m.mu.Unlock()
+	m.Status()
+	if len(m.cert.kick) != 1 {
+		t.Fatal("open page does not make titand look again")
 	}
 }

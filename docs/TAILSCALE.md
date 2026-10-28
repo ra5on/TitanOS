@@ -60,10 +60,16 @@ Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
   Ein fehlgeschlagener Abruf behält ein noch gültiges Zertifikat. Nichts davon
   greift auf `/config` zu; im Entwicklungsmodus passiert nichts.
 - Kein eigener Schalter in TitanOS: Das Einschalten von HTTPS im Tailnet ist
-  die Entscheidung des Besitzers. Der Name erscheint dabei in öffentlichen
-  Certificate-Transparency-Protokollen; die Plugin-Einstellungen sagen das.
+  die Entscheidung des Besitzers. Ist es aus, holt titand über das Plugin den
+  Ein-Klick-Link von Tailscale (LocalAPI `POST /localapi/v0/query-feature?feature=serve`
+  am Socket `/run/tailscale/tailscaled.sock`, derselbe Link wie bei
+  `tailscale serve`; nur Links auf `login.tailscale.com` werden gezeigt) und
+  die Tailscale-Einstellungen zeigen ihn als Knopf „HTTPS im Tailnet
+  einschalten“. Solange die Seite offen ist, sieht titand alle 20 Sekunden
+  nach, damit das Zertifikat dem Klick gleich folgt. Der Name erscheint dabei
+  in öffentlichen Certificate-Transparency-Protokollen; die Seite sagt das.
 - Zustand in `GET /api/v1/plugins/tailscale` unter `https` (`state`
-  inactive/disabled/ok/error, `name`, `notAfter`, `error`) und in den
+  inactive/disabled/ok/error, `name`, `notAfter`, `error`, `enableUrl`) und in den
   Tailscale-Einstellungen mit Link auf die Adresse.
 
 ## Ablage und Netzwerk
