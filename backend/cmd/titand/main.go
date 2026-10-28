@@ -973,6 +973,16 @@ func run(opts options) error {
 		}
 		return firewallApps(status.Containers), true
 	}
+	// The networks own firewall zones are made of: logical networks of
+	// Settings › Network, Docker networks, VM/LXC NAT bridges. While Docker
+	// does not answer, its last known networks stay.
+	var dockerNetworks []docker.EngineNetwork
+	packetFilter.Networks = func(ctx context.Context) ([]firewall.Network, bool) {
+		if list, err := containers.Networks(ctx); err == nil {
+			dockerNetworks = list
+		}
+		return firewallNetworks(connection, dockerNetworks), true
+	}
 	packetFilter.OnBlock = func(block firewall.Block) {
 		notifier.Notify(notify.Warning, "firewall_blocked", block.Address)
 		audit.Record(activity.Entry{Via: activity.ViaSystem, IP: block.Address, Action: "firewall_block", Target: block.Source, OK: true})
@@ -1328,6 +1338,64 @@ func webPorts(opts options) firewall.WebPorts {
 		}
 	}
 	return ports
+}
+
+// firewallNetworks lists the networks of the NAS for own firewall zones.
+func firewallNetworks(connection *network.Manager, engine []docker.EngineNetwork) []firewall.Network {
+	out := []firewall.Network{}
+	for _, n := range connection.Connections() {
+		dev, ok := connection.Device(n.ID, false)
+		if !ok {
+			continue
+		}
+		name := n.Name
+		if name == "" {
+			name = n.ID
+		}
+		out = append(out, firewall.Network{ID: "net:" + n.ID, Kind: firewall.KindNetwork, Name: name, Device: dev, Subnets: interfaceSubnets(dev)})
+	}
+	for _, n := range engine {
+		kind := firewall.KindDocker
+		if n.Device == "" {
+			kind = firewall.KindDockerLAN
+		}
+		out = append(out, firewall.Network{ID: "docker:" + n.Name, Kind: kind, Name: n.Name, Device: n.Device, Parent: n.Parent, Subnets: n.Subnets})
+	}
+	// NAT bridges of libvirt or LXC, where someone set them up by hand:
+	// TitanOS's own VMs use the QEMU user network or a bridge of the LAN.
+	if ifaces, err := net.Interfaces(); err == nil {
+		for _, iface := range ifaces {
+			if strings.HasPrefix(iface.Name, "virbr") || strings.HasPrefix(iface.Name, "lxcbr") {
+				out = append(out, firewall.Network{ID: "vm:" + iface.Name, Kind: firewall.KindVM, Name: iface.Name, Device: iface.Name, Subnets: interfaceSubnets(iface.Name)})
+			}
+		}
+	}
+	return out
+}
+
+// interfaceSubnets are the networks of the addresses of an interface,
+// without link-local ones.
+func interfaceSubnets(name string) []string {
+	out := []string{}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return out
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return out
+	}
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP.IsLinkLocalUnicast() {
+			continue
+		}
+		masked := (&net.IPNet{IP: ipnet.IP.Mask(ipnet.Mask), Mask: ipnet.Mask}).String()
+		if !slices.Contains(out, masked) {
+			out = append(out, masked)
+		}
+	}
+	return out
 }
 
 // firewallApps groups the published ports of containers by app: the

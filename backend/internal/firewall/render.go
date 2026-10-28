@@ -45,6 +45,8 @@ type ruleset struct {
 	blocklist []netip.Prefix
 	// admin is let in completely while a change is on trial.
 	admin netip.Addr
+	// networks of the NAS the zones are made of.
+	networks []Network
 }
 
 // offScript removes the table (and creates it first, so that removing a
@@ -87,6 +89,16 @@ func render(rs ruleset) string {
 	writeSet(&b, "blocklist4", "ipv4_addr", l4)
 	writeSet(&b, "blocklist6", "ipv6_addr", l6)
 
+	mems := members(rs.cfg, rs.networks)
+	// The zones with chains: the three made of addresses and those with
+	// networks or sources, in the order of the settings.
+	var zones []Zone
+	for _, z := range rs.cfg.Zones {
+		if slices.Contains(legacyZones, z.ID) || slices.ContainsFunc(mems, func(m member) bool { return m.zone == z.ID }) {
+			zones = append(zones, z.ID)
+		}
+	}
+
 	b.WriteString("\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n")
 	for _, line := range []string{
 		`iif "lo" accept`,
@@ -110,40 +122,30 @@ func render(rs ruleset) string {
 	if rs.admin.IsValid() {
 		fmt.Fprintf(&b, "\t\t%s saddr %s accept comment \"admin on trial\"\n", family(rs.admin), rs.admin)
 	}
-	writeZoneJumps(&b, "")
+	writeZoneJumps(&b, mems, "")
 	b.WriteString("\t}\n")
 
 	apps := slices.Clone(rs.apps)
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Key < apps[j].Key })
 	services := Services(&rs.web)
-	for _, zone := range AllZones {
+	for _, zone := range zones {
 		// Packets to the NAS itself.
+		cell := rs.cfg.Cell(zone, ToNAS)
+		drop := "goto drop_" + string(zone)
 		fmt.Fprintf(&b, "\tchain %s {\n", zone)
 		if zone == Internet {
 			b.WriteString("\t\tip saddr @blocklist4 goto drop_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_internet comment \"v64 blocklist\"\n")
 		}
-		for _, r := range rs.cfg.Rules {
-			if line := ruleLine(r, zone, false); line != "" {
+		for _, p := range cell.Policies {
+			for _, line := range nasLines(p, services, drop) {
 				b.WriteString("\t\t" + line + "\n")
-			}
-		}
-		for _, s := range services {
-			if !rs.cfg.Services[s.ID].Has(zone) {
-				continue
-			}
-			for _, set := range s.Ports {
-				if set.Protocol == "icmp" {
-					fmt.Fprintf(&b, "\t\tmeta l4proto icmp icmp type echo-request accept comment %q\n", s.ID)
-					fmt.Fprintf(&b, "\t\tmeta l4proto ipv6-icmp icmpv6 type echo-request accept comment %q\n", s.ID)
-					continue
-				}
-				fmt.Fprintf(&b, "\t\t%s dport %s accept comment %q\n", set.Protocol, portSet(set.Ports), s.ID)
 			}
 		}
 		// Ports Docker's userland proxy answers on the NAS itself (IPv6,
 		// and IPv4 where Docker does not DNAT).
+		appCell := rs.cfg.Cell(zone, ToApps)
 		for _, app := range apps {
-			if !appZones(rs.cfg, app.Key).Has(zone) {
+			if !appAllowed(appCell, app.Key) {
 				continue
 			}
 			for _, proto := range []string{"tcp", "udp"} {
@@ -152,7 +154,11 @@ func render(rs ruleset) string {
 				}
 			}
 		}
-		fmt.Fprintf(&b, "\t\tgoto drop_%s\n\t}\n", zone)
+		if cell.Default == Allow {
+			b.WriteString("\t\taccept\n\t}\n")
+		} else {
+			fmt.Fprintf(&b, "\t\t%s\n\t}\n", drop)
+		}
 		// Broadcasts and multicasts of other devices are dropped quietly:
 		// they would fill the list of blocked packets.
 		fmt.Fprintf(&b, "\tchain drop_%s {\n\t\tfib daddr type { broadcast, multicast } drop\n", zone)
@@ -161,29 +167,43 @@ func render(rs ruleset) string {
 
 	// Published ports of Docker apps: Docker's DNAT has rewritten the
 	// destination, ct original proto-dst is still the port on the NAS.
-	// Everything else that is forwarded (containers going out, VMs and
-	// LXC on br0 with br_netfilter, Tailscale routes) is left alone.
+	// New connections out of networks behind the NAS (Docker, VM/LXC NAT
+	// bridges in a zone) follow the cells between zones; everything else
+	// that is forwarded (VMs and LXC on br0 with br_netfilter, Tailscale
+	// routes) is left alone.
+	routed := slices.ContainsFunc(mems, func(m member) bool { return len(m.hostedDevices()) > 0 })
 	b.WriteString("\tchain forward {\n\t\ttype filter hook forward priority filter; policy accept;\n")
 	b.WriteString("\t\tct status dnat ip saddr @blocked4 jump blocked\n\t\tct status dnat ip6 saddr @blocked6 jump blocked\n")
 	b.WriteString("\t\tct state established,related accept\n")
-	b.WriteString("\t\tct state new ct status dnat jump published\n\t}\n")
-	b.WriteString("\tchain published {\n")
-	writeZoneJumps(&b, "app_")
+	b.WriteString("\t\tct state new ct status dnat jump published\n")
+	if routed {
+		b.WriteString("\t\tct state new jump routed\n")
+	}
 	b.WriteString("\t}\n")
-	for _, zone := range AllZones {
+	b.WriteString("\tchain published {\n")
+	writeZoneJumps(&b, mems, "app_")
+	b.WriteString("\t}\n")
+	for _, zone := range zones {
+		cell := rs.cfg.Cell(zone, ToApps)
+		drop := "goto drop_app_" + string(zone)
 		fmt.Fprintf(&b, "\tchain app_%s {\n", zone)
 		if zone == Internet {
 			b.WriteString("\t\tip saddr @blocklist4 goto drop_app_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_app_internet comment \"v64 blocklist\"\n")
 		}
-		for _, r := range rs.cfg.Rules {
-			if line := ruleLine(r, zone, true); line != "" {
+		for _, p := range cell.Policies {
+			for _, line := range appLines(p, apps, drop) {
 				b.WriteString("\t\t" + line + "\n")
 			}
 		}
+		// Apps without a policy of their own follow the default; listed so
+		// that the rule set says which ports it saw.
+		verdict := "accept"
+		if cell.Default != Allow {
+			verdict = drop
+		}
 		for _, app := range apps {
-			verdict := "accept"
-			if !appZones(rs.cfg, app.Key).Has(zone) {
-				verdict = "goto drop_app_" + string(zone)
+			if slices.ContainsFunc(cell.Policies, func(p Policy) bool { return !p.Disabled && p.App == app.Key }) {
+				continue
 			}
 			for _, proto := range []string{"tcp", "udp"} {
 				if ports := appPorts(app, proto); len(ports) > 0 {
@@ -191,25 +211,117 @@ func render(rs ruleset) string {
 				}
 			}
 		}
-		if rs.cfg.NewApps.Has(zone) {
+		if cell.Default == Allow {
 			b.WriteString("\t\taccept comment \"new apps\"\n")
 		} else {
-			fmt.Fprintf(&b, "\t\tgoto drop_app_%s\n", zone)
+			fmt.Fprintf(&b, "\t\t%s\n", drop)
 		}
 		b.WriteString("\t}\n")
 		fmt.Fprintf(&b, "\tchain drop_app_%s {\n\t\tlimit rate 5/second burst 20 packets log prefix \"%sapp-%s \" level info\n\t\tdrop\n\t}\n", zone, logPrefix, zone)
+	}
+	if routed {
+		writeRouted(&b, rs.cfg, mems)
 	}
 	b.WriteString("}\n")
 	return b.String()
 }
 
-// writeZoneJumps sends a packet on to the chain of its zone.
-func writeZoneJumps(b *strings.Builder, prefix string) {
-	quoted := make([]string, len(vpnInterfaces))
-	for i, name := range vpnInterfaces {
-		quoted[i] = strconv.Quote(name)
+// writeRouted writes the cells between zones for traffic out of networks
+// behind the NAS: routed sends it to the chain of its source zone, from_
+// <zone> finds the destination zone (by outgoing interface, then by
+// address), fwd_<source>_<destination> holds the policies of the cell.
+// Within one network (same bridge) nothing is filtered.
+func writeRouted(b *strings.Builder, cfg Config, mems []member) {
+	var same []string
+	for _, m := range mems {
+		for _, dev := range m.hostedDevices() {
+			same = append(same, fmt.Sprintf("%q . %q", dev, dev))
+		}
 	}
-	fmt.Fprintf(b, "\t\tiifname { %s } goto %s%s\n", strings.Join(quoted, ", "), prefix, VPN)
+	b.WriteString("\tchain routed {\n")
+	fmt.Fprintf(b, "\t\tiifname . oifname { %s } accept comment \"same network\"\n", strings.Join(same, ", "))
+	var sources []member
+	for _, m := range mems {
+		if devs := m.hostedDevices(); len(devs) > 0 {
+			fmt.Fprintf(b, "\t\tiifname %s goto from_%s\n", nameSet(devs), m.zone)
+			sources = append(sources, m)
+		}
+	}
+	b.WriteString("\t}\n")
+	// Destinations in the order a destination address is matched.
+	dests := []Zone{}
+	for _, m := range mems {
+		dests = append(dests, m.zone)
+	}
+	dests = append(dests, VPN, Home, Internet)
+	for _, src := range sources {
+		fmt.Fprintf(b, "\tchain from_%s {\n", src.zone)
+		for _, d := range mems {
+			target := fmt.Sprintf("goto fwd_%s_%s", src.zone, d.zone)
+			if devs := d.devices(); len(devs) > 0 {
+				fmt.Fprintf(b, "\t\toifname %s %s\n", nameSet(devs), target)
+			}
+			v4, v6 := split(d.sources)
+			if len(v4) > 0 {
+				fmt.Fprintf(b, "\t\tip daddr %s %s\n", portSet(v4), target)
+			}
+			if len(v6) > 0 {
+				fmt.Fprintf(b, "\t\tip6 daddr %s %s\n", portSet(v6), target)
+			}
+		}
+		fmt.Fprintf(b, "\t\toifname %s goto fwd_%s_%s\n", nameSet(vpnInterfaces), src.zone, VPN)
+		for _, p := range vpnPrefixes {
+			fmt.Fprintf(b, "\t\t%s daddr %s goto fwd_%s_%s\n", family(p.Addr()), p, src.zone, VPN)
+		}
+		fmt.Fprintf(b, "\t\tip daddr @home4 goto fwd_%s_%s\n\t\tip6 daddr @home6 goto fwd_%s_%s\n", src.zone, Home, src.zone, Home)
+		fmt.Fprintf(b, "\t\tgoto fwd_%s_%s\n\t}\n", src.zone, Internet)
+		drop := "goto drop_fwd_" + string(src.zone)
+		for _, dst := range dests {
+			cell := cfg.Cell(src.zone, string(dst))
+			fmt.Fprintf(b, "\tchain fwd_%s_%s {\n", src.zone, dst)
+			for _, p := range cell.Policies {
+				if line := forwardLine(p, drop); line != "" {
+					b.WriteString("\t\t" + line + "\n")
+				}
+			}
+			if cell.Default == Allow {
+				b.WriteString("\t\taccept\n\t}\n")
+			} else {
+				fmt.Fprintf(b, "\t\t%s\n\t}\n", drop)
+			}
+		}
+		fmt.Fprintf(b, "\tchain drop_fwd_%s {\n\t\tlimit rate 5/second burst 20 packets log prefix \"%sfwd-%s \" level info\n\t\tdrop\n\t}\n", src.zone, logPrefix, src.zone)
+	}
+}
+
+// writeZoneJumps sends a packet on to the chain of its zone: own zones
+// and Docker by interface (and subnet) or source, then VPN, home network,
+// internet.
+func writeZoneJumps(b *strings.Builder, mems []member, prefix string) {
+	for _, m := range mems {
+		target := "goto " + prefix + string(m.zone)
+		for _, bind := range m.bindings {
+			v4, v6 := split(bind.subnets)
+			if len(v4) == 0 && len(v6) == 0 {
+				fmt.Fprintf(b, "\t\tiifname %q %s\n", bind.device, target)
+				continue
+			}
+			if len(v4) > 0 {
+				fmt.Fprintf(b, "\t\tiifname %q ip saddr %s %s\n", bind.device, portSet(v4), target)
+			}
+			if len(v6) > 0 {
+				fmt.Fprintf(b, "\t\tiifname %q ip6 saddr %s %s\n", bind.device, portSet(v6), target)
+			}
+		}
+		v4, v6 := split(m.sources)
+		if len(v4) > 0 {
+			fmt.Fprintf(b, "\t\tip saddr %s %s\n", portSet(v4), target)
+		}
+		if len(v6) > 0 {
+			fmt.Fprintf(b, "\t\tip6 saddr %s %s\n", portSet(v6), target)
+		}
+	}
+	fmt.Fprintf(b, "\t\tiifname %s goto %s%s\n", nameSet(vpnInterfaces), prefix, VPN)
 	for _, p := range vpnPrefixes {
 		fmt.Fprintf(b, "\t\t%s saddr %s goto %s%s\n", family(p.Addr()), p, prefix, VPN)
 	}
@@ -217,53 +329,173 @@ func writeZoneJumps(b *strings.Builder, prefix string) {
 	fmt.Fprintf(b, "\t\tgoto %s%s\n", prefix, Internet)
 }
 
-// ruleLine is an own rule in the chain of a zone; "" if it does not apply
-// there. forward rules match the original (published) port.
-func ruleLine(r Rule, zone Zone, forward bool) string {
-	if r.Disabled || (r.Zone != "" && r.Zone != zone) {
+func nameSet(names []string) string {
+	quoted := make([]string, len(names))
+	for i, name := range names {
+		quoted[i] = strconv.Quote(name)
+	}
+	if len(quoted) == 1 {
+		return quoted[0]
+	}
+	return "{ " + strings.Join(quoted, ", ") + " }"
+}
+
+// sourcePart is the match of a source (or destination) address; ok false
+// if the text is no address.
+func addressPart(text, dir string) (string, bool) {
+	if text == "" {
+		return "", true
+	}
+	p, err := parseSource(text)
+	if err != nil {
+		return "", false
+	}
+	return family(p.Addr()) + " " + dir + " " + prefixText(p), true
+}
+
+// nasLines are the lines of a policy in the chain of a zone to the NAS.
+func nasLines(p Policy, services []Service, drop string) []string {
+	if p.Disabled {
+		return nil
+	}
+	source, ok := addressPart(p.Source, "saddr")
+	if !ok {
+		return nil
+	}
+	verdict := "accept"
+	if p.Action == Deny {
+		verdict = drop
+	}
+	join := func(parts ...string) string {
+		var out []string
+		for _, part := range parts {
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	if p.Service != "" {
+		text := p.Comment
+		if text == "" {
+			text = p.Service
+		}
+		var lines []string
+		for _, set := range policyPortSets(p, services) {
+			if set.Protocol == "icmp" {
+				lines = append(lines,
+					join(source, "meta l4proto icmp icmp type echo-request", verdict, "comment "+strconv.Quote(text)),
+					join(source, "meta l4proto ipv6-icmp icmpv6 type echo-request", verdict, "comment "+strconv.Quote(text)))
+				continue
+			}
+			lines = append(lines, join(source, set.Protocol+" dport "+portSet(set.Ports), verdict, "comment "+strconv.Quote(text)))
+		}
+		return lines
+	}
+	return []string{join(source, portMatch(p, false), verdict, commentPart(p.Comment))}
+}
+
+// appLines are the lines of a policy in the chain of a zone to the apps:
+// an app's published ports, or own ports by their original destination.
+func appLines(p Policy, apps []App, drop string) []string {
+	if p.Disabled {
+		return nil
+	}
+	source, ok := addressPart(p.Source, "saddr")
+	if !ok {
+		return nil
+	}
+	verdict := "accept"
+	if p.Action == Deny {
+		verdict = drop
+	}
+	prefix := ""
+	if source != "" {
+		prefix = source + " "
+	}
+	if p.App != "" {
+		i := slices.IndexFunc(apps, func(a App) bool { return a.Key == p.App })
+		if i < 0 {
+			return nil
+		}
+		var lines []string
+		for _, proto := range []string{"tcp", "udp"} {
+			if ports := appPorts(apps[i], proto); len(ports) > 0 {
+				lines = append(lines, fmt.Sprintf("%smeta l4proto %s ct original proto-dst %s %s comment %q", prefix, proto, portSet(ports), verdict, comment("app "+p.App)))
+			}
+		}
+		return lines
+	}
+	line := prefix
+	if match := portMatch(p, true); match != "" {
+		line += match + " "
+	}
+	line += verdict
+	if c := commentPart(p.Comment); c != "" {
+		line += " " + c
+	}
+	return []string{line}
+}
+
+// forwardLine is a policy of a cell between zones.
+func forwardLine(p Policy, drop string) string {
+	if p.Disabled {
+		return ""
+	}
+	source, ok := addressPart(p.Source, "saddr")
+	if !ok {
+		return ""
+	}
+	dest, ok := addressPart(p.Destination, "daddr")
+	if !ok {
+		return ""
+	}
+	if source != "" && dest != "" && strings.Fields(source)[0] != strings.Fields(dest)[0] {
+		// IPv4 source and IPv6 destination never match together.
 		return ""
 	}
 	var parts []string
-	if r.Source != "" {
-		source, err := parseSource(r.Source)
-		if err != nil {
-			return ""
+	for _, part := range []string{source, dest, portMatch(p, false)} {
+		if part != "" {
+			parts = append(parts, part)
 		}
-		parts = append(parts, family(source.Addr())+" saddr "+prefixText(source))
-	}
-	protocols := r.Protocol
-	if protocols == "any" {
-		protocols = "{ tcp, udp }"
-	}
-	switch {
-	case r.Ports != "" && forward:
-		parts = append(parts, "meta l4proto "+protocols+" ct original proto-dst "+r.Ports)
-	case r.Ports != "" && r.Protocol == "any":
-		parts = append(parts, "meta l4proto "+protocols+" th dport "+r.Ports)
-	case r.Ports != "":
-		parts = append(parts, r.Protocol+" dport "+r.Ports)
-	case r.Protocol != "any":
-		parts = append(parts, "meta l4proto "+r.Protocol)
 	}
 	verdict := "accept"
-	if r.Action == "deny" {
-		verdict = "goto drop_" + string(zone)
-		if forward {
-			verdict = "goto drop_app_" + string(zone)
-		}
+	if p.Action == Deny {
+		verdict = drop
 	}
 	parts = append(parts, verdict)
-	if r.Comment != "" {
-		parts = append(parts, "comment "+strconv.Quote(r.Comment))
+	if c := commentPart(p.Comment); c != "" {
+		parts = append(parts, c)
 	}
 	return strings.Join(parts, " ")
 }
 
-func appZones(cfg Config, key string) Zones {
-	if zones, ok := cfg.Apps[key]; ok {
-		return zones
+// portMatch is the protocol and ports of a policy; forward matches the
+// original (published) port.
+func portMatch(p Policy, forward bool) string {
+	protocols := p.Protocol
+	if protocols == "any" {
+		protocols = "{ tcp, udp }"
 	}
-	return cfg.NewApps
+	switch {
+	case p.Ports != "" && forward:
+		return "meta l4proto " + protocols + " ct original proto-dst " + p.Ports
+	case p.Ports != "" && p.Protocol == "any":
+		return "meta l4proto " + protocols + " th dport " + p.Ports
+	case p.Ports != "":
+		return p.Protocol + " dport " + p.Ports
+	case p.Protocol != "any":
+		return "meta l4proto " + p.Protocol
+	}
+	return ""
+}
+
+func commentPart(text string) string {
+	if text == "" {
+		return ""
+	}
+	return "comment " + strconv.Quote(text)
 }
 
 func appPorts(app App, protocol string) []string {

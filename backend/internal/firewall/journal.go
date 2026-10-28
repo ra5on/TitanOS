@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,8 +29,14 @@ type Drop struct {
 	Port     int       `json:"port,omitempty"`
 	// App is set for published ports of Docker apps; Port is then the
 	// port inside the container (the kernel logs it after Docker's DNAT).
-	App       bool   `json:"app,omitempty"`
-	Interface string `json:"interface,omitempty"`
+	App bool `json:"app,omitempty"`
+	// Forward is set for traffic out of a network behind the NAS to another
+	// zone (a cell between zones); Destination is where it was going.
+	Forward     bool   `json:"forward,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Interface   string `json:"interface,omitempty"`
+	// Out is the outgoing interface of forwarded traffic.
+	Out string `json:"out,omitempty"`
 }
 
 const maxRecent = 200
@@ -91,8 +98,10 @@ func parseDrop(message string) (Drop, bool) {
 	drop := Drop{Zone: zone}
 	if app, ok := strings.CutPrefix(zone, "app-"); ok {
 		drop.Zone, drop.App = app, true
+	} else if fwd, ok := strings.CutPrefix(zone, "fwd-"); ok {
+		drop.Zone, drop.Forward = fwd, true
 	}
-	if drop.Zone != "blocked" && drop.Zone != string(Home) && drop.Zone != string(VPN) && drop.Zone != string(Internet) {
+	if drop.Zone != "blocked" && !slices.Contains(builtinZones, Zone(drop.Zone)) && !customZoneRE.MatchString(drop.Zone) {
 		return Drop{}, false
 	}
 	for _, field := range strings.Fields(fields) {
@@ -102,6 +111,14 @@ func parseDrop(message string) (Drop, bool) {
 			drop.Interface = value
 		case "SRC":
 			drop.Source = value
+		case "DST":
+			if drop.Forward {
+				drop.Destination = value
+			}
+		case "OUT":
+			if drop.Forward {
+				drop.Out = value
+			}
 		case "PROTO":
 			drop.Protocol = strings.ToLower(value)
 		case "DPT":

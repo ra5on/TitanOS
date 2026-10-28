@@ -10,7 +10,6 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +41,12 @@ type Status struct {
 	// HomeNetworks and VPNNetworks are what the zones are made of now.
 	HomeNetworks []string `json:"homeNetworks"`
 	VPNNetworks  []string `json:"vpnNetworks"`
+	// Networks are the networks of the NAS for own zones, and those own
+	// zones refer to that are gone (Missing).
+	Networks []Network `json:"networks"`
+	// DockerError is why Docker's isolation could not be passed for a cell
+	// between Docker networks (DOCKER-USER).
+	DockerError string `json:"dockerError,omitempty"`
 	// ClientAddress/ClientZone are of the request asking.
 	ClientAddress string  `json:"clientAddress"`
 	ClientZone    Zone    `json:"clientZone"`
@@ -64,6 +69,9 @@ type Manager struct {
 	// Apps returns the Docker apps with their published ports; ok false
 	// keeps the last known list (Docker not answering).
 	Apps func(ctx context.Context) ([]App, bool)
+	// Networks returns the networks of the NAS (logical networks, Docker
+	// and VM/LXC bridges); ok false keeps the last known list.
+	Networks func(ctx context.Context) ([]Network, bool)
 	// OnBlock is told about every new automatic block.
 	OnBlock func(Block)
 	// OnRevert is told when a change was not confirmed and went back.
@@ -85,7 +93,14 @@ type Manager struct {
 	timer    *time.Timer
 	home     []netip.Prefix
 	apps     []App
+	networks []Network
 	applied  string
+	// dockerUser are the Docker bridge pairs loaded into TITANOS-FWD,
+	// dockerUserErr why that failed, dockerUserClean that nothing of it is
+	// left (checked once after the start).
+	dockerUser      string
+	dockerUserErr   string
+	dockerUserClean bool
 	// blocklist is the v64 blocklist (RAM only, SetBlocklist).
 	blocklist []netip.Prefix
 	lastErr   string
@@ -109,11 +124,14 @@ func NewManager(store *config.Store) *Manager {
 // at the start; without settings the firewall is off and nothing changes.
 func (m *Manager) Load(ctx context.Context) error {
 	cfg := Defaults()
-	err := m.store.ReadJSON(settingsFile, &cfg)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	file := emptyFile()
+	err := m.store.ReadJSON(settingsFile, &file)
+	switch {
+	case err == nil:
+		cfg = fromFile(file)
+	case !errors.Is(err, fs.ErrNotExist):
 		return err
 	}
-	cfg = normal(cfg)
 	if err := validate(cfg); err != nil {
 		slog.Warn("firewall settings not valid, firewall stays off", "err", err)
 		cfg.Enabled = false
@@ -158,7 +176,7 @@ func (m *Manager) applyLocked(ctx context.Context) error {
 	if m.Disabled {
 		return nil
 	}
-	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), blocklist: m.blocklist}
+	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), blocklist: m.blocklist, networks: m.networks}
 	if m.pending != nil {
 		rs.admin = m.admin
 	}
@@ -175,6 +193,9 @@ func (m *Manager) applyLocked(ctx context.Context) error {
 	}
 	m.applied, m.lastErr, m.failed = script, "", false
 	m.saveRun()
+	if err := m.syncDockerUser(ctx, dockerPairs(rs.cfg, rs.networks), false); err != nil {
+		slog.Warn("firewall: Docker networks not opened to each other", "err", err)
+	}
 	return nil
 }
 
@@ -187,6 +208,9 @@ func (m *Manager) tableNeeded() bool {
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
+	// At once, not after the first tick: the networks of own zones and the
+	// Docker ports are not known at Load.
+	m.refresh(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -211,6 +235,20 @@ func (m *Manager) refresh(ctx context.Context) {
 		apps, appsKnown = m.Apps(lookup)
 		cancel()
 	}
+	// The networks also while off: the page shows them.
+	var networks []Network
+	networksKnown := false
+	if m.Networks != nil {
+		lookup, cancel := context.WithTimeout(ctx, 5*time.Second)
+		networks, networksKnown = m.Networks(lookup)
+		cancel()
+		for i := range networks {
+			if networks[i].Subnets == nil {
+				networks[i].Subnets = []string{}
+			}
+		}
+		sortNetworks(networks)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded || m.Disabled {
@@ -227,6 +265,10 @@ func (m *Manager) refresh(ctx context.Context) {
 	if appsKnown && !sameApps(apps, m.apps) {
 		m.apps, changed = apps, true
 	}
+	if networksKnown && !sameNetworks(networks, m.networks) {
+		m.networks = networks
+		changed = changed || m.current().Enabled
+	}
 	if !changed && m.tableNeeded() && !m.failed {
 		// Someone (nft flush ruleset, a script) may have removed the table.
 		check, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -238,6 +280,10 @@ func (m *Manager) refresh(ctx context.Context) {
 		if err := m.applyLocked(ctx); err != nil {
 			slog.Error("firewall rules not loaded", "err", err)
 		}
+	} else if m.current().Enabled && (m.dockerUser != "" || m.dockerUserErr != "") {
+		check, cancel := context.WithTimeout(ctx, 5*time.Second)
+		m.syncDockerUser(check, dockerPairs(m.current(), m.networks), true)
+		cancel()
 	}
 	m.flushPermanent(now, false)
 }
@@ -273,7 +319,7 @@ func (m *Manager) Change(ctx context.Context, cfg Config, admin string) error {
 		return fmt.Errorf("%w: unknown client address", ErrInvalid)
 	}
 	addr = addr.Unmap().WithZone("")
-	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, classify(addr, m.home), addr, "tcp", m.Web.or().HTTPS, "webui") {
+	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
 		return ErrExcludesYou
 	}
 	if !cfg.Enabled {
@@ -285,7 +331,7 @@ func (m *Manager) Change(ctx context.Context, cfg Config, admin string) error {
 			m.applyLocked(ctx)
 			return err
 		}
-		if err := m.store.WriteJSON(settingsFile, cfg); err != nil {
+		if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
 			return err
 		}
 		slog.Info("firewall switched off")
@@ -330,7 +376,7 @@ func (m *Manager) Confirm(ctx context.Context) error {
 	}
 	cfg := *m.pending
 	cfg.AutoBlock = m.active.AutoBlock
-	if err := m.store.WriteJSON(settingsFile, cfg); err != nil {
+	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
 		return err
 	}
 	m.timer.Stop()
@@ -375,7 +421,7 @@ func (m *Manager) SetAutoBlock(ctx context.Context, a AutoBlock) error {
 	}
 	cfg := clone(m.active)
 	cfg.AutoBlock = a
-	if err := m.store.WriteJSON(settingsFile, cfg); err != nil {
+	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
 		return err
 	}
 	m.active = cfg
@@ -452,7 +498,7 @@ func (m *Manager) AllowHTTP(remoteAddr string, app bool) bool {
 	if app {
 		service = "apps"
 	}
-	return decide(cfg, classify(addr, m.home), addr, "tcp", m.Web.or().HTTPS, service)
+	return decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home).zone(addr), addr, "tcp", m.Web.or().HTTPS, service)
 }
 
 // Status returns the settings and the state; client is the address of the
@@ -473,8 +519,10 @@ func (m *Manager) Status(client string) Status {
 		status.VPNNetworks = append(status.VPNNetworks, p.String())
 	}
 	if addr, err := netip.ParseAddr(client); err == nil {
-		status.ClientZone = classify(addr, m.home)
+		status.ClientZone = newClassifier(m.current(), m.networks, m.home).zone(addr)
 	}
+	status.Networks = statusNetworks(m.networks, m.active, m.pending)
+	status.DockerError = m.dockerUserErr
 	status.Blocked = slices.Clone(m.blocks)
 	status.Blocklist = len(m.blocklist)
 	m.mu.Unlock()
@@ -524,11 +572,41 @@ func (m *Manager) Enabled() bool {
 	return m.loaded && m.current().Enabled
 }
 
-// AppZones returns the zones the published ports of an app are allowed from.
+// AppZones returns the built-in zones the published ports of an app are
+// allowed from (its policy without a source in each cell, else the
+// default).
 func (m *Manager) AppZones(key string) Zones {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return appZones(m.active, key)
+}
+
+func appZones(cfg Config, key string) Zones {
+	var z Zones
+	for _, zone := range legacyZones {
+		z.set(zone, appAllowed(cfg.Cell(zone, ToApps), key))
+	}
+	return z
+}
+
+// setAppZones sets the policy of an app in the cells of the built-in
+// zones: the first one for it without a source is changed, else one is
+// added at the end.
+func setAppZones(cfg *Config, key string, zones Zones) {
+	for _, zone := range legacyZones {
+		c := cfg.Cell(zone, ToApps)
+		c.Policies = slices.Clone(c.Policies)
+		action := Deny
+		if zones.Has(zone) {
+			action = Allow
+		}
+		if i := slices.IndexFunc(c.Policies, func(p Policy) bool { return !p.Disabled && p.App == key && p.Source == "" }); i >= 0 {
+			c.Policies[i].Action = action
+		} else {
+			c.Policies = append(c.Policies, Policy{Action: action, Protocol: "any", App: key})
+		}
+		cfg.setCell(c)
+	}
 }
 
 // SetAppZones sets the zones of one app at once and stores them, without
@@ -554,11 +632,11 @@ func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (boo
 		return false, nil
 	}
 	cfg := clone(m.active)
-	cfg.Apps[key] = zones
+	setAppZones(&cfg, key, zones)
 	if err := validate(cfg); err != nil {
 		return false, err
 	}
-	if err := m.store.WriteJSON(settingsFile, cfg); err != nil {
+	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
 		return false, err
 	}
 	before := m.active
@@ -574,9 +652,9 @@ func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (boo
 
 // InternetHTTP tells whether the plain HTTP port of titand (where Let's
 // Encrypt checks an HTTP-01 challenge) is reachable from the internet zone
-// for anyone: the firewall is off, the web UI is allowed from the internet,
-// or an own rule without a source allows the port there before any deny.
-// Rules limited to a source never count: Let's Encrypt checks from
+// for anyone: the firewall is off, or the cell internet → NAS lets the
+// port in for any sender (policies without a source, then the default).
+// Policies limited to a source never count: Let's Encrypt checks from
 // addresses nobody knows in advance. With plain HTTP off it is false.
 func (m *Manager) InternetHTTP() bool {
 	m.mu.Lock()
@@ -592,33 +670,45 @@ func (m *Manager) InternetHTTP() bool {
 	return internetReaches(cfg, Services(&m.Web), "tcp", port)
 }
 
-// internetReaches follows the order of the internet chain in render: own
-// rules first (first match decides), then the services.
+// internetReaches follows the order of the internet chain in render:
+// policies first (first match decides), then the default.
 func internetReaches(cfg Config, services []Service, protocol string, port int) bool {
-	for _, r := range cfg.Rules {
-		if r.Disabled || (r.Zone != "" && r.Zone != Internet) || r.Source != "" {
+	c := cfg.Cell(Internet, ToNAS)
+	for _, p := range c.Policies {
+		if p.Source != "" {
 			continue
 		}
-		if r.Protocol != "any" && r.Protocol != protocol {
-			continue
-		}
-		if r.Ports != "" {
-			low, high, err := parsePorts(r.Ports)
-			if err != nil || port < low || port > high {
-				continue
-			}
-		}
-		return r.Action != "deny"
-	}
-	for _, s := range services {
-		if !cfg.Services[s.ID].Has(Internet) {
-			continue
-		}
-		for _, set := range s.Ports {
-			if set.Protocol == protocol && slices.Contains(set.Ports, strconv.Itoa(port)) {
-				return true
-			}
+		if policyMatchesNAS(p, services, netip.Addr{}, protocol, port, "") {
+			return p.Action == Allow
 		}
 	}
-	return false
+	return c.Default == Allow
+}
+
+// statusNetworks are the networks of the NAS plus those the settings (and
+// a change on trial) refer to that are gone.
+func statusNetworks(live []Network, active Config, pending *Config) []Network {
+	out := slices.Clone(live)
+	if out == nil {
+		out = []Network{}
+	}
+	configs := []Config{active}
+	if pending != nil {
+		configs = append(configs, *pending)
+	}
+	for _, cfg := range configs {
+		for _, z := range cfg.Zones {
+			for _, id := range z.Networks {
+				if slices.ContainsFunc(out, func(n Network) bool { return n.ID == id }) {
+					continue
+				}
+				kind, name, _ := strings.Cut(id, ":")
+				if kind == "net" {
+					kind = KindNetwork
+				}
+				out = append(out, Network{ID: id, Kind: kind, Name: name, Subnets: []string{}, Missing: true})
+			}
+		}
+	}
+	return out
 }

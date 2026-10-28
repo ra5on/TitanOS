@@ -88,22 +88,80 @@ func classify(addr netip.Addr, home []netip.Prefix) Zone {
 	return Internet
 }
 
-// ruleMatches tells whether an own rule applies to a connection.
-func ruleMatches(r Rule, addr netip.Addr, protocol string, port int) bool {
-	if r.Source != "" {
-		source, err := parseSource(r.Source)
+// sharedByName are the services on the same port (443) that titand tells
+// apart by the name asked for (appproxy.Manager.Gate → AllowHTTP).
+var sharedByName = []string{"webui", "apps"}
+
+// policyPortSets are the ports a service policy stands for in the rules.
+// A deny of the web UI or of the HTTPS names leaves out the port both
+// share: nftables lets it in, titand refuses the name that is denied.
+func policyPortSets(p Policy, services []Service) []PortSet {
+	s, ok := serviceByID(services, p.Service)
+	if !ok {
+		return nil
+	}
+	if p.Action != Deny || !slices.Contains(sharedByName, p.Service) {
+		return s.Ports
+	}
+	var shared []PortSet
+	for _, other := range sharedByName {
+		if o, ok := serviceByID(services, other); ok && other != p.Service {
+			shared = append(shared, o.Ports...)
+		}
+	}
+	var out []PortSet
+	for _, set := range s.Ports {
+		var ports []string
+		for _, port := range set.Ports {
+			if !slices.ContainsFunc(shared, func(o PortSet) bool { return o.Protocol == set.Protocol && slices.Contains(o.Ports, port) }) {
+				ports = append(ports, port)
+			}
+		}
+		if len(ports) > 0 {
+			out = append(out, PortSet{Protocol: set.Protocol, Ports: ports})
+		}
+	}
+	return out
+}
+
+// policyMatchesNAS tells whether a policy of a cell to the NAS applies to
+// a connection. service is the service asked for by titand (webui, apps) or
+// empty for a plain port: a policy for one of the services on port 443
+// then only matches its own name.
+func policyMatchesNAS(p Policy, services []Service, addr netip.Addr, protocol string, port int, service string) bool {
+	if p.Disabled {
+		return false
+	}
+	if p.Source != "" {
+		source, err := parseSource(p.Source)
 		if err != nil || !source.Contains(addr) {
 			return false
 		}
 	}
-	if r.Protocol != "any" && r.Protocol != protocol {
+	if p.Service != "" {
+		if service != "" && slices.Contains(sharedByName, service) && slices.Contains(sharedByName, p.Service) {
+			return p.Service == service
+		}
+		for _, set := range policyPortSets(p, services) {
+			if set.Protocol != protocol {
+				continue
+			}
+			for _, ports := range set.Ports {
+				if low, high, err := parsePorts(ports); err == nil && port >= low && port <= high {
+					return true
+				}
+			}
+		}
 		return false
 	}
-	if r.Ports != "" {
+	if p.Protocol != "any" && p.Protocol != protocol {
+		return false
+	}
+	if p.Ports != "" {
 		if protocol != "tcp" && protocol != "udp" {
 			return false
 		}
-		low, high, err := parsePorts(r.Ports)
+		low, high, err := parsePorts(p.Ports)
 		if err != nil || port < low || port > high {
 			return false
 		}
@@ -111,16 +169,15 @@ func ruleMatches(r Rule, addr netip.Addr, protocol string, port int) bool {
 	return true
 }
 
-// decide evaluates the own rules and then the service the way the rule
-// set does for a new connection from addr in zone.
-func decide(cfg Config, zone Zone, addr netip.Addr, protocol string, port int, service string) bool {
-	for _, r := range cfg.Rules {
-		if r.Disabled || (r.Zone != "" && r.Zone != zone) {
-			continue
-		}
-		if ruleMatches(r, addr, protocol, port) {
-			return r.Action == "allow"
+// decide evaluates the cell of a zone to the NAS the way the rule set
+// does for a new connection from addr: policies in order, then the
+// default.
+func decide(cfg Config, services []Service, zone Zone, addr netip.Addr, protocol string, port int, service string) bool {
+	c := cfg.Cell(zone, ToNAS)
+	for _, p := range c.Policies {
+		if policyMatchesNAS(p, services, addr, protocol, port, service) {
+			return p.Action == Allow
 		}
 	}
-	return cfg.Services[service].Has(zone)
+	return c.Default == Allow
 }

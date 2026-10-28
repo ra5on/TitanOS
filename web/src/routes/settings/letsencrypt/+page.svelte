@@ -270,7 +270,7 @@
 					<p>{t('letsencrypt.firewallHttp')}</p>
 					<p>{t('letsencrypt.firewallHttpWays')}</p>
 					<div class="row-actions">
-						<a class="btn" href="/settings/firewall#firewall-rules">{t('letsencrypt.toFirewall')}</a>
+						<a class="btn" href="/settings/firewall?tab=policies#firewall-policies">{t('letsencrypt.toFirewall')}</a>
 						<button type="button" class="btn" disabled={busy} onclick={() => (challenge = 'dns-01')}
 							>{t('letsencrypt.useDns')}</button
 						>

@@ -24,8 +24,8 @@ Platzhalter `*.<domain>` – für die HTTPS-Namen der Apps, und erneuert es selb
     ebenso, wenn die TitanOS-Firewall eingeschaltet ist und Port 80 aus dem
     Internet nicht für jeden erlaubt (Normalfall: Port 80 gehört zur
     „Weboberfläche“, die nur Heimnetz und VPN erlaubt). Ausweg: DNS-Challenge
-    oder unter Firewall › Eigene Regeln „Erlauben, TCP, Port 80, Zone Internet“
-    ohne Absender. TitanOS öffnet Port 80 nie von selbst. Eine Regel mit
+    oder unter Firewall › Richtlinien in der Zelle „Internet → NAS“ „Erlauben,
+    TCP, Port 80“ ohne Absender. TitanOS öffnet Port 80 nie von selbst. Eine Richtlinie mit
     Absender zählt nicht, weil Let's Encrypt von wechselnden Adressen prüft
     (`firewall.Manager.InternetHTTP`, Feld `internetHttp` der Status-API).
 - **Auch HTTPS-Namen der Apps abdecken** (nur DNS-Challenge): fügt

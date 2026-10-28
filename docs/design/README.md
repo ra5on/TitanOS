@@ -95,11 +95,23 @@ Großbuchstaben-Überschrift `.tile-title`; Felder mit Beschriftung darüber und
 lesbarer Breite (`label.stack`), Häkchen mit Hinweis eingerückt darunter,
 Knopfleisten `.row-actions`, Unterteilungen mit Linie (`.divided`). Neu:
 „HTTPS-Namen für Apps“ unter Netzwerk und Dienste (siehe `docs/APP-PROXY.md`).
-Ebenso „Firewall“ (Symbol Schild): Hauptschalter, Zonenmatrix als Tabelle mit
-Häkchen je Zone, Docker-Apps mit „Neue Apps“, eigene Regeln als bearbeitbare
-Tabellenzeilen, eine haftende Leiste „Auf Probe übernehmen“ und darüber der
-Probe-Hinweis mit Countdown, automatisches Sperren mit Sperrliste und „Zuletzt
-gesperrt“ (siehe `docs/FIREWALL.md`).
+Ebenso „Firewall“ (Symbol Schild): Hauptschalter in einer Kachel, darunter
+Reiter (`Tabs.svelte`, `?tab=`) Zonen, Netze, Richtlinien, Auto-Sperre und
+Protokoll. **Zonen** (nach UniFi): Matrix Quell-Zone × Ziel (NAS, Docker-Apps,
+Zonen) in `.table-wrap`/`.data-table`, Zellen als Knöpfe in den Statusfarben
+„Erlaubt“ (grün), „Blockiert“ (rot), „Teilweise“ (gelb) mit Kurztext „n
+erlaubt/gesperrt“, nicht über das NAS laufende Zellen grau gestrichelt mit „—“
+und Tooltip; ein Klick öffnet darunter die Richtlinien der Zelle als Karten mit
+↑/↓ („erste passende entscheidet“) und der Vorgabe als `Segments`; darunter die
+Zonen mit ihren Netzen, Reihenfolge eigener Zonen per ↑/↓, „Zone anlegen“
+(Dialog: Name, Netze als Häkchen gruppiert nach Netzwerk/VLAN, Docker-Netze,
+VM/LXC-Netze und Docker im LAN – letztere nicht wählbar –, Quellnetze).
+**Netze**: Tabelle aller erkannten Netze mit Art, Gerät, Subnetz und
+Zonenauswahl („nach Adresse“ bzw. „Standard-Zone Docker“ oder eine eigene
+Zone). **Richtlinien**: alle als Karten (auch mobil), filterbar nach Von/Nach.
+`TrialBanner` und die haftende Leiste „Auf Probe übernehmen“ nur auf Zonen,
+Netze und Richtlinien; die Auto-Sperre speichert getrennt sofort (siehe
+`docs/FIREWALL.md`).
 
 ### Einstellungen und Sicherungen (0.6.1)
 
@@ -670,7 +682,8 @@ Rand. `scripts/test-ui-023.mjs` misst diesen Wert, prüft Graphit/Hell, Deutsch/
 Englisch, Flat/Glas/Outline und 120 % Schrift sowie die neuen Fachdialoge anhand
 isolierter Daten. Diese Aufnahmen ersetzen keine QEMU-Funktionsprüfung.
 
-Router, DHCP und Zugriffsregeln bleiben extern. Netzwerkzwecke und
-Verwaltungsmarkierung sind keine Firewall-Regeln. Tailscale bleibt eine eigene
+Router und DHCP bleiben extern. Netzwerkzwecke und Verwaltungsmarkierung haben
+keine Firewall-Bedeutung; welcher Zone der Firewall ein Netz angehört, ist eine
+eigene Zuordnung unter Einstellungen › Firewall › Netze. Tailscale bleibt eine eigene
 Integration; öffentliche Cloudflare-App-Links sind keine Tunnelverwaltung.
 Ablaufende Download-Links sind ausdrücklich nicht Teil des Umfangs.
