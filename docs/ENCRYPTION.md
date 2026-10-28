@@ -98,8 +98,9 @@ Container wieder. Ein absichtlich gesperrtes Volume ergibt keine Meldung.
 
 `cryptsetup luksFormat --type luks2 --pbkdf argon2id --pbkdf-memory 262144
 --pbkdf-parallel 4 --iter-time 2000` (ebenso für neue Schlüsselplätze):
-Argon2id mit **256 MiB** Speicher, vier Bahnen und so vielen Durchläufen, wie
-auf diesem NAS etwa zwei Sekunden dauern. 256 MiB statt der 1 GiB, die
+Argon2id mit **256 MiB** Speicher, vier Bahnen (cryptsetup nimmt höchstens so
+viele, wie CPUs online sind; im QEMU-Gast mit zwei CPUs also zwei) und so vielen
+Durchläufen, wie auf diesem NAS etwa zwei Sekunden dauern. 256 MiB statt der 1 GiB, die
 cryptsetup sonst nimmt, weil TitanOS komplett im RAM läuft und NAS-Boards oft
 4–8 GiB haben; der Speicher wird nur für den Moment des Entsperrens gebraucht.
 Bei wenig freiem RAM senkt cryptsetup den Wert selbst. Verschlüsselung:
@@ -141,8 +142,15 @@ Schreibcache → kein Entsperren möglich.
 - Ein gesperrtes Btrfs-Volume bietet weder Platte hinzufügen noch Prüfen an;
   ein gesperrtes mdadm-Volume schon (beides betrifft nur das Array).
 - **Löschen** eines verschlüsselten Volumes (auch gesperrt) zerstört zuerst die
-  Schlüsselplätze (`cryptsetup erase`): Danach ist nichts mehr lesbar, mit
-  keinem Passwort und keiner Header-Sicherung von davor.
+  Schlüsselplätze (`cryptsetup erase`) und entfernt danach die LUKS-Signaturen
+  (`wipefs`, beim mdadm-Volume über das Array, weil der Header dort erst am
+  Datenanfang des Arrays liegt): Danach ist mit keinem Passwort mehr etwas
+  lesbar. **Ausnahme Header-Sicherung:** Die Daten selbst werden nicht
+  überschrieben. Wer eine vorher heruntergeladene Header-Sicherung an die alte
+  Stelle zurückspielt, öffnet sie mit einem Passwort von damals wieder, solange
+  die Platten nicht neu beschrieben wurden. Header-Sicherungen alter Volumes
+  deshalb vernichten oder die Platten überschreiben (Werkzeuge › Platten
+  vorbereiten).
 
 ### Übernehmen bestehender Volumes
 
@@ -207,9 +215,25 @@ Kommandozeile oder in `volumes.json`. Die Übergabe von stdin und Pipe-
 Deskriptoren ist mit echten Prozessen getestet (`run/run_test.go`), die
 API-Grenze (nur Websitzung, nicht im Assistenten-Katalog) im API-Test.
 
-**Nicht geprüft:** echtes cryptsetup mit Loop-Geräten oder echten Platten (in
-der Entwicklungsumgebung ohne root nicht möglich), Laufzeit und RAM der
-Schlüsselableitung auf NAS-Hardware, Erweitern eines verschlüsselten RAID 5/6,
-Btrfs-Ersatz eines Mitglieds, Zusammenspiel mit echtem dm-cache, das Sperren
-mit laufendem Docker/Samba/VMs, der QEMU-Storage-Test und der Abbildbau mit dem
-neuen Paket.
+**Geprüft in QEMU** (28.10.2026, `scripts/smoke-encryption.py`, Ergebnis
+`docs/validation/encryption-qemu-2026-10-28.json`): echtes Abbild aus
+`make zip` mit cryptsetup 2.7.5 und dm_crypt, vier UEFI-Starts mit frischen
+qcow2-Platten (KVM, zwei CPUs). Verschlüsseltes mdadm-RAID1 (ext4), Btrfs-RAID1
+und RAID5 über die API angelegt; nach dem Neustart alle gesperrt, je genau eine
+Meldung `volume_locked`, keine Freigaben, Docker aus, Healthcheck und Boot-Check
+in Ordnung. Fünf falsche Passwörter (je rund 2 s), danach 429 mit 30 s
+Wartezeit auch für das richtige; Entsperren bringt Daten (Prüfsummen),
+SMB-Freigaben und Docker-Datenordner zurück. Sperren mit verbundenem
+SMB-Client (rund 6 s), Passwort ändern/ergänzen und mit dem zweiten entsperren,
+Header-Sicherung als tar. mdadm-Reserveplatte, RAID5-Erweitern 3→4 mit
+`cryptsetup resize` und `resize2fs`, Btrfs-Platte nur mit richtigem Passwort.
+Lesecache: `titanos-crypt-secure → titanos-cache-secure → md` nach Neustart
+und Entsperren. Löschen: keine LUKS-Signatur mehr auf den früheren Mitgliedern
+(dabei gefunden und behoben: der Header blieb im gelöschten mdadm-Array). Gast
+mit 2 GiB RAM: drei Entsperrungen, cryptsetup höchstens rund 266 MiB, kein OOM.
+
+**Nicht geprüft:** echte NAS-Hardware und deren Entsperrzeiten, Schreibcache
+unter dm-crypt und fehlende Cache-SSD, Btrfs-Ersatz und -Entfernen eines
+verschlüsselten Mitglieds, Übernahme bestehender verschlüsselter Arrays,
+Sperren mit laufenden VMs/LXC, XFS im Container, RAID6 und ein Neustart mitten
+im Umbau eines verschlüsselten Arrays.
