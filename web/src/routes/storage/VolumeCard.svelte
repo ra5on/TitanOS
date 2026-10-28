@@ -143,6 +143,7 @@
 				</button>
 			{/if}
 			{#if canAdd}<button type="button" class="btn" onclick={onadd} disabled={busy}>{t('storage.addDisk')}</button>{/if}
+			{#if volume.members.length > 1 && !(volume.level === 'raid0' && volume.filesystem !== 'btrfs') && !lockedBlocks(volume)}<a class="btn" href="/storage/replace?volume={encodeURIComponent(volume.name)}">{t('swap.button')}</a>{/if}
 			{#if volume.filesystem === 'btrfs' && volume.state === 'ok' && !locked}<button type="button" class="btn" onclick={onprofile} disabled={busy}>{t('btrfs.profileChange')}</button>{/if}
 			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}>{t('storage.delete')}</button>
 		</div>
