@@ -70,7 +70,7 @@ func (f *fakeTailscale) Run(ctx context.Context, stdin, name string, args ...str
 			if f.certs {
 				certs = []string{host + ".tail1234.ts.net"}
 			}
-			out, _ := json.Marshal(map[string]any{"BackendState": state, "CertDomains": certs, "Self": map[string]string{"DNSName": host + ".tail1234.ts.net.", "HostName": host}})
+			out, _ := json.Marshal(map[string]any{"BackendState": state, "CertDomains": certs, "Self": map[string]any{"DNSName": host + ".tail1234.ts.net.", "HostName": host, "TailscaleIPs": []string{"fd7a:115c:a1e0::5", "100.101.102.103"}}})
 			return string(out), nil
 		case "up":
 			for _, a := range args {

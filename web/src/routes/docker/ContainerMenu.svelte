@@ -10,7 +10,7 @@
 		name: string;
 		busy: boolean;
 	};
-	let { container, name, busy, onaction, onlogs, onremove, onconsole, onupdate }: Props = $props();
+	let { container, name, busy, onaction, onlogs, onremove, onconsole, onupdate, ontailnet, tailnet = false }: Props = $props();
 
 	const running = $derived(isRunning(container));
 	// The menu lies in the browser's top layer, so no tile or list clips it.
@@ -50,6 +50,9 @@
 			<a role="menuitem" href="/docker/apps/{container.app}" onclick={() => (at = null)}>{t('docker.edit')}</a>
 		{/if}
 		<button type="button" role="menuitem" onclick={() => choose(() => onaction('restart'))} disabled={busy}>{t('docker.restart')}</button>
+		{#if container.managed && ontailnet}
+			<button type="button" role="menuitem" onclick={() => choose(ontailnet)}>{t(tailnet ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button>
+		{/if}
 		{#if container.managed && container.updateAvailable}
 			<button type="button" role="menuitem" onclick={() => choose(onupdate)} disabled={busy}>{t('docker.updateNow')}</button>
 		{/if}

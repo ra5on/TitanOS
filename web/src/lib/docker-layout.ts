@@ -60,5 +60,5 @@ export function moveDockerGroup(order: string[], groups: DockerGroup[], from: st
 export function stackPrimary(group: DockerGroup, services: Record<string,string>): DockerContainer | undefined {
  const chosen = services[group.id];
  if (chosen) return group.members.find(c => c.service === chosen);
- return group.members.find(c => c.webui?.trim()) ?? group.members.find(c => c.publicUrl?.trim()) ?? group.members.find(c => c.proxyUrl?.trim());
+ return group.members.find(c => c.webui?.trim()) ?? group.members.find(c => c.publicUrl?.trim()) ?? group.members.find(c => c.proxyUrl?.trim()) ?? group.members.find(c => c.tailnetUrl?.trim());
 }

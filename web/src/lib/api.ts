@@ -402,6 +402,8 @@ export type DockerContainer = {
 	publicUrl: string;
 	/** The app's own HTTPS name through TitanOS, e.g. https://immich.nas.local; missing without one. */
 	proxyUrl?: string;
+	/** The app's own device in the tailnet, e.g. https://immich.tail1234.ts.net, while it runs. */
+	tailnetUrl?: string;
 	icon: string;
 	updateAvailable: boolean;
 	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
@@ -423,6 +425,8 @@ export type AppProxyRoute = {
 	networks?: string[];
 	tailscale?: boolean;
 	tailscaleName?: string;
+	/** Switched on by "Im Tailnet veröffentlichen": leaving the tailnet switches it off again. */
+	tailnetOnly?: boolean;
 	/** Full domains of their own, e.g. photos.example.org. */
 	domains?: string[];
 	urls: string[];

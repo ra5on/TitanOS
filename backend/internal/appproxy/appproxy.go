@@ -69,6 +69,11 @@ type Route struct {
 	// (see tailnet.go); TailscaleName is its name there, Name if empty.
 	Tailscale     bool   `json:"tailscale,omitempty"`
 	TailscaleName string `json:"tailscaleName,omitempty"`
+	// TailnetOnly marks a route that "Publish in the tailnet" switched on
+	// (oneclick.go): taking the app out of the tailnet switches it off
+	// again. A form that saves the route drops it (the route is then the
+	// user's own). Older versions ignore it.
+	TailnetOnly bool `json:"tailnetOnly,omitempty"`
 	// Domains are full host names of their own (e.g. photos.example.org),
 	// answered next to <name>.<suffix>; each belongs to one route only.
 	// Older versions ignore them. Not sent (nil) keeps the stored ones.
