@@ -1,9 +1,9 @@
 # Plugins aus einem eigenen Repository
 
 Stand 29.10.2026: Client, Bau, Tests und Workflows sind umgesetzt; die Quellen
-und Build-Skripte liegen in `ra5on/TitanOS-Plugins`. Veröffentlicht ist dort
-noch nichts, weil die Signaturschlüssel fehlen (siehe unten). Solange es keinen
-signierten Zeiger gibt, nimmt TitanOS die Plugins des eigenen Releases.
+und Build-Skripte liegen in `ra5on/TitanOS-Plugins`. Signiert wird in TitanOS,
+der Schlüssel verlässt dieses Repository nicht. Solange es keinen signierten
+Zeiger gibt, nimmt TitanOS die Plugins des eigenen Releases.
 
 ## Ziel
 
@@ -96,9 +96,21 @@ Im Plugin-Repository (README und RELEASING.md dort):
   Bauskript, Katalogeintrag) behalten Bau und Version des vorigen Satzes; neue
   Versionen bietet TitanOS deshalb nur bei echten Änderungen an. `minBase` ist das
   Release, gegen dessen Abbild gebaut wurde: ältere Systeme behalten ihren Satz.
-- Signiert wird erst nach Freigabe im Environment `release`; danach erhöht der
-  Lauf `serial` im Zeiger. NVIDIA-Treiberupdates hängt `nvidia-driver.yml` an
-  einen Kernel-Satz (nur `nvidia-updates.json` wird dabei ersetzt).
+- Ein getesteter Satz wird dort nur als **Entwurf** (unveröffentlichte Release)
+  angelegt, NVIDIA-Treiberupdates als Entwurf `pending-nvidia-<lauf>-<satz>`.
+  Signiert wird dort nichts.
+
+Signiert und veröffentlicht wird in TitanOS (`.github/workflows/plugin-sign.yml`):
+
+- Alle 15 Minuten (oder von Hand) schaut der Workflow mit `PLUGINS_DISPATCH_TOKEN`
+  nach Entwürfen. Gibt es welche, startet er sich selbst vom neuesten
+  veröffentlichten Release-Tag aus, denn das Environment `release` erlaubt nur
+  Tags `v*`. Dieser Lauf wartet auf die Freigabe des Projektinhabers.
+- Nach der Freigabe prüft er, dass der Schlüssel zu den öffentlichen Schlüsseln
+  des Abbilds passt, signiert Manifeste und Index, veröffentlicht den Satz und
+  erhöht `serial` im Zeiger. Treiberupdates hängt er an ihren Kernel-Satz und
+  ersetzt dort nur `nvidia-updates.json`; der Entwurf wird danach gelöscht.
+- Voraussetzung: Ein veröffentlichtes Release enthält `plugin-sign.yml`.
 
 In TitanOS (`.github/workflows/release.yml`, `scripts/plugin-set.py`):
 
@@ -119,15 +131,13 @@ weiter an jedes volle TitanOS-Release und führt sie im Manifest unter `plugins`
 
 ## Was nur der Projektinhaber tun kann
 
-1. Im Plugin-Repository das Environment `release` mit Freigabe durch `ra5on`
-   und Deployment nur von `main` anlegen; dort `MINISIGN_SECRET_KEY` und
-   `MINISIGN_PASSWORD` hinterlegen (wie in `docs/RELEASING.md`).
-2. Einen Fine-grained-Token nur für `ra5on/TitanOS-Plugins` (Contents: read and
-   write) als Repository-Secret `PLUGINS_DISPATCH_TOKEN` in TitanOS hinterlegen.
-   Der Build-Job braucht ihn, bevor die Freigabe des Releases ansteht, deshalb
-   liegt er nicht im Environment.
-3. Den ersten Satz von Hand anstoßen (Actions › Release im Plugin-Repository,
-   „both“) und freigeben.
+1. Einen Fine-grained-Token nur für `ra5on/TitanOS-Plugins` (Contents: read and
+   write) als Repository-Secret `PLUGINS_DISPATCH_TOKEN` in TitanOS hinterlegen
+   (erledigt am 29.10.2026). Er stößt Bauten an, liest die Entwürfe und
+   veröffentlicht sie; der Build-Job eines Releases braucht ihn vor der
+   Freigabe, deshalb liegt er nicht im Environment. Er läuft ab; rechtzeitig
+   erneuern.
+2. Signierläufe von `plugin-sign.yml` im Environment `release` freigeben.
 
-Ohne Schritt 1 kann das Plugin-Repository nichts signieren, das TitanOS als
-„Offiziell“ annimmt; ohne Schritt 2 bricht ein Tag mit neuem Kernel ab.
+Das Environment `release` im Plugin-Repository und sein `MINISIGN_PASSWORD`
+werden nicht gebraucht; sie können bleiben oder entfernt werden.

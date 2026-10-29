@@ -1,0 +1,147 @@
+name: Plugin sets
+
+# Signs and publishes what ra5on/TitanOS-Plugins built and tested: its plugin
+# sets (draft releases common-<n> / kernel-<package>-<n>) and NVIDIA driver
+# updates (draft releases pending-nvidia-<run>-<kernel set>). The key stays in
+# this repository's environment "release"; the plugin repository never sees
+# it. See docs/PLUGIN-REPO.md.
+#
+# The environment permits v* tags only. A scheduled or manual run on the
+# default branch therefore only looks for drafts and, if there are some,
+# starts this workflow again from the newest published release tag, which
+# then asks the owner for approval.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: plugin-sign-${{ github.ref_type }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PLUGINS: ra5on/TitanOS-Plugins
+  DRAFTS: '[.[] | select(.draft) | select(.tag_name | test("^((common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*|pending-nvidia-[0-9]+-kernel-[0-9][0-9A-Za-z._~-]*-[1-9][0-9]*)$")) | .tag_name]'
+
+jobs:
+  dispatch:
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Drafts waiting to be signed
+        id: drafts
+        env:
+          GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "No PLUGINS_DISPATCH_TOKEN; nothing to look at."
+            echo "tags=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tags=$(gh api "repos/$PLUGINS/releases?per_page=100" --jq "$DRAFTS")
+          echo "Drafts: $tags"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - name: Sign them from the newest published release tag
+        if: steps.drafts.outputs.tags != '[]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          execution_tag=
+          while IFS= read -r tag; do
+            if gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/plugin-sign.yml?ref=$tag" >/dev/null 2>&1; then
+              execution_tag=$tag
+              break
+            fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"))) | .tag_name')
+          if [ -z "$execution_tag" ]; then
+            echo "No published release contains plugin-sign.yml yet." >&2
+            exit 1
+          fi
+          # A run that already waits for approval is enough.
+          if [ "$(gh run list --workflow plugin-sign.yml --event workflow_dispatch --status waiting --json databaseId --jq length)" != 0 ]; then
+            echo "A signing run is already waiting for approval."
+            exit 0
+          fi
+          gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref "$execution_tag"
+          echo "Signing run started from $execution_tag; it waits for the approval of the environment release."
+
+  sign:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # The environment asks for an approval and holds the signing key.
+    environment: release
+    env:
+      GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
+    steps:
+      # The public keys of the image, to check that the key is the real one.
+      - uses: actions/checkout@v7
+      # sets.py and nvidia-update-release.py, as published on main.
+      - uses: actions/checkout@v7
+        with:
+          repository: ra5on/TitanOS-Plugins
+          path: plugins-repo
+      - name: Sign and publish
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          if [ -z "$MINISIGN_SECRET_KEY" ] || [ -z "$GH_TOKEN" ]; then
+            echo "the environment 'release' holds no MINISIGN_SECRET_KEY, or PLUGINS_DISPATCH_TOKEN is missing" >&2
+            exit 1
+          fi
+          python3 scripts/check-release-keys.py build/mkosi.extra/usr/share/titanos/update-keys
+          key=$(mktemp)
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          releases=$(gh api "repos/$PLUGINS/releases?per_page=100")
+          # Kernel sets before the common set before driver updates.
+          for tag in $(jq -r "$DRAFTS | sort_by(if startswith(\"kernel-\") then 0 elif startswith(\"common-\") then 1 else 2 end) | .[]" <<<"$releases"); do
+            id=$(jq -r --arg t "$tag" '.[] | select(.draft and .tag_name == $t) | .id' <<<"$releases")
+            dir=$(mktemp -d)
+            while IFS=$'\t' read -r asset name; do
+              [[ $name =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$ ]] || { echo "odd asset name $name" >&2; exit 1; }
+              gh api -H 'Accept: application/octet-stream' "repos/$PLUGINS/releases/assets/$asset" > "$dir/$name"
+            done < <(gh api "repos/$PLUGINS/releases/$id/assets?per_page=100" --jq '.[] | [.id, .name] | @tsv')
+            upload() {
+              gh api -X POST -H 'Content-Type: application/octet-stream' --input "$2" \
+                "https://uploads.github.com/repos/$PLUGINS/releases/$1/assets?name=$(basename "$2")" >/dev/null
+            }
+            if [[ $tag == pending-nvidia-* ]]; then
+              set_tag=${tag#pending-nvidia-*-}
+              set_tag=kernel-${set_tag#kernel-}
+              [ "$(jq -r .tag "$dir/target.json")" = "$set_tag" ] || { echo "$tag does not belong to $set_tag" >&2; exit 1; }
+              python3 plugins-repo/scripts/nvidia-update-release.py sign "$dir" "$key"
+              python3 plugins-repo/scripts/nvidia-update-release.py verify "$dir"
+              gh release upload "$set_tag" --repo "$PLUGINS" "$dir"/nvidia-update-*
+              gh release upload "$set_tag" --repo "$PLUGINS" "$dir/nvidia-updates.json" "$dir/nvidia-updates.json.minisig" --clobber
+              gh api -X DELETE "repos/$PLUGINS/releases/$id"
+              echo "Driver update of $set_tag published."
+              continue
+            fi
+            rm -f "$dir"/*.minisig
+            python3 plugins-repo/scripts/sets.py sign "$dir" "$key"
+            # Only a signature the image accepts goes out.
+            python3 plugins-repo/scripts/sets.py verify "$dir" build/mkosi.extra/usr/share/titanos/update-keys
+            for signature in "$dir"/*.minisig; do upload "$id" "$signature"; done
+            gh api -X PATCH "repos/$PLUGINS/releases/$id" -F draft=false -f make_latest=false >/dev/null
+            current=-
+            rm -rf catalog-current catalog-new
+            if gh release download catalog --repo "$PLUGINS" -p 'catalog.json*' -D catalog-current; then current=catalog-current; fi
+            python3 plugins-repo/scripts/sets.py pointer "$dir" "$current" catalog-new "$key"
+            if ! gh release view catalog --repo "$PLUGINS" >/dev/null 2>&1; then
+              gh release create catalog --repo "$PLUGINS" --title "Plugin catalog" --latest=false \
+                --notes "Signed pointer to the current plugin sets (catalog.json). TitanOS reads it; see docs/PLUGIN-REPO.md in ra5on/TitanOS."
+            fi
+            gh release upload catalog --repo "$PLUGINS" catalog-new/catalog.json catalog-new/catalog.json.minisig --clobber
+            echo "$tag published, catalog updated."
+          done
