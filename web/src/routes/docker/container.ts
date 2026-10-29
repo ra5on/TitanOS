@@ -10,6 +10,10 @@ export type ContainerActions = {
 	onremove: () => void;
 	onconsole: () => void;
 	onupdate: () => void;
+	/** "Im Tailnet veröffentlichen" / "Aus dem Tailnet nehmen" of a managed app. */
+	ontailnet?: () => void;
+	/** Whether the app is in the tailnet (or on its way there). */
+	tailnet?: boolean;
 };
 
 export const isRunning = (container: DockerContainer) => container.state === 'running' || container.state === 'restarting';
@@ -36,6 +40,7 @@ export function webLinks(container: DockerContainer, host: string, tailscaleHost
 	const links: WebLink[] = [
 		{ icon: 'globe', text: t('docker.webui'), label: t('docker.webui'), href: appURL(container.webui, host) },
 		{ icon: 'lock', text: t('docker.proxyWebui'), label: t('docker.proxyWebuiLabel'), href: publicURL(container.proxyUrl ?? '') },
+		{ icon: 'tailnet', text: t('docker.tailnetWebui'), label: t('docker.tailnetWebuiLabel'), href: publicURL(container.tailnetUrl ?? '') },
 		{ icon: 'tailnet', text: t('docker.tailscaleShort'), label: t('docker.tailscaleWebui'), href: appURL(container.webui, tailscaleHost, true) },
 		{ icon: 'external', text: t('docker.publicWebui'), label: t('docker.publicWebui'), href: publicURL(container.publicUrl ?? '') }
 	];

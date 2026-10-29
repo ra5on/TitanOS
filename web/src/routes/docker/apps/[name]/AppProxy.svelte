@@ -22,7 +22,13 @@
 	// container, so it does not wait for "Apply". What holds for all names
 	// (domain, local name, mDNS, the switch for all) is on
 	// Settings › HTTPS names for apps.
-	let { app, members }: { app: string; members: DockerContainer[] } = $props();
+	// version counts changes made elsewhere ("Im Tailnet veröffentlichen"):
+	// a new one reads the route again.
+	let {
+		app,
+		members,
+		version = 0,
+	}: { app: string; members: DockerContainer[]; version?: number } = $props();
 
 	let status = $state<AppProxyStatus | null>(null);
 	let loadError = $state('');
@@ -50,6 +56,7 @@
 		}
 	}
 	$effect(() => {
+		void version;
 		void load(app);
 	});
 	// The port is only suggested while nothing is saved and nothing typed.

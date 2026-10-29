@@ -75,6 +75,7 @@ func addProxyURLs(containers []docker.Container, routes *appproxy.Manager) {
 		}
 		if !publishes[c.App] || slices.ContainsFunc(c.Ports, func(p docker.Port) bool { return p.Host == route.Port }) {
 			containers[i].ProxyURL = routes.URL(c.App)
+			containers[i].TailnetURL = routes.TailnetURL(c.App)
 		}
 	}
 }

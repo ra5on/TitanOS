@@ -58,6 +58,7 @@ var activityQuiet = []string{
 	"POST /api/v1/backups/smb/discover",
 	"POST /api/v1/homeassistant/check",
 	"POST /api/v1/files/archive",
+	"POST /api/v1/docker/proxy/apps/{app}/tailnet/check",
 }
 
 // activityReads are reads that open a console or take sensitive data along.

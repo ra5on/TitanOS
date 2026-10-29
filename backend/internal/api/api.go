@@ -457,6 +457,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxyDomain))
 	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRoute))
 	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnet))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnetRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAdmin(s.handleAppTailnetCheck))
 	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTarget))
 	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTargetRemove))
 

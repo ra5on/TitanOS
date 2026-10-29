@@ -72,6 +72,21 @@ Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
   inactive/disabled/ok/error, `name`, `notAfter`, `error`, `enableUrl`) und in den
   Tailscale-Einstellungen mit Link auf die Adresse.
 
+## Docker-Apps im Tailnet veröffentlichen
+
+**„Im Tailnet veröffentlichen“** im Kontextmenü einer Docker-App, im Kopf eines
+Stacks und im App-Editor macht die App mit einem Klick zu einem eigenen Gerät
+im Tailnet, `https://<name>.<tailnet>.ts.net`, mit gültigem Zertifikat von
+Tailscale (nur Besitzer/Administratoren). Dafür startet titand je App eine
+eigene `tailscaled`-Instanz im Userspace aus diesem Plugin; die Anfragen gehen
+über Tailscale Serve an den Proxy von titand. Voraussetzungen, die der Dialog
+prüft und erklärt: Plugin installiert und aktiv, ein einmal hinterlegter
+Auth-Key (wiederverwendbar, nicht „ephemeral“, Tag optional) und HTTPS-
+Zertifikate im Tailnet (sonst derselbe Ein-Klick-Link wie oben). „Aus dem
+Tailnet nehmen“ meldet die Instanz ab und hält sie an; das Gerät in der
+Tailscale-Verwaltung entfernt der Besitzer selbst. Details:
+[APP-PROXY.md](APP-PROXY.md#mit-einem-klick-ins-tailnet).
+
 ## Ablage und Netzwerk
 
 Nur Besitzer und Administratoren erhalten Zugriff auf diese API. Einstellungen

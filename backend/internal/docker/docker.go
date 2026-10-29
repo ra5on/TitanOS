@@ -98,7 +98,10 @@ type Container struct {
 	// ProxyURL is the app's own HTTPS name through titand, if it has one
 	// (see package appproxy); the API fills it in.
 	ProxyURL string `json:"proxyUrl,omitempty"`
-	Icon     string `json:"icon"`
+	// TailnetURL is the app's own device in the tailnet
+	// (https://<name>.<tailnet>.ts.net) while it runs; the API fills it in.
+	TailnetURL string `json:"tailnetUrl,omitempty"`
+	Icon       string `json:"icon"`
 	// UpdateAvailable is true when the registry has a newer image for the
 	// container's tag than the one it runs.
 	UpdateAvailable bool   `json:"updateAvailable"`

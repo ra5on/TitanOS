@@ -261,3 +261,67 @@ export function proxyProblems(
 	}
 	return out;
 }
+
+// "Im Tailnet veröffentlichen" (POST /docker/proxy/apps/{app}/tailnet).
+
+/** Where auth keys are made in the Tailscale admin console. */
+export const TAILSCALE_KEYS_URL = 'https://login.tailscale.com/admin/settings/keys';
+/** Where MagicDNS and HTTPS certificates are switched on. */
+export const TAILSCALE_DNS_URL = 'https://login.tailscale.com/admin/dns';
+
+/** The port to publish: the main service's WebUI first, then the other services. */
+export function tailnetPort(members: Ports[], primary?: Ports | null): number {
+	return suggestedProxyPort(primary ? [primary, ...members] : members);
+}
+
+/** Where a published app stands, as the dialog shows it. */
+export type TailnetStep =
+	| 'off'
+	| 'start'
+	| 'login'
+	| 'https-off'
+	| 'error'
+	| 'check'
+	| 'ready'
+	| 'unreachable';
+
+type TailnetRoute = {
+	enabled: boolean;
+	tailscale?: boolean;
+	tailnet?: { state: string; url?: string; error?: string };
+};
+
+/**
+ * The step of a publication: the device's state, and once it runs, what
+ * asking its address gave (null: not asked yet; failed: answers without
+ * success so far, `limit` of them mean it is not reachable from the NAS).
+ */
+export function tailnetStep(
+	route: TailnetRoute | null | undefined,
+	check: { reachable: boolean } | null,
+	failed = 0,
+	limit = 12,
+): TailnetStep {
+	if (!inTailnet(route)) return 'off';
+	switch (route?.tailnet?.state) {
+		case undefined:
+		case 'starting':
+			return 'start';
+		case 'login':
+			return 'login';
+		case 'https-off':
+			return 'https-off';
+		case 'error':
+			return 'error';
+		case 'running':
+			if (check?.reachable) return 'ready';
+			return failed >= limit ? 'unreachable' : 'check';
+		default:
+			return 'off';
+	}
+}
+
+/** Whether an app is in the tailnet (or on its way there). */
+export function inTailnet(route: TailnetRoute | null | undefined): boolean {
+	return !!route?.enabled && !!route.tailscale;
+}
