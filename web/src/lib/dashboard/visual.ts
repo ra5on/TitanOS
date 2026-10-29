@@ -35,6 +35,9 @@ export type DashboardVisual = {
 		y: number;
 		zoom: number;
 		fixed: boolean;
+		// A picture of its own is shown behind every page, not just the
+		// dashboard (default). Older app versions show it on the dashboard only.
+		everywhere: boolean;
 	};
 };
 const record = (v: unknown): Record<string, unknown> =>
@@ -95,6 +98,7 @@ export function dashboardVisual(input: unknown): DashboardVisual {
 			y: number(b.y, 50, 0, 100),
 			zoom: number(b.zoom, 100, 100, 200),
 			fixed: b.fixed !== false,
+			everywhere: b.everywhere !== false,
 		},
 	};
 }

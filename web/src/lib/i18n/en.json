@@ -4523,6 +4523,7 @@
 	"dashboard.visual.positionY": "Vertical position",
 	"dashboard.visual.dim": "Dimming",
 	"dashboard.visual.fixed": "Keep background fixed when scrolling",
+	"dashboard.visual.everywhere": "Also show behind all other pages",
 	"dashboard.visual.inherit": "Use general background",
 	"dashboard.visual.none": "No background image",
 	"dashboard.visual.containHint": "“Show entire image” preserves the complete image without cropping. Empty edges use your background color.",

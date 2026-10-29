@@ -53,6 +53,13 @@
 		});
 	});
 
+	// The dashboard background; a picture of its own also behind every other
+	// page unless switched off. "Like the general background" and "none" stay
+	// on the dashboard: the other pages have the general background anyway.
+	const shownVisual = $derived(dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual));
+	const backgroundEverywhere = $derived(
+		shownVisual.background.everywhere && (shownVisual.background.source === 'builtin' || shownVisual.background.source === 'custom'),
+	);
 	// Pages without a PageHead (the dashboard) are named by their place in the navigation.
 	const ROUTE_TITLES: Record<string, MessageKey> = { '/': 'nav.dashboard', '/terminal': 'terminal.title' };
 	const documentTitle = $derived.by(() => {
@@ -67,8 +74,8 @@
 	<title>{documentTitle}</title>
 </svelte:head>
 
-{#if page.url.pathname === '/' && session.data?.user}<DashboardBackground
-		visual={dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual)}
+{#if session.data?.user && (page.url.pathname === '/' || backgroundEverywhere)}<DashboardBackground
+		visual={shownVisual}
 		inherited={appearance.current}
 		urls={dashboardScene.urls}
 	/>{:else}<Backdrop appearance={appearance.current} />{/if}
