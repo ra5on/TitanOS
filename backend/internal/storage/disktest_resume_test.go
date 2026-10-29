@@ -281,6 +281,20 @@ func TestADifferentDiskUnderTheSameNameIsNotContinued(t *testing.T) {
 	if err := e.m.ResumeTest(context.Background(), "sdb", ""); !errors.Is(err, ErrNoTest) {
 		t.Errorf("continuing nothing: %v", err)
 	}
+	// The checkpoint of the other disk goes in the background; the test's
+	// folder must not be cleaned up while that still writes in it.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := readState(t, e); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the checkpoint of the other disk stayed")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	e.m.testSaveMu.Lock()
+	e.m.testSaveMu.Unlock()
 }
 
 func TestSelfTestIsWatchedAgainOrStartedOnceMore(t *testing.T) {
