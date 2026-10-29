@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import Segments from '#lib/components/Segments.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { appearance, saveAppearance } from '#lib/theme/appearance.svelte.ts';
@@ -20,6 +21,7 @@
 		THEME_IDS,
 		type Appearance,
 		type CustomColors,
+		type FloatingSurface,
 		type ThemeId
 	} from '#lib/theme/themes.ts';
 	import Preview from './Preview.svelte';
@@ -70,6 +72,21 @@
 	function look(id: ThemeId) {
 		return resolvePalette({ ...draft, theme: id }, appearance.systemLight);
 	}
+
+	/** "Like the tiles" or own values; own values start from the tiles' ones. */
+	function setOwn(surface: FloatingSurface, own: boolean) {
+		if (own && !surface.own) {
+			surface.glass = draft.glass;
+			surface.blur = draft.blur;
+			surface.shine = draft.shine;
+		}
+		surface.own = own;
+	}
+	const FLOATING_GROUPS = ['menus', 'dialogs'] as const;
+	const ownOptions = $derived([
+		{ value: 'inherit', label: t('appearance.floating.inherit') },
+		{ value: 'own', label: t('appearance.floating.own') }
+	]);
 
 	function fail(err: unknown) {
 		message = { text: errorText(err instanceof ApiError ? err.code : 'internal'), warn: true };
@@ -235,6 +252,35 @@
 				<Slider id="shine" label={t('appearance.shine')} bind:value={draft.shine} limit={LIMITS.shine} unit="%" />
 				<p class="hint muted">{t('appearance.glassHint')}</p>
 			{/if}
+		</section>
+
+		<section class="tile panel" aria-labelledby="h-floating" id="menus">
+			<h2 class="tile-title" id="h-floating">{t('appearance.floating.title')}</h2>
+			{#if draft.style === 'glass'}
+				{#each FLOATING_GROUPS as key (key)}
+					<fieldset class:divided={key === 'dialogs'}>
+						<legend>{t(`appearance.floating.${key}`)}</legend>
+						<p class="hint muted">{t(`appearance.floating.${key}Desc`)}</p>
+						<Segments
+							label={t(`appearance.floating.${key}`)}
+							options={ownOptions}
+							value={draft[key].own ? 'own' : 'inherit'}
+							onchange={(value) => setOwn(draft[key], value === 'own')}
+						/>
+						{#if draft[key].own}
+							<Slider id="{key}-glass" label={t('appearance.transparency')} bind:value={draft[key].glass} limit={LIMITS.glass} unit="%" />
+							<Slider id="{key}-blur" label={t('appearance.blur')} bind:value={draft[key].blur} limit={LIMITS.blur} unit="px" />
+							<Slider id="{key}-shine" label={t('appearance.shine')} bind:value={draft[key].shine} limit={LIMITS.shine} unit="%" />
+						{/if}
+					</fieldset>
+				{/each}
+				<p class="hint muted">{t('appearance.floating.hint')}</p>
+			{:else}
+				<p class="hint muted">{t('appearance.floating.opaque')}</p>
+			{/if}
+			<div class:divided={draft.style === 'glass'}>
+				<Slider id="dialog-dim" label={t('appearance.floating.dim')} bind:value={draft.dialogs.dim} limit={LIMITS.dialogDim} unit="%" />
+			</div>
 		</section>
 
 		<section class="tile panel" aria-labelledby="h-shape">

@@ -58,7 +58,7 @@
 		</div>
 
 		<div class="wrap">
-			<div class="menu" role="group" aria-label={t('preview.menu')}>
+			<div class="menu floating-menu" role="group" aria-label={t('preview.menu')}>
 				<span class="menu-head">{t('preview.signedIn', { name: user?.name ?? '', role: user ? t(`role.${user.role}`) : '' })}</span>
 				<span class="menu-item current">{t('menu.appearance')}</span>
 				<span class="menu-item">{t('menu.restart')}</span>
@@ -67,6 +67,24 @@
 			<div class="buttons">
 				<span class="btn btn-primary">{t('appearance.apply')}</span>
 				<span class="btn tile">{t('common.cancel')}</span>
+			</div>
+		</div>
+
+		<!-- A dialog over the dimmed page, with the settings for dialog windows. -->
+		<div class="dialog-stage">
+			<div class="tile pad stage-content" aria-hidden="true">
+				{#each [1, 2] as n (n)}
+					<div class="item"><span class="grow">{t('preview.item', { n })}</span><span class="muted small">{t('preview.running')}</span></div>
+				{/each}
+			</div>
+			<span class="dim-layer" aria-hidden="true"></span>
+			<div class="dialog-sample" role="group" aria-label={t('preview.dialog')}>
+				<strong>{t('preview.dialog')}</strong>
+				<span class="muted">{t('preview.dialogText')}</span>
+				<div class="buttons end">
+					<span class="btn">{t('common.cancel')}</span>
+					<span class="btn btn-primary">{t('appearance.apply')}</span>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -155,12 +173,39 @@
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-		background: var(--menu-bg);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		-webkit-backdrop-filter: var(--panel-backdrop);
-		backdrop-filter: var(--panel-backdrop);
-		box-shadow: var(--shadow-menu);
+	}
+	.dialog-stage {
+		position: relative;
+		display: grid;
+		min-height: 150px;
+		border-radius: var(--radius-tile);
+		overflow: hidden;
+	}
+	.stage-content,
+	.dim-layer,
+	.dialog-sample {
+		grid-area: 1 / 1;
+	}
+	.dim-layer {
+		background: var(--overlay);
+	}
+	.dialog-sample {
+		align-self: center;
+		justify-self: center;
+		width: min(320px, calc(100% - 24px));
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: var(--tile-pad);
+		background: var(--dialog-bg);
+		border: 1px solid var(--dialog-border);
+		border-radius: var(--radius-tile);
+		-webkit-backdrop-filter: var(--dialog-backdrop);
+		backdrop-filter: var(--dialog-backdrop);
+		box-shadow: var(--dialog-shadow);
+	}
+	.buttons.end {
+		justify-content: flex-end;
 	}
 	.menu-head {
 		padding: 8px 10px;
