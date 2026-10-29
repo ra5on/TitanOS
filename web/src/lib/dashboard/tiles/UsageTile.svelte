@@ -46,18 +46,36 @@
 					history={systemHistory[kind]}
 				/>
 				{#if kind === 'memory' && ram && system.reachable}
-					<div class="memory-occupancy" aria-label={t('system.memoryIncludesCache')}>
+					<div
+						class="memory-occupancy"
+						role="img"
+						aria-label={t('dashboard.memoryBar', {
+							occupied: formatBytes(ram.occupied),
+							write: formatBytes(ram.write),
+							free: formatBytes(ram.free),
+						})}
+					>
 						<div class="memory-track" aria-hidden="true">
 							<span
-								class="other"
-								style:width="{ram.total ? ((ram.other ?? ram.used) / ram.total) * 100 : 0}%"
+								class="metric-level occupied"
+								style:width="{ram.total ? (ram.occupied / ram.total) * 100 : 0}%"
 							></span>
 							<span
-								class="cache"
-								style:width="{ram.total ? ((ram.cache ?? 0) / ram.total) * 100 : 0}%"
+								class="metric-level write"
+								style:width="{ram.total ? (ram.write / ram.total) * 100 : 0}%"
 							></span>
 						</div>
-						<p>{t('system.memoryIncludesCache')}: <b>{formatBytes(ram.used)}</b></p>
+						<p aria-hidden="true">
+							<span
+								><i class="occupied"></i>{t('dashboard.memoryOccupied')}
+								<b>{formatBytes(ram.occupied)}</b></span
+							>
+							<span
+								><i class="write"></i>{t('dashboard.memoryWrite')}
+								<b>{formatBytes(ram.write)}</b></span
+							>
+							<span><i></i>{t('dashboard.memoryFree')} <b>{formatBytes(ram.free)}</b></span>
+						</p>
 					</div>
 					{#if info.memory.lowAvailable}<p class="notice-warn" role="status">
 							{t('memoryPolicy.lowAvailable')}
@@ -89,13 +107,13 @@
 					>
 				</div>
 				<div>
-					<span>{t('dashboard.memoryCache')}</span><b
-						>{!system.reachable || ram?.cache == null ? '–' : formatBytes(ram.cache)}</b
+					<span>{t('dashboard.memoryWrite')}</span><b
+						>{!system.reachable || !ram ? '–' : formatBytes(ram.write)}</b
 					>
 				</div>
 				<div>
-					<span>{t('memoryPolicy.other')}</span><b
-						>{!system.reachable || ram?.other == null ? '–' : formatBytes(ram.other)}</b
+					<span>{t('dashboard.memoryOccupied')}</span><b
+						>{!system.reachable || !ram ? '–' : formatBytes(ram.occupied)}</b
 					>
 				</div>
 				<div>
@@ -140,7 +158,21 @@
 		color: var(--tile-label-color, var(--muted));
 	}
 	.memory-occupancy p {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px 12px;
 		margin: 5px 0 0;
+	}
+	.memory-occupancy p span {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+	}
+	.memory-occupancy i {
+		width: 8px;
+		height: 8px;
+		border-radius: var(--radius-small);
+		background: var(--track);
 	}
 	.memory-occupancy b {
 		color: var(--text);
@@ -156,10 +188,10 @@
 	.memory-track span {
 		height: 100%;
 	}
-	.memory-track .other {
+	.memory-occupancy .occupied {
 		background: var(--accent);
 	}
-	.memory-track .cache {
+	.memory-occupancy .write {
 		background: var(--muted);
 	}
 	.cpu-model {

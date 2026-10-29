@@ -110,10 +110,6 @@
 				<dd>{formatBytes(status.memory.availableBytes)}</dd>
 			</div>
 			<div>
-				<dt>{t('memoryPolicy.cache')}</dt>
-				<dd>{formatBytes(status.memory.cacheBytes ?? 0)}</dd>
-			</div>
-			<div>
 				<dt>{t('memoryPolicy.dirty')}</dt>
 				<dd>
 					{formatBytes((status.memory.dirtyBytes ?? 0) + (status.memory.writebackBytes ?? 0))}
@@ -129,7 +125,6 @@
 			</div>
 		</dl>
 		<p class="muted">{t('memoryPolicy.pressureHint')}</p>
-		<p class="muted">{t('memoryPolicy.imageHint')}</p>
 		{#if status.paused}<p class="notice-warn" role="status">
 				{t('error.upload_memory_pressure')}
 			</p>{/if}

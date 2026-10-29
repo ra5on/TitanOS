@@ -1,19 +1,24 @@
 # RAM, Writeback und Uploads
 
-`MemTotal - MemFree` zählt den gesamten belegten RAM genau einmal, einschließlich
-Kernel, komprimiertem Systemabbild/tmpfs, QEMU, Containern und Dateicache.
-`MemAvailable` bleibt die separate Kernel-Schätzung für neue Aufgaben. Die
-Cacheanzeige verwendet `Cached - Shmem + Buffers + SReclaimable`, begrenzt auf den
-belegten RAM; sie ist keine Garantie, dass jeder einzelne Cache-Byte sofort
-freigegeben werden kann.
+Linux nutzt freien RAM als Lesecache und gibt ihn selbst frei, sobald Programme
+Speicher brauchen. Diesen Lesecache stellt TitanOS weder ein noch zeigt es ihn
+gesondert an: Er zählt als frei. `MemAvailable` ist die Kernel-Schätzung des
+für neue Aufgaben verfügbaren RAM.
 
 Die RAM-Kachel stellt **verfügbaren RAM** einschließlich seines Prozentwerts in
-den Vordergrund. Der Verlauf zeigt ebenfalls verfügbaren RAM. Eine zweite
-Belegungsleiste unterscheidet übrige Belegung und Dateicache; der Rest ist
-physisch frei. „Übrige Belegung“ umfasst unter anderem Anwendungen, Kernel und
-tmpfs, nicht nur Anwendungsdaten. `MemAvailable` überlappt diese Anteile und
-wird nie zur Gesamtbelegung addiert. Das komprimierte Systemabbild und das
-512-MiB-Overlay sind bereits enthalten und kein frei verwerfbarer Lesecache.
+den Vordergrund. Der Verlauf zeigt ebenfalls verfügbaren RAM. Der Balken darunter
+(Entscheidung des Projektinhabers vom 29.10.2026) zeigt drei Teile, die zusammen
+den gesamten RAM ergeben:
+
+- **Belegt** = `MemTotal - MemAvailable`: Anwendungen, VMs, Kernel, tmpfs,
+  komprimiertes Systemabbild und 512-MiB-Overlay.
+- **Schreibcache** = `Dirty + Writeback`, begrenzt auf `MemAvailable` und daraus
+  herausgerechnet: Daten, die noch auf die Platte müssen, bevor ihr RAM frei
+  wird. Er füllt sich bei Übertragungen und fällt danach wieder ab.
+- **Frei** = der Rest von `MemAvailable`, einschließlich Lesecache.
+
+Die Einstellungsseite heißt „Schreibcache“ (`/settings/memory`), weil sie nur
+das Budget für noch nicht geschriebene Daten festlegt (siehe unten).
 
 Der gemeinsame Systemmonitor liest alle zwei Sekunden RAM und optional
 `/proc/pressure/memory`. PSI `someAvg10`/`fullAvg10` sind die prozentualen
