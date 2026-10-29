@@ -45,7 +45,7 @@
 	let failed = $state(0);
 	let copied = $state(false);
 
-	const route = $derived<AppProxyRoute | null>(status?.apps.find((entry) => entry.app === app) ?? null);
+	const route = $derived<AppProxyRoute | null>(status?.apps?.find((entry) => entry.app === app) ?? null);
 	const step = $derived(tailnetStep(route, check, failed, CHECKS));
 	const deviceName = $derived(route?.tailscale ? tailnetName(route) : suggestedProxyName(app) || 'app');
 	const available = $derived(status?.tailnet?.available ?? false);

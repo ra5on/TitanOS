@@ -135,7 +135,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	let tailnetDialog = $state<'publish' | 'remove' | null>(null);
 	// Counts changes, so that the HTTPS name section below reads them.
 	let proxyVersion = $state(0);
-	const published = $derived(inTailnet(proxy?.apps.find((route) => route.app === name)));
+	const published = $derived(inTailnet(proxy?.apps?.find((route) => route.app === name)));
 	async function loadProxy() {
 		try {
 			proxy = await api.get<AppProxyStatus>('/docker/proxy');

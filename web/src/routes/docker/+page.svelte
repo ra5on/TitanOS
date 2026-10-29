@@ -199,7 +199,7 @@
 			proxy = null;
 		}
 	}
-	const appInTailnet = (app: string) => inTailnet(proxy?.apps.find((route) => route.app === app));
+	const appInTailnet = (app: string) => inTailnet(proxy?.apps?.find((route) => route.app === app));
 	function openTailnet(app: string) {
 		const members = containers.filter((container) => container.app === app);
 		const primary = stackPrimary({ id: `app:${app}`, name: app, members }, layout.primaryServices);
