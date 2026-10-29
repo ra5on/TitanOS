@@ -118,9 +118,12 @@ def fetch(args):
     if refs["kernel"] is None:
         print(f"no kernel set for {args.kernel} ({args.kernel_package}) yet", file=sys.stderr)
         return NOT_FOUND
+    # The signer publishes the kernel set before the common set; a release
+    # waits for both instead of going out without the common plugins.
+    if refs["common"] is None:
+        print("no common set yet", file=sys.stderr)
+        return NOT_FOUND
     for kind, ref in refs.items():
-        if ref is None:
-            continue
         if not TAG.fullmatch(ref["tag"]) or not HASH.fullmatch(ref["index"]):
             raise SystemExit("catalog.json: invalid entry")
         directory = dest / kind

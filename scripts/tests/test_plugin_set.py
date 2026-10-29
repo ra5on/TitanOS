@@ -99,13 +99,16 @@ class PluginSetTest(unittest.TestCase):
         self.catalog(None, [other])
         self.assertEqual(self.fetch(), plugin_set.NOT_FOUND)
         kernel = self.publish("kernel-6.12.113-1-1", KERNEL, PACKAGE, {"nvidia": "1-1"}, min_base="0.37.0")
+        # The kernel set alone is not enough: the common set is still being signed.
         self.catalog(None, [other, kernel])
+        self.assertEqual(self.fetch(), plugin_set.NOT_FOUND)
+        self.catalog(self.publish("common-1", "", "", {"tailscale": "1-1"}), [other, kernel])
         with self.assertRaisesRegex(SystemExit, "meant for TitanOS 0.37.0"):
             self.fetch()
 
     def test_tampering_is_refused(self):
         kernel = self.publish("kernel-6.12.113-1-1", KERNEL, PACKAGE, {"nvidia": "1-1"})
-        self.catalog(None, [kernel])
+        self.catalog(self.publish("common-1", "", "", {"tailscale": "1-1"}), [kernel])
         (self.releases / "kernel-6.12.113-1-1/nvidia.raw").write_bytes(b"changed")
         with self.assertRaisesRegex(SystemExit, "does not match"):
             self.fetch()
