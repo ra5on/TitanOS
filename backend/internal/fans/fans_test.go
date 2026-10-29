@@ -121,7 +121,10 @@ func TestCurveFixedAndBackToBIOS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { m.Run(ctx); close(done) }()
-	time.Sleep(50 * time.Millisecond)
+	// Run applies right away; a slow machine may need longer than a moment.
+	for deadline := time.Now().Add(5 * time.Second); read(filepath.Join(dir, "pwm1")) != "153" && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if read(filepath.Join(dir, "pwm1")) != "153" {
 		t.Fatalf("fixed: %s", read(filepath.Join(dir, "pwm1")))
 	}
