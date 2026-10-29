@@ -2,6 +2,10 @@
 Description=TitanOS daemon (web UI and API)
 Documentation=https://github.com/ra5on/TitanOS
 After=network.target
+# On shutdown and restart titand stops before the stick is unmounted: in
+# parallel, a write of titand could keep /efi busy and the stick would be
+# left with its dirty bit set. efi.mount is noauto, so this pulls nothing in.
+After=efi.mount
 # An app update that does not start is given up on after three starts and
 # the one before it runs again: systemd must not stop trying before that.
 StartLimitIntervalSec=2min
