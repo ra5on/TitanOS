@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/run"
@@ -259,5 +260,74 @@ func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("NVIDIA driver update action", "action", req.Action, "by", currentUser(r).Name)
+	s.handlePlugins(w, r)
+}
+
+// linkHost names a link for the activity log: scheme and server only.
+func linkHost(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return ""
+}
+
+func (s *Server) handlePluginSources(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"sources": s.opts.Plugins.Sources()})
+}
+
+// handlePluginSourceAdd keeps a list of community plugins the owner entered.
+// The address is checked once; nothing is installed.
+func (s *Server) handlePluginSourceAdd(w http.ResponseWriter, r *http.Request) {
+	var req struct{ URL string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	noteTarget(r, linkHost(req.URL))
+	if _, err := s.opts.Plugins.AddSource(r.Context(), req.URL); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	s.handlePluginSources(w, r)
+}
+
+func (s *Server) handlePluginSourceRemove(w http.ResponseWriter, r *http.Request) {
+	if err := s.opts.Plugins.RemoveSource(r.PathValue("id")); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	s.handlePluginSources(w, r)
+}
+
+// handlePluginInspect shows what a link to a <name>.plugin.json offers,
+// without downloading the image.
+func (s *Server) handlePluginInspect(w http.ResponseWriter, r *http.Request) {
+	var req struct{ URL string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	plugin, err := s.opts.Plugins.InspectLink(r.Context(), req.URL)
+	if err != nil {
+		writePluginError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, plugin)
+}
+
+// handlePluginExternal installs a community plugin from a link or a source.
+// Like a file from a share, an unsigned one needs its name as confirmation.
+func (s *Server) handlePluginExternal(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginsEditable(w) {
+		return
+	}
+	var req plugins.ExternalRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	noteTarget(r, req.Name, linkHost(req.URL))
+	if err := s.opts.Plugins.InstallExternal(context.WithoutCancel(r.Context()), req, s.opts.Storage.Mounted()); err != nil {
+		writePluginError(w, err)
+		return
+	}
+	slog.Info("community plugin installed", "name", req.Name, "from", linkHost(req.URL), "source", req.Source, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handlePlugins(w, r)
 }

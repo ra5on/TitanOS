@@ -116,7 +116,7 @@
 	</button>
 
 	{#if open}
-		<div class="panel" role="dialog" aria-label={t('notify.title')}>
+		<div class="panel floating-menu" role="dialog" aria-label={t('notify.title')}>
 			<div class="head">
 				<span class="name">{t('notify.title')}</span>
 				<span class="links"
@@ -327,12 +327,6 @@
 		max-height: min(70vh, 560px);
 		display: flex;
 		flex-direction: column;
-		background: var(--menu-bg);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		-webkit-backdrop-filter: var(--panel-backdrop);
-		backdrop-filter: var(--panel-backdrop);
-		box-shadow: var(--shadow-menu);
 		font-size: 0.8125rem;
 	}
 	.head {
@@ -341,7 +335,7 @@
 		justify-content: space-between;
 		gap: 12px;
 		padding: 12px 14px;
-		border-bottom: 1px solid var(--panel-border);
+		border-bottom: 1px solid var(--menu-border);
 	}
 	.links,
 	.notice-links {
@@ -364,7 +358,7 @@
 		flex-direction: column;
 		gap: 4px;
 		padding: 12px 14px;
-		border-bottom: 1px solid var(--panel-border);
+		border-bottom: 1px solid var(--menu-border);
 		border-left: 3px solid transparent;
 	}
 	li.fresh {

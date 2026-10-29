@@ -2,7 +2,7 @@ import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
-	appearance: 'theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen',
+	appearance: 'theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
 	firewall:
 		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
@@ -47,8 +47,20 @@ const keywords: Record<string, string> = {
 	letsencrypt:
 		"let's encrypt letsencrypt acme zertifikat certificate https tls ssl dns challenge wildcard cloudflare desec hetzner ionos netcup inwx duckdns ipv64 rfc2136",
 	ddns:
-		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2',
+		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 ipv64.net strato no-ip dyndns2 healthcheck erreichbarkeit',
+	// The tab "IPv64" of Settings › Dynamic DNS (since 29 Oct 2026 no area of its own).
+	'ipv64-overview': 'ipv64 ipv64.net konto account api key schlüssel paket plan nutzung usage protokoll log',
+	'ipv64-domains': 'ipv64 domain domains dns record records eintrag einträge txt caa cname mx',
+	'ipv64-dyndns': 'ipv64 dyndns ddns update token aktualisieren präfix prefix wildcard router',
+	'ipv64-assignments': 'ipv64 zuweisung zuweisungen assignment assignments app apps https name domain eigene',
+	'ipv64-monitoring': 'ipv64 healthcheck überwachung monitoring statusseite status page offline wartung maintenance',
+	'ipv64-failover': 'ipv64 failover ausfallschutz ersatz fallback',
+	'ipv64-public': 'ipv64 öffentlich public cdn reverse proxy portmapper internet freigeben',
+	'ipv64-router': 'ipv64 cloud router wireguard tunnel vpn gateway peer ipv64wg',
+	'ipv64-blocklist': 'ipv64 blocklist sperrliste honeypot v64 melden report firewall',
 	wireguard: 'wireguard vpn tunnel fernzugriff remote access qr handy phone smartphone laptop server',
+	api: 'api token tokens cli titanosctl openapi rest automatisierung automation',
+	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -72,6 +84,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],
+	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	letsencrypt: [
@@ -85,6 +98,15 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	ddns: [
 		{ id: 'ddns-status', label: 'ddns.statusTitle', href: '/settings/ddns#ddns-status' },
 		{ id: 'ddns-settings', label: 'ddns.settingsTitle', href: '/settings/ddns#ddns-settings' },
+		{ id: 'ipv64-overview', label: 'ipv64x.search.overview', href: '/settings/ddns?tab=ipv64&sub=overview' },
+		{ id: 'ipv64-domains', label: 'ipv64x.search.domains', href: '/settings/ddns?tab=ipv64&sub=domains' },
+		{ id: 'ipv64-dyndns', label: 'ipv64x.search.dyndns', href: '/settings/ddns?tab=ipv64&sub=dyndns' },
+		{ id: 'ipv64-assignments', label: 'ipv64x.search.assignments', href: '/settings/ddns?tab=ipv64&sub=assignments' },
+		{ id: 'ipv64-monitoring', label: 'ipv64x.search.monitoring', href: '/settings/ddns?tab=ipv64&sub=monitoring' },
+		{ id: 'ipv64-failover', label: 'ipv64x.search.failover', href: '/settings/ddns?tab=ipv64&sub=failover' },
+		{ id: 'ipv64-public', label: 'ipv64x.search.public', href: '/settings/ddns?tab=ipv64&sub=public' },
+		{ id: 'ipv64-router', label: 'ipv64x.search.router', href: '/settings/ddns?tab=ipv64&sub=router' },
+		{ id: 'ipv64-blocklist', label: 'ipv64x.search.blocklist', href: '/settings/ddns?tab=ipv64&sub=blocklist' },
 	],
 	firewall: [
 		{ id: 'firewall-zones', label: 'firewall.zones', href: '/settings/firewall?tab=zones#firewall-zones' },

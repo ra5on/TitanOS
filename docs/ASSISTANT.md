@@ -6,9 +6,35 @@ Der Ausbau von 0.15.0 mit Auftragszentrale, persönlichem Wissen, Dokumentbearbe
 
 ## Einrichtung und Rechte
 
-Ab Werk ausgeschaltet. Unter Einstellungen › KI-Assistent werden Ollama-Adresse, Modell und erlaubte Bereiche gewählt. Ein Modell mit Werkzeugunterstützung ist nötig; Modelle werden nicht vorinstalliert. Modellverwaltung, Kontextlänge und Temperatur bleiben einstellbar.
+Ab Werk ausgeschaltet. Unter Einstellungen › KI-Assistent werden Modellanbieter, Modell und erlaubte Bereiche gewählt. Ein Modell mit Werkzeugunterstützung ist nötig; Modelle werden nicht vorinstalliert. Modellverwaltung (nur Ollama), Kontextlänge (nur Ollama) und Temperatur bleiben einstellbar.
 
-Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Benutzer benötigen eine zusätzliche Freigabe und erreichen ausschließlich ihre eigenen Freigaben mit ihren bestehenden Dateirechten. Je Bereich gilt aus, lesen oder lesen/ändern: Dateien, Docker/Apps, VMs, Speicher, Shares, Backups, Konten, System und Updates. Konten, System und Updates sind standardmäßig nur lesbar. Direktmodus erweitert diese Rechte nicht.
+### Modellanbieter
+
+Entscheidung des Projektinhabers vom 29.10.2026: neben Ollama sind Cloud-Modelle wählbar. Ab Werk und bei fehlendem Feld bleibt es Ollama mit unverändertem Verhalten.
+
+- **Ollama** (`provider` leer oder `ollama`): Adresse wie bisher, Modelle verwalten und laden.
+- **Anthropic** (`anthropic`): Messages-API `https://api.anthropic.com/v1/messages` mit `x-api-key` und `anthropic-version: 2023-06-01`, Werkzeugaufrufe und Streaming (SSE), Standardmodell `claude-sonnet-5-5`, Modellliste über `GET /v1/models`. Keine Gedankenausgabe angefordert; Temperatur höchstens 1.
+- **OpenAI-kompatibel** (`openai`): Basisadresse `openaiBase` samt `/v1` (ohne Pfad wird `/v1` ergänzt) und optionaler Schlüssel; `/chat/completions` mit `tools` und Streaming, Modellliste über `/models`. Deckt OpenAI, OpenRouter, LM Studio, vLLM u. a. ab. Fähigkeiten meldet nur OpenRouter (`supported_parameters`); sonst gilt das Modell als unbekannt und wird versucht.
+
+Die Anbieterabstraktion (`assistant/provider.go`, `anthropic.go`, `openai.go`, Schnittstelle `backend`) sitzt genau an der Stelle des früheren Ollama-Aufrufs. Agentenschleife, zentrale Schemaprüfung (`validation.go`), Streaming, Statistik, Schleifenerkennung, Wiederholungen und Checkpoints bleiben ein Codepfad; alle Anbieter liefern Teilstücke im Ollama-Format. Werkzeugaufrufe und Ergebnisse werden über die Aufruf-ID gepaart; Aufrufe ohne Ergebnis (unterbrochener Lauf) und verwaiste Ergebnisse gehen nicht an Cloud-Anbieter. Ein Stream ohne Abschluss (`message_stop` bzw. Endegrund/`[DONE]`) führt keine Werkzeuge aus. Fehlercodes: `provider_failed`, `provider_auth` (Schlüssel abgelehnt, Antworttext wird nicht übernommen), `model_missing`.
+
+**Schlüssel** liegen getrennt in `/config/assistant/keys.json` (atomar, 0600; der Ordner ist im Stick-Dateimanager ausgeblendet, nicht im Diagnosepaket, nicht im Werkzeugkatalog des Assistenten, nie protokolliert). Über die API nur `anthropicKeySet`/`openaiKeySet`; ein leeres Feld behält den gespeicherten Schlüssel, `clearAnthropicKey`/`clearOpenaiKey` entfernt ihn. Der OpenAI-kompatible Schlüssel gehört zur Adresse, für die er eingegeben wurde: Bei geänderter Adresse ohne neuen Schlüssel lehnt das Speichern mit `assistant_key_server` ab, und Prüfen/Modellliste/Modelltest schicken ihn nie an eine andere Adresse. Eingeschaltetes Anthropic ohne Schlüssel: `assistant_key_missing`. Fehlermeldungen werden um den Schlüssel bereinigt.
+
+**Verbindungen** der Cloud-Anbieter prüfen bei jedem Verbindungsaufbau die tatsächliche Adresse (`internal/netguard` über `httpfetch`) und folgen keiner Weiterleitung. Anthropic nur öffentliche Adressen; OpenAI-kompatible Server im Heimnetz/Tailnet nur, wenn ein Besitzer oder Administrator die Adresse gewählt hat (Einstellungen und Prüfen sind ohnehin nur für sie), sonst nur öffentliche Adressen; Loopback dieses NAS nie (`assistant_address_blocked`).
+
+**Datenschutz:** Mit einem Cloud-Anbieter gehen Chatinhalte, Anhänge, gelesene Dokumente und Werkzeugergebnisse an diesen Anbieter. Die Einstellungsseite sagt das deutlich. Rechte, Bereiche und Bestätigungen prüft weiterhin das NAS.
+
+**Rückweg:** neue Felder `provider` und `openaiBase` sind optional; ältere titand lesen die Datei weiter, verwenden dann Ollama mit dem eingetragenen Modellnamen (Fehler „Modell fehlt“, falls es ein Cloud-Modell war) und verwerfen die beiden Felder beim Speichern. Die Schlüsseldatei kennen sie nicht.
+
+### Ollama per Klick
+
+Antwortet unter Ollama kein Server und läuft keine Ollama-App, zeigt die Einstellungsseite „Ollama einrichten“. Vorher geschieht nichts. `GET /api/v1/assistant/ollama-setup` (nur Besitzer/Administratoren, ändert nichts) nennt Docker-Zustand, eine verfügbare NVIDIA-GPU (nur sie nutzt das Ollama-Abbild), den Speicher und die Modellauswahl `choices`.
+
+Das Modell wählt die Person (Entscheidung des Projektinhabers vom 29.10.2026). Vorausgewählt und als „empfohlen für dieses NAS“ markiert ist das Modell der festen Tabelle `setupModels` (`RecommendModel`): Grafikspeicher bei GPU, sonst Arbeitsspeicher; bis 8 GiB `qwen3:4b`, bis 16 GiB `qwen3:8b`, darüber `qwen3:14b`. Die kuratierte Liste `setupChoices` (`assistant/ollama.go`) nennt je Modell ungefähre Downloadgröße der Standardquantisierung und benötigten Speicher: `llama3.2:3b`, `qwen3:4b`, `llama3.1:8b`, `qwen3:8b`, `mistral-nemo:12b`, `gemma3:12b`, `qwen3:14b`, `gpt-oss:20b`, `mistral-small:24b`, `qwen3:32b`. Alle tragen in der Ollama-Bibliothek die Fähigkeit „tools“ (Stand des Wissens bei der Umsetzung, nicht live geprüft); `gemma3:12b` ist als unsicher markiert, weil Ollama Gemma 3 nicht durchgängig als werkzeugfähig führt. Modelle, die nicht in den erkannten Speicher passen, sind ausgegraut mit Grund, bleiben aber wählbar; vor der Einrichtung fragt dann ein einfacher Warndialog. Zusätzlich ein freies Feld für jedes andere Ollama-Modell (`validOllamaModel` in `lib/ollama-setup.ts`: optional Registry/Namensräume, Name, optional `:Tag`, keine Leerzeichen oder Digests; das Backend prüft zusätzlich `ValidModel`). Das gewählte Modell wird geladen und als Modell des Assistenten gespeichert; weitere Modelle lädt oder entfernt man später unter „Modelle in Ollama“, das Modell des Assistenten wählt man unter „Voreingestelltes Modell“. Ohne eingeschaltetes, laufendes Docker mit Volume erklärt die Karte das und verlinkt Docker.
+
+Nach dem Klick (`routes/settings/assistant/OllamaSetup.svelte`, `lib/ollama-setup.ts`): Vorlage `ollama` des offiziellen Katalogs mit demselben Code wie das Installationspanel der Apps-Seite füllen (`readTemplate`/`build`/`withHardware`), die GPU dem Ollama-Dienst geben und Ollamas API nur auf `127.0.0.1:<freier Port>` veröffentlichen, dann `POST /docker/apps`. Danach Container-Start abwarten (bis 30 Minuten, Fehlerausgabe von Docker bei fehlgeschlagener Einrichtung), auf Antwort von Ollama warten, Anbieter Ollama mit dieser Adresse und dem gewählten Modell speichern und das Modell mit Fortschritt in Bytes laden. Jeder Schritt zeigt seinen Zustand; „Erneut versuchen“ setzt beim fehlgeschlagenen Schritt fort (fehlgeschlagene App-Einrichtung über den Wiederholen-Weg der Docker-Seite, Modell-Download setzt bei Ollama fort). Der Ablauf läuft im Browser; Schließen der Seite unterbricht ihn, die App bleibt installiert.
+
+Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Benutzer benötigen eine zusätzliche Freigabe und erreichen ausschließlich ihre eigenen Freigaben mit ihren bestehenden Dateirechten. Je Bereich gilt aus, lesen oder lesen/ändern: Dateien, Docker/Apps, VMs, Speicher, Shares, Backups, Konten, System, Updates, Home Assistant, Plugins sowie Netzwerk und Firewall. Konten, System und Updates sind standardmäßig nur lesbar; Home Assistant, Plugins und Netzwerk/Firewall sind ab Werk aus (siehe [Plugins, Netzwerk und Firewall, Sicherungen und App-Updates](#plugins-netzwerk-und-firewall-sicherungen-und-app-updates-29102026)). Direktmodus erweitert diese Rechte nicht.
 
 Es gibt zwei Ausführungsarten:
 
@@ -57,11 +83,11 @@ Konfiguration: `/config/system/assistant.json`, persönliche Auswahl: `/config/u
 
 Optionale Aufbewahrung in Tagen löscht nur alte abgeschlossene/gestoppte Chats. Null bedeutet keine zeitbasierte Löschung. Der temporäre Modus schreibt neue Verläufe nur in den RAM; vorhandene Volume-Chats werden dadurch nicht gelöscht. Chatdaten gehören weder zur Sticksicherung noch zum allgemeinen Diagnosepaket. Der gesonderte Diagnoseexport enthält standardmäßig nur Ablaufmetadaten; Inhalte sind ausschließlich mit ausdrücklicher Wahl `?content=true` enthalten und werden durch den Diagnosefilter geschwärzt. Freie Texte können trotz Filter sensible Angaben enthalten.
 
-Der konfigurierte Ollama-Server erhält den Modellkontext und zulässige Werkzeugdaten. Hochgeladene Anhänge sind nicht automatisch vollständig anonymisiert. Administrator-Aufträge erzeugen Abschluss-/Blockierungsmeldungen ohne Chatinhalte oder Dateinamen; normale Benutzer erzeugen keine Meldungen im gemeinsamen Administrator-Kanal.
+Der konfigurierte Modellanbieter (Ollama oder ein Cloud-Anbieter, siehe oben) erhält den Modellkontext und zulässige Werkzeugdaten. Hochgeladene Anhänge sind nicht automatisch vollständig anonymisiert. Administrator-Aufträge erzeugen Abschluss-/Blockierungsmeldungen ohne Chatinhalte oder Dateinamen; normale Benutzer erzeugen keine Meldungen im gemeinsamen Administrator-Kanal.
 
 ## Sicherheitsgrenzen und Werkzeuge
 
-Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beliebigen Shellbefehle, kein allgemeines HTTP-Werkzeug und keine Erweiterung der Rechte durch einen Prompt. Konsolen, Kontenanlegen mit Passwort, private Schlüssel, Backup-Passwörter, `.env`, Wiederherstellungscodes und Sticksicherungsdownloads sind ausgeschlossen. Die Bestätigung einer Netzwerkänderung bleibt außerhalb des Agenten; der normale zeitliche Netzwerk-Rückfall gilt auch im Direktmodus.
+Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beliebigen Shellbefehle, kein allgemeines HTTP-Werkzeug und keine Erweiterung der Rechte durch einen Prompt. Konsolen, Kontenanlegen mit Passwort, private Schlüssel, Backup-Passwörter, `.env`, Wiederherstellungscodes und Sticksicherungsdownloads sind ausgeschlossen. Netzwerkänderungen selbst, ihre Bestätigung, das Ein-/Ausschalten der Firewall und das Bestätigen einer Firewall-Änderung auf Probe bleiben außerhalb des Agenten; der normale zeitliche Rückfall gilt auch im Direktmodus.
 
 Dateien, Protokolle, Webseiten, Anhänge und Werkzeugergebnisse sind Daten, keine neuen Aufträge oder Erlaubnisse. Der Standardprompt verlangt, deren eingebettete Anweisungen zu ignorieren und auf das Nutzerziel begrenzt zu arbeiten. Das ist keine Garantie gegen jede Fehlentscheidung eines Modells; die technisch durchgesetzten Rechte gelten zusätzlich.
 
@@ -71,9 +97,9 @@ Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckG
 
 ## Aufbau und Prüfgrenzen
 
-`assistant` enthält Modellkommunikation, Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server, Bearer-API-Schlüssel und die Agent-App sind entfernt.
+`assistant` enthält Modellkommunikation (Ollama und Cloud-Anbieter), Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server des Assistenten, Bearer-Schlüssel für Zugriffe auf den Assistenten und die Agent-App sind entfernt; API-Schlüssel gibt es nur für die Modellanbieter. Der davon unabhängige MCP-Server für externe KI-Clients (`docs/MCP.md`, seit 29.10.2026) nutzt persönliche API-Tokens und Lesewerkzeuge aus diesem festen Katalog, aber keine Einstellungen, Chats oder Aufträge des Assistenten.
 
-Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Nicht abgenommen: echte Ollama-Modelle, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
+Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Cloud-Anbieter sind gegen nachgebaute Anthropic- und OpenAI-Server geprüft (Werkzeugaufrufe in Teilstücken, Streaming, unvollständiger Stream, Statistik, Modelllisten, abgelehnter Schlüssel, Schlüsselablage, Adressregel, keine Weiterleitung, Modelltest, Einstellungsdatei älterer Versionen), „Ollama per Klick“ mit isolierten Browserdaten und einem Node-Test der Vorlagenaufbereitung. Nicht abgenommen: echte Ollama-Modelle, echte Anthropic-/OpenAI-/OpenRouter-/LM-Studio-/vLLM-Endpunkte, eine echte Installation der Ollama-App samt GPU, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
 
 ## Werkzeugprüfung seit 0.12.1
 
@@ -270,3 +296,36 @@ Einzelheiten stehen in [HOME-ASSISTANT.md](HOME-ASSISTANT.md).
 ### Prüfgrenzen
 
 Geprüft mit nachgebautem Ollama, ntfy, Home Assistant (REST und WebSocket) und MQTT-Broker. Nicht geprüft sind echte Smartphones, Apps, ein echtes Home Assistant und ein echter Broker.
+
+## Plugins, Netzwerk und Firewall, Sicherungen und App-Updates (29.10.2026)
+
+Entscheidung des Projektinhabers vom 29.10.2026: Der Agent übernimmt diese Bereiche mit den bestehenden Bestätigungs- und Rechteregeln. Alle Werkzeuge gibt es nur für Besitzer und Administratoren. Jedes Ziel wird beim Planen gegen den aktuellen Zustand geprüft und unmittelbar vor der Ausführung neu geplant und verglichen; danach liest titand den Endzustand selbst nach (`assistant_areas.go`, `verifyAreaAction`).
+
+**Neue Bereiche, ab Werk aus:** `plugins` und `network` (Einstellungen › KI-Assistent). Auf dem Stick stehen sie in `extraAreas` von `/config/system/assistant.json`, damit die vorige App-Version ihre bekannten Bereiche weiter lesen und speichern kann (sie verliert dabei nur die neuen Bereiche, die dann wieder aus sind). Die bisherigen Katalogrouten `GET/POST/DELETE /plugins…` und `/firewall…` gehören jetzt zu diesen Bereichen statt zu System; `PUT /network` ist nicht mehr im Katalog.
+
+| Werkzeug | Art | Bereich | Endzustand |
+|---|---|---|---|
+| `plugins_list` (optional `refresh`) | lesen | plugins | Liste ohne Pfade in Freigaben, Beschreibungen gelten als Daten |
+| `plugin_install` | Gefahr | plugins | installiert, eingeschaltet und aktiv (bzw. installiert und aus) |
+| `plugin_switch` | Gefahr | plugins | eingeschaltet und aktiv bzw. aus |
+| `plugin_update` | Gefahr (offiziell) / Zerstörung (nicht signierte Fassung aus einer Freigabe, Name als Bestätigung) | plugins | neue Version installiert |
+| `plugin_remove` | Zerstörung | plugins | nicht mehr installiert |
+| `network_diagnostics` | lesen | network | Prüfungen je Netz (ohne Angabe: Liste der Netze) |
+| `firewall_status` | lesen | network | Zonen, Zellen mit nummerierten Regeln, Sperren, letzte verworfene Pakete |
+| `firewall_rule_add`, `firewall_rule_remove` | Gefahr | network | auf Probe (eingeschaltet) bzw. gespeichert (ausgeschaltet) |
+| `firewall_unblock` | Gefahr | network | Adresse nicht mehr gesperrt |
+| `backup_snapshots`, `backup_files` | lesen | backups | Stände und Ordner eines Stands |
+| `backup_check` | Änderung | backups | angenommen; Ergebnis später in `backup_status` |
+| `backup_restore_files` | Änderung | backups | angenommen; neuer Ordner unter `restored/`, nichts wird überschrieben |
+| `backup_schedule` (pause/resume) | Änderung | backups | `enabled` des Auftrags wie verlangt |
+| `docker_auto_updates` | lesen | docker | Einstellungen, nächstes Fenster, letzte Ergebnisse |
+| `docker_auto_update` | Änderung | docker | App in der Liste bzw. nicht, Fenster gespeichert |
+
+- **Plugins:** Installiert werden nur offizielle Plugins des signierten Release-Katalogs, ausschließlich über den Namen. Lokale Dateien, Community-Plugins und Adressen aus Inhalten installiert der Agent nie; die Plugin-Seite bietet sie weiter an. Updates nur auf die Fassung, die `plugins_list` unter `update` nennt (der Pfad kommt aus dem Status, nie vom Modell). Bestehende Sperren (Systemupdate, Tailscale/NetBird auf Probe, NVIDIA-Wechsel) gelten unverändert.
+- **Netzwerk:** nur lesen und Diagnose. Änderungen am Netzwerk bleiben Handarbeit, weil ihre Bestätigung aus einer echten Websitzung kommen muss.
+- **Firewall:** Regeln einer Zelle hinzufügen (mit Position, erste passende entscheidet) und entfernen, gesperrte Adressen freigeben. Der Hauptschalter bleibt, wie er ist: Ein Vorschlag mit anderem `enabled` wird abgelehnt (`firewall_switch_manual`), auch serverseitig in `PUT /firewall`, wenn der Agent ihn schickt (`firewall.Manager.ChangeFromAssistant`). Weil der Agent keine Adresse einer Websitzung hat, entfällt die Ausnahme für die speichernde Adresse; stattdessen wird jeder Vorschlag abgelehnt, der die Weboberfläche für das Heimnetz oder das VPN (ohne eigene Absenderregel) schließen würde (`firewall_closes_webui`). Eine Änderung der eingeschalteten Firewall läuft wie immer zwei Minuten auf Probe; bestätigen kann nur eine Person unter Einstellungen › Firewall, sonst geht sie zurück. Das Ergebnis heißt dann `on_trial`, nicht „erledigt“. Während einer Probe plant der Agent keine weitere Firewall-Änderung.
+- **Sicherungen:** Jetzt sichern/abbrechen wie bisher (`backup_action`), dazu Prüfen, Einzeldateien in einen neuen Ordner wiederherstellen (bis 200 absolute Pfade ohne `..`) und Zeitplan pausieren/fortsetzen. Der geänderte Auftrag wird ohne Geheimnisse geschickt; leere Geheimnisse behalten den gespeicherten Wert für dasselbe Ziel.
+- **Updates:** Status lesen und „jetzt suchen“ wie bisher (`update_status`, `update_action` mit `check`). Neu wird das Ergebnis der Suche beobachtet: Eine fehlgeschlagene Suche heißt `failed` und „unbekannt“, nie „kein Update“. Installieren folgt weiter dem Bereich Updates (ab Werk nur lesen).
+- **Docker:** automatische App-Updates je App ein-/ausschalten, optional mit neuem Fenster für alle Apps. Eine nicht mehr vorhandene App lässt sich noch ausschalten.
+
+Prüfgrenzen: Planung, Bestätigungsstufen, Bereichsrechte, Endzustandsprüfung und Geheimnisfreiheit sind mit isolierten Daten getestet (`assistant_areas_test.go`, `firewall/agent_test.go`); Backup-Zeitplan und App-Update-Liste zusätzlich über den echten Agentenablauf mit nachgebautem Ollama. Echte Plugin-Installationen, echte nftables-Regeln mit Probe und echte restic-Läufe durch den Agenten sind nicht abgenommen.

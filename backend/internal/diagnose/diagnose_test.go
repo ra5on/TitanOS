@@ -135,6 +135,7 @@ func TestBundleHoldsNoSecrets(t *testing.T) {
 	store.Write("network/network.json", []byte(`{"hostname":"keller","address":"192.168.1.5/24","gateway":"192.168.1.1"}`))
 	store.Write("shares/shares.json", []byte(`[{"name":"media","access":{"alex":"rw"}}]`))
 	store.Write("vms/win11.json", []byte(`{"name":"win11","memoryMiB":8192}`))
+	store.Write("storage/disk-sleep.json", []byte(`{"idleMinutes":30,"volumes":{"tank":0},"disks":{"serial:WD-WCC4N7XYZ123":60,"wwn:0x5000c500a1b2c3d4":0}}`))
 
 	var buf bytes.Buffer
 	if err := m.Bundle(context.Background(), &buf, []string{"alex"}); err != nil {
@@ -153,7 +154,10 @@ func TestBundleHoldsNoSecrets(t *testing.T) {
 		files[file.Name] = string(data)
 		all.WriteString(file.Name + "\n" + string(data))
 	}
-	for _, secret := range []string{"hunter2", "verysecret", "argon2id", "webhooks/1/hook", "BEGIN PRIVATE KEY", "192.168.1.", "52:54:00", "fe80::", "alex", "keller"} {
+	if sleep := files["config/storage/disk-sleep.json"]; !strings.Contains(sleep, `"disk-1":60`) || !strings.Contains(sleep, `"disk-2":0`) || !strings.Contains(sleep, `"tank":0`) {
+		t.Errorf("disk sleep settings: %q", sleep)
+	}
+	for _, secret := range []string{"hunter2", "verysecret", "argon2id", "webhooks/1/hook", "BEGIN PRIVATE KEY", "192.168.1.", "52:54:00", "fe80::", "alex", "keller", "WCC4N7", "5000c500"} {
 		if strings.Contains(all.String(), secret) {
 			t.Errorf("the bundle gives away %q", secret)
 		}

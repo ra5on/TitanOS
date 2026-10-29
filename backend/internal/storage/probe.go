@@ -19,6 +19,7 @@ type blockDevice struct {
 	Transport  string        `json:"tran"`
 	Model      string        `json:"model"`
 	Serial     string        `json:"serial"`
+	WWN        string        `json:"wwn"`
 	FSType     string        `json:"fstype"`
 	Label      string        `json:"label"`
 	UUID       string        `json:"uuid"`
@@ -28,7 +29,7 @@ type blockDevice struct {
 }
 
 var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output",
-	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,FSTYPE,LABEL,UUID,MOUNTPOINT,PARTUUID"}
+	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,WWN,FSTYPE,LABEL,UUID,MOUNTPOINT,PARTUUID"}
 
 func parseLsblk(output string) ([]blockDevice, error) {
 	var result struct {

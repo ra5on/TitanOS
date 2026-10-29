@@ -25,6 +25,11 @@ test('backgrounds reject injected URLs and missing image references', () => {
 	assert.equal(v.blur, 14);
 	assert.equal(v.glowColor, '');
 });
+test('the background is meant for every page unless switched off', () => {
+	assert.equal(dashboardVisual({}).background.everywhere, true);
+	assert.equal(dashboardVisual({ background: { everywhere: 'no' } }).background.everywhere, true);
+	assert.equal(dashboardVisual({ background: { everywhere: false } }).background.everywhere, false);
+});
 test('tiles have no design of their own: stored design values are ignored', () => {
 	const style = tileStyle(
 		tileOptions(

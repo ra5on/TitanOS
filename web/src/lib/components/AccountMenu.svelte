@@ -44,7 +44,7 @@
 		</button>
 
 		{#if open}
-			<div class="menu" role="menu" aria-label={t('menu.account')}>
+			<div class="menu floating-menu" role="menu" aria-label={t('menu.account')}>
 				<div class="who">
 					<span class="avatar large" aria-hidden="true">{initial}</span>
 					<span class="lines">
@@ -124,12 +124,6 @@
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-		background: var(--menu-bg);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		-webkit-backdrop-filter: var(--panel-backdrop);
-		backdrop-filter: var(--panel-backdrop);
-		box-shadow: var(--shadow-menu);
 	}
 	.who {
 		display: flex;

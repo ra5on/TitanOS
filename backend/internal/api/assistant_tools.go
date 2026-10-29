@@ -209,6 +209,7 @@ func (s *Server) toolShares(ctx context.Context) (any, error) {
 func (s *Server) toolDocker(ctx context.Context) (any, error) {
 	status := s.opts.Docker.Status(ctx)
 	type container struct {
+		ID              string    `json:"id"`
 		Name            string    `json:"name"`
 		Image           string    `json:"image"`
 		State           string    `json:"state"`
@@ -223,7 +224,7 @@ func (s *Server) toolDocker(ctx context.Context) (any, error) {
 	}
 	list := []container{}
 	for _, c := range status.Containers {
-		list = append(list, container{Name: c.Name, Image: c.Image, State: c.State, Since: c.Since, App: c.App,
+		list = append(list, container{ID: c.ID, Name: c.Name, Image: c.Image, State: c.State, Since: c.Since, App: c.App,
 			CPUPercent: math.Round(c.CPUPercent*10) / 10, MemoryBytes: c.MemoryBytes, Ports: c.Ports, UpdateAvailable: c.UpdateAvailable, UpdateState: c.UpdateState, UpdateError: c.UpdateError})
 	}
 	failed := []string{}

@@ -50,6 +50,15 @@
 
 	--glass-surface: rgba(22, 26, 31, 0.55);
 	--glass-menu: rgba(22, 26, 31, 0.7);
+	--glass-dialog: rgba(22, 26, 31, 0.7);
+	--menu-alpha: 0.7;
+	--menu-blur: 18px;
+	--menu-shine: 0.2;
+	--menu-shine-color: rgba(255, 255, 255, 0.1);
+	--dialog-alpha: 0.7;
+	--dialog-blur: 18px;
+	--dialog-shine: 0.2;
+	--dialog-shine-color: rgba(255, 255, 255, 0.1);
 	--glass-border: rgba(255, 255, 255, 0.12);
 	--glass-shine-color: rgba(255, 255, 255, 0.1);
 	--glass-shadow: rgba(0, 0, 0, 0.3);
@@ -124,6 +133,13 @@
 	--panel-backdrop: none;
 	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--surface);
+	--menu-border: var(--border);
+	--menu-backdrop: none;
+	--menu-shadow: var(--shadow-menu);
+	--dialog-bg: var(--surface);
+	--dialog-border: var(--border);
+	--dialog-backdrop: none;
+	--dialog-shadow: var(--shadow-menu);
 }
 [data-surface='glass'] {
 	--panel-bg: var(--glass-surface);
@@ -131,6 +147,13 @@
 	--panel-backdrop: blur(var(--glass-blur)) saturate(160%);
 	--panel-shadow: inset 0 1px 0 var(--glass-shine-color), 0 8px 24px var(--glass-shadow);
 	--menu-bg: var(--glass-menu);
+	--menu-border: var(--glass-border);
+	--menu-backdrop: blur(var(--menu-blur)) saturate(160%);
+	--menu-shadow: inset 0 1px 0 var(--menu-shine-color), var(--shadow-menu);
+	--dialog-bg: var(--glass-dialog);
+	--dialog-border: var(--glass-border);
+	--dialog-backdrop: blur(var(--dialog-blur)) saturate(160%);
+	--dialog-shadow: inset 0 1px 0 var(--dialog-shine-color), var(--shadow-menu);
 }
 [data-surface='outline'] {
 	--panel-bg: transparent;
@@ -138,16 +161,31 @@
 	--panel-backdrop: none;
 	--panel-shadow: 0 0 0 transparent;
 	--menu-bg: var(--bg);
+	--menu-border: var(--outline-border);
+	--menu-backdrop: none;
+	--menu-shadow: var(--shadow-menu);
+	--dialog-bg: var(--bg);
+	--dialog-border: var(--outline-border);
+	--dialog-backdrop: none;
+	--dialog-shadow: var(--shadow-menu);
 }
 
 /* Without backdrop-filter, or if the user asked for less transparency, glass
-   would be see-through but not blurred: fall back to solid surfaces. */
+   would be see-through but not blurred: fall back to solid surfaces. This
+   includes menus and dialogs (--menu-*, --dialog-*). */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 	[data-surface='glass'] {
 		--panel-bg: var(--surface);
 		--panel-border: var(--border);
 		--panel-backdrop: none;
 		--menu-bg: var(--surface);
+		--menu-border: var(--border);
+		--menu-backdrop: none;
+		--menu-shadow: var(--shadow-menu);
+		--dialog-bg: var(--surface);
+		--dialog-border: var(--border);
+		--dialog-backdrop: none;
+		--dialog-shadow: var(--shadow-menu);
 	}
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -156,7 +194,27 @@
 		--panel-border: var(--border);
 		--panel-backdrop: none;
 		--menu-bg: var(--surface);
+		--menu-border: var(--border);
+		--menu-backdrop: none;
+		--menu-shadow: var(--shadow-menu);
+		--dialog-bg: var(--surface);
+		--dialog-border: var(--border);
+		--dialog-backdrop: none;
+		--dialog-shadow: var(--shadow-menu);
 	}
+}
+
+/* Pop-up surfaces (Settings › Appearance › Menus and windows): every
+   floating menu uses .floating-menu or these variables, dialogs use
+   --dialog-*. Glass values come from lib/theme (--menu-alpha, --menu-blur,
+   --menu-shine and the --dialog-* counterparts). */
+.floating-menu {
+	background: var(--menu-bg);
+	border: 1px solid var(--menu-border);
+	border-radius: var(--radius-ctl);
+	-webkit-backdrop-filter: var(--menu-backdrop);
+	backdrop-filter: var(--menu-backdrop);
+	box-shadow: var(--menu-shadow);
 }
 
 *,
@@ -450,7 +508,9 @@ main.readable :target { outline: 2px solid var(--accent); outline-offset: 4px; s
 }
 
 /* Page transitions: the header keeps its place, the content fades over. */
-:root[data-fx-transitions='on'] header {
+/* Named only while a transition runs (+layout.svelte): a named element is a
+   backdrop root, and menus in the header would not blur the page. */
+:root[data-fx-transitions='on'][data-view-transition] header {
 	view-transition-name: titanos-header;
 }
 ::view-transition-old(root),

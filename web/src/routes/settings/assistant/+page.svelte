@@ -1,11 +1,13 @@
 <script lang="ts">
-	// The assistant: on or off, where Ollama is and which models it has, who
-	// may chat, the web search, where chats are kept, and additions to what
-	// the model is told.
+	// The assistant: on or off, which provider runs the model (Ollama or a
+	// cloud provider), which models it has, who may chat, the web search,
+	// where chats are kept, and additions to what the model is told.
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { AREAS, loadAssistant, loadModels, type AssistantModel, type AssistantSettings } from '#lib/assistant.svelte.ts';
+	import { pullModel } from '#lib/assistant-pull.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import OllamaSetup from './OllamaSetup.svelte';
 	import AgentSettings from '#lib/components/AgentSettings.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatNumber } from '#lib/format.ts';
@@ -25,12 +27,22 @@
 	let pulling = $state<{ status: string; total: number; completed: number } | null>(null);
 	let pullError = $state('');
 	let removing = $state<string | null>(null);
+	// Keys typed in; they go to the NAS with the next check or save and are
+	// never shown again. Empty keeps the stored key.
+	let anthropicKey = $state('');
+	let openaiKey = $state('');
+	let clearAnthropic = $state(false);
+	let clearOpenai = $state(false);
+	let setupActive = $state(false);
+
+	const provider = $derived(settings?.provider || 'ollama');
+	const cloud = $derived(provider !== 'ollama');
 
 	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
 	// What the assistant may do where, as titand decides it without a setting.
 	const DEFAULT_ACCESS: Record<string, 'off' | 'read' | 'write'> = {
-		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read', home: 'off'
+		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read', home: 'off', plugins: 'off', network: 'off'
 	};
 
 
@@ -40,6 +52,8 @@
 			settings = await api.get<AssistantSettings>('/assistant');
 			settings.areas = Object.fromEntries(AREAS.map((a) => [a, settings!.areas?.[a] ?? DEFAULT_ACCESS[a]]));
 			settings.maxSteps ??= 0;
+			if (!settings.provider) settings.provider = 'ollama';
+			settings.openaiBase ??= '';
 			check();
 			api.get<{ apps: typeof found }>('/assistant/ollama-apps').then((res) => (found = res.apps)).catch(() => (found = []));
 		} catch (err) {
@@ -54,18 +68,37 @@
 		}
 	});
 
-	/** Asks Ollama at the address in the field which models it has. */
+	/** Asks the provider in the fields which models it has. */
 	async function check() {
 		if (!settings) return;
 		checking = true;
 		checkError = null;
 		try {
-			models = (await api.post<{ models: AssistantModel[] }>('/assistant/models', { ollama: settings.ollama })).models;
+			models = (
+				await api.post<{ models: AssistantModel[] }>('/assistant/models', {
+					provider,
+					ollama: settings.ollama,
+					openaiBase: settings.openaiBase ?? '',
+					anthropicKey: clearAnthropic ? '' : anthropicKey,
+					openaiKey: clearOpenai ? '' : openaiKey
+				})
+			).models;
 		} catch (err) {
 			models = null;
-			checkError = { text: problem(err), detail: err instanceof ApiError && err.code === 'ollama_failed' ? err.message : '' };
+			const code = err instanceof ApiError ? err.code : '';
+			checkError = { text: problem(err), detail: code === 'ollama_failed' || code === 'provider_failed' ? (err as ApiError).message : '' };
 		}
 		checking = false;
+	}
+
+	/** Another provider has other models; Anthropic starts with the default. */
+	function switchProvider(next: string) {
+		if (!settings) return;
+		settings.provider = next as AssistantSettings['provider'];
+		settings.model = next === 'anthropic' ? 'claude-sonnet-5-5' : '';
+		models = null;
+		checkError = null;
+		check();
 	}
 
 	async function save(event: SubmitEvent) {
@@ -77,8 +110,19 @@
 		try {
 			const value = settings.temperature;
 			const areas = settings.areas;
-			settings = await api.put<AssistantSettings>('/assistant', { ...settings, numCtx: Number(settings.numCtx) || 0, maxSteps: 0, temperature: value });
+			settings = await api.put<AssistantSettings>('/assistant', {
+				...settings,
+				numCtx: Number(settings.numCtx) || 0,
+				maxSteps: 0,
+				temperature: value,
+				anthropicKey: clearAnthropic ? '' : anthropicKey,
+				openaiKey: clearOpenai ? '' : openaiKey,
+				clearAnthropicKey: clearAnthropic,
+				clearOpenaiKey: clearOpenai
+			});
 			settings.areas = { ...areas, ...settings.areas };
+			anthropicKey = openaiKey = '';
+			clearAnthropic = clearOpenai = false;
 			// The buttons in the header follow the new settings.
 			await loadAssistant();
 			loadModels();
@@ -97,43 +141,10 @@
 		pullError = '';
 		pulling = { status: '', total: 0, completed: 0 };
 		try {
-			const res = await fetch('/api/v1/assistant/models/pull', {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ model })
-			});
-			if (!res.ok || !res.body) {
-				let code = 'internal';
-				try {
-					code = (await res.json()).error?.code ?? code;
-				} catch {
-					// The generic text will do.
-				}
-				throw new ApiError(res.status, code, '');
-			}
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-			let finished = false;
-			for (;;) {
-				const { done, value } = await reader.read();
-				buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-				let cut;
-				while ((cut = buffer.indexOf('\n\n')) >= 0) {
-					const raw = buffer.slice(0, cut);
-					buffer = buffer.slice(cut + 2);
-					const kind = /^event: (.*)$/m.exec(raw)?.[1];
-					const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] ?? '{}');
-					if (kind === 'progress') pulling = { status: data.status ?? '', total: data.total ?? 0, completed: data.completed ?? 0 };
-					else if (kind === 'problem') pullError = data.detail || errorText(data.code ?? 'internal');
-					else if (kind === 'done') finished = true;
-				}
-				if (done) break;
-			}
-			if (finished) pullName = '';
+			await pullModel(model, (p) => (pulling = p));
+			pullName = '';
 		} catch (err) {
-			pullError = problem(err);
+			pullError = err instanceof ApiError && err.message ? err.message : problem(err);
 		}
 		pulling = null;
 		await check();
@@ -170,34 +181,92 @@
 			<p class="muted">{t('assistant.settingsText')}</p>
 
 			<label class="stack">
-				<span>{t('assistant.ollama')}</span>
-				<div class="row">
-					<input class="field mono" bind:value={settings.ollama} aria-label={t('assistant.ollama')} placeholder="http://127.0.0.1:11434" spellcheck="false" autocapitalize="none" required />
-					<button type="button" class="btn" onclick={check} disabled={checking}>{t(checking ? 'assistant.checking' : 'assistant.check')}</button>
-				</div>
-				<span class="muted small">{t('assistant.ollamaHint')}</span>
+				<span>{t('assistant.provider')}</span>
+				<select class="field" value={settings.provider} onchange={(e) => switchProvider(e.currentTarget.value)}>
+					<option value="ollama">{t('assistant.provider.ollama')}</option>
+					<option value="anthropic">{t('assistant.provider.anthropic')}</option>
+					<option value="openai">{t('assistant.provider.openai')}</option>
+				</select>
 			</label>
-			{#each found.filter((f) => f.address !== settings?.ollama) as app (app.container)}
-				<p class="small">
-					{t('assistant.foundApp', { name: app.container, address: app.address })}
-					<button type="button" class="btn small-btn" onclick={() => { settings!.ollama = app.address; check(); }}>{t('assistant.useApp')}</button>
-				</p>
-			{/each}
+			{#if cloud}
+				<div class="notice-warn" role="note">{t('assistant.cloudNotice')}</div>
+			{/if}
+
+			{#if provider === 'ollama'}
+				<label class="stack">
+					<span>{t('assistant.ollama')}</span>
+					<div class="row">
+						<input class="field mono" bind:value={settings.ollama} aria-label={t('assistant.ollama')} placeholder="http://127.0.0.1:11434" spellcheck="false" autocapitalize="none" required />
+						<button type="button" class="btn" onclick={check} disabled={checking}>{t(checking ? 'assistant.checking' : 'assistant.check')}</button>
+					</div>
+					<span class="muted small">{t('assistant.ollamaHint')}</span>
+				</label>
+				{#each found.filter((f) => f.address !== settings?.ollama) as app (app.container)}
+					<p class="small">
+						{t('assistant.foundApp', { name: app.container, address: app.address })}
+						<button type="button" class="btn small-btn" onclick={() => { settings!.ollama = app.address; check(); }}>{t('assistant.useApp')}</button>
+					</p>
+				{/each}
+			{:else}
+				{#if provider === 'openai'}
+					<label class="stack">
+						<span>{t('assistant.openaiBase')}</span>
+						<input class="field mono" bind:value={settings.openaiBase} placeholder="https://api.openai.com/v1" spellcheck="false" autocapitalize="none" required />
+						<span class="muted small">{t('assistant.openaiBaseHint')}</span>
+					</label>
+				{/if}
+				{@const keySet = provider === 'anthropic' ? settings.anthropicKeySet : settings.openaiKeySet}
+				<label class="stack">
+					<span>{t(provider === 'anthropic' ? 'assistant.anthropicKey' : 'assistant.openaiKey')}</span>
+					<div class="row">
+						{#if provider === 'anthropic'}
+							<input class="field mono" type="password" bind:value={anthropicKey} disabled={clearAnthropic} placeholder={keySet ? t('assistant.keyKeep') : 'sk-ant-…'} autocomplete="off" spellcheck="false" autocapitalize="none" />
+						{:else}
+							<input class="field mono" type="password" bind:value={openaiKey} disabled={clearOpenai} placeholder={keySet ? t('assistant.keyKeep') : 'sk-…'} autocomplete="off" spellcheck="false" autocapitalize="none" />
+						{/if}
+						<button type="button" class="btn" onclick={check} disabled={checking}>{t(checking ? 'assistant.checking' : 'assistant.check')}</button>
+					</div>
+					<span class="muted small">{t(keySet ? 'assistant.keySet' : 'assistant.keyNone')} {t(provider === 'anthropic' ? 'assistant.anthropicKeyHint' : 'assistant.openaiKeyHint')}</span>
+				</label>
+				{#if keySet}
+					<label class="check">
+						{#if provider === 'anthropic'}
+							<input type="checkbox" bind:checked={clearAnthropic} />
+						{:else}
+							<input type="checkbox" bind:checked={clearOpenai} />
+						{/if}
+						<span>{t('assistant.keyRemove')}</span>
+					</label>
+				{/if}
+			{/if}
 			{#if checkError}
 				<div class="notice-warn" role="alert">{checkError.text}{#if checkError.detail}<br /><span class="mono small">{checkError.detail}</span>{/if}</div>
 			{:else if models}
-				<p class="ok" role="status">{t('assistant.reachable', { count: models.length })}</p>
+				<p class="ok" role="status">{t(cloud ? 'assistant.reachableCloud' : 'assistant.reachable', { count: models.length })}</p>
 			{/if}
 
 			<label class="stack">
 				<span>{t('assistant.defaultModel')}</span>
-				<select class="field" bind:value={settings.model}>
-					<option value="">{t('assistant.pickModel')}</option>
-					{#each choices as model (model)}<option value={model}>{model}</option>{/each}
-				</select>
-				<span class="muted small">{t('assistant.modelHint')}</span>
+				{#if cloud}
+					<input class="field mono" bind:value={settings.model} list="assistant-cloud-models" placeholder={provider === 'anthropic' ? 'claude-sonnet-5-5' : 'gpt-…'} spellcheck="false" autocapitalize="none" />
+					<datalist id="assistant-cloud-models">
+						{#each choices as model (model)}<option value={model}></option>{/each}
+					</datalist>
+					<span class="muted small">{t('assistant.modelCloudHint')}</span>
+				{:else}
+					<select class="field" bind:value={settings.model}>
+						<option value="">{t('assistant.pickModel')}</option>
+						{#each choices as model (model)}<option value={model}>{model}</option>{/each}
+					</select>
+					<span class="muted small">{t('assistant.modelHint')}</span>
+				{/if}
 			</label>
 		</section>
+
+		<!-- Once clicked, the card stays to show its steps and the result. -->
+		{#if provider === 'ollama' && (setupActive || (checkError && !checking && found.length === 0))}
+			<OllamaSetup onstart={() => (setupActive = true)} ondone={load} />
+		{/if}
 
 		<section class="tile panel" aria-labelledby="assistant-access">
 			<h2 class="tile-title" id="assistant-access">{t('assistant.access')}</h2>
@@ -281,6 +350,7 @@
 		</div>
 	</form>
 
+	{#if !cloud}
 	<section class="tile panel" aria-labelledby="assistant-models">
 		<h2 class="tile-title" id="assistant-models">{t('assistant.models')}</h2>
 		{#if models}
@@ -316,8 +386,9 @@
 			</div>
 		{/if}
 		{#if pullError}<p class="notice-error" role="alert">{pullError}</p>{/if}
-		<p class="muted small">{t('assistant.pullHint')}</p>
+		<p class="muted small">{t('assistant.pullHint')} {t('assistant.pullChangeHint')}</p>
 	</section>
+	{/if}
 {:else if !loadError}
 	<p class="loading" role="status">{t('common.loading')}</p>
 {/if}

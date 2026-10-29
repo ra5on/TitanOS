@@ -62,6 +62,16 @@ export type AssistantSettings = {
 	retentionDays?: number;
 	ephemeral?: boolean;
 	pushApproval?: boolean;
+	/** Empty or ollama is Ollama; anthropic and openai send chats to that provider. */
+	provider?: '' | 'ollama' | 'anthropic' | 'openai';
+	openaiBase?: string;
+	/** Keys only go to the NAS; it answers with whether one is set. */
+	anthropicKey?: string;
+	openaiKey?: string;
+	clearAnthropicKey?: boolean;
+	clearOpenaiKey?: boolean;
+	anthropicKeySet?: boolean;
+	openaiKeySet?: boolean;
 	ollama: string;
 	model: string;
 	users: boolean;
@@ -79,7 +89,7 @@ export type AssistantPrefs = { floating: boolean; pageContext: boolean; model: s
 const DEFAULT_PREFS: AssistantPrefs = { floating: true, pageContext: true, model: '' };
 
 /** Areas of the NAS, in the order of the settings page. */
-export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home'] as const;
+export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home', 'plugins', 'network'] as const;
 
 /** Statistics of a chat: rounds with the model, tokens, time. */
 export type RunStats = { rounds: number; prompt: number; generated: number; modelMs: number; toolMs: number; tools: number };

@@ -55,9 +55,15 @@ var activityQuiet = []string{
 	"POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/preview",
 	"POST /api/v1/storage/import/preview",
 	"POST /api/v1/network/diagnostics",
+	"POST /api/v1/network/ipv64/account",
+	"POST /api/v1/network/ipv64/domains",
+	"POST /api/v1/network/ipv64/records",
+	"POST /api/v1/network/ipv64/healthchecks",
+	"POST /api/v1/network/ipv64/heartbeat/status",
 	"POST /api/v1/backups/smb/discover",
 	"POST /api/v1/homeassistant/check",
 	"POST /api/v1/files/archive",
+	"POST /api/v1/docker/proxy/apps/{app}/tailnet/check",
 }
 
 // activityReads are reads that open a console or take sensitive data along.
@@ -78,7 +84,9 @@ var activityParam = regexp.MustCompile(`\{([A-Za-z]+)\.{0,3}\}`)
 // once the handler is done.
 func (s *Server) activityLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.opts.Activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
+		// A route called by an MCP tool is recorded once, as that tool call
+		// (mcp.go).
+		if _, mcp := r.Context().Value(mcpCallKey{}).(*mcpCall); s.opts.Activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") || mcp {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -121,7 +129,9 @@ func noteActivity(r *http.Request, user auth.User) {
 	rec.user = user.Name
 	rec.action = action
 	rec.via = activity.ViaWeb
-	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
+	if _, ok := r.Context().Value(mcpCallKey{}).(*mcpCall); ok {
+		rec.via = activity.ViaMCP
+	} else if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		rec.via = activity.ViaToken
 	} else if _, ok := r.Context().Value(agentIdentity{}).(string); ok {
 		rec.via = activity.ViaAgent

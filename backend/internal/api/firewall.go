@@ -21,6 +21,10 @@ func writeFirewallError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "firewall_pending", err.Error())
 	case errors.Is(err, firewall.ErrNoPending):
 		writeError(w, http.StatusConflict, "firewall_not_pending", err.Error())
+	case errors.Is(err, firewall.ErrSwitchManual):
+		writeError(w, http.StatusForbidden, "firewall_switch_manual", err.Error())
+	case errors.Is(err, firewall.ErrClosesWebUI):
+		writeError(w, http.StatusConflict, "firewall_closes_webui", err.Error())
 	case errors.Is(err, firewall.ErrNotBlocked):
 		writeError(w, http.StatusNotFound, "firewall_not_blocked", err.Error())
 	case errors.Is(err, firewall.ErrDisabled):
@@ -47,7 +51,15 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &cfg) {
 		return
 	}
-	if err := s.opts.Firewall.Change(r.Context(), cfg, remoteIP(r)); err != nil {
+	// The assistant has no address of a web session to keep in; it changes
+	// rules only, never the switch, and a person confirms in the web UI.
+	var err error
+	if _, agent := r.Context().Value(agentIdentity{}).(string); agent {
+		err = s.opts.Firewall.ChangeFromAssistant(r.Context(), cfg)
+	} else {
+		err = s.opts.Firewall.Change(r.Context(), cfg, remoteIP(r))
+	}
+	if err != nil {
 		writeFirewallError(w, err)
 		return
 	}

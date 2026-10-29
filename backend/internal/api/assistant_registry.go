@@ -102,6 +102,10 @@ var toolAreas = map[string]string{
 	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
 	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
 	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
+	"plugins_list": assistant.AreaPlugins, "plugin_install": assistant.AreaPlugins, "plugin_switch": assistant.AreaPlugins, "plugin_update": assistant.AreaPlugins, "plugin_remove": assistant.AreaPlugins,
+	"network_diagnostics": assistant.AreaNetwork, "firewall_status": assistant.AreaNetwork, "firewall_rule_add": assistant.AreaNetwork, "firewall_rule_remove": assistant.AreaNetwork, "firewall_unblock": assistant.AreaNetwork,
+	"backup_snapshots": assistant.AreaBackups, "backup_files": assistant.AreaBackups, "backup_check": assistant.AreaBackups, "backup_restore_files": assistant.AreaBackups, "backup_schedule": assistant.AreaBackups,
+	"docker_auto_updates": assistant.AreaDocker, "docker_auto_update": assistant.AreaDocker,
 	"ha_diagnostics": assistant.AreaHome, "ha_capabilities": assistant.AreaHome, "ha_undo": assistant.AreaHome, "ha_history": assistant.AreaHome, "ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
 }
 
@@ -142,6 +146,27 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 			schema(map[string]any{"query": str("Words to look for, in English or German.")}, "query"), false, s.toolDocsSearch),
 		reading("docs_read", "Read one document of the TitanOS manual, or only its sections whose heading contains the given text.",
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
+	}
+	tools = append(tools, s.statusTools(user)...)
+	if s.assistantWeb(user) {
+		tools = append(tools, s.webTools()...)
+	}
+	tools = append(tools, s.fileTools(user)...)
+	if user.Role.CanAdminister() {
+		tools = append(tools, s.apiTools(user, r)...)
+		tools = append(tools, s.areaTools()...)
+	}
+	tools = append(tools, s.haTools(user)...)
+	tools = append(tools, s.knowledgeTools(user)...)
+	tools = append(tools, s.documentEditTool(user))
+	return append(tools, s.assistantActions(user)...)
+}
+
+// statusTools are the reading tools of the fixed catalog about the state of
+// the NAS and the files of the account. The assistant and the MCP server
+// (mcp_tools.go) offer them both.
+func (s *Server) statusTools(user auth.User) []assistant.Tool {
+	tools := []assistant.Tool{
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
 			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.assistantFilesList(user)),
 		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) Excel (.xlsx) or PDF document (first 20 pages; document_read for further pages) from the file manager, with the rights of this account.",
@@ -213,17 +238,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 			})),
 		)
 	}
-	if s.assistantWeb(user) {
-		tools = append(tools, s.webTools()...)
-	}
-	tools = append(tools, s.fileTools(user)...)
-	if user.Role.CanAdminister() {
-		tools = append(tools, s.apiTools(user, r)...)
-	}
-	tools = append(tools, s.haTools(user)...)
-	tools = append(tools, s.knowledgeTools(user)...)
-	tools = append(tools, s.documentEditTool(user))
-	return append(tools, s.assistantActions(user)...)
+	return tools
 }
 
 func (s *Server) assistantMyShares(user auth.User) map[string]any {

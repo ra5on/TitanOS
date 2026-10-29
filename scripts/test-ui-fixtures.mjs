@@ -661,6 +661,14 @@ export function fixtureFactory(browser, errors) {
         }
         return json(data.plugins);
       }
+      // Community plugins: a link is inspected, then installed with its name.
+      if (path === "/plugins/external/inspect" && method === "POST" && data.linkPreview)
+        return json(data.linkPreview);
+      if (path === "/plugins/external" && method === "POST" && data.plugins) {
+        (data.externalInstalls ??= []).push(route.request().postDataJSON());
+        data.plugins = data.pluginsAfterExternal ?? data.plugins;
+        return json(data.plugins);
+      }
       if (path.endsWith("/update") && path.startsWith("/plugins/") && method === "POST") {
         (data.pluginUpdates ??= []).push([path, route.request().postDataJSON()]);
         if (data.failPluginUpdate)

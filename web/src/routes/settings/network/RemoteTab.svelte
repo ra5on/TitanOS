@@ -45,6 +45,8 @@
 	<h2 class="tile-title" id="remote-dns">{t('netx.dnsServices')}</h2>
 	<p class="muted">{t('netx.dnsHint')}</p>
 	<div class="row-actions">
-		<a class="btn" href="/settings/ddns">{t('ddns.title')}</a>
+		<a class="btn" href="/settings/ddns">{t('ddns.title')}</a><a class="btn" href="/settings/ddns?tab=ipv64"
+			>{t('ipv64x.title')}</a
+		>
 	</div>
 </section>

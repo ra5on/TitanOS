@@ -267,10 +267,41 @@ export type VolumeCache = {
 	blockBytes: number;
 };
 
+/** Where the effective idle time comes from: the default, the volume or the disk's own value. */
+export type DiskSleepOrigin = 'default' | 'volume' | 'disk';
+export type DiskSleepVolume = {
+	name: string;
+	/** null inherits the default; 0 never sleeps. */
+	override: number | null;
+	effective: number;
+	origin: DiskSleepOrigin;
+};
+export type DiskSleepDisk = {
+	/** Serial or WWN based; empty when the disk has no unique identity (inherits only). */
+	id: string;
+	name: string;
+	model: string;
+	serial: string;
+	sizeBytes: number;
+	volume?: string;
+	override: number | null;
+	effective: number;
+	origin: DiskSleepOrigin;
+	state: 'asleep' | 'active';
+	error?: string;
+};
 export type DiskSleepStatus = {
 	idleMinutes: number;
+	/** Overrides by volume name and by disk id; a missing entry inherits. */
+	volumes?: Record<string, number>;
+	disks?: Record<string, number>;
 	available: boolean;
 	errors: { disk: string; message: string }[];
+	/** Only present when the disks could be listed. */
+	volumeStatus?: DiskSleepVolume[];
+	diskStatus?: DiskSleepDisk[];
+	missingVolumes?: string[];
+	missingDisks?: string[];
 };
 export type StorageStatus = { disks: Disk[]; volumes: Volume[]; diskSleep: DiskSleepStatus };
 
@@ -402,6 +433,8 @@ export type DockerContainer = {
 	publicUrl: string;
 	/** The app's own HTTPS name through TitanOS, e.g. https://immich.nas.local; missing without one. */
 	proxyUrl?: string;
+	/** The app's own device in the tailnet, e.g. https://immich.tail1234.ts.net, while it runs. */
+	tailnetUrl?: string;
 	icon: string;
 	updateAvailable: boolean;
 	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
@@ -423,6 +456,8 @@ export type AppProxyRoute = {
 	networks?: string[];
 	tailscale?: boolean;
 	tailscaleName?: string;
+	/** Switched on by "Im Tailnet veröffentlichen": leaving the tailnet switches it off again. */
+	tailnetOnly?: boolean;
 	/** Full domains of their own, e.g. photos.example.org. */
 	domains?: string[];
 	urls: string[];
@@ -551,6 +586,32 @@ export type VMStatus = {
 	};
 	vms: VM[];
 };
+
+/** A copy of VM settings (vm.json) on a mounted volume whose VM this NAS does not know. */
+export type VMAdoptCandidate = {
+	volume: string;
+	directory: string;
+	name: string;
+	displayName?: string;
+	description?: string;
+	template: string;
+	firmware?: string;
+	memoryMiB: number;
+	vcpus: number;
+	disks: string[];
+	created: string;
+	/** The VM was removed while its disks were kept. */
+	removed: boolean;
+	removedAt?: string;
+	/** Another VM has this name; a new one must be chosen. */
+	nameTaken: boolean;
+	/** Codes of what is changed on taking it over (see vms.adopt.change.*). */
+	dropped: string[];
+	/** Volumes the VM needs that are not mounted. */
+	missing: string[];
+};
+
+export type VMAdoptResult = { name: string; changes: string[] };
 
 export type HostCPU = { id: number; kind: '' | 'p' | 'e'; siblings: number[]; usedBy: string[] };
 export type DiskImage = {

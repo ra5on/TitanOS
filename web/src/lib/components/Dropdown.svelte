@@ -22,20 +22,44 @@
 	let { label, text, icon, kind = 'menu', align = 'left', compact = false, disabled = false, children }: Props = $props();
 
 	let open = $state(false);
-	// Opens upwards when there is no room below, so that the page never grows.
-	let up = $state(false);
 	let root: HTMLElement | undefined = $state();
 	let button: HTMLButtonElement | undefined = $state();
 	let panel: HTMLElement | undefined = $state();
+	let left = $state(0),
+		top = $state(0);
 
 	async function toggle() {
 		if (open) return close();
-		const rect = button?.getBoundingClientRect();
-		up = !!rect && window.innerHeight - rect.bottom < 320 && rect.top > 320;
 		open = true;
 		await tick();
+		// The top layer keeps the panel outside clipped tiles, and its glass
+		// blurs the page instead of only the tile it was opened from.
+		panel?.showPopover();
+		place();
 		if (kind === 'menu') focusFirstItem(panel);
 	}
+	// Under the button, or above it when there is no room below; always on screen.
+	function place() {
+		if (!button || !panel) return;
+		const rect = button.getBoundingClientRect();
+		const { width, height } = panel.getBoundingClientRect();
+		const below = window.innerHeight - rect.bottom;
+		const up = below < height + 12 && rect.top > below;
+		const start = align === 'right' ? rect.right - width : rect.left;
+		left = Math.max(8, Math.min(start, window.innerWidth - width - 8));
+		top = up ? Math.max(8, rect.top - 4 - height) : rect.bottom + 4;
+	}
+	// Follow the button while the page or a list around it scrolls.
+	$effect(() => {
+		if (!open) return;
+		const follow = () => place();
+		window.addEventListener('scroll', follow, true);
+		window.addEventListener('resize', follow);
+		return () => {
+			window.removeEventListener('scroll', follow, true);
+			window.removeEventListener('resize', follow);
+		};
+	});
 	function close(focus = false) {
 		open = false;
 		if (focus) button?.focus();
@@ -71,10 +95,11 @@
 	</button>
 	{#if open}
 		<div
-			class="dropdown-panel"
-			class:up
-			class:right={align === 'right'}
+			class="dropdown-panel floating-menu"
 			class:panel={kind === 'panel'}
+			popover="manual"
+			style:left="{left}px"
+			style:top="{top}px"
 			bind:this={panel}
 			role={kind === 'menu' ? 'menu' : 'group'}
 			aria-label={label}
@@ -97,29 +122,17 @@
 		justify-content: center;
 	}
 	.dropdown-panel {
-		position: absolute;
-		left: 0;
-		top: calc(100% + 4px);
-		z-index: 40;
+		position: fixed;
+		inset: auto;
+		margin: 0;
 		min-width: 14rem;
 		max-width: min(22rem, calc(100vw - 32px));
+		max-height: calc(100dvh - 16px);
+		overflow: auto;
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-		/* Solid: inside a glass tile a second backdrop blur only sees the rows
-		   beneath it, and their text would show through. */
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		box-shadow: var(--shadow-menu);
-	}
-	.dropdown-panel.right {
-		left: auto;
-		right: 0;
-	}
-	.dropdown-panel.up {
-		top: auto;
-		bottom: calc(100% + 4px);
+		/* Surface from .floating-menu (app.css). */
 	}
 	.dropdown-panel.panel {
 		gap: 10px;

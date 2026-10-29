@@ -122,7 +122,7 @@ type Manager struct {
 	// AppDomain returns the domain of the app HTTPS names, "" without one.
 	AppDomain func() string
 	// AppNames returns the full domains of single app routes (such as
-	// photos.example.org); with "names for apps" they join the
+	// photos.nas.ipv64.de); with "names for apps" they join the
 	// certificate where the DNS challenge can prove them (see names).
 	AppNames func() []string
 	// Install serves a certificate from now on; nil stops serving one.
@@ -681,4 +681,14 @@ func (m *Manager) HTTPHandler(next http.Handler) http.Handler {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte(answer))
 	})
+}
+
+// IPv64Key returns the API key of IPv64 stored for the DNS challenge, if any.
+func (m *Manager) IPv64Key() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.settings.Provider.Type != dnsprovider.IPv64Net {
+		return ""
+	}
+	return m.settings.Provider.Token
 }

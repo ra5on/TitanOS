@@ -159,7 +159,7 @@
 			{/each}
 			<button type="button" class="plus" bind:this={plus} aria-label={t('terminal.new')} aria-haspopup="menu" aria-expanded={menu} onclick={openMenu} disabled={!info?.enabled}>+</button>
 			{#if menu}
-				<div class="menu" role="menu" tabindex="-1" aria-label={t('terminal.new')} bind:this={menuPanel} onkeydown={menuKeys}>
+				<div class="menu floating-menu" role="menu" tabindex="-1" aria-label={t('terminal.new')} bind:this={menuPanel} onkeydown={menuKeys}>
 					{#if info?.nasShell}
 						<button type="button" role="menuitem" onclick={() => choose(addNasShell)}><span class="kind" aria-hidden="true">NAS</span>{t('terminal.newNas')}</button>
 					{/if}
@@ -386,10 +386,6 @@
 		padding: 6px;
 		display: flex;
 		flex-direction: column;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		box-shadow: var(--shadow-menu);
 	}
 	.panel.full .menu {
 		top: calc(100% + 8px);

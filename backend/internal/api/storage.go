@@ -22,6 +22,7 @@ var storageErrors = []struct {
 	{storage.ErrInvalidLevel, http.StatusBadRequest, "invalid_level"},
 	{storage.ErrInvalidFS, http.StatusBadRequest, "invalid_filesystem"},
 	{storage.ErrInvalidIdleTime, http.StatusBadRequest, "invalid_disk_idle_time"},
+	{storage.ErrUnknownSleepTarget, http.StatusBadRequest, "unknown_disk_sleep_target"},
 	{storage.ErrTooFewDisks, http.StatusBadRequest, "too_few_disks"},
 	{storage.ErrDiskUnavailable, http.StatusConflict, "disk_unavailable"},
 	{storage.ErrTestRunning, http.StatusConflict, "disk_test_running"},
@@ -67,13 +68,27 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+// handleDiskSleep returns the settings with volumes and disks and their
+// effective values. Listing the disks (lsblk) wakes none of them.
 func (s *Server) handleDiskSleep(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Storage.DiskSleep())
+	status, err := s.opts.Storage.DiskSleepStatus(r.Context())
+	if err != nil {
+		// Without the disk list only the settings from RAM; clients then
+		// must not send overrides (they would replace the stored ones).
+		slog.Warn("disk sleep: listing disks failed", "err", err)
+		status = s.opts.Storage.DiskSleep()
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
+// handleSetDiskSleep sets the default and, if given, replaces the overrides
+// per volume and per disk. A missing "volumes" or "disks" keeps the stored
+// ones, so clients that only know the default change nothing else.
 func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		IdleMinutes *int `json:"idleMinutes"`
+		IdleMinutes *int            `json:"idleMinutes"`
+		Volumes     *map[string]int `json:"volumes"`
+		Disks       *map[string]int `json:"disks"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -82,11 +97,19 @@ func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_disk_idle_time", "idleMinutes is required")
 		return
 	}
-	if err := s.opts.Storage.SetDiskSleep(storage.DiskSleepSettings{IdleMinutes: *req.IdleMinutes}); err != nil {
+	settings := s.opts.Storage.DiskSleep().DiskSleepSettings
+	settings.IdleMinutes = *req.IdleMinutes
+	if req.Volumes != nil {
+		settings.Volumes = *req.Volumes
+	}
+	if req.Disks != nil {
+		settings.Disks = *req.Disks
+	}
+	if err := s.opts.Storage.SetDiskSleep(r.Context(), settings); err != nil {
 		writeStorageError(w, r, "set disk sleep", err)
 		return
 	}
-	slog.Info("disk sleep changed", "idleMinutes", *req.IdleMinutes, "user", currentUser(r).Name)
+	slog.Info("disk sleep changed", "idleMinutes", settings.IdleMinutes, "volumes", len(settings.Volumes), "disks", len(settings.Disks), "user", currentUser(r).Name)
 	s.handleDiskSleep(w, r)
 }
 

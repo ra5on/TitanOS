@@ -819,3 +819,150 @@ func (c *IPv64) legacyUpdate(ctx context.Context, host string, v4, v6 netip.Addr
 	}
 	return nil
 }
+
+// --- healthchecks ---
+
+// IPv64Healthcheck is a push healthcheck, without its token.
+type IPv64Healthcheck struct {
+	// ID identifies the check towards the web UI: a hash of the token.
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Status       string     `json:"status"`
+	LastSeen     *time.Time `json:"lastSeenAt,omitempty"`
+	ExpectedBy   *time.Time `json:"expectedBy,omitempty"`
+	Period       int        `json:"periodSeconds"`
+	Grace        int        `json:"graceSeconds"`
+	Integrations []int      `json:"integrations"`
+	token        string
+}
+
+// Token is the secret of the check; it never goes to the web UI.
+func (h IPv64Healthcheck) Token() string { return h.token }
+
+type ipv64WireCheck struct {
+	Token  string `json:"token"`
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Notify struct {
+		Integrations []int `json:"integrations"`
+	} `json:"notify"`
+	LastSeen *time.Time `json:"last_seen_at"`
+	Push     *struct {
+		Period     int        `json:"period_seconds"`
+		Grace      int        `json:"grace_seconds"`
+		ExpectedBy *time.Time `json:"expected_by"`
+	} `json:"push"`
+}
+
+// HealthcheckID is the name the web UI knows a check by.
+func HealthcheckID(token string) string { return shortHash(token) }
+
+func (w ipv64WireCheck) public() IPv64Healthcheck {
+	h := IPv64Healthcheck{ID: HealthcheckID(w.Token), Name: w.Name, Status: w.Status, LastSeen: w.LastSeen, Integrations: w.Notify.Integrations, token: w.Token}
+	if h.Integrations == nil {
+		h.Integrations = []int{}
+	}
+	if w.Push != nil {
+		h.Period, h.Grace, h.ExpectedBy = w.Push.Period, w.Push.Grace, w.Push.ExpectedBy
+	}
+	return h
+}
+
+// Healthchecks lists the push healthchecks of the account.
+func (c *IPv64) Healthchecks(ctx context.Context) ([]IPv64Healthcheck, error) {
+	var list []ipv64WireCheck
+	if err := c.call(ctx, http.MethodGet, "/healthchecks", url.Values{"type": {"push"}}, nil, &list); err != nil {
+		return nil, err
+	}
+	out := []IPv64Healthcheck{}
+	for _, w := range list {
+		if w.Type == "" || w.Type == "push" {
+			out = append(out, w.public())
+		}
+	}
+	return out, nil
+}
+
+// Healthcheck reads one check.
+func (c *IPv64) Healthcheck(ctx context.Context, token string) (IPv64Healthcheck, error) {
+	var w ipv64WireCheck
+	err := c.call(ctx, http.MethodGet, "/healthchecks/"+url.PathEscape(token), nil, nil, &w)
+	return w.public(), err
+}
+
+// CreateHealthcheck makes a push check; IPv64 alarms when no ping came for
+// period plus grace. Integration 0 is the e-mail address of the account.
+func (c *IPv64) CreateHealthcheck(ctx context.Context, name string, period, grace time.Duration, integrations []int) (IPv64Healthcheck, error) {
+	if name == "" || len(name) > 100 || period < time.Minute || grace < time.Minute || period%time.Minute != 0 || grace%time.Minute != 0 {
+		return IPv64Healthcheck{}, invalid("healthcheck")
+	}
+	body := map[string]any{"name": name, "type": "push", "period_seconds": int(period.Seconds()), "grace_seconds": int(grace.Seconds()),
+		"integrations": integrations, "notify_on_down": true, "notify_on_up": true}
+	var w ipv64WireCheck
+	err := c.call(ctx, http.MethodPost, "/healthchecks", nil, body, &w)
+	return w.public(), err
+}
+
+// PauseHealthcheck and ResumeHealthcheck stop and start the alarms.
+func (c *IPv64) PauseHealthcheck(ctx context.Context, token string) error {
+	return c.call(ctx, http.MethodPost, "/healthchecks/"+url.PathEscape(token)+"/pause", nil, nil, nil)
+}
+
+func (c *IPv64) ResumeHealthcheck(ctx context.Context, token string) error {
+	return c.call(ctx, http.MethodPost, "/healthchecks/"+url.PathEscape(token)+"/resume", nil, nil, nil)
+}
+
+// DeleteHealthcheck removes a check at IPv64.
+func (c *IPv64) DeleteHealthcheck(ctx context.Context, token string) error {
+	return c.call(ctx, http.MethodDelete, "/healthchecks/"+url.PathEscape(token), nil, nil, nil)
+}
+
+// TestNotification sends a test message to the integrations of a check
+// (IPv64 allows one every 30 seconds).
+func (c *IPv64) TestNotification(ctx context.Context, token string) error {
+	return c.call(ctx, http.MethodPost, "/healthchecks/"+url.PathEscape(token)+"/test-notification", nil, nil, nil)
+}
+
+// IPv64Integration is an alert channel of the account, names only.
+type IPv64Integration struct {
+	ID     int    `json:"id"`
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// Integrations lists the alert channels (never with their secrets).
+func (c *IPv64) Integrations(ctx context.Context) ([]IPv64Integration, error) {
+	var list []IPv64Integration
+	if err := c.call(ctx, http.MethodGet, "/integrations", url.Values{"include_secrets": {"false"}}, nil, &list); err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []IPv64Integration{}
+	}
+	return list, nil
+}
+
+// Ping tells a healthcheck that the NAS is alive (GET /health).
+func (c *IPv64) Ping(ctx context.Context, token string) error {
+	if err := ipv64Allow(time.Now(), false); err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/health", nil)
+	if err != nil {
+		return errors.New("IPv64: request could not be built")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	status, header, data, err := c.roundTrip(req, c.client)
+	if err != nil {
+		return err
+	}
+	switch {
+	case status == http.StatusUnauthorized:
+		return &APIError{Provider: "IPv64", Status: status, Message: "healthcheck token not accepted"}
+	case status >= 300:
+		return ipv64Error(status, header, data)
+	}
+	return nil
+}

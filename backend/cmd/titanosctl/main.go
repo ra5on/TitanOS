@@ -22,12 +22,12 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout); err != nil {
+	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
-func run(args []string, out io.Writer) error {
+func run(args []string, in io.Reader, out io.Writer) error {
 	f := flag.NewFlagSet("titanosctl", flag.ContinueOnError)
 	base := f.String("url", os.Getenv("TITANOS_URL"), "NAS HTTPS URL (or TITANOS_URL)")
 	tokenFile := f.String("token-file", "", "private file containing the API token; otherwise TITANOS_TOKEN")
@@ -68,7 +68,17 @@ func run(args []string, out io.Writer) error {
 	}
 	cmd := f.Args()
 	if len(cmd) == 0 {
-		return fmt.Errorf("usage: titanosctl --url URL status | files ROOT [PATH] | docker [ID ACTION] | vm [NAME ACTION] | openapi | request METHOD /path [JSON-FILE]")
+		return fmt.Errorf("usage: titanosctl --url URL status | files ROOT [PATH] | docker [ID ACTION] | vm [NAME ACTION] | openapi | request METHOD /path [JSON-FILE] | mcp")
+	}
+	client, err := newClient(*caFile)
+	if err != nil {
+		return err
+	}
+	if cmd[0] == "mcp" {
+		if len(cmd) != 1 {
+			return fmt.Errorf("mcp takes no arguments")
+		}
+		return bridgeMCP(client, strings.TrimSuffix(u.String(), "/")+"/mcp", token, in, out, os.Stderr)
 	}
 	method, path := http.MethodGet, ""
 	var body []byte
@@ -130,23 +140,6 @@ func run(args []string, out io.Writer) error {
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ResponseHeaderTimeout = 30 * time.Second
-	if *caFile != "" {
-		data, e := os.ReadFile(*caFile)
-		if e != nil {
-			return e
-		}
-		pool, e := x509.SystemCertPool()
-		if e != nil {
-			pool = x509.NewCertPool()
-		}
-		if !pool.AppendCertsFromPEM(data) {
-			return fmt.Errorf("CA file contains no certificates")
-		}
-		transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
-	}
-	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -173,4 +166,26 @@ func run(args []string, out io.Writer) error {
 	}
 	_, err = out.Write(data)
 	return err
+}
+
+// newClient trusts the system roots plus an optional NAS certificate and
+// never follows redirects.
+func newClient(caFile string) (*http.Client, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 30 * time.Second
+	if caFile != "" {
+		data, e := os.ReadFile(caFile)
+		if e != nil {
+			return nil, e
+		}
+		pool, e := x509.SystemCertPool()
+		if e != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(data) {
+			return nil, fmt.Errorf("CA file contains no certificates")
+		}
+		transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	}
+	return &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
 }

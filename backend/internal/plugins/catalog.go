@@ -36,8 +36,10 @@ type catalogEntry struct {
 	plugin    Plugin
 	manifest  []byte
 	signature []byte
-	// base is the release the image is downloaded from.
-	base string
+	// base is the release the image is downloaded from; external entries
+	// (external.go) come through the guarded client.
+	base     string
+	external bool
 }
 
 func catalogClient() *http.Client {
@@ -85,6 +87,8 @@ func (m *Manager) RefreshCatalog(ctx context.Context, force bool) error {
 	m.mu.Unlock()
 
 	entries, err := m.fetchCatalog(ctx)
+	// Community sources have their own state; their errors do not hide the catalog.
+	m.refreshSources(ctx)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.catalogLoading = false
@@ -107,12 +111,16 @@ func (m *Manager) RefreshCatalog(ctx context.Context, force bool) error {
 }
 
 func (m *Manager) fetchMetadata(ctx context.Context, url string, limit int64) ([]byte, error) {
+	return m.fetchMetadataWith(ctx, m.client, url, limit)
+}
+
+func (m *Manager) fetchMetadataWith(ctx context.Context, client *http.Client, url string, limit int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "TitanOS/"+m.Release)
-	response, err := m.client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDownload, err)
 	}
@@ -383,11 +391,13 @@ func (m *Manager) installOfficial(ctx context.Context, name, volume string, moun
 	return m.install(ctx, path, volume, "", mounted, activate)
 }
 
-// UpdateOfficial replaces an installed plugin with the newer signed version
-// in the official catalog. Like an installation, the download happens
-// without holding actions; the swap itself is the one of Update, with the
-// previous files coming back if the new version does not start.
-func (m *Manager) UpdateOfficial(ctx context.Context, name string, mounted []string) error {
+// UpdateDownload replaces an installed plugin with the newer version in the
+// official catalog or, for a community plugin, in a source. Like an
+// installation, the download happens without holding actions; the swap
+// itself is the one of Update, with the previous files coming back if the
+// new version does not start. An unsigned version needs the plugin's name as
+// confirmation, like one from a share.
+func (m *Manager) UpdateDownload(ctx context.Context, name, confirm string, mounted []string) error {
 	m.actions.Lock()
 	volume, err := m.officialUpdateAllowed(name, mounted)
 	m.actions.Unlock()
@@ -410,28 +420,45 @@ func (m *Manager) UpdateOfficial(ctx context.Context, name string, mounted []str
 		m.mu.Unlock()
 	}()
 	tr := m.track(name, "update", StepSignature, StepDownload, StepChecksum, StepWrite, StepStop)
-	err = m.updateOfficial(withTracker(ctx, tr), name, volume, mounted)
+	err = m.updateDownload(withTracker(ctx, tr), name, confirm, volume, mounted)
 	tr.finish(err)
 	return err
 }
 
-func (m *Manager) updateOfficial(ctx context.Context, name, volume string, mounted []string) error {
+func (m *Manager) updateDownload(ctx context.Context, name, confirm, volume string, mounted []string) error {
 	tr := trackerOf(ctx)
 	tr.begin(StepSignature)
-	entries, err := m.fetchCatalog(ctx)
-	if err != nil {
-		return err
-	}
-	var selected *catalogEntry
-	for i := range entries {
-		if entries[i].plugin.Name == name {
-			selected = &entries[i]
-		}
-	}
 	m.actions.Lock()
 	old, exists := m.installed(volume)[name]
+	official := exists && m.official(filepath.Join(m.dir(volume), name+manifestSuffix))
 	m.actions.Unlock()
-	if selected == nil || !exists {
+	if !exists {
+		return ErrNotFound
+	}
+	var selected *catalogEntry
+	if entries, err := m.fetchCatalog(ctx); err == nil {
+		for i := range entries {
+			if entries[i].plugin.Name == name {
+				selected = &entries[i]
+			}
+		}
+	} else if official {
+		return err
+	}
+	// A community plugin is updated from the source that offers it now.
+	if selected == nil && !official {
+		for _, entry := range m.sourceSnapshot() {
+			if entry.plugin.Name == name {
+				fresh, err := m.externalEntry(ctx, ExternalRequest{Source: entry.plugin.Source, Name: name})
+				if err != nil {
+					return err
+				}
+				selected = &fresh
+				break
+			}
+		}
+	}
+	if selected == nil {
 		return ErrNotFound
 	}
 	manifest := selected.plugin.Manifest
@@ -442,27 +469,11 @@ func (m *Manager) updateOfficial(ctx context.Context, name, volume string, mount
 		return fmt.Errorf("%w: the new version targets another kernel", ErrInvalid)
 	}
 	tr.name(name, manifest.Title)
-	dir := m.baseDir(volume)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	stage, err := os.MkdirTemp(dir, ".download-")
+	path, cleanup, err := m.stageDownload(ctx, *selected, volume)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(stage)
-	path := filepath.Join(stage, name+manifestSuffix)
-	if err := os.WriteFile(path, selected.manifest, 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path+".minisig", selected.signature, 0o600); err != nil {
-		return err
-	}
-	tr.begin(StepDownload)
-	tr.bytes(0, manifest.Size)
-	if err := m.downloadImage(ctx, selected.base+name+".raw", filepath.Join(stage, name+".raw"), manifest); err != nil {
-		return err
-	}
+	defer cleanup()
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if again, err := m.officialUpdateAllowed(name, mounted); err != nil {
@@ -473,14 +484,18 @@ func (m *Manager) updateOfficial(ctx context.Context, name, volume string, mount
 	if current := m.installed(volume)[name]; current.SHA256 != old.SHA256 {
 		return fmt.Errorf("%w: %s changed during the download", ErrInvalid, name)
 	}
-	if staged, err := readManifest(path); err != nil || !m.official(path) || staged.SHA256 != manifest.SHA256 {
+	signed := m.official(path)
+	if staged, err := readManifest(path); err != nil || (official && !signed) || staged.SHA256 != manifest.SHA256 {
 		return fmt.Errorf("%w: plugin metadata", ErrInvalid)
+	}
+	if !signed && confirm != name {
+		return ErrNotConfirmed
 	}
 	enabled := slices.Contains(m.current().Enabled, name)
 	if enabled {
 		tr.expect(activationSteps(manifest)...)
 	}
-	return m.replace(ctx, name, path, manifest, true, enabled, volume, mounted)
+	return m.replace(ctx, name, path, manifest, signed, enabled, volume, mounted)
 }
 
 // officialUpdateAllowed returns the plugin volume. Caller holds actions.
@@ -510,6 +525,22 @@ func (m *Manager) officialUpdateAllowed(name string, mounted []string) (string, 
 // officialInstallAllowed returns the volume an official plugin goes to.
 // Caller holds actions.
 func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) (string, error) {
+	if !nameRE.MatchString(name) {
+		return "", ErrNotFound
+	}
+	volume, err := m.installVolume(volume, mounted)
+	if err != nil {
+		return "", err
+	}
+	if _, exists := m.installed(volume)[name]; exists {
+		return "", ErrExists
+	}
+	return volume, nil
+}
+
+// installVolume returns the plugin volume a new plugin goes to, if changes
+// are allowed now. Caller holds actions.
+func (m *Manager) installVolume(volume string, mounted []string) (string, error) {
 	if m.current().PendingDriver != nil {
 		return "", ErrDriverPending
 	}
@@ -519,17 +550,11 @@ func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) 
 	if m.Disabled {
 		return "", ErrDisabled
 	}
-	if !nameRE.MatchString(name) {
-		return "", ErrNotFound
-	}
 	if settings := m.current(); settings.Volume != "" {
 		volume = settings.Volume
 	}
 	if !slices.Contains(mounted, volume) || volume == "" {
 		return "", ErrUnknownVolume
-	}
-	if _, exists := m.installed(volume)[name]; exists {
-		return "", ErrExists
 	}
 	return volume, nil
 }
@@ -545,8 +570,12 @@ var errDownloadChecksum = errors.New("image checksum or size")
 // file whose final hash does not match is deleted and fetched once more from
 // the start. The caller must own dest's directory.
 func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest Manifest) error {
+	return m.downloadImageWith(ctx, m.client, url, dest, manifest)
+}
+
+func (m *Manager) downloadImageWith(ctx context.Context, client *http.Client, url, dest string, manifest Manifest) error {
 	for attempt := 0; ; attempt++ {
-		resumed, err := m.downloadAttempt(ctx, url, dest, manifest)
+		resumed, err := m.downloadAttempt(ctx, client, url, dest, manifest)
 		if err != nil && resumed && attempt == 0 && errors.Is(err, errDownloadChecksum) {
 			continue
 		}
@@ -554,7 +583,7 @@ func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest 
 	}
 }
 
-func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifest Manifest) (resumed bool, err error) {
+func (m *Manager) downloadAttempt(ctx context.Context, client *http.Client, url, dest string, manifest Manifest) (resumed bool, err error) {
 	if manifest.Size < 0 {
 		return false, fmt.Errorf("%w: image size", ErrInvalid)
 	}
@@ -613,7 +642,7 @@ func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifes
 	if resumed {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 	}
-	response, err := m.client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return resumed, transferErr(err)
 	}
