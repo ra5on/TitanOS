@@ -161,8 +161,9 @@ func sampleRuleset() ruleset {
 			{Key: "immich", Name: "immich", Ports: []AppPort{{2283, "tcp"}}},
 			{Key: "container:pihole", Name: "pihole", Ports: []AppPort{{53, "tcp"}, {53, "udp"}, {8053, "tcp"}}},
 		},
-		blocked: []netip.Prefix{netip.MustParsePrefix("198.51.100.7/32"), netip.MustParsePrefix("2001:db8:bad::/64")},
-		admin:   netip.MustParseAddr("192.168.1.20"),
+		blocked:   []netip.Prefix{netip.MustParsePrefix("198.51.100.7/32"), netip.MustParsePrefix("2001:db8:bad::/64")},
+		admin:     netip.MustParseAddr("192.168.1.20"),
+		blocklist: []netip.Prefix{netip.MustParsePrefix("203.0.113.66/32"), netip.MustParsePrefix("2001:db8:66::/48")},
 	}
 }
 

@@ -180,7 +180,7 @@ try {
     const hrefs = await nav(page).locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
     const network = hrefs.slice(hrefs.indexOf("/settings/network"), hrefs.indexOf("/settings/access") + 1);
     assert.deepEqual(network, [
-      "/settings/network", "/settings/firewall", "/settings/letsencrypt", "/settings/ddns", "/settings/proxy", "/settings/access",
+      "/settings/network", "/settings/firewall", "/settings/letsencrypt", "/settings/ddns", "/settings/wireguard", "/settings/proxy", "/settings/access",
     ]);
     for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await nav(page).locator(`a[href="/settings/${area}"]`).getByText("neu", { exact: true }).count(), 1, area);

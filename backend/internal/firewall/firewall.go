@@ -52,6 +52,8 @@ type Status struct {
 	ClientZone    Zone    `json:"clientZone"`
 	Blocked       []Block `json:"blocked"`
 	Recent        []Drop  `json:"recent"`
+	// Blocklist is the number of entries of the v64 blocklist in use.
+	Blocklist int `json:"blocklist"`
 }
 
 // Manager keeps the rules in line with the settings.
@@ -99,8 +101,10 @@ type Manager struct {
 	dockerUser      string
 	dockerUserErr   string
 	dockerUserClean bool
-	lastErr         string
-	failed          bool
+	// blocklist is the v64 blocklist (RAM only, SetBlocklist).
+	blocklist []netip.Prefix
+	lastErr   string
+	failed    bool
 
 	attempts      map[netip.Prefix][]time.Time
 	blocks        []Block
@@ -172,7 +176,7 @@ func (m *Manager) applyLocked(ctx context.Context) error {
 	if m.Disabled {
 		return nil
 	}
-	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), networks: m.networks}
+	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), blocklist: m.blocklist, networks: m.networks}
 	if m.pending != nil {
 		rs.admin = m.admin
 	}
@@ -526,6 +530,7 @@ func (m *Manager) Status(client string) Status {
 	status.Networks = statusNetworks(m.networks, m.active, m.pending)
 	status.DockerError = m.dockerUserErr
 	status.Blocked = slices.Clone(m.blocks)
+	status.Blocklist = len(m.blocklist)
 	m.mu.Unlock()
 	if status.Apps == nil {
 		status.Apps = []App{}
@@ -548,6 +553,22 @@ func (m *Manager) ClearRecent() {
 	m.recentMu.Lock()
 	m.recent = nil
 	m.recentMu.Unlock()
+}
+
+// SetBlocklist replaces the addresses of the v64 blocklist. They only
+// take effect while the firewall is on, in the internet zone: the home
+// network and the VPN are never dropped by them. nil switches it off.
+func (m *Manager) SetBlocklist(ctx context.Context, list []netip.Prefix) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if slices.Equal(list, m.blocklist) {
+		return nil
+	}
+	m.blocklist = slices.Clone(list)
+	if m.Disabled || !m.loaded || !m.current().Enabled {
+		return nil
+	}
+	return m.applyLocked(ctx)
 }
 
 // Enabled tells whether the packet filter is on.

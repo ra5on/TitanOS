@@ -35,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -103,6 +104,10 @@ type Options struct {
 	HealthReport *healthreport.Manager
 	// Fans drives the fans; nil makes one that only reads.
 	Fans *fans.Manager
+	// IPv64 is the account area of IPv64.net; nil makes one that is off.
+	IPv64 *ipv64.Manager
+	// IPv64Reserved are ports of titand that are never published.
+	IPv64Reserved []int
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -186,6 +191,7 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
+	ipv64       ipv64Area
 }
 
 // New returns the handler for all requests.
@@ -238,6 +244,22 @@ func New(opts Options) *Server {
 	if s.opts.WebPush == nil {
 		s.opts.WebPush = webpush.New(opts.Store)
 		s.opts.WebPush.Load()
+	}
+	if s.opts.IPv64 == nil {
+		s.opts.IPv64 = ipv64.NewManager(opts.Store)
+		s.opts.IPv64.Disabled = true
+		s.opts.IPv64.Options = ipv64Options
+		s.opts.IPv64.Fallback = func() (string, string) {
+			var ddns, le string
+			if s.opts.DDNS != nil {
+				ddns = s.opts.DDNS.IPv64Key()
+			}
+			if s.opts.LetsEncrypt != nil {
+				le = s.opts.LetsEncrypt.IPv64Key()
+			}
+			return ddns, le
+		}
+		s.opts.IPv64.Load(context.Background())
 	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
@@ -622,6 +644,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/network/ddns", s.requireAdmin(s.handleDDNS))
 	mux.HandleFunc("PUT /api/v1/network/ddns", s.requireAdmin(s.handleDDNSChange))
 	mux.HandleFunc("POST /api/v1/network/ddns/update", s.requireAdmin(s.handleDDNSUpdate))
+	// IPv64.net: POST everywhere, so that a typed-in API key stays out of addresses.
+	mux.HandleFunc("POST /api/v1/network/ipv64/account", s.requireAdmin(s.handleIPv64Account))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains", s.requireAdmin(s.handleIPv64Domains))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/create", s.requireAdmin(s.handleIPv64DomainCreate))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/change", s.requireAdmin(s.handleIPv64DomainChange))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records", s.requireAdmin(s.handleIPv64Records))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/add", s.requireAdmin(s.handleIPv64RecordAdd))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/delete", s.requireAdmin(s.handleIPv64RecordDelete))
+	mux.HandleFunc("POST /api/v1/network/ipv64/healthchecks", s.requireAdmin(s.handleIPv64Healthchecks))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/on", s.requireAdmin(s.handleIPv64HeartbeatOn))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/off", s.requireAdmin(s.handleIPv64HeartbeatOff))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/status", s.requireAdmin(s.handleIPv64HeartbeatStatus))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/test", s.requireAdmin(s.handleIPv64HeartbeatTest))
+	s.ipv64Routes(mux)
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 	// The chat in the web UI. Its settings are for administrators; who may

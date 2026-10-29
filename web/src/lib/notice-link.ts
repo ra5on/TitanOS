@@ -12,6 +12,11 @@ export function noticeLink(kind: string, subject: string): string | null {
 	if (kind === 'certificate_expiring') return '/settings/access';
 	if (kind.startsWith('letsencrypt_')) return '/settings/letsencrypt';
 	if (kind.startsWith('ddns_')) return '/settings/ddns';
+	// IPv64 is a tab of Settings › Dynamic DNS (29 Oct 2026).
+	if (kind === 'ipv64_failover' || kind === 'ipv64_fallback') return '/settings/ddns?tab=ipv64&sub=failover';
+	if (kind === 'ipv64_check_down') return '/settings/ddns?tab=ipv64&sub=monitoring';
+	if (kind === 'ipv64_cdn_traffic') return '/settings/ddns?tab=ipv64&sub=public';
+	if (kind.startsWith('ipv64_')) return '/settings/ddns?tab=ipv64';
 	if (kind === 'usb_plugged') return '/files';
 	if (kind === 'plugin_recommended') return '/plugins';
 	return null;

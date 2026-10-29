@@ -22,6 +22,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import AppProxy from './AppProxy.svelte';
 	import TailnetDialog from '../../TailnetDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
+	import AppIpv64 from './AppIpv64.svelte';
 	import {
 		check,
 		NETWORKS,
@@ -606,7 +607,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	<p class="notice-warn">{t('editor.noServices')}</p>
 {/if}
 
-{#if loaded}<AppProxy app={name} {members} version={proxyVersion} />{/if}
+{#if loaded}<AppProxy app={name} {members} version={proxyVersion} /><AppIpv64 app={name} />{/if}
 {#if tailnetDialog}<TailnetDialog
 		app={name}
 		mode={tailnetDialog}
