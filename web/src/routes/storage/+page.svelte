@@ -29,6 +29,7 @@
 	import { takesDisk } from './btrfs.ts';
 	import CreateVolumeDialog from './CreateVolumeDialog.svelte';
 	import DeleteVolumeDialog from './DeleteVolumeDialog.svelte';
+	import DiskSleepDialog from './DiskSleepDialog.svelte';
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
 
@@ -49,9 +50,7 @@
 	>(null);
 	let busy = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
-	let sleepChoice = $state<number | null>(null);
 	const diskSleep = $derived(storage.status?.diskSleep);
-	const idleMinutes = [0, 5, 10, 15, 30, 60, 120, 180];
 
 	const navigation = storageNavigation(session.data?.user?.name ?? '');
 	let tab = $state(navigation.tab),
@@ -275,16 +274,6 @@
 		run(() =>
 			api.post(`/storage/volumes/${volume.name}/check`, { action: start ? 'start' : 'stop' }),
 		);
-	const saveDiskSleep = () =>
-		run(async () => {
-			if (sleepChoice === null) return;
-			const updated = await api.put<DiskSleepStatus>('/storage/disk-sleep', {
-				idleMinutes: sleepChoice,
-			});
-			if (storage.status) storage.status.diskSleep = updated;
-			sleepChoice = null;
-		});
-
 	// The dialog stays open and locked while the disk is removed and erased.
 	async function removeDisk() {
 		if (dialog?.kind !== 'remove' || busy) return;
@@ -616,57 +605,13 @@
 		</aside>
 	{/if}
 </div>
-{#if sleepOpen}<Dialog title={t('storage.sleepTitle')} onclose={() => (sleepOpen = false)}>
-		<div class="disk-sleep">
-			<p class="muted sleep-copy">{t('storage.sleepHint')}</p>
-			<div class="sleep-controls">
-				<label for="disk-sleep-time">{t('storage.sleepAfter')}</label>
-				<select
-					class="field"
-					id="disk-sleep-time"
-					value={sleepChoice ?? diskSleep?.idleMinutes ?? 0}
-					onchange={(event) => (sleepChoice = Number(event.currentTarget.value))}
-					disabled={busy || !diskSleep?.available}
-				>
-					{#each idleMinutes as minutes}
-						<option value={minutes}
-							>{minutes === 0
-								? t('storage.sleepOff')
-								: minutes < 60
-									? t('storage.sleepMinutes', { count: minutes })
-									: minutes === 60
-										? t('storage.sleepHour')
-										: t('storage.sleepHours', { count: minutes / 60 })}</option
-						>
-					{/each}
-				</select>
-				<button
-					type="button"
-					class="btn btn-primary"
-					onclick={saveDiskSleep}
-					disabled={busy ||
-						!diskSleep?.available ||
-						sleepChoice === null ||
-						sleepChoice === diskSleep.idleMinutes}>{t('common.save')}</button
-				>
-			</div>
-			<p class="muted sleep-detail">{t('storage.sleepDetails')}</p>
-			{#if diskSleep && !diskSleep.available}<p class="notice-error" role="alert">
-					{t('storage.sleepUnavailable')}
-				</p>{/if}
-			{#if diskSleep?.errors.length}
-				<div class="notice-error" role="alert">
-					<p>{t('storage.sleepFailed')}</p>
-					{#each diskSleep.errors as problem}<p>
-							<strong class="mono">{problem.disk}</strong>: {problem.message}
-						</p>{/each}
-				</div>
-			{/if}
-		</div>
-		<div class="dialog-actions">
-			<button class="btn" onclick={() => (sleepOpen = false)}>{t('common.close')}</button>
-		</div>
-	</Dialog>{/if}
+{#if sleepOpen}<DiskSleepDialog
+		status={diskSleep}
+		onclose={() => (sleepOpen = false)}
+		onsaved={(updated: DiskSleepStatus) => {
+			if (storage.status) storage.status.diskSleep = updated;
+		}}
+	/>{/if}
 
 {#if dialog?.kind === 'create'}
 	<CreateVolumeDialog
@@ -890,23 +835,6 @@
 	.disk-details dd {
 		margin: 0;
 		overflow-wrap: anywhere;
-	}
-	.disk-sleep {
-		display: grid;
-		gap: 16px;
-	}
-	.sleep-controls {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		flex-wrap: wrap;
-	}
-	.sleep-controls select {
-		width: auto;
-	}
-	.sleep-copy,
-	.sleep-detail {
-		font-size: 0.875rem;
 	}
 	.status {
 		display: flex;

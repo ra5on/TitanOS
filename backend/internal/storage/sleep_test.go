@@ -63,7 +63,7 @@ func sleepManager(t *testing.T) (*Manager, *sleepRunner, time.Time) {
 	m.runner = runner
 	sleepStat(t, m, 1, 1, 0, 0)
 	sleepFile(t, m, "sde/diskseq", "123")
-	if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: 5}); err != nil {
+	if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 5}); err != nil {
 		t.Fatal(err)
 	}
 	return m, runner, time.Unix(1000, 0)
@@ -84,7 +84,7 @@ func TestDiskSleepSettings(t *testing.T) {
 		t.Fatalf("default: %+v", got)
 	}
 	for _, minutes := range []int{5, 10, 15, 30, 60, 120, 180, 0} {
-		if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: minutes}); err != nil {
+		if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: minutes}); err != nil {
 			t.Fatal(err)
 		}
 		loaded := NewManager(store)
@@ -94,11 +94,11 @@ func TestDiskSleepSettings(t *testing.T) {
 	}
 	writes := store.Changes()
 	for _, minutes := range []int{-1, 1, 4, 6, 20, 45, 90, 240, 1000000} {
-		if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: minutes}); !errors.Is(err, ErrInvalidIdleTime) {
+		if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: minutes}); !errors.Is(err, ErrInvalidIdleTime) {
 			t.Errorf("accepted %d: %v", minutes, err)
 		}
 	}
-	if err := m.SetDiskSleep(DiskSleepSettings{}); err != nil || store.Changes() != writes {
+	if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{}); err != nil || store.Changes() != writes {
 		t.Fatal("invalid or unchanged settings wrote to the stick", err)
 	}
 	if len(runner.commands) != 0 {
@@ -115,7 +115,7 @@ func TestDiskSleepSettings(t *testing.T) {
 func TestDiskSleepWriteFailureAndReadOnly(t *testing.T) {
 	m, runner, now := sleepManager(t)
 	m.ReadOnly = true
-	if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: 10}); !errors.Is(err, ErrReadOnly) {
+	if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 10}); !errors.Is(err, ErrReadOnly) {
 		t.Fatal(err)
 	}
 	sleepTicks(t, m, now, 6*time.Minute)
@@ -126,7 +126,7 @@ func TestDiskSleepWriteFailureAndReadOnly(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "not-a-directory")
 	os.WriteFile(bad, []byte("x"), 0o600)
 	m.store = config.Open(bad)
-	if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: 30}); err == nil || m.DiskSleep().IdleMinutes != 5 {
+	if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 30}); err == nil || m.DiskSleep().IdleMinutes != 5 {
 		t.Fatal("write failure must preserve active setting")
 	}
 }
@@ -154,7 +154,7 @@ func TestDiskSleepAllTimeouts(t *testing.T) {
 	for _, minutes := range []int{5, 10, 15, 30, 60, 120, 180} {
 		t.Run(fmt.Sprint(minutes), func(t *testing.T) {
 			m, runner, now := sleepManager(t)
-			m.SetDiskSleep(DiskSleepSettings{IdleMinutes: minutes})
+			m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: minutes})
 			// No periodic reads of /config: the timer still works without it.
 			os.RemoveAll(m.store.Dir())
 			limit := time.Duration(minutes) * time.Minute
@@ -195,7 +195,7 @@ func TestDiskSleepActivityAndOff(t *testing.T) {
 			if len(runner.standbyCalls()) != 0 {
 				t.Fatal("activity did not reset timer", runner.standbyCalls())
 			}
-			if err := m.SetDiskSleep(DiskSleepSettings{}); err != nil {
+			if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{}); err != nil {
 				t.Fatal(err)
 			}
 			sleepTicks(t, m, now.Add(10*time.Minute), 10*time.Minute)
@@ -234,7 +234,7 @@ func TestDiskSleepResetsAfterWakeAndObservationGap(t *testing.T) {
 	if len(runner.standbyCalls()) != 2 {
 		t.Fatal("did not sleep again after a full idle period following I/O")
 	}
-	m.SetDiskSleep(DiskSleepSettings{IdleMinutes: 5})
+	m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 5})
 	sleepTicks(t, m, now.Add(20*time.Minute), 0)
 	sleepTicks(t, m, now.Add(30*time.Minute), 0)
 	if len(runner.standbyCalls()) != 2 {
@@ -281,7 +281,7 @@ func TestDiskSleepFailureAndUnreadableCounters(t *testing.T) {
 		t.Fatalf("failure must be visible without retrying every poll: %v %+v", runner.standbyCalls(), m.DiskSleep())
 	}
 	for _, invalid := range []string{"", "0 0 0", "1 0 8 0 1 0 8 0 x 0 0", "1 0 8 0 1 0 8 0 0 0 0 0"} {
-		m.SetDiskSleep(DiskSleepSettings{IdleMinutes: 5})
+		m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 5})
 		sleepFile(t, m, "sde/stat", invalid)
 		sleepTicks(t, m, now, 10*time.Minute)
 	}
@@ -327,7 +327,7 @@ func TestDiskSleepConcurrentSettingsAndPolling(t *testing.T) {
 			for n := range 50 {
 				switch worker {
 				case 0:
-					if err := m.SetDiskSleep(DiskSleepSettings{IdleMinutes: []int{0, 5, 180}[n%3]}); err != nil {
+					if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: []int{0, 5, 180}[n%3]}); err != nil {
 						t.Error(err)
 					}
 				case 1:
