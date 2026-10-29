@@ -138,24 +138,7 @@ func (r apiRoute) match(method, p string) (map[string]string, bool) {
 	if r.Method != method {
 		return nil, false
 	}
-	want := strings.Split(r.Path, "/")
-	got := strings.Split(p, "/")
-	if len(want) != len(got) {
-		return nil, false
-	}
-	params := map[string]string{}
-	for i := range want {
-		if routeParam.MatchString(want[i]) {
-			v, err := url.PathUnescape(got[i])
-			if err != nil || v == "" || strings.ContainsAny(v, "/\\") || v == ".." {
-				return nil, false
-			}
-			params[strings.Trim(want[i], "{}")] = v
-		} else if want[i] != got[i] {
-			return nil, false
-		}
-	}
-	return params, true
+	return matchPattern(r.Path, p)
 }
 
 // allowedRoutes are the routes the settings let the assistant use.

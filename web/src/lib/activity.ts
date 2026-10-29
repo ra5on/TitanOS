@@ -101,6 +101,8 @@ const named: Record<string, string> = {
 	'POST /api/v1/account/2fa/disable': 'twoFactorOff',
 	'POST /api/v1/account/tokens': 'tokenCreate',
 	'DELETE /api/v1/account/tokens/{id}': 'tokenDelete',
+	'PUT /api/v1/system/mcp': 'mcpSettings',
+	mcp_tool: 'mcpTool',
 	'PUT /api/v1/activity': 'activitySettings',
 	vm_schedule_start: 'vmScheduleStart',
 	vm_schedule_stop: 'vmScheduleStop',

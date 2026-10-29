@@ -142,6 +142,26 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 			schema(map[string]any{"query": str("Words to look for, in English or German.")}, "query"), false, s.toolDocsSearch),
 		reading("docs_read", "Read one document of the TitanOS manual, or only its sections whose heading contains the given text.",
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
+	}
+	tools = append(tools, s.statusTools(user)...)
+	if s.assistantWeb(user) {
+		tools = append(tools, s.webTools()...)
+	}
+	tools = append(tools, s.fileTools(user)...)
+	if user.Role.CanAdminister() {
+		tools = append(tools, s.apiTools(user, r)...)
+	}
+	tools = append(tools, s.haTools(user)...)
+	tools = append(tools, s.knowledgeTools(user)...)
+	tools = append(tools, s.documentEditTool(user))
+	return append(tools, s.assistantActions(user)...)
+}
+
+// statusTools are the reading tools of the fixed catalog about the state of
+// the NAS and the files of the account. The assistant and the MCP server
+// (mcp_tools.go) offer them both.
+func (s *Server) statusTools(user auth.User) []assistant.Tool {
+	tools := []assistant.Tool{
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
 			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.assistantFilesList(user)),
 		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) Excel (.xlsx) or PDF document (first 20 pages; document_read for further pages) from the file manager, with the rights of this account.",
@@ -213,17 +233,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 			})),
 		)
 	}
-	if s.assistantWeb(user) {
-		tools = append(tools, s.webTools()...)
-	}
-	tools = append(tools, s.fileTools(user)...)
-	if user.Role.CanAdminister() {
-		tools = append(tools, s.apiTools(user, r)...)
-	}
-	tools = append(tools, s.haTools(user)...)
-	tools = append(tools, s.knowledgeTools(user)...)
-	tools = append(tools, s.documentEditTool(user))
-	return append(tools, s.assistantActions(user)...)
+	return tools
 }
 
 func (s *Server) assistantMyShares(user auth.User) map[string]any {

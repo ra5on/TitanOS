@@ -6,6 +6,14 @@
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import {
+		claudeCodeCommand,
+		desktopBridgeConfig,
+		desktopRemoteConfig,
+		mcpEndpoint,
+		mcpTokenScopes,
+		type MCPStatus,
+	} from '#lib/mcp.ts';
 	type Token = { id: string; name: string; scopes: string[]; created: string; lastUsed?: string };
 	const labels: Record<string, MessageKey> = {
 		'system:read': 'api.scope.systemRead',
@@ -15,6 +23,7 @@
 		'docker:write': 'api.scope.dockerWrite',
 		'vms:read': 'api.scope.vmsRead',
 		'vms:write': 'api.scope.vmsWrite',
+		mcp: 'api.scope.mcp',
 	};
 	let tokens = $state<Token[]>([]),
 		scopes = $state<string[]>([]),
@@ -28,8 +37,58 @@
 		selected = $state<string[]>(['system:read']),
 		secret = $state(''),
 		copied = $state(false),
-		revoking = $state<Token | null>(null);
+		revoking = $state<Token | null>(null),
+		// Scopes of the token just created, for the snippet with its secret.
+		createdScopes = $state<string[]>([]);
+	let mcp = $state<MCPStatus | null>(null),
+		mcpBusy = $state(false),
+		mcpError = $state(''),
+		copiedSnippet = $state('');
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
+	const origin = typeof location === 'undefined' ? '' : location.origin;
+	const endpoint = $derived(mcpEndpoint(origin, mcp?.path));
+	const snippets = $derived([
+		{ id: 'code', label: t('mcp.claudeCode'), text: claudeCodeCommand(endpoint) },
+		{ id: 'remote', label: t('mcp.desktopRemote'), text: desktopRemoteConfig(endpoint) },
+		{
+			id: 'bridge',
+			label: t('mcp.desktopBridge'),
+			text: desktopBridgeConfig(origin, '/home/me/.config/titanos-token'),
+		},
+	]);
+	async function loadMCP() {
+		try {
+			mcp = await api.get<MCPStatus>('/system/mcp');
+		} catch (e) {
+			mcpError = errorText(e instanceof ApiError ? e.code : 'internal');
+		}
+	}
+	async function setMCP(enabled: boolean) {
+		mcpBusy = true;
+		mcpError = '';
+		try {
+			await api.put('/system/mcp', { enabled });
+			await loadMCP();
+		} catch (e) {
+			mcpError = errorText(e instanceof ApiError ? e.code : 'internal');
+		} finally {
+			mcpBusy = false;
+		}
+	}
+	async function copySnippet(id: string, text: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			copiedSnippet = id;
+		} catch {
+			copiedSnippet = '';
+		}
+	}
+	function startCreate(scopes: string[], label = '') {
+		name = label;
+		selected = scopes;
+		creating = true;
+		dialogError = '';
+	}
 	async function load() {
 		try {
 			const res = await api.get<{ tokens: Token[]; scopes: string[] }>('/account/tokens');
@@ -43,6 +102,7 @@
 	}
 	$effect(() => {
 		void load();
+		void loadMCP();
 	});
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
@@ -51,6 +111,7 @@
 		try {
 			const res = await api.post<{ secret: string }>('/account/tokens', { name, scopes: selected });
 			secret = res.secret;
+			createdScopes = [...selected];
 			copied = false;
 			creating = false;
 			await load();
@@ -86,20 +147,17 @@
 
 <PageHead title={t('api.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
 	<p class="muted">{t('api.intro')}</p>
-	{#snippet actions()}<button
-			class="btn btn-primary"
-			onclick={() => {
-				name = '';
-				selected = ['system:read'];
-				creating = true;
-				dialogError = '';
-			}}>{t('api.create')}</button
+	{#snippet actions()}<button class="btn btn-primary" onclick={() => startCreate(['system:read'])}
+			>{t('api.create')}</button
 		>{/snippet}
 </PageHead>
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
-{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !tokens.length}<EmptyState
-		title={t('api.empty')}
-	/>{:else}<section class="tile panel tokens" aria-labelledby="api-mine">
+{#if loading}<p class="loading" role="status">
+		{t('common.loading')}
+	</p>{:else if !tokens.length}<EmptyState title={t('api.empty')} />{:else}<section
+		class="tile panel tokens"
+		aria-labelledby="api-mine"
+	>
 		<h2 class="tile-title" id="api-mine">{t('api.mine')}</h2>
 		{#each tokens as token (token.id)}<div class="token">
 				<div>
@@ -111,15 +169,60 @@
 							· {t('api.lastUsed')} {formatDateTime(new Date(token.lastUsed))}{/if}</small
 					>
 				</div>
-				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}>{t('api.revoke')}</button>
+				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}
+					>{t('api.revoke')}</button
+				>
 			</div>{/each}
 	</section>{/if}
 <section class="tile panel" aria-labelledby="api-docs">
 	<h2 class="tile-title" id="api-docs">{t('api.documentation')}</h2>
 	<div class="row-actions">
-		<a class="btn" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">{t('api.openapi')}</a>
+		<a class="btn" href="/api/v1/openapi.json" target="_blank" rel="noreferrer"
+			>{t('api.openapi')}</a
+		>
 	</div>
 	<p class="muted">{t('api.cliHint')}</p>
+</section>
+<section class="tile panel" id="api-mcp" aria-labelledby="api-mcp-title">
+	<h2 class="tile-title" id="api-mcp-title">{t('mcp.title')}</h2>
+	<p class="muted">{t('mcp.intro')}</p>
+	{#if mcp}
+		{#if admin}<label class="check"
+				><input
+					type="checkbox"
+					checked={mcp.enabled}
+					disabled={mcpBusy}
+					onchange={(e) => setMCP(e.currentTarget.checked)}
+				/><span>{t('mcp.enabled')}</span></label
+			>{:else}<p>{t(mcp.enabled ? 'mcp.stateOn' : 'mcp.stateOff')}</p>
+			<p class="muted">{t('mcp.adminOnly')}</p>{/if}
+	{/if}
+	{#if mcpError}<div class="notice-error" role="alert">{mcpError}</div>{/if}
+	<div class="snippet">
+		<span>{t('mcp.endpoint')}</span>
+		<code class="mono">{endpoint}</code>
+		<button class="btn" onclick={() => copySnippet('endpoint', endpoint)}
+			>{t(copiedSnippet === 'endpoint' ? 'mcp.copied' : 'mcp.copy')}</button
+		>
+	</div>
+	<div class="row-actions">
+		<button class="btn" onclick={() => startCreate(mcpTokenScopes(admin), 'Claude')}
+			>{t('mcp.createToken')}</button
+		>
+	</div>
+	<p class="muted">{t('mcp.tokenHint')}</p>
+	{#each snippets as snippet (snippet.id)}
+		<div class="snippet block">
+			<span>{snippet.label}</span>
+			<pre class="mono">{snippet.text}</pre>
+			<button class="btn" onclick={() => copySnippet(snippet.id, snippet.text)}
+				>{t(copiedSnippet === snippet.id ? 'mcp.copied' : 'mcp.copy')}</button
+			>
+		</div>
+	{/each}
+	<p class="muted">{t('mcp.placeholder')}</p>
+	<p class="muted">{t('mcp.bridgeHint')}</p>
+	<p class="muted">{t('mcp.safety')}</p>
 </section>
 <p class="muted">{t('api.security')}</p>
 
@@ -135,7 +238,7 @@
 			>
 			<fieldset>
 				<legend>{t('api.scopes')}</legend
-				>{#each scopes.filter((s) => admin || s.startsWith('files:') || s === 'system:read') as scope}<label
+				>{#each scopes.filter((s) => admin || s.startsWith('files:') || s === 'system:read' || s === 'mcp') as scope}<label
 						class="check"
 						><input type="checkbox" bind:group={selected} value={scope} /><span
 							>{t(labels[scope])}</span
@@ -163,6 +266,15 @@
 				rows="3"
 				spellcheck="false"></textarea></label
 		><button class="btn" onclick={copy}>{t(copied ? 'api.copied' : 'api.copy')}</button>
+		{#if createdScopes.includes('mcp')}<div class="snippet block">
+				<span>{t('mcp.withToken')}</span>
+				<pre class="mono">{claudeCodeCommand(endpoint, secret)}</pre>
+				<button
+					class="btn"
+					onclick={() => copySnippet('created', claudeCodeCommand(endpoint, secret))}
+					>{t(copiedSnippet === 'created' ? 'mcp.copied' : 'mcp.copy')}</button
+				>
+			</div>{/if}
 		<div class="dialog-actions">
 			<button class="btn btn-primary" onclick={() => (secret = '')}>{t('common.close')}</button>
 		</div></Dialog
@@ -230,6 +342,32 @@
 		gap: 8px;
 		justify-content: flex-end;
 		margin-top: var(--gap);
+	}
+	.snippet {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px var(--gap);
+	}
+	.snippet > span {
+		font-weight: 600;
+	}
+	.snippet code {
+		overflow-wrap: anywhere;
+	}
+	.snippet.block {
+		display: grid;
+		grid-template-columns: 1fr auto;
+	}
+	.snippet.block pre {
+		grid-column: 1 / -1;
+		margin: 0;
+		padding: var(--tile-pad);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--track);
+		overflow-x: auto;
+		white-space: pre;
 	}
 	@media (max-width: 500px) {
 		.token {

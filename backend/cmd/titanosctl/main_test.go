@@ -31,10 +31,10 @@ func TestCLIAuthenticatesAndNeverFollowsRedirects(t *testing.T) {
 	}))
 	defer server.Close()
 	var out bytes.Buffer
-	if err := run([]string{"--url", server.URL, "status"}, &out); err != nil || !strings.Contains(out.String(), "nas") {
+	if err := run([]string{"--url", server.URL, "status"}, strings.NewReader(""), &out); err != nil || !strings.Contains(out.String(), "nas") {
 		t.Fatal(err, out.String())
 	}
-	if err := run([]string{"--url", server.URL, "request", "GET", "/redirect"}, &out); err == nil || called {
+	if err := run([]string{"--url", server.URL, "request", "GET", "/redirect"}, strings.NewReader(""), &out); err == nil || called {
 		t.Fatal("redirect followed or accepted", err, called)
 	}
 }
@@ -47,13 +47,13 @@ func TestCLITrustsExplicitNASCertificateAndStreamsBinary(t *testing.T) {
 	}))
 	defer server.Close()
 	var out bytes.Buffer
-	if err := run([]string{"--url", server.URL, "request", "GET", "/files/download"}, &out); err == nil {
+	if err := run([]string{"--url", server.URL, "request", "GET", "/files/download"}, strings.NewReader(""), &out); err == nil {
 		t.Fatal("untrusted TLS accepted")
 	}
 	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	path := filepath.Join(t.TempDir(), "nas.crt")
 	os.WriteFile(path, cert, 0600)
-	if err := run([]string{"--url", server.URL, "--ca-file", path, "request", "GET", "/files/download"}, &out); err != nil {
+	if err := run([]string{"--url", server.URL, "--ca-file", path, "request", "GET", "/files/download"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(out.Bytes(), content) {

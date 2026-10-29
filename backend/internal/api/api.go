@@ -165,6 +165,7 @@ type Server struct {
 	loginLook   loginLook
 	appIcon     appIcons
 	dav         davState
+	mcp         mcpState
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -275,6 +276,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)
 	mux.HandleFunc("/dav/", s.handleWebDAV)
 	mux.HandleFunc("/dav", s.handleWebDAV)
+	// The MCP server checks its own token (mcp.go).
+	mux.HandleFunc(mcpPath, s.handleMCP)
+	mux.HandleFunc("GET /api/v1/system/mcp", s.requireUser(s.handleMCPSettings))
+	mux.HandleFunc("PUT /api/v1/system/mcp", s.requireAdmin(s.handleMCPSettingsSet))
 	mux.HandleFunc("GET /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettings))
 	mux.HandleFunc("PUT /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettingsSet))
 	mux.HandleFunc("GET /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAV))

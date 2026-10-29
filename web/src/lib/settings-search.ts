@@ -49,6 +49,8 @@ const keywords: Record<string, string> = {
 	ddns:
 		'dyndns ddns dynamisches dynamic dns ip adresse address ipv4 ipv6 cloudflare desec dedyn hetzner ionos netcup inwx duckdns ipv64 strato no-ip dyndns2',
 	wireguard: 'wireguard vpn tunnel fernzugriff remote access qr handy phone smartphone laptop server',
+	api: 'api token tokens cli titanosctl openapi rest automatisierung automation',
+	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -72,6 +74,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],
+	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	letsencrypt: [

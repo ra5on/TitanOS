@@ -11,69 +11,44 @@ import (
 
 type apiTokenIdentity struct{}
 
-// Public routes are an explicit contract. A token never opens account, shell,
-// credential, update, network/firewall confirmation or assistant endpoints.
-func publicScope(method, path string) string {
-	if method == "GET" {
-		switch path {
-		case "/api/v1/system", "/api/v1/storage", "/api/v1/network", "/api/v1/firewall", "/api/v1/plugins", "/api/v1/openapi.json":
-			return "system:read"
-		case "/api/v1/shares", "/api/v1/files/roots", "/api/v1/files/list", "/api/v1/files/download", "/api/v1/files/properties", "/api/v1/files/text", "/api/v1/files/jobs":
-			return "files:read"
-		case "/api/v1/docker":
-			return "docker:read"
-		case "/api/v1/vms":
-			return "vms:read"
-		}
-		if strings.HasPrefix(path, "/api/v1/docker/containers/") && strings.HasSuffix(path, "/logs") {
-			return "docker:read"
-		}
+// tokenError is why a Bearer header is not accepted.
+type tokenError struct {
+	status        int
+	code, message string
+}
+
+// tokenAccount checks a Bearer header: a token that exists, of an account
+// that still exists unchanged and is not locked.
+func (s *Server) tokenAccount(header string) (auth.APIToken, auth.User, *tokenError) {
+	if !strings.HasPrefix(header, "Bearer ") {
+		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "expected a Bearer token"}
 	}
-	if method == "POST" {
-		parts := strings.Split(strings.Trim(path, "/"), "/")
-		if len(parts) == 6 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "docker" && parts[3] == "containers" && slices.Contains([]string{"start", "stop", "restart"}, parts[5]) {
-			return "docker:write"
-		}
-		if len(parts) == 5 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "vms" && slices.Contains([]string{"start", "shutdown", "reboot"}, parts[4]) {
-			return "vms:write"
-		}
-		if len(parts) == 6 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "docker" && parts[3] == "apps" && parts[5] == "network" {
-			return "docker:write"
-		}
-		if slices.Contains([]string{"mkdir", "copy", "rename", "create", "delete"}, strings.TrimPrefix(path, "/api/v1/files/")) {
-			return "files:write"
-		}
+	token, ok := s.tokens.Lookup(strings.TrimPrefix(header, "Bearer "))
+	if !ok {
+		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "invalid or revoked API token"}
 	}
-	if method == "PUT" && path == "/api/v1/files/text" {
-		return "files:write"
+	user, ok := s.opts.Users.Get(token.User)
+	if !ok || !user.Created.Equal(token.AccountCreated) || token.AccountKey != auth.TokenAccountKey(user) {
+		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "token account no longer exists"}
 	}
-	return ""
+	if user.Disabled {
+		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "the account of this token is locked"}
+	}
+	return token, user, nil
 }
 
 func (s *Server) bearerAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
-		// WebDAV checks its own Basic sign-in (webdav.go).
-		if header == "" || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") {
+		// WebDAV checks its own Basic sign-in (webdav.go), the MCP server
+		// its token (mcp.go).
+		if header == "" || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == mcpPath {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !strings.HasPrefix(header, "Bearer ") {
-			writeError(w, 401, "unauthorized", "expected a Bearer token")
-			return
-		}
-		token, ok := s.tokens.Lookup(strings.TrimPrefix(header, "Bearer "))
-		if !ok {
-			writeError(w, 401, "unauthorized", "invalid or revoked API token")
-			return
-		}
-		user, ok := s.opts.Users.Get(token.User)
-		if !ok || !user.Created.Equal(token.AccountCreated) || token.AccountKey != auth.TokenAccountKey(user) {
-			writeError(w, 401, "unauthorized", "token account no longer exists")
-			return
-		}
-		if user.Disabled {
-			writeError(w, 401, "unauthorized", "the account of this token is locked")
+		token, user, failed := s.tokenAccount(header)
+		if failed != nil {
+			writeError(w, failed.status, failed.code, failed.message)
 			return
 		}
 		scope := publicScope(r.Method, r.URL.Path)

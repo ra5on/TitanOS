@@ -7,7 +7,7 @@ für externe Anwendungen freigegeben.
 
 ## Persönlichen Zugang anlegen
 
-Unter **Einstellungen › API-Zugänge** erstellt jedes Konto eigene benannte
+Unter **Einstellungen › API und CLI** erstellt jedes Konto eigene benannte
 Tokens. Standard ist ausschließlich `system:read`; Schreibrechte müssen
 bewusst gewählt werden. Das vollständige Geheimnis erscheint einmal. Ein
 verlorenes Token wird widerrufen und ersetzt. Höchstens 32 Tokens je Konto.
@@ -29,11 +29,16 @@ neu; API-Aufrufe schreiben nicht regelmäßig auf den USB-Stick.
 | `docker:write` | Start/Stop/Neustart; LAN-Zuweisung eines verwalteten App-Dienstes |
 | `vms:read` | VM-Status |
 | `vms:write` | Start, sauberes Herunterfahren, Neustart |
+| `mcp` | MCP-Server unter `/mcp` (siehe unten); öffnet allein keine `/api/v1`-Route |
 
 Docker und VM benötigen weiterhin Besitzer-/Administratorrechte. Netzwerk-,
 Firewall- und Pluginstatus ebenfalls. Dateioperationen beachten aktuelle Share-Rechte;
 Administratoren sehen zusätzlich ihre erlaubten erweiterten Dateiwurzeln.
 Ein `*:write`-Bereich schließt `*:read` nicht automatisch ein.
+
+Die freigegebenen Routen stehen als eine Liste in
+`backend/internal/api/public_routes.go` (`publicRoutes`); Tokenprüfung,
+OpenAPI-Datei und die ändernden MCP-Werkzeuge entstehen daraus.
 
 Tokens öffnen weder Konten/Geheimnisse, Sitzungen oder Shells noch Updates,
 Netzwerk- und Firewall-Bestätigung, Firewall-Änderungen, Assistent oder beliebige neue API-Routen. Verwaltung der
@@ -85,3 +90,16 @@ Wurzeln zunächst mit `request GET /files/roots` entdecken. Pfade sind relativ
 zur jeweiligen Wurzel, keine Hostpfade. `202 Accepted` bestätigt den Start eines
 Auftrags; dessen Endzustand muss anschließend abgefragt werden. Versionierte
 Textänderungen brauchen die durch `GET /files/text` gelieferte `version`.
+
+## MCP-Server
+
+Für KI-Clients (Claude Desktop, Claude Code und andere MCP-Clients) gibt es
+seit 29.10.2026 einen MCP-Server unter `POST /mcp` auf demselben Port. Ab Werk
+aus; Besitzer/Administratoren schalten ihn unter Einstellungen › API und CLI
+ein. Er nimmt dieselben persönlichen Tokens mit dem zusätzlichen Bereich `mcp`;
+die übrigen Bereiche des Tokens und die aktuelle Rolle bestimmen die
+Werkzeuge, die genau die Routen dieser Seite (und Lesewerkzeuge aus dem festen
+Katalog des Assistenten) mit denselben Rechteprüfungen aufrufen. Zerstörende
+Werkzeuge verlangen `confirm: true`; jeder Aufruf steht im Aktivitätsprotokoll
+als „per MCP“. `titanosctl mcp` ist eine stdio-Brücke für Clients ohne
+HTTP-Transport. Einzelheiten: `docs/MCP.md`.
