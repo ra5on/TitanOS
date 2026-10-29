@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -204,50 +203,16 @@ var errResubscribe = errors.New("what is watched changed")
 // session is one connection: authenticate, subscribe, read until something
 // changes or the connection breaks.
 func (m *Manager) session(ctx context.Context, entities, events []string, wake, settingsChanged <-chan struct{}) error {
-	m.mu.Lock()
-	s, client := m.settings, m.client
-	m.mu.Unlock()
-	address := "ws" + strings.TrimPrefix(s.URL, "http") + "/api/websocket"
-	// The WebSocket library wants no client timeout; the context bounds the dial.
-	wsClient := *client
-	wsClient.Timeout = 0
-	dialCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	conn, _, err := websocket.Dial(dialCtx, address, &websocket.DialOptions{HTTPClient: &wsClient})
-	cancel()
+	conn, err := m.wsOpen(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return err
 	}
 	defer conn.CloseNow()
-	conn.SetReadLimit(4 << 20)
-
-	read := func(v any) error {
-		readCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		_, data, err := conn.Read(readCtx)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(data, v)
-	}
 	write := func(v any) error {
 		data, _ := json.Marshal(v)
 		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		return conn.Write(writeCtx, websocket.MessageText, data)
-	}
-	var hello struct{ Type string }
-	if err := read(&hello); err != nil || hello.Type != "auth_required" {
-		return fmt.Errorf("%w: no greeting: %v", ErrUnreachable, err)
-	}
-	if err := write(map[string]string{"type": "auth", "access_token": s.Token}); err != nil {
-		return err
-	}
-	var auth struct{ Type, Message string }
-	if err := read(&auth); err != nil {
-		return err
-	}
-	if auth.Type != "auth_ok" {
-		return fmt.Errorf("%w: the token was refused: %s", ErrUnreachable, auth.Message)
 	}
 	id := 0
 	triggerID := -1

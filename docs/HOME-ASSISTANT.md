@@ -141,6 +141,48 @@ zweite Ausführung aus.
 Die Integration ist mit der aktuellen Conversation-Entity-Schnittstelle
 implementiert, aber noch nicht in einer echten HA-Installation abgenommen.
 
+## Speicher für Home Assistant
+
+Seit dem Wunsch des Projektinhabers vom 29. Oktober 2026 richtet TitanOS
+unter Einstellungen › Home Assistant › „Speicher für Home Assistant“ eine
+Freigabe ein, die Home Assistant OS (oder Supervised) als Netzwerkspeicher
+einbindet: für seine **Backups**, für **Medien** oder als **Freigabe** für
+Add-ons.
+
+- **Einrichten:** Volume, Name der Freigabe, Name des Kontos (beide ab Werk
+  `homeassistant`), Zweck und optional eine Obergrenze in GiB. TitanOS legt ein
+  Konto der Rolle Benutzer mit zufälligem Passwort an und eine SMB-Freigabe, auf
+  die nur dieses Konto lesen und schreiben darf. Scheitert die Freigabe, wird
+  das Konto wieder entfernt. Ein vorhandenes Konto gleichen Namens wird nie
+  übernommen.
+- **Passwort:** wird genau einmal angezeigt (mit Kopieren) und nirgends
+  gespeichert, auch nicht in `/config`. „Erneut in Home Assistant eintragen“
+  vergibt ein neues.
+- **Direkt eintragen:** Über die bestehende Verbindung schickt TitanOS
+  `supervisor/api` `POST /mounts` (wie die Oberfläche von Home Assistant
+  selbst; braucht einen Token eines Administrators). Name des Speichers
+  `titanos_<freigabe>`, Typ CIFS, Server ist die Adresse, mit der das NAS Home
+  Assistant erreicht. Lehnt der Supervisor ab, steht sein Grund im Dialog; ohne
+  Supervisor (Container/Core) heißt es, dass Netzwerkspeicher dort fehlt. Die
+  Werte zum Eintragen von Hand stehen immer im Dialog.
+- **Backups überwachen** (nur Zweck Backups, ab Werk 3 Tage): einmal täglich
+  und zehn Minuten nach dem Start fragt TitanOS Home Assistant per
+  `backup/info` (ab 2025.1) nach dem neuesten Backup am Speicherort
+  `hassio.titanos_<freigabe>`. Liegt es länger zurück als eingestellt (oder gab
+  es seit der Einrichtung keines), kommt einmal die Meldung `backup_ha_overdue`,
+  erneut erst nach einem neuen Backup. Die Platten des NAS werden dafür nicht
+  geweckt. Ohne Antwort von Home Assistant gibt es keine Meldung.
+- **Nicht mehr verwalten** vergisst die Einrichtung (`/config/homeassistant/storage.json`);
+  Freigabe, Konto und Daten bleiben.
+- API (nur Besitzer/Administratoren): `GET`/`POST`/`PUT`/`DELETE
+  /api/v1/homeassistant/storage`, `POST …/storage/register`, `POST
+  …/storage/check`. Einrichten und erneutes Eintragen nur aus einer
+  Websitzung, weil die Antwort das Passwort enthält; nicht im Assistenten- oder
+  API-Token-Katalog.
+- Geprüft mit nachgebautem Home Assistant (`supervisor/api`, `backup/info`) und
+  `scripts/test-ui-ha-storage.mjs`; ein echtes Home Assistant OS ist nicht
+  abgenommen.
+
 ## Prüfstand
 
 Geprüft mit nachgebauten Servern für REST, WebSocket und MQTT:

@@ -119,6 +119,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
 		{ id: 'mqtt', label: 'ha.mqtt', href: '/settings/homeassistant#mqtt' },
+		{ id: 'storage', label: 'hastore.title', href: '/settings/homeassistant#storage' },
 	],
 	backups: [
 		{ id: 'coverage', label: 'coverage.title', href: '/settings/backups/coverage' },
