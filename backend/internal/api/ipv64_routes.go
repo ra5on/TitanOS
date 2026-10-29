@@ -5,7 +5,7 @@ import "net/http"
 // ipv64Routes registers the tab IPv64 of Settings › Dynamic DNS. Reads are GET (nothing in them is
 // secret: the key never comes with a request); every change is owner or
 // administrator and from a web session only.
-func (s *Server) ipv64Routes(mux *http.ServeMux) {
+func (s *Server) ipv64Routes(mux *routeMux) {
 	read := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.requireAdmin(h)) }
 	change := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.requireAdmin(s.browserOnly(h))) }
 

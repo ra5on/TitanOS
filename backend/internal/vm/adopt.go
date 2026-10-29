@@ -398,7 +398,9 @@ func (m *Manager) Adopt(ctx context.Context, req AdoptRequest, mounted []string)
 		return AdoptResult{}, fmt.Errorf("%w: choose another name", ErrExists)
 	}
 	changes := m.dropForAdoption(&v, mounted)
-	if v.UUID == "" {
+	// The UUID names the folder of the snapshots; one that is not a plain
+	// UUID (as a vm.json from elsewhere might carry) gets a new one.
+	if v.UUID = strings.ToLower(v.UUID); !snapshotID.MatchString(v.UUID) {
 		v.UUID = newUUID()
 	}
 	if v.Created.IsZero() {

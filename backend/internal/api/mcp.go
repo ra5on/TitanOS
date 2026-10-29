@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -36,6 +37,9 @@ const (
 	// Per token: a burst of mcpBurst requests, then mcpRate per second.
 	mcpBurst = 60
 	mcpRate  = 1.0
+	// A batch is no way around the limit: each further message of it costs
+	// one more request, and a batch holds at most this many.
+	mcpMaxBatch = 32
 )
 
 // mcpVersions are the protocol versions the server speaks, newest first.
@@ -240,7 +244,20 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			writeRPCError(w, http.StatusBadRequest, rpcParseError, "invalid JSON-RPC batch")
 			return
 		}
-		for _, raw := range messages {
+		if len(messages) > mcpMaxBatch {
+			writeRPCError(w, http.StatusBadRequest, rpcInvalidRequest, "a batch holds at most "+strconv.Itoa(mcpMaxBatch)+" messages")
+			return
+		}
+		for i, raw := range messages {
+			if i > 0 {
+				// The request itself paid for the first message.
+				if ok, _ := s.mcpAllow(token.ID); !ok {
+					if answer := mcpRateLimited(raw); answer != nil {
+						answers = append(answers, *answer)
+					}
+					continue
+				}
+			}
 			if answer := s.mcpMessage(session, raw); answer != nil {
 				answers = append(answers, *answer)
 			}
@@ -286,6 +303,16 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 // mcpMessage answers one JSON-RPC message; nil for notifications and for
 // responses of the client.
+// mcpRateLimited answers a message of a batch that is over the limit of its
+// token; notifications and responses get no answer, as always.
+func mcpRateLimited(raw json.RawMessage) *rpcResponse {
+	var msg rpcMessage
+	if json.Unmarshal(raw, &msg) != nil || msg.Method == "" || len(bytes.TrimSpace(msg.ID)) == 0 {
+		return nil
+	}
+	return &rpcResponse{JSONRPC: "2.0", ID: msg.ID, Error: &rpcError{rpcServerError, "too many requests for this token; try again later"}}
+}
+
 func (s *Server) mcpMessage(session *mcpSession, raw json.RawMessage) *rpcResponse {
 	var msg rpcMessage
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -349,6 +376,7 @@ func (s *Server) mcpMethod(session *mcpSession, method string, params json.RawMe
 			Arguments json.RawMessage `json:"arguments"`
 		}
 		if json.Unmarshal(params, &req) != nil || req.Name == "" {
+			s.mcpRefused(session, "", http.StatusBadRequest)
 			return nil, &rpcError{rpcInvalidParams, "tools/call needs a name"}
 		}
 		for _, tool := range s.mcpTools(session) {
@@ -356,12 +384,30 @@ func (s *Server) mcpMethod(session *mcpSession, method string, params json.RawMe
 				return s.mcpRun(session, tool, req.Arguments), nil
 			}
 		}
+		// Unknown, or not for the scopes and role of this token: a try that
+		// belongs in the log like any other call.
+		s.mcpRefused(session, req.Name, http.StatusForbidden)
 		return nil, &rpcError{rpcInvalidParams, "unknown tool " + strconv.Quote(req.Name) + "; tools/list shows the tools of this token"}
 	}
 	return nil, &rpcError{rpcMethodNotFound, "method not found: " + method}
 }
 
 // mcpRun runs one tool call and records it in the activity log.
+// mcpRefused logs a tools/call that never ran, once, like mcpRun does.
+func (s *Server) mcpRefused(session *mcpSession, name string, status int) {
+	if s.opts.Activity == nil {
+		return
+	}
+	if len(name) > 64 || !utf8.ValidString(name) {
+		name = strconv.QuoteToASCII(name[:min(len(name), 64)])
+	}
+	targets := []string{"token " + session.token.Name}
+	if name != "" {
+		targets = append(targets, name)
+	}
+	s.opts.Activity.Record(activity.Entry{User: session.user.Name, Via: activity.ViaMCP, IP: remoteIP(session.r), Action: "mcp_tool", Target: strings.Join(targets, ", "), Status: status, OK: false})
+}
+
 func (s *Server) mcpRun(session *mcpSession, tool mcpTool, args json.RawMessage) map[string]any {
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")

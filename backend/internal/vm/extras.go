@@ -135,6 +135,52 @@ func (m *Manager) usedBy(path, except string) string {
 	return ""
 }
 
+// ownerOf returns another VM that uses the same disk or image as disk, by
+// what the paths lead to: one whole disk has several stable names, and an
+// image can be reached over a link. Unlike usedBy it is not fooled by a
+// second name for the same thing.
+func (m *Manager) ownerOf(disk Disk, except string) string {
+	target := m.diskTarget(disk, disk.Path)
+	if target == "" {
+		return ""
+	}
+	type use struct {
+		vm   string
+		disk Disk
+		path string
+	}
+	var uses []use
+	m.mu.Lock()
+	for name, vm := range m.vms {
+		if name == except {
+			continue
+		}
+		for _, d := range vm.Disks {
+			uses = append(uses, use{name, d, m.diskPath(vm, d)})
+		}
+	}
+	m.mu.Unlock()
+	for _, u := range uses {
+		if m.diskTarget(u.disk, u.path) == target {
+			return u.vm
+		}
+	}
+	return ""
+}
+
+// diskTarget is what a disk path leads to: the kernel's name of a whole
+// disk, the real path of an image; empty when it leads nowhere.
+func (m *Manager) diskTarget(disk Disk, path string) string {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	if m.isBlock(disk) {
+		return "block:" + filepath.Base(real)
+	}
+	return "file:" + real
+}
+
 // checkSource looks at the image a new disk is to be a copy of.
 func (m *Manager) checkSource(ctx context.Context, disk *Disk) error {
 	real, info, err := m.onVolume(disk.Source)

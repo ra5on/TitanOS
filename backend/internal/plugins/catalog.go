@@ -40,6 +40,9 @@ type catalogEntry struct {
 	// (external.go) come through the guarded client.
 	base     string
 	external bool
+	// public: a source list named this entry on another host than its
+	// own; it is fetched from public addresses only (see guarded).
+	public bool
 }
 
 func catalogClient() *http.Client {
@@ -87,11 +90,20 @@ func (m *Manager) RefreshCatalog(ctx context.Context, force bool) error {
 	m.mu.Unlock()
 
 	entries, err := m.fetchCatalog(ctx)
-	// Community sources have their own state; their errors do not hide the catalog.
+	err = m.publishCatalog(entries, err)
+	// Community sources have their own state; their errors do not hide the
+	// catalog, and a slow one does not hold it back: it is shown already.
 	m.refreshSources(ctx)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.catalogLoading = false
+	m.mu.Unlock()
+	return err
+}
+
+// publishCatalog makes the result of a refresh the catalog the page shows.
+func (m *Manager) publishCatalog(entries []catalogEntry, err error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if err != nil {
 		m.catalog.State, m.catalog.Error = "error", err.Error()
 		if errors.Is(err, ErrRelease) {

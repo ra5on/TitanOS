@@ -99,6 +99,11 @@ func (m *Manager) fetchRepoSets(ctx context.Context, target repoTarget, fetch fu
 			return nil, err
 		}
 		sig, err := fetch(ctx, url+".minisig", 4096)
+		if errors.Is(err, ErrRelease) {
+			// The file is there, its signature is not: a signature error,
+			// not a repository without a set for this system.
+			return nil, fmt.Errorf("%w: no signature for %s", ErrInvalid, url[strings.LastIndex(url, "/")+1:])
+		}
 		if err != nil {
 			return nil, err
 		}

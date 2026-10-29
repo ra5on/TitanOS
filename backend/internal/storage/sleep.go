@@ -322,6 +322,28 @@ func sleepableDiskIDs(devices []blockDevice) map[string]bool {
 func (m *Manager) SetDiskSleep(ctx context.Context, settings DiskSleepSettings) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	return m.setDiskSleepLocked(ctx, settings)
+}
+
+// UpdateDiskSleep sets the default and the overrides that are given (nil
+// keeps the stored ones). The stored ones are read under the same lock as
+// the change is made: two changes at once, one of the volumes and one of
+// the disks, both stay.
+func (m *Manager) UpdateDiskSleep(ctx context.Context, idleMinutes int, volumes, disks *map[string]int) (DiskSleepSettings, error) {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	settings := m.DiskSleep().DiskSleepSettings
+	settings.IdleMinutes = idleMinutes
+	if volumes != nil {
+		settings.Volumes = *volumes
+	}
+	if disks != nil {
+		settings.Disks = *disks
+	}
+	return settings, m.setDiskSleepLocked(ctx, settings)
+}
+
+func (m *Manager) setDiskSleepLocked(ctx context.Context, settings DiskSleepSettings) error {
 	if m.ReadOnly {
 		return ErrReadOnly
 	}

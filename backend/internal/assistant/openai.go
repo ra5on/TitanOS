@@ -83,7 +83,7 @@ func (b openaiBackend) chat(ctx context.Context, req chatRequest, each func(olla
 	}
 	var calls []*pending
 	var final ollamaChunk
-	finished, done := false, false
+	finished, done, truncated := false, false, false
 	err = b.sse(res, func(data []byte) error {
 		if string(data) == "[DONE]" {
 			done = true
@@ -143,9 +143,15 @@ func (b openaiBackend) chat(ctx context.Context, req chatRequest, each func(olla
 				}
 				p.name += tc.Function.Name
 				p.args.WriteString(tc.Function.Arguments)
+				if n := len(tc.Function.Name) + len(tc.Function.Arguments); n > 0 {
+					if err := each(ollamaChunk{pending: n}); err != nil {
+						return err
+					}
+				}
 			}
 			if choice.FinishReason != "" {
 				finished = true
+				truncated = choice.FinishReason == "length"
 			}
 			if out.Message.Content != "" || out.Message.Thinking != "" {
 				if err := each(out); err != nil {
@@ -161,6 +167,10 @@ func (b openaiBackend) chat(ctx context.Context, req chatRequest, each func(olla
 	// Some servers end without [DONE]; a finish reason is enough.
 	if !finished && !done {
 		return b.fail("stream ended before completion; no tools were executed", ErrTransient)
+	}
+	if truncated && len(calls) > 0 {
+		// Cut-off arguments would otherwise become {} below.
+		return b.fail("the answer hit the length limit during a tool call; no tools were executed")
 	}
 	for _, p := range calls {
 		var call ollamaToolCall

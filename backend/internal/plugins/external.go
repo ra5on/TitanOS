@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
@@ -69,8 +70,16 @@ func externalClient() *http.Client {
 	return httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.LAN(a.Addr()) }})
 }
 
-// guarded is the client for community addresses.
-func (m *Manager) guarded() *http.Client {
+// guarded is the client for community addresses. The person chose the
+// host of a link or a source list, so it may be in the home network; a host
+// that only a list names (public) may not.
+func (m *Manager) guarded(public bool) *http.Client {
+	if public {
+		if m.publicClient == nil {
+			m.publicClient = httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.Public(a.Addr()) }})
+		}
+		return m.publicClient
+	}
 	if m.externalClient == nil {
 		m.externalClient = externalClient()
 	}
@@ -204,22 +213,28 @@ func (m *Manager) refreshSources(ctx context.Context) {
 	m.mu.Lock()
 	sources := slices.Clone(m.sources)
 	m.mu.Unlock()
+	// All at once: one that does not answer costs its minute, not the
+	// minutes of all that come after it.
+	var wg sync.WaitGroup
 	for _, source := range sources {
-		ctx, cancel := context.WithTimeout(ctx, time.Minute)
-		_, entries, err := m.fetchSource(ctx, source.URL)
-		cancel()
-		for i := range entries {
-			entries[i].plugin.Source = source.ID
-		}
-		m.mu.Lock()
-		m.setSourceEntries(source.ID, entries, err)
-		m.mu.Unlock()
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			_, entries, err := m.fetchSource(ctx, source.URL)
+			cancel()
+			for i := range entries {
+				entries[i].plugin.Source = source.ID
+			}
+			m.mu.Lock()
+			m.setSourceEntries(source.ID, entries, err)
+			m.mu.Unlock()
+		})
 	}
+	wg.Wait()
 }
 
 func (m *Manager) fetchSource(ctx context.Context, listURL string) (sourceIndex, []catalogEntry, error) {
 	var index sourceIndex
-	data, err := m.fetchMetadataWith(ctx, m.guarded(), listURL, 256<<10)
+	data, err := m.fetchMetadataWith(ctx, m.guarded(false), listURL, 256<<10)
 	if errors.Is(err, ErrRelease) {
 		return index, nil, fmt.Errorf("%w: nothing at this address", ErrDownload)
 	}
@@ -249,7 +264,9 @@ func (m *Manager) fetchSource(ctx context.Context, listURL string) (sourceIndex,
 		if _, err := validLink(manifestURL.String()); err != nil {
 			return index, nil, err
 		}
-		entry, err := m.fetchExternal(ctx, manifestURL.String())
+		// The list chose this host, not the person: no home network then.
+		public := manifestURL.Scheme != base.Scheme || manifestURL.Host != base.Host
+		entry, err := m.fetchExternal(ctx, manifestURL.String(), public)
 		if err != nil {
 			return index, nil, fmt.Errorf("%s: %w", item.Name, err)
 		}
@@ -263,7 +280,7 @@ func (m *Manager) fetchSource(ctx context.Context, listURL string) (sourceIndex,
 
 // fetchExternal reads a manifest and, if there is one, its signature. The
 // image is expected next to it as <name>.raw.
-func (m *Manager) fetchExternal(ctx context.Context, manifestURL string) (catalogEntry, error) {
+func (m *Manager) fetchExternal(ctx context.Context, manifestURL string, public bool) (catalogEntry, error) {
 	u, err := validLink(manifestURL)
 	if err != nil {
 		return catalogEntry{}, err
@@ -272,7 +289,8 @@ func (m *Manager) fetchExternal(ctx context.Context, manifestURL string) (catalo
 	if !strings.HasSuffix(file, manifestSuffix) {
 		return catalogEntry{}, fmt.Errorf("%w: the link must point to a <name>%s", ErrInvalid, manifestSuffix)
 	}
-	data, err := m.fetchMetadataWith(ctx, m.guarded(), u.String(), 64<<10)
+	client := m.guarded(public)
+	data, err := m.fetchMetadataWith(ctx, client, u.String(), 64<<10)
 	if errors.Is(err, ErrRelease) {
 		return catalogEntry{}, fmt.Errorf("%w: nothing at this address", ErrDownload)
 	}
@@ -283,7 +301,12 @@ func (m *Manager) fetchExternal(ctx context.Context, manifestURL string) (catalo
 	if err != nil {
 		return catalogEntry{}, err
 	}
-	sig, err := m.fetchMetadataWith(ctx, m.guarded(), u.String()+".minisig", 4096)
+	// Signature and image sit next to the manifest; a query of the link
+	// belongs to the manifest only.
+	next := *u
+	next.RawQuery, next.Fragment, next.RawPath = "", "", ""
+	next.Path += ".minisig"
+	sig, err := m.fetchMetadataWith(ctx, client, next.String(), 4096)
 	if err != nil && !errors.Is(err, ErrRelease) {
 		return catalogEntry{}, err
 	}
@@ -291,19 +314,20 @@ func (m *Manager) fetchExternal(ctx context.Context, manifestURL string) (catalo
 	if !official {
 		sig = nil
 	}
-	base := strings.TrimSuffix(u.String(), file)
+	next.Path = strings.TrimSuffix(u.Path, file)
+	base := next.String()
 	plugin := Plugin{Manifest: manifest, Official: official, Download: true, URL: u.String()}
 	if !m.compatible(manifest) {
 		plugin.Problem = "kernel"
 	}
-	return catalogEntry{plugin: plugin, manifest: data, signature: sig, base: base, external: true}, nil
+	return catalogEntry{plugin: plugin, manifest: data, signature: sig, base: base, external: true, public: public}, nil
 }
 
 // InspectLink shows what a link offers before anything is downloaded.
 func (m *Manager) InspectLink(ctx context.Context, link string) (Plugin, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	entry, err := m.fetchExternal(ctx, link)
+	entry, err := m.fetchExternal(ctx, link, false)
 	return entry.plugin, err
 }
 
@@ -324,7 +348,7 @@ func (m *Manager) externalEntry(ctx context.Context, req ExternalRequest) (catal
 		return catalogEntry{}, fmt.Errorf("%w: a link or a source, not both", ErrInvalid)
 	}
 	if req.URL != "" {
-		return m.fetchExternal(ctx, req.URL)
+		return m.fetchExternal(ctx, req.URL, false)
 	}
 	m.mu.Lock()
 	index := slices.IndexFunc(m.sources, func(s Source) bool { return s.ID == req.Source })
@@ -445,7 +469,7 @@ func (m *Manager) stageDownload(ctx context.Context, entry catalogEntry, volume 
 	tr.bytes(0, entry.plugin.Size)
 	client := m.client
 	if entry.external {
-		client = m.guarded()
+		client = m.guarded(entry.public)
 	}
 	if err := m.downloadImageWith(ctx, client, entry.base+name+".raw", filepath.Join(stage, name+".raw"), entry.plugin.Manifest); err != nil {
 		cleanup()
@@ -460,10 +484,20 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// officialName reports whether the official catalog offers this name.
+// officialName reports whether the name belongs to an official plugin: one
+// the catalog offers or one the image knows. The catalog alone is empty
+// until it was loaded once since the start, offline for good; the table in
+// the image also has the plugins of kernel sets other than the running one.
 func (m *Manager) officialName(name string) bool {
 	_, plugins := m.catalogSnapshot()
-	return slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Name == name })
+	if slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Name == name }) {
+		return true
+	}
+	if m.catalogTable == "" || !nameRE.MatchString(name) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(m.catalogTable, name+".json"))
+	return err == nil
 }
 
 // sourceSnapshot returns the plugins of all sources from the last refresh.

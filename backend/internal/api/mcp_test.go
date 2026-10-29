@@ -371,15 +371,20 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 		t.Fatal("file still there")
 	}
 	ts.mcpCall(plain, "system_status", map[string]any{})
+	// A tool this token does not have never runs, but the try is logged.
+	if r := ts.mcp(plain, "2025-06-18", rpc(70, "tools/call", map[string]any{"name": "vm_shutdown_all", "arguments": map[string]any{}})); r.msg["error"] == nil {
+		t.Fatalf("unknown tool: %s", r.body)
+	}
 
 	rows := activityEntries(t, log)
 	del, ok := findActivity(rows, "POST /api/v1/files/delete")
 	if !ok || del.Via != activity.ViaMCP || !strings.Contains(del.Target, "token claude") || !strings.Contains(del.Target, "files_delete") || !strings.Contains(del.Target, "weg.txt") || !del.OK || del.User != "alex" {
 		t.Fatalf("delete entry: %+v %v", del, ok)
 	}
-	read, ok := findActivity(rows, "mcp_tool")
-	if !ok || read.Via != activity.ViaMCP || !strings.Contains(read.Target, "system_status") {
-		t.Fatalf("read entry: %+v", read)
+	if !slices.ContainsFunc(rows, func(e activity.Entry) bool {
+		return e.Action == "mcp_tool" && e.Via == activity.ViaMCP && e.OK && strings.Contains(e.Target, "system_status")
+	}) {
+		t.Fatalf("read entry missing: %+v", rows)
 	}
 	refused := 0
 	for _, e := range rows {
@@ -390,8 +395,13 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 			t.Fatalf("MCP call recorded twice: %+v", e)
 		}
 	}
-	if refused != 3 {
+	if refused != 4 {
 		t.Fatalf("refused calls recorded: %d", refused)
+	}
+	if !slices.ContainsFunc(rows, func(e activity.Entry) bool {
+		return e.Via == activity.ViaMCP && !e.OK && e.Status == http.StatusForbidden && strings.Contains(e.Target, "vm_shutdown_all")
+	}) {
+		t.Fatal("unknown tool not logged")
 	}
 }
 
@@ -483,5 +493,54 @@ func TestMCPRateLimitPerToken(t *testing.T) {
 	now = now.Add(3 * time.Second)
 	if r := ts.mcp(a, "2025-06-18", rpc(100, "ping", nil)); r.status != 200 {
 		t.Fatal("no refill", r.status)
+	}
+}
+
+// A batch costs one request per message and cannot be made arbitrarily long.
+func TestMCPBatchCountsEveryMessage(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.mcpOn()
+	now := time.Unix(1_800_000_000, 0)
+	ts.server.mcp.now = func() time.Time { return now }
+	token := ts.mcpToken("alex", "mcp", "system:read")
+
+	batch := func(from, n int) string {
+		parts := make([]string, n)
+		for i := range parts {
+			parts[i] = rpc(from+i, "ping", nil)
+		}
+		return "[" + strings.Join(parts, ",") + "]"
+	}
+	if r := ts.mcp(token, "2025-03-26", batch(0, mcpMaxBatch+1)); r.status != http.StatusBadRequest {
+		t.Fatalf("batch over the cap: %d %s", r.status, r.body)
+	}
+
+	// Two full batches use up the burst; the rest of the second gets errors.
+	answered, limited := 0, 0
+	for round := range 2 {
+		r := ts.mcp(token, "2025-03-26", batch(round*100, mcpMaxBatch))
+		if r.status != 200 {
+			t.Fatalf("batch %d: %d %s", round, r.status, r.body)
+		}
+		var answers []map[string]any
+		if err := json.Unmarshal(r.body, &answers); err != nil || len(answers) != mcpMaxBatch {
+			t.Fatalf("batch %d answers: %v %s", round, err, r.body)
+		}
+		for _, a := range answers {
+			if a["error"] != nil {
+				limited++
+			} else {
+				answered++
+			}
+		}
+	}
+	// The cap-breaking batch above was refused before it cost anything
+	// beyond its own request.
+	if answered != mcpBurst-1 || limited != 2*mcpMaxBatch-answered {
+		t.Fatalf("answered %d, limited %d of %d", answered, limited, 2*mcpMaxBatch)
+	}
+	if r := ts.mcp(token, "2025-03-26", rpc(999, "ping", nil)); r.status != http.StatusTooManyRequests {
+		t.Fatalf("after the batches: %d", r.status)
 	}
 }

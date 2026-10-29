@@ -208,10 +208,13 @@ type Manager struct {
 	// Community plugins from links and sources (external.go). Their client
 	// checks every address it connects to; sources are kept in RAM after Load.
 	externalClient *http.Client
-	sources        []Source
-	sourcesLoaded  bool
-	sourceEntries  []catalogEntry
-	sourceStates   map[string]SourceState
+	// publicClient reaches public addresses only: for what a source list
+	// names on a host other than its own.
+	publicClient  *http.Client
+	sources       []Source
+	sourcesLoaded bool
+	sourceEntries []catalogEntry
+	sourceStates  map[string]SourceState
 	// Official images being downloaded, without holding actions.
 	downloading map[string]bool
 	// Steps of installations, updates and removals, RAM only; own lock so

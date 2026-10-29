@@ -49,7 +49,9 @@ Sitzung, nie ein Token.
   Kopfzeile zu setzen (Claude Code `--header`, mcp-remote `--header`) oder die
   stdio-Brücke.
 - Rate-Limit je Token im RAM: 60 Anfragen am Stück, danach eine pro Sekunde;
-  darüber `429` mit `Retry-After` und JSON-RPC-Fehler `-32000`.
+  darüber `429` mit `Retry-After` und JSON-RPC-Fehler `-32000`. In einem Batch
+  (nur 2025-03-26, höchstens 32 Nachrichten) zählt jede weitere Nachricht als
+  eigene Anfrage; über dem Limit bekommt sie einzeln den Fehler `-32000`.
 
 Umsetzung: `backend/internal/api/mcp.go` (Transport, Einstellung, Limit,
 Protokoll), `mcp_tools.go` (Werkzeuge), ausschließlich Standardbibliothek.
@@ -120,7 +122,7 @@ Jeder `tools/call` steht genau einmal unter Werkzeuge › Aktivität mit Herkunf
 der Route genannten Zielen (Pfade, Namen; nie Inhalte). Änderungen tragen die
 Route als Aktion (z. B. `POST /api/v1/files/delete`), Lesewerkzeuge `mcp_tool`.
 Abgelehnte Aufrufe (fehlende Bestätigung, Rechte) stehen als fehlgeschlagen
-darin. `initialize`, `ping` und `tools/list` werden nicht protokolliert. Das
+darin, auch Aufrufe eines Werkzeugs, das der Token nicht hat (Status 403). `initialize`, `ping` und `tools/list` werden nicht protokolliert. Das
 Ein-/Ausschalten selbst ist `PUT /api/v1/system/mcp`.
 
 ## Clients einrichten
