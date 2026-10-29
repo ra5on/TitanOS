@@ -22,7 +22,8 @@ import (
 // login of the chat; api_change proposes a change as a card like every
 // action. Routes that give away secrets (backup passwords, downloads of
 // the stick backup, consoles, private keys) or that only a person may use
-// (confirming a network change) are not in the list and cannot be called.
+// (changing or confirming the network, confirming a firewall change) are
+// not in the list and cannot be called.
 
 type apiRoute struct {
 	Method string
@@ -36,13 +37,7 @@ var apiRoutes = []apiRoute{
 	// system
 	{"GET", "/system", assistant.AreaSystem, "", "Name, version, CPU, memory, temperatures, networks of the dashboard."},
 	{"GET", "/network", assistant.AreaSystem, "", "Network configuration and state, bond modes and time zone."},
-	{"PUT", "/network", assistant.AreaSystem, assistant.LevelDanger, "Change the network (body: the config object from GET /network › network.config). Runs 2 minutes on trial; the person confirms it in the web UI or it goes back."},
 	{"POST", "/network/revert", assistant.AreaSystem, assistant.LevelNormal, "Undo a network change that is still on trial."},
-	{"GET", "/firewall", assistant.AreaSystem, "", "Firewall: on/off, zone matrix (home, vpn, internet) per service and Docker app, own rules, automatic blocking, blocked addresses, recently dropped packets."},
-	{"PUT", "/firewall", assistant.AreaSystem, assistant.LevelDanger, "Change the firewall (body: the config object from GET /firewall). Switching on or changing runs 2 minutes on trial; the person confirms it in the web UI or it goes back. Switching off applies at once."},
-	{"POST", "/firewall/revert", assistant.AreaSystem, assistant.LevelNormal, "Undo a firewall change that is still on trial."},
-	{"PUT", "/firewall/autoblock", assistant.AreaSystem, assistant.LevelDanger, "Change the automatic blocking after failed logins (body: config.autoBlock of GET /firewall)."},
-	{"POST", "/firewall/unblock", assistant.AreaSystem, assistant.LevelNormal, "Release an automatically blocked address (body: {address})."},
 	{"PUT", "/system/hostname", assistant.AreaSystem, assistant.LevelDanger, `Rename the NAS (body {"hostname": "…"}).`},
 	{"PUT", "/system/timezone", assistant.AreaSystem, assistant.LevelNormal, `Set the time zone (body {"timezone": "Europe/Berlin"}).`},
 	{"GET", "/notifications/settings", assistant.AreaSystem, "", "Ways notifications are sent (e-mail, ntfy, Telegram, Discord); secrets only as set or not."},
@@ -66,17 +61,24 @@ var apiRoutes = []apiRoute{
 	{"POST", "/usb/{id}/mount", assistant.AreaSystem, assistant.LevelNormal, "Mount a USB drive by its ID from GET /usb."},
 	{"POST", "/usb/{id}/eject", assistant.AreaSystem, assistant.LevelNormal, "Eject a USB drive."},
 	{"GET", "/usb/disks", assistant.AreaSystem, "", "Whole unmanaged drives, also empty ones, and the last format. Formatting is only offered in the web UI."},
-	{"GET", "/plugins", assistant.AreaSystem, "", "Installed and available plugins."},
-	{"POST", "/plugins/catalog", assistant.AreaSystem, assistant.LevelNormal, "Load the list of official plugins for this version."},
-	{"POST", "/plugins", assistant.AreaSystem, assistant.LevelDanger, "Install an official plugin (body: name from GET /plugins, volume from storage_overview, optional activate boolean). A plugin becomes part of the system."},
-	{"POST", "/plugins/{name}/update", assistant.AreaSystem, assistant.LevelDanger, "Replace an installed plugin with the version GET /plugins names under update (body: path from there; confirm the plugin name only if that version is not official). A plugin becomes part of the system."},
-	{"POST", "/plugins/{name}/{action}", assistant.AreaSystem, assistant.LevelDanger, "Switch a plugin on or off (action enable or disable)."},
-	{"DELETE", "/plugins/{name}", assistant.AreaSystem, assistant.LevelDestroy, "Remove a plugin."},
 	{"GET", "/plugins/tailscale", assistant.AreaSystem, "", "Tailscale settings and state."},
 	{"PUT", "/plugins/tailscale", assistant.AreaSystem, assistant.LevelDanger, "Change the Tailscale settings (body as GET › settings)."},
 	{"GET", "/plugins/netbird", assistant.AreaSystem, "", "NetBird settings and state; the setup key only as set or not."},
 	{"PUT", "/plugins/netbird", assistant.AreaSystem, assistant.LevelDanger, "Change the NetBird settings (body as GET › settings; the setup key is not part of it). Runs 2 minutes on trial; the person confirms it in the web UI or it goes back."},
 	{"GET", "/about", assistant.AreaSystem, "", "Version, kernel and licenses."},
+	// plugins: the dedicated tools plugins_list, plugin_install … check
+	// the target first; installing goes by name from the signed catalog only.
+	{"GET", "/plugins", assistant.AreaPlugins, "", "Installed and available plugins."},
+	{"POST", "/plugins/catalog", assistant.AreaPlugins, assistant.LevelNormal, "Load the list of official plugins for this version."},
+	{"POST", "/plugins/{name}/{action}", assistant.AreaPlugins, assistant.LevelDanger, "Switch a plugin on or off (action enable or disable)."},
+	{"DELETE", "/plugins/{name}", assistant.AreaPlugins, assistant.LevelDestroy, "Remove a plugin."},
+	// firewall: rules only. Switching the firewall on or off, changing the
+	// network and confirming a change on trial stay in the web UI.
+	{"GET", "/firewall", assistant.AreaNetwork, "", "Firewall: on/off, zone matrix (home, vpn, internet) per service and Docker app, own rules, automatic blocking, blocked addresses, recently dropped packets."},
+	{"PUT", "/firewall", assistant.AreaNetwork, assistant.LevelDanger, "Change the rules of the firewall (body: the config object from GET /firewall with the same enabled value; switching it on or off is only done in the web UI). A change of a switched-on firewall runs 2 minutes on trial; the person confirms it in the web UI or it goes back."},
+	{"POST", "/firewall/revert", assistant.AreaNetwork, assistant.LevelNormal, "Undo a firewall change that is still on trial."},
+	{"PUT", "/firewall/autoblock", assistant.AreaNetwork, assistant.LevelDanger, "Change the automatic blocking after failed logins (body: config.autoBlock of GET /firewall)."},
+	{"POST", "/firewall/unblock", assistant.AreaNetwork, assistant.LevelDanger, "Release an automatically blocked address (body: {address})."},
 	// updates
 	{"GET", "/update", assistant.AreaUpdates, "", "Update state, channel, slots and an update that was found."},
 	{"PUT", "/update/settings", assistant.AreaUpdates, assistant.LevelNormal, "Change the update settings (body as GET › settings)."},
@@ -98,6 +100,7 @@ var apiRoutes = []apiRoute{
 	{"GET", "/docker", assistant.AreaDocker, "", "Docker settings, containers, apps and app setups."},
 	{"PUT", "/docker/settings", assistant.AreaDocker, assistant.LevelDanger, "Change the Docker settings (body as GET › settings)."},
 	{"GET", "/docker/apps/{name}", assistant.AreaDocker, "", "The compose file of an app."},
+	{"GET", "/docker/auto-update", assistant.AreaDocker, "", "Apps that update by themselves, the window and the last results."},
 	{"PUT", "/docker/apps/{name}", assistant.AreaDocker, assistant.LevelDanger, `Replace the compose file of an app and recreate it (body {"compose": "…"}); data in its paths stays.`},
 	{"POST", "/docker/apps", assistant.AreaDocker, assistant.LevelNormal, `Create an app from a compose file (body {"name": "…", "compose": "…"}).`},
 	{"DELETE", "/docker/apps/{name}/job", assistant.AreaDocker, assistant.LevelNormal, "Hide the message of a failed app setup."},

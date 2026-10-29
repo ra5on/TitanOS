@@ -79,7 +79,7 @@ export type AssistantPrefs = { floating: boolean; pageContext: boolean; model: s
 const DEFAULT_PREFS: AssistantPrefs = { floating: true, pageContext: true, model: '' };
 
 /** Areas of the NAS, in the order of the settings page. */
-export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home'] as const;
+export const AREAS = ['files', 'docker', 'vms', 'storage', 'shares', 'backups', 'accounts', 'system', 'updates', 'home', 'plugins', 'network'] as const;
 
 /** Statistics of a chat: rounds with the model, tokens, time. */
 export type RunStats = { rounds: number; prompt: number; generated: number; modelMs: number; toolMs: number; tools: number };
