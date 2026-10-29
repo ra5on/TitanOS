@@ -29,6 +29,9 @@ func modelResponseError(message string) error {
 // What titand asks Ollama for. See https://github.com/ollama/ollama/blob/main/docs/api.md.
 
 type ollamaToolCall struct {
+	// ID pairs a call with its result for the cloud providers; Ollama
+	// pairs them by order and never sees it.
+	ID       string `json:"-"`
 	Function struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -42,6 +45,8 @@ type ollamaMessage struct {
 	Images    []string         `json:"images,omitempty"`
 	ToolCalls []ollamaToolCall `json:"tool_calls,omitempty"`
 	ToolName  string           `json:"tool_name,omitempty"`
+	// ToolCallID is the call a tool result answers (cloud providers only).
+	ToolCallID string `json:"-"`
 }
 
 type ollamaChunk struct {
@@ -193,12 +198,37 @@ func (m *Manager) show(ctx context.Context, base, model string) ([]string, int, 
 	return answer.Capabilities, length, nil
 }
 
-// Models returns the models Ollama has at address, or at the stored
-// address if it is empty, with what each can.
+// Models returns the models Ollama has at address, or those of the stored
+// provider if it is empty, with what each can.
 func (m *Manager) Models(ctx context.Context, address string) ([]Model, error) {
 	if address == "" {
-		address = m.Settings().Ollama
+		// Stored settings were chosen by an owner or administrator.
+		return m.ListModels(ctx, m.Settings(), "admin")
 	}
+	return m.ollamaModels(ctx, address)
+}
+
+// ListModels returns the models of the provider in settings, which may
+// still be unsaved. Keys left empty are the stored ones (see withKeys); role
+// is who chose the address of an OpenAI-compatible server.
+func (m *Manager) ListModels(ctx context.Context, settings Settings, role string) ([]Model, error) {
+	if !settings.Cloud() {
+		address := settings.Ollama
+		if address == "" {
+			address = DefaultOllama
+		}
+		return m.ollamaModels(ctx, address)
+	}
+	b, err := m.backendFor(m.withKeys(settings), role)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	return b.models(ctx)
+}
+
+func (m *Manager) ollamaModels(ctx context.Context, address string) ([]Model, error) {
 	address = strings.TrimRight(address, "/")
 	if !ValidOllama(address) {
 		return nil, ErrInvalid
@@ -268,4 +298,85 @@ func (m *Manager) DeleteModel(ctx context.Context, model string) error {
 		return ErrInvalid
 	}
 	return m.call(ctx, http.MethodDelete, m.Settings().Ollama, "/api/delete", map[string]any{"model": model}, nil)
+}
+
+// ollamaBackend is Ollama at base, the default and original way.
+type ollamaBackend struct {
+	m    *Manager
+	base string
+}
+
+func (b ollamaBackend) chat(ctx context.Context, req chatRequest, each func(ollamaChunk) error) error {
+	body := map[string]any{"model": req.Model, "messages": req.Messages, "stream": true}
+	if req.UseTools {
+		definitions := make([]map[string]any, 0, len(req.Tools))
+		for _, t := range req.Tools {
+			definitions = append(definitions, map[string]any{"type": "function", "function": map[string]any{
+				"name": t.Name, "description": t.Description, "parameters": t.Parameters,
+			}})
+		}
+		body["tools"] = definitions
+	}
+	if req.Think {
+		body["think"] = true
+	}
+	options := map[string]any{}
+	if req.NumCtx > 0 {
+		options["num_ctx"] = req.NumCtx
+	}
+	if req.Temperature != nil {
+		options["temperature"] = *req.Temperature
+	}
+	if len(options) > 0 {
+		body["options"] = options
+	}
+	res, err := b.m.request(ctx, http.MethodPost, b.base, "/api/chat", body)
+	if err != nil {
+		return err
+	}
+	return stream(res, func(line []byte) error {
+		var chunk ollamaChunk
+		if err := json.Unmarshal(line, &chunk); err != nil {
+			return fmt.Errorf("%w sent something unexpected: %v", ErrUpstream, err)
+		}
+		if chunk.Error != "" {
+			return modelResponseError(chunk.Error)
+		}
+		return each(chunk)
+	})
+}
+
+func (b ollamaBackend) show(ctx context.Context, model string) ([]string, int, error) {
+	return b.m.show(ctx, b.base, model)
+}
+
+func (b ollamaBackend) models(ctx context.Context) ([]Model, error) {
+	return b.m.ollamaModels(ctx, b.base)
+}
+
+// setupModels is what "Ollama per click" loads, by the memory the model
+// runs in: the first row whose limit fits, the last one above all. Every
+// model here calls tools in Ollama.
+var setupModels = []struct {
+	upTo  uint64 // bytes; 0 is no limit
+	model string
+}{
+	{8 << 30, "qwen3:4b"},
+	{16 << 30, "qwen3:8b"},
+	{0, "qwen3:14b"},
+}
+
+// RecommendModel chooses the model for a new Ollama: by the memory of the
+// GPU it gets if there is one, else by the RAM of the NAS. basis says which.
+func RecommendModel(ramBytes, vramBytes uint64) (model, basis string) {
+	memory, basis := ramBytes, "ram"
+	if vramBytes > 0 {
+		memory, basis = vramBytes, "vram"
+	}
+	for _, row := range setupModels {
+		if row.upTo == 0 || memory <= row.upTo {
+			return row.model, basis
+		}
+	}
+	return setupModels[len(setupModels)-1].model, basis
 }

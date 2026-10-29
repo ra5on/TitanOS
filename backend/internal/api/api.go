@@ -644,6 +644,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
 	mux.HandleFunc("POST /api/v1/assistant/models/delete", s.requireAdmin(s.handleAssistantModelDelete))
 	mux.HandleFunc("GET /api/v1/assistant/ollama-apps", s.requireAdmin(s.handleAssistantOllamaApps))
+	mux.HandleFunc("GET /api/v1/assistant/ollama-setup", s.requireAdmin(s.handleAssistantOllamaSetup))
 	mux.HandleFunc("GET /api/v1/assistant/models", s.requireAssistant(s.handleAssistantChatModels))
 	mux.HandleFunc("GET /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChats))
 	mux.HandleFunc("POST /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatCreate))

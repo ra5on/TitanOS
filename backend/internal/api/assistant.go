@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
 // The chat in the web UI. Owners and administrators chat when it is on;
@@ -26,6 +27,12 @@ func writeAssistantError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, assistant.ErrOff):
 		writeError(w, http.StatusConflict, "assistant_off", err.Error())
+	case errors.Is(err, assistant.ErrAddress):
+		writeError(w, http.StatusBadRequest, "assistant_address_blocked", err.Error())
+	case errors.Is(err, assistant.ErrKeyMissing):
+		writeError(w, http.StatusBadRequest, "assistant_key_missing", err.Error())
+	case errors.Is(err, assistant.ErrKeyServer):
+		writeError(w, http.StatusBadRequest, "assistant_key_server", err.Error())
 	case errors.Is(err, assistant.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_assistant", err.Error())
 	case errors.Is(err, assistant.ErrChatNotFound):
@@ -38,14 +45,26 @@ func writeAssistantError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "action_gone", err.Error())
 	case errors.Is(err, assistant.ErrModelMissing):
 		writeError(w, http.StatusNotFound, "model_missing", err.Error())
-	case errors.Is(err, assistant.ErrModelOutput):
-		writeError(w, http.StatusBadGateway, "model_tool_parse", err.Error())
 	case errors.Is(err, assistant.ErrUpstream):
-		writeError(w, http.StatusBadGateway, "ollama_failed", err.Error())
+		writeError(w, http.StatusBadGateway, assistantUpstreamCode(err), err.Error())
 	default:
 		slog.Error("assistant failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "the assistant failed")
 	}
+}
+
+// assistantUpstreamCode tells failures of the model apart: Ollama, a cloud
+// provider, a refused key, or a malformed tool call.
+func assistantUpstreamCode(err error) string {
+	switch {
+	case errors.Is(err, assistant.ErrModelOutput):
+		return "model_tool_parse"
+	case errors.Is(err, assistant.ErrAuth):
+		return "provider_auth"
+	case errors.Is(err, assistant.ErrProvider):
+		return "provider_failed"
+	}
+	return "ollama_failed"
 }
 
 // chatsDir is where chats are kept: on the volume of the settings, or the
@@ -99,8 +118,10 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	previous := s.opts.Assistant.Settings()
+	// A replaced key is a change as well, though "is set" stays the same.
+	newKey := settings.AnthropicKey != "" || settings.OpenAIKey != ""
 	if err := s.opts.Assistant.SetSettings(settings); err != nil {
-		if errors.Is(err, assistant.ErrInvalid) {
+		if errors.Is(err, assistant.ErrInvalid) || errors.Is(err, assistant.ErrKeyMissing) || errors.Is(err, assistant.ErrKeyServer) {
 			writeAssistantError(w, err)
 			return
 		}
@@ -109,7 +130,7 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	saved := s.opts.Assistant.Settings()
-	if !reflect.DeepEqual(previous, saved) {
+	if newKey || !reflect.DeepEqual(previous, saved) {
 		s.agentMu.Lock()
 		for _, j := range s.agentJobs {
 			j.mu.Lock()
@@ -150,21 +171,32 @@ func (s *Server) handleAssistantChange(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	slog.Info("assistant settings changed", "enabled", saved.Enabled, "ollama", saved.Ollama, "model", saved.Model, "users", saved.Users, "web", saved.Web, "webUsers", saved.WebUsers, "by", currentUser(r).Name, "ip", remoteIP(r))
+	// Never the keys, only whether they are set.
+	slog.Info("assistant settings changed", "enabled", saved.Enabled, "provider", saved.Provider, "ollama", saved.Ollama, "openaiBase", saved.OpenAIBase, "anthropicKeySet", saved.AnthropicKeySet, "openaiKeySet", saved.OpenAIKeySet, "model", saved.Model, "users", saved.Users, "web", saved.Web, "webUsers", saved.WebUsers, "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, saved)
 }
 
-// handleAssistantModels asks Ollama which models it has, at the address
-// given or else at the stored one, so that the settings can be tried
-// before they are saved.
+// handleAssistantModels asks the provider which models it has, with the
+// settings given (empty keys are the stored ones), so that the settings can
+// be tried before they are saved. Only the provider fields count.
 func (s *Server) handleAssistantModels(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Ollama string `json:"ollama"`
+		Provider     string `json:"provider"`
+		Ollama       string `json:"ollama"`
+		OpenAIBase   string `json:"openaiBase"`
+		AnthropicKey string `json:"anthropicKey"`
+		OpenAIKey    string `json:"openaiKey"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	models, err := s.opts.Assistant.Models(r.Context(), req.Ollama)
+	settings := assistant.Settings{Provider: req.Provider, Ollama: req.Ollama, OpenAIBase: req.OpenAIBase, AnthropicKey: strings.TrimSpace(req.AnthropicKey), OpenAIKey: strings.TrimSpace(req.OpenAIKey)}
+	if req.Provider == "" || req.Provider == assistant.ProviderOllama {
+		if req.Ollama == "" {
+			settings.Ollama = s.opts.Assistant.Settings().Ollama
+		}
+	}
+	models, err := s.opts.Assistant.ListModels(r.Context(), settings, string(currentUser(r).Role))
 	if err != nil {
 		writeAssistantError(w, err)
 		return
@@ -173,7 +205,7 @@ func (s *Server) handleAssistantModels(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAssistantChatModels lists the models the chat can use: those that
-// call tools, or of an Ollama that does not tell.
+// call tools, or of a server that does not tell.
 func (s *Server) handleAssistantChatModels(w http.ResponseWriter, r *http.Request) {
 	models, err := s.opts.Assistant.Models(r.Context(), "")
 	if err != nil {
@@ -225,7 +257,7 @@ func (s *Server) handleAssistantPull(w http.ResponseWriter, r *http.Request) {
 		send("done", map[string]string{})
 	case errors.Is(err, context.Canceled):
 	default:
-		send("problem", map[string]string{"code": "ollama_failed", "detail": err.Error()})
+		send("problem", map[string]string{"code": assistantUpstreamCode(err), "detail": err.Error()})
 	}
 }
 
@@ -545,4 +577,40 @@ func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 	}
 	owned = false
 	s.answer(w, r, user, chat, req.Model, page, release)
+}
+
+// handleAssistantOllamaSetup tells the settings page what "Ollama per click"
+// would do: whether Docker is ready for it, the NVIDIA GPU it would pass to
+// Ollama (the only kind the Ollama image uses), and the model chosen by the
+// memory there is. It changes nothing; the page installs through the
+// normal app path after a click.
+func (s *Server) handleAssistantOllamaSetup(w http.ResponseWriter, r *http.Request) {
+	status := s.opts.Docker.Status(r.Context())
+	type gpu struct {
+		ID        string `json:"id"`
+		Title     string `json:"title"`
+		VRAMBytes uint64 `json:"vramBytes,omitempty"`
+	}
+	var chosen *gpu
+	for _, d := range s.opts.Docker.ContainerDevices(r.Context()) {
+		if d.Kind == "nvidia" && d.Available {
+			chosen = &gpu{ID: d.ID, Title: d.Title}
+			break
+		}
+	}
+	vram := uint64(0)
+	if chosen != nil && s.opts.Accelerators != nil {
+		for _, a := range s.opts.Accelerators.Snapshot() {
+			if a.Address == chosen.ID && a.MemoryTotalBytes != nil && *a.MemoryTotalBytes > 0 {
+				chosen.VRAMBytes = uint64(*a.MemoryTotalBytes)
+				vram = chosen.VRAMBytes
+			}
+		}
+	}
+	ram := system.ReadMemory().TotalBytes
+	model, basis := assistant.RecommendModel(ram, vram)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"docker": map[string]any{"enabled": status.Settings.Enabled, "running": status.Running, "volume": status.Settings.Volume},
+		"apps":   status.Apps, "gpu": chosen, "ramBytes": ram, "model": model, "basis": basis,
+	})
 }
