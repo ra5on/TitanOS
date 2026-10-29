@@ -1,4 +1,5 @@
-// Plugin page: updating an installed plugin from a share. All NAS endpoints
+// Plugin page: updating an installed plugin from a share or the catalog, and
+// installing a community plugin from a link. All NAS endpoints
 // are isolated fixtures; no request reaches a NAS.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -81,6 +82,47 @@ try {
   assert.equal(await page.getByText("liegt in einer Freigabe bereit").count(), 0);
   await page.screenshot({ path: `${out}/updated.png`, fullPage: true });
   await ctx.close();
+
+  // A newer version in the official catalog: no path, the NAS downloads it.
+  {
+    const { ctx, page, data } = await context();
+    const catalog = { path: "", version: "2.1", official: true, download: true };
+    data.plugins = status("1.0", catalog);
+    data.pluginsAfterUpdate = status("2.1", null);
+    await page.goto(base + "/plugins");
+    await page.getByText("Version 2.1 ist im offiziellen Katalog verfügbar.").waitFor();
+    await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText("lädt die signierte neue Version", { exact: false }).waitFor();
+    await page.screenshot({ path: `${out}/catalog-dialog.png`, fullPage: true });
+    await dialog.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    await dialog.waitFor({ state: "detached" });
+    assert.deepEqual(data.pluginUpdates.at(-1), [
+      "/plugins/werkzeug/update",
+      { path: "", confirm: "werkzeug" },
+    ]);
+    await ctx.close();
+  }
+  // A community plugin from a link: checked first, installed after the click,
+  // which sends the name the API wants as confirmation.
+  {
+    const { ctx, page, data } = await context();
+    data.plugins = status("1.0", null);
+    data.linkPreview = { ...plugin("0.3", null), name: "fremd", title: "Fremdes Plugin", installed: false, enabled: false, active: false, official: false, download: true };
+    await page.goto(base + "/plugins");
+    await page.getByRole("button", { name: "Von Link hinzufügen …" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Link zur .plugin.json").fill("https://example.org/fremd.plugin.json");
+    await dialog.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await dialog.getByText("wurde nicht geprüft", { exact: false }).waitFor();
+    await page.screenshot({ path: `${out}/link-dialog.png`, fullPage: true });
+    await dialog.getByRole("button", { name: "Herunterladen und installieren" }).click();
+    await dialog.waitFor({ state: "detached" });
+    const sent = data.externalInstalls.at(-1);
+    assert.equal(sent.url, "https://example.org/fremd.plugin.json");
+    assert.equal(sent.confirm, "fremd");
+    await ctx.close();
+  }
   assert.deepEqual(errors, []);
   console.log("plugin page update: ok");
 } finally {

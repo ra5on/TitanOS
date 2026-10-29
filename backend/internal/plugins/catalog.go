@@ -36,6 +36,10 @@ type catalogEntry struct {
 	plugin    Plugin
 	manifest  []byte
 	signature []byte
+	// base is the release the image is downloaded from; external entries
+	// (external.go) come through the guarded client.
+	base     string
+	external bool
 }
 
 func catalogClient() *http.Client {
@@ -83,6 +87,8 @@ func (m *Manager) RefreshCatalog(ctx context.Context, force bool) error {
 	m.mu.Unlock()
 
 	entries, err := m.fetchCatalog(ctx)
+	// Community sources have their own state; their errors do not hide the catalog.
+	m.refreshSources(ctx)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.catalogLoading = false
@@ -105,12 +111,16 @@ func (m *Manager) RefreshCatalog(ctx context.Context, force bool) error {
 }
 
 func (m *Manager) fetchMetadata(ctx context.Context, url string, limit int64) ([]byte, error) {
+	return m.fetchMetadataWith(ctx, m.client, url, limit)
+}
+
+func (m *Manager) fetchMetadataWith(ctx context.Context, client *http.Client, url string, limit int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "TitanOS/"+m.Release)
-	response, err := m.client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDownload, err)
 	}
@@ -131,13 +141,90 @@ func (m *Manager) fetchMetadata(ctx context.Context, url string, limit int64) ([
 	return data, nil
 }
 
+// fetchCatalog prefers the plugin sets of the plugin repository for the
+// running kernel. Without a kernel set, kernel-bound plugins still come
+// from the TitanOS release; without any set, everything does.
 func (m *Manager) fetchCatalog(ctx context.Context) ([]catalogEntry, error) {
-	base, err := m.releaseBase()
-	if err != nil {
+	if _, err := m.releaseBase(); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	common, kernel, err := m.fetchRepoSets(ctx, repoTarget{base: m.Release, kernel: m.kernel, kernelPackage: m.kernelPackage}, m.fetchMetadata)
+	if errors.Is(err, errNoPluginSet) {
+		return m.fetchReleaseCatalog(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var entries []catalogEntry
+	names := map[string]bool{}
+	for _, set := range []*repoSet{kernel, common} {
+		if set == nil {
+			continue
+		}
+		found, err := m.fetchSetEntries(ctx, set)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range found {
+			if !names[entry.plugin.Name] {
+				names[entry.plugin.Name] = true
+				entries = append(entries, entry)
+			}
+		}
+	}
+	if kernel == nil {
+		release, err := m.fetchReleaseCatalog(ctx)
+		if err != nil && !errors.Is(err, ErrRelease) {
+			return nil, err
+		}
+		for _, entry := range release {
+			if entry.plugin.Kernel != "" && !names[entry.plugin.Name] {
+				names[entry.plugin.Name] = true
+				entries = append(entries, entry)
+			}
+		}
+	}
+	return entries, nil
+}
+
+// fetchSetEntries reads the signed plugin manifests of a verified set.
+func (m *Manager) fetchSetEntries(ctx context.Context, set *repoSet) ([]catalogEntry, error) {
+	keys := minisign.LoadKeys(m.keyDir)
+	var entries []catalogEntry
+	for _, item := range set.index.Plugins {
+		asset := item.Name + manifestSuffix
+		data, err := m.fetchMetadata(ctx, set.base+asset, 64<<10)
+		if err != nil {
+			return nil, err
+		}
+		sig, err := m.fetchMetadata(ctx, set.base+asset+".minisig", 4096)
+		if err != nil {
+			return nil, err
+		}
+		if minisign.Verify(keys, data, string(sig)) != nil {
+			return nil, fmt.Errorf("%w: signature for %s", ErrInvalid, item.Name)
+		}
+		manifest, err := verifySetManifest(set, item, data)
+		if err != nil {
+			return nil, err
+		}
+		plugin := Plugin{Manifest: manifest, Official: true, Download: true, LicenseURL: set.base + item.Name + "-licenses.tar.gz"}
+		if !m.compatible(manifest) {
+			plugin.Problem = "kernel"
+		}
+		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig, base: set.base})
+	}
+	return entries, nil
+}
+
+// fetchReleaseCatalog reads the plugins attached to the running release.
+func (m *Manager) fetchReleaseCatalog(ctx context.Context) ([]catalogEntry, error) {
+	base, err := m.releaseBase()
+	if err != nil {
+		return nil, err
+	}
 	keys := minisign.LoadKeys(m.keyDir)
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("%w: no trusted plugin keys", ErrInvalid)
@@ -196,7 +283,7 @@ func (m *Manager) fetchCatalog(ctx context.Context) ([]catalogEntry, error) {
 		if !m.compatible(manifest) {
 			plugin.Problem = "kernel"
 		}
-		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig})
+		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig, base: base})
 	}
 	return entries, nil
 }
@@ -266,7 +353,7 @@ func (m *Manager) installOfficial(ctx context.Context, name, volume string, moun
 		return fmt.Errorf("%w: plugin targets another kernel", ErrInvalid)
 	}
 	tr.name(name, selected.plugin.Title)
-	base, _ := m.releaseBase()
+	base := selected.base
 	dir := m.baseDir(volume)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -304,9 +391,115 @@ func (m *Manager) installOfficial(ctx context.Context, name, volume string, moun
 	return m.install(ctx, path, volume, "", mounted, activate)
 }
 
-// officialInstallAllowed returns the volume an official plugin goes to.
-// Caller holds actions.
-func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) (string, error) {
+// UpdateDownload replaces an installed plugin with the newer version in the
+// official catalog or, for a community plugin, in a source. Like an
+// installation, the download happens without holding actions; the swap
+// itself is the one of Update, with the previous files coming back if the
+// new version does not start. An unsigned version needs the plugin's name as
+// confirmation, like one from a share.
+func (m *Manager) UpdateDownload(ctx context.Context, name, confirm string, mounted []string) error {
+	m.actions.Lock()
+	volume, err := m.officialUpdateAllowed(name, mounted)
+	m.actions.Unlock()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	if m.downloading[name] {
+		m.mu.Unlock()
+		return ErrDownloading
+	}
+	if m.downloading == nil {
+		m.downloading = map[string]bool{}
+	}
+	m.downloading[name] = true
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.downloading, name)
+		m.mu.Unlock()
+	}()
+	tr := m.track(name, "update", StepSignature, StepDownload, StepChecksum, StepWrite, StepStop)
+	err = m.updateDownload(withTracker(ctx, tr), name, confirm, volume, mounted)
+	tr.finish(err)
+	return err
+}
+
+func (m *Manager) updateDownload(ctx context.Context, name, confirm, volume string, mounted []string) error {
+	tr := trackerOf(ctx)
+	tr.begin(StepSignature)
+	m.actions.Lock()
+	old, exists := m.installed(volume)[name]
+	official := exists && m.official(filepath.Join(m.dir(volume), name+manifestSuffix))
+	m.actions.Unlock()
+	if !exists {
+		return ErrNotFound
+	}
+	var selected *catalogEntry
+	if entries, err := m.fetchCatalog(ctx); err == nil {
+		for i := range entries {
+			if entries[i].plugin.Name == name {
+				selected = &entries[i]
+			}
+		}
+	} else if official {
+		return err
+	}
+	// A community plugin is updated from the source that offers it now.
+	if selected == nil && !official {
+		for _, entry := range m.sourceSnapshot() {
+			if entry.plugin.Name == name {
+				fresh, err := m.externalEntry(ctx, ExternalRequest{Source: entry.plugin.Source, Name: name})
+				if err != nil {
+					return err
+				}
+				selected = &fresh
+				break
+			}
+		}
+	}
+	if selected == nil {
+		return ErrNotFound
+	}
+	manifest := selected.plugin.Manifest
+	if !updatable(old, manifest) {
+		return fmt.Errorf("%w: no newer version of %s", ErrInvalid, name)
+	}
+	if !m.compatible(manifest) {
+		return fmt.Errorf("%w: the new version targets another kernel", ErrInvalid)
+	}
+	tr.name(name, manifest.Title)
+	path, cleanup, err := m.stageDownload(ctx, *selected, volume)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if again, err := m.officialUpdateAllowed(name, mounted); err != nil {
+		return err
+	} else if again != volume {
+		return ErrUnknownVolume
+	}
+	if current := m.installed(volume)[name]; current.SHA256 != old.SHA256 {
+		return fmt.Errorf("%w: %s changed during the download", ErrInvalid, name)
+	}
+	signed := m.official(path)
+	if staged, err := readManifest(path); err != nil || (official && !signed) || staged.SHA256 != manifest.SHA256 {
+		return fmt.Errorf("%w: plugin metadata", ErrInvalid)
+	}
+	if !signed && confirm != name {
+		return ErrNotConfirmed
+	}
+	enabled := slices.Contains(m.current().Enabled, name)
+	if enabled {
+		tr.expect(activationSteps(manifest)...)
+	}
+	return m.replace(ctx, name, path, manifest, signed, enabled, volume, mounted)
+}
+
+// officialUpdateAllowed returns the plugin volume. Caller holds actions.
+func (m *Manager) officialUpdateAllowed(name string, mounted []string) (string, error) {
 	if m.current().PendingDriver != nil {
 		return "", ErrDriverPending
 	}
@@ -316,17 +509,52 @@ func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) 
 	if m.Disabled {
 		return "", ErrDisabled
 	}
+	volume := m.current().Volume
+	if !nameRE.MatchString(name) || name == "nvidia" {
+		return "", ErrNotFound
+	}
+	if volume == "" || !slices.Contains(mounted, volume) {
+		return "", ErrUnknownVolume
+	}
+	if _, exists := m.installed(volume)[name]; !exists {
+		return "", ErrNotFound
+	}
+	return volume, nil
+}
+
+// officialInstallAllowed returns the volume an official plugin goes to.
+// Caller holds actions.
+func (m *Manager) officialInstallAllowed(name, volume string, mounted []string) (string, error) {
 	if !nameRE.MatchString(name) {
 		return "", ErrNotFound
+	}
+	volume, err := m.installVolume(volume, mounted)
+	if err != nil {
+		return "", err
+	}
+	if _, exists := m.installed(volume)[name]; exists {
+		return "", ErrExists
+	}
+	return volume, nil
+}
+
+// installVolume returns the plugin volume a new plugin goes to, if changes
+// are allowed now. Caller holds actions.
+func (m *Manager) installVolume(volume string, mounted []string) (string, error) {
+	if m.current().PendingDriver != nil {
+		return "", ErrDriverPending
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return "", ErrUpdatePending
+	}
+	if m.Disabled {
+		return "", ErrDisabled
 	}
 	if settings := m.current(); settings.Volume != "" {
 		volume = settings.Volume
 	}
 	if !slices.Contains(mounted, volume) || volume == "" {
 		return "", ErrUnknownVolume
-	}
-	if _, exists := m.installed(volume)[name]; exists {
-		return "", ErrExists
 	}
 	return volume, nil
 }
@@ -342,8 +570,12 @@ var errDownloadChecksum = errors.New("image checksum or size")
 // file whose final hash does not match is deleted and fetched once more from
 // the start. The caller must own dest's directory.
 func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest Manifest) error {
+	return m.downloadImageWith(ctx, m.client, url, dest, manifest)
+}
+
+func (m *Manager) downloadImageWith(ctx context.Context, client *http.Client, url, dest string, manifest Manifest) error {
 	for attempt := 0; ; attempt++ {
-		resumed, err := m.downloadAttempt(ctx, url, dest, manifest)
+		resumed, err := m.downloadAttempt(ctx, client, url, dest, manifest)
 		if err != nil && resumed && attempt == 0 && errors.Is(err, errDownloadChecksum) {
 			continue
 		}
@@ -351,7 +583,7 @@ func (m *Manager) downloadImage(ctx context.Context, url, dest string, manifest 
 	}
 }
 
-func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifest Manifest) (resumed bool, err error) {
+func (m *Manager) downloadAttempt(ctx context.Context, client *http.Client, url, dest string, manifest Manifest) (resumed bool, err error) {
 	if manifest.Size < 0 {
 		return false, fmt.Errorf("%w: image size", ErrInvalid)
 	}
@@ -410,7 +642,7 @@ func (m *Manager) downloadAttempt(ctx context.Context, url, dest string, manifes
 	if resumed {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 	}
-	response, err := m.client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return resumed, transferErr(err)
 	}

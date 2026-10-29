@@ -7,6 +7,8 @@
 		locked?: boolean;
 		wide?: boolean;
 		maxWidth?: number;
+		/** "menu" for pop-ups that act as a menu (command palette): menu glass values. */
+		surface?: 'dialog' | 'menu';
 		onrequestclose?: () => void;
 		onclose: () => void;
 		children: Snippet;
@@ -16,6 +18,7 @@
 		locked = false,
 		wide = false,
 		maxWidth,
+		surface = 'dialog',
 		onrequestclose,
 		onclose,
 		children,
@@ -41,6 +44,7 @@
 	bind:this={dialog}
 	class="tile"
 	class:wide
+	class:as-menu={surface === 'menu'}
 	style:max-width={maxWidth ? `${Math.max(320, Math.min(1400, maxWidth))}px` : undefined}
 	aria-labelledby="{id}-title"
 	{onclose}
@@ -59,10 +63,20 @@
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: var(--muted) transparent;
-		background: var(--surface);
-		border-color: var(--border);
+		/* Surface per Settings › Appearance › Menus and windows (app.css). */
+		background: var(--dialog-bg);
+		border-color: var(--dialog-border);
+		-webkit-backdrop-filter: var(--dialog-backdrop);
+		backdrop-filter: var(--dialog-backdrop);
 		color: var(--text);
-		box-shadow: var(--shadow-menu);
+		box-shadow: var(--dialog-shadow);
+	}
+	dialog.as-menu {
+		background: var(--menu-bg);
+		border-color: var(--menu-border);
+		-webkit-backdrop-filter: var(--menu-backdrop);
+		backdrop-filter: var(--menu-backdrop);
+		box-shadow: var(--menu-shadow);
 	}
 	dialog.wide {
 		max-width: 760px;

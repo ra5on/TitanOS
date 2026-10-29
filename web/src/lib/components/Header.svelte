@@ -102,7 +102,7 @@
 	</button>
 	<div
 		id="mobile-navigation"
-		class="mobile-navigation"
+		class="mobile-navigation floating-menu"
 		popover="auto"
 		bind:this={mobileMenu}
 		ontoggle={() => (mobileOpen = mobileMenu?.matches(':popover-open') ?? false)}
@@ -400,9 +400,8 @@
 		max-height: calc(100dvh - 84px - env(safe-area-inset-bottom));
 		overflow-y: auto;
 		padding: 12px;
-		border: 1px solid var(--border);
+		/* Surface from .floating-menu (app.css), like every other menu. */
 		border-radius: var(--radius-tile);
-		background: var(--header);
 		color: var(--text);
 	}
 	.mobile-nav-heading {

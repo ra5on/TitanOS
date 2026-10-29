@@ -76,6 +76,26 @@ export type Effects = {
 export const EFFECT_IDS = ['transitions', 'skeleton', 'micro', 'pulse', 'gradient', 'illustrations', 'shortcuts'] as const;
 export type EffectId = (typeof EFFECT_IDS)[number];
 
+/**
+ * Pop-up surfaces (Settings › Appearance › Menus and windows). With `own`
+ * off they follow the tiles; with it on they use their own glass values.
+ * Only used with the glass style; flat and outline stay opaque.
+ */
+export type FloatingSurface = {
+	own: boolean;
+	/** Transparency in percent, 0–90 (limited like tiles, see floatingAlpha). */
+	glass: number;
+	/** Blur in px, 0–40. */
+	blur: number;
+	/** Shine edge in percent, 0–60. */
+	shine: number;
+};
+
+export type DialogSurface = FloatingSurface & {
+	/** Dimming of the page behind a dialog in percent, 0–90; also without own values. */
+	dim: number;
+};
+
 export type Appearance = {
 	theme: ThemeId;
 	accent: AccentId;
@@ -109,6 +129,10 @@ export type Appearance = {
 	/** Length of that movement in ms, 150–1000. */
 	duration: number;
 	fx: Effects;
+	/** Menus: account menu, dropdowns, context menus, mobile navigation, palette, bell, terminal "+". */
+	menus: FloatingSurface;
+	/** Dialogs (Dialog.svelte) and the dimming behind them. */
+	dialogs: DialogSurface;
 };
 
 export const LIMITS = {
@@ -120,8 +144,15 @@ export const LIMITS = {
 	font: { min: 90, max: 120, step: 5 },
 	dim: { min: 0, max: 80, step: 5 },
 	glow: { min: 0, max: 100, step: 5 },
-	duration: { min: 150, max: 1000, step: 50 }
+	duration: { min: 150, max: 1000, step: 50 },
+	dialogDim: { min: 0, max: 90, step: 5 }
 } as const;
+
+/**
+ * Menus and dialogs that follow the tiles stay at least this opaque: they
+ * lie over text, not only over the background (the rule before 0.36.0).
+ */
+export const FLOATING_INHERIT_MIN = 0.7;
 
 export function defaultAppearance(): Appearance {
 	return {
@@ -144,8 +175,31 @@ export function defaultAppearance(): Appearance {
 		glowColor: '',
 		motion: true,
 		duration: 450,
-		fx: defaultEffects()
+		fx: defaultEffects(),
+		menus: defaultFloating(),
+		dialogs: { ...defaultFloating(), dim: 70 }
 	};
+}
+
+/** Values a pop-up surface starts with; `own` off means "like the tiles". */
+export function defaultFloating(): FloatingSurface {
+	return { own: false, glass: 30, blur: 24, shine: 20 };
+}
+
+function sanitizeFloating(input: unknown): FloatingSurface {
+	const d = defaultFloating();
+	const v = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
+	return {
+		own: typeof v.own === 'boolean' ? v.own : d.own,
+		glass: inRange(v.glass, LIMITS.glass, d.glass),
+		blur: inRange(v.blur, LIMITS.blur, d.blur),
+		shine: inRange(v.shine, LIMITS.shine, d.shine)
+	};
+}
+
+function sanitizeDialogs(input: unknown): DialogSurface {
+	const v = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
+	return { ...sanitizeFloating(input), dim: inRange(v.dim, LIMITS.dialogDim, 70) };
 }
 
 export function defaultEffects(): Effects {
@@ -229,7 +283,9 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		glowColor: isHex(v.glowColor) ? v.glowColor.toUpperCase() : '',
 		motion: typeof v.motion === 'boolean' ? v.motion : d.motion,
 		duration: inRange(v.duration, LIMITS.duration, d.duration),
-		fx: sanitizeEffects(v.fx)
+		fx: sanitizeEffects(v.fx),
+		menus: sanitizeFloating(v.menus),
+		dialogs: sanitizeDialogs(v.dialogs)
 	};
 }
 
@@ -276,6 +332,28 @@ export function glassAlpha(a: Appearance, palette: Palette): number {
 	return Math.max(alpha, palette.dark ? 0.35 : 0.5);
 }
 
+/** The glass values a menu or dialog uses: its own, or those of the tiles. */
+export function floatingValues(a: Appearance, s: FloatingSurface): { glass: number; blur: number; shine: number } {
+	return s.own ? { glass: s.glass, blur: s.blur, shine: s.shine } : { glass: a.glass, blur: a.blur, shine: a.shine };
+}
+
+/**
+ * Opacity of a glass menu or dialog. Unlike tiles they always lie over
+ * other content, so the limit holds on a plain background as well: own
+ * values at least 35 % (dark) or 50 % (light), like tiles; following the
+ * tiles at least FLOATING_INHERIT_MIN as before.
+ */
+export function floatingAlpha(a: Appearance, s: FloatingSurface, palette: Palette): number {
+	const { glass } = floatingValues(a, s);
+	const alpha = 1 - glass / 100;
+	if (!s.own) return Math.max(alpha, FLOATING_INHERIT_MIN);
+	return Math.max(alpha, palette.dark ? 0.35 : 0.5);
+}
+
+function shineColor(shine: number, dark: boolean): string {
+	return `rgba(255, 255, 255, ${(dark ? shine * 0.5 : 0.4 + shine * 0.5).toFixed(2)})`;
+}
+
 /** Contrast of normal text on surfaces; below 4.5 the editor warns. */
 export function textContrast(palette: Palette): number {
 	return contrast(palette.text, palette.surface);
@@ -293,6 +371,10 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 	const accent = resolveAccent(a, p);
 	const alpha = glassAlpha(a, p);
 	const shine = a.shine / 100;
+	const menu = floatingValues(a, a.menus);
+	const menuAlpha = floatingAlpha(a, a.menus, p);
+	const dialog = floatingValues(a, a.dialogs);
+	const dialogAlpha = floatingAlpha(a, a.dialogs, p);
 	return {
 		'--bg': p.bg,
 		'--surface': p.surface,
@@ -312,12 +394,22 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--font-scale': (a.font / 100).toFixed(2),
 		// Derived values the surface styles in app.css are built from.
 		'--glass-surface': withAlpha(p.surface, alpha),
-		'--glass-menu': withAlpha(p.surface, Math.max(alpha, 0.7)),
 		'--glass-border': p.dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)',
-		'--glass-shine-color': `rgba(255, 255, 255, ${(p.dark ? shine * 0.5 : 0.4 + shine * 0.5).toFixed(2)})`,
+		'--glass-shine-color': shineColor(shine, p.dark),
+		// Menus and dialogs (app.css builds --menu-*/--dialog-* surfaces from these).
+		'--menu-alpha': menuAlpha.toFixed(2),
+		'--menu-blur': `${menu.blur}px`,
+		'--menu-shine': (menu.shine / 100).toFixed(2),
+		'--glass-menu': withAlpha(p.surface, menuAlpha),
+		'--menu-shine-color': shineColor(menu.shine / 100, p.dark),
+		'--dialog-alpha': dialogAlpha.toFixed(2),
+		'--dialog-blur': `${dialog.blur}px`,
+		'--dialog-shine': (dialog.shine / 100).toFixed(2),
+		'--glass-dialog': withAlpha(p.surface, dialogAlpha),
+		'--dialog-shine-color': shineColor(dialog.shine / 100, p.dark),
 		'--glass-shadow': `rgba(0, 0, 0, ${p.dark ? 0.3 : 0.08})`,
 		'--outline-border': p.dark ? shade(p.border, 0.12) : shade(p.border, -0.15),
-		'--overlay': withAlpha(p.dark ? p.bg : p.text, 0.7),
+		'--overlay': withAlpha(p.dark ? p.bg : p.text, a.dialogs.dim / 100),
 		'--bg-dim': (a.dim / 100).toFixed(2),
 		// A shadow list entry even when off, so it can follow --panel-shadow.
 		'--panel-glow': a.glow

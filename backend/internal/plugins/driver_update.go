@@ -100,7 +100,9 @@ func (m *Manager) validDriver(data []byte, sig []byte) (Manifest, error) {
 	if err != nil {
 		return manifest, err
 	}
-	if manifest.Name != "nvidia" || manifest.TitanOS != m.Release || manifest.Kernel != m.kernel || manifest.Revision == 0 || !driverHashRE.MatchString(manifest.SHA256) {
+	// Drivers of a kernel set in the plugin repository name no TitanOS
+	// release: they fit every base with that exact kernel.
+	if manifest.Name != "nvidia" || (manifest.TitanOS != m.Release && manifest.TitanOS != "") || manifest.Kernel != m.kernel || manifest.Revision == 0 || !driverHashRE.MatchString(manifest.SHA256) {
 		return manifest, fmt.Errorf("%w: driver target or revision", ErrInvalid)
 	}
 	return manifest, nil
@@ -223,12 +225,12 @@ func (m *Manager) checkDriverUpdate(ctx context.Context, mounted []string, selec
 		m.driverStatus.Version, m.driverStatus.SHA256 = cached.Version, cached.SHA256
 		m.mu.Unlock()
 	}
-	base, err := m.releaseBase()
+	metaCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	base, err := m.driverBase(metaCtx)
 	if err != nil {
 		return err
 	}
-	metaCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
 	catalog, err := m.fetchDriverVersions(metaCtx, base)
 	if err != nil {
 		return err
@@ -372,6 +374,26 @@ func (m *Manager) RequestDriverUpdate(hash string, mounted []string) error {
 	}
 	return nil
 }
+
+// driverBase is where driver updates come from: the kernel set of the
+// plugin repository for the running kernel, otherwise the TitanOS release.
+func (m *Manager) driverBase(ctx context.Context) (string, error) {
+	base, err := m.releaseBase()
+	if err != nil {
+		return "", err
+	}
+	_, kernel, err := m.fetchRepoSets(ctx, repoTarget{base: m.Release, kernel: m.kernel, kernelPackage: m.kernelPackage}, m.fetchMetadata)
+	switch {
+	case errors.Is(err, errNoPluginSet):
+		return base, nil
+	case err != nil:
+		return "", err
+	case kernel == nil:
+		return base, nil
+	}
+	return kernel.base, nil
+}
+
 func (m *Manager) fetchDriverVersions(ctx context.Context, base string) ([]DriverVersion, error) {
 	data, err := m.fetchMetadata(ctx, base+"nvidia-updates.json", 64<<10)
 	if err != nil {
@@ -385,12 +407,18 @@ func (m *Manager) fetchDriverVersions(ctx context.Context, base string) ([]Drive
 		return nil, fmt.Errorf("%w: driver catalog signature", ErrInvalid)
 	}
 	var catalog struct {
-		TitanOS     string          `json:"titanos"`
-		Kernel      string          `json:"kernel"`
-		Versions    []DriverVersion `json:"versions"`
-		Recommended string          `json:"recommended"`
+		TitanOS       string          `json:"titanos"`
+		Kernel        string          `json:"kernel"`
+		KernelPackage string          `json:"kernelPackage"`
+		Versions      []DriverVersion `json:"versions"`
+		Recommended   string          `json:"recommended"`
 	}
-	if json.Unmarshal(data, &catalog) != nil || catalog.TitanOS != m.Release || catalog.Kernel != m.kernel || len(catalog.Versions) > 32 {
+	if json.Unmarshal(data, &catalog) != nil {
+		return nil, ErrInvalid
+	}
+	// A kernel set's list names the kernel package instead of a release.
+	fits := catalog.TitanOS == m.Release || (catalog.TitanOS == "" && catalog.KernelPackage != "" && catalog.KernelPackage == m.kernelPackage)
+	if !fits || catalog.Kernel != m.kernel || len(catalog.Versions) > 32 {
 		return nil, ErrInvalid
 	}
 	seen, revisions := map[string]bool{}, map[uint64]bool{}

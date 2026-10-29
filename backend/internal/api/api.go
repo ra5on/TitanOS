@@ -35,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -103,6 +104,10 @@ type Options struct {
 	HealthReport *healthreport.Manager
 	// Fans drives the fans; nil makes one that only reads.
 	Fans *fans.Manager
+	// IPv64 is the account area of IPv64.net; nil makes one that is off.
+	IPv64 *ipv64.Manager
+	// IPv64Reserved are ports of titand that are never published.
+	IPv64Reserved []int
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
@@ -165,6 +170,7 @@ type Server struct {
 	loginLook   loginLook
 	appIcon     appIcons
 	dav         davState
+	mcp         mcpState
 	handler     http.Handler
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
@@ -186,6 +192,7 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
+	ipv64       ipv64Area
 }
 
 // New returns the handler for all requests.
@@ -239,6 +246,22 @@ func New(opts Options) *Server {
 		s.opts.WebPush = webpush.New(opts.Store)
 		s.opts.WebPush.Load()
 	}
+	if s.opts.IPv64 == nil {
+		s.opts.IPv64 = ipv64.NewManager(opts.Store)
+		s.opts.IPv64.Disabled = true
+		s.opts.IPv64.Options = ipv64Options
+		s.opts.IPv64.Fallback = func() (string, string) {
+			var ddns, le string
+			if s.opts.DDNS != nil {
+				ddns = s.opts.DDNS.IPv64Key()
+			}
+			if s.opts.LetsEncrypt != nil {
+				le = s.opts.LetsEncrypt.IPv64Key()
+			}
+			return ddns, le
+		}
+		s.opts.IPv64.Load(context.Background())
+	}
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
 		if manual, err := fs.Sub(s.opts.UI, "manual"); err == nil {
@@ -275,6 +298,10 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)
 	mux.HandleFunc("/dav/", s.handleWebDAV)
 	mux.HandleFunc("/dav", s.handleWebDAV)
+	// The MCP server checks its own token (mcp.go).
+	mux.HandleFunc(mcpPath, s.handleMCP)
+	mux.HandleFunc("GET /api/v1/system/mcp", s.requireUser(s.handleMCPSettings))
+	mux.HandleFunc("PUT /api/v1/system/mcp", s.requireAdmin(s.handleMCPSettingsSet))
 	mux.HandleFunc("GET /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettings))
 	mux.HandleFunc("PUT /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettingsSet))
 	mux.HandleFunc("GET /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAV))
@@ -457,6 +484,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxyDomain))
 	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRoute))
 	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnet))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnetRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAdmin(s.handleAppTailnetCheck))
 	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTarget))
 	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTargetRemove))
 
@@ -478,6 +508,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
+	// Taking a VM over from the copy of its settings on a volume.
+	mux.HandleFunc("GET /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdoptable))
+	mux.HandleFunc("POST /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdopt))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
 	mux.HandleFunc("GET /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicy))
 	mux.HandleFunc("PUT /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicyChange))
@@ -619,6 +652,20 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/network/ddns", s.requireAdmin(s.handleDDNS))
 	mux.HandleFunc("PUT /api/v1/network/ddns", s.requireAdmin(s.handleDDNSChange))
 	mux.HandleFunc("POST /api/v1/network/ddns/update", s.requireAdmin(s.handleDDNSUpdate))
+	// IPv64.net: POST everywhere, so that a typed-in API key stays out of addresses.
+	mux.HandleFunc("POST /api/v1/network/ipv64/account", s.requireAdmin(s.handleIPv64Account))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains", s.requireAdmin(s.handleIPv64Domains))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/create", s.requireAdmin(s.handleIPv64DomainCreate))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/change", s.requireAdmin(s.handleIPv64DomainChange))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records", s.requireAdmin(s.handleIPv64Records))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/add", s.requireAdmin(s.handleIPv64RecordAdd))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/delete", s.requireAdmin(s.handleIPv64RecordDelete))
+	mux.HandleFunc("POST /api/v1/network/ipv64/healthchecks", s.requireAdmin(s.handleIPv64Healthchecks))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/on", s.requireAdmin(s.handleIPv64HeartbeatOn))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/off", s.requireAdmin(s.handleIPv64HeartbeatOff))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/status", s.requireAdmin(s.handleIPv64HeartbeatStatus))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/test", s.requireAdmin(s.handleIPv64HeartbeatTest))
+	s.ipv64Routes(mux)
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 	// The chat in the web UI. Its settings are for administrators; who may
@@ -644,6 +691,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
 	mux.HandleFunc("POST /api/v1/assistant/models/delete", s.requireAdmin(s.handleAssistantModelDelete))
 	mux.HandleFunc("GET /api/v1/assistant/ollama-apps", s.requireAdmin(s.handleAssistantOllamaApps))
+	mux.HandleFunc("GET /api/v1/assistant/ollama-setup", s.requireAdmin(s.handleAssistantOllamaSetup))
 	mux.HandleFunc("GET /api/v1/assistant/models", s.requireAssistant(s.handleAssistantChatModels))
 	mux.HandleFunc("GET /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChats))
 	mux.HandleFunc("POST /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatCreate))
@@ -680,6 +728,11 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/plugins/catalog", s.requireAdmin(s.handlePluginCatalog))
 	mux.HandleFunc("POST /api/v1/plugins/recommendations/{name}/dismiss", s.requireAdmin(s.handlePluginDismiss))
 	mux.HandleFunc("DELETE /api/v1/plugins/recommendations/dismissed", s.requireAdmin(s.handlePluginRestoreDismissed))
+	mux.HandleFunc("GET /api/v1/plugins/sources", s.requireAdmin(s.handlePluginSources))
+	mux.HandleFunc("POST /api/v1/plugins/sources", s.requireAdmin(s.handlePluginSourceAdd))
+	mux.HandleFunc("DELETE /api/v1/plugins/sources/{id}", s.requireAdmin(s.handlePluginSourceRemove))
+	mux.HandleFunc("POST /api/v1/plugins/external/inspect", s.requireAdmin(s.handlePluginInspect))
+	mux.HandleFunc("POST /api/v1/plugins/external", s.requireHeavyAdmin(s.handlePluginExternal))
 	mux.HandleFunc("POST /api/v1/plugins", s.requireHeavyAdmin(s.handlePluginInstall))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/update", s.requireHeavyAdmin(s.handlePluginUpdate))
 	mux.HandleFunc("POST /api/v1/plugins/{name}/{action}", s.requireAdmin(s.handlePluginAction))

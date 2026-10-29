@@ -30,7 +30,10 @@ titand leitet Anfragen für den Namen an den Port der App weiter. Sie steht nich
 in der Compose-Datei, sondern in `/config/docker/proxy.json`. Die API setzt die
 Adresse als `proxyUrl` an den Container, der den gewählten Port veröffentlicht
 (bei Host-Netzwerk an alle Container der App); bei Stacks dient sie dem
-Hauptdienst als letzter Rückfall. Details: [APP-PROXY.md](APP-PROXY.md).
+Hauptdienst als letzter Rückfall. Hat die App ein eigenes Gerät im Tailnet
+(„Im Tailnet veröffentlichen“) und läuft es, kommt der Knopf „ts.net“ mit
+`https://<name>.<tailnet>.ts.net` dazu (`tailnetUrl`, an denselben Containern
+wie `proxyUrl`). Details: [APP-PROXY.md](APP-PROXY.md).
 
 ## Darstellung
 

@@ -248,10 +248,10 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 		if chat.Run.State == "blocked" {
 			code := "agent_blocked"
 			if errors.Is(err, assistant.ErrUpstream) {
-				code = "ollama_failed"
-				if errors.Is(err, assistant.ErrModelOutput) {
-					code = "model_tool_parse"
-				}
+				code = assistantUpstreamCode(err)
+			}
+			if errors.Is(err, assistant.ErrKeyMissing) {
+				code = "assistant_key_missing"
 			}
 			if errors.Is(err, assistant.ErrNoModel) {
 				code = "assistant_no_model"

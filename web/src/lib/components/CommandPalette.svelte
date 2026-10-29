@@ -42,7 +42,7 @@
   else if(e.key==='Enter'){e.preventDefault();if(entries[index])visit(entries[index]);}
  }
 </script>
-<Dialog title={t('palette.title')} {onclose}>
+<Dialog title={t('palette.title')} surface="menu" {onclose}>
  <label class="search"><span>{t('palette.search')}</span><!-- svelte-ignore a11y_autofocus --><input class="field" type="search" role="combobox" aria-expanded={entries.length>0} aria-autocomplete="list" aria-controls="palette-results" aria-activedescendant={entries[index]?'palette-result-'+index:undefined} bind:value={query} oninput={()=>index=0} onkeydown={keys} autofocus/></label>
  <p class="keys muted">{t('palette.keys',{open:isMac?'⌘K':'Ctrl+K'})}</p>
  {#if loading}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}

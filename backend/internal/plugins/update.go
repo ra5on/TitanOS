@@ -2,7 +2,9 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +27,12 @@ func (m *Manager) releaseDir(volume, version string) string {
 
 // PrepareUpdate is called before the updater writes a bootable target slot.
 // fetch and download use the updater's bounded, resumable HTTP implementation.
-func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base string, assets map[string]string, mounted []string,
+//
+// The plugin repository is asked for the sets of the target kernel first
+// (kernelPackage comes from the target's signed manifest; older manifests
+// lack it, then only the common set fits). A plugin it does not have comes
+// from the target release as before.
+func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPackage, base string, assets map[string]string, mounted []string,
 	fetch func(context.Context, string, int64) ([]byte, error),
 	download func(context.Context, string, string, string, int64) error) error {
 	m.actions.Lock()
@@ -64,6 +71,30 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
+	type source struct {
+		base, asset string
+		set         *repoSet
+		item        repoIndexItem
+	}
+	sources := map[string]source{}
+	for name, asset := range assets {
+		sources[name] = source{base: base, asset: asset}
+	}
+	common, kernelSet, err := m.fetchRepoSets(ctx, repoTarget{base: version, kernel: kernel, kernelPackage: kernelPackage}, m.fetchMetadata)
+	// An unreachable repository leaves the plugins of the target release,
+	// which carries copies of them; anything not authentic stops the update.
+	if errors.Is(err, ErrInvalid) {
+		return fmt.Errorf("plugin repository: %w", err)
+	} else if err != nil && !errors.Is(err, errNoPluginSet) {
+		slog.Warn("plugin repository unavailable, using the plugins of the release", "err", err)
+	}
+	for _, set := range []*repoSet{common, kernelSet} {
+		if set != nil {
+			for _, item := range set.index.Plugins {
+				sources[item.Name] = source{base: set.base, asset: item.Name + manifestSuffix, set: set, item: item}
+			}
+		}
+	}
 	stage, err := os.MkdirTemp(parent, ".prepare-")
 	if err != nil {
 		return err
@@ -74,12 +105,12 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 		manifest := old
 		_, localErr := m.localDriver(m.dir(settings.Volume))
 		trusted := m.official(oldPath) || (name == "nvidia" && localErr == nil)
-		if asset, available := assets[name]; available && trusted {
-			data, err := fetch(ctx, base+asset, 64<<10)
+		if src, available := sources[name]; available && trusted {
+			data, err := fetch(ctx, src.base+src.asset, 64<<10)
 			if err != nil {
 				return fmt.Errorf("plugin %s: %w", name, err)
 			}
-			sig, err := fetch(ctx, base+asset+".minisig", 4096)
+			sig, err := fetch(ctx, src.base+src.asset+".minisig", 4096)
 			if err != nil {
 				return err
 			}
@@ -94,13 +125,17 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, base strin
 			if err != nil || !m.official(path) {
 				return fmt.Errorf("%w: plugin %s signature or metadata", ErrInvalid, name)
 			}
-			if manifest.Name != name || (manifest.Version != version && !strings.HasSuffix(manifest.Version, "-titanos-"+version)) {
+			if src.set != nil {
+				if _, err := verifySetManifest(src.set, src.item, data); err != nil {
+					return err
+				}
+			} else if manifest.Name != name || (manifest.Version != version && !strings.HasSuffix(manifest.Version, "-titanos-"+version)) {
 				return fmt.Errorf("%w: plugin %s targets another release", ErrInvalid, name)
 			}
 			if manifest.Kernel != "" && manifest.Kernel != kernel {
 				return fmt.Errorf("%w: plugin %s targets another kernel", ErrInvalid, name)
 			}
-			if err := download(ctx, base+name+".raw", filepath.Join(stage, name+".raw"), manifest.SHA256, manifest.Size); err != nil {
+			if err := download(ctx, src.base+name+".raw", filepath.Join(stage, name+".raw"), manifest.SHA256, manifest.Size); err != nil {
 				return err
 			}
 		} else {

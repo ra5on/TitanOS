@@ -587,7 +587,7 @@ func TestPluginPreparationFailurePreservesFallbackSlot(t *testing.T) {
 	os.WriteFile(oldEntry, []byte("fallback entry"), 0o644)
 	os.WriteFile(oldKernel, []byte("fallback kernel"), 0o644)
 	called := false
-	e.m.PreparePlugins = func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error {
+	e.m.PreparePlugins = func(context.Context, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error {
 		called = true
 		return errors.New("bad plugin signature")
 	}

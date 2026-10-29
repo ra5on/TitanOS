@@ -11,6 +11,11 @@ die Weboberfläche; titand unterscheidet am Namen). Ein Zertifikat von Let's
 Encrypt für `*.<domain>` holt auf Wunsch Einstellungen › Let's Encrypt
 (`docs/LETSENCRYPT.md`).
 
+Unabhängig davon kann eine App unter „Öffentlich über IPv64“ im App-Editor über
+das CDN von IPv64.net aus dem Internet erreichbar werden (Reverse Proxy von IPv64
+mit HTTPS direkt an den Port der App, nicht über den Proxy von titand; nie für
+die Ports der Weboberfläche). Einzelheiten und Warnungen: `docs/IPV64.md`.
+
 ## Bedienung
 
 Docker › App bearbeiten › Abschnitt „HTTPS-Name“ (nur Besitzer und
@@ -77,9 +82,12 @@ NAS. Öffentliche Ziele werden abgelehnt.
 `fotos.example.org`. Jede Domain gehört genau einer Route (über Apps und Ziele
 eindeutig), mindestens zwei Teile, keine Platzhalter, nie `.local`. Eine volle
 Domain wird vor `<name>.<suffix>` erkannt. Gesetzt werden sie im Feld „Eigene
-Domains“ des App-Editors bzw. des Bearbeiten-Dialogs dieser Seite (seit 0.34.0;
-vorher unter Einstellungen › IPv64 › Zuweisungen). Auf das NAS zeigen muss der
-Name im DNS selbst, z. B. über Dynamisches DNS. Formulare ohne `domains`
+Domains“ des App-Editors bzw. des Bearbeiten-Dialogs dieser Seite (seit 0.34.0).
+Auf das NAS zeigen muss der Name im DNS selbst, z. B. über Dynamisches DNS. Mit
+IPv64.net erledigt beides auch Einstellungen › Dynamisches DNS › IPv64 ›
+Zuweisungen (`docs/IPV64.md`): Es schreibt in dasselbe Feld `domains` (keine
+zweite Liste) und nimmt den Namen in dynamisches DNS auf; Domains des Kontos, die
+hier von Hand stehen, zeigt es als zugewiesen. Formulare ohne `domains`
 behalten die gespeicherten. Die Adressen der
 Route nennen sie (`urls`).
 
@@ -264,6 +272,64 @@ von Let's Encrypt holt und erneuert (unabhängig vom ACME-Client von TitanOS).
   `GET` liefert `tailnet: {available, keySet}`.
 - Entwicklungsmodus startet keine Instanzen.
 
+### Mit einem Klick ins Tailnet
+
+Entscheidung des Projektinhabers vom 29.10.2026, angelehnt an Unraid:
+**„Im Tailnet veröffentlichen“** im Kontextmenü einer verwalteten App bzw.
+eines Stack-Mitglieds der Docker-Übersicht, als Knopf im Kopf eines Stacks und
+im Kopfbereich des App-Editors (nur Besitzer/Administratoren, wie die übrigen
+Proxy-Einstellungen). `internal/appproxy/oneclick.go`.
+
+- **Ein Klick** schaltet für die App „Über Tailscale erreichbar“ ein. Ohne
+  Route legt er eine an: HTTPS-Name aus dem App-Namen als DNS-Teil
+  (`DNSLabel`: Kleinbuchstaben, alles außer `a–z`, `0–9`, `-` wird zu `-`,
+  höchstens 63 Zeichen, leer → `app`; ist der Name vergeben, `-2`, `-3` …),
+  „nur Heimnetz“ an, Port = WebUI-Port des Hauptdienstes (`docker.primaryServices`
+  bzw. die automatische Wahl der Übersicht, sonst `titanos.webui` eines
+  anderen Dienstes, sonst der erste veröffentlichte TCP-Port; schickt die Seite
+  keinen, ermittelt titand ihn genauso aus den Containern der App). Eine
+  vorhandene Route behält Namen, Port und weitere Einstellungen und wird
+  eingeschaltet. Der Name im Tailnet ist der DNS-Teil des App-Namens (bei
+  Kollision mit einem anderen Gerät `-2` …) und lässt sich danach wie bisher im
+  App-Editor bzw. unter Einstellungen › HTTPS-Namen für Apps ändern.
+- Hat erst der Klick die Route eingeschaltet, trägt sie `tailnetOnly: true`
+  (ältere titand ignorieren das Feld). Speichern der Route in einem Formular
+  entfernt die Markierung; die Route gehört dann dem Nutzer.
+- Der Dialog fragt nur, was fehlt: ohne gespeicherten Auth-Key einmalig ein
+  Feld dafür (Link auf `login.tailscale.com/admin/settings/keys`, Hinweis
+  „Reusable“ an, „Ephemeral“ aus, Tag optional; gespeichert wie bisher, nur
+  „ist gesetzt“). Ist das Plugin nicht installiert oder nicht aktiv, erklärt er
+  das und verlinkt die Plugins; ist der Hauptschalter aus, verweist er auf die
+  Einstellungen. Danach zeigt er die Schritte (Instanz startet, meldet sich an,
+  Zertifikat, Adresse antwortet) bis zur Adresse mit Kopieren/Öffnen. Meldet
+  das Gerät `https-off`, zeigt er den Ein-Klick-Link des Plugins
+  („HTTPS im Tailnet einschalten“, `tailscale/cert.go`), sonst einen Link auf
+  die DNS-Einstellungen bei Tailscale. Schließen bricht nichts ab.
+- **Erreichbarkeit:** `POST …/tailnet/check` ruft `https://<name>.ts.net/`
+  (HEAD) über das Tailscale des NAS an der Tailnet-Adresse des Geräts auf
+  (IPv4 zuerst), mit SNI und Zertifikatsprüfung gegen die Systemwurzeln; jede
+  HTTP-Antwort gilt als erreichbar, 502 heißt „die App antwortet nicht“. Der
+  Dialog fragt alle fünf Sekunden, nach zwölf Fehlschlägen zeigt er die Adresse
+  mit dem Hinweis auf die Zugriffsregeln des Tailnets (das NAS selbst muss das
+  Gerät erreichen dürfen).
+- **„Aus dem Tailnet nehmen“** (einfacher Bestätigungsdialog): „Über
+  Tailscale“ aus; der Abgleich meldet die Instanz ab (`tailscale logout`), hält
+  sie an und löscht ihren Zustandsordner. Eine Route mit `tailnetOnly` wird
+  ausgeschaltet, eine eigene HTTPS-Name-Route bleibt an. Das Gerät bleibt in der
+  Tailscale-Verwaltung aufgeführt, bis der Besitzer es dort entfernt; der Dialog
+  sagt das.
+- **Links:** `GET /api/v1/docker` setzt `tailnetUrl` an dieselben Container wie
+  `proxyUrl`, solange das Gerät `running` ist; die Link-Knöpfe (Docker-Übersicht,
+  Stack-Kopf, App-Editor, Dashboard-Menü) zeigen ihn als „ts.net“.
+- API (nur Besitzer/Administratoren, Aktivitätsprotokoll mit App und Namen,
+  ein mitgeschickter Key als `tailscale-key`, die Prüfung ohne Eintrag):
+  `POST /api/v1/docker/proxy/apps/{app}/tailnet` mit `{port?, tailscaleKey?}`,
+  `DELETE /api/v1/docker/proxy/apps/{app}/tailnet` (beide antworten wie
+  `GET /docker/proxy`), `POST /api/v1/docker/proxy/apps/{app}/tailnet/check` →
+  `{url, reachable, status, error}`. Fehler `tailnet_unavailable` (409, Plugin
+  nicht aktiv), `tailnet_key_missing` (409), `proxy_off` (409),
+  `proxy_no_port` (400), `tailnet_not_ready` (409), sonst wie oben.
+
 ## Prüfstand und Grenzen
 
 Geprüft mit Go-Tests (`internal/appproxy`, `internal/tlscert/apps_test.go`,
@@ -279,8 +345,17 @@ Netze (auch IPv4 in IPv6), Ziele samt Ablehnung öffentlicher Adressen und der
 Ports von titand bei jeder Verbindung, Zertifikatsprüfung gegen ein selbst
 signiertes Zertifikat. Volle Domains (`TestFullDomains`: Erkennung, Eindeutigkeit,
 Prüfung, Behalten ohne Feld, Zertifikatsnamen, Neustart, Hauptschalter) und ihre
-Aufnahme bei Let's Encrypt (`TestAppNamesJoinTheCertificate`). Webtest
-`web/tests/app-proxy.test.mjs`.
+Aufnahme bei Let's Encrypt (`TestAppNamesJoinTheCertificate`). Ein-Klick ins
+Tailnet (`internal/appproxy/oneclick_test.go`, `internal/api/app_tailnet_test.go`)
+mit nachgebautem systemctl/systemd-run/`tailscale`: Anlegen samt Namensbildung
+und Kollisionen, fehlender bzw. ungültiger Auth-Key, Plugin nicht aktiv,
+Hauptschalter aus, eigene Route bleibt erhalten, Entfernen mit Logout, Prüfung
+der Adresse (nachgebaut), Rechte. Webtest `web/tests/app-proxy.test.mjs`.
+
+Nicht geprüft beim Ein-Klick: ein echtes Tailnet (Anmeldung mit echtem Key,
+Zertifikat beim ersten Aufruf, Zugriffsregeln zwischen NAS und App-Gerät, die
+echte HTTPS-Prüfung über `tailscale0`) und der Dialog im Browser gegen ein
+echtes NAS.
 
 Nicht geprüft: echtes avahi (Neuladen von `/etc/avahi/hosts`, Namenskonflikte im
 Netz, ein von avahi umbenannter NAS-Name wie `nas-2.local`), Browser mit echten

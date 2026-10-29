@@ -43,6 +43,7 @@ var vmErrors = []struct {
 	{vm.ErrNoBridge, http.StatusConflict, "no_bridge"},
 	{vm.ErrBadFolder, http.StatusBadRequest, "invalid_folder"},
 	{vm.ErrBadImage, http.StatusBadRequest, "invalid_image"},
+	{vm.ErrNoCopy, http.StatusNotFound, "vm_copy_not_found"},
 	{hardware.ErrUnknown, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrNotPassable, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrIncompleteGroup, http.StatusBadRequest, "hardware_incomplete_group"},
@@ -116,6 +117,28 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// handleVMAdoptable lists the copies of VM settings on the mounted volumes
+// whose VMs are not registered. The volumes are only read here, on request.
+func (s *Server) handleVMAdoptable(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": s.opts.VMs.AdoptCandidates(s.opts.Storage.Mounted())})
+}
+
+// handleVMAdopt registers the VM of such a copy again.
+func (s *Server) handleVMAdopt(w http.ResponseWriter, r *http.Request) {
+	var req vm.AdoptRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	noteTarget(r, req.Volume+"/vms/"+req.Directory)
+	result, err := s.opts.VMs.Adopt(r.Context(), req, s.opts.Storage.Mounted())
+	if err != nil {
+		writeVMError(w, err)
+		return
+	}
+	slog.Info("VM taken over", "vm", result.Name, "volume", req.Volume, "folder", req.Directory, "by", currentUser(r).Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusCreated, result)
 }
 
 func (s *Server) handleVMUpdate(w http.ResponseWriter, r *http.Request) {

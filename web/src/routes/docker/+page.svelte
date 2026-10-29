@@ -7,9 +7,11 @@
 	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, stackPrimary, type DockerGroup, type DockerView } from '#lib/docker-layout.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
-	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
+	import { api, ApiError, type AppProxyStatus, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import AutoUpdateDialog from './AutoUpdateDialog.svelte';
+	import TailnetDialog from './TailnetDialog.svelte';
+	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
@@ -181,9 +183,28 @@
 	}
 	onMount(() => {
 		void load();
+		void loadProxy();
 		const timer = setInterval(load, 3000);
 		return () => clearInterval(timer);
 	});
+
+	// Apps in the tailnet (their own device, appproxy): read when the page
+	// opens and after "Im Tailnet veröffentlichen" changed something.
+	let proxy = $state<AppProxyStatus | null>(null);
+	let tailnetDialog = $state<{ app: string; mode: 'publish' | 'remove'; port: number } | null>(null);
+	async function loadProxy() {
+		try {
+			proxy = await api.get<AppProxyStatus>('/docker/proxy');
+		} catch {
+			proxy = null;
+		}
+	}
+	const appInTailnet = (app: string) => inTailnet(proxy?.apps?.find((route) => route.app === app));
+	function openTailnet(app: string) {
+		const members = containers.filter((container) => container.app === app);
+		const primary = stackPrimary({ id: `app:${app}`, name: app, members }, layout.primaryServices);
+		tailnetDialog = { app, mode: appInTailnet(app) ? 'remove' : 'publish', port: tailnetPort(members, primary) };
+	}
 
 	// The failed action, for "Retry" next to its error.
 	let failedAction = $state<{ key: string; action: () => Promise<unknown>; label: string } | null>(null);
@@ -326,7 +347,9 @@
 			onlogs: () => showLogs(container),
 			onremove: () => {dialogError=null;container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });},
 			onconsole: () => addContainerConsole(container.id, dockerName(container, 'distinct')),
-			onupdate: () => run(appKey(container.app), () => api.post(`/docker/apps/${container.app}/update`), container.app)
+			onupdate: () => run(appKey(container.app), () => api.post(`/docker/apps/${container.app}/update`), container.app),
+			ontailnet: proxy ? () => openTailnet(container.app) : undefined,
+			tailnet: appInTailnet(container.app)
 		};
 	}
 
@@ -600,6 +623,7 @@
    {#each links as link(link.label)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14}/>{link.text}</a>{/each}
    {#if layout.primaryServices[group.id]&&!primary}<span class="notice-warn missing-primary">{t('docker.primaryMissing',{service:layout.primaryServices[group.id]})}</span>{/if}
    <button class="btn small" disabled={editing||savingLayout} onclick={()=>editLinks(group)}>{t('docker.stackLinks')}</button>
+   {#if proxy && group.members.some(c=>c.managed && c.app)}{@const app = group.members.find(c=>c.managed && c.app)?.app ?? ''}<button class="btn small" disabled={editing} onclick={()=>openTailnet(app)}><Icon name="tailnet" size={14}/>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button>{/if}
   </div>
 	</div>
 {/snippet}
@@ -708,6 +732,7 @@
 	</Dialog>
 {/if}
 
+{#if tailnetDialog}<TailnetDialog app={tailnetDialog.app} mode={tailnetDialog.mode} port={tailnetDialog.port} onclose={() => (tailnetDialog = null)} onchanged={() => { void loadProxy(); void load(); }} />{/if}
 {#if autoUpdates}<AutoUpdateDialog apps={[...new Set(containers.filter((c) => c.managed && c.app).map((c) => c.app))].sort()} onclose={() => (autoUpdates = false)} />{/if}
 
 <style>

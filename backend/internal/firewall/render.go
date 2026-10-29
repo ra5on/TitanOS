@@ -40,6 +40,9 @@ type ruleset struct {
 	home    []netip.Prefix
 	apps    []App
 	blocked []netip.Prefix
+	// blocklist are the addresses of the v64 blocklist of IPv64 (package
+	// ipv64), dropped in the internet zone only.
+	blocklist []netip.Prefix
 	// admin is let in completely while a change is on trial.
 	admin netip.Addr
 	// networks of the NAS the zones are made of.
@@ -82,6 +85,9 @@ func render(rs ruleset) string {
 	h4, h6 := split(rs.home)
 	writeSet(&b, "home4", "ipv4_addr", h4)
 	writeSet(&b, "home6", "ipv6_addr", h6)
+	l4, l6 := split(rs.blocklist)
+	writeSet(&b, "blocklist4", "ipv4_addr", l4)
+	writeSet(&b, "blocklist6", "ipv6_addr", l6)
 
 	mems := members(rs.cfg, rs.networks)
 	// The zones with chains: the three made of addresses and those with
@@ -127,6 +133,9 @@ func render(rs ruleset) string {
 		cell := rs.cfg.Cell(zone, ToNAS)
 		drop := "goto drop_" + string(zone)
 		fmt.Fprintf(&b, "\tchain %s {\n", zone)
+		if zone == Internet {
+			b.WriteString("\t\tip saddr @blocklist4 goto drop_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_internet comment \"v64 blocklist\"\n")
+		}
 		for _, p := range cell.Policies {
 			for _, line := range nasLines(p, services, drop) {
 				b.WriteString("\t\t" + line + "\n")
@@ -178,6 +187,9 @@ func render(rs ruleset) string {
 		cell := rs.cfg.Cell(zone, ToApps)
 		drop := "goto drop_app_" + string(zone)
 		fmt.Fprintf(&b, "\tchain app_%s {\n", zone)
+		if zone == Internet {
+			b.WriteString("\t\tip saddr @blocklist4 goto drop_app_internet comment \"v64 blocklist\"\n\t\tip6 saddr @blocklist6 goto drop_app_internet comment \"v64 blocklist\"\n")
+		}
 		for _, p := range cell.Policies {
 			for _, line := range appLines(p, apps, drop) {
 				b.WriteString("\t\t" + line + "\n")

@@ -57,6 +57,10 @@ type Tailnet struct {
 	runDir    string
 	binary    string
 
+	// probe asks a device's address for its ts.net name over HTTPS
+	// (oneclick.go); replaced in tests.
+	probe func(ctx context.Context, ip, name string) (int, error)
+
 	mu     sync.Mutex
 	nodes  map[string]*TailnetNode
 	served map[string]string // id → serve target that is set
@@ -70,6 +74,7 @@ type TailnetNode struct {
 	URL   string `json:"url,omitempty"`
 	Error string `json:"error,omitempty"`
 	dns   string
+	ips   []string // the device's addresses in the tailnet
 }
 
 // TailnetStatus is the global part the settings page shows.
@@ -79,7 +84,15 @@ type TailnetStatus struct {
 }
 
 func newTailnet() *Tailnet {
-	return &Tailnet{runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-ts-names", binary: "/usr/sbin/tailscaled", nodes: map[string]*TailnetNode{}, served: map[string]string{}}
+	return &Tailnet{runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-ts-names", binary: "/usr/sbin/tailscaled", probe: probeTailnet, nodes: map[string]*TailnetNode{}, served: map[string]string{}}
+}
+
+// Configure points the devices at other commands and folders: runner
+// plays systemctl, systemd-run and tailscale, mountRoot holds the data
+// volumes, runDir the sockets, binary is tailscaled. For tests of other
+// packages; titand keeps the defaults.
+func (t *Tailnet) Configure(runner run.Runner, mountRoot, runDir, binary string) {
+	t.runner, t.mountRoot, t.runDir, t.binary = runner, mountRoot, runDir, binary
 }
 
 // nodeID is the name of a route's unit, socket and state folder:
@@ -294,7 +307,7 @@ func (t *Tailnet) set(key string, n *TailnetNode) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if old := t.nodes[key]; old != nil && n.dns == "" && n.State == "running" {
-		n.dns = old.dns
+		n.dns, n.ips = old.dns, old.ips
 	}
 	t.nodes[key] = n
 }
@@ -355,8 +368,9 @@ type tsStatus struct {
 	BackendState string
 	CertDomains  []string
 	Self         struct {
-		DNSName  string
-		HostName string
+		DNSName      string
+		HostName     string
+		TailscaleIPs []string
 	}
 }
 
@@ -435,7 +449,7 @@ func (t *Tailnet) ensure(ctx context.Context, volume string, w tailnetWant, key 
 		t.cmd(ctx, id, "set", "--hostname="+w.name)
 	}
 	dns := strings.TrimSuffix(strings.ToLower(st.Self.DNSName), ".")
-	node := &TailnetNode{State: "running", URL: "https://" + dns, dns: dns}
+	node := &TailnetNode{State: "running", URL: "https://" + dns, dns: dns, ips: st.Self.TailscaleIPs}
 	if len(st.CertDomains) == 0 {
 		// Without HTTPS certificates in the tailnet, Serve has no certificate.
 		node.State = "https-off"

@@ -125,6 +125,10 @@ type Plugin struct {
 	Problem string `json:"problem"`
 	// Update is another version of this installed plugin found in a share.
 	Update *PluginUpdate `json:"update,omitempty"`
+	// Source is the ID of the source a community download comes from; URL
+	// the link of a single one (external.go).
+	Source string `json:"source,omitempty"`
+	URL    string `json:"url,omitempty"`
 	// Devices is the present hardware the plugin is meant for.
 	Devices []Device `json:"devices,omitempty"`
 }
@@ -134,6 +138,10 @@ type PluginUpdate struct {
 	Path     string `json:"path"`
 	Version  string `json:"version"`
 	Official bool   `json:"official"`
+	// Download is a newer version in the official catalog or a source; Path
+	// is empty. Source names that source.
+	Download bool   `json:"download,omitempty"`
+	Source   string `json:"source,omitempty"`
 }
 
 // Status is everything the plugin page shows.
@@ -148,6 +156,8 @@ type Status struct {
 	Recommendations []Recommendation `json:"recommendations"`
 	// Dismissed counts recommendations the owner asked not to see again.
 	Dismissed int `json:"dismissed"`
+	// Sources of community plugins with what the last refresh found.
+	Sources []SourceState `json:"sources"`
 }
 
 // Manager installs plugins and keeps the system in line with the settings.
@@ -182,12 +192,26 @@ type Manager struct {
 	loaded   bool
 	settings Settings
 	// The release catalog is kept in memory; polling Status never contacts GitHub.
-	client         *http.Client
-	releaseSource  string
-	catalog        CatalogStatus
-	catalogPlugins []Plugin
-	catalogAttempt time.Time
-	catalogLoading bool
+	client        *http.Client
+	releaseSource string
+	// pluginSource is the plugin repository (repo.go); empty means the
+	// plugins of the TitanOS release only.
+	pluginSource string
+	// The running kernel package and image, which a plugin set has to match.
+	kernelPackage, debian, sysextLevel string
+	catalogSerial                      uint64
+	serialLoaded                       bool
+	catalog                            CatalogStatus
+	catalogPlugins                     []Plugin
+	catalogAttempt                     time.Time
+	catalogLoading                     bool
+	// Community plugins from links and sources (external.go). Their client
+	// checks every address it connects to; sources are kept in RAM after Load.
+	externalClient *http.Client
+	sources        []Source
+	sourcesLoaded  bool
+	sourceEntries  []catalogEntry
+	sourceStates   map[string]SourceState
 	// Official images being downloaded, without holding actions.
 	downloading map[string]bool
 	// Steps of installations, updates and removals, RAM only; own lock so
@@ -244,7 +268,10 @@ func (m *Manager) RuntimeAction(name string, action func() error) error {
 func NewManager(store *config.Store) *Manager {
 	release, _ := os.ReadFile("/proc/sys/kernel/osrelease")
 	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	return &Manager{driverRequests: make(chan string, 1), bootID: strings.TrimSpace(string(boot)), store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS",
+	version, _ := os.ReadFile("/proc/version")
+	osRelease, _ := os.ReadFile("/usr/lib/os-release")
+	debian, sysextLevel := osReleaseValues(string(osRelease))
+	return &Manager{pluginSource: "https://github.com/ra5on/TitanOS-Plugins", kernelPackage: kernelPackageOf(string(version)), debian: debian, sysextLevel: sysextLevel, driverRequests: make(chan string, 1), bootID: strings.TrimSpace(string(boot)), store: store, runner: run.Exec{}, mountRoot: "/mnt", extDir: "/run/extensions", keyDir: "/usr/share/titanos/plugin-keys", kernel: strings.TrimSpace(string(release)), moduleRoot: "/run/titanos-plugin-modules", moduleSource: "/usr/lib/modules", applied: "-", active: map[string]Manifest{}, resident: map[string]Manifest{}, problems: map[string]string{}, client: catalogClient(), releaseSource: "https://github.com/ra5on/TitanOS",
 		sysRoot: "/sys", pciIDsPath: "/usr/share/misc/pci.ids", catalogTable: catalogTableDir}
 }
 
@@ -277,7 +304,7 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
-	return nil
+	return m.loadSources()
 }
 
 func (m *Manager) current() Settings {
@@ -460,6 +487,30 @@ func (m *Manager) Status(mounted []string) Status {
 			status.Plugins = append(status.Plugins, plugin)
 		}
 	}
+	// A newer signed version in the catalog, mostly from the plugin repository.
+	for _, plugin := range available {
+		if index, ok := installedAt[plugin.Name]; ok {
+			installed := &status.Plugins[index]
+			if installed.Official && updatable(installed.Manifest, plugin.Manifest) && m.compatible(plugin.Manifest) {
+				installed.Update = &PluginUpdate{Version: plugin.Version, Official: true, Download: true}
+			}
+		}
+	}
+	// Community plugins from sources: never in place of an official one.
+	for _, entry := range m.sourceSnapshot() {
+		plugin := entry.plugin
+		if index, ok := installedAt[plugin.Name]; ok {
+			installed := &status.Plugins[index]
+			if installed.Update == nil && !installed.Official && updatable(installed.Manifest, plugin.Manifest) && m.compatible(plugin.Manifest) {
+				installed.Update = &PluginUpdate{Version: plugin.Version, Official: plugin.Official, Download: true, Source: plugin.Source}
+			}
+			continue
+		}
+		if !names[plugin.Name] {
+			names[plugin.Name] = true
+			status.Plugins = append(status.Plugins, plugin)
+		}
+	}
 	// Plugins someone put into a share or onto a volume, ready to install.
 	for _, file := range shares {
 		if index, ok := installedAt[file.manifest.Name]; ok {
@@ -479,6 +530,7 @@ func (m *Manager) Status(mounted []string) Status {
 	}
 	sort.Slice(status.Plugins, func(i, j int) bool { return status.Plugins[i].Name < status.Plugins[j].Name })
 	m.addHardware(&status)
+	status.Sources = m.Sources()
 	return status
 }
 
@@ -1160,7 +1212,13 @@ func (m *Manager) prepareModules(ctx context.Context) error {
 // on again. An unsigned version is confirmed by name, like a new community
 // plugin. Official plugins come with their system release; NVIDIA has its own
 // driver preparation and is never swapped here.
+//
+// Without manifestPath the newer version comes from the official catalog
+// (UpdateOfficial).
 func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string, mounted []string) error {
+	if manifestPath == "" {
+		return m.UpdateDownload(ctx, name, confirm, mounted)
+	}
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if m.current().PendingDriver != nil {
@@ -1216,16 +1274,24 @@ func (m *Manager) update(ctx context.Context, name, manifestPath, confirm string
 	} else {
 		tr.skip(StepSignature)
 	}
+	return m.replace(ctx, name, real, manifest, signed, enabled, settings.Volume, mounted)
+}
+
+// replace swaps the installed plugin name for the verified manifest at
+// real and the image next to it, and brings the previous files back if the
+// new version cannot be put in place or started. Caller holds actions.
+func (m *Manager) replace(ctx context.Context, name, real string, manifest Manifest, signed, enabled bool, volume string, mounted []string) error {
+	tr := trackerOf(ctx)
 	tr.begin(StepChecksum)
 	image := filepath.Join(filepath.Dir(real), name+".raw")
 	if sum, size, err := hashFile(image, maxImageBytes); err != nil || size != manifest.Size || sum != strings.ToLower(manifest.SHA256) {
 		return fmt.Errorf("%w: the image is not the one the manifest describes", ErrInvalid)
 	}
 	tr.begin(StepWrite)
-	if err := m.ensureReleaseSet(settings.Volume); err != nil {
+	if err := m.ensureReleaseSet(volume); err != nil {
 		return err
 	}
-	dir := m.dir(settings.Volume)
+	dir := m.dir(volume)
 
 	// The new files are copied and checked next to the installed ones
 	// before anything running is touched.

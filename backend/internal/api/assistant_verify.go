@@ -28,6 +28,9 @@ func validJSONResult(s string) []byte {
 // complete. The model receives the distinction and the next status tool.
 func (s *Server) verifyAgentAction(ctx context.Context, user auth.User, a *assistant.Action, r *http.Request) any {
 	out := map[string]any{"observedAt": time.Now(), "state": "not_verified", "next": "Read the relevant status before claiming the requested outcome."}
+	if observed := s.verifyAreaAction(ctx, a); observed != nil {
+		return observed
+	}
 	if a.Tool == "ha_call" && s.opts.HomeAssistant != nil {
 		var call haCall
 		b, _ := json.Marshal(a.Body)

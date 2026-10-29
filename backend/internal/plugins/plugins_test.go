@@ -34,6 +34,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	root := t.TempDir()
 	m := NewManager(config.Open(filepath.Join(root, "config")))
 	m.mountRoot, m.extDir, m.keyDir, m.kernel = filepath.Join(root, "mnt"), filepath.Join(root, "extensions"), filepath.Join(root, "keys"), "6.12.0-test"
+	// Tests opt into the plugin repository with their own server.
+	m.pluginSource, m.kernelPackage, m.debian, m.sysextLevel = "", "6.12.0-1", "trixie", "1"
 	m.moduleRoot, m.moduleSource = filepath.Join(root, "module-index"), filepath.Join(root, "modules")
 	os.MkdirAll(filepath.Join(m.moduleSource, m.kernel), 0o755)
 	runner := &fakeRunner{}

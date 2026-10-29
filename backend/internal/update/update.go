@@ -160,11 +160,14 @@ type File struct {
 
 // Manifest describes a release. It is the signed part of an update.
 type Manifest struct {
-	Version  string    `json:"version"`
-	Tag      string    `json:"tag"`
-	Channel  string    `json:"channel"`
-	Kernel   string    `json:"kernel"`
-	Released time.Time `json:"released"`
+	Version string `json:"version"`
+	Tag     string `json:"tag"`
+	Channel string `json:"channel"`
+	Kernel  string `json:"kernel"`
+	// KernelPackage is the Debian version of the kernel package; the
+	// plugin repository orders its kernel sets by it. Optional.
+	KernelPackage string    `json:"kernelPackage,omitempty"`
+	Released      time.Time `json:"released"`
 	// MinVersion is the oldest version that may go to this one directly.
 	MinVersion string `json:"minVersion,omitempty"`
 	Changelog  string `json:"changelog"`
@@ -302,7 +305,7 @@ type Manager struct {
 	// encryptionSince cannot open them; going back to one must not wait for
 	// them, or its boot check fails and the stick returns to this system.
 	Encrypted      func() []string
-	PreparePlugins func(context.Context, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
+	PreparePlugins func(context.Context, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
 	// Base is the version of the system image; "" for one that knows no
@@ -1096,7 +1099,7 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 		for _, plugin := range manifest.Plugins {
 			assets[plugin.Name] = plugin.Asset
 		}
-		if err := m.PreparePlugins(ctx, release, manifest.Kernel, base, assets, m.fetch,
+		if err := m.PreparePlugins(ctx, release, manifest.Kernel, manifest.KernelPackage, base, assets, m.fetch,
 			func(ctx context.Context, url, dest, sum string, size int64) error {
 				return m.download(ctx, url, dest, File{SHA256: sum, Size: size}, func(done int64, speed uint64) {
 					m.setProgress(func(p *Progress) { p.File = filepath.Base(dest); p.SpeedBytesPerSecond = speed })

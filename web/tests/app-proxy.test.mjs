@@ -185,3 +185,36 @@ test('a name in the tailnet is a label of its own and unique among devices', asy
 	});
 	assert.deepEqual([back.tailscale, back.tailscaleName], [true, 'photos']);
 });
+
+test('one click into the tailnet: port and steps', async () => {
+	const { inTailnet, tailnetPort, tailnetStep } = await import('../src/lib/app-proxy.ts');
+	const db = { webui: '', ports: [{ host: 5432, protocol: 'tcp' }] };
+	const web = { webui: '2283/photos', ports: [{ host: 2283, protocol: 'tcp' }] };
+	const admin = { webui: '8080', ports: [{ host: 8080, protocol: 'tcp' }] };
+	// The chosen main service first, then the WebUI of any other service.
+	assert.equal(tailnetPort([db, web, admin], admin), 8080);
+	assert.equal(tailnetPort([db, web, admin], null), 2283);
+	assert.equal(tailnetPort([db], undefined), 5432);
+	assert.equal(tailnetPort([], null), 0);
+
+	const route = (state, enabled = true, tailscale = true) => ({
+		enabled,
+		tailscale,
+		tailnet: state ? { state } : undefined,
+	});
+	assert.equal(tailnetStep(null, null), 'off');
+	assert.equal(tailnetStep(route('running', false), null), 'off');
+	assert.equal(tailnetStep(route('running', true, false), null), 'off');
+	assert.equal(tailnetStep(route(undefined), null), 'start');
+	assert.equal(tailnetStep(route('starting'), null), 'start');
+	assert.equal(tailnetStep(route('login'), null), 'login');
+	assert.equal(tailnetStep(route('https-off'), null), 'https-off');
+	assert.equal(tailnetStep(route('error'), null), 'error');
+	assert.equal(tailnetStep(route('stopped'), null), 'off');
+	assert.equal(tailnetStep(route('running'), null), 'check');
+	assert.equal(tailnetStep(route('running'), { reachable: false }, 3), 'check');
+	assert.equal(tailnetStep(route('running'), { reachable: false }, 12), 'unreachable');
+	assert.equal(tailnetStep(route('running'), { reachable: true }, 12), 'ready');
+	assert.ok(inTailnet(route('starting')));
+	assert.ok(!inTailnet(route('running', false)));
+});

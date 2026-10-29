@@ -54,7 +54,7 @@
 />
 
 <div
-	class="dropdown-panel context-menu"
+	class="dropdown-panel context-menu floating-menu"
 	popover="manual"
 	bind:this={menu}
 	role="menu"
@@ -81,9 +81,5 @@
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		box-shadow: var(--shadow-menu);
 	}
 </style>

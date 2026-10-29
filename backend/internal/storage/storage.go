@@ -239,6 +239,9 @@ type Manager struct {
 	diskSleep       DiskSleepSettings
 	diskSleepLoaded bool
 	diskSleepErrors []DiskSleepError
+	// diskSleepAsleep are the disks sent to standby without activity
+	// since, by device name (RAM only).
+	diskSleepAsleep map[string]bool
 	// sleepSamples is protected by actions, never persisted on the stick.
 	sleepSamples  map[string]sleepSample
 	btrfsProgress map[string]btrfsProgress
@@ -378,11 +381,14 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	return m.status(devices, m.arrays(ctx)), nil
+	status := m.status(devices, m.arrays(ctx))
+	status.DiskSleep = m.diskSleepStatus(devices)
+	return status, nil
 }
 
-func (m *Manager) status(devices []blockDevice, arrays []array) Status {
-	configured := m.configured()
+// volumesByUUID maps the UUIDs found on member partitions (md array UUID,
+// Btrfs UUID, LUKS UUIDs of encrypted Btrfs members) to the volume name.
+func volumesByUUID(configured []VolumeConfig) map[string]string {
 	volumeByArray := map[string]string{}
 	for _, volume := range configured {
 		uuid := volume.ArrayUUID
@@ -399,7 +405,12 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 			}
 		}
 	}
+	return volumeByArray
+}
 
+func (m *Manager) status(devices []blockDevice, arrays []array) Status {
+	configured := m.configured()
+	volumeByArray := volumesByUUID(configured)
 	status := Status{Disks: []Disk{}, Volumes: []Volume{}, DiskSleep: m.DiskSleep()}
 	testing := m.testing()
 	diskOfPart := map[string]string{} // sda1 → sda

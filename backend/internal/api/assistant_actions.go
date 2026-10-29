@@ -19,9 +19,12 @@ import (
 // The level of confirmation is decided here, never by the model.
 //
 // Not offered at all, also with confirmation: terminal and consoles,
-// secrets (backup passwords, .env, recovery and pairing codes), backups of
-// the stick, plugins, certificate, SSH, network, one's own password and
-// second factor. For those the assistant links the page.
+// secrets (backup passwords, .env, recovery and pairing codes), downloads
+// of the stick backup, plugins from files or addresses, certificate,
+// changing the network, switching the firewall on or off, confirming a
+// change on trial, one's own password and second factor. For those the
+// assistant links the page. Plugins, firewall rules and more of the
+// backups have their tools in assistant_areas.go.
 
 type plan func(ctx context.Context, args json.RawMessage) (*assistant.Action, error)
 

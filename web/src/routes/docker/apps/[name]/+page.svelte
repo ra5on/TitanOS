@@ -10,7 +10,7 @@
 import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
-	import { api, ApiError, type DockerContainer, type DockerStatus } from '#lib/api.ts';
+	import { api, ApiError, type AppProxyStatus, type DockerContainer, type DockerStatus } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { stackPrimary, sanitizeDockerLayout } from '#lib/docker-layout.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
@@ -20,6 +20,9 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { isRunning, webLinks } from '../../container.ts';
 	import AppProxy from './AppProxy.svelte';
+	import TailnetDialog from '../../TailnetDialog.svelte';
+	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
+	import AppIpv64 from './AppIpv64.svelte';
 	import {
 		check,
 		NETWORKS,
@@ -125,8 +128,25 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	);
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || location.hostname);
 	const quickLinks = $derived(
-		primary ? webLinks(primary, host, '').filter((link) => link.icon === 'globe' || link.icon === 'lock') : [],
+		primary ? webLinks(primary, host, '').filter((link) => link.icon !== 'external') : [],
 	);
+	// "Im Tailnet veröffentlichen": the app's own device in the tailnet.
+	let proxy = $state<AppProxyStatus | null>(null);
+	let tailnetDialog = $state<'publish' | 'remove' | null>(null);
+	// Counts changes, so that the HTTPS name section below reads them.
+	let proxyVersion = $state(0);
+	const published = $derived(inTailnet(proxy?.apps?.find((route) => route.app === name)));
+	async function loadProxy() {
+		try {
+			proxy = await api.get<AppProxyStatus>('/docker/proxy');
+		} catch {
+			proxy = null;
+		}
+	}
+	$effect(() => {
+		void name;
+		void loadProxy();
+	});
 	let restarting = $state(false),
 		actionError = $state('');
 	async function restartAll() {
@@ -297,7 +317,7 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		{/if}
 	</div>
 	<div class="quick">
-		{#each quickLinks as link (link.icon)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}
+		{#each quickLinks as link (link.label)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}
 				><Icon name={link.icon} size={14} />{link.text}</a
 			>{/each}
 		<button type="button" class="btn small" disabled={!target} onclick={() => target && showLogs(target)}
@@ -313,6 +333,9 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		<button type="button" class="btn small" disabled={!members.length || restarting || applying} onclick={restartAll}
 			><Icon name="restart" size={14} />{t(restarting ? 'editor.restarting' : 'docker.restart')}</button
 		>
+		{#if proxy}<button type="button" class="btn small" onclick={() => (tailnetDialog = published ? 'remove' : 'publish')}
+				><Icon name="tailnet" size={14} />{t(published ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button
+			>{/if}
 	</div>
 	{#if statusError}<div class="notice-warn row-note" role="alert">
 			<span>{statusError}</span><button type="button" class="btn small" onclick={loadStatus}
@@ -584,7 +607,18 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	<p class="notice-warn">{t('editor.noServices')}</p>
 {/if}
 
-{#if loaded}<AppProxy app={name} {members} />{/if}
+{#if loaded}<AppProxy app={name} {members} version={proxyVersion} /><AppIpv64 app={name} />{/if}
+{#if tailnetDialog}<TailnetDialog
+		app={name}
+		mode={tailnetDialog}
+		port={tailnetPort(members, primary)}
+		onclose={() => (tailnetDialog = null)}
+		onchanged={() => {
+			proxyVersion += 1;
+			void loadProxy();
+			void loadStatus();
+		}}
+	/>{/if}
 
 {#if result}
 	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">

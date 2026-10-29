@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AdoptDialog from './AdoptDialog.svelte';
 	import CloneDialog from './CloneDialog.svelte';
 	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
@@ -55,7 +56,8 @@
 	// The last CPU loads of every running VM, only in this page.
 	let history = $state<Record<string, number[]>>({});
 
-	let mode = $state<ScaleMode>('scale');
+	// Adjusting the guest's resolution is the default; guests that cannot do it scale.
+	let mode = $state<ScaleMode>('remote');
 	let sidebar = $state(true);
 	let fullscreen = $state(false);
 	let dialog = $state<
@@ -65,6 +67,8 @@
 		| null
 	>(null);
 	let draft = $state({ deleteDisks: false, text: '' });
+	// "VM übernehmen": copies of VM settings on the volumes; read only on request.
+	let adopting = $state(false);
 	let dialogError = $state<Problem | null>(null);
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
@@ -413,10 +417,9 @@
 				? 'vms.mode.remote.unsupported'
 				: `vms.mode.${entry}.hint`,
 		);
-	// A VM that cannot change its resolution falls back to scaling.
-	$effect(() => {
-		if (mode === 'remote' && current && current.template !== 'linux') mode = 'scale';
-	});
+	// A VM that cannot change its resolution shows scaling; the choice stays
+	// for the next VM that can.
+	const shownMode = $derived<ScaleMode>(mode === 'remote' && current && current.template !== 'linux' ? 'scale' : mode);
 	// Only a different VM closes the list; a refreshed copy of the same one
 	// (a new object after every poll) must not.
 	const currentName = $derived(current?.name);
@@ -485,6 +488,7 @@
 	<PageHead title={t('vms.title')}>
 		{#snippet actions()}
 <a class="btn" href="/vms/media">{t('media.title')}</a>
+			<button type="button" class="btn" onclick={() => (adopting = true)}>{t('vms.adopt.open')}</button>
 			<TasksPanel compact />
 			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
 		{/snippet}
@@ -668,13 +672,13 @@
 								>
 							{/snippet}
 						</Dropdown>
-						<Dropdown label={t('vms.display')} text={t(`vms.mode.${mode}`)} icon="monitor" compact>
+						<Dropdown label={t('vms.display')} text={t(`vms.mode.${shownMode}`)} icon="monitor" compact>
 							{#snippet children(close)}
 								{#each MODES as entry (entry)}
 									<button
 										type="button"
 										role="menuitemradio"
-										aria-checked={mode === entry}
+										aria-checked={shownMode === entry}
 										disabled={entry === 'remote' && current.template !== 'linux'}
 										title={modeHint(entry)}
 										onclick={() => {
@@ -751,6 +755,13 @@
 						>
 							<span>{vmLabel(current)}</span><Icon name="chevronDown" size={14} />
 						</button>
+						<button
+							type="button"
+							class="btn add"
+							aria-label={t('vms.adopt.open')}
+							title={t('vms.adopt.open')}
+							onclick={() => (adopting = true)}><Icon name="download" size={16} /></button
+						>
 						<a class="btn add" href="/vms/new" aria-label={t('vms.create')} title={t('vms.create')}
 							><Icon name="plus" size={16} /></a
 						>
@@ -1048,6 +1059,15 @@
 		</form>
 	</Dialog>
 {/if}
+
+{#if adopting}<AdoptDialog
+		onclose={() => (adopting = false)}
+		onadopted={async (name) => {
+			adopting = false;
+			await load();
+			goto(`/vms?vm=${encodeURIComponent(name)}`);
+		}}
+	/>{/if}
 
 {#if cloning}<CloneDialog
 		source={cloning}

@@ -64,6 +64,8 @@ const (
 	ViaSystem = "system"
 	// ViaSSH is a login over SSH, read from the journal of sshd.
 	ViaSSH = "ssh"
+	// ViaMCP is a tool call of an AI client through the MCP server.
+	ViaMCP = "mcp"
 )
 
 type Status struct {
