@@ -89,7 +89,10 @@ dem Internet hinzufügen (nur Besitzer/Administratoren):
   Plugin als „Community (nicht geprüft)“; Installation und Update brauchen den
   Klick nach der Warnung (die Oberfläche schickt den Plugin-Namen als
   Bestätigung). Ein Name des offiziellen Katalogs kann nicht aus einer Quelle oder
-  von einem Link installiert werden. Verbindungen gehen nur an öffentliche
+  von einem Link installiert werden, auch nicht, solange der Katalog nicht
+  geladen ist: Die Namen kommen dann aus den Katalogtexten im Abbild
+  (`/usr/share/titanos/plugin-catalog/`), die auch Plugins anderer Kernel-Sätze
+  kennen. Verbindungen gehen nur an öffentliche
   Adressen und ins Heimnetz, nie an Loopback; jede Adresse und Weiterleitung wird
   beim Verbinden geprüft. Links und Quellen kommen nur von der Person, die sie
   eingibt, nie aus Inhalten.

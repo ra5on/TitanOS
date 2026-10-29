@@ -30,6 +30,21 @@ func TestAssistantProposals(t *testing.T) {
 	if err := m.CheckProposal(one); err != nil {
 		t.Fatal(err)
 	}
+	// A rule with a sender that covers a whole network of the NAS or the
+	// VPN shuts out just as much as one without.
+	m.HomeNetworks = func() []string { return []string{"192.168.1.0/24"} }
+	for name, wide := range map[string]Config{
+		"home network":  withPolicies(cfg, Home, ToNAS, Policy{Action: Deny, Protocol: "tcp", Ports: "443", Source: "192.168.0.0/16"}),
+		"own network":   withPolicies(cfg, Home, ToNAS, Policy{Action: Deny, Protocol: "any", Service: "webui", Source: "192.168.1.0/24"}),
+		"tailscale/vpn": withPolicies(cfg, VPN, ToNAS, Policy{Action: Deny, Protocol: "any", Service: "webui", Source: "100.64.0.0/10"}),
+	} {
+		if err := m.CheckProposal(wide); !errors.Is(err, ErrClosesWebUI) {
+			t.Errorf("%s shut out: %v", name, err)
+		}
+	}
+	if err := m.CheckProposal(one); err != nil {
+		t.Fatal(err)
+	}
 	ssh := withPolicies(cfg, Internet, ToNAS, Policy{Action: Allow, Protocol: "any", Service: "ssh", Comment: "agent"})
 	if err := m.ChangeFromAssistant(context.Background(), ssh); err != nil {
 		t.Fatal(err)

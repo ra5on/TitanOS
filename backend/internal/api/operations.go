@@ -17,7 +17,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
-func (s *Server) operationsRoutes(mux *http.ServeMux) {
+func (s *Server) operationsRoutes(mux *routeMux) {
 	register := func(route string, fn http.HandlerFunc, guard func(http.HandlerFunc) http.HandlerFunc) {
 		mux.HandleFunc(route, guard(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet {

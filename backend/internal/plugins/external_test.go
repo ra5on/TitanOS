@@ -168,3 +168,25 @@ func TestSourcesCannotReplaceOfficialPlugins(t *testing.T) {
 		t.Fatalf("hash mismatch: %v", err)
 	}
 }
+
+// Started without network, the catalog was never loaded. The names of the
+// official plugins still come from the table in the image, including those
+// that only a kernel set of another kernel has.
+func TestOfficialNamesHoldWithoutCatalog(t *testing.T) {
+	f, dir, base := community(t)
+	ctx := context.Background()
+	f.m.catalogTable = t.TempDir()
+	if err := os.WriteFile(filepath.Join(f.m.catalogTable, "nvidia.json"), []byte(`{"category":"graphics"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin(t, dir, "nvidia", func(p *Manifest) { p.Kernel = f.m.kernel })
+	err := f.m.InstallExternal(ctx, ExternalRequest{URL: base + "nvidia.plugin.json", Volume: "data", Confirm: "nvidia"}, []string{"data"})
+	if !errors.Is(err, ErrExists) {
+		t.Fatalf("official name taken over while the catalog was not loaded: %v", err)
+	}
+	// Other names stay open to community plugins.
+	plugin(t, dir, "werkzeug", func(p *Manifest) { p.Kernel = f.m.kernel })
+	if err := f.m.InstallExternal(ctx, ExternalRequest{URL: base + "werkzeug.plugin.json", Volume: "data", Confirm: "werkzeug"}, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -36,6 +36,9 @@ const (
 	// Per token: a burst of mcpBurst requests, then mcpRate per second.
 	mcpBurst = 60
 	mcpRate  = 1.0
+	// A batch is no way around the limit: each further message of it costs
+	// one more request, and a batch holds at most this many.
+	mcpMaxBatch = 32
 )
 
 // mcpVersions are the protocol versions the server speaks, newest first.
@@ -240,7 +243,20 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			writeRPCError(w, http.StatusBadRequest, rpcParseError, "invalid JSON-RPC batch")
 			return
 		}
-		for _, raw := range messages {
+		if len(messages) > mcpMaxBatch {
+			writeRPCError(w, http.StatusBadRequest, rpcInvalidRequest, "a batch holds at most "+strconv.Itoa(mcpMaxBatch)+" messages")
+			return
+		}
+		for i, raw := range messages {
+			if i > 0 {
+				// The request itself paid for the first message.
+				if ok, _ := s.mcpAllow(token.ID); !ok {
+					if answer := mcpRateLimited(raw); answer != nil {
+						answers = append(answers, *answer)
+					}
+					continue
+				}
+			}
 			if answer := s.mcpMessage(session, raw); answer != nil {
 				answers = append(answers, *answer)
 			}
@@ -286,6 +302,16 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 // mcpMessage answers one JSON-RPC message; nil for notifications and for
 // responses of the client.
+// mcpRateLimited answers a message of a batch that is over the limit of its
+// token; notifications and responses get no answer, as always.
+func mcpRateLimited(raw json.RawMessage) *rpcResponse {
+	var msg rpcMessage
+	if json.Unmarshal(raw, &msg) != nil || msg.Method == "" || len(bytes.TrimSpace(msg.ID)) == 0 {
+		return nil
+	}
+	return &rpcResponse{JSONRPC: "2.0", ID: msg.ID, Error: &rpcError{rpcServerError, "too many requests for this token; try again later"}}
+}
+
 func (s *Server) mcpMessage(session *mcpSession, raw json.RawMessage) *rpcResponse {
 	var msg rpcMessage
 	if err := json.Unmarshal(raw, &msg); err != nil {

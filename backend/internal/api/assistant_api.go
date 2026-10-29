@@ -70,7 +70,11 @@ var apiRoutes = []apiRoute{
 	// the target first; installing goes by name from the signed catalog only.
 	{"GET", "/plugins", assistant.AreaPlugins, "", "Installed and available plugins."},
 	{"POST", "/plugins/catalog", assistant.AreaPlugins, assistant.LevelNormal, "Load the list of official plugins for this version."},
-	{"POST", "/plugins/{name}/{action}", assistant.AreaPlugins, assistant.LevelDanger, "Switch a plugin on or off (action enable or disable)."},
+	// Spelled out: a {action} parameter would also match /plugins/x/update,
+	// /plugins/nvidia/updates or /plugins/external/inspect, which the mux
+	// routes to their own handlers.
+	{"POST", "/plugins/{name}/enable", assistant.AreaPlugins, assistant.LevelDanger, "Switch a plugin on."},
+	{"POST", "/plugins/{name}/disable", assistant.AreaPlugins, assistant.LevelDanger, "Switch a plugin off."},
 	{"DELETE", "/plugins/{name}", assistant.AreaPlugins, assistant.LevelDestroy, "Remove a plugin."},
 	// firewall: rules only. Switching the firewall on or off, changing the
 	// network and confirming a change on trial stay in the web UI.

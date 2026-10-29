@@ -460,10 +460,20 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// officialName reports whether the official catalog offers this name.
+// officialName reports whether the name belongs to an official plugin: one
+// the catalog offers or one the image knows. The catalog alone is empty
+// until it was loaded once since the start, offline for good; the table in
+// the image also has the plugins of kernel sets other than the running one.
 func (m *Manager) officialName(name string) bool {
 	_, plugins := m.catalogSnapshot()
-	return slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Name == name })
+	if slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Name == name }) {
+		return true
+	}
+	if m.catalogTable == "" || !nameRE.MatchString(name) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(m.catalogTable, name+".json"))
+	return err == nil
 }
 
 // sourceSnapshot returns the plugins of all sources from the last refresh.

@@ -161,6 +161,23 @@ func TestPublishTailnetKeepsOwnRoute(t *testing.T) {
 	}
 }
 
+// A route that was once open to the internet and then switched off must
+// not come back open: the one click only means the tailnet.
+func TestPublishTailnetOfAnOffRouteStaysLocal(t *testing.T) {
+	m, _, _ := newTailnetManager(t)
+	m.SetTailnetKey("tskey-auth-x")
+	if err := m.SetRoute("immich", Route{Name: "fotos", Port: 2283, Networks: []string{"0.0.0.0/0"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.PublishTailnet("immich", 2283, ""); err != nil {
+		t.Fatal(err)
+	}
+	route := m.Settings().Apps["immich"]
+	if !route.Enabled || !route.LocalOnly || len(route.Networks) != 0 || !route.TailnetOnly {
+		t.Fatalf("route %+v", route)
+	}
+}
+
 func TestPublishTailnetRefused(t *testing.T) {
 	m, fake, _ := newTailnetManager(t)
 	m.Tailnet.Volume = func() (string, bool) { return "", false }

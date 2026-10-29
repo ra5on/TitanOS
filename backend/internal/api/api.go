@@ -162,16 +162,19 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	opts        Options
-	sessions    *auth.Sessions
-	tokens      *auth.Tokens
-	limiter     *auth.Limiter
-	prefs       *preferences
-	loginLook   loginLook
-	appIcon     appIcons
-	dav         davState
-	mcp         mcpState
-	handler     http.Handler
+	opts      Options
+	sessions  *auth.Sessions
+	tokens    *auth.Tokens
+	limiter   *auth.Limiter
+	prefs     *preferences
+	loginLook loginLook
+	appIcon   appIcons
+	dav       davState
+	mcp       mcpState
+	handler   http.Handler
+	// patterns are all routes of the mux, for tests that compare them
+	// with the route lists of the assistant and the public API.
+	patterns    []string
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
 	chats       *assistant.Chats
@@ -281,7 +284,7 @@ func New(opts Options) *Server {
 		s.opts.HomeAssistant.OnEvent("titanos_ask", s.handleAssist)
 	}
 
-	mux := http.NewServeMux()
+	mux := &routeMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
 	mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
@@ -749,8 +752,25 @@ func New(opts Options) *Server {
 	mux.Handle("/", uiHandler(opts.UI))
 
 	// Browsers must not let another website send requests with our cookie.
-	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux))))
+	s.patterns = mux.patterns
+	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux))))
 	return s
+}
+
+// routeMux is a ServeMux that remembers its patterns.
+type routeMux struct {
+	*http.ServeMux
+	patterns []string
+}
+
+func (m *routeMux) Handle(pattern string, h http.Handler) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.Handle(pattern, h)
+}
+
+func (m *routeMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Request)) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.HandleFunc(pattern, h)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

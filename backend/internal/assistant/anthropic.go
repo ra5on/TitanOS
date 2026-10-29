@@ -167,6 +167,9 @@ func (b anthropicBackend) chat(ctx context.Context, req chatRequest, each func(o
 				if bl := blocks[event.Index]; bl != nil {
 					bl.input.WriteString(event.Delta.PartialJSON)
 				}
+				if n := len(event.Delta.PartialJSON); n > 0 {
+					return each(ollamaChunk{pending: n})
+				}
 				return nil
 			default:
 				return nil
@@ -189,6 +192,15 @@ func (b anthropicBackend) chat(ctx context.Context, req chatRequest, each func(o
 			chunk.Message.ToolCalls = []ollamaToolCall{call}
 		case "message_delta":
 			final.EvalCount = event.Usage.Output
+			if event.Delta.StopReason == "max_tokens" {
+				for _, bl := range blocks {
+					if bl.tool {
+						// The arguments may be cut off; even a complete
+						// looking call may lack fields that were to follow.
+						return b.fail("the answer hit the length limit during a tool call; no tools were executed")
+					}
+				}
+			}
 			return nil
 		case "message_stop":
 			done = true

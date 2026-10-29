@@ -116,7 +116,10 @@ func (m *Manager) PublishTailnet(app string, port int, key string) (Route, error
 		route = Route{Name: freeLabel(label, func(n string) bool { return slices.Contains(names, n) }), Port: port, LocalOnly: true, TailnetOnly: true}
 	} else if !route.Enabled {
 		// It was off: taking the app out of the tailnet again turns it off.
-		route.TailnetOnly = true
+		// Switching it on also brings back its ordinary names and domains;
+		// they answer the home network only, like those of a new route,
+		// not whoever the route once let in.
+		route.TailnetOnly, route.LocalOnly, route.Networks = true, true, nil
 	}
 	if !route.Tailscale {
 		// The device is named after the app, unless that one is taken.

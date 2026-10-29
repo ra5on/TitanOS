@@ -49,7 +49,9 @@ Sitzung, nie ein Token.
   Kopfzeile zu setzen (Claude Code `--header`, mcp-remote `--header`) oder die
   stdio-Brücke.
 - Rate-Limit je Token im RAM: 60 Anfragen am Stück, danach eine pro Sekunde;
-  darüber `429` mit `Retry-After` und JSON-RPC-Fehler `-32000`.
+  darüber `429` mit `Retry-After` und JSON-RPC-Fehler `-32000`. In einem Batch
+  (nur 2025-03-26, höchstens 32 Nachrichten) zählt jede weitere Nachricht als
+  eigene Anfrage; über dem Limit bekommt sie einzeln den Fehler `-32000`.
 
 Umsetzung: `backend/internal/api/mcp.go` (Transport, Einstellung, Limit,
 Protokoll), `mcp_tools.go` (Werkzeuge), ausschließlich Standardbibliothek.
