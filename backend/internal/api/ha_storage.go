@@ -127,6 +127,9 @@ func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
 	active := s.opts.HomeAssistant != nil && s.opts.HomeAssistant.Active()
 	// The shares to choose from: those on a mounted volume, by name.
 	mounted := s.opts.Storage.Mounted()
+	if mounted == nil {
+		mounted = []string{}
+	}
 	choices := []map[string]string{}
 	for _, share := range s.opts.Shares.List() {
 		if slices.Contains(mounted, share.Volume) && share.SMB {

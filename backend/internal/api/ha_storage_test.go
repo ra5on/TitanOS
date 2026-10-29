@@ -66,6 +66,13 @@ func TestStorageForHomeAssistant(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
+	// Lists are lists, also without anything in them (the page reads them).
+	fresh := newTestServer(t)
+	fresh.setup()
+	if _, body := fresh.request("GET", "/api/v1/homeassistant/storage", nil); !strings.Contains(string(body), `"volumes":[]`) || !strings.Contains(string(body), `"shares":[]`) {
+		t.Fatalf("empty lists: %s", body)
+	}
+
 	setup := map[string]any{"volume": "tank", "share": "homeassistant", "account": "homeassistant", "usage": "backup", "register": true}
 	// Entering it in Home Assistant needs the connection.
 	if res, body := ts.request("POST", "/api/v1/homeassistant/storage", setup); res.StatusCode != http.StatusConflict || errorCode(t, body) != "ha_not_connected" {

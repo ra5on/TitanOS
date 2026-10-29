@@ -70,6 +70,9 @@
 		return errorText(err instanceof ApiError ? err.code : 'internal');
 	}
 	function take(next: Status) {
+		// Older titand (and the development mode without volumes) may send null.
+		next.volumes ??= [];
+		next.shares ??= [];
 		status = next;
 		if (!form.volume) form.volume = next.volumes[0] ?? '';
 		if (!form.existingShare) form.existingShare = next.shares[0]?.name ?? '';
