@@ -3,8 +3,8 @@ package plugins
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
