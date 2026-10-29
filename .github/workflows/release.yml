@@ -182,9 +182,7 @@ jobs:
           elif [ "$status" != 0 ]; then
             exit "$status"
           fi
-          sets=(out/plugin-sets/kernel)
-          [ -d out/plugin-sets/common ] && sets+=(out/plugin-sets/common)
-          python3 scripts/plugin-set.py import --base "$VERSION" "${sets[@]}"
+          python3 scripts/plugin-set.py import --base "$VERSION" out/plugin-sets/kernel out/plugin-sets/common
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Test NVIDIA compilation in the NAS build environment
