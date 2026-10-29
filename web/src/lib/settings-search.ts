@@ -2,7 +2,7 @@ import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
-	appearance: 'theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen',
+	appearance: 'theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
 	network: 'ip dns gateway bridge vlan bonding netzwerk network',
 	firewall:
 		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',

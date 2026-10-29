@@ -45,11 +45,17 @@
 		if (!document.startViewTransition || !effectOn(appearance.current, 'transitions')) return;
 		if (navigation.from?.url.pathname === navigation.to?.url.pathname) return;
 		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		// The header is named only while a transition runs: a named element is
+		// a backdrop root, and the glass of the account menu and the
+		// notifications in it would no longer blur the page behind them.
+		const root = document.documentElement;
+		root.dataset.viewTransition = 'running';
 		return new Promise((resolve) => {
-			document.startViewTransition(async () => {
+			const transition = document.startViewTransition(async () => {
 				resolve();
 				await navigation.complete;
 			});
+			transition.finished.finally(() => delete root.dataset.viewTransition);
 		});
 	});
 
