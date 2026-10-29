@@ -2,6 +2,7 @@
 	// The connection to Home Assistant and what of it is released to the
 	// assistant. The token never comes back from the NAS.
 	import PageHead from '#lib/components/PageHead.svelte';
+	import HAStorage from './HAStorage.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
@@ -603,6 +604,7 @@
 			>
 		</div>
 	</form>
+	<HAStorage />
 {/if}
 
 <style>

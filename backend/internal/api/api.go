@@ -174,6 +174,7 @@ type Server struct {
 	appIcon   appIcons
 	dav       davState
 	mcp       mcpState
+	haStore   haStorageState
 	handler   http.Handler
 	// patterns are all routes of the mux, for tests that compare them
 	// with the route lists of the assistant and the public API.
@@ -281,6 +282,7 @@ func New(opts Options) *Server {
 		s.opts.Notify.SetPersonalDataDir(s.chatsDir)
 	}
 	s.agentJobs = map[string]*agentJob{}
+	s.haStore.check = make(chan struct{}, 1)
 	s.agentSlots = make(chan struct{}, 1)
 	if s.opts.HomeAssistant != nil {
 		s.opts.HomeAssistant.OnEvent("mobile_app_notification_action", s.handleHANotificationAction)
@@ -603,6 +605,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/homeassistant/undo", s.requireAdmin(s.handleHAUndo))
 	mux.HandleFunc("POST /api/v1/homeassistant/call", s.requireAdmin(s.handleHACall))
 	mux.HandleFunc("GET /api/v1/homeassistant/notify-services", s.requireUser(s.handleHANotifyServices))
+	// Storage for Home Assistant: a share, an account and the entry there.
+	mux.HandleFunc("GET /api/v1/homeassistant/storage", s.requireAdmin(s.handleHAStorage))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage", s.requireAdmin(s.handleHAStorageAdd))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage/register", s.requireAdmin(s.handleHAStorageRegister))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage/check", s.requireAdmin(s.handleHAStorageCheck))
+	mux.HandleFunc("PUT /api/v1/homeassistant/storage/{mount}", s.requireAdmin(s.handleHAStorageChange))
+	mux.HandleFunc("DELETE /api/v1/homeassistant/storage/{mount}", s.requireAdmin(s.handleHAStorageRemove))
 	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
 	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
 	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))

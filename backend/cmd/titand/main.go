@@ -1343,6 +1343,8 @@ func run(opts options) error {
 
 	agentDone := make(chan struct{})
 	go func() { defer close(agentDone); handler.RunAssistant(ctx) }()
+	// Watches that Home Assistant keeps putting its backups on the NAS.
+	go handler.RunHAStorage(ctx)
 	go home.RunMQTT(ctx, handler.HASnapshot, handler.HACommand)
 	schedule.Busy = handler.PowerBusy
 	go schedule.Run(ctx)
