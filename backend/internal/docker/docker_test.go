@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -534,6 +535,44 @@ func TestRestartOfTitandKeepsTheEngineRunning(t *testing.T) {
 	}
 	if last := runner.commands[len(runner.commands)-1]; last != "systemctl start docker.service" {
 		t.Errorf("a stopped engine was not started: %v", runner.commands)
+	}
+}
+
+// The configuration of an older titand lacks the shutdown timeout. After an
+// app update the engine takes it with a reload: its containers keep running.
+func TestOlderEngineConfigurationIsReloadedNotRestarted(t *testing.T) {
+	m, runner, _ := newTestManager(t)
+	ctx := context.Background()
+	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
+	if err := m.reconcile(ctx, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := os.ReadFile(m.daemonConfig)
+	if !strings.Contains(string(current), `"shutdown-timeout": 60`) {
+		t.Fatalf("daemon.json: %s", current)
+	}
+	var older map[string]any
+	json.Unmarshal(current, &older)
+	delete(older, "shutdown-timeout")
+	data, _ := json.MarshalIndent(older, "", "  ")
+	os.WriteFile(m.daemonConfig, data, 0o644)
+
+	again := NewManager(m.store, m.configDir)
+	again.runner, again.api, again.mountRoot, again.daemonConfig = runner, m.api, m.mountRoot, m.daemonConfig
+	again.Load()
+	runner.commands = nil
+	if err := again.reconcile(ctx, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "systemctl reload docker.service") || slices.ContainsFunc(runner.commands, func(c string) bool { return strings.Contains(c, "stop") }) {
+		t.Fatalf("commands: %v", runner.commands)
+	}
+	if current, _ := os.ReadFile(m.daemonConfig); !strings.Contains(string(current), `"shutdown-timeout"`) {
+		t.Fatal("timeout not written")
+	}
+	// Anything else that differs still restarts the engine.
+	if sameDaemon([]byte(`{"data-root":"/a"}`), []byte(`{"data-root":"/b","shutdown-timeout":60}`)) {
+		t.Fatal("other data root taken as the same")
 	}
 }
 

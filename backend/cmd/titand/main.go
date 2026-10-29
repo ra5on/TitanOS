@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -61,6 +62,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -702,6 +704,32 @@ func run(opts options) error {
 			beforePowerOff()
 		}
 	}}
+	// Planned restarts and shutdowns first end the VMs, LXC containers and
+	// Docker apps, with time for each and visible in the web UI. The UPS
+	// keeps the fast way of systemd (upsPower).
+	ending := shutdown.New(shutdown.Workloads{
+		VMs: func() []string { return slices.Collect(maps.Keys(machines.RunningNames())) },
+		StopVM: func(ctx context.Context, name string) error {
+			return machines.Action(ctx, name, "shutdown")
+		},
+		StartVM: func(ctx context.Context, name string) error {
+			return machines.Start(ctx, name, volumes.Mounted())
+		},
+		LXC: func() []string { return slices.Collect(maps.Keys(systemContainers.RunningNames())) },
+		StopLXC: func(ctx context.Context, name string) error {
+			return systemContainers.Action(ctx, name, "stop", volumes.Mounted())
+		},
+		StartLXC: func(ctx context.Context, name string) error {
+			return systemContainers.Start(ctx, name, volumes.Mounted())
+		},
+		Containers:  containers.RunningContainers,
+		StopDocker:  containers.StopEngine,
+		StartDocker: containers.StartEngine,
+	})
+	// Nobody watches these: after the waiting time they go on by themselves.
+	unattended := func(action, by string, run func() error) func() error {
+		return func() error { return ending.Begin(action, by, true, run) }
+	}
 
 	// New versions go into the other slot of the stick and start on trial.
 	slot := system.BootSlot()
@@ -721,7 +749,7 @@ func run(opts options) error {
 	updates.PreparePlugins = func(ctx context.Context, version, kernel, kernelPackage, base string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
 		return extensions.PrepareUpdate(ctx, version, kernel, kernelPackage, base, assets, volumes.Mounted(), fetch, download)
 	}
-	updates.Reboot = power.Reboot
+	updates.Reboot = unattended("reboot", "update", power.Reboot)
 	if !opts.dev && slot != "" && base != "" {
 		updates.Base, updates.Apps = base, app.New("/efi", slot)
 		// Both at once: the check waits for the new titand. From a unit of
@@ -908,7 +936,7 @@ func run(opts options) error {
 	// Shutting down and waking on a schedule, and Wake-on-LAN.
 	schedule := system.NewPowerScheduler(store)
 	schedule.Disabled = opts.dev
-	schedule.Poweroff = power.Poweroff
+	schedule.Poweroff = unattended("poweroff", "power schedule", power.Poweroff)
 	schedule.Notify = notifier.Notify
 	if err := schedule.Load(); err != nil {
 		slog.Warn("power schedule unavailable", "err", err)
@@ -1304,6 +1332,7 @@ func run(opts options) error {
 		PowerButton:        powerButton,
 		MemoryPolicy:       memoryPolicy,
 		Power:              power,
+		Shutdown:           ending,
 		Version:            version.Version,
 		ShareDir:           shareDir,
 		SecureCookies:      !opts.dev,

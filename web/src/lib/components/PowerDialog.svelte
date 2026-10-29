@@ -7,18 +7,50 @@
 	type Props = { action: 'restart' | 'shutdown'; onclose: () => void };
 	let { action, onclose }: Props = $props();
 
-	type PowerStatus = { pending: { action: string; by: string; since: string } | null; rebuilding: boolean };
-	let phase = $state<'confirm' | 'working' | 'done' | 'waiting'>('confirm');
+	type Item = { kind: 'vm' | 'lxc' | 'docker'; name: string; state: 'stopping' | 'stopped' | 'failed'; error?: string };
+	type Preparing = { action: 'reboot' | 'poweroff'; by: string; phase: 'stopping' | 'waiting' | 'going' | 'failed'; items: Item[]; error?: string };
+	type PowerStatus = {
+		pending: { action: string; by: string; since: string } | null;
+		rebuilding: boolean;
+		preparing?: Preparing | null;
+	};
+	let phase = $state<'confirm' | 'working' | 'preparing' | 'done' | 'waiting'>('confirm');
 	let error = $state('');
 	let status = $state<PowerStatus | null>(null);
+	let busy = $state(false);
 	// Ticked by default while a rebuild runs: a restart would start it over.
 	let afterRebuild = $state(true);
+	const preparing = $derived(status?.preparing ?? null);
+	// A preparation under way decides which way the NAS goes, not the button.
+	const restart = $derived(preparing ? preparing.action === 'reboot' : action === 'restart');
+	const stuck = $derived(preparing?.items.filter((item) => item.state !== 'stopped') ?? []);
 
+	async function load() {
+		try {
+			status = await api.get<PowerStatus>('/system/power');
+		} catch {
+			// While the NAS goes down the answers stop: it is on its way.
+			if (phase === 'preparing') finish();
+			return;
+		}
+		if (status?.preparing && phase === 'confirm') phase = 'preparing';
+		if (phase !== 'preparing') return;
+		if (status?.preparing?.phase === 'going' || (!status?.preparing && !busy)) finish();
+	}
 	$effect(() => {
-		api.get<PowerStatus>('/system/power')
-			.then((res) => (status = res))
-			.catch(() => (status = null));
+		void load();
 	});
+	// While preparing, the list follows the guests.
+	$effect(() => {
+		if (phase !== 'preparing') return;
+		const timer = setInterval(load, 2000);
+		return () => clearInterval(timer);
+	});
+
+	function finish() {
+		phase = 'done';
+		if (restart) waitForRestart();
+	}
 
 	async function confirm() {
 		error = '';
@@ -27,7 +59,8 @@
 		try {
 			const res = await api.post<{ pending?: boolean } | null>('/system/power', {
 				action: action === 'restart' ? 'reboot' : 'poweroff',
-				afterRebuild: wait
+				afterRebuild: wait,
+				wait: true,
 			});
 			if (wait && res?.pending) {
 				phase = 'waiting';
@@ -38,14 +71,29 @@
 			phase = 'confirm';
 			return;
 		}
-		phase = 'done';
-		if (action === 'restart') waitForRestart();
+		busy = true;
+		phase = 'preparing';
+		// The first list comes a moment after the request.
+		setTimeout(() => {
+			busy = false;
+			void load();
+		}, 600);
+	}
+
+	async function anyway() {
+		error = '';
+		try {
+			await api.post('/system/power/now', {});
+		} catch (err) {
+			error = errorText(err instanceof ApiError ? err.code : 'internal');
+		}
 	}
 
 	async function cancelWaiting() {
 		error = '';
 		try {
 			status = await api.delete<PowerStatus>('/system/power');
+			if (phase === 'preparing') onclose();
 		} catch (err) {
 			error = errorText(err instanceof ApiError ? err.code : 'internal');
 		}
@@ -74,17 +122,53 @@
 <!-- Once the NAS is going down there is nothing to return to. -->
 <Dialog
 	title={t(
-		phase !== 'done'
-			? action === 'restart' ? 'power.restartTitle' : 'power.shutdownTitle'
-			: action === 'restart' ? 'power.restarting' : 'power.shuttingDown'
+		phase === 'preparing'
+			? restart ? 'power.preparingRestart' : 'power.preparingShutdown'
+			: phase !== 'done'
+				? restart ? 'power.restartTitle' : 'power.shutdownTitle'
+				: restart ? 'power.restarting' : 'power.shuttingDown'
 	)}
-	locked={phase === 'working' || phase === 'done'}
+	locked={phase === 'working' || phase === 'done' || phase === 'preparing'}
 	{onclose}
 >
 	{#if phase === 'waiting'}
 		<p role="status">{t(action === 'restart' ? 'power.waitingRestart' : 'power.waitingShutdown')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
+		</div>
+	{:else if phase === 'preparing'}
+		<p class="muted" role="status">{t(restart ? 'power.preparingTextRestart' : 'power.preparingTextShutdown')}</p>
+		{#if preparing && preparing.items.length}
+			<ul class="items" aria-live="polite">
+				{#each preparing.items as item (item.kind + ':' + item.name)}
+					<li>
+						<span class="chip small">{t(`power.kind.${item.kind}`)}</span>
+						<span class="name mono">{item.name}</span>
+						<span
+							class="state"
+							class:ok={item.state === 'stopped'}
+							class:bad={item.state === 'failed'}
+							title={item.error}>{t(`power.state.${item.state}`)}</span
+						>
+					</li>
+				{/each}
+			</ul>
+		{:else if preparing}
+			<p class="muted">{t('power.preparingNothing')}</p>
+		{/if}
+		{#if preparing?.phase === 'waiting'}
+			<p class="notice-warn" role="alert">{t('power.stuck', { names: stuck.map((item) => item.name).join(', ') })}</p>
+		{/if}
+		{#if preparing?.phase === 'failed'}
+			<p class="notice-error" role="alert">{t('power.goingFailed', { error: preparing.error ?? '' })}</p>
+		{/if}
+		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
+		<p class="muted small">{t('power.callOffHint')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={cancelWaiting}>{t('power.callOff')}</button>
+			<button type="button" class="btn btn-danger" onclick={anyway} disabled={preparing?.phase === 'going'}>
+				{t(restart ? 'power.anywayRestart' : 'power.anywayShutdown')}
+			</button>
 		</div>
 	{:else if phase !== 'done'}
 		{#if status?.pending}
@@ -112,7 +196,7 @@
 			</button>
 		</div>
 	{:else}
-		<p class="muted" role="status">{t(action === 'restart' ? 'power.restartingText' : 'power.shutDownText')}</p>
+		<p class="muted" role="status">{t(restart ? 'power.restartingText' : 'power.shutDownText')}</p>
 	{/if}
 </Dialog>
 
@@ -132,5 +216,33 @@
 	}
 	li .dot {
 		margin-top: 7px;
+	}
+	.items {
+		gap: 6px;
+		max-height: 18rem;
+		overflow-y: auto;
+	}
+	.items li {
+		align-items: center;
+	}
+	.items .name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.state {
+		color: var(--muted);
+		font-size: 0.8125rem;
+	}
+	.state.ok {
+		color: var(--ok-text);
+	}
+	.state.bad {
+		color: var(--error-text);
+	}
+	.small {
+		font-size: 0.8125rem;
 	}
 </style>
