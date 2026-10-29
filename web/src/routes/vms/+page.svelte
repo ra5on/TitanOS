@@ -55,7 +55,8 @@
 	// The last CPU loads of every running VM, only in this page.
 	let history = $state<Record<string, number[]>>({});
 
-	let mode = $state<ScaleMode>('scale');
+	// Adjusting the guest's resolution is the default; guests that cannot do it scale.
+	let mode = $state<ScaleMode>('remote');
 	let sidebar = $state(true);
 	let fullscreen = $state(false);
 	let dialog = $state<
@@ -413,10 +414,9 @@
 				? 'vms.mode.remote.unsupported'
 				: `vms.mode.${entry}.hint`,
 		);
-	// A VM that cannot change its resolution falls back to scaling.
-	$effect(() => {
-		if (mode === 'remote' && current && current.template !== 'linux') mode = 'scale';
-	});
+	// A VM that cannot change its resolution shows scaling; the choice stays
+	// for the next VM that can.
+	const shownMode = $derived<ScaleMode>(mode === 'remote' && current && current.template !== 'linux' ? 'scale' : mode);
 	// Only a different VM closes the list; a refreshed copy of the same one
 	// (a new object after every poll) must not.
 	const currentName = $derived(current?.name);
@@ -668,13 +668,13 @@
 								>
 							{/snippet}
 						</Dropdown>
-						<Dropdown label={t('vms.display')} text={t(`vms.mode.${mode}`)} icon="monitor" compact>
+						<Dropdown label={t('vms.display')} text={t(`vms.mode.${shownMode}`)} icon="monitor" compact>
 							{#snippet children(close)}
 								{#each MODES as entry (entry)}
 									<button
 										type="button"
 										role="menuitemradio"
-										aria-checked={mode === entry}
+										aria-checked={shownMode === entry}
 										disabled={entry === 'remote' && current.template !== 'linux'}
 										title={modeHint(entry)}
 										onclick={() => {
