@@ -125,6 +125,10 @@ type Plugin struct {
 	Problem string `json:"problem"`
 	// Update is another version of this installed plugin found in a share.
 	Update *PluginUpdate `json:"update,omitempty"`
+	// Source is the ID of the source a community download comes from; URL
+	// the link of a single one (external.go).
+	Source string `json:"source,omitempty"`
+	URL    string `json:"url,omitempty"`
 	// Devices is the present hardware the plugin is meant for.
 	Devices []Device `json:"devices,omitempty"`
 }
@@ -134,8 +138,10 @@ type PluginUpdate struct {
 	Path     string `json:"path"`
 	Version  string `json:"version"`
 	Official bool   `json:"official"`
-	// Download is a newer version in the official catalog; Path is empty.
-	Download bool `json:"download,omitempty"`
+	// Download is a newer version in the official catalog or a source; Path
+	// is empty. Source names that source.
+	Download bool   `json:"download,omitempty"`
+	Source   string `json:"source,omitempty"`
 }
 
 // Status is everything the plugin page shows.
@@ -150,6 +156,8 @@ type Status struct {
 	Recommendations []Recommendation `json:"recommendations"`
 	// Dismissed counts recommendations the owner asked not to see again.
 	Dismissed int `json:"dismissed"`
+	// Sources of community plugins with what the last refresh found.
+	Sources []SourceState `json:"sources"`
 }
 
 // Manager installs plugins and keeps the system in line with the settings.
@@ -197,6 +205,13 @@ type Manager struct {
 	catalogPlugins                     []Plugin
 	catalogAttempt                     time.Time
 	catalogLoading                     bool
+	// Community plugins from links and sources (external.go). Their client
+	// checks every address it connects to; sources are kept in RAM after Load.
+	externalClient *http.Client
+	sources        []Source
+	sourcesLoaded  bool
+	sourceEntries  []catalogEntry
+	sourceStates   map[string]SourceState
 	// Official images being downloaded, without holding actions.
 	downloading map[string]bool
 	// Steps of installations, updates and removals, RAM only; own lock so
@@ -289,7 +304,7 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
-	return nil
+	return m.loadSources()
 }
 
 func (m *Manager) current() Settings {
@@ -481,6 +496,21 @@ func (m *Manager) Status(mounted []string) Status {
 			}
 		}
 	}
+	// Community plugins from sources: never in place of an official one.
+	for _, entry := range m.sourceSnapshot() {
+		plugin := entry.plugin
+		if index, ok := installedAt[plugin.Name]; ok {
+			installed := &status.Plugins[index]
+			if installed.Update == nil && !installed.Official && updatable(installed.Manifest, plugin.Manifest) && m.compatible(plugin.Manifest) {
+				installed.Update = &PluginUpdate{Version: plugin.Version, Official: plugin.Official, Download: true, Source: plugin.Source}
+			}
+			continue
+		}
+		if !names[plugin.Name] {
+			names[plugin.Name] = true
+			status.Plugins = append(status.Plugins, plugin)
+		}
+	}
 	// Plugins someone put into a share or onto a volume, ready to install.
 	for _, file := range shares {
 		if index, ok := installedAt[file.manifest.Name]; ok {
@@ -500,6 +530,7 @@ func (m *Manager) Status(mounted []string) Status {
 	}
 	sort.Slice(status.Plugins, func(i, j int) bool { return status.Plugins[i].Name < status.Plugins[j].Name })
 	m.addHardware(&status)
+	status.Sources = m.Sources()
 	return status
 }
 
@@ -1186,7 +1217,7 @@ func (m *Manager) prepareModules(ctx context.Context) error {
 // (UpdateOfficial).
 func (m *Manager) Update(ctx context.Context, name, manifestPath, confirm string, mounted []string) error {
 	if manifestPath == "" {
-		return m.UpdateOfficial(ctx, name, mounted)
+		return m.UpdateDownload(ctx, name, confirm, mounted)
 	}
 	m.actions.Lock()
 	defer m.actions.Unlock()

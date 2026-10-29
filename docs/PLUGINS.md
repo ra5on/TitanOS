@@ -66,6 +66,38 @@ sind. Die Statusabfrage alle fünf Sekunden liest die Platten nicht erneut und
 weckt ruhende Festplatten deshalb nicht auf. Neu abgelegte Dateien erscheinen
 nach dem Aktualisieren.
 
+## Community-Plugins von einem Link oder aus Quellen
+
+Neben dem offiziellen Katalog und Dateien in Freigaben lassen sich Plugins aus
+dem Internet hinzufügen (nur Besitzer/Administratoren):
+
+- **Von Link hinzufügen …:** Link auf `<name>.plugin.json`; das Abbild
+  `<name>.raw` (und optional `<name>.plugin.json.minisig`) liegt im selben
+  Ordner. **Prüfen** liest nur das Manifest; **Herunterladen und installieren**
+  lädt das Abbild direkt auf das Daten-Volume und installiert wie eine Datei aus
+  einer Freigabe.
+- **Quellen …:** eine Liste `plugins.json`
+  (`{"name": "…", "plugins": [{"name": "beispiel", "url": "optional"}]}`, Dateien
+  ohne `url` liegen neben der Liste; ein Satz-Index aus TitanOS-Plugins mit
+  Manifest-Hashes funktioniert auch, die Hashes werden dann geprüft). Höchstens 16
+  Quellen mit je 64 Plugins, gespeichert in `/config/plugins/sources.json`. Ihre
+  Plugins erscheinen im Katalog als „Community · <Quelle>“, neuere Versionen
+  installierter Community-Plugins als **Aktualisieren** (Tausch mit Rückweg wie
+  beim Update aus einer Freigabe). Gelesen werden Quellen nur mit dem Katalog
+  (Öffnen der Seite, Knopf), nie im Status-Polling.
+- **Vertrauen:** Ohne Signatur eines Schlüssels aus `plugin-keys` gilt ein
+  Plugin als „Community (nicht geprüft)“; Installation und Update brauchen den
+  Klick nach der Warnung (die Oberfläche schickt den Plugin-Namen als
+  Bestätigung). Ein Name des offiziellen Katalogs kann nicht aus einer Quelle oder
+  von einem Link installiert werden. Verbindungen gehen nur an öffentliche
+  Adressen und ins Heimnetz, nie an Loopback; jede Adresse und Weiterleitung wird
+  beim Verbinden geprüft. Links und Quellen kommen nur von der Person, die sie
+  eingibt, nie aus Inhalten.
+- **API:** `GET/POST /api/v1/plugins/sources`, `DELETE /api/v1/plugins/sources/{id}`,
+  `POST /api/v1/plugins/external/inspect` (`url`), `POST /api/v1/plugins/external`
+  (`url` oder `source`+`name`, `volume`, `confirm`, `activate`); Updates über
+  `POST /api/v1/plugins/{name}/update` ohne `path`.
+
 ## Bereiche, Suche und Details
 
 Die Plugin-Seite gruppiert den Katalog nach Bereichen (Netzwerkkarten, Grafik
