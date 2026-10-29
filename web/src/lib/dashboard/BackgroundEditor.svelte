@@ -211,6 +211,13 @@
 			onchange={(e) => background({ fixed: e.currentTarget.checked })}
 		/>{t('dashboard.visual.fixed')}</label
 	>
+	<label class="effects-check"
+		><input
+			type="checkbox"
+			checked={value.background.everywhere}
+			onchange={(e) => background({ everywhere: e.currentTarget.checked })}
+		/>{t('dashboard.visual.everywhere')}</label
+	>
 	<div class="background-modes">
 		<button class="link" onclick={() => background({ source: 'inherit', id: '' })}
 			>{t('dashboard.visual.inherit')}</button

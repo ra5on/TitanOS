@@ -53,6 +53,8 @@
 		});
 	});
 
+	// The dashboard background, or behind every page when chosen so.
+	const shownVisual = $derived(dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual));
 	// Pages without a PageHead (the dashboard) are named by their place in the navigation.
 	const ROUTE_TITLES: Record<string, MessageKey> = { '/': 'nav.dashboard', '/terminal': 'terminal.title' };
 	const documentTitle = $derived.by(() => {
@@ -67,8 +69,8 @@
 	<title>{documentTitle}</title>
 </svelte:head>
 
-{#if page.url.pathname === '/' && session.data?.user}<DashboardBackground
-		visual={dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual)}
+{#if session.data?.user && (page.url.pathname === '/' || shownVisual.background.everywhere)}<DashboardBackground
+		visual={shownVisual}
 		inherited={appearance.current}
 		urls={dashboardScene.urls}
 	/>{:else}<Backdrop appearance={appearance.current} />{/if}
