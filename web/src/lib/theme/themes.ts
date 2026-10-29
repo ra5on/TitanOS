@@ -3,6 +3,7 @@
 // blau, kompakt, …) are part of the exported theme files; do not rename them.
 
 import { contrast, darkenFor, isHex, luminance, rotateHue, shade, withAlpha, type Hex } from './color.ts';
+import { defaultNav, sanitizeNav, type NavPrefs } from '../navigation.ts';
 
 export type Palette = {
 	bg: Hex;
@@ -133,6 +134,8 @@ export type Appearance = {
 	menus: FloatingSurface;
 	/** Dialogs (Dialog.svelte) and the dimming behind them. */
 	dialogs: DialogSurface;
+	/** Order and hidden tabs of the header navigation. */
+	nav: NavPrefs;
 };
 
 export const LIMITS = {
@@ -177,7 +180,8 @@ export function defaultAppearance(): Appearance {
 		duration: 450,
 		fx: defaultEffects(),
 		menus: defaultFloating(),
-		dialogs: { ...defaultFloating(), dim: 70 }
+		dialogs: { ...defaultFloating(), dim: 70 },
+		nav: defaultNav()
 	};
 }
 
@@ -285,7 +289,8 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		duration: inRange(v.duration, LIMITS.duration, d.duration),
 		fx: sanitizeEffects(v.fx),
 		menus: sanitizeFloating(v.menus),
-		dialogs: sanitizeDialogs(v.dialogs)
+		dialogs: sanitizeDialogs(v.dialogs),
+		nav: sanitizeNav(v.nav)
 	};
 }
 
