@@ -71,7 +71,7 @@ Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckG
 
 ## Aufbau und Prüfgrenzen
 
-`assistant` enthält Modellkommunikation, Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server, Bearer-API-Schlüssel und die Agent-App sind entfernt.
+`assistant` enthält Modellkommunikation, Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server des Assistenten, seine Bearer-API-Schlüssel und die Agent-App sind entfernt. Der davon unabhängige MCP-Server für externe KI-Clients (`docs/MCP.md`, seit 29.10.2026) nutzt persönliche API-Tokens und Lesewerkzeuge aus diesem festen Katalog, aber keine Einstellungen, Chats oder Aufträge des Assistenten.
 
 Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Nicht abgenommen: echte Ollama-Modelle, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
 

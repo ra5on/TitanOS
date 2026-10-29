@@ -18,7 +18,7 @@ import (
 
 const tokenFile = "users/api-tokens.json"
 
-var TokenScopes = []string{"system:read", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write"}
+var TokenScopes = []string{"system:read", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write", "mcp"}
 var ErrInvalidToken = errors.New("invalid token name, scopes or token limit")
 
 type APIToken struct {

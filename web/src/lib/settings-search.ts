@@ -59,6 +59,8 @@ const keywords: Record<string, string> = {
 	'ipv64-router': 'ipv64 cloud router wireguard tunnel vpn gateway peer ipv64wg',
 	'ipv64-blocklist': 'ipv64 blocklist sperrliste honeypot v64 melden report firewall',
 	wireguard: 'wireguard vpn tunnel fernzugriff remote access qr handy phone smartphone laptop server',
+	api: 'api token tokens cli titanosctl openapi rest automatisierung automation',
+	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -82,6 +84,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],
+	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
 	letsencrypt: [
