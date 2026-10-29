@@ -48,7 +48,7 @@ func TestAssistantOllamaSetupProposal(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	res, body := ts.request("GET", "/api/v1/assistant/ollama-setup", nil)
-	if res.StatusCode != 200 || !strings.Contains(string(body), `"model":"qwen3:`) || !strings.Contains(string(body), `"basis":"ram"`) || !strings.Contains(string(body), `"enabled":false`) {
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"model":"qwen3:`) || !strings.Contains(string(body), `"basis":"ram"`) || !strings.Contains(string(body), `"enabled":false`) || !strings.Contains(string(body), `"name":"qwen3:32b"`) || !strings.Contains(string(body), `"fits":`) {
 		t.Fatalf("setup: %d %s", res.StatusCode, body)
 	}
 }

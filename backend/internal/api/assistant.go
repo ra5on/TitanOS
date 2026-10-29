@@ -582,8 +582,8 @@ func (s *Server) handleAssistantAction(w http.ResponseWriter, r *http.Request) {
 // handleAssistantOllamaSetup tells the settings page what "Ollama per click"
 // would do: whether Docker is ready for it, the NVIDIA GPU it would pass to
 // Ollama (the only kind the Ollama image uses), and the model chosen by the
-// memory there is. It changes nothing; the page installs through the
-// normal app path after a click.
+// memory there is, preselected among the curated choices. It changes
+// nothing; the page installs through the normal app path after a click.
 func (s *Server) handleAssistantOllamaSetup(w http.ResponseWriter, r *http.Request) {
 	status := s.opts.Docker.Status(r.Context())
 	type gpu struct {
@@ -612,5 +612,6 @@ func (s *Server) handleAssistantOllamaSetup(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{
 		"docker": map[string]any{"enabled": status.Settings.Enabled, "running": status.Running, "volume": status.Settings.Volume},
 		"apps":   status.Apps, "gpu": chosen, "ramBytes": ram, "model": model, "basis": basis,
+		"choices": assistant.SetupChoices(ram, vram),
 	})
 }

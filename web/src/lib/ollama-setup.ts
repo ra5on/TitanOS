@@ -73,3 +73,13 @@ export function prepareOllama(
 		address: `http://127.0.0.1:${port}`,
 	};
 }
+
+/**
+ * Whether text can be an Ollama model reference: optionally a registry host
+ * (with port) and namespaces, a name and a tag, e.g. qwen3:8b,
+ * library/llama3.1 or hf.co/user/model-GGUF:Q4_K_M. No digests, spaces or "..".
+ */
+export function validOllamaModel(text: string): boolean {
+	if (text.length === 0 || text.length > 200 || text.includes('..')) return false;
+	return /^([A-Za-z0-9][A-Za-z0-9._-]*(:[0-9]{1,5})?\/)*[A-Za-z0-9][A-Za-z0-9._-]*(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?$/.test(text);
+}

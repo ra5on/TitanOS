@@ -366,8 +366,54 @@ var setupModels = []struct {
 	{0, "qwen3:14b"},
 }
 
-// RecommendModel chooses the model for a new Ollama: by the memory of the
-// GPU it gets if there is one, else by the RAM of the NAS. basis says which.
+// SetupChoice is a model "Ollama per click" offers. Sizes are those of the
+// default quantization in the Ollama library, rounded; Memory is roughly what
+// it takes to run with a moderate context. Uncertain marks entries whose
+// tool support in Ollama is not certain.
+type SetupChoice struct {
+	Name        string `json:"name"`
+	DiskBytes   uint64 `json:"diskBytes"`
+	MemoryBytes uint64 `json:"memoryBytes"`
+	Uncertain   bool   `json:"uncertain,omitempty"`
+	// Fits says whether Memory fits the memory the model would run in.
+	Fits bool `json:"fits"`
+}
+
+const gb = 1000 * 1000 * 1000
+
+// setupChoices is the curated list, small to large. All but the uncertain
+// ones are marked "tools" in the Ollama library.
+var setupChoices = []SetupChoice{
+	{Name: "llama3.2:3b", DiskBytes: 2 * gb, MemoryBytes: 4 << 30},
+	{Name: "qwen3:4b", DiskBytes: 2.5 * gb, MemoryBytes: 4 << 30},
+	{Name: "llama3.1:8b", DiskBytes: 4.9 * gb, MemoryBytes: 7 << 30},
+	{Name: "qwen3:8b", DiskBytes: 5.2 * gb, MemoryBytes: 7 << 30},
+	{Name: "mistral-nemo:12b", DiskBytes: 7.1 * gb, MemoryBytes: 10 << 30},
+	{Name: "gemma3:12b", DiskBytes: 8.1 * gb, MemoryBytes: 11 << 30, Uncertain: true},
+	{Name: "qwen3:14b", DiskBytes: 9.3 * gb, MemoryBytes: 12 << 30},
+	{Name: "gpt-oss:20b", DiskBytes: 14 * gb, MemoryBytes: 16 << 30},
+	{Name: "mistral-small:24b", DiskBytes: 14 * gb, MemoryBytes: 18 << 30},
+	{Name: "qwen3:32b", DiskBytes: 20 * gb, MemoryBytes: 24 << 30},
+}
+
+// SetupChoices returns the curated list with whether each fits: into the
+// GPU's memory if there is one, else into the RAM of the NAS.
+func SetupChoices(ramBytes, vramBytes uint64) []SetupChoice {
+	memory := ramBytes
+	if vramBytes > 0 {
+		memory = vramBytes
+	}
+	list := make([]SetupChoice, len(setupChoices))
+	for i, c := range setupChoices {
+		c.Fits = c.MemoryBytes <= memory
+		list[i] = c
+	}
+	return list
+}
+
+// RecommendModel chooses the model preselected for a new Ollama: by the
+// memory of the GPU it gets if there is one, else by the RAM of the NAS.
+// basis says which. The person may choose any other.
 func RecommendModel(ramBytes, vramBytes uint64) (model, basis string) {
 	memory, basis := ramBytes, "ram"
 	if vramBytes > 0 {

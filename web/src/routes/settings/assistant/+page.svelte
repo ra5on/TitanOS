@@ -386,7 +386,7 @@
 			</div>
 		{/if}
 		{#if pullError}<p class="notice-error" role="alert">{pullError}</p>{/if}
-		<p class="muted small">{t('assistant.pullHint')}</p>
+		<p class="muted small">{t('assistant.pullHint')} {t('assistant.pullChangeHint')}</p>
 	</section>
 	{/if}
 {:else if !loadError}

@@ -508,3 +508,31 @@ func TestRecommendModel(t *testing.T) {
 		}
 	}
 }
+
+func TestSetupChoices(t *testing.T) {
+	const gib = 1 << 30
+	for _, c := range []struct{ ram, vram uint64 }{{4 * gib, 0}, {15 * gib, 0}, {64 * gib, 0}, {8 * gib, 24 * gib}} {
+		model, _ := RecommendModel(c.ram, c.vram)
+		found := false
+		for _, choice := range SetupChoices(c.ram, c.vram) {
+			if !ValidModel(choice.Name) || choice.DiskBytes == 0 || choice.MemoryBytes == 0 {
+				t.Errorf("choice %+v", choice)
+			}
+			if choice.Name == model {
+				found = true
+				if !choice.Fits {
+					t.Errorf("recommended %s does not fit %d/%d", model, c.ram, c.vram)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("recommended %s not among the choices", model)
+		}
+	}
+	// The GPU's memory decides when there is one.
+	for _, choice := range SetupChoices(64*gib, 8*gib) {
+		if choice.Name == "qwen3:32b" && choice.Fits || choice.Name == "qwen3:4b" && !choice.Fits {
+			t.Errorf("fits by VRAM: %+v", choice)
+		}
+	}
+}
