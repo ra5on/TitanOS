@@ -60,7 +60,7 @@ func Services(web *WebPorts) []Service {
 		{ID: "smb", Ports: []PortSet{{"tcp", []string{"139", "445"}}, {"udp", []string{"137-138"}}}, Default: local},
 		{ID: "nfs", Ports: []PortSet{{"tcp", nfs}, {"udp", nfs}}, Default: local},
 		{ID: "ssh", Ports: []PortSet{{"tcp", []string{"22"}}}, Default: local},
-		// mDNS (avahi), WS-Discovery and LLMNR (wsdd2) only make sense
+		// mDNS (avahi), WS-Discovery (wsdd2) and LLMNR (resolved) only make sense
 		// where the NAS can be seen: in the home network.
 		{ID: "discovery", Ports: []PortSet{{"udp", []string{"3702", "5353", "5355"}}, {"tcp", []string{"5355", "5357"}}}, Default: homeOnly},
 		{ID: "ping", Ports: []PortSet{{"icmp", nil}}, Default: local},
