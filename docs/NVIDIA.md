@@ -8,7 +8,9 @@ echter Hardware geprüft werden.
 
 - NVIDIA **Turing und neuer**, beispielsweise RTX 20/30/40/50, mit den offenen
   NVIDIA-Kernelmodulen. Ältere Pascal-/Maxwell-Karten werden nicht unterstützt.
-- Treiber **615.71.09**, passend zum **exakten Kernel des jeweiligen Releases**.
+- Treiber **615.71.09**, passend zum **exakten Kernel des jeweiligen Releases**
+  (Kernel-Satz im [Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins);
+  neuere Treiber erscheinen dort als Treiberupdate).
 - CUDA-Treiberbibliotheken, NVENC/NVDEC, NVML und `nvidia-smi`.
 - NVIDIA Container Toolkit **1.20.1**, Geräte für Docker über CDI.
 - Kein CUDA-Entwicklungs-SDK (`nvcc`), kein Desktop-/Xorg-Treiber und keine

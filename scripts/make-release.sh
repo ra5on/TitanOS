@@ -91,7 +91,7 @@ fi
 
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
-import datetime, hashlib, json, os, tarfile, shutil, zipfile
+import datetime, hashlib, json, os, re, tarfile, shutil, zipfile
 from pathlib import Path
 
 version, base, release, image = os.environ["VERSION"], os.environ["BASE"], os.environ["RELEASE"], os.environ["IMAGE"]
@@ -122,6 +122,14 @@ def sha256(path):
 options = [line.split(None, 1)[1].strip() for line in open("boot/entry.conf.in") if line.startswith("options")]
 assert len(options) == 1 and "live-media-path=/titanos/@SLOT@" in options[0], options
 
+def kernel_package(kernel):
+    """The Debian version of the image's kernel package: plugin sets are ordered by it."""
+    for block in (Path(image) / "rootfs/var/lib/dpkg/status").read_text().split("\n\n"):
+        fields = dict(re.findall(r"^(Package|Version|Status): (.*)$", block, re.M))
+        if fields.get("Package") == "linux-image-" + kernel and fields.get("Status") == "install ok installed":
+            return fields["Version"]
+    raise SystemExit("linux-image-" + kernel + " is not installed in the image")
+
 files = []
 for name in ("vmlinuz", "initrd.img", "filesystem.squashfs"):
     asset = f"titanos-{version}-{name}"
@@ -134,6 +142,8 @@ manifest = {
     "tag": "v" + version,
     "channel": os.environ["CHANNEL"],
     "kernel": open(os.path.join(image, "kernel-version")).read().strip(),
+    # Optional; older TitanOS ignore it. Finds the plugin set of the target kernel.
+    "kernelPackage": kernel_package(open(os.path.join(image, "kernel-version")).read().strip()),
     "released": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "changelog": changelog,
     "cmdline": options[0],
@@ -146,27 +156,31 @@ manifest = {
 }
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
-# Kernel plugins are separate downloads; they must match this exact system.
-# Driver plugins (make-driver-plugins.py) carry their compiled sources.
-DRIVERS = set(json.loads(Path("plugins/drivers/drivers.json").read_text())["plugins"])
+# Plugins come from the sets of ra5on/TitanOS-Plugins (scripts/plugin-set.py
+# puts them into out/plugins); they must match this exact system. The official
+# ones are those the image has catalog entries for. Driver plugins carry their
+# compiled sources.
+OFFICIAL = {p.stem for p in Path("plugins/catalog").glob("*.json")}
 manifest["plugins"] = []
 plugin_sources = []
 without_plugins = os.environ["WITHOUT_PLUGINS"] == "1"
 for path in [] if without_plugins else sorted(Path("out/plugins").glob("*.plugin.json")):
     plugin = json.loads(path.read_text())
     name = plugin["name"]
-    if name not in {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird", *DRIVERS} or path.name != name + ".plugin.json":
+    if name not in OFFICIAL or path.name != name + ".plugin.json":
         raise ValueError("unrecognized official plugin")
     if (name == "nvidia" or plugin.get("kernel")) and plugin.get("kernel") != manifest["kernel"]:
         raise ValueError("plugin kernel mismatch: " + name)
     # Plugins belong to the system image: an app release brings those of its base.
-    expected = plugin["version"].endswith("-titanos-" + base) if name == "nvidia" else plugin["version"] == base
+    # A plugin set's version with the base it is carried for; plugins of a base
+    # before the plugin repository carry the base version itself.
+    expected = plugin["version"].endswith("-titanos-" + base) or (name != "nvidia" and plugin["version"] == base)
     if not expected or sha256(Path("out/plugins") / (name + ".raw")) != plugin["sha256"] or (Path("out/plugins") / (name + ".raw")).stat().st_size != plugin["size"]:
         raise ValueError("plugin version/checksum mismatch: " + name)
     assets = [name + ".raw", path.name, name + "-licenses.tar.gz"]
     if name == "nvidia":
         assets.append("nvidia-kernel-sources.tar.gz")
-    if name in DRIVERS:
+    if name != "nvidia" and plugin.get("kernel"):
         if plugin.get("kernel") != manifest["kernel"] or not plugin.get("sources"):
             raise ValueError("driver plugin without kernel or sources: " + name)
         assets.append(name + "-sources.tar.gz")

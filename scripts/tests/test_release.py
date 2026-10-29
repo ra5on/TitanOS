@@ -79,8 +79,7 @@ class ReleaseTest(unittest.TestCase):
         for name in ["make-release.sh", "sign-release.sh"]:
             shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
         shutil.copytree(REPO / "boot", self.repo / "boot")
-        (self.repo / "plugins/drivers").mkdir(parents=True)
-        shutil.copy2(REPO / "plugins/drivers/drivers.json", self.repo / "plugins/drivers/drivers.json")
+        shutil.copytree(REPO / "plugins/catalog", self.repo / "plugins/catalog")
         self.root = self.repo / "build/mkosi.output/rootfs"
         self.root.mkdir(parents=True)
         self.slot = self.repo / "out/stick/titanos/a"
@@ -88,6 +87,9 @@ class ReleaseTest(unittest.TestCase):
         (self.repo / "out/stick/config").mkdir()
         (self.root / "usr/lib").mkdir(parents=True)
         (self.root / "usr/lib/os-release").write_text('ID=titanos\nVERSION_ID=0.1.0-beta.1\n')
+        (self.root / "var/lib/dpkg").mkdir(parents=True)
+        (self.root / "var/lib/dpkg/status").write_text(
+            "Package: linux-image-6.12-test\nStatus: install ok installed\nVersion: 6.12.0-1\n")
         (self.root / "usr/bin").mkdir(parents=True)
         (self.root / "usr/bin/titand").write_bytes(b"titand 0.1.0-beta.1")
         (self.root / "usr/share/titanos").mkdir(parents=True)
@@ -147,6 +149,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
         manifest = json.loads((self.release / "manifest.json").read_text())
         self.assertEqual(manifest["app"]["base"], "0.1.0-beta.1")
+        self.assertEqual(manifest["kernelPackage"], "6.12.0-1")
         self.assertEqual(manifest["app"]["asset"], "titanos-0.1.0-beta.1-titand")
         self.assertEqual((self.release / "titanos-0.1.0-beta.1-titand").read_bytes(), b"titand 0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz", "titanos-0.1.0-beta.1-titand",

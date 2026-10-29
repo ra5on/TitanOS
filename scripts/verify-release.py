@@ -14,9 +14,9 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-# The official plugins: tools and remote access, plus the driver plugins.
-OFFICIAL = {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird",
-            *json.loads((Path(__file__).resolve().parent.parent / "plugins/drivers/drivers.json").read_text())["plugins"]}
+# The official plugins are those the image has catalog entries for; they are
+# built in ra5on/TitanOS-Plugins (docs/PLUGIN-REPO.md).
+OFFICIAL = {p.stem for p in (Path(__file__).resolve().parent.parent / "plugins/catalog").glob("*.json")}
 
 
 def verify(release, keys, without_plugins=False):
@@ -81,7 +81,9 @@ def verify(release, keys, without_plugins=False):
     for item in plugins:
         name = item["name"]
         plugin = json.loads((release / item["asset"]).read_text())
-        correct_version = plugin["version"].endswith("-titanos-" + base) if name == "nvidia" else plugin["version"] == base
+        # A plugin set's version with the base it is carried for; plugins of a base
+        # before the plugin repository carry the base version itself.
+        correct_version = plugin["version"].endswith("-titanos-" + base) or (name != "nvidia" and plugin["version"] == base)
         if plugin["name"] != name or (plugin.get("kernel") != manifest["kernel"] if name == "nvidia" else plugin.get("kernel", "") not in ("", manifest["kernel"])) or not correct_version:
             raise ValueError("plugin kernel/version mismatch: " + name)
         if checksums[name + ".raw"] != plugin["sha256"] or (release / (name + ".raw")).stat().st_size != plugin["size"]:

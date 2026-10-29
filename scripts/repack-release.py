@@ -106,6 +106,9 @@ def repack(base_dir, manifest, version, titand, work):
     (image / "rootfs/usr/share").mkdir(parents=True)
     run("cp", "-r", str(notices), str(image / "rootfs/usr/share/titanos"))
     (image / "kernel-version").write_text(manifest["kernel"] + "\n")
+    # make-release.sh reads the kernel package version from it.
+    (image / "rootfs/var/lib/dpkg").mkdir(parents=True)
+    run("cp", str(root / "var/lib/dpkg/status"), str(image / "rootfs/var/lib/dpkg/status"))
     packed = work / "filesystem.squashfs"
     sudo("mksquashfs", str(root), str(packed), "-comp", "zstd", "-Xcompression-level", "19", "-b", "1M",
          "-noappend", "-no-progress", "-quiet")

@@ -1,9 +1,9 @@
 # Plugins aus einem eigenen Repository
 
-Stand 29.10.2026: Der Client in TitanOS ist umgesetzt, das Repository
-`ra5on/TitanOS-Plugins` ist angelegt. Bau, Signatur und Veröffentlichung der
-Plugin-Sätze dort folgen. Solange es dort keinen signierten Zeiger gibt,
-verhält sich TitanOS wie bisher und nimmt die Plugins des eigenen Releases.
+Stand 29.10.2026: Client, Bau, Tests und Workflows sind umgesetzt; die Quellen
+und Build-Skripte liegen in `ra5on/TitanOS-Plugins`. Veröffentlicht ist dort
+noch nichts, weil die Signaturschlüssel fehlen (siehe unten). Solange es keinen
+signierten Zeiger gibt, nimmt TitanOS die Plugins des eigenen Releases.
 
 ## Ziel
 
@@ -83,6 +83,33 @@ die Fassung direkt auf das Daten-Volume, prüft sie und tauscht sie wie beim
 Update aus einer Freigabe: startet sie nicht, kommt die bisherige zurück.
 Automatisch passiert nichts.
 
+## Bau und Veröffentlichung
+
+Im Plugin-Repository (README und RELEASING.md dort):
+
+- Jeder Lauf baut das TitanOS-Abbild aus dem angefragten Commit, alle Plugins
+  dagegen (`TITANOS` zeigt auf den Checkout) und daraus beide Sätze
+  (`scripts/sets.py`). Er packt sie wie unten beschrieben in ein TitanOS-Release
+  und bootet es mit den Plugins in QEMU (`smoke-release.py`,
+  `smoke-storage.py`).
+- Kernelunabhängige Plugins mit unveränderten Eingaben (Quellen, Lock-Datei,
+  Bauskript, Katalogeintrag) behalten Bau und Version des vorigen Satzes; neue
+  Versionen bietet TitanOS deshalb nur bei echten Änderungen an. `minBase` ist das
+  Release, gegen dessen Abbild gebaut wurde: ältere Systeme behalten ihren Satz.
+- Signiert wird erst nach Freigabe im Environment `release`; danach erhöht der
+  Lauf `serial` im Zeiger. NVIDIA-Treiberupdates hängt `nvidia-driver.yml` an
+  einen Kernel-Satz (nur `nvidia-updates.json` wird dabei ersetzt).
+
+In TitanOS (`.github/workflows/release.yml`, `scripts/plugin-set.py`):
+
+- Ein Tag eines vollen Releases holt die Sätze für den Kernel seines Abbilds
+  (`fetch`). Fehlt der Kernel-Satz, schickt er `repository_dispatch`
+  `titanos-release` (Version, Commit, Kernel, Kernelpaket) und wartet, bis der
+  Satz veröffentlicht ist. Das Plugin-Repository prüft, dass sein Abbild aus
+  diesem Commit denselben Kernel hat.
+- `import` legt die Plugins nach `out/plugins`; `make-release.sh` schreibt
+  `kernelPackage` ins Manifest.
+
 ## Ältere NAS
 
 TitanOS bis 0.35 kennt das Repository nicht. Damit ihre vollen Updates und die
@@ -90,15 +117,17 @@ manuelle Installation „aus dem gleichen Release“ weiter funktionieren, häng
 Release-CI die Plugin-Assets des passenden Satzes **kopiert** (nicht neu gebaut)
 weiter an jedes volle TitanOS-Release und führt sie im Manifest unter `plugins`.
 
-## Noch offen
+## Was nur der Projektinhaber tun kann
 
-1. Plugin-Repository: Quellen und Build-Skripte umziehen, Workflows für Bau,
-   QEMU-Kurztest, Signatur und Veröffentlichung (`repository_dispatch` aus dem
-   TitanOS-Release mit Version, Kernel, kernelPackage und Abbild-URL).
-2. TitanOS-CI: Plugin-Bau entfällt; `release.yml` wartet auf den Satz des neuen
-   Kernels, kopiert ihn ans Release und schreibt `kernelPackage` ins Manifest.
-3. Durch den Projektinhaber: Environment `release` im Plugin-Repository mit
-   Freigabe durch `ra5on`, dort `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD`
-   (wie in `docs/RELEASING.md`), und ein Fine-grained-Token nur für
-   `TitanOS-Plugins` (Contents: write) als `PLUGINS_DISPATCH_TOKEN` im
-   TitanOS-Environment `release`.
+1. Im Plugin-Repository das Environment `release` mit Freigabe durch `ra5on`
+   und Deployment nur von `main` anlegen; dort `MINISIGN_SECRET_KEY` und
+   `MINISIGN_PASSWORD` hinterlegen (wie in `docs/RELEASING.md`).
+2. Einen Fine-grained-Token nur für `ra5on/TitanOS-Plugins` (Contents: read and
+   write) als Repository-Secret `PLUGINS_DISPATCH_TOKEN` in TitanOS hinterlegen.
+   Der Build-Job braucht ihn, bevor die Freigabe des Releases ansteht, deshalb
+   liegt er nicht im Environment.
+3. Den ersten Satz von Hand anstoßen (Actions › Release im Plugin-Repository,
+   „both“) und freigeben.
+
+Ohne Schritt 1 kann das Plugin-Repository nichts signieren, das TitanOS als
+„Offiziell“ annimmt; ohne Schritt 2 bricht ein Tag mit neuem Kernel ab.

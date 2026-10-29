@@ -5,8 +5,10 @@ name: Release
 # is signed in a second job that needs an approval and alone sees the key.
 # See docs/RELEASING.md.
 #
-# Pull requests rehearse only the image and its boot here; plugin changes are
-# tested by plugins.yml. Tags and manual runs build and test everything.
+# Pull requests rehearse only the image and its boot here. The plugins are
+# built, tested and signed in ra5on/TitanOS-Plugins (docs/PLUGIN-REPO.md); a
+# tag asks it for the set of a new kernel, waits for it and carries the sets
+# in the release for NAS that do not know the plugin repository yet.
 #
 # A tag on which only titand changed since the last full release becomes an
 # app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
@@ -22,6 +24,7 @@ on:
       - 'scripts/make-zip.sh'
       - 'scripts/check-image-hardware.py'
       - 'plugins/catalog/**'
+      - 'scripts/plugin-set.py'
       - 'scripts/normalize-image-tmpfiles.py'
       - 'scripts/make-release.sh'
       - 'scripts/sign-release.sh'
@@ -67,7 +70,9 @@ jobs:
   build:
     name: Release image
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # A tag may wait for the plugin set of a new kernel (built and approved
+    # in the plugin repository).
+    timeout-minutes: ${{ github.event_name == 'push' && 360 || 90 }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -142,35 +147,57 @@ jobs:
         if: steps.kind.outputs.kind == 'app'
         run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
 
-      - name: Build the matching NVIDIA plugin
+      - name: Plugin sets for the kernel of this image
+        id: plugins
         if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
+        timeout-minutes: 300
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
         run: |
-          sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh ${{ steps.version.outputs.version }}
-          sudo chown -R "$(id -u):$(id -g)" out/plugins
+          kernel=$(cat build/mkosi.output/kernel-version)
+          package=$(python3 scripts/plugin-set.py package build/mkosi.output)
+          fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest out/plugin-sets; }
+          status=0; fetch || status=$?
+          if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            if [ -z "$GH_TOKEN" ]; then
+              echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
+              exit 1
+            fi
+            # The plugin repository rebuilds this commit's image, checks the
+            # kernel, builds and tests the set; its owner approves the signing.
+            gh api repos/ra5on/TitanOS-Plugins/dispatches -f event_type=titanos-release \
+              -f "client_payload[version]=$VERSION" -f "client_payload[ref]=$GITHUB_SHA" \
+              -f "client_payload[kernel]=$kernel" -f "client_payload[kernelPackage]=$package"
+            echo "Waiting for the plugin set of $kernel ($package)"
+            until [ "$status" = 0 ]; do
+              sleep 120
+              status=0; fetch || status=$?
+              [ "$status" = 0 ] || [ "$status" = 3 ] || exit "$status"
+            done
+          elif [ "$status" = 3 ]; then
+            # A manual rehearsal of a kernel without a set packs the system alone.
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
+          sets=(out/plugin-sets/kernel)
+          [ -d out/plugin-sets/common ] && sets+=(out/plugin-sets/common)
+          python3 scripts/plugin-set.py import --base "$VERSION" "${sets[@]}"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Test NVIDIA compilation in the NAS build environment
-        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
+        if: steps.plugins.outputs.ready == 'true'
         run: |
           sdk="$PWD/out/plugins/nvidia-build-sdk.tar.zst"
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
-      - name: Build Intel GPU Tools, Coral USB, Tailscale and NetBird plugins
-        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
-        run: |
-          sudo env PATH="$PATH" scripts/make-tools-plugins.sh ${{ steps.version.outputs.version }}
-          sudo chown -R "$(id -u):$(id -g)" out/plugins
-
-      - name: Build the driver plugins against the image kernel
-        if: github.event_name != 'pull_request' && steps.kind.outputs.kind == 'system'
-        run: |
-          sudo env PATH="$PATH" python3 scripts/make-driver-plugins.py ${{ steps.version.outputs.version }}
-          sudo chown -R "$(id -u):$(id -g)" out/plugins
-
       - name: Pack the release
         env:
           # Only a pull request packs the system alone; it is never published.
-          WITHOUT_PLUGINS: ${{ github.event_name == 'pull_request' && '1' || '' }}
+          WITHOUT_PLUGINS: ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '1' || '' }}
           BASE_VERSION: ${{ steps.kind.outputs.base }}
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
@@ -178,10 +205,10 @@ jobs:
         if: github.event_name != 'push'
         run: |
           scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
-          python3 scripts/verify-release.py ${{ github.event_name == 'pull_request' && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
+          python3 scripts/verify-release.py ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
 
       - name: Boot the actual installation ZIP in UEFI QEMU
-        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420
+        run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420
 
       - name: App update, its failure and the way back in UEFI QEMU
         if: github.event_name != 'push'
@@ -192,7 +219,7 @@ jobs:
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
         # An app release keeps image and plugins of its base, which were tested then.
         if: steps.kind.outputs.kind == 'system'
-        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ github.event_name != 'pull_request' && '--plugins out/release' || '' }} --timeout 420 --workflows023
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420 --workflows023
 
       - uses: actions/upload-artifact@v7
         if: always()

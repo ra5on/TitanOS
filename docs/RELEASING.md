@@ -144,10 +144,18 @@ dafür „Allow GitHub Actions to create and approve pull requests“ an sein.
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den
 Image-Probelauf aus (`release.yml`). Er baut und startet nur das System, ohne
 Plugins (`WITHOUT_PLUGINS=1`); ein solches Paket lehnt `verify-release.py` ab,
-außer mit `--without-plugins`. Änderungen an Plugins, ihren Skripten und der
-Plugin-Seite prüft stattdessen `plugins.yml`: Abbild bauen, alle offiziellen
-Plugins dagegen bauen und mit `--plugins` in QEMU starten. Ein Tag und
-Actions › Release › „Run workflow“ bauen und prüfen immer beides. Solche Läufe
+außer mit `--without-plugins`. Die Plugins werden in
+[ra5on/TitanOS-Plugins](https://github.com/ra5on/TitanOS-Plugins) gebaut,
+gegen ein frisches TitanOS-Abbild in QEMU geprüft und dort signiert
+(`docs/PLUGIN-REPO.md`). Ein Tag eines vollen Releases holt mit
+`scripts/plugin-set.py fetch` die Sätze für den Kernel seines Abbilds; fehlt der
+Kernel-Satz, stößt er ihn dort per `repository_dispatch` an (Repository-Secret
+`PLUGINS_DISPATCH_TOKEN`, ein Fine-grained-Token nur für TitanOS-Plugins mit
+„Contents: read and write“) und wartet, bis er veröffentlicht ist (Freigabe im
+Plugin-Repository). `scripts/plugin-set.py import` legt die Plugins mit der
+Version `<Satzversion>-titanos-<Basis>` nach `out/plugins`; das Release signiert
+diese Manifeste neu, damit NAS bis 0.35 sie wie bisher annehmen. Actions ›
+Release › „Run workflow“ nimmt einen vorhandenen Satz, sonst nur das System. Solche Läufe
 veröffentlichen nichts (außer dem Tag) und Probeläufe haben keinen Zugriff auf
 die Signiergeheimnisse.
 
@@ -169,7 +177,8 @@ Lokal:
 ```bash
 make test test-release
 make zip VERSION=0.1.0-beta.3
-sudo env PATH="$PATH" scripts/make-nvidia-plugin.sh 0.1.0-beta.3
+# Plugins im Checkout von TitanOS-Plugins bauen (dessen README), dann übernehmen:
+python3 scripts/plugin-set.py import --base 0.1.0-beta.3 ../TitanOS-Plugins/out/sets/kernel ../TitanOS-Plugins/out/sets/common
 scripts/make-release.sh 0.1.0-beta.3 beta docs/releases/v0.1.0-beta.3.md
 python3 scripts/smoke-release.py out/release/titanos-0.1.0-beta.3.zip --plugins out/release
 ```
@@ -217,7 +226,7 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `nvidia-build-sdk.tar.zst`, `nvidia-build-sdk-sources.txt` | exakte Kernelheader und abgeschlossene Bauumgebung mit Original-Lizenztexten und Debian-Quellpaketlinks; SHA-256 im signierten Manifest |
 | `tailscale.raw`, `tailscale.plugin.json`, `.minisig`, `tailscale-licenses.tar.gz` | Tailscale, Subnet-/Exit-Node-Einstellungen und Original-Lizenztexte |
 | `netbird.raw`, `netbird.plugin.json`, `.minisig`, `netbird-licenses.tar.gz` | NetBird-Client (BSD-3-Clause, ohne AGPL-Server), Original-Lizenz und Hinweise der Go-Module |
-| `<treiber>.raw`, `<treiber>.plugin.json`, `.minisig`, `<treiber>-licenses.tar.gz`, `<treiber>-sources.tar.gz` für `wangxun-nic`, `intel-qat`, `it87-extended` | Treiber-Plugins aus `scripts/make-driver-plugins.py` für genau den Kernel des Releases; die Quellarchive enthalten die kompilierten GPL-Quellen und das Baurezept, `titanos-<version>-sources.txt` nennt Debian-Quellpaket bzw. Upstream-Commit. `make-release.sh` verweigert ein Treiber-Plugin ohne Kernel, Quellenangabe oder Quellarchiv |
+| `<treiber>.raw`, `<treiber>.plugin.json`, `.minisig`, `<treiber>-licenses.tar.gz`, `<treiber>-sources.tar.gz` für `wangxun-nic`, `intel-qat`, `it87-extended` | Treiber-Plugins aus dem Kernel-Satz des Plugin-Repositorys für genau den Kernel des Releases; die Quellarchive enthalten die kompilierten GPL-Quellen und das Baurezept, `titanos-<version>-sources.txt` nennt Debian-Quellpaket bzw. Upstream-Commit. `make-release.sh` verweigert ein Treiber-Plugin ohne Kernel, Quellenangabe oder Quellarchiv |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-cli-linux-amd64` | statische öffentliche CLI, durch signierte SHA256SUMS abgedeckt |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
