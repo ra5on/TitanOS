@@ -62,6 +62,16 @@ export type AssistantSettings = {
 	retentionDays?: number;
 	ephemeral?: boolean;
 	pushApproval?: boolean;
+	/** Empty or ollama is Ollama; anthropic and openai send chats to that provider. */
+	provider?: '' | 'ollama' | 'anthropic' | 'openai';
+	openaiBase?: string;
+	/** Keys only go to the NAS; it answers with whether one is set. */
+	anthropicKey?: string;
+	openaiKey?: string;
+	clearAnthropicKey?: boolean;
+	clearOpenaiKey?: boolean;
+	anthropicKeySet?: boolean;
+	openaiKeySet?: boolean;
 	ollama: string;
 	model: string;
 	users: boolean;

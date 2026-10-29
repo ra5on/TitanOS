@@ -23,12 +23,36 @@ func (m *Manager) ProbeScenario(ctx context.Context, settings Settings, question
 	if !ok {
 		return nil, ErrInvalid
 	}
-	if !ValidOllama(settings.Ollama) || !ValidModel(settings.Model) || len(settings.SystemPrompt) > MaxPrompt || len(question) > MaxMessage {
+	if settings.Ollama == "" {
+		settings.Ollama = DefaultOllama
+	}
+	if settings.Provider == ProviderOllama {
+		settings.Provider = ""
+	}
+	if !ValidOllama(settings.Ollama) || !ValidModel(settings.Model) || len(settings.SystemPrompt) > MaxPrompt || len(question) > MaxMessage || !validKey(settings.AnthropicKey) || !validKey(settings.OpenAIKey) {
 		return nil, ErrInvalid
 	}
+	switch settings.Provider {
+	case "", ProviderAnthropic:
+	case ProviderOpenAI:
+		if _, ok := NormalizeBase(settings.OpenAIBase); !ok {
+			return nil, ErrInvalid
+		}
+	default:
+		return nil, ErrInvalid
+	}
+	// The test may run on unsaved settings; keys left empty are the stored
+	// ones. They stay inside the scratch manager like in the real one.
+	withKeys := m.withKeys(settings)
 	scratch := NewManager(nil)
-	scratch.client = m.client
-	scratch.settings = settings
+	scratch.client, scratch.anthropicClient, scratch.lanClient, scratch.publicClient = m.client, m.anthropicClient, m.lanClient, m.publicClient
+	scratch.anthropicURL = m.anthropicURL
+	scratch.keys = Keys{Anthropic: withKeys.AnthropicKey, OpenAI: withKeys.OpenAIKey}
+	if base, ok := NormalizeBase(settings.OpenAIBase); ok {
+		scratch.keys.OpenAIBase = base
+		settings.OpenAIBase = base
+	}
+	scratch.settings = settings.stored()
 	scratch.settings.Enabled = true
 	scratch.settings.MaxSteps = 6
 	if question == "" {
@@ -69,7 +93,7 @@ func (m *Manager) ProbeScenario(ctx context.Context, settings Settings, question
 			answer.WriteString(e.Content)
 		}
 	}
-	return map[string]any{"scenario": scenario, "expected": expected, "model": settings.Model, "durationMs": time.Since(started).Milliseconds(), "stats": chat.Stats, "toolCalled": calls > 0, "calls": calls, "answer": answer.String(), "note": fmt.Sprintf("Synthetic test only (%d calls). Check the answer's treatment of the failure; this is not a blanket model certification.", calls)}, nil
+	return map[string]any{"scenario": scenario, "expected": expected, "provider": providerOf(settings), "model": settings.Model, "durationMs": time.Since(started).Milliseconds(), "stats": chat.Stats, "toolCalled": calls > 0, "calls": calls, "answer": answer.String(), "note": fmt.Sprintf("Synthetic test only (%d calls). Check the answer's treatment of the failure; this is not a blanket model certification.", calls)}, nil
 }
 
 var probeExpectations = map[string]string{

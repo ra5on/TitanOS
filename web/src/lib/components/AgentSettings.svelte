@@ -61,7 +61,7 @@
  <label class="check"><input type="checkbox" bind:checked={settings.ephemeral}/>{t('agent.ephemeral')}</label>
  <p class="muted">{t('agent.ephemeralHint')}</p>
  <label>{t('agent.retention')}<input class="field" type="number" min="0" max="36500" bind:value={settings.retentionDays}/></label>
- <p class="muted">{t('agent.privacyHint',{address:settings.ollama})}</p>
+ <p class="muted">{t('agent.privacyHint',{address:settings.provider==='anthropic'?'api.anthropic.com':settings.provider==='openai'?(settings.openaiBase||''):settings.ollama})}</p>
 </section>
 {#if direct}<Dialog title={t('agent.direct')} onclose={()=>direct=false}><p>{t('agent.directWarning')}</p><div class="dialog-actions"><button type="button" class="btn" onclick={()=>direct=false}>{t('common.cancel')}</button><button type="button" class="btn btn-danger" onclick={()=>{settings.execution='direct';direct=false}}>{t('agent.enableDirect')}</button></div></Dialog>{/if}
 <style>

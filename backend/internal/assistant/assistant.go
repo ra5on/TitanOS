@@ -1,7 +1,9 @@
-// Package assistant is the chat in the web UI: a model from Ollama answers
-// questions about the NAS, looks things up with tools, searches the manual
-// and, if allowed, the web, and executes actions under the configured policy. titand talks to Ollama itself; whoever is logged in chats
-// with the rights of their account. See docs/ASSISTANT.md.
+// Package assistant is the chat in the web UI: a model from Ollama, or from
+// a cloud provider if the owner chose one, answers questions about the NAS,
+// looks things up with tools, searches the manual and, if allowed, the web,
+// and executes actions under the configured policy. titand talks to the
+// model itself; whoever is logged in chats with the rights of their account.
+// See docs/ASSISTANT.md.
 package assistant
 
 import (
@@ -11,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -56,8 +59,8 @@ var (
 	ErrOff          = errors.New("assistant: switched off")
 	ErrInvalid      = errors.New("assistant: invalid settings")
 	ErrNoModel      = errors.New("assistant: no model chosen")
-	ErrUpstream     = errors.New("assistant: Ollama")
-	ErrModelMissing = errors.New("assistant: Ollama does not have this model")
+	ErrUpstream     = errors.New("assistant: model server")
+	ErrModelMissing = errors.New("assistant: the model server does not have this model")
 	ErrNoTools      = errors.New("assistant: the model cannot call tools")
 	ErrNoAction     = errors.New("assistant: no such action")
 )
@@ -69,8 +72,22 @@ type Settings struct {
 	DocumentModel string `json:"documentModel,omitempty"`
 	PlanningModel string `json:"planningModel,omitempty"`
 	Enabled       bool   `json:"enabled"`
-	Ollama        string `json:"ollama"`
-	Model         string `json:"model"`
+	// Provider is ollama (also when empty, as older versions write it),
+	// anthropic or openai (any OpenAI-compatible server at OpenAIBase).
+	Provider   string `json:"provider,omitempty"`
+	OpenAIBase string `json:"openaiBase,omitempty"`
+	Ollama     string `json:"ollama"`
+	// Model is the model of the chosen provider.
+	Model string `json:"model"`
+	// The API keys are never stored here (see keysFile) and never sent back:
+	// a key comes in once, empty keeps the stored one, Clear removes it, and
+	// the browser only learns whether one is set.
+	AnthropicKey      string `json:"anthropicKey,omitempty"`
+	OpenAIKey         string `json:"openaiKey,omitempty"`
+	ClearAnthropicKey bool   `json:"clearAnthropicKey,omitempty"`
+	ClearOpenAIKey    bool   `json:"clearOpenaiKey,omitempty"`
+	AnthropicKeySet   bool   `json:"anthropicKeySet,omitempty"`
+	OpenAIKeySet      bool   `json:"openaiKeySet,omitempty"`
 	// Users lets accounts with the role user chat, with what they see.
 	Users bool `json:"users"`
 	// Web allows the web search; WebUsers allows it for users as well.
@@ -80,7 +97,8 @@ type Settings struct {
 	Volume string `json:"volume"`
 	// Prompt is added to the system prompt.
 	Prompt string `json:"prompt"`
-	// NumCtx and Temperature go to Ollama; zero and nil leave what it has.
+	// NumCtx (Ollama only) and Temperature go to the model; zero and nil
+	// leave what it has.
 	NumCtx      int      `json:"numCtx"`
 	Temperature *float64 `json:"temperature"`
 	// MaxSteps is how many rounds with tools one answer may take; 0 is
@@ -163,10 +181,17 @@ func (s Settings) Access(area string) string {
 	return AccessOff
 }
 
-// Manager keeps the settings and talks to Ollama.
+// Manager keeps the settings and talks to the model.
 type Manager struct {
 	store  *config.Store
 	client *http.Client
+	// The cloud providers have clients that check every address they
+	// connect to (reach) and follow no redirect: Anthropic and accounts
+	// other than owners/administrators only the internet, owners and
+	// administrators also the home network. anthropicURL is fixed but for tests.
+	anthropicClient, lanClient, publicClient *http.Client
+	anthropicURL                             string
+	reach                                    func(addr netip.Addr, role string) bool
 	// Web does the web search; Manual is the documentation.
 	Web    *Web
 	Manual *Manual
@@ -174,22 +199,29 @@ type Manager struct {
 
 	mu           sync.Mutex
 	settings     Settings
+	keys         Keys
 	capabilities map[string]capabilities
 }
 
 // NewManager returns a manager with the settings of a new NAS.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{
+	m := &Manager{
 		store: store,
 		// No overall timeout: an answer streams as long as it takes and
 		// is canceled by the owning job, independently of browser connections.
 		client:       &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 10 * time.Minute, Proxy: nil}},
+		anthropicURL: anthropicAPI,
+		reach:        EndpointAllowed,
 		Web:          NewWeb(),
 		Manual:       NewManual(nil),
 		now:          time.Now,
 		settings:     Settings{Ollama: DefaultOllama},
 		capabilities: map[string]capabilities{},
 	}
+	m.anthropicClient = cloudClient(func(a netip.Addr) bool { return m.reach(a, "user") })
+	m.lanClient = cloudClient(func(a netip.Addr) bool { return m.reach(a, "admin") })
+	m.publicClient = cloudClient(func(a netip.Addr) bool { return m.reach(a, "user") })
+	return m
 }
 
 // Load reads the settings from /config.
@@ -210,9 +242,14 @@ func (m *Manager) Load() error {
 		}
 	}
 	settings.ExtraAreas = nil
+	var keys Keys
+	if err := m.store.ReadJSON(keysFile, &keys); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.settings = settings
+	m.settings = settings.stored()
+	m.keys = keys
 	return nil
 }
 
@@ -238,11 +275,22 @@ func onStick(settings Settings) Settings {
 	return settings
 }
 
-// Settings returns the current settings.
+// stored is settings without what never goes into the file.
+func (s Settings) stored() Settings {
+	s.AnthropicKey, s.OpenAIKey = "", ""
+	s.ClearAnthropicKey, s.ClearOpenAIKey = false, false
+	s.AnthropicKeySet, s.OpenAIKeySet = false, false
+	return s
+}
+
+// Settings returns the current settings, with keys only as set or not.
 func (m *Manager) Settings() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.settings
+	s := m.settings
+	s.AnthropicKeySet = m.keys.Anthropic != ""
+	s.OpenAIKeySet = m.keys.OpenAI != ""
+	return s
 }
 
 var (
@@ -268,11 +316,27 @@ func (m *Manager) SetSettings(settings Settings) error {
 	settings.Ollama = strings.TrimRight(strings.TrimSpace(settings.Ollama), "/")
 	settings.Model = strings.TrimSpace(settings.Model)
 	settings.Prompt = strings.TrimSpace(settings.Prompt)
+	settings.AnthropicKey, settings.OpenAIKey = strings.TrimSpace(settings.AnthropicKey), strings.TrimSpace(settings.OpenAIKey)
 	if settings.Ollama == "" {
 		settings.Ollama = DefaultOllama
 	}
+	if settings.Provider == ProviderOllama {
+		settings.Provider = ""
+	}
+	if settings.OpenAIBase != "" || settings.Provider == ProviderOpenAI {
+		base, ok := NormalizeBase(settings.OpenAIBase)
+		if !ok {
+			return ErrInvalid
+		}
+		settings.OpenAIBase = base
+	}
+	if settings.Provider == ProviderAnthropic && settings.Model == "" {
+		settings.Model = DefaultAnthropicModel
+	}
 	switch {
-	case !ValidOllama(settings.Ollama), settings.Model != "" && !modelName.MatchString(settings.Model),
+	case settings.Provider != "" && settings.Provider != ProviderAnthropic && settings.Provider != ProviderOpenAI,
+		!validKey(settings.AnthropicKey), !validKey(settings.OpenAIKey),
+		!ValidOllama(settings.Ollama), settings.Model != "" && !modelName.MatchString(settings.Model),
 		settings.Volume != "" && !volumeName.MatchString(settings.Volume),
 		utf8.RuneCountInString(settings.Prompt) > MaxPrompt,
 		settings.NumCtx != 0 && (settings.NumCtx < 2048 || settings.NumCtx > 1<<20),
@@ -303,12 +367,44 @@ func (m *Manager) SetSettings(settings Settings) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	keys := m.keys
+	switch {
+	case settings.ClearAnthropicKey:
+		keys.Anthropic = ""
+	case settings.AnthropicKey != "":
+		keys.Anthropic = settings.AnthropicKey
+	}
+	switch {
+	case settings.ClearOpenAIKey:
+		keys.OpenAI, keys.OpenAIBase = "", ""
+	case settings.OpenAIKey != "":
+		keys.OpenAI, keys.OpenAIBase = settings.OpenAIKey, settings.OpenAIBase
+	case keys.OpenAI != "" && keys.OpenAIBase != settings.OpenAIBase:
+		// The stored key never goes to a server it was not entered for.
+		return ErrKeyServer
+	}
+	if settings.Enabled && settings.Provider == ProviderAnthropic && keys.Anthropic == "" {
+		return ErrKeyMissing
+	}
+	settings = settings.stored()
 	settings.PromptHistory = slices.Clone(m.settings.PromptHistory)
 	if settings.SystemPrompt != m.settings.SystemPrompt {
 		settings.PromptHistory = append([]string{m.settings.SystemPrompt}, settings.PromptHistory...)
 		if len(settings.PromptHistory) > 5 {
 			settings.PromptHistory = settings.PromptHistory[:5]
 		}
+	}
+	if keys != m.keys {
+		// Keys first: settings that name a provider without its key would
+		// fail, a key without settings that use it does nothing.
+		if keys == (Keys{}) {
+			if err := m.store.Remove(keysFile); err != nil {
+				return err
+			}
+		} else if err := m.store.WriteJSON(keysFile, keys); err != nil {
+			return err
+		}
+		m.keys = keys
 	}
 	settings.ExtraAreas = nil
 	if err := m.store.WriteJSON(settingsFile, onStick(settings)); err != nil {
@@ -466,7 +562,7 @@ func history(chat *Chat, vision bool) []ollamaMessage {
 			msg.Role, msg.Content = "assistant", e.Content
 			for _, call := range e.Calls {
 				var tc ollamaToolCall
-				tc.Function.Name, tc.Function.Arguments = call.Name, call.Args
+				tc.ID, tc.Function.Name, tc.Function.Arguments = call.ID, call.Name, call.Args
 				// Ollama's history expects objects even when the model emitted
 				// invalid arguments. Keep the actual rejected input in the chat;
 				// the following tool result explains why it was not dispatched.
@@ -485,7 +581,7 @@ func history(chat *Chat, vision bool) []ollamaMessage {
 			} else if i < lastUser {
 				content = truncate(content, MaxOldToolText)
 			}
-			msg.Role, msg.ToolName, msg.Content = "tool", e.Tool, content
+			msg.Role, msg.ToolName, msg.ToolCallID, msg.Content = "tool", e.Tool, e.CallID, content
 		default:
 			continue
 		}
@@ -611,11 +707,16 @@ func (m *Manager) Prepare(ctx context.Context, model string) (string, []string, 
 	if !modelName.MatchString(model) {
 		return "", nil, ErrInvalid
 	}
-	caps, _, err := m.show(ctx, settings.Ollama, model)
+	b, err := m.backendFor(m.withKeys(settings), "admin")
 	if err != nil {
 		return "", nil, err
 	}
-	// Old versions of Ollama do not tell; then it is tried.
+	caps, _, err := b.show(ctx, model)
+	if err != nil {
+		return "", nil, err
+	}
+	// Old versions of Ollama and OpenAI-compatible servers do not tell;
+	// then it is tried.
 	if len(caps) > 0 && !slices.Contains(caps, "tools") {
 		return "", nil, ErrNoTools
 	}
@@ -659,25 +760,21 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		return err
 	}
 	settings := m.Settings()
+	// One code path for every provider: only the rounds go elsewhere.
+	provider, err := m.backendFor(m.withKeys(settings), "admin")
+	if err != nil {
+		return err
+	}
 	chat.Model = model
-	definitions := make([]map[string]any, 0, len(turn.Tools))
+	definitions := make([]toolDef, 0, len(turn.Tools))
 	byName := map[string]Tool{}
 	for _, tool := range turn.Tools {
 		parameters := tool.Parameters
 		if parameters == nil {
 			parameters = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
-		definitions = append(definitions, map[string]any{"type": "function", "function": map[string]any{
-			"name": tool.Name, "description": tool.Description, "parameters": parameters,
-		}})
+		definitions = append(definitions, toolDef{Name: tool.Name, Description: tool.Description, Parameters: parameters})
 		byName[tool.Name] = tool
-	}
-	options := map[string]any{}
-	if settings.NumCtx > 0 {
-		options["num_ctx"] = settings.NumCtx
-	}
-	if settings.Temperature != nil {
-		options["temperature"] = *settings.Temperature
 	}
 	add := func(e Entry) int {
 		e.Time = m.now()
@@ -715,16 +812,8 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		if extra != "" {
 			messages = append(messages, ollamaMessage{Role: "system", Content: extra})
 		}
-		body := map[string]any{"model": model, "messages": messages, "stream": true}
-		if withTools {
-			body["tools"] = definitions
-		}
-		if slices.Contains(caps, "thinking") {
-			body["think"] = true
-		}
-		if len(options) > 0 {
-			body["options"] = options
-		}
+		request := chatRequest{Model: model, Messages: messages, Tools: definitions, UseTools: withTools,
+			Think: slices.Contains(caps, "thinking"), NumCtx: settings.NumCtx, Temperature: settings.Temperature}
 		var answer, thought strings.Builder
 		received := 0
 		completed := false
@@ -748,34 +837,27 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		// Bound silence, not the whole job. Streaming progress renews this timer.
 		idle := time.AfterFunc(2*time.Minute, cancel)
 		defer idle.Stop()
-		res, err := m.request(callCtx, http.MethodPost, settings.Ollama, "/api/chat", body)
-		if err == nil {
-			err = stream(res, func(line []byte) error {
-				idle.Reset(2 * time.Minute)
-				received += len(line)
-				if received > 2<<20 {
-					return fmt.Errorf("%w: model response too large", ErrUpstream)
-				}
-				var chunk ollamaChunk
-				if err := json.Unmarshal(line, &chunk); err != nil {
-					return fmt.Errorf("%w sent something unexpected: %v", ErrUpstream, err)
-				}
-				if chunk.Error != "" {
-					return modelResponseError(chunk.Error)
-				}
-				if answer.Len()+thought.Len()+len(chunk.Message.Content)+len(chunk.Message.Thinking) > 2<<20 {
-					return fmt.Errorf("%w: model response too large", ErrUpstream)
-				}
-				onThought(chunk.Message.Thinking)
-				splitter.feed(chunk.Message.Content, onAnswer, onThought)
-				calls = append(calls, chunk.Message.ToolCalls...)
-				if chunk.Done {
-					counts = chunk
-				}
-				completed = completed || chunk.Done
-				return nil
-			})
-		}
+		err := provider.chat(callCtx, request, func(chunk ollamaChunk) error {
+			idle.Reset(2 * time.Minute)
+			received += len(chunk.Message.Content) + len(chunk.Message.Thinking)
+			for _, call := range chunk.Message.ToolCalls {
+				received += len(call.Function.Name) + len(call.Function.Arguments)
+			}
+			if received > 2<<20 {
+				return fmt.Errorf("%w: model response too large", ErrUpstream)
+			}
+			if answer.Len()+thought.Len()+len(chunk.Message.Content)+len(chunk.Message.Thinking) > 2<<20 {
+				return fmt.Errorf("%w: model response too large", ErrUpstream)
+			}
+			onThought(chunk.Message.Thinking)
+			splitter.feed(chunk.Message.Content, onAnswer, onThought)
+			calls = append(calls, chunk.Message.ToolCalls...)
+			if chunk.Done {
+				counts = chunk
+			}
+			completed = completed || chunk.Done
+			return nil
+		})
 		if err != nil && callCtx.Err() != nil && ctx.Err() == nil {
 			err = fmt.Errorf("%w: %w: model call timed out or stopped producing output; no tools from this response were executed", ErrUpstream, ErrTransient)
 		}
