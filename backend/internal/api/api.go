@@ -47,6 +47,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -143,7 +144,9 @@ type Options struct {
 	PowerButton   *system.PowerButtonManager
 	MemoryPolicy  *system.MemoryPolicy
 	Power         system.Power
-	Version       string
+	// Shutdown ends the guests before a planned restart or shutdown.
+	Shutdown *shutdown.Manager
+	Version  string
 	// ShareDir holds the texts of the licenses.
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -327,6 +330,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
 	mux.HandleFunc("GET /api/v1/system/power", s.requireAdmin(s.handlePowerStatus))
 	mux.HandleFunc("DELETE /api/v1/system/power", s.requireAdmin(s.handlePowerCancel))
+	mux.HandleFunc("POST /api/v1/system/power/now", s.requireAdmin(s.handlePowerNow))
 
 	// Everyone may see the volumes; only administrators may change disks.
 	s.operationsRoutes(mux)

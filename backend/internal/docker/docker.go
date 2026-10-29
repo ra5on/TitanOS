@@ -329,13 +329,23 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 		"features": map[string]bool{"cdi": true},
 		// Logs live on the volume too; keep them from growing without end.
 		"log-opts": map[string]string{"max-size": "10m", "max-file": "3"},
+		// Before a restart or shutdown titand stops the engine (package
+		// shutdown): each container gets a minute to end, not ten seconds.
+		"shutdown-timeout": shutdownTimeout,
 	}, "", "  ")
 	daemon = append(daemon, '\n')
 	// titand was restarted (an app update), the engine was not: it runs
 	// with exactly this configuration, and its containers keep running.
 	if applied == "" && want != "" {
-		if current, err := os.ReadFile(m.daemonConfig); err == nil && string(current) == string(daemon) {
+		if current, err := os.ReadFile(m.daemonConfig); err == nil && sameDaemon(current, daemon) {
 			if _, err := m.runner.Run(ctx, "", "systemctl", "is-active", "--quiet", "docker.service"); err == nil {
+				// Written by an older titand, without the shutdown timeout:
+				// the engine takes that one without a restart.
+				if string(current) != string(daemon) {
+					if err := os.WriteFile(m.daemonConfig, daemon, 0o644); err == nil {
+						m.runner.Run(ctx, "", "systemctl", "reload", "docker.service")
+					}
+				}
 				m.mu.Lock()
 				m.applied = want
 				m.mu.Unlock()
@@ -373,6 +383,71 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 	m.applied = want
 	m.mu.Unlock()
 	return nil
+}
+
+// shutdownTimeout is how long the engine gives each container to end
+// when it stops (seconds). docker.service may take longer than that.
+const shutdownTimeout = 60
+
+// sameDaemon says whether two engine configurations differ at most in
+// what the engine reloads without a restart (the shutdown timeout).
+func sameDaemon(a, b []byte) bool {
+	var x, y map[string]any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	delete(x, "shutdown-timeout")
+	delete(y, "shutdown-timeout")
+	xs, _ := json.Marshal(x)
+	ys, _ := json.Marshal(y)
+	return string(xs) == string(ys)
+}
+
+// RunningContainers names the containers that run, for the list shown
+// while the NAS is prepared for going down.
+func (m *Manager) RunningContainers(ctx context.Context) []string {
+	m.mu.Lock()
+	ready := m.applied != ""
+	m.mu.Unlock()
+	if m.Disabled || !ready {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	containers, err := m.api.containers(ctx)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, c := range containers {
+		if c.State == "running" && len(c.Names) > 0 {
+			names = append(names, strings.TrimPrefix(c.Names[0], "/"))
+		}
+	}
+	return names
+}
+
+// StopEngine ends the engine and so all containers, each with its stop
+// timeout. Unlike stopping them one by one this keeps their restart
+// policies: apps with "unless-stopped" come back after the restart.
+func (m *Manager) StopEngine(ctx context.Context) error {
+	if m.Disabled {
+		return nil
+	}
+	_, err := m.runner.Run(ctx, "", "systemctl", "stop", "docker.socket", "docker.service")
+	return err
+}
+
+// StartEngine starts it again when going down was called off.
+func (m *Manager) StartEngine(ctx context.Context) error {
+	m.mu.Lock()
+	applied := m.applied
+	m.mu.Unlock()
+	if m.Disabled || applied == "" {
+		return nil
+	}
+	_, err := m.runner.Run(ctx, "", "systemctl", "start", "docker.service")
+	return err
 }
 
 // sample reads CPU and memory of the running containers.
