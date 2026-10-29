@@ -20,6 +20,10 @@ Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Release
 TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
 bevor es die Einträge anzeigt. Welche Plugins angeboten werden, hängt vom
 Release ab; ein neueres oder „latest“-Release wird nicht ersatzweise verwendet.
+Gibt es im Plugin-Repository `ra5on/TitanOS-Plugins` einen signierten Satz für
+diese Systembasis und den exakten Kernel, kommen die Plugins von dort; ist dort
+eine neuere Version eines installierten Plugins, bietet die Seite
+**Aktualisieren** an. Einzelheiten in [Plugin-Repository](PLUGIN-REPO.md).
 
 1. Ein Daten-Volume unter **Speicher** anlegen bzw. einbinden. Eine Freigabe ist
    für den direkten Download nicht erforderlich.

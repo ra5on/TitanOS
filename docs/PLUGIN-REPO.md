@@ -1,68 +1,104 @@
-# Plugins in einem eigenen Repository (Plan)
+# Plugins aus einem eigenen Repository
 
-Stand: Entwurf vom 28.10.2026, noch nicht umgesetzt. Heute baut jedes volle
-Release alle offiziellen Plugins neu und hängt sie an sein eigenes Release
-(`docs/PLUGINS.md`). Im RAM-System liegen sie schon heute nicht: TitanOS lädt
-ein Abbild erst bei der Installation direkt auf das Daten-Volume. Der Umzug
-entlastet also vor allem den Release-Ablauf.
+Stand 29.10.2026: Der Client in TitanOS ist umgesetzt, das Repository
+`ra5on/TitanOS-Plugins` ist angelegt. Bau, Signatur und Veröffentlichung der
+Plugin-Sätze dort folgen. Solange es dort keinen signierten Zeiger gibt,
+verhält sich TitanOS wie bisher und nimmt die Plugins des eigenen Releases.
 
 ## Ziel
 
-- Plugins kommen aus `ra5on/TitanOS-Plugins`, nicht mehr aus jedem
-  TitanOS-Release.
 - **Ohne Kernelbindung** (Tailscale, NetBird, Coral-USB, Intel GPU Tools):
   einmal bauen und prüfen, gültig für alle Systembasen mit derselben
-  Debian-Version und demselben `SYSEXT_LEVEL`. Neuer Bau nur bei einem Update
-  des Plugins selbst.
+  Debian-Version (`VERSION_CODENAME`) und demselben `SYSEXT_LEVEL`. Neuer Bau
+  nur bei einem Update des Plugins selbst; installierte Plugins lassen sich dann
+  ohne Systemupdate aktualisieren.
 - **Mit Kernelbindung** (NVIDIA, `wangxun-nic`, `intel-qat`, `it87-extended`):
-  geordnet nach dem exakten `linux-image` (`uname -r` plus Debian-Paketversion).
-  Neuer Bau und Prüfung nur, wenn ein volles Release einen neuen Kernel bringt.
-  Releases mit gleichem Kernel übernehmen die vorhandenen Plugins.
+  geordnet nach dem exakten Kernel (`uname -r` plus Debian-Paketversion). Neuer
+  Bau nur, wenn ein volles Release einen neuen Kernel bringt. Releases mit
+  gleichem Kernel übernehmen die vorhandenen Plugins. NVIDIA-Treiberupdates
+  hängen am Kernel-Satz.
 
-## Aufbau des Repositorys
+## Format
 
-- Releases mit festen Tags, nie „latest“:
-  - `common-<n>`: kernelunabhängige Plugins.
-  - `kernel-<uname-r>-<debianversion>-<n>`: Kernel-Plugins für genau diesen Kernel.
-- Je Release eine signierte `index.json` (+ `.minisig`) mit Name, Version,
-  Asset, SHA-256, Größe, optional `kernel`, `minBase` (älteste Systembasis)
-  und `sysextLevel`. Plugin-Manifeste bleiben einzeln signiert wie heute.
-- Signatur mit denselben Schlüsseln wie TitanOS (`titanos-release-1`), in
-  einem geschützten Environment `release` mit Freigabe durch `ra5on`.
+Alle Dateien sind mit `titanos-release-1` signiert (`.minisig` daneben).
 
-## Änderungen in TitanOS
+- **Zeiger** `releases/download/catalog/catalog.json` (feste Release `catalog`):
 
-1. `plugins/catalog.go`: Katalog zuerst aus dem Plugin-Repository
-   (`common` + passender `kernel-…`-Index der **laufenden Kernelversion**),
-   sonst wie bisher aus dem eigenen Release. Prüfungen: Signatur des Index,
-   Tag passt exakt, `kernel` = laufender Kernel, `minBase` ≤ Basis,
-   `sysextLevel` gleich. Die Regel „keine latest-Ausweichversion“ bleibt: Der
-   Index wird über den exakten Kernel gefunden, nie über das neueste Release.
-2. `update.PreparePlugins`: Für das Ziel eines vollen Updates den Index zum
-   **Ziel-Kernel** aus dessen Manifest holen; fehlt er, wie bisher die
-   Plugins des Ziel-Releases verwenden.
-3. Plugin-Ablage pro Systembasis bleibt (`releases/<version>/`), damit
-   Rückfall und `docs/PLUGIN-CLEANUP.md` unverändert funktionieren.
+  ```json
+  {"serial": 3, "debian": "trixie", "sysextLevel": "1",
+   "common": {"tag": "common-2", "index": "<sha256 von index.json>"},
+   "kernels": [{"kernel": "6.12.113+deb13-amd64", "kernelPackage": "6.12.113-1",
+                "tag": "kernel-6.12.113-1-1", "index": "<sha256>"}]}
+  ```
 
-## Änderungen in der CI
+  `serial` steigt mit jeder Änderung. Gefunden wird ein Satz nur über den
+  exakten Kernel, nie als „neuester“.
+- **Satz-Releases** `common-<n>` und `kernel-<kernelPackage>-<n>` (ohne `+`,
+  damit die Download-URLs eindeutig bleiben) mit `index.json`:
 
-- TitanOS `release.yml`: Plugin-Bau nur noch, wenn das Plugin-Repository für
-  den Kernel des neuen Abbilds noch keinen Index hat; sonst überspringen und
-  `smoke-release.py --plugins` mit den Plugins aus dem Plugin-Repository.
-- Plugin-Repository: Workflow auf Anstoß (`repository_dispatch` aus dem
-  TitanOS-Release mit Kernelversion und Abbild-URL) und bei Änderungen an
-  einem Plugin; QEMU-Kurztest (Plugin aktivieren, Modul lädt, Dienst startet)
-  wie heute in `smoke-storage.py`.
+  ```json
+  {"tag": "common-2", "debian": "trixie", "sysextLevel": "1", "minBase": "0.36.0",
+   "kernel": "", "kernelPackage": "",
+   "plugins": [{"name": "tailscale", "version": "1.92.1-1",
+                "manifest": "<sha256 von tailscale.plugin.json>",
+                "sha256": "<sha256 des Abbilds>", "size": 31457280}]}
+  ```
 
-## Was nur der Projektinhaber tun kann
+  Daneben wie bisher `<name>.raw`, `<name>.plugin.json(.minisig)`,
+  `<name>-licenses.tar.gz` und bei Treibern `<name>-sources.tar.gz`. Ein
+  Kernel-Satz enthält außerdem `nvidia-updates.json` (mit `kernelPackage` statt
+  `titanos`) und die NVIDIA-Update-Assets.
+- **Plugin-Manifeste**: Version `<upstream>-<satzrevision>`, kein Suffix
+  `-titanos-<release>` mehr. Kernel-Plugins nennen `kernel`; ein NVIDIA-Update
+  aus einem Kernel-Satz hat kein `titanos`.
 
-1. Repository `ra5on/TitanOS-Plugins` anlegen (öffentlich).
-2. Environment `release` mit Freigabe durch `ra5on` und Tag-Regel einrichten.
-3. `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` dort hinterlegen (wie in
-   `docs/RELEASING.md` beschrieben, Passphrase interaktiv).
-4. Ein Token bzw. eine GitHub-App für `repository_dispatch` vom TitanOS- in
-   das Plugin-Repository.
+## Was TitanOS prüft (`backend/internal/plugins/repo.go`)
 
-Ohne Schritt 3 kann das Plugin-Repository nichts signieren, das TitanOS als
-„Offiziell“ annimmt. Erst danach werden die Änderungen oben umgesetzt und mit
-einem vollen Release geprüft; bis dahin bleibt der heutige Weg unverändert.
+1. Signatur des Zeigers, `serial` nicht kleiner als die zuletzt gesehene
+   (`/config/plugins/catalog-serial.json`, nur geschrieben, wenn sie steigt),
+   `debian` und `sysextLevel` gleich denen des Abbilds.
+2. Kernel-Satz mit `kernel` = laufender Kernel und `kernelPackage` = Debian-Version
+   aus `/proc/version`; der gemeinsame Satz immer.
+3. Je Satz: Signatur und SHA-256 der `index.json` gegen den Zeiger, Tag, Kernel,
+   `minBase` ≤ Basis-Version (sonst gilt der Satz als nicht vorhanden).
+4. Je Plugin: Signatur des Manifests und SHA-256 gegen den Index; Version,
+   Abbild-Hash, Größe und Kernel gleich dem Index.
+
+Kein passender Zeiger (404, andere Debian-Version, kein Satz für diese Basis):
+die Plugins des eigenen Releases wie bisher. Kein Kernel-Satz: gemeinsamer Satz
+aus dem Repository, Kernel-Plugins aus dem eigenen Release. Eine falsche Signatur,
+ein falscher Hash oder eine ältere `serial` sind Fehler und nie ein Grund für den
+Rückfall.
+
+Volle Systemupdates (`PrepareUpdate`) suchen die Sätze für den **Ziel-Kernel**;
+dafür trägt das Release-Manifest künftig das optionale Feld `kernelPackage`.
+Fehlt es, passt nur der gemeinsame Satz, Kernel-Plugins kommen aus dem
+Ziel-Release. Die Ablage pro Basis (`releases/<version>/`) und
+`docs/PLUGIN-CLEANUP.md` bleiben unverändert.
+
+Ist im Katalog eine neuere Version eines installierten offiziellen Plugins
+(außer NVIDIA, das seinen eigenen Treiberweg hat), bietet die Plugin-Seite
+„Aktualisieren“ an (`POST /api/v1/plugins/{name}/update` ohne `path`). TitanOS lädt
+die Fassung direkt auf das Daten-Volume, prüft sie und tauscht sie wie beim
+Update aus einer Freigabe: startet sie nicht, kommt die bisherige zurück.
+Automatisch passiert nichts.
+
+## Ältere NAS
+
+TitanOS bis 0.35 kennt das Repository nicht. Damit ihre vollen Updates und die
+manuelle Installation „aus dem gleichen Release“ weiter funktionieren, hängt die
+Release-CI die Plugin-Assets des passenden Satzes **kopiert** (nicht neu gebaut)
+weiter an jedes volle TitanOS-Release und führt sie im Manifest unter `plugins`.
+
+## Noch offen
+
+1. Plugin-Repository: Quellen und Build-Skripte umziehen, Workflows für Bau,
+   QEMU-Kurztest, Signatur und Veröffentlichung (`repository_dispatch` aus dem
+   TitanOS-Release mit Version, Kernel, kernelPackage und Abbild-URL).
+2. TitanOS-CI: Plugin-Bau entfällt; `release.yml` wartet auf den Satz des neuen
+   Kernels, kopiert ihn ans Release und schreibt `kernelPackage` ins Manifest.
+3. Durch den Projektinhaber: Environment `release` im Plugin-Repository mit
+   Freigabe durch `ra5on`, dort `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD`
+   (wie in `docs/RELEASING.md`), und ein Fine-grained-Token nur für
+   `TitanOS-Plugins` (Contents: write) als `PLUGINS_DISPATCH_TOKEN` im
+   TitanOS-Environment `release`.

@@ -704,8 +704,8 @@ func run(opts options) error {
 	updates.PluginsHealthy = func() bool {
 		return extensions.Healthy() || slices.Contains(volumes.WaitingForPassword(ctx), extensions.Volume())
 	}
-	updates.PreparePlugins = func(ctx context.Context, version, kernel, base string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
-		return extensions.PrepareUpdate(ctx, version, kernel, base, assets, volumes.Mounted(), fetch, download)
+	updates.PreparePlugins = func(ctx context.Context, version, kernel, kernelPackage, base string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
+		return extensions.PrepareUpdate(ctx, version, kernel, kernelPackage, base, assets, volumes.Mounted(), fetch, download)
 	}
 	updates.Reboot = power.Reboot
 	if !opts.dev && slot != "" && base != "" {

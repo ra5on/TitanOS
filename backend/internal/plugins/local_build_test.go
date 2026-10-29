@@ -176,7 +176,7 @@ func TestLocalBuildOSUpdateUsesNewSignedBundledDriver(t *testing.T) {
 	download := func(_ context.Context, url, dest, sum string, size int64) error {
 		return copyFile(filepath.Join(f.dir, strings.TrimPrefix(url, "https://release/")), dest, 0600)
 	}
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", "new-kernel", "https://release/", map[string]string{"nvidia": "nvidia.plugin.json"}, []string{"data"}, fetch, download); err != nil {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "new-kernel", "", "https://release/", map[string]string{"nvidia": "nvidia.plugin.json"}, []string{"data"}, fetch, download); err != nil {
 		t.Fatal(err)
 	}
 	if m.dir("data") != oldDir {

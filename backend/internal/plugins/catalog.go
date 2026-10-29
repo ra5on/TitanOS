@@ -36,6 +36,8 @@ type catalogEntry struct {
 	plugin    Plugin
 	manifest  []byte
 	signature []byte
+	// base is the release the image is downloaded from.
+	base string
 }
 
 func catalogClient() *http.Client {
@@ -131,13 +133,90 @@ func (m *Manager) fetchMetadata(ctx context.Context, url string, limit int64) ([
 	return data, nil
 }
 
+// fetchCatalog prefers the plugin sets of the plugin repository for the
+// running kernel. Without a kernel set, kernel-bound plugins still come
+// from the TitanOS release; without any set, everything does.
 func (m *Manager) fetchCatalog(ctx context.Context) ([]catalogEntry, error) {
-	base, err := m.releaseBase()
-	if err != nil {
+	if _, err := m.releaseBase(); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	common, kernel, err := m.fetchRepoSets(ctx, repoTarget{base: m.Release, kernel: m.kernel, kernelPackage: m.kernelPackage}, m.fetchMetadata)
+	if errors.Is(err, errNoPluginSet) {
+		return m.fetchReleaseCatalog(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var entries []catalogEntry
+	names := map[string]bool{}
+	for _, set := range []*repoSet{kernel, common} {
+		if set == nil {
+			continue
+		}
+		found, err := m.fetchSetEntries(ctx, set)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range found {
+			if !names[entry.plugin.Name] {
+				names[entry.plugin.Name] = true
+				entries = append(entries, entry)
+			}
+		}
+	}
+	if kernel == nil {
+		release, err := m.fetchReleaseCatalog(ctx)
+		if err != nil && !errors.Is(err, ErrRelease) {
+			return nil, err
+		}
+		for _, entry := range release {
+			if entry.plugin.Kernel != "" && !names[entry.plugin.Name] {
+				names[entry.plugin.Name] = true
+				entries = append(entries, entry)
+			}
+		}
+	}
+	return entries, nil
+}
+
+// fetchSetEntries reads the signed plugin manifests of a verified set.
+func (m *Manager) fetchSetEntries(ctx context.Context, set *repoSet) ([]catalogEntry, error) {
+	keys := minisign.LoadKeys(m.keyDir)
+	var entries []catalogEntry
+	for _, item := range set.index.Plugins {
+		asset := item.Name + manifestSuffix
+		data, err := m.fetchMetadata(ctx, set.base+asset, 64<<10)
+		if err != nil {
+			return nil, err
+		}
+		sig, err := m.fetchMetadata(ctx, set.base+asset+".minisig", 4096)
+		if err != nil {
+			return nil, err
+		}
+		if minisign.Verify(keys, data, string(sig)) != nil {
+			return nil, fmt.Errorf("%w: signature for %s", ErrInvalid, item.Name)
+		}
+		manifest, err := verifySetManifest(set, item, data)
+		if err != nil {
+			return nil, err
+		}
+		plugin := Plugin{Manifest: manifest, Official: true, Download: true, LicenseURL: set.base + item.Name + "-licenses.tar.gz"}
+		if !m.compatible(manifest) {
+			plugin.Problem = "kernel"
+		}
+		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig, base: set.base})
+	}
+	return entries, nil
+}
+
+// fetchReleaseCatalog reads the plugins attached to the running release.
+func (m *Manager) fetchReleaseCatalog(ctx context.Context) ([]catalogEntry, error) {
+	base, err := m.releaseBase()
+	if err != nil {
+		return nil, err
+	}
 	keys := minisign.LoadKeys(m.keyDir)
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("%w: no trusted plugin keys", ErrInvalid)
@@ -196,7 +275,7 @@ func (m *Manager) fetchCatalog(ctx context.Context) ([]catalogEntry, error) {
 		if !m.compatible(manifest) {
 			plugin.Problem = "kernel"
 		}
-		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig})
+		entries = append(entries, catalogEntry{plugin: plugin, manifest: data, signature: sig, base: base})
 	}
 	return entries, nil
 }
@@ -266,7 +345,7 @@ func (m *Manager) installOfficial(ctx context.Context, name, volume string, moun
 		return fmt.Errorf("%w: plugin targets another kernel", ErrInvalid)
 	}
 	tr.name(name, selected.plugin.Title)
-	base, _ := m.releaseBase()
+	base := selected.base
 	dir := m.baseDir(volume)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -302,6 +381,130 @@ func (m *Manager) installOfficial(ctx context.Context, name, volume string, moun
 		return ErrUnknownVolume
 	}
 	return m.install(ctx, path, volume, "", mounted, activate)
+}
+
+// UpdateOfficial replaces an installed plugin with the newer signed version
+// in the official catalog. Like an installation, the download happens
+// without holding actions; the swap itself is the one of Update, with the
+// previous files coming back if the new version does not start.
+func (m *Manager) UpdateOfficial(ctx context.Context, name string, mounted []string) error {
+	m.actions.Lock()
+	volume, err := m.officialUpdateAllowed(name, mounted)
+	m.actions.Unlock()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	if m.downloading[name] {
+		m.mu.Unlock()
+		return ErrDownloading
+	}
+	if m.downloading == nil {
+		m.downloading = map[string]bool{}
+	}
+	m.downloading[name] = true
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.downloading, name)
+		m.mu.Unlock()
+	}()
+	tr := m.track(name, "update", StepSignature, StepDownload, StepChecksum, StepWrite, StepStop)
+	err = m.updateOfficial(withTracker(ctx, tr), name, volume, mounted)
+	tr.finish(err)
+	return err
+}
+
+func (m *Manager) updateOfficial(ctx context.Context, name, volume string, mounted []string) error {
+	tr := trackerOf(ctx)
+	tr.begin(StepSignature)
+	entries, err := m.fetchCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	var selected *catalogEntry
+	for i := range entries {
+		if entries[i].plugin.Name == name {
+			selected = &entries[i]
+		}
+	}
+	m.actions.Lock()
+	old, exists := m.installed(volume)[name]
+	m.actions.Unlock()
+	if selected == nil || !exists {
+		return ErrNotFound
+	}
+	manifest := selected.plugin.Manifest
+	if !updatable(old, manifest) {
+		return fmt.Errorf("%w: no newer version of %s", ErrInvalid, name)
+	}
+	if !m.compatible(manifest) {
+		return fmt.Errorf("%w: the new version targets another kernel", ErrInvalid)
+	}
+	tr.name(name, manifest.Title)
+	dir := m.baseDir(volume)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(dir, ".download-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	path := filepath.Join(stage, name+manifestSuffix)
+	if err := os.WriteFile(path, selected.manifest, 0o600); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path+".minisig", selected.signature, 0o600); err != nil {
+		return err
+	}
+	tr.begin(StepDownload)
+	tr.bytes(0, manifest.Size)
+	if err := m.downloadImage(ctx, selected.base+name+".raw", filepath.Join(stage, name+".raw"), manifest); err != nil {
+		return err
+	}
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if again, err := m.officialUpdateAllowed(name, mounted); err != nil {
+		return err
+	} else if again != volume {
+		return ErrUnknownVolume
+	}
+	if current := m.installed(volume)[name]; current.SHA256 != old.SHA256 {
+		return fmt.Errorf("%w: %s changed during the download", ErrInvalid, name)
+	}
+	if staged, err := readManifest(path); err != nil || !m.official(path) || staged.SHA256 != manifest.SHA256 {
+		return fmt.Errorf("%w: plugin metadata", ErrInvalid)
+	}
+	enabled := slices.Contains(m.current().Enabled, name)
+	if enabled {
+		tr.expect(activationSteps(manifest)...)
+	}
+	return m.replace(ctx, name, path, manifest, true, enabled, volume, mounted)
+}
+
+// officialUpdateAllowed returns the plugin volume. Caller holds actions.
+func (m *Manager) officialUpdateAllowed(name string, mounted []string) (string, error) {
+	if m.current().PendingDriver != nil {
+		return "", ErrDriverPending
+	}
+	if m.ChangeAllowed != nil && !m.ChangeAllowed() {
+		return "", ErrUpdatePending
+	}
+	if m.Disabled {
+		return "", ErrDisabled
+	}
+	volume := m.current().Volume
+	if !nameRE.MatchString(name) || name == "nvidia" {
+		return "", ErrNotFound
+	}
+	if volume == "" || !slices.Contains(mounted, volume) {
+		return "", ErrUnknownVolume
+	}
+	if _, exists := m.installed(volume)[name]; !exists {
+		return "", ErrNotFound
+	}
+	return volume, nil
 }
 
 // officialInstallAllowed returns the volume an official plugin goes to.

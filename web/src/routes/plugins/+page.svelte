@@ -32,7 +32,7 @@
 		download: boolean;
 		licenseUrl?: string;
 		problem: string;
-		update?: { path: string; version: string; official: boolean } | null;
+		update?: { path: string; version: string; official: boolean; download?: boolean } | null;
 		category?: string;
 		license?: string;
 		upstream?: { name?: string; url?: string; version?: string } | null;
@@ -65,7 +65,7 @@
 	// list may change meanwhile.
 	let removing = $state<{ name: string; title: string } | null>(null);
 	// Likewise the update dialog: plugin and the version it was opened for.
-	let updating = $state<{ name: string; title: string; path: string; version: string; official: boolean } | null>(null);
+	let updating = $state<{ name: string; title: string; path: string; version: string; official: boolean; download?: boolean } | null>(null);
 	let tailnetPending = $state(false);
 	let netbirdPending = $state(false);
 	// Steps of installations, updates and removals as the NAS reports them.
@@ -512,7 +512,7 @@
 					<p class="muted note">{t('plugins.enabledNote')}</p>
 					{#if current.update}
 						<div class="row update">
-							<span>{t('plugins.updateAvailable', { version: current.update.version })} <span class="muted path">{current.update.path}</span></span>
+							{#if current.update.download}<span>{t('plugins.updateAvailableDownload', { version: current.update.version })}</span>{:else}<span>{t('plugins.updateAvailable', { version: current.update.version })} <span class="muted path">{current.update.path}</span></span>{/if}
 							<button type="button" class="btn btn-primary" disabled={locked} onclick={() => openUpdate(current)}>{t('plugins.update')}</button>
 						</div>
 					{/if}
@@ -546,7 +546,7 @@
 	<Dialog title={t('plugins.updateTitle', { name: target.title, version: target.version })} locked={busy} onclose={() => (updating = null)}>
 		<p class="text">{t('plugins.updateText')}</p>
 		{#if !target.official}<p class="notice-warn">{t('plugins.trustCommunity')}</p>{/if}
-		<p class="muted mono path">{target.path}</p>
+		{#if target.download}<p class="text">{t('plugins.updateDownloadText')}</p>{:else}<p class="muted mono path">{target.path}</p>{/if}
 		{#if updatingSteps && (busy || updatingSteps.state !== 'done')}<PluginSteps progress={updatingSteps} />{/if}
 		{#if error}
 			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>

@@ -81,6 +81,27 @@ try {
   assert.equal(await page.getByText("liegt in einer Freigabe bereit").count(), 0);
   await page.screenshot({ path: `${out}/updated.png`, fullPage: true });
   await ctx.close();
+
+  // A newer version in the official catalog: no path, the NAS downloads it.
+  {
+    const { ctx, page, data } = await context();
+    const catalog = { path: "", version: "2.1", official: true, download: true };
+    data.plugins = status("1.0", catalog);
+    data.pluginsAfterUpdate = status("2.1", null);
+    await page.goto(base + "/plugins");
+    await page.getByText("Version 2.1 ist im offiziellen Katalog verfügbar.").waitFor();
+    await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText("lädt die signierte neue Version", { exact: false }).waitFor();
+    await page.screenshot({ path: `${out}/catalog-dialog.png`, fullPage: true });
+    await dialog.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    await dialog.waitFor({ state: "detached" });
+    assert.deepEqual(data.pluginUpdates.at(-1), [
+      "/plugins/werkzeug/update",
+      { path: "", confirm: "werkzeug" },
+    ]);
+    await ctx.close();
+  }
   assert.deepEqual(errors, []);
   console.log("plugin page update: ok");
 } finally {

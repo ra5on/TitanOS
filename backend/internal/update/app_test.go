@@ -195,7 +195,7 @@ func TestReleaseForAnotherImageIsASystemUpdate(t *testing.T) {
 	e := newAppEnv(t)
 	e.publishApp(t, "1.1.1", "1.1.0")
 	var release string
-	e.m.PreparePlugins = func(_ context.Context, version, _, _ string, _ map[string]string, _ func(context.Context, string, int64) ([]byte, error), _ func(context.Context, string, string, string, int64) error) error {
+	e.m.PreparePlugins = func(_ context.Context, version, _, _, _ string, _ map[string]string, _ func(context.Context, string, int64) ([]byte, error), _ func(context.Context, string, string, string, int64) error) error {
 		release = version
 		return nil
 	}

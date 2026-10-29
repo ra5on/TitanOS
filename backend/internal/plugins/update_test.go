@@ -43,7 +43,7 @@ func TestUpdateStagesSignedPluginsAndKeepsRollback(t *testing.T) {
 		return copyFile(filepath.Join(remote, strings.TrimPrefix(url, "https://release/")), dest, 0o600)
 	}
 	prepare := func() error {
-		return m.PrepareUpdate(ctx, "0.1.0-beta.3", "new-kernel", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download)
+		return m.PrepareUpdate(ctx, "0.1.0-beta.3", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download)
 	}
 	if err := prepare(); err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestUpdateStagesSignedPluginsAndKeepsRollback(t *testing.T) {
 	}
 	// Tampering with metadata must abort before download or publishing .ready.
 	os.WriteFile(newPath, []byte(`{"name":"gpu","size":100,"sha256":"bad"}`), 0o600)
-	if err := m.PrepareUpdate(ctx, "0.1.0-beta.4", "new-kernel", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download); err == nil {
+	if err := m.PrepareUpdate(ctx, "0.1.0-beta.4", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download); err == nil {
 		t.Fatal("accepted unsigned replacement")
 	}
 	if _, err := os.Stat(filepath.Join(m.releaseDir("data", "0.1.0-beta.4"), ".ready")); !os.IsNotExist(err) {
@@ -79,13 +79,13 @@ func TestUpdateRefusesMissingKernelPluginAndOfflineVolume(t *testing.T) {
 	if err := m.Install(context.Background(), path, "data", "gpu", []string{"data"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", "other", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "other", "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatal("lost kernel plugin", err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", nil, nil, nil, nil); !errors.Is(err, ErrUnknownVolume) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrUnknownVolume) {
 		t.Fatal("wrote into RAM instead of volume", err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "../../escape", m.kernel, "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+	if err := m.PrepareUpdate(context.Background(), "../../escape", m.kernel, "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 }
@@ -148,7 +148,7 @@ func TestRuntimeSettingsSerializeWithPluginLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.UpdateAllowed = func() bool { return false }
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", nil, nil, nil, nil); !errors.Is(err, ErrBusy) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrBusy) {
 		t.Fatal("update ignored routing trial", err)
 	}
 }

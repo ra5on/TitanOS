@@ -2395,6 +2395,8 @@
 	"error.hardware_settings": "This GPU does not support that power limit or it could not be applied.",
 	"plugins.catalogIntro": "Install official plugins directly from GitHub. Only selected packages are downloaded, then stored on a data volume.",
 	"plugins.updateAvailable": "Version {version} is ready in a share.",
+	"plugins.updateAvailableDownload": "Version {version} is available in the official catalog.",
+	"plugins.updateDownloadText": "TitanOS downloads the signed new version directly to the data volume and checks it before the plugin is replaced.",
 	"plugins.updateChip": "Update",
 	"plugins.update": "Update",
 	"plugins.updating": "Updating …",

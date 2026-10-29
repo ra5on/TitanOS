@@ -2395,6 +2395,8 @@
 	"error.hardware_settings": "Das Leistungslimit wird von dieser Karte nicht unterstützt oder konnte nicht gesetzt werden.",
 	"plugins.catalogIntro": "Offizielle Plugins direkt von GitHub installieren. Geladen werden nur die ausgewählten Pakete; sie liegen anschließend auf einem Daten-Volume.",
 	"plugins.updateAvailable": "Version {version} liegt in einer Freigabe bereit.",
+	"plugins.updateAvailableDownload": "Version {version} ist im offiziellen Katalog verfügbar.",
+	"plugins.updateDownloadText": "TitanOS lädt die signierte neue Version direkt auf das Daten-Volume und prüft sie, bevor das Plugin ersetzt wird.",
 	"plugins.updateChip": "Update",
 	"plugins.update": "Aktualisieren",
 	"plugins.updating": "Wird aktualisiert …",
