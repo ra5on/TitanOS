@@ -8,7 +8,7 @@ Der Ausbau von 0.15.0 mit Auftragszentrale, persönlichem Wissen, Dokumentbearbe
 
 Ab Werk ausgeschaltet. Unter Einstellungen › KI-Assistent werden Ollama-Adresse, Modell und erlaubte Bereiche gewählt. Ein Modell mit Werkzeugunterstützung ist nötig; Modelle werden nicht vorinstalliert. Modellverwaltung, Kontextlänge und Temperatur bleiben einstellbar.
 
-Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Benutzer benötigen eine zusätzliche Freigabe und erreichen ausschließlich ihre eigenen Freigaben mit ihren bestehenden Dateirechten. Je Bereich gilt aus, lesen oder lesen/ändern: Dateien, Docker/Apps, VMs, Speicher, Shares, Backups, Konten, System und Updates. Konten, System und Updates sind standardmäßig nur lesbar. Direktmodus erweitert diese Rechte nicht.
+Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Benutzer benötigen eine zusätzliche Freigabe und erreichen ausschließlich ihre eigenen Freigaben mit ihren bestehenden Dateirechten. Je Bereich gilt aus, lesen oder lesen/ändern: Dateien, Docker/Apps, VMs, Speicher, Shares, Backups, Konten, System, Updates, Home Assistant, Plugins sowie Netzwerk und Firewall. Konten, System und Updates sind standardmäßig nur lesbar; Home Assistant, Plugins und Netzwerk/Firewall sind ab Werk aus (siehe [Plugins, Netzwerk und Firewall, Sicherungen und App-Updates](#plugins-netzwerk-und-firewall-sicherungen-und-app-updates-29102026)). Direktmodus erweitert diese Rechte nicht.
 
 Es gibt zwei Ausführungsarten:
 
@@ -61,7 +61,7 @@ Der konfigurierte Ollama-Server erhält den Modellkontext und zulässige Werkzeu
 
 ## Sicherheitsgrenzen und Werkzeuge
 
-Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beliebigen Shellbefehle, kein allgemeines HTTP-Werkzeug und keine Erweiterung der Rechte durch einen Prompt. Konsolen, Kontenanlegen mit Passwort, private Schlüssel, Backup-Passwörter, `.env`, Wiederherstellungscodes und Sticksicherungsdownloads sind ausgeschlossen. Die Bestätigung einer Netzwerkänderung bleibt außerhalb des Agenten; der normale zeitliche Netzwerk-Rückfall gilt auch im Direktmodus.
+Die feste API-Liste steht in `backend/internal/api/assistant_api.go`. Keine beliebigen Shellbefehle, kein allgemeines HTTP-Werkzeug und keine Erweiterung der Rechte durch einen Prompt. Konsolen, Kontenanlegen mit Passwort, private Schlüssel, Backup-Passwörter, `.env`, Wiederherstellungscodes und Sticksicherungsdownloads sind ausgeschlossen. Netzwerkänderungen selbst, ihre Bestätigung, das Ein-/Ausschalten der Firewall und das Bestätigen einer Firewall-Änderung auf Probe bleiben außerhalb des Agenten; der normale zeitliche Rückfall gilt auch im Direktmodus.
 
 Dateien, Protokolle, Webseiten, Anhänge und Werkzeugergebnisse sind Daten, keine neuen Aufträge oder Erlaubnisse. Der Standardprompt verlangt, deren eingebettete Anweisungen zu ignorieren und auf das Nutzerziel begrenzt zu arbeiten. Das ist keine Garantie gegen jede Fehlentscheidung eines Modells; die technisch durchgesetzten Rechte gelten zusätzlich.
 
@@ -270,3 +270,36 @@ Einzelheiten stehen in [HOME-ASSISTANT.md](HOME-ASSISTANT.md).
 ### Prüfgrenzen
 
 Geprüft mit nachgebautem Ollama, ntfy, Home Assistant (REST und WebSocket) und MQTT-Broker. Nicht geprüft sind echte Smartphones, Apps, ein echtes Home Assistant und ein echter Broker.
+
+## Plugins, Netzwerk und Firewall, Sicherungen und App-Updates (29.10.2026)
+
+Entscheidung des Projektinhabers vom 29.10.2026: Der Agent übernimmt diese Bereiche mit den bestehenden Bestätigungs- und Rechteregeln. Alle Werkzeuge gibt es nur für Besitzer und Administratoren. Jedes Ziel wird beim Planen gegen den aktuellen Zustand geprüft und unmittelbar vor der Ausführung neu geplant und verglichen; danach liest titand den Endzustand selbst nach (`assistant_areas.go`, `verifyAreaAction`).
+
+**Neue Bereiche, ab Werk aus:** `plugins` und `network` (Einstellungen › KI-Assistent). Auf dem Stick stehen sie in `extraAreas` von `/config/system/assistant.json`, damit die vorige App-Version ihre bekannten Bereiche weiter lesen und speichern kann (sie verliert dabei nur die neuen Bereiche, die dann wieder aus sind). Die bisherigen Katalogrouten `GET/POST/DELETE /plugins…` und `/firewall…` gehören jetzt zu diesen Bereichen statt zu System; `PUT /network` ist nicht mehr im Katalog.
+
+| Werkzeug | Art | Bereich | Endzustand |
+|---|---|---|---|
+| `plugins_list` (optional `refresh`) | lesen | plugins | Liste ohne Pfade in Freigaben, Beschreibungen gelten als Daten |
+| `plugin_install` | Gefahr | plugins | installiert, eingeschaltet und aktiv (bzw. installiert und aus) |
+| `plugin_switch` | Gefahr | plugins | eingeschaltet und aktiv bzw. aus |
+| `plugin_update` | Gefahr (offiziell) / Zerstörung (nicht signierte Fassung aus einer Freigabe, Name als Bestätigung) | plugins | neue Version installiert |
+| `plugin_remove` | Zerstörung | plugins | nicht mehr installiert |
+| `network_diagnostics` | lesen | network | Prüfungen je Netz (ohne Angabe: Liste der Netze) |
+| `firewall_status` | lesen | network | Zonen, Zellen mit nummerierten Regeln, Sperren, letzte verworfene Pakete |
+| `firewall_rule_add`, `firewall_rule_remove` | Gefahr | network | auf Probe (eingeschaltet) bzw. gespeichert (ausgeschaltet) |
+| `firewall_unblock` | Gefahr | network | Adresse nicht mehr gesperrt |
+| `backup_snapshots`, `backup_files` | lesen | backups | Stände und Ordner eines Stands |
+| `backup_check` | Änderung | backups | angenommen; Ergebnis später in `backup_status` |
+| `backup_restore_files` | Änderung | backups | angenommen; neuer Ordner unter `restored/`, nichts wird überschrieben |
+| `backup_schedule` (pause/resume) | Änderung | backups | `enabled` des Auftrags wie verlangt |
+| `docker_auto_updates` | lesen | docker | Einstellungen, nächstes Fenster, letzte Ergebnisse |
+| `docker_auto_update` | Änderung | docker | App in der Liste bzw. nicht, Fenster gespeichert |
+
+- **Plugins:** Installiert werden nur offizielle Plugins des signierten Release-Katalogs, ausschließlich über den Namen. Lokale Dateien, Community-Plugins und Adressen aus Inhalten installiert der Agent nie; die Plugin-Seite bietet sie weiter an. Updates nur auf die Fassung, die `plugins_list` unter `update` nennt (der Pfad kommt aus dem Status, nie vom Modell). Bestehende Sperren (Systemupdate, Tailscale/NetBird auf Probe, NVIDIA-Wechsel) gelten unverändert.
+- **Netzwerk:** nur lesen und Diagnose. Änderungen am Netzwerk bleiben Handarbeit, weil ihre Bestätigung aus einer echten Websitzung kommen muss.
+- **Firewall:** Regeln einer Zelle hinzufügen (mit Position, erste passende entscheidet) und entfernen, gesperrte Adressen freigeben. Der Hauptschalter bleibt, wie er ist: Ein Vorschlag mit anderem `enabled` wird abgelehnt (`firewall_switch_manual`), auch serverseitig in `PUT /firewall`, wenn der Agent ihn schickt (`firewall.Manager.ChangeFromAssistant`). Weil der Agent keine Adresse einer Websitzung hat, entfällt die Ausnahme für die speichernde Adresse; stattdessen wird jeder Vorschlag abgelehnt, der die Weboberfläche für das Heimnetz oder das VPN (ohne eigene Absenderregel) schließen würde (`firewall_closes_webui`). Eine Änderung der eingeschalteten Firewall läuft wie immer zwei Minuten auf Probe; bestätigen kann nur eine Person unter Einstellungen › Firewall, sonst geht sie zurück. Das Ergebnis heißt dann `on_trial`, nicht „erledigt“. Während einer Probe plant der Agent keine weitere Firewall-Änderung.
+- **Sicherungen:** Jetzt sichern/abbrechen wie bisher (`backup_action`), dazu Prüfen, Einzeldateien in einen neuen Ordner wiederherstellen (bis 200 absolute Pfade ohne `..`) und Zeitplan pausieren/fortsetzen. Der geänderte Auftrag wird ohne Geheimnisse geschickt; leere Geheimnisse behalten den gespeicherten Wert für dasselbe Ziel.
+- **Updates:** Status lesen und „jetzt suchen“ wie bisher (`update_status`, `update_action` mit `check`). Neu wird das Ergebnis der Suche beobachtet: Eine fehlgeschlagene Suche heißt `failed` und „unbekannt“, nie „kein Update“. Installieren folgt weiter dem Bereich Updates (ab Werk nur lesen).
+- **Docker:** automatische App-Updates je App ein-/ausschalten, optional mit neuem Fenster für alle Apps. Eine nicht mehr vorhandene App lässt sich noch ausschalten.
+
+Prüfgrenzen: Planung, Bestätigungsstufen, Bereichsrechte, Endzustandsprüfung und Geheimnisfreiheit sind mit isolierten Daten getestet (`assistant_areas_test.go`, `firewall/agent_test.go`); Backup-Zeitplan und App-Update-Liste zusätzlich über den echten Agentenablauf mit nachgebautem Ollama. Echte Plugin-Installationen, echte nftables-Regeln mit Probe und echte restic-Läufe durch den Agenten sind nicht abgenommen.

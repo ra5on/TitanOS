@@ -102,6 +102,10 @@ var toolAreas = map[string]string{
 	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
 	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
 	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
+	"plugins_list": assistant.AreaPlugins, "plugin_install": assistant.AreaPlugins, "plugin_switch": assistant.AreaPlugins, "plugin_update": assistant.AreaPlugins, "plugin_remove": assistant.AreaPlugins,
+	"network_diagnostics": assistant.AreaNetwork, "firewall_status": assistant.AreaNetwork, "firewall_rule_add": assistant.AreaNetwork, "firewall_rule_remove": assistant.AreaNetwork, "firewall_unblock": assistant.AreaNetwork,
+	"backup_snapshots": assistant.AreaBackups, "backup_files": assistant.AreaBackups, "backup_check": assistant.AreaBackups, "backup_restore_files": assistant.AreaBackups, "backup_schedule": assistant.AreaBackups,
+	"docker_auto_updates": assistant.AreaDocker, "docker_auto_update": assistant.AreaDocker,
 	"ha_diagnostics": assistant.AreaHome, "ha_capabilities": assistant.AreaHome, "ha_undo": assistant.AreaHome, "ha_history": assistant.AreaHome, "ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
 }
 
@@ -219,6 +223,7 @@ func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.
 	tools = append(tools, s.fileTools(user)...)
 	if user.Role.CanAdminister() {
 		tools = append(tools, s.apiTools(user, r)...)
+		tools = append(tools, s.areaTools()...)
 	}
 	tools = append(tools, s.haTools(user)...)
 	tools = append(tools, s.knowledgeTools(user)...)

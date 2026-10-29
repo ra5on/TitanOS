@@ -318,6 +318,12 @@ func (m *Manager) Change(ctx context.Context, cfg Config, admin string) error {
 	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
 		return ErrExcludesYou
 	}
+	return m.changeLocked(ctx, cfg, addr)
+}
+
+// changeLocked applies checked settings: switching off at once, everything
+// else on trial with admin let in (if valid). m.mu is held.
+func (m *Manager) changeLocked(ctx context.Context, cfg Config, addr netip.Addr) error {
 	if !cfg.Enabled {
 		// Switching off cannot lock anybody out: no trial.
 		before := m.active

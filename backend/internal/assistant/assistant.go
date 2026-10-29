@@ -89,7 +89,11 @@ type Settings struct {
 	// Areas say what the assistant may do in each part of the NAS: off,
 	// read or write (changes with confirmation). Missing areas have their
 	// default.
-	Areas         map[string]string `json:"areas"`
+	Areas map[string]string `json:"areas"`
+	// ExtraAreas is only used on the stick: the areas older titand do not
+	// know (see laterAreas) are kept here, so that a previous app version
+	// can still read and save its known areas. Merged into Areas in RAM.
+	ExtraAreas    map[string]string `json:"extraAreas,omitempty"`
 	Execution     string            `json:"execution,omitempty"` // confirm or direct
 	Paused        bool              `json:"paused,omitempty"`
 	SystemPrompt  string            `json:"systemPrompt,omitempty"`
@@ -113,7 +117,11 @@ type Profile struct {
 }
 
 // Areas of the NAS and what the assistant may do there by default.
-var Areas = []string{AreaFiles, AreaDocker, AreaVMs, AreaStorage, AreaShares, AreaBackups, AreaAccounts, AreaSystem, AreaUpdates, AreaHome}
+var Areas = []string{AreaFiles, AreaDocker, AreaVMs, AreaStorage, AreaShares, AreaBackups, AreaAccounts, AreaSystem, AreaUpdates, AreaHome, AreaPlugins, AreaNetwork}
+
+// laterAreas came after 0.35.0. They are stored in extraAreas, because
+// older titand refuse settings with areas they do not know.
+var laterAreas = []string{AreaPlugins, AreaNetwork}
 
 const (
 	AreaFiles    = "files"
@@ -127,6 +135,11 @@ const (
 	AreaUpdates  = "updates"
 	// AreaHome is Home Assistant; off unless switched on.
 	AreaHome = "home"
+	// AreaPlugins installs, switches and removes plugins; off unless switched on.
+	AreaPlugins = "plugins"
+	// AreaNetwork reads the network with diagnostics and changes rules of
+	// the firewall; off unless switched on. Network changes stay manual.
+	AreaNetwork = "network"
 
 	AccessOff   = "off"
 	AccessRead  = "read"
@@ -136,6 +149,7 @@ const (
 var defaultAccess = map[string]string{
 	AreaFiles: AccessWrite, AreaDocker: AccessWrite, AreaVMs: AccessWrite, AreaStorage: AccessWrite, AreaShares: AccessWrite,
 	AreaBackups: AccessWrite, AreaAccounts: AccessRead, AreaSystem: AccessRead, AreaUpdates: AccessRead, AreaHome: AccessOff,
+	AreaPlugins: AccessOff, AreaNetwork: AccessOff,
 }
 
 // Access says what the assistant may do in an area.
@@ -187,10 +201,41 @@ func (m *Manager) Load() error {
 	if settings.Ollama == "" {
 		settings.Ollama = DefaultOllama
 	}
+	for area, level := range settings.ExtraAreas {
+		if slices.Contains(laterAreas, area) {
+			if settings.Areas == nil {
+				settings.Areas = map[string]string{}
+			}
+			settings.Areas[area] = level
+		}
+	}
+	settings.ExtraAreas = nil
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings = settings
 	return nil
+}
+
+// onStick splits the areas for /config: those older titand know stay in
+// areas, the later ones go to extraAreas.
+func onStick(settings Settings) Settings {
+	known, extra := map[string]string{}, map[string]string{}
+	for area, level := range settings.Areas {
+		if slices.Contains(laterAreas, area) {
+			extra[area] = level
+		} else {
+			known[area] = level
+		}
+	}
+	if settings.Areas == nil {
+		known = nil
+	}
+	settings.Areas = known
+	settings.ExtraAreas = nil
+	if len(extra) > 0 {
+		settings.ExtraAreas = extra
+	}
+	return settings
 }
 
 // Settings returns the current settings.
@@ -265,7 +310,8 @@ func (m *Manager) SetSettings(settings Settings) error {
 			settings.PromptHistory = settings.PromptHistory[:5]
 		}
 	}
-	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+	settings.ExtraAreas = nil
+	if err := m.store.WriteJSON(settingsFile, onStick(settings)); err != nil {
 		return err
 	}
 	m.settings = settings

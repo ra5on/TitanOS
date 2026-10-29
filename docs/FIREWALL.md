@@ -235,6 +235,14 @@ Bestätigungsdialog, kein Aussperren. Ausschalten gilt sofort und ohne Probe;
 im ausgeschalteten Zustand gespeicherte Einstellungen gelten beim Einschalten.
 Ein titand-Neustart während der Probe lädt den bestätigten Stand.
 
+Der KI-Assistent (Bereich „Netzwerk und Firewall“, ab Werk aus) ändert nur
+Regeln (`firewall.Manager.ChangeFromAssistant`): Er kann die Firewall weder
+ein- noch ausschalten (`firewall_switch_manual`) noch eine Änderung vorschlagen,
+die die Weboberfläche für Heimnetz oder VPN ohne eigene Absenderregel schließt
+(`firewall_closes_webui`). Er hat keine Adresse einer Websitzung, deshalb gibt
+es für ihn keine freigegebene Adresse auf Probe; bestätigen muss eine Person in
+der Weboberfläche, sonst geht die Änderung zurück. Siehe `docs/ASSISTANT.md`.
+
 Rückweg ohne Weboberfläche: lokale Konsole, `nft delete table inet titanos`
 (öffnet bis zum nächsten Start von titand alles) oder in
 `/config/firewall/settings.json` `"enabled": false` setzen. Hat titand
