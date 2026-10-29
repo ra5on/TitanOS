@@ -84,8 +84,8 @@ var apiRoutes = []apiRoute{
 	{"PUT", "/config-backup", assistant.AreaBackups, assistant.LevelNormal, "Change the settings of the stick backup (body as GET › settings)."},
 	// storage
 	{"GET", "/storage", assistant.AreaStorage, "", "Disks and volumes in full detail."},
-	{"GET", "/storage/disk-sleep", assistant.AreaStorage, "", "Sleep time of hard disks."},
-	{"PUT", "/storage/disk-sleep", assistant.AreaStorage, assistant.LevelNormal, `Set the sleep time of hard disks (body {"idleMinutes": 30}; 0 is off).`},
+	{"GET", "/storage/disk-sleep", assistant.AreaStorage, "", "Sleep time of hard disks: default, overrides per volume and disk, effective value and state of each disk."},
+	{"PUT", "/storage/disk-sleep", assistant.AreaStorage, assistant.LevelNormal, `Set the sleep time of hard disks (body {"idleMinutes": 30}; 0 is off). Optional "volumes" {"<volume>": minutes} and "disks" {"<disk id from GET>": minutes} replace all overrides; a missing entry inherits, 0 never sleeps; leave them out to keep the stored ones.`},
 	{"POST", "/storage/volumes/{name}/disks", assistant.AreaStorage, assistant.LevelDestroy, `Add a disk to a volume or replace a missing one (body {"disk": "sdc", "erase": true}); everything on the disk is erased.`},
 	{"DELETE", "/storage/volumes/{name}/disks/{disk}", assistant.AreaStorage, assistant.LevelDestroy, "Take a disk out of a volume."},
 	{"GET", "/storage/volumes/{name}/snapshots", assistant.AreaStorage, "", "Snapshots of a Btrfs volume."},

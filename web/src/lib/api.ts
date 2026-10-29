@@ -267,10 +267,41 @@ export type VolumeCache = {
 	blockBytes: number;
 };
 
+/** Where the effective idle time comes from: the default, the volume or the disk's own value. */
+export type DiskSleepOrigin = 'default' | 'volume' | 'disk';
+export type DiskSleepVolume = {
+	name: string;
+	/** null inherits the default; 0 never sleeps. */
+	override: number | null;
+	effective: number;
+	origin: DiskSleepOrigin;
+};
+export type DiskSleepDisk = {
+	/** Serial or WWN based; empty when the disk has no unique identity (inherits only). */
+	id: string;
+	name: string;
+	model: string;
+	serial: string;
+	sizeBytes: number;
+	volume?: string;
+	override: number | null;
+	effective: number;
+	origin: DiskSleepOrigin;
+	state: 'asleep' | 'active';
+	error?: string;
+};
 export type DiskSleepStatus = {
 	idleMinutes: number;
+	/** Overrides by volume name and by disk id; a missing entry inherits. */
+	volumes?: Record<string, number>;
+	disks?: Record<string, number>;
 	available: boolean;
 	errors: { disk: string; message: string }[];
+	/** Only present when the disks could be listed. */
+	volumeStatus?: DiskSleepVolume[];
+	diskStatus?: DiskSleepDisk[];
+	missingVolumes?: string[];
+	missingDisks?: string[];
 };
 export type StorageStatus = { disks: Disk[]; volumes: Volume[]; diskSleep: DiskSleepStatus };
 

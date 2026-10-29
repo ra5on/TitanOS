@@ -224,6 +224,35 @@ var configFiles = []string{
 	"system/settings.json", "system/terminal.json", "system/backup.json", "plugins/settings.json",
 }
 
+// withoutDiskIDs replaces the serial numbers and WWNs that key the per-disk
+// sleep settings by disk-1, disk-2 …; the values stay. Anything that is
+// not the expected JSON is left out.
+func withoutDiskIDs(data []byte) []byte {
+	var settings map[string]json.RawMessage
+	if json.Unmarshal(data, &settings) != nil {
+		return []byte("(unreadable)\n")
+	}
+	if raw, ok := settings["disks"]; ok {
+		var disks map[string]json.RawMessage
+		if json.Unmarshal(raw, &disks) != nil {
+			delete(settings, "disks")
+		} else {
+			keys := make([]string, 0, len(disks))
+			for key := range disks {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			hidden := map[string]json.RawMessage{}
+			for i, key := range keys {
+				hidden[fmt.Sprintf("disk-%d", i+1)] = disks[key]
+			}
+			settings["disks"], _ = json.Marshal(hidden)
+		}
+	}
+	result, _ := json.Marshal(settings)
+	return append(result, '\n')
+}
+
 const readme = `TitanOS diagnostic bundle
 =========================
 
@@ -336,6 +365,9 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 		data, err := m.store.Read(name)
 		if err != nil {
 			continue
+		}
+		if name == "storage/disk-sleep.json" {
+			data = withoutDiskIDs(data)
 		}
 		if err := add("config/"+name, redactor.Text(string(data))); err != nil {
 			return err
