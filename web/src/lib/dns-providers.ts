@@ -171,3 +171,10 @@ export function validHostName(name: string, wildcard = false): boolean {
 	return host.split('.').every((part) => label.test(part));
 }
 
+/** The zones IPv64 makes DynDNS names under, should the NAS not say. */
+export const IPV64_ZONES = ['ipv64.net', 'ipv64.de', 'home64.de', 'nas64.de', 'dyndns64.de'];
+
+/** A wished name for a new IPv64 DynDNS name: one label. */
+export function validIpv64Wish(wish: string): boolean {
+	return /^(?!-)[a-z0-9-]{1,63}(?<!-)$/.test(wish);
+}

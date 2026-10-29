@@ -48,6 +48,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -688,6 +689,17 @@ func run(opts options) error {
 	if opts.dev {
 		power = system.NoPower{}
 	}
+	// A shutdown after a power failure (UPS) is no planned one: the
+	// healthcheck of IPv64 keeps watching then.
+	upsPower := power
+	// Planned shutdowns and restarts first pause the healthcheck of IPv64
+	// (dynamic DNS, set further down), so that it raises no alarm.
+	var beforePowerOff func()
+	power = announcedPower{Power: power, before: func() {
+		if beforePowerOff != nil {
+			beforePowerOff()
+		}
+	}}
 
 	// New versions go into the other slot of the stick and start on trial.
 	slot := system.BootSlot()
@@ -848,7 +860,7 @@ func run(opts options) error {
 	// The UPS: on battery the NAS shuts down cleanly before it is empty.
 	supply := ups.NewManager(store)
 	supply.Disabled = opts.dev
-	supply.Poweroff = power.Poweroff
+	supply.Poweroff = upsPower.Poweroff
 	supply.OnEvent = func(kind, subject string) {
 		severity := notify.Warning
 		switch kind {
@@ -1054,6 +1066,19 @@ func run(opts options) error {
 		slog.Warn("dynamic DNS settings not readable from /config", "err", err)
 	}
 	go dynamicDNS.Run(ctx)
+	beforePowerOff = func() { dynamicDNS.PauseForShutdown(context.Background()) }
+	// The IPv64.net account beyond dynamic DNS: notifications from polling,
+	// the v64 blocklist for the firewall and the WireGuard tunnel into a
+	// Cloud Router; all off until switched on.
+	account64 := ipv64.NewManager(store)
+	account64.Disabled = opts.dev
+	account64.Fallback = func() (string, string) { return dynamicDNS.IPv64Key(), acmeCerts.IPv64Key() }
+	account64.Notify = func(severity, kind, subject string) { notifier.Notify(severity, kind, subject) }
+	account64.Firewall = packetFilter
+	if err := account64.Load(ctx); err != nil {
+		slog.Warn("IPv64 settings not readable from /config", "err", err)
+	}
+	go account64.Run(ctx)
 	// The WireGuard server of the NAS, off unless switched on.
 	vpnServer := wgserver.New(store)
 	vpnServer.Disabled = opts.dev
@@ -1250,6 +1275,8 @@ func run(opts options) error {
 		Netbird:            mesh,
 		Network:            connection,
 		Firewall:           packetFilter,
+		IPv64:              account64,
+		IPv64Reserved:      reservedPorts(opts),
 		Notify:             notifier,
 		WebPush:            pushes,
 		WireGuard:          vpnServer,
@@ -1424,6 +1451,12 @@ func proxyPorts(opts options) (int, []int) {
 	return https, reserved
 }
 
+// reservedPorts are the ports of titand that are never published.
+func reservedPorts(opts options) []int {
+	_, reserved := proxyPorts(opts)
+	return reserved
+}
+
 // webPorts are the ports of the web UI for the firewall.
 func webPorts(opts options) firewall.WebPorts {
 	ports := firewall.WebPorts{HTTP: -1}
@@ -1558,4 +1591,20 @@ func redirectToHTTPS(httpsAddr string) http.Handler {
 		}
 		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 	})
+}
+
+// announcedPower runs before first, for planned shutdowns and restarts.
+type announcedPower struct {
+	system.Power
+	before func()
+}
+
+func (p announcedPower) Reboot() error {
+	p.before()
+	return p.Power.Reboot()
+}
+
+func (p announcedPower) Poweroff() error {
+	p.before()
+	return p.Power.Poweroff()
 }

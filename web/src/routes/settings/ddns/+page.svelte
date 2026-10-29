@@ -2,7 +2,10 @@
 	// Dynamic DNS (backend package ddns): host names at the public IPv4
 	// address of the connection and the global IPv6 address of the NAS.
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { api, ApiError } from '#lib/api.ts';
+	import Tabs from '#lib/components/Tabs.svelte';
 	import DnsProviderFields from '#lib/components/DnsProviderFields.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import {
@@ -19,6 +22,20 @@
 	import DdnsStatusPanel from '#lib/ddns/DdnsStatus.svelte';
 	import UpdaterFields from '#lib/ddns/UpdaterFields.svelte';
 	import { MAX_HOSTS, updaterForm, updaterPayload, type DdnsStatus, type UpdaterForm } from '#lib/ddns/ddns.ts';
+	import Ipv64Panel from '#lib/ipv64/Ipv64Panel.svelte';
+	import Ipv64Area from '#lib/ipv64/Ipv64Area.svelte';
+	import { DDNS_TABS, ddnsTabFrom, type DdnsTab } from '#lib/ipv64/ipv64.ts';
+
+	// Two tabs (decision of the owner of 29 Oct 2026): dynamic DNS for every
+	// provider and the IPv64.net account (?tab=ipv64, sub-tab in ?sub=).
+	let tab = $state<DdnsTab>(ddnsTabFrom(page.url.searchParams.get('tab')));
+	$effect(() => {
+		tab = ddnsTabFrom(page.url.searchParams.get('tab'));
+	});
+	function chooseTab(next: DdnsTab) {
+		tab = next;
+		goto(next === 'ipv64' ? '/settings/ddns?tab=ipv64' : '/settings/ddns', { replaceState: true });
+	}
 
 	let status = $state<DdnsStatus | null>(null);
 	let loadError = $state('');
@@ -91,6 +108,8 @@
 				hostnames,
 				...updaterPayload(updater),
 				provider: providerPayload(provider, 'address'),
+				// The healthcheck is switched on and off in its own section.
+				heartbeat: { ...status.settings.heartbeat },
 				clearSecrets: cleared,
 			});
 			status = next;
@@ -105,11 +124,24 @@
 			busy = false;
 		}
 	}
+
+	function addHost(name: string) {
+		if (!hostnames.includes(name)) names = [...hostnames, name].join('\n');
+	}
 </script>
 
 <PageHead title={t('ddns.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
-{#if loadError}
+<Tabs
+	tabs={DDNS_TABS.map((id) => ({ id, label: t(id === 'ipv64' ? 'ipv64x.title' : 'ddns.tabDdns') }))}
+	value={tab}
+	label={t('ddns.title')}
+	onchange={chooseTab}
+/>
+
+{#if tab === 'ipv64'}
+	<Ipv64Area />
+{:else if loadError}
 	<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button></div>
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
@@ -157,6 +189,10 @@
 			{#if busy || saved}<span class="muted" role="status">{t(busy ? 'ui.saving' : 'ui.saved')}</span>{/if}
 		</div>
 	</form>
+
+	{#if provider.type === 'ipv64'}
+		<Ipv64Panel {status} apiKey={provider.token ?? ''} hostnames={hostnames} onhost={addHost} onstatus={(next) => (status = next)} />
+	{/if}
 {/if}
 
 <style>

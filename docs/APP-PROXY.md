@@ -11,6 +11,11 @@ die Weboberfläche; titand unterscheidet am Namen). Ein Zertifikat von Let's
 Encrypt für `*.<domain>` holt auf Wunsch Einstellungen › Let's Encrypt
 (`docs/LETSENCRYPT.md`).
 
+Unabhängig davon kann eine App unter „Öffentlich über IPv64“ im App-Editor über
+das CDN von IPv64.net aus dem Internet erreichbar werden (Reverse Proxy von IPv64
+mit HTTPS direkt an den Port der App, nicht über den Proxy von titand; nie für
+die Ports der Weboberfläche). Einzelheiten und Warnungen: `docs/IPV64.md`.
+
 ## Bedienung
 
 Docker › App bearbeiten › Abschnitt „HTTPS-Name“ (nur Besitzer und
@@ -77,9 +82,12 @@ NAS. Öffentliche Ziele werden abgelehnt.
 `fotos.example.org`. Jede Domain gehört genau einer Route (über Apps und Ziele
 eindeutig), mindestens zwei Teile, keine Platzhalter, nie `.local`. Eine volle
 Domain wird vor `<name>.<suffix>` erkannt. Gesetzt werden sie im Feld „Eigene
-Domains“ des App-Editors bzw. des Bearbeiten-Dialogs dieser Seite (seit 0.34.0;
-vorher unter Einstellungen › IPv64 › Zuweisungen). Auf das NAS zeigen muss der
-Name im DNS selbst, z. B. über Dynamisches DNS. Formulare ohne `domains`
+Domains“ des App-Editors bzw. des Bearbeiten-Dialogs dieser Seite (seit 0.34.0).
+Auf das NAS zeigen muss der Name im DNS selbst, z. B. über Dynamisches DNS. Mit
+IPv64.net erledigt beides auch Einstellungen › Dynamisches DNS › IPv64 ›
+Zuweisungen (`docs/IPV64.md`): Es schreibt in dasselbe Feld `domains` (keine
+zweite Liste) und nimmt den Namen in dynamisches DNS auf; Domains des Kontos, die
+hier von Hand stehen, zeigt es als zugewiesen. Formulare ohne `domains`
 behalten die gespeicherten. Die Adressen der
 Route nennen sie (`urls`).
 
