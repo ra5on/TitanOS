@@ -69,7 +69,7 @@ type GetOptions = {
 };
 
 /** Logs in with a passkey the browser or phone holds. */
-export async function loginWithPasskey(): Promise<void> {
+export async function loginWithPasskey(remember = false): Promise<void> {
 	const options = await api.post<GetOptions>('/login/passkey/begin');
 	const p = options.publicKey;
 	const credential = (await navigator.credentials.get({
@@ -83,6 +83,7 @@ export async function loginWithPasskey(): Promise<void> {
 		clientDataJSON: toB64(response.clientDataJSON),
 		authenticatorData: toB64(response.authenticatorData),
 		signature: toB64(response.signature),
-		userHandle: toB64(response.userHandle)
+		userHandle: toB64(response.userHandle),
+		remember
 	});
 }
