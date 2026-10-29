@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AdoptDialog from './AdoptDialog.svelte';
 	import CloneDialog from './CloneDialog.svelte';
 	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
@@ -66,6 +67,8 @@
 		| null
 	>(null);
 	let draft = $state({ deleteDisks: false, text: '' });
+	// "VM übernehmen": copies of VM settings on the volumes; read only on request.
+	let adopting = $state(false);
 	let dialogError = $state<Problem | null>(null);
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
@@ -485,6 +488,7 @@
 	<PageHead title={t('vms.title')}>
 		{#snippet actions()}
 <a class="btn" href="/vms/media">{t('media.title')}</a>
+			<button type="button" class="btn" onclick={() => (adopting = true)}>{t('vms.adopt.open')}</button>
 			<TasksPanel compact />
 			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
 		{/snippet}
@@ -751,6 +755,13 @@
 						>
 							<span>{vmLabel(current)}</span><Icon name="chevronDown" size={14} />
 						</button>
+						<button
+							type="button"
+							class="btn add"
+							aria-label={t('vms.adopt.open')}
+							title={t('vms.adopt.open')}
+							onclick={() => (adopting = true)}><Icon name="download" size={16} /></button
+						>
 						<a class="btn add" href="/vms/new" aria-label={t('vms.create')} title={t('vms.create')}
 							><Icon name="plus" size={16} /></a
 						>
@@ -1048,6 +1059,15 @@
 		</form>
 	</Dialog>
 {/if}
+
+{#if adopting}<AdoptDialog
+		onclose={() => (adopting = false)}
+		onadopted={async (name) => {
+			adopting = false;
+			await load();
+			goto(`/vms?vm=${encodeURIComponent(name)}`);
+		}}
+	/>{/if}
 
 {#if cloning}<CloneDialog
 		source={cloning}

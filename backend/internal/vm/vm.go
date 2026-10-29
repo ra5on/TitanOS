@@ -214,6 +214,9 @@ type Manager struct {
 	// PowerOffSoon says the NAS shuts down by its own schedule shortly or
 	// waits to; a scheduled start is then left out.
 	PowerOffSoon func() bool
+	// Mounted returns the volumes mounted right now. The copies of the
+	// settings in the folders of the VMs are only written to those.
+	Mounted func() []string
 
 	store  *config.Store
 	runner run.Runner
@@ -288,6 +291,11 @@ type Manager struct {
 	powerUnit, powerPoll time.Duration
 	// now is the clock the next scheduled times are shown from; tests set it.
 	now func() time.Time
+
+	// copyMu keeps writes of the copies on the volumes apart; copied are the
+	// VMs whose copy was written or looked at since titand started.
+	copyMu sync.Mutex
+	copied map[string]bool
 }
 
 // NewManager returns a manager working on the real system. gid is the
@@ -296,7 +304,7 @@ func NewManager(store *config.Store, gid int) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
 		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
-		snapshotJobs: map[string]*Job{}, autostartFile: "/run/titanos/vms-autostarted",
+		snapshotJobs: map[string]*Job{}, copied: map[string]bool{}, autostartFile: "/run/titanos/vms-autostarted",
 		powerFile: "/run/titanos/vm-schedule.json", powerUnit: time.Second, powerPoll: 2 * time.Second,
 		FreeDisks: func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
 	}
@@ -449,6 +457,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		} else if !m.Disabled {
 			m.runSnapshotSchedules(ctx, mounted(), time.Now())
 			m.runPowerSchedules(ctx, mounted(), time.Now())
+			m.refreshVolumeCopies(mounted())
 			m.autostart(ctx, mounted())
 			m.sample()
 			m.checkIOErrors(ctx)
@@ -1314,9 +1323,15 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 		}
 		os.Remove(filepath.Join(m.dir(vm.Volume, vm.folder()), "nvram.fd"))
 		os.RemoveAll(filepath.Join(m.dir(vm.Volume, vm.folder()), "tpm"))
+		// The copy of the settings goes with the disks it describes.
+		m.removeVolumeCopy(vm)
 		for _, volume := range vm.volumes() {
 			os.Remove(m.dir(volume, vm.folder()))
 		}
+	} else {
+		// The disks stay: the copy says the VM was removed, and it can be
+		// taken over again ("VM übernehmen").
+		m.markVolumeCopyRemoved(vm, time.Now().UTC().Truncate(time.Second))
 	}
 	return nil
 }

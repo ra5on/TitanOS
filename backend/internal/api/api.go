@@ -508,6 +508,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
+	// Taking a VM over from the copy of its settings on a volume.
+	mux.HandleFunc("GET /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdoptable))
+	mux.HandleFunc("POST /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdopt))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
 	mux.HandleFunc("GET /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicy))
 	mux.HandleFunc("PUT /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicyChange))

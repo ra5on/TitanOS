@@ -125,10 +125,11 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Netzwerk und Geräte:** bestätigte benannte NAS-Bridges mit eigener Gast-IP oder QEMU-User-Networking; erkannte IP-Adressen, PCI/GPU-/USB-Passthrough und Ordnerfreigaben per virtiofs. Eine Grafik wird nur übergeben, wenn kein Programm des NAS sie noch nutzt; bei der Start-iGPU wird die Textkonsole vorher gelöst und danach zurückgegeben, damit das NAS dabei nicht hängen bleibt.
 - **Installationsmedien und Abbilder:** Browser-Upload oder HTTP(S)-Import, gzip/xz/ZIP auf dem Daten-Volume entpacken, Prüfsummen und kontrollierte Wiederaufnahme. Offizielle stabile Windows-VirtIO-ISO automatisch als zweites CD-Laufwerk einlegen. [Medienimport und Grenzen](docs/VM-MEDIA.md).
 - **Snapshots:** VM-Datenträger, Konfiguration und bei unterstützten Gästen RAM-Zustand, UEFI und TPM sichern und zurücksetzen. Zeitpläne, Aufbewahrung und Wiederherstellungsstatus; Voraussetzungen und Ausschlüsse werden angezeigt.
+- **VM übernehmen:** Eine Kopie der Einstellungen liegt im Ordner jeder VM auf dem Volume. Nach Verlust des Sticks, für entfernte VMs mit erhaltenen Platten oder für ein Volume von einem anderen TitanOS lassen sich VMs damit wieder registrieren (ohne durchgereichte Geräte, ohne Autostart).
 
 [![VM-Verwaltung mit Maschinenliste und Übersicht der ausgewählten Home-Assistant-VM](docs/screenshots/current/vms.png)](docs/screenshots/current/vms.png)
 
-[VM-Snapshots und Grenzen](docs/VM-SNAPSHOTS.md) · [Bridge-Netzwerk](docs/NETWORKING.md)
+[VM-Snapshots und Grenzen](docs/VM-SNAPSHOTS.md) · [VM übernehmen](docs/VM-IMPORT.md) · [Bridge-Netzwerk](docs/NETWORKING.md)
 
 Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung. Die Heimnetz-Bridge `br0` wird bei der Ersteinrichtung automatisch vorbereitet und nach Verbindungsbestätigung dauerhaft übernommen; bestehende NAS aktivieren sie direkt aus der VM-Einrichtung.
 

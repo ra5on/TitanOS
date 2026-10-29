@@ -31,26 +31,11 @@ func validVMDirectory(name string) bool {
 // A chosen folder is dedicated to one VM. Merely displaying a different name
 // never renames disks or firmware state. Direct images remain user-owned.
 func (m *Manager) checkDirectory(vm VM) error {
-	m.mu.Lock()
-	others := make([]VM, 0, len(m.vms))
-	for _, other := range m.vms {
-		others = append(others, other)
+	if err := m.checkFolderOwner(vm); err != nil {
+		return err
 	}
-	m.mu.Unlock()
 	for _, volume := range vm.volumes() {
 		dir := m.dir(volume, vm.folder())
-		for _, other := range others {
-			for _, v := range other.volumes() {
-				if dir == m.dir(v, other.folder()) {
-					return fmt.Errorf("%w: folder belongs to %s", ErrBadFolder, other.Label())
-				}
-			}
-			for _, disk := range other.Disks {
-				if disk.Path != "" && filepath.Dir(disk.Path) == dir {
-					return fmt.Errorf("%w: image in folder belongs to %s", ErrBadFolder, other.Label())
-				}
-			}
-		}
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
 			continue
@@ -77,6 +62,35 @@ func (m *Manager) checkDirectory(vm VM) error {
 		for _, entry := range entries {
 			if !allowed[entry.Name()] || entry.Type()&fs.ModeSymlink != 0 {
 				return fmt.Errorf("%w: %s contains files not selected for this VM (%s)", ErrBadFolder, dir, entry.Name())
+			}
+		}
+	}
+	return nil
+}
+
+// checkFolderOwner refuses folders of a VM that belong to another one: its
+// folder, or the folder of an image another VM uses directly.
+func (m *Manager) checkFolderOwner(vm VM) error {
+	m.mu.Lock()
+	others := make([]VM, 0, len(m.vms))
+	for _, other := range m.vms {
+		if other.Name != vm.Name {
+			others = append(others, other)
+		}
+	}
+	m.mu.Unlock()
+	for _, volume := range vm.volumes() {
+		dir := m.dir(volume, vm.folder())
+		for _, other := range others {
+			for _, v := range other.volumes() {
+				if dir == m.dir(v, other.folder()) {
+					return fmt.Errorf("%w: folder belongs to %s", ErrBadFolder, other.Label())
+				}
+			}
+			for _, disk := range other.Disks {
+				if disk.Path != "" && filepath.Dir(disk.Path) == dir {
+					return fmt.Errorf("%w: image in folder belongs to %s", ErrBadFolder, other.Label())
+				}
 			}
 		}
 	}
