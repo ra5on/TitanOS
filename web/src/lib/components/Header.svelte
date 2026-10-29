@@ -3,8 +3,9 @@
 	import { dashboardControl } from '#lib/dashboard/control.svelte.ts';
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import type { Role } from '#lib/api.ts';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { t } from '#lib/i18n/index.svelte.ts';
+	import { navForRole, visibleNav } from '#lib/navigation.ts';
+	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { horizontalNav } from '#lib/horizontal-nav.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
@@ -15,28 +16,13 @@
 	import Logo from './Logo.svelte';
 	import Notifications from './Notifications.svelte';
 
-	// A plain user only works with their own shares and files.
-	const NAV: { href: string; label: MessageKey; roles?: Role[] }[] = [
-		{ href: '/', label: 'nav.dashboard' },
-		{ href: '/storage', label: 'nav.storage', roles: ['owner', 'admin'] },
-		{ href: '/shares', label: 'nav.shares', roles: ['owner', 'admin'] },
-		{ href: '/files', label: 'nav.files' },
-		{ href: '/users', label: 'nav.users', roles: ['owner', 'admin'] },
-		{ href: '/docker', label: 'nav.docker', roles: ['owner', 'admin'] },
-		{ href: '/vms', label: 'nav.vms', roles: ['owner', 'admin'] },
-		{ href: '/lxc', label: 'nav.lxc', roles: ['owner', 'admin'] },
-		{ href: '/apps', label: 'nav.apps', roles: ['owner', 'admin'] },
-		{ href: '/plugins', label: 'nav.plugins', roles: ['owner', 'admin'] },
-		{ href: '/settings', label: 'nav.settings' },
-		{ href: '/tools', label: 'nav.tools', roles: ['owner', 'admin'] },
-	];
-
 	const role = $derived(session.data?.user?.role ?? 'user');
-	const items = $derived(NAV.filter((item) => !item.roles || item.roles.includes(role)));
+	const allItems = $derived(navForRole(role));
+	const items = $derived(visibleNav(allItems, appearance.current.nav));
 
 	let mobileMenu = $state<HTMLElement>();
 	let mobileOpen = $state(false);
-	const currentLabel = $derived(items.find((item) => isCurrent(item.href))?.label ?? 'nav.label');
+	const currentLabel = $derived(allItems.find((item) => isCurrent(item.href))?.label ?? 'nav.label');
 	// The app on the home screen has no back button of the browser: show
 	// one once there is a page to go back to (CSS shows it only there).
 	let visited = $state(false);

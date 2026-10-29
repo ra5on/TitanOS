@@ -27,7 +27,6 @@ export function stateAge(container: DockerContainer): string {
 
 // Without an icon from a template, an app gets a monogram in a color of
 // its own, derived from its name so that it stays the same.
-export const monogramHue = (name: string) => [...name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
 
 /** The published ports as short labels, e.g. "8096" or "7359/udp". */
 export const portLabels = (container: DockerContainer) =>

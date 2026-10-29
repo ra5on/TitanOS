@@ -32,6 +32,8 @@
 	import LoginAppearanceEditor from '#lib/login/LoginAppearanceEditor.svelte';
 	import AppIconEditor from '#lib/components/AppIconEditor.svelte';
 	import { onDestroy } from 'svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	import { arrangeNav, moveNav, navForRole, NAV_FIXED } from '#lib/navigation.ts';
 
 	const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 	const CUSTOM_FIELDS: (keyof CustomColors)[] = ['bg', 'surface', 'header', 'text', 'border'];
@@ -57,6 +59,12 @@
 	});
 
 	// The login page is one setting for the whole NAS.
+	const navItems = $derived(navForRole(session.data?.user?.role ?? 'user'));
+	const navArranged = $derived(arrangeNav(navItems, draft.nav));
+	function toggleNav(id: string, shown: boolean) {
+		draft.nav.hidden = shown ? draft.nav.hidden.filter((other) => other !== id) : [...draft.nav.hidden, id];
+	}
+
 	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty);
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
@@ -333,6 +341,30 @@
 				</div>
 			{/if}
 			<p class="hint muted">{t('appearance.fx.hint')}</p>
+		</section>
+
+		<section class="tile panel" aria-labelledby="h-nav" id="navigation">
+			<h2 class="tile-title" id="h-nav">{t('appearance.nav.title')}</h2>
+			<ol class="nav-list">
+				{#each navArranged as item, index (item.id)}
+					<li>
+						<label class="check">
+							<input
+								type="checkbox"
+								checked={item.id === NAV_FIXED || !draft.nav.hidden.includes(item.id)}
+								disabled={item.id === NAV_FIXED}
+								onchange={(event) => toggleNav(item.id, event.currentTarget.checked)}
+							/>{t(item.label)}{#if item.id === NAV_FIXED}<span class="muted small">{t('appearance.nav.fixed')}</span>{/if}
+						</label>
+						<button type="button" class="btn small" disabled={index === 0} aria-label={t('appearance.nav.up', { tab: t(item.label) })} title={t('appearance.nav.up', { tab: t(item.label) })} onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, -1))}><Icon name="arrowUp" size={14} /></button>
+						<button type="button" class="btn small" disabled={index === navArranged.length - 1} aria-label={t('appearance.nav.down', { tab: t(item.label) })} title={t('appearance.nav.down', { tab: t(item.label) })} onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, 1))}><Icon name="arrowDown" size={14} /></button>
+					</li>
+				{/each}
+			</ol>
+			<div class="row-actions">
+				<button type="button" class="btn small" onclick={() => (draft.nav = { order: [], hidden: [] })}>{t('appearance.nav.reset')}</button>
+			</div>
+			<p class="hint muted">{t('appearance.nav.hint')}</p>
 		</section>
 
 		<section class="tile panel" aria-labelledby="h-bg">
@@ -645,5 +677,20 @@
 		.preview {
 			position: static;
 		}
+	}
+	.nav-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.nav-list li {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 3px 0;
+	}
+	.nav-list label {
+		flex: 1;
+		gap: 8px;
 	}
 </style>

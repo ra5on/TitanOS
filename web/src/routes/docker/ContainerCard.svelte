@@ -7,7 +7,7 @@
 	import { dockerName } from '#lib/docker-name.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { isRunning, monogramHue, portLabels, stateAge, webLinks, type ContainerActions } from './container.ts';
+	import { isRunning, portLabels, stateAge, webLinks, type ContainerActions } from './container.ts';
 	import ContainerMenu from './ContainerMenu.svelte';
 	import CpuSpark from './CpuSpark.svelte';
 
@@ -30,7 +30,7 @@
 
 <article class="tile card" class:stopped={!running} aria-label={name}>
 	<div class="top">
-		<span class="icon" style:background="hsl({monogramHue(container.name)} 45% 42%)"><AppIcon src={container.icon} {name} /></span>
+		<span class="icon"><AppIcon src={container.icon} {name} /></span>
 		<div class="names">
 			<span class="line">
 				{#if container.managed}<a class="name" href="/docker/apps/{container.app}" title={container.name}>{name}</a>{:else}<span class="name" title={container.name}>{name}</span>{/if}
@@ -89,7 +89,7 @@
 		flex: none;
 		overflow: hidden;
 		border-radius: var(--radius-ctl);
-		color: var(--on-monogram);
+		color: var(--text);
 		font-size: 0.875rem;
 		font-weight: 600;
 	}

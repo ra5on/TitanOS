@@ -22,7 +22,7 @@
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContainerCard from './ContainerCard.svelte';
 	import ContainerRow from './ContainerRow.svelte';
-	import { isRunning, monogramHue, webLinks, type ContainerActions } from './container.ts';
+	import { isRunning, webLinks, type ContainerActions } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
  const tailscaleHost = $derived(tailnetHost(tailnet));
@@ -608,7 +608,7 @@
  {@const problemCount = group.members.filter(c=>!isRunning(c)||c.state==='restarting').length}
 	<div class="stack-head">
 		<button type="button" class="stack-toggle" aria-expanded={stackOpen(group.id)} onclick={() => (expanded[group.id] = !stackOpen(group.id))}>
-			<span class="stack-icon" style:background="hsl({monogramHue(group.name)} 45% 42%)"><AppIcon src={group.members.find((container) => container.icon)?.icon ?? ''} name={group.name} /></span>
+			<span class="stack-icon"><AppIcon src={group.members.find((container) => container.icon)?.icon ?? ''} name={group.name} /></span>
 			<span class="stack-names">
 				<span class="stack-line"><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn">{t('docker.update')}</span>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}><Icon name="chevronDown" size={16} /></span></span>
 				<span class="stack-sub">{t('docker.stackServices', { count: group.members.length })}</span>
@@ -967,7 +967,7 @@
 		flex: none;
 		overflow: hidden;
 		border-radius: var(--radius-ctl);
-		color: var(--on-monogram);
+		color: var(--text);
 		font-size: 0.8125rem;
 		font-weight: 600;
 	}
