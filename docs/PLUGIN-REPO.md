@@ -104,13 +104,14 @@ Signiert und veröffentlicht wird in TitanOS (`.github/workflows/plugin-sign.yml
 
 - Alle 15 Minuten (oder von Hand) schaut der Workflow mit `PLUGINS_DISPATCH_TOKEN`
   nach Entwürfen. Gibt es welche, startet er sich selbst vom neuesten
-  veröffentlichten Release-Tag aus, denn das Environment `release` erlaubt nur
-  Tags `v*`. Dieser Lauf wartet auf die Freigabe des Projektinhabers.
+  Release-Tag aus, der ihn enthält, denn das Environment `release` erlaubt nur
+  Tags `v*`. Ein Tag reicht: Das volle Release, das auf seinen Kernel-Satz wartet,
+  ist zu dem Zeitpunkt noch nicht veröffentlicht. Dieser Lauf wartet auf die Freigabe des Projektinhabers.
 - Nach der Freigabe prüft er, dass der Schlüssel zu den öffentlichen Schlüsseln
   des Abbilds passt, signiert Manifeste und Index, veröffentlicht den Satz und
   erhöht `serial` im Zeiger. Treiberupdates hängt er an ihren Kernel-Satz und
   ersetzt dort nur `nvidia-updates.json`; der Entwurf wird danach gelöscht.
-- Voraussetzung: Ein veröffentlichtes Release enthält `plugin-sign.yml`.
+- Voraussetzung: Ein Tag `v*` enthält `plugin-sign.yml` (ab `v0.36.0`).
 
 In TitanOS (`.github/workflows/release.yml`, `scripts/plugin-set.py`):
 
