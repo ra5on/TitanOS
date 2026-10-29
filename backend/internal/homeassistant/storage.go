@@ -91,6 +91,30 @@ func (m *Manager) Mounts(ctx context.Context) ([]Mount, error) {
 // AddMount adds SMB storage to Home Assistant. The Supervisor mounts it
 // right away and refuses it if it cannot; the error says why.
 func (m *Manager) AddMount(ctx context.Context, req MountRequest) error {
+	return m.putMount(ctx, "post", "/mounts", req)
+}
+
+// UpdateMount changes storage that is there, e.g. to a new password.
+func (m *Manager) UpdateMount(ctx context.Context, req MountRequest) error {
+	if !mountNameRE.MatchString(req.Name) {
+		return invalid("network storage")
+	}
+	return m.putMount(ctx, "put", "/mounts/"+req.Name, req)
+}
+
+// RemoveMount takes storage out of Home Assistant; the files stay.
+func (m *Manager) RemoveMount(ctx context.Context, name string) error {
+	if !m.Active() {
+		return ErrOff
+	}
+	if !mountNameRE.MatchString(name) {
+		return invalid("network storage")
+	}
+	_, err := m.supervisor(ctx, "delete", "/mounts/"+name, nil)
+	return err
+}
+
+func (m *Manager) putMount(ctx context.Context, method, endpoint string, req MountRequest) error {
 	if !m.Active() {
 		return ErrOff
 	}
@@ -105,7 +129,7 @@ func (m *Manager) AddMount(ctx context.Context, req MountRequest) error {
 	if req.ReadOnly {
 		data["read_only"] = true
 	}
-	_, err := m.supervisor(ctx, "post", "/mounts", data)
+	_, err := m.supervisor(ctx, method, endpoint, data)
 	return err
 }
 

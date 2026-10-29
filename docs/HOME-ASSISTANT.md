@@ -143,57 +143,59 @@ implementiert, aber noch nicht in einer echten HA-Installation abgenommen.
 
 ## Speicher für Home Assistant
 
-Seit dem Wunsch des Projektinhabers vom 29. Oktober 2026 richtet TitanOS
-unter Einstellungen › Home Assistant › „Speicher für Home Assistant“ eine
-Freigabe ein, die Home Assistant OS (oder Supervised) als Netzwerkspeicher
-einbindet: für seine **Backups**, für **Medien** oder als **Freigabe** für
-Add-ons.
+Seit dem Wunsch des Projektinhabers vom 29. Oktober 2026 verwaltet TitanOS
+unter Einstellungen › Home Assistant › „Speicher für Home Assistant“ eine Liste
+von Freigaben (oder Ordnern darin), die Home Assistant OS (oder Supervised) als
+Netzwerkspeicher einbindet: für **Backups**, für **Medien** oder als
+**Freigabe** für Add-ons.
 
-- **Einrichten:** Volume, Name der Freigabe, Name des Kontos (beide ab Werk
-  `homeassistant`), Zweck und optional eine Obergrenze in GiB. TitanOS legt ein
-  Konto der Rolle Benutzer mit zufälligem Passwort an und eine SMB-Freigabe, auf
-  die nur dieses Konto lesen und schreiben darf. Scheitert die Freigabe, wird
-  das Konto wieder entfernt. Ein vorhandenes Konto gleichen Namens wird nie
-  übernommen.
-- **Vorhandene Freigabe und Ordner:** Statt einer neuen Freigabe lässt sich
-  eine vorhandene wählen (nur SMB-Freigaben auf eingebundenen Volumes) und
-  darin ein Ordner (Auswahl über die Datei-API, nur Ordner, keine versteckten).
-  Das neue Konto kommt zu den Rechten der Freigabe hinzu, alle bisherigen
-  bleiben. Home Assistant bekommt `freigabe/ordner`: Der Supervisor nimmt das im
-  Feld `share` an (seine Prüfung verlangt nur den Anfang ohne Schrägstrich) und
-  bindet `//server/freigabe/ordner` ein. Der Ordner muss existieren und wird ohne
-  Linkverfolgung innerhalb der Freigabe geprüft. Name in Home Assistant
+- **Ein Konto für alle Einträge:** Der erste Eintrag legt ein Konto der Rolle
+  Benutzer an (Name ab Werk `homeassistant`, nie ein vorhandenes). Jeder Eintrag
+  gibt diesem Konto Zugriff auf seine Freigabe, Lesen und Schreiben oder nur
+  Lesen.
+- **Eintrag hinzufügen:** neue Freigabe (Volume, Name, optional Obergrenze)
+  oder vorhandene Freigabe (nur SMB-Freigaben auf eingebundenen Volumes) und
+  darin optional ein Ordner (Auswahl über die Datei-API, nur Ordner, keine
+  versteckten; ohne Linkverfolgung innerhalb der Freigabe geprüft). Bei einer
+  vorhandenen Freigabe bleiben alle bisherigen Rechte. Scheitert der erste
+  Eintrag, wird das Konto wieder entfernt. Dieselbe Freigabe bzw. derselbe
+  Ordner zweimal wird abgelehnt.
+- **Unterordner in Home Assistant:** Home Assistant bekommt `freigabe/ordner`.
+  Der Supervisor nimmt das im Feld `share` an (seine Prüfung verlangt nur den
+  Anfang ohne Schrägstrich) und bindet `//server/freigabe/ordner` ein. Name
   `titanos_<freigabe>_<ordner>`.
-- **Nur lesen:** für Medien und Freigaben wählbar. Das Konto bekommt nur
-  Leserecht, und Home Assistant bindet mit `read_only` ein. Für Backups
-  abgelehnt.
-- **Passwort:** wird genau einmal angezeigt (mit Kopieren) und nirgends
-  gespeichert, auch nicht in `/config`. „Erneut in Home Assistant eintragen“
-  vergibt ein neues.
-- **Direkt eintragen:** Über die bestehende Verbindung schickt TitanOS
-  `supervisor/api` `POST /mounts` (wie die Oberfläche von Home Assistant
-  selbst; braucht einen Token eines Administrators). Name des Speichers
-  `titanos_<freigabe>`, Typ CIFS, Server ist die Adresse, mit der das NAS Home
-  Assistant erreicht. Lehnt der Supervisor ab, steht sein Grund im Dialog; ohne
-  Supervisor (Container/Core) heißt es, dass Netzwerkspeicher dort fehlt. Die
-  Werte zum Eintragen von Hand stehen immer im Dialog.
-- **Backups überwachen** (nur Zweck Backups, ab Werk 3 Tage): einmal täglich
-  und zehn Minuten nach dem Start fragt TitanOS Home Assistant per
-  `backup/info` (ab 2025.1) nach dem neuesten Backup am Speicherort
-  `hassio.titanos_<freigabe>`. Liegt es länger zurück als eingestellt (oder gab
-  es seit der Einrichtung keines), kommt einmal die Meldung `backup_ha_overdue`,
-  erneut erst nach einem neuen Backup. Die Platten des NAS werden dafür nicht
-  geweckt. Ohne Antwort von Home Assistant gibt es keine Meldung.
-- **Nicht mehr verwalten** vergisst die Einrichtung (`/config/homeassistant/storage.json`);
-  Freigabe, Konto und Daten bleiben.
-- API (nur Besitzer/Administratoren): `GET`/`POST`/`PUT`/`DELETE
-  /api/v1/homeassistant/storage`, `POST …/storage/register`, `POST
-  …/storage/check`. Einrichten und erneutes Eintragen nur aus einer
-  Websitzung, weil die Antwort das Passwort enthält; nicht im Assistenten- oder
-  API-Token-Katalog.
-- Geprüft mit nachgebautem Home Assistant (`supervisor/api`, `backup/info`) und
-  `scripts/test-ui-ha-storage.mjs`; ein echtes Home Assistant OS ist nicht
-  abgenommen.
+- **Nur lesen:** für Medien und Freigaben wählbar (Leserecht und `read_only`),
+  für Backups abgelehnt.
+- **Passwort:** Ein neues Passwort entsteht beim ersten Eintrag, bei jedem
+  Eintrag mit „direkt eintragen“ und bei „Erneut in Home Assistant
+  eintragen“. Es wird genau einmal angezeigt und nirgends gespeichert. Ein neues
+  Passwort geht an **alle** Einträge in Home Assistant: vorhandene per
+  `supervisor/api` `PUT /mounts/<name>`, neue per `POST /mounts` (vorher `GET
+  /mounts`). Das Ergebnis steht je Eintrag im Dialog. Ohne „direkt eintragen“
+  bleibt das Passwort, wie es ist.
+- **Direkt eintragen** braucht einen Token eines Administrators. Server ist die
+  Adresse, mit der das NAS Home Assistant erreicht. Ohne Supervisor
+  (Container/Core) gibt es keinen Netzwerkspeicher; die Werte stehen dann zum
+  Eintragen von Hand im Dialog.
+- **Backups überwachen** je Backup-Eintrag (ab Werk 3 Tage, bis 30 oder aus):
+  einmal täglich und zehn Minuten nach dem Start `backup/info` (ab 2025.1), das
+  neueste Backup am Speicherort `hassio.titanos_<…>`. Ist es zu alt (oder gab
+  es seit dem Eintrag keines), kommt einmal die Meldung `backup_ha_overdue`,
+  erneut erst nach einem neuen Backup. Die Platten werden dafür nicht geweckt;
+  ohne Antwort von Home Assistant gibt es keine Meldung.
+- **Eintrag entfernen:** `DELETE /mounts/<name>` in Home Assistant und Entzug
+  des Zugriffs des Kontos auf die Freigabe, wenn kein anderer Eintrag sie nutzt.
+  Freigabe und Daten bleiben. Hätte danach niemand mehr Zugriff, bekommt ihn die
+  Person, die entfernt. Das Konto bleibt und dient dem nächsten Eintrag.
+- Gespeichert in `/config/homeassistant/storage.json` (`account`, `server`,
+  `entries`). API (nur Besitzer/Administratoren): `GET`/`POST
+  /api/v1/homeassistant/storage`, `PUT`/`DELETE …/storage/{mount}`, `POST
+  …/storage/register`, `POST …/storage/check`. Hinzufügen und erneutes
+  Eintragen nur aus einer Websitzung, weil die Antwort das Passwort enthält;
+  nicht im Assistenten- oder API-Token-Katalog.
+- Geprüft mit nachgebautem Home Assistant (`supervisor/api` GET/POST/PUT/DELETE,
+  `backup/info`) und `scripts/test-ui-ha-storage.mjs`; ein echtes Home Assistant
+  OS ist nicht abgenommen.
 
 ## Prüfstand
 

@@ -81,6 +81,8 @@ func TestMountsThroughTheSupervisor(t *testing.T) {
 				return nil, "home_assistant_error", "Could not mount titanos_ha: permission denied"
 			}
 			return map[string]any{}, "", ""
+		case "put", "delete":
+			return map[string]any{}, "", ""
 		}
 		return nil, "unknown_error", "?"
 	}}
@@ -110,6 +112,22 @@ func TestMountsThroughTheSupervisor(t *testing.T) {
 	data = sent["data"].(map[string]any)
 	if data["share"] != "Medien/Musik" || data["read_only"] != true || data["name"] != "titanos_medien_musik" {
 		t.Fatalf("folder: %v", data)
+	}
+	// A new password for storage that is there, and taking it out.
+	if err := m.UpdateMount(ctx, MountRequest{Name: "titanos_ha", Usage: "backup", Server: "192.168.1.5", Share: "ha", Username: "ha", Password: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if sent := fake.seen[len(fake.seen)-1]; sent["method"] != "put" || sent["endpoint"] != "/mounts/titanos_ha" || sent["data"].(map[string]any)["password"] != "new" {
+		t.Fatalf("update %v", sent)
+	}
+	if err := m.RemoveMount(ctx, "titanos_ha"); err != nil {
+		t.Fatal(err)
+	}
+	if sent := fake.seen[len(fake.seen)-1]; sent["method"] != "delete" || sent["endpoint"] != "/mounts/titanos_ha" {
+		t.Fatalf("remove %v", sent)
+	}
+	if err := m.RemoveMount(ctx, "../x"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad name: %v", err)
 	}
 	// The Supervisor's reason comes back.
 	req.Server = "10.0.0.9"

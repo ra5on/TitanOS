@@ -1,25 +1,14 @@
 <script lang="ts">
-	// Storage for Home Assistant: a share and an account of its own that Home
-	// Assistant OS mounts as network storage (backups, media or a share for
-	// add-ons). TitanOS can enter it there itself and watches the backups.
+	// Storage for Home Assistant: shares (or folders in them) that Home
+	// Assistant OS mounts as network storage for backups, media or add-ons,
+	// all with one account of its own. TitanOS can enter them there itself
+	// and watches the backups.
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Usage = 'backup' | 'media' | 'share';
-	type Setup = {
-		share: string;
-		folder?: string;
-		existing?: boolean;
-		readOnly?: boolean;
-		account: string;
-		usage: Usage;
-		mount: string;
-		server: string;
-		created: string;
-		maxAgeDays: number;
-	};
 	type Backup = {
 		checked: string;
 		latest?: string;
@@ -27,45 +16,66 @@
 		error?: string;
 		overdue: boolean;
 	};
+	type Entry = {
+		share: string;
+		folder?: string;
+		existing?: boolean;
+		readOnly?: boolean;
+		usage: Usage;
+		mount: string;
+		created: string;
+		maxAgeDays: number;
+		backup?: Backup;
+	};
 	type Status = {
-		setup: Setup | null;
+		account: string;
+		server: string;
+		entries: Entry[];
 		volumes: string[];
 		shares: { name: string; volume: string }[];
 		homeAssistant: boolean;
-		server: string;
-		backup?: Backup;
 	};
-	type Result = { setup: Setup; password: string; registered?: boolean; registerError?: string };
+	type HAResult = { mount: string; ok: boolean; error?: string };
+	type Answer = {
+		setup: { account: string; server: string; entries: Entry[] };
+		entry?: Entry;
+		password?: string;
+		results?: HAResult[];
+	};
 
 	let status = $state<Status | null>(null);
 	let loadError = $state('');
 	let error = $state('');
 	let busy = $state('');
-	let result = $state<Result | null>(null);
-	let confirm = $state<'register' | 'forget' | null>(null);
+	let adding = $state(false);
+	let result = $state<Answer | null>(null);
+	let confirm = $state<{ kind: 'register' } | { kind: 'remove'; entry: Entry } | null>(null);
 	let copied = $state(false);
-	let form = $state({
-		volume: '',
-		share: 'homeassistant',
-		account: 'homeassistant',
-		usage: 'backup' as Usage,
-		quotaGiB: '',
-		register: true,
-		existing: false,
-		existingShare: '',
-		folder: '',
-		readOnly: false,
-	});
+	let form = $state(blankForm());
 	// The folder chooser for a share that exists: one level at a time.
 	let picking = $state(false);
 	let pickDir = $state('');
 	let pickDirs = $state<string[] | null>(null);
 	let pickError = $state('');
-	let maxAge = $state(3);
 
 	const usages: Usage[] = ['backup', 'media', 'share'];
 	const ages = [0, 1, 2, 3, 7, 14, 30];
+	const hasBackups = $derived(!!status?.entries.some((e) => e.usage === 'backup'));
 
+	function blankForm() {
+		return {
+			account: 'homeassistant',
+			existing: false,
+			volume: '',
+			share: 'homeassistant',
+			existingShare: '',
+			folder: '',
+			quotaGiB: '',
+			usage: 'backup' as Usage,
+			readOnly: false,
+			register: true,
+		};
+	}
 	function failure(err: unknown) {
 		return errorText(err instanceof ApiError ? err.code : 'internal');
 	}
@@ -73,11 +83,8 @@
 		// Older titand (and the development mode without volumes) may send null.
 		next.volumes ??= [];
 		next.shares ??= [];
+		next.entries ??= [];
 		status = next;
-		if (!form.volume) form.volume = next.volumes[0] ?? '';
-		if (!form.existingShare) form.existingShare = next.shares[0]?.name ?? '';
-		if (!next.homeAssistant) form.register = false;
-		if (next.setup) maxAge = next.setup.maxAgeDays;
 	}
 	async function load() {
 		loadError = '';
@@ -105,31 +112,46 @@
 		}
 	}
 
-	async function setUp(event: SubmitEvent) {
+	function startAdding() {
+		if (!status) return;
+		form = blankForm();
+		form.volume = status.volumes[0] ?? '';
+		form.existingShare = status.shares[0]?.name ?? '';
+		// A second entry is most often media in a share that exists.
+		if (status.entries.length) {
+			form.existing = status.shares.length > 0;
+			form.usage = 'media';
+		}
+		form.register = status.homeAssistant;
+		error = '';
+		adding = true;
+	}
+	async function add(event: SubmitEvent) {
 		event.preventDefault();
 		const register = form.register && !!status?.homeAssistant;
 		const readOnly = form.readOnly && form.usage !== 'backup';
 		const body = form.existing
 			? {
+					account: form.account,
 					existing: true,
 					share: form.existingShare,
 					folder: form.folder,
-					account: form.account,
 					usage: form.usage,
 					readOnly,
 					register,
 				}
 			: {
+					account: form.account,
 					volume: form.volume,
 					share: form.share,
-					account: form.account,
-					usage: form.usage,
 					quotaGiB: Number(form.quotaGiB) || 0,
+					usage: form.usage,
 					readOnly,
 					register,
 				};
-		const made = await run('setup', () => api.post<Result>('/homeassistant/storage', body));
+		const made = await run('add', () => api.post<Answer>('/homeassistant/storage', body));
 		if (made) {
+			adding = false;
 			result = made;
 			copied = false;
 			await load();
@@ -138,7 +160,7 @@
 	async function register() {
 		confirm = null;
 		const made = await run('register', () =>
-			api.post<Result>('/homeassistant/storage/register', {}),
+			api.post<Answer>('/homeassistant/storage/register', {}),
 		);
 		if (made) {
 			result = made;
@@ -146,17 +168,22 @@
 			await load();
 		}
 	}
-	async function forget() {
+	async function remove(entry: Entry) {
 		confirm = null;
-		const next = await run('forget', () => api.delete<Status>('/homeassistant/storage'));
-		if (next) {
-			result = null;
-			take(next);
-		}
+		const done = await run('remove', () =>
+			api.delete<{ removedError: string }>(
+				`/homeassistant/storage/${encodeURIComponent(entry.mount)}`,
+			),
+		);
+		if (done?.removedError)
+			error = t('hastore.removeHAFailed', { error: problem(done.removedError) });
+		await load();
 	}
-	async function saveAge() {
+	async function setAge(entry: Entry, days: number) {
 		const next = await run('age', () =>
-			api.put<Status>('/homeassistant/storage', { maxAgeDays: maxAge }),
+			api.put<Status>(`/homeassistant/storage/${encodeURIComponent(entry.mount)}`, {
+				maxAgeDays: days,
+			}),
 		);
 		if (next) take(next);
 	}
@@ -172,8 +199,11 @@
 			copied = false;
 		}
 	}
-	function place(setup: Setup) {
-		return setup.folder ? `${setup.share}/${setup.folder}` : setup.share;
+	function place(entry: Entry) {
+		return entry.folder ? `${entry.share}/${entry.folder}` : entry.share;
+	}
+	function problem(text: string) {
+		return text === 'no_supervisor' ? t('hastore.noSupervisor') : text;
 	}
 
 	async function browse(dir: string) {
@@ -199,10 +229,6 @@
 	function up() {
 		void browse(pickDir.includes('/') ? pickDir.slice(0, pickDir.lastIndexOf('/')) : '');
 	}
-
-	function registerProblem(text: string) {
-		return text === 'no_supervisor' ? t('hastore.noSupervisor') : text;
-	}
 </script>
 
 <section class="tile panel" id="storage" aria-labelledby="hastore-title">
@@ -216,78 +242,175 @@
 		</div>
 	{:else if !status}
 		<p class="muted" role="status">{t('common.loading')}</p>
-	{:else if !status.setup}
-		{#if !status.volumes.length}
-			<p class="notice-warn">{t('hastore.noVolume')}</p>
-		{:else}
-			<form class="setup" onsubmit={setUp}>
-				{#if status.shares.length}
-					<fieldset class="mode" aria-label={t('hastore.where')}>
-						<label class="check"
-							><input
-								type="radio"
-								name="hastore-mode"
-								value={false}
-								bind:group={form.existing}
-							/><span>{t('hastore.newShare')}</span></label
-						>
-						<label class="check"
-							><input
-								type="radio"
-								name="hastore-mode"
-								value={true}
-								bind:group={form.existing}
-							/><span>{t('hastore.existingShare')}</span></label
-						>
-					</fieldset>
-				{/if}
-				<div class="grid">
-					{#if form.existing}
-						<label class="stack"
-							><span>{t('hastore.share')}</span>
-							<select
-								class="field"
-								bind:value={form.existingShare}
-								onchange={() => (form.folder = '')}
+	{:else}
+		{#if status.account}
+			<p class="account">
+				{t('hastore.accountLine', { account: status.account, server: status.server })}
+			</p>
+		{/if}
+		{#if status.entries.length}
+			<ul class="entries">
+				{#each status.entries as entry (entry.mount)}
+					<li>
+						<div class="entry-head">
+							<span class="mono name">{place(entry)}</span>
+							<span class="chip">{t(`hastore.usage.${entry.usage}`)}</span>
+							{#if entry.readOnly}<span class="chip">{t('hastore.readOnlyShort')}</span>{/if}
+							<button
+								class="btn small remove"
+								type="button"
+								disabled={!!busy}
+								onclick={() => (confirm = { kind: 'remove', entry })}>{t('hastore.remove')}</button
 							>
-								{#each status.shares as share (share.name)}<option value={share.name}
-										>{share.name} ({share.volume})</option
-									>{/each}
-							</select></label
-						>
-						<div class="stack folder">
-							<span id="hastore-folder">{t('hastore.folder')}</span>
-							<div class="folder-row">
-								<span class="field mono path" aria-labelledby="hastore-folder"
-									>{form.folder
-										? `${form.existingShare}/${form.folder}`
-										: t('hastore.wholeShare')}</span
-								>
-								<button
-									class="btn"
-									type="button"
-									disabled={!form.existingShare}
-									onclick={openPicker}>{t('hastore.chooseFolder')}</button
+						</div>
+						<span class="muted small">{t('hastore.mountLine', { mount: entry.mount })}</span>
+						{#if entry.usage === 'backup'}
+							<div class="backup">
+								{#if entry.backup?.error}
+									<span class="muted small">{t('hastore.backupUnknown')}</span>
+								{:else if entry.backup?.latest}
+									<span class="small" class:warn={entry.backup.overdue}
+										>{t('hastore.backupLatest', {
+											name: entry.backup.name ?? '',
+											date: formatDateTime(new Date(entry.backup.latest)),
+										})}</span
+									>
+								{:else if entry.backup}
+									<span
+										class="small"
+										class:warn={entry.backup.overdue}
+										class:muted={!entry.backup.overdue}>{t('hastore.backupNone')}</span
+									>
+								{/if}
+								<label class="age small"
+									><span>{t('hastore.maxAge')}</span>
+									<select
+										class="field"
+										value={entry.maxAgeDays}
+										disabled={!!busy}
+										onchange={(event) => setAge(entry, Number(event.currentTarget.value))}
+									>
+										{#each ages as days (days)}<option value={days}
+												>{days ? t('hastore.days', { count: days }) : t('hastore.off')}</option
+											>{/each}
+									</select></label
 								>
 							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if !status.volumes.length && !status.shares.length}
+			<p class="notice-warn">{t('hastore.noVolume')}</p>
+		{/if}
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		<div class="row-actions">
+			<button
+				class="btn"
+				class:btn-primary={!status.entries.length}
+				type="button"
+				disabled={!!busy || (!status.volumes.length && !status.shares.length)}
+				onclick={startAdding}>{t(status.entries.length ? 'hastore.addMore' : 'hastore.add')}</button
+			>
+			{#if status.entries.length}
+				<button
+					class="btn"
+					type="button"
+					disabled={!!busy || !status.homeAssistant}
+					onclick={() => (confirm = { kind: 'register' })}>{t('hastore.registerAgain')}</button
+				>
+			{/if}
+			{#if hasBackups}
+				<button class="btn" type="button" disabled={!!busy || !status.homeAssistant} onclick={check}
+					>{t(busy === 'check' ? 'hastore.checking' : 'hastore.check')}</button
+				>
+			{/if}
+		</div>
+		{#if hasBackups}<p class="muted hint">{t('hastore.maxAgeHint')}</p>{/if}
+	{/if}
+</section>
+
+{#if adding && status}
+	<Dialog
+		title={t(status.entries.length ? 'hastore.addMore' : 'hastore.add')}
+		locked={!!busy}
+		onclose={() => (adding = false)}
+	>
+		<form class="setup" onsubmit={add}>
+			{#if status.shares.length}
+				<fieldset class="mode" aria-label={t('hastore.where')}>
+					<label class="check"
+						><input
+							type="radio"
+							name="hastore-mode"
+							value={false}
+							bind:group={form.existing}
+						/><span>{t('hastore.newShare')}</span></label
+					>
+					<label class="check"
+						><input type="radio" name="hastore-mode" value={true} bind:group={form.existing} /><span
+							>{t('hastore.existingShare')}</span
+						></label
+					>
+				</fieldset>
+			{/if}
+			<div class="grid">
+				{#if form.existing}
+					<label class="stack"
+						><span>{t('hastore.share')}</span>
+						<select
+							class="field"
+							bind:value={form.existingShare}
+							onchange={() => (form.folder = '')}
+						>
+							{#each status.shares as share (share.name)}<option value={share.name}
+									>{share.name} ({share.volume})</option
+								>{/each}
+						</select></label
+					>
+					<div class="stack">
+						<span id="hastore-folder">{t('hastore.folder')}</span>
+						<div class="folder-row">
+							<span class="field mono path" aria-labelledby="hastore-folder"
+								>{form.folder
+									? `${form.existingShare}/${form.folder}`
+									: t('hastore.wholeShare')}</span
+							>
+							<button class="btn" type="button" disabled={!form.existingShare} onclick={openPicker}
+								>{t('hastore.chooseFolder')}</button
+							>
 						</div>
-					{:else}
-						<label class="stack"
-							><span>{t('hastore.volume')}</span>
-							<select class="field" bind:value={form.volume}>
-								{#each status.volumes as volume (volume)}<option value={volume}>{volume}</option
-									>{/each}
-							</select></label
-						>
-						<label class="stack"
-							><span>{t('hastore.share')}</span><input
-								class="field mono"
-								bind:value={form.share}
-								spellcheck="false"
-								autocapitalize="off"
-							/></label
-						>
-					{/if}
+					</div>
+				{:else}
+					<label class="stack"
+						><span>{t('hastore.volume')}</span>
+						<select class="field" bind:value={form.volume}>
+							{#each status.volumes as volume (volume)}<option value={volume}>{volume}</option
+								>{/each}
+						</select></label
+					>
+					<label class="stack"
+						><span>{t('hastore.share')}</span><input
+							class="field mono"
+							bind:value={form.share}
+							spellcheck="false"
+							autocapitalize="off"
+						/></label
+					>
+					<label class="stack"
+						><span>{t('hastore.quota')}</span><input
+							class="field"
+							type="number"
+							min="0"
+							step="1"
+							inputmode="numeric"
+							placeholder={t('hastore.quotaNone')}
+							bind:value={form.quotaGiB}
+						/></label
+					>
+				{/if}
+				{#if !status.account}
 					<label class="stack"
 						><span>{t('hastore.account')}</span><input
 							class="field mono"
@@ -296,175 +419,103 @@
 							autocapitalize="off"
 						/></label
 					>
-					{#if !form.existing}
-						<label class="stack"
-							><span>{t('hastore.quota')}</span><input
-								class="field"
-								type="number"
-								min="0"
-								step="1"
-								inputmode="numeric"
-								placeholder={t('hastore.quotaNone')}
-								bind:value={form.quotaGiB}
-							/></label
-						>
-					{/if}
-				</div>
-				<fieldset class="usage">
-					<legend>{t('hastore.usage')}</legend>
-					{#each usages as usage (usage)}
-						<label class="check"
-							><input
-								type="radio"
-								name="hastore-usage"
-								value={usage}
-								bind:group={form.usage}
-							/><span
-								><strong>{t(`hastore.usage.${usage}`)}</strong>
-								<span class="muted">{t(`hastore.usageHint.${usage}`)}</span></span
-							></label
-						>
-					{/each}
-				</fieldset>
-				{#if form.usage !== 'backup'}
+				{/if}
+			</div>
+			<fieldset class="usage">
+				<legend>{t('hastore.usage')}</legend>
+				{#each usages as usage (usage)}
 					<label class="check"
-						><input type="checkbox" bind:checked={form.readOnly} /><span
-							>{t('hastore.readOnly')}</span
+						><input type="radio" name="hastore-usage" value={usage} bind:group={form.usage} /><span
+							><strong>{t(`hastore.usage.${usage}`)}</strong>
+							<span class="muted">{t(`hastore.usageHint.${usage}`)}</span></span
 						></label
 					>
-				{/if}
-				{#if form.existing}<p class="muted hint">{t('hastore.existingHint')}</p>{/if}
+				{/each}
+			</fieldset>
+			{#if form.usage !== 'backup'}
 				<label class="check"
-					><input
-						type="checkbox"
-						bind:checked={form.register}
-						disabled={!status.homeAssistant}
-					/><span>{t('hastore.register')}</span></label
+					><input type="checkbox" bind:checked={form.readOnly} /><span>{t('hastore.readOnly')}</span
+					></label
 				>
-				<p class="muted hint">
-					{t(status.homeAssistant ? 'hastore.registerHint' : 'hastore.registerOff')}
-				</p>
-				{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-				<div class="row-actions">
-					<button
-						class="btn btn-primary"
-						disabled={!!busy ||
-							!form.account ||
-							(form.existing ? !form.existingShare : !form.volume || !form.share)}
-						>{t(busy === 'setup' ? 'hastore.settingUp' : 'hastore.setUp')}</button
-					>
-				</div>
-			</form>
-		{/if}
-	{:else}
-		{@const setup = status.setup}
-		<dl class="values">
-			<dt>{t('hastore.share')}</dt>
-			<dd class="mono">
-				{place(setup)}{#if setup.readOnly}<span class="muted">
-						· {t('hastore.readOnlyShort')}</span
-					>{/if}
-			</dd>
-			<dt>{t('hastore.account')}</dt>
-			<dd class="mono">{setup.account}</dd>
-			<dt>{t('hastore.usage')}</dt>
-			<dd>{t(`hastore.usage.${setup.usage}`)}</dd>
-			<dt>{t('hastore.server')}</dt>
-			<dd class="mono">{setup.server || status.server}</dd>
-			<dt>{t('hastore.mount')}</dt>
-			<dd class="mono">{setup.mount}</dd>
-		</dl>
-
-		{#if setup.usage === 'backup'}
-			<div class="divided backups">
-				<h3>{t('hastore.backups')}</h3>
-				{#if status.backup?.error}
-					<p class="muted hint">{t('hastore.backupUnknown')}</p>
-				{:else if status.backup?.latest}
-					<p class:notice-warn={status.backup.overdue}>
-						{t('hastore.backupLatest', {
-							name: status.backup.name ?? '',
-							date: formatDateTime(new Date(status.backup.latest)),
-						})}
-					</p>
-				{:else if status.backup}
-					<p class:notice-warn={status.backup.overdue} class:muted={!status.backup.overdue}>
-						{t('hastore.backupNone')}
-					</p>
-				{/if}
-				<div class="row-actions">
-					<label class="stack age"
-						><span>{t('hastore.maxAge')}</span>
-						<select class="field" bind:value={maxAge}>
-							{#each ages as days (days)}<option value={days}
-									>{days ? t('hastore.days', { count: days }) : t('hastore.off')}</option
-								>{/each}
-						</select></label
-					>
-					<button
-						class="btn"
-						type="button"
-						disabled={!!busy || maxAge === setup.maxAgeDays}
-						onclick={saveAge}>{t('common.save')}</button
-					>
-					<button
-						class="btn"
-						type="button"
-						disabled={!!busy || !status.homeAssistant}
-						onclick={check}>{t(busy === 'check' ? 'hastore.checking' : 'hastore.check')}</button
-					>
-				</div>
-				<p class="muted hint">{t('hastore.maxAgeHint')}</p>
+			{/if}
+			{#if form.existing}<p class="muted hint">{t('hastore.existingHint')}</p>{/if}
+			<label class="check"
+				><input
+					type="checkbox"
+					bind:checked={form.register}
+					disabled={!status.homeAssistant}
+				/><span>{t('hastore.register')}</span></label
+			>
+			<p class="muted hint">
+				{t(
+					!status.homeAssistant
+						? 'hastore.registerOff'
+						: status.entries.length
+							? 'hastore.registerHintMore'
+							: 'hastore.registerHint',
+				)}
+			</p>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={!!busy} onclick={() => (adding = false)}
+					>{t('common.cancel')}</button
+				>
+				<button
+					class="btn btn-primary"
+					disabled={!!busy ||
+						(!status.account && !form.account) ||
+						(form.existing ? !form.existingShare : !form.volume || !form.share)}
+					>{t(busy === 'add' ? 'hastore.settingUp' : 'hastore.setUp')}</button
+				>
 			</div>
-		{/if}
-
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions divided">
-			<button
-				class="btn"
-				type="button"
-				disabled={!!busy || !status.homeAssistant}
-				onclick={() => (confirm = 'register')}>{t('hastore.registerAgain')}</button
-			>
-			<button class="btn" type="button" disabled={!!busy} onclick={() => (confirm = 'forget')}
-				>{t('hastore.forget')}</button
-			>
-		</div>
-	{/if}
-</section>
+		</form>
+	</Dialog>
+{/if}
 
 {#if result}
 	<Dialog title={t('hastore.resultTitle')} onclose={() => (result = null)}>
-		{#if result.registered}
-			<p class="notice-ok" role="status">{t('hastore.registered', { name: result.setup.mount })}</p>
-		{:else if result.registerError}
-			<p class="notice-warn" role="alert">
-				{t('hastore.registerFailed', { error: registerProblem(result.registerError) })}
-			</p>
+		{#if result.results}
+			<ul class="results">
+				{#each result.results as r (r.mount)}
+					<li class:notice-ok={r.ok} class:notice-warn={!r.ok}>
+						{r.ok
+							? t('hastore.registered', { name: r.mount })
+							: t('hastore.registerFailedFor', { name: r.mount, error: problem(r.error ?? '') })}
+					</li>
+				{/each}
+			</ul>
 		{/if}
-		<p>{t(result.registered ? 'hastore.valuesKept' : 'hastore.valuesHowTo')}</p>
-		<dl class="values">
-			<dt>{t('hastore.mount')}</dt>
-			<dd class="mono">{result.setup.mount}</dd>
-			<dt>{t('hastore.usage')}</dt>
-			<dd>{t(`hastore.usage.${result.setup.usage}`)}</dd>
-			<dt>{t('hastore.server')}</dt>
-			<dd class="mono">{result.setup.server}</dd>
-			<dt>{t('hastore.protocol')}</dt>
-			<dd>Samba/Windows (CIFS)</dd>
-			<dt>{t('hastore.share')}</dt>
-			<dd class="mono">{place(result.setup)}</dd>
-			<dt>{t('hastore.account')}</dt>
-			<dd class="mono">{result.setup.account}</dd>
-			<dt>{t('hastore.password')}</dt>
-			<dd class="password">
-				<span class="mono">{result.password}</span>
-				<button class="btn small" type="button" onclick={() => copy(result?.password ?? '')}
-					>{t(copied ? 'hastore.copied' : 'hastore.copy')}</button
-				>
-			</dd>
-		</dl>
-		<p class="notice-warn">{t('hastore.passwordOnce')}</p>
+		{#if result.entry}
+			<p>{t(result.results?.every((r) => r.ok) ? 'hastore.valuesKept' : 'hastore.valuesHowTo')}</p>
+			<dl class="values">
+				<dt>{t('hastore.mount')}</dt>
+				<dd class="mono">{result.entry.mount}</dd>
+				<dt>{t('hastore.usage')}</dt>
+				<dd>{t(`hastore.usage.${result.entry.usage}`)}</dd>
+				<dt>{t('hastore.server')}</dt>
+				<dd class="mono">{result.setup.server}</dd>
+				<dt>{t('hastore.protocol')}</dt>
+				<dd>Samba/Windows (CIFS)</dd>
+				<dt>{t('hastore.share')}</dt>
+				<dd class="mono">{place(result.entry)}</dd>
+				<dt>{t('hastore.account')}</dt>
+				<dd class="mono">{result.setup.account}</dd>
+			</dl>
+		{/if}
+		{#if result.password}
+			<dl class="values">
+				<dt>{t('hastore.password')}</dt>
+				<dd class="password">
+					<span class="mono">{result.password}</span>
+					<button class="btn small" type="button" onclick={() => copy(result?.password ?? '')}
+						>{t(copied ? 'hastore.copied' : 'hastore.copy')}</button
+					>
+				</dd>
+			</dl>
+			<p class="notice-warn">{t('hastore.passwordOnce')}</p>
+		{:else if result.entry}
+			<p class="muted">{t('hastore.passwordSame')}</p>
+		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn btn-primary" onclick={() => (result = null)}
 				>{t('common.close')}</button
@@ -516,51 +567,123 @@
 	</Dialog>
 {/if}
 
-{#if confirm && status?.setup}
+{#if confirm}
 	<Dialog
-		title={t(confirm === 'register' ? 'hastore.registerAgain' : 'hastore.forget')}
+		title={t(confirm.kind === 'register' ? 'hastore.registerAgain' : 'hastore.removeTitle')}
 		locked={!!busy}
 		onclose={() => (confirm = null)}
 	>
-		<p>
-			{t(confirm === 'register' ? 'hastore.registerAgainText' : 'hastore.forgetText', {
-				share: status.setup.share,
-				account: status.setup.account,
-			})}
-		</p>
+		{#if confirm.kind === 'register'}
+			<p>{t('hastore.registerAgainText', { account: status?.account ?? '' })}</p>
+		{:else}
+			<p>
+				{t('hastore.removeText', { place: place(confirm.entry), account: status?.account ?? '' })}
+			</p>
+		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" disabled={!!busy} onclick={() => (confirm = null)}
 				>{t('common.cancel')}</button
 			>
-			<button
-				type="button"
-				class="btn btn-warn"
-				disabled={!!busy}
-				onclick={confirm === 'register' ? register : forget}
-				>{t(confirm === 'register' ? 'hastore.registerAgain' : 'hastore.forget')}</button
-			>
+			{#if confirm.kind === 'register'}
+				<button type="button" class="btn btn-warn" disabled={!!busy} onclick={register}
+					>{t('hastore.registerAgain')}</button
+				>
+			{:else}
+				{@const entry = confirm.entry}
+				<button type="button" class="btn btn-danger" disabled={!!busy} onclick={() => remove(entry)}
+					>{t('hastore.remove')}</button
+				>
+			{/if}
 		</div>
 	</Dialog>
 {/if}
 
 <style>
+	.hint,
+	.account {
+		font-size: 0.875rem;
+	}
+	.small {
+		font-size: 0.8125rem;
+	}
+	.warn {
+		color: var(--warn-text);
+		font-weight: 600;
+	}
+	.entries {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.entries li {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 10px 0;
+		border-top: 1px solid var(--panel-border);
+	}
+	.entries li:last-child {
+		border-bottom: 1px solid var(--panel-border);
+	}
+	.entry-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 8px;
+	}
+	.entry-head .name {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.entry-head .remove {
+		margin-left: auto;
+	}
+	.backup {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 16px;
+	}
+	.age {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--muted);
+	}
+	.age select {
+		width: auto;
+	}
 	.setup {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		min-width: min(36rem, 100%);
 	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 12px;
 	}
-	.mode {
+	.mode,
+	.usage {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px 20px;
 		margin: 0;
 		padding: 0;
 		border: 0;
+	}
+	.mode {
+		flex-wrap: wrap;
+		gap: 8px 20px;
+	}
+	.usage {
+		flex-direction: column;
+		gap: 8px;
+	}
+	.usage legend {
+		margin-bottom: 6px;
+		font-size: 0.875rem;
 	}
 	.folder-row {
 		display: flex;
@@ -574,6 +697,34 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.results {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.values {
+		display: grid;
+		grid-template-columns: max-content minmax(0, 1fr);
+		gap: 6px 16px;
+		margin: 0;
+		font-size: 0.875rem;
+	}
+	.values dt {
+		color: var(--muted);
+	}
+	.values dd {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.password {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
 	}
 	.crumbs {
 		margin: 0;
@@ -605,54 +756,5 @@
 	.dir:hover,
 	.dir:focus-visible {
 		background: var(--chip);
-	}
-	.usage {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		margin: 0;
-		padding: 0;
-		border: 0;
-	}
-	.usage legend {
-		margin-bottom: 6px;
-		font-size: 0.875rem;
-	}
-	.hint {
-		font-size: 0.875rem;
-	}
-	.values {
-		display: grid;
-		grid-template-columns: max-content minmax(0, 1fr);
-		gap: 6px 16px;
-		margin: 0;
-		font-size: 0.875rem;
-	}
-	.values dt {
-		color: var(--muted);
-	}
-	.values dd {
-		margin: 0;
-		overflow-wrap: anywhere;
-	}
-	.password {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px;
-	}
-	.backups h3 {
-		margin: 0 0 6px;
-		font-size: 0.9375rem;
-	}
-	.backups p {
-		margin: 0 0 8px;
-	}
-	.backups .row-actions {
-		align-items: flex-end;
-	}
-	.age select {
-		width: auto;
-		min-width: 9rem;
 	}
 </style>
