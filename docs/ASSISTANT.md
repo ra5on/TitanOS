@@ -6,7 +6,31 @@ Der Ausbau von 0.15.0 mit Auftragszentrale, persönlichem Wissen, Dokumentbearbe
 
 ## Einrichtung und Rechte
 
-Ab Werk ausgeschaltet. Unter Einstellungen › KI-Assistent werden Ollama-Adresse, Modell und erlaubte Bereiche gewählt. Ein Modell mit Werkzeugunterstützung ist nötig; Modelle werden nicht vorinstalliert. Modellverwaltung, Kontextlänge und Temperatur bleiben einstellbar.
+Ab Werk ausgeschaltet. Unter Einstellungen › KI-Assistent werden Modellanbieter, Modell und erlaubte Bereiche gewählt. Ein Modell mit Werkzeugunterstützung ist nötig; Modelle werden nicht vorinstalliert. Modellverwaltung (nur Ollama), Kontextlänge (nur Ollama) und Temperatur bleiben einstellbar.
+
+### Modellanbieter
+
+Entscheidung des Projektinhabers vom 29.10.2026: neben Ollama sind Cloud-Modelle wählbar. Ab Werk und bei fehlendem Feld bleibt es Ollama mit unverändertem Verhalten.
+
+- **Ollama** (`provider` leer oder `ollama`): Adresse wie bisher, Modelle verwalten und laden.
+- **Anthropic** (`anthropic`): Messages-API `https://api.anthropic.com/v1/messages` mit `x-api-key` und `anthropic-version: 2023-06-01`, Werkzeugaufrufe und Streaming (SSE), Standardmodell `claude-sonnet-5-5`, Modellliste über `GET /v1/models`. Keine Gedankenausgabe angefordert; Temperatur höchstens 1.
+- **OpenAI-kompatibel** (`openai`): Basisadresse `openaiBase` samt `/v1` (ohne Pfad wird `/v1` ergänzt) und optionaler Schlüssel; `/chat/completions` mit `tools` und Streaming, Modellliste über `/models`. Deckt OpenAI, OpenRouter, LM Studio, vLLM u. a. ab. Fähigkeiten meldet nur OpenRouter (`supported_parameters`); sonst gilt das Modell als unbekannt und wird versucht.
+
+Die Anbieterabstraktion (`assistant/provider.go`, `anthropic.go`, `openai.go`, Schnittstelle `backend`) sitzt genau an der Stelle des früheren Ollama-Aufrufs. Agentenschleife, zentrale Schemaprüfung (`validation.go`), Streaming, Statistik, Schleifenerkennung, Wiederholungen und Checkpoints bleiben ein Codepfad; alle Anbieter liefern Teilstücke im Ollama-Format. Werkzeugaufrufe und Ergebnisse werden über die Aufruf-ID gepaart; Aufrufe ohne Ergebnis (unterbrochener Lauf) und verwaiste Ergebnisse gehen nicht an Cloud-Anbieter. Ein Stream ohne Abschluss (`message_stop` bzw. Endegrund/`[DONE]`) führt keine Werkzeuge aus. Fehlercodes: `provider_failed`, `provider_auth` (Schlüssel abgelehnt, Antworttext wird nicht übernommen), `model_missing`.
+
+**Schlüssel** liegen getrennt in `/config/assistant/keys.json` (atomar, 0600; der Ordner ist im Stick-Dateimanager ausgeblendet, nicht im Diagnosepaket, nicht im Werkzeugkatalog des Assistenten, nie protokolliert). Über die API nur `anthropicKeySet`/`openaiKeySet`; ein leeres Feld behält den gespeicherten Schlüssel, `clearAnthropicKey`/`clearOpenaiKey` entfernt ihn. Der OpenAI-kompatible Schlüssel gehört zur Adresse, für die er eingegeben wurde: Bei geänderter Adresse ohne neuen Schlüssel lehnt das Speichern mit `assistant_key_server` ab, und Prüfen/Modellliste/Modelltest schicken ihn nie an eine andere Adresse. Eingeschaltetes Anthropic ohne Schlüssel: `assistant_key_missing`. Fehlermeldungen werden um den Schlüssel bereinigt.
+
+**Verbindungen** der Cloud-Anbieter prüfen bei jedem Verbindungsaufbau die tatsächliche Adresse (`internal/netguard` über `httpfetch`) und folgen keiner Weiterleitung. Anthropic nur öffentliche Adressen; OpenAI-kompatible Server im Heimnetz/Tailnet nur, wenn ein Besitzer oder Administrator die Adresse gewählt hat (Einstellungen und Prüfen sind ohnehin nur für sie), sonst nur öffentliche Adressen; Loopback dieses NAS nie (`assistant_address_blocked`).
+
+**Datenschutz:** Mit einem Cloud-Anbieter gehen Chatinhalte, Anhänge, gelesene Dokumente und Werkzeugergebnisse an diesen Anbieter. Die Einstellungsseite sagt das deutlich. Rechte, Bereiche und Bestätigungen prüft weiterhin das NAS.
+
+**Rückweg:** neue Felder `provider` und `openaiBase` sind optional; ältere titand lesen die Datei weiter, verwenden dann Ollama mit dem eingetragenen Modellnamen (Fehler „Modell fehlt“, falls es ein Cloud-Modell war) und verwerfen die beiden Felder beim Speichern. Die Schlüsseldatei kennen sie nicht.
+
+### Ollama per Klick
+
+Antwortet unter Ollama kein Server und läuft keine Ollama-App, zeigt die Einstellungsseite „Ollama einrichten“. Vorher geschieht nichts. `GET /api/v1/assistant/ollama-setup` (nur Besitzer/Administratoren, ändert nichts) nennt Docker-Zustand, eine verfügbare NVIDIA-GPU (nur sie nutzt das Ollama-Abbild) und das Modell aus der festen Tabelle `setupModels` (`assistant/ollama.go`, `RecommendModel`): Grafikspeicher bei GPU, sonst Arbeitsspeicher; bis 8 GiB `qwen3:4b`, bis 16 GiB `qwen3:8b`, darüber `qwen3:14b` (alle mit Werkzeugen in Ollama). Ohne eingeschaltetes, laufendes Docker mit Volume erklärt die Karte das und verlinkt Docker.
+
+Nach dem Klick (`routes/settings/assistant/OllamaSetup.svelte`, `lib/ollama-setup.ts`): Vorlage `ollama` des offiziellen Katalogs mit demselben Code wie das Installationspanel der Apps-Seite füllen (`readTemplate`/`build`/`withHardware`), die GPU dem Ollama-Dienst geben und Ollamas API nur auf `127.0.0.1:<freier Port>` veröffentlichen, dann `POST /docker/apps`. Danach Container-Start abwarten (bis 30 Minuten, Fehlerausgabe von Docker bei fehlgeschlagener Einrichtung), auf Antwort von Ollama warten, Anbieter Ollama mit dieser Adresse und dem Modell speichern und das Modell mit Fortschritt in Bytes laden. Jeder Schritt zeigt seinen Zustand; „Erneut versuchen“ setzt beim fehlgeschlagenen Schritt fort (fehlgeschlagene App-Einrichtung über den Wiederholen-Weg der Docker-Seite, Modell-Download setzt bei Ollama fort). Der Ablauf läuft im Browser; Schließen der Seite unterbricht ihn, die App bleibt installiert.
 
 Besitzer und Administratoren dürfen den eingeschalteten Assistenten nutzen. Benutzer benötigen eine zusätzliche Freigabe und erreichen ausschließlich ihre eigenen Freigaben mit ihren bestehenden Dateirechten. Je Bereich gilt aus, lesen oder lesen/ändern: Dateien, Docker/Apps, VMs, Speicher, Shares, Backups, Konten, System und Updates. Konten, System und Updates sind standardmäßig nur lesbar. Direktmodus erweitert diese Rechte nicht.
 
@@ -57,7 +81,7 @@ Konfiguration: `/config/system/assistant.json`, persönliche Auswahl: `/config/u
 
 Optionale Aufbewahrung in Tagen löscht nur alte abgeschlossene/gestoppte Chats. Null bedeutet keine zeitbasierte Löschung. Der temporäre Modus schreibt neue Verläufe nur in den RAM; vorhandene Volume-Chats werden dadurch nicht gelöscht. Chatdaten gehören weder zur Sticksicherung noch zum allgemeinen Diagnosepaket. Der gesonderte Diagnoseexport enthält standardmäßig nur Ablaufmetadaten; Inhalte sind ausschließlich mit ausdrücklicher Wahl `?content=true` enthalten und werden durch den Diagnosefilter geschwärzt. Freie Texte können trotz Filter sensible Angaben enthalten.
 
-Der konfigurierte Ollama-Server erhält den Modellkontext und zulässige Werkzeugdaten. Hochgeladene Anhänge sind nicht automatisch vollständig anonymisiert. Administrator-Aufträge erzeugen Abschluss-/Blockierungsmeldungen ohne Chatinhalte oder Dateinamen; normale Benutzer erzeugen keine Meldungen im gemeinsamen Administrator-Kanal.
+Der konfigurierte Modellanbieter (Ollama oder ein Cloud-Anbieter, siehe oben) erhält den Modellkontext und zulässige Werkzeugdaten. Hochgeladene Anhänge sind nicht automatisch vollständig anonymisiert. Administrator-Aufträge erzeugen Abschluss-/Blockierungsmeldungen ohne Chatinhalte oder Dateinamen; normale Benutzer erzeugen keine Meldungen im gemeinsamen Administrator-Kanal.
 
 ## Sicherheitsgrenzen und Werkzeuge
 
@@ -71,9 +95,9 @@ Websuche ist optional, ab Werk aus, für Benutzer separat freizugeben. DuckDuckG
 
 ## Aufbau und Prüfgrenzen
 
-`assistant` enthält Modellkommunikation, Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server, Bearer-API-Schlüssel und die Agent-App sind entfernt.
+`assistant` enthält Modellkommunikation (Ollama und Cloud-Anbieter), Prompt, Verlauf und Kontextverkürzung; `api/assistant_runtime.go` besitzt die Aufträge und Ausführung, `assistant_registry.go`/`assistant_*.go` die berechtigten Werkzeuge. `office` erzeugt Dokumente. Der Web-Build bettet das aktuelle Handbuch ein. Der frühere externe MCP-Server, Bearer-Schlüssel für Zugriffe auf den Assistenten und die Agent-App sind entfernt; API-Schlüssel gibt es nur für die Modellanbieter.
 
-Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Nicht abgenommen: echte Ollama-Modelle, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
+Automatisierte Tests verwenden ein nachgebautes Ollama und isolierte Dateiwurzeln: direkte Ausführung, Probelauf, Browserabbruch, Rechte, persistente Ergebnisse, unbekannte Ausgänge, Fotosuche, fehlgeschlagene Registry-Prüfung, Promptverlauf und mehr als 500 Runden. Browserprüfungen testen Einstellungen und Chatdarstellung mit isolierten API-Daten. Cloud-Anbieter sind gegen nachgebaute Anthropic- und OpenAI-Server geprüft (Werkzeugaufrufe in Teilstücken, Streaming, unvollständiger Stream, Statistik, Modelllisten, abgelehnter Schlüssel, Schlüsselablage, Adressregel, keine Weiterleitung, Modelltest, Einstellungsdatei älterer Versionen), „Ollama per Klick“ mit isolierten Browserdaten und einem Node-Test der Vorlagenaufbereitung. Nicht abgenommen: echte Ollama-Modelle, echte Anthropic-/OpenAI-/OpenRouter-/LM-Studio-/vLLM-Endpunkte, eine echte Installation der Ollama-App samt GPU, reale NAS-Platten/VMs/Container sowie Stromausfall während einer echten Mutation. Ein unterbrochener Neustart-/Updateauftrag kann deshalb bewusst zur Ergebnisprüfung blockieren.
 
 ## Werkzeugprüfung seit 0.12.1
 
