@@ -349,7 +349,7 @@
 	<p class="muted">{t('plugins.catalogIntro')}</p>
 	{#snippet actions()}
 <a class="btn" href="/plugins/cleanup">{t('cleanup.title')}</a>
-		<button type="button" class="btn" disabled={locked} onclick={() => ((error = null), (sourcesOpen = true))}>{t('plugins.sources')}</button>
+		<button type="button" class="btn" disabled={locked} onclick={() => ((error = null), (sourcesOpen = true))}>{t('plugins.sourceList')}</button>
 		<button type="button" class="btn" disabled={locked || !volumes.length} onclick={openLink}>{t('plugins.fromLink')}</button>
 		<button type="button" class="btn" disabled={busy || refreshing} onclick={() => refreshCatalog(true)}>{t(refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button>
 	{/snippet}
@@ -647,7 +647,7 @@
 {/if}
 
 {#if sourcesOpen}
-	<Dialog title={t('plugins.sources')} locked={sourceAdding} onclose={() => (sourcesOpen = false)}>
+	<Dialog title={t('plugins.sourceListTitle')} locked={sourceAdding} onclose={() => (sourcesOpen = false)}>
 		<p class="text">{t('plugins.sourcesText')}</p>
 		{#if sources.length}
 			<ul class="sources">
