@@ -141,7 +141,8 @@ nie ab. LAN-Adressen, Bridge und DHCP-Konfiguration bleiben unverändert.
 
 Der Build verwendet den NetBird-Client 0.81.5 aus dem offiziellen statischen
 amd64-Archiv `netbird_0.81.5_linux_amd64.tar.gz` mit im Repository festgelegtem
-SHA-256 und fester Größe (`plugins/netbird/packages.lock.json`). Das
+SHA-256 und fester Größe (`plugins/netbird/packages.lock.json` im
+[Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins)). Das
 NetBird-Repository ist gemischt lizenziert: Der Client steht unter
 BSD-3-Clause, die Server-Komponenten `management/`, `signal/`, `relay/` und
 `combined/` unter AGPL-3.0. Das Plugin enthält nur das Client-Binary; dessen

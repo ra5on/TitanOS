@@ -1,5 +1,5 @@
 name: Tools for building the image
-description: Node, Go, mkosi and the packages that release.yml and plugins.yml build and boot the image with.
+description: Node, Go, mkosi and the packages that release.yml and ra5on/TitanOS-Plugins build and boot the image with.
 
 runs:
   using: composite

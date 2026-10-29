@@ -124,7 +124,7 @@ func TestBuildEnvironmentMustBeSignedAndExact(t *testing.T) {
 	}
 }
 func TestLocalBuildRunsOfflineWithBounds(t *testing.T) {
-	args := strings.Join(buildCommand("/mnt/data/.titanos/nvidia-build/root", "build"), "\n")
+	args := strings.Join(buildCommand("/mnt/data/.titanos/nvidia-build/root", "build", "1.0.0"), "\n")
 	for _, want := range []string{"PrivateNetwork=yes", "CapabilityBoundingSet=", "ReadWritePaths=+/work", "MemoryMax=2G", "CPUQuota=200%", "RuntimeMaxSec=7200", "NoNewPrivileges=yes", "ProtectSystem=strict"} {
 		if !strings.Contains(args, want) {
 			t.Fatal("missing isolation", want)

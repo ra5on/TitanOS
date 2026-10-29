@@ -4,7 +4,7 @@
   "license": "FSL-1.1-ALv2",
   "upstream": {
     "name": "TitanOS (own helper)",
-    "url": "https://github.com/ra5on/TitanOS/tree/main/plugins/coral"
+    "url": "https://github.com/ra5on/TitanOS-Plugins/tree/main/plugins/coral"
   },
   "details": {
     "de": {

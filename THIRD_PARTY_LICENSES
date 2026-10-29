@@ -88,8 +88,9 @@ Source: https://github.com/netbirdio/netbird/tree/v0.81.5
 NVIDIA build SDK: Debian build tools and exact kernel headers retain their original
 licenses. Its archive includes package notices; nvidia-build-sdk-sources.txt lists
 the corresponding Debian source packages. The SDK is separate from the NAS RAM image.
-Driver plugins (separate downloads, built by scripts/make-driver-plugins.py for the
-exact kernel of each release; pins in plugins/drivers/drivers.json):
+Driver plugins (separate downloads, built in https://github.com/ra5on/TitanOS-Plugins
+by scripts/make-driver-plugins.py for the exact kernel of each kernel set; pins in
+plugins/drivers/drivers.json there):
 - wangxun-nic (libwx, ngbe, txgbe), intel-qat (qat_4xxx, qat_420xx): unmodified Linux kernel sources from Debian's linux-source package of
   the image's kernel version, GPL-2.0-only (qat: BSD-3-Clause OR GPL-2.0-only).
   Each release ships <name>-sources.tar.gz with the exact compiled sources and the

@@ -392,14 +392,16 @@ func writeFresh(path string, data []byte) error {
 	return file.Close()
 }
 
-func buildCommand(root, action string) []string {
+// The build SDK may come from a plugin set made for an earlier release with
+// the same kernel; the release the driver is built for is passed explicitly.
+func buildCommand(root, action, release string) []string {
 	args := []string{"--wait", "--collect", "--quiet", "--unit=titanos-nvidia-build", "--property=RootDirectory=" + root, "--property=WorkingDirectory=/usr/lib/titanos/nvidia-build", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes", "--property=ProtectSystem=strict", "--property=ReadWritePaths=+/work", "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=", "--property=ProtectKernelTunables=yes", "--property=ProtectControlGroups=yes", "--property=RestrictSUIDSGID=yes", "--property=MemoryMax=2G", "--property=CPUQuota=200%", "--property=TasksMax=256", "--property=RuntimeMaxSec=7200", "--property=Nice=10", "--property=StandardOutput=append:" + buildLogPath(root), "--property=StandardError=inherit"}
 	if action == "build" {
 		args = append(args, "--property=PrivateNetwork=yes")
 	} else {
 		args = append(args, "--property=BindReadOnlyPaths=/etc/resolv.conf")
 	}
-	return append(args, "python3", "/usr/lib/titanos/nvidia-build/scripts/nvidia-nas-build.py", action)
+	return append(args, "--setenv=TITANOS_VERSION="+release, "python3", "/usr/lib/titanos/nvidia-build/scripts/nvidia-nas-build.py", action)
 }
 func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepare bool) (err error) {
 	if !m.driverActions.TryLock() {
@@ -567,7 +569,7 @@ func (m *Manager) runBuildJob(ctx context.Context, root, action string) (string,
 	if err := resetBuildLog(logPath); err != nil {
 		return "", err
 	}
-	output, err := m.runner.Run(ctx, "", "systemd-run", buildCommand(root, action)...)
+	output, err := m.runner.Run(ctx, "", "systemd-run", buildCommand(root, action, m.Release)...)
 	if ctx.Err() != nil {
 		cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()

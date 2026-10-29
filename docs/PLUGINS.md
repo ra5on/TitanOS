@@ -159,11 +159,12 @@ gewohnten Installationsdialog.
 
 ## Treiber-Plugins
 
-`scripts/make-driver-plugins.py` baut `wangxun-nic`, `intel-qat` und
-`it87-extended` in jedem vollen Release (und in `plugins.yml`) gegen den
-exakten Kernel des Abbilds:
+`scripts/make-driver-plugins.py` im
+[Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins) baut
+`wangxun-nic`, `intel-qat` und `it87-extended` für jeden Kernel-Satz gegen den
+exakten Kernel des TitanOS-Abbilds:
 
-- In einem Wegwerf-mkosi-Root (`plugins/drivers/build`) werden
+- In einem Wegwerf-mkosi-Root (`plugins/drivers/build` dort) werden
   `linux-headers-<kernel>` und `linux-source-<x.y>` genau in der Version des
   `linux-image`-Pakets aus dem Abbild installiert. Abweichende Paketversionen,
   eine andere Kernelversion im Quellbaum, ein falsches `vermagic` eines Moduls,
@@ -172,7 +173,7 @@ exakten Kernel des Abbilds:
   ab.
 - Kerneltreiber stammen unverändert aus dem Debian-Quellpaket; externe Quellen
   (it87) und Firmware (QAT) sind mit Commit und SHA-256 in
-  `plugins/drivers/drivers.json` festgelegt.
+  `plugins/drivers/drivers.json` des Plugin-Repositorys festgelegt.
 - Module liegen unter `/usr/lib/modules/<kernel>/updates/titanos-<name>/` und
   haben damit Vorrang vor gleichnamigen Modulen des Systems; das Manifest nennt
   den Kernel und die zu ladenden Module. Geladen wird beim Aktivieren und bei
@@ -208,7 +209,7 @@ kann es bis zum nächsten Neustart in der NAS-Shell tun:
 
 Alle Felder sind optional und werden von älteren TitanOS-Versionen ignoriert;
 die Signatur des Manifests deckt sie wie alles andere ab. Für offizielle Plugins
-liegen sie in `plugins/catalog/<name>.json` und werden von
+liegen sie in `plugins/catalog/<name>.json` und werden im Plugin-Repository von
 `scripts/make-plugin.sh` mit dem beim Bau erzeugten `plugin.json` zusammengeführt
 (Bauwerte wie Version, Kernel und Module haben Vorrang). Dieselben Dateien
 kommen als Katalogtabelle ins Abbild.
@@ -237,12 +238,12 @@ kommen als Katalogtabelle ins Abbild.
   `pci`, `usb` und `dmi`; Regeln für andere Busse bleiben gültig, passen aber nie
   (damit ein neuerer Regeltyp ein signiertes Manifest nicht unbrauchbar macht).
   `unbound: true` für Treiber (siehe oben).
-- Neues Treiber-Plugin: Eintrag in `plugins/drivers/drivers.json` (Kernel-
-  Verzeichnis und Kconfig-Werte bzw. externe Quelle mit Commit und SHA-256,
-  erwartete Module, zu ladende Module, ggf. Firmware), Beschreibung in
-  `plugins/catalog/<name>.json` mit den Aliasen des Moduls als `hardware`.
-  Die Liste offizieller Plugins in `make-release.sh` und `verify-release.py`
-  folgt `drivers.json` von selbst.
+- Neues Treiber-Plugin: Eintrag in `plugins/drivers/drivers.json` des
+  Plugin-Repositorys (Kernel-Verzeichnis und Kconfig-Werte bzw. externe Quelle
+  mit Commit und SHA-256, erwartete Module, zu ladende Module, ggf. Firmware),
+  Beschreibung hier in `plugins/catalog/<name>.json` mit den Aliasen des Moduls
+  als `hardware`. Die Liste offizieller Plugins in `make-release.sh` und
+  `verify-release.py` folgt `plugins/catalog/`.
 
 ## Fortschritt in Schritten
 
@@ -387,14 +388,16 @@ aktualisiert.
 
 ## Entwicklung und Tests
 
+Gebaut werden die Plugins im
+[Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins) (README dort):
 `scripts/make-plugin.sh <name> <version> <ordner>` packt einen Ordner zu Abbild
-und Manifest. Enthält der Ordner Kernelmodule (`usr/lib/modules/<kernel>`), muss
-`plugin.json` genau diesen Kernel nennen, sonst bricht das Skript ab.
-
-`scripts/make-tools-plugins.sh <version>` baut die Werkzeuge in einem isolierten
-Debian-Rootfs. Es benötigt zuerst das Basisabbild unter `build/mkosi.output` und
-läuft als root oder in einem Benutzer-/Mount-Namespace. Die Release-Pipeline
-signiert jedes Plugin-Manifest und die vollständige Prüfsummenliste.
+und Manifest – auch für eigene Community-Plugins. Enthält der Ordner
+Kernelmodule (`usr/lib/modules/<kernel>`), muss `plugin.json` genau diesen
+Kernel nennen, sonst bricht das Skript ab. Die übrigen Bauskripte brauchen ein
+gebautes TitanOS-Abbild (`TITANOS` zeigt auf diesen Checkout). Dort prüft
+`test.yml` jede Änderung mit Abbild und QEMU-Boot; die Release-Pipeline von
+TitanOS signiert die übernommenen Manifeste und die vollständige
+Prüfsummenliste.
 
 `scripts/smoke-storage.py <zip> --plugins out/plugins` prüft Installation,
 Bibliotheken und Aktivierung der Werkzeuge über Neustarts in QEMU. Tests mit

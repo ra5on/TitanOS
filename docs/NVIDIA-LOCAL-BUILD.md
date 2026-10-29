@@ -53,10 +53,15 @@ Die Originaldateien für den OS-Rückfall bleiben erhalten. Der lokale Build ist
 an den exakten OS-Kernel gebunden; ein Systemupdate lädt wieder das dazu passende
 signierte Standardplugin, eine spätere lokale Vorbereitung ist erneut möglich.
 
-Der alte CI-Workflow für fertig kompilierte Zusatztreiber bleibt für ältere
-TitanOS-Versionen manuell verfügbar. Seine tägliche Ausführung ist abgeschaltet;
-neue Treiber brauchen keinen neuen TitanOS-Release und keinen Treiberbuild durch
-uns. Jeder OS-Release enthält weiterhin einen passenden Standardtreiber.
+Fertig kompilierte Zusatztreiber baut der manuelle Workflow `nvidia-driver.yml`
+im [Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins) für dessen
+Kernel-Sätze; TitanOS bietet sie aus dem Satz seines Kernels an (ältere Versionen
+bis 0.35 lesen nur Zusatztreiber an ihrem eigenen Release, dort kommen keine neuen
+mehr hinzu). Neue Treiber brauchen keinen neuen TitanOS-Release. Jeder
+Kernel-Satz und damit jedes volle Release enthält einen passenden Standardtreiber.
+Die Bauumgebung (`nvidia-build-sdk.tar.zst`) stammt aus dem Kernel-Satz und passt
+zu jedem Release mit diesem Kernel; titand übergibt dem Bau die eigene Version
+(`TITANOS_VERSION`).
 
 Die Release-Pipeline prüft den echten Buildpfad in der herunterladbaren Umgebung.
 Unit-Tests prüfen Signaturen, falsche Kernel, manipulierte lokale Ergebnisse,

@@ -27,7 +27,7 @@ var errNoPluginSet = errors.New("plugins: no plugin set for this system")
 
 const catalogSerialPath = "plugins/catalog-serial.json"
 
-var setTagRE = regexp.MustCompile(`^(common|kernel-[0-9][0-9A-Za-z.~-]*)-[1-9][0-9]*$`)
+var setTagRE = regexp.MustCompile(`^(common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*$`)
 
 // repoPointer is catalog.json of the release "catalog".
 type repoPointer struct {

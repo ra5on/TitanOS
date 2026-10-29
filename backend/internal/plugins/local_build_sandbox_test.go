@@ -43,7 +43,7 @@ func TestBuildLogIgnoresPlantedSymlink(t *testing.T) {
 	root := sandboxRoot(t)
 	secret := filepath.Join(t.TempDir(), "sessions.json")
 	os.WriteFile(secret, []byte("SECRET-TOKEN"), 0600)
-	args := strings.Join(buildCommand(root, "build"), "\n")
+	args := strings.Join(buildCommand(root, "build", "1.0.0"), "\n")
 	if strings.Contains(args, filepath.Join(root, "work")) || !strings.Contains(args, "append:"+filepath.Join(filepath.Dir(root), "build.log")) {
 		t.Fatal("build log is inside the sandbox-writable tree:", args)
 	}
