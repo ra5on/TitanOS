@@ -30,6 +30,9 @@ func TestRealNASBuildEnvironment(t *testing.T) {
 	}
 	os.Mkdir(filepath.Join(root, "work"), 0700)
 	m := NewManager(config.Open(t.TempDir()))
+	// titand names the release it builds for; the SDK of a plugin set may
+	// stem from another release with the same kernel.
+	m.Release = "0.99.0"
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	for _, action := range []string{"check", "build"} {
@@ -38,7 +41,7 @@ func TestRealNASBuildEnvironment(t *testing.T) {
 		}
 	}
 	target, _ := os.ReadFile(filepath.Join(root, "usr/lib/titanos/nvidia-build/target.json"))
-	var expected struct{ Kernel, Version string }
+	var expected struct{ Kernel string }
 	if err := json.Unmarshal(target, &expected); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +50,7 @@ func TestRealNASBuildEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Kernel != expected.Kernel || manifest.TitanOS != expected.Version || !manifest.LocalBuild {
+	if manifest.Kernel != expected.Kernel || manifest.TitanOS != m.Release || !strings.HasSuffix(manifest.Version, "-titanos-"+m.Release+"-local") || !manifest.LocalBuild {
 		t.Fatalf("wrong result %+v", manifest)
 	}
 	sum, size, err := hashFile(filepath.Join(result, "nvidia.raw"), maxImageBytes)
