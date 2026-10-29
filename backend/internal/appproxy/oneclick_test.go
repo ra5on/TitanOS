@@ -178,6 +178,33 @@ func TestPublishTailnetOfAnOffRouteStaysLocal(t *testing.T) {
 	}
 }
 
+// The auth key counts for every app device: a new one that came with a
+// publish that then failed does not replace the one before.
+func TestPublishTailnetFailingKeepsPreviousKey(t *testing.T) {
+	m, _, _ := newTailnetManager(t)
+	m.SetTailnetKey("tskey-auth-old")
+	m.Reserved = []int{8443}
+	if _, err := m.PublishTailnet("immich", 8443, "tskey-auth-new"); err == nil {
+		t.Fatal("route to a port of titand accepted")
+	}
+	if key := m.currentKey(); key != "tskey-auth-old" {
+		t.Fatalf("key after failed publish: %q", key)
+	}
+	if data, err := m.store.Read(tailnetKeyFile); err != nil || string(data) != "tskey-auth-old" {
+		t.Fatalf("stored key: %q %v", data, err)
+	}
+	// Without a key before, the new one stays: nothing is replaced, and
+	// the dialog need not ask again.
+	m.SetTailnetKey("")
+	if _, err := m.PublishTailnet("immich", 8443, "tskey-auth-new"); err == nil || m.currentKey() != "tskey-auth-new" {
+		t.Fatalf("first key after failed publish: %v %q", err, m.currentKey())
+	}
+	// Succeeding, the new key stays.
+	if _, err := m.PublishTailnet("immich", 2283, "tskey-auth-new"); err != nil || m.currentKey() != "tskey-auth-new" {
+		t.Fatalf("publish: %v %q", err, m.currentKey())
+	}
+}
+
 func TestPublishTailnetRefused(t *testing.T) {
 	m, fake, _ := newTailnetManager(t)
 	m.Tailnet.Volume = func() (string, bool) { return "", false }

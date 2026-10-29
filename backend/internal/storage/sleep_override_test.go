@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -304,5 +305,35 @@ func TestDiskSleepOverrideValidation(t *testing.T) {
 	}
 	if len(runner.standbyCalls()) != 0 {
 		t.Fatal("saving sent standby commands")
+	}
+}
+
+// Two changes at once, one of the volumes and one of the disks, must not
+// undo each other: the stored values are read under the lock of the change.
+func TestDiskSleepUpdatesAtOnceKeepEachOther(t *testing.T) {
+	m, _, _ := overrideManager(t)
+	ctx := context.Background()
+	for round := range 20 {
+		if err := m.SetDiskSleep(ctx, DiskSleepSettings{}); err != nil {
+			t.Fatal(err)
+		}
+		volumes := map[string]int{"tank": 30}
+		disks := map[string]int{"serial:F1": 10}
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			if _, err := m.UpdateDiskSleep(ctx, 0, &volumes, nil); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Go(func() {
+			if _, err := m.UpdateDiskSleep(ctx, 0, nil, &disks); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Wait()
+		got := m.DiskSleep()
+		if got.Volumes["tank"] != 30 || got.Disks["serial:F1"] != 10 {
+			t.Fatalf("round %d: %+v", round, got.DiskSleepSettings)
+		}
 	}
 }

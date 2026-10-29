@@ -371,15 +371,20 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 		t.Fatal("file still there")
 	}
 	ts.mcpCall(plain, "system_status", map[string]any{})
+	// A tool this token does not have never runs, but the try is logged.
+	if r := ts.mcp(plain, "2025-06-18", rpc(70, "tools/call", map[string]any{"name": "vm_shutdown_all", "arguments": map[string]any{}})); r.msg["error"] == nil {
+		t.Fatalf("unknown tool: %s", r.body)
+	}
 
 	rows := activityEntries(t, log)
 	del, ok := findActivity(rows, "POST /api/v1/files/delete")
 	if !ok || del.Via != activity.ViaMCP || !strings.Contains(del.Target, "token claude") || !strings.Contains(del.Target, "files_delete") || !strings.Contains(del.Target, "weg.txt") || !del.OK || del.User != "alex" {
 		t.Fatalf("delete entry: %+v %v", del, ok)
 	}
-	read, ok := findActivity(rows, "mcp_tool")
-	if !ok || read.Via != activity.ViaMCP || !strings.Contains(read.Target, "system_status") {
-		t.Fatalf("read entry: %+v", read)
+	if !slices.ContainsFunc(rows, func(e activity.Entry) bool {
+		return e.Action == "mcp_tool" && e.Via == activity.ViaMCP && e.OK && strings.Contains(e.Target, "system_status")
+	}) {
+		t.Fatalf("read entry missing: %+v", rows)
 	}
 	refused := 0
 	for _, e := range rows {
@@ -390,8 +395,13 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 			t.Fatalf("MCP call recorded twice: %+v", e)
 		}
 	}
-	if refused != 3 {
+	if refused != 4 {
 		t.Fatalf("refused calls recorded: %d", refused)
+	}
+	if !slices.ContainsFunc(rows, func(e activity.Entry) bool {
+		return e.Via == activity.ViaMCP && !e.OK && e.Status == http.StatusForbidden && strings.Contains(e.Target, "vm_shutdown_all")
+	}) {
+		t.Fatal("unknown tool not logged")
 	}
 }
 

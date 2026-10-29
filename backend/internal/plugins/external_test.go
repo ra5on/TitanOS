@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // community serves plugins under /community next to the release fixture.
@@ -188,5 +193,117 @@ func TestOfficialNamesHoldWithoutCatalog(t *testing.T) {
 	plugin(t, dir, "werkzeug", func(p *Manifest) { p.Kernel = f.m.kernel })
 	if err := f.m.InstallExternal(ctx, ExternalRequest{URL: base + "werkzeug.plugin.json", Volume: "data", Confirm: "werkzeug"}, []string{"data"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// roundTrip lets a test stand in for an http.Client's transport.
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A source list may only send the NAS to public addresses: what it names on
+// a host other than its own goes through the public client, also the
+// image. Same host as the list (which the person chose) stays as it was.
+func TestSourceListsReachOtherHostsPublicOnly(t *testing.T) {
+	f, dir, base := community(t)
+	m := f.m
+	ctx := context.Background()
+	other := strings.Replace(base, "127.0.0.1", "localhost", 1)
+	if other == base {
+		t.Skip("test server not on 127.0.0.1")
+	}
+	var public []string
+	inner := m.client.Transport
+	if inner == nil {
+		inner = http.DefaultTransport
+	}
+	m.publicClient = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		public = append(public, r.URL.Host)
+		return inner.RoundTrip(r)
+	})}
+	plugin(t, dir, "werkzeug", func(p *Manifest) { p.Kernel = m.kernel })
+	plugin(t, dir, "helfer", func(p *Manifest) { p.Kernel = m.kernel })
+	list := map[string]any{"plugins": []map[string]string{{"name": "werkzeug"}, {"name": "helfer", "url": other + "helfer.plugin.json"}}}
+	data, _ := json.Marshal(list)
+	os.WriteFile(filepath.Join(dir, "plugins.json"), data, 0o644)
+	state, err := m.AddSource(ctx, base+"plugins.json")
+	if err != nil || state.Plugins != 2 {
+		t.Fatalf("source %+v %v", state, err)
+	}
+	if len(public) != 2 || strings.HasPrefix(public[0], "127.0.0.1") {
+		t.Fatalf("public client used for %v, want the manifest and signature of helfer", public)
+	}
+	public = nil
+	if err := m.InstallExternal(ctx, ExternalRequest{Source: state.ID, Name: "helfer", Volume: "data", Confirm: "helfer"}, []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(public, func(h string) bool { return strings.HasPrefix(h, "localhost") }) || slices.ContainsFunc(public, func(h string) bool { return strings.HasPrefix(h, "127.0.0.1") }) {
+		t.Fatalf("install of helfer used the public client for %v", public)
+	}
+	// A link the person typed may name the home network, and may carry a
+	// query: signature and image are still next to the manifest.
+	public = nil
+	if _, err := m.InspectLink(ctx, other+"werkzeug.plugin.json"); err != nil || len(public) != 0 {
+		t.Fatalf("own link: %v, public client used for %v", err, public)
+	}
+	if err := m.InstallExternal(ctx, ExternalRequest{URL: base + "werkzeug.plugin.json?ref=main", Volume: "data", Confirm: "werkzeug"}, []string{"data"}); err != nil {
+		t.Fatalf("link with a query: %v", err)
+	}
+}
+
+// The official catalog is shown while a source still has not answered, and
+// sources are read side by side, not one after the other.
+func TestSlowSourceDoesNotHoldBackTheCatalog(t *testing.T) {
+	f, dir, base := community(t)
+	m := f.m
+	ctx := context.Background()
+	plugin(t, dir, "werkzeug", nil)
+	data, _ := json.Marshal(map[string]any{"plugins": []map[string]string{{"name": "werkzeug"}}})
+	os.WriteFile(filepath.Join(dir, "plugins.json"), data, 0o644)
+	fast, err := m.AddSource(ctx, base+"plugins.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two sources that only answer once the test lets them.
+	release := make(chan struct{})
+	var waiting sync.WaitGroup
+	waiting.Add(2)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		waiting.Done()
+		<-release
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(slow.Close)
+	m.mu.Lock()
+	m.sources = append(m.sources, Source{ID: "slow-1", URL: slow.URL + "/a.json"}, Source{ID: "slow-2", URL: slow.URL + "/b.json"})
+	m.mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() { done <- m.RefreshCatalog(ctx, true) }()
+	// Both slow sources are asked at the same time...
+	asked := make(chan struct{})
+	go func() { waiting.Wait(); close(asked) }()
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the sources are not read side by side")
+	}
+	// ... and meanwhile the catalog is there.
+	if status, plugins := m.catalogSnapshot(); status.State != "ready" || len(plugins) == 0 {
+		close(release)
+		t.Fatalf("catalog while sources load: %+v", status)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	states := m.Status([]string{"data"}).Sources
+	errorsOf := map[string]string{}
+	for _, s := range states {
+		errorsOf[s.ID] = s.Error
+	}
+	if errorsOf[fast.ID] != "" || errorsOf["slow-1"] == "" || errorsOf["slow-2"] == "" {
+		t.Fatalf("source states %+v", states)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -375,6 +376,7 @@ func (s *Server) mcpMethod(session *mcpSession, method string, params json.RawMe
 			Arguments json.RawMessage `json:"arguments"`
 		}
 		if json.Unmarshal(params, &req) != nil || req.Name == "" {
+			s.mcpRefused(session, "", http.StatusBadRequest)
 			return nil, &rpcError{rpcInvalidParams, "tools/call needs a name"}
 		}
 		for _, tool := range s.mcpTools(session) {
@@ -382,12 +384,30 @@ func (s *Server) mcpMethod(session *mcpSession, method string, params json.RawMe
 				return s.mcpRun(session, tool, req.Arguments), nil
 			}
 		}
+		// Unknown, or not for the scopes and role of this token: a try that
+		// belongs in the log like any other call.
+		s.mcpRefused(session, req.Name, http.StatusForbidden)
 		return nil, &rpcError{rpcInvalidParams, "unknown tool " + strconv.Quote(req.Name) + "; tools/list shows the tools of this token"}
 	}
 	return nil, &rpcError{rpcMethodNotFound, "method not found: " + method}
 }
 
 // mcpRun runs one tool call and records it in the activity log.
+// mcpRefused logs a tools/call that never ran, once, like mcpRun does.
+func (s *Server) mcpRefused(session *mcpSession, name string, status int) {
+	if s.opts.Activity == nil {
+		return
+	}
+	if len(name) > 64 || !utf8.ValidString(name) {
+		name = strconv.QuoteToASCII(name[:min(len(name), 64)])
+	}
+	targets := []string{"token " + session.token.Name}
+	if name != "" {
+		targets = append(targets, name)
+	}
+	s.opts.Activity.Record(activity.Entry{User: session.user.Name, Via: activity.ViaMCP, IP: remoteIP(session.r), Action: "mcp_tool", Target: strings.Join(targets, ", "), Status: status, OK: false})
+}
+
 func (s *Server) mcpRun(session *mcpSession, tool mcpTool, args json.RawMessage) map[string]any {
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")
