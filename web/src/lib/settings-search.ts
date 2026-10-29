@@ -27,7 +27,7 @@ const keywords: Record<string, string> = {
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'intel-guc': 'intel igpu grafik graphics guc huc firmware quick sync qsv i915 xe',
 	'power-button': 'power button taste knopf ausschalten shutdown',
-	memory: 'ram memory speicher cache',
+	memory: 'ram memory speicher cache schreibcache write cache arbeitsspeicher writeback dirty',
 	files:
 		'dateisuche volltext index inhalt full text search content ocr vorschaubilder thumbnails miniaturen',
 	energy:
