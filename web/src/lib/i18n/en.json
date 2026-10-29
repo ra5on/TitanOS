@@ -7427,5 +7427,20 @@
 	"error.ha_storage_account_exists": "An account of this name exists. Choose another name.",
 	"error.ha_storage_usage": "Unknown use.",
 	"error.ha_storage_max_age": "The number of days does not fit.",
-	"error.ha_not_connected": "Home Assistant is not connected."
+	"error.ha_not_connected": "Home Assistant is not connected.",
+	"hastore.where": "Where",
+	"hastore.newShare": "Create a new share",
+	"hastore.existingShare": "Use a share that exists",
+	"hastore.existingHint": "The account for Home Assistant gets access to this share; everyone keeps their rights. Home Assistant sees only the folder chosen.",
+	"hastore.folder": "Folder",
+	"hastore.wholeShare": "whole share",
+	"hastore.chooseFolder": "Choose folder …",
+	"hastore.chooseFolderIn": "Folder in {share}",
+	"hastore.up": "One level up",
+	"hastore.noSubfolders": "No folders",
+	"hastore.useThisFolder": "Use this folder",
+	"hastore.readOnly": "Read only (Home Assistant cannot change anything there)",
+	"hastore.readOnlyShort": "read only",
+	"error.ha_storage_folder": "This folder does not exist in the share, or it cannot be chosen.",
+	"error.ha_storage_read_only": "Backups need to write."
 }

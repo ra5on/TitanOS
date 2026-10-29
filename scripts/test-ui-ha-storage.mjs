@@ -17,14 +17,14 @@ const errors = [],
 async function open(width) {
   const made = await create("owner", "graphit", width);
   const state = { setup: null, calls: [], backup: undefined };
-  const status = () => ({ setup: state.setup, volumes: ["tank", "fast"], homeAssistant: true, server: "192.168.10.5", backup: state.backup });
+  const status = () => ({ setup: state.setup, volumes: ["tank", "fast"], shares: [{ name: "Medien", volume: "tank" }, { name: "Dokumente", volume: "fast" }], homeAssistant: true, server: "192.168.10.5", backup: state.backup });
   await made.ctx.route("**/api/v1/homeassistant/storage**", async (r) => {
     const req = r.request();
     const path = new URL(req.url()).pathname;
     state.calls.push([req.method(), path, req.postData() ?? ""]);
     if (req.method() === "POST" && path.endsWith("/storage")) {
       const body = JSON.parse(req.postData());
-      state.setup = { share: body.share, account: body.account, usage: body.usage, mount: "titanos_" + body.share, server: "192.168.10.5", created: "2026-10-29T18:00:00Z", maxAgeDays: 3 };
+      state.setup = { share: body.share, folder: body.folder, existing: body.existing, readOnly: body.readOnly, account: body.account, usage: body.usage, mount: "titanos_" + body.share.toLowerCase(), server: "192.168.10.5", created: "2026-10-29T18:00:00Z", maxAgeDays: 3 };
       return r.fulfill({ status: 201, json: { setup: state.setup, password: "Xy7-geheimes-Passwort-9", registered: true } });
     }
     if (req.method() === "POST" && path.endsWith("/check")) {
@@ -47,6 +47,14 @@ async function open(width) {
       },
     }),
   );
+  // Folders of the share Medien for the chooser.
+  const tree = { "": ["Musik", "Videos", ".recycle"], Musik: ["Rock", "Jazz"], "Musik/Rock": [], "Musik/Jazz": [], Videos: [] };
+  await made.ctx.route("**/api/v1/files/list?**", (r) => {
+    const url = new URL(r.request().url());
+    state.calls.push(["GET", url.pathname, url.search]);
+    const names = tree[url.searchParams.get("path")] ?? [];
+    return r.fulfill({ json: [...names.map((name) => ({ name, dir: true, size: 0 })), { name: "liste.m3u", dir: false, size: 10 }] });
+  });
   await made.page.goto(`${base}/settings/homeassistant`);
   await made.page.locator("#storage").waitFor();
   return { ...made, state };
@@ -64,7 +72,7 @@ try {
     const dialog = page.locator("dialog[open]");
     await dialog.getByText("Xy7-geheimes-Passwort-9").waitFor();
     const post = JSON.parse(state.calls.find(([m, p]) => m === "POST" && p.endsWith("/storage"))[2]);
-    assert.deepEqual(post, { volume: "fast", share: "homeassistant", account: "homeassistant", usage: "backup", quotaGiB: 200, register: true });
+    assert.deepEqual(post, { volume: "fast", share: "homeassistant", account: "homeassistant", usage: "backup", quotaGiB: 200, readOnly: false, register: true });
     await dialog.getByText(/hat den Speicher „titanos_homeassistant“ eingebunden/).waitFor();
     await dialog.getByText(/nur jetzt angezeigt/).waitFor();
     await dialog.screenshot({ path: `${out}/result.png`, animations: "disabled" });
@@ -86,6 +94,30 @@ try {
     assert.equal(await confirm.locator("input").count(), 0);
     await confirm.getByRole("button", { name: "Nicht mehr verwalten" }).click();
     await section.getByRole("button", { name: "Einrichten" }).waitFor();
+    await ctx.close();
+  }
+  {
+    // A share that exists, a folder in it, read only.
+    const { ctx, page, state } = await open(1440);
+    const section = page.locator("#storage");
+    await section.getByRole("radio", { name: "Vorhandene Freigabe verwenden" }).check();
+    assert.equal(await section.getByLabel("Obergrenze in GiB").count(), 0, "no limit for a share that exists");
+    await section.getByRole("radio", { name: /Medien/ }).check();
+    await section.getByRole("button", { name: "Ordner wählen …" }).click();
+    const picker = page.locator("dialog[open]");
+    await picker.getByRole("button", { name: "Musik" }).click();
+    await picker.getByRole("button", { name: "Rock" }).waitFor();
+    assert.equal(await picker.getByRole("button", { name: ".recycle" }).count(), 0);
+    assert.equal(await picker.getByText("liste.m3u").count(), 0, "only folders");
+    await picker.screenshot({ path: `${out}/picker.png`, animations: "disabled" });
+    await picker.getByRole("button", { name: "Diesen Ordner nehmen" }).click();
+    await section.getByText("Medien/Musik", { exact: true }).waitFor();
+    await section.getByLabel(/Nur lesen/).check();
+    await section.screenshot({ path: `${out}/existing.png`, animations: "disabled" });
+    await section.getByRole("button", { name: "Einrichten" }).click();
+    await page.locator("dialog[open]").getByText("Xy7-geheimes-Passwort-9").waitFor();
+    const post = JSON.parse(state.calls.find(([m, p]) => m === "POST" && p.endsWith("/storage"))[2]);
+    assert.deepEqual(post, { existing: true, share: "Medien", folder: "Musik", account: "homeassistant", usage: "media", readOnly: true, register: true });
     await ctx.close();
   }
   {

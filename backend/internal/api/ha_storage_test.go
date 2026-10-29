@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -186,4 +188,63 @@ func findShare(ts *testServer, name string) shares.Share {
 func hasNotice(ts *testServer, kind string) bool {
 	_, body := ts.request("GET", "/api/v1/notifications", nil)
 	return strings.Contains(string(body), kind)
+}
+
+// A share that exists, and a folder in it, read only: the account joins
+// those who may open the share, and Home Assistant gets share/folder.
+func TestStorageForHomeAssistantInAnExistingFolder(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	docs := ts.withShare()
+	os.MkdirAll(filepath.Join(docs, "Musik", "Rock"), 0o755)
+	os.WriteFile(filepath.Join(docs, "notiz.txt"), []byte("x"), 0o644)
+	os.Symlink("/etc", filepath.Join(docs, "link"))
+	fake := &fakeSupervisor{}
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	ts.home.SetSettings(homeassistant.Settings{Enabled: true, URL: srv.URL, Token: "token"})
+
+	for name, req := range map[string]map[string]any{
+		"out of the share":      {"share": "Docs", "existing": true, "folder": "../tank", "usage": "media"},
+		"missing folder":        {"share": "Docs", "existing": true, "folder": "Videos", "usage": "media"},
+		"a file":                {"share": "Docs", "existing": true, "folder": "notiz.txt", "usage": "media"},
+		"a link":                {"share": "Docs", "existing": true, "folder": "link", "usage": "media"},
+		"hidden":                {"share": "Docs", "existing": true, "folder": ".recycle", "usage": "media"},
+		"folder of a new share": {"share": "neu", "volume": "tank", "folder": "Musik", "usage": "media"},
+		"backups read only":     {"share": "Docs", "existing": true, "usage": "backup", "readOnly": true},
+		"no such share":         {"share": "Gibtsnicht", "existing": true, "usage": "media"},
+	} {
+		req["account"] = "hass"
+		if res, body := ts.request("POST", "/api/v1/homeassistant/storage", req); res.StatusCode < 400 {
+			t.Errorf("%s: %d %s", name, res.StatusCode, body)
+		}
+		if _, ok := ts.users.Get("hass"); ok {
+			t.Fatalf("%s: account left behind", name)
+		}
+	}
+
+	res, body := ts.request("POST", "/api/v1/homeassistant/storage", map[string]any{
+		"share": "Docs", "existing": true, "folder": "/Musik/Rock/", "account": "hass", "usage": "media", "readOnly": true, "register": true,
+	})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("setup: %d %s", res.StatusCode, body)
+	}
+	var made struct {
+		Setup      haStorage
+		Registered bool
+	}
+	json.Unmarshal(body, &made)
+	if !made.Registered || made.Setup.Folder != "Musik/Rock" || made.Setup.Mount != "titanos_docs_musik_rock" || !made.Setup.Existing || !made.Setup.ReadOnly {
+		t.Fatalf("setup %s", body)
+	}
+	share := findShare(ts, "Docs")
+	if share.Access["alex"] != "rw" || share.Access["hass"] != "ro" {
+		t.Fatalf("access %v", share.Access)
+	}
+	fake.mu.Lock()
+	mount := fake.mounts[0]
+	fake.mu.Unlock()
+	if mount["share"] != "Docs/Musik/Rock" || mount["read_only"] != true || mount["usage"] != "media" {
+		t.Fatalf("mount %v", mount)
+	}
 }

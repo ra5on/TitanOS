@@ -10,6 +10,9 @@
 	type Usage = 'backup' | 'media' | 'share';
 	type Setup = {
 		share: string;
+		folder?: string;
+		existing?: boolean;
+		readOnly?: boolean;
 		account: string;
 		usage: Usage;
 		mount: string;
@@ -27,6 +30,7 @@
 	type Status = {
 		setup: Setup | null;
 		volumes: string[];
+		shares: { name: string; volume: string }[];
 		homeAssistant: boolean;
 		server: string;
 		backup?: Backup;
@@ -47,7 +51,16 @@
 		usage: 'backup' as Usage,
 		quotaGiB: '',
 		register: true,
+		existing: false,
+		existingShare: '',
+		folder: '',
+		readOnly: false,
 	});
+	// The folder chooser for a share that exists: one level at a time.
+	let picking = $state(false);
+	let pickDir = $state('');
+	let pickDirs = $state<string[] | null>(null);
+	let pickError = $state('');
 	let maxAge = $state(3);
 
 	const usages: Usage[] = ['backup', 'media', 'share'];
@@ -59,6 +72,7 @@
 	function take(next: Status) {
 		status = next;
 		if (!form.volume) form.volume = next.volumes[0] ?? '';
+		if (!form.existingShare) form.existingShare = next.shares[0]?.name ?? '';
 		if (!next.homeAssistant) form.register = false;
 		if (next.setup) maxAge = next.setup.maxAgeDays;
 	}
@@ -90,14 +104,28 @@
 
 	async function setUp(event: SubmitEvent) {
 		event.preventDefault();
-		const quota = Number(form.quotaGiB) || 0;
-		const made = await run('setup', () =>
-			api.post<Result>('/homeassistant/storage', {
-				...form,
-				quotaGiB: quota,
-				register: form.register && !!status?.homeAssistant,
-			}),
-		);
+		const register = form.register && !!status?.homeAssistant;
+		const readOnly = form.readOnly && form.usage !== 'backup';
+		const body = form.existing
+			? {
+					existing: true,
+					share: form.existingShare,
+					folder: form.folder,
+					account: form.account,
+					usage: form.usage,
+					readOnly,
+					register,
+				}
+			: {
+					volume: form.volume,
+					share: form.share,
+					account: form.account,
+					usage: form.usage,
+					quotaGiB: Number(form.quotaGiB) || 0,
+					readOnly,
+					register,
+				};
+		const made = await run('setup', () => api.post<Result>('/homeassistant/storage', body));
 		if (made) {
 			result = made;
 			copied = false;
@@ -141,6 +169,34 @@
 			copied = false;
 		}
 	}
+	function place(setup: Setup) {
+		return setup.folder ? `${setup.share}/${setup.folder}` : setup.share;
+	}
+
+	async function browse(dir: string) {
+		pickError = '';
+		try {
+			const list = await api.get<{ name: string; dir: boolean }[]>(
+				`/files/list?${new URLSearchParams({ root: `share/${form.existingShare}`, path: dir })}`,
+			);
+			pickDir = dir;
+			pickDirs = list
+				.filter((entry) => entry.dir && !entry.name.startsWith('.'))
+				.map((entry) => entry.name)
+				.sort((a, b) => a.localeCompare(b));
+		} catch (err) {
+			pickError = failure(err);
+		}
+	}
+	function openPicker() {
+		picking = true;
+		pickDirs = null;
+		void browse(form.folder);
+	}
+	function up() {
+		void browse(pickDir.includes('/') ? pickDir.slice(0, pickDir.lastIndexOf('/')) : '');
+	}
+
 	function registerProblem(text: string) {
 		return text === 'no_supervisor' ? t('hastore.noSupervisor') : text;
 	}
@@ -162,22 +218,73 @@
 			<p class="notice-warn">{t('hastore.noVolume')}</p>
 		{:else}
 			<form class="setup" onsubmit={setUp}>
+				{#if status.shares.length}
+					<fieldset class="mode" aria-label={t('hastore.where')}>
+						<label class="check"
+							><input
+								type="radio"
+								name="hastore-mode"
+								value={false}
+								bind:group={form.existing}
+							/><span>{t('hastore.newShare')}</span></label
+						>
+						<label class="check"
+							><input
+								type="radio"
+								name="hastore-mode"
+								value={true}
+								bind:group={form.existing}
+							/><span>{t('hastore.existingShare')}</span></label
+						>
+					</fieldset>
+				{/if}
 				<div class="grid">
-					<label class="stack"
-						><span>{t('hastore.volume')}</span>
-						<select class="field" bind:value={form.volume}>
-							{#each status.volumes as volume (volume)}<option value={volume}>{volume}</option
-								>{/each}
-						</select></label
-					>
-					<label class="stack"
-						><span>{t('hastore.share')}</span><input
-							class="field mono"
-							bind:value={form.share}
-							spellcheck="false"
-							autocapitalize="off"
-						/></label
-					>
+					{#if form.existing}
+						<label class="stack"
+							><span>{t('hastore.share')}</span>
+							<select
+								class="field"
+								bind:value={form.existingShare}
+								onchange={() => (form.folder = '')}
+							>
+								{#each status.shares as share (share.name)}<option value={share.name}
+										>{share.name} ({share.volume})</option
+									>{/each}
+							</select></label
+						>
+						<div class="stack folder">
+							<span id="hastore-folder">{t('hastore.folder')}</span>
+							<div class="folder-row">
+								<span class="field mono path" aria-labelledby="hastore-folder"
+									>{form.folder
+										? `${form.existingShare}/${form.folder}`
+										: t('hastore.wholeShare')}</span
+								>
+								<button
+									class="btn"
+									type="button"
+									disabled={!form.existingShare}
+									onclick={openPicker}>{t('hastore.chooseFolder')}</button
+								>
+							</div>
+						</div>
+					{:else}
+						<label class="stack"
+							><span>{t('hastore.volume')}</span>
+							<select class="field" bind:value={form.volume}>
+								{#each status.volumes as volume (volume)}<option value={volume}>{volume}</option
+									>{/each}
+							</select></label
+						>
+						<label class="stack"
+							><span>{t('hastore.share')}</span><input
+								class="field mono"
+								bind:value={form.share}
+								spellcheck="false"
+								autocapitalize="off"
+							/></label
+						>
+					{/if}
 					<label class="stack"
 						><span>{t('hastore.account')}</span><input
 							class="field mono"
@@ -186,17 +293,19 @@
 							autocapitalize="off"
 						/></label
 					>
-					<label class="stack"
-						><span>{t('hastore.quota')}</span><input
-							class="field"
-							type="number"
-							min="0"
-							step="1"
-							inputmode="numeric"
-							placeholder={t('hastore.quotaNone')}
-							bind:value={form.quotaGiB}
-						/></label
-					>
+					{#if !form.existing}
+						<label class="stack"
+							><span>{t('hastore.quota')}</span><input
+								class="field"
+								type="number"
+								min="0"
+								step="1"
+								inputmode="numeric"
+								placeholder={t('hastore.quotaNone')}
+								bind:value={form.quotaGiB}
+							/></label
+						>
+					{/if}
 				</div>
 				<fieldset class="usage">
 					<legend>{t('hastore.usage')}</legend>
@@ -214,6 +323,14 @@
 						>
 					{/each}
 				</fieldset>
+				{#if form.usage !== 'backup'}
+					<label class="check"
+						><input type="checkbox" bind:checked={form.readOnly} /><span
+							>{t('hastore.readOnly')}</span
+						></label
+					>
+				{/if}
+				{#if form.existing}<p class="muted hint">{t('hastore.existingHint')}</p>{/if}
 				<label class="check"
 					><input
 						type="checkbox"
@@ -228,7 +345,9 @@
 				<div class="row-actions">
 					<button
 						class="btn btn-primary"
-						disabled={!!busy || !form.volume || !form.share || !form.account}
+						disabled={!!busy ||
+							!form.account ||
+							(form.existing ? !form.existingShare : !form.volume || !form.share)}
 						>{t(busy === 'setup' ? 'hastore.settingUp' : 'hastore.setUp')}</button
 					>
 				</div>
@@ -238,7 +357,11 @@
 		{@const setup = status.setup}
 		<dl class="values">
 			<dt>{t('hastore.share')}</dt>
-			<dd class="mono">{setup.share}</dd>
+			<dd class="mono">
+				{place(setup)}{#if setup.readOnly}<span class="muted">
+						· {t('hastore.readOnlyShort')}</span
+					>{/if}
+			</dd>
 			<dt>{t('hastore.account')}</dt>
 			<dd class="mono">{setup.account}</dd>
 			<dt>{t('hastore.usage')}</dt>
@@ -327,7 +450,7 @@
 			<dt>{t('hastore.protocol')}</dt>
 			<dd>Samba/Windows (CIFS)</dd>
 			<dt>{t('hastore.share')}</dt>
-			<dd class="mono">{result.setup.share}</dd>
+			<dd class="mono">{place(result.setup)}</dd>
 			<dt>{t('hastore.account')}</dt>
 			<dd class="mono">{result.setup.account}</dd>
 			<dt>{t('hastore.password')}</dt>
@@ -342,6 +465,49 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn btn-primary" onclick={() => (result = null)}
 				>{t('common.close')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
+{#if picking}
+	<Dialog
+		title={t('hastore.chooseFolderIn', { share: form.existingShare })}
+		onclose={() => (picking = false)}
+	>
+		<p class="mono crumbs">{form.existingShare}{pickDir ? `/${pickDir}` : ''}</p>
+		{#if pickError}<p class="notice-error" role="alert">{pickError}</p>{/if}
+		{#if pickDirs === null}
+			<p class="muted" role="status">{t('common.loading')}</p>
+		{:else}
+			<ul class="dirs">
+				{#if pickDir}<li>
+						<button type="button" class="dir" onclick={up}>‹ {t('hastore.up')}</button>
+					</li>{/if}
+				{#each pickDirs as name (name)}
+					<li>
+						<button
+							type="button"
+							class="dir mono"
+							onclick={() => browse(pickDir ? `${pickDir}/${name}` : name)}>{name}</button
+						>
+					</li>
+				{:else}
+					<li class="muted">{t('hastore.noSubfolders')}</li>
+				{/each}
+			</ul>
+		{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (picking = false)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				onclick={() => {
+					form.folder = pickDir;
+					picking = false;
+				}}>{t('hastore.useThisFolder')}</button
 			>
 		</div>
 	</Dialog>
@@ -384,6 +550,58 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 12px;
+	}
+	.mode {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 20px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	.folder-row {
+		display: flex;
+		gap: 8px;
+	}
+	.folder-row .path {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.crumbs {
+		margin: 0;
+		color: var(--muted);
+		overflow-wrap: anywhere;
+	}
+	.dirs {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-height: 20rem;
+		min-width: min(28rem, 100%);
+		margin: 0;
+		padding: 0;
+		overflow-y: auto;
+		list-style: none;
+	}
+	.dir {
+		width: 100%;
+		padding: 8px 10px;
+		background: none;
+		border: 0;
+		border-radius: var(--radius-small);
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.dir:hover,
+	.dir:focus-visible {
+		background: var(--chip);
 	}
 	.usage {
 		display: flex;

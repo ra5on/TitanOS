@@ -31,22 +31,27 @@ type Mount struct {
 // MountRequest adds SMB storage to Home Assistant. The password goes to
 // Home Assistant only and is not kept by TitanOS.
 type MountRequest struct {
-	Name     string
-	Usage    string
-	Server   string
+	Name   string
+	Usage  string
+	Server string
+	// Share may name a folder in it, share/folder: the Supervisor mounts
+	// //server/share/folder, which SMB serves as that folder.
 	Share    string
 	Username string
 	Password string
+	// ReadOnly is for media and shares; backups need to write.
+	ReadOnly bool
 }
 
 // Mount names are what Home Assistant accepts: letters, digits, underscore.
 var mountNameRE = regexp.MustCompile(`^[A-Za-z0-9_]{1,40}$`)
 
-// MountName is the name TitanOS gives the storage of a share.
+// MountName is the name TitanOS gives the storage of a share or of a
+// folder in it (share/folder).
 func MountName(share string) string {
 	var b strings.Builder
 	b.WriteString("titanos_")
-	for _, r := range strings.ToLower(share) {
+	for _, r := range strings.ToLower(strings.Trim(share, "/")) {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
 			b.WriteRune(r)
 		} else {
@@ -89,14 +94,18 @@ func (m *Manager) AddMount(ctx context.Context, req MountRequest) error {
 	if !m.Active() {
 		return ErrOff
 	}
-	if !mountNameRE.MatchString(req.Name) || !ValidUsage(req.Usage) || req.Server == "" || req.Share == "" || req.Username == "" || req.Password == "" {
+	if !mountNameRE.MatchString(req.Name) || !ValidUsage(req.Usage) || req.Server == "" || req.Share == "" || strings.HasPrefix(req.Share, "/") || req.Username == "" || req.Password == "" || req.ReadOnly && req.Usage == "backup" {
 		return invalid("network storage")
 	}
-	_, err := m.supervisor(ctx, "post", "/mounts", map[string]any{
+	data := map[string]any{
 		"name": req.Name, "usage": req.Usage, "type": "cifs",
 		"server": req.Server, "share": req.Share,
 		"username": req.Username, "password": req.Password,
-	})
+	}
+	if req.ReadOnly {
+		data["read_only"] = true
+	}
+	_, err := m.supervisor(ctx, "post", "/mounts", data)
 	return err
 }
 

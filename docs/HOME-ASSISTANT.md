@@ -155,6 +155,18 @@ Add-ons.
   die nur dieses Konto lesen und schreiben darf. Scheitert die Freigabe, wird
   das Konto wieder entfernt. Ein vorhandenes Konto gleichen Namens wird nie
   übernommen.
+- **Vorhandene Freigabe und Ordner:** Statt einer neuen Freigabe lässt sich
+  eine vorhandene wählen (nur SMB-Freigaben auf eingebundenen Volumes) und
+  darin ein Ordner (Auswahl über die Datei-API, nur Ordner, keine versteckten).
+  Das neue Konto kommt zu den Rechten der Freigabe hinzu, alle bisherigen
+  bleiben. Home Assistant bekommt `freigabe/ordner`: Der Supervisor nimmt das im
+  Feld `share` an (seine Prüfung verlangt nur den Anfang ohne Schrägstrich) und
+  bindet `//server/freigabe/ordner` ein. Der Ordner muss existieren und wird ohne
+  Linkverfolgung innerhalb der Freigabe geprüft. Name in Home Assistant
+  `titanos_<freigabe>_<ordner>`.
+- **Nur lesen:** für Medien und Freigaben wählbar. Das Konto bekommt nur
+  Leserecht, und Home Assistant bindet mit `read_only` ein. Für Backups
+  abgelehnt.
 - **Passwort:** wird genau einmal angezeigt (mit Kopieren) und nirgends
   gespeichert, auch nicht in `/config`. „Erneut in Home Assistant eintragen“
   vergibt ein neues.

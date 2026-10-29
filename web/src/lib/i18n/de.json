@@ -7427,5 +7427,20 @@
 	"error.ha_storage_account_exists": "Ein Konto mit diesem Namen gibt es schon. Wähle einen anderen Namen.",
 	"error.ha_storage_usage": "Unbekannter Zweck.",
 	"error.ha_storage_max_age": "Die Zahl der Tage passt nicht.",
-	"error.ha_not_connected": "Home Assistant ist nicht verbunden."
+	"error.ha_not_connected": "Home Assistant ist nicht verbunden.",
+	"hastore.where": "Wo",
+	"hastore.newShare": "Neue Freigabe anlegen",
+	"hastore.existingShare": "Vorhandene Freigabe verwenden",
+	"hastore.existingHint": "Das Konto für Home Assistant bekommt Zugriff auf diese Freigabe; alle bisherigen Rechte bleiben. Home Assistant sieht nur den gewählten Ordner.",
+	"hastore.folder": "Ordner",
+	"hastore.wholeShare": "ganze Freigabe",
+	"hastore.chooseFolder": "Ordner wählen …",
+	"hastore.chooseFolderIn": "Ordner in {share}",
+	"hastore.up": "Eine Ebene höher",
+	"hastore.noSubfolders": "Keine Unterordner",
+	"hastore.useThisFolder": "Diesen Ordner nehmen",
+	"hastore.readOnly": "Nur lesen (Home Assistant kann dort nichts ändern)",
+	"hastore.readOnlyShort": "nur lesen",
+	"error.ha_storage_folder": "Diesen Ordner gibt es in der Freigabe nicht, oder er ist nicht wählbar.",
+	"error.ha_storage_read_only": "Backups brauchen Schreibzugriff."
 }

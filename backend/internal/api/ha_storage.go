@@ -16,9 +16,14 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,12 +36,19 @@ const haStorageFile = "homeassistant/storage.json"
 
 // haStorage is what was set up; older titand ignore the file.
 type haStorage struct {
-	Share   string    `json:"share"`
-	Account string    `json:"account"`
-	Usage   string    `json:"usage"`
-	Mount   string    `json:"mount"`
-	Server  string    `json:"server"`
-	Created time.Time `json:"created"`
+	Share string `json:"share"`
+	// Folder is a folder in the share Home Assistant gets instead of the
+	// whole share (slash separated, empty: all of it).
+	Folder string `json:"folder,omitempty"`
+	// Existing: the share was there before; the account was only given
+	// access to it.
+	Existing bool      `json:"existing,omitempty"`
+	ReadOnly bool      `json:"readOnly,omitempty"`
+	Account  string    `json:"account"`
+	Usage    string    `json:"usage"`
+	Mount    string    `json:"mount"`
+	Server   string    `json:"server"`
+	Created  time.Time `json:"created"`
 	// MaxAgeDays: a notice when no backup of Home Assistant arrived on the
 	// share for this long; 0 is off. Only for usage backup.
 	MaxAgeDays int `json:"maxAgeDays"`
@@ -113,7 +125,15 @@ func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
 	backup := s.haStore.backup
 	s.haStore.mu.Unlock()
 	active := s.opts.HomeAssistant != nil && s.opts.HomeAssistant.Active()
-	res := map[string]any{"setup": setup, "volumes": s.opts.Storage.Mounted(), "homeAssistant": active, "server": s.haServerAddress(r)}
+	// The shares to choose from: those on a mounted volume, by name.
+	mounted := s.opts.Storage.Mounted()
+	choices := []map[string]string{}
+	for _, share := range s.opts.Shares.List() {
+		if slices.Contains(mounted, share.Volume) && share.SMB {
+			choices = append(choices, map[string]string{"name": share.Name, "volume": share.Volume})
+		}
+	}
+	res := map[string]any{"setup": setup, "volumes": mounted, "shares": choices, "homeAssistant": active, "server": s.haServerAddress(r)}
 	if setup != nil && setup.Usage == "backup" && !backup.Checked.IsZero() {
 		res["backup"] = backup
 	}
@@ -134,6 +154,11 @@ func (s *Server) handleHAStorageSetup(w http.ResponseWriter, r *http.Request) {
 		Usage    string `json:"usage"`
 		QuotaGiB uint64 `json:"quotaGiB"`
 		Register bool   `json:"register"`
+		// Existing uses a share that is there already; Folder a folder in
+		// it; ReadOnly gives the account (and Home Assistant) reading only.
+		Existing bool   `json:"existing"`
+		Folder   string `json:"folder"`
+		ReadOnly bool   `json:"readOnly"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -151,21 +176,62 @@ func (s *Server) handleHAStorageSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "ha_not_connected", "Home Assistant is not connected")
 		return
 	}
+	if req.ReadOnly && req.Usage == "backup" {
+		writeError(w, http.StatusBadRequest, "ha_storage_read_only", "backups need to write")
+		return
+	}
 	if _, exists := s.opts.Users.Get(req.Account); exists {
 		writeError(w, http.StatusConflict, "ha_storage_account_exists", "an account of this name exists; choose another name")
 		return
+	}
+	var existing shares.Share
+	if req.Existing {
+		var ok bool
+		if existing, ok = s.findShare(req.Share); !ok {
+			writeError(w, http.StatusNotFound, "share_not_found", "no such share")
+			return
+		}
+		req.Volume = existing.Volume
+	} else if req.Folder != "" {
+		writeError(w, http.StatusBadRequest, "ha_storage_folder", "a folder only goes with a share that exists")
+		return
+	}
+	folder, ok := haFolder(req.Folder)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "ha_storage_folder", "not a folder in the share")
+		return
+	}
+	if folder != "" && !s.haFolderExists(existing, folder) {
+		writeError(w, http.StatusBadRequest, "ha_storage_folder", "the folder does not exist in the share")
+		return
+	}
+	access := shares.ReadWrite
+	if req.ReadOnly {
+		access = shares.ReadOnly
 	}
 	password := haPassword()
 	if _, err := s.opts.Users.Create(req.Account, password, auth.RoleUser); err != nil {
 		writeAccountError(w, err)
 		return
 	}
-	share := shares.Share{
-		Name: req.Share, Volume: req.Volume, SMB: true,
-		Access: map[string]string{req.Account: shares.ReadWrite},
-		Quota:  req.QuotaGiB << 30,
+	var err error
+	if req.Existing {
+		// Everyone keeps their access; the account joins them.
+		changed := existing
+		changed.Access = maps.Clone(existing.Access)
+		if changed.Access == nil {
+			changed.Access = map[string]string{}
+		}
+		changed.Access[req.Account] = access
+		err = s.opts.Shares.Update(existing.Name, changed, s.opts.Storage.Names(), s.userNames())
+	} else {
+		err = s.opts.Shares.Create(shares.Share{
+			Name: req.Share, Volume: req.Volume, SMB: true,
+			Access: map[string]string{req.Account: access},
+			Quota:  req.QuotaGiB << 30,
+		}, s.opts.Storage.Names(), s.userNames())
 	}
-	if err := s.opts.Shares.Create(share, s.opts.Storage.Names(), s.userNames()); err != nil {
+	if err != nil {
 		// Nothing half: the account was only for this share.
 		if removeErr := s.opts.Users.Delete(req.Account); removeErr != nil {
 			slog.Warn("account for Home Assistant not removed again", "account", req.Account, "err", removeErr)
@@ -176,8 +242,9 @@ func (s *Server) handleHAStorageSetup(w http.ResponseWriter, r *http.Request) {
 	s.opts.Shares.Kick()
 	s.opts.SSH.Kick()
 	setup := &haStorage{
-		Share: req.Share, Account: req.Account, Usage: req.Usage,
-		Mount: homeassistant.MountName(req.Share), Server: s.haServerAddress(r),
+		Share: req.Share, Folder: folder, Existing: req.Existing, ReadOnly: req.ReadOnly,
+		Account: req.Account, Usage: req.Usage,
+		Mount: homeassistant.MountName(path.Join(req.Share, folder)), Server: s.haServerAddress(r),
 		Created: time.Now().UTC().Truncate(time.Second),
 	}
 	if req.Usage == "backup" {
@@ -237,8 +304,8 @@ func (s *Server) haRegister(ctx context.Context, setup *haStorage, password stri
 		return false, "no address of the NAS that Home Assistant can reach"
 	}
 	err := s.opts.HomeAssistant.AddMount(ctx, homeassistant.MountRequest{
-		Name: setup.Mount, Usage: setup.Usage, Server: setup.Server, Share: setup.Share,
-		Username: setup.Account, Password: password,
+		Name: setup.Mount, Usage: setup.Usage, Server: setup.Server, Share: path.Join(setup.Share, setup.Folder),
+		Username: setup.Account, Password: password, ReadOnly: setup.ReadOnly,
 	})
 	if err != nil {
 		var ce *homeassistant.CommandError
@@ -378,6 +445,35 @@ func (s *Server) haServerAddress(r *http.Request) string {
 		host = r.Host
 	}
 	return host
+}
+
+// haFolder cleans a folder given relative to the share: no way out of it,
+// no hidden or internal folders.
+func haFolder(folder string) (string, bool) {
+	folder = strings.Trim(strings.ReplaceAll(folder, "\\", "/"), "/")
+	if folder == "" {
+		return "", true
+	}
+	if len(folder) > 512 || !fs.ValidPath(folder) {
+		return "", false
+	}
+	for _, part := range strings.Split(folder, "/") {
+		if strings.HasPrefix(part, ".") || strings.ContainsAny(part, "\x00\n\r") {
+			return "", false
+		}
+	}
+	return folder, true
+}
+
+// haFolderExists checks within the share, following no links.
+func (s *Server) haFolderExists(share shares.Share, folder string) bool {
+	root, err := os.OpenRoot(s.opts.Shares.Path(share))
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	info, err := root.Lstat(folder)
+	return err == nil && info.IsDir()
 }
 
 // haPassword is the password of the account Home Assistant mounts with.

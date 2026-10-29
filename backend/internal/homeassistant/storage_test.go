@@ -102,13 +102,24 @@ func TestMountsThroughTheSupervisor(t *testing.T) {
 	if sent["endpoint"] != "/mounts" || data["type"] != "cifs" || data["password"] != "pw" || data["share"] != "Home-Assistant" || data["usage"] != "backup" {
 		t.Fatalf("sent %v", sent)
 	}
+	// A folder in the share, read only.
+	if err := m.AddMount(ctx, MountRequest{Name: MountName("Medien/Musik"), Usage: "media", Server: "192.168.1.5", Share: "Medien/Musik", Username: "ha", Password: "pw", ReadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	sent = fake.seen[len(fake.seen)-1]
+	data = sent["data"].(map[string]any)
+	if data["share"] != "Medien/Musik" || data["read_only"] != true || data["name"] != "titanos_medien_musik" {
+		t.Fatalf("folder: %v", data)
+	}
 	// The Supervisor's reason comes back.
 	req.Server = "10.0.0.9"
 	var ce *CommandError
 	if err := m.AddMount(ctx, req); !errors.As(err, &ce) || ce.Message == "" {
 		t.Fatalf("refused mount: %v", err)
 	}
-	for _, bad := range []MountRequest{{Name: "a b", Usage: "backup", Server: "s", Share: "x", Username: "u", Password: "p"}, {Name: "ok", Usage: "music", Server: "s", Share: "x", Username: "u", Password: "p"}} {
+	for _, bad := range []MountRequest{{Name: "a b", Usage: "backup", Server: "s", Share: "x", Username: "u", Password: "p"}, {Name: "ok", Usage: "music", Server: "s", Share: "x", Username: "u", Password: "p"},
+		{Name: "ok", Usage: "backup", Server: "s", Share: "x", Username: "u", Password: "p", ReadOnly: true},
+		{Name: "ok", Usage: "media", Server: "s", Share: "/x", Username: "u", Password: "p"}} {
 		if err := m.AddMount(ctx, bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v: %v", bad, err)
 		}
