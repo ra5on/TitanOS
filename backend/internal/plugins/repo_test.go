@@ -216,6 +216,12 @@ func TestRepoRejectsTamperingAndRollback(t *testing.T) {
 	if err := r.m.RefreshCatalog(ctx, true); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unsigned catalog: %v", err)
 	}
+	// So is a missing one: the catalog is there, only its signature is not.
+	r.pointer(t)
+	os.Remove(pointer + ".minisig")
+	if err := r.m.RefreshCatalog(ctx, true); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("catalog without signature: %v", err)
+	}
 }
 
 func TestRepoUpdateReplacesInstalledPluginWithNewerVersion(t *testing.T) {

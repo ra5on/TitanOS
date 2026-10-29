@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -71,7 +72,7 @@ func freeLabel(base string, taken func(string) bool) string {
 // app's name, reachable from the home network only; an existing route
 // keeps its names and port and is switched on. key, if not empty, is
 // stored as the auth key first; without one stored, ErrTailnetNoKey.
-func (m *Manager) PublishTailnet(app string, port int, key string) (Route, error) {
+func (m *Manager) PublishTailnet(app string, port int, key string) (_ Route, err error) {
 	if !appRE.MatchString(app) {
 		return Route{}, fmt.Errorf("%w: app name", ErrInvalid)
 	}
@@ -101,11 +102,22 @@ func (m *Manager) PublishTailnet(app string, port int, key string) (Route, error
 	if off {
 		return Route{}, ErrProxyOff
 	}
-	if key = strings.TrimSpace(key); key != "" {
+	previous := m.currentKey()
+	if key = strings.TrimSpace(key); key != "" && key != previous {
 		if err := m.SetTailnetKey(key); err != nil {
 			return Route{}, err
 		}
-	} else if m.currentKey() == "" {
+		// The key is for all devices of the apps: one that came with a
+		// publish that failed does not replace the one before. Without one
+		// before it stays, so the dialog need not ask for it again.
+		defer func() {
+			if err != nil && previous != "" {
+				if restore := m.SetTailnetKey(previous); restore != nil {
+					slog.Warn("previous tailnet auth key not restored", "err", restore)
+				}
+			}
+		}()
+	} else if previous == "" {
 		return Route{}, ErrTailnetNoKey
 	}
 	label := DNSLabel(app)
@@ -116,7 +128,10 @@ func (m *Manager) PublishTailnet(app string, port int, key string) (Route, error
 		route = Route{Name: freeLabel(label, func(n string) bool { return slices.Contains(names, n) }), Port: port, LocalOnly: true, TailnetOnly: true}
 	} else if !route.Enabled {
 		// It was off: taking the app out of the tailnet again turns it off.
-		route.TailnetOnly = true
+		// Switching it on also brings back its ordinary names and domains;
+		// they answer the home network only, like those of a new route,
+		// not whoever the route once let in.
+		route.TailnetOnly, route.LocalOnly, route.Networks = true, true, nil
 	}
 	if !route.Tailscale {
 		// The device is named after the app, unless that one is taken.

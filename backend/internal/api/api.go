@@ -47,6 +47,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -143,7 +144,9 @@ type Options struct {
 	PowerButton   *system.PowerButtonManager
 	MemoryPolicy  *system.MemoryPolicy
 	Power         system.Power
-	Version       string
+	// Shutdown ends the guests before a planned restart or shutdown.
+	Shutdown *shutdown.Manager
+	Version  string
 	// ShareDir holds the texts of the licenses.
 	ShareDir string
 	// SecureCookies is on whenever the API is served over HTTPS.
@@ -162,16 +165,20 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	opts        Options
-	sessions    *auth.Sessions
-	tokens      *auth.Tokens
-	limiter     *auth.Limiter
-	prefs       *preferences
-	loginLook   loginLook
-	appIcon     appIcons
-	dav         davState
-	mcp         mcpState
-	handler     http.Handler
+	opts      Options
+	sessions  *auth.Sessions
+	tokens    *auth.Tokens
+	limiter   *auth.Limiter
+	prefs     *preferences
+	loginLook loginLook
+	appIcon   appIcons
+	dav       davState
+	mcp       mcpState
+	haStore   haStorageState
+	handler   http.Handler
+	// patterns are all routes of the mux, for tests that compare them
+	// with the route lists of the assistant and the public API.
+	patterns    []string
 	knowledge   *assistant.Knowledge
 	automations *assistant.Automations
 	chats       *assistant.Chats
@@ -275,13 +282,14 @@ func New(opts Options) *Server {
 		s.opts.Notify.SetPersonalDataDir(s.chatsDir)
 	}
 	s.agentJobs = map[string]*agentJob{}
+	s.haStore.check = make(chan struct{}, 1)
 	s.agentSlots = make(chan struct{}, 1)
 	if s.opts.HomeAssistant != nil {
 		s.opts.HomeAssistant.OnEvent("mobile_app_notification_action", s.handleHANotificationAction)
 		s.opts.HomeAssistant.OnEvent("titanos_ask", s.handleAssist)
 	}
 
-	mux := http.NewServeMux()
+	mux := &routeMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
 	mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
@@ -324,6 +332,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
 	mux.HandleFunc("GET /api/v1/system/power", s.requireAdmin(s.handlePowerStatus))
 	mux.HandleFunc("DELETE /api/v1/system/power", s.requireAdmin(s.handlePowerCancel))
+	mux.HandleFunc("POST /api/v1/system/power/now", s.requireAdmin(s.handlePowerNow))
 
 	// Everyone may see the volumes; only administrators may change disks.
 	s.operationsRoutes(mux)
@@ -596,6 +605,13 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/homeassistant/undo", s.requireAdmin(s.handleHAUndo))
 	mux.HandleFunc("POST /api/v1/homeassistant/call", s.requireAdmin(s.handleHACall))
 	mux.HandleFunc("GET /api/v1/homeassistant/notify-services", s.requireUser(s.handleHANotifyServices))
+	// Storage for Home Assistant: a share, an account and the entry there.
+	mux.HandleFunc("GET /api/v1/homeassistant/storage", s.requireAdmin(s.handleHAStorage))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage", s.requireAdmin(s.handleHAStorageAdd))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage/register", s.requireAdmin(s.handleHAStorageRegister))
+	mux.HandleFunc("POST /api/v1/homeassistant/storage/check", s.requireAdmin(s.handleHAStorageCheck))
+	mux.HandleFunc("PUT /api/v1/homeassistant/storage/{mount}", s.requireAdmin(s.handleHAStorageChange))
+	mux.HandleFunc("DELETE /api/v1/homeassistant/storage/{mount}", s.requireAdmin(s.handleHAStorageRemove))
 	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
 	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
 	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
@@ -749,8 +765,25 @@ func New(opts Options) *Server {
 	mux.Handle("/", uiHandler(opts.UI))
 
 	// Browsers must not let another website send requests with our cookie.
-	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux))))
+	s.patterns = mux.patterns
+	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux))))
 	return s
+}
+
+// routeMux is a ServeMux that remembers its patterns.
+type routeMux struct {
+	*http.ServeMux
+	patterns []string
+}
+
+func (m *routeMux) Handle(pattern string, h http.Handler) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.Handle(pattern, h)
+}
+
+func (m *routeMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Request)) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.HandleFunc(pattern, h)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

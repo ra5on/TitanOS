@@ -57,6 +57,9 @@ type ollamaChunk struct {
 	PromptEvalCount int   `json:"prompt_eval_count"`
 	EvalCount       int   `json:"eval_count"`
 	TotalDuration   int64 `json:"total_duration"`
+	// pending is set by the cloud providers for parts of a tool call that
+	// are still being put together: bytes that arrived, nothing to show.
+	pending int
 }
 
 func (m *Manager) request(ctx context.Context, method, base, path string, body any) (*http.Response, error) {

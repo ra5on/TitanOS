@@ -727,6 +727,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 			if err := m.checkExisting(ctx, disk, mounted); err != nil {
 				return err
 			}
+			if other := m.ownerOf(*disk, vm.Name); other != "" {
+				return fmt.Errorf("%w: %s is used by the VM %s", ErrBadImage, disk.Path, other)
+			}
 			continue
 		}
 		if disk.Format != "qcow2" && disk.Format != "raw" {

@@ -53,6 +53,10 @@ const (
 	MaxAttachments = 4
 )
 
+// streamSilence is how long a model may send nothing before its call is
+// given up. Text, thinking and the parts of a tool call all count.
+var streamSilence = 2 * time.Minute
+
 var (
 	ErrTransient    = errors.New("temporary model failure")
 	ErrWaiting      = errors.New("agent waiting")
@@ -815,7 +819,7 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		request := chatRequest{Model: model, Messages: messages, Tools: definitions, UseTools: withTools,
 			Think: slices.Contains(caps, "thinking"), NumCtx: settings.NumCtx, Temperature: settings.Temperature}
 		var answer, thought strings.Builder
-		received := 0
+		received, pending := 0, 0
 		completed := false
 		var calls []ollamaToolCall
 		var counts ollamaChunk
@@ -835,10 +839,19 @@ func (m *Manager) Answer(ctx context.Context, chat *Chat, turn Turn) error {
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
 		// Bound silence, not the whole job. Streaming progress renews this timer.
-		idle := time.AfterFunc(2*time.Minute, cancel)
+		idle := time.AfterFunc(streamSilence, cancel)
 		defer idle.Stop()
 		err := provider.chat(callCtx, request, func(chunk ollamaChunk) error {
-			idle.Reset(2 * time.Minute)
+			idle.Reset(streamSilence)
+			if chunk.pending > 0 {
+				// Arguments of a tool call on the way: progress, and they
+				// count against the limit before they are complete.
+				pending += chunk.pending
+				if pending > 2<<20 {
+					return fmt.Errorf("%w: model response too large", ErrUpstream)
+				}
+				return nil
+			}
 			received += len(chunk.Message.Content) + len(chunk.Message.Thinking)
 			for _, call := range chunk.Message.ToolCalls {
 				received += len(call.Function.Name) + len(call.Function.Arguments)

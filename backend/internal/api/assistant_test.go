@@ -361,13 +361,18 @@ func TestAssistantAreas(t *testing.T) {
 }
 
 func TestAssistantAPIRoutes(t *testing.T) {
-	source, err := os.ReadFile("api.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, route := range apiRouteList() {
-		if !strings.Contains(string(source), `"`+route+`"`) {
-			t.Errorf("%s is not a route of the server", route)
+	// Each route is served by a pattern of the mux: itself, or one with a
+	// parameter where the route has a word (POST /plugins/{name}/enable).
+	// That no other pattern is more specific checks route_lists_test.go.
+	ts := newTestServer(t)
+	for _, r := range apiRoutes {
+		served := slices.ContainsFunc(ts.server.patterns, func(pattern string) bool {
+			method, path, _ := strings.Cut(pattern, " ")
+			_, ok := matchPattern(strings.TrimPrefix(path, "/api/v1"), r.Path)
+			return method == r.Method && strings.HasPrefix(path, "/api/v1/") && ok
+		})
+		if !served {
+			t.Errorf("%s /api/v1%s is not a route of the server", r.Method, r.Path)
 		}
 	}
 	for _, secret := range []string{"/backups/{id}/password", "/config-backup/download", "/network/confirm", "/firewall/confirm", "/system/certificate", "/terminal/shell", "/files/download", "/users"} {

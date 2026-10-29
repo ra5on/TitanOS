@@ -1,7 +1,7 @@
 <script lang="ts">
-	// All HTTPS names in one place (backend package appproxy): what holds for
-	// all names, the names of Docker apps and names for targets outside
-	// Docker (VMs, containers, devices in the home network).
+	// All HTTPS names in one place (backend package appproxy): the names of
+	// Docker apps and of targets outside Docker (VMs, containers, devices in
+	// the home network) first, one line each, then what holds for all names.
 	import { onMount } from 'svelte';
 	import { api, ApiError, type AppProxyRoute, type AppProxyStatus } from '#lib/api.ts';
 	import {
@@ -16,6 +16,8 @@
 		type ProxyForm,
 	} from '#lib/app-proxy.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -33,6 +35,9 @@
 	let generalError = $state('');
 	let generalNotice = $state('');
 	let offBusy = $state(false);
+	let offError = $state('');
+	// Routes whose further addresses and target are shown, by kind and key.
+	let expanded = $state<Record<string, boolean>>({});
 	let removing = $state<{ kind: Kind; route: AppProxyRoute } | null>(null);
 	let editing = $state<Editing | null>(null);
 	let editError = $state('');
@@ -115,11 +120,11 @@
 	async function setOff(off: boolean) {
 		if (offBusy) return;
 		offBusy = true;
-		generalError = '';
+		offError = '';
 		try {
 			take(await api.put<AppProxyStatus>('/docker/proxy', { off }));
 		} catch (err) {
-			generalError = failure(err);
+			offError = failure(err);
 		} finally {
 			offBusy = false;
 		}
@@ -225,94 +230,122 @@
 </script>
 
 {#snippet routeRow(kind: Kind, route: AppProxyRoute)}
-	<div class="route">
-		<label class="check switch"
+	{@const name = kind === 'app' ? route.app : route.name}
+	{@const live = route.enabled && !status?.off}
+	{@const tailnetUrl = route.tailnet?.state === 'running' ? route.tailnet.url : undefined}
+	{@const more = route.urls.length - 1 + (tailnetUrl ? 1 : 0)}
+	{@const key = `${kind}:${route.app}`}
+	<div class="route" class:off={!route.enabled}>
+		<label class="check"
 			><input
 				type="checkbox"
 				checked={route.enabled}
 				disabled={!!busyKey}
-				aria-label={t('proxy.toggle', { app: route.app })}
+				aria-label={t('proxy.toggle', { app: name })}
 				onchange={(event) => toggle(kind, route, event.currentTarget.checked)}
 			/></label
 		>
 		<div class="route-text">
 			<div class="route-name">
-				<strong>{kind === 'app' ? route.app : route.name}</strong>
-				<span class="chip" class:ok={route.enabled && !status?.off}
-					>{t(route.enabled ? 'proxy.on' : 'proxy.off')}</span
-				>
-				<span class="chip" class:warn={!route.localOnly && !route.networks?.length}
-					>{access(route)}</span
-				>
-				{#if route.short}<span class="chip">{t('proxy.shortChip')}</span>{/if}
-				{#if route.scheme === 'https'}<span class="chip"
-						>{t(route.verifyTLS ? 'proxy.verifyChip' : 'proxy.noVerifyChip')}</span
+				<strong>{name}</strong>
+				{#if !route.enabled}<span class="chip">{t('proxy.off')}</span>{/if}
+				{#if !route.localOnly || route.networks?.length}<span
+						class="chip"
+						class:warn={!route.localOnly && !route.networks?.length}>{access(route)}</span
 					>{/if}
-			</div>
-			<div class="urls">
-				{#each route.urls as url (url)}
-					{#if route.enabled && !status?.off}<a
-							class="mono"
-							href={url}
-							target="_blank"
-							rel="noreferrer">{url}</a
-						>{:else}<span class="mono muted">{url}</span>{/if}
-				{/each}
-			</div>
-			{#if route.tailnet}
-				<div class="urls">
-					<span
+				{#if route.tailnet}<span
 						class="chip"
 						class:ok={route.tailnet.state === 'running'}
 						class:warn={['login', 'https-off', 'error'].includes(route.tailnet.state)}
 						>Tailscale · {t(
 							`proxy.tailnetState.${route.tailnet.state}` as 'proxy.tailnetState.running',
 						)}</span
-					>
-					{#if route.tailnet.url && route.tailnet.state === 'running'}<a
-							class="mono"
-							href={route.tailnet.url}
-							target="_blank"
-							rel="noreferrer">{route.tailnet.url}</a
-						>{/if}
-					{#if route.tailnet.error && route.tailnet.error !== 'plugin'}<span class="muted small"
+					>{/if}
+				{#if route.scheme === 'https' && !route.verifyTLS}<span class="chip"
+						>{t('proxy.noVerifyChip')}</span
+					>{/if}
+			</div>
+			<div class="urls">
+				{#if route.urls[0]}{@render link(route.urls[0], live)}{/if}
+				{#if more > 0}<button
+						type="button"
+						class="more"
+						aria-expanded={expanded[key] ?? false}
+						aria-label={t('proxy.allAddresses', { name })}
+						onclick={() => (expanded[key] = !expanded[key])}
+						>{expanded[key] ? t('proxy.fewerUrls') : t('proxy.moreUrls', { count: more })}</button
+					>{/if}
+			</div>
+			{#if expanded[key]}
+				<div class="details">
+					{#each route.urls.slice(1) as url (url)}{@render link(url, live)}{/each}
+					{#if tailnetUrl}{@render link(tailnetUrl, live)}{/if}
+					{#if route.tailnet?.error && route.tailnet.error !== 'plugin'}<span class="muted small"
 							>{route.tailnet.error}</span
 						>{/if}
+					{#if route.short}<span class="muted small">{t('proxy.shortChip')}</span>{/if}
+					<span class="muted small"
+						>{t('proxy.target')}:
+						<span class="mono">{route.scheme}://{route.host || '127.0.0.1'}:{route.port}</span
+						></span
+					>
 				</div>
 			{/if}
-			{#if route.aliases?.length}<span class="muted small"
-					>{t('proxy.aliasesList')}: <span class="mono">{route.aliases.join(', ')}</span></span
-				>{/if}
-			<span class="muted small"
-				>{t('proxy.target')}:
-				<span class="mono">{route.scheme}://{route.host || '127.0.0.1'}:{route.port}</span></span
-			>
 		</div>
-		<div class="row-actions">
-			{#if extended}<button
-					class="btn"
+		<Dropdown
+			label={t('proxy.actionsFor', { name })}
+			icon="more"
+			align="right"
+			disabled={!!busyKey}
+		>
+			{#snippet children(close)}
+				{#if extended}<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							close();
+							edit(kind, route);
+						}}><Icon name="edit" size={16} /><span>{t('proxy.editHere')}</span></button
+					>{/if}
+				{#if kind === 'app'}<a
+						role="menuitem"
+						href="/docker/apps/{encodeURIComponent(route.app)}#h-proxy"
+						onclick={close}><Icon name="external" size={16} /><span>{t('proxy.edit')}</span></a
+					>{/if}
+				<hr />
+				<button
 					type="button"
-					disabled={!!busyKey}
-					onclick={() => edit(kind, route)}>{t('proxy.editHere')}</button
-				>{/if}
-			{#if kind === 'app'}<a class="btn" href="/docker/apps/{encodeURIComponent(route.app)}#h-proxy"
-					>{t('proxy.edit')}</a
-				>{/if}
-			<button
-				class="btn"
-				type="button"
-				disabled={!!busyKey}
-				onclick={() => {
-					error = '';
-					removing = { kind, route };
-				}}>{t('proxy.remove')}</button
-			>
-		</div>
+					role="menuitem"
+					class="danger"
+					onclick={() => {
+						close();
+						error = '';
+						removing = { kind, route };
+					}}><Icon name="trash" size={16} /><span>{t('proxy.remove')}</span></button
+				>
+			{/snippet}
+		</Dropdown>
 	</div>
+{/snippet}
+
+{#snippet link(url: string, live: boolean)}
+	{#if live}<a class="mono" href={url} target="_blank" rel="noreferrer">{url}</a>{:else}<span
+			class="mono muted">{url}</span
+		>{/if}
 {/snippet}
 
 <PageHead title={t('proxy.settingsTitle')} parent={{ href: '/settings', label: t('nav.settings') }}>
 	<p class="muted">{t('proxy.settingsIntro')}</p>
+	{#snippet actions()}
+		{#if status && extended}<label class="check head-switch" title={t('proxy.allOnHint')}
+				><input
+					type="checkbox"
+					checked={!status.off}
+					disabled={offBusy}
+					onchange={(event) => setOff(!event.currentTarget.checked)}
+				/><span>{t('proxy.allOn')}</span></label
+			>{/if}
+	{/snippet}
 </PageHead>
 
 {#if loadError}
@@ -324,21 +357,39 @@
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
+	{#if status.off}<p class="notice-warn" role="status">{t('proxy.allOffHint')}</p>{/if}
+	{#if offError}<p class="notice-error" role="alert">{offError}</p>{/if}
+
+	<section class="tile panel" aria-labelledby="proxy-apps">
+		<h2 class="tile-title" id="proxy-apps">{t('proxy.appsTitle')}</h2>
+		{#each apps as route (route.app)}
+			{@render routeRow('app', route)}
+		{:else}
+			<p class="muted">{t('proxy.appsEmpty')}</p>
+			<div class="row-actions"><a class="btn" href="/docker">{t('proxy.openDocker')}</a></div>
+		{/each}
+		{#if error && !removing}<p class="notice-error" role="alert">{error}</p>{/if}
+	</section>
+
+	{#if extended}
+		<section class="tile panel" aria-labelledby="proxy-targets">
+			<h2 class="tile-title" id="proxy-targets">{t('proxy.targetsTitle')}</h2>
+			<p class="muted hint">{t('proxy.targetsIntro')}</p>
+			{#each targets as route (route.app)}
+				{@render routeRow('target', route)}
+			{/each}
+			<div class="row-actions">
+				<button class="btn" type="button" disabled={!!busyKey} onclick={() => edit('target', null)}
+					>{t('proxy.addTarget')}</button
+				>
+			</div>
+		</section>
+	{/if}
+
 	<form class="tile panel" aria-labelledby="proxy-general" onsubmit={saveGeneral}>
 		<h2 class="tile-title" id="proxy-general">{t('proxy.generalTitle')}</h2>
 		{#if extended}
 			<div class="option">
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={!status.off}
-						disabled={offBusy}
-						onchange={(event) => setOff(!event.currentTarget.checked)}
-					/><span>{t('proxy.allOn')}</span></label
-				>
-				<p class="muted hint">{t(status.off ? 'proxy.allOffHint' : 'proxy.allOnHint')}</p>
-			</div>
-			<div class="divided option">
 				<label class="check"
 					><input type="checkbox" bind:checked={general.mdns} /><span>{t('proxy.mdns')}</span
 					></label
@@ -363,8 +414,8 @@
 			{#if !validLocalName(general.localName)}<p class="notice-warn" role="alert">
 					{t('proxy.localNameInvalid')}
 				</p>{/if}
+			<div class="rule"></div>
 		{/if}
-		{#if extended}<div class="rule"></div>{/if}
 		<label class="stack"
 			><span>{t('proxy.domain')}</span><input
 				class="field mono"
@@ -395,32 +446,6 @@
 		</div>
 	</form>
 
-	<section class="tile panel" aria-labelledby="proxy-apps">
-		<h2 class="tile-title" id="proxy-apps">{t('proxy.appsTitle')}</h2>
-		{#each apps as route (route.app)}
-			{@render routeRow('app', route)}
-		{:else}
-			<p class="muted">{t('proxy.appsEmpty')}</p>
-			<div class="row-actions"><a class="btn" href="/docker">{t('proxy.openDocker')}</a></div>
-		{/each}
-		{#if error && !removing}<p class="notice-error" role="alert">{error}</p>{/if}
-	</section>
-
-	{#if extended}
-		<section class="tile panel" aria-labelledby="proxy-targets">
-			<h2 class="tile-title" id="proxy-targets">{t('proxy.targetsTitle')}</h2>
-			<p class="muted hint">{t('proxy.targetsIntro')}</p>
-			{#each targets as route (route.app)}
-				{@render routeRow('target', route)}
-			{/each}
-			<div class="row-actions">
-				<button class="btn" type="button" disabled={!!busyKey} onclick={() => edit('target', null)}
-					>{t('proxy.addTarget')}</button
-				>
-			</div>
-		</section>
-	{/if}
-
 	{#if status.tailnet}
 		<form
 			class="tile panel"
@@ -431,7 +456,6 @@
 			}}
 		>
 			<h2 class="tile-title" id="proxy-tailnet">{t('proxy.tailnetTitle')}</h2>
-			<p class="muted hint">{t('proxy.tailnetIntro')}</p>
 			{#if !status.tailnet.available}<p class="notice-warn">{t('proxy.tailscaleNoPlugin')}</p>{/if}
 			<label class="stack"
 				><span>{t('proxy.tailscaleKey')}</span><input
@@ -443,7 +467,11 @@
 					disabled={tailnetBusy}
 				/></label
 			>
-			<p class="muted hint">{t('proxy.tailscaleKeyHint')}</p>
+			<details class="explain">
+				<summary>{t('proxy.tailnetHelp')}</summary>
+				<p class="hint">{t('proxy.tailnetIntro')}</p>
+				<p class="hint">{t('proxy.tailscaleKeyHint')}</p>
+			</details>
 			{#if tailnetError}<p class="notice-error" role="alert">{tailnetError}</p>{/if}
 			<div class="row-actions">
 				<button
@@ -462,15 +490,15 @@
 		</form>
 	{/if}
 
-	<section class="tile panel" aria-labelledby="proxy-how">
-		<h2 class="tile-title" id="proxy-how">{t('proxy.howTitle')}</h2>
+	<details class="tile panel explain" aria-labelledby="proxy-how">
+		<summary class="tile-title" id="proxy-how">{t('proxy.howTitle')}</summary>
 		<p class="hint">{t('proxy.howLocal')}</p>
 		<p class="hint">{t('proxy.howDomain')}</p>
 		<p class="hint">{t('proxy.howCert')}</p>
 		<div class="row-actions">
 			<a class="btn" href="/settings/access#access-cert">{t('proxy.openCert')}</a>
 		</div>
-	</section>
+	</details>
 {/if}
 
 {#if editing && status}
@@ -554,13 +582,32 @@
 	.rule {
 		border-top: 1px solid var(--panel-border);
 	}
+	/* Outside a tile, so without the tile's look of checkboxes. */
+	.head-switch {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 0.875rem;
+	}
+	.head-switch input {
+		width: 18px;
+		height: 18px;
+		margin: 0;
+	}
 	.route {
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
-		align-items: center;
-		gap: 14px;
-		padding-top: 14px;
+		align-items: start;
+		gap: 4px 12px;
+		padding-top: 12px;
 		border-top: 1px solid var(--panel-border);
+	}
+	.route > .check,
+	.route > :global(.dropdown) {
+		margin-top: 2px;
+	}
+	.route.off strong {
+		color: var(--muted);
 	}
 	.route-text {
 		display: flex;
@@ -572,27 +619,47 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: 6px 8px;
 	}
-	.urls {
+	.urls,
+	.details {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 14px;
+		align-items: baseline;
+		gap: 4px 12px;
 		font-size: 0.875rem;
 		overflow-wrap: anywhere;
+	}
+	.details {
+		flex-direction: column;
+		gap: 4px;
+	}
+	.more {
+		padding: 0;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		font: inherit;
+		font-size: 0.8125rem;
+		cursor: pointer;
+	}
+	.more:hover {
+		text-decoration: underline;
+	}
+	.explain summary {
+		cursor: pointer;
+	}
+	.explain[open] summary {
+		margin-bottom: 4px;
+	}
+	details.explain:not(.tile) summary {
+		color: var(--accent);
+		font-size: 0.875rem;
 	}
 	.edit {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
 		min-width: min(36rem, 100%);
-	}
-	@media (max-width: 760px) {
-		.route {
-			grid-template-columns: auto minmax(0, 1fr);
-		}
-		.route .row-actions {
-			grid-column: 1 / -1;
-		}
 	}
 </style>

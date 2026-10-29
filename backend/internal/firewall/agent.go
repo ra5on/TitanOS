@@ -67,10 +67,37 @@ func (m *Manager) proposalLocked(cfg Config) (Config, error) {
 	}
 	services, port := Services(&m.Web), m.Web.or().HTTPS
 	for _, zone := range []Zone{Home, VPN} {
-		// The zero address matches no policy with a sender of its own.
-		if decide(m.active, services, zone, netip.Addr{}, "tcp", port, "webui") && !decide(cfg, services, zone, netip.Addr{}, "tcp", port, "webui") {
-			return cfg, ErrClosesWebUI
+		for _, addr := range m.webUIProbes(zone) {
+			if decide(m.active, services, zone, addr, "tcp", port, "webui") && !decide(cfg, services, zone, addr, "tcp", port, "webui") {
+				return cfg, ErrClosesWebUI
+			}
 		}
 	}
 	return cfg, nil
+}
+
+// webUIProbes are the senders the web UI must stay open to: the zero
+// address, which matches no policy with a sender of its own, and the first
+// address of every network of the zone. A policy that shuts out a whole
+// network of the NAS (or the VPN) holds that address too; one for a single
+// device does not.
+func (m *Manager) webUIProbes(zone Zone) []netip.Addr {
+	probes := []netip.Addr{{}}
+	var prefixes []netip.Prefix
+	switch zone {
+	case Home:
+		if m.HomeNetworks != nil {
+			for _, s := range m.HomeNetworks() {
+				if p, err := netip.ParsePrefix(s); err == nil {
+					prefixes = append(prefixes, p)
+				}
+			}
+		}
+	case VPN:
+		prefixes = vpnPrefixes
+	}
+	for _, p := range prefixes {
+		probes = append(probes, p.Masked().Addr())
+	}
+	return probes
 }

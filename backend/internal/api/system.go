@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
@@ -64,7 +65,12 @@ var powerPollInterval = 30 * time.Second
 func (s *Server) handlePowerStatus(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	res := map[string]any{"pending": nil, "rebuilding": s.rebuildingNow(ctx)}
+	res := map[string]any{"pending": nil, "rebuilding": s.rebuildingNow(ctx), "preparing": nil}
+	if s.opts.Shutdown != nil {
+		if status := s.opts.Shutdown.Status(); status != nil {
+			res["preparing"] = status
+		}
+	}
 	s.powerMu.Lock()
 	if s.power.action != "" {
 		res["pending"] = powerView{Action: s.power.action, By: s.power.by, Since: s.power.since}
@@ -73,7 +79,8 @@ func (s *Server) handlePowerStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// handlePowerCancel drops a restart or shutdown that is still waiting.
+// handlePowerCancel drops a restart or shutdown that is still waiting, for
+// a rebuild or for the guests; guests already ended are started again.
 func (s *Server) handlePowerCancel(w http.ResponseWriter, r *http.Request) {
 	s.powerMu.Lock()
 	action := s.power.action
@@ -85,7 +92,30 @@ func (s *Server) handlePowerCancel(w http.ResponseWriter, r *http.Request) {
 	if action != "" {
 		slog.Info("waiting power action cancelled", "action", action, "user", currentUser(r).Name, "ip", remoteIP(r))
 	}
+	if s.opts.Shutdown != nil {
+		// Starting the guests again is no matter of the browser's request.
+		if err := s.opts.Shutdown.Cancel(context.WithoutCancel(r.Context())); err == nil {
+			slog.Info("going down called off", "user", currentUser(r).Name, "ip", remoteIP(r))
+		}
+	}
 	s.handlePowerStatus(w, r)
+}
+
+func (s *Server) shutdownStatus() *shutdown.Status {
+	if s.opts.Shutdown == nil {
+		return nil
+	}
+	return s.opts.Shutdown.Status()
+}
+
+// handlePowerNow goes down without waiting any longer for the guests.
+func (s *Server) handlePowerNow(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Shutdown == nil || s.opts.Shutdown.Now() != nil {
+		writeError(w, http.StatusConflict, "power_not_preparing", "the NAS is not being prepared for going down")
+		return
+	}
+	slog.Info("going down without waiting for the guests", "user", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +123,12 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		Action string `json:"action"`
 		// AfterRebuild waits until no volume is rebuilt or checked.
 		AfterRebuild bool `json:"afterRebuild"`
+		// Wait: someone watches in the web UI and decides when guests are
+		// still running after the waiting time. Without it (Home Assistant,
+		// the assistant, API) the NAS goes on by itself then.
+		Wait bool `json:"wait"`
+		// Now skips ending the guests first (systemd still ends them).
+		Now bool `json:"now"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -107,10 +143,21 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", `action must be "reboot" or "poweroff"`)
 		return
 	}
+	by := currentUser(r).Name
 	run := func() {
+		if s.opts.Shutdown != nil && !req.Now {
+			if err := s.opts.Shutdown.Begin(req.Action, by, !req.Wait, action); err != nil {
+				slog.Error("power action not started", "action", req.Action, "err", err)
+			}
+			return
+		}
 		if err := action(); err != nil {
 			slog.Error("power action failed", "action", req.Action, "err", err)
 		}
+	}
+	if st := s.shutdownStatus(); st != nil && !req.Now && st.Phase != "failed" {
+		writeError(w, http.StatusConflict, "power_preparing", "the NAS is already being prepared for going down")
+		return
 	}
 
 	// A new request replaces one that is still waiting.

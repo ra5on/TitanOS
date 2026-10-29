@@ -97,15 +97,8 @@ func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_disk_idle_time", "idleMinutes is required")
 		return
 	}
-	settings := s.opts.Storage.DiskSleep().DiskSleepSettings
-	settings.IdleMinutes = *req.IdleMinutes
-	if req.Volumes != nil {
-		settings.Volumes = *req.Volumes
-	}
-	if req.Disks != nil {
-		settings.Disks = *req.Disks
-	}
-	if err := s.opts.Storage.SetDiskSleep(r.Context(), settings); err != nil {
+	settings, err := s.opts.Storage.UpdateDiskSleep(r.Context(), *req.IdleMinutes, req.Volumes, req.Disks)
+	if err != nil {
 		writeStorageError(w, r, "set disk sleep", err)
 		return
 	}

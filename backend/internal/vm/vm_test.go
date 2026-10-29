@@ -433,6 +433,21 @@ func TestExistingImagesAndWholeDisks(t *testing.T) {
 		}
 	}
 
+	// What alt uses no second VM gets, also not by another name for it.
+	link := filepath.Join(filepath.Dir(direct), "link.qcow2")
+	os.Symlink(direct, link)
+	for name, disk := range map[string]Disk{
+		"same whole disk by another stable name": {Path: filepath.Join(m.byID, "wwn-0x5000")},
+		"same image":                             {Path: direct},
+		"same image over a link":                 {Path: link},
+		"copied disk of alt":                     {Path: copied},
+	} {
+		second := VM{Name: "second", Template: "other", MemoryMiB: 1024, VCPUs: 1, Disks: []Disk{disk}}
+		if err := m.Create(ctx, second, mounted); !errors.Is(err, ErrBadImage) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
 	// The tiny fake conversion can finish before the Start call above. In that
 	// valid case stop the fake guest before exercising offline disk operations.
 	if m.pid("alt") != 0 {

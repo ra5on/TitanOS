@@ -89,9 +89,17 @@ dem Internet hinzufügen (nur Besitzer/Administratoren):
   Plugin als „Community (nicht geprüft)“; Installation und Update brauchen den
   Klick nach der Warnung (die Oberfläche schickt den Plugin-Namen als
   Bestätigung). Ein Name des offiziellen Katalogs kann nicht aus einer Quelle oder
-  von einem Link installiert werden. Verbindungen gehen nur an öffentliche
+  von einem Link installiert werden, auch nicht, solange der Katalog nicht
+  geladen ist: Die Namen kommen dann aus den Katalogtexten im Abbild
+  (`/usr/share/titanos/plugin-catalog/`), die auch Plugins anderer Kernel-Sätze
+  kennen. Verbindungen gehen nur an öffentliche
   Adressen und ins Heimnetz, nie an Loopback; jede Adresse und Weiterleitung wird
-  beim Verbinden geprüft. Links und Quellen kommen nur von der Person, die sie
+  beim Verbinden geprüft. Was eine Quellliste auf einem anderen Host als ihrem
+  eigenen nennt (Manifest, Signatur, Abbild), kommt nur von öffentlichen
+  Adressen: den Host der Liste hat die Person gewählt, den anderen nicht.
+  Quellen werden gleichzeitig gelesen, nachdem der offizielle Katalog schon
+  angezeigt wird. Fehlt die Signatur des Plugin-Katalogs, ist das ein Fehler,
+  kein Rückfall auf den Katalog des Releases. Links und Quellen kommen nur von der Person, die sie
   eingibt, nie aus Inhalten.
 - **API:** `GET/POST /api/v1/plugins/sources`, `DELETE /api/v1/plugins/sources/{id}`,
   `POST /api/v1/plugins/external/inspect` (`url`), `POST /api/v1/plugins/external`

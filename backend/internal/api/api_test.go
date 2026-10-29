@@ -15,7 +15,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
@@ -37,6 +39,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -1982,5 +1985,123 @@ func TestPowerAfterRebuild(t *testing.T) {
 	}
 	if got := status(); got["pending"] != nil {
 		t.Fatalf("still pending: %v", got)
+	}
+}
+
+// Restart and shutdown first end the guests (owner request of 29 Oct
+// 2026); a guest that does not end keeps the NAS up until the person
+// decides: go on anyway, or call it off and have the guests back.
+func TestPowerEndsTheGuestsFirst(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	var mu sync.Mutex
+	running, started := map[string]bool{"haos": true, "win": true}, []string{}
+	ending := shutdown.New(shutdown.Workloads{
+		VMs: func() []string {
+			mu.Lock()
+			defer mu.Unlock()
+			var names []string
+			for name, on := range running {
+				if on {
+					names = append(names, name)
+				}
+			}
+			return names
+		},
+		StopVM: func(_ context.Context, name string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if name != "win" { // win does not react to ACPI
+				running[name] = false
+			}
+			return nil
+		},
+		StartVM: func(_ context.Context, name string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			running[name], started = true, append(started, name)
+			return nil
+		},
+	})
+	ending.Wait, ending.Poll = 50*time.Millisecond, 5*time.Millisecond
+	ts.server.opts.Shutdown = ending
+
+	type status struct {
+		Preparing *shutdown.Status `json:"preparing"`
+	}
+	preparing := func(phase string) *shutdown.Status {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			var st status
+			_, body := ts.request("GET", "/api/v1/system/power", nil)
+			json.Unmarshal(body, &st)
+			if st.Preparing != nil && st.Preparing.Phase == phase {
+				return st.Preparing
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("phase %q never came: %s", phase, body)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if res, _ := ts.request("POST", "/api/v1/system/power/now", nil); res.StatusCode != http.StatusConflict {
+		t.Fatalf("now without preparation: %d", res.StatusCode)
+	}
+	if res, _ := ts.request("POST", "/api/v1/system/power", map[string]any{"action": "reboot", "wait": true}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("reboot: %d", res.StatusCode)
+	}
+	st := preparing("waiting")
+	if st.By != "alex" || st.Unattended || len(st.Items) != 2 {
+		t.Fatalf("status %+v", st)
+	}
+	select {
+	case got := <-ts.power.actions:
+		t.Fatalf("went down while win still runs: %s", got)
+	default:
+	}
+	if res, body := ts.request("POST", "/api/v1/system/power", map[string]any{"action": "poweroff"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "power_preparing" {
+		t.Fatalf("second request: %d %s", res.StatusCode, body)
+	}
+	// "Go down anyway".
+	if res, _ := ts.request("POST", "/api/v1/system/power/now", nil); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("now: %d", res.StatusCode)
+	}
+	select {
+	case got := <-ts.power.actions:
+		if got != "reboot" {
+			t.Fatalf("carried out %q", got)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("did not go down")
+	}
+
+	// Called off: the guests that were ended run again, nothing goes down.
+	ending = shutdown.New(ending.Workloads)
+	ending.Wait, ending.Poll = time.Minute, 5*time.Millisecond
+	ts.server.opts.Shutdown = ending
+	mu.Lock()
+	running["haos"], started = true, nil
+	mu.Unlock()
+	ts.request("POST", "/api/v1/system/power", map[string]any{"action": "poweroff", "wait": true})
+	preparing("stopping")
+	res, body := ts.request("DELETE", "/api/v1/system/power", nil)
+	var after status
+	json.Unmarshal(body, &after)
+	if res.StatusCode != http.StatusOK || after.Preparing != nil {
+		t.Fatalf("cancel: %d %s", res.StatusCode, body)
+	}
+	mu.Lock()
+	slices.Sort(started)
+	got := slices.Clone(started)
+	mu.Unlock()
+	if !slices.Equal(got, []string{"haos", "win"}) {
+		t.Fatalf("started again: %v", got)
+	}
+	select {
+	case action := <-ts.power.actions:
+		t.Fatalf("went down after cancel: %s", action)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

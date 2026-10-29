@@ -275,6 +275,40 @@ func TestAdoptAfterLosingTheStick(t *testing.T) {
 	}
 }
 
+// The UUID names the snapshot folder of a VM. A vm.json whose UUID is a
+// path must not lead the snapshots out of it.
+func TestAdoptReplacesAUUIDThatIsNoUUID(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+	mounted := []string{"data", "fast"}
+	spec := VM{Name: "office", Template: "linux", MemoryMiB: 1024, VCPUs: 1, Disks: []Disk{{Format: "qcow2", SizeBytes: 4 * gib, Volume: "data"}}}
+	if err := m.Create(ctx, spec, mounted); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(m.mountRoot, "data", "vms", "office", "vm.json")
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c VolumeCopy
+	if err := json.Unmarshal(data, &c); err != nil {
+		t.Fatal(err)
+	}
+	c.VM.UUID = "../../share/x"
+	data, _ = json.Marshal(c)
+	if err := os.WriteFile(file, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fresh := freshStick(t, m)
+	if _, err := fresh.Adopt(ctx, AdoptRequest{Volume: "data", Directory: "office"}, mounted); err != nil {
+		t.Fatal(err)
+	}
+	adopted, _ := fresh.get("office")
+	if !snapshotID.MatchString(adopted.UUID) {
+		t.Fatalf("uuid %q", adopted.UUID)
+	}
+}
+
 func TestAdoptCollisions(t *testing.T) {
 	m, _ := newTestManager(t)
 	ctx := context.Background()

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import AppTabBar from './AppTabBar.svelte';
 	// The frame around every page once someone is logged in.
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
@@ -145,7 +144,6 @@
 	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
-<AppTabBar />
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} assistant={!!assistant.status?.available} onclose={() => (shortcutsOpen = false)} />{/if}
@@ -165,12 +163,14 @@
 {/if}
 
 <style>
-	@media (display-mode: standalone) and (max-width: 760px) {
+	/* As an app on the home screen the phone's home indicator lies over
+	   the bottom edge. */
+	@media (display-mode: standalone) {
 		.shell {
-			padding-bottom: calc(64px + env(safe-area-inset-bottom));
+			padding-bottom: env(safe-area-inset-bottom);
 		}
 		.fab {
-			bottom: calc(80px + env(safe-area-inset-bottom));
+			bottom: calc(44px + env(safe-area-inset-bottom));
 		}
 	}
 	.trial {

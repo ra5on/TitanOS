@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
@@ -27,7 +28,8 @@ type fakeCloud struct {
 	got     []map[string]any
 	headers []http.Header
 	models  string
-	status  int // answers every request with this status if set
+	status  int           // answers every request with this status if set
+	pause   time.Duration // between two lines of a reply
 }
 
 func (f *fakeCloud) serve(t *testing.T) string {
@@ -58,6 +60,7 @@ func (f *fakeCloud) serve(t *testing.T) string {
 		for _, line := range reply {
 			fmt.Fprintf(w, "event: x\ndata: %s\n\n", line)
 			flusher.Flush()
+			time.Sleep(f.pause)
 		}
 	}))
 	t.Cleanup(srv.Close)
@@ -204,6 +207,76 @@ func TestAnthropicModels(t *testing.T) {
 	models, err := m.Models(context.Background(), "")
 	if err != nil || len(models) != 2 || models[1].Name != "claude-sonnet-5-5" || models[1].ContextLength != 200000 || !models[1].Can("tools") {
 		t.Fatalf("models %+v, %v", models, err)
+	}
+}
+
+// A tool call cut off by the length limit is never executed, not even as {}.
+func TestLengthLimitDuringToolCallRunsNoTool(t *testing.T) {
+	anthropic := []string{
+		`{"type":"message_start","message":{"usage":{"input_tokens":1}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"storage_overview","input":{}}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":16384}}`,
+		`{"type":"message_stop"}`,
+	}
+	openai := []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"storage_overview","arguments":""}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"length"}]}`,
+		`[DONE]`,
+	}
+	for _, provider := range []string{ProviderAnthropic, ProviderOpenAI} {
+		t.Run(provider, func(t *testing.T) {
+			// The second reply would end a round that ran the tool.
+			reply, next := anthropic, anthropicTurn("fertig")
+			if provider == ProviderOpenAI {
+				reply, next = openai, []string{`{"choices":[{"delta":{"content":"fertig"},"finish_reason":"stop"}]}`, `[DONE]`}
+			}
+			fake := &fakeCloud{replies: [][]string{reply, next}}
+			base := fake.serve(t)
+			settings := Settings{Enabled: true, Provider: provider, AnthropicKey: testKey}
+			if provider == ProviderOpenAI {
+				settings = Settings{Enabled: true, Provider: provider, OpenAIBase: base, Model: "gpt-test"}
+			}
+			m := cloudManager(t, settings)
+			m.anthropicURL = base
+			var calls []string
+			err := m.Answer(context.Background(), newChat(t, "?"), Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}})
+			if err == nil || !errors.Is(err, ErrProvider) || len(calls) != 0 {
+				t.Fatalf("err %v, calls %v", err, calls)
+			}
+		})
+	}
+}
+
+// A long tool argument (a document the model writes) keeps the call alive
+// while it streams, even with no text in between.
+func TestToolArgumentsCountAsProgress(t *testing.T) {
+	defer func(old time.Duration) { streamSilence = old }(streamSilence)
+	streamSilence = 500 * time.Millisecond
+	reply := []string{
+		`{"type":"message_start","message":{"usage":{"input_tokens":1}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"storage_overview","input":{}}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"detail\":"}}`,
+	}
+	// Twenty pieces 100 ms apart: four times the silence limit in all.
+	for range 19 {
+		reply = append(reply, `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":" "}}`)
+	}
+	reply = append(reply,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"true}"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":30}}`,
+		`{"type":"message_stop"}`,
+	)
+	fake := &fakeCloud{replies: [][]string{reply, anthropicTurn("fertig")}, pause: 100 * time.Millisecond}
+	m := cloudManager(t, Settings{Enabled: true, Provider: ProviderAnthropic, AnthropicKey: testKey})
+	m.anthropicURL = fake.serve(t)
+	var calls []string
+	if err := m.Answer(context.Background(), newChat(t, "?"), Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "storage_overview") {
+		t.Fatalf("calls: %v", calls)
 	}
 }
 
