@@ -552,6 +552,32 @@ export type VMStatus = {
 	vms: VM[];
 };
 
+/** A copy of VM settings (vm.json) on a mounted volume whose VM this NAS does not know. */
+export type VMAdoptCandidate = {
+	volume: string;
+	directory: string;
+	name: string;
+	displayName?: string;
+	description?: string;
+	template: string;
+	firmware?: string;
+	memoryMiB: number;
+	vcpus: number;
+	disks: string[];
+	created: string;
+	/** The VM was removed while its disks were kept. */
+	removed: boolean;
+	removedAt?: string;
+	/** Another VM has this name; a new one must be chosen. */
+	nameTaken: boolean;
+	/** Codes of what is changed on taking it over (see vms.adopt.change.*). */
+	dropped: string[];
+	/** Volumes the VM needs that are not mounted. */
+	missing: string[];
+};
+
+export type VMAdoptResult = { name: string; changes: string[] };
+
 export type HostCPU = { id: number; kind: '' | 'p' | 'e'; siblings: number[]; usedBy: string[] };
 export type DiskImage = {
 	path: string;

@@ -468,6 +468,8 @@ func run(opts options) error {
 		return err
 	}
 	machines.Disabled = opts.dev
+	// Copies of the VM settings go only to volumes mounted right now.
+	machines.Mounted = volumes.Mounted
 	if err := machines.Load(); err != nil {
 		slog.Warn("VMs not readable from /config", "err", err)
 	}

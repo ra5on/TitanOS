@@ -73,6 +73,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	m.powerFile = filepath.Join(root, "run-titanos", "vm-schedule.json")
 	runner := &fakeRunner{pidDir: m.pidDir}
 	m.runner = runner
+	// The volumes of the tests; the copies of the settings are written there.
+	m.Mounted = func() []string { return []string{"data", "fast"} }
 	for _, dir := range []string{m.pidDir, filepath.Join(m.mountRoot, "data", "media"), filepath.Join(m.mountRoot, "fast")} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
