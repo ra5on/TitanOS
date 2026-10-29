@@ -34,8 +34,12 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string, maxAge in
 	})
 }
 
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user auth.User) bool {
-	token, err := s.sessions.Create(user.Name, remoteIP(r), r.UserAgent())
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user auth.User, remember bool) bool {
+	create := s.sessions.Create
+	if remember {
+		create = s.sessions.CreateRemembered
+	}
+	token, err := create(user.Name, remoteIP(r), r.UserAgent())
 	if err != nil {
 		slog.Error("create session", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "could not start a session")
@@ -110,6 +114,8 @@ type credentials struct {
 	Password string `json:"password"`
 	// Code is the one-time code of an account with two-factor login.
 	Code string `json:"code"`
+	// Remember keeps the login over a restart of the NAS ("stay logged in").
+	Remember bool `json:"remember"`
 }
 
 func (c *credentials) normalize() {
@@ -150,7 +156,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		s.recordEvent(r, user.Name, "setup", "", true)
 		s.opts.Shares.Kick()
 		s.opts.SSH.Kick()
-		if s.startSession(w, r, user) {
+		if s.startSession(w, r, user, false) {
 			writeJSON(w, http.StatusCreated, userOf(user))
 		}
 	}
@@ -221,7 +227,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.opts.Shares.Kick()
 		s.opts.SSH.Kick()
 	}
-	if s.startSession(w, r, user) {
+	if s.startSession(w, r, user, req.Remember) {
 		s.recordEvent(r, user.Name, "login", "", true)
 		if user.Role.CanAdminister() && s.opts.Update != nil {
 			s.opts.Update.CheckAfterLogin()

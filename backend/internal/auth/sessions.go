@@ -33,6 +33,10 @@ type Session struct {
 	// Confirmed is when the password was last entered again in this
 	// session, as required before opening a console.
 	Confirmed time.Time
+	// Remember keeps the session over a restart of the NAS ("stay logged
+	// in"): a hash of its token is kept on the stick. It ends only after
+	// SessionMaxAge, not after SessionIdleTimeout.
+	Remember bool `json:",omitempty"`
 }
 
 // ConfirmFor is how long entering the password again opens the door to
@@ -51,7 +55,22 @@ type Sessions struct {
 	// keeps them in memory only. saved is when it was last written.
 	file  string
 	saved time.Time
+	// keep holds the remembered sessions on the stick; kept is what was
+	// last written there, so that only a real change writes again.
+	keep Keeper
+	kept []byte
 }
+
+// Keeper reads and writes a file of the persistent configuration (/config).
+type Keeper interface {
+	ReadJSON(name string, v any) error
+	WriteJSON(name string, v any) error
+}
+
+// RememberFile holds the remembered sessions on the stick: hashes of their
+// tokens, the account, the login time and the device, nothing that changes
+// while a session is used.
+const RememberFile = "sessions/remembered.json"
 
 // saveEvery is how often a session that is only used, not changed, is
 // written: what the file misses is when it was last seen.
@@ -65,6 +84,15 @@ func NewSessions() *Sessions {
 // Create starts a session and returns its secret token for the cookie. Only
 // a hash of the token is kept.
 func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
+	return s.create(user, remoteIP, userAgent, false)
+}
+
+// CreateRemembered starts a session that outlives a restart of the NAS.
+func (s *Sessions) CreateRemembered(user, remoteIP, userAgent string) (string, error) {
+	return s.create(user, remoteIP, userAgent, true)
+}
+
+func (s *Sessions) create(user, remoteIP, userAgent string, remember bool) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -76,9 +104,10 @@ func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
 	now := s.now()
 	s.prune(now)
 	s.sessions[sha256.Sum256([]byte(token))] = &Session{
-		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent,
+		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent, Remember: remember,
 	}
 	s.save()
+	s.keepRemembered()
 	return token, nil
 }
 
@@ -99,6 +128,7 @@ func (s *Sessions) Get(token string) (Session, bool) {
 	if expired(session, now) {
 		delete(s.sessions, key)
 		s.save()
+		s.keepRemembered()
 		return Session{}, false
 	}
 	session.LastSeen = now
@@ -129,10 +159,11 @@ func (s *Sessions) Delete(token string) {
 	defer s.mu.Unlock()
 	delete(s.sessions, sha256.Sum256([]byte(token)))
 	s.save()
+	s.keepRemembered()
 }
 
 func expired(session *Session, now time.Time) bool {
-	return now.Sub(session.LastSeen) > SessionIdleTimeout || now.Sub(session.Created) > SessionMaxAge
+	return (!session.Remember && now.Sub(session.LastSeen) > SessionIdleTimeout) || now.Sub(session.Created) > SessionMaxAge
 }
 
 func (s *Sessions) prune(now time.Time) {
@@ -156,6 +187,7 @@ func (s *Sessions) DeleteUser(user, exceptToken string) {
 		}
 	}
 	s.save()
+	s.keepRemembered()
 }
 
 // Confirm notes that the password was just entered again in this session.
@@ -220,6 +252,7 @@ func (s *Sessions) DeleteByID(user, id string) bool {
 		if session.User == user && sessionID(key) == id {
 			delete(s.sessions, key)
 			s.save()
+			s.keepRemembered()
 			return true
 		}
 	}
@@ -253,6 +286,72 @@ func (s *Sessions) Persist(path string) error {
 		s.sessions[[sha256.Size]byte(raw)] = session
 	}
 	return nil
+}
+
+// Remember keeps sessions with Remember on the stick from now on and takes
+// over those stored there that are not known yet (after a restart of the
+// NAS). Call it after Persist: the file in RAM knows more about them.
+func (s *Sessions) Remember(store Keeper) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var stored map[string]*Session
+	if err := store.ReadJSON(RememberFile, &stored); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Not readable: leave the file alone rather than overwrite it.
+		return err
+	}
+	s.keep = store
+	// What the file holds counts as written: a start alone does not write.
+	written := map[string]Session{}
+	for hash, session := range stored {
+		if session != nil {
+			written[hash] = fixed(session)
+		}
+	}
+	s.kept, _ = json.Marshal(written)
+	now := s.now()
+	for hash, session := range stored {
+		raw, err := hex.DecodeString(hash)
+		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || !session.Remember || expired(session, now) {
+			continue
+		}
+		key := [sha256.Size]byte(raw)
+		if _, known := s.sessions[key]; !known {
+			session.LastSeen = session.Created
+			s.sessions[key] = session
+		}
+	}
+	s.keepRemembered()
+	return nil
+}
+
+// fixed is what is kept of a remembered session on the stick.
+func fixed(session *Session) Session {
+	return Session{User: session.User, Created: session.Created, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Remember: true}
+}
+
+// keepRemembered writes the remembered sessions to the stick if they
+// changed. Only the fields that are fixed for a session are written, so
+// using a session never writes. The lock is held.
+func (s *Sessions) keepRemembered() {
+	if s.keep == nil {
+		return
+	}
+	now := s.now()
+	stored := map[string]Session{}
+	for key, session := range s.sessions {
+		if session.Remember && !expired(session, now) {
+			stored[hex.EncodeToString(key[:])] = fixed(session)
+		}
+	}
+	data, err := json.Marshal(stored)
+	if err != nil || string(data) == string(s.kept) {
+		return
+	}
+	if err := s.keep.WriteJSON(RememberFile, stored); err != nil {
+		slog.Warn("remembered logins not saved to the stick", "err", err)
+		return
+	}
+	s.kept = data
 }
 
 // Flush writes the sessions now, for a clean stop of titand.

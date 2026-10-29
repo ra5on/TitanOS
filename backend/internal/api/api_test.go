@@ -2105,3 +2105,33 @@ func TestPowerEndsTheGuestsFirst(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 }
+
+func TestLoginCanStayLoggedIn(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.server.sessions.Remember(ts.store)
+
+	plain := ts.newClient()
+	if res, body := ts.do(plain, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword}); res.StatusCode != http.StatusOK {
+		t.Fatalf("login: %d %s", res.StatusCode, body)
+	}
+	if _, err := ts.store.Read(auth.RememberFile); err == nil {
+		t.Fatal("a normal login was written to the stick")
+	}
+	kept := ts.newClient()
+	if res, body := ts.do(kept, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword, Remember: true}); res.StatusCode != http.StatusOK {
+		t.Fatalf("login: %d %s", res.StatusCode, body)
+	}
+
+	// A restart of the NAS: a new session store reads only the stick.
+	ts.server.sessions = auth.NewSessions()
+	if err := ts.server.sessions.Remember(ts.store); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := ts.do(kept, "GET", "/api/v1/account/sessions", nil); res.StatusCode != http.StatusOK {
+		t.Errorf("remembered login after the restart: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(plain, "GET", "/api/v1/account/sessions", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("normal login after the restart: %d", res.StatusCode)
+	}
+}

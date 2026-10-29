@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,5 +77,103 @@ func TestPeekDoesNotTouchTheSession(t *testing.T) {
 	}
 	if _, ok := sessions.Peek(""); ok {
 		t.Error("an empty token found a session")
+	}
+}
+
+// memKeeper is /config in memory and counts the writes.
+type memKeeper struct {
+	files  map[string][]byte
+	writes int
+	broken bool
+}
+
+func (k *memKeeper) ReadJSON(name string, v any) error {
+	if k.broken {
+		return os.ErrPermission
+	}
+	data, ok := k.files[name]
+	if !ok {
+		return os.ErrNotExist
+	}
+	return json.Unmarshal(data, v)
+}
+
+func (k *memKeeper) WriteJSON(name string, v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	k.files[name] = data
+	k.writes++
+	return nil
+}
+
+func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
+	stick := &memKeeper{files: map[string][]byte{}}
+	first := NewSessions()
+	if err := first.Remember(stick); err != nil {
+		t.Fatal(err)
+	}
+	if stick.writes != 0 {
+		t.Fatal("a start without remembered logins wrote to the stick")
+	}
+	kept, _ := first.CreateRemembered("alex", "192.0.2.1", "Safari")
+	plain, _ := first.Create("kim", "192.0.2.2", "Firefox")
+	if stick.writes != 1 || strings.Contains(string(stick.files[RememberFile]), kept) || strings.Contains(string(stick.files[RememberFile]), "kim") {
+		t.Fatalf("stick after login: %d writes, %s", stick.writes, stick.files[RememberFile])
+	}
+	first.now = func() time.Time { return time.Now().Add(10 * 24 * time.Hour) }
+	first.Get(kept)
+	if stick.writes != 1 {
+		t.Error("using a remembered login wrote to the stick")
+	}
+
+	// A restart of the NAS: RAM is empty, the stick is not.
+	second := NewSessions()
+	second.now = func() time.Time { return time.Now().Add(20 * 24 * time.Hour) }
+	if err := second.Remember(stick); err != nil {
+		t.Fatal(err)
+	}
+	if session, ok := second.Get(kept); !ok || session.User != "alex" || !session.Remember {
+		t.Fatalf("remembered login after the restart: %+v %v", session, ok)
+	}
+	if _, ok := second.Get(plain); ok {
+		t.Error("a normal login outlived the restart")
+	}
+	if stick.writes != 1 {
+		t.Error("taking the logins over wrote to the stick")
+	}
+
+	// Ending it, also for the whole account, removes it from the stick.
+	second.DeleteUser("alex", "")
+	third := NewSessions()
+	third.Remember(stick)
+	if _, ok := third.Get(kept); ok {
+		t.Error("an ended remembered login came back")
+	}
+
+	// It ends after SessionMaxAge, not after the idle time.
+	fourth := NewSessions()
+	fourth.Remember(stick)
+	token, _ := fourth.CreateRemembered("alex", "192.0.2.1", "Safari")
+	fourth.now = func() time.Time { return time.Now().Add(SessionIdleTimeout + time.Hour) }
+	if _, ok := fourth.Get(token); !ok {
+		t.Error("a remembered login ended after the idle time")
+	}
+	fourth.now = func() time.Time { return time.Now().Add(SessionMaxAge + time.Hour) }
+	if _, ok := fourth.Get(token); ok {
+		t.Error("a remembered login outlived SessionMaxAge")
+	}
+
+	// An unreadable stick is left alone.
+	stick.broken = true
+	writes := stick.writes
+	fifth := NewSessions()
+	if err := fifth.Remember(stick); err == nil {
+		t.Error("an unreadable stick was not reported")
+	}
+	fifth.CreateRemembered("alex", "192.0.2.1", "Safari")
+	if stick.writes != writes {
+		t.Error("the file on an unreadable stick was overwritten")
 	}
 }

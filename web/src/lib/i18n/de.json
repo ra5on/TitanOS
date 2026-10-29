@@ -8,6 +8,7 @@
 	"lang.en": "English",
 	"auth.name": "Name",
 	"auth.password": "Passwort",
+	"auth.remember": "Angemeldet bleiben (30 Tage, auch nach einem Neustart)",
 	"auth.passwordRepeat": "Passwort wiederholen",
 	"auth.loginTitle": "Anmelden",
 	"auth.login": "Anmelden",

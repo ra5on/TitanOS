@@ -1272,6 +1272,10 @@ func run(opts options) error {
 		if err := sessions.Persist("/run/titanos/sessions.json"); err != nil {
 			slog.Warn("logins of before not taken over", "err", err)
 		}
+		// "Stay logged in" also outlives a restart of the NAS.
+		if err := sessions.Remember(store); err != nil {
+			slog.Warn("remembered logins not taken over", "err", err)
+		}
 	}
 	diagnostics := diagnose.NewManager(store, version.Version)
 	diagnostics.SMART = func(ctx context.Context) any { return volumes.SmartDumps(ctx) }
