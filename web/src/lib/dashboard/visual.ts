@@ -35,8 +35,8 @@ export type DashboardVisual = {
 		y: number;
 		zoom: number;
 		fixed: boolean;
-		// Shown behind every page, not just the dashboard. Older app
-		// versions drop the field and show it on the dashboard only.
+		// A picture of its own is shown behind every page, not just the
+		// dashboard (default). Older app versions show it on the dashboard only.
 		everywhere: boolean;
 	};
 };
@@ -98,7 +98,7 @@ export function dashboardVisual(input: unknown): DashboardVisual {
 			y: number(b.y, 50, 0, 100),
 			zoom: number(b.zoom, 100, 100, 200),
 			fixed: b.fixed !== false,
-			everywhere: b.everywhere === true,
+			everywhere: b.everywhere !== false,
 		},
 	};
 }
