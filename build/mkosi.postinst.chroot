@@ -34,7 +34,7 @@ Web UI: https://\4
 
 ISSUE
 
-# The stick is mounted on /efi on demand (see /etc/fstab). /config is a link
+# The stick is mounted on /efi (see /etc/fstab). /config is a link
 # into it, not a directory: if the stick is missing, writing configuration
 # fails loudly instead of landing in RAM and being gone after the next boot.
 mkdir -p /efi

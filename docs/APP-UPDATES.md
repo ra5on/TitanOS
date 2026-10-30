@@ -109,7 +109,7 @@ titanos/a/
 3. Die Datei nach `/var/lib/titanos/app/titand-<version>` kopieren (im RAM, auf dem Wurzeldateisystem: `/run` erlaubt keine Programme), die Kopie noch einmal prüfen und mit `exec` starten, mit `TITANOS_APP=<version>` in der Umgebung, damit sie sich nicht noch einmal selbst sucht. `/var/lib/titanos/app/running` nennt die gestartete Version.
 4. Läuft die App auf Probe, zählt die Basis vor dem `exec` `tries` hoch (ein Schreibzugriff auf den Stick, nur während der Probe). Ab drei Versuchen gilt die App als gescheitert. Dann wird `current` zu `previous`, und es wird zurückgewechselt.
 
-**Was das kostet:** ein Lesen vom Stick bei jedem Start von titand (Automount wie heute) und etwa 20 MB mehr RAM für die Kopie in `/run`. Die Prüfung gegen das Manifest schützt vor beschädigten Dateien. Schutz gegen jemanden mit Zugriff auf den Stick ist das nicht; der könnte das squashfs genauso tauschen.
+**Was das kostet:** ein Lesen vom Stick bei jedem Start von titand (der Stick ist dauerhaft eingebunden) und etwa 20 MB mehr RAM für die Kopie in `/run`. Die Prüfung gegen das Manifest schützt vor beschädigten Dateien. Schutz gegen jemanden mit Zugriff auf den Stick ist das nicht; der könnte das squashfs genauso tauschen.
 
 Diesen Teil muss **eine volle Basis-Version** einführen, zum Beispiel 0.8.0. Erst ab dieser Basis sind App-Updates möglich.
 
