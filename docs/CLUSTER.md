@@ -65,7 +65,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 
 ## Einen anderen Knoten verwalten
 
-- **Knoten wählen:** in der Statusleiste („Knoten ▾“) oder unter Einstellungen › Cluster › **Verwalten**.
+- **Knoten wählen:** über das TitanOS-Symbol oben links (kleiner Pfeil, auch auf dem Handy), in der seitlichen Navigation über die Knoten-Karte oben, oder unter Einstellungen › Cluster › **Verwalten**.
 - **Weiterleitung:** Der Browser bleibt auf dem eigenen NAS. Dessen titand leitet `/api/v1/cluster/nodes/<id>/api/…` an den Knoten weiter, auch WebSockets (Terminal, Konsolen, VM-Bildschirm), Uploads und Downloads.
 - **Konto und Rechte:** Der andere Knoten prüft Konto und Rechte selbst, mit seinem synchronisierten Konto.
 - **Protokoll:** Im Aktivitätsprotokoll des Knotens steht die Herkunft „per Cluster“.
