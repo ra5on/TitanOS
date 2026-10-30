@@ -19,6 +19,17 @@ const order = (p) =>
   p
     .locator(".dashboard-grid > [gs-id]")
     .evaluateAll((es) => es.map((e) => e.getAttribute("gs-id")));
+// Tiles from top to bottom as they appear in one visible column.
+const visualOrder = (p) =>
+  p
+    .locator(".dashboard-grid > [gs-id]")
+    .evaluateAll((es) =>
+      es
+        .map((e) => [e.getAttribute("gs-id"), e.getBoundingClientRect().top])
+        .sort((a, b) => a[1] - b[1])
+        .map((e) => e[0]),
+    );
+const { columnOrder } = await import("../web/src/lib/dashboard/positions.ts");
 const inspector = (p) => p.locator(".inspector");
 async function noOverflow(page) {
   assert.ok(
@@ -341,6 +352,12 @@ try {
       await order(page),
       saved.tiles.map((t) => t.id),
     );
+    // Phones show the first wished column top to bottom, then the next.
+    if (width <= 390)
+      assert.deepEqual(
+        await visualOrder(page),
+        columnOrder(saved.tiles, saved.columns).map((t) => t.id),
+      );
     for (const name of await tile(page, "vms").locator(".entry-name").all())
       assert.ok(
         await name.evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
