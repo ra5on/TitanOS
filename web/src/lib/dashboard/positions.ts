@@ -26,12 +26,26 @@ export function positions(
 }
 
 /**
+ * Order for fewer visible than wished columns: the wished first column from
+ * top to bottom, then the second and so on. Every tile carries the column it
+ * has in the wished layout, so edits in this order keep the wide layout.
+ */
+export function columnOrder<T extends Position>(items: T[], columns: number): T[] {
+	const { rects } = positions(items, columns, {});
+	return items
+		.map((item, index) => ({ item, index, column: rects[item.id].column }))
+		.sort((a, b) => a.column - b.column || a.index - b.index)
+		.map(({ item, column }) => ({ ...item, column }));
+}
+
+/**
  * Reading order after dropping `id` at the drop point `at` (pixels, column
  * index already snapped). With `explicit` columns the tile goes behind the last
  * tile of its target lanes that starts above the drop point, so tiles above it
  * in that lane keep their place and tiles in other lanes keep their column; the
  * gap above becomes its offset. Without explicit columns (fewer visible columns
- * than wished for) only the reading order changes.
+ * than wished for, `items` in `columnOrder`) the tile joins the wished column
+ * of the tile it lands behind, or in front of at the very top.
  */
 export function dropLayout<T extends Position>(
 	items: T[],
@@ -56,7 +70,8 @@ export function dropLayout<T extends Position>(
 				(Math.abs(rects[p.id].top - at.top) <= 8 && rects[p.id].column >= col),
 		);
 		if (index < 0) index = rest.length;
-		rest.splice(index, 0, current);
+		const column = (rest[index - 1] ?? rest[index])?.column;
+		rest.splice(index, 0, column === undefined ? current : { ...current, column, offset: 0 });
 		return rest;
 	}
 	let index = 0;

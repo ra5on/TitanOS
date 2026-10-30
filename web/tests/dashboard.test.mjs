@@ -173,3 +173,43 @@ test('dropping a tile keeps tiles above the drop point in their lane', async () 
 		['F', 'A', 'B', 'C', 'D', 'E'],
 	);
 });
+
+test('fewer visible columns read the wished columns top to bottom, one after the other', async () => {
+	const { positions, columnOrder, dropLayout } = await import('../src/lib/dashboard/positions.ts');
+	// Wished: two columns, A C E left and B D F right.
+	const items = ['A', 'B', 'C', 'D', 'E', 'F'].map((id) => ({ id }));
+	const narrow = columnOrder(items, 2);
+	assert.deepEqual(
+		narrow.map((p) => p.id),
+		['A', 'C', 'E', 'B', 'D', 'F'],
+	);
+	// Explicit columns and offsets decide, not the saved order.
+	const placed = [
+		{ id: 'a', column: 1 },
+		{ id: 'b', column: 0, offset: 24 },
+		{ id: 'c', column: 1 },
+	];
+	assert.deepEqual(
+		columnOrder(placed, 2).map((p) => [p.id, p.column, p.offset]),
+		[
+			['b', 0, 24],
+			['a', 1, undefined],
+			['c', 1, undefined],
+		],
+	);
+	// Dropping F on top of the single column puts it into the first wished column.
+	const heights = Object.fromEntries(items.map((p) => [p.id, 100]));
+	const { rects } = positions(narrow, 1, heights, false);
+	const dropped = dropLayout(narrow, 'F', rects, { column: 0, top: 0 }, 1, false);
+	assert.deepEqual(
+		columnOrder(dropped, 2).map((p) => p.id),
+		['F', 'A', 'C', 'E', 'B', 'D'],
+	);
+	// Dropped behind C it stays there in the wide layout as well.
+	const behind = dropLayout(narrow, 'F', rects, { column: 0, top: 150 }, 1, false);
+	assert.deepEqual(
+		columnOrder(behind, 2).map((p) => p.id),
+		['A', 'C', 'F', 'E', 'B', 'D'],
+	);
+	assert.equal(positions(behind, 2, heights).rects.F.column, 0);
+});

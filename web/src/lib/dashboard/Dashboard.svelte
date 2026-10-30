@@ -22,7 +22,7 @@
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import { dashboardControl } from './control.svelte.ts';
 	import { positionGrid } from './position-grid.svelte.ts';
-	import { dropLayout, type Rect } from './positions.ts';
+	import { columnOrder, dropLayout, type Rect } from './positions.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { cpuTemperature, temperatureSelection, tileTemperatures } from './temperatures.ts';
 	import type { TailnetDevices } from './tailscale.ts';
@@ -179,7 +179,7 @@
 	function attachGrid(element: HTMLElement) {
 		board = element;
 		const cleanup = positionGrid(element, () => ({
-			items: mountedLayout,
+			items: actualColumns === columns ? mountedLayout : columnOrder(mountedLayout, columns),
 			columns: actualColumns,
 			explicit: actualColumns === columns,
 			onlayout: (rects, width) => {
@@ -648,14 +648,19 @@
 		for (const key of STYLE_KEYS) (next as unknown as Record<string, unknown>)[key] = fresh[key];
 		options = { ...options, [customize]: next };
 	}
-	function moveTile(id: TileId, to: number) {
-		const layout = [...shown],
-			from = layout.findIndex((p) => p.id === id);
-		if (from < 0 || to < 0 || to >= layout.length || from === to) return;
+	// One place up or down in the order shown on screen.
+	function moveTile(id: TileId, direction: number) {
+		const narrow = actualColumns !== columns;
+		const layout = narrow ? columnOrder(shown, columns) : [...shown],
+			from = layout.findIndex((p) => p.id === id),
+			to = from + direction;
+		if (from < 0 || to < 0 || to >= layout.length) return;
 		checkpoint();
+		// Narrow: the tile joins the wished column of the tile it passes.
+		const passed = layout[to];
 		const [item] = layout.splice(from, 1);
-		layout.splice(to, 0, item);
-		rebuild(layout.map((p) => ({ ...p, column: undefined, offset: undefined })));
+		layout.splice(to, 0, narrow ? { ...item, column: passed.column, offset: 0 } : item);
+		rebuild(narrow ? layout : layout.map((p) => ({ ...p, column: undefined, offset: undefined })));
 	}
 	async function keyboardMove(e: KeyboardEvent, id: TileId) {
 		if (
@@ -678,7 +683,7 @@
 				),
 				e.key === 'ArrowUp' || e.key === 'ArrowDown' ? false : undefined,
 			);
-		} else moveTile(id, shown.findIndex((p) => p.id === id) + direction);
+		} else moveTile(id, direction);
 		await tick();
 		document
 			.querySelector<HTMLButtonElement>(`.grid-stack-item[gs-id="${CSS.escape(id)}"] .grip`)
@@ -699,10 +704,12 @@
 		const start = { x: event.clientX, y: event.clientY },
 			r = boardRects[id];
 		const cell = (availableWidth + 12) / actualColumns;
-		const original = structuredClone($state.snapshot(shown));
+		const explicit = actualColumns === columns;
+		const original = explicit
+			? structuredClone($state.snapshot(shown))
+			: columnOrder(structuredClone($state.snapshot(shown)), columns);
 		const base = Object.fromEntries(Object.entries(boardRects).map(([id, r]) => [id, { ...r }]));
 		const history = snapshot();
-		const explicit = actualColumns === columns;
 		let changed = false,
 			preview = '';
 		handle.setPointerCapture(event.pointerId);
