@@ -2,7 +2,7 @@
 
 Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM läuft – inspiriert von Unraid, aber mit klassischem RAID. Wird auf GitHub veröffentlicht.
 
-Stand: **0.37.1** (App-Release, Systembasis 0.36.1; Release-Prüfstand siehe docs/releases/v0.37.1.md). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
+Stand: **0.37.2** (volles Release, Systembasis 0.37.2; Release-Prüfstand siehe docs/releases/v0.37.2.md). Diese Datei beschreibt die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel hier aktualisieren, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
