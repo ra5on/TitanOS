@@ -110,7 +110,12 @@ def repack(base_dir, manifest, version, titand, work):
     (image / "rootfs/var/lib/dpkg").mkdir(parents=True)
     run("cp", str(root / "var/lib/dpkg/status"), str(image / "rootfs/var/lib/dpkg/status"))
     packed = work / "filesystem.squashfs"
-    sudo("mksquashfs", str(root), str(packed), "-comp", "zstd", "-Xcompression-level", "19", "-b", "1M",
+    # Like mkosi.finalize under SOURCE_DATE_EPOCH: creation time and file
+    # times clamped to the commit, so the same commit packs the same image.
+    # Outside a checkout (tests) the times stay as they are.
+    epoch = os.environ.get("SOURCE_DATE_EPOCH") or subprocess.run(
+        ["git", "log", "-1", "--format=%ct"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    sudo("env", *([f"SOURCE_DATE_EPOCH={epoch}"] if epoch else []), "mksquashfs", str(root), str(packed), "-comp", "zstd", "-Xcompression-level", "19", "-b", "1M",
          "-noappend", "-no-progress", "-quiet")
     sudo("rm", "-rf", str(root))
 

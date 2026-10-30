@@ -265,6 +265,9 @@
 						})}</span
 					>{/if}
 				{#if backup.state?.warning}<span>{backup.state.warning}</span>{/if}
+				{#if !backup.state?.running && backup.state?.skipped}<span
+						>{t('backup.skipped', { n: backup.state.skipped })}</span
+					>{/if}
 				<button
 					type="button"
 					class="chip-btn"
