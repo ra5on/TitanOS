@@ -122,7 +122,7 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 	if err := a.m.Create("Home"); err != nil {
 		t.Fatal(err)
 	}
-	info := a.m.View().JoinInfo
+	info := a.m.JoinInfo()
 	if !strings.HasPrefix(info, JoinPrefix) {
 		t.Fatalf("join information %q", info)
 	}
@@ -167,7 +167,7 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 
 	// A third node joins with the information shown on B.
 	c := newTestNode(t, "nas-c", map[string]string{"carl": "password-of-c"})
-	if err := c.m.Join(ctx, b.m.View().JoinInfo); err != nil {
+	if err := c.m.Join(ctx, b.m.JoinInfo()); err != nil {
 		t.Fatal(err)
 	}
 	eventually(t, "C known everywhere", func() bool { return len(a.m.View().Nodes) == 3 && len(b.m.View().Nodes) == 3 })
@@ -229,14 +229,14 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 			cID = n.ID
 		}
 	}
-	oldInfo := a.m.View().JoinInfo
+	oldInfo := a.m.JoinInfo()
 	if err := a.m.Remove(ctx, cID); err != nil {
 		t.Fatal(err)
 	}
 	if c.m.InCluster() {
 		t.Fatal("removed node still in the cluster")
 	}
-	key := func(m *Manager) string { info, _ := parseJoinInfo(m.View().JoinInfo); return info.Key }
+	key := func(m *Manager) string { info, _ := parseJoinInfo(m.JoinInfo()); return info.Key }
 	if old, _ := parseJoinInfo(oldInfo); key(b.m) == old.Key || key(b.m) != key(a.m) {
 		t.Fatal("join key not replaced everywhere")
 	}
@@ -277,7 +277,7 @@ func TestVerifyRefusesReplayWrongSecretAndPublicAddresses(t *testing.T) {
 	if err := a.m.Create("Home"); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.m.Join(context.Background(), a.m.View().JoinInfo); err != nil {
+	if err := b.m.Join(context.Background(), a.m.JoinInfo()); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest("GET", "/api/v1/storage", nil)
@@ -320,7 +320,7 @@ func TestJoinNeedsTheRightKeyAndSlowsGuessing(t *testing.T) {
 	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
 	b := newTestNode(t, "nas-b", map[string]string{"bob": "password-of-b"})
 	a.m.Create("Home")
-	info, _ := parseJoinInfo(a.m.View().JoinInfo)
+	info, _ := parseJoinInfo(a.m.JoinInfo())
 	info.Key = strings.Repeat("0", 64)
 	data, _ := json.Marshal(info)
 	wrong := JoinPrefix + base64.RawURLEncoding.EncodeToString(data)
@@ -372,7 +372,7 @@ func TestVerifyChecksEveryField(t *testing.T) {
 	if err := a.m.Create("Home"); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.m.Join(context.Background(), a.m.View().JoinInfo); err != nil {
+	if err := b.m.Join(context.Background(), a.m.JoinInfo()); err != nil {
 		t.Fatal(err)
 	}
 	a.m.mu.Lock()

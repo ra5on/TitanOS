@@ -13,7 +13,7 @@ Einstellung: **Einstellungen › Cluster** (Besitzer und Administratoren). Code:
 ## Erstellen und beitreten
 
 1. Auf dem ersten NAS: **Cluster erstellen** und einen Namen vergeben.
-2. Die Seite zeigt ab jetzt dauerhaft die **Beitrittsinformation**. Das ist ein Text `titanos-cluster:…` mit:
+2. Unter **Beitrittsinformation anzeigen** bestätigt man mit dem eigenen Passwort (und ggf. einem Code) oder mit einem Passkey des Kontos für diese Adresse; erst dann zeigt die Seite die **Beitrittsinformation**. Sie verschwindet nach fünf Minuten, beim Verlassen der Seite und bei „Ausblenden“ wieder und steht nie in der normalen Antwort der Seite (`GET /api/v1/cluster`), sondern nur in `POST /api/v1/cluster/join-info`. Das ist ein Text `titanos-cluster:…` mit:
    - dem Namen des Clusters,
    - den Adressen der Knoten,
    - den Fingerabdrücken ihrer Cluster-Zertifikate,

@@ -280,8 +280,6 @@ type View struct {
 	Name     string `json:"name,omitempty"`
 	Internet bool   `json:"internet"`
 	Nodes    []Node `json:"nodes"`
-	// JoinInfo lets another node join; only owners and administrators see it.
-	JoinInfo string `json:"joinInfo,omitempty"`
 	// Extra are the addresses added for this node.
 	Extra []string `json:"extra"`
 	// Found are the addresses this node found itself.
@@ -299,9 +297,16 @@ func (m *Manager) View() View {
 	if m.state != nil {
 		view.Name, view.Internet = m.state.Name, m.state.Internet
 		view.Nodes = slices.Clone(m.state.Nodes)
-		view.JoinInfo = m.joinInfoLocked()
 	}
 	return view
+}
+
+// JoinInfo lets another node join; it is empty outside a cluster. The
+// settings page shows it only after password or passkey, never with View.
+func (m *Manager) JoinInfo() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.joinInfoLocked()
 }
 
 // node returns a member other than this node.
