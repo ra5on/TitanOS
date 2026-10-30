@@ -41,7 +41,7 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 - Kopfbereich mit Status, CPU/RAM und Schnellaktionen: WebUI öffnen, Logs, Konsole, Neustarten.
 
 **Docker-Übersicht und App-Store**
-- Aktuelles gemeinsames Raster für Container und Compose-Stacks mit Karten/Liste/Minimal und persönlichen Layouts: siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand; weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
+- Aktuelles gemeinsames Raster für Container und Compose-Stacks mit Karten/Liste/Minimal und persönlichen Layouts: siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand; weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`; öffnet sich per Klick aufs App-Symbol und per Rechtsklick auf Kachel/Karte wie bei den VMs, Wunsch des Projektinhabers vom 30.10.2026; Aufbau gleich auf Docker-Seite und Dashboard: Kopf mit Symbol und Name, Start/Stopp, Adressen mit Ziel, Logs, Konsole, Bearbeiten, Neustarten, Update, Entfernen; nur seitenspezifisch zusätzlich Tailnet bzw. Container anzeigen/Anheften), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
 - Suche/Filter, Status, CPU/RAM, Ports, WebUI, Start/Stopp und Schnellaktionen bleiben erhalten. Eigene Quellen werden täglich/per Knopf aktualisiert, externe Stores nur ausdrücklich hinzugefügt.
 - Installationspanel mit Herkunft je Feld, eigenen Variablen/Pfaden/Ports und erweiterten Rechtehinweisen. Daten auf dem ausgewählten Docker-Volume, niemals im RAM-Overlay; GPU-Nutzung ausdrücklich je Dienst.
 - Webadressen über `titanos.webui`, optional `titanos.public-url` und aktiven Tailscale-Host; `titanos.public-url` richtet keinen Tunnel ein. Siehe `docs/APP-LINKS.md` und `docs/NATIVE-APPS.md`.
@@ -54,7 +54,20 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   Compose-Stacks; Karten, Liste und Minimal. Minimal klappt per Namensknopf auf.
 - „Seite anpassen“: Reihenfolge per Griff oder Pfeilen, Breiten 3/4/8 von 12
   Spalten (Schmal/Normal/Breit), Image/CPU-Verlauf wählbar, Speichern/Abbrechen/
-  Standard. Listen nutzen volle Breite; kleine Bildschirme stapeln automatisch.
+  Standard. Kleine Bildschirme stapeln automatisch.
+- **Liste als Kacheln** (Entscheidung des Projektinhabers vom 30.10.2026 nach
+  Screenshot-Abstimmung): jeder Container eine eigene abgerundete Kachel, alle
+  gleich breit (15rem) und 52 px hoch, so viele nebeneinander wie passen
+  (Handy: eine Spalte). App-Symbol mittig links, Name (mit Update-Chip) und
+  darunter nur CPU · RAM; der Zustand ist der Streifen links (Akzentfarbe =
+  läuft, grau = gestoppt; zusätzlich gedimmtes Symbol und „–“ statt Werten,
+  Screenreader-Text). Keine Knöpfe in der Kachel: Symbol oder Rechtsklick öffnet
+  das Menü (Start/Stopp oben, Adressen mit Ziel, Ports unten). Keine
+  Spaltenköpfe. Ein Stack ist eine Kachel derselben Form („laufend/gesamt · CPU ·
+  RAM“), sein Name klappt die Dienste als eigene Kacheln dahinter auf, sein
+  Symbol öffnet das Stack-Menü (Adressen, Probleme, Links festlegen, Tailnet,
+  Bearbeiten). Prüfung: `scripts/test-ui-dashboard-flow.mjs`,
+  Screenshots unter `out/validation/`.
 - Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
   Preferences-API mit RAM-Cache. Nur ausdrückliches Speichern schreibt.
   Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die

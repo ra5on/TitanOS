@@ -34,6 +34,15 @@
 <nav class="settings-sidebar" aria-label={t('settings.navigation')}>
 	<SettingsSearch results={flat} idPrefix={prefix} />
 	<div class="groups" id="{prefix}-results">
+		<!-- The overview (what needs attention, this NAS) above the groups. -->
+		{#if !searching}<ul class="overview">
+				<li>
+					<a href="/settings" aria-current={path === '/settings' ? 'page' : undefined}
+						><Icon name="gridSmall" size={16} /><span class="label">{t('settings.overview')}</span
+						></a
+					>
+				</li>
+			</ul>{/if}
 		<!-- The overview says how many matched itself. -->
 		{#if searching && path !== '/settings'}<p class="muted note" role="status">
 				{flat.length ? t('ui.results', { count: flat.length }) : t('ui.noSettings')}
@@ -78,6 +87,9 @@
 	.groups {
 		display: flex;
 		flex-direction: column;
+	}
+	.overview {
+		margin-top: 8px;
 	}
 	.note {
 		margin: 8px 8px 0;

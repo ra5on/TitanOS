@@ -23,9 +23,11 @@ Besitzer und Administratoren (wie die Glocke).
 
 ## App-Modus
 
-Läuft TitanOS vom Home-Bildschirm (`display-mode: standalone`), hat die
-Kopfzeile einen eigenen Zurück-Knopf (es gibt keine Browserleiste), und die
-Seite lässt unten Platz für den Home-Indikator. Navigiert wird wie im Browser
+Läuft TitanOS vom Home-Bildschirm (`display-mode: standalone`), lässt die
+Seite unten Platz für den Home-Indikator. Einen eigenen Zurück-Knopf in der
+Kopfzeile gibt es nicht (entfernt auf Wunsch des Projektinhabers vom
+30.10.2026); Unterseiten öffnen sich über Menüs statt über eigene Seiten,
+wo das reicht. Navigiert wird wie im Browser
 über das Menü der Kopfzeile; eine eigene untere Leiste gibt es nicht
 (Entscheidung des Projektinhabers vom 29.10.2026). Im Browser ändert sich
 nichts.

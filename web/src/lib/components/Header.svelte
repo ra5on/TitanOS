@@ -30,13 +30,7 @@
 	const currentLabel = $derived(
 		allItems.find((item) => isCurrent(item.href))?.label ?? 'nav.label',
 	);
-	// The app on the home screen has no back button of the browser: show
-	// one once there is a page to go back to (CSS shows it only there).
-	let visited = $state(false);
-	afterNavigate((navigation) => {
-		mobileMenu?.hidePopover();
-		if (navigation.type !== 'enter') visited = true;
-	});
+	afterNavigate(() => mobileMenu?.hidePopover());
 	onMount(() => {
 		const desktop = matchMedia('(min-width: 761px)');
 		const close = () => {
@@ -70,13 +64,6 @@
 </script>
 
 <header class="bar-surface" class:side>
-	{#if visited && page.url.pathname !== '/'}<button
-			type="button"
-			class="app-back"
-			onclick={() => history.back()}
-			aria-label={t('nav.back')}
-			title={t('nav.back')}><Icon name="arrowLeft" size={20} /></button
-		>{/if}
 	{#if clusterNodes.nodes.length > 1}<div class="brand"><NodeMenu variant="logo" /></div>{:else}<a
 			class="brand"
 			href="/"
@@ -276,23 +263,6 @@
 			white-space: nowrap;
 			font-size: 1.125rem;
 			font-weight: 600;
-		}
-	}
-	.app-back {
-		display: none;
-	}
-	@media (display-mode: standalone) {
-		.app-back {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			min-width: 44px;
-			min-height: 44px;
-			margin-left: -8px;
-			border: 0;
-			background: none;
-			color: var(--text);
-			cursor: pointer;
 		}
 	}
 	.quick-access {

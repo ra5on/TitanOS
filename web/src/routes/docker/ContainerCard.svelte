@@ -20,6 +20,7 @@
 	};
 	let { container, host, tailscaleHost, busy, details, ...actions }: Props = $props();
 
+	let menu: ReturnType<typeof ContainerMenu> | undefined = $state();
 	const MAX_PORTS = 3;
 	const name = $derived(dockerName(container));
 	const running = $derived(isRunning(container));
@@ -28,9 +29,22 @@
 	const age = $derived(stateAge(container));
 </script>
 
-<article class="tile card" class:stopped={!running} aria-label={name}>
+<article
+	class="tile card"
+	class:stopped={!running}
+	aria-label={name}
+	oncontextmenu={(event) => menu?.openAt(event)}
+>
 	<div class="top">
-		<span class="icon"><AppIcon src={container.icon} {name} /></span>
+		<button
+			type="button"
+			class="icon"
+			aria-label={t('docker.actionsFor', { name: dockerName(container, 'distinct') })}
+			aria-haspopup="menu"
+			onpointerdown={() => menu?.press()}
+			onclick={(event) => menu?.toggleUnder(event.currentTarget)}
+			><AppIcon src={container.icon} {name} /></button
+		>
 		<div class="names">
 			<span class="line">
 				{#if container.managed}<a
@@ -42,7 +56,13 @@
 			</span>
 			{#if details}<span class="mono image" title={container.image}>{container.image}</span>{/if}
 		</div>
-		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} {...actions} />
+		<ContainerMenu
+			bind:this={menu}
+			{container}
+			name={dockerName(container, 'distinct')}
+			{busy}
+			{...actions}
+		/>
 	</div>
 
 	<div class="stats">
@@ -119,6 +139,10 @@
 		gap: 10px;
 	}
 	.icon {
+		padding: 0;
+		border: 0;
+		background: none;
+		cursor: pointer;
 		width: 36px;
 		height: 36px;
 		flex: none;
