@@ -326,7 +326,14 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                     if boot == 4:
                         request('/storage/volumes/mirror/check', {'action': 'start'})
                         deadline = time.monotonic() + 90
-                        while 'finished' not in remote('btrfs scrub status -R /mnt/mirror'):
+                        while True:
+                            # Right after the start btrfs may have no status
+                            # yet and exits 1; that is no failure, just early.
+                            try:
+                                if 'finished' in remote('btrfs scrub status -R /mnt/mirror'):
+                                    break
+                            except subprocess.CalledProcessError:
+                                pass
                             if time.monotonic() > deadline: raise TimeoutError('scrub')
                             time.sleep(2)
                         time.sleep(6)  # background status sampler observes the completed scrub
