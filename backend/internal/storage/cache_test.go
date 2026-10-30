@@ -483,3 +483,57 @@ func TestWriteCacheBecomesReadCacheOnlyWhenClean(t *testing.T) {
 		t.Fatalf("live %q", table)
 	}
 }
+
+// zeroWatch records which cache partitions get zeroed and what the cache
+// device was at that moment: an SSD may only be cleared once no table
+// uses it.
+func zeroWatch(m *Manager, runner *cacheRunner) *[]string {
+	var zeroed []string
+	m.zero = func(part string) error {
+		zeroed = append(zeroed, filepath.Base(part)+"@"+runner.fakeDM.target("titanos-cache-tank"))
+		return nil
+	}
+	return &zeroed
+}
+
+func TestForgottenCacheClearsTheSSD(t *testing.T) {
+	want := []string{testMetaUUID + "@linear", testDataUUID + "@linear"}
+	t.Run("read cache", func(t *testing.T) {
+		m, runner := cacheManager(t)
+		activeCache(t, m, runner, "writethrough", 0)
+		zeroed := zeroWatch(m, runner)
+		if err := m.DisableCache(context.Background(), "tank"); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(*zeroed, want) {
+			t.Fatalf("zeroed %v, want %v", *zeroed, want)
+		}
+	})
+	t.Run("write cache", func(t *testing.T) {
+		m, runner := cacheManager(t)
+		activeCache(t, m, runner, "writeback", 0)
+		zeroed := zeroWatch(m, runner)
+		if err := m.DisableCache(context.Background(), "tank"); err != nil {
+			t.Fatal(err)
+		}
+		if len(*zeroed) != 0 {
+			t.Fatalf("cleared while still in use: %v", *zeroed)
+		}
+		if !m.finishCacheRemoval(context.Background(), "tank") {
+			t.Fatal("not removed")
+		}
+		if !slices.Equal(*zeroed, want) {
+			t.Fatalf("zeroed %v, want %v", *zeroed, want)
+		}
+	})
+	t.Run("dirty write cache", func(t *testing.T) {
+		m, runner := cacheManager(t)
+		activeCache(t, m, runner, "writeback", 5)
+		runner.fakeDM.cleanAfter = -1
+		zeroed := zeroWatch(m, runner)
+		m.DisableCache(context.Background(), "tank")
+		if m.finishCacheRemoval(context.Background(), "tank") || len(*zeroed) != 0 {
+			t.Fatalf("SSD with dirty blocks cleared: %v", *zeroed)
+		}
+	})
+}

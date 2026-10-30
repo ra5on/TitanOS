@@ -144,6 +144,13 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
         def usb_serials():
             return sorted(d.get('serial') or d.get('device') for d in request('/usb/disks')['disks'])
 
+        def signatures(device):
+            """blkid -p of every partition of a guest disk: what udev and
+            /usb/disks see there (a cache partition can hold a copy of the
+            array's first block, with the file system's UUID)."""
+            parts = remote(f'lsblk -nrpo NAME,TYPE {device} | awk \'$2=="part"{{print $1}}\'').split()
+            return {p: remote(f'blkid -p -o export {p} 2>/dev/null | grep -E "^(TYPE|UUID|LABEL)=" || true').split() for p in parts}
+
         def config(name):
             """The volume as saved in /config/storage/volumes.json."""
             saved = json.loads(remote('cat /config/storage/volumes.json'))
@@ -282,6 +289,7 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
                         assert source == '/dev/mapper/titanos-cache-plain', source
                         sums['/mnt/plain/a/after.bin'] = write('/mnt/plain/a/after.bin', 64)
                         status_after = dm_status('titanos-cache-plain')
+                        record('a', ssd1SignaturesWhileActive=signatures('/dev/' + names['SSD1']))
                         for path in ('/mnt/plain/a/before.bin', '/mnt/plain/a/after.bin'):
                             assert checksum(path) == sums[path], path
                         record('a', mountSource=source, statusAtStart=status, statusAfterWrite=status_after,
@@ -297,6 +305,9 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
                         remote('systemd-run --unit=cachewriter sh -ec ' + shlex.quote(script))
                         wait(lambda: remote('ls /run/cachewriter/ | grep -c sha || true') >= '2', 'writer started', 60, 1)
                         dirty_before = dm_status('titanos-cache-plain')
+                        # Diagnostic: the first cache block can be a copy of the
+                        # array's first block (ext4 of "plain", same UUID).
+                        record('b', ssd1SignaturesBeforeDisable=signatures('/dev/' + names['SSD1']))
                         started = time.monotonic()
                         status_code, _, body = call('/storage/volumes/plain/cache', method='DELETE')
                         assert status_code == 204, (status_code, body)
@@ -314,10 +325,18 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
                             sums[f'/mnt/plain/b/f{i}.bin'] = remote(f'cat /run/cachewriter/f{i}.sha')
                         remote('sync')
                         removed = wait(lambda: notices('volume_cache_removed', 'plain'), 'volume_cache_removed notice', 60)
+                        # Forgotten means free: no copy of the array's blocks
+                        # may look like the volume's file system any more.
+                        # (udev only re-probes at the next start, so check the
+                        # partitions directly: titand zeroes their first MiB.)
+                        ssd1_after = signatures('/dev/' + names['SSD1'])
+                        assert len(ssd1_after) == 2 and not any(ssd1_after.values()), ssd1_after
+                        for part in ssd1_after:
+                            assert remote(f'cmp -s -n 1048576 {part} /dev/zero && echo zero || echo data') == 'zero', part
                         record('b', statusBeforeDisable=dirty_before, viewAfterDisable=removing, writerWhenDisabled=writer_during,
                                secondsUntilForgotten=forgotten, writerWhenForgotten=writer_at_forget,
                                tableAfter=table.split()[:5], mountSource=mount_source('plain'), filesWritten=WRITER_FILES,
-                               noticeRemoved=len(removed), usbAfterRemoval=usb_serials(), kernelErrors=ext4_errors().splitlines())
+                               noticeRemoved=len(removed), ssd1Signatures=ssd1_after, usbAfterRemoval=usb_serials(), kernelErrors=ext4_errors().splitlines())
 
                         # f) unlock secret; writeback → writethrough while dirty.
                         status_code, _, body = call('/storage/volumes/secret/unlock', {'password': password})
@@ -362,6 +381,11 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
                             magic = remote(f"LC_ALL=C grep -c -a -P '{LUKS_MAGIC}' {dev} || true")
                             checks[s] = {'devices': parts, 'isLuks': is_luks, 'luksMagicWholeDisk': int(magic),
                                          'blkid': remote(f'blkid -p {dev} 2>&1 || true')}
+                        checks['SSD2']['signatures'] = signatures('/dev/' + names['SSD2'])
+                        checks['SSD2']['firstMiBZero'] = {p: remote(f'cmp -s -n 1048576 {p} /dev/zero && echo yes || echo no') == 'yes'
+                                                          for p in checks['SSD2']['signatures']}
+                        assert all(checks['SSD2']['firstMiBZero'].values()), checks['SSD2']
+                        assert not any(checks['SSD2']['signatures'].values()), checks['SSD2']
                         assert all(not c['isLuks'] and not c['luksMagicWholeDisk'] for c in checks.values()), checks
                         record('d', statusBeforeDelete=dirty, mdMembers=md_members, luksMagicBefore=luks_before,
                                secondsToDelete=deleted, mapperAfter=mapper.splitlines(), afterDelete=checks, ok=True)
@@ -387,7 +411,7 @@ def smoke(archive, output, timeout, force_tcg=False, hold=False):
                         errors = ext4_errors()
                         assert not errors, errors
                         usb_now = usb_serials()
-                        assert 'SSD1' in usb_now, usb_now
+                        assert 'SSD1' in usb_now, (usb_now, signatures('/dev/' + names['SSD1']), remote('lsblk -o NAME,SERIAL,FSTYPE,UUID'))
                         record('b', afterReboot={'mountSource': source, 'checksumsMatch': len([p for p in sums if p.startswith('/mnt/plain/')]),
                                                  'e2fsck': fsck.stdout.strip().splitlines(), 'kernelErrors': [], 'usb': usb_now}, ok=True)
                         # c) read cache on SSD1, effective after the next start.

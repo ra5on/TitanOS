@@ -37,8 +37,12 @@ wechseln (`dmsetup reload` mit kurzem `suspend`/`resume`).
   `/dev/mapper/titanos-cache-<volume>` per `dmsetup reload` eine `linear`-
   Tabelle direkt auf das Array: Das eingebundene Volume läuft weiter, die SSD
   ist frei, und beim Herunterfahren geht nichts verloren. Danach wird der
-  Cache vergessen (Meldung `volume_cache_removed`); die lineare Zuordnung
-  bleibt bis zum nächsten Start. Ein Lesecache ohne offene Blöcke wird sofort
+  Cache vergessen (Meldung `volume_cache_removed`), und titand nullt das
+  erste MiB beider SSD-Partitionen (und verwirft die Cache-Partition per
+  `blkdiscard`, wo die SSD das kann): Der erste Cache-Block kann eine Kopie
+  des Array-Anfangs mit Dateisystem-Signatur und UUID des Volumes sein, und
+  udev sähe das Dateisystem dann beim nächsten Start ein zweites Mal auf der
+  SSD. Die lineare Zuordnung bleibt bis zum nächsten Start. Ein Lesecache ohne offene Blöcke wird sofort
   so abgelöst. Ein Schreibcache, der nicht läuft, obwohl die SSD da ist (z. B.
   gesperrtes Volume), lässt sich erst ausschalten, wenn er läuft; fehlt die
   SSD, wird er auf Wunsch vergessen (seine offenen Blöcke sind dann ohnehin
@@ -46,8 +50,8 @@ wechseln (`dmsetup reload` mit kurzem `suspend`/`resume`).
 - Löschen eines verschlüsselten Volumes mit Cache: erst zurückschreiben und
   `writethrough` (höchstens 5 Minuten, sonst „beschäftigt“, später erneut),
   dann `cryptsetup erase` und `wipefs` durch den Cache, dann das Cache-Gerät
-  entfernen; die Metadaten der SSD werden genullt und die Cache-Partition per
-  `blkdiscard` verworfen, wo die SSD das kann.
+  entfernen; der Anfang beider SSD-Partitionen wird genullt und die
+  Cache-Partition per `blkdiscard` verworfen, wo die SSD das kann.
 - Die PARTUUIDs der Cache-Partitionen zählen zu `storage.Owns`: Die SSD
   erscheint nicht unter „Laufwerk formatieren“.
 - Die Speicher-Seite zeigt Belegung, Lesetreffer und offene Blöcke aus
@@ -114,7 +118,20 @@ scheiterte, und ein zweiter Versuch blieb an „kein LUKS-Gerät“ hängen.
 Seitdem wartet titand auf udev und versucht das Entfernen erneut, und ein
 bereits gelöschter LUKS-Kopf gilt als gelöscht.
 
-Lokal gelaufen am 30.10.2026 (KVM, 4 Minuten, alle Phasen grün):
+Der Release-Probelauf (PR #205, echtes Abbild, TCG ohne KVM) fand einen
+zweiten: Nach dem Ausschalten eines Schreibcaches und einem Neustart fehlte
+die freie SSD unter „Laufwerk formatieren“. Ursache: Die Cache-Partition
+begann mit einer Kopie des ersten Array-Blocks (ext4-Signatur mit der UUID
+von `plain`, die TitanOS als eigenes Volume erkennt); udev sieht das erst beim
+nächsten Start. Ob der erste Cache-Block diese Kopie hält, hängt davon ab,
+welcher Block zuerst in den Cache kommt, deshalb trat es lokal mit KVM nicht
+auf. Seitdem nullt titand beim Vergessen eines Caches den Anfang beider
+SSD-Partitionen (wie schon beim Löschen), und der Test prüft genau das
+(erstes MiB beider Partitionen null, keine Signatur) zusätzlich zur Liste.
+
+Lokal gelaufen am 30.10.2026 mit beiden Korrekturen, mit KVM (4 Minuten)
+und mit `--tcg` wie im CI ohne KVM (8 Minuten), alle Phasen grün; die
+Doppel-Signatur selbst trat lokal in keinem Lauf auf:
 [`docs/validation/cache-qemu-2026-10-30.json`](validation/cache-qemu-2026-10-30.json).
 Weil hier kein mkosi-Bau möglich war, lief das Abbild von 0.32.0 mit dem
 titand dieses Stands (und dessen `fstab`/`titand.service`); Kernel, dm-cache
