@@ -42,6 +42,7 @@
 							})}
 					compact={kind === 'cpu'}
 					showCompactLabel
+					bar={kind !== 'memory'}
 					{options}
 					history={systemHistory[kind]}
 				/>
