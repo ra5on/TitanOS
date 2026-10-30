@@ -792,7 +792,7 @@ func (m *Manager) forget() {
 }
 
 // CurrentProgress is safe for background polling: unlike Status it never
-// reads signing keys or the boot entries on the automounted USB stick.
+// reads signing keys or the boot entries on the USB stick.
 func (m *Manager) CurrentProgress() Progress {
 	m.mu.Lock()
 	defer m.mu.Unlock()
