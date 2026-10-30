@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/cluster"
+	"github.com/ra5on/TitanOS/backend/internal/webauthn/webauthntest"
 )
 
 // clusterTestServer is a test server that is a node of a cluster. Nodes on
@@ -42,18 +43,28 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("create: %d %s", res.StatusCode, body)
 	}
+	// The join information is never part of the page, only shown after
+	// the password.
+	if strings.Contains(string(body), cluster.JoinPrefix) {
+		t.Fatalf("join information without the password: %s", body)
+	}
+	res, body = a.request("POST", "/api/v1/cluster/join-info", map[string]string{"password": "wrong"})
+	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "wrong_password" {
+		t.Fatalf("join information with a wrong password: %d %s", res.StatusCode, body)
+	}
+	res, body = a.request("POST", "/api/v1/cluster/join-info", map[string]string{"password": testPassword})
 	var view struct {
-		Cluster cluster.View `json:"cluster"`
+		JoinInfo string `json:"joinInfo"`
 	}
 	json.Unmarshal(body, &view)
-	if !strings.HasPrefix(view.Cluster.JoinInfo, cluster.JoinPrefix) {
-		t.Fatalf("no join information: %s", body)
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(view.JoinInfo, cluster.JoinPrefix) {
+		t.Fatalf("no join information: %d %s", res.StatusCode, body)
 	}
-	res, body = b.request("POST", "/api/v1/cluster/preview", map[string]string{"info": view.Cluster.JoinInfo})
+	res, body = b.request("POST", "/api/v1/cluster/preview", map[string]string{"info": view.JoinInfo})
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"replaced":["alex"]`) {
 		t.Fatalf("preview: %d %s", res.StatusCode, body)
 	}
-	res, body = b.request("POST", "/api/v1/cluster/join", map[string]string{"info": view.Cluster.JoinInfo})
+	res, body = b.request("POST", "/api/v1/cluster/join", map[string]string{"info": view.JoinInfo})
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("join: %d %s", res.StatusCode, body)
 	}
@@ -114,4 +125,81 @@ func eventuallyAPI(t *testing.T, ok func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timed out")
+}
+
+// TestClusterJoinInfoWithPasskey: a passkey of the account shows the join
+// information instead of the password; its challenge registers nothing.
+func TestClusterJoinInfoWithPasskey(t *testing.T) {
+	ts, _ := clusterTestServer(t, "nas-a")
+	ts.url = strings.Replace(ts.url, "127.0.0.1", "localhost", 1)
+	origin := strings.ToLower(ts.url)
+	ts.client = ts.newClient()
+	ts.setup()
+	if res, body := ts.request("POST", "/api/v1/cluster", map[string]string{"name": "Home"}); res.StatusCode != http.StatusOK {
+		t.Fatalf("create: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("POST", "/api/v1/account/passkeys/confirm", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "no_passkey" {
+		t.Fatalf("confirm without a passkey: %d %s", res.StatusCode, body)
+	}
+
+	_, body := ts.request("POST", "/api/v1/account/passkeys/begin", map[string]string{"password": testPassword})
+	var begun struct {
+		ChallengeID string `json:"challengeId"`
+		PublicKey   struct {
+			Challenge string
+			User      struct{ ID string }
+		} `json:"publicKey"`
+	}
+	json.Unmarshal(body, &begun)
+	key := webauthntest.New()
+	key.Handle, _ = decodeB64(begun.PublicKey.User.ID)
+	cd, att := key.Create(begun.PublicKey.Challenge, origin, "localhost")
+	if res, body := ts.request("POST", "/api/v1/account/passkeys", map[string]string{"challengeId": begun.ChallengeID, "name": "Laptop", "clientDataJSON": cd, "attestationObject": att}); res.StatusCode != http.StatusOK {
+		t.Fatalf("add passkey: %d %s", res.StatusCode, body)
+	}
+
+	type challenge struct {
+		ChallengeID string `json:"challengeId"`
+		PublicKey   struct {
+			Challenge        string
+			AllowCredentials []struct{ ID string } `json:"allowCredentials"`
+		} `json:"publicKey"`
+	}
+	confirm := func() challenge {
+		t.Helper()
+		res, body := ts.request("POST", "/api/v1/account/passkeys/confirm", nil)
+		var c challenge
+		if res.StatusCode != http.StatusOK || json.Unmarshal(body, &c) != nil || len(c.PublicKey.AllowCredentials) != 1 {
+			t.Fatalf("confirm: %d %s", res.StatusCode, body)
+		}
+		return c
+	}
+	// A confirmation challenge never registers a passkey: whoever holds
+	// only the session must not add one without the password.
+	c := confirm()
+	other := webauthntest.New()
+	other.Handle = key.Handle
+	cd, att = other.Create(c.PublicKey.Challenge, origin, "localhost")
+	if res, body := ts.request("POST", "/api/v1/account/passkeys", map[string]string{"challengeId": c.ChallengeID, "clientDataJSON": cd, "attestationObject": att}); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("registered with a confirmation challenge: %d %s", res.StatusCode, body)
+	}
+
+	reveal := func(tamper bool) (*http.Response, []byte) {
+		c := confirm()
+		ch := c.PublicKey.Challenge
+		if tamper {
+			ch = strings.Repeat("A", len(ch))
+		}
+		id, cd, ad, sig, handle := key.Get(ch, origin, "localhost")
+		return ts.request("POST", "/api/v1/cluster/join-info", map[string]any{"passkey": map[string]string{
+			"challengeId": c.ChallengeID, "id": id, "clientDataJSON": cd, "authenticatorData": ad, "signature": sig, "userHandle": handle,
+		}})
+	}
+	if res, body := reveal(true); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "passkey_failed" {
+		t.Fatalf("tampered passkey: %d %s", res.StatusCode, body)
+	}
+	res, body := reveal(false)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), cluster.JoinPrefix) {
+		t.Fatalf("join information with the passkey: %d %s", res.StatusCode, body)
+	}
 }

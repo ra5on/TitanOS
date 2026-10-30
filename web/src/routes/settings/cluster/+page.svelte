@@ -6,6 +6,8 @@
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import ReconfirmFields, { reconfirmComplete } from '#lib/components/ReconfirmFields.svelte';
+	import { confirmWithPasskey, hasPasskeyHere } from '#lib/passkeys.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDuration } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -23,6 +25,18 @@
 	let busy = $state(false);
 	let error = $state('');
 	let copied = $state(false);
+
+	// The join information lets a node in that sees everything: it is shown
+	// only after password (and code) or a passkey, and hidden again after a
+	// while, on leaving the page and whenever the key changes.
+	const JOIN_INFO_SHOWN = 5 * 60 * 1000;
+	let joinInfo = $state('');
+	let hideTimer: ReturnType<typeof setTimeout> | undefined;
+	let revealing = $state(false);
+	let password = $state('');
+	let code = $state('');
+	let passkeyHere = $state(false);
+	let revealError = $state('');
 
 	let newName = $state('');
 	let joinText = $state('');
@@ -49,6 +63,7 @@
 	}
 
 	function fill(next: ClusterPage) {
+		if (page && next.cluster.nodes.length !== page.cluster.nodes.length) hideJoinInfo();
 		page = next;
 		clusterName = next.cluster.name ?? '';
 		internet = next.cluster.internet;
@@ -63,7 +78,68 @@
 			loadError = problem(err);
 		}
 	}
-	onMount(() => poll(load, { interval: 20000, skip: () => busy || !inCluster }));
+	onMount(() => {
+		const stop = poll(load, { interval: 20000, skip: () => busy || !inCluster });
+		return () => {
+			stop();
+			clearTimeout(hideTimer);
+		};
+	});
+
+	function hideJoinInfo() {
+		joinInfo = '';
+		copied = false;
+		clearTimeout(hideTimer);
+	}
+
+	async function openReveal() {
+		password = '';
+		code = '';
+		revealError = '';
+		revealing = true;
+		passkeyHere = await hasPasskeyHere();
+	}
+
+	async function reveal(proof: Record<string, unknown>) {
+		busy = true;
+		revealError = '';
+		try {
+			const answer = await api.post<{ joinInfo: string }>('/cluster/join-info', proof);
+			joinInfo = answer.joinInfo;
+			revealing = false;
+			clearTimeout(hideTimer);
+			hideTimer = setTimeout(hideJoinInfo, JOIN_INFO_SHOWN);
+		} catch (err) {
+			revealError = problem(err);
+		} finally {
+			busy = false;
+			password = '';
+			code = '';
+		}
+	}
+
+	function revealWithPassword(event: SubmitEvent) {
+		event.preventDefault();
+		if (reconfirmComplete(password, code)) reveal({ password, code });
+	}
+
+	async function revealWithPasskey() {
+		revealError = '';
+		let passkey;
+		try {
+			passkey = await confirmWithPasskey();
+		} catch (err) {
+			if (err instanceof ApiError) revealError = problem(err);
+			else
+				revealError = t(
+					err instanceof DOMException && err.name !== 'NotAllowedError'
+						? 'passkeys.browserError'
+						: 'passkeys.cancelled',
+				);
+			return;
+		}
+		await reveal({ passkey });
+	}
 
 	async function act(run: () => Promise<ClusterPage | void>) {
 		busy = true;
@@ -104,11 +180,17 @@
 	}
 
 	async function leave() {
-		if (await act(() => api.post<ClusterPage>('/cluster/leave'))) confirmLeave = false;
+		if (await act(() => api.post<ClusterPage>('/cluster/leave'))) {
+			confirmLeave = false;
+			hideJoinInfo();
+		}
 	}
 
 	async function newKey() {
-		if (await act(() => api.post<ClusterPage>('/cluster/join-key'))) confirmKey = false;
+		if (await act(() => api.post<ClusterPage>('/cluster/join-key'))) {
+			confirmKey = false;
+			hideJoinInfo();
+		}
 	}
 
 	async function remove(node: NodeView) {
@@ -131,9 +213,9 @@
 	}
 
 	async function copy() {
-		if (!cluster?.joinInfo) return;
+		if (!joinInfo) return;
 		try {
-			await navigator.clipboard.writeText(cluster.joinInfo);
+			await navigator.clipboard.writeText(joinInfo);
 			copied = true;
 			setTimeout(() => (copied = false), 2000);
 		} catch {
@@ -301,17 +383,21 @@
 	<section class="tile panel" id="cluster-join" aria-labelledby="cluster-join-title">
 		<h2 class="tile-title" id="cluster-join-title">{t('cluster.joinInfo')}</h2>
 		<p class="muted">{t('cluster.joinInfoHint')}</p>
-		<textarea
-			class="field mono join-info"
-			rows="4"
-			readonly
-			value={cluster.joinInfo ?? ''}
-			aria-label={t('cluster.joinInfo')}
-			onfocus={(e) => e.currentTarget.select()}></textarea>
+		{#if joinInfo}<textarea
+				class="field mono join-info"
+				rows="4"
+				readonly
+				value={joinInfo}
+				aria-label={t('cluster.joinInfo')}
+				onfocus={(e) => e.currentTarget.select()}></textarea>
+			<p class="muted small">{t('cluster.joinInfoHides')}</p>{/if}
 		<div class="row-actions">
-			<button class="btn btn-primary" onclick={copy}
-				>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
-			>
+			{#if joinInfo}<button class="btn btn-primary" onclick={copy}
+					>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
+				><button class="btn" onclick={hideJoinInfo}>{t('cluster.hideJoinInfo')}</button
+				>{:else}<button class="btn btn-primary" disabled={busy} onclick={openReveal}
+					>{t('cluster.showJoinInfo')}</button
+				>{/if}
 			<button class="btn" disabled={busy} onclick={() => (confirmKey = true)}
 				>{t('cluster.newKey')}</button
 			>
@@ -395,6 +481,30 @@
 	</Dialog>
 {/if}
 
+{#if revealing}
+	<Dialog title={t('cluster.showJoinInfo')} locked={busy} onclose={() => (revealing = false)}>
+		<form class="reveal" onsubmit={revealWithPassword}>
+			{#if passkeyHere}<button
+					type="button"
+					class="btn btn-primary"
+					disabled={busy}
+					onclick={revealWithPasskey}>{t('cluster.confirmPasskey')}</button
+				>
+				<p class="muted or">{t('cluster.orPassword')}</p>{/if}
+			<ReconfirmFields bind:password bind:code />
+			{#if revealError}<p class="notice-error" role="alert">{revealError}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (revealing = false)}
+					>{t('common.cancel')}</button
+				><button
+					class={passkeyHere ? 'btn' : 'btn btn-primary'}
+					disabled={busy || !reconfirmComplete(password, code)}>{t('cluster.showJoinInfo')}</button
+				>
+			</div>
+		</form>
+	</Dialog>
+{/if}
+
 {#if confirmLeave}
 	<Dialog title={t('cluster.leave')} onclose={() => (confirmLeave = false)}>
 		<p>{t('cluster.leaveConfirm')}</p>
@@ -460,6 +570,11 @@
 	}
 	.name {
 		font-weight: 600;
+	}
+	.reveal {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 	}
 	.join-info {
 		width: 100%;

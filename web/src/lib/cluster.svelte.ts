@@ -44,7 +44,6 @@ export type ClusterView = {
 	name?: string;
 	internet: boolean;
 	nodes: ClusterNode[];
-	joinInfo?: string;
 	extra: string[];
 	found: string[];
 };

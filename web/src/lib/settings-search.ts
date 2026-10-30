@@ -4,7 +4,8 @@ import type { IconName } from '#lib/components/Icon.svelte';
 const keywords: Record<string, string> = {
 	appearance:
 		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
-	network: 'ip dns gateway bridge vlan bonding netzwerk network',
+	network:
+		'ip dns gateway bridge vlan bonding netzwerk network hostname name nas-name rechnername umbenennen rename',
 	firewall:
 		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
 	'firewall-zones': 'zone zonen matrix vlan eigene own docker netz network ziel destination',
@@ -95,7 +96,10 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
-	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	network: [
+		{ id: 'hostname', label: 'netcfg.hostname', href: '/settings/network#net-system' },
+		{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' },
+	],
 	letsencrypt: [
 		{
 			id: 'letsencrypt-status',

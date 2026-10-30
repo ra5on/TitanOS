@@ -100,6 +100,7 @@ func (s *Server) routeCluster(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/cluster/preview", s.requireOwner(s.requireOwnSession(s.handleClusterPreview)))
 	mux.HandleFunc("POST /api/v1/cluster/join", s.requireOwner(s.requireOwnSession(s.handleClusterJoin)))
 	mux.HandleFunc("POST /api/v1/cluster/leave", s.requireOwner(s.requireOwnSession(s.handleClusterLeave)))
+	mux.HandleFunc("POST /api/v1/cluster/join-info", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinInfo)))
 	mux.HandleFunc("POST /api/v1/cluster/join-key", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinKey)))
 	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{id}", s.requireOwner(s.requireOwnSession(s.handleClusterRemove)))
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", s.requireAdmin(s.requireOwnSession(s.handleClusterBackupPair)))
@@ -248,6 +249,26 @@ func (s *Server) handleClusterLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("cluster left", "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleCluster(w, r)
+}
+
+// handleClusterJoinInfo hands out the join information after password (and
+// code) or a passkey: whoever has it may add a node that sees everything.
+func (s *Server) handleClusterJoinInfo(w http.ResponseWriter, r *http.Request) {
+	var req proof
+	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	if !s.reconfirmProof(w, user, req) {
+		return
+	}
+	info := s.opts.Cluster.JoinInfo()
+	if info == "" {
+		writeError(w, http.StatusConflict, "cluster_none", "this node is in no cluster")
+		return
+	}
+	slog.Info("cluster join information shown", "by", user.Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, map[string]string{"joinInfo": info})
 }
 
 func (s *Server) handleClusterJoinKey(w http.ResponseWriter, r *http.Request) {
