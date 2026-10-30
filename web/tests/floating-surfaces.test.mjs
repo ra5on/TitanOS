@@ -8,11 +8,17 @@ import {
 	floatingValues,
 	resolvePalette,
 	sanitizeAppearance,
-	THEMES
+	THEMES,
 } from '../src/lib/theme/themes.ts';
 
 test('menus and windows: older appearances follow the tiles', () => {
-	const old = sanitizeAppearance({ theme: 'graphit', style: 'glass', glass: 60, blur: 10, shine: 40 });
+	const old = sanitizeAppearance({
+		theme: 'graphit',
+		style: 'glass',
+		glass: 60,
+		blur: 10,
+		shine: 40,
+	});
 	assert.deepEqual(old.menus, defaultAppearance().menus);
 	assert.equal(old.menus.own, false);
 	assert.equal(old.dialogs.own, false);
@@ -29,11 +35,14 @@ test('menus and windows: older appearances follow the tiles', () => {
 test('menus and windows: broken or out-of-range values are fixed', () => {
 	const a = sanitizeAppearance({
 		menus: { own: 'yes', glass: 500, blur: -3, shine: 'x', extra: 1 },
-		dialogs: { own: true, glass: 12.4, blur: 99, shine: 61, dim: 140 }
+		dialogs: { own: true, glass: 12.4, blur: 99, shine: 61, dim: 140 },
 	});
 	assert.deepEqual(a.menus, { own: false, glass: 90, blur: 0, shine: 20 });
 	assert.deepEqual(a.dialogs, { own: true, glass: 12, blur: 40, shine: 60, dim: 90 });
-	assert.deepEqual(sanitizeAppearance({ menus: null, dialogs: [] }).dialogs, defaultAppearance().dialogs);
+	assert.deepEqual(
+		sanitizeAppearance({ menus: null, dialogs: [] }).dialogs,
+		defaultAppearance().dialogs,
+	);
 	assert.equal(sanitizeAppearance({ dialogs: { dim: -5 } }).dialogs.dim, 0);
 });
 
@@ -48,7 +57,11 @@ test('menus and windows: following the tiles keeps menus at least 70 % opaque', 
 
 test('menus and windows: own values use the glass limits, also on a plain background', () => {
 	for (const bg of ['shapes', 'solid']) {
-		const a = sanitizeAppearance({ bg, menus: { own: true, glass: 90 }, dialogs: { own: true, glass: 90 } });
+		const a = sanitizeAppearance({
+			bg,
+			menus: { own: true, glass: 90 },
+			dialogs: { own: true, glass: 90 },
+		});
 		assert.equal(floatingAlpha(a, a.menus, THEMES.graphit), 0.35);
 		assert.equal(floatingAlpha(a, a.dialogs, THEMES.hell), 0.5);
 	}
@@ -70,7 +83,10 @@ test('menus and windows: dimming behind dialogs', () => {
 });
 
 test('menus and windows: a theme file round trip keeps them', () => {
-	const a = sanitizeAppearance({ menus: { own: true, glass: 50, blur: 30, shine: 10 }, dialogs: { own: true, glass: 40, blur: 12, shine: 5, dim: 55 } });
+	const a = sanitizeAppearance({
+		menus: { own: true, glass: 50, blur: 30, shine: 10 },
+		dialogs: { own: true, glass: 40, blur: 12, shine: 5, dim: 55 },
+	});
 	const file = JSON.parse(JSON.stringify({ titanosTheme: 1, ...a }));
 	const back = sanitizeAppearance(file);
 	assert.deepEqual(back.menus, a.menus);
@@ -81,26 +97,58 @@ test('menus and windows: every style and fallback sets the surfaces; menus use t
 	const { readFile } = await import('node:fs/promises');
 	const css = await readFile(new URL('../src/app.css', import.meta.url), 'utf8');
 	const block = (start) => css.slice(css.indexOf(start), css.indexOf('}', css.indexOf(start)));
-	for (const start of ["[data-surface='flat'] {", "[data-surface='glass'] {", "[data-surface='outline'] {"]) {
-		for (const name of ['--menu-bg', '--menu-border', '--menu-backdrop', '--menu-shadow', '--dialog-bg', '--dialog-border', '--dialog-backdrop', '--dialog-shadow']) {
+	for (const start of [
+		"[data-surface='flat'] {",
+		"[data-surface='glass'] {",
+		"[data-surface='outline'] {",
+	]) {
+		for (const name of [
+			'--menu-bg',
+			'--menu-border',
+			'--menu-backdrop',
+			'--menu-shadow',
+			'--dialog-bg',
+			'--dialog-border',
+			'--dialog-backdrop',
+			'--dialog-shadow',
+		]) {
 			assert.match(block(start), new RegExp(`${name}:`), `${start} ${name}`);
 		}
 	}
 	// Opaque without backdrop-filter and with reduced transparency.
-	for (const start of ['@supports not ((backdrop-filter', '@media (prefers-reduced-transparency: reduce)']) {
+	for (const start of [
+		'@supports not ((backdrop-filter',
+		'@media (prefers-reduced-transparency: reduce)',
+	]) {
 		const part = css.slice(css.indexOf(start), css.indexOf('}\n}', css.indexOf(start)));
 		assert.match(part, /--menu-backdrop: none/);
 		assert.match(part, /--dialog-backdrop: none/);
 		assert.match(part, /--menu-bg: var\(--surface\)/);
 		assert.match(part, /--dialog-bg: var\(--surface\)/);
 	}
-	for (const file of ['AccountMenu', 'Dropdown', 'ContextMenu', 'Header', 'Notifications', 'TerminalPanel']) {
-		const source = await readFile(new URL(`../src/lib/components/${file}.svelte`, import.meta.url), 'utf8');
+	for (const file of [
+		'AccountMenu',
+		'Dropdown',
+		'ContextMenu',
+		'Header',
+		'Notifications',
+		'TerminalPanel',
+	]) {
+		const source = await readFile(
+			new URL(`../src/lib/components/${file}.svelte`, import.meta.url),
+			'utf8',
+		);
 		assert.match(source, /floating-menu/, file);
 	}
-	const dialog = await readFile(new URL('../src/lib/components/Dialog.svelte', import.meta.url), 'utf8');
+	const dialog = await readFile(
+		new URL('../src/lib/components/Dialog.svelte', import.meta.url),
+		'utf8',
+	);
 	assert.match(dialog, /var\(--dialog-bg\)/);
 	assert.match(dialog, /var\(--dialog-backdrop\)/);
-	const palette = await readFile(new URL('../src/lib/components/CommandPalette.svelte', import.meta.url), 'utf8');
+	const palette = await readFile(
+		new URL('../src/lib/components/CommandPalette.svelte', import.meta.url),
+		'utf8',
+	);
 	assert.match(palette, /surface="menu"/);
 });

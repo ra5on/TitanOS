@@ -1,11 +1,16 @@
 <script lang="ts">
-	import { api, ApiError, type Account, type Role, type Share } from '#lib/api.ts';
+	import { api, type Account, type Role, type Share } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { ACCOUNT_STATUS_FILTERS, filterAccounts, mayLock, type AccountStatusFilter } from '#lib/users-view.ts';
+	import {
+		ACCOUNT_STATUS_FILTERS,
+		filterAccounts,
+		mayLock,
+		type AccountStatusFilter,
+	} from '#lib/users-view.ts';
 
 	const ROLES: Role[] = ['owner', 'admin', 'user'];
 	const NAME = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -38,11 +43,16 @@
 	}
 	const offeredRoles = $derived(ROLES.filter(mayManage));
 	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }));
-	const dateTime = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }));
+	const dateTime = $derived(
+		new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }),
+	);
 	// The status filter lives only in this page visit (no write to the stick).
 	let statusFilter = $state<AccountStatusFilter>('all');
 	const shown = $derived(accounts ? filterAccounts(accounts, statusFilter) : []);
-	const filterLabel: Record<AccountStatusFilter, 'users.filterAll' | 'users.filterActive' | 'users.filterLocked'> = {
+	const filterLabel: Record<
+		AccountStatusFilter,
+		'users.filterAll' | 'users.filterActive' | 'users.filterLocked'
+	> = {
 		all: 'users.filterAll',
 		active: 'users.filterActive',
 		locked: 'users.filterLocked',
@@ -50,15 +60,20 @@
 	function lockedTitle(account: Account): string {
 		if (!account.disabledAt) return t('users.statusLocked');
 		const when = dateTime.format(new Date(account.disabledAt));
-		return account.disabledBy ? t('users.lockedSince', { date: when, name: account.disabledBy }) : t('users.lockedAt', { date: when });
+		return account.disabledBy
+			? t('users.lockedSince', { date: when, name: account.disabledBy })
+			: t('users.lockedAt', { date: when });
 	}
 
 	async function load() {
 		loading = true;
 		loadError = '';
-		const [users, list] = await Promise.allSettled([api.get<Account[]>('/users'), api.get<Share[]>('/shares')]);
+		const [users, list] = await Promise.allSettled([
+			api.get<Account[]>('/users'),
+			api.get<Share[]>('/shares'),
+		]);
 		if (users.status === 'fulfilled') accounts = users.value;
-		else loadError = errorText(users.reason instanceof ApiError ? users.reason.code : 'internal');
+		else loadError = apiErrorText(users.reason);
 		// Without the shares the page still works; the column says it is unknown.
 		shares = list.status === 'fulfilled' ? list.value : null;
 		loading = false;
@@ -93,7 +108,7 @@
 			await api.put(`/users/${account.name}`, { role });
 		} catch (err) {
 			failed = true;
-			const text = errorText(err instanceof ApiError ? err.code : 'internal');
+			const text = apiErrorText(err);
 			if (dialog?.kind === 'role') dialogError = text;
 			else error = text;
 		}
@@ -102,7 +117,8 @@
 		await load();
 		// The select shows what the NAS has; a refused role is turned back
 		// (the value bound to it may not have changed, so set it directly).
-		if (select) select.value = accounts?.find((entry) => entry.name === account.name)?.role ?? account.role;
+		if (select)
+			select.value = accounts?.find((entry) => entry.name === account.name)?.role ?? account.role;
 	}
 
 	/** For someone who lost the phone and the recovery codes. */
@@ -114,13 +130,12 @@
 			await api.put(`/users/${account.name}`, { role: account.role, resetTwoFactor: true });
 			dialog = null;
 		} catch (err) {
-			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+			dialogError = apiErrorText(err);
 		} finally {
 			working = false;
 		}
 		await load();
 	}
-
 
 	function openCreate() {
 		draft = { name: '', role: 'user', password: '', repeat: '' };
@@ -133,7 +148,8 @@
 		dialogError = '';
 		const name = draft.name.trim().toLowerCase();
 		if (!NAME.test(name)) return void (dialogError = errorText('invalid_name'));
-		if ([...draft.password].length < MIN_PASSWORD_LENGTH) return void (dialogError = errorText('password_too_short'));
+		if ([...draft.password].length < MIN_PASSWORD_LENGTH)
+			return void (dialogError = errorText('password_too_short'));
 		if (draft.password !== draft.repeat) return void (dialogError = t('auth.passwordMismatch'));
 		working = true;
 		try {
@@ -141,7 +157,7 @@
 			dialog = null;
 			await load();
 		} catch (err) {
-			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+			dialogError = apiErrorText(err);
 		}
 		working = false;
 	}
@@ -155,7 +171,7 @@
 			await api.post(`/users/${account.name}/${disabled ? 'lock' : 'unlock'}`);
 			dialog = null;
 		} catch (err) {
-			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+			dialogError = apiErrorText(err);
 		} finally {
 			working = false;
 		}
@@ -172,7 +188,7 @@
 			dialog = null;
 			await load();
 		} catch (err) {
-			dialogError = errorText(err instanceof ApiError ? err.code : 'internal');
+			dialogError = apiErrorText(err);
 		} finally {
 			working = false;
 		}
@@ -180,7 +196,11 @@
 </script>
 
 <PageHead title={t('users.title')}>
-	{#if accounts}<p class="muted">{accounts.length === 1 ? t('users.summaryOne') : t('users.summary', { count: accounts.length })}</p>{/if}
+	{#if accounts}<p class="muted">
+			{accounts.length === 1
+				? t('users.summaryOne')
+				: t('users.summary', { count: accounts.length })}
+		</p>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn btn-primary" onclick={openCreate}>{t('users.new')}</button>
 	{/snippet}
@@ -188,96 +208,146 @@
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if loadError}
-	<div class="notice-error failed" role="alert"><span>{loadError}</span><button type="button" class="btn" disabled={loading} onclick={load}>{t('common.retry')}</button></div>
+	<div class="notice-error failed" role="alert">
+		<span>{loadError}</span><button type="button" class="btn" disabled={loading} onclick={load}
+			>{t('common.retry')}</button
+		>
+	</div>
 {/if}
 
 {#if accounts === null}
 	{#if !loadError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {:else}
-<div class="toolbar">
-	<label>
-		<span>{t('users.filter')}</span>
-		<select class="field filter" bind:value={statusFilter}>
-			{#each ACCOUNT_STATUS_FILTERS as option (option)}<option value={option}>{t(filterLabel[option])}</option>{/each}
-		</select>
-	</label>
-</div>
-<div class="tile table">
-	<table>
-		<thead>
-			<tr>
-				<th scope="col">{t('users.name')}</th>
-				<th scope="col">{t('users.role')}</th>
-				<th scope="col">{t('users.status')}</th>
-				<th scope="col">{t('users.shares')}</th>
-				<th scope="col">{t('users.created')}</th>
-				<th scope="col"></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each shown as account (account.name)}
-				{@const manageable = mayManage(account.role)}
-				<tr class:locked={account.disabled}>
-					<td>
-						<span class="who">
-							<span class="avatar" aria-hidden="true">{account.name.charAt(0).toUpperCase()}</span>
-							<span>
-								<span class="mono name">{account.name}</span>{#if account.name === me?.name}<span class="chip you">{t('users.you')}</span>{/if}
-								{#if !account.smbReady}<span class="sub">{t('users.smbPending')}</span>{/if}
-								{#if account.twoFactor}<span class="chip">{t('users.twoFactor')}</span>{/if}
-							</span>
-						</span>
-					</td>
-					<td>
-						{#if manageable && account.name !== me?.name}
-							<select class="field role" aria-label="{t('users.role')}: {account.name}" value={account.role} disabled={working} onchange={(event) => pickRole(account, event.currentTarget.value as Role, event.currentTarget)}>
-								{#each offeredRoles as role (role)}<option value={role}>{t(`role.${role}`)}</option>{/each}
-							</select>
-						{:else}
-							{t(`role.${account.role}`)}
-						{/if}
-					</td>
-					<td>
-						{#if account.disabled}
-							<span class="chip warn" title={lockedTitle(account)}>{t('users.statusLocked')}</span>
-							{#if account.disabledAt}<span class="sub">{lockedTitle(account)}</span>{/if}
-						{:else}
-							<span class="chip ok">{t('users.statusActive')}</span>
-						{/if}
-					</td>
-					<td class="reach">
-						{#if shares === null}
-							<span class="muted">{t('users.sharesUnknown')}</span>
-						{:else}
-							{#each reach(account.name) as entry (entry.name)}
-								<a class="chip" href="/shares?share={encodeURIComponent(entry.name)}&tab=access" title={t(`share.${entry.level}`)}><span class="mono">{entry.name}</span> · {t(entry.level === 'rw' ? 'users.shareRw' : 'users.shareRo')}</a>
-							{:else}
-								<span class="muted">{t('users.sharesNone')}</span>
-							{/each}
-						{/if}
-					</td>
-					<td class="muted">{date.format(new Date(account.created))}</td>
-					<td class="actions">
-						{#if manageable || account.name === me?.name}
-							<button type="button" class="btn" onclick={() => (dialog = { kind: 'password', name: account.name })}>{t('users.changePassword')}</button>
-							{#if account.twoFactor && manageable && account.name !== me?.name}
-								<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'twoFactor', account }))}>{t('users.resetTwoFactor')}</button>
-							{/if}
-						{/if}
-						{#if accounts && mayLock(me, account, accounts)}
-							<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'lock', account, disabled: !account.disabled }))}>{account.disabled ? t('users.unlock') : t('users.lock')}</button>
-						{/if}
-						{#if manageable && account.name !== me?.name}
-							<button type="button" class="btn" onclick={() => ((dialogError = ''), (dialog = { kind: 'delete', name: account.name }))}>{t('users.delete')}</button>
-						{/if}
-					</td>
+	<div class="toolbar">
+		<label>
+			<span>{t('users.filter')}</span>
+			<select class="field filter" bind:value={statusFilter}>
+				{#each ACCOUNT_STATUS_FILTERS as option (option)}<option value={option}
+						>{t(filterLabel[option])}</option
+					>{/each}
+			</select>
+		</label>
+	</div>
+	<div class="tile table">
+		<table>
+			<thead>
+				<tr>
+					<th scope="col">{t('users.name')}</th>
+					<th scope="col">{t('users.role')}</th>
+					<th scope="col">{t('users.status')}</th>
+					<th scope="col">{t('users.shares')}</th>
+					<th scope="col">{t('users.created')}</th>
+					<th scope="col"></th>
 				</tr>
-			{:else}
-				<tr><td colspan="6" class="muted">{t('users.filterEmpty')}</td></tr>
-			{/each}
-		</tbody>
-	</table>
-</div>
+			</thead>
+			<tbody>
+				{#each shown as account (account.name)}
+					{@const manageable = mayManage(account.role)}
+					<tr class:locked={account.disabled}>
+						<td>
+							<span class="who">
+								<span class="avatar" aria-hidden="true">{account.name.charAt(0).toUpperCase()}</span
+								>
+								<span>
+									<span class="mono name">{account.name}</span>{#if account.name === me?.name}<span
+											class="chip you">{t('users.you')}</span
+										>{/if}
+									{#if !account.smbReady}<span class="sub">{t('users.smbPending')}</span>{/if}
+									{#if account.twoFactor}<span class="chip">{t('users.twoFactor')}</span>{/if}
+								</span>
+							</span>
+						</td>
+						<td>
+							{#if manageable && account.name !== me?.name}
+								<select
+									class="field role"
+									aria-label="{t('users.role')}: {account.name}"
+									value={account.role}
+									disabled={working}
+									onchange={(event) =>
+										pickRole(account, event.currentTarget.value as Role, event.currentTarget)}
+								>
+									{#each offeredRoles as role (role)}<option value={role}
+											>{t(`role.${role}`)}</option
+										>{/each}
+								</select>
+							{:else}
+								{t(`role.${account.role}`)}
+							{/if}
+						</td>
+						<td>
+							{#if account.disabled}
+								<span class="chip warn" title={lockedTitle(account)}>{t('users.statusLocked')}</span
+								>
+								{#if account.disabledAt}<span class="sub">{lockedTitle(account)}</span>{/if}
+							{:else}
+								<span class="chip ok">{t('users.statusActive')}</span>
+							{/if}
+						</td>
+						<td class="reach">
+							{#if shares === null}
+								<span class="muted">{t('users.sharesUnknown')}</span>
+							{:else}
+								{#each reach(account.name) as entry (entry.name)}
+									<a
+										class="chip"
+										href="/shares?share={encodeURIComponent(entry.name)}&tab=access"
+										title={t(`share.${entry.level}`)}
+										><span class="mono">{entry.name}</span> · {t(
+											entry.level === 'rw' ? 'users.shareRw' : 'users.shareRo',
+										)}</a
+									>
+								{:else}
+									<span class="muted">{t('users.sharesNone')}</span>
+								{/each}
+							{/if}
+						</td>
+						<td class="muted">{date.format(new Date(account.created))}</td>
+						<td class="actions">
+							{#if manageable || account.name === me?.name}
+								<button
+									type="button"
+									class="btn"
+									onclick={() => (dialog = { kind: 'password', name: account.name })}
+									>{t('users.changePassword')}</button
+								>
+								{#if account.twoFactor && manageable && account.name !== me?.name}
+									<button
+										type="button"
+										class="btn"
+										onclick={() => ((dialogError = ''), (dialog = { kind: 'twoFactor', account }))}
+										>{t('users.resetTwoFactor')}</button
+									>
+								{/if}
+							{/if}
+							{#if accounts && mayLock(me, account, accounts)}
+								<button
+									type="button"
+									class="btn"
+									onclick={() => (
+										(dialogError = ''),
+										(dialog = { kind: 'lock', account, disabled: !account.disabled })
+									)}>{account.disabled ? t('users.unlock') : t('users.lock')}</button
+								>
+							{/if}
+							{#if manageable && account.name !== me?.name}
+								<button
+									type="button"
+									class="btn"
+									onclick={() => (
+										(dialogError = ''),
+										(dialog = { kind: 'delete', name: account.name })
+									)}>{t('users.delete')}</button
+								>
+							{/if}
+						</td>
+					</tr>
+				{:else}
+					<tr><td colspan="6" class="muted">{t('users.filterEmpty')}</td></tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 {#if dialog?.kind === 'create'}
@@ -286,74 +356,148 @@
 			<label>
 				<span>{t('auth.name')}</span>
 				<!-- svelte-ignore a11y_autofocus -->
-				<input class="field" type="text" bind:value={draft.name} maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false" required autofocus />
+				<input
+					class="field"
+					type="text"
+					bind:value={draft.name}
+					maxlength="32"
+					autocapitalize="none"
+					autocomplete="off"
+					spellcheck="false"
+					required
+					autofocus
+				/>
 				<small>{t('auth.nameHint')}</small>
 			</label>
 			<label>
 				<span>{t('users.role')}</span>
 				<select class="field" bind:value={draft.role}>
-					{#each offeredRoles as role (role)}<option value={role}>{t(`role.${role}`)}</option>{/each}
+					{#each offeredRoles as role (role)}<option value={role}>{t(`role.${role}`)}</option
+						>{/each}
 				</select>
 				<small>{t(`users.roleHint.${draft.role}`)}</small>
 			</label>
 			<label>
 				<span>{t('auth.password')}</span>
-				<input class="field" type="password" bind:value={draft.password} autocomplete="new-password" required />
+				<input
+					class="field"
+					type="password"
+					bind:value={draft.password}
+					autocomplete="new-password"
+					required
+				/>
 				<small>{t('auth.passwordHint', { min: MIN_PASSWORD_LENGTH })}</small>
 			</label>
 			<label>
 				<span>{t('auth.passwordRepeat')}</span>
-				<input class="field" type="password" bind:value={draft.repeat} autocomplete="new-password" required />
+				<input
+					class="field"
+					type="password"
+					bind:value={draft.repeat}
+					autocomplete="new-password"
+					required
+				/>
 			</label>
 			{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={working}>{t('common.cancel')}</button>
-				<button type="submit" class="btn btn-primary" disabled={working}>{t('users.create')}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={working}
+					>{t('common.cancel')}</button
+				>
+				<button type="submit" class="btn btn-primary" disabled={working}>{t('users.create')}</button
+				>
 			</div>
 		</form>
 	</Dialog>
 {:else if dialog?.kind === 'password'}
-	<PasswordDialog name={dialog.name} self={dialog.name === me?.name} onclose={() => (dialog = null)} />
+	<PasswordDialog
+		name={dialog.name}
+		self={dialog.name === me?.name}
+		onclose={() => (dialog = null)}
+	/>
 {:else if dialog?.kind === 'delete'}
 	{@const name = dialog.name}
 	{@const reached = reach(name)}
 	<Dialog title={t('users.deleteTitle', { name })} locked={working} onclose={() => (dialog = null)}>
 		<p class="text">{t('users.deleteText')}</p>
-		{#if reached.length}<p class="text">{t('users.deleteShares', { shares: reached.map((entry) => entry.name).join(', ') })}</p>{/if}
+		{#if reached.length}<p class="text">
+				{t('users.deleteShares', { shares: reached.map((entry) => entry.name).join(', ') })}
+			</p>{/if}
 		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={working} onclick={() => remove(name)}>{t('users.delete')}</button>
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={working} onclick={() => remove(name)}
+				>{t('users.delete')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'role'}
 	{@const change = dialog}
-	<Dialog title={t('users.ownerTitle', { name: change.account.name })} locked={working} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t('users.ownerTitle', { name: change.account.name })}
+		locked={working}
+		onclose={() => (dialog = null)}
+	>
 		<p class="text">{t('users.ownerText', { name: change.account.name })}</p>
 		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={working} onclick={() => setRole(change.account, change.role)}>{t('users.ownerSubmit')}</button>
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-warn"
+				disabled={working}
+				onclick={() => setRole(change.account, change.role)}>{t('users.ownerSubmit')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'lock'}
 	{@const change = dialog}
-	<Dialog title={t(change.disabled ? 'users.lockTitle' : 'users.unlockTitle', { name: change.account.name })} locked={working} onclose={() => (dialog = null)}>
-		<p class="text">{t(change.disabled ? 'users.lockText' : 'users.unlockText', { name: change.account.name })}</p>
+	<Dialog
+		title={t(change.disabled ? 'users.lockTitle' : 'users.unlockTitle', {
+			name: change.account.name,
+		})}
+		locked={working}
+		onclose={() => (dialog = null)}
+	>
+		<p class="text">
+			{t(change.disabled ? 'users.lockText' : 'users.unlockText', { name: change.account.name })}
+		</p>
 		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class={change.disabled ? 'btn btn-warn' : 'btn btn-primary'} disabled={working} onclick={() => setLocked(change.account, change.disabled)}>{t(change.disabled ? 'users.lock' : 'users.unlock')}</button>
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class={change.disabled ? 'btn btn-warn' : 'btn btn-primary'}
+				disabled={working}
+				onclick={() => setLocked(change.account, change.disabled)}
+				>{t(change.disabled ? 'users.lock' : 'users.unlock')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'twoFactor'}
 	{@const account = dialog.account}
-	<Dialog title={t('users.resetTwoFactorTitle', { name: account.name })} locked={working} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t('users.resetTwoFactorTitle', { name: account.name })}
+		locked={working}
+		onclose={() => (dialog = null)}
+	>
 		<p class="text">{t('users.resetTwoFactorText', { name: account.name })}</p>
 		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={working} onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button>
+			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-warn"
+				disabled={working}
+				onclick={() => resetTwoFactor(account)}>{t('users.resetTwoFactor')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

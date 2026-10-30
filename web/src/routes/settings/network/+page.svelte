@@ -4,10 +4,11 @@
 	// tested on trial; older single-network configurations arrive already
 	// in the multi-network form (`migrated`) and keep working unchanged
 	// until such a test is confirmed.
+	import { poll } from '#lib/poll.ts';
 	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -70,11 +71,10 @@
 	});
 
 	function problem(e: unknown) {
-		error =
-			errorText(e instanceof ApiError ? e.code : 'internal') +
-			(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+		error = apiErrorText(e, { detail: true });
 	}
-	function take(r: { network: NetworkStatus; bondModes: string[]; timezone?: string }) {
+	type NetworkAnswer = { network: NetworkStatus; bondModes: string[]; timezone?: string };
+	function take(r: NetworkAnswer) {
 		const keep = dirty || !!editor || !!bondEditor;
 		status = r.network;
 		modes = r.bondModes;
@@ -84,19 +84,13 @@
 	}
 	async function load() {
 		try {
-			take(await api.get('/network'));
+			take(await api.get<NetworkAnswer>('/network'));
 		} catch (e) {
 			// While a change is on trial the NAS may be unreachable here.
 			if (!status) problem(e);
 		}
 	}
-	$effect(() => {
-		void load();
-		const timer = setInterval(() => {
-			if (!document.hidden && !busy) void load();
-		}, 3000);
-		return () => clearInterval(timer);
-	});
+	$effect(() => poll(load, { interval: 3000, skip: () => busy }));
 
 	function show(next: Tab) {
 		tab = next;
@@ -305,26 +299,26 @@
 {/if}
 
 {#if editor && draft}
-	<NetworkEditor
-		network={editor.network}
-		isNew={editor.isNew}
-		config={draft}
-		{ports}
-		vlans={status?.vlans ?? true}
-		onsave={saveNetwork}
-		onclose={() => (editor = null)}
-	/>
+	{#key editor}<NetworkEditor
+			network={editor.network}
+			isNew={editor.isNew}
+			config={draft}
+			{ports}
+			vlans={status?.vlans ?? true}
+			onsave={saveNetwork}
+			onclose={() => (editor = null)}
+		/>{/key}
 {/if}
 {#if bondEditor && draft}
-	<BondEditor
-		bond={bondEditor.bond}
-		isNew={bondEditor.isNew}
-		config={draft}
-		{ports}
-		{modes}
-		onsave={saveBond}
-		onclose={() => (bondEditor = null)}
-	/>
+	{#key bondEditor}<BondEditor
+			bond={bondEditor.bond}
+			isNew={bondEditor.isNew}
+			config={draft}
+			{ports}
+			{modes}
+			onsave={saveBond}
+			onclose={() => (bondEditor = null)}
+		/>{/key}
 {/if}
 {#if removeNetwork}
 	<Dialog title={t('netx.remove')} onclose={() => (removeNetwork = null)}>

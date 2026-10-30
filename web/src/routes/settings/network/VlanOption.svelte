@@ -2,9 +2,9 @@
 	// "Use VLANs": off by default, because VLANs need a router or switch that
 	// understands them. Switching on asks once; switching off is refused
 	// while a network still uses a VLAN.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { NetworkStatus } from '#lib/network.ts';
 
 	let {
@@ -31,7 +31,7 @@
 			onchanged(res.network);
 			asking = false;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -63,8 +63,12 @@
 		<p class="muted">{t('netx.vlans.confirmLocal')}</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" disabled={busy} onclick={() => save(true)}>{t('netx.vlans.confirm')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" disabled={busy} onclick={() => save(true)}
+				>{t('netx.vlans.confirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

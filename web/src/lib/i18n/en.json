@@ -7571,5 +7571,22 @@
 	"notify.kind.cluster_node_joined.title": "Node {subject} joined the cluster",
 	"notify.kind.cluster_node_joined.text": "The node can now manage all nodes. If none of you did this: remove it under Settings › Cluster and create a new key.",
 	"notify.kind.cluster_node_removed.title": "Node {subject} was removed from the cluster",
-	"notify.kind.cluster_node_removed.text": "The key of the cluster was renewed."
+	"notify.kind.cluster_node_removed.text": "The key of the cluster was renewed.",
+	"reconfirm.hint": "Please confirm with your password that it is you.",
+	"reconfirm.hintCode": "Please confirm with your password and a code from your authenticator app that it is you.",
+	"error.setup_not_local": "The first setup is only possible from the local network.",
+	"error.request_timeout": "The request took too long. Please try again.",
+	"error.automation_direct_forbidden": "Direct execution is not allowed for this automation: the assistant is set to confirm globally.",
+	"automation.directOnlyGlobal": "Direct execution is only possible when the assistant runs actions directly for everyone.",
+	"automation.directConfirms": "This automation is set to direct execution but runs with confirmation, because the assistant is set to confirm globally.",
+	"assistant.afterWaits": "Waits for confirmation because content from {after} was read before.",
+	"assistant.afterSource.web_search": "web search",
+	"assistant.afterSource.web_read": "web page",
+	"assistant.afterSource.api_read": "NAS API",
+	"apps.ownPortHostShort": "NAS",
+	"apps.ownPortContainerShort": "Container",
+	"vms.form.displayNameExample": "Home Assistant",
+	"update.fallbackRemoved": "There was no room on the stick for this update next to the previous version – the fallback version was removed.",
+	"update.fallbackRemovedFailed": "Caution: there was no room on the stick for this update next to the previous version – the fallback version was removed. There is no older version left for the NAS to go back to. Please try the update again before the NAS restarts.",
+	"backup.skipped": "{n} links or special files skipped"
 }

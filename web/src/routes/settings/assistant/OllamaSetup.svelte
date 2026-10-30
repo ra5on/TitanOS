@@ -11,7 +11,7 @@
 	import { pullModel, type PullProgress } from '#lib/assistant-pull.ts';
 	import type { Template } from '#lib/compose/template.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { dockerName } from '#lib/docker-name.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { OLLAMA_TEMPLATE, prepareOllama, validOllamaModel } from '#lib/ollama-setup.ts';
@@ -25,7 +25,13 @@
 		ramBytes: number;
 		model: string;
 		basis: 'ram' | 'vram';
-		choices: { name: string; diskBytes: number; memoryBytes: number; uncertain?: boolean; fits: boolean }[];
+		choices: {
+			name: string;
+			diskBytes: number;
+			memoryBytes: number;
+			uncertain?: boolean;
+			fits: boolean;
+		}[];
 	};
 	type Step = 'install' | 'start' | 'connect' | 'settings' | 'model' | 'done';
 
@@ -41,7 +47,13 @@
 	const chosen = $derived(pick === 'own' ? own.trim() : pick);
 	const pickedChoice = $derived(proposal?.choices.find((c) => c.name === pick));
 	const ownInvalid = $derived(pick === 'own' && !validOllamaModel(own.trim()));
-	const memory = $derived(proposal ? (proposal.basis === 'vram' && proposal.gpu?.vramBytes ? proposal.gpu.vramBytes : proposal.ramBytes) : 0);
+	const memory = $derived(
+		proposal
+			? proposal.basis === 'vram' && proposal.gpu?.vramBytes
+				? proposal.gpu.vramBytes
+				: proposal.ramBytes
+			: 0,
+	);
 	// Fixed once the setup started, so that a retry loads the same model.
 	let running = $state('');
 	// What this page already did, so that a retry goes on from there.
@@ -49,7 +61,9 @@
 	let address = '';
 
 	const STEPS: Exclude<Step, 'done'>[] = ['install', 'start', 'connect', 'settings', 'model'];
-	const ready = $derived(!!proposal?.docker.enabled && !!proposal.docker.volume && proposal.docker.running);
+	const ready = $derived(
+		!!proposal?.docker.enabled && !!proposal.docker.volume && proposal.docker.running,
+	);
 	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 	async function load() {
@@ -58,7 +72,7 @@
 			proposal = await api.get<Proposal>('/assistant/ollama-setup');
 			if (!pick) pick = proposal.model;
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 	onMount(load);
@@ -74,8 +88,12 @@
 	}
 
 	/** An Ollama app the NAS already runs, with the address titand uses. */
-	async function findApp(): Promise<{ container: string; address: string; running: boolean } | undefined> {
-		const res = await api.get<{ apps: { container: string; address: string; running: boolean }[] }>('/assistant/ollama-apps');
+	async function findApp(): Promise<
+		{ container: string; address: string; running: boolean } | undefined
+	> {
+		const res = await api.get<{ apps: { container: string; address: string; running: boolean }[] }>(
+			'/assistant/ollama-apps',
+		);
 		return res.apps.find((app) => app.running) ?? res.apps[0];
 	}
 
@@ -91,17 +109,26 @@
 		try {
 			tpl = await api.get<Template>(`/apps/sources/titanos/apps/${OLLAMA_TEMPLATE}`);
 		} catch (err) {
-			throw new StepError(err instanceof ApiError && err.status === 404 ? 'assistant.setup.noTemplate' : 'assistant.setup.failed', err instanceof Error ? err.message : '');
+			throw new StepError(
+				err instanceof ApiError && err.status === 404
+					? 'assistant.setup.noTemplate'
+					: 'assistant.setup.failed',
+				err instanceof Error ? err.message : '',
+			);
 		}
 		const used = new Map<string, string>();
 		for (const port of tpl.listening ?? []) used.set(`${port.port}/${port.protocol}`, '');
 		for (const container of docker.containers)
-			for (const port of container.ports) used.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
+			for (const port of container.ports)
+				used.set(`${port.host}/${port.protocol}`, dockerName(container, 'distinct'));
 		let app;
 		try {
 			app = prepareOllama(tpl, docker.apps, used, proposal?.gpu?.id ?? null);
 		} catch (err) {
-			throw new StepError('assistant.setup.templateBroken', err instanceof Error ? err.message : '');
+			throw new StepError(
+				'assistant.setup.templateBroken',
+				err instanceof Error ? err.message : '',
+			);
 		}
 		await api.post('/docker/apps', { name: app.name, compose: app.compose, env: app.env });
 		created = app.name;
@@ -112,7 +139,8 @@
 		for (let waited = 0; waited < 30 * 60_000; waited += 3000) {
 			const docker = await api.get<DockerStatus>('/docker');
 			const job = created ? docker.jobs[created] : undefined;
-			if (job?.state === 'failed') throw new StepError('assistant.setup.installFailed', job.output.slice(-2000));
+			if (job?.state === 'failed')
+				throw new StepError('assistant.setup.installFailed', job.output.slice(-2000));
 			const app = await findApp();
 			if (app?.running) {
 				address = app.address;
@@ -139,7 +167,12 @@
 
 	async function configure() {
 		const current = await api.get<AssistantSettings>('/assistant');
-		await api.put('/assistant', { ...current, provider: 'ollama', ollama: address, model: running });
+		await api.put('/assistant', {
+			...current,
+			provider: 'ollama',
+			ollama: address,
+			model: running,
+		});
 	}
 
 	async function model() {
@@ -162,7 +195,13 @@
 		onstart();
 		const start0 = failed?.step ?? 'install';
 		failed = null;
-		const actions: Record<Exclude<Step, 'done'>, () => Promise<void>> = { install, start, connect, settings: configure, model };
+		const actions: Record<Exclude<Step, 'done'>, () => Promise<void>> = {
+			install,
+			start,
+			connect,
+			settings: configure,
+			model,
+		};
 		for (const s of STEPS.slice(STEPS.indexOf(start0))) {
 			step = s;
 			try {
@@ -171,7 +210,11 @@
 				failed =
 					err instanceof StepError
 						? { step: s, text: t(err.code), detail: err.detail }
-						: { step: s, text: errorText(err instanceof ApiError ? err.code : 'internal'), detail: err instanceof ApiError ? err.message : '' };
+						: {
+								step: s,
+								text: apiErrorText(err),
+								detail: err instanceof ApiError ? err.message : '',
+							};
 				// The address may be needed again after a failed start.
 				if (s === 'connect' || s === 'start') failed.step = 'start';
 				step = null;
@@ -188,7 +231,9 @@
 <section class="tile panel" aria-labelledby="ollama-setup">
 	<h2 class="tile-title" id="ollama-setup">{t('assistant.setup.title')}</h2>
 	{#if loadError}
-		<div class="notice-error" role="alert">{loadError} <button type="button" class="btn" onclick={load}>{t('ui.retry')}</button></div>
+		<div class="notice-error" role="alert">
+			{loadError} <button type="button" class="btn" onclick={load}>{t('ui.retry')}</button>
+		</div>
 	{:else if !proposal}
 		<p class="loading" role="status">{t('common.loading')}</p>
 	{:else if step === 'done'}
@@ -204,8 +249,13 @@
 		{:else}
 			<p>
 				{t('assistant.setup.plan', {
-					basis: proposal.basis === 'vram' && proposal.gpu?.vramBytes ? t('assistant.setup.basisVram', { size: gib(proposal.gpu.vramBytes) }) : t('assistant.setup.basisRam', { size: gib(proposal.ramBytes) }),
-					where: proposal.gpu ? t('assistant.setup.gpu', { name: proposal.gpu.title }) : t('assistant.setup.cpu'),
+					basis:
+						proposal.basis === 'vram' && proposal.gpu?.vramBytes
+							? t('assistant.setup.basisVram', { size: gib(proposal.gpu.vramBytes) })
+							: t('assistant.setup.basisRam', { size: gib(proposal.ramBytes) }),
+					where: proposal.gpu
+						? t('assistant.setup.gpu', { name: proposal.gpu.title })
+						: t('assistant.setup.cpu'),
 				})}
 			</p>
 			<fieldset class="choices" disabled={!!step || !!failed}>
@@ -215,10 +265,26 @@
 						<input type="radio" name="ollama-model" value={choice.name} bind:group={pick} />
 						<span>
 							<span class="mono">{choice.name}</span>
-							{#if choice.name === proposal.model}<span class="chip">{t('assistant.setup.recommended')}</span>{/if}
-							<span class="muted small">{t('assistant.setup.choiceSize', { disk: gib(choice.diskBytes), memory: gib(choice.memoryBytes) })}</span>
-							{#if !choice.fits}<span class="small warn-text">{t(proposal.basis === 'vram' ? 'assistant.setup.tooLargeVram' : 'assistant.setup.tooLargeRam', { size: gib(memory) })}</span>{/if}
-							{#if choice.uncertain}<span class="small warn-text">{t('assistant.setup.uncertain')}</span>{/if}
+							{#if choice.name === proposal.model}<span class="chip"
+									>{t('assistant.setup.recommended')}</span
+								>{/if}
+							<span class="muted small"
+								>{t('assistant.setup.choiceSize', {
+									disk: gib(choice.diskBytes),
+									memory: gib(choice.memoryBytes),
+								})}</span
+							>
+							{#if !choice.fits}<span class="small warn-text"
+									>{t(
+										proposal.basis === 'vram'
+											? 'assistant.setup.tooLargeVram'
+											: 'assistant.setup.tooLargeRam',
+										{ size: gib(memory) },
+									)}</span
+								>{/if}
+							{#if choice.uncertain}<span class="small warn-text"
+									>{t('assistant.setup.uncertain')}</span
+								>{/if}
 						</span>
 					</label>
 				{/each}
@@ -228,8 +294,20 @@
 				</label>
 				{#if pick === 'own'}
 					<label class="stack own">
-						<input class="field mono" bind:value={own} placeholder="hf.co/user/model-GGUF:Q4_K_M" aria-label={t('assistant.setup.ownModel')} aria-invalid={!!own.trim() && ownInvalid} spellcheck="false" autocapitalize="none" />
-						<span class="muted small">{own.trim() && ownInvalid ? t('assistant.setup.ownInvalid') : t('assistant.setup.ownHint')}</span>
+						<input
+							class="field mono"
+							bind:value={own}
+							placeholder="hf.co/user/model-GGUF:Q4_K_M"
+							aria-label={t('assistant.setup.ownModel')}
+							aria-invalid={!!own.trim() && ownInvalid}
+							spellcheck="false"
+							autocapitalize="none"
+						/>
+						<span class="muted small"
+							>{own.trim() && ownInvalid
+								? t('assistant.setup.ownInvalid')
+								: t('assistant.setup.ownHint')}</span
+						>
 					</label>
 				{/if}
 				<p class="muted small">{t('assistant.setup.sizesNote')}</p>
@@ -239,13 +317,35 @@
 					{#each STEPS as s (s)}
 						{@const index = STEPS.indexOf(s)}
 						{@const current = step ? STEPS.indexOf(step) : failed ? STEPS.indexOf(failed.step) : -1}
-						<li class:active={s === step} class:finished={index < current} class:failed={failed?.step === s}>
-							<span class="state">{index < current ? t('assistant.setup.stepDone') : s === step ? t('assistant.setup.stepRunning') : failed?.step === s ? t('assistant.setup.stepFailed') : t('assistant.setup.stepOpen')}</span>
-							{t(`assistant.setup.step.${s as Exclude<Step, 'done'>}`, { model: running || chosen })}
+						<li
+							class:active={s === step}
+							class:finished={index < current}
+							class:failed={failed?.step === s}
+						>
+							<span class="state"
+								>{index < current
+									? t('assistant.setup.stepDone')
+									: s === step
+										? t('assistant.setup.stepRunning')
+										: failed?.step === s
+											? t('assistant.setup.stepFailed')
+											: t('assistant.setup.stepOpen')}</span
+							>
+							{t(`assistant.setup.step.${s as Exclude<Step, 'done'>}`, {
+								model: running || chosen,
+							})}
 							{#if s === 'model' && step === 'model' && progress}
 								<div class="progress" role="status">
-									<span class="small">{progress.status || t('assistant.pulling')}{#if progress.total}{` · ${formatBytes(progress.completed)} / ${formatBytes(progress.total)}`}{/if}</span>
-									{#if progress.total}<div class="bar"><span style:width="{Math.round((progress.completed / progress.total) * 100)}%"></span></div>{/if}
+									<span class="small"
+										>{progress.status ||
+											t(
+												'assistant.pulling',
+											)}{#if progress.total}{` · ${formatBytes(progress.completed)} / ${formatBytes(progress.total)}`}{/if}</span
+									>
+									{#if progress.total}<div class="bar">
+											<span style:width="{Math.round((progress.completed / progress.total) * 100)}%"
+											></span>
+										</div>{/if}
 								</div>
 							{/if}
 						</li>
@@ -259,7 +359,12 @@
 			{/if}
 			{#if step === 'model'}<p class="muted small">{t('assistant.setup.keepOpen')}</p>{/if}
 			<div class="row-actions">
-				<button type="button" class="btn btn-primary" disabled={!!step || !chosen || ownInvalid} onclick={begin}>{t(failed ? 'ui.retry' : 'assistant.setup.button')}</button>
+				<button
+					type="button"
+					class="btn btn-primary"
+					disabled={!!step || !chosen || ownInvalid}
+					onclick={begin}>{t(failed ? 'ui.retry' : 'assistant.setup.button')}</button
+				>
 			</div>
 		{/if}
 	{/if}
@@ -267,10 +372,20 @@
 
 {#if warning && pickedChoice}
 	<Dialog title={t('assistant.setup.tooLargeTitle')} onclose={() => (warning = false)}>
-		<p>{t('assistant.setup.tooLargeText', { model: pickedChoice.name, need: gib(pickedChoice.memoryBytes), size: gib(memory) })}</p>
+		<p>
+			{t('assistant.setup.tooLargeText', {
+				model: pickedChoice.name,
+				need: gib(pickedChoice.memoryBytes),
+				size: gib(memory),
+			})}
+		</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (warning = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={run}>{t('assistant.setup.tooLargeConfirm')}</button>
+			<button type="button" class="btn" onclick={() => (warning = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-warn" onclick={run}
+				>{t('assistant.setup.tooLargeConfirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

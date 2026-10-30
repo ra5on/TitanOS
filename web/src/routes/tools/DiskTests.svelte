@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Testing disks before they go into a volume.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type Disk } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { resumeBody, resumeKind, restartHint } from '#lib/disktest.ts';
@@ -29,7 +30,14 @@
 		resumes?: number;
 	};
 	// A checkpoint that was dropped after a restart, and why.
-	type Notice = { kind: string; serial?: string; model?: string; mode?: string; started: string; time: string };
+	type Notice = {
+		kind: string;
+		serial?: string;
+		model?: string;
+		mode?: string;
+		started: string;
+		time: string;
+	};
 	type TestList = { tests: Test[]; notices?: Notice[] };
 
 	let disks = $state<Disk[]>([]);
@@ -53,12 +61,21 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: (code === 'storage_failed' || code === 'disk_unavailable') && err instanceof ApiError ? err.message : '' };
+		error = {
+			text: errorText(code),
+			detail:
+				(code === 'storage_failed' || code === 'disk_unavailable') && err instanceof ApiError
+					? err.message
+					: '',
+		};
 	}
 
 	async function load() {
 		try {
-			const [storage, running] = await Promise.all([api.get<{ disks: Disk[] }>('/storage'), api.get<TestList>('/storage/tests')]);
+			const [storage, running] = await Promise.all([
+				api.get<{ disks: Disk[] }>('/storage'),
+				api.get<TestList>('/storage/tests'),
+			]);
 			disks = storage.disks;
 			show(running);
 			loaded = new Date();
@@ -73,12 +90,19 @@
 
 	const active = $derived(tests.some((test) => !test.result));
 	$effect(() => {
-		load();
-		const timer = setInterval(() => !document.hidden && load(), active ? 2000 : 10_000);
-		return () => clearInterval(timer);
+		const fast = active;
+		return poll(load, { interval: fast ? 2000 : 10_000 });
 	});
 
-	const candidates = $derived(disks.filter((disk) => (disk.role === 'free' || disk.role === 'used') && !disk.mounted && !disk.testing && !tests.some((test) => test.disk === disk.name)));
+	const candidates = $derived(
+		disks.filter(
+			(disk) =>
+				(disk.role === 'free' || disk.role === 'used') &&
+				!disk.mounted &&
+				!disk.testing &&
+				!tests.some((test) => test.disk === disk.name),
+		),
+	);
 
 	function open(disk: Disk) {
 		chosen = disk;
@@ -107,8 +131,8 @@
 					// The API still wants the disk name as confirmation for an erasing test.
 					confirm: mode === 'write' ? chosen.name : '',
 					// Writing never continues by itself after a restart.
-					autoResume: mode === 'read' && autoResume
-				})
+					autoResume: mode === 'read' && autoResume,
+				}),
 			);
 			chosen = null;
 		} catch (err) {
@@ -158,24 +182,49 @@
 	function progress(test: Test): string {
 		const percent = test.percent.toFixed(test.percent < 10 ? 1 : 0);
 		if (test.phase === '') return t('disktest.starting');
-		if (test.phase === 'smart') return test.percent > 0 ? t('disktest.progressSmart', { percent }) : '';
+		if (test.phase === 'smart')
+			return test.percent > 0 ? t('disktest.progressSmart', { percent }) : '';
 		if (test.remainingSeconds < 0) return t('disktest.progressSmart', { percent });
-		return t('disktest.progress', { percent, speed: Math.round(test.speedBytesPerSecond / 1e6), remaining: formatDuration(test.remainingSeconds) });
+		return t('disktest.progress', {
+			percent,
+			speed: Math.round(test.speedBytesPerSecond / 1e6),
+			remaining: formatDuration(test.remainingSeconds),
+		});
 	}
 </script>
 
 <section class="tile" aria-labelledby="tools-disks">
 	<h2 class="tile-title" id="tools-disks">{t('disktest.title')}</h2>
 	<p class="muted">{t('disktest.intro')}</p>
-	{#if error && !chosen && !stopping && !resuming}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></div>{/if}
+	{#if error && !chosen && !stopping && !resuming}<div class="notice-error" role="alert">
+			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			<button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
+		</div>{/if}
 	{#each notices as notice, index (index)}
 		<p class="notice-warn" role="status">
 			{tOr(`disktest.notice.${notice.kind}`, notice.kind)}
-			<span class="muted">{[notice.model, notice.serial, notice.mode ? t(`disktest.mode.${notice.mode as Mode}`) : '', t('disktest.startedAt', { time: formatDateTime(new Date(notice.started)) })].filter(Boolean).join(' · ')}</span>
-			{#if index === notices.length - 1}<button type="button" class="btn small" disabled={busy} onclick={dismissNotices}>{t('disktest.dismiss')}</button>{/if}
+			<span class="muted"
+				>{[
+					notice.model,
+					notice.serial,
+					notice.mode ? t(`disktest.mode.${notice.mode as Mode}`) : '',
+					t('disktest.startedAt', { time: formatDateTime(new Date(notice.started)) }),
+				]
+					.filter(Boolean)
+					.join(' · ')}</span
+			>
+			{#if index === notices.length - 1}<button
+					type="button"
+					class="btn small"
+					disabled={busy}
+					onclick={dismissNotices}>{t('disktest.dismiss')}</button
+				>{/if}
 		</p>
 	{/each}
-	{#if stale && loaded}<p class="notice-warn" role="status">{t('disktest.stale', { time: formatTime(loaded) })} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button></p>{/if}
+	{#if stale && loaded}<p class="notice-warn" role="status">
+			{t('disktest.stale', { time: formatTime(loaded) })}
+			<button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
+		</p>{/if}
 
 	{#if tests.length > 0}
 		<h3>{t('disktest.running')}</h3>
@@ -183,7 +232,14 @@
 			{#each tests as test (test.disk)}
 				<li>
 					<div class="head">
-						<span><span class="mono name">{test.disk}</span> <span class="muted">{[test.model, test.serial, formatDiskBytes(test.sizeBytes)].filter(Boolean).join(' · ')}</span></span>
+						<span
+							><span class="mono name">{test.disk}</span>
+							<span class="muted"
+								>{[test.model, test.serial, formatDiskBytes(test.sizeBytes)]
+									.filter(Boolean)
+									.join(' · ')}</span
+							></span
+						>
 						{#if test.result}
 							<span class="chip {TONE[test.result]}">{t(`disktest.result.${test.result}`)}</span>
 						{:else}
@@ -191,12 +247,24 @@
 						{/if}
 					</div>
 					<p class="muted">
-						{t('disktest.startedAt', { time: formatDateTime(new Date(test.started)) })}{#if test.resumed}{' · '}{t('disktest.resumedAt', { time: formatDateTime(new Date(test.resumed)), count: test.resumes ?? 1 })}{/if}
+						{t('disktest.startedAt', {
+							time: formatDateTime(new Date(test.started)),
+						})}{#if test.resumed}{' · '}{t('disktest.resumedAt', {
+								time: formatDateTime(new Date(test.resumed)),
+								count: test.resumes ?? 1,
+							})}{/if}
 					</p>
 					{#if test.result === 'interrupted'}
-						<p>{t(test.mode === 'write' ? 'disktest.interruptedWrite' : 'disktest.interruptedRead', { phase: test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting'), percent: test.percent.toFixed(0) })}</p>
+						<p>
+							{t(test.mode === 'write' ? 'disktest.interruptedWrite' : 'disktest.interruptedRead', {
+								phase: test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting'),
+								percent: test.percent.toFixed(0),
+							})}
+						</p>
 						<div class="line">
-							<button type="button" class="btn small" disabled={busy} onclick={() => stop(test)}>{t('disktest.discard')}</button>
+							<button type="button" class="btn small" disabled={busy} onclick={() => stop(test)}
+								>{t('disktest.discard')}</button
+							>
 							<button
 								type="button"
 								class="btn small btn-primary"
@@ -209,23 +277,55 @@
 							>
 						</div>
 					{:else if !test.result}
-						<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(test.percent)} aria-label={test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}><span style:width="{test.percent}%"></span></div>
-						<div class="line">
-							<span>{test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}{#if progress(test) && test.phase}{' · '}<span class="mono">{progress(test)}</span>{/if}</span>
-							<button type="button" class="btn small" onclick={() => { error = null; stopping = test; }}>{t('disktest.cancel')}</button>
+						<div
+							class="bar"
+							role="progressbar"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							aria-valuenow={Math.round(test.percent)}
+							aria-label={test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}
+						>
+							<span style:width="{test.percent}%"></span>
 						</div>
-						{#if restartHint(test)}<p class="muted">{t(`disktest.restart.${restartHint(test)}` as 'disktest.restart.kept')}</p>{/if}
+						<div class="line">
+							<span
+								>{test.phase
+									? t(`disktest.phase.${test.phase}`)
+									: t('disktest.starting')}{#if progress(test) && test.phase}{' · '}<span
+										class="mono">{progress(test)}</span
+									>{/if}</span
+							>
+							<button
+								type="button"
+								class="btn small"
+								onclick={() => {
+									error = null;
+									stopping = test;
+								}}>{t('disktest.cancel')}</button
+							>
+						</div>
+						{#if restartHint(test)}<p class="muted">
+								{t(`disktest.restart.${restartHint(test)}` as 'disktest.restart.kept')}
+							</p>{/if}
 					{:else}
 						<div class="line">
 							<span class:bad={test.result === 'failed'}>
-								{#if test.result === 'passed'}{t('disktest.passedText')}{:else if test.result === 'failed'}{t('disktest.failedText')}{/if}
+								{#if test.result === 'passed'}{t(
+										'disktest.passedText',
+									)}{:else if test.result === 'failed'}{t('disktest.failedText')}{/if}
 							</span>
-							<button type="button" class="btn small" onclick={() => stop(test)}>{t('disktest.dismiss')}</button>
+							<button type="button" class="btn small" onclick={() => stop(test)}
+								>{t('disktest.dismiss')}</button
+							>
 						</div>
 					{/if}
-					{#if test.errors > 0}<p class="bad">{t('disktest.errors', { count: test.errors })}</p>{/if}
+					{#if test.errors > 0}<p class="bad">
+							{t('disktest.errors', { count: test.errors })}
+						</p>{/if}
 					{#each test.notes as note, index (index)}
-						<p class="muted">{tOr(`disktest.note.${note.kind}`, note.kind).replace('{detail}', note.detail)}</p>
+						<p class="muted">
+							{tOr(`disktest.note.${note.kind}`, note.kind).replace('{detail}', note.detail)}
+						</p>
 					{/each}
 				</li>
 			{/each}
@@ -240,8 +340,16 @@
 			{#each candidates as disk (disk.name)}
 				<li>
 					<span class="mono name">{disk.name}</span>
-					<span class="muted grow">{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)].filter(Boolean).join(' · ')} · {disk.contents?.length ? t('disktest.contents', { contents: disk.contents.join(', ') }) : t('disktest.empty')}</span>
-					<button type="button" class="btn small" onclick={() => open(disk)}>{t('disktest.start')}</button>
+					<span class="muted grow"
+						>{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)]
+							.filter(Boolean)
+							.join(' · ')} · {disk.contents?.length
+							? t('disktest.contents', { contents: disk.contents.join(', ') })
+							: t('disktest.empty')}</span
+					>
+					<button type="button" class="btn small" onclick={() => open(disk)}
+						>{t('disktest.start')}</button
+					>
 				</li>
 			{/each}
 		</ul>
@@ -250,31 +358,74 @@
 
 {#if chosen}
 	{@const disk = chosen}
-	<Dialog title={t('disktest.dialog', { disk: disk.name })} locked={busy} onclose={() => (chosen = null)}>
+	<Dialog
+		title={t('disktest.dialog', { disk: disk.name })}
+		locked={busy}
+		onclose={() => (chosen = null)}
+	>
 		<form onsubmit={(event) => event.preventDefault()}>
-			<p class="muted">{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)].filter(Boolean).join(' · ')}</p>
+			<p class="muted">
+				{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)].filter(Boolean).join(' · ')}
+			</p>
 			<fieldset>
 				<legend>{t('disktest.mode')}</legend>
-				<label class="choice"><input type="radio" bind:group={mode} value="read" /><span><span class="name">{t('disktest.mode.read')}</span><small>{t('disktest.mode.readHint')}</small></span></label>
-				<label class="choice"><input type="radio" bind:group={mode} value="write" /><span><span class="name">{t('disktest.mode.write')}</span><small>{t('disktest.mode.writeHint')}</small></span></label>
+				<label class="choice"
+					><input type="radio" bind:group={mode} value="read" /><span
+						><span class="name">{t('disktest.mode.read')}</span><small
+							>{t('disktest.mode.readHint')}</small
+						></span
+					></label
+				>
+				<label class="choice"
+					><input type="radio" bind:group={mode} value="write" /><span
+						><span class="name">{t('disktest.mode.write')}</span><small
+							>{t('disktest.mode.writeHint')}</small
+						></span
+					></label
+				>
 			</fieldset>
-			<p class="muted">{t('disktest.estimate', { size: formatDiskBytes(disk.sizeBytes), hours: hours(disk, mode) })}</p>
+			<p class="muted">
+				{t('disktest.estimate', {
+					size: formatDiskBytes(disk.sizeBytes),
+					hours: hours(disk, mode),
+				})}
+			</p>
 			{#if mode === 'write'}
 				<div class="notice-warn">
-					{t('disktest.eraseWarning', { disk: disk.name, model: [disk.model, disk.serial].filter(Boolean).join(' · ') })}
-					{#if disk.contents?.length}<br />{t('disktest.eraseContents', { contents: disk.contents.join(', ') })}{/if}
+					{t('disktest.eraseWarning', {
+						disk: disk.name,
+						model: [disk.model, disk.serial].filter(Boolean).join(' · '),
+					})}
+					{#if disk.contents?.length}<br />{t('disktest.eraseContents', {
+							contents: disk.contents.join(', '),
+						})}{/if}
 				</div>
 			{/if}
 			{#if mode === 'read'}
-				<label class="choice"><input type="checkbox" bind:checked={autoResume} /><span><span class="name">{t('disktest.autoResume')}</span><small>{t('disktest.autoResumeHint')}</small></span></label>
+				<label class="choice"
+					><input type="checkbox" bind:checked={autoResume} /><span
+						><span class="name">{t('disktest.autoResume')}</span><small
+							>{t('disktest.autoResumeHint')}</small
+						></span
+					></label
+				>
 			{:else}
 				<p class="muted">{t('disktest.writeResumeNote')}</p>
 			{/if}
 			<p class="muted">{t('disktest.restartNote')}</p>
-			{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+			{#if error}<div class="notice-error" role="alert">
+					{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+				</div>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (chosen = null)} disabled={busy}>{t('common.cancel')}</button>
-				<button type="button" class="btn {mode === 'write' ? 'btn-danger' : 'btn-primary'}" disabled={busy} onclick={start}>{t('disktest.begin')}</button>
+				<button type="button" class="btn" onclick={() => (chosen = null)} disabled={busy}
+					>{t('common.cancel')}</button
+				>
+				<button
+					type="button"
+					class="btn {mode === 'write' ? 'btn-danger' : 'btn-primary'}"
+					disabled={busy}
+					onclick={start}>{t('disktest.begin')}</button
+				>
 			</div>
 		</form>
 	</Dialog>
@@ -282,24 +433,54 @@
 
 {#if resuming}
 	{@const test = resuming}
-	<Dialog title={t('disktest.resumeTitle', { disk: test.disk })} locked={busy} onclose={() => (resuming = null)}>
-		<div class="notice-warn">{t('disktest.resumeWrite', { disk: test.disk, model: [test.model, test.serial].filter(Boolean).join(' · '), percent: test.percent.toFixed(0) })}</div>
-		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+	<Dialog
+		title={t('disktest.resumeTitle', { disk: test.disk })}
+		locked={busy}
+		onclose={() => (resuming = null)}
+	>
+		<div class="notice-warn">
+			{t('disktest.resumeWrite', {
+				disk: test.disk,
+				model: [test.model, test.serial].filter(Boolean).join(' · '),
+				percent: test.percent.toFixed(0),
+			})}
+		</div>
+		{#if error}<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (resuming = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={busy} onclick={() => resume(test)}>{t('disktest.resumeConfirm')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (resuming = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={busy} onclick={() => resume(test)}
+				>{t('disktest.resumeConfirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
 
 {#if stopping}
 	{@const test = stopping}
-	<Dialog title={t('disktest.cancelTitle', { disk: test.disk })} locked={busy} onclose={() => (stopping = null)}>
-		<p>{t(test.mode === 'write' ? 'disktest.cancelWrite' : 'disktest.cancelRead', { disk: test.disk })}</p>
-		{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+	<Dialog
+		title={t('disktest.cancelTitle', { disk: test.disk })}
+		locked={busy}
+		onclose={() => (stopping = null)}
+	>
+		<p>
+			{t(test.mode === 'write' ? 'disktest.cancelWrite' : 'disktest.cancelRead', {
+				disk: test.disk,
+			})}
+		</p>
+		{#if error}<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (stopping = null)}>{t('disktest.keepRunning')}</button>
-			<button type="button" class="btn btn-warn" disabled={busy} onclick={() => stop(test)}>{t('disktest.cancelConfirm')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (stopping = null)}
+				>{t('disktest.keepRunning')}</button
+			>
+			<button type="button" class="btn btn-warn" disabled={busy} onclick={() => stop(test)}
+				>{t('disktest.cancelConfirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

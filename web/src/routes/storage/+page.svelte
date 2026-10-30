@@ -21,7 +21,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDiskBytes, formatPercent } from '#lib/format.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { refreshStorage, storage } from '#lib/storage.svelte.ts';
 	import AddDiskDialog from './AddDiskDialog.svelte';
@@ -166,7 +166,7 @@
 		try {
 			storage.status = await api.get<StorageStatus>('/storage');
 		} catch (err) {
-			statusError = errorText(err instanceof ApiError ? err.code : 'internal');
+			statusError = apiErrorText(err);
 		}
 		statusLoading = false;
 	}
@@ -621,15 +621,19 @@
 		ondone={done}
 	/>
 {:else if dialog?.kind === 'add' && dialogVolume}
-	<AddDiskDialog
-		volume={dialogVolume}
-		{disks}
-		preselect={dialog.disk}
-		onclose={() => (dialog = null)}
-		ondone={done}
-	/>
+	{#key dialog}<AddDiskDialog
+			volume={dialogVolume}
+			{disks}
+			preselect={dialog.disk}
+			onclose={() => (dialog = null)}
+			ondone={done}
+		/>{/key}
 {:else if dialog?.kind === 'profile' && dialogVolume}
-	<ProfileDialog volume={dialogVolume} onclose={() => (dialog = null)} ondone={done} />
+	{#key dialog}<ProfileDialog
+			volume={dialogVolume}
+			onclose={() => (dialog = null)}
+			ondone={done}
+		/>{/key}
 {:else if dialog?.kind === 'delete' && dialogVolume}
 	<DeleteVolumeDialog
 		volume={dialogVolume}

@@ -1,56 +1,76 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { untrack, tick, onMount } from 'svelte';
- import { page } from '$app/state';
-	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
+	import { page } from '$app/state';
+	import {
+		api,
+		ApiError,
+		type CopyJob,
+		type FileEntry,
+		type FileRoot,
+		type UploadStatus,
+	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { filePreferences, folderPath, rangeSelection, previewKind, selectionType, thumbnailKind, type FolderView, type Favorite, type FileView } from '#lib/file-actions.ts';
-	import { beginFileDrag, endFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
-	import { fileList, type FileSort } from '#lib/file-list.ts';
+	import { folderPath, rangeSelection, previewKind, selectionType } from '#lib/file-actions.ts';
+	import { beginFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
+	import { fileList } from '#lib/file-list.ts';
 	import { preferredFileRoot } from '#lib/file-root.ts';
-	import { formatBytes } from '#lib/format.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { isEditableText } from '#lib/text-files.ts';
-	import { enqueue, recover, uploads } from '#lib/uploads.svelte.ts';
+	import { enqueue, uploads } from '#lib/uploads.svelte.ts';
+	import ActionBar from './ActionBar.svelte';
 	import ArchiveDialog from './ArchiveDialog.svelte';
+	import BackupLock from './BackupLock.svelte';
 	import CompareDialog from './CompareDialog.svelte';
-	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import CopyDialog from './CopyDialog.svelte';
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
-	import Dropdown from '#lib/components/Dropdown.svelte';
+	import DropHint from './DropHint.svelte';
 	import DuplicatesDialog from './DuplicatesDialog.svelte';
+	import EntryDialog from './EntryDialog.svelte';
 	import FavoritesDialog from './FavoritesDialog.svelte';
-	import FileIcon from './FileIcon.svelte';
+	import FileList from './FileList.svelte';
+	import FileMenus from './FileMenus.svelte';
 	import FilePreview from './FilePreview.svelte';
 	import FileProperties from './FileProperties.svelte';
-	import FileThumbnail from './FileThumbnail.svelte';
 	import FolderPane from './FolderPane.svelte';
 	import JobsPanel from './JobsPanel.svelte';
+	import MobileActions from './MobileActions.svelte';
+	import MobileLocation from './MobileLocation.svelte';
+	import NavBar from './NavBar.svelte';
 	import Places from './Places.svelte';
 	import RenameBatchDialog from './RenameBatchDialog.svelte';
 	import SearchDialog from './SearchDialog.svelte';
+	import SelectionBar from './SelectionBar.svelte';
+	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import PhotoView from './PhotoView.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import TrashView from './TrashView.svelte';
 	import UndoPanel from './UndoPanel.svelte';
+	import UnfinishedUploads from './UnfinishedUploads.svelte';
 	import UploadPanel from './UploadPanel.svelte';
 	import UploadReview from './UploadReview.svelte';
 	import UrlDownloadDialog from './UrlDownloadDialog.svelte';
 	import DriveFormatDialog from './DriveFormatDialog.svelte';
 	import UsageDialog from './UsageDialog.svelte';
-	import VirtualEntries from './VirtualEntries.svelte';
 	import WindowsPath from './WindowsPath.svelte';
-	import { backupFolder, type BackupState, type USBBackup } from './usb-backup.ts';
-	import { askAbout, assistant, readAttachment } from '#lib/assistant.svelte.ts';
+	import { FileClipboard } from './clipboard.svelte.ts';
+	import type { FileCommand } from './commands.ts';
+	import { droppedFiles, pickedFiles, type PickedFile } from './drop-files.ts';
+	import { FileHistory, type Location } from './history.svelte.ts';
+	import { fileKeys, type KeyboardHost } from './keyboard.ts';
+	import { FilePreferenceStore } from './preferences.svelte.ts';
+	import { UsbDrives } from './usb.svelte.ts';
+	import { askAbout, readAttachment } from '#lib/assistant.svelte.ts';
 
-	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
+	const canAdminister = $derived(
+		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
+	);
 	const join = (...parts: string[]) => parts.filter(Boolean).join('/');
-	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
 	// --- Where we are -------------------------------------------------------
 
@@ -69,45 +89,61 @@
 	let placesOpen = $state(false);
 
 	const root = $derived(roots?.find((candidate) => candidate.id === rootId));
- let appliedLocation = '';
- $effect(() => {
-  const requested=page.url.searchParams.get('root') ?? '';
-  const requestedPath=folderPath(page.url.searchParams.get('path')??'');
-  const location=JSON.stringify([requested,requestedPath]);
-  const available=roots;
-  if(!requested) { appliedLocation='';return; }
-  if(available&&location!==appliedLocation){
-   appliedLocation=location;
-   if(requestedPath===null)error=t('files.invalidPath');
-   else if(available.some(r=>r.id===requested)) untrack(()=>open(requested,requestedPath));
-   else error=t('files.requestedRootUnavailable');
-  }
- });
-	const crumbs = $derived(dir ? dir.split('/') : []);
-	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }));
+	let appliedLocation = '';
+	$effect(() => {
+		const requested = page.url.searchParams.get('root') ?? '';
+		const requestedPath = folderPath(page.url.searchParams.get('path') ?? '');
+		const location = JSON.stringify([requested, requestedPath]);
+		const available = roots;
+		if (!requested) {
+			appliedLocation = '';
+			return;
+		}
+		if (available && location !== appliedLocation) {
+			appliedLocation = location;
+			if (requestedPath === null) error = t('files.invalidPath');
+			else if (available.some((r) => r.id === requested))
+				untrack(() => open(requested, requestedPath));
+			else error = t('files.requestedRootUnavailable');
+		}
+	});
 
 	// --- Dialogs and panels -------------------------------------------------
 
-	let copying = $state<{ move: boolean; restore?: boolean; from?: FileRoot; paths?: string[]; targetRoot?: string; targetDir?: string; pasted?: boolean } | null>(null);
+	let copying = $state<{
+		move: boolean;
+		restore?: boolean;
+		from?: FileRoot;
+		paths?: string[];
+		targetRoot?: string;
+		targetDir?: string;
+		pasted?: boolean;
+	} | null>(null);
 	let editing = $state<string | null>(null);
 	let jobsTick = $state(0);
 	let windowsPath = $state(false);
-	let favoriteManager = $state(false), creatingFile = $state(false), shortcuts = $state(false), downloadingLink = $state(false);
+	let favoriteManager = $state(false),
+		creatingFile = $state(false),
+		shortcuts = $state(false),
+		downloadingLink = $state(false);
 	let selectionFilter = $state('images');
-	let downloadPaths = $state<string[] | null>(null), usage = $state(false), duplicates = $state(false);
+	let downloadPaths = $state<string[] | null>(null),
+		usage = $state(false),
+		duplicates = $state(false);
 	let photos = $state(false);
-	let deepSearch = $state(false), comparison = $state(false), batchRename = $state(false), archive = $state<string | null>(null);
+	let deepSearch = $state(false),
+		comparison = $state(false),
+		batchRename = $state(false),
+		archive = $state<string | null>(null);
 	let properties = $state<{ root: FileRoot; path: string } | null>(null);
-	let preview = $state<FileEntry | null>(null), otherPreview = $state<{ root: string; path: string; size: number } | null>(null);
-	let uploadReview = $state<{ root: FileRoot; dir: string; files: { file: File; path: string }[] } | null>(null);
+	let preview = $state<FileEntry | null>(null),
+		otherPreview = $state<{ root: string; path: string; size: number } | null>(null);
+	let uploadReview = $state<{ root: FileRoot; dir: string; files: PickedFile[] } | null>(null);
 	let dropReview = $state<{ source: FileDrag; target: string; path: string } | null>(null);
-	let dialog = $state<{ kind: 'mkdir' } | { kind: 'rename'; name: string } | { kind: 'delete' } | null>(null);
-	let typed = $state('');
-	let confirmed = $state(false);
-	let permanent = $state(false);
-	let dialogError = $state('');
+	let dialog = $state<
+		{ kind: 'mkdir' } | { kind: 'rename'; name: string } | { kind: 'delete' } | null
+	>(null);
 	let dialogBusy = $state(false);
-	let unlockDialog = $state(false);
 	/** The floating menus: one for entries, one for the empty part of the folder. */
 	let menu = $state<{ entry: FileEntry; x: number; y: number } | null>(null);
 	let backgroundMenu = $state<{ x: number; y: number } | null>(null);
@@ -116,27 +152,54 @@
 	let folderInput = $state<HTMLInputElement>();
 	let dragging = $state(false);
 
+	// --- Stores -------------------------------------------------------------
+
+	const prefs = new FilePreferenceStore(() => ({ root: rootId, path: dir }));
+	const clipboard = new FileClipboard();
+	const usb = new UsbDrives({
+		admin: () => canAdminister,
+		rootId: () => rootId,
+		roots: () => roots,
+		loadRoots,
+		open,
+		restore: (from, path) => (copying = { move: false, restore: true, from, paths: [path] }),
+		setError: (message) => (error = message),
+	});
+
 	// --- Two panes ----------------------------------------------------------
 
-	let split = $state(false);
-	let right = $state<{ root: string; path: string; selected: string[] }>({ root: '', path: '', selected: [] });
+	let right = $state<{ root: string; path: string; selected: string[] }>({
+		root: '',
+		path: '',
+		selected: [],
+	});
 
 	function reviewDrop(event: DragEvent, target: string, path: string) {
 		if (!hasFileDrag(event)) return;
 		event.preventDefault();
 		event.stopPropagation();
 		dragging = false;
-		const source = takeFileDrag(event), destination = safeRoots.find((r) => r.id === target), origin = safeRoots.find((r) => r.id === source?.root);
+		const source = takeFileDrag(event),
+			destination = safeRoots.find((r) => r.id === target),
+			origin = safeRoots.find((r) => r.id === source?.root);
 		if (!source || !origin || origin.kind === 'stick' || !destination?.writable) return;
-		if (source.root === target && source.paths.some((p) => path === p || path.startsWith(p + '/'))) return;
+		if (source.root === target && source.paths.some((p) => path === p || path.startsWith(p + '/')))
+			return;
 		dropReview = { source, target, path };
 	}
 	function acceptDrop(move: boolean) {
 		const review = dropReview;
 		if (!review) return;
-		const from = safeRoots.find((r) => r.id === review.source.root), target = safeRoots.find((r) => r.id === review.target);
+		const from = safeRoots.find((r) => r.id === review.source.root),
+			target = safeRoots.find((r) => r.id === review.target);
 		if (!from || !target?.writable || (move && !from.writable)) return;
-		copying = { from, paths: review.source.paths, move, targetRoot: target.id, targetDir: review.path };
+		copying = {
+			from,
+			paths: review.source.paths,
+			move,
+			targetRoot: target.id,
+			targetDir: review.path,
+		};
 		dropReview = null;
 	}
 	function dragEntry(event: DragEvent, entry: FileEntry) {
@@ -152,174 +215,93 @@
 		const source = direction === 'right' ? safeRoots.find((r) => r.id === rootId) : rightRoot;
 		const target = direction === 'right' ? rightRoot : safeRoots.find((r) => r.id === rootId);
 		const names = direction === 'right' ? selected : right.selected;
-		const sourceDir = direction === 'right' ? dir : right.path, targetDir = direction === 'right' ? right.path : dir;
+		const sourceDir = direction === 'right' ? dir : right.path,
+			targetDir = direction === 'right' ? right.path : dir;
 		if (!source || !target?.writable || !names.length || (move && !source.writable)) return;
-		copying = { from: source, paths: names.map((n) => join(sourceDir, n)), move, targetRoot: target.id, targetDir };
+		copying = {
+			from: source,
+			paths: names.map((n) => join(sourceDir, n)),
+			move,
+			targetRoot: target.id,
+			targetDir,
+		};
 	}
 	function canRetry(job: CopyJob) {
-		return !!safeRoots.find((r) => r.id === job.to)?.writable && (!job.move || !!safeRoots.find((r) => r.id === job.from)?.writable);
+		return (
+			!!safeRoots.find((r) => r.id === job.to)?.writable &&
+			(!job.move || !!safeRoots.find((r) => r.id === job.from)?.writable)
+		);
 	}
 
 	// --- Unfinished uploads ---------------------------------------------------
 
+	// Partial uploads of the folder; UnfinishedUploads offers to finish them.
 	let pending = $state<UploadStatus[]>([]);
-	let recoveryInput = $state<HTMLInputElement>();
-	let recovery = $state<{ status: UploadStatus; root: FileRoot; dir: string } | null>(null);
 	let recovering = $state(false);
-	const unfinished = $derived(pending.filter((part) => !uploads.items.some((item) => item.id === part.id)));
-	async function recoverPicked(input: HTMLInputElement) {
-		const file = input.files?.[0], chosen = recovery;
-		input.value = '';
-		if (!file || !chosen) return;
-		recovering = true;
-		try {
-			await recover(file, chosen.root, chosen.dir, chosen.status);
-			await load();
-		} catch (err) {
-			error = fail(err);
-		} finally {
-			recovering = false;
-			recovery = null;
-		}
-	}
-	async function removePending(part: UploadStatus) {
-		try {
-			await api.delete(`/files/uploads/${part.id}`);
-			await load();
-		} catch (err) {
-			error = fail(err);
-		}
-	}
 
-	// --- Preferences of the account -----------------------------------------
+	// --- List position, history and search ---------------------------------
 
-	type Location = { root: string; path: string; search: string; selected: string[]; scroll: number; listScroll: number };
-	let virtualList = $state<{ getScroll: () => number; setScroll: (top: number) => void; reveal: (index: number) => void; getColumns: () => number }>();
-	let back = $state<Location[]>([]), forward = $state<Location[]>([]);
-	let favorites = $state<Favorite[]>([]);
-	let folderViews = $state<FolderView[]>([]);
-	let defaults = $state<{ view: FileView; sort: FileSort; descending: boolean }>({ view: 'list', sort: 'name', descending: false });
-	let preferencesReady = $state(false);
-	let rememberedRoot = $state('');
-	let preferenceError = $state('');
-	let savingPreferences = $state(false);
-	let view = $state<FileView>('list');
-	let showHidden = $state(false);
+	let virtualList = $state<{
+		getScroll: () => number;
+		setScroll: (top: number) => void;
+		reveal: (index: number) => void;
+		getColumns: () => number;
+	}>();
+	const steps = new FileHistory();
 	let search = $state('');
-	let sort = $state<FileSort>('name');
-	let descending = $state(false);
-	const views = [
-		{ mode: 'list', icon: 'list', label: 'files.view.list' },
-		{ mode: 'small', icon: 'gridSmall', label: 'files.view.small' },
-		{ mode: 'large', icon: 'grid', label: 'files.view.large' }
-	] as const;
-	let saveQueue = Promise.resolve();
 
 	onMount(() => {
-		void loadPreferences();
+		void prefs.load();
 	});
-	async function loadPreferences() {
-		try {
-			const result = await api.get<{ files: unknown }>('/preferences');
-			const prefs = filePreferences(result.files);
-			split = prefs.split;
-			showHidden = prefs.showHidden;
-			rememberedRoot = prefs.root;
-			view = prefs.view;
-			sort = prefs.sort;
-			descending = prefs.descending;
-			favorites = prefs.favorites;
-			folderViews = prefs.folders;
-			defaults = { view: prefs.view, sort: prefs.sort, descending: prefs.descending };
-			applyFolderView();
-			preferencesReady = true;
-			preferenceError = '';
-		} catch {
-			preferenceError = t('files.preferencesLoadFailed');
-		}
-	}
-	function savePreferences() {
-		if (!preferencesReady) return;
-		if (folderViews.some((f) => f.root === rootId && f.path === dir)) folderViews = folderViews.map((f) => (f.root === rootId && f.path === dir ? { ...f, view, sort, descending } : f));
-		else defaults = { view, sort, descending };
-		const value = { split, showHidden, root: rememberedRoot, ...defaults, folders: $state.snapshot(folderViews), favorites: $state.snapshot(favorites) };
-		savingPreferences = true;
-		saveQueue = saveQueue.then(async () => {
-			try {
-				await api.put('/preferences/files', value);
-				preferenceError = '';
-			} catch {
-				preferenceError = t('files.preferencesSaveFailed');
-			}
-		});
-		const queued = saveQueue;
-		void queued.then(() => {
-			if (queued === saveQueue) savingPreferences = false;
-		});
-	}
-	const folderViewSaved = $derived(folderViews.some((f) => f.root === rootId && f.path === dir));
-	function applyFolderView() {
-		const settings = folderViews.find((f) => f.root === rootId && f.path === dir) ?? defaults;
-		view = settings.view;
-		sort = settings.sort;
-		descending = settings.descending;
-	}
-	function toggleFolderView() {
-		if (folderViewSaved) {
-			folderViews = folderViews.filter((f) => f.root !== rootId || f.path !== dir);
-			applyFolderView();
-		} else if (folderViews.length < 200) folderViews = [...folderViews, { root: rootId, path: dir, view, sort, descending }];
-		savePreferences();
-	}
-	function changeView(next: FileView) {
-		view = next;
-		savePreferences();
-	}
-	/** A click on a column heading sorts by it; a second click turns the order around. */
-	function sortBy(column: FileSort) {
-		if (!preferencesReady) return;
-		if (sort === column) descending = !descending;
-		else {
-			sort = column;
-			descending = false;
-		}
-		savePreferences();
-	}
-	function sortLabel(column: FileSort) {
-		const name = t(column === 'name' ? 'files.name' : column === 'size' ? 'files.size' : 'files.modified');
-		return sort === column ? `${name}, ${t(descending ? 'files.sortedDescending' : 'files.sortedAscending')}` : name;
-	}
-	const visibleFavorites = $derived(favorites.filter((f) => roots?.some((r) => r.id === f.root)));
-	const isFavorite = $derived(favorites.some((f) => f.root === rootId && f.path === dir));
-	function saveFavorites(next: Favorite[]) {
-		favorites = next;
-		savePreferences();
-	}
-	function toggleFavorite() {
-		if (isFavorite) saveFavorites(favorites.filter((f) => f.root !== rootId || f.path !== dir));
-		else if (favorites.length < 50) saveFavorites([...favorites, { root: rootId, path: dir }]);
-	}
+	const visibleFavorites = $derived(
+		prefs.favorites.filter((f) => roots?.some((r) => r.id === f.root)),
+	);
 
 	// --- The list -----------------------------------------------------------
 
-	const visibleEntries = $derived(fileList((entries ?? []).filter((entry) => showHidden || !entry.name.startsWith('.')), search, sort, descending, i18n.locale));
-	const gallery = $derived(visibleEntries.filter((e) => !e.dir && previewKind(e.name, e.size) === 'image'));
+	const visibleEntries = $derived(
+		fileList(
+			(entries ?? []).filter((entry) => prefs.showHidden || !entry.name.startsWith('.')),
+			search,
+			prefs.sort,
+			prefs.descending,
+			i18n.locale,
+		),
+	);
+	const gallery = $derived(
+		visibleEntries.filter((e) => !e.dir && previewKind(e.name, e.size) === 'image'),
+	);
 	const galleryIndex = $derived(preview ? gallery.findIndex((e) => e.name === preview?.name) : -1);
 	const selectedNames = $derived(new Set(selected));
-	const allSelected = $derived(visibleEntries.length > 0 && visibleEntries.every((entry) => selectedNames.has(entry.name)));
-	const selectedEntries = $derived((entries ?? []).filter((entry) => selectedNames.has(entry.name)));
-	const selectedBytes = $derived(selectedEntries.filter((entry) => !entry.dir).reduce((sum, entry) => sum + entry.size, 0));
+	const allSelected = $derived(
+		visibleEntries.length > 0 && visibleEntries.every((entry) => selectedNames.has(entry.name)),
+	);
+	const selectedEntries = $derived(
+		(entries ?? []).filter((entry) => selectedNames.has(entry.name)),
+	);
+	const selectedBytes = $derived(
+		selectedEntries.filter((entry) => !entry.dir).reduce((sum, entry) => sum + entry.size, 0),
+	);
 	const selectedFolders = $derived(selectedEntries.filter((entry) => entry.dir).length);
 	const selectionKey = $derived(JSON.stringify([rootId, dir, selected]));
-	let measured = $state<{ key: string; bytes: number } | null>(null), measuring = $state(false);
+	let measured = $state<{ key: string; bytes: number } | null>(null),
+		measuring = $state(false);
+	const selectionBytes = $derived(measured?.key === selectionKey ? measured.bytes : selectedBytes);
+	/** Selected folders whose size is not known yet. */
+	const uncounted = $derived(
+		selectedFolders && measured?.key !== selectionKey ? selectedFolders : 0,
+	);
 	async function measureSelection() {
 		const key = selectionKey;
 		measuring = true;
 		try {
-			const result = await api.post<{ bytes: number }>('/files/inspect', { root: rootId, paths: selected.map((name) => join(dir, name)) });
+			const result = await api.post<{ bytes: number }>('/files/inspect', {
+				root: rootId,
+				paths: selected.map((name) => join(dir, name)),
+			});
 			if (key === selectionKey) measured = { key, bytes: result.bytes };
 		} catch (err) {
-			if (key === selectionKey) error = fail(err);
+			if (key === selectionKey) error = apiErrorText(err);
 		} finally {
 			measuring = false;
 		}
@@ -327,113 +309,17 @@
 
 	// --- USB drives and their backups ---------------------------------------
 
-	let usbDevices = $state<UsbDevice[]>([]);
-	let usbBusy = $state('');
 	let formattingDrive = $state(false);
-	let usbLoadError = $state(false);
-	let usbBackups = $state<USBBackup[]>([]);
-	let backupLoadError = $state(false);
-	let backupCatalogReady = $state(false);
-	let backupProgressError = $state(false);
-	let openingBackup = $state('');
-	let unlockedRoot = $state('');
-	const backupDrives = $derived(usbDevices.filter((device) => usbBackups.some((backup) => backup.job.destination.deviceId === device.id)).map((device) => device.root));
-	const isLockedBackup = (id: string, kind: string) => kind === 'usb' && (!backupCatalogReady || usbLoadError || backupDrives.includes(id)) && unlockedRoot !== id;
-	const backupLocked = $derived(!!root && isLockedBackup(root.id, root.kind));
+	const backupLocked = $derived(!!root && usb.isLocked(root.id, root.kind));
 	const writable = $derived(!!root?.writable && !backupLocked);
-	const safeRoots = $derived((roots ?? []).map((place) => (isLockedBackup(place.id, place.kind) ? { ...place, writable: false } : place)));
+	const safeRoots = $derived(
+		(roots ?? []).map((place) =>
+			usb.isLocked(place.id, place.kind) ? { ...place, writable: false } : place,
+		),
+	);
 	const rightRoot = $derived(safeRoots.find((r) => r.id === right.root));
-	const currentUSBBackup = $derived(usbBackups.find((backup) => usbDevices.some((device) => device.id === backup.job.destination.deviceId && device.root === rootId) && (dir === backupFolder(backup) || dir.startsWith(backupFolder(backup) + '/'))));
-
-	async function loadBackupProgress() {
-		try {
-			const states = await api.get<Record<string, BackupState>>('/backups/progress');
-			usbBackups = usbBackups.map((backup) => ({ ...backup, state: states[backup.job.id] ?? backup.state }));
-			backupProgressError = false;
-		} catch {
-			backupProgressError = true;
-		}
-	}
-	$effect(() => {
-		if (!canAdminister) return;
-		void loadUSBBackups();
-		const timer = setInterval(() => {
-			if (!document.hidden) void loadBackupProgress();
-		}, 5000);
-		return () => clearInterval(timer);
-	});
-	async function loadUSBBackups() {
-		try {
-			const overview = await api.get<{ jobs: USBBackup[] }>('/backups');
-			usbBackups = overview.jobs.filter((job) => job.job.destination.type === 'usb-copy');
-			backupLoadError = false;
-			backupCatalogReady = true;
-		} catch {
-			backupLoadError = true;
-		}
-	}
-	async function openUSBBackup(backup: USBBackup, restore = false) {
-		const id = backup.job.destination.deviceId;
-		const drive = usbDevices.find((device) => device.id === id);
-		if (!drive || !drive.supported) return;
-		openingBackup = backup.job.id;
-		error = '';
-		try {
-			let devices = usbDevices;
-			if (!drive.mounted) devices = await api.post<UsbDevice[]>(`/usb/${encodeURIComponent(drive.id)}/mount`);
-			usbDevices = devices;
-			const mounted = devices.find((device) => device.id === id);
-			if (!mounted?.root) throw new Error('unavailable');
-			await loadRoots();
-			const path = backupFolder(backup);
-			// Do not create a backup directory just to browse it.
-			await api.get<FileEntry[]>('/files/list?' + new URLSearchParams({ root: mounted.root, path }));
-			if (restore) {
-				const source = roots?.find((place) => place.id === mounted.root);
-				if (source) copying = { move: false, restore: true, from: source, paths: [path] };
-			} else open(mounted.root, path);
-		} catch (err) {
-			error = err instanceof ApiError && err.code === 'file_not_found' ? t('files.usbBackupMissing') : fail(err);
-		} finally {
-			openingBackup = '';
-		}
-	}
-	async function loadUsb() {
-		if (!canAdminister) return;
-		try {
-			const list = await api.get<UsbDevice[]>('/usb');
-			usbLoadError = false;
-			const before = usbDevices.filter((d) => d.mounted).map((d) => d.id).join();
-			usbDevices = list;
-			// A drive that was mounted or taken away changes the places on the left.
-			if (before !== list.filter((d) => d.mounted).map((d) => d.id).join()) loadRoots();
-		} catch {
-			usbLoadError = true;
-			// The next look may work.
-		}
-	}
-	async function usbAction(device: UsbDevice, action: 'mount' | 'eject') {
-		usbBusy = device.id;
-		error = '';
-		try {
-			usbDevices = await api.post<UsbDevice[]>(`/usb/${encodeURIComponent(device.id)}/${action}`);
-			if (action === 'eject' && rootId === device.root) open('', '');
-			await loadRoots();
-			if (action === 'mount') {
-				const mounted = usbDevices.find((d) => d.id === device.id);
-				if (mounted?.root) open(mounted.root, '');
-			}
-		} catch (err) {
-			error = fail(err);
-		}
-		usbBusy = '';
-	}
-	$effect(() => {
-		if (!canAdminister) return;
-		loadUsb();
-		const timer = setInterval(() => !document.hidden && loadUsb(), 5000);
-		return () => clearInterval(timer);
-	});
+	const currentUSBBackup = $derived(usb.backupAt(rootId, dir));
+	$effect(() => usb.watch());
 
 	const editable = $derived.by(() => {
 		if (backupLocked || !(root?.editable || writable) || selected.length !== 1) return false;
@@ -446,9 +332,10 @@
 	async function loadRoots() {
 		try {
 			roots = await api.get<FileRoot[]>('/files/roots');
-			if (!roots.some((candidate) => candidate.id === rootId)) open(preferredFileRoot(roots, rememberedRoot), '');
+			if (!roots.some((candidate) => candidate.id === rootId))
+				open(preferredFileRoot(roots, prefs.rememberedRoot), '');
 		} catch (err) {
-			error = fail(err);
+			error = apiErrorText(err);
 		}
 	}
 	async function load() {
@@ -457,13 +344,14 @@
 			pending = [];
 			return;
 		}
-		const requestedRoot = rootId, requestedDir = dir;
+		const requestedRoot = rootId,
+			requestedDir = dir;
 		listLoading = true;
 		try {
 			const query = `root=${encodeURIComponent(requestedRoot)}&path=${encodeURIComponent(requestedDir)}`;
 			const [listing, parts] = await Promise.all([
 				api.get<FileEntry[]>(`/files/list?${query}`),
-				writable ? api.get<UploadStatus[]>(`/files/uploads?${query}`) : Promise.resolve([])
+				writable ? api.get<UploadStatus[]>(`/files/uploads?${query}`) : Promise.resolve([]),
 			]);
 			if (rootId !== requestedRoot || dir !== requestedDir) return;
 			entries = listing;
@@ -475,7 +363,7 @@
 		} catch (err) {
 			if (rootId !== requestedRoot || dir !== requestedDir) return;
 			entries = null;
-			listError = fail(err);
+			listError = apiErrorText(err);
 		} finally {
 			if (rootId === requestedRoot && dir === requestedDir) listLoading = false;
 		}
@@ -484,51 +372,63 @@
 	// Looks again every ten seconds, unless the user is in the middle of something.
 	let refreshError = $state(false);
 	onMount(() => {
-		let active = true, inFlight = false;
-		let controller: AbortController | undefined;
 		const blocked = () =>
-			document.hidden || document.querySelector('dialog[open]') !== null || menu !== null || backgroundMenu !== null || dragging || trash || !rootId ||
-			root?.kind === 'stick' || entries === null || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName ?? '');
-		async function refresh() {
-			if (inFlight || blocked()) return;
-			const id = rootId, path = dir, before = entries;
-			inFlight = true;
-			controller = new AbortController();
+			document.hidden ||
+			document.querySelector('dialog[open]') !== null ||
+			menu !== null ||
+			backgroundMenu !== null ||
+			dragging ||
+			trash ||
+			!rootId ||
+			root?.kind === 'stick' ||
+			entries === null ||
+			['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName ?? '');
+		async function refresh(signal: AbortSignal) {
+			const id = rootId,
+				path = dir,
+				before = entries;
 			try {
-				const listing = await api.get<FileEntry[]>('/files/list?' + new URLSearchParams({ root: id, path }), controller.signal);
-				if (!active || id !== rootId || path !== dir || before !== entries || blocked()) return;
+				const listing = await api.get<FileEntry[]>(
+					'/files/list?' + new URLSearchParams({ root: id, path }),
+					signal,
+				);
+				if (signal.aborted || id !== rootId || path !== dir || before !== entries || blocked())
+					return;
 				refreshError = false;
 				if (JSON.stringify(listing) === JSON.stringify(entries)) return;
-				const first = Array.from(document.querySelectorAll<HTMLElement>('[data-file-name]')).find((e) => e.getBoundingClientRect().top >= 0);
-				const name = first?.dataset.fileName, offset = first?.getBoundingClientRect().top, scroll = window.scrollY;
+				const first = Array.from(document.querySelectorAll<HTMLElement>('[data-file-name]')).find(
+					(e) => e.getBoundingClientRect().top >= 0,
+				);
+				const name = first?.dataset.fileName,
+					offset = first?.getBoundingClientRect().top,
+					scroll = window.scrollY;
 				entries = listing;
 				const names = new Set(listing.map((e) => e.name));
 				selected = selected.filter((n) => names.has(n));
 				await tick();
-				if (!active || id !== rootId || path !== dir) return;
-				const next = Array.from(document.querySelectorAll<HTMLElement>('[data-file-name]')).find((e) => e.dataset.fileName === name);
-				window.scrollTo({ top: next && offset !== undefined ? window.scrollY + next.getBoundingClientRect().top - offset : scroll, behavior: 'instant' });
+				if (signal.aborted || id !== rootId || path !== dir) return;
+				const next = Array.from(document.querySelectorAll<HTMLElement>('[data-file-name]')).find(
+					(e) => e.dataset.fileName === name,
+				);
+				window.scrollTo({
+					top:
+						next && offset !== undefined
+							? window.scrollY + next.getBoundingClientRect().top - offset
+							: scroll,
+					behavior: 'instant',
+				});
 			} catch {
-				if (active && id === rootId && path === dir) refreshError = true;
-			} finally {
-				inFlight = false;
+				if (!signal.aborted && id === rootId && path === dir) refreshError = true;
 			}
 		}
-		const timer = setInterval(refresh, 10000);
-		document.addEventListener('visibilitychange', refresh);
-		return () => {
-			active = false;
-			controller?.abort();
-			clearInterval(timer);
-			document.removeEventListener('visibilitychange', refresh);
-		};
+		return poll(refresh, { interval: 10000, immediate: false, skip: blocked });
 	});
 
 	// At the start, and whenever an upload finishes: it may belong to the
 	// folder on screen, and it changes the free space.
 	$effect(() => {
 		uploads.finished;
-		if (!preferencesReady) return;
+		if (!prefs.ready) return;
 		untrack(() => {
 			loadRoots();
 			load();
@@ -540,40 +440,38 @@
 	let pathEditing = $state(false);
 	let pathInput = $state('');
 	let pathMessage = $state('');
-	let pathField = $state<HTMLInputElement>();
+	let mobileSearch = $state(false);
+	let navBar = $state<ReturnType<typeof NavBar>>();
 
 	function captureLocation(): Location {
-		return { root: rootId, path: dir, search, selected: [...selected], scroll: window.scrollY, listScroll: virtualList?.getScroll() ?? 0 };
+		return {
+			root: rootId,
+			path: dir,
+			search,
+			selected: [...selected],
+			scroll: window.scrollY,
+			listScroll: virtualList?.getScroll() ?? 0,
+		};
 	}
 	function historyGo(direction: 'back' | 'forward') {
-		const list = direction === 'back' ? back : forward;
-		const target = list.at(-1);
-		if (!target) return;
-		if (direction === 'back') {
-			back = back.slice(0, -1);
-			forward = [...forward, captureLocation()];
-		} else {
-			forward = forward.slice(0, -1);
-			back = [...back, captureLocation()];
-		}
-		navigate(target.root, target.path, target);
+		const target = steps.go(direction, captureLocation);
+		if (target) navigate(target.root, target.path, target);
 	}
 	function open(id: string, path: string) {
-		if (rootId && (rootId !== id || dir !== path)) back = [...back, captureLocation()].slice(-50);
-		forward = [];
+		steps.leave(rootId && (rootId !== id || dir !== path) ? captureLocation() : null);
 		placesOpen = false;
 		navigate(id, path);
 	}
 	async function navigate(id: string, path: string, restore?: Location) {
 		const chosen = roots?.find((place) => place.id === id);
-		if ((chosen?.kind === 'share' || chosen?.kind === 'volume') && rememberedRoot !== id) {
-			rememberedRoot = id;
-			if (rootId) savePreferences();
+		if ((chosen?.kind === 'share' || chosen?.kind === 'volume') && prefs.rememberedRoot !== id) {
+			prefs.rememberedRoot = id;
+			if (rootId) prefs.save();
 		}
-		if (rootId !== id) unlockedRoot = '';
+		if (rootId !== id) usb.unlockedRoot = '';
 		rootId = id;
 		dir = path;
-		applyFolderView();
+		prefs.applyFolderView();
 		search = restore?.search ?? '';
 		anchor = '';
 		menu = null;
@@ -597,39 +495,6 @@
 		virtualList?.setScroll(restore?.listScroll ?? 0);
 		window.scrollTo({ top: restore?.scroll ?? 0, behavior: 'instant' });
 	}
-	async function editPath() {
-		pathInput = '/' + dir;
-		pathMessage = '';
-		pathEditing = true;
-		await tick();
-		pathField?.select();
-	}
-	async function goToPath(event: SubmitEvent) {
-		event.preventDefault();
-		const path = folderPath(pathInput);
-		if (path === null) {
-			pathMessage = t('files.invalidPath');
-			return;
-		}
-		const id = rootId;
-		try {
-			await api.get<FileEntry[]>('/files/list?' + new URLSearchParams({ root: id, path }));
-			if (rootId === id) {
-				pathMessage = '';
-				open(id, path);
-			}
-		} catch (err) {
-			pathMessage = fail(err);
-		}
-	}
-	async function copyPath() {
-		try {
-			await navigator.clipboard.writeText('/' + dir);
-			pathMessage = t('files.pathCopied');
-		} catch {
-			pathMessage = t('files.pathCopyFailed');
-		}
-	}
 
 	// --- Selection and mouse ------------------------------------------------
 
@@ -638,11 +503,19 @@
 		selected = checked ? [...selected, name] : selected.filter((other) => other !== name);
 	}
 	function selectRange(name: string, add = false) {
-		const range = rangeSelection(visibleEntries.map((e) => e.name), anchor, name);
+		const range = rangeSelection(
+			visibleEntries.map((e) => e.name),
+			anchor,
+			name,
+		);
 		selected = add ? [...new Set([...selected, ...range])] : range;
 	}
 	function selectType() {
-		selected = visibleEntries.filter((e) => (selectionFilter === 'folders' ? e.dir : !e.dir && selectionType(e.name) === selectionFilter)).map((e) => e.name);
+		selected = visibleEntries
+			.filter((e) =>
+				selectionFilter === 'folders' ? e.dir : !e.dir && selectionType(e.name) === selectionFilter,
+			)
+			.map((e) => e.name);
 	}
 	// The entry hit by the last click. A double click only opens what both
 	// clicks hit: the first click on a folder already opened it, and the
@@ -673,7 +546,13 @@
 	/** Double click on a file: preview, or the editor for text the preview does not show. */
 	function rowDoubleClicked(entry: FileEntry, event: MouseEvent) {
 		if (entry.dir || lastClick !== `${rootId}/${dir}/${entry.name}`) return;
-		if (event.target instanceof Element && event.target.closest('input') || event.shiftKey || event.ctrlKey || event.metaKey) return;
+		if (
+			(event.target instanceof Element && event.target.closest('input')) ||
+			event.shiftKey ||
+			event.ctrlKey ||
+			event.metaKey
+		)
+			return;
 		selected = [entry.name];
 		anchor = entry.name;
 		if (previewKind(entry.name, entry.size)) preview = entry;
@@ -689,7 +568,13 @@
 		entryMenu(entry, rect.right - 232, rect.bottom + 4);
 	}
 	function blankMenu(event: MouseEvent) {
-		if (trash || !root || (event.target instanceof Element && event.target.closest('.row:not(.header),button,input,select,a,[role="menu"]'))) return;
+		if (
+			trash ||
+			!root ||
+			(event.target instanceof Element &&
+				event.target.closest('.row:not(.header),button,input,select,a,[role="menu"]'))
+		)
+			return;
 		event.preventDefault();
 		menu = null;
 		backgroundMenu = { x: event.clientX, y: event.clientY };
@@ -703,107 +588,51 @@
 
 	// --- Clipboard and keyboard ---------------------------------------------
 
-	let mobileSearch = $state(false);
-	let mobileSearchField: HTMLInputElement | undefined = $state();
-	async function toggleMobileSearch() { mobileSearch=!mobileSearch; if(mobileSearch){await tick();mobileSearchField?.focus();}else search=''; }
-	let clipboard = $state<{ from: FileRoot; paths: string[]; move: boolean } | null>(null);
 	function rememberSelection(move: boolean) {
 		if (!root || !selected.length || root.kind === 'stick' || (move && !writable)) return;
-		clipboard = { from: root, paths: selected.map((name) => join(dir, name)), move };
+		clipboard.remember(root, dir, selected, move);
 		menu = null;
 	}
-	const canPaste = $derived(!!clipboard && writable && (!clipboard.move || !!safeRoots.find((place) => place.id === clipboard?.from.id)?.writable));
+	const canPaste = $derived(clipboard.canPaste(writable, safeRoots));
 	function paste() {
-		if (!clipboard || !canPaste) return;
-		copying = { ...clipboard, targetRoot: rootId, targetDir: dir, pasted: true };
+		if (!clipboard.content || !canPaste) return;
+		copying = { ...clipboard.content, targetRoot: rootId, targetDir: dir, pasted: true };
 		backgroundMenu = null;
 	}
-	async function focusEntry(index: number) {
-		virtualList?.reveal(index);
-		await tick();
-		const name = visibleEntries[index]?.name;
-		if (name) document.querySelector<HTMLElement>(`.browser [data-file-name="${CSS.escape(name)}"]`)?.focus({ preventScroll: true });
-	}
-	function keyboard(event: KeyboardEvent) {
-		if (trash || !root || menu || backgroundMenu || document.querySelector('dialog') || event.altKey || event.defaultPrevented) return;
-		if (event.target instanceof Element && event.target.closest('input:not([type=checkbox]):not([type=radio]),textarea,select,[contenteditable="true"],[role="menu"],.dropdown-panel')) return;
-		const key = event.key.toLowerCase(), command = event.ctrlKey || event.metaKey;
-		if (key === 'f1') {
-			event.preventDefault();
-			shortcuts = true;
-			return;
-		}
-		if (event.target instanceof Element && event.target.closest('.pane')) return;
-		const listTarget = !(event.target instanceof Element) || event.target === document.body || !!event.target.closest('.file-entries');
-		if (!command && listTarget && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'home', 'end'].includes(key) && visibleEntries.length) {
-			event.preventDefault();
-			const focused = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-file-name]')?.dataset.fileName : undefined;
-			const old = visibleEntries.findIndex((e) => e.name === (focused ?? selected.at(-1)));
-			const columns = virtualList?.getColumns() ?? 1;
-			const step = key === 'arrowup' ? -columns : key === 'arrowdown' ? columns : key === 'arrowleft' ? -1 : 1;
-			const index = key === 'home' ? 0 : key === 'end' ? visibleEntries.length - 1 : Math.max(0, Math.min(visibleEntries.length - 1, old < 0 ? 0 : old + step));
-			const name = visibleEntries[index].name;
-			if (event.shiftKey) {
-				if (!anchor) anchor = visibleEntries[Math.max(0, old)].name;
-				selectRange(name);
-			} else {
-				selected = [name];
-				anchor = name;
-			}
-			void focusEntry(index);
-			return;
-		}
-		if (!command && listTarget && (key === 'enter' || key === ' ') && selected.length === 1) {
-			if (event.target instanceof Element && event.target.closest('button,input,a')) return;
-			const entry = visibleEntries.find((e) => e.name === selected[0]);
-			if (!entry) return;
-			event.preventDefault();
-			if (entry.dir && key === 'enter') open(rootId, join(dir, entry.name));
-			else if (!entry.dir && previewKind(entry.name, entry.size)) preview = entry;
-			// Like a double click: a file without a preview opens in the editor.
-			else if (!entry.dir && key === 'enter' && editable) editing = join(dir, entry.name);
-			return;
-		}
-		// Shift+F10 and the menu key open the menu of the focused entry.
-		if ((key === 'contextmenu' || (key === 'f10' && event.shiftKey)) && selected.length) {
-			const row = document.querySelector<HTMLElement>(`.browser [data-file-name="${CSS.escape(selected.at(-1) ?? '')}"]`);
-			const entry = visibleEntries.find((e) => e.name === selected.at(-1));
-			if (row && entry) {
-				event.preventDefault();
-				const rect = row.getBoundingClientRect();
-				entryMenu(entry, rect.left + 40, rect.bottom);
-			}
-			return;
-		}
-		if (command && key === 'a') {
-			event.preventDefault();
-			selected = visibleEntries.map((entry) => entry.name);
-		} else if (command && (key === 'c' || key === 'x') && selected.length && root.kind !== 'stick' && (key !== 'x' || writable)) {
-			event.preventDefault();
-			rememberSelection(key === 'x');
-		} else if (command && key === 'v' && clipboard && writable) {
-			event.preventDefault();
-			paste();
-		} else if (!command && key === 'f2' && selected.length === 1 && writable) {
-			event.preventDefault();
-			show('rename');
-		} else if (!command && key === 'delete' && selected.length && writable) {
-			event.preventDefault();
-			show('delete');
-		} else if (!command && key === 'escape' && selected.length) {
-			selected = [];
-		}
-	}
+	const keys: KeyboardHost = {
+		ignored: () => trash || !root || !!menu || !!backgroundMenu,
+		entries: () => visibleEntries,
+		selected: () => selected,
+		anchor: () => anchor,
+		setAnchor: (name) => (anchor = name),
+		pick: (name) => {
+			selected = [name];
+			anchor = name;
+		},
+		selectRange: (name) => selectRange(name),
+		list: () => virtualList,
+		writable: () => writable,
+		stick: () => root?.kind === 'stick',
+		editable: () => editable,
+		hasClipboard: () => !!clipboard.content,
+		menuAt: entryMenu,
+		run: command,
+	};
 
 	// --- Actions --------------------------------------------------------------
 
 	/** Gives a text file or an image to the assistant with a question about it. */
 	async function showAssistant(name: string) {
 		try {
-			const res = await fetch(apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) })), { credentials: 'same-origin' });
+			const res = await fetch(
+				apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) })),
+				{ credentials: 'same-origin' },
+			);
 			if (!res.ok) throw new Error(String(res.status));
 			const blob = await res.blob();
-			const file = new File([blob], name, { type: previewKind(name, blob.size) === 'image' ? blob.type || 'image/png' : 'text/plain' });
+			const file = new File([blob], name, {
+				type: previewKind(name, blob.size) === 'image' ? blob.type || 'image/png' : 'text/plain',
+			});
 			await askAbout(t('assistant.askFile', { name }), [await readAttachment(file)]);
 		} catch {
 			error = t('assistant.askFileFailed');
@@ -812,70 +641,158 @@
 
 	function download() {
 		if (!entries || selected.length === 0) return;
-		const single = selected.length === 1 ? entries.find((entry) => entry.name === selected[0]) : undefined;
+		const single =
+			selected.length === 1 ? entries.find((entry) => entry.name === selected[0]) : undefined;
 		// Folders and several entries are packed; the dialog asks for the name of the ZIP.
 		if (!single || single.dir) {
 			downloadPaths = selected.map((name) => join(dir, name));
 			return;
 		}
 		// The browser saves the answer; nothing passes through this page's memory.
-		location.href = apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) }));
+		location.href = apiPath(
+			'/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) }),
+		);
 	}
 	function show(kind: 'mkdir' | 'rename' | 'delete') {
 		if (!writable || dialogBusy) return;
-		dialogError = '';
-		confirmed = false;
-		permanent = !root?.recycle;
-		if (kind === 'rename') {
-			typed = selected[0];
-			dialog = { kind, name: selected[0] };
-		} else {
-			typed = '';
-			dialog = { kind };
-		}
+		dialog = kind === 'rename' ? { kind, name: selected[0] } : { kind };
 	}
-	// Enter submits only "new folder" and "rename"; deleting runs from its button alone.
-	async function submitDialog(event?: SubmitEvent) {
-		event?.preventDefault();
-		if (!dialog || !writable || dialogBusy) return;
-		if (event && dialog.kind === 'delete') return;
-		dialogError = '';
-		dialogBusy = true;
-		try {
-			if (dialog.kind === 'mkdir') {
-				await api.post('/files/mkdir', { root: rootId, path: join(dir, typed.trim()) });
-			} else if (dialog.kind === 'rename') {
-				await api.post('/files/rename', { root: rootId, from: join(dir, dialog.name), to: join(dir, typed.trim()) });
-			} else {
-				if (permanent && !confirmed) return;
-				await api.post('/files/delete', { root: rootId, paths: selected.map((name) => join(dir, name)), permanent });
-			}
-			dialog = null;
-			jobsTick++;
-			selected = [];
-			await load();
-			loadRoots();
-		} catch (err) {
-			dialogError = fail(err);
-		} finally {
-			dialogBusy = false;
+	async function dialogDone() {
+		dialog = null;
+		jobsTick++;
+		selected = [];
+		await load();
+		loadRoots();
+	}
+
+	/** Carries out a command of a bar or a menu; `entry` is the one a menu was opened on. */
+	function command(action: FileCommand, entry?: FileEntry) {
+		switch (action) {
+			case 'up':
+				return open(rootId, dir.split('/').slice(0, -1).join('/'));
+			case 'back':
+			case 'forward':
+				return historyGo(action);
+			case 'editPath':
+				return void navBar?.editPath();
+			case 'favorite':
+				return prefs.toggleFavorite();
+			case 'mkdir':
+			case 'rename':
+			case 'delete':
+				return show(action);
+			case 'newFile':
+				creatingFile = true;
+				return;
+			case 'upload':
+				return fileInput?.click();
+			case 'uploadFolder':
+				return folderInput?.click();
+			case 'urlDownload':
+				downloadingLink = true;
+				return;
+			case 'selectAll':
+				selected = visibleEntries.map((e) => e.name);
+				return;
+			case 'clearSelection':
+				selected = [];
+				return;
+			case 'invertSelection':
+				selected = visibleEntries.filter((e) => !selectedNames.has(e.name)).map((e) => e.name);
+				return;
+			case 'selectType':
+				return selectType();
+			case 'openFolder':
+				if (entry) open(rootId, join(dir, entry.name));
+				return;
+			case 'preview':
+				if (entry) preview = entry;
+				return;
+			case 'edit':
+				editing = join(dir, selected[0]);
+				return;
+			case 'assistant':
+				if (entry) void showAssistant(entry.name);
+				return;
+			case 'download':
+				return download();
+			case 'archive':
+				if (entry) archive = join(dir, entry.name);
+				return;
+			case 'properties':
+				if (entry && root) properties = { root, path: join(dir, entry.name) };
+				return;
+			case 'clipboardCopy':
+			case 'cut':
+				return rememberSelection(action === 'cut');
+			case 'paste':
+				return paste();
+			case 'copy':
+			case 'move':
+				copying = { move: action === 'move' };
+				return;
+			case 'restore':
+				copying = { move: false, restore: true };
+				return;
+			case 'renameBatch':
+				batchRename = true;
+				return;
+			case 'deepSearch':
+				deepSearch = true;
+				return;
+			case 'usage':
+				usage = true;
+				return;
+			case 'duplicates':
+				duplicates = true;
+				return;
+			case 'compare':
+				comparison = true;
+				return;
+			case 'photos':
+				photos = true;
+				return;
+			case 'shortcuts':
+				shortcuts = true;
+				return;
+			case 'trash':
+				trash = true;
+				selected = [];
+				return;
+			case 'twoPanes':
+				prefs.split = !prefs.split;
+				prefs.save();
+				return;
+			case 'showHidden':
+				prefs.showHidden = !prefs.showHidden;
+				selected = [];
+				prefs.save();
+				return;
+			case 'folderView':
+				return prefs.toggleFolderView();
+			default:
+				return prefs.changeView(action);
 		}
 	}
 
 	// --- Uploads --------------------------------------------------------------
 
-	function upload(files: { file: File; path: string }[]) {
+	function upload(files: PickedFile[]) {
 		if (root && writable && files.length) uploadReview = { root, dir, files };
 	}
 	/** Creates the folders of an uploaded tree, parents first, then queues the files. */
-	async function startUpload(files: { file: File; path: string; conflict: '' | 'rename' | 'replace' }[]) {
+	async function startUpload(
+		files: { file: File; path: string; conflict: '' | 'rename' | 'replace' }[],
+	) {
 		const review = uploadReview;
-		if (!review || !safeRoots.find((r) => r.id === review.root.id)?.writable) throw new ApiError(403, 'read_only_share', '');
+		if (!review || !safeRoots.find((r) => r.id === review.root.id)?.writable)
+			throw new ApiError(403, 'read_only_share', '');
 		const target = review.dir;
 		const folders = new Set<string>();
 		for (const { path } of files) {
 			const parts = path.split('/').slice(0, -1);
-			for (let depth = 1; depth <= parts.length; depth++) folders.add(parts.slice(0, depth).join('/'));
+			for (let depth = 1; depth <= parts.length; depth++)
+				folders.add(parts.slice(0, depth).join('/'));
 		}
 		for (const folder of [...folders].sort()) {
 			try {
@@ -886,34 +803,15 @@
 			}
 		}
 		enqueue(
-			files.map(({ file, path, conflict }) => ({ file, conflict, dir: join(target, path.split('/').slice(0, -1).join('/')) })),
-			review.root
+			files.map(({ file, path, conflict }) => ({
+				file,
+				conflict,
+				dir: join(target, path.split('/').slice(0, -1).join('/')),
+			})),
+			review.root,
 		);
 		uploadReview = null;
 		load();
-	}
-	function picked(input: HTMLInputElement) {
-		const files = [...(input.files ?? [])].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
-		input.value = '';
-		upload(files);
-	}
-	/** Reads a dropped folder with everything below it. What the browser cannot read is noted in `failed`. */
-	async function readEntry(entry: FileSystemEntry, prefix: string, out: { file: File; path: string }[], failed: string[]) {
-		try {
-			if (entry.isFile) {
-				const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
-				out.push({ file, path: prefix + entry.name });
-			} else if (entry.isDirectory) {
-				const reader = (entry as FileSystemDirectoryEntry).createReader();
-				for (;;) {
-					const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-					if (batch.length === 0) break;
-					for (const child of batch) await readEntry(child, prefix + entry.name + '/', out, failed);
-				}
-			}
-		} catch {
-			failed.push(prefix + entry.name);
-		}
 	}
 	async function dropped(event: DragEvent) {
 		if (hasFileDrag(event)) {
@@ -923,96 +821,129 @@
 		event.preventDefault();
 		dragging = false;
 		if (!writable || !event.dataTransfer) return;
-		// The entries have to be taken before the first await; the list is gone afterwards.
-		const items = [...event.dataTransfer.items].map((item) => item.webkitGetAsEntry?.()).filter((entry): entry is FileSystemEntry => !!entry);
-		const plain = [...event.dataTransfer.files];
-		const files: { file: File; path: string }[] = [],
-			failed: string[] = [];
-		if (items.length > 0) for (const entry of items) await readEntry(entry, '', files, failed);
-		else files.push(...plain.map((file) => ({ file, path: file.name })));
+		const { files, failed } = await droppedFiles(event.dataTransfer);
 		// The rest is still offered for upload; the unreadable ones are named.
-		if (failed.length) error = t('files.dropUnreadable', { count: failed.length, names: failed.slice(0, 5).join(', ') + (failed.length > 5 ? ' …' : '') });
+		if (failed.length)
+			error = t('files.dropUnreadable', {
+				count: failed.length,
+				names: failed.slice(0, 5).join(', ') + (failed.length > 5 ? ' …' : ''),
+			});
 		upload(files);
 	}
 </script>
 
-<svelte:window onkeydown={keyboard} />
+<svelte:window onkeydown={(event) => fileKeys(event, keys)} />
 <div class="files-pagehead"><PageHead title={t('files.title')} /></div>
-{#if preferenceError}<p class="notice-error" role="alert">{preferenceError} <button class="btn" onclick={() => (preferencesReady ? savePreferences() : loadPreferences())}>{t('files.retryPreferences')}</button></p>{/if}
+{#if prefs.error}<p class="notice-error" role="alert">
+		{prefs.error}
+		<button class="btn" onclick={() => (prefs.ready ? prefs.save() : prefs.load())}
+			>{t('files.retryPreferences')}</button
+		>
+	</p>{/if}
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 <!-- Fixed, so that saving never moves the page. -->
-{#if savingPreferences}<p class="saving" role="status">{t('files.savingPreferences')}</p>{/if}
+{#if prefs.saving}<p class="saving" role="status">{t('files.savingPreferences')}</p>{/if}
 
 {#if roots && roots.length === 0}
-	<EmptyState title={t('files.noRoots')} text={canAdminister ? t('files.noRootsAdmin') : undefined} />
+	<EmptyState
+		title={t('files.noRoots')}
+		text={canAdminister ? t('files.noRootsAdmin') : undefined}
+	/>
 {:else if roots}
 	<div class="layout">
-		<div class="mobile-location">
-<button type="button" class="btn places-toggle" aria-label={`${root?.name??'–'} / ${dir}`} title={`${root?.name??'–'} / ${dir}`} aria-expanded={placesOpen} aria-controls="file-places" onclick={() => (placesOpen = !placesOpen)}><Icon name="folder" size={16}/><span>{root?.name??'–'}{#if dir}<span class="muted"> / {dir}</span>{/if}</span><Icon name="chevronDown" size={14}/></button>
-<button type="button" class="btn mobile-back" aria-label={t('files.back')} disabled={!back.length} onclick={()=>historyGo('back')}><Icon name="arrowLeft" size={16}/></button>
-</div>
-		<nav id="file-places" class="tile places" class:open={placesOpen} aria-label={t('files.places')}>
+		<MobileLocation
+			{root}
+			{dir}
+			bind:placesOpen
+			canBack={!!steps.back.length}
+			onback={() => historyGo('back')}
+		/>
+		<nav
+			id="file-places"
+			class="tile places"
+			class:open={placesOpen}
+			aria-label={t('files.places')}
+		>
 			<Places
 				{roots}
 				current={trash ? '' : rootId}
 				{dir}
-				{showHidden}
+				showHidden={prefs.showHidden}
 				admin={canAdminister}
-				{usbDevices}
-				{usbBusy}
-				{usbLoadError}
-				backups={usbBackups}
-				{backupLoadError}
-				{backupProgressError}
-				{openingBackup}
+				usbDevices={usb.devices}
+				usbBusy={usb.busy}
+				usbLoadError={usb.loadError}
+				backups={usb.backups}
+				backupLoadError={usb.backupLoadError}
+				backupProgressError={usb.progressError}
+				openingBackup={usb.opening}
 				favorites={visibleFavorites}
 				onopen={open}
-				onusb={usbAction}
-				onbackup={openUSBBackup}
+				onusb={(device, action) => usb.action(device, action)}
+				onbackup={(backup, restore) => usb.openBackup(backup, restore)}
 				onrefreshbackups={() => {
-					loadUSBBackups();
-					loadUsb();
+					usb.loadBackups();
+					usb.load();
 				}}
 				onmanagefavorites={() => (favoriteManager = true)}
-				onremovefavorite={(favorite) => saveFavorites(favorites.filter((f) => f !== favorite))}
+				onremovefavorite={(favorite) =>
+					prefs.saveFavorites(prefs.favorites.filter((f) => f !== favorite))}
 				onformat={() => (formattingDrive = true)}
 			/>
 		</nav>
-{#if !trash}<div class="mobile-file-actions" role="toolbar" aria-label={t('files.moreActions')}>
-<button type="button" class="btn btn-primary" disabled={!writable} onclick={()=>fileInput?.click()}><Icon name="upload" size={16}/><span>{t('files.mobileUpload')}</span></button>
-<Dropdown label={t('files.new')} text={t('files.new')} icon="plus" disabled={!writable}>{#snippet children(close)}<button type="button" role="menuitem" onclick={()=>{close();show('mkdir');}}><Icon name="folder" size={16}/>{t('files.newFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();creatingFile=true;}}><Icon name="fileText" size={16}/>{t('files.newFile')}</button><button type="button" role="menuitem" onclick={()=>{close();folderInput?.click();}}><Icon name="upload" size={16}/>{t('files.uploadFolder')}</button><button type="button" role="menuitem" onclick={()=>{close();downloadingLink=true;}}><Icon name="globe" size={16}/>{t('files.urlDownload')}</button>{/snippet}</Dropdown>
-<button type="button" class="btn" aria-expanded={mobileSearch} aria-controls="mobile-file-search" onclick={toggleMobileSearch}><Icon name="search" size={16}/><span>{t('files.mobileSearch')}</span></button>
-<Dropdown label={t('files.moreActions')} text={t('files.mobileMore')} icon="more" align="right">{#snippet children(close)}
-<button type="button" role="menuitem" disabled={!dir} onclick={()=>{close();open(rootId,dir.split('/').slice(0,-1).join('/'));}}><Icon name="arrowUp" size={16}/>{t('files.up')}</button>
-<button type="button" role="menuitem" disabled={!forward.length} onclick={()=>{close();historyGo('forward');}}><Icon name="arrowRight" size={16}/>{t('files.forward')}</button>
-<button type="button" role="menuitem" onclick={()=>{close();editPath();}}><Icon name="edit" size={16}/>{t('files.editPath')}</button>
-{#if root?.kind!=='stick'}<button type="button" role="menuitem" onclick={()=>{close();toggleFavorite();}}><Icon name="star" size={16}/>{t(isFavorite?'files.unfavorite':'files.favorite')}</button>{/if}
-{#if clipboard}<button type="button" role="menuitem" disabled={!canPaste} onclick={()=>{close();paste();}}><Icon name="paste" size={16}/>{t('files.paste')}</button>{/if}
-<hr/><button type="button" role="menuitem" onclick={()=>{close();selected=visibleEntries.map(e=>e.name);}}><Icon name="select" size={16}/>{t('files.selectAll')}</button>
-<button type="button" role="menuitem" onclick={()=>{close();deepSearch=true;}}><Icon name="search" size={16}/>{t('files.deepSearch')}</button>
-{#if root?.kind!=='stick'}<button type="button" role="menuitem" onclick={()=>{close();usage=true;}}>{t('files.usageTitle')}</button><button type="button" role="menuitem" onclick={()=>{close();duplicates=true;}}>{t('files.duplicatesTitle')}</button>{/if}
-{#if root?.kind==='share'}<button type="button" role="menuitem" onclick={()=>{close();trash=true;selected=[];}}><Icon name="trash" size={16}/>{t('files.trash')}</button>{/if}
-<hr/>{#each views as option}<button type="button" role="menuitem" disabled={!preferencesReady} onclick={()=>{close();changeView(option.mode);}}><Icon name={option.icon} size={16}/>{t(option.label)}</button>{/each}
-<button type="button" role="menuitem" onclick={()=>{close();split=!split;savePreferences();}}><Icon name="columns" size={16}/>{t('files.twoPanes')}</button>
-{#if split}<button type="button" role="menuitem" disabled={!rightRoot} onclick={()=>{close();comparison=true;}}>{t('files.compareFolders')}</button>{/if}
-<button type="button" role="menuitem" onclick={()=>{close();showHidden=!showHidden;selected=[];savePreferences();}}><Icon name="eye" size={16}/>{t('files.showHidden')}</button>
-{#if root?.kind!=='stick'}<button type="button" role="menuitem" disabled={!preferencesReady||(!folderViewSaved&&folderViews.length>=200)} onclick={()=>{close();toggleFolderView();}}>{t('files.rememberFolderView')}</button>{/if}
-<button type="button" role="menuitem" onclick={()=>{close();shortcuts=true;}}><Icon name="keyboard" size={16}/>{t('files.shortcuts')}</button>
-{/snippet}</Dropdown></div>
-{#if mobileSearch}<label class="mobile-file-search" id="mobile-file-search"><span class="sr-only">{t('files.searchFolder')}</span><Icon name="search" size={16}/><input class="field" type="search" bind:this={mobileSearchField} bind:value={search} placeholder={t('files.searchFolder')} oninput={()=>{selected=[];anchor='';}}/><button class="btn icon" type="button" aria-label={t('common.close')} onclick={toggleMobileSearch}><Icon name="close" size={16}/></button></label>{/if}
-{#if selected.length}<div class="mobile-selection" role="region" aria-label={t('files.selectionActions')}><span>{t('files.selected',{count:selected.length})}</span><button type="button" class="btn icon" aria-label={t('files.copy')} onclick={()=>copying={move:false}}><Icon name="copy" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.selectionMore')} onclick={event=>{const entry=selectedEntries.at(-1);if(entry)menuFromButton(entry,event.currentTarget);}}><Icon name="more" size={16}/></button><button type="button" class="btn icon" aria-label={t('files.clearSelection')} onclick={()=>selected=[]}><Icon name="close" size={16}/></button></div>{/if}{/if}
+		{#if !trash}
+			<MobileActions
+				{root}
+				{dir}
+				{writable}
+				canForward={!!steps.forward.length}
+				isFavorite={prefs.isFavorite}
+				clipboard={!!clipboard.content}
+				{canPaste}
+				split={prefs.split}
+				canCompare={!!rightRoot}
+				preferencesReady={prefs.ready}
+				folderViewSaved={prefs.folderViewSaved}
+				folderViewsFull={prefs.folderViews.length >= 200}
+				selected={selected.length}
+				bind:search
+				bind:searchOpen={mobileSearch}
+				oncommand={command}
+				onsearch={() => {
+					selected = [];
+					anchor = '';
+				}}
+				onmore={(button) => {
+					const entry = selectedEntries.at(-1);
+					if (entry) menuFromButton(entry, button);
+				}}
+			/>
+		{/if}
 
-
-		<div class="workspace" class:split>
-			{#if split && !trash && (selected.length || right.selected.length) && root?.kind !== 'stick'}
+		<div class="workspace" class:split={prefs.split}>
+			{#if prefs.split && !trash && (selected.length || right.selected.length) && root?.kind !== 'stick'}
 				<div class="pane-actions">
 					{#if selected.length}
-						<button class="btn" disabled={!rightRoot?.writable} onclick={() => transferPane('right', false)}>{t('files.copyRight')} →</button>
-						<button class="btn" disabled={!writable || !rightRoot?.writable} onclick={() => transferPane('right', true)}>{t('files.moveRight')} →</button>
+						<button
+							class="btn"
+							disabled={!rightRoot?.writable}
+							onclick={() => transferPane('right', false)}>{t('files.copyRight')} →</button
+						>
+						<button
+							class="btn"
+							disabled={!writable || !rightRoot?.writable}
+							onclick={() => transferPane('right', true)}>{t('files.moveRight')} →</button
+						>
 					{/if}
 					{#if right.selected.length}
-						<button class="btn" disabled={!writable} onclick={() => transferPane('left', false)}>← {t('files.copyLeft')}</button>
-						<button class="btn" disabled={!rightRoot?.writable || !writable} onclick={() => transferPane('left', true)}>← {t('files.moveLeft')}</button>
+						<button class="btn" disabled={!writable} onclick={() => transferPane('left', false)}
+							>← {t('files.copyLeft')}</button
+						>
+						<button
+							class="btn"
+							disabled={!rightRoot?.writable || !writable}
+							onclick={() => transferPane('left', true)}>← {t('files.moveLeft')}</button
+						>
 					{/if}
 				</div>
 			{/if}
@@ -1034,437 +965,444 @@
 			>
 				{#if trash && root}
 					{#if root.recycle}
-						<TrashView {root} user={session.data?.user?.name ?? ''} admin={canAdminister} onclose={() => { trash = false; load(); }} onchanged={() => { load(); loadRoots(); }} />
+						<TrashView
+							{root}
+							user={session.data?.user?.name ?? ''}
+							admin={canAdminister}
+							onclose={() => {
+								trash = false;
+								load();
+							}}
+							onchanged={() => {
+								load();
+								loadRoots();
+							}}
+						/>
 					{:else}
-						<div class="toolbar"><button type="button" class="btn" onclick={() => { trash = false; load(); }}>{t('files.trashBack')}</button></div>
-						<EmptyState title={t('files.trashOf', { name: root.name })} text={t('files.trashDisabled')} />
-						{#if canAdminister}<a class="btn trash-configure" href="/shares">{t('files.trashConfigure')}</a>{/if}
+						<div class="toolbar">
+							<button
+								type="button"
+								class="btn"
+								onclick={() => {
+									trash = false;
+									load();
+								}}>{t('files.trashBack')}</button
+							>
+						</div>
+						<EmptyState
+							title={t('files.trashOf', { name: root.name })}
+							text={t('files.trashDisabled')}
+						/>
+						{#if canAdminister}<a class="btn trash-configure" href="/shares"
+								>{t('files.trashConfigure')}</a
+							>{/if}
 					{/if}
 				{:else}
-					<!-- Where: history, path and search. -->
-					<div class="toolbar nav-bar" class:path-editing={pathEditing}>
-						<div class="nav-buttons">
-							<button type="button" class="btn icon" aria-label={t('files.back')} title={t('files.back')} disabled={!back.length} onclick={() => historyGo('back')}><Icon name="arrowLeft" size={16} /></button>
-							<button type="button" class="btn icon" aria-label={t('files.forward')} title={t('files.forward')} disabled={!forward.length} onclick={() => historyGo('forward')}><Icon name="arrowRight" size={16} /></button>
-							<button type="button" class="btn icon" aria-label={t('files.up')} title={t('files.up')} disabled={!dir} onclick={() => open(rootId, dir.split('/').slice(0, -1).join('/'))}><Icon name="arrowUp" size={16} /></button>
-						</div>
-						{#if pathEditing && root}
-							<form class="path-form" onsubmit={goToPath}>
-								<label class="sr-only" for="file-path">{t('files.folderPath')}</label>
-								<input
-									id="file-path"
-									class="field mono"
-									bind:this={pathField}
-									bind:value={pathInput}
-									placeholder="/"
-									title={t('files.pathHint', { name: root.name })}
-									autocomplete="off"
-									spellcheck="false"
-									onkeydown={(event) => {
-										if (event.key === 'Escape') {
-											event.preventDefault();
-											pathEditing = false;
-											pathMessage = '';
-										}
-									}}
-								/>
-								<button class="btn">{t('files.goToPath')}</button>
-								<button type="button" class="btn" onclick={() => { pathEditing = false; pathMessage = ''; }}>{t('common.cancel')}</button>
-							</form>
-						{:else}
-							<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-							<div class="crumbs mono" title={t('files.editPathHint')} onclick={(event) => { if (event.target === event.currentTarget) editPath(); }}>
-								{#if root}<button type="button" onclick={() => open(rootId, '')}>{root.name}</button>{/if}
-								{#each crumbs as crumb, index (index)}
-									<span class="muted" aria-hidden="true">/</span>
-									<button type="button" onclick={() => open(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button>
-								{/each}
-								{#if root}<button type="button" class="edit-path" aria-label={t('files.editPath')} title={t('files.editPath')} onclick={editPath}><Icon name="edit" size={14} /></button>{/if}
-							</div>
-						{/if}
-						{#if root && root.kind !== 'stick'}
-							<button type="button" class="btn icon favorite" aria-label={t(isFavorite ? 'files.unfavorite' : 'files.favorite')} title={`${t(isFavorite ? 'files.unfavorite' : 'files.favorite')} – ${t('files.favoriteAccount')}`} aria-pressed={isFavorite} disabled={!isFavorite && favorites.length >= 50} onclick={toggleFavorite}><Icon name="star" size={16} /></button>
-						{/if}
-						{#if root}
-							<Dropdown label={t('files.moreFolderActions')} icon="more" align="right">
-								{#snippet children(close)}
-									<button type="button" role="menuitem" onclick={() => { close(); editPath(); }}><span>{t('files.editPath')}</span></button>
-									<button type="button" role="menuitem" onclick={() => { close(); copyPath(); }}><span>{t('files.copyPath')}</span></button>
-									{#if root?.kind === 'share' || root?.kind === 'volume'}<button type="button" role="menuitem" onclick={() => { close(); windowsPath = true; }}><span>{t('files.windowsPath')}</span></button>{/if}
-									<hr />
-									<button type="button" role="menuitem" onclick={() => { close(); load(); loadRoots(); }}><span>{t('files.reload')}</span></button>
-								{/snippet}
-							</Dropdown>
-						{/if}
-						<label class="search">
-							<Icon name="search" size={16} />
-							<input class="field" type="search" aria-label={t('files.searchFolder')} placeholder={t('files.searchFolder')} bind:value={search} oninput={() => { selected = []; anchor = ''; }} />
-						</label>
-					</div>
-					{#if pathMessage}<p class="path-message" role="status">{pathMessage}</p>{/if}
+					<NavBar
+						bind:this={navBar}
+						{root}
+						{rootId}
+						{dir}
+						canBack={!!steps.back.length}
+						canForward={!!steps.forward.length}
+						isFavorite={prefs.isFavorite}
+						favoritesFull={prefs.favorites.length >= 50}
+						bind:search
+						bind:editing={pathEditing}
+						bind:message={pathMessage}
+						bind:input={pathInput}
+						onopen={open}
+						oncommand={command}
+						onwindowspath={() => (windowsPath = true)}
+						onreload={() => {
+							load();
+							loadRoots();
+						}}
+						onsearch={() => {
+							selected = [];
+							anchor = '';
+						}}
+					/>
+					<ActionBar
+						{root}
+						{writable}
+						clipboard={!!clipboard.content}
+						{canPaste}
+						selected={selected.length}
+						split={prefs.split}
+						canCompare={!!rightRoot}
+						view={prefs.view}
+						preferencesReady={prefs.ready}
+						showHidden={prefs.showHidden}
+						folderViewSaved={prefs.folderViewSaved}
+						folderViewsFull={prefs.folderViews.length >= 200}
+						bind:selectionFilter
+						bind:fileInput
+						bind:folderInput
+						onpicked={(input) => upload(pickedFiles(input))}
+						oncommand={command}
+					/>
 
-					<!-- What: creating, choosing, viewing. -->
-					<div class="toolbar action-bar">
-						{#if writable}
-							<button type="button" class="btn btn-primary" onclick={() => fileInput?.click()}><Icon name="upload" size={16} />{t('files.upload')}</button>
-							<Dropdown label={t('files.new')} text={t('files.new')} icon="plus">
-								{#snippet children(close)}
-									<button type="button" role="menuitem" onclick={() => { close(); show('mkdir'); }}><Icon name="folder" size={16} /><span>{t('files.newFolder')}</span></button>
-									<button type="button" role="menuitem" onclick={() => { close(); creatingFile = true; }}><Icon name="fileText" size={16} /><span>{t('files.newFile')}</span></button>
-									<hr />
-									<button type="button" role="menuitem" onclick={() => { close(); folderInput?.click(); }}><Icon name="upload" size={16} /><span>{t('files.uploadFolder')}</span></button>
-									<button type="button" role="menuitem" onclick={() => { close(); downloadingLink = true; }}><Icon name="globe" size={16} /><span>{t('files.urlDownload')}</span></button>
-								{/snippet}
-							</Dropdown>
-							<input bind:this={fileInput} type="file" multiple hidden onchange={(event) => picked(event.currentTarget)} />
-							<input bind:this={folderInput} type="file" webkitdirectory hidden onchange={(event) => picked(event.currentTarget)} />
-						{/if}
-						{#if clipboard}
-							<button type="button" class="btn" disabled={!canPaste} onclick={paste}><Icon name="paste" size={16} />{t('files.paste')}</button>
-						{/if}
-						<span class="spacer"></span>
-						{#if root}
-							<Dropdown label={t('files.selection')} text={t('files.selection')} icon="select" kind="panel" align="right" compact>
-								{#snippet children()}
-									<button class="btn" onclick={() => (selected = visibleEntries.map((e) => e.name))}>{t('files.selectAll')}</button>
-									<button class="btn" disabled={!selected.length} onclick={() => (selected = [])}>{t('files.clearSelection')}</button>
-									<button class="btn" onclick={() => (selected = visibleEntries.filter((e) => !selectedNames.has(e.name)).map((e) => e.name))}>{t('files.invertSelection')}</button>
-									<hr />
-									<label class="stack">{t('files.selectType')}
-										<select class="field" bind:value={selectionFilter}>
-											{#each ['images', 'video', 'audio', 'documents', 'folders', 'other'] as type (type)}<option value={type}>{t(`files.selectionType.${type}` as 'files.selectionType.images')}</option>{/each}
-										</select>
-									</label>
-									<button class="btn" onclick={selectType}>{t('files.selectMatches')}</button>
-								{/snippet}
-							</Dropdown>
-							<Dropdown label={t('files.tools')} text={t('files.tools')} icon="tool" align="right" compact>
-								{#snippet children(close)}
-									<button type="button" role="menuitem" onclick={() => { close(); deepSearch = true; }}><span>{t('files.deepSearch')}</span></button>
-									{#if root?.kind !== 'stick'}
-										<button type="button" role="menuitem" onclick={() => { close(); usage = true; }}><span>{t('files.usageTitle')}</span></button>
-										<button type="button" role="menuitem" onclick={() => { close(); duplicates = true; }}><span>{t('files.duplicatesTitle')}</span></button>
-									{/if}
-									{#if split}<button type="button" role="menuitem" disabled={!rightRoot} onclick={() => { close(); comparison = true; }}><span>{t('files.compareFolders')}</span></button>{/if}
-								{/snippet}
-							</Dropdown>
-							{#if root.kind === 'share'}
-								<button type="button" class="btn" aria-label={t('files.trash')} title={t('files.trash')} onclick={() => { trash = true; selected = []; }}><Icon name="trash" size={16} /><span class="label">{t('files.trash')}</span></button>
-							{/if}
-						{/if}
-						<div class="segmented" role="group" aria-label={t('files.view')}>
-							{#each views as option (option.mode)}
-								<button type="button" class="btn icon" disabled={!preferencesReady} aria-label={t(option.label)} title={option.mode === 'large' ? `${t(option.label)} – ${t('files.thumbnailHint')}` : t(option.label)} aria-pressed={view === option.mode} onclick={() => changeView(option.mode)}><Icon name={option.icon} size={16} /></button>
-							{/each}
-						</div>
-						<button type="button" class="btn icon" aria-label={t('files.twoPanes')} title={t('files.twoPanes')} aria-pressed={split} onclick={() => { split = !split; savePreferences(); }}><Icon name="columns" size={16} /></button>
-						<Dropdown label={t('files.view')} text={t('files.view')} icon="eye" kind="panel" align="right" compact>
-							{#snippet children(close)}
-								<label><input type="checkbox" checked={showHidden} onchange={(event) => { showHidden = event.currentTarget.checked; selected = []; savePreferences(); }} />{t('files.showHidden')}</label>
-								{#if root?.kind !== 'stick'}<label><input type="checkbox" checked={folderViewSaved} disabled={!preferencesReady || (!folderViewSaved && folderViews.length >= 200)} onchange={toggleFolderView} />{t('files.rememberFolderView')}</label>{/if}
-								{#if root?.kind !== 'stick'}<button class="btn" onclick={() => { close(); photos = true; }}><Icon name="grid" size={16} /> {t('files.photoView')}</button>{/if}
-								<hr />
-								<button class="btn" onclick={() => { close(); shortcuts = true; }}>{t('files.shortcuts')} <kbd aria-hidden="true">F1</kbd></button>
-							{/snippet}
-						</Dropdown>
-					</div>
-
-					{#if unfinished.length > 0}
-						<section class="unfinished" aria-label={t('uploads.unfinished')}>
-							<strong>{t('uploads.unfinished')}</strong>
-							<p class="muted">{recovering ? t('uploads.verifying') : t('uploads.recoverHint')}</p>
-							<input bind:this={recoveryInput} type="file" hidden onchange={(event) => recoverPicked(event.currentTarget)} />
-							{#each unfinished as part (part.id)}
-								<div class="unfinished-row">
-									<span>{part.name} · <span class="mono">{formatBytes(part.offset)} / {formatBytes(part.size)}</span></span>
-									<button class="btn" disabled={recovering || part.busy} onclick={() => { if (root) { recovery = { status: part, root, dir }; recoveryInput?.click(); } }}>{t('uploads.resume')}</button>
-									<button class="btn" disabled={recovering || part.busy} onclick={() => removePending(part)}>{t('uploads.removePartial')}</button>
-								</div>
-							{/each}
-						</section>
+					<UnfinishedUploads
+						{pending}
+						{root}
+						{dir}
+						bind:recovering
+						onchanged={load}
+						onerror={(message) => (error = message)}
+					/>
+					{#if root?.kind === 'usb' && usb.mayHoldBackup(rootId)}
+						<BackupLock {usb} {rootId} locked={backupLocked} onlock={() => clipboard.dropCut()} />
 					{/if}
-					{#if root?.kind === 'usb' && (!backupCatalogReady || usbLoadError || backupDrives.includes(rootId))}
-						<div class="toolbar">
-							<span>{t(backupLocked ? 'files.backupLocked' : 'files.backupUnlocked')}</span>
-							<button class="btn" onclick={() => { if (backupLocked) unlockDialog = true; else { unlockedRoot = ''; if (clipboard?.move) clipboard = null; } }}>{t(backupLocked ? 'files.unlockBackup' : 'files.lockBackup')}</button>
-						</div>
-					{/if}
-					{#if root && !writable}<p class="notice-warn">{t(backupLocked ? 'files.rightReason.usb' : root.kind === 'share' ? 'files.rightReason.share' : root.kind === 'stick' ? 'files.rightReason.stick' : 'files.rightReason.readOnly')}</p>{/if}
-					{#if refreshError}<p class="notice-warn" role="status">{t('files.autoRefreshFailed')}</p>{/if}
+					{#if root && !writable}<p class="notice-warn">
+							{t(
+								backupLocked
+									? 'files.rightReason.usb'
+									: root.kind === 'share'
+										? 'files.rightReason.share'
+										: root.kind === 'stick'
+											? 'files.rightReason.stick'
+											: 'files.rightReason.readOnly',
+							)}
+						</p>{/if}
+					{#if refreshError}<p class="notice-warn" role="status">
+							{t('files.autoRefreshFailed')}
+						</p>{/if}
 
-					<div class="file-entries" class:small={view === 'small'} class:large={view === 'large'}>
-						<div class="row header">
-							<input type="checkbox" aria-label={t('files.selectAll')} checked={allSelected} onchange={(event) => (selected = event.currentTarget.checked ? visibleEntries.map((entry) => entry.name) : [])} />
-							{#each ['name', 'size', 'modified'] as const as column (column)}
-								<button type="button" class="sort" class:num={column !== 'name'} class:active={sort === column} disabled={!preferencesReady} aria-label={sortLabel(column)} title={t('files.sort')} onclick={() => sortBy(column)}>
-									<span>{t(column === 'name' ? 'files.name' : column === 'size' ? 'files.size' : 'files.modified')}</span>
-									{#if sort === column}<span aria-hidden="true">{descending ? '↓' : '↑'}</span>{/if}
-								</button>
-							{/each}
-						</div>
-						<VirtualEntries bind:this={virtualList} items={visibleEntries} key={(e) => e.name} minWidth={view === 'list' ? 0 : view === 'small' ? 220 : 160} rowHeight={view === 'large' ? 260 : 72} label={t('files.title')} reset={`${rootId}/${dir}/${search}/${view}/${sort}/${descending}`}>
-							{#snippet children(entry)}
-								<!-- The whole row is a larger target for the mouse. Keyboards and screen
-								     readers use the checkbox and the buttons inside it, so the row
-								     itself is no control: one nested in another is announced badly. -->
-								<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-								<div
-									class="row"
-									tabindex="-1"
-									draggable={root?.kind !== 'stick'}
-									ondragstart={(event) => dragEntry(event, entry)}
-									ondragend={endFileDrag}
-									ondragover={(event) => { if (entry.dir && writable && hasFileDrag(event)) { event.preventDefault(); event.stopPropagation(); } }}
-									ondrop={(event) => { if (entry.dir) reviewDrop(event, rootId, join(dir, entry.name)); }}
-									data-file-name={entry.name}
-									class:picked={selectedNames.has(entry.name)}
-									onclick={(event) => rowClicked(entry, event)}
-									ondblclick={(event) => rowDoubleClicked(entry, event)}
-									oncontextmenu={(event) => { event.preventDefault(); event.stopPropagation(); entryMenu(entry, event.clientX, event.clientY); }}
-								>
-									<input type="checkbox" aria-label={t('files.select', { name: entry.name })} checked={selectedNames.has(entry.name)} onclick={(event) => { if (event.shiftKey) selectRange(entry.name, event.ctrlKey || event.metaKey); else toggle(entry.name, event.currentTarget.checked); }} />
-									{#if entry.dir}
-										<button type="button" class="entry" onclick={(event) => folderClick(entry, event)}><FileIcon name={entry.name} dir size={view === 'large' ? 48 : view === 'small' ? 24 : 18} /><span>{entry.name}</span></button>
-									{:else}
-										<span class="entry">{#if view === 'large' && thumbnailKind(entry.name) && root?.kind !== 'stick'}<FileThumbnail root={rootId} path={join(dir, entry.name)} modified={entry.modified} />{:else}<FileIcon name={entry.name} dir={false} size={view === 'large' ? 48 : view === 'small' ? 24 : 18} />{/if}<span>{entry.name}</span></span>
-									{/if}
-									<span class="mono num muted">{entry.dir ? '–' : formatBytes(entry.size)}</span>
-									<span class="num muted">{date.format(new Date(entry.modified))}</span>
-									<button type="button" class="entry-more" aria-label={t('files.actionsFor', { name: entry.name })} title={t('files.actionsFor', { name: entry.name })} aria-haspopup="menu" aria-expanded={menu?.entry.name === entry.name} onclick={(event) => menuFromButton(entry, event.currentTarget)}><Icon name="more" size={16} /></button>
-								</div>
-							{/snippet}
-						</VirtualEntries>
-						{#if !visibleEntries.length}
-							{#if !root}<EmptyState inline title={t('files.chooseRoot')} />{:else if listError}<div class="notice-error list-state" role="alert"><span>{listError}</span><button type="button" class="btn" disabled={listLoading} onclick={load}>{t('common.retry')}</button></div>{:else if entries}<EmptyState inline title={t(search && entries.length > 0 ? 'files.noMatches' : 'files.empty')} />{:else}<p class="muted list-state" role="status">{t('common.loading')}</p>{/if}
-						{/if}
-					</div>
+					<FileList
+						bind:virtualList
+						items={visibleEntries}
+						{entries}
+						{root}
+						{rootId}
+						{dir}
+						{search}
+						{listError}
+						{listLoading}
+						view={prefs.view}
+						sort={prefs.sort}
+						descending={prefs.descending}
+						preferencesReady={prefs.ready}
+						{selectedNames}
+						{allSelected}
+						{writable}
+						menuName={menu?.entry.name}
+						onload={load}
+						onselectall={(checked) =>
+							(selected = checked ? visibleEntries.map((entry) => entry.name) : [])}
+						onsort={(column) => prefs.sortBy(column)}
+						ontoggle={toggle}
+						onrange={selectRange}
+						onrowclick={rowClicked}
+						onrowdblclick={rowDoubleClicked}
+						onfolderclick={folderClick}
+						onmenu={entryMenu}
+						onmenubutton={menuFromButton}
+						ondragentry={dragEntry}
+						ondropon={(event, path) => reviewDrop(event, rootId, path)}
+					/>
 
-					<p class="list-footer muted" role="status">{t('files.resultCount', { shown: visibleEntries.length, total: entries?.length ?? 0 })}{#if clipboard} · {t(clipboard.move ? 'files.cutCount' : 'files.copiedCount', { count: clipboard.paths.length })}{/if}</p>
+					<p class="list-footer muted" role="status">
+						{t('files.resultCount', {
+							shown: visibleEntries.length,
+							total: entries?.length ?? 0,
+						})}{#if clipboard.content}
+							· {t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
+								count: clipboard.content.paths.length,
+							})}{/if}
+					</p>
 					{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
-					{#if writable}
-						<p class="drop" class:active={dragging}>
-							<Icon name="upload" size={18} />{dragging ? t('files.dropNow', { path: join(root?.name ?? '', dir) }) : t('files.dropHint')}
-						</p>
-					{/if}
+					{#if writable}<DropHint {dragging} path={join(root?.name ?? '', dir)} />{/if}
 
-					<!-- Stays at the bottom of the screen while the list scrolls. -->
 					{#if selected.length > 0}
-						<div class="actions" role="region" aria-label={t('files.selectionActions')}>
-							<span class="count">{t('files.selected', { count: selected.length })} · {formatBytes(measured?.key === selectionKey ? measured.bytes : selectedBytes)}{#if selectedFolders && measured?.key !== selectionKey} · <span class="muted">{t('files.foldersNotCounted', { count: selectedFolders })}</span>{/if}</span>
-							{#if selectedFolders}<button class="btn secondary" disabled={measuring} onclick={measureSelection}>{t(measuring ? 'files.measuring' : 'files.measureFolders')}</button>{/if}
-							{#if currentUSBBackup}<button type="button" class="btn" disabled={currentUSBBackup.state?.running} onclick={() => (copying = { move: false, restore: true })}>{t('files.restoreSelected')}</button>{/if}
-							<button type="button" class="btn" onclick={download}><Icon name="download" size={16} />{t('files.download')}</button>
-							{#if root?.kind !== 'stick'}<button type="button" class="btn secondary" onclick={() => (copying = { move: false })}>{t('files.copy')}</button>{/if}
-							{#if editable}<button type="button" class="btn secondary" onclick={() => (editing = join(dir, selected[0]))}>{t('files.edit')}</button>{/if}
-							{#if writable}
-								<button type="button" class="btn secondary" onclick={() => (copying = { move: true })}>{t('files.move')}</button>
-								{#if selected.length === 1}<button type="button" class="btn secondary" onclick={() => show('rename')}>{t('files.rename')}</button>{:else}<button class="btn secondary" onclick={() => (batchRename = true)}>{t('files.renameBatch')}</button>{/if}
-								<button type="button" class="btn btn-danger" onclick={() => show('delete')}><Icon name="trash" size={16} />{t('files.delete')}</button>
-							{/if}
-							<!-- On phones the other actions are in the menu, so the bar keeps one line. -->
-							<button type="button" class="btn icon more-actions" aria-label={t('files.selectionMore')} title={t('files.selectionMore')} aria-haspopup="menu" onclick={(event) => { const entry = selectedEntries.at(-1); if (entry) menuFromButton(entry, event.currentTarget); }}><Icon name="more" size={16} /></button>
-							<button type="button" class="btn icon clear" aria-label={t('files.clearSelection')} title={t('files.clearSelection')} onclick={() => (selected = [])}><Icon name="close" size={16} /></button>
-						</div>
+						<SelectionBar
+							count={selected.length}
+							bytes={selectionBytes}
+							folders={selectedFolders}
+							{uncounted}
+							{measuring}
+							backup={currentUSBBackup}
+							stick={root?.kind === 'stick'}
+							{editable}
+							{writable}
+							onmeasure={measureSelection}
+							oncommand={command}
+							onmore={(button) => {
+								const entry = selectedEntries.at(-1);
+								if (entry) menuFromButton(entry, button);
+							}}
+						/>
 					{/if}
 				{/if}
 			</section>
-			{#if split}<FolderPane onpreview={(id, path, entry) => (otherPreview = { root: id, path, size: entry.size })} ondropfiles={reviewDrop} roots={safeRoots} refresh={jobsTick + uploads.finished} {showHidden} onchange={(id, path, names) => (right = { root: id, path, selected: names })} />{/if}
+			{#if prefs.split}<FolderPane
+					onpreview={(id, path, entry) => (otherPreview = { root: id, path, size: entry.size })}
+					ondropfiles={reviewDrop}
+					roots={safeRoots}
+					refresh={jobsTick + uploads.finished}
+					showHidden={prefs.showHidden}
+					onchange={(id, path, names) => (right = { root: id, path, selected: names })}
+				/>{/if}
 		</div>
 	</div>
 {/if}
 
-{#if menu && root}
-	{@const entry = menu.entry}
-	{@const one = selected.length === 1}
-	<ContextMenu label={one ? t('files.actionsFor', { name: entry.name }) : t('files.selected', { count: selected.length })} x={menu.x} y={menu.y} onclose={() => (menu = null)}>
-		<div class="menu-title" role="presentation">{one ? entry.name : t('files.selected', { count: selected.length })}</div>
-		{#if one && entry.dir}<button type="button" role="menuitem" onclick={() => choose(() => open(rootId, join(dir, entry.name)))}><Icon name="folder" size={16} /><span>{t('files.openFolder')}</span><kbd aria-hidden="true">Enter</kbd></button>
-		{:else if one && previewKind(entry.name, entry.size)}<button type="button" role="menuitem" onclick={() => choose(() => (preview = entry))}><Icon name="search" size={16} /><span>{t('files.preview')}</span><kbd aria-hidden="true">Space</kbd></button>{/if}
-		{#if editable}<button type="button" role="menuitem" onclick={() => choose(() => (editing = join(dir, selected[0])))}><Icon name="edit" size={16} /><span>{t('files.edit')}</span></button>{/if}
-		{#if one && !entry.dir && root.kind !== 'stick' && assistant.status?.available && ((previewKind(entry.name, entry.size) === 'text' && entry.size <= 256 << 10) || (previewKind(entry.name, entry.size) === 'image' && entry.size <= 4 << 20))}
-			<button type="button" role="menuitem" onclick={() => choose(() => showAssistant(entry.name))}><Icon name="chat" size={16} /><span>{t('assistant.askFileMenu')}</span></button>
-		{/if}
-		<button type="button" role="menuitem" onclick={() => choose(download)}><Icon name="download" size={16} /><span>{t('files.download')}</span></button>
-		{#if one && !entry.dir && /\.zip$/i.test(entry.name)}<button type="button" role="menuitem" onclick={() => choose(() => (archive = join(dir, entry.name)))}><Icon name="archive" size={16} /><span>{t('files.archiveTitle')}</span></button>{/if}
-		{#if root.kind !== 'stick'}
-			<hr />
-			<button type="button" role="menuitem" onclick={() => choose(() => rememberSelection(false))}><Icon name="copy" size={16} /><span>{t('files.clipboardCopy')}</span><kbd aria-hidden="true">Ctrl+C</kbd></button>
-			{#if writable}<button type="button" role="menuitem" onclick={() => choose(() => rememberSelection(true))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.cut')}</span><kbd aria-hidden="true">Ctrl+X</kbd></button>{/if}
-			<button type="button" role="menuitem" onclick={() => choose(() => (copying = { move: false }))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.copy')}</span></button>
-			{#if writable}<button type="button" role="menuitem" onclick={() => choose(() => (copying = { move: true }))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.move')}</span></button>{/if}
-		{/if}
-		{#if writable}
-			{#if one}<button type="button" role="menuitem" onclick={() => choose(() => show('rename'))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.rename')}</span><kbd aria-hidden="true">F2</kbd></button>
-			{:else}<button type="button" role="menuitem" onclick={() => choose(() => (batchRename = true))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.renameBatch')}</span></button>{/if}
-		{/if}
-		{#if one}<hr /><button type="button" role="menuitem" onclick={() => choose(() => (properties = { root: root!, path: join(dir, entry.name) }))}><i class="no-icon" aria-hidden="true"></i><span>{t('files.properties')}</span></button>{/if}
-		{#if writable}<hr /><button type="button" role="menuitem" class="danger" onclick={() => choose(() => show('delete'))}><Icon name="trash" size={16} /><span>{t('files.delete')}</span><kbd aria-hidden="true">Entf</kbd></button>{/if}
-	</ContextMenu>
-{/if}
-
-{#if backgroundMenu && root}
-	<ContextMenu label={t('files.folderActions')} x={backgroundMenu.x} y={backgroundMenu.y} onclose={() => (backgroundMenu = null)}>
-		{#if writable}
-			<button type="button" role="menuitem" onclick={() => choose(() => show('mkdir'))}><Icon name="folder" size={16} /><span>{t('files.newFolder')}</span></button>
-			<button type="button" role="menuitem" onclick={() => choose(() => (creatingFile = true))}><Icon name="fileText" size={16} /><span>{t('files.newFile')}</span></button>
-			<button type="button" role="menuitem" onclick={() => choose(() => fileInput?.click())}><Icon name="upload" size={16} /><span>{t('files.upload')}</span></button>
-			<button type="button" role="menuitem" onclick={() => choose(() => (downloadingLink = true))}><Icon name="globe" size={16} /><span>{t('files.urlDownload')}</span></button>
-			<button type="button" role="menuitem" disabled={!canPaste} onclick={() => choose(paste)}><Icon name="paste" size={16} /><span>{t('files.paste')}</span><kbd aria-hidden="true">Ctrl+V</kbd></button>
-			<hr />
-		{/if}
-		{#each views as option (option.mode)}
-			<button type="button" role="menuitemradio" aria-checked={view === option.mode} onclick={() => choose(() => changeView(option.mode))}><Icon name={option.icon} size={16} /><span>{t(option.label)}</span></button>
-		{/each}
-	</ContextMenu>
-{/if}
+<FileMenus
+	{menu}
+	background={backgroundMenu}
+	{root}
+	{selected}
+	{editable}
+	{writable}
+	{canPaste}
+	view={prefs.view}
+	oncommand={(action, entry) => choose(() => command(action, entry))}
+	onclose={() => {
+		menu = null;
+		backgroundMenu = null;
+	}}
+/>
 
 {#if dropReview}
 	<Dialog title={t('files.dropTransfer')} onclose={() => (dropReview = null)}>
 		<p>{t('files.dropTransferHint', { count: dropReview.source.paths.length })}</p>
-		<p class="mono">{safeRoots.find((r) => r.id === dropReview?.source.root)?.name}: {dropReview.source.paths.join(', ')}</p>
-		<p class="mono">→ {safeRoots.find((r) => r.id === dropReview?.target)?.name}/{dropReview.path}</p>
+		<p class="mono">
+			{safeRoots.find((r) => r.id === dropReview?.source.root)?.name}: {dropReview.source.paths.join(
+				', ',
+			)}
+		</p>
+		<p class="mono">
+			→ {safeRoots.find((r) => r.id === dropReview?.target)?.name}/{dropReview.path}
+		</p>
 		<div class="dialog-actions">
 			<button class="btn" onclick={() => (dropReview = null)}>{t('common.cancel')}</button>
 			<button class="btn" onclick={() => acceptDrop(false)}>{t('files.copy')}</button>
-			<button class="btn btn-warn" disabled={!safeRoots.find((r) => r.id === dropReview?.source.root)?.writable} onclick={() => acceptDrop(true)}>{t('files.move')}</button>
+			<button
+				class="btn btn-warn"
+				disabled={!safeRoots.find((r) => r.id === dropReview?.source.root)?.writable}
+				onclick={() => acceptDrop(true)}>{t('files.move')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
-<JobsPanel {canRetry} onopen={(id, path) => open(id, path)} refresh={jobsTick} onfinished={() => { load(); loadRoots(); jobsTick++; }} />
+<JobsPanel
+	{canRetry}
+	onopen={(id, path) => open(id, path)}
+	refresh={jobsTick}
+	onfinished={() => {
+		load();
+		loadRoots();
+		jobsTick++;
+	}}
+/>
 <UploadPanel />
-<UndoPanel roots={safeRoots} refresh={jobsTick} onchanged={() => { load(); loadRoots(); jobsTick++; }} />
+<UndoPanel
+	roots={safeRoots}
+	refresh={jobsTick}
+	onchanged={() => {
+		load();
+		loadRoots();
+		jobsTick++;
+	}}
+/>
 
 {#if copying && root && roots}
-	<CopyDialog roots={safeRoots} from={copying.from ?? root} paths={copying.paths ?? selected.map((name) => join(dir, name))} move={copying.move} restore={copying.restore} targetRoot={copying.targetRoot} targetDir={copying.targetDir} startDir={dir} onclose={() => (copying = null)} ondone={() => { if (copying?.pasted && copying.move) clipboard = null; copying = null; selected = []; jobsTick++; }} />
+	{#key copying}<CopyDialog
+			roots={safeRoots}
+			from={copying.from ?? root}
+			paths={copying.paths ?? selected.map((name) => join(dir, name))}
+			move={copying.move}
+			restore={copying.restore}
+			targetRoot={copying.targetRoot}
+			targetDir={copying.targetDir}
+			startDir={dir}
+			onclose={() => (copying = null)}
+			ondone={() => {
+				if (copying?.pasted && copying.move) clipboard.content = null;
+				copying = null;
+				selected = [];
+				jobsTick++;
+			}}
+		/>{/key}
 {/if}
 {#if editing && root}
-	<TextEditor root={root.id} stick={root.kind === 'stick'} path={editing} onclose={() => { editing = null; load(); }} />
+	<TextEditor
+		root={root.id}
+		stick={root.kind === 'stick'}
+		path={editing}
+		onclose={() => {
+			editing = null;
+			load();
+		}}
+	/>
 {/if}
 {#if windowsPath && root}<WindowsPath {root} {dir} onclose={() => (windowsPath = false)} />{/if}
 
 {#if dialog}
-	{@const kind = dialog.kind}
-	<Dialog
-		title={kind === 'mkdir'
-			? t('files.newFolderTitle')
-			: kind === 'rename'
-				? t('files.renameTitle', { name: dialog.name })
-				: selected.length === 1
-					? t('files.deleteTitleOne', { name: selected[0] })
-					: t('files.deleteTitleMany', { count: selected.length })}
-		locked={dialogBusy}
-		onclose={() => (dialog = null)}
-	>
-		<form onsubmit={submitDialog}>
-			{#if kind === 'delete'}
-				<div class="delete-summary">
-					<p>{t('files.deleteSummary', { files: selectedEntries.length - selectedFolders, folders: selectedFolders })} · <span class="mono">{formatBytes(measured?.key === selectionKey ? measured.bytes : selectedBytes)}</span>{#if selectedFolders && measured?.key !== selectionKey} <span class="muted">({t('files.foldersNotCounted', { count: selectedFolders })})</span>{/if}</p>
-					{#if selected.length > 1}
-						<ul class="mono">
-							{#each selected.slice(0, 10) as name (name)}<li>{name}</li>{/each}
-						</ul>
-						{#if selected.length > 10}<p class="muted">{t('files.deleteMore', { count: selected.length - 10 })}</p>{/if}
-					{/if}
-				</div>
-				{#if root?.recycle}
-					<label class="field-row"><span>{t('files.deleteAction')}</span>
-						<select class="field" bind:value={permanent} disabled={dialogBusy} onchange={() => { confirmed = false; }}>
-							<option value={false}>{t('files.moveToTrash')}</option>
-							<option value={true}>{t('files.trashDeleteForever')}</option>
-						</select>
-					</label>
-				{/if}
-				<p class={permanent ? 'notice-error' : 'text'}>{t(permanent ? (root?.recycle ? 'files.trashForeverText' : 'files.deletePermanent') : 'files.deleteRecycle')}</p>
-				{#if permanent}
-					<label class="confirm"><input type="checkbox" bind:checked={confirmed} disabled={dialogBusy} /><span>{t('files.deleteConfirm')}</span></label>
-				{/if}
-			{:else}
-				<label class="field-row">
-					<span>{t(kind === 'mkdir' ? 'files.name' : 'files.newName')}</span>
-					<!-- svelte-ignore a11y_autofocus -->
-					<input class="field" type="text" bind:value={typed} maxlength="255" autocomplete="off" spellcheck="false" required autofocus readonly={dialogBusy} />
-				</label>
-			{/if}
-			{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
-			<div class="dialog-actions">
-				{#if dialogBusy}<span class="dialog-busy" role="status">{t('files.dialogBusy')}</span>{/if}
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}>{t('common.cancel')}</button>
-				{#if kind === 'delete'}
-					<button type="button" class="btn {permanent ? 'btn-danger' : 'btn-warn'}" disabled={(permanent && !confirmed) || dialogBusy} onclick={() => submitDialog()}>{t(permanent ? 'files.trashDeleteForever' : 'files.moveToTrash')}</button>
-				{:else}
-					<button type="submit" class="btn btn-primary" disabled={dialogBusy}>{t(kind === 'mkdir' ? 'files.create' : 'files.rename')}</button>
-				{/if}
-			</div>
-		</form>
-	</Dialog>
+	{#key dialog}
+		<EntryDialog
+			{dialog}
+			{root}
+			{rootId}
+			{dir}
+			{writable}
+			{selected}
+			files={selectedEntries.length - selectedFolders}
+			folders={selectedFolders}
+			bytes={selectionBytes}
+			{uncounted}
+			busy={dialogBusy}
+			onbusy={(busy) => (dialogBusy = busy)}
+			onclose={() => (dialog = null)}
+			ondone={dialogDone}
+		/>
+	{/key}
 {/if}
 
-{#if downloadPaths && root}<DownloadDialog {root} paths={downloadPaths} onclose={() => (downloadPaths = null)} />{/if}
-{#if duplicates && root}<DuplicatesDialog root={safeRoots.find((r) => r.id === rootId) ?? root} {dir} {showHidden} onclose={() => (duplicates = false)} onopen={(path) => { duplicates = false; open(rootId, path); }} onchanged={() => { load(); loadRoots(); jobsTick++; }} />{/if}
-{#if usage && root}<UsageDialog {root} {dir} {showHidden} onclose={() => (usage = false)} onopen={(path) => { usage = false; open(rootId, path); }} />{/if}
+{#if downloadPaths && root}<DownloadDialog
+		{root}
+		paths={downloadPaths}
+		onclose={() => (downloadPaths = null)}
+	/>{/if}
+{#if duplicates && root}<DuplicatesDialog
+		root={safeRoots.find((r) => r.id === rootId) ?? root}
+		{dir}
+		showHidden={prefs.showHidden}
+		onclose={() => (duplicates = false)}
+		onopen={(path) => {
+			duplicates = false;
+			open(rootId, path);
+		}}
+		onchanged={() => {
+			load();
+			loadRoots();
+			jobsTick++;
+		}}
+	/>{/if}
+{#if usage && root}<UsageDialog
+		{root}
+		{dir}
+		showHidden={prefs.showHidden}
+		onclose={() => (usage = false)}
+		onopen={(path) => {
+			usage = false;
+			open(rootId, path);
+		}}
+	/>{/if}
 {#if photos && root}<PhotoView root={rootId} {dir} onclose={() => (photos = false)} />{/if}
-{#if deepSearch && root}<SearchDialog {root} {dir} {showHidden} onclose={() => (deepSearch = false)} onopen={(path) => { deepSearch = false; open(rootId, path); }} />{/if}
-{#if comparison && root && rightRoot}<CompareDialog left={safeRoots.find((r) => r.id === rootId) ?? root} leftDir={dir} right={rightRoot} rightDir={right.path} {showHidden} ondone={() => { comparison = false; jobsTick++; }} onclose={() => (comparison = false)} onopen={(id, path) => { comparison = false; open(id, path); }} />{/if}
-{#if batchRename && root}<RenameBatchDialog {root} {dir} names={selected} onclose={() => { batchRename = false; load(); jobsTick++; }} ondone={() => { batchRename = false; selected = []; load(); jobsTick++; }} />{/if}
-{#if archive && root}<ArchiveDialog {root} path={archive} {dir} roots={safeRoots} onclose={() => (archive = null)} ondone={() => { archive = null; jobsTick++; }} />{/if}
-{#if properties}<FileProperties root={properties.root} path={properties.path} locked={properties.root.kind === 'usb' && !safeRoots.find((r) => r.id === properties?.root.id)?.writable && properties.root.writable} onclose={() => (properties = null)} />{/if}
-{#if uploadReview}<UploadReview root={uploadReview.root} dir={uploadReview.dir} files={uploadReview.files} onclose={() => (uploadReview = null)} onconfirm={startUpload} />{/if}
-{#if favoriteManager}<FavoritesDialog {favorites} onsave={saveFavorites} onclose={() => (favoriteManager = false)} />{/if}
-{#if formattingDrive && canAdminister}<DriveFormatDialog onclose={() => (formattingDrive = false)} onformatted={() => { loadUsb(); }} />{/if}
-{#if downloadingLink && root && writable}<UrlDownloadDialog root={rootId} {dir} confined={!canAdminister} onclose={() => (downloadingLink = false)} onstarted={() => { downloadingLink = false; jobsTick++; }} />{/if}
-{#if creatingFile && root && writable}<CreateFileDialog root={rootId} {dir} onclose={() => (creatingFile = false)} oncreated={(path) => { creatingFile = false; editing = path; load(); }} />{/if}
+{#if deepSearch && root}<SearchDialog
+		{root}
+		{dir}
+		showHidden={prefs.showHidden}
+		onclose={() => (deepSearch = false)}
+		onopen={(path) => {
+			deepSearch = false;
+			open(rootId, path);
+		}}
+	/>{/if}
+{#if comparison && root && rightRoot}<CompareDialog
+		left={safeRoots.find((r) => r.id === rootId) ?? root}
+		leftDir={dir}
+		right={rightRoot}
+		rightDir={right.path}
+		showHidden={prefs.showHidden}
+		ondone={() => {
+			comparison = false;
+			jobsTick++;
+		}}
+		onclose={() => (comparison = false)}
+		onopen={(id, path) => {
+			comparison = false;
+			open(id, path);
+		}}
+	/>{/if}
+{#if batchRename && root}<RenameBatchDialog
+		{root}
+		{dir}
+		names={selected}
+		onclose={() => {
+			batchRename = false;
+			load();
+			jobsTick++;
+		}}
+		ondone={() => {
+			batchRename = false;
+			selected = [];
+			load();
+			jobsTick++;
+		}}
+	/>{/if}
+{#if archive && root}<ArchiveDialog
+		{root}
+		path={archive}
+		{dir}
+		roots={safeRoots}
+		onclose={() => (archive = null)}
+		ondone={() => {
+			archive = null;
+			jobsTick++;
+		}}
+	/>{/if}
+{#if properties}<FileProperties
+		root={properties.root}
+		path={properties.path}
+		locked={properties.root.kind === 'usb' &&
+			!safeRoots.find((r) => r.id === properties?.root.id)?.writable &&
+			properties.root.writable}
+		onclose={() => (properties = null)}
+	/>{/if}
+{#if uploadReview}<UploadReview
+		root={uploadReview.root}
+		dir={uploadReview.dir}
+		files={uploadReview.files}
+		onclose={() => (uploadReview = null)}
+		onconfirm={startUpload}
+	/>{/if}
+{#if favoriteManager}<FavoritesDialog
+		favorites={prefs.favorites}
+		onsave={(next) => prefs.saveFavorites(next)}
+		onclose={() => (favoriteManager = false)}
+	/>{/if}
+{#if formattingDrive && canAdminister}<DriveFormatDialog
+		onclose={() => (formattingDrive = false)}
+		onformatted={() => {
+			usb.load();
+		}}
+	/>{/if}
+{#if downloadingLink && root && writable}<UrlDownloadDialog
+		root={rootId}
+		{dir}
+		confined={!canAdminister}
+		onclose={() => (downloadingLink = false)}
+		onstarted={() => {
+			downloadingLink = false;
+			jobsTick++;
+		}}
+	/>{/if}
+{#if creatingFile && root && writable}<CreateFileDialog
+		root={rootId}
+		{dir}
+		onclose={() => (creatingFile = false)}
+		oncreated={(path) => {
+			creatingFile = false;
+			editing = path;
+			load();
+		}}
+	/>{/if}
 {#if otherPreview}<FilePreview {...otherPreview} onclose={() => (otherPreview = null)} />{/if}
-{#if shortcuts}
-	<Dialog title={t('files.shortcuts')} onclose={() => (shortcuts = false)}>
-		<p>{t('files.shortcutsHint')}</p>
-		<dl class="file-properties">
-			{#each [['↑ ↓ ← →', 'navigate'], ['Enter', 'open'], ['Space', 'preview'], ['Shift + ↑ / ↓', 'range'], ['Ctrl / ⌘ + A', 'all'], ['Ctrl / ⌘ + C / X / V', 'clipboard'], ['F2', 'rename'], ['Delete', 'delete'], ['Shift + F10', 'menu'], ['Esc', 'clear'], ['F1', 'help']] as const as [keys, action] (keys)}<dt class="mono">{keys}</dt><dd>{t(`files.key.${action}`)}</dd>{/each}
-		</dl>
-		<p class="muted">{t('files.key.doubleClick')}</p>
-		<div class="dialog-actions"><button class="btn" onclick={() => (shortcuts = false)}>{t('files.editClose')}</button></div>
-	</Dialog>
-{/if}
-{#if preview && root}<FilePreview root={root.id} path={join(dir, preview.name)} size={preview.size} onprevious={galleryIndex > 0 ? () => (preview = gallery[galleryIndex - 1]) : undefined} onnext={galleryIndex >= 0 && galleryIndex < gallery.length - 1 ? () => (preview = gallery[galleryIndex + 1]) : undefined} onclose={() => (preview = null)} />{/if}
-{#if unlockDialog}
-	<Dialog title={t('files.unlockBackup')} onclose={() => (unlockDialog = false)}>
-		<p>{t('files.unlockBackupHelp')}</p>
-		<div class="dialog-actions">
-			<button class="btn" onclick={() => (unlockDialog = false)}>{t('common.cancel')}</button>
-			<button class="btn btn-warn" onclick={() => { unlockedRoot = rootId; unlockDialog = false; }}>{t('files.unlockBackup')}</button>
-		</div>
-	</Dialog>
-{/if}
+{#if shortcuts}<ShortcutsDialog onclose={() => (shortcuts = false)} />{/if}
+{#if preview && root}<FilePreview
+		root={root.id}
+		path={join(dir, preview.name)}
+		size={preview.size}
+		onprevious={galleryIndex > 0 ? () => (preview = gallery[galleryIndex - 1]) : undefined}
+		onnext={galleryIndex >= 0 && galleryIndex < gallery.length - 1
+			? () => (preview = gallery[galleryIndex + 1])
+			: undefined}
+		onclose={() => (preview = null)}
+	/>{/if}
 
 <style>
-	.delete-summary {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.875rem;
-	}
-	.delete-summary ul {
-		margin: 0;
-		padding-left: 18px;
-		font-size: 0.8125rem;
-		max-height: 14rem;
-		overflow-y: auto;
-		overflow-wrap: anywhere;
-	}
-	.list-state {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		margin: 12px;
-	}
-	.dialog-busy {
-		order: -2;
-		margin-right: auto;
-		align-self: center;
-		font-size: 0.8125rem;
-		color: var(--muted);
-	}
 	.layout {
 		display: grid;
 		grid-template-columns: 240px minmax(0, 1fr);
@@ -1480,9 +1418,6 @@
 		top: calc(var(--header-height, 60px) + var(--gap));
 		max-height: calc(100vh - var(--header-height, 60px) - 2 * var(--gap) - 40px);
 		overflow: auto;
-	}
-	.places-toggle {
-		display: none;
 	}
 	.workspace {
 		min-width: 0;
@@ -1519,90 +1454,6 @@
 	.toolbar .btn {
 		height: 2.375rem;
 	}
-	.btn.icon {
-		width: 2.375rem;
-		padding: 0;
-		justify-content: center;
-	}
-	.btn[aria-pressed='true'] {
-		border-color: var(--accent);
-		color: var(--accent);
-	}
-	.nav-buttons,
-	.segmented {
-		display: flex;
-		gap: 4px;
-	}
-	.spacer {
-		flex: 1 1 auto;
-	}
-	.crumbs {
-		flex: 1 1 240px;
-		min-width: 0;
-		min-height: 2.375rem;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 2px;
-		padding: 0 4px;
-		border: 1px solid transparent;
-		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
-		cursor: text;
-	}
-	.crumbs:hover {
-		border-color: var(--border);
-	}
-	.crumbs button {
-		padding: 4px 6px;
-		background: transparent;
-		border: 0;
-		border-radius: var(--radius-small);
-		color: var(--text);
-		font: inherit;
-		cursor: pointer;
-	}
-	.crumbs button:hover {
-		background: var(--chip);
-	}
-	.crumbs .edit-path {
-		display: inline-flex;
-		margin-left: auto;
-		color: var(--muted);
-	}
-	.path-form {
-		flex: 1 1 320px;
-		min-width: 0;
-		display: flex;
-		gap: 6px;
-	}
-	.path-form input {
-		flex: 1 1 160px;
-		min-width: 0;
-	}
-	.path-message {
-		margin: 0;
-		padding: 6px 14px;
-		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.8125rem;
-	}
-	.search {
-		flex: 0 1 260px;
-		min-width: 160px;
-		position: relative;
-		display: flex;
-		align-items: center;
-	}
-	.search :global(svg) {
-		position: absolute;
-		left: 10px;
-		color: var(--muted);
-		pointer-events: none;
-	}
-	.search input {
-		width: 100%;
-		padding-left: 34px;
-	}
 	.list-footer {
 		margin: 0;
 		padding: 10px 14px 0;
@@ -1622,261 +1473,13 @@
 		color: var(--muted);
 		font-size: 0.8125rem;
 	}
-	.unfinished {
-		padding: 12px var(--tile-pad);
-		border-bottom: 1px solid var(--border);
-	}
-	.unfinished-row {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 10px;
-		margin-top: 10px;
-	}
-	.unfinished-row > span {
-		flex: 1;
-		overflow-wrap: anywhere;
-	}
 	.trash-configure {
 		align-self: center;
 		margin-bottom: 16px;
 	}
-
-	/* The list. */
-	.file-entries {
-		min-height: 120px;
-	}
-	.row {
-		display: grid;
-		grid-template-columns: 22px minmax(0, 1fr) 96px 170px 36px;
-		align-items: center;
-		gap: 12px;
-		cursor: pointer;
-		padding: 7px 14px;
-		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.875rem;
-		user-select: none;
-	}
-	.row:not(.header):hover {
-		background: color-mix(in srgb, var(--chip) 60%, transparent);
-	}
-	.row:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -2px;
-	}
-	.row.header {
-		position: sticky;
-		top: var(--header-height, 60px);
-		z-index: 2;
-		padding-top: 4px;
-		padding-bottom: 4px;
-		background: var(--surface);
-		font-size: 0.75rem;
-		color: var(--muted);
-		cursor: default;
-	}
-	.row.picked {
-		background: color-mix(in srgb, var(--accent) 14%, transparent);
-	}
-	.row input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.sort {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 0;
-		padding: 4px 6px;
-		margin: 0 -6px;
-		background: transparent;
-		border: 0;
-		border-radius: var(--radius-small);
-		color: inherit;
-		font: inherit;
-		cursor: pointer;
-	}
-	.sort.num {
-		justify-content: flex-end;
-	}
-	.sort:hover:not(:disabled) {
-		background: var(--chip);
-		color: var(--text);
-	}
-	.sort.active {
-		color: var(--text);
-		font-weight: 500;
-	}
-	.num {
-		text-align: right;
-		font-size: 0.8125rem;
-		white-space: nowrap;
-	}
-	.entry {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		min-width: 0;
-		padding: 0;
-		background: transparent;
-		border: 0;
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-	}
-	button.entry {
-		cursor: pointer;
-	}
-	button.entry:hover span {
-		text-decoration: underline;
-	}
-	.entry span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.entry-more {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		padding: 0;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: var(--radius-ctl);
-		color: var(--muted);
-		cursor: pointer;
-	}
-	.entry-more:hover,
-	.entry-more[aria-expanded='true'] {
-		background: var(--chip);
-		border-color: var(--border);
-		color: var(--text);
-	}
-
-	/* Symbol views: the header keeps the checkbox and the sort buttons in one line. */
-	.file-entries.small,
-	.file-entries.large {
-		padding: 0 12px 12px;
-	}
-	.small .row.header,
-	.large .row.header {
-		display: flex;
-		gap: 16px;
-		margin: 0 -12px 8px;
-		padding-left: 26px;
-	}
-	.small .row:not(.header),
-	.large .row:not(.header) {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: 10px;
-		grid-template-columns: 18px minmax(0, 1fr) 32px;
-		gap: 8px;
-	}
-	.small .row:not(.header) > .num,
-	.large .row:not(.header) > .num {
-		display: none;
-	}
-	.large .row:not(.header) {
-		align-content: start;
-	}
-	.large .entry {
-		grid-column: 1 / -1;
-		grid-row: 2;
-		flex-direction: column;
-		text-align: center;
-		min-height: 130px;
-		justify-content: center;
-	}
-	.large .entry span {
-		white-space: normal;
-		overflow-wrap: anywhere;
-		width: 100%;
-	}
-	.large .entry-more {
-		grid-column: 3;
-		grid-row: 1;
-	}
-
-	/* The bar for the selection. */
-	.actions {
-		position: sticky;
-		bottom: 12px;
-		z-index: 5;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px;
-		margin: 0 12px 12px;
-		padding: 8px 10px 8px 14px;
-		background: var(--surface);
-		border: 1px solid var(--accent);
-		border-radius: var(--radius-ctl);
-		box-shadow: var(--shadow-menu);
-	}
-	.actions .btn {
-		height: 2.25rem;
-	}
-	.actions .more-actions {
-		display: none;
-	}
-	.count {
-		margin-right: auto;
-		font-size: 0.8125rem;
-	}
 	.none {
 		padding: 20px 14px;
 		font-size: 0.875rem;
-	}
-	.drop {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 8px;
-		margin: 12px;
-		padding: 12px;
-		border: 1px dashed var(--outline-border);
-		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
-		color: var(--muted);
-	}
-	.drop.active {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
-		color: var(--text);
-	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
-	.path-form {
-		flex-direction: row;
-		gap: 6px;
-	}
-	.field-row {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: 0.875rem;
-	}
-	.text {
-		font-size: 0.875rem;
-	}
-	.file-properties dd {
-		margin: 0 0 8px;
-		overflow-wrap: anywhere;
-	}
-	.file-properties dt {
-		color: var(--muted);
-		font-size: 0.8rem;
-	}
-	.no-icon {
-		width: 16px;
-		flex: none;
 	}
 
 	@media (max-width: 1100px) {
@@ -1884,26 +1487,10 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
-	@media (max-width: 1180px) {
-		.action-bar .label {
-			display: none;
-		}
-	}
 	@media (max-width: 760px) {
 		.layout {
 			grid-template-columns: minmax(0, 1fr);
-		}
-		.places-toggle {
-			display: flex;
-			justify-content: flex-start;
-			width: 100%;
-		}
-		.places-toggle span {
-			flex: 1;
-			text-align: left;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
+			gap: 8px;
 		}
 		.places {
 			display: none;
@@ -1913,74 +1500,15 @@
 		.places.open {
 			display: flex;
 		}
-		.toolbar .btn,
-		.btn.icon {
+		.toolbar .btn {
 			height: 2.75rem;
 		}
-		.btn.icon {
-			width: 2.75rem;
-		}
-		.crumbs {
-			order: 5;
-			flex-basis: 100%;
-		}
-		.path-form {
-			order: 5;
-			flex-basis: 100%;
-		}
-		.search {
-			flex: 1 1 100%;
-			order: 6;
-		}
-		.spacer {
-			display: none;
-		}
-		.row {
-			grid-template-columns: 22px minmax(0, 1fr) 76px 36px;
-		}
-		.row > :nth-child(4) {
-			display: none;
-		}
-		.row.header {
-			top: 0;
-		}
-		.entry-more {
-			width: 2.75rem;
-			height: 2.75rem;
-		}
-		.actions .secondary {
-			display: none;
-		}
-		.actions .more-actions {
-			display: inline-flex;
-		}
-		/* Count and "clear" on the first line, the actions below. */
-		.actions > * {
-			order: 2;
-		}
-		.actions .count {
-			order: 0;
-			flex: 1 1 calc(100% - 3.5rem);
-		}
-		.actions .clear {
-			order: 1;
-		}
-		.actions .btn {
-			height: 2.75rem;
+		.files-pagehead {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
 		}
 	}
-
-.mobile-location{display:contents}.mobile-back,.mobile-file-actions,.mobile-file-search,.mobile-selection{display:none}
-@media(max-width:760px){
- .files-pagehead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
- .mobile-location{display:flex;gap:8px;align-items:center;min-width:0}.mobile-location .places-toggle{flex:1;min-width:0;width:auto;height:44px;background:var(--panel-bg);border-color:var(--panel-border);backdrop-filter:var(--panel-backdrop)}
- .mobile-location .places-toggle>span{min-width:0;flex:1}.mobile-location .places-toggle>span .muted{display:inline;white-space:nowrap}.mobile-back{display:inline-flex;width:44px;min-width:44px;height:44px;padding:0}
- .mobile-file-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-width:0}.mobile-file-actions>.btn{min-width:0;padding:0 6px;font-size:.8125rem;gap:5px;height:44px}
- .mobile-file-actions :global(.dropdown){min-width:0;width:100%}.mobile-file-actions :global(.dropdown>button){width:100%;height:44px;padding:0 5px;gap:4px;font-size:.8125rem}.mobile-file-actions :global(.chevron){display:none}.mobile-file-actions :global(.dropdown-panel){max-width:calc(100vw - 32px);max-height:65vh;overflow-y:auto}
- .mobile-file-actions :global(.dropdown-panel button){min-height:44px}
- .mobile-file-search{display:flex;gap:8px;align-items:center;min-width:0}.mobile-file-search .field{flex:1;min-width:0;height:44px}.mobile-selection{display:flex;align-items:center;gap:6px}.mobile-selection>span{flex:1;font-size:.8125rem}
- .browser>.nav-bar,.browser>.action-bar,.browser>.actions{display:none}.browser>.nav-bar.path-editing{display:flex}.browser>.nav-bar.path-editing>:not(.path-form){display:none}
- .layout{gap:8px}.mobile-selection .btn{width:44px;height:44px;padding:0}
-}
-
 </style>

@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { untrack } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
-	import { t, errorText } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import type { MediaJob } from '#lib/media.ts';
 	let {
@@ -29,7 +30,7 @@
 		const auto = automatic;
 		retry;
 		let alive = true;
-		let timer: ReturnType<typeof setInterval> | undefined;
+		let stopPolling: (() => void) | undefined;
 		if (!auto || !dest || disabled) {
 			onbusy(false);
 			onready(path);
@@ -57,29 +58,24 @@
 					path = job.output;
 					onready(path);
 					onbusy(false);
-					if (timer) clearInterval(timer);
+					stopPolling?.();
 				} else if (job && ['failed', 'review', 'cancelled'].includes(job.phase)) {
 					error = job.error ?? t('error.media_failed');
-					if (timer) clearInterval(timer);
+					stopPolling?.();
 				}
 			} catch (e) {
 				if (alive) {
-					error = errorText(e instanceof ApiError ? e.code : 'internal');
-					if (timer) clearInterval(timer);
+					error = apiErrorText(e);
+					stopPolling?.();
 				}
 			} finally {
 				polling = false;
 			}
 		}
-		untrack(() => {
-			void refresh();
-		});
-		timer = setInterval(() => {
-			if (!document.hidden) void refresh();
-		}, 1500);
+		stopPolling = poll(refresh, { interval: 1500 });
 		return () => {
 			alive = false;
-			if (timer) clearInterval(timer);
+			stopPolling?.();
 			onbusy(false);
 		};
 	});

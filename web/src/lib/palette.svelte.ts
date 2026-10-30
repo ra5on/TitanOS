@@ -1,5 +1,7 @@
-export const palette = $state({open:false});
-export function togglePalette(){palette.open=!palette.open;}
+export const palette = $state({ open: false });
+export function togglePalette() {
+	palette.open = !palette.open;
+}
 
 // Pages opened from the palette, newest first. Kept in RAM for this page
 // session only; preferences never go to browser storage.

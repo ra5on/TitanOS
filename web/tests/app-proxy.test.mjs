@@ -140,10 +140,15 @@ test('the route form round-trips and reports what the NAS would refuse', async (
 	assert.deepEqual(keys(form, false, 'fotos'), ['proxy.shortIsNas']);
 	assert.deepEqual(keys({ ...form, host: '' }, true), ['proxy.hostInvalid']);
 	assert.equal(proxyBody({ ...form, host: 'HA.lan.' }, true).host, 'ha.lan');
-	assert.deepEqual(proxyBody({ ...form, domains: ' Fotos.Example.org., bilder.example.org' }, false).domains, ['fotos.example.org', 'bilder.example.org']);
+	assert.deepEqual(
+		proxyBody({ ...form, domains: ' Fotos.Example.org., bilder.example.org' }, false).domains,
+		['fotos.example.org', 'bilder.example.org'],
+	);
 	assert.deepEqual(keys({ ...form, domains: 'nas.local' }), ['proxy.domainInvalid']);
 	assert.deepEqual(keys({ ...form, domains: 'nur-ein-teil' }), ['proxy.domainInvalid']);
-	assert.deepEqual(keys({ ...form, domains: 'a.de,b.de,c.de,d.de,e.de,f.de,g.de,h.de,i.de' }), ['proxy.domainTooMany']);
+	assert.deepEqual(keys({ ...form, domains: 'a.de,b.de,c.de,d.de,e.de,f.de,g.de,h.de,i.de' }), [
+		'proxy.domainTooMany',
+	]);
 });
 
 test('a name in the tailnet is a label of its own and unique among devices', async () => {

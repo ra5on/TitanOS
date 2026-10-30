@@ -1,19 +1,35 @@
 <script lang="ts">
+	import { poll, type Poller } from '#lib/poll.ts';
 	import { tick, onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { session } from '#lib/session.svelte.ts';
-	import { defaultDockerLayout, sanitizeDockerLayout, dockerGroups, orderedDockerGroups, moveDockerGroup, stackPrimary, type DockerGroup, type DockerView } from '#lib/docker-layout.ts';
+	import {
+		defaultDockerLayout,
+		sanitizeDockerLayout,
+		dockerGroups,
+		orderedDockerGroups,
+		moveDockerGroup,
+		stackPrimary,
+		type DockerGroup,
+		type DockerView,
+	} from '#lib/docker-layout.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
-	import { api, ApiError, type AppProxyStatus, type DockerContainer, type DockerStatus } from '#lib/api.ts';
+	import {
+		api,
+		ApiError,
+		type AppProxyStatus,
+		type DockerContainer,
+		type DockerStatus,
+	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import AutoUpdateDialog from './AutoUpdateDialog.svelte';
 	import TailnetDialog from './TailnetDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -25,17 +41,21 @@
 	import { isRunning, webLinks, type ContainerActions } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
- const tailscaleHost = $derived(tailnetHost(tailnet));
- $effect(() => {
-  let disposed = false;
-  const refresh = async () => {
-   if (document.hidden) return;
-   try { const value = await api.get<TailnetStatus>('/plugins/tailscale'); if (!disposed) tailnet = value; } catch { if (!disposed) tailnet = null; }
-  };
-  refresh(); const timer = setInterval(refresh, 15000);
-  return () => { disposed = true; clearInterval(timer); };
- });
- const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+	const tailscaleHost = $derived(tailnetHost(tailnet));
+	$effect(() =>
+		poll(
+			async (signal) => {
+				try {
+					const value = await api.get<TailnetStatus>('/plugins/tailscale', signal);
+					if (!signal.aborted) tailnet = value;
+				} catch {
+					if (!signal.aborted) tailnet = null;
+				}
+			},
+			{ interval: 15000 },
+		),
+	);
+	const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 	let status = $state<DockerStatus | null>(null);
 	let autoUpdates = $state(false);
@@ -46,7 +66,8 @@
 	const appKey = (app: string) => `app:${app}`;
 	const containerKey = (container: DockerContainer) => `container:${container.id}`;
 	const containerBusy = (container: DockerContainer) =>
-		busyKeys.has(containerKey(container)) || (!!container.app && busyKeys.has(appKey(container.app)));
+		busyKeys.has(containerKey(container)) ||
+		(!!container.app && busyKeys.has(appKey(container.app)));
 	const globalBusy = $derived(busyKeys.has('global'));
 	// Requests of the dialogs (remove, import, settings).
 	let dialogBusy = $state(false);
@@ -55,8 +76,11 @@
 	// A stack is closed until the user opens it; filters reveal matching services.
 	let expanded = $state<Record<string, boolean>>({});
 	const stackOpen = (id: string) => expanded[id] ?? (search.trim() !== '' || filter !== 'all');
-	let linkGroup = $state<DockerGroup | null>(null), primaryService = $state('');
-	let refreshError = $state(''), lastRefresh = $state(''), refreshing = $state(false);
+	let linkGroup = $state<DockerGroup | null>(null),
+		primaryService = $state('');
+	let refreshError = $state(''),
+		lastRefresh = $state(''),
+		refreshing = $state(false);
 	let layout = $state(sanitizeDockerLayout(session.docker));
 	let savedLayout = $state(sanitizeDockerLayout(session.docker));
 	let editing = $state(false);
@@ -64,7 +88,13 @@
 	let layoutError = $state('');
 	let layoutSaved = $state(false);
 	let dragged = $state<string | null>(null);
-	function startEditing() { editing = true; layoutSaved = false; layoutError = ''; search = ''; filter = 'all'; }
+	function startEditing() {
+		editing = true;
+		layoutSaved = false;
+		layoutError = '';
+		search = '';
+		filter = 'all';
+	}
 	// The view is saved right away; only the order waits for "Save layout".
 	async function setView(view: DockerView) {
 		if (layout.view === view) return;
@@ -80,25 +110,38 @@
 		} catch (err) {
 			// Not saved: the page shows the view that is still stored.
 			layout.view = previous;
-			layoutError = t('docker.layout.viewFailed', { error: errorText(err instanceof ApiError ? err.code : 'internal') });
+			layoutError = t('docker.layout.viewFailed', { error: apiErrorText(err) });
 		} finally {
 			savingLayout = false;
 		}
 	}
-	function move(from: string, to: string) { layout.order = moveDockerGroup(layout.order, groups, from, to); }
+	function move(from: string, to: string) {
+		layout.order = moveDockerGroup(layout.order, groups, from, to);
+	}
 	function moveBy(id: string, offset: number) {
-		const target = groups[groups.findIndex(group => group.id === id) + offset];
+		const target = groups[groups.findIndex((group) => group.id === id) + offset];
 		if (target) move(id, target.id);
 	}
-	function cancelLayout() { layout = sanitizeDockerLayout(savedLayout); editing = false; layoutError = ''; }
+	function cancelLayout() {
+		layout = sanitizeDockerLayout(savedLayout);
+		editing = false;
+		layoutError = '';
+	}
 	async function saveLayout() {
-		savingLayout = true; layoutError = '';
+		savingLayout = true;
+		layoutError = '';
 		const value = sanitizeDockerLayout(layout);
 		try {
 			await api.put('/preferences/docker', value);
-			session.docker = value; savedLayout = value; editing = false; layoutSaved = true;
-		} catch (err) { layoutError = errorText(err instanceof ApiError ? err.code : 'internal'); }
-		finally { savingLayout = false; }
+			session.docker = value;
+			savedLayout = value;
+			editing = false;
+			layoutSaved = true;
+		} catch (err) {
+			layoutError = apiErrorText(err);
+		} finally {
+			savingLayout = false;
+		}
 	}
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
@@ -118,44 +161,74 @@
 	const totals = $derived(
 		t('docker.totals', {
 			cpu: formatPercent(containers.reduce((sum, container) => sum + container.cpuPercent, 0)),
-			ram: formatBytes(containers.reduce((sum, container) => sum + container.memoryBytes, 0))
-		})
+			ram: formatBytes(containers.reduce((sum, container) => sum + container.memoryBytes, 0)),
+		}),
 	);
 
 	const visible = $derived(
 		containers.filter(
 			(container) =>
-				(filter === 'all' || (filter === 'updates' ? container.updateAvailable : (filter === 'running') === isRunning(container))) &&
-				(search === '' || `${container.name} ${container.image} ${container.app}`.toLowerCase().includes(search.toLowerCase()))
-		)
+				(filter === 'all' ||
+					(filter === 'updates'
+						? container.updateAvailable
+						: (filter === 'running') === isRunning(container))) &&
+				(search === '' ||
+					`${container.name} ${container.image} ${container.app}`
+						.toLowerCase()
+						.includes(search.toLowerCase())),
+		),
 	);
 	const groups = $derived(orderedDockerGroups(dockerGroups(containers), layout.order));
-	const visibleIDs = $derived(new Set(visible.map(container => container.id)));
-	const shownGroups = $derived(groups.filter(group => group.members.some(container => visibleIDs.has(container.id))));
-	const shownMembers = (group: DockerGroup) => group.members.filter((container) => visibleIDs.has(container.id));
-	const isStack = (group: DockerGroup) => group.members.length > 1 || !!layout.primaryServices[group.id];
+	const visibleIDs = $derived(new Set(visible.map((container) => container.id)));
+	const shownGroups = $derived(
+		groups.filter((group) => group.members.some((container) => visibleIDs.has(container.id))),
+	);
+	const shownMembers = (group: DockerGroup) =>
+		group.members.filter((container) => visibleIDs.has(container.id));
+	const isStack = (group: DockerGroup) =>
+		group.members.length > 1 || !!layout.primaryServices[group.id];
 	const sum = (group: DockerGroup, value: (container: DockerContainer) => number) =>
 		group.members.filter(isRunning).reduce((total, container) => total + value(container), 0);
 	const updateCount = $derived(containers.filter((container) => container.updateAvailable).length);
-	const updatable = $derived(containers.some((container) => container.updateAvailable && container.managed));
+	const updatable = $derived(
+		containers.some((container) => container.updateAvailable && container.managed),
+	);
 	const checked = $derived.by(() => {
 		const time = new Date(status?.updatesChecked ?? '').getTime();
 		if (!time || time < 0) return t('docker.updatesNever');
-		return t('docker.updatesChecked', { time: new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'short', timeStyle: 'short' }).format(time) });
+		return t('docker.updatesChecked', {
+			time: new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'short', timeStyle: 'short' }).format(
+				time,
+			),
+		});
 	});
-	const jobs = $derived(Object.entries(status?.jobs ?? {}).filter(([, job]) => job.state !== 'done'));
+	const jobs = $derived(
+		Object.entries(status?.jobs ?? {}).filter(([, job]) => job.state !== 'done'),
+	);
 	// Apps whose setup never created a container (or whose containers are
 	// gone) have no card; without this they could not be removed.
-	const idleApps = $derived((status?.apps ?? []).filter((app) => !containers.some((container) => container.app === app) && !jobs.some(([name]) => name === app)));
+	const idleApps = $derived(
+		(status?.apps ?? []).filter(
+			(app) =>
+				!containers.some((container) => container.app === app) &&
+				!jobs.some(([name]) => name === app),
+		),
+	);
 
 	function problem(err: unknown): { text: string; detail: string } {
 		const code = err instanceof ApiError ? err.code : 'internal';
 		const detailed = code === 'invalid_compose' || code === 'docker_failed';
-		return { text: errorText(code), detail: detailed && err instanceof ApiError ? err.message : '' };
+		return {
+			text: errorText(code),
+			detail: detailed && err instanceof ApiError ? err.message : '',
+		};
 	}
 
-	async function load() {
-		if (document.hidden || refreshing) return;
+	// Refreshes go through the poller: never two at once, and one asked for
+	// during a run follows it, so an older answer cannot win.
+	let poller: Poller | undefined;
+	const load = () => poller?.now() ?? Promise.resolve();
+	async function fetchStatus() {
 		refreshing = true;
 		try {
 			status = await api.get<DockerStatus>('/docker');
@@ -163,35 +236,61 @@
 			lastRefresh = new Date().toISOString();
 		} catch (err) {
 			refreshError = problem(err).text;
-		} finally { refreshing = false; }
+		} finally {
+			refreshing = false;
+		}
 	}
-	function editLinks(group: DockerGroup) { linkGroup=group; primaryService=savedLayout.primaryServices[group.id] ?? ''; layoutError=''; }
+	function editLinks(group: DockerGroup) {
+		linkGroup = group;
+		primaryService = savedLayout.primaryServices[group.id] ?? '';
+		layoutError = '';
+	}
 	async function saveLinks() {
 		if (!linkGroup || savingLayout) return;
-		const primaryServices={...savedLayout.primaryServices};
-		if(primaryService) primaryServices[linkGroup.id]=primaryService; else delete primaryServices[linkGroup.id];
-		const value=sanitizeDockerLayout({...savedLayout,primaryServices});
-		savingLayout=true;layoutError='';
-		try { await api.put('/preferences/docker',value);session.docker=value;savedLayout=value;layout=value;linkGroup=null; }
-		catch(err) { layoutError=problem(err).text; }
-		finally { savingLayout=false; }
+		const primaryServices = { ...savedLayout.primaryServices };
+		if (primaryService) primaryServices[linkGroup.id] = primaryService;
+		else delete primaryServices[linkGroup.id];
+		const value = sanitizeDockerLayout({ ...savedLayout, primaryServices });
+		savingLayout = true;
+		layoutError = '';
+		try {
+			await api.put('/preferences/docker', value);
+			session.docker = value;
+			savedLayout = value;
+			layout = value;
+			linkGroup = null;
+		} catch (err) {
+			layoutError = problem(err).text;
+		} finally {
+			savingLayout = false;
+		}
 	}
 	async function showProblems(group: DockerGroup) {
-		search='';filter='all';expanded[group.id]=true;await tick();
-		const container=group.members.find(c=>!isRunning(c)||c.state==='restarting');
-		if(container) document.getElementById(`docker-container-${encodeURIComponent(container.name)}`)?.scrollIntoView({block:'nearest'});
+		search = '';
+		filter = 'all';
+		expanded[group.id] = true;
+		await tick();
+		const container = group.members.find((c) => !isRunning(c) || c.state === 'restarting');
+		if (container)
+			document
+				.getElementById(`docker-container-${encodeURIComponent(container.name)}`)
+				?.scrollIntoView({ block: 'nearest' });
 	}
 	onMount(() => {
-		void load();
+		const current = (poller = poll(fetchStatus, { interval: 3000 }));
 		void loadProxy();
-		const timer = setInterval(load, 3000);
-		return () => clearInterval(timer);
+		return () => {
+			current();
+			if (poller === current) poller = undefined;
+		};
 	});
 
 	// Apps in the tailnet (their own device, appproxy): read when the page
 	// opens and after "Im Tailnet veröffentlichen" changed something.
 	let proxy = $state<AppProxyStatus | null>(null);
-	let tailnetDialog = $state<{ app: string; mode: 'publish' | 'remove'; port: number } | null>(null);
+	let tailnetDialog = $state<{ app: string; mode: 'publish' | 'remove'; port: number } | null>(
+		null,
+	);
 	async function loadProxy() {
 		try {
 			proxy = await api.get<AppProxyStatus>('/docker/proxy');
@@ -203,11 +302,17 @@
 	function openTailnet(app: string) {
 		const members = containers.filter((container) => container.app === app);
 		const primary = stackPrimary({ id: `app:${app}`, name: app, members }, layout.primaryServices);
-		tailnetDialog = { app, mode: appInTailnet(app) ? 'remove' : 'publish', port: tailnetPort(members, primary) };
+		tailnetDialog = {
+			app,
+			mode: appInTailnet(app) ? 'remove' : 'publish',
+			port: tailnetPort(members, primary),
+		};
 	}
 
 	// The failed action, for "Retry" next to its error.
-	let failedAction = $state<{ key: string; action: () => Promise<unknown>; label: string } | null>(null);
+	let failedAction = $state<{ key: string; action: () => Promise<unknown>; label: string } | null>(
+		null,
+	);
 	async function run(key: string, action: () => Promise<unknown>, label = '') {
 		if (busyKeys.has(key)) return;
 		busyKeys.add(key);
@@ -228,9 +333,13 @@
 	// Logs: only the answer to the latest request for the open container
 	// counts; a late answer for another container is dropped.
 	let logsRequest = 0;
-	let logsError = $state(''), logsFollow = $state(false), logsSearch = $state(''), logsLoading = $state(false);
+	let logsError = $state(''),
+		logsFollow = $state(false),
+		logsSearch = $state(''),
+		logsLoading = $state(false);
 	let logsBox: HTMLElement | undefined = $state();
-	const logsFor = (container: DockerContainer) => dialog?.kind === 'logs' && dialog.container.id === container.id;
+	const logsFor = (container: DockerContainer) =>
+		dialog?.kind === 'logs' && dialog.container.id === container.id;
 	async function showLogs(container: DockerContainer, again = false) {
 		const request = ++logsRequest;
 		if (!again || !logsFor(container)) {
@@ -241,7 +350,9 @@
 		logsError = '';
 		logsLoading = true;
 		try {
-			const res = await api.get<{ logs: string }>(`/docker/containers/${container.id}/logs?tail=300`);
+			const res = await api.get<{ logs: string }>(
+				`/docker/containers/${container.id}/logs?tail=300`,
+			);
 			if (request !== logsRequest || !logsFor(container) || dialog?.kind !== 'logs') return;
 			dialog.text = res.logs;
 			if (logsFollow) {
@@ -258,10 +369,7 @@
 	$effect(() => {
 		const container = dialog?.kind === 'logs' ? dialog.container : null;
 		if (!container || !logsFollow) return;
-		const timer = setInterval(() => {
-			if (!document.hidden) void showLogs(container, true);
-		}, 3000);
-		return () => clearInterval(timer);
+		return poll(() => showLogs(container, true), { interval: 3000, immediate: false });
 	});
 	type LogPart = { text: string; hit: boolean };
 	const logParts = $derived.by<LogPart[]>(() => {
@@ -300,7 +408,10 @@
 		const apps = new Map<string, string[]>();
 		for (const container of containers)
 			if (container.updateAvailable && container.managed && container.app)
-				apps.set(container.app, [...(apps.get(container.app) ?? []), dockerName(container, 'distinct')]);
+				apps.set(container.app, [
+					...(apps.get(container.app) ?? []),
+					dockerName(container, 'distinct'),
+				]);
 		return [...apps].map(([app, names]) => ({ app, names }));
 	});
 	function askUpdates() {
@@ -336,36 +447,76 @@
 	}
 
 	async function remove(container: DockerContainer) {
-  dialogBusy=true;dialogError=null;busyKeys.add(containerKey(container));
-  try {await api.delete(`/docker/containers/${encodeURIComponent(container.id)}`);dialog=null;await load();}
-  catch(err){dialogError=problem(err);}finally{dialogBusy=false;busyKeys.delete(containerKey(container));}
+		dialogBusy = true;
+		dialogError = null;
+		busyKeys.add(containerKey(container));
+		try {
+			await api.delete(`/docker/containers/${encodeURIComponent(container.id)}`);
+			dialog = null;
+			await load();
+		} catch (err) {
+			dialogError = problem(err);
+		} finally {
+			dialogBusy = false;
+			busyKeys.delete(containerKey(container));
+		}
 	}
 
 	function actionsFor(container: DockerContainer): ContainerActions {
 		return {
-			onaction: (action) => run(containerKey(container), () => api.post(`/docker/containers/${container.id}/${action}`), dockerName(container, 'distinct')),
+			onaction: (action) =>
+				run(
+					containerKey(container),
+					() => api.post(`/docker/containers/${container.id}/${action}`),
+					dockerName(container, 'distinct'),
+				),
 			onlogs: () => showLogs(container),
-			onremove: () => {dialogError=null;container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });},
+			onremove: () => {
+				dialogError = null;
+				container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });
+			},
 			onconsole: () => addContainerConsole(container.id, dockerName(container, 'distinct')),
-			onupdate: () => run(appKey(container.app), () => api.post(`/docker/apps/${container.app}/update`), container.app),
+			onupdate: () =>
+				run(
+					appKey(container.app),
+					() => api.post(`/docker/apps/${container.app}/update`),
+					container.app,
+				),
 			ontailnet: proxy ? () => openTailnet(container.app) : undefined,
-			tailnet: appInTailnet(container.app)
+			tailnet: appInTailnet(container.app),
 		};
 	}
 
 	function askRemoveApp(app: string) {
-  dialogError=null;
+		dialogError = null;
 		dialog = { kind: 'removeApp', app, purge: false };
 	}
 
 	async function removeApp(app: string, purge: boolean) {
-  dialogBusy=true;dialogError=null;busyKeys.add(appKey(app));
-  try {await api.delete(`/docker/apps/${encodeURIComponent(app)}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`);dialog=null;await load();}
-  catch(err){dialogError=problem(err);}finally{dialogBusy=false;busyKeys.delete(appKey(app));}
+		dialogBusy = true;
+		dialogError = null;
+		busyKeys.add(appKey(app));
+		try {
+			await api.delete(
+				`/docker/apps/${encodeURIComponent(app)}${purge ? `?deleteData=${encodeURIComponent(app)}` : ''}`,
+			);
+			dialog = null;
+			await load();
+		} catch (err) {
+			dialogError = problem(err);
+		} finally {
+			dialogBusy = false;
+			busyKeys.delete(appKey(app));
+		}
 	}
 
 	function open(kind: 'import' | 'settings') {
-		draft = { name: '', compose: '', enabled: status?.settings.enabled ?? true, volume: status?.settings.volume || volumes[0] || '' };
+		draft = {
+			name: '',
+			compose: '',
+			enabled: status?.settings.enabled ?? true,
+			volume: status?.settings.volume || volumes[0] || '',
+		};
 		dialogError = null;
 		dialog = { kind };
 	}
@@ -378,7 +529,8 @@
 		dialogError = null;
 		try {
 			if (dialog?.kind === 'import') {
-				if (!NAME.test(draft.name)) return void (dialogError = { text: errorText('invalid_app_name'), detail: '' });
+				if (!NAME.test(draft.name))
+					return void (dialogError = { text: errorText('invalid_app_name'), detail: '' });
 				await api.post('/docker/apps', { name: draft.name, compose: draft.compose });
 			} else {
 				await api.put('/docker/settings', { enabled: draft.enabled, volume: draft.volume });
@@ -400,29 +552,60 @@
 		}
 	});
 
-	const enable = () => run('global', () => api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }));
+	const enable = () =>
+		run('global', () =>
+			api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }),
+		);
 </script>
 
 <PageHead title={t('docker.title')}>
 	{#if status?.running}
 		<p class="muted summary">
-			<span><span class="dot ok" aria-hidden="true"></span>{t('docker.running', { count: runCount })}</span>
-			<span><span class="dot" aria-hidden="true"></span>{t('docker.stopped', { count: containers.length - runCount })}</span>
+			<span
+				><span class="dot ok" aria-hidden="true"></span>{t('docker.running', {
+					count: runCount,
+				})}</span
+			>
+			<span
+				><span class="dot" aria-hidden="true"></span>{t('docker.stopped', {
+					count: containers.length - runCount,
+				})}</span
+			>
 			<span class="mono">{totals}</span>
 			<span>{t('docker.version', { version: status.version })}</span>
 			<span>{checked}</span>
-			<button type="button" class="link" onclick={() => run('global', async () => (status = await api.post<DockerStatus>('/docker/updates/check')))} disabled={globalBusy}>{t('docker.checkUpdates')}</button>
+			<button
+				type="button"
+				class="link"
+				onclick={() =>
+					run(
+						'global',
+						async () => (status = await api.post<DockerStatus>('/docker/updates/check')),
+					)}
+				disabled={globalBusy}>{t('docker.checkUpdates')}</button
+			>
 		</p>
 	{/if}
 	{#snippet actions()}
-<a class="btn" href="/docker/networks">{t('lan.title')}</a>
+		<a class="btn" href="/docker/networks">{t('lan.title')}</a>
 		{#if status?.settings.enabled}
-			<button type="button" class="btn" onclick={() => open('settings')}>{t('docker.settings')}</button>
-			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}>{t('docker.import')}</button>
+			<button type="button" class="btn" onclick={() => open('settings')}
+				>{t('docker.settings')}</button
+			>
+			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}
+				>{t('docker.import')}</button
+			>
 			{#if updatable}
-				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}>{t('docker.updateAll')}</button>
+				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
+					>{t('docker.updateAll')}</button
+				>
 			{/if}
-			<button type="button" class="btn" onclick={() => (autoUpdates = true)} disabled={!status.running}>{t('autoUpdate.button')}</button>
+			<button
+				type="button"
+				class="btn"
+				onclick={() => (autoUpdates = true)}
+				disabled={!status.running}>{t('autoUpdate.button')}</button
+			>
 			<a class="btn btn-primary" href="/apps">{t('docker.installApp')}</a>
 		{/if}
 	{/snippet}
@@ -430,13 +613,27 @@
 
 {#if error}
 	<div class="notice-error" role="alert">
-		<div class="error-line"><span>{error.text}</span>{#if failedAction}{@const retry = failedAction}<button type="button" class="btn" disabled={busyKeys.has(retry.key)} onclick={() => run(retry.key, retry.action, retry.label)}>{t('common.retry')}</button>{/if}</div>
+		<div class="error-line">
+			<span>{error.text}</span>{#if failedAction}{@const retry = failedAction}<button
+					type="button"
+					class="btn"
+					disabled={busyKeys.has(retry.key)}
+					onclick={() => run(retry.key, retry.action, retry.label)}>{t('common.retry')}</button
+				>{/if}
+		</div>
 		{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>
 {/if}
 
-{#if refreshError}<div class="notice-warn" role="alert"><span>{refreshError} {lastRefresh?t('docker.stale',{time:new Date(lastRefresh).toLocaleTimeString()}):t('docker.noCurrentData')}</span><button class="btn" disabled={refreshing} onclick={load}>{t('common.retry')}</button></div>{/if}
-{#if !status&&!refreshError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
+{#if refreshError}<div class="notice-warn" role="alert">
+		<span
+			>{refreshError}
+			{lastRefresh
+				? t('docker.stale', { time: new Date(lastRefresh).toLocaleTimeString() })
+				: t('docker.noCurrentData')}</span
+		><button class="btn" disabled={refreshing} onclick={load}>{t('common.retry')}</button>
+	</div>{/if}
+{#if !status && !refreshError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {#if status && !status.settings.enabled}
 	<section class="tile setup">
 		<h2>{t('docker.setupTitle')}</h2>
@@ -445,16 +642,23 @@
 			<p class="notice-warn">{t('docker.setupNeedVolume')}</p>
 		{:else}
 			<div class="setup-row">
-				<label><span>{t('docker.volume')}</span>
-					<select class="field" bind:value={draft.volume}>{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}</select>
+				<label
+					><span>{t('docker.volume')}</span>
+					<select class="field" bind:value={draft.volume}
+						>{#each volumes as volume (volume)}<option value={volume}>{volume}</option
+							>{/each}</select
+					>
 				</label>
-				<button type="button" class="btn btn-primary" onclick={enable} disabled={globalBusy}>{t('docker.enable')}</button>
+				<button type="button" class="btn btn-primary" onclick={enable} disabled={globalBusy}
+					>{t('docker.enable')}</button
+				>
 			</div>
 		{/if}
 	</section>
 {:else if status && !status.running}
 	<p class="notice-warn" role="status">
-		{volumes.includes(status.settings.volume) && storage.status?.volumes.find((volume) => volume.name === status?.settings.volume)?.mounted
+		{volumes.includes(status.settings.volume) &&
+		storage.status?.volumes.find((volume) => volume.name === status?.settings.volume)?.mounted
 			? t('docker.starting')
 			: t('docker.waitingVolume', { volume: status.settings.volume })}
 	</p>
@@ -465,11 +669,38 @@
 			{#if job.state === 'failed' && job.output}<pre>{job.output}</pre>{/if}
 			{#if job.state === 'failed'}
 				<div class="buttons job-actions">
-					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}>{t('common.retry')}</button>
+					<button
+						type="button"
+						class="btn"
+						disabled={busyKeys.has(appKey(app))}
+						onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}
+						>{t('common.retry')}</button
+					>
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
-					<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}>{t('docker.jobDismiss')}</button>
-					{#if assistant.status?.available}<button type="button" class="btn" onclick={() => askAbout(t('assistant.askAppSetup', { app }), job.output ? [{ name: `${app}-setup.log`, kind: 'text', text: job.output.slice(-200000) }] : [])}>{t('assistant.ask')}</button>{/if}
+					<button
+						type="button"
+						class="btn"
+						disabled={busyKeys.has(appKey(app))}
+						onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button
+					>
+					<button
+						type="button"
+						class="btn"
+						disabled={busyKeys.has(appKey(app))}
+						onclick={() => run(appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}
+						>{t('docker.jobDismiss')}</button
+					>
+					{#if assistant.status?.available}<button
+							type="button"
+							class="btn"
+							onclick={() =>
+								askAbout(
+									t('assistant.askAppSetup', { app }),
+									job.output
+										? [{ name: `${app}-setup.log`, kind: 'text', text: job.output.slice(-200000) }]
+										: [],
+								)}>{t('assistant.ask')}</button
+						>{/if}
 				</div>
 			{/if}
 		</div>
@@ -479,32 +710,88 @@
 		<div class="notice-warn" role="status">
 			{t('docker.appIdle', { app, path: `/config/apps/${app}/compose.yaml` })}
 			<div class="buttons job-actions">
-				<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}>{t('docker.appStart')}</button>
+				<button
+					type="button"
+					class="btn"
+					disabled={busyKeys.has(appKey(app))}
+					onclick={() => run(appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}
+					>{t('docker.appStart')}</button
+				>
 				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-				<button type="button" class="btn" disabled={busyKeys.has(appKey(app))} onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button>
+				<button
+					type="button"
+					class="btn"
+					disabled={busyKeys.has(appKey(app))}
+					onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button
+				>
 			</div>
 		</div>
 	{/each}
 
 	{#if containers.length > 0}
 		<div class="controls">
-			<input class="field search" type="search" disabled={editing} bind:value={search} oninput={() => expanded={}} placeholder={t('docker.search')} aria-label={t('docker.search')} />
+			<input
+				class="field search"
+				type="search"
+				disabled={editing}
+				bind:value={search}
+				oninput={() => (expanded = {})}
+				placeholder={t('docker.search')}
+				aria-label={t('docker.search')}
+			/>
 			<div class="segmented" role="group" aria-label={t('docker.filter')}>
 				{#each [['all', containers.length], ['running', runCount], ['stopped', containers.length - runCount], ['updates', updateCount]] as [id, count] (id)}
-					<button type="button" aria-pressed={filter === id} disabled={editing} onclick={() => {filter = id as typeof filter;expanded={};}}>
-						{t(id === 'all' ? 'docker.filterAll' : id === 'running' ? 'docker.filterRunning' : id === 'stopped' ? 'docker.filterStopped' : 'docker.filterUpdates')}<span class="mono count">{count}</span>
+					<button
+						type="button"
+						aria-pressed={filter === id}
+						disabled={editing}
+						onclick={() => {
+							filter = id as typeof filter;
+							expanded = {};
+						}}
+					>
+						{t(
+							id === 'all'
+								? 'docker.filterAll'
+								: id === 'running'
+									? 'docker.filterRunning'
+									: id === 'stopped'
+										? 'docker.filterStopped'
+										: 'docker.filterUpdates',
+						)}<span class="mono count">{count}</span>
 					</button>
 				{/each}
 			</div>
 			<div class="view-tools">
 				<div class="segmented" role="group" aria-label={t('docker.layout.view')}>
 					{#each [['list', t('docker.layout.list')], ['cards', t('docker.layout.cards')]] as [id, label] (id)}
-						<button type="button" aria-pressed={layout.view === id} disabled={savingLayout} onclick={() => setView(id as DockerView)}>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d={id === 'list' ? 'M4 6h16M4 12h16M4 18h16' : 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'} /></svg>{label}
+						<button
+							type="button"
+							aria-pressed={layout.view === id}
+							disabled={savingLayout}
+							onclick={() => setView(id as DockerView)}
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								aria-hidden="true"
+								><path
+									d={id === 'list'
+										? 'M4 6h16M4 12h16M4 18h16'
+										: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'}
+								/></svg
+							>{label}
 						</button>
 					{/each}
 				</div>
-				<button type="button" class="btn" onclick={startEditing} disabled={editing}><Icon name="edit" size={16} />{t('docker.layout.edit')}</button>
+				<button type="button" class="btn" onclick={startEditing} disabled={editing}
+					><Icon name="edit" size={16} />{t('docker.layout.edit')}</button
+				>
 			</div>
 		</div>
 		{#if layoutError && !editing}<p class="notice-error" role="alert">{layoutError}</p>{/if}
@@ -514,27 +801,72 @@
 	{#if editing}
 		<section class="tile layout-editor" aria-label={t('docker.layout.edit')}>
 			<p>{t('docker.layout.hint')}</p>
-			<label class="check"><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t('docker.layout.details')}</label>
+			<label class="check"
+				><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t(
+					'docker.layout.details',
+				)}</label
+			>
 			<ol class="order">
 				{#each groups as group, index (group.id)}
-					<li class:dragging={dragged === group.id}
-						ondragover={(event) => { if (dragged && !savingLayout) event.preventDefault(); }}
-						ondrop={(event) => { event.preventDefault(); if (dragged && !savingLayout) move(dragged, group.id); dragged = null; }}>
-						<button type="button" class="btn grip" draggable={!savingLayout} disabled={savingLayout} aria-label={t('dashboard.move', { tile: group.name })}
-							ondragstart={(event) => { dragged = group.id; event.dataTransfer?.setData('text/plain', group.id); }} ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button>
+					<li
+						class:dragging={dragged === group.id}
+						ondragover={(event) => {
+							if (dragged && !savingLayout) event.preventDefault();
+						}}
+						ondrop={(event) => {
+							event.preventDefault();
+							if (dragged && !savingLayout) move(dragged, group.id);
+							dragged = null;
+						}}
+					>
+						<button
+							type="button"
+							class="btn grip"
+							draggable={!savingLayout}
+							disabled={savingLayout}
+							aria-label={t('dashboard.move', { tile: group.name })}
+							ondragstart={(event) => {
+								dragged = group.id;
+								event.dataTransfer?.setData('text/plain', group.id);
+							}}
+							ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button
+						>
 						<span class="order-name">{group.name}</span>
 						{#if isStack(group)}<span class="chip">{t('docker.stack')}</span>{/if}
-						<button type="button" class="btn arrow" disabled={savingLayout || index === 0} aria-label={t('docker.layout.before', { name: group.name })} onclick={() => moveBy(group.id, -1)}>↑</button>
-						<button type="button" class="btn arrow" disabled={savingLayout || index === groups.length - 1} aria-label={t('docker.layout.after', { name: group.name })} onclick={() => moveBy(group.id, 1)}>↓</button>
+						<button
+							type="button"
+							class="btn arrow"
+							disabled={savingLayout || index === 0}
+							aria-label={t('docker.layout.before', { name: group.name })}
+							onclick={() => moveBy(group.id, -1)}>↑</button
+						>
+						<button
+							type="button"
+							class="btn arrow"
+							disabled={savingLayout || index === groups.length - 1}
+							aria-label={t('docker.layout.after', { name: group.name })}
+							onclick={() => moveBy(group.id, 1)}>↓</button
+						>
 					</li>
 				{/each}
 			</ol>
 			{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
 			<div class="buttons">
-				<button type="button" class="btn" disabled={savingLayout} onclick={() => { layout = { ...defaultDockerLayout(), view: layout.view }; }}>{t('dashboard.restore')}</button>
+				<button
+					type="button"
+					class="btn"
+					disabled={savingLayout}
+					onclick={() => {
+						layout = { ...defaultDockerLayout(), view: layout.view };
+					}}>{t('dashboard.restore')}</button
+				>
 				<span class="spacer"></span>
-				<button type="button" class="btn" disabled={savingLayout} onclick={cancelLayout}>{t('common.cancel')}</button>
-				<button type="button" class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}>{t('docker.layout.save')}</button>
+				<button type="button" class="btn" disabled={savingLayout} onclick={cancelLayout}
+					>{t('common.cancel')}</button
+				>
+				<button type="button" class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}
+					>{t('docker.layout.save')}</button
+				>
 			</div>
 		</section>
 	{/if}
@@ -544,7 +876,9 @@
 			<div class="list-wrap">
 				<div class="tile list" role="list" aria-label={t('docker.title')}>
 					<div class="head" aria-hidden="true">
-						<span>{t('docker.column.name')}</span><span>{t('docker.column.state')}</span><span>{t('docker.cpu')}</span><span>{t('docker.ram')}</span><span>{t('docker.column.ports')}</span><span></span>
+						<span>{t('docker.column.name')}</span><span>{t('docker.column.state')}</span><span
+							>{t('docker.cpu')}</span
+						><span>{t('docker.ram')}</span><span>{t('docker.column.ports')}</span><span></span>
 					</div>
 					{#each shownGroups as group (group.id)}
 						{#if isStack(group)}
@@ -584,7 +918,14 @@
 						</section>
 					{:else}
 						{@const container = group.members[0]}
-						<ContainerCard {container} {host} {tailscaleHost} busy={containerBusy(container)} details={layout.details} {...actionsFor(container)} />
+						<ContainerCard
+							{container}
+							{host}
+							{tailscaleHost}
+							busy={containerBusy(container)}
+							details={layout.details}
+							{...actionsFor(container)}
+						/>
 					{/if}
 				{/each}
 			</div>
@@ -598,63 +939,188 @@
 {/if}
 
 {#snippet row(container: DockerContainer, member: boolean)}
-	<ContainerRow {container} {host} {tailscaleHost} busy={containerBusy(container)} {member} details={layout.details} {...actionsFor(container)} />
+	<ContainerRow
+		{container}
+		{host}
+		{tailscaleHost}
+		busy={containerBusy(container)}
+		{member}
+		details={layout.details}
+		{...actionsFor(container)}
+	/>
 {/snippet}
 
 {#snippet stackHead(group: DockerGroup)}
 	{@const running = group.members.filter(isRunning).length}
- {@const primary = stackPrimary(group,layout.primaryServices)}
- {@const links = primary ? webLinks(primary,host,tailscaleHost) : []}
- {@const problemCount = group.members.filter(c=>!isRunning(c)||c.state==='restarting').length}
+	{@const primary = stackPrimary(group, layout.primaryServices)}
+	{@const links = primary ? webLinks(primary, host, tailscaleHost) : []}
+	{@const problemCount = group.members.filter(
+		(c) => !isRunning(c) || c.state === 'restarting',
+	).length}
 	<div class="stack-head">
-		<button type="button" class="stack-toggle" aria-expanded={stackOpen(group.id)} onclick={() => (expanded[group.id] = !stackOpen(group.id))}>
-			<span class="stack-icon"><AppIcon src={group.members.find((container) => container.icon)?.icon ?? ''} name={group.name} /></span>
+		<button
+			type="button"
+			class="stack-toggle"
+			aria-expanded={stackOpen(group.id)}
+			onclick={() => (expanded[group.id] = !stackOpen(group.id))}
+		>
+			<span class="stack-icon"
+				><AppIcon
+					src={group.members.find((container) => container.icon)?.icon ?? ''}
+					name={group.name}
+				/></span
+			>
 			<span class="stack-names">
-				<span class="stack-line"><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn">{t('docker.update')}</span>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}><Icon name="chevronDown" size={16} /></span></span>
+				<span class="stack-line"
+					><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span
+					>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn"
+							>{t('docker.update')}</span
+						>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}
+						><Icon name="chevronDown" size={16} /></span
+					></span
+				>
 				<span class="stack-sub">{t('docker.stackServices', { count: group.members.length })}</span>
 			</span>
 		</button>
-		<span class="stack-state"><span class="dot" class:ok={running === group.members.length} class:warn={running > 0 && running < group.members.length} aria-hidden="true"></span>{t('docker.stackSummary', { running, total: group.members.length })}</span>
-		<span class="mono stack-value"><span class="label">{t('docker.cpu')}</span>{running ? formatPercent(sum(group, (container) => container.cpuPercent)) : '–'}</span>
-		<span class="mono stack-value"><span class="label">{t('docker.ram')}</span>{running ? formatBytes(sum(group, (container) => container.memoryBytes)) : '–'}</span>
-  <div class="stack-links">
-   {#if problemCount}<button class="link stack-problems" onclick={()=>showProblems(group)}>{t('docker.stackProblems',{count:problemCount})}</button>{/if}
-   {#if search.trim()||filter!=='all'}<span class="muted matches">{t('docker.stackMatches',{count:shownMembers(group).length,total:group.members.length})}</span>{/if}
-   {#each links as link(link.label)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14}/>{link.text}</a>{/each}
-   {#if layout.primaryServices[group.id]&&!primary}<span class="notice-warn missing-primary">{t('docker.primaryMissing',{service:layout.primaryServices[group.id]})}</span>{/if}
-   <button class="btn small" disabled={editing||savingLayout} onclick={()=>editLinks(group)}>{t('docker.stackLinks')}</button>
-   {#if proxy && group.members.some(c=>c.managed && c.app)}{@const app = group.members.find(c=>c.managed && c.app)?.app ?? ''}<button class="btn small" disabled={editing} onclick={()=>openTailnet(app)}><Icon name="tailnet" size={14}/>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button>{/if}
-  </div>
+		<span class="stack-state"
+			><span
+				class="dot"
+				class:ok={running === group.members.length}
+				class:warn={running > 0 && running < group.members.length}
+				aria-hidden="true"
+			></span>{t('docker.stackSummary', { running, total: group.members.length })}</span
+		>
+		<span class="mono stack-value"
+			><span class="label">{t('docker.cpu')}</span>{running
+				? formatPercent(sum(group, (container) => container.cpuPercent))
+				: '–'}</span
+		>
+		<span class="mono stack-value"
+			><span class="label">{t('docker.ram')}</span>{running
+				? formatBytes(sum(group, (container) => container.memoryBytes))
+				: '–'}</span
+		>
+		<div class="stack-links">
+			{#if problemCount}<button class="link stack-problems" onclick={() => showProblems(group)}
+					>{t('docker.stackProblems', { count: problemCount })}</button
+				>{/if}
+			{#if search.trim() || filter !== 'all'}<span class="muted matches"
+					>{t('docker.stackMatches', {
+						count: shownMembers(group).length,
+						total: group.members.length,
+					})}</span
+				>{/if}
+			{#each links as link (link.label)}<a
+					class="btn small"
+					href={link.href}
+					target="_blank"
+					rel="noreferrer"
+					title={link.label}><Icon name={link.icon} size={14} />{link.text}</a
+				>{/each}
+			{#if layout.primaryServices[group.id] && !primary}<span class="notice-warn missing-primary"
+					>{t('docker.primaryMissing', { service: layout.primaryServices[group.id] })}</span
+				>{/if}
+			<button class="btn small" disabled={editing || savingLayout} onclick={() => editLinks(group)}
+				>{t('docker.stackLinks')}</button
+			>
+			{#if proxy && group.members.some((c) => c.managed && c.app)}{@const app =
+					group.members.find((c) => c.managed && c.app)?.app ?? ''}<button
+					class="btn small"
+					disabled={editing}
+					onclick={() => openTailnet(app)}
+					><Icon name="tailnet" size={14} />{t(
+						appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish',
+					)}</button
+				>{/if}
+		</div>
 	</div>
 {/snippet}
 
 {#if linkGroup}
- <Dialog title={t('docker.stackLinksTitle',{name:linkGroup.name})} locked={savingLayout} onclose={()=>linkGroup=null}>
-  <p class="text">{t('docker.stackLinksHint')}</p>
-  <label class="field-row"><span>{t('docker.primaryService')}</span><select class="field" bind:value={primaryService} disabled={savingLayout}>
-   <option value="">{t('docker.primaryAuto')}</option>
-   {#if primaryService&&!linkGroup.members.some(c=>c.service===primaryService)}<option value={primaryService}>{primaryService} · {t('docker.primaryUnavailable')}</option>{/if}
-   {#each [...new Set(linkGroup.members.map(c=>c.service).filter(Boolean))] as service}<option value={service}>{service}</option>{/each}
-  </select></label>
-  {#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
-  <div class="dialog-actions"><button class="btn" disabled={savingLayout} onclick={()=>linkGroup=null}>{t('common.cancel')}</button><button class="btn btn-primary" disabled={savingLayout} onclick={saveLinks}>{t('common.save')}</button></div>
- </Dialog>
+	<Dialog
+		title={t('docker.stackLinksTitle', { name: linkGroup.name })}
+		locked={savingLayout}
+		onclose={() => (linkGroup = null)}
+	>
+		<p class="text">{t('docker.stackLinksHint')}</p>
+		<label class="field-row"
+			><span>{t('docker.primaryService')}</span><select
+				class="field"
+				bind:value={primaryService}
+				disabled={savingLayout}
+			>
+				<option value="">{t('docker.primaryAuto')}</option>
+				{#if primaryService && !linkGroup.members.some((c) => c.service === primaryService)}<option
+						value={primaryService}>{primaryService} · {t('docker.primaryUnavailable')}</option
+					>{/if}
+				{#each [...new Set(linkGroup.members
+							.map((c) => c.service)
+							.filter(Boolean))] as service}<option value={service}>{service}</option>{/each}
+			</select></label
+		>
+		{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
+		<div class="dialog-actions">
+			<button class="btn" disabled={savingLayout} onclick={() => (linkGroup = null)}
+				>{t('common.cancel')}</button
+			><button class="btn btn-primary" disabled={savingLayout} onclick={saveLinks}
+				>{t('common.save')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 {#if dialog?.kind === 'logs'}
 	{@const container = dialog.container}
 	{@const text = dialog.text}
-	<Dialog title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })} wide onclose={() => (dialog = null)}>
+	<Dialog
+		title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })}
+		wide
+		onclose={() => (dialog = null)}
+	>
 		<div class="logs-tools">
-			<input class="field logs-search" type="search" bind:value={logsSearch} placeholder={t('docker.logsSearch')} aria-label={t('docker.logsSearch')} />
-			{#if logsSearch.trim()}<span class="muted mono" role="status">{t('docker.logsHits', { count: logHits })}</span>{/if}
-			<label class="check"><input type="checkbox" bind:checked={logsFollow} /><span>{t('docker.logsFollow')}</span></label>
+			<input
+				class="field logs-search"
+				type="search"
+				bind:value={logsSearch}
+				placeholder={t('docker.logsSearch')}
+				aria-label={t('docker.logsSearch')}
+			/>
+			{#if logsSearch.trim()}<span class="muted mono" role="status"
+					>{t('docker.logsHits', { count: logHits })}</span
+				>{/if}
+			<label class="check"
+				><input type="checkbox" bind:checked={logsFollow} /><span>{t('docker.logsFollow')}</span
+				></label
+			>
 		</div>
-		{#if logsError}<div class="notice-error logs-error" role="alert"><span>{logsError}</span><button type="button" class="btn" disabled={logsLoading} onclick={() => showLogs(container, true)}>{t('common.retry')}</button></div>{/if}
-		<pre class="logs" bind:this={logsBox}>{#if text === null}…{:else if !text}{t('docker.logsEmpty')}{:else}{#each logParts as part, index (index)}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{/if}</pre>
+		{#if logsError}<div class="notice-error logs-error" role="alert">
+				<span>{logsError}</span><button
+					type="button"
+					class="btn"
+					disabled={logsLoading}
+					onclick={() => showLogs(container, true)}>{t('common.retry')}</button
+				>
+			</div>{/if}
+		<pre class="logs" bind:this={logsBox}>{#if text === null}…{:else if !text}{t(
+					'docker.logsEmpty',
+				)}{:else}{#each logParts as part, index (index)}{#if part.hit}<mark>{part.text}</mark
+						>{:else}{part.text}{/if}{/each}{/if}</pre>
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={!text} onclick={() => text && downloadLogs(container, text)}><Icon name="download" size={16} />{t('docker.logsDownload')}</button>
-			<button type="button" class="btn" disabled={logsLoading} onclick={() => showLogs(container, true)}>{t('docker.logsRefresh')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}>{t('common.done')}</button>
+			<button
+				type="button"
+				class="btn"
+				disabled={!text}
+				onclick={() => text && downloadLogs(container, text)}
+				><Icon name="download" size={16} />{t('docker.logsDownload')}</button
+			>
+			<button
+				type="button"
+				class="btn"
+				disabled={logsLoading}
+				onclick={() => showLogs(container, true)}>{t('docker.logsRefresh')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}
+				>{t('common.done')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'updates'}
@@ -663,80 +1129,222 @@
 		<p class="text">{t('docker.updatesText')}</p>
 		<div class="update-list">
 			{#each updateApps as entry (entry.app)}
-				<label class="check"><input type="checkbox" disabled={dialogBusy} checked={target.selected.includes(entry.app)}
-					onchange={(event) => (target.selected = event.currentTarget.checked ? [...target.selected, entry.app] : target.selected.filter((app) => app !== entry.app))} />
-					<span><span class="mono">{entry.app}</span>{#if entry.names.length > 1 || entry.names[0] !== entry.app} <span class="muted">· {entry.names.join(', ')}</span>{/if}</span></label>
+				<label class="check"
+					><input
+						type="checkbox"
+						disabled={dialogBusy}
+						checked={target.selected.includes(entry.app)}
+						onchange={(event) =>
+							(target.selected = event.currentTarget.checked
+								? [...target.selected, entry.app]
+								: target.selected.filter((app) => app !== entry.app))}
+					/>
+					<span
+						><span class="mono">{entry.app}</span
+						>{#if entry.names.length > 1 || entry.names[0] !== entry.app}
+							<span class="muted">· {entry.names.join(', ')}</span>{/if}</span
+					></label
+				>
 			{:else}<p class="muted">{t('docker.updatesNone')}</p>{/each}
 		</div>
-		{#if target.failed.length}<div class="notice-error" role="alert">{t('docker.updatesFailed')}<ul>{#each target.failed as entry (entry.app)}<li><span class="mono">{entry.app}</span>: {entry.text}</li>{/each}</ul></div>{/if}
+		{#if target.failed.length}<div class="notice-error" role="alert">
+				{t('docker.updatesFailed')}
+				<ul>
+					{#each target.failed as entry (entry.app)}<li>
+							<span class="mono">{entry.app}</span>: {entry.text}
+						</li>{/each}
+				</ul>
+			</div>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" disabled={dialogBusy || target.selected.length === 0} onclick={applyUpdates}>{t(dialogBusy ? 'docker.updatesRunning' : 'docker.updatesSubmit', { count: target.selected.length })}</button>
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={dialogBusy || target.selected.length === 0}
+				onclick={applyUpdates}
+				>{t(dialogBusy ? 'docker.updatesRunning' : 'docker.updatesSubmit', {
+					count: target.selected.length,
+				})}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
-	<Dialog title={t('docker.removeTitle', { name: container.name })} locked={dialogBusy} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t('docker.removeTitle', { name: container.name })}
+		locked={dialogBusy}
+		onclose={() => (dialog = null)}
+	>
 		<p class="text">{t('docker.removeContainer')}</p>
- {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
+		{#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={dialogBusy} onclick={() => remove(container)}>{t('docker.removeSubmit')}</button>
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-warn"
+				disabled={dialogBusy}
+				onclick={() => remove(container)}>{t('docker.removeSubmit')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog?.kind === 'removeApp'}
 	{@const app = dialog.app}
-	<Dialog title={t('docker.removeTitle', { name: app })} locked={dialogBusy} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t('docker.removeTitle', { name: app })}
+		locked={dialogBusy}
+		onclose={() => (dialog = null)}
+	>
 		{@const path = `/mnt/${status?.settings.volume}/appdata/${app}`}
-		<p class="text">{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}</p>
- {#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
-		<label class="check"><input type="checkbox" bind:checked={dialog.purge} disabled={dialogBusy} /><span>{t('docker.removeData', { path })}</span></label>
+		<p class="text">
+			{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}
+		</p>
+		{#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
+		<label class="check"
+			><input type="checkbox" bind:checked={dialog.purge} disabled={dialogBusy} /><span
+				>{t('docker.removeData', { path })}</span
+			></label
+		>
 		{#if dialog.purge}
 			<p class="notice-error">{t('docker.removeDataWarning')}</p>
 		{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}>{t('common.cancel')}</button>
-			<button type="button" disabled={dialogBusy} class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
-				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button>
+			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				disabled={dialogBusy}
+				class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
+				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}
+				>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button
+			>
 		</div>
 	</Dialog>
 {:else if dialog}
 	{@const kind = dialog.kind}
-	<Dialog title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')} wide={kind === 'import'} locked={dialogBusy} onclose={() => (dialog = null)}>
+	<Dialog
+		title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')}
+		wide={kind === 'import'}
+		locked={dialogBusy}
+		onclose={() => (dialog = null)}
+	>
 		<form onsubmit={submit}>
 			{#if kind === 'import'}
 				<p class="notice-warn">{t('docker.importWarning')}</p>
-				<label><span>{t('docker.importName')}</span>
+				<label
+					><span>{t('docker.importName')}</span>
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="field mono name-field" type="text" bind:value={draft.name} maxlength="32" autocapitalize="none" spellcheck="false" required autofocus />
+					<input
+						class="field mono name-field"
+						type="text"
+						bind:value={draft.name}
+						maxlength="32"
+						autocapitalize="none"
+						spellcheck="false"
+						required
+						autofocus
+					/>
 				</label>
-				<label><span>{t('docker.importCompose')}</span>
-					<textarea class="field mono" rows="14" bind:value={draft.compose} spellcheck="false" required placeholder={'services:\n  web:\n    image: …'}></textarea>
-					<small>{t('docker.importHint', { path: `/mnt/${status?.settings.volume}/appdata/${draft.name || '<name>'}` })}</small>
+				<label
+					><span>{t('docker.importCompose')}</span>
+					<textarea
+						class="field mono"
+						rows="14"
+						bind:value={draft.compose}
+						spellcheck="false"
+						required
+						placeholder={'services:\n  web:\n    image: …'}></textarea>
+					<small
+						>{t('docker.importHint', {
+							path: `/mnt/${status?.settings.volume}/appdata/${draft.name || '<name>'}`,
+						})}</small
+					>
 				</label>
 			{:else}
-				<label class="check"><input type="checkbox" bind:checked={draft.enabled} /><span>{t('docker.enabled')}</span></label>
-				<label><span>{t('docker.volume')}</span>
-					<select class="field" bind:value={draft.volume} disabled={!draft.enabled}>{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}</select>
+				<label class="check"
+					><input type="checkbox" bind:checked={draft.enabled} /><span>{t('docker.enabled')}</span
+					></label
+				>
+				<label
+					><span>{t('docker.volume')}</span>
+					<select class="field" bind:value={draft.volume} disabled={!draft.enabled}
+						>{#each volumes as volume (volume)}<option value={volume}>{volume}</option
+							>{/each}</select
+					>
 				</label>
 				<p class="muted note">{t('docker.disableNote')}</p>
 			{/if}
 			{#if dialogError}
-				<div class="notice-error" role="alert">{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}</div>
+				<div class="notice-error" role="alert">
+					{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}
+				</div>
 			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}>{t('common.cancel')}</button>
-				<button type="submit" class="btn btn-primary" disabled={dialogBusy}>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button>
+				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}
+					>{t('common.cancel')}</button
+				>
+				<button type="submit" class="btn btn-primary" disabled={dialogBusy}
+					>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button
+				>
 			</div>
 		</form>
 	</Dialog>
 {/if}
 
-{#if tailnetDialog}<TailnetDialog app={tailnetDialog.app} mode={tailnetDialog.mode} port={tailnetDialog.port} onclose={() => (tailnetDialog = null)} onchanged={() => { void loadProxy(); void load(); }} />{/if}
-{#if autoUpdates}<AutoUpdateDialog apps={[...new Set(containers.filter((c) => c.managed && c.app).map((c) => c.app))].sort()} onclose={() => (autoUpdates = false)} />{/if}
+{#if tailnetDialog}<TailnetDialog
+		app={tailnetDialog.app}
+		mode={tailnetDialog.mode}
+		port={tailnetDialog.port}
+		onclose={() => (tailnetDialog = null)}
+		onchanged={() => {
+			void loadProxy();
+			void load();
+		}}
+	/>{/if}
+{#if autoUpdates}<AutoUpdateDialog
+		apps={[...new Set(containers.filter((c) => c.managed && c.app).map((c) => c.app))].sort()}
+		onclose={() => (autoUpdates = false)}
+	/>{/if}
 
 <style>
- .stack-links{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px}.stack-links .small{min-height:30px;padding:4px 8px;font-size:.75rem}.stack-problems{color:var(--warn-text)}.missing-primary{font-size:.75rem;padding:3px 6px}.matches{font-size:.75rem}.field-row{display:flex;flex-direction:column;gap:6px}.notice-warn{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+	.stack-links {
+		grid-column: 1/-1;
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-top: 5px;
+	}
+	.stack-links .small {
+		min-height: 30px;
+		padding: 4px 8px;
+		font-size: 0.75rem;
+	}
+	.stack-problems {
+		color: var(--warn-text);
+	}
+	.missing-primary {
+		font-size: 0.75rem;
+		padding: 3px 6px;
+	}
+	.matches {
+		font-size: 0.75rem;
+	}
+	.field-row {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.notice-warn {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
 
 	.summary {
 		display: flex;
@@ -907,7 +1515,9 @@
 	}
 	.list {
 		display: grid;
-		grid-template-columns: minmax(12rem, 2.4fr) minmax(8rem, auto) minmax(7rem, 1fr) minmax(5rem, auto) minmax(0, 1.3fr) auto;
+		grid-template-columns:
+			minmax(12rem, 2.4fr) minmax(8rem, auto) minmax(7rem, 1fr) minmax(5rem, auto)
+			minmax(0, 1.3fr) auto;
 		column-gap: 20px;
 	}
 	.head {

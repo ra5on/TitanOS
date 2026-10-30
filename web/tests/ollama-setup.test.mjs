@@ -30,7 +30,15 @@ services:
     volumes:
       - ./webui:/app/backend/data
 `;
-const tpl = { compose, timezone: 'Europe/Berlin', uid: 1000, gid: 100, appdata: '/mnt/Data/appdata', listening: [], missingDevices: [] };
+const tpl = {
+	compose,
+	timezone: 'Europe/Berlin',
+	uid: 1000,
+	gid: 100,
+	appdata: '/mnt/Data/appdata',
+	listening: [],
+	missingDevices: [],
+};
 
 test('the Ollama template gets a loopback port, the GPU and its secret apart', () => {
 	const result = prepareOllama(tpl, [], new Map(), '0000:01:00.0');
@@ -60,12 +68,36 @@ test('a second Ollama gets its own name and a free port; without a GPU it runs o
 
 test('a template without the Ollama image is refused', () => {
 	assert.equal(ollamaService(compose), 'ollama');
-	assert.throws(() => prepareOllama({ ...tpl, compose: 'services:\n  web:\n    image: nginx\n' }, [], new Map(), null), /template_without_ollama/);
+	assert.throws(
+		() =>
+			prepareOllama(
+				{ ...tpl, compose: 'services:\n  web:\n    image: nginx\n' },
+				[],
+				new Map(),
+				null,
+			),
+		/template_without_ollama/,
+	);
 });
 
 test('own model names must be Ollama model references', () => {
-	for (const name of ['qwen3:8b', 'llama3.1', 'library/llama3.1:8b', 'hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M', 'registry.local:5000/team/model:v1'])
+	for (const name of [
+		'qwen3:8b',
+		'llama3.1',
+		'library/llama3.1:8b',
+		'hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M',
+		'registry.local:5000/team/model:v1',
+	])
 		assert.ok(validOllamaModel(name), name);
-	for (const name of ['', 'qwen3 8b', '-x', 'a/../b', 'model@sha256:abc', 'x:', 'https://ollama.com/qwen3', 'a'.repeat(201)])
+	for (const name of [
+		'',
+		'qwen3 8b',
+		'-x',
+		'a/../b',
+		'model@sha256:abc',
+		'x:',
+		'https://ollama.com/qwen3',
+		'a'.repeat(201),
+	])
 		assert.ok(!validOllamaModel(name), name);
 });

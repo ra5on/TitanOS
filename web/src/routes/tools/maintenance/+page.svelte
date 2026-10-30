@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
@@ -51,7 +52,7 @@
 	);
 	async function load() {
 		try {
-			status = await api.get('/maintenance');
+			status = await api.get<MaintenanceStatus>('/maintenance');
 			error = null;
 			if (!settings) {
 				settings = structuredClone($state.snapshot(status!.settings));
@@ -73,17 +74,14 @@
 				backups = b.jobs;
 			})
 			.catch((e) => (error = requestProblem(e, t)));
-		const timer = setInterval(() => {
-			if (!document.hidden && !draft && !busy) load();
-		}, 10000);
-		return () => clearInterval(timer);
+		return poll(load, { interval: 10000, immediate: false, skip: () => !!draft || busy });
 	});
 	async function save(next: MaintenanceSettings): Promise<boolean> {
 		busy = true;
 		error = null;
 		saved = false;
 		try {
-			status = await api.put('/maintenance', next);
+			status = await api.put<MaintenanceStatus>('/maintenance', next);
 			settings = structuredClone($state.snapshot(status!.settings));
 			draft = null;
 			savedSettings = JSON.stringify(settings);
@@ -151,7 +149,7 @@
 		busy = true;
 		error = null;
 		try {
-			status = await api.post(
+			status = await api.post<MaintenanceStatus>(
 				`/maintenance/${encodeURIComponent(id)}/${kind}`,
 				// The API still wants the job ID as confirmation of the review.
 				kind === 'review' ? { confirm: id } : {},

@@ -2,15 +2,35 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { pauseAll,resumeAll,retryFailed,cancel, clearFinished, pause, resolve, resume, uploads, type Upload } from '#lib/uploads.svelte.ts';
+	import {
+		pauseAll,
+		resumeAll,
+		retryFailed,
+		cancel,
+		clearFinished,
+		pause,
+		resolve,
+		resume,
+		uploads,
+		type Upload,
+	} from '#lib/uploads.svelte.ts';
 
-	const totalBytes=$derived(uploads.items.reduce((sum,i)=>sum+i.file.size,0));
- const sentBytes=$derived(uploads.items.reduce((sum,i)=>sum+Math.min(Number.isFinite(i.sent)?i.sent:0,i.file.size),0));
- const done = $derived(uploads.items.filter((item) => item.state === 'done').length);
-	const active = $derived(uploads.items.find((item) => item.state === 'uploading' || item.state === 'retrying'));
+	const totalBytes = $derived(uploads.items.reduce((sum, i) => sum + i.file.size, 0));
+	const sentBytes = $derived(
+		uploads.items.reduce(
+			(sum, i) => sum + Math.min(Number.isFinite(i.sent) ? i.sent : 0, i.file.size),
+			0,
+		),
+	);
+	const done = $derived(uploads.items.filter((item) => item.state === 'done').length);
+	const active = $derived(
+		uploads.items.find((item) => item.state === 'uploading' || item.state === 'retrying'),
+	);
 	const rate = $derived.by(() => {
 		if (!active || active.speed <= 0) return '';
-		const left = uploads.items.filter((item) => item.state === 'uploading' || item.state === 'queued').reduce((sum, item) => sum + item.file.size - item.sent, 0);
+		const left = uploads.items
+			.filter((item) => item.state === 'uploading' || item.state === 'queued')
+			.reduce((sum, item) => sum + item.file.size - item.sent, 0);
 		return `${t('uploads.speed', { speed: formatBytes(active.speed) })} · ${t('sync.remaining', { time: formatDuration(left / active.speed) })}`;
 	});
 
@@ -20,22 +40,45 @@
 </script>
 
 {#if uploads.items.length > 0}
-	<section class="tile panel" aria-label={t('uploads.title', { done, total: uploads.items.length })}>
+	<section
+		class="tile panel"
+		aria-label={t('uploads.title', { done, total: uploads.items.length })}
+	>
 		<div class="head">
 			<span class="title">{t('uploads.title', { done, total: uploads.items.length })}</span>
 			<span class="mono muted">{rate}</span>
-			<button type="button" class="btn small" disabled={!uploads.items.some(i=>['queued','uploading','retrying','pressure'].includes(i.state))} onclick={pauseAll}>{t('uploads.pauseAll')}</button>
- <button type="button" class="btn small" disabled={!uploads.items.some(i=>i.state==='paused')} onclick={resumeAll}>{t('uploads.resumeAll')}</button>
- <button type="button" class="btn small" disabled={!uploads.items.some(i=>i.state==='failed')} onclick={retryFailed}>{t('uploads.retryFailed')}</button>
- <button type="button" class="btn small" onclick={clearFinished}>{t('uploads.clear')}</button>
+			<button
+				type="button"
+				class="btn small"
+				disabled={!uploads.items.some((i) =>
+					['queued', 'uploading', 'retrying', 'pressure'].includes(i.state),
+				)}
+				onclick={pauseAll}>{t('uploads.pauseAll')}</button
+			>
+			<button
+				type="button"
+				class="btn small"
+				disabled={!uploads.items.some((i) => i.state === 'paused')}
+				onclick={resumeAll}>{t('uploads.resumeAll')}</button
+			>
+			<button
+				type="button"
+				class="btn small"
+				disabled={!uploads.items.some((i) => i.state === 'failed')}
+				onclick={retryFailed}>{t('uploads.retryFailed')}</button
+			>
+			<button type="button" class="btn small" onclick={clearFinished}>{t('uploads.clear')}</button>
 		</div>
-		<progress max={totalBytes||1} value={sentBytes} aria-label={t('uploads.totalProgress')}></progress><span class="mono muted">{formatBytes(sentBytes)} / {formatBytes(totalBytes)}</span>
- <p class="muted">{t('uploads.queueLifetime')}</p>
- {#each uploads.items as item (item.key)}
+		<progress max={totalBytes || 1} value={sentBytes} aria-label={t('uploads.totalProgress')}
+		></progress><span class="mono muted">{formatBytes(sentBytes)} / {formatBytes(totalBytes)}</span>
+		<p class="muted">{t('uploads.queueLifetime')}</p>
+		{#each uploads.items as item (item.key)}
 			<div class="item">
 				<div class="line">
 					<span class="name">{item.name}</span>
-					<span class="muted where">{t('uploads.to', { path: [item.rootName, item.dir].filter(Boolean).join('/') })}</span>
+					<span class="muted where"
+						>{t('uploads.to', { path: [item.rootName, item.dir].filter(Boolean).join('/') })}</span
+					>
 					{#if item.state === 'done'}
 						<span class="state ok"><Icon name="check" size={14} />{t('uploads.done')}</span>
 					{:else if item.state === 'failed'}
@@ -45,8 +88,8 @@
 					{:else if item.state === 'paused'}
 						<span class="state warn">{t('uploads.paused')} · {formatPercent(percent(item))}</span>
 					{:else if item.state === 'pressure'}
-                        <span class="state warn">{t('error.upload_memory_pressure')}</span>
-                    {:else if item.state === 'retrying'}
+						<span class="state warn">{t('error.upload_memory_pressure')}</span>
+					{:else if item.state === 'retrying'}
 						<span class="state warn">{t('uploads.retrying')}</span>
 					{:else if item.state === 'queued'}
 						<span class="state muted">{t('uploads.queued')}</span>
@@ -54,15 +97,41 @@
 						<span class="mono state">{formatPercent(percent(item))}</span>
 					{/if}
 					{#if item.state === 'conflict'}
-						<button type="button" class="btn small" onclick={() => resolve(item, 'replace')}>{t('uploads.replace')}</button>
-						<button type="button" class="btn small" onclick={() => resolve(item, 'rename')}>{t('uploads.keepBoth')}</button>
-						<button type="button" class="btn small" onclick={() => resolve(item, 'skip')}>{t('uploads.skip')}</button>
+						<button type="button" class="btn small" onclick={() => resolve(item, 'replace')}
+							>{t('uploads.replace')}</button
+						>
+						<button type="button" class="btn small" onclick={() => resolve(item, 'rename')}
+							>{t('uploads.keepBoth')}</button
+						>
+						<button type="button" class="btn small" onclick={() => resolve(item, 'skip')}
+							>{t('uploads.skip')}</button
+						>
 					{:else if item.state === 'uploading' || item.state === 'retrying' || item.state === 'pressure' || item.state === 'queued'}
-						<button type="button" class="icon" aria-label="{t('uploads.pause')}: {item.name}" onclick={() => pause(item)}><Icon name="pause" size={16} /></button>
-						<button type="button" class="icon" aria-label="{t('uploads.cancel')}: {item.name}" onclick={() => cancel(item)}><Icon name="close" size={16} /></button>
+						<button
+							type="button"
+							class="icon"
+							aria-label="{t('uploads.pause')}: {item.name}"
+							onclick={() => pause(item)}><Icon name="pause" size={16} /></button
+						>
+						<button
+							type="button"
+							class="icon"
+							aria-label="{t('uploads.cancel')}: {item.name}"
+							onclick={() => cancel(item)}><Icon name="close" size={16} /></button
+						>
 					{:else if item.state === 'paused' || item.state === 'failed'}
-						<button type="button" class="icon" aria-label="{t('uploads.resume')}: {item.name}" onclick={() => resume(item)}><Icon name="play" size={16} /></button>
-						<button type="button" class="icon" aria-label="{t('uploads.cancel')}: {item.name}" onclick={() => cancel(item)}><Icon name="close" size={16} /></button>
+						<button
+							type="button"
+							class="icon"
+							aria-label="{t('uploads.resume')}: {item.name}"
+							onclick={() => resume(item)}><Icon name="play" size={16} /></button
+						>
+						<button
+							type="button"
+							class="icon"
+							aria-label="{t('uploads.cancel')}: {item.name}"
+							onclick={() => cancel(item)}><Icon name="close" size={16} /></button
+						>
 					{/if}
 				</div>
 				{#if item.state === 'uploading' || item.state === 'retrying' || item.state === 'paused'}
@@ -74,7 +143,11 @@
 {/if}
 
 <style>
- progress{width:100%;accent-color:var(--accent);height:.5rem;}
+	progress {
+		width: 100%;
+		accent-color: var(--accent);
+		height: 0.5rem;
+	}
 	.panel {
 		display: flex;
 		flex-direction: column;

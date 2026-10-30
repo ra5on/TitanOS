@@ -46,13 +46,24 @@
 	function themeColors() {
 		const css = getComputedStyle(document.documentElement);
 		const read = (name: string) => css.getPropertyValue(name).trim();
-		return { background: read('--bg'), foreground: read('--text'), cursor: read('--accent'), selectionBackground: read('--chip') };
+		return {
+			background: read('--bg'),
+			foreground: read('--text'),
+			cursor: read('--accent'),
+			selectionBackground: read('--chip'),
+		};
 	}
 
 	// The terminal itself lives as long as the tab, whatever the connection does.
 	$effect(() => {
 		if (!screen) return;
-		const terminal = new Terminal({ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, cursorBlink: true, scrollback: 5000, theme: themeColors() });
+		const terminal = new Terminal({
+			fontFamily: "'IBM Plex Mono', monospace",
+			fontSize: 13,
+			cursorBlink: true,
+			scrollback: 5000,
+			theme: themeColors(),
+		});
 		fit = new FitAddon();
 		search = new SearchAddon();
 		terminal.loadAddon(fit);
@@ -61,8 +72,14 @@
 		term = terminal;
 
 		const encoder = new TextEncoder();
-		const input = terminal.onData((data) => socket?.readyState === WebSocket.OPEN && socket.send(encoder.encode(data)));
-		const resized = terminal.onResize(() => socket?.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ cols: terminal.cols, rows: terminal.rows })));
+		const input = terminal.onData(
+			(data) => socket?.readyState === WebSocket.OPEN && socket.send(encoder.encode(data)),
+		);
+		const resized = terminal.onResize(
+			() =>
+				socket?.readyState === WebSocket.OPEN &&
+				socket.send(JSON.stringify({ cols: terminal.cols, rows: terminal.rows })),
+		);
 		const observer = new ResizeObserver(() => screen?.offsetParent && fit?.fit());
 		observer.observe(screen);
 		// A changed theme changes the colors of what is open, too.
@@ -85,7 +102,14 @@
 	$effect(() => {
 		if (!confirmed || !term || socket || phase === 'ended') return;
 		const terminal = term;
-		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : session.kind === 'lxc' ? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}` : `/docker/containers/${session.container}/console${containerQuery(session.shell, session.user)}`;
+		const path =
+			session.kind === 'nas'
+				? '/terminal/shell'
+				: session.kind === 'vm'
+					? `/vms/${session.container}/serial`
+					: session.kind === 'lxc'
+						? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}`
+						: `/docker/containers/${session.container}/console${containerQuery(session.shell, session.user)}`;
 		const connection = new WebSocket(apiSocket(path));
 		connection.binaryType = 'arraybuffer';
 		socket = connection;
@@ -98,7 +122,8 @@
 				terminal.writeln(`\x1b[33m${t('terminal.nasWarning')}\x1b[0m\r\n`);
 			}
 			if (session.kind === 'vm') terminal.writeln(`\x1b[90m${t('terminal.vmBanner')}\x1b[0m\r\n`);
-			if (session.kind === 'lxc' && session.shell) terminal.writeln(`\x1b[90m${t('terminal.lxcBanner')}\x1b[0m\r\n`);
+			if (session.kind === 'lxc' && session.shell)
+				terminal.writeln(`\x1b[90m${t('terminal.lxcBanner')}\x1b[0m\r\n`);
 			connection.send(JSON.stringify({ cols: terminal.cols, rows: terminal.rows }));
 			if (active) terminal.focus();
 		};
@@ -169,7 +194,9 @@
 <div class="session" class:hidden={!active}>
 	<div class="screen" bind:this={screen}></div>
 	{#if phase === 'ended'}
-		<p class="ended" role="status">{t(noShell ? 'docker.consoleNoShell' : 'docker.consoleClosed')}</p>
+		<p class="ended" role="status">
+			{t(noShell ? 'docker.consoleNoShell' : 'docker.consoleClosed')}
+		</p>
 	{/if}
 </div>
 

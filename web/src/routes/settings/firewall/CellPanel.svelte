@@ -54,48 +54,53 @@
 </script>
 
 {#if cell}<section class="tile panel cell" aria-labelledby="firewall-cell">
-	<div class="title-row">
-		<h2 class="tile-title" id="firewall-cell">{t('firewall.cellTitle', { from: fromLabel, to: toLabel })}</h2>
-		<button class="btn small" type="button" onclick={onclose}>{t('common.close')}</button>
-	</div>
-	<p class="muted">{t('firewall.cellText')}</p>
-	{#if to === APPS}<p class="muted">{t('firewall.appsText')}</p>{/if}
-	{#if to === APPS && hostNetworkApps.length}<p class="notice-warn">
-			{t('firewall.hostNetworkHint', { apps: hostNetworkApps.join(', ') })}
-		</p>{/if}
-	{#if cell.policies.length}<ol class="policies">
-			{#each cell.policies as _, i (i)}
-				<PolicyEditor
-					bind:policy={draft.cells[index].policies[i]}
-					to={cell.to}
-					{services}
-					{apps}
-					index={i}
-					count={cell.policies.length}
-					{locked}
-					onmove={(by) => move(i, by)}
-					onremove={() => cell.policies.splice(i, 1)}
-				/>
-			{/each}
-		</ol>{:else}<p class="muted">{t('firewall.noPolicies')}</p>{/if}
-	<div class="row-actions start">
-		<button class="btn" type="button" disabled={locked || cell.policies.length >= 640} onclick={add}
-			>{t('firewall.addPolicy')}</button
-		>
-	</div>
-	<div class="default">
-		<span>{t('firewall.default')}</span>
-		<Segments
-			options={[
-				{ value: 'allow', label: t('firewall.allow') },
-				{ value: 'deny', label: t('firewall.deny') },
-			]}
-			bind:value={draft.cells[index].default}
-			label={t('firewall.default')}
-			disabled={locked}
-		/>
-	</div>
-</section>{/if}
+		<div class="title-row">
+			<h2 class="tile-title" id="firewall-cell">
+				{t('firewall.cellTitle', { from: fromLabel, to: toLabel })}
+			</h2>
+			<button class="btn small" type="button" onclick={onclose}>{t('common.close')}</button>
+		</div>
+		<p class="muted">{t('firewall.cellText')}</p>
+		{#if to === APPS}<p class="muted">{t('firewall.appsText')}</p>{/if}
+		{#if to === APPS && hostNetworkApps.length}<p class="notice-warn">
+				{t('firewall.hostNetworkHint', { apps: hostNetworkApps.join(', ') })}
+			</p>{/if}
+		{#if cell.policies.length}<ol class="policies">
+				{#each cell.policies as _, i (i)}
+					<PolicyEditor
+						bind:policy={draft.cells[index].policies[i]}
+						to={cell.to}
+						{services}
+						{apps}
+						index={i}
+						count={cell.policies.length}
+						{locked}
+						onmove={(by) => move(i, by)}
+						onremove={() => cell.policies.splice(i, 1)}
+					/>
+				{/each}
+			</ol>{:else}<p class="muted">{t('firewall.noPolicies')}</p>{/if}
+		<div class="row-actions start">
+			<button
+				class="btn"
+				type="button"
+				disabled={locked || cell.policies.length >= 640}
+				onclick={add}>{t('firewall.addPolicy')}</button
+			>
+		</div>
+		<div class="default">
+			<span>{t('firewall.default')}</span>
+			<Segments
+				options={[
+					{ value: 'allow', label: t('firewall.allow') },
+					{ value: 'deny', label: t('firewall.deny') },
+				]}
+				bind:value={draft.cells[index].default}
+				label={t('firewall.default')}
+				disabled={locked}
+			/>
+		</div>
+	</section>{/if}
 
 <style>
 	.title-row {

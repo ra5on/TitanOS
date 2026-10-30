@@ -7,7 +7,13 @@
 
 	let { progress, ondismiss }: { progress: PluginProgress; ondismiss?: () => void } = $props();
 	const percent = $derived(downloadPercent(progress));
-	const marks: Record<string, string> = { pending: '○', running: '●', done: '✓', failed: '✕', skipped: '–' };
+	const marks: Record<string, string> = {
+		pending: '○',
+		running: '●',
+		done: '✓',
+		failed: '✕',
+		skipped: '–',
+	};
 	const stateKey = (state: string) => `plugins.stepState.${state}` as MessageKey;
 </script>
 
@@ -16,15 +22,37 @@
 		{#each progress.steps as step (step.id)}
 			<li class={step.state} aria-current={step.state === 'running' ? 'step' : undefined}>
 				<span class="mark" aria-hidden="true">{marks[step.state] ?? '○'}</span>
-				<span class="label">{t(pluginStepKey(step.id))}<span class="sr-only"> – {t(stateKey(step.state))}</span>{#if step.state === 'skipped'}<span class="muted"> · {t(stateKey(step.state))}</span>{/if}</span>
+				<span class="label"
+					>{t(pluginStepKey(step.id))}<span class="sr-only">
+						– {t(stateKey(step.state))}</span
+					>{#if step.state === 'skipped'}<span class="muted">
+							· {t(stateKey(step.state))}</span
+						>{/if}</span
+				>
 				{#if step.id === 'download' && step.state === 'running'}
 					<div class="download">
 						{#if percent !== undefined}
-							<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(percent)} aria-label={t('plugins.step.download')}><span style:width="{percent}%"></span></div>
+							<div
+								class="bar"
+								role="progressbar"
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-valuenow={Math.round(percent)}
+								aria-label={t('plugins.step.download')}
+							>
+								<span style:width="{percent}%"></span>
+							</div>
 						{:else}
 							<progress aria-label={t('plugins.step.download')}></progress>
 						{/if}
-						<span class="muted mono">{progress.total > 0 ? `${formatBytes(progress.bytes)} / ${formatBytes(progress.total)}` : formatBytes(progress.bytes)}{#if progress.speedBytesPerSecond > 0}{' · '}{t('plugins.speed', { speed: formatMegabytesPerSecond(progress.speedBytesPerSecond) })}{/if}</span>
+						<span class="muted mono"
+							>{progress.total > 0
+								? `${formatBytes(progress.bytes)} / ${formatBytes(progress.total)}`
+								: formatBytes(progress.bytes)}{#if progress.speedBytesPerSecond > 0}{' · '}{t(
+									'plugins.speed',
+									{ speed: formatMegabytesPerSecond(progress.speedBytesPerSecond) },
+								)}{/if}</span
+						>
 					</div>
 				{/if}
 				{#if step.state === 'failed' && step.error}<pre>{step.error}</pre>{/if}

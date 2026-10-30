@@ -7571,5 +7571,22 @@
 	"notify.kind.cluster_node_joined.title": "Knoten {subject} ist dem Cluster beigetreten",
 	"notify.kind.cluster_node_joined.text": "Der Knoten kann jetzt alle Knoten verwalten. Wenn das niemand von euch war: unter Einstellungen › Cluster entfernen und einen neuen Schlüssel erstellen.",
 	"notify.kind.cluster_node_removed.title": "Knoten {subject} wurde aus dem Cluster entfernt",
-	"notify.kind.cluster_node_removed.text": "Der Schlüssel des Clusters wurde erneuert."
+	"notify.kind.cluster_node_removed.text": "Der Schlüssel des Clusters wurde erneuert.",
+	"reconfirm.hint": "Bitte bestätige mit deinem Passwort, dass du es bist.",
+	"reconfirm.hintCode": "Bitte bestätige mit deinem Passwort und einem Code aus der Authenticator-App, dass du es bist.",
+	"error.setup_not_local": "Die Ersteinrichtung ist nur aus dem lokalen Netz möglich.",
+	"error.request_timeout": "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.",
+	"error.automation_direct_forbidden": "Direkt ausführen ist für diese Automation nicht erlaubt: Der Assistent arbeitet global mit Bestätigung.",
+	"automation.directOnlyGlobal": "Direkt ausführen ist nur möglich, wenn der Assistent global direkt ausführt.",
+	"automation.directConfirms": "Diese Automation ist auf „Direkt ausführen“ gestellt, läuft aber mit Bestätigung, weil der Assistent global mit Bestätigung arbeitet.",
+	"assistant.afterWaits": "Wartet auf Bestätigung, weil vorher Inhalte aus {after} gelesen wurden.",
+	"assistant.afterSource.web_search": "Websuche",
+	"assistant.afterSource.web_read": "Webseite",
+	"assistant.afterSource.api_read": "NAS-API",
+	"apps.ownPortHostShort": "NAS",
+	"apps.ownPortContainerShort": "Container",
+	"vms.form.displayNameExample": "Home Assistant",
+	"update.fallbackRemoved": "Für dieses Update war auf dem Stick kein Platz neben der Vorversion – die Rückfall-Version wurde entfernt.",
+	"update.fallbackRemovedFailed": "Achtung: Für dieses Update war auf dem Stick kein Platz neben der Vorversion – die Rückfall-Version wurde entfernt. Es gibt keine ältere Version mehr, zu der das NAS zurückkehren kann. Bitte das Update erneut versuchen, bevor das NAS neu startet.",
+	"backup.skipped": "{n} Links bzw. Spezialdateien übersprungen"
 }

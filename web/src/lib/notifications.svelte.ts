@@ -25,7 +25,10 @@ function readSeen(): number {
 }
 
 /** What happened on the NAS, the newest first; `seen` is the time up to which it was looked at in this browser. */
-export const notifications = $state<{ list: Notice[]; seen: number }>({ list: [], seen: readSeen() });
+export const notifications = $state<{ list: Notice[]; seen: number }>({
+	list: [],
+	seen: readSeen(),
+});
 
 /** What this account wants to see in its bell; the NAS keeps every message. */
 export const bell = $state<{ settings: BellSettings }>({ settings: sanitizeBell(null) });
@@ -41,7 +44,10 @@ export async function loadNotifications() {
 	const request = ++generation;
 	try {
 		const result = await api.get<{ messages: Notice[] }>('/notifications');
-		if (request === generation) { notifications.list = result.messages; soundForNotices(result.messages.filter((notice) => bellShows(bell.settings, notice))); }
+		if (request === generation) {
+			notifications.list = result.messages;
+			soundForNotices(result.messages.filter((notice) => bellShows(bell.settings, notice)));
+		}
 	} catch {
 		// The list stays as it is; the next change brings it again.
 	}
@@ -76,6 +82,6 @@ export function noticeText(notice: Notice): { title: string; text: string } {
 	const fill = (text: string) => text.replaceAll('{subject}', notice.subject);
 	return {
 		title: fill(tOr(`notify.kind.${notice.kind}.title`, notice.title)),
-		text: fill(tOr(`notify.kind.${notice.kind}.text`, notice.text))
+		text: fill(tOr(`notify.kind.${notice.kind}.text`, notice.text)),
 	};
 }

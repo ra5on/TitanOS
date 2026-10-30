@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Status = {
 		config: { bridge: boolean };
@@ -44,18 +45,15 @@
 			if (Date.now() < until) waiting = true;
 			else {
 				waiting = false;
-				error = errorText(err instanceof ApiError ? err.code : 'internal');
+				error = apiErrorText(err);
 			}
 		}
 	}
 	onMount(() => {
-		void load();
-		const timer = setInterval(() => {
-			if (!document.hidden && !busy && (status?.pending || waiting)) void load();
-		}, 2000);
+		const stop = poll(load, { interval: 2000, skip: () => busy || !(status?.pending || waiting) });
 		return () => {
 			disposed = true;
-			clearInterval(timer);
+			stop();
 		};
 	});
 
@@ -101,7 +99,7 @@
 			)
 				waiting = true;
 			else {
-				error = errorText(err instanceof ApiError ? err.code : 'internal');
+				error = apiErrorText(err);
 				until = 0;
 			}
 		} finally {
@@ -115,7 +113,7 @@
 			await api.post(`/network/${action}`, {});
 			await load();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			settling = false;
 		}

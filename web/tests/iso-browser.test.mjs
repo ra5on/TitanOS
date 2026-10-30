@@ -24,8 +24,17 @@ test('ISO search matches every word anywhere in the path, ignoring case', () => 
 		{ path: '/mnt/data/iso/Win11_German.iso', sizeBytes: 2 },
 		{ path: '/mnt/backup/old/debian-12.iso', sizeBytes: 3 },
 	];
-	assert.deepEqual(matchMedia(media, 'debian').map((m) => m.sizeBytes), [1, 3]);
-	assert.deepEqual(matchMedia(media, 'WIN german').map((m) => m.sizeBytes), [2]);
-	assert.deepEqual(matchMedia(media, 'backup debian').map((m) => m.sizeBytes), [3]);
+	assert.deepEqual(
+		matchMedia(media, 'debian').map((m) => m.sizeBytes),
+		[1, 3],
+	);
+	assert.deepEqual(
+		matchMedia(media, 'WIN german').map((m) => m.sizeBytes),
+		[2],
+	);
+	assert.deepEqual(
+		matchMedia(media, 'backup debian').map((m) => m.sizeBytes),
+		[3],
+	);
 	assert.equal(matchMedia(media, '  ').length, 3);
 });

@@ -1,10 +1,11 @@
 <script lang="ts">
+	import ReconfirmFields, { reconfirmComplete } from '#lib/components/ReconfirmFields.svelte';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
@@ -40,7 +41,10 @@
 		copied = $state(false),
 		revoking = $state<Token | null>(null),
 		// Scopes of the token just created, for the snippet with its secret.
-		createdScopes = $state<string[]>([]);
+		createdScopes = $state<string[]>([]),
+		// A new token opens another way into the account: password (and code) first.
+		password = $state(''),
+		code = $state('');
 	let mcp = $state<MCPStatus | null>(null),
 		mcpBusy = $state(false),
 		mcpError = $state(''),
@@ -61,7 +65,7 @@
 		try {
 			mcp = await api.get<MCPStatus>('/system/mcp');
 		} catch (e) {
-			mcpError = errorText(e instanceof ApiError ? e.code : 'internal');
+			mcpError = apiErrorText(e);
 		}
 	}
 	async function setMCP(enabled: boolean) {
@@ -71,7 +75,7 @@
 			await api.put('/system/mcp', { enabled });
 			await loadMCP();
 		} catch (e) {
-			mcpError = errorText(e instanceof ApiError ? e.code : 'internal');
+			mcpError = apiErrorText(e);
 		} finally {
 			mcpBusy = false;
 		}
@@ -89,6 +93,8 @@
 		selected = scopes;
 		creating = true;
 		dialogError = '';
+		password = '';
+		code = '';
 	}
 	async function load() {
 		try {
@@ -96,7 +102,7 @@
 			tokens = res.tokens;
 			scopes = res.scopes;
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 		} finally {
 			loading = false;
 		}
@@ -110,14 +116,23 @@
 		busy = true;
 		dialogError = '';
 		try {
-			const res = await api.post<{ secret: string }>('/account/tokens', { name, scopes: selected });
+			const res = await api.post<{ secret: string }>('/account/tokens', {
+				name,
+				scopes: selected,
+				password,
+				code: code.trim(),
+			});
+			password = '';
+			code = '';
 			secret = res.secret;
 			createdScopes = [...selected];
 			copied = false;
 			creating = false;
 			await load();
 		} catch (e) {
-			dialogError = errorText(e instanceof ApiError ? e.code : 'internal');
+			dialogError = apiErrorText(e);
+			// A used or wrong code cannot be sent again.
+			if (e instanceof ApiError && e.code === 'invalid_code') code = '';
 		} finally {
 			busy = false;
 		}
@@ -131,7 +146,7 @@
 			revoking = null;
 			await load();
 		} catch (e) {
-			dialogError = errorText(e instanceof ApiError ? e.code : 'internal');
+			dialogError = apiErrorText(e);
 		} finally {
 			busy = false;
 		}
@@ -247,11 +262,14 @@
 					>{/each}
 			</fieldset>
 			<p class="muted">{t('api.scopeHint')}</p>
+			<ReconfirmFields bind:password bind:code />
 			{#if dialogError}<div class="notice-error" role="alert">{dialogError}</div>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" disabled={busy} onclick={() => (creating = false)}
 					>{t('common.cancel')}</button
-				><button class="btn btn-primary" disabled={busy || !name.trim() || !selected.length}
+				><button
+					class="btn btn-primary"
+					disabled={busy || !name.trim() || !selected.length || !reconfirmComplete(password, code)}
 					>{t('api.create')}</button
 				>
 			</div>

@@ -4,14 +4,20 @@
 	// where chats are kept, and additions to what the model is told.
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import { AREAS, loadAssistant, loadModels, type AssistantModel, type AssistantSettings } from '#lib/assistant.svelte.ts';
+	import {
+		AREAS,
+		loadAssistant,
+		loadModels,
+		type AssistantModel,
+		type AssistantSettings,
+	} from '#lib/assistant.svelte.ts';
 	import { pullModel } from '#lib/assistant-pull.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import OllamaSetup from './OllamaSetup.svelte';
 	import AgentSettings from '#lib/components/AgentSettings.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatNumber } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 
 	let settings = $state<AssistantSettings | null>(null);
@@ -38,26 +44,39 @@
 	const provider = $derived(settings?.provider || 'ollama');
 	const cloud = $derived(provider !== 'ollama');
 
-	const problem = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
-
 	// What the assistant may do where, as titand decides it without a setting.
 	const DEFAULT_ACCESS: Record<string, 'off' | 'read' | 'write'> = {
-		files: 'write', docker: 'write', vms: 'write', storage: 'write', shares: 'write', backups: 'write', accounts: 'read', system: 'read', updates: 'read', home: 'off', plugins: 'off', network: 'off'
+		files: 'write',
+		docker: 'write',
+		vms: 'write',
+		storage: 'write',
+		shares: 'write',
+		backups: 'write',
+		accounts: 'read',
+		system: 'read',
+		updates: 'read',
+		home: 'off',
+		plugins: 'off',
+		network: 'off',
 	};
-
 
 	async function load() {
 		loadError = '';
 		try {
 			settings = await api.get<AssistantSettings>('/assistant');
-			settings.areas = Object.fromEntries(AREAS.map((a) => [a, settings!.areas?.[a] ?? DEFAULT_ACCESS[a]]));
+			settings.areas = Object.fromEntries(
+				AREAS.map((a) => [a, settings!.areas?.[a] ?? DEFAULT_ACCESS[a]]),
+			);
 			settings.maxSteps ??= 0;
 			if (!settings.provider) settings.provider = 'ollama';
 			settings.openaiBase ??= '';
 			check();
-			api.get<{ apps: typeof found }>('/assistant/ollama-apps').then((res) => (found = res.apps)).catch(() => (found = []));
+			api
+				.get<{ apps: typeof found }>('/assistant/ollama-apps')
+				.then((res) => (found = res.apps))
+				.catch(() => (found = []));
 		} catch (err) {
-			loadError = problem(err);
+			loadError = apiErrorText(err);
 		}
 	}
 	onMount(load);
@@ -80,13 +99,17 @@
 					ollama: settings.ollama,
 					openaiBase: settings.openaiBase ?? '',
 					anthropicKey: clearAnthropic ? '' : anthropicKey,
-					openaiKey: clearOpenai ? '' : openaiKey
+					openaiKey: clearOpenai ? '' : openaiKey,
 				})
 			).models;
 		} catch (err) {
 			models = null;
 			const code = err instanceof ApiError ? err.code : '';
-			checkError = { text: problem(err), detail: code === 'ollama_failed' || code === 'provider_failed' ? (err as ApiError).message : '' };
+			checkError = {
+				text: apiErrorText(err),
+				detail:
+					code === 'ollama_failed' || code === 'provider_failed' ? (err as ApiError).message : '',
+			};
 		}
 		checking = false;
 	}
@@ -118,7 +141,7 @@
 				anthropicKey: clearAnthropic ? '' : anthropicKey,
 				openaiKey: clearOpenai ? '' : openaiKey,
 				clearAnthropicKey: clearAnthropic,
-				clearOpenaiKey: clearOpenai
+				clearOpenaiKey: clearOpenai,
 			});
 			settings.areas = { ...areas, ...settings.areas };
 			anthropicKey = openaiKey = '';
@@ -128,7 +151,7 @@
 			loadModels();
 			saved = true;
 		} catch (err) {
-			error = problem(err);
+			error = apiErrorText(err);
 		}
 		saving = false;
 	}
@@ -144,7 +167,7 @@
 			await pullModel(model, (p) => (pulling = p));
 			pullName = '';
 		} catch (err) {
-			pullError = err instanceof ApiError && err.message ? err.message : problem(err);
+			pullError = err instanceof ApiError && err.message ? err.message : apiErrorText(err);
 		}
 		pulling = null;
 		await check();
@@ -157,20 +180,41 @@
 			if (settings?.model === name) settings.model = '';
 			await check();
 		} catch (err) {
-			error = problem(err);
+			error = apiErrorText(err);
 			removing = null;
 		}
 	}
 
-	const usable = $derived((models ?? []).filter((m) => m.capabilities.length === 0 || m.capabilities.includes('tools')));
-	const choices = $derived(settings?.model && !usable.some((m) => m.name === settings?.model) ? [settings.model, ...usable.map((m) => m.name)] : usable.map((m) => m.name));
+	const usable = $derived(
+		(models ?? []).filter((m) => m.capabilities.length === 0 || m.capabilities.includes('tools')),
+	);
+	const choices = $derived(
+		settings?.model && !usable.some((m) => m.name === settings?.model)
+			? [settings.model, ...usable.map((m) => m.name)]
+			: usable.map((m) => m.name),
+	);
 	const volumes = $derived((storage.status?.volumes ?? []).map((v) => v.name));
-	const capability = (name: string) => t(name === 'tools' ? 'assistant.capTools' : name === 'vision' ? 'assistant.capVision' : name === 'thinking' ? 'assistant.capThinking' : 'assistant.capOther', { name });
+	const capability = (name: string) =>
+		t(
+			name === 'tools'
+				? 'assistant.capTools'
+				: name === 'vision'
+					? 'assistant.capVision'
+					: name === 'thinking'
+						? 'assistant.capThinking'
+						: 'assistant.capOther',
+			{ name },
+		);
 </script>
 
-<PageHead title={t('assistant.settingsTitle')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead
+	title={t('assistant.settingsTitle')}
+	parent={{ href: '/settings', label: t('nav.settings') }}
+/>
 
-{#if loadError}<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button></div>{/if}
+{#if loadError}<div class="notice-error" role="alert">
+		{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button>
+	</div>{/if}
 {#if settings}
 	<form onsubmit={save} class="sections">
 		<section class="tile panel">
@@ -182,7 +226,11 @@
 
 			<label class="stack">
 				<span>{t('assistant.provider')}</span>
-				<select class="field" value={settings.provider} onchange={(e) => switchProvider(e.currentTarget.value)}>
+				<select
+					class="field"
+					value={settings.provider}
+					onchange={(e) => switchProvider(e.currentTarget.value)}
+				>
 					<option value="ollama">{t('assistant.provider.ollama')}</option>
 					<option value="anthropic">{t('assistant.provider.anthropic')}</option>
 					<option value="openai">{t('assistant.provider.openai')}</option>
@@ -196,37 +244,89 @@
 				<label class="stack">
 					<span>{t('assistant.ollama')}</span>
 					<div class="row">
-						<input class="field mono" bind:value={settings.ollama} aria-label={t('assistant.ollama')} placeholder="http://127.0.0.1:11434" spellcheck="false" autocapitalize="none" required />
-						<button type="button" class="btn" onclick={check} disabled={checking}>{t(checking ? 'assistant.checking' : 'assistant.check')}</button>
+						<input
+							class="field mono"
+							bind:value={settings.ollama}
+							aria-label={t('assistant.ollama')}
+							placeholder="http://127.0.0.1:11434"
+							spellcheck="false"
+							autocapitalize="none"
+							required
+						/>
+						<button type="button" class="btn" onclick={check} disabled={checking}
+							>{t(checking ? 'assistant.checking' : 'assistant.check')}</button
+						>
 					</div>
 					<span class="muted small">{t('assistant.ollamaHint')}</span>
 				</label>
 				{#each found.filter((f) => f.address !== settings?.ollama) as app (app.container)}
 					<p class="small">
 						{t('assistant.foundApp', { name: app.container, address: app.address })}
-						<button type="button" class="btn small-btn" onclick={() => { settings!.ollama = app.address; check(); }}>{t('assistant.useApp')}</button>
+						<button
+							type="button"
+							class="btn small-btn"
+							onclick={() => {
+								settings!.ollama = app.address;
+								check();
+							}}>{t('assistant.useApp')}</button
+						>
 					</p>
 				{/each}
 			{:else}
 				{#if provider === 'openai'}
 					<label class="stack">
 						<span>{t('assistant.openaiBase')}</span>
-						<input class="field mono" bind:value={settings.openaiBase} placeholder="https://api.openai.com/v1" spellcheck="false" autocapitalize="none" required />
+						<input
+							class="field mono"
+							bind:value={settings.openaiBase}
+							placeholder="https://api.openai.com/v1"
+							spellcheck="false"
+							autocapitalize="none"
+							required
+						/>
 						<span class="muted small">{t('assistant.openaiBaseHint')}</span>
 					</label>
 				{/if}
-				{@const keySet = provider === 'anthropic' ? settings.anthropicKeySet : settings.openaiKeySet}
+				{@const keySet =
+					provider === 'anthropic' ? settings.anthropicKeySet : settings.openaiKeySet}
 				<label class="stack">
-					<span>{t(provider === 'anthropic' ? 'assistant.anthropicKey' : 'assistant.openaiKey')}</span>
+					<span
+						>{t(provider === 'anthropic' ? 'assistant.anthropicKey' : 'assistant.openaiKey')}</span
+					>
 					<div class="row">
 						{#if provider === 'anthropic'}
-							<input class="field mono" type="password" bind:value={anthropicKey} disabled={clearAnthropic} placeholder={keySet ? t('assistant.keyKeep') : 'sk-ant-…'} autocomplete="off" spellcheck="false" autocapitalize="none" />
+							<input
+								class="field mono"
+								type="password"
+								bind:value={anthropicKey}
+								disabled={clearAnthropic}
+								placeholder={keySet ? t('assistant.keyKeep') : 'sk-ant-…'}
+								autocomplete="off"
+								spellcheck="false"
+								autocapitalize="none"
+							/>
 						{:else}
-							<input class="field mono" type="password" bind:value={openaiKey} disabled={clearOpenai} placeholder={keySet ? t('assistant.keyKeep') : 'sk-…'} autocomplete="off" spellcheck="false" autocapitalize="none" />
+							<input
+								class="field mono"
+								type="password"
+								bind:value={openaiKey}
+								disabled={clearOpenai}
+								placeholder={keySet ? t('assistant.keyKeep') : 'sk-…'}
+								autocomplete="off"
+								spellcheck="false"
+								autocapitalize="none"
+							/>
 						{/if}
-						<button type="button" class="btn" onclick={check} disabled={checking}>{t(checking ? 'assistant.checking' : 'assistant.check')}</button>
+						<button type="button" class="btn" onclick={check} disabled={checking}
+							>{t(checking ? 'assistant.checking' : 'assistant.check')}</button
+						>
 					</div>
-					<span class="muted small">{t(keySet ? 'assistant.keySet' : 'assistant.keyNone')} {t(provider === 'anthropic' ? 'assistant.anthropicKeyHint' : 'assistant.openaiKeyHint')}</span>
+					<span class="muted small"
+						>{t(keySet ? 'assistant.keySet' : 'assistant.keyNone')}
+						{t(
+							provider === 'anthropic' ? 'assistant.anthropicKeyHint' : 'assistant.openaiKeyHint',
+						)}</span
+					>
 				</label>
 				{#if keySet}
 					<label class="check">
@@ -240,15 +340,28 @@
 				{/if}
 			{/if}
 			{#if checkError}
-				<div class="notice-warn" role="alert">{checkError.text}{#if checkError.detail}<br /><span class="mono small">{checkError.detail}</span>{/if}</div>
+				<div class="notice-warn" role="alert">
+					{checkError.text}{#if checkError.detail}<br /><span class="mono small"
+							>{checkError.detail}</span
+						>{/if}
+				</div>
 			{:else if models}
-				<p class="ok" role="status">{t(cloud ? 'assistant.reachableCloud' : 'assistant.reachable', { count: models.length })}</p>
+				<p class="ok" role="status">
+					{t(cloud ? 'assistant.reachableCloud' : 'assistant.reachable', { count: models.length })}
+				</p>
 			{/if}
 
 			<label class="stack">
 				<span>{t('assistant.defaultModel')}</span>
 				{#if cloud}
-					<input class="field mono" bind:value={settings.model} list="assistant-cloud-models" placeholder={provider === 'anthropic' ? 'claude-sonnet-5-5' : 'gpt-…'} spellcheck="false" autocapitalize="none" />
+					<input
+						class="field mono"
+						bind:value={settings.model}
+						list="assistant-cloud-models"
+						placeholder={provider === 'anthropic' ? 'claude-sonnet-5-5' : 'gpt-…'}
+						spellcheck="false"
+						autocapitalize="none"
+					/>
 					<datalist id="assistant-cloud-models">
 						{#each choices as model (model)}<option value={model}></option>{/each}
 					</datalist>
@@ -281,7 +394,11 @@
 			</label>
 			<p class="muted">{t('assistant.webText')}</p>
 			<label class="check indent">
-				<input type="checkbox" bind:checked={settings.webUsers} disabled={!settings.web || !settings.users} />
+				<input
+					type="checkbox"
+					bind:checked={settings.webUsers}
+					disabled={!settings.web || !settings.users}
+				/>
 				<span>{t('assistant.webUsers')}</span>
 			</label>
 			<p class="muted">{t('assistant.actionsText')}</p>
@@ -291,9 +408,17 @@
 					<tbody>
 						{#each AREAS as area (area)}
 							<tr>
-								<td><strong>{t(`assistant.area.${area}`)}</strong><br /><span class="muted small">{t(`assistant.areaText.${area}`)}</span></td>
+								<td
+									><strong>{t(`assistant.area.${area}`)}</strong><br /><span class="muted small"
+										>{t(`assistant.areaText.${area}`)}</span
+									></td
+								>
 								<td>
-									<select class="field" bind:value={settings.areas[area]} aria-label={t(`assistant.area.${area}`)}>
+									<select
+										class="field"
+										bind:value={settings.areas[area]}
+										aria-label={t(`assistant.area.${area}`)}
+									>
 										<option value="off">{t('assistant.access.off')}</option>
 										<option value="read">{t('assistant.access.read')}</option>
 										<option value="write">{t('assistant.access.write')}</option>
@@ -314,7 +439,9 @@
 				<select class="field" bind:value={settings.volume}>
 					<option value="">{t('assistant.volumeFirst')}</option>
 					{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
-					{#if settings.volume && !volumes.includes(settings.volume)}<option value={settings.volume}>{settings.volume}</option>{/if}
+					{#if settings.volume && !volumes.includes(settings.volume)}<option value={settings.volume}
+							>{settings.volume}</option
+						>{/if}
 				</select>
 				<span class="muted small">{t('assistant.volumeHint')}</span>
 			</label>
@@ -324,18 +451,38 @@
 			<h2 class="tile-title" id="assistant-advanced">{t('assistant.advanced')}</h2>
 			<label class="stack">
 				<span>{t('assistant.prompt')}</span>
-				<textarea class="field" bind:value={settings.prompt} rows="4" maxlength="24000" placeholder={t('assistant.promptPlaceholder')}></textarea>
+				<textarea
+					class="field"
+					bind:value={settings.prompt}
+					rows="4"
+					maxlength="24000"
+					placeholder={t('assistant.promptPlaceholder')}></textarea>
 				<span class="muted small">{t('assistant.promptHint')}</span>
 			</label>
 			<div class="pair">
 				<label class="stack">
 					<span>{t('assistant.numCtx')}</span>
-					<input class="field mono" type="number" min="0" max="1048576" step="1024" bind:value={settings.numCtx} />
+					<input
+						class="field mono"
+						type="number"
+						min="0"
+						max="1048576"
+						step="1024"
+						bind:value={settings.numCtx}
+					/>
 					<span class="muted small">{t('assistant.numCtxHint')}</span>
 				</label>
 				<label class="stack">
 					<span>{t('assistant.temperature')}</span>
-					<input class="field mono" type="number" min="0" max="2" step="0.1" bind:value={settings.temperature} placeholder="–" />
+					<input
+						class="field mono"
+						type="number"
+						min="0"
+						max="2"
+						step="0.1"
+						bind:value={settings.temperature}
+						placeholder="–"
+					/>
 					<span class="muted small">{t('assistant.temperatureHint')}</span>
 				</label>
 			</div>
@@ -351,43 +498,84 @@
 	</form>
 
 	{#if !cloud}
-	<section class="tile panel" aria-labelledby="assistant-models">
-		<h2 class="tile-title" id="assistant-models">{t('assistant.models')}</h2>
-		{#if models}
-			<div class="table">
-				<table>
-					<thead><tr><th>{t('assistant.modelName')}</th><th>{t('assistant.modelSize')}</th><th>{t('assistant.modelCan')}</th><th><span class="sr-only">{t('assistant.modelActions')}</span></th></tr></thead>
-					<tbody>
-						{#each models as model (model.name)}
-							<tr>
-								<td class="mono">{model.name}{#if model.parameters}<span class="muted">{` · ${model.parameters}`}</span>{/if}</td>
-								<td class="mono">{formatBytes(model.sizeBytes)}{#if model.contextLength}<span class="muted">{` · ${t('assistant.context', { count: formatNumber(model.contextLength) })}`}</span>{/if}</td>
-								<td>
-									{#each model.capabilities.filter((c) => c !== 'completion') as cap (cap)}<span class="chip">{capability(cap)}</span>{/each}
-									{#if model.capabilities.length > 0 && !model.capabilities.includes('tools')}<span class="warn">{t('assistant.noToolsModel')}</span>{/if}
-								</td>
-								<td class="end"><button type="button" class="btn small-btn" onclick={() => (removing = model.name)}>{t('assistant.delete')}</button></td>
-							</tr>
-						{:else}
-							<tr><td colspan="4" class="muted">{t('assistant.noModels')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-		<form class="row pull" onsubmit={pull}>
-			<input class="field mono" bind:value={pullName} placeholder="qwen3:8b" aria-label={t('assistant.pullName')} spellcheck="false" autocapitalize="none" disabled={!!pulling} />
-			<button type="submit" class="btn" disabled={!!pulling || !pullName.trim() || !models}>{t('assistant.pull')}</button>
-		</form>
-		{#if pulling}
-			<div class="progress" role="status">
-				<span class="small">{pulling.status || t('assistant.pulling')}{#if pulling.total}{` · ${formatBytes(pulling.completed)} / ${formatBytes(pulling.total)}`}{/if}</span>
-				{#if pulling.total}<div class="bar"><span style:width="{Math.round((pulling.completed / pulling.total) * 100)}%"></span></div>{/if}
-			</div>
-		{/if}
-		{#if pullError}<p class="notice-error" role="alert">{pullError}</p>{/if}
-		<p class="muted small">{t('assistant.pullHint')} {t('assistant.pullChangeHint')}</p>
-	</section>
+		<section class="tile panel" aria-labelledby="assistant-models">
+			<h2 class="tile-title" id="assistant-models">{t('assistant.models')}</h2>
+			{#if models}
+				<div class="table">
+					<table>
+						<thead
+							><tr
+								><th>{t('assistant.modelName')}</th><th>{t('assistant.modelSize')}</th><th
+									>{t('assistant.modelCan')}</th
+								><th><span class="sr-only">{t('assistant.modelActions')}</span></th></tr
+							></thead
+						>
+						<tbody>
+							{#each models as model (model.name)}
+								<tr>
+									<td class="mono"
+										>{model.name}{#if model.parameters}<span class="muted"
+												>{` · ${model.parameters}`}</span
+											>{/if}</td
+									>
+									<td class="mono"
+										>{formatBytes(model.sizeBytes)}{#if model.contextLength}<span class="muted"
+												>{` · ${t('assistant.context', { count: formatNumber(model.contextLength) })}`}</span
+											>{/if}</td
+									>
+									<td>
+										{#each model.capabilities.filter((c) => c !== 'completion') as cap (cap)}<span
+												class="chip">{capability(cap)}</span
+											>{/each}
+										{#if model.capabilities.length > 0 && !model.capabilities.includes('tools')}<span
+												class="warn">{t('assistant.noToolsModel')}</span
+											>{/if}
+									</td>
+									<td class="end"
+										><button
+											type="button"
+											class="btn small-btn"
+											onclick={() => (removing = model.name)}>{t('assistant.delete')}</button
+										></td
+									>
+								</tr>
+							{:else}
+								<tr><td colspan="4" class="muted">{t('assistant.noModels')}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+			<form class="row pull" onsubmit={pull}>
+				<input
+					class="field mono"
+					bind:value={pullName}
+					placeholder="qwen3:8b"
+					aria-label={t('assistant.pullName')}
+					spellcheck="false"
+					autocapitalize="none"
+					disabled={!!pulling}
+				/>
+				<button type="submit" class="btn" disabled={!!pulling || !pullName.trim() || !models}
+					>{t('assistant.pull')}</button
+				>
+			</form>
+			{#if pulling}
+				<div class="progress" role="status">
+					<span class="small"
+						>{pulling.status ||
+							t(
+								'assistant.pulling',
+							)}{#if pulling.total}{` · ${formatBytes(pulling.completed)} / ${formatBytes(pulling.total)}`}{/if}</span
+					>
+					{#if pulling.total}<div class="bar">
+							<span style:width="{Math.round((pulling.completed / pulling.total) * 100)}%"></span>
+						</div>{/if}
+				</div>
+			{/if}
+			{#if pullError}<p class="notice-error" role="alert">{pullError}</p>{/if}
+			<p class="muted small">{t('assistant.pullHint')} {t('assistant.pullChangeHint')}</p>
+		</section>
 	{/if}
 {:else if !loadError}
 	<p class="loading" role="status">{t('common.loading')}</p>
@@ -403,8 +591,12 @@
 	<Dialog title={t('assistant.deleteModel')} onclose={() => (removing = null)}>
 		<p>{t('assistant.deleteModelText', { name })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" onclick={() => removeModel(name)}>{t('assistant.delete')}</button>
+			<button type="button" class="btn" onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" onclick={() => removeModel(name)}
+				>{t('assistant.delete')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

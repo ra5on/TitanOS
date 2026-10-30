@@ -2,11 +2,19 @@
 	// GuC/HuC firmware loading of Intel graphics (Gen9 to Gen11 on i915) and
 	// what the kernel loaded. Asked for once when the page opens: the status
 	// may read the stick and the kernel log.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { activeMode, applicableGPUs, gucModes, hucState, type GucMode, type IntelGPU, type IntelGucStatus } from '#lib/intel-gpu.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import {
+		activeMode,
+		applicableGPUs,
+		gucModes,
+		hucState,
+		type GucMode,
+		type IntelGPU,
+		type IntelGucStatus,
+	} from '#lib/intel-gpu.ts';
 
 	let status = $state<IntelGucStatus | null>(null);
 	let error = $state('');
@@ -22,7 +30,7 @@
 				status = res;
 				mode = res.mode;
 			},
-			(err) => (error = errorText(err instanceof ApiError ? err.code : 'internal'))
+			(err) => (error = apiErrorText(err)),
 		);
 	}
 	$effect(load);
@@ -41,7 +49,7 @@
 			mode = status.mode;
 			saved = true;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -59,7 +67,8 @@
 	const fileParts = (file: string) => file.split(/(?<=[/_])/);
 	const firmwareText = (gpu: IntelGPU, kind: 'guc' | 'huc') => {
 		const fw = gpu[kind];
-		if (fw.loaded && fw.version) return t('intelGuc.fwLoaded', { file: fw.loaded, version: fw.version });
+		if (fw.loaded && fw.version)
+			return t('intelGuc.fwLoaded', { file: fw.loaded, version: fw.version });
 		if (fw.state === 'disabled') return t('intelGuc.fwOff');
 		if (fw.state) return t('intelGuc.fwState', { state: fw.state });
 		return t('intelGuc.fwUnknown');
@@ -71,8 +80,18 @@
 		<h2 class="tile-title" id="hw-intel">{t('intelGuc.title')}</h2>
 		{#each status.gpus as gpu (gpu.address)}
 			<div class="gpu divided">
-				<span class="name">{gpu.name ? t('intelGuc.platform', { name: gpu.name, gen: gpu.generation }) : t('intelGuc.otherIntel')}</span>
-				<span class="muted mono">{gpu.address} · 8086:{gpu.device} · {gpu.driver ? t('hardware.driver', { driver: gpu.driver }) : t('hardware.noDriver')} · {gpu.renderNode ? `/dev/dri/${gpu.renderNode}` : t('intelGuc.noRender')}</span>
+				<span class="name"
+					>{gpu.name
+						? t('intelGuc.platform', { name: gpu.name, gen: gpu.generation })
+						: t('intelGuc.otherIntel')}</span
+				>
+				<span class="muted mono"
+					>{gpu.address} · 8086:{gpu.device} · {gpu.driver
+						? t('hardware.driver', { driver: gpu.driver })
+						: t('hardware.noDriver')} · {gpu.renderNode
+						? `/dev/dri/${gpu.renderNode}`
+						: t('intelGuc.noRender')}</span
+				>
 				{#if gpu.driver === 'xe'}
 					<span class="muted">{t('intelGuc.xe')}</span>
 				{:else if gpu.driver === 'i915' && !gpu.platform}
@@ -84,8 +103,13 @@
 					<dl>
 						<dt>HuC</dt>
 						<dd>
-							<span class="chip" class:ok={hucState(gpu) === 'loaded'} class:error={hucState(gpu) === 'failed'}>{t(`intelGuc.huc.${hucState(gpu)}`)}</span>
-							{#if hucState(gpu) !== 'off'}<span class="muted mono">{firmwareText(gpu, 'huc')}</span>{/if}
+							<span
+								class="chip"
+								class:ok={hucState(gpu) === 'loaded'}
+								class:error={hucState(gpu) === 'failed'}>{t(`intelGuc.huc.${hucState(gpu)}`)}</span
+							>
+							{#if hucState(gpu) !== 'off'}<span class="muted mono">{firmwareText(gpu, 'huc')}</span
+								>{/if}
 						</dd>
 						<dt>GuC</dt>
 						<dd><span class="muted mono">{firmwareText(gpu, 'guc')}</span></dd>
@@ -99,9 +123,12 @@
 								{#each [gpu.huc, gpu.guc] as fw, n (n)}
 									<span
 										><span class="mono file" title={fw.file}
-											>{#each fileParts(fw.file) as part, i (i)}{#if i}<wbr />{/if}{part}{/each}</span
+											>{#each fileParts(fw.file) as part, i (i)}{#if i}<wbr
+													/>{/if}{part}{/each}</span
 										>
-										<span class="muted">{fw.present ? t('intelGuc.present') : t('intelGuc.absent')}</span></span
+										<span class="muted"
+											>{fw.present ? t('intelGuc.present') : t('intelGuc.absent')}</span
+										></span
 									>
 								{/each}
 							</dd>
@@ -121,12 +148,26 @@
 					<p class="muted">{t('intelGuc.intro')}</p>
 					{#each gucModes as value (value)}
 						<label class="check">
-							<input type="radio" name="intel-guc" {value} bind:group={mode} onchange={() => (saved = false)} />
-							<span><strong>{t(`intelGuc.mode.${value}`)}</strong><br /><span class="muted">{t(`intelGuc.mode.${value}.hint`)}</span></span>
+							<input
+								type="radio"
+								name="intel-guc"
+								{value}
+								bind:group={mode}
+								onchange={() => (saved = false)}
+							/>
+							<span
+								><strong>{t(`intelGuc.mode.${value}`)}</strong><br /><span class="muted"
+									>{t(`intelGuc.mode.${value}.hint`)}</span
+								></span
+							>
 						</label>
 					{/each}
 					{#if mode === 'guc'}
-						<p class="notice-warn" role="status">{applicable.some((gpu) => gpu.submission) ? t('intelGuc.gucWarn') : t('intelGuc.gucWarnGen9')}</p>
+						<p class="notice-warn" role="status">
+							{applicable.some((gpu) => gpu.submission)
+								? t('intelGuc.gucWarn')
+								: t('intelGuc.gucWarnGen9')}
+						</p>
 					{/if}
 					{#if applicable.some((gpu) => !gpu.huc.present) && mode !== 'auto'}
 						<p class="notice-warn" role="status">{t('intelGuc.missingFirmware')}</p>
@@ -134,18 +175,26 @@
 				</fieldset>
 				{#if !status.writable}<p class="muted">{t('intelGuc.notWritable')}</p>{/if}
 				<p class="muted small">
-					{t('intelGuc.running', { mode: running === 'other' ? status.active : t(`intelGuc.mode.${running}`) })}
+					{t('intelGuc.running', {
+						mode: running === 'other' ? status.active : t(`intelGuc.mode.${running}`),
+					})}
 					{#if status.param}· {t('intelGuc.param', { value: status.param })}{/if}
 				</p>
-				{#if !status.managed && status.active}<p class="muted small">{t('intelGuc.manual', { value: status.active })}</p>{/if}
+				{#if !status.managed && status.active}<p class="muted small">
+						{t('intelGuc.manual', { value: status.active })}
+					</p>{/if}
 				<div class="row-actions">
-					<button class="btn" disabled={!status.writable || busy || !changed}>{t('common.save')}</button>
+					<button class="btn" disabled={!status.writable || busy || !changed}
+						>{t('common.save')}</button
+					>
 					{#if saved}<span role="status">{t('intelGuc.saved')}</span>{/if}
 				</div>
 				{#if status.restartNeeded}
 					<div class="notice-warn row" role="status">
 						<span>{status.deferred ? t('intelGuc.deferred') : t('intelGuc.afterRestart')}</span>
-						<button type="button" class="btn" onclick={() => (restarting = true)}>{t('update.restartNow')}</button>
+						<button type="button" class="btn" onclick={() => (restarting = true)}
+							>{t('update.restartNow')}</button
+						>
 					</div>
 				{/if}
 				{#if status.problem}<p class="notice-error" role="alert">{status.problem}</p>{/if}
@@ -161,8 +210,12 @@
 	<Dialog title={t('intelGuc.confirmTitle')} onclose={() => (confirming = false)}>
 		<p>{t('intelGuc.confirmText')}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (confirming = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={save}>{t('intelGuc.confirmAction')}</button>
+			<button type="button" class="btn" onclick={() => (confirming = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-warn" onclick={save}
+				>{t('intelGuc.confirmAction')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

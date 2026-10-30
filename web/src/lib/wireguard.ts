@@ -46,5 +46,10 @@ export function validEndpoint(host: string): boolean {
 	const value = host.trim();
 	if (!value) return true;
 	if (value.includes(':')) return /^[0-9a-fA-F:]+$/.test(value);
-	return /^[A-Za-z0-9.-]{1,253}$/.test(value) && !value.startsWith('.') && !value.endsWith('.') && !value.includes('..');
+	return (
+		/^[A-Za-z0-9.-]{1,253}$/.test(value) &&
+		!value.startsWith('.') &&
+		!value.endsWith('.') &&
+		!value.includes('..')
+	);
 }

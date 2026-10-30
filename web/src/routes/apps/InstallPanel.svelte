@@ -24,7 +24,7 @@
 		type Template,
 		type VarField,
 	} from '#lib/compose/template.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type Props = {
@@ -37,7 +37,15 @@
 		dirty?: boolean;
 		onclose: () => void;
 	};
-	let { app, source, description, docker, shares, dirty = $bindable(false), onclose }: Props = $props();
+	let {
+		app,
+		source,
+		description,
+		docker,
+		shares,
+		dirty = $bindable(false),
+		onclose,
+	}: Props = $props();
 
 	let tpl = $state<Template | null>(null);
 	let form = $state<InstallForm | null>(null);
@@ -104,7 +112,7 @@
 			},
 			(err) =>
 				(loadError = {
-					text: errorText(err instanceof ApiError ? err.code : 'internal'),
+					text: apiErrorText(err),
 					detail: '',
 				}),
 		);
@@ -590,7 +598,7 @@
 									type="text"
 									inputmode="numeric"
 									bind:value={row.host}
-									placeholder="NAS"
+									placeholder={t('apps.ownPortHostShort')}
 									aria-label={t('apps.ownPortHost')}
 								/>
 								<span class="muted" aria-hidden="true">→</span>
@@ -599,7 +607,7 @@
 									type="text"
 									inputmode="numeric"
 									bind:value={row.container}
-									placeholder="Container"
+									placeholder={t('apps.ownPortContainerShort')}
 									aria-label={t('apps.ownPortContainer')}
 								/>
 								<select
@@ -631,18 +639,17 @@
 		{/if}
 
 		{#if form && view === 'form' && Object.keys(selectedHardware).length > 0}
-			<div class="body"><section aria-labelledby="install-hardware">
-				<h3 id="install-hardware">{t('apps.hardware')}</h3>
-				{#each Object.keys(selectedHardware) as serviceName (serviceName)}
-					<fieldset class="box">
-						<legend class="mono">{serviceName}</legend>
-						<HardwarePicker
-							bind:selected={selectedHardware[serviceName]}
-							onchange={markEdited}
-						/>
-					</fieldset>
-				{/each}
-			</section></div>
+			<div class="body">
+				<section aria-labelledby="install-hardware">
+					<h3 id="install-hardware">{t('apps.hardware')}</h3>
+					{#each Object.keys(selectedHardware) as serviceName (serviceName)}
+						<fieldset class="box">
+							<legend class="mono">{serviceName}</legend>
+							<HardwarePicker bind:selected={selectedHardware[serviceName]} onchange={markEdited} />
+						</fieldset>
+					{/each}
+				</section>
+			</div>
 		{/if}
 		{#if error}
 			<div class="body">

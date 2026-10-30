@@ -7,7 +7,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDateTime, formatNumber } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
 		isSmartList,
@@ -66,7 +66,7 @@
 		} catch (err) {
 			if (selected !== disk) return;
 			detail = null;
-			detailError = errorText(err instanceof ApiError ? err.code : 'internal');
+			detailError = apiErrorText(err);
 		}
 		detailLoading = false;
 	}

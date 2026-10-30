@@ -1,15 +1,27 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	// Confirmation before a restart or shutdown, and the waiting screen after it.
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from './Dialog.svelte';
 
 	type Props = { action: 'restart' | 'shutdown'; onclose: () => void };
 	let { action, onclose }: Props = $props();
 
-	type Item = { kind: 'vm' | 'lxc' | 'docker'; name: string; state: 'stopping' | 'stopped' | 'failed'; error?: string };
-	type Preparing = { action: 'reboot' | 'poweroff'; by: string; phase: 'stopping' | 'waiting' | 'going' | 'failed'; items: Item[]; error?: string };
+	type Item = {
+		kind: 'vm' | 'lxc' | 'docker';
+		name: string;
+		state: 'stopping' | 'stopped' | 'failed';
+		error?: string;
+	};
+	type Preparing = {
+		action: 'reboot' | 'poweroff';
+		by: string;
+		phase: 'stopping' | 'waiting' | 'going' | 'failed';
+		items: Item[];
+		error?: string;
+	};
 	type PowerStatus = {
 		pending: { action: string; by: string; since: string } | null;
 		rebuilding: boolean;
@@ -44,8 +56,8 @@
 	// While preparing, the list follows the guests.
 	$effect(() => {
 		if (phase !== 'preparing') return;
-		const timer = setInterval(load, 2000);
-		return () => clearInterval(timer);
+		// Not paused in a hidden tab: the end of the shutdown must be noticed.
+		return poll(load, { interval: 2000, immediate: false, pauseHidden: false });
 	});
 
 	function finish() {
@@ -68,7 +80,7 @@
 				return;
 			}
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			phase = 'confirm';
 			return;
 		}
@@ -86,7 +98,7 @@
 		try {
 			await api.post('/system/power/now', {});
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	}
 
@@ -96,7 +108,7 @@
 			status = await api.delete<PowerStatus>('/system/power');
 			if (phase === 'preparing') onclose();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	}
 
@@ -124,21 +136,31 @@
 <Dialog
 	title={t(
 		phase === 'preparing'
-			? restart ? 'power.preparingRestart' : 'power.preparingShutdown'
+			? restart
+				? 'power.preparingRestart'
+				: 'power.preparingShutdown'
 			: phase !== 'done'
-				? restart ? 'power.restartTitle' : 'power.shutdownTitle'
-				: restart ? 'power.restarting' : 'power.shuttingDown'
+				? restart
+					? 'power.restartTitle'
+					: 'power.shutdownTitle'
+				: restart
+					? 'power.restarting'
+					: 'power.shuttingDown',
 	)}
 	locked={phase === 'working' || phase === 'done' || phase === 'preparing'}
 	{onclose}
 >
 	{#if phase === 'waiting'}
-		<p role="status">{t(action === 'restart' ? 'power.waitingRestart' : 'power.waitingShutdown')}</p>
+		<p role="status">
+			{t(action === 'restart' ? 'power.waitingRestart' : 'power.waitingShutdown')}
+		</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
 		</div>
 	{:else if phase === 'preparing'}
-		<p class="muted" role="status">{t(restart ? 'power.preparingTextRestart' : 'power.preparingTextShutdown')}</p>
+		<p class="muted" role="status">
+			{t(restart ? 'power.preparingTextRestart' : 'power.preparingTextShutdown')}
+		</p>
 		{#if preparing && preparing.items.length}
 			<ul class="items" aria-live="polite">
 				{#each preparing.items as item (item.kind + ':' + item.name)}
@@ -158,24 +180,37 @@
 			<p class="muted">{t('power.preparingNothing')}</p>
 		{/if}
 		{#if preparing?.phase === 'waiting'}
-			<p class="notice-warn" role="alert">{t('power.stuck', { names: stuck.map((item) => item.name).join(', ') })}</p>
+			<p class="notice-warn" role="alert">
+				{t('power.stuck', { names: stuck.map((item) => item.name).join(', ') })}
+			</p>
 		{/if}
 		{#if preparing?.phase === 'failed'}
-			<p class="notice-error" role="alert">{t('power.goingFailed', { error: preparing.error ?? '' })}</p>
+			<p class="notice-error" role="alert">
+				{t('power.goingFailed', { error: preparing.error ?? '' })}
+			</p>
 		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<p class="muted small">{t('power.callOffHint')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={cancelWaiting}>{t('power.callOff')}</button>
-			<button type="button" class="btn btn-danger" onclick={anyway} disabled={preparing?.phase === 'going'}>
+			<button
+				type="button"
+				class="btn btn-danger"
+				onclick={anyway}
+				disabled={preparing?.phase === 'going'}
+			>
 				{t(restart ? 'power.anywayRestart' : 'power.anywayShutdown')}
 			</button>
 		</div>
 	{:else if phase !== 'done'}
 		{#if status?.pending}
 			<div class="notice-warn" role="status">
-				{t(status.pending.action === 'reboot' ? 'power.pendingRestart' : 'power.pendingShutdown', { user: status.pending.by })}
-				<button type="button" class="btn small" onclick={cancelWaiting}>{t('power.cancelWaiting')}</button>
+				{t(status.pending.action === 'reboot' ? 'power.pendingRestart' : 'power.pendingShutdown', {
+					user: status.pending.by,
+				})}
+				<button type="button" class="btn small" onclick={cancelWaiting}
+					>{t('power.cancelWaiting')}</button
+				>
 			</div>
 		{/if}
 		<ul>
@@ -183,15 +218,25 @@
 			<li><span class="dot" aria-hidden="true"></span>{t('power.workloadsNote')}</li>
 			<li><span class="dot" aria-hidden="true"></span>{t('power.maintenanceNote')}</li>
 			<li><span class="dot" aria-hidden="true"></span>{t('power.diskTestNote')}</li>
-			{#if action === 'shutdown'}<li class="muted"><span class="dot" aria-hidden="true"></span>{t('power.wakeOnLanNote')}</li>{/if}
-			<li class="muted"><span class="dot" aria-hidden="true"></span>{t(action === 'restart' ? 'power.restartNote' : 'power.shutdownNote')}</li>
+			{#if action === 'shutdown'}<li class="muted">
+					<span class="dot" aria-hidden="true"></span>{t('power.wakeOnLanNote')}
+				</li>{/if}
+			<li class="muted">
+				<span class="dot" aria-hidden="true"></span>{t(
+					action === 'restart' ? 'power.restartNote' : 'power.shutdownNote',
+				)}
+			</li>
 		</ul>
 		{#if status?.rebuilding}
-			<label class="check"><input type="checkbox" bind:checked={afterRebuild} />{t('power.afterRebuild')}</label>
+			<label class="check"
+				><input type="checkbox" bind:checked={afterRebuild} />{t('power.afterRebuild')}</label
+			>
 		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose} disabled={phase === 'working'}>{t('common.cancel')}</button>
+			<button type="button" class="btn" onclick={onclose} disabled={phase === 'working'}
+				>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-warn" onclick={confirm} disabled={phase === 'working'}>
 				{t(action === 'restart' ? 'power.restartAction' : 'power.shutdownAction')}
 			</button>

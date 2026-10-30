@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The folder restores of this NAS with progress, cancel and dismiss.
 	// Refreshes every two seconds while one runs and the page is visible.
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { formatBytes, formatBytesOf } from '#lib/format.ts';
@@ -26,11 +27,10 @@
 		}
 	}
 	onMount(() => {
-		load();
-		const timer = setInterval(() => {
-			if (!document.hidden && jobs.some((job) => job.state === 'running')) load();
-		}, 2000);
-		return () => clearInterval(timer);
+		return poll(load, {
+			interval: 2000,
+			skip: () => !jobs.some((job) => job.state === 'running'),
+		});
 	});
 	async function act(job: FolderRestoreJob, cancel: boolean) {
 		busy = job.id;

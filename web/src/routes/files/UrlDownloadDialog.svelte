@@ -6,7 +6,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
 		downloadName,
 		validDigest,
@@ -66,7 +66,7 @@
 			probe = result;
 			if (!nameEdited && result.name) name = result.name;
 		} catch (err) {
-			if (run === probeRun) probeError = errorText(err instanceof ApiError ? err.code : 'internal');
+			if (run === probeRun) probeError = apiErrorText(err);
 		} finally {
 			if (run === probeRun) probing = false;
 		}
@@ -134,7 +134,10 @@
 				>{t(probing ? 'files.urlProbing' : 'files.urlProbe')}</button
 			>
 			{#if probe}<span class="muted small"
-					>{probe.size >= 0 ? formatBytes(probe.size) : t('files.urlSizeUnknown')}{#if probe.type}{' · '}<span class="mono">{probe.type}</span>{/if}</span
+					>{probe.size >= 0
+						? formatBytes(probe.size)
+						: t('files.urlSizeUnknown')}{#if probe.type}{' · '}<span class="mono">{probe.type}</span
+						>{/if}</span
 				>{/if}
 		</div>
 		{#if probeError}<p class="notice-warn small" role="status">{probeError}</p>{/if}

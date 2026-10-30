@@ -27,7 +27,9 @@
 
 <div class="page-head">
 	<div class="title">
-		{#if parent}<p class="muted crumbs"><a href={parent.href}>{parent.label}</a> › {crumb ?? title}</p>{/if}
+		{#if parent}<p class="muted crumbs">
+				<a href={parent.href}>{parent.label}</a> › {crumb ?? title}
+			</p>{/if}
 		<h1 {id}>{title}</h1>
 		{@render children?.()}
 	</div>

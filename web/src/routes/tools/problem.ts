@@ -31,7 +31,8 @@ export function problemText(raw: string, translate: (key: MessageKey) => string)
 	for (const [pattern, key] of KNOWN) {
 		if (pattern.test(message)) {
 			// Waiting reasons and persistence errors carry useful detail.
-			const keep = key === 'ops.err.waiting' || key === 'ops.err.persist' || key === 'ops.err.invalid';
+			const keep =
+				key === 'ops.err.waiting' || key === 'ops.err.persist' || key === 'ops.err.invalid';
 			return { text: translate(key), detail: keep ? message : '' };
 		}
 	}
@@ -40,7 +41,10 @@ export function problemText(raw: string, translate: (key: MessageKey) => string)
 
 /** A translated text for a failed request. */
 export function requestProblem(err: unknown, translate: (key: MessageKey) => string): Problem {
-	if (err instanceof ApiError && !['operation_failed', 'bad_request', 'unavailable'].includes(err.code))
+	if (
+		err instanceof ApiError &&
+		!['operation_failed', 'bad_request', 'unavailable'].includes(err.code)
+	)
 		return { text: errorText(err.code), detail: '' };
 	return problemText(err instanceof Error ? err.message : String(err), translate);
 }

@@ -1,12 +1,20 @@
 <script lang="ts">
 	// On a new stick: put a saved configuration back instead of setting
 	// the NAS up again. Shown on the setup page.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Found = { name: string; device: string; label: string; time: string; hostname: string; version: string; newer?: boolean };
+	type Found = {
+		name: string;
+		device: string;
+		label: string;
+		time: string;
+		hostname: string;
+		version: string;
+		newer?: boolean;
+	};
 	type Source = { kind: 'found'; backup: Found } | { kind: 'file'; file: File };
 
 	let found = $state<Found[]>([]);
@@ -33,7 +41,7 @@
 				found = res.backups.slice(0, 10);
 				searchError = '';
 			} catch (err) {
-				searchError = errorText(err instanceof ApiError ? err.code : 'internal');
+				searchError = apiErrorText(err);
 			}
 			if (stopped) return;
 			if (found.length === 0 && Date.now() - started < searchFor) timer = setTimeout(look, 10_000);
@@ -47,7 +55,11 @@
 	});
 
 	function entry(backup: Found): string {
-		return t('restore.entry', { time: formatDateTime(new Date(backup.time)), hostname: backup.hostname, version: backup.version });
+		return t('restore.entry', {
+			time: formatDateTime(new Date(backup.time)),
+			hostname: backup.hostname,
+			version: backup.version,
+		});
 	}
 
 	function pick(event: Event) {
@@ -65,10 +77,14 @@
 		error = '';
 		phase = 'working';
 		try {
-			if (source.kind === 'found') await api.post('/setup/restore', { device: source.backup.device, name: source.backup.name });
+			if (source.kind === 'found')
+				await api.post('/setup/restore', {
+					device: source.backup.device,
+					name: source.backup.name,
+				});
 			else await api.post('/setup/restore/upload', source.file);
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			phase = 'idle';
 			cancel();
 			return;
@@ -88,7 +104,10 @@
 		const timer = setInterval(async () => {
 			slow = Date.now() - started > 120_000;
 			try {
-				const res = await fetch('/api/v1/session', { credentials: 'same-origin', signal: AbortSignal.timeout(2500) });
+				const res = await fetch('/api/v1/session', {
+					credentials: 'same-origin',
+					signal: AbortSignal.timeout(2500),
+				});
 				if (res.ok && wentDown) {
 					clearInterval(timer);
 					location.reload();
@@ -106,7 +125,11 @@
 		<p class="muted">{t('restore.restartingHint')}</p>
 		{#if slow}
 			<p class="notice-warn">{t('restore.slow')}</p>
-			<div><button type="button" class="btn" onclick={() => location.reload()}>{t('restore.reload')}</button></div>
+			<div>
+				<button type="button" class="btn" onclick={() => location.reload()}
+					>{t('restore.reload')}</button
+				>
+			</div>
 		{/if}
 	</div>
 {:else}
@@ -115,25 +138,46 @@
 			<p class="name">{t('restore.found')}</p>
 			<p class="muted">{t('restore.foundText')}</p>
 			{#if found.length > 1}
-				<label><span class="muted">{t('restore.choose')}</span>
+				<label
+					><span class="muted">{t('restore.choose')}</span>
 					<select class="field" bind:value={chosen}>
-						{#each found as backup, index (backup.device + backup.name)}<option value={index}>{entry(backup)}</option>{/each}
+						{#each found as backup, index (backup.device + backup.name)}<option value={index}
+								>{entry(backup)}</option
+							>{/each}
 					</select>
 				</label>
 			{:else}
 				<p>{entry(found[0])}</p>
 			{/if}
-			{#if found[chosen]?.newer}<p class="notice-warn" role="alert">{t('restore.newer', { version: found[chosen].version })}</p>{/if}
-			<button type="button" class="btn btn-primary" disabled={phase !== 'idle'} onclick={() => (source = { kind: 'found', backup: found[chosen] })}>{t('restore.button')}</button>
+			{#if found[chosen]?.newer}<p class="notice-warn" role="alert">
+					{t('restore.newer', { version: found[chosen].version })}
+				</p>{/if}
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={phase !== 'idle'}
+				onclick={() => (source = { kind: 'found', backup: found[chosen] })}
+				>{t('restore.button')}</button
+			>
 		</div>
 	{/if}
-	{#if found.length === 0 && searching}<p class="muted" role="status">{t('restore.searching')}</p>{/if}
-	{#if found.length === 0 && searchError}<p class="notice-warn">{t('restore.searchFailed', { error: searchError })}</p>{/if}
+	{#if found.length === 0 && searching}<p class="muted" role="status">
+			{t('restore.searching')}
+		</p>{/if}
+	{#if found.length === 0 && searchError}<p class="notice-warn">
+			{t('restore.searchFailed', { error: searchError })}
+		</p>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<details>
 		<summary>{t('restore.fromFile')}</summary>
 		<p class="muted">{t('restore.fileHint')}</p>
-		<input bind:this={picker} type="file" accept=".gz,.tgz,application/gzip" onchange={pick} disabled={phase !== 'idle'} />
+		<input
+			bind:this={picker}
+			type="file"
+			accept=".gz,.tgz,application/gzip"
+			onchange={pick}
+			disabled={phase !== 'idle'}
+		/>
 	</details>
 	{#if found.length > 0}<p class="muted or">{t('restore.or')}</p>{/if}
 {/if}
@@ -142,12 +186,18 @@
 	<Dialog title={t('restore.confirmTitle')} locked={phase === 'working'} onclose={cancel}>
 		<p class="mono what">{source.kind === 'found' ? entry(source.backup) : source.file.name}</p>
 		<p>{t('restore.confirmText')}</p>
-		{#if source.kind === 'found' && source.backup.newer}<p class="notice-warn">{t('restore.newer', { version: source.backup.version })}</p>{/if}
+		{#if source.kind === 'found' && source.backup.newer}<p class="notice-warn">
+				{t('restore.newer', { version: source.backup.version })}
+			</p>{/if}
 		<p class="notice-warn">{t('restore.confirmAddress')}</p>
 		{#if phase === 'working'}<p class="muted" role="status">{t('restore.working')}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={cancel} disabled={phase === 'working'}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" onclick={restore} disabled={phase === 'working'}>{t('restore.button')}</button>
+			<button type="button" class="btn" onclick={cancel} disabled={phase === 'working'}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={restore} disabled={phase === 'working'}
+				>{t('restore.button')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

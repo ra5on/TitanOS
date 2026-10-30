@@ -18,7 +18,9 @@
 	const searching = $derived(settingsSearch.query.trim() !== '');
 	const states = $derived(settingsStates());
 	const path = $derived(page.url.pathname.replace(/\/$/, ''));
-	const active = $derived(searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1);
+	const active = $derived(
+		searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1,
+	);
 
 	function current(id: string): boolean {
 		return path === `/settings/${id}` || path.startsWith(`/settings/${id}/`);

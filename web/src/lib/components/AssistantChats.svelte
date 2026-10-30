@@ -1,10 +1,18 @@
 <script lang="ts">
 	// The chats of this account: search, open, rename, delete.
 	import { onMount } from 'svelte';
-	import { assistant, deleteAllChats, deleteChat, loadChats, newChat, openChat, renameChat, setPrefs } from '#lib/assistant.svelte.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import {
+		assistant,
+		deleteAllChats,
+		deleteChat,
+		loadChats,
+		newChat,
+		openChat,
+		renameChat,
+		setPrefs,
+	} from '#lib/assistant.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { ApiError } from '#lib/api.ts';
 	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
 
@@ -37,7 +45,7 @@
 			renaming = null;
 			removing = null;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	}
 
@@ -46,10 +54,26 @@
 
 <div class="chats">
 	<div class="top">
-		<input class="field" type="search" value={assistant.search} oninput={search} placeholder={t('assistant.searchChats')} aria-label={t('assistant.searchChats')} />
-		<button type="button" class="btn btn-primary" onclick={() => { newChat(); onopen?.(); }}><Icon name="plus" size={14} />{t('assistant.new')}</button>
+		<input
+			class="field"
+			type="search"
+			value={assistant.search}
+			oninput={search}
+			placeholder={t('assistant.searchChats')}
+			aria-label={t('assistant.searchChats')}
+		/>
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => {
+				newChat();
+				onopen?.();
+			}}><Icon name="plus" size={14} />{t('assistant.new')}</button
+		>
 	</div>
-	{#if !assistant.status?.persistent}<p class="notice-warn small" role="note">{t('assistant.memoryOnly')}</p>{/if}
+	{#if !assistant.status?.persistent}<p class="notice-warn small" role="note">
+			{t('assistant.memoryOnly')}
+		</p>{/if}
 	<ul>
 		{#each assistant.chats as chat (chat.id)}
 			<li class:current={chat.id === assistant.chatId}>
@@ -57,30 +81,71 @@
 					<span class="title">{chat.title || t('assistant.untitled')}</span>
 					<span class="muted small">{when(chat.updated)}</span>
 				</button>
-				<button type="button" class="mini" aria-label={t('assistant.rename')} title={t('assistant.rename')} onclick={() => (renaming = { id: chat.id, title: chat.title })}><Icon name="edit" size={14} /></button>
-				<button type="button" class="mini" aria-label={t('assistant.deleteChat')} title={t('assistant.deleteChat')} onclick={() => (removing = { id: chat.id, title: chat.title })} disabled={assistant.busy && chat.id === assistant.chatId}><Icon name="trash" size={14} /></button>
+				<button
+					type="button"
+					class="mini"
+					aria-label={t('assistant.rename')}
+					title={t('assistant.rename')}
+					onclick={() => (renaming = { id: chat.id, title: chat.title })}
+					><Icon name="edit" size={14} /></button
+				>
+				<button
+					type="button"
+					class="mini"
+					aria-label={t('assistant.deleteChat')}
+					title={t('assistant.deleteChat')}
+					onclick={() => (removing = { id: chat.id, title: chat.title })}
+					disabled={assistant.busy && chat.id === assistant.chatId}
+					><Icon name="trash" size={14} /></button
+				>
 			</li>
 		{:else}
-			<li class="none muted">{t(assistant.search ? 'assistant.noMatches' : 'assistant.noChats')}</li>
+			<li class="none muted">
+				{t(assistant.search ? 'assistant.noMatches' : 'assistant.noChats')}
+			</li>
 		{/each}
 	</ul>
 	{#if assistant.chats.length > 1 && !assistant.search}
-		<button type="button" class="btn all" onclick={() => (removing = 'all')} disabled={assistant.busy}>{t('assistant.deleteAll')}</button>
+		<button
+			type="button"
+			class="btn all"
+			onclick={() => (removing = 'all')}
+			disabled={assistant.busy}>{t('assistant.deleteAll')}</button
+		>
 	{/if}
 	<label class="pref">
-		<input type="checkbox" checked={assistant.prefs.floating} onchange={(event) => setPrefs({ floating: event.currentTarget.checked })} />
+		<input
+			type="checkbox"
+			checked={assistant.prefs.floating}
+			onchange={(event) => setPrefs({ floating: event.currentTarget.checked })}
+		/>
 		<span class="muted">{t('assistant.floating')}</span>
 	</label>
 </div>
 
 {#if renaming}
 	<Dialog title={t('assistant.rename')} onclose={() => (renaming = null)}>
-		<form onsubmit={(event) => { event.preventDefault(); const r = renaming!; act(() => renameChat(r.id, r.title)); }}>
+		<form
+			onsubmit={(event) => {
+				event.preventDefault();
+				const r = renaming!;
+				act(() => renameChat(r.id, r.title));
+			}}
+		>
 			<!-- svelte-ignore a11y_autofocus -->
-			<input class="field" bind:value={renaming.title} maxlength="120" aria-label={t('assistant.chatTitle')} required autofocus />
+			<input
+				class="field"
+				bind:value={renaming.title}
+				maxlength="120"
+				aria-label={t('assistant.chatTitle')}
+				required
+				autofocus
+			/>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (renaming = null)}>{t('common.cancel')}</button>
+				<button type="button" class="btn" onclick={() => (renaming = null)}
+					>{t('common.cancel')}</button
+				>
 				<button type="submit" class="btn btn-primary">{t('assistant.save')}</button>
 			</div>
 		</form>
@@ -88,12 +153,28 @@
 {/if}
 
 {#if removing}
-	<Dialog title={removing === 'all' ? t('assistant.deleteAll') : t('assistant.deleteChat')} onclose={() => (removing = null)}>
-		<p>{removing === 'all' ? t('assistant.deleteAllText') : t('assistant.deleteChatText', { title: removing.title || t('assistant.untitled') })}</p>
+	<Dialog
+		title={removing === 'all' ? t('assistant.deleteAll') : t('assistant.deleteChat')}
+		onclose={() => (removing = null)}
+	>
+		<p>
+			{removing === 'all'
+				? t('assistant.deleteAllText')
+				: t('assistant.deleteChatText', { title: removing.title || t('assistant.untitled') })}
+		</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" onclick={() => { const r = removing!; act(() => (r === 'all' ? deleteAllChats() : deleteChat(r.id))); }}>{t('assistant.delete')}</button>
+			<button type="button" class="btn" onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				onclick={() => {
+					const r = removing!;
+					act(() => (r === 'all' ? deleteAllChats() : deleteChat(r.id)));
+				}}>{t('assistant.delete')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

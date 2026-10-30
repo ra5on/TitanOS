@@ -10,35 +10,69 @@ function fixture(t) {
 	let resize;
 	let disconnected = false;
 	t.mock.property(globalThis, 'window', window);
-	t.mock.property(globalThis, 'ResizeObserver', class {
-		constructor(callback) { resize = callback; }
-		observe() {}
-		disconnect() { disconnected = true; }
-	});
+	t.mock.property(
+		globalThis,
+		'ResizeObserver',
+		class {
+			constructor(callback) {
+				resize = callback;
+			}
+			observe() {}
+			disconnect() {
+				disconnected = true;
+			}
+		},
+	);
 	const classes = new Set();
 	const nav = Object.assign(new EventTarget(), {
-		scrollLeft: 0, clientWidth: 300, scrollWidth: 900, clientHeight: 40,
+		scrollLeft: 0,
+		clientWidth: 300,
+		scrollWidth: 900,
+		clientHeight: 40,
 		classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c) },
 		getBoundingClientRect: () => ({ left: 100, right: 400, top: 0, width: 300 }),
-		setPointerCapture: (id) => { nav.captured = id; },
+		setPointerCapture: (id) => {
+			nav.captured = id;
+		},
 		hasPointerCapture: (id) => nav.captured === id,
-		releasePointerCapture: () => { nav.captured = undefined; }
+		releasePointerCapture: () => {
+			nav.captured = undefined;
+		},
 	});
 	const items = { scrollWidth: 900, querySelector: () => null };
 	nav.firstElementChild = items;
 	const shell = { clientWidth: 360, querySelector: () => nav };
 	let state;
-	const action = horizontalNav(shell, (s) => { state = s; });
+	const action = horizontalNav(shell, (s) => {
+		state = s;
+	});
 	t.after(() => action.destroy());
 	const fire = (target, type, props = {}) => {
 		const event = Object.assign(new Event(type, { cancelable: true }), {
-			pointerType: 'mouse', pointerId: 1, button: 0, buttons: 1,
-			clientX: 300, clientY: 20, detail: 1, ...props
+			pointerType: 'mouse',
+			pointerId: 1,
+			button: 0,
+			buttons: 1,
+			clientX: 300,
+			clientY: 20,
+			detail: 1,
+			...props,
 		});
 		target.dispatchEvent(event);
 		return event;
 	};
-	return { window, nav, items, shell, action, fire, resize: () => resize(), state: () => state, classes, disconnected: () => disconnected };
+	return {
+		window,
+		nav,
+		items,
+		shell,
+		action,
+		fire,
+		resize: () => resize(),
+		state: () => state,
+		classes,
+		disconnected: () => disconnected,
+	};
 }
 
 test('ordinary clicks, modified clicks, touch and native scrollbar keep their native behavior', (t) => {
@@ -85,7 +119,9 @@ test('cancelled drag does not block keyboard navigation or leave listeners behin
 test('resizing keeps active tab visible and reports both scroll boundaries', (t) => {
 	const f = fixture(t);
 	assert.deepEqual(f.state(), { overflow: true, left: false, right: true });
-	f.items.querySelector = () => ({ getBoundingClientRect: () => ({ left: 420, right: 500, width: 80 }) });
+	f.items.querySelector = () => ({
+		getBoundingClientRect: () => ({ left: 420, right: 500, width: 80 }),
+	});
 	f.resize();
 	assert.equal(f.nav.scrollLeft, 100);
 	f.nav.scrollLeft = 600;

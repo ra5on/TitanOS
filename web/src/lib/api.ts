@@ -70,13 +70,19 @@ async function request<T>(
 	}
 }
 
+// The answer type is never guessed from where the result goes: without a type
+// argument it is `unknown`, so every read names what it expects (api.get<Share[]>).
 export const api = {
-	get: <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal),
-	post: <T>(path: string, body?: Body, signal?: AbortSignal) =>
+	get: <T = unknown>(path: string, signal?: AbortSignal): Promise<NoInfer<T>> =>
+		request<T>('GET', path, undefined, signal),
+	post: <T = unknown>(path: string, body?: Body, signal?: AbortSignal): Promise<NoInfer<T>> =>
 		request<T>('POST', path, body, signal),
-	put: <T>(path: string, body?: Body) => request<T>('PUT', path, body),
-	patch: <T>(path: string, body?: Body) => request<T>('PATCH', path, body),
-	delete: <T>(path: string, body?: Body) => request<T>('DELETE', path, body),
+	put: <T = unknown>(path: string, body?: Body): Promise<NoInfer<T>> =>
+		request<T>('PUT', path, body),
+	patch: <T = unknown>(path: string, body?: Body): Promise<NoInfer<T>> =>
+		request<T>('PATCH', path, body),
+	delete: <T = unknown>(path: string, body?: Body): Promise<NoInfer<T>> =>
+		request<T>('DELETE', path, body),
 };
 
 export type Role = 'owner' | 'admin' | 'user';
@@ -464,7 +470,11 @@ export type AppProxyRoute = {
 	domains?: string[];
 	urls: string[];
 	/** The route's own device in the tailnet (0.30.0 and later). */
-	tailnet?: { state: 'starting' | 'login' | 'running' | 'https-off' | 'stopped' | 'error'; url?: string; error?: string };
+	tailnet?: {
+		state: 'starting' | 'login' | 'running' | 'https-off' | 'stopped' | 'error';
+		url?: string;
+		error?: string;
+	};
 };
 
 export type AppProxyStatus = {
@@ -574,7 +584,7 @@ export type VM = {
 };
 
 export type VMStatus = {
- networks?: import('./network.ts').NASNetwork[];
+	networks?: import('./network.ts').NASNetwork[];
 	/** Whether the machine has hardware virtualization. */
 	kvm: boolean;
 	/** Whether the bridge is set up that gives VMs an address of their own. */

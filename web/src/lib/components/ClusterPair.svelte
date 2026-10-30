@@ -3,10 +3,10 @@
 	// (POST /cluster/nodes/{id}/backup-pair): that node creates the source,
 	// the data goes through the cluster. Hidden outside a cluster and while
 	// the tab manages another node.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import { clusterNodes } from '#lib/cluster.svelte.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	let { onpair }: { onpair: (code: string) => void } = $props();
 
@@ -25,7 +25,7 @@
 			);
 			onpair(res.code);
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}

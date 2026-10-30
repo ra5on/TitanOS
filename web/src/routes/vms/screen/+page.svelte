@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	// The screen of a VM in a window of its own: nothing but the picture.
 	import { page } from '$app/state';
-	import { api, ApiError, type VMStatus } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api, type VMStatus } from '#lib/api.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import VncScreen, { type ScaleMode, type ConnectionPhase } from '../VncScreen.svelte';
 
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
@@ -18,13 +19,12 @@
 
 	$effect(() => {
 		const vmName = name;
-		let disposed = false;
 		running = null;
 		error = '';
-		const check = async () => {
+		const check = async (signal: AbortSignal) => {
 			try {
-				const res = await api.get<VMStatus>('/vms');
-				if (disposed) return;
+				const res = await api.get<VMStatus>('/vms', signal);
+				if (signal.aborted) return;
 				const vm = res.vms.find((vm) => vm.name === vmName);
 				running = vm?.state === 'running';
 				displayName = vm ? vmLabel(vm) : vmName;
@@ -32,15 +32,10 @@
 				if (!resizable && mode === 'remote') mode = 'scale';
 				error = vm ? '' : errorText('vm_not_found');
 			} catch (err) {
-				if (!disposed) error = errorText(err instanceof ApiError ? err.code : 'internal');
+				if (!signal.aborted) error = apiErrorText(err);
 			}
 		};
-		check();
-		const timer = setInterval(check, 3000);
-		return () => {
-			disposed = true;
-			clearInterval(timer);
-		};
+		return poll(check, { interval: 3000 });
 	});
 </script>
 
@@ -64,7 +59,13 @@
 		{:else if running === null}<span class="muted" role="status">{t('common.loading')}</span>
 		{:else if !running}<span class="muted">{t('vms.off', { name: displayName || name })}</span>
 		{:else if connectionPhase !== 'connected'}<span class="muted" role="status"
-				>{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}</span
+				>{t(
+					connectionPhase === 'disabled'
+						? 'vms.screenDisabled'
+						: connectionPhase === 'lost'
+							? 'vms.screenLost'
+							: 'vms.screenConnecting',
+				)}</span
 			>{/if}
 		<span class="grow"></span>
 		<button type="button" onclick={() => screen?.ctrlAltDel()} disabled={!running}

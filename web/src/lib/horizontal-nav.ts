@@ -10,13 +10,22 @@ export function horizontalNav(shell: HTMLElement, onChange: (state: ScrollState)
 	let startScroll = 0;
 	let dragged = false;
 	let suppressClick = false;
-	const update = () => onChange({
-		overflow: items.scrollWidth > shell.clientWidth + 1,
-		left: nav.scrollLeft > 1,
-		right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1
-	});
+	const update = () =>
+		onChange({
+			overflow: items.scrollWidth > shell.clientWidth + 1,
+			left: nav.scrollLeft > 1,
+			right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1,
+		});
 	const down = (event: PointerEvent) => {
-		if (event.pointerType !== 'mouse' || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+		if (
+			event.pointerType !== 'mouse' ||
+			event.button !== 0 ||
+			event.ctrlKey ||
+			event.metaKey ||
+			event.shiftKey ||
+			event.altKey
+		)
+			return;
 		// Let the native scrollbar handle clicks and thumb dragging itself.
 		if (event.clientY >= nav.getBoundingClientRect().top + nav.clientHeight) return;
 		pointer = event.pointerId;
@@ -26,7 +35,10 @@ export function horizontalNav(shell: HTMLElement, onChange: (state: ScrollState)
 	};
 	const move = (event: PointerEvent) => {
 		if (pointer !== event.pointerId) return;
-		if (!(event.buttons & 1)) { end(); return; }
+		if (!(event.buttons & 1)) {
+			end();
+			return;
+		}
 		const delta = event.clientX - startX;
 		if (!dragged && Math.abs(delta) < 5) return;
 		if (!dragged) {
@@ -56,7 +68,8 @@ export function horizontalNav(shell: HTMLElement, onChange: (state: ScrollState)
 		if (active) {
 			const box = active.getBoundingClientRect();
 			const viewport = nav.getBoundingClientRect();
-			if (box.left < viewport.left || box.width > viewport.width) nav.scrollLeft += box.left - viewport.left;
+			if (box.left < viewport.left || box.width > viewport.width)
+				nav.scrollLeft += box.left - viewport.left;
 			else if (box.right > viewport.right) nav.scrollLeft += box.right - viewport.right;
 		}
 		update();
@@ -71,16 +84,18 @@ export function horizontalNav(shell: HTMLElement, onChange: (state: ScrollState)
 	nav.addEventListener('lostpointercapture', end);
 	nav.addEventListener('click', click, true);
 	update();
-	return { destroy() {
-		end();
-		observer.disconnect();
-		nav.removeEventListener('scroll', update);
-		nav.removeEventListener('pointerdown', down);
-		window.removeEventListener('pointermove', move);
-		window.removeEventListener('pointerup', end);
-		window.removeEventListener('pointercancel', end);
-		window.removeEventListener('blur', end);
-		nav.removeEventListener('lostpointercapture', end);
-		nav.removeEventListener('click', click, true);
-	} };
+	return {
+		destroy() {
+			end();
+			observer.disconnect();
+			nav.removeEventListener('scroll', update);
+			nav.removeEventListener('pointerdown', down);
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', end);
+			window.removeEventListener('pointercancel', end);
+			window.removeEventListener('blur', end);
+			nav.removeEventListener('lostpointercapture', end);
+			nav.removeEventListener('click', click, true);
+		},
+	};
 }

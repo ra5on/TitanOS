@@ -19,7 +19,10 @@
 		if (!aside) return;
 		const covered = terminal.open && !terminal.full ? terminal.height : 0;
 		const pad = parseFloat(getComputedStyle(aside).getPropertyValue('--page-pad')) || 20;
-		room = Math.max(160, window.innerHeight - Math.max(aside.getBoundingClientRect().top, 0) - covered - pad);
+		room = Math.max(
+			160,
+			window.innerHeight - Math.max(aside.getBoundingClientRect().top, 0) - covered - pad,
+		);
 	}
 	$effect(() => {
 		void terminal.open;
@@ -40,7 +43,9 @@
 		};
 	});
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	const allowed = $derived(admin || userSettingsPaths.includes(page.url.pathname.replace(/\/$/, '')));
+	const allowed = $derived(
+		admin || userSettingsPaths.includes(page.url.pathname.replace(/\/$/, '')),
+	);
 	const overview = $derived(page.url.pathname.replace(/\/$/, '') === '/settings');
 	// The states beside some areas are read once when the settings open, not
 	// on every page change inside them and never on a timer.
@@ -52,7 +57,11 @@
 <!-- A sidebar beside every settings page (desktop); on phones the overview is
      the list and the pages behind it get a way back instead. -->
 <div class="settings-shell" class:overview>
-	<div class="settings-aside tile" bind:this={aside} style:max-height={room ? `${room}px` : undefined}>
+	<div
+		class="settings-aside tile"
+		bind:this={aside}
+		style:max-height={room ? `${room}px` : undefined}
+	>
 		<SettingsSidebar />
 	</div>
 	<div class="settings-main">

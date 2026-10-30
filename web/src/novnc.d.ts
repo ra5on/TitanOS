@@ -1,7 +1,11 @@
 // noVNC ships without types; this is the part of it the VM screen uses.
 declare module '@novnc/novnc' {
 	export default class RFB extends EventTarget {
-		constructor(target: HTMLElement, url: string, options?: { wsProtocols?: string[]; shared?: boolean });
+		constructor(
+			target: HTMLElement,
+			url: string,
+			options?: { wsProtocols?: string[]; shared?: boolean },
+		);
 		scaleViewport: boolean;
 		resizeSession: boolean;
 		clipViewport: boolean;

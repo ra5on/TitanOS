@@ -5,13 +5,16 @@
 // a script.
 
 export function escapeHtml(text: string): string {
-	return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+	return text.replace(
+		/[&<>"']/g,
+		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+	);
 }
 
 const NAME = '[A-Za-z0-9_.-]{1,64}';
 /** Pages of the web UI the assistant may link to. */
 const PAGE = new RegExp(
-	`^/(?:|storage|shares|files|users|docker|docker/apps/${NAME}|apps|vms|vms\\?vm=${NAME}|plugins|tools|account|assistant|settings|settings/[a-z-]{2,30})$`
+	`^/(?:|storage|shares|files|users|docker|docker/apps/${NAME}|apps|vms|vms\\?vm=${NAME}|plugins|tools|account|assistant|settings|settings/[a-z-]{2,30})$`,
 );
 
 /** Reports whether a path is a page of the web UI the assistant may link to. */
@@ -43,20 +46,40 @@ const ROW = /^\s*\|.*\|\s*$/;
 const RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 
 function cells(line: string): string[] {
-	return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => inline(cell.trim()));
+	return line
+		.trim()
+		.replace(/^\|/, '')
+		.replace(/\|$/, '')
+		.split('|')
+		.map((cell) => inline(cell.trim()));
 }
 
 function table(lines: string[]): string {
 	const [head, , ...body] = lines;
-	const th = cells(head).map((c) => `<th>${c}</th>`).join('');
-	const rows = body.map((line) => `<tr>${cells(line).map((c) => `<td>${c}</td>`).join('')}</tr>`).join('');
+	const th = cells(head)
+		.map((c) => `<th>${c}</th>`)
+		.join('');
+	const rows = body
+		.map(
+			(line) =>
+				`<tr>${cells(line)
+					.map((c) => `<td>${c}</td>`)
+					.join('')}</tr>`,
+		)
+		.join('');
 	return `<div class="table"><table><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function block(paragraph: string): string {
 	const lines = paragraph.split('\n').filter((line) => line.trim() !== '');
 	if (lines.length === 0) return '';
-	if (lines.length >= 2 && ROW.test(lines[0]) && RULE.test(lines[1]) && lines.slice(2).every((l) => ROW.test(l))) return table(lines);
+	if (
+		lines.length >= 2 &&
+		ROW.test(lines[0]) &&
+		RULE.test(lines[1]) &&
+		lines.slice(2).every((l) => ROW.test(l))
+	)
+		return table(lines);
 	const out: string[] = [];
 	const open: { list: { tag: 'ul' | 'ol'; items: string[] } | null } = { list: null };
 	let text: string[] = [];
@@ -66,7 +89,10 @@ function block(paragraph: string): string {
 	};
 	const flushList = () => {
 		const list = open.list;
-		if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`);
+		if (list)
+			out.push(
+				`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`,
+			);
 		open.list = null;
 	};
 	for (const line of lines) {
@@ -96,6 +122,13 @@ function block(paragraph: string): string {
 export function chatMarkdown(text: string): string {
 	return escapeHtml(text)
 		.split(/```[A-Za-z0-9_+-]*\n?/)
-		.map((part, index) => (index % 2 === 1 ? `<pre><code>${part.replace(/\n$/, '')}</code></pre>` : part.split(/\n{2,}/).map(block).join('')))
+		.map((part, index) =>
+			index % 2 === 1
+				? `<pre><code>${part.replace(/\n$/, '')}</code></pre>`
+				: part
+						.split(/\n{2,}/)
+						.map(block)
+						.join(''),
+		)
 		.join('');
 }

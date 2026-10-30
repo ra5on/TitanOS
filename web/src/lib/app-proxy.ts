@@ -276,14 +276,7 @@ export function tailnetPort(members: Ports[], primary?: Ports | null): number {
 
 /** Where a published app stands, as the dialog shows it. */
 export type TailnetStep =
-	| 'off'
-	| 'start'
-	| 'login'
-	| 'https-off'
-	| 'error'
-	| 'check'
-	| 'ready'
-	| 'unreachable';
+	'off' | 'start' | 'login' | 'https-off' | 'error' | 'check' | 'ready' | 'unreachable';
 
 type TailnetRoute = {
 	enabled: boolean;

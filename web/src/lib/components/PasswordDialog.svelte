@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Changes a password: one's own (needs the current one) or, as an
 	// administrator, someone else's.
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from './Dialog.svelte';
 
 	type Props = { name: string; self: boolean; onclose: () => void };
@@ -32,7 +32,7 @@
 			await api.post(`/users/${name}/password`, self ? { password, current } : { password });
 			onclose();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			working = false;
 		}
 	}
@@ -44,23 +44,46 @@
 			<label>
 				<span>{t('users.currentPassword')}</span>
 				<!-- svelte-ignore a11y_autofocus -->
-				<input class="field" type="password" bind:value={current} autocomplete="current-password" required autofocus />
+				<input
+					class="field"
+					type="password"
+					bind:value={current}
+					autocomplete="current-password"
+					required
+					autofocus
+				/>
 			</label>
 		{/if}
 		<label>
 			<span>{t('users.newPassword')}</span>
-			<input class="field" type="password" bind:value={password} autocomplete="new-password" required />
+			<input
+				class="field"
+				type="password"
+				bind:value={password}
+				autocomplete="new-password"
+				required
+			/>
 			<small>{t('auth.passwordHint', { min: MIN_PASSWORD_LENGTH })}</small>
 		</label>
 		<label>
 			<span>{t('auth.passwordRepeat')}</span>
-			<input class="field" type="password" bind:value={repeat} autocomplete="new-password" required />
+			<input
+				class="field"
+				type="password"
+				bind:value={repeat}
+				autocomplete="new-password"
+				required
+			/>
 		</label>
 		<p class="muted note">{t('users.passwordNote')}</p>
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={working}>{t('users.savePassword')}</button>
+			<button type="button" class="btn" onclick={onclose} disabled={working}
+				>{t('common.cancel')}</button
+			>
+			<button type="submit" class="btn btn-primary" disabled={working}
+				>{t('users.savePassword')}</button
+			>
 		</div>
 	</form>
 </Dialog>

@@ -1,20 +1,30 @@
 import { api } from '../api.ts';
-import { cssVariables, dataAttributes, defaultAppearance, sanitizeAppearance, type Appearance } from './themes.ts';
+import {
+	cssVariables,
+	dataAttributes,
+	defaultAppearance,
+	sanitizeAppearance,
+	type Appearance,
+} from './themes.ts';
 
 const CACHE_KEY = 'titanos.appearance';
 
 /** The appearance in use, and whether the system prefers a light theme (for "auto"). */
 export const appearance = $state<{ current: Appearance; systemLight: boolean }>({
 	current: defaultAppearance(),
-	systemLight: false
+	systemLight: false,
 });
 
 function apply() {
 	const root = document.documentElement;
-	for (const [name, value] of Object.entries(cssVariables(appearance.current, appearance.systemLight))) {
+	for (const [name, value] of Object.entries(
+		cssVariables(appearance.current, appearance.systemLight),
+	)) {
 		root.style.setProperty(name, value);
 	}
-	for (const [name, value] of Object.entries(dataAttributes(appearance.current, appearance.systemLight))) {
+	for (const [name, value] of Object.entries(
+		dataAttributes(appearance.current, appearance.systemLight),
+	)) {
 		root.setAttribute(name, value);
 	}
 }

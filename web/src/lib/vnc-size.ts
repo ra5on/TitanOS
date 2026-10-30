@@ -4,14 +4,20 @@ export const VNC_HEIGHT = { min: 240, max: 2000, default: 620 };
 export const VNC_WIDTH = { min: 320, max: 4000 };
 
 export function vncHeight(value: unknown): number {
-	const height = value && typeof value === 'object' ? (value as Record<string, unknown>).height : undefined;
-	return typeof height === 'number' && Number.isFinite(height) ? Math.round(Math.max(VNC_HEIGHT.min, Math.min(VNC_HEIGHT.max, height))) : VNC_HEIGHT.default;
+	const height =
+		value && typeof value === 'object' ? (value as Record<string, unknown>).height : undefined;
+	return typeof height === 'number' && Number.isFinite(height)
+		? Math.round(Math.max(VNC_HEIGHT.min, Math.min(VNC_HEIGHT.max, height)))
+		: VNC_HEIGHT.default;
 }
 
 /** The stored width, or null for the full width of the column. */
 export function vncWidth(value: unknown): number | null {
-	const width = value && typeof value === 'object' ? (value as Record<string, unknown>).width : undefined;
-	return typeof width === 'number' && Number.isFinite(width) ? Math.round(Math.max(VNC_WIDTH.min, Math.min(VNC_WIDTH.max, width))) : null;
+	const width =
+		value && typeof value === 'object' ? (value as Record<string, unknown>).width : undefined;
+	return typeof width === 'number' && Number.isFinite(width)
+		? Math.round(Math.max(VNC_WIDTH.min, Math.min(VNC_WIDTH.max, width)))
+		: null;
 }
 
 /**

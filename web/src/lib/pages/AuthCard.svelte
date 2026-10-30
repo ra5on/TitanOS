@@ -7,7 +7,12 @@
 	import Logo from '#lib/components/Logo.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
 	import { i18n } from '#lib/i18n/index.svelte.ts';
-	import { loginAppearance, loginBackgroundURL, loginTexts, type LoginLook } from '#lib/login/look.ts';
+	import {
+		loginAppearance,
+		loginBackgroundURL,
+		loginTexts,
+		type LoginLook,
+	} from '#lib/login/look.ts';
 	import { loginLook } from '#lib/login/state.svelte.ts';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { cssVariables, dataAttributes } from '#lib/theme/themes.ts';
@@ -25,7 +30,15 @@
 		/** URL of a picked image that is not saved yet. */
 		imageURL?: string;
 	};
-	let { title, hostname = '', children, look, texts = false, preview = false, imageURL = '' }: Props = $props();
+	let {
+		title,
+		hostname = '',
+		children,
+		look,
+		texts = false,
+		preview = false,
+		imageURL = '',
+	}: Props = $props();
 
 	const current = $derived(look === undefined ? loginLook.value : look);
 	const resolved = $derived(loginAppearance(current, appearance.current));
@@ -36,9 +49,11 @@
 			? Object.entries(cssVariables(effective.appearance, appearance.systemLight))
 					.map(([name, value]) => `${name}: ${value}`)
 					.join('; ')
-			: undefined
+			: undefined,
 	);
-	const attributes = $derived(effective.scoped ? dataAttributes(effective.appearance, appearance.systemLight) : {});
+	const attributes = $derived(
+		effective.scoped ? dataAttributes(effective.appearance, appearance.systemLight) : {},
+	);
 	const picture = $derived(loginBackgroundURL(current, imageURL));
 	const words = $derived(texts ? loginTexts(current, i18n.locale, title) : { title, notice: '' });
 	const position = $derived(current?.position ?? 'center');
@@ -50,8 +65,14 @@
 		const timer = setInterval(() => (now = new Date()), 1000);
 		return () => clearInterval(timer);
 	});
-	const time = $derived(new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(now));
-	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { weekday: 'long', day: 'numeric', month: 'long' }).format(now));
+	const time = $derived(
+		new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(now),
+	);
+	const date = $derived(
+		new Intl.DateTimeFormat(i18n.locale, { weekday: 'long', day: 'numeric', month: 'long' }).format(
+			now,
+		),
+	);
 </script>
 
 <main
@@ -71,7 +92,9 @@
 					style:background-image={`url("${picture}")`}
 					style:background-size={current!.background.fit}
 					style:background-position={`${current!.background.x}% ${current!.background.y}%`}
-					style:transform={current!.background.fit === 'cover' ? `scale(${current!.background.zoom / 100})` : undefined}
+					style:transform={current!.background.fit === 'cover'
+						? `scale(${current!.background.zoom / 100})`
+						: undefined}
 				></div>
 				<div class="dim" style:opacity={current!.background.dim / 100}></div>
 			</div>

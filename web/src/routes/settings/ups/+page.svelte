@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The uninterruptible power supply: on battery the NAS shuts down
 	// cleanly before it is empty.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDuration } from '#lib/format.ts';
@@ -8,8 +9,32 @@
 	import { system } from '#lib/system.svelte.ts';
 
 	type Mode = 'off' | 'local' | 'network';
-	type Settings = { mode: Mode; driver?: string; port?: string; serve: boolean; remotePassword?: string; host?: string; name?: string; user?: string; password?: string; shutdownAfter: number };
-	type Status = { mode: Mode; connected: boolean; onBattery: boolean; lowBattery: boolean; raw: string; charge: number; runtime: number; load: number; model: string; error: string; since: string | null; shuttingDown: boolean };
+	type Settings = {
+		mode: Mode;
+		driver?: string;
+		port?: string;
+		serve: boolean;
+		remotePassword?: string;
+		host?: string;
+		name?: string;
+		user?: string;
+		password?: string;
+		shutdownAfter: number;
+	};
+	type Status = {
+		mode: Mode;
+		connected: boolean;
+		onBattery: boolean;
+		lowBattery: boolean;
+		raw: string;
+		charge: number;
+		runtime: number;
+		load: number;
+		model: string;
+		error: string;
+		since: string | null;
+		shuttingDown: boolean;
+	};
 	type Answer = { settings: Settings; passwordSet: boolean; status: Status; drivers: string[] };
 	type Found = { driver: string; port: string; product: string };
 
@@ -23,13 +48,24 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: code === 'invalid_ups_settings' && err instanceof ApiError ? err.message.replace(/^ups: invalid setting: /, '') : '' };
+		error = {
+			text: errorText(code),
+			detail:
+				code === 'invalid_ups_settings' && err instanceof ApiError
+					? err.message.replace(/^ups: invalid setting: /, '')
+					: '',
+		};
 	}
 
 	function take(res: Answer, keepDraft = false) {
 		answer = res;
 		if (!draft || !keepDraft) {
-			draft = { ...res.settings, driver: res.settings.driver || 'usbhid-ups', port: res.settings.port || 'auto', password: '' };
+			draft = {
+				...res.settings,
+				driver: res.settings.driver || 'usbhid-ups',
+				port: res.settings.port || 'auto',
+				password: '',
+			};
 			byTime = res.settings.shutdownAfter > 0;
 			if (!byTime) draft.shutdownAfter = 5;
 		}
@@ -42,11 +78,7 @@
 			if (!answer) problem(err);
 		}
 	}
-	$effect(() => {
-		load();
-		const timer = setInterval(() => !document.hidden && load(), 5000);
-		return () => clearInterval(timer);
-	});
+	$effect(() => poll(load, { interval: 5000 }));
 
 	async function scan() {
 		busy = true;
@@ -72,7 +104,12 @@
 		error = null;
 		saved = false;
 		try {
-			take(await api.put<Answer>('/ups', { ...draft, shutdownAfter: byTime ? Number(draft.shutdownAfter) || 1 : 0 }));
+			take(
+				await api.put<Answer>('/ups', {
+					...draft,
+					shutdownAfter: byTime ? Number(draft.shutdownAfter) || 1 : 0,
+				}),
+			);
 			saved = true;
 		} catch (err) {
 			problem(err);
@@ -89,7 +126,9 @@
 	<p class="muted">{t('ups.intro')}</p>
 </PageHead>
 
-{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+{#if error}<div class="notice-error" role="alert">
+		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>{/if}
 
 {#if status && status.mode !== 'off'}
 	<section class="tile panel" aria-labelledby="ups-now">
@@ -102,13 +141,34 @@
 		</div>
 		{#if status.connected}
 			{#if status.charge >= 0}
-				<div class="bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={status.charge} aria-label={t('ups.charge')}><span style:width="{status.charge}%"></span></div>
+				<div
+					class="bar"
+					role="meter"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={status.charge}
+					aria-label={t('ups.charge')}
+				>
+					<span style:width="{status.charge}%"></span>
+				</div>
 			{/if}
 			<dl>
-				<div><dt>{t('ups.model')}</dt><dd>{status.model || '–'}</dd></div>
-				<div><dt>{t('ups.charge')}</dt><dd class="mono">{status.charge >= 0 ? `${status.charge} %` : '–'}</dd></div>
-				<div><dt>{t('ups.runtime')}</dt><dd>{status.runtime >= 0 ? formatDuration(status.runtime) : '–'}</dd></div>
-				<div><dt>{t('ups.load')}</dt><dd class="mono">{status.load >= 0 ? `${status.load} %` : '–'}</dd></div>
+				<div>
+					<dt>{t('ups.model')}</dt>
+					<dd>{status.model || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ups.charge')}</dt>
+					<dd class="mono">{status.charge >= 0 ? `${status.charge} %` : '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ups.runtime')}</dt>
+					<dd>{status.runtime >= 0 ? formatDuration(status.runtime) : '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ups.load')}</dt>
+					<dd class="mono">{status.load >= 0 ? `${status.load} %` : '–'}</dd>
+				</div>
 			</dl>
 			{#if status.shuttingDown}<p class="notice-error" role="alert">{t('ups.shuttingDown')}</p>{/if}
 		{:else if status.error}
@@ -122,7 +182,12 @@
 		<h2 class="tile-title">{t('ups.settings')}</h2>
 		<div class="segments" role="radiogroup" aria-label={t('ups.settings')}>
 			{#each ['off', 'local', 'network'] as const as mode (mode)}
-				<button type="button" role="radio" aria-checked={draft.mode === mode} onclick={() => draft && (draft.mode = mode)}>{t(`ups.mode.${mode}`)}</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={draft.mode === mode}
+					onclick={() => draft && (draft.mode = mode)}>{t(`ups.mode.${mode}`)}</button
+				>
 			{/each}
 		</div>
 		<p class="muted">{t(`ups.modeHint.${draft.mode}`)}</p>
@@ -134,27 +199,55 @@
 			</div>
 			{#each found ?? [] as device (device.driver + device.port + device.product)}
 				<div class="found">
-					<span>{device.product || device.driver} <span class="muted mono">{device.driver} · {device.port}</span></span>
-					<button type="button" class="btn small" onclick={() => use(device)}>{t('ups.use')}</button>
+					<span
+						>{device.product || device.driver}
+						<span class="muted mono">{device.driver} · {device.port}</span></span
+					>
+					<button type="button" class="btn small" onclick={() => use(device)}>{t('ups.use')}</button
+					>
 				</div>
 			{/each}
 			<div class="row">
-				<label class="narrow"><span>{t('ups.driver')}</span>
+				<label class="narrow"
+					><span>{t('ups.driver')}</span>
 					<select class="field mono" bind:value={draft.driver}>
 						{#each answer.drivers as driver (driver)}<option value={driver}>{driver}</option>{/each}
 					</select>
 				</label>
 				{#if !usb}
-					<label class="narrow"><span>{t('ups.port')}</span><input class="field mono" type="text" bind:value={draft.port} placeholder="/dev/ttyS0" spellcheck="false" required /></label>
+					<label class="narrow"
+						><span>{t('ups.port')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={draft.port}
+							placeholder="/dev/ttyS0"
+							spellcheck="false"
+							required
+						/></label
+					>
 				{/if}
 			</div>
-			<label class="check"><input type="checkbox" bind:checked={draft.serve} /><span>{t('ups.serve')}</span></label>
+			<label class="check"
+				><input type="checkbox" bind:checked={draft.serve} /><span>{t('ups.serve')}</span></label
+			>
 			{#if draft.serve && answer.settings.serve && answer.settings.remotePassword}
 				<dl class="share">
-					<div><dt>{t('ups.serveHost')}</dt><dd class="mono">{host}</dd></div>
-					<div><dt>{t('ups.serveName')}</dt><dd class="mono">ups</dd></div>
-					<div><dt>{t('notify.username')}</dt><dd class="mono">monitor</dd></div>
-					<div><dt>{t('notify.password')}</dt><dd class="mono">{answer.settings.remotePassword}</dd></div>
+					<div>
+						<dt>{t('ups.serveHost')}</dt>
+						<dd class="mono">{host}</dd>
+					</div>
+					<div>
+						<dt>{t('ups.serveName')}</dt>
+						<dd class="mono">ups</dd>
+					</div>
+					<div>
+						<dt>{t('notify.username')}</dt>
+						<dd class="mono">monitor</dd>
+					</div>
+					<div>
+						<dt>{t('notify.password')}</dt>
+						<dd class="mono">{answer.settings.remotePassword}</dd>
+					</div>
 				</dl>
 				<p class="muted">{t('ups.serveHint')}</p>
 			{:else if draft.serve}
@@ -162,21 +255,77 @@
 			{/if}
 		{:else if draft.mode === 'network'}
 			<div class="row">
-				<label class="narrow"><span>{t('ups.server')}</span><input class="field mono" type="text" bind:value={draft.host} spellcheck="false" autocapitalize="none" required /></label>
-				<label class="narrow"><span>{t('ups.name')}</span><input class="field mono" type="text" bind:value={draft.name} placeholder="ups" spellcheck="false" autocapitalize="none" required /></label>
+				<label class="narrow"
+					><span>{t('ups.server')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={draft.host}
+						spellcheck="false"
+						autocapitalize="none"
+						required
+					/></label
+				>
+				<label class="narrow"
+					><span>{t('ups.name')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={draft.name}
+						placeholder="ups"
+						spellcheck="false"
+						autocapitalize="none"
+						required
+					/></label
+				>
 			</div>
 			<div class="row">
-				<label class="narrow"><span>{t('notify.username')}</span><input class="field mono" type="text" bind:value={draft.user} autocomplete="off" spellcheck="false" autocapitalize="none" required /></label>
-				<label class="narrow"><span>{t('notify.password')}</span><input class="field mono" type="password" bind:value={draft.password} autocomplete="new-password" placeholder={answer.passwordSet ? t('notify.secretStored') : ''} required={!answer.passwordSet} /></label>
+				<label class="narrow"
+					><span>{t('notify.username')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={draft.user}
+						autocomplete="off"
+						spellcheck="false"
+						autocapitalize="none"
+						required
+					/></label
+				>
+				<label class="narrow"
+					><span>{t('notify.password')}</span><input
+						class="field mono"
+						type="password"
+						bind:value={draft.password}
+						autocomplete="new-password"
+						placeholder={answer.passwordSet ? t('notify.secretStored') : ''}
+						required={!answer.passwordSet}
+					/></label
+				>
 			</div>
 		{/if}
 
 		{#if draft.mode !== 'off'}
 			<fieldset class="divided">
 				<legend>{t('ups.when')}</legend>
-				<label class="check"><input type="radio" name="when" checked={!byTime} onchange={() => (byTime = false)} /><span>{t('ups.whenLow')}</span></label>
-				<label class="check"><input type="radio" name="when" checked={byTime} onchange={() => (byTime = true)} /><span>{t('ups.whenTime')}</span>
-					<input class="field mono minutes" type="number" min="1" max="240" bind:value={draft.shutdownAfter} disabled={!byTime} aria-label={t('ups.minutes')} /><span>{t('ups.minutes')}</span>
+				<label class="check"
+					><input
+						type="radio"
+						name="when"
+						checked={!byTime}
+						onchange={() => (byTime = false)}
+					/><span>{t('ups.whenLow')}</span></label
+				>
+				<label class="check"
+					><input type="radio" name="when" checked={byTime} onchange={() => (byTime = true)} /><span
+						>{t('ups.whenTime')}</span
+					>
+					<input
+						class="field mono minutes"
+						type="number"
+						min="1"
+						max="240"
+						bind:value={draft.shutdownAfter}
+						disabled={!byTime}
+						aria-label={t('ups.minutes')}
+					/><span>{t('ups.minutes')}</span>
 				</label>
 				<p class="muted">{t('ups.whenHint')}</p>
 			</fieldset>

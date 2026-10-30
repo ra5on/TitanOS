@@ -2,9 +2,9 @@
 	// Chooses an installation medium: folders of the mounted volumes to click
 	// through, or a search over the ISO files the NAS found on them.
 	import { onMount, untrack } from 'svelte';
-	import { api, ApiError, type FileEntry } from '#lib/api.ts';
+	import { api, type FileEntry } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { isISO, isoLocation, isoPath, matchMedia } from '#lib/iso-browser.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -52,7 +52,7 @@
 			const roots = await api.get<{ id: string; name: string; kind: string }[]>('/files/roots');
 			volumes = roots.filter((r) => r.kind === 'volume').map((r) => r.name);
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 			return;
 		}
 		const at = isoLocation(initial, volumes);
@@ -82,8 +82,7 @@
 				);
 			return true;
 		} catch (err) {
-			if (!quiet && mine === serial)
-				loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			if (!quiet && mine === serial) loadError = apiErrorText(err);
 			return false;
 		}
 	}

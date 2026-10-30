@@ -4,7 +4,12 @@
 
 <div class="switch" role="radiogroup" aria-label={t('lang.label')}>
 	{#each LOCALES as locale (locale)}
-		<button type="button" role="radio" aria-checked={i18n.locale === locale} onclick={() => setLocale(locale)}>
+		<button
+			type="button"
+			role="radio"
+			aria-checked={i18n.locale === locale}
+			onclick={() => setLocale(locale)}
+		>
 			{t(`lang.${locale}`)}
 		</button>
 	{/each}

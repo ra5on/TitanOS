@@ -33,6 +33,8 @@
 	} = $props();
 
 	// The dialog edits its own copy; the caller passed a fresh one.
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the page mounts this editor anew for each network ({#key editor}).
 	// svelte-ignore state_referenced_locally
 	let n = $state($state.snapshot(network));
 	n.routes ??= [];

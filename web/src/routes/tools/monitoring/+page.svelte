@@ -38,13 +38,13 @@
 		busy = true;
 		error = null;
 		try {
-			status = await api.get('/monitoring');
+			status = await api.get<MonitorStatus>('/monitoring');
 			if (!settings) {
 				settings = structuredClone($state.snapshot(status!.settings));
 				initialSettings = JSON.stringify(settings);
 			}
-			samples = await api.get(`/monitoring/history?hours=${hours}`);
-			if (status?.settings.enabled) trends = await api.get('/monitoring/trends');
+			samples = await api.get<MonitorSample[]>(`/monitoring/history?hours=${hours}`);
+			if (status?.settings.enabled) trends = await api.get<Trend[]>('/monitoring/trends');
 			else trends = [];
 			if (!disks.includes(disk)) disk = disks[0] ?? '';
 			if (!networks.includes(network)) network = networks[0] ?? '';
@@ -67,7 +67,7 @@
 		saved = false;
 		error = null;
 		try {
-			status = await api.put('/monitoring', settings);
+			status = await api.put<MonitorStatus>('/monitoring', settings);
 			settings = structuredClone($state.snapshot(status!.settings));
 			initialSettings = JSON.stringify(settings);
 			saved = true;

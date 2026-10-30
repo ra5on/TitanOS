@@ -3,7 +3,7 @@
 	// creation (image, volume, privileged) is only shown when editing.
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { api, ApiError, type Share } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import {
 		containerLabel,
@@ -28,6 +28,8 @@
 	let { list, existing, onclose, ondone }: Props = $props();
 
 	// The form starts from what is stored; it is not meant to follow later changes.
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the page mounts this form anew for each opening ({#key form}).
 	// svelte-ignore state_referenced_locally
 	const initial = existing;
 	let label = $state(initial ? containerLabel(initial) : '');
@@ -85,7 +87,7 @@
 				},
 				(err) => {
 					images = [];
-					imagesError = errorText(err instanceof ApiError ? err.code : 'internal');
+					imagesError = apiErrorText(err);
 				},
 			);
 		}

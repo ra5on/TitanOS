@@ -19,7 +19,10 @@
 			const raw = localStorage.getItem(PREVIEW_KEY);
 			if (!raw) return;
 			const data = JSON.parse(raw) as { look?: unknown; imageURL?: unknown };
-			const imageURL = typeof data.imageURL === 'string' && data.imageURL.startsWith('blob:' + location.origin) ? data.imageURL : '';
+			const imageURL =
+				typeof data.imageURL === 'string' && data.imageURL.startsWith('blob:' + location.origin)
+					? data.imageURL
+					: '';
 			draft = { look: sanitizeLoginLook(data.look), imageURL };
 		} catch {
 			draft = null;

@@ -147,14 +147,20 @@
 	<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 		<ClusterBanner />
 		{#if !dockerPage}<ConnectionBanner
-			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel hideEmptyMobile={page.url.pathname === '/files'} />{/if}{/if}
+			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel
+					hideEmptyMobile={page.url.pathname === '/files'}
+				/>{/if}{/if}
 		{@render children()}
 	</main>
 	<StatusBar note={shell.statusNote} />
 </div>
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
-{#if shortcutsOpen}<ShortcutsDialog {admin} assistant={!!assistant.status?.available} onclose={() => (shortcutsOpen = false)} />{/if}
+{#if shortcutsOpen}<ShortcutsDialog
+		{admin}
+		assistant={!!assistant.status?.available}
+		onclose={() => (shortcutsOpen = false)}
+	/>{/if}
 {#if fab}
 	<button
 		type="button"

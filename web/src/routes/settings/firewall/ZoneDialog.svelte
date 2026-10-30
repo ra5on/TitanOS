@@ -29,6 +29,8 @@
 		onclose: () => void;
 	} = $props();
 
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the page mounts this dialog anew for each zone ({#key editing}).
 	// svelte-ignore state_referenced_locally
 	let name = $state(zone.name ?? '');
 	// svelte-ignore state_referenced_locally
@@ -38,7 +40,12 @@
 	let confirmRemove = $state(false);
 
 	const sources = $derived(parseNetworks(sourcesText));
-	const result = $derived<FirewallZoneDef>({ ...zone, name: name.trim(), networks: picked, sources });
+	const result = $derived<FirewallZoneDef>({
+		...zone,
+		name: name.trim(),
+		networks: picked,
+		sources,
+	});
 	const problem = $derived(zoneProblem(result));
 	const groups = $derived(
 		(['network', 'docker', 'vm', 'dockerlan'] as const).map((kind) => ({
@@ -65,7 +72,12 @@
 		}}
 	>
 		<label class="stack"
-			><span>{t('firewall.zoneNameLabel')}</span><input class="field" bind:value={name} maxlength="40" required /></label
+			><span>{t('firewall.zoneNameLabel')}</span><input
+				class="field"
+				bind:value={name}
+				maxlength="40"
+				required
+			/></label
 		>
 		{#each groups as group (group.kind)}
 			<fieldset>
@@ -73,7 +85,9 @@
 				{#if group.list.length === 0}<p class="muted small">
 						{t(group.kind === 'vm' ? 'firewall.groupEmptyVm' : 'firewall.groupEmpty')}
 					</p>{/if}
-				{#if group.kind === 'dockerlan' && group.list.length}<p class="muted small">{t('firewall.bypassText')}</p>{/if}
+				{#if group.kind === 'dockerlan' && group.list.length}<p class="muted small">
+						{t('firewall.bypassText')}
+					</p>{/if}
 				{#each group.list as n (n.id)}
 					<label class="check"
 						><input
@@ -83,7 +97,9 @@
 							onchange={(event) => toggle(n.id, event.currentTarget.checked)}
 						/><span
 							><strong>{n.name}</strong>
-							<span class="mono small muted">{n.device ?? n.parent ?? ''} {n.subnets.join(', ')}</span>
+							<span class="mono small muted"
+								>{n.device ?? n.parent ?? ''} {n.subnets.join(', ')}</span
+							>
 							{#if n.missing}<span class="chip warn">{t('firewall.netMissing')}</span>{/if}
 							{#if elsewhere(n) && !picked.includes(n.id)}<span class="muted small"
 									>· {t('firewall.inZone', { zone: zoneLabel(elsewhere(n)) })}</span
@@ -99,17 +115,20 @@
 				rows="3"
 				spellcheck="false"
 				placeholder="10.20.0.0/16"
-				bind:value={sourcesText}
-			></textarea></label
+				bind:value={sourcesText}></textarea></label
 		>
 		<p class="muted small">{t('firewall.zoneSourcesHint')}</p>
 		{#if problem}<p class="notice-warn" role="alert">{t(problem as MessageKey)}</p>{/if}
 		<div class="dialog-actions">
-			{#if onremove}<button type="button" class="btn btn-warn" onclick={() => (confirmRemove = true)}
-					>{t('firewall.zoneRemove')}</button
+			{#if onremove}<button
+					type="button"
+					class="btn btn-warn"
+					onclick={() => (confirmRemove = true)}>{t('firewall.zoneRemove')}</button
 				>{/if}
 			<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
-			<button type="submit" class="btn btn-primary" disabled={!!problem}>{t('firewall.zoneApply')}</button>
+			<button type="submit" class="btn btn-primary" disabled={!!problem}
+				>{t('firewall.zoneApply')}</button
+			>
 		</div>
 	</form>
 </Dialog>
@@ -118,8 +137,12 @@
 	<Dialog title={t('firewall.zoneRemove')} onclose={() => (confirmRemove = false)}>
 		<p>{t('firewall.zoneRemoveText', { name: zone.name ?? '' })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (confirmRemove = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={onremove}>{t('firewall.zoneRemove')}</button>
+			<button type="button" class="btn" onclick={() => (confirmRemove = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-warn" onclick={onremove}
+				>{t('firewall.zoneRemove')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

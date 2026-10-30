@@ -21,7 +21,10 @@ export const MIN_HEIGHT = 180;
 function remembered(): { height: number; fontSize: number } {
 	try {
 		const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
-		return { height: Number(stored.height) || 380, fontSize: Math.min(18, Math.max(11, Number(stored.fontSize) || 13)) };
+		return {
+			height: Number(stored.height) || 380,
+			fontSize: Math.min(18, Math.max(11, Number(stored.fontSize) || 13)),
+		};
 	} catch {
 		return { height: 380, fontSize: 13 };
 	}
@@ -33,14 +36,17 @@ export const terminal = $state({
 	full: false,
 	sessions: [] as TerminalSession[],
 	active: 0,
-	...remembered()
+	...remembered(),
 });
 
 let nextId = 1;
 
 export function remember() {
 	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify({ height: terminal.height, fontSize: terminal.fontSize }));
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({ height: terminal.height, fontSize: terminal.fontSize }),
+		);
 	} catch {
 		// It just will not be remembered in this browser.
 	}
@@ -60,7 +66,9 @@ export function addNasShell() {
 
 /** Opens the console of a container, or shows the one that is open already. */
 export function addContainerConsole(container: string, name: string) {
-	const existing = terminal.sessions.find((session) => session.kind === 'ct' && session.container === container);
+	const existing = terminal.sessions.find(
+		(session) => session.kind === 'ct' && session.container === container,
+	);
 	if (existing) {
 		terminal.active = existing.id;
 		terminal.open = true;
@@ -71,7 +79,9 @@ export function addContainerConsole(container: string, name: string) {
 
 /** Opens the serial console of a VM, or shows the one that is open already. */
 export function addVmConsole(name: string, label = name) {
-	const existing = terminal.sessions.find((session) => session.kind === 'vm' && session.container === name);
+	const existing = terminal.sessions.find(
+		(session) => session.kind === 'vm' && session.container === name,
+	);
 	if (existing) {
 		terminal.active = existing.id;
 		terminal.open = true;
@@ -83,13 +93,20 @@ export function addVmConsole(name: string, label = name) {
 /** Opens a shell (or, with `console`, the text console) of a system container. */
 export function addLXCConsole(name: string, label = name, mode: 'shell' | 'console' = 'shell') {
 	const shell = mode === 'console' ? 'sh' : '';
-	const existing = terminal.sessions.find((session) => session.kind === 'lxc' && session.container === name && session.shell === shell);
+	const existing = terminal.sessions.find(
+		(session) => session.kind === 'lxc' && session.container === name && session.shell === shell,
+	);
 	if (existing) {
 		terminal.active = existing.id;
 		terminal.open = true;
 		return;
 	}
-	add({ kind: 'lxc', title: mode === 'console' ? `${label} (tty)` : label, container: name, shell });
+	add({
+		kind: 'lxc',
+		title: mode === 'console' ? `${label} (tty)` : label,
+		container: name,
+		shell,
+	});
 }
 
 export function closeSession(id: number) {

@@ -40,9 +40,33 @@ export type DdnsStatus = {
 };
 
 export type Ipv64Usage = { used: number; limit: number | null };
-export type Ipv64Account = { username: string; plan: string; validUntil?: string; usage: Record<string, Ipv64Usage>; keyName?: string };
-export type Ipv64Domain = { id: number; name: string; kind: string; zone: string; wildcard: boolean; ignore: string; active: boolean; updateCount: number };
-export type Ipv64Record = { id: number; prefix: string; fqdn: string; type: string; content: string; ttl: number; state: string; pendingDNS: boolean };
+export type Ipv64Account = {
+	username: string;
+	plan: string;
+	validUntil?: string;
+	usage: Record<string, Ipv64Usage>;
+	keyName?: string;
+};
+export type Ipv64Domain = {
+	id: number;
+	name: string;
+	kind: string;
+	zone: string;
+	wildcard: boolean;
+	ignore: string;
+	active: boolean;
+	updateCount: number;
+};
+export type Ipv64Record = {
+	id: number;
+	prefix: string;
+	fqdn: string;
+	type: string;
+	content: string;
+	ttl: number;
+	state: string;
+	pendingDNS: boolean;
+};
 export type Ipv64Healthcheck = {
 	id: string;
 	name: string;
@@ -56,12 +80,23 @@ export type Ipv64Healthcheck = {
 export type Ipv64Integration = { id: number; type: string; name: string; status: string };
 
 /** The usage entries worth showing, in this order. */
-export const USAGE_KEYS = ['dyndns_updates_24h', 'dyndns_domains', 'own_domains', 'healthchecks', 'healthcheck_pings_24h'];
+export const USAGE_KEYS = [
+	'dyndns_updates_24h',
+	'dyndns_domains',
+	'own_domains',
+	'healthchecks',
+	'healthcheck_pings_24h',
+];
 
 /** "3 of 48", "3" without a limit. */
-export function usageText(usage: Ipv64Usage | undefined, of: (used: number, limit: number) => string): string {
+export function usageText(
+	usage: Ipv64Usage | undefined,
+	of: (used: number, limit: number) => string,
+): string {
 	if (!usage) return '–';
-	return usage.limit === null || usage.limit === undefined ? String(usage.used) : of(usage.used, usage.limit);
+	return usage.limit === null || usage.limit === undefined
+		? String(usage.used)
+		: of(usage.used, usage.limit);
 }
 
 /** The CAA record that allows only Let's Encrypt to issue certificates. */
@@ -93,22 +128,41 @@ export const INTERVALS = [5, 10, 15, 30, 60, 360, 1440];
 export const MAX_HOSTS = 8;
 
 /** The updater settings both pages edit alike. */
-export type UpdaterForm = { ipv4: boolean; ipv6: boolean; interval: number; lookupURL: string; iface: string };
+export type UpdaterForm = {
+	ipv4: boolean;
+	ipv6: boolean;
+	interval: number;
+	lookupURL: string;
+	iface: string;
+};
 
 export function updaterForm(s: DdnsStatus['settings']): UpdaterForm {
-	return { ipv4: s.ipv4, ipv6: s.ipv6, interval: s.interval ?? 0, lookupURL: s.lookupURL ?? '', iface: s.interface ?? '' };
+	return {
+		ipv4: s.ipv4,
+		ipv6: s.ipv6,
+		interval: s.interval ?? 0,
+		lookupURL: s.lookupURL ?? '',
+		iface: s.interface ?? '',
+	};
 }
 
 /** The updater part of PUT /network/ddns and PUT /ipv64/ddns. */
 export function updaterPayload(form: UpdaterForm) {
-	return { ipv4: form.ipv4, ipv6: form.ipv6, interval: form.interval, lookupURL: form.lookupURL.trim(), interface: form.iface.trim() };
+	return {
+		ipv4: form.ipv4,
+		ipv6: form.ipv6,
+		interval: form.interval,
+		lookupURL: form.lookupURL.trim(),
+		interface: form.iface.trim(),
+	};
 }
 
 /** The state chip of dynamic DNS. */
 export function ddnsBadge(status: DdnsStatus | null): { text: MessageKey; tone: string } {
 	if (!status?.settings.enabled) return { text: 'ddns.state.off', tone: '' };
 	if (status.lastError) return { text: 'ddns.state.error', tone: 'warn' };
-	if (status.lastUpdate || status.publishedIPv4 || status.publishedIPv6) return { text: 'ddns.state.ok', tone: 'ok' };
+	if (status.lastUpdate || status.publishedIPv4 || status.publishedIPv6)
+		return { text: 'ddns.state.ok', tone: 'ok' };
 	return { text: 'ddns.state.waiting', tone: '' };
 }
 
@@ -131,14 +185,28 @@ export function ipv64UpdateURL(domain: string, token = '<update-token>'): string
 // --- the healthcheck "watch reachability" (POST /network/ipv64/heartbeat/…) ---
 
 /** The body of the IPv64 calls: a key typed in but not saved yet goes along; else titand takes the stored one. */
-export function keyBody(apiKey: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+export function keyBody(
+	apiKey: string,
+	extra: Record<string, unknown> = {},
+): Record<string, unknown> {
 	return apiKey.trim() ? { apiKey: apiKey.trim(), ...extra } : extra;
 }
 
-export type HeartbeatChoice = { check: string; name: string; period: number; grace: number; integrations: number[]; autoPause: boolean };
+export type HeartbeatChoice = {
+	check: string;
+	name: string;
+	period: number;
+	grace: number;
+	integrations: number[];
+	autoPause: boolean;
+};
 
 export function heartbeatChecks(apiKey: string) {
-	return api.post<{ healthchecks: Ipv64Healthcheck[]; integrations: Ipv64Integration[]; suggestedName: string }>('/network/ipv64/healthchecks', keyBody(apiKey));
+	return api.post<{
+		healthchecks: Ipv64Healthcheck[];
+		integrations: Ipv64Integration[];
+		suggestedName: string;
+	}>('/network/ipv64/healthchecks', keyBody(apiKey));
 }
 
 export function heartbeatOn(apiKey: string, c: HeartbeatChoice): Promise<DdnsStatus> {
@@ -147,7 +215,13 @@ export function heartbeatOn(apiKey: string, c: HeartbeatChoice): Promise<DdnsSta
 		keyBody(
 			apiKey,
 			c.check === 'new'
-				? { name: c.name.trim(), periodMinutes: c.period, graceMinutes: c.grace, integrations: c.integrations, autoPause: c.autoPause }
+				? {
+						name: c.name.trim(),
+						periodMinutes: c.period,
+						graceMinutes: c.grace,
+						integrations: c.integrations,
+						autoPause: c.autoPause,
+					}
 				: { id: c.check, autoPause: c.autoPause },
 		),
 	);
@@ -167,5 +241,12 @@ export function heartbeatTest(apiKey: string): Promise<unknown> {
 
 /** Whether a new healthcheck may be created with these values. */
 export function heartbeatChoiceValid(c: HeartbeatChoice): boolean {
-	return c.check !== 'new' || (c.name.trim().length > 0 && c.period >= 20 && c.period <= 1440 && c.grace >= 1 && c.grace <= 1440);
+	return (
+		c.check !== 'new' ||
+		(c.name.trim().length > 0 &&
+			c.period >= 20 &&
+			c.period <= 1440 &&
+			c.grace >= 1 &&
+			c.grace <= 1440)
+	);
 }

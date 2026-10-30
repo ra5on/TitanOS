@@ -32,7 +32,9 @@
 	} = $props();
 
 	type Kind = 'service' | 'app' | 'ports';
-	const kind = $derived<Kind>(policy.service !== undefined ? 'service' : policy.app !== undefined ? 'app' : 'ports');
+	const kind = $derived<Kind>(
+		policy.service !== undefined ? 'service' : policy.app !== undefined ? 'app' : 'ports',
+	);
 	const problem = $derived(policyProblem(policy));
 	const id = $props.id();
 
@@ -78,13 +80,20 @@
 				aria-label={t('firewall.ruleDown')}
 				title={t('firewall.ruleDown')}
 				onclick={() => onmove(1)}>↓</button
-			><button class="btn small" type="button" disabled={locked} onclick={onremove}>{t('firewall.ruleRemove')}</button>
+			><button class="btn small" type="button" disabled={locked} onclick={onremove}
+				>{t('firewall.ruleRemove')}</button
+			>
 		</span>
 	</div>
 	<div class="fields">
 		<label class="stack"
-			><span>{t('firewall.ruleAction')}</span><select class="field" bind:value={policy.action} disabled={locked}
-				><option value="allow">{t('firewall.allow')}</option><option value="deny">{t('firewall.deny')}</option></select
+			><span>{t('firewall.ruleAction')}</span><select
+				class="field"
+				bind:value={policy.action}
+				disabled={locked}
+				><option value="allow">{t('firewall.allow')}</option><option value="deny"
+					>{t('firewall.deny')}</option
+				></select
 			></label
 		>
 		{#if !zoneCell}<label class="stack"
@@ -100,17 +109,29 @@
 				</select></label
 			>{/if}
 		{#if kind === 'service'}<label class="stack"
-				><span>{t('firewall.kindService')}</span><select class="field" bind:value={policy.service} disabled={locked}
-					>{#each services as s (s.id)}<option value={s.id}>{t(`firewall.svc.${s.id}` as MessageKey)}</option>{/each}</select
+				><span>{t('firewall.kindService')}</span><select
+					class="field"
+					bind:value={policy.service}
+					disabled={locked}
+					>{#each services as s (s.id)}<option value={s.id}
+							>{t(`firewall.svc.${s.id}` as MessageKey)}</option
+						>{/each}</select
 				></label
 			>{:else if kind === 'app'}<label class="stack"
-				><span>{t('firewall.kindApp')}</span><select class="field" bind:value={policy.app} disabled={locked}
-					>{#each apps as app (app.key)}<option value={app.key}>{app.name}</option>{/each}{#if policy.app && !apps.some((a) => a.key === policy.app)}<option
+				><span>{t('firewall.kindApp')}</span><select
+					class="field"
+					bind:value={policy.app}
+					disabled={locked}
+					>{#each apps as app (app.key)}<option value={app.key}>{app.name}</option
+						>{/each}{#if policy.app && !apps.some((a) => a.key === policy.app)}<option
 							value={policy.app}>{policy.app.replace(/^container:/, '')}</option
 						>{/if}</select
 				></label
 			>{:else}<label class="stack"
-				><span>{t('firewall.ruleProtocol')}</span><select class="field" bind:value={policy.protocol} disabled={locked}
+				><span>{t('firewall.ruleProtocol')}</span><select
+					class="field"
+					bind:value={policy.protocol}
+					disabled={locked}
 					><option value="tcp">TCP</option><option value="udp">UDP</option><option value="any"
 						>{t('firewall.anyProtocol')}</option
 					></select
@@ -157,7 +178,9 @@
 				· <span class="mono">{servicePorts(service)}</span>{/if}
 		</p>
 	{/if}
-	{#if problem}<p class="notice-warn" role="alert" id="{id}-problem">{t(problem as MessageKey)}</p>{/if}
+	{#if problem}<p class="notice-warn" role="alert" id="{id}-problem">
+			{t(problem as MessageKey)}
+		</p>{/if}
 </li>
 
 <style>

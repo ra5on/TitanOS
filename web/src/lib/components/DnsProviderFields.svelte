@@ -97,8 +97,14 @@
 				</div>
 			{/if}
 		{/each}
-		{#if form.type === 'dyndns2'}<p class="muted hint">{t('dnsProvider.dyndns2Placeholders')}</p>{/if}
-		{#if form.type === 'ipv64'}<p class="muted hint">{t(purpose === 'address' ? 'dnsProvider.ipv64KeysAddress' : 'dnsProvider.ipv64KeysChallenge')}</p>{/if}
+		{#if form.type === 'dyndns2'}<p class="muted hint">
+				{t('dnsProvider.dyndns2Placeholders')}
+			</p>{/if}
+		{#if form.type === 'ipv64'}<p class="muted hint">
+				{t(
+					purpose === 'address' ? 'dnsProvider.ipv64KeysAddress' : 'dnsProvider.ipv64KeysChallenge',
+				)}
+			</p>{/if}
 		{#if secrets && !keeps && Object.values(secrets).some(Boolean)}
 			<p class="muted hint">{t('dnsProvider.secretsNotMoved')}</p>
 		{/if}

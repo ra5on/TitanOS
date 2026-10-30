@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -30,7 +30,7 @@
 			releases = res.releases;
 			selected = [];
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 		} finally {
 			loading = false;
 		}
@@ -50,7 +50,7 @@
 			confirm = false;
 			await load();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 			await load();
 		} finally {
 			busy = false;
@@ -62,9 +62,11 @@
 	><p class="muted">{t('cleanup.intro')}</p></PageHead
 >
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !releases.length}<EmptyState
-		title={t('cleanup.empty')}
-	/>{:else}<section class="tile content">
+{#if loading}<p class="loading" role="status">
+		{t('common.loading')}
+	</p>{:else if !releases.length}<EmptyState title={t('cleanup.empty')} />{:else}<section
+		class="tile content"
+	>
 		<h2 class="tile-title">{t('cleanup.versions')}</h2>
 		{#each releases as release (release.version)}<div class="release">
 				<div>

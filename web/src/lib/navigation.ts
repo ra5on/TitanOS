@@ -33,7 +33,9 @@ const ID = /^[a-z][a-z0-9-]{0,31}$/;
 
 function ids(value: unknown): string[] {
 	if (!Array.isArray(value)) return [];
-	return [...new Set(value.filter((id): id is string => typeof id === 'string' && ID.test(id)))].slice(0, 64);
+	return [
+		...new Set(value.filter((id): id is string => typeof id === 'string' && ID.test(id))),
+	].slice(0, 64);
 }
 
 export function sanitizeNav(input: unknown): NavPrefs {
@@ -56,7 +58,10 @@ export function arrangeNav(items: NavItem[], prefs: NavPrefs): NavItem[] {
 	const out = prefs.order.flatMap((id) => byId.get(id) ?? []);
 	items.forEach((item, index) => {
 		if (out.includes(item)) return;
-		const before = items.slice(0, index).reverse().find((other) => out.includes(other));
+		const before = items
+			.slice(0, index)
+			.reverse()
+			.find((other) => out.includes(other));
 		out.splice(before ? out.indexOf(before) + 1 : 0, 0, item);
 	});
 	return out;
@@ -64,7 +69,9 @@ export function arrangeNav(items: NavItem[], prefs: NavPrefs): NavItem[] {
 
 /** The tabs shown in the header. */
 export function visibleNav(items: NavItem[], prefs: NavPrefs): NavItem[] {
-	return arrangeNav(items, prefs).filter((item) => item.id === NAV_FIXED || !prefs.hidden.includes(item.id));
+	return arrangeNav(items, prefs).filter(
+		(item) => item.id === NAV_FIXED || !prefs.hidden.includes(item.id),
+	);
 }
 
 /** Moves a tab one place up (-1) or down (+1) and returns the new order of all ids. */
@@ -72,7 +79,8 @@ export function moveNav(items: NavItem[], prefs: NavPrefs, id: string, step: -1 
 	const order = arrangeNav(items, prefs).map((item) => item.id);
 	const from = order.indexOf(id);
 	const to = from + step;
-	if (from >= 0 && to >= 0 && to < order.length) [order[from], order[to]] = [order[to], order[from]];
+	if (from >= 0 && to >= 0 && to < order.length)
+		[order[from], order[to]] = [order[to], order[from]];
 	// Ids of tabs this role does not see keep their saved place at the end.
 	return [...order, ...prefs.order.filter((other) => !order.includes(other))];
 }

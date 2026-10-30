@@ -9,11 +9,22 @@
 		if (recent.length < 2) return '';
 		const step = 100 / (points - 1);
 		const start = (points - recent.length) * step;
-		return recent.map((value, index) => `${(start + index * step).toFixed(1)},${(22 - Math.min(100, Math.max(0, value)) * 0.2).toFixed(1)}`).join(' ');
+		return recent
+			.map(
+				(value, index) =>
+					`${(start + index * step).toFixed(1)},${(22 - Math.min(100, Math.max(0, value)) * 0.2).toFixed(1)}`,
+			)
+			.join(' ');
 	});
 </script>
 
-<svg class="sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label={label}>
+<svg
+	class="sparkline"
+	viewBox="0 0 100 24"
+	preserveAspectRatio="none"
+	role="img"
+	aria-label={label}
+>
 	{#if line}<polyline points={line} />{/if}
 </svg>
 

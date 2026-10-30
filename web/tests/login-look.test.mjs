@@ -11,7 +11,7 @@ import {
 	loginBackgroundURL,
 	loginSaveBody,
 	loginTexts,
-	sanitizeLoginLook
+	sanitizeLoginLook,
 } from '../src/lib/login/look.ts';
 import { defaultAppearance, resolvePalette, THEMES } from '../src/lib/theme/themes.ts';
 
@@ -27,13 +27,22 @@ test('no settings or default settings keep today’s login page', () => {
 
 test('a fixed theme starts from the defaults, inherit keeps the browser look', () => {
 	const inherited = { ...defaultAppearance(), theme: 'schwarz', font: 120 };
-	const fixed = loginAppearance({ ...defaultLoginLook(), theme: 'hell', accent: 'rose', style: 'flat' }, inherited);
+	const fixed = loginAppearance(
+		{ ...defaultLoginLook(), theme: 'hell', accent: 'rose', style: 'flat' },
+		inherited,
+	);
 	assert.equal(fixed.scoped, true);
 	assert.equal(fixed.appearance.theme, 'hell');
 	assert.equal(fixed.appearance.accent, 'rose');
 	assert.equal(fixed.appearance.style, 'flat');
 	assert.equal(fixed.appearance.font, 100);
-	const motif = loginAppearance({ ...defaultLoginLook(), background: { ...defaultLoginLook().background, source: 'builtin', id: 'wellen' } }, inherited);
+	const motif = loginAppearance(
+		{
+			...defaultLoginLook(),
+			background: { ...defaultLoginLook().background, source: 'builtin', id: 'wellen' },
+		},
+		inherited,
+	);
 	assert.equal(motif.appearance.theme, 'schwarz');
 	// A picture behind glass keeps the readable minimum opacity.
 	assert.equal(motif.appearance.bg, 'image');
@@ -50,7 +59,7 @@ test('untrusted values never reach the page', () => {
 		position: 'top',
 		width: 'x',
 		texts: { de: { title: 'a\nb<script>', notice: 'x'.repeat(400) }, fr: { title: 'Bonjour' } },
-		hideHost: 'yes'
+		hideHost: 'yes',
 	});
 	assert.equal(look.theme, 'inherit');
 	assert.equal(look.accent, 'blau');
@@ -71,7 +80,10 @@ test('untrusted values never reach the page', () => {
 	assert.equal(loginBackgroundURL(look), '');
 	// An own image needs stored metadata from titand.
 	assert.equal(sanitizeLoginLook({ background: { source: 'custom' } }).background.source, 'theme');
-	assert.equal(sanitizeLoginLook({ background: { source: 'custom' }, image: { id: 'x' } }).background.source, 'theme');
+	assert.equal(
+		sanitizeLoginLook({ background: { source: 'custom' }, image: { id: 'x' } }).background.source,
+		'theme',
+	);
 	assert.equal(cleanLoginText('  Hallo Welt  ', 60), 'Hallo Welt');
 });
 
@@ -85,19 +97,28 @@ test('background URLs only point to the gallery or the configured image', () => 
 });
 
 test('texts fall back to the other language, then to the default title', () => {
-	const look = sanitizeLoginLook({ texts: { en: { title: 'Welcome', notice: 'Family only' }, de: { notice: 'Nur Familie' } } });
+	const look = sanitizeLoginLook({
+		texts: { en: { title: 'Welcome', notice: 'Family only' }, de: { notice: 'Nur Familie' } },
+	});
 	assert.deepEqual(loginTexts(look, 'de', 'Anmelden'), { title: 'Welcome', notice: 'Nur Familie' });
 	assert.deepEqual(loginTexts(look, 'en', 'Sign in'), { title: 'Welcome', notice: 'Family only' });
 	assert.deepEqual(loginTexts(null, 'de', 'Anmelden'), { title: 'Anmelden', notice: '' });
 });
 
 test('the save body carries no image metadata or unknown fields', () => {
-	const body = loginSaveBody({ ...sanitizeLoginLook({ background: { source: 'custom' }, image }), configured: true }, true);
+	const body = loginSaveBody(
+		{ ...sanitizeLoginLook({ background: { source: 'custom' }, image }), configured: true },
+		true,
+	);
 	assert.equal('image' in body, false);
 	assert.equal('configured' in body, false);
 	assert.equal(body.removeImage, true);
 	assert.equal('id' in body.background, false);
-	assert.equal(loginSaveBody(sanitizeLoginLook({ background: { source: 'builtin', id: 'kueste' } })).background.id, 'kueste');
+	assert.equal(
+		loginSaveBody(sanitizeLoginLook({ background: { source: 'builtin', id: 'kueste' } })).background
+			.id,
+		'kueste',
+	);
 });
 
 test('card contrast follows surface style, glass opacity and darkening', () => {

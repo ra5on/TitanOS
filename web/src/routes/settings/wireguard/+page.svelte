@@ -7,8 +7,14 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
 	import { formatBytes, formatTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { configFileName, connected, validEndpoint, type WireGuardPeer, type WireGuardStatus } from '#lib/wireguard.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+	import {
+		configFileName,
+		connected,
+		validEndpoint,
+		type WireGuardPeer,
+		type WireGuardStatus,
+	} from '#lib/wireguard.ts';
 
 	let status = $state<WireGuardStatus | null>(null);
 	let loadError = $state('');
@@ -38,7 +44,7 @@
 	function problem(err: unknown): string {
 		return err instanceof ApiError && err.code === 'invalid_wireguard'
 			? `${errorText(err.code)} ${err.message.replace(/^wireguard: invalid settings: ?/, '')}`
-			: errorText(err instanceof ApiError ? err.code : 'internal');
+			: apiErrorText(err);
 	}
 
 	async function load() {
@@ -64,7 +70,16 @@
 		error = '';
 		saved = false;
 		try {
-			fill(await api.put<WireGuardStatus>('/network/wireguard', { enabled, endpoint: endpoint.trim(), port: status.port, network: status.network, fullTunnel, dns: dns.trim() }));
+			fill(
+				await api.put<WireGuardStatus>('/network/wireguard', {
+					enabled,
+					endpoint: endpoint.trim(),
+					port: status.port,
+					network: status.network,
+					fullTunnel,
+					dns: dns.trim(),
+				}),
+			);
 			saved = true;
 		} catch (err) {
 			error = problem(err);
@@ -79,7 +94,9 @@
 		busy = true;
 		error = '';
 		try {
-			const answer = await api.post<{ name: string; config: string }>('/network/wireguard/peers', { name: newName.trim() });
+			const answer = await api.post<{ name: string; config: string }>('/network/wireguard/peers', {
+				name: newName.trim(),
+			});
 			created = answer;
 			adding = false;
 			newName = '';
@@ -95,7 +112,12 @@
 		busy = true;
 		error = '';
 		try {
-			fill(await api.post<WireGuardStatus>('/network/wireguard/peers/remove', { publicKey: peer.publicKey, name: peer.name }));
+			fill(
+				await api.post<WireGuardStatus>('/network/wireguard/peers/remove', {
+					publicKey: peer.publicKey,
+					name: peer.name,
+				}),
+			);
 			removing = null;
 		} catch (err) {
 			error = problem(err);
@@ -119,14 +141,19 @@
 </PageHead>
 
 {#if loadError}
-	<div class="notice-error" role="alert">{loadError} <button class="btn" onclick={() => load()}>{t('ui.retry')}</button></div>
+	<div class="notice-error" role="alert">
+		{loadError} <button class="btn" onclick={() => load()}>{t('ui.retry')}</button>
+	</div>
 {:else if !status}
 	<p class="muted loading">{t('common.loading')}</p>
 {:else}
 	<form class="tile panel" id="wg-server" onsubmit={save}>
 		<h2 class="tile-title">{t('wg.server')}</h2>
 		{#if status.disabled}<p class="notice-warn">{t('wg.devMode')}</p>{/if}
-		<label class="check"><input type="checkbox" bind:checked={enabled} disabled={busy} /><span>{t('wg.enabled')}</span></label>
+		<label class="check"
+			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span>{t('wg.enabled')}</span
+			></label
+		>
 		<label class="stack"
 			><span>{t('wg.endpoint')}</span><input
 				class="field mono"
@@ -141,31 +168,63 @@
 		{#if !endpointOk}<p class="notice-warn" role="alert">{t('wg.endpointInvalid')}</p>{/if}
 		<fieldset class="choice">
 			<legend>{t('wg.access')}</legend>
-			<label class="check"><input type="radio" name="access" value={false} bind:group={fullTunnel} disabled={busy} /><span>{t('wg.accessHome')}</span></label>
-			<label class="check"><input type="radio" name="access" value={true} bind:group={fullTunnel} disabled={busy} /><span>{t('wg.accessAll')}</span></label>
+			<label class="check"
+				><input
+					type="radio"
+					name="access"
+					value={false}
+					bind:group={fullTunnel}
+					disabled={busy}
+				/><span>{t('wg.accessHome')}</span></label
+			>
+			<label class="check"
+				><input
+					type="radio"
+					name="access"
+					value={true}
+					bind:group={fullTunnel}
+					disabled={busy}
+				/><span>{t('wg.accessAll')}</span></label
+			>
 		</fieldset>
 		<label class="stack"
-			><span>{t('wg.dns')}</span><input class="field mono" type="text" bind:value={dns} placeholder="192.168.178.1" spellcheck="false" disabled={busy} /><small class="muted"
-				>{t('wg.dnsHint')}</small
-			></label
+			><span>{t('wg.dns')}</span><input
+				class="field mono"
+				type="text"
+				bind:value={dns}
+				placeholder="192.168.178.1"
+				spellcheck="false"
+				disabled={busy}
+			/><small class="muted">{t('wg.dnsHint')}</small></label
 		>
 		{#if status.network}
-			<p class="muted small">{t('wg.details', { network: status.network, port: String(status.port) })}</p>
+			<p class="muted small">
+				{t('wg.details', { network: status.network, port: String(status.port) })}
+			</p>
 		{/if}
 		<p class="muted small">{t('wg.router', { port: String(status.port) })}</p>
 		{#if status.error}<p class="notice-error" role="alert">{status.error}</p>{/if}
 		{#if error && !adding}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="row-actions">
 			<button class="btn btn-primary" disabled={!canSave}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status">{t(busy ? 'ui.saving' : 'ui.saved')}</span>{/if}
-			{#if status.enabled}<span class="chip" class:ok={status.running}>{t(status.running ? 'wg.running' : 'wg.notRunning')}</span>{/if}
+			{#if busy || saved}<span class="muted" role="status"
+					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+				>{/if}
+			{#if status.enabled}<span class="chip" class:ok={status.running}
+					>{t(status.running ? 'wg.running' : 'wg.notRunning')}</span
+				>{/if}
 		</div>
 	</form>
 
 	<section class="tile panel" id="wg-devices" aria-labelledby="wg-devices-title">
 		<div class="head">
 			<h2 class="tile-title" id="wg-devices-title">{t('wg.devices')}</h2>
-			<button type="button" class="btn" disabled={busy || !status.enabled || !status.network} onclick={() => ((adding = true), (error = ''))}>{t('wg.add')}</button>
+			<button
+				type="button"
+				class="btn"
+				disabled={busy || !status.enabled || !status.network}
+				onclick={() => ((adding = true), (error = ''))}>{t('wg.add')}</button
+			>
 		</div>
 		{#if !status.enabled}<p class="muted">{t('wg.enableFirst')}</p>{/if}
 		{#if status.peers.length}
@@ -174,12 +233,21 @@
 					<li>
 						<span class="name">{peer.name}</span>
 						<span class="mono small">{peer.address.replace('/32', '')}</span>
-						<span class="chip" class:ok={connected(peer, now)}>{t(connected(peer, now) ? 'wg.connected' : 'wg.notConnected')}</span>
+						<span class="chip" class:ok={connected(peer, now)}
+							>{t(connected(peer, now) ? 'wg.connected' : 'wg.notConnected')}</span
+						>
 						<span class="muted small"
-							>{peer.lastHandshake ? t('wg.lastSeen', { time: formatTime(new Date(peer.lastHandshake)) }) : t('wg.never')}{#if peer.received || peer.sent}
+							>{peer.lastHandshake
+								? t('wg.lastSeen', { time: formatTime(new Date(peer.lastHandshake)) })
+								: t('wg.never')}{#if peer.received || peer.sent}
 								· ↓ {formatBytes(peer.sent)} · ↑ {formatBytes(peer.received)}{/if}</span
 						>
-						<button type="button" class="btn small" disabled={busy} onclick={() => (removing = peer)}>{t('wg.remove')}</button>
+						<button
+							type="button"
+							class="btn small"
+							disabled={busy}
+							onclick={() => (removing = peer)}>{t('wg.remove')}</button
+						>
 					</li>
 				{/each}
 			</ul>
@@ -193,10 +261,20 @@
 {#if adding}
 	<Dialog title={t('wg.add')} onclose={() => (adding = false)}>
 		<form onsubmit={add}>
-			<label class="stack"><span>{t('wg.deviceName')}</span><input class="field" type="text" bind:value={newName} maxlength="40" placeholder={t('wg.deviceNamePlaceholder')} /></label>
+			<label class="stack"
+				><span>{t('wg.deviceName')}</span><input
+					class="field"
+					type="text"
+					bind:value={newName}
+					maxlength="40"
+					placeholder={t('wg.deviceNamePlaceholder')}
+				/></label
+			>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (adding = false)}>{t('common.cancel')}</button>
+				<button type="button" class="btn" onclick={() => (adding = false)}
+					>{t('common.cancel')}</button
+				>
 				<button class="btn btn-primary" disabled={busy || !newName.trim()}>{t('wg.create')}</button>
 			</div>
 		</form>
@@ -206,15 +284,23 @@
 {#if created}
 	<Dialog title={t('wg.createdTitle', { name: created.name })} onclose={() => (created = null)}>
 		<p>{t('wg.createdHint')}</p>
-		<div class="qr"><QrCode text={created.config} label={t('wg.qrLabel', { name: created.name })} /></div>
+		<div class="qr">
+			<QrCode text={created.config} label={t('wg.qrLabel', { name: created.name })} />
+		</div>
 		<details>
 			<summary>{t('wg.showConfig')}</summary>
 			<pre class="mono config">{created.config}</pre>
 		</details>
 		<p class="notice-warn">{t('wg.onceOnly')}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => created && download(created.name, created.config)}>{t('wg.download')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => (created = null)}>{t('wg.done')}</button>
+			<button
+				type="button"
+				class="btn"
+				onclick={() => created && download(created.name, created.config)}>{t('wg.download')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={() => (created = null)}
+				>{t('wg.done')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
@@ -223,8 +309,15 @@
 	<Dialog title={t('wg.remove')} onclose={() => (removing = null)}>
 		<p>{t('wg.removeText', { name: removing.name })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={busy} onclick={() => removing && remove(removing)}>{t('wg.remove')}</button>
+			<button type="button" class="btn" onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				disabled={busy}
+				onclick={() => removing && remove(removing)}>{t('wg.remove')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

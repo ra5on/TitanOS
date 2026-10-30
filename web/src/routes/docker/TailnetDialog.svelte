@@ -6,6 +6,7 @@
 	// missing (auth key), explains what is not there (plugin, HTTPS in the
 	// tailnet) and follows the device until its address answers.
 	// mode "remove" is the simple confirmation for taking it out again.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type AppProxyRoute, type AppProxyStatus } from '#lib/api.ts';
 	import {
 		suggestedProxyName,
@@ -16,7 +17,7 @@
 	} from '#lib/app-proxy.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Props = {
 		app: string;
@@ -45,9 +46,13 @@
 	let failed = $state(0);
 	let copied = $state(false);
 
-	const route = $derived<AppProxyRoute | null>(status?.apps?.find((entry) => entry.app === app) ?? null);
+	const route = $derived<AppProxyRoute | null>(
+		status?.apps?.find((entry) => entry.app === app) ?? null,
+	);
 	const step = $derived(tailnetStep(route, check, failed, CHECKS));
-	const deviceName = $derived(route?.tailscale ? tailnetName(route) : suggestedProxyName(app) || 'app');
+	const deviceName = $derived(
+		route?.tailscale ? tailnetName(route) : suggestedProxyName(app) || 'app',
+	);
 	const available = $derived(status?.tailnet?.available ?? false);
 	const keySet = $derived(status?.tailnet?.keySet ?? false);
 	const url = $derived(route?.tailnet?.url ?? check?.url ?? '');
@@ -64,7 +69,7 @@
 		try {
 			status = await api.get<AppProxyStatus>('/docker/proxy');
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 	$effect(() => {
@@ -83,11 +88,19 @@
 		const tick = async () => {
 			if (stop) return;
 			await load();
-			if (stop || tailnetStep(route, check, failed, CHECKS) !== 'check' || asking || Date.now() - asked < 5000) return;
+			if (
+				stop ||
+				tailnetStep(route, check, failed, CHECKS) !== 'check' ||
+				asking ||
+				Date.now() - asked < 5000
+			)
+				return;
 			asking = true;
 			asked = Date.now();
 			try {
-				const next = await api.post<Check>(`/docker/proxy/apps/${encodeURIComponent(app)}/tailnet/check`);
+				const next = await api.post<Check>(
+					`/docker/proxy/apps/${encodeURIComponent(app)}/tailnet/check`,
+				);
 				if (stop) return;
 				check = next;
 				if (!next.reachable) failed += 1;
@@ -97,13 +110,15 @@
 				asking = false;
 			}
 		};
-		void tick();
-		const fast = setInterval(tick, 2000);
-		const slow = setInterval(() => step === 'https-off' && loadPlugin(), 20000);
+		const fast = poll(tick, { interval: 2000 });
+		const slow = poll(() => step === 'https-off' && loadPlugin(), {
+			interval: 20000,
+			immediate: false,
+		});
 		return () => {
 			stop = true;
-			clearInterval(fast);
-			clearInterval(slow);
+			fast();
+			slow();
 		};
 	});
 	// Done: the page loads its links again once.
@@ -116,10 +131,13 @@
 		busy = true;
 		error = '';
 		try {
-			status = await api.post<AppProxyStatus>(`/docker/proxy/apps/${encodeURIComponent(app)}/tailnet`, {
-				port,
-				...(key.trim() ? { tailscaleKey: key.trim() } : {}),
-			});
+			status = await api.post<AppProxyStatus>(
+				`/docker/proxy/apps/${encodeURIComponent(app)}/tailnet`,
+				{
+					port,
+					...(key.trim() ? { tailscaleKey: key.trim() } : {}),
+				},
+			);
 			key = '';
 			check = null;
 			failed = 0;
@@ -143,7 +161,7 @@
 			onchanged?.();
 			onclose();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -162,12 +180,19 @@
 
 {#if mode === 'remove'}
 	<Dialog title={t('tailnetPublish.removeTitle', { name: app })} locked={busy} {onclose}>
-		<p>{t('tailnetPublish.removeText', { name: app, device: route ? tailnetName(route) : deviceName })}</p>
+		<p>
+			{t('tailnetPublish.removeText', {
+				name: app,
+				device: route ? tailnetName(route) : deviceName,
+			})}
+		</p>
 		{#if route?.tailnetOnly}<p class="muted">{t('tailnetPublish.removeRoute')}</p>{/if}
 		<p class="muted">{t('tailnetPublish.removeAdmin')}</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={onclose}>{t('common.cancel')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={onclose}
+				>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}
 				>{t(busy ? 'tailnetPublish.removing' : 'tailnetPublish.remove')}</button
 			>
@@ -177,7 +202,9 @@
 	<Dialog title={t('tailnetPublish.title', { name: app })} locked={busy} {onclose}>
 		{#if loadError && !status}
 			<div class="notice-error row" role="alert">
-				<span>{loadError}</span><button type="button" class="btn small" onclick={load}>{t('common.retry')}</button>
+				<span>{loadError}</span><button type="button" class="btn small" onclick={load}
+					>{t('common.retry')}</button
+				>
 			</div>
 		{:else if !status}
 			<p class="muted" role="status">{t('common.loading')}</p>
@@ -197,11 +224,21 @@
 			{:else if !keySet}
 				<label class="stack">
 					<span>{t('proxy.tailscaleKey')}</span>
-					<input class="field mono" type="password" autocomplete="off" spellcheck="false" placeholder="tskey-auth-…" bind:value={key} disabled={busy} />
+					<input
+						class="field mono"
+						type="password"
+						autocomplete="off"
+						spellcheck="false"
+						placeholder="tskey-auth-…"
+						bind:value={key}
+						disabled={busy}
+					/>
 				</label>
 				<p class="muted small-text">
 					{t('tailnetPublish.keyHint')}
-					<a href={TAILSCALE_KEYS_URL} target="_blank" rel="noreferrer">{t('tailnetPublish.keysLink')}</a>
+					<a href={TAILSCALE_KEYS_URL} target="_blank" rel="noreferrer"
+						>{t('tailnetPublish.keysLink')}</a
+					>
 				</p>
 			{/if}
 			{#if plugin?.https?.state === 'disabled'}
@@ -209,20 +246,40 @@
 			{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" disabled={busy} onclick={onclose}>{t('common.cancel')}</button>
+				<button type="button" class="btn" disabled={busy} onclick={onclose}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type="button"
 					class="btn btn-primary"
-					disabled={busy || !available || status.off || (!keySet && !key.trim().startsWith('tskey-'))}
-					onclick={publish}>{t(busy ? 'tailnetPublish.publishing' : 'tailnetPublish.publish')}</button
+					disabled={busy ||
+						!available ||
+						status.off ||
+						(!keySet && !key.trim().startsWith('tskey-'))}
+					onclick={publish}
+					>{t(busy ? 'tailnetPublish.publishing' : 'tailnetPublish.publish')}</button
 				>
 			</div>
 		{:else}
 			<ol class="steps" aria-live="polite">
-				<li class:done={step !== 'start'} class:now={step === 'start'}>{t('tailnetPublish.stepStart')}</li>
-				<li class:done={['https-off', 'check', 'ready', 'unreachable'].includes(step)} class:now={step === 'login'}>{t('tailnetPublish.stepJoin')}</li>
-				<li class:done={['check', 'ready', 'unreachable'].includes(step)} class:now={step === 'https-off'}>{t('tailnetPublish.stepCert')}</li>
-				<li class:done={step === 'ready'} class:now={step === 'check' || step === 'unreachable'}>{t('tailnetPublish.stepCheck')}</li>
+				<li class:done={step !== 'start'} class:now={step === 'start'}>
+					{t('tailnetPublish.stepStart')}
+				</li>
+				<li
+					class:done={['https-off', 'check', 'ready', 'unreachable'].includes(step)}
+					class:now={step === 'login'}
+				>
+					{t('tailnetPublish.stepJoin')}
+				</li>
+				<li
+					class:done={['check', 'ready', 'unreachable'].includes(step)}
+					class:now={step === 'https-off'}
+				>
+					{t('tailnetPublish.stepCert')}
+				</li>
+				<li class:done={step === 'ready'} class:now={step === 'check' || step === 'unreachable'}>
+					{t('tailnetPublish.stepCheck')}
+				</li>
 			</ol>
 			{#if step === 'login'}
 				<p class="notice-warn">{t('tailnetPublish.login')}</p>
@@ -230,14 +287,20 @@
 				<div class="notice-warn stack-note" role="alert">
 					<span>{t('tailnetPublish.httpsOff')}</span>
 					{#if plugin?.https?.enableUrl}
-						<a class="btn small" href={plugin.https.enableUrl} target="_blank" rel="noreferrer">{t('tailscale.httpsEnable')}</a>
+						<a class="btn small" href={plugin.https.enableUrl} target="_blank" rel="noreferrer"
+							>{t('tailscale.httpsEnable')}</a
+						>
 					{:else}
-						<a class="btn small" href={TAILSCALE_DNS_URL} target="_blank" rel="noreferrer">{t('tailnetPublish.dnsLink')}</a>
+						<a class="btn small" href={TAILSCALE_DNS_URL} target="_blank" rel="noreferrer"
+							>{t('tailnetPublish.dnsLink')}</a
+						>
 					{/if}
 					<span class="muted small-text">{t('tailnetPublish.httpsOffWait')}</span>
 				</div>
 			{:else if step === 'error'}
-				<p class="notice-error" role="alert">{t('tailnetPublish.failed', { error: route?.tailnet?.error ?? '' })}</p>
+				<p class="notice-error" role="alert">
+					{t('tailnetPublish.failed', { error: route?.tailnet?.error ?? '' })}
+				</p>
 			{:else if step === 'off'}
 				<p class="notice-warn">{t('tailnetPublish.stopped')}</p>
 			{:else if step === 'unreachable'}
@@ -247,18 +310,28 @@
 			{:else if step === 'ready'}
 				<p class="notice-ok" role="status">{t('tailnetPublish.ready')}</p>
 			{:else}
-				<p class="muted" role="status">{t(step === 'check' ? 'tailnetPublish.checking' : 'tailnetPublish.starting')}</p>
+				<p class="muted" role="status">
+					{t(step === 'check' ? 'tailnetPublish.checking' : 'tailnetPublish.starting')}
+				</p>
 			{/if}
 			{#if url && (step === 'ready' || step === 'unreachable' || step === 'check')}
 				<div class="address">
 					<a class="mono" href={url} target="_blank" rel="noreferrer">{url}</a>
-					<button type="button" class="btn small" onclick={copy}><Icon name={copied ? 'check' : 'copy'} size={14} />{t(copied ? 'tailnetPublish.copied' : 'tailnetPublish.copy')}</button>
-					<a class="btn small" href={url} target="_blank" rel="noreferrer"><Icon name="external" size={14} />{t('tailnetPublish.open')}</a>
+					<button type="button" class="btn small" onclick={copy}
+						><Icon name={copied ? 'check' : 'copy'} size={14} />{t(
+							copied ? 'tailnetPublish.copied' : 'tailnetPublish.copy',
+						)}</button
+					>
+					<a class="btn small" href={url} target="_blank" rel="noreferrer"
+						><Icon name="external" size={14} />{t('tailnetPublish.open')}</a
+					>
 				</div>
 			{/if}
 			<p class="muted small-text">{t('tailnetPublish.later')}</p>
 			<div class="dialog-actions">
-				<button type="button" class="btn btn-primary" onclick={onclose}>{t(step === 'ready' ? 'common.done' : 'tailnetPublish.background')}</button>
+				<button type="button" class="btn btn-primary" onclick={onclose}
+					>{t(step === 'ready' ? 'common.done' : 'tailnetPublish.background')}</button
+				>
 			</div>
 		{/if}
 	</Dialog>

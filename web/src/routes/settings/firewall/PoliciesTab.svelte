@@ -22,11 +22,14 @@
 
 	let from = $state('');
 	let to = $state('');
-	const destLabel = (id: string) => (id === NAS ? t('firewall.toNas') : id === APPS ? t('firewall.toApps') : zoneLabel(id));
+	const destLabel = (id: string) =>
+		id === NAS ? t('firewall.toNas') : id === APPS ? t('firewall.toApps') : zoneLabel(id);
 	const allDestinations = $derived([NAS, APPS, ...draft.zones.map((z) => z.id)]);
 	const entries = $derived(
 		draft.cells.flatMap((cell, ci) =>
-			(!from || cell.from === from) && (!to || cell.to === to) && destinations(draft, cell.from).includes(cell.to)
+			(!from || cell.from === from) &&
+			(!to || cell.to === to) &&
+			destinations(draft, cell.from).includes(cell.to)
 				? cell.policies.map((_, pi) => ({ ci, pi }))
 				: [],
 		),
@@ -56,15 +59,15 @@
 	<div class="filters">
 		<label class="stack"
 			><span>{t('firewall.from')}</span><select class="field" bind:value={from}
-				><option value="">{t('firewall.filterAll')}</option>{#each draft.zones as z (z.id)}<option value={z.id}
-						>{zoneLabel(z.id)}</option
+				><option value="">{t('firewall.filterAll')}</option>{#each draft.zones as z (z.id)}<option
+						value={z.id}>{zoneLabel(z.id)}</option
 					>{/each}</select
 			></label
 		>
 		<label class="stack"
 			><span>{t('firewall.to')}</span><select class="field" bind:value={to}
-				><option value="">{t('firewall.filterAll')}</option>{#each allDestinations as d (d)}<option value={d}
-						>{destLabel(d)}</option
+				><option value="">{t('firewall.filterAll')}</option>{#each allDestinations as d (d)}<option
+						value={d}>{destLabel(d)}</option
 					>{/each}</select
 			></label
 		>
@@ -87,7 +90,9 @@
 			{/each}
 		</ol>{:else}<p class="muted">{t('firewall.noMatch')}</p>{/if}
 	<div class="row-actions start">
-		<button class="btn" type="button" disabled={locked || !canAdd} onclick={add}>{t('firewall.addPolicy')}</button>
+		<button class="btn" type="button" disabled={locked || !canAdd} onclick={add}
+			>{t('firewall.addPolicy')}</button
+		>
 		{#if !canAdd}<span class="muted small">{t('firewall.addPolicyHint')}</span>{/if}
 	</div>
 </section>

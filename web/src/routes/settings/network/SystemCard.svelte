@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Name of the NAS and its time zone. A new name cannot cut the
 	// connection, so it applies at once and is not part of the draft.
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	let {
 		hostname,
@@ -35,9 +35,7 @@
 			timer = setTimeout(() => (saved = false), 5000);
 			onsaved(value);
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			busy = false;
 		}

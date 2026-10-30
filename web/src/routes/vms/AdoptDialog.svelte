@@ -5,7 +5,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { api, ApiError, type VMAdoptCandidate, type VMAdoptResult } from '#lib/api.ts';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
-	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
 
 	let { onclose, onadopted }: { onclose: () => void; onadopted: (name: string) => void } = $props();
@@ -35,7 +35,7 @@
 			const first = candidates.find((c) => c.missing.length === 0);
 			if (!selected) choose(first);
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		} finally {
 			loading = false;
 		}

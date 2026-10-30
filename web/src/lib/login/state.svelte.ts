@@ -22,7 +22,7 @@ function cached(): LoginLook | null {
  */
 export const loginLook = $state<{ value: LoginLook | null; loaded: boolean }>({
 	value: typeof localStorage === 'undefined' ? null : cached(),
-	loaded: false
+	loaded: false,
 });
 
 /** Asks the NAS for the look of the login page (no login needed). */

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import UsageBreakdown from '#lib/operations/UsageBreakdown.svelte';
 	import SnapshotFolderRestore from '#lib/operations/SnapshotFolderRestore.svelte';
 	import SnapshotRestoreJobs from '#lib/operations/SnapshotRestoreJobs.svelte';
@@ -93,16 +94,17 @@
 		volume = page.url.searchParams.get('volume') ?? '';
 		mode = page.url.searchParams.get('mode') ?? 'usage';
 		load();
-		const timer = setInterval(() => {
-			if (!document.hidden && mode === 'grow' && !busy) loadGrowth();
-		}, 5000);
-		return () => clearInterval(timer);
+		return poll(loadGrowth, {
+			interval: 5000,
+			immediate: false,
+			skip: () => mode !== 'grow' || busy,
+		});
 	});
 	async function load() {
 		busy = true;
 		error = '';
 		try {
-			storage = await api.get('/storage');
+			storage = await api.get<StorageStatus>('/storage');
 			if (!storage!.volumes.some((v) => v.name === volume))
 				volume = storage!.volumes[0]?.name ?? '';
 			await loadGrowth();
@@ -115,7 +117,7 @@
 	}
 	async function loadGrowth() {
 		try {
-			growth = await api.get('/storage/growth');
+			growth = await api.get<GrowthStatus>('/storage/growth');
 		} catch (e) {
 			error = operationError(e, t);
 		}
@@ -152,7 +154,7 @@
 	const base = () => `/storage/volumes/${encodeURIComponent(volume)}`;
 	async function analyze() {
 		await run(async () => {
-			usage = await api.get(`${base()}/usage`);
+			usage = await api.get<Usage>(`${base()}/usage`);
 		});
 	}
 	// The API still wants the volume name as confirmation; the page sends it
@@ -169,7 +171,7 @@
 	}
 	async function growPreview() {
 		await run(async () => {
-			preview = await api.post(`${base()}/growth/preview`, growthRequest());
+			preview = await api.post<Growth>(`${base()}/growth/preview`, growthRequest());
 			erase = false;
 		});
 	}
@@ -198,7 +200,7 @@
 		});
 	}
 	async function loadSnapshots() {
-		snapshots = volume ? await api.get(`${base()}/snapshots`) : [];
+		snapshots = volume ? await api.get<{ name: string }[]>(`${base()}/snapshots`) : [];
 	}
 	// Another snapshot starts empty: nothing listed or picked in the old one
 	// may be sent to the new one.

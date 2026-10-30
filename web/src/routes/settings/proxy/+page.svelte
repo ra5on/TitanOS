@@ -20,7 +20,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Kind = 'app' | 'target';
 	// The route being edited; key is null for a new target.
@@ -72,7 +72,7 @@
 			? err.code === 'proxy_name_taken'
 				? errorText(err.code)
 				: err.message
-			: errorText(err instanceof ApiError ? err.code : 'internal');
+			: apiErrorText(err);
 	}
 	function take(next: AppProxyStatus) {
 		status = next;

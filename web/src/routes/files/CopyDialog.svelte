@@ -3,7 +3,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { untrack } from 'svelte';
 
 	type Props = {
@@ -38,6 +38,8 @@
 			(root) => root.writable && (!restore || root.kind === 'share' || root.kind === 'volume'),
 		),
 	);
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the file manager mounts this dialog anew for each opening ({#key copying}).
 	// svelte-ignore state_referenced_locally
 	let toRoot = $state(
 		targetRoot ??
@@ -123,7 +125,6 @@
 		const dot = name.lastIndexOf('.');
 		return dot > 0 ? name.slice(0, dot) + ' (2)' + name.slice(dot) : name + ' (2)';
 	};
-	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 
 	let scope = $state<{ bytes: number; files: number } | null>(null),
 		scopeError = $state(''),
@@ -156,7 +157,7 @@
 			.catch((err) => {
 				if (!controller.signal.aborted) {
 					scopeDeferred = err instanceof ApiError && err.code === 'file_scan_timeout';
-					scopeError = fail(err);
+					scopeError = apiErrorText(err);
 				}
 			});
 		return () => controller.abort();
@@ -176,7 +177,7 @@
 			error = '';
 		} catch (err) {
 			folders = [];
-			error = fail(err);
+			error = apiErrorText(err);
 		}
 	}
 
@@ -222,7 +223,7 @@
 				if (!controller.signal.aborted && key === targetKey) {
 					inspectionDeferred = err instanceof ApiError && err.code === 'file_scan_timeout';
 					inspectionError =
-						inspectionDeferred && !replaces && conflict !== 'individual' ? '' : fail(err);
+						inspectionDeferred && !replaces && conflict !== 'individual' ? '' : apiErrorText(err);
 				}
 				return false;
 			})
@@ -320,7 +321,7 @@
 				}),
 			);
 		} catch (err) {
-			error = fail(err);
+			error = apiErrorText(err);
 			busy = false;
 		}
 	}

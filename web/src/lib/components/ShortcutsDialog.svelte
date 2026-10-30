@@ -19,16 +19,20 @@
 				{ keys: [mod, 'Z'], label: 'shortcuts.dashboardUndo', show: true },
 				{ keys: [mod, 'S'], label: 'shortcuts.dashboardSave', show: true },
 				{ keys: ['F1'], label: 'shortcuts.files', show: true },
-				{ keys: ['Esc'], label: 'shortcuts.escape', show: true }
+				{ keys: ['Esc'], label: 'shortcuts.escape', show: true },
 			] satisfies { keys: string[]; label: MessageKey; show: boolean }[]
-		).filter((row) => row.show)
+		).filter((row) => row.show),
 	);
 </script>
 
 <Dialog title={t('shortcuts.title')} {onclose}>
 	<dl class="keys">
 		{#each rows as row (row.label)}
-			<dt>{#each row.keys as key, index (index)}{#if index}<span class="plus">+</span>{/if}<kbd>{key === 'Strg' ? t('shortcuts.ctrl') : key}</kbd>{/each}</dt>
+			<dt>
+				{#each row.keys as key, index (index)}{#if index}<span class="plus">+</span>{/if}<kbd
+						>{key === 'Strg' ? t('shortcuts.ctrl') : key}</kbd
+					>{/each}
+			</dt>
 			<dd>{t(row.label)}</dd>
 		{/each}
 	</dl>

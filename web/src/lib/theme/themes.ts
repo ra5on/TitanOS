@@ -2,7 +2,16 @@
 // Values follow docs/design/Appearance.dc.html. The identifiers (graphit,
 // blau, kompakt, …) are part of the exported theme files; do not rename them.
 
-import { contrast, darkenFor, isHex, luminance, rotateHue, shade, withAlpha, type Hex } from './color.ts';
+import {
+	contrast,
+	darkenFor,
+	isHex,
+	luminance,
+	rotateHue,
+	shade,
+	withAlpha,
+	type Hex,
+} from './color.ts';
 import { defaultNav, sanitizeNav, type NavPrefs } from '../navigation.ts';
 
 export type Palette = {
@@ -18,10 +27,50 @@ export type Palette = {
 };
 
 export const THEMES = {
-	graphit: { bg: '#0E1114', surface: '#161A1F', header: '#12161A', border: '#232A31', text: '#E6E9ED', muted: '#9AA3AD', track: '#232A31', chip: '#1E252C', dark: true },
-	schwarz: { bg: '#000000', surface: '#0E0E0F', header: '#080808', border: '#242426', text: '#EDEDED', muted: '#A3A3A9', track: '#1F1F22', chip: '#1A1A1C', dark: true },
-	mitternacht: { bg: '#0A0F1E', surface: '#111933', header: '#0D1428', border: '#232D4D', text: '#E6EAF5', muted: '#9DA7C6', track: '#232D4D', chip: '#1A2442', dark: true },
-	hell: { bg: '#F3F4F6', surface: '#FFFFFF', header: '#FFFFFF', border: '#DCE0E5', text: '#14181D', muted: '#56606B', track: '#E3E7EC', chip: '#EAEDF1', dark: false }
+	graphit: {
+		bg: '#0E1114',
+		surface: '#161A1F',
+		header: '#12161A',
+		border: '#232A31',
+		text: '#E6E9ED',
+		muted: '#9AA3AD',
+		track: '#232A31',
+		chip: '#1E252C',
+		dark: true,
+	},
+	schwarz: {
+		bg: '#000000',
+		surface: '#0E0E0F',
+		header: '#080808',
+		border: '#242426',
+		text: '#EDEDED',
+		muted: '#A3A3A9',
+		track: '#1F1F22',
+		chip: '#1A1A1C',
+		dark: true,
+	},
+	mitternacht: {
+		bg: '#0A0F1E',
+		surface: '#111933',
+		header: '#0D1428',
+		border: '#232D4D',
+		text: '#E6EAF5',
+		muted: '#9DA7C6',
+		track: '#232D4D',
+		chip: '#1A2442',
+		dark: true,
+	},
+	hell: {
+		bg: '#F3F4F6',
+		surface: '#FFFFFF',
+		header: '#FFFFFF',
+		border: '#DCE0E5',
+		text: '#14181D',
+		muted: '#56606B',
+		track: '#E3E7EC',
+		chip: '#EAEDF1',
+		dark: false,
+	},
 } satisfies Record<string, Palette>;
 
 export const THEME_IDS = ['graphit', 'schwarz', 'mitternacht', 'hell', 'auto', 'eigen'] as const;
@@ -34,7 +83,7 @@ export const ACCENTS = {
 	tuerkis: { hex: '#3FCFC7', dark: '#127A75' },
 	violett: { hex: '#B49CFF', dark: '#6247C9' },
 	kupfer: { hex: '#E0895A', dark: '#A8521F' },
-	rose: { hex: '#F28CB0', dark: '#B33A68' }
+	rose: { hex: '#F28CB0', dark: '#B33A68' },
 } satisfies Record<string, { hex: Hex; dark: Hex }>;
 
 export const ACCENT_IDS = ['blau', 'gruen', 'tuerkis', 'violett', 'kupfer', 'rose'] as const;
@@ -74,7 +123,15 @@ export type Effects = {
 	shortcuts: boolean;
 };
 
-export const EFFECT_IDS = ['transitions', 'skeleton', 'micro', 'pulse', 'gradient', 'illustrations', 'shortcuts'] as const;
+export const EFFECT_IDS = [
+	'transitions',
+	'skeleton',
+	'micro',
+	'pulse',
+	'gradient',
+	'illustrations',
+	'shortcuts',
+] as const;
 export type EffectId = (typeof EFFECT_IDS)[number];
 
 /**
@@ -148,7 +205,7 @@ export const LIMITS = {
 	dim: { min: 0, max: 80, step: 5 },
 	glow: { min: 0, max: 100, step: 5 },
 	duration: { min: 150, max: 1000, step: 50 },
-	dialogDim: { min: 0, max: 90, step: 5 }
+	dialogDim: { min: 0, max: 90, step: 5 },
 } as const;
 
 /**
@@ -173,7 +230,13 @@ export function defaultAppearance(): Appearance {
 		bg: 'shapes',
 		dim: 30,
 		bgVersion: 0,
-		custom: { bg: '#101418', surface: '#1A2027', header: '#13181D', text: '#ECEFF3', border: '#2A333D' },
+		custom: {
+			bg: '#101418',
+			surface: '#1A2027',
+			header: '#13181D',
+			text: '#ECEFF3',
+			border: '#2A333D',
+		},
 		glow: 0,
 		glowColor: '',
 		motion: true,
@@ -181,7 +244,7 @@ export function defaultAppearance(): Appearance {
 		fx: defaultEffects(),
 		menus: defaultFloating(),
 		dialogs: { ...defaultFloating(), dim: 70 },
-		nav: defaultNav()
+		nav: defaultNav(),
 	};
 }
 
@@ -197,7 +260,7 @@ function sanitizeFloating(input: unknown): FloatingSurface {
 		own: typeof v.own === 'boolean' ? v.own : d.own,
 		glass: inRange(v.glass, LIMITS.glass, d.glass),
 		blur: inRange(v.blur, LIMITS.blur, d.blur),
-		shine: inRange(v.shine, LIMITS.shine, d.shine)
+		shine: inRange(v.shine, LIMITS.shine, d.shine),
 	};
 }
 
@@ -215,7 +278,7 @@ export function defaultEffects(): Effects {
 		pulse: false,
 		gradient: false,
 		illustrations: true,
-		shortcuts: true
+		shortcuts: true,
 	};
 }
 
@@ -258,9 +321,21 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 	// Glow and animation were set in the dashboard editor before 0.30.0
 	// (dashboard preferences, "visual"); they count until the appearance
 	// has its own.
-	const old = (typeof legacy === 'object' && legacy !== null ? legacy : {}) as Record<string, unknown>;
-	const v: Record<string, unknown> = { glow: old.glow, glowColor: old.glowColor, motion: old.motion, duration: old.duration, ...(input as Record<string, unknown>) };
-	const custom = (typeof v.custom === 'object' && v.custom !== null ? v.custom : {}) as Record<string, unknown>;
+	const old = (typeof legacy === 'object' && legacy !== null ? legacy : {}) as Record<
+		string,
+		unknown
+	>;
+	const v: Record<string, unknown> = {
+		glow: old.glow,
+		glowColor: old.glowColor,
+		motion: old.motion,
+		duration: old.duration,
+		...(input as Record<string, unknown>),
+	};
+	const custom = (typeof v.custom === 'object' && v.custom !== null ? v.custom : {}) as Record<
+		string,
+		unknown
+	>;
 	return {
 		theme: oneOf(v.theme, THEME_IDS, d.theme),
 		accent: oneOf(v.accent, [...ACCENT_IDS, 'custom'] as const, d.accent),
@@ -281,7 +356,7 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 			surface: hex(custom.surface, d.custom.surface),
 			header: hex(custom.header, d.custom.header),
 			text: hex(custom.text, d.custom.text),
-			border: hex(custom.border, d.custom.border)
+			border: hex(custom.border, d.custom.border),
 		},
 		glow: inRange(v.glow, LIMITS.glow, d.glow),
 		glowColor: isHex(v.glowColor) ? v.glowColor.toUpperCase() : '',
@@ -290,7 +365,7 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		fx: sanitizeEffects(v.fx),
 		menus: sanitizeFloating(v.menus),
 		dialogs: sanitizeDialogs(v.dialogs),
-		nav: sanitizeNav(v.nav)
+		nav: sanitizeNav(v.nav),
 	};
 }
 
@@ -309,7 +384,7 @@ export function resolvePalette(a: Appearance, systemLight: boolean): Palette {
 			muted: dark ? shade(c.text, -0.32) : shade(c.text, 0.38),
 			track: c.border,
 			chip: dark ? shade(c.surface, 0.06) : shade(c.surface, -0.06),
-			dark
+			dark,
 		};
 	}
 	if (a.theme === 'auto') return systemLight ? THEMES.hell : THEMES.graphit;
@@ -338,8 +413,13 @@ export function glassAlpha(a: Appearance, palette: Palette): number {
 }
 
 /** The glass values a menu or dialog uses: its own, or those of the tiles. */
-export function floatingValues(a: Appearance, s: FloatingSurface): { glass: number; blur: number; shine: number } {
-	return s.own ? { glass: s.glass, blur: s.blur, shine: s.shine } : { glass: a.glass, blur: a.blur, shine: a.shine };
+export function floatingValues(
+	a: Appearance,
+	s: FloatingSurface,
+): { glass: number; blur: number; shine: number } {
+	return s.own
+		? { glass: s.glass, blur: s.blur, shine: s.shine }
+		: { glass: a.glass, blur: a.blur, shine: a.shine };
 }
 
 /**
@@ -422,7 +502,9 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 			: '0 0 0 transparent',
 		'--metric-duration': `${a.motion ? a.duration : 0}ms`,
 		'--accent-2': rotateHue(accent, 38),
-		'--accent-fill': effectOn(a, 'gradient') ? `linear-gradient(135deg, ${accent}, ${rotateHue(accent, 38)})` : accent
+		'--accent-fill': effectOn(a, 'gradient')
+			? `linear-gradient(135deg, ${accent}, ${rotateHue(accent, 38)})`
+			: accent,
 	};
 }
 
@@ -433,6 +515,8 @@ export function dataAttributes(a: Appearance, systemLight: boolean): Record<stri
 		'data-mode': resolvePalette(a, systemLight).dark ? 'dark' : 'light',
 		'data-surface': a.style,
 		'data-density': a.density === 'kompakt' ? 'compact' : 'normal',
-		...Object.fromEntries(EFFECT_IDS.map((id) => [`data-fx-${id}`, effectOn(a, id) ? 'on' : 'off']))
+		...Object.fromEntries(
+			EFFECT_IDS.map((id) => [`data-fx-${id}`, effectOn(a, id) ? 'on' : 'off']),
+		),
 	};
 }

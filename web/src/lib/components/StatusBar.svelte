@@ -21,9 +21,15 @@
 		if (volumes.length === 0) return t('status.noVolumes');
 		return volumes
 			.map((volume) => {
-				const state = volume.encryption?.locked ? t('crypt.chipLocked') : t(`state.${volume.state}`);
+				const state = volume.encryption?.locked
+					? t('crypt.chipLocked')
+					: t(`state.${volume.state}`);
 				return volume.sync
-					? t('status.volumeSync', { name: volume.name, state, percent: formatPercent(volume.sync.percent) })
+					? t('status.volumeSync', {
+							name: volume.name,
+							state,
+							percent: formatPercent(volume.sync.percent),
+						})
 					: t('status.volume', { name: volume.name, state });
 			})
 			.join(' · ');
@@ -33,7 +39,8 @@
 		const parts: string[] = [];
 		if (system.info) {
 			parts.push(`TitanOS ${system.info.version}`);
-			if (system.info.image?.slot) parts.push(t('status.slot', { slot: system.info.image.slot.toUpperCase() }));
+			if (system.info.image?.slot)
+				parts.push(t('status.slot', { slot: system.info.image.slot.toUpperCase() }));
 		}
 		parts.push(formatTime(now));
 		return parts.join(' · ');
@@ -64,6 +71,14 @@
 			padding: 10px 16px;
 		}
 	}
- footer span { min-width: 0; overflow-wrap: anywhere; }
- .right { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+	footer span {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.right {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 16px;
+	}
 </style>

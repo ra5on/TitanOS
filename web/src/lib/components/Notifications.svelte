@@ -3,8 +3,7 @@
 	import { noticeLink } from '#lib/notice-link.ts';
 	import { armSound } from '#lib/sound.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { ApiError } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
 		dismissNotifications,
 		loadNotifications,
@@ -33,7 +32,7 @@
 			await dismissNotifications(ids);
 			confirmAll = null;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -177,7 +176,8 @@
 										>{/if}
 									{#if notice.subject}<a
 											class="notice-link"
-											href={'/tools/logs?' + new URLSearchParams({ search: notice.subject, range: '24h' })}
+											href={'/tools/logs?' +
+												new URLSearchParams({ search: notice.subject, range: '24h' })}
 											onclick={() => (open = false)}>{t('notify.inLogs')}</a
 										>{/if}
 								</span>
@@ -206,21 +206,21 @@
 		</div>
 	{/if}
 	{#if confirmAll}
-	<Dialog title={t('notify.deleteAllTitle')} locked={busy} onclose={() => (confirmAll = null)}>
-		<p>{t('notify.deleteAllText', { count: confirmAll.length })}</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (confirmAll = null)}
-				>{t('common.cancel')}</button
-			>
-			<button
-				type="button"
-				class="btn btn-danger"
-				disabled={busy}
-				onclick={() => confirmAll && dismiss(confirmAll)}>{t('notify.deleteAllConfirm')}</button
-			>
-		</div>
-	</Dialog>
+		<Dialog title={t('notify.deleteAllTitle')} locked={busy} onclose={() => (confirmAll = null)}>
+			<p>{t('notify.deleteAllText', { count: confirmAll.length })}</p>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (confirmAll = null)}
+					>{t('common.cancel')}</button
+				>
+				<button
+					type="button"
+					class="btn btn-danger"
+					disabled={busy}
+					onclick={() => confirmAll && dismiss(confirmAll)}>{t('notify.deleteAllConfirm')}</button
+				>
+			</div>
+		</Dialog>
 	{/if}
 </div>
 

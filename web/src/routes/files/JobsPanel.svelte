@@ -9,10 +9,10 @@
 			notices = notices.filter((item) => item.id !== job.id);
 			jobs = jobs.filter((item) => item.id !== job.id);
 		} catch (err) {
-			retryError = errorText(err instanceof ApiError ? err.code : 'internal');
+			retryError = apiErrorText(err);
 		} finally {
 			retrying = '';
-			await poll();
+			await fetchJobs();
 		}
 	}
 	async function clearFinished() {
@@ -25,16 +25,17 @@
 			notices = [];
 			jobs = jobs.filter((job) => job.state === 'running');
 		} catch (err) {
-			retryError = errorText(err instanceof ApiError ? err.code : 'internal');
+			retryError = apiErrorText(err);
 		} finally {
 			retrying = '';
-			await poll();
+			await fetchJobs();
 		}
 	}
+	import { poll } from '#lib/poll.ts';
 	import { transferSample, transferProblem, type TransferSample } from '#lib/transfer-progress.ts';
-	import { api, ApiError, type CopyJob } from '#lib/api.ts';
+	import { api, type CopyJob } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Props = {
 		/** Called when a job that was running has ended. */ onfinished: () => void;
@@ -56,10 +57,10 @@
 		try {
 			await api.post(`/files/jobs/${job.id}/retry`);
 		} catch (err) {
-			retryError = errorText(err instanceof ApiError ? err.code : 'internal');
+			retryError = apiErrorText(err);
 		} finally {
 			retrying = '';
-			await poll();
+			await fetchJobs();
 		}
 	}
 	async function control(job: CopyJob, change: Partial<CopyJob>) {
@@ -73,9 +74,9 @@
 				rate: job.rate ?? 0,
 				...change,
 			});
-			await poll();
+			await fetchJobs();
 		} catch (err) {
-			retryError = errorText(err instanceof ApiError ? err.code : 'internal');
+			retryError = apiErrorText(err);
 		} finally {
 			controlling = '';
 		}
@@ -96,7 +97,7 @@
 	let initialized = false;
 	let notices = $state<CopyJob[]>([]);
 
-	async function poll() {
+	async function fetchJobs() {
 		if (retrying) return;
 		if (inFlight) {
 			refreshAfterPoll = true;
@@ -144,16 +145,14 @@
 			inFlight = false;
 			if (refreshAfterPoll && !retrying) {
 				refreshAfterPoll = false;
-				void poll();
+				void fetchJobs();
 			}
 		}
 	}
 
 	$effect(() => {
 		refresh;
-		poll();
-		const timer = setInterval(() => !document.hidden && poll(), 1000);
-		return () => clearInterval(timer);
+		return poll(fetchJobs, { interval: 1000 });
 	});
 
 	const percent = (job: CopyJob) =>
@@ -162,7 +161,8 @@
 			: job.state === 'done'
 				? 100
 				: 0;
-	const cancel = (job: CopyJob) => api.post(`/files/jobs/${job.id}/cancel`).then(poll, poll);
+	const cancel = (job: CopyJob) =>
+		api.post(`/files/jobs/${job.id}/cancel`).then(fetchJobs, fetchJobs);
 </script>
 
 {#each notices as notice (notice.id)}<div class="notice" role="status">

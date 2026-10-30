@@ -31,9 +31,9 @@
 			<table class="data-table networks">
 				<thead
 					><tr
-						><th>{t('firewall.netName')}</th><th>{t('firewall.netKind')}</th><th>{t('firewall.netDevice')}</th><th
-							>{t('firewall.netSubnets')}</th
-						><th>{t('firewall.netZone')}</th></tr
+						><th>{t('firewall.netName')}</th><th>{t('firewall.netKind')}</th><th
+							>{t('firewall.netDevice')}</th
+						><th>{t('firewall.netSubnets')}</th><th>{t('firewall.netZone')}</th></tr
 					></thead
 				>
 				<tbody>
@@ -48,7 +48,9 @@
 							<td class="mono">{n.device ?? (n.parent ? `↳ ${n.parent}` : '–')}</td>
 							<td class="mono small">{n.subnets.join(', ') || '–'}</td>
 							<td>
-								{#if n.kind === 'dockerlan'}<span class="muted small">{t('firewall.netBypass')}</span>
+								{#if n.kind === 'dockerlan'}<span class="muted small"
+										>{t('firewall.netBypass')}</span
+									>
 								{:else}<select
 										class="field"
 										value={zone === fallback(n) ? '' : zone}

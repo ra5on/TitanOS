@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api, type VM, type VMStatus } from '#lib/api.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import VmForm from '../VmForm.svelte';
 
 	let vm = $state<VM | null>(null);
@@ -14,7 +14,7 @@
 				vm = res.vms.find((candidate) => candidate.name === name) ?? null;
 				if (!vm) error = errorText('vm_not_found');
 			},
-			(err) => (error = errorText(err instanceof ApiError ? err.code : 'internal'))
+			(err) => (error = apiErrorText(err)),
 		);
 	});
 </script>

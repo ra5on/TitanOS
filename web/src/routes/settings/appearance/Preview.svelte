@@ -15,13 +15,15 @@
 	const style = $derived(
 		Object.entries(cssVariables(draft, appearance.systemLight))
 			.map(([name, value]) => `${name}: ${value}`)
-			.join('; ')
+			.join('; '),
 	);
 	const attributes = $derived(dataAttributes(draft, appearance.systemLight));
 
 	const user = $derived(session.data?.user);
 	const info = $derived(system.info);
-	const memoryPercent = $derived(info && info.memory.totalBytes > 0 ? (100 * info.memory.usedBytes) / info.memory.totalBytes : 0);
+	const memoryPercent = $derived(
+		info && info.memory.totalBytes > 0 ? (100 * info.memory.usedBytes) / info.memory.totalBytes : 0,
+	);
 </script>
 
 <div class="preview" {style} {...attributes}>
@@ -40,9 +42,17 @@
 		<div class="two">
 			<div class="tile pad">
 				<span class="tile-title">{t('tile.system')}</span>
-				<div class="row"><span>{t('system.cpu')}</span><span class="mono">{formatPercent(info?.cpu.usagePercent ?? 0)}</span></div>
+				<div class="row">
+					<span>{t('system.cpu')}</span><span class="mono"
+						>{formatPercent(info?.cpu.usagePercent ?? 0)}</span
+					>
+				</div>
 				<div class="bar"><span style:width="{info?.cpu.usagePercent ?? 0}%"></span></div>
-				<div class="row"><span>{t('system.memory')}</span><span class="mono">{info ? formatBytesOf(info.memory.usedBytes, info.memory.totalBytes) : '–'}</span></div>
+				<div class="row">
+					<span>{t('system.memory')}</span><span class="mono"
+						>{info ? formatBytesOf(info.memory.usedBytes, info.memory.totalBytes) : '–'}</span
+					>
+				</div>
 				<div class="bar"><span style:width="{memoryPercent}%"></span></div>
 			</div>
 			<div class="tile pad">
@@ -59,7 +69,12 @@
 
 		<div class="wrap">
 			<div class="menu floating-menu" role="group" aria-label={t('preview.menu')}>
-				<span class="menu-head">{t('preview.signedIn', { name: user?.name ?? '', role: user ? t(`role.${user.role}`) : '' })}</span>
+				<span class="menu-head"
+					>{t('preview.signedIn', {
+						name: user?.name ?? '',
+						role: user ? t(`role.${user.role}`) : '',
+					})}</span
+				>
 				<span class="menu-item current">{t('menu.appearance')}</span>
 				<span class="menu-item">{t('menu.restart')}</span>
 				<span class="menu-item">{t('menu.logout')}</span>
@@ -74,7 +89,11 @@
 		<div class="dialog-stage">
 			<div class="tile pad stage-content" aria-hidden="true">
 				{#each [1, 2] as n (n)}
-					<div class="item"><span class="grow">{t('preview.item', { n })}</span><span class="muted small">{t('preview.running')}</span></div>
+					<div class="item">
+						<span class="grow">{t('preview.item', { n })}</span><span class="muted small"
+							>{t('preview.running')}</span
+						>
+					</div>
 				{/each}
 			</div>
 			<span class="dim-layer" aria-hidden="true"></span>

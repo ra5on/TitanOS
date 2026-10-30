@@ -10,7 +10,18 @@
 		name: string;
 		busy: boolean;
 	};
-	let { container, name, busy, onaction, onlogs, onremove, onconsole, onupdate, ontailnet, tailnet = false }: Props = $props();
+	let {
+		container,
+		name,
+		busy,
+		onaction,
+		onlogs,
+		onremove,
+		onconsole,
+		onupdate,
+		ontailnet,
+		tailnet = false,
+	}: Props = $props();
 
 	const running = $derived(isRunning(container));
 	// The menu lies in the browser's top layer, so no tile or list clips it.
@@ -38,26 +49,62 @@
 </script>
 
 <div class="wrap">
-	<button type="button" class="more" bind:this={button} aria-label={t('docker.actionsFor', { name })} title={t('docker.actionsFor', { name })} aria-haspopup="menu" aria-expanded={!!at} onpointerdown={() => (wasOpen = !!at)} onclick={toggle}>
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+	<button
+		type="button"
+		class="more"
+		bind:this={button}
+		aria-label={t('docker.actionsFor', { name })}
+		title={t('docker.actionsFor', { name })}
+		aria-haspopup="menu"
+		aria-expanded={!!at}
+		onpointerdown={() => (wasOpen = !!at)}
+		onclick={toggle}
+	>
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+			><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle
+				cx="19"
+				cy="12"
+				r="1.8"
+			/></svg
+		>
 	</button>
 </div>
 {#if at}
-	<ContextMenu label={t('docker.actionsFor', { name })} x={at.x} y={at.y} onclose={() => (at = null)}>
+	<ContextMenu
+		label={t('docker.actionsFor', { name })}
+		x={at.x}
+		y={at.y}
+		onclose={() => (at = null)}
+	>
 		<button type="button" role="menuitem" onclick={() => choose(onlogs)}>{t('docker.logs')}</button>
-		<button type="button" role="menuitem" onclick={() => choose(onconsole)} disabled={!running}>{t('docker.console')}</button>
+		<button type="button" role="menuitem" onclick={() => choose(onconsole)} disabled={!running}
+			>{t('docker.console')}</button
+		>
 		{#if container.managed}
-			<a role="menuitem" href="/docker/apps/{container.app}" onclick={() => (at = null)}>{t('docker.edit')}</a>
+			<a role="menuitem" href="/docker/apps/{container.app}" onclick={() => (at = null)}
+				>{t('docker.edit')}</a
+			>
 		{/if}
-		<button type="button" role="menuitem" onclick={() => choose(() => onaction('restart'))} disabled={busy}>{t('docker.restart')}</button>
+		<button
+			type="button"
+			role="menuitem"
+			onclick={() => choose(() => onaction('restart'))}
+			disabled={busy}>{t('docker.restart')}</button
+		>
 		{#if container.managed && ontailnet}
-			<button type="button" role="menuitem" onclick={() => choose(ontailnet)}>{t(tailnet ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button>
+			<button type="button" role="menuitem" onclick={() => choose(ontailnet)}
+				>{t(tailnet ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button
+			>
 		{/if}
 		{#if container.managed && container.updateAvailable}
-			<button type="button" role="menuitem" onclick={() => choose(onupdate)} disabled={busy}>{t('docker.updateNow')}</button>
+			<button type="button" role="menuitem" onclick={() => choose(onupdate)} disabled={busy}
+				>{t('docker.updateNow')}</button
+			>
 		{/if}
 		<hr />
-		<button type="button" role="menuitem" class="danger" onclick={() => choose(onremove)}>{t('docker.remove')}</button>
+		<button type="button" role="menuitem" class="danger" onclick={() => choose(onremove)}
+			>{t('docker.remove')}</button
+		>
 	</ContextMenu>
 {/if}
 

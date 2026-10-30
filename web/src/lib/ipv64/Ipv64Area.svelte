@@ -53,7 +53,10 @@
 		keyBusy = true;
 		keyError = '';
 		try {
-			status = await api.put<Status>('/ipv64/key', clear ? { clear: true } : { apiKey: key.trim() });
+			status = await api.put<Status>(
+				'/ipv64/key',
+				clear ? { clear: true } : { apiKey: key.trim() },
+			);
 			key = '';
 		} catch (err) {
 			keyError = failure(err);
@@ -65,7 +68,9 @@
 </script>
 
 {#if loadError}
-	<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button></div>
+	<div class="notice-error" role="alert">
+		{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button>
+	</div>
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
@@ -96,13 +101,23 @@
 				/></label
 			>
 			<button class="btn btn-primary" disabled={keyBusy || !key.trim()}>{t('common.save')}</button>
-			{#if status.status.keySet}<button type="button" class="btn" disabled={keyBusy} onclick={() => saveKey(true)}>{t('ipv64x.keyRemove')}</button>{/if}
+			{#if status.status.keySet}<button
+					type="button"
+					class="btn"
+					disabled={keyBusy}
+					onclick={() => saveKey(true)}>{t('ipv64x.keyRemove')}</button
+				>{/if}
 		</form>
 		{#if keyError}<p class="notice-error" role="alert">{keyError}</p>{/if}
 		{#if status.status.readOnly}<p class="notice-warn">{t('ipv64x.devMode')}</p>{/if}
 	</section>
 
-	<Tabs tabs={TABS.map((id) => ({ id, label: t(`ipv64x.tab.${id}` as MessageKey) }))} value={tab} label={t('ipv64x.subTabs')} onchange={choose} />
+	<Tabs
+		tabs={TABS.map((id) => ({ id, label: t(`ipv64x.tab.${id}` as MessageKey) }))}
+		value={tab}
+		label={t('ipv64x.subTabs')}
+		onchange={choose}
+	/>
 
 	{#if !hasKey}
 		<p class="muted">{t('ipv64x.needKeyForTabs')}</p>

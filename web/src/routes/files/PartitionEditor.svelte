@@ -6,9 +6,10 @@
 	// the same drive again by device, serial, model and size.
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
+	import { poll } from '#lib/poll.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		driveFilesystems,
 		formatRunning,
@@ -93,11 +94,8 @@
 		}
 	}
 
-	$effect(() => {
-		load();
-		const timer = setInterval(() => !document.hidden && !busy && load(), 2000);
-		return () => clearInterval(timer);
-	});
+	// While an action runs, its own answer brings the new layout.
+	$effect(() => poll(() => load(), { interval: 2000, skip: () => busy }));
 
 	function partName(p: PartitionSlot) {
 		return `${p.device.replace('/dev/', '')} (${t('files.partitions.colNumber')} ${p.number})`;
@@ -174,13 +172,14 @@
 		actionError = '';
 		const base = `/usb/disks/${encodeURIComponent(id)}`;
 		try {
-			let result: { job: FormatJob | null };
+			type JobAnswer = { job: FormatJob | null };
+			let result: JobAnswer;
 			switch (action.kind) {
 				case 'table':
-					result = await api.post(`${base}/table`, { scheme });
+					result = await api.post<JobAnswer>(`${base}/table`, { scheme });
 					break;
 				case 'create':
-					result = await api.post(`${base}/partitions`, {
+					result = await api.post<JobAnswer>(`${base}/partitions`, {
 						start: action.gap.start,
 						size: rest ? 0 : createSize,
 						filesystem,
@@ -188,21 +187,21 @@
 					});
 					break;
 				case 'delete':
-					result = await api.delete(`${base}/partitions/${action.part.number}`);
+					result = await api.delete<JobAnswer>(`${base}/partitions/${action.part.number}`);
 					break;
 				case 'format':
-					result = await api.post(`${base}/partitions/${action.part.number}/format`, {
+					result = await api.post<JobAnswer>(`${base}/partitions/${action.part.number}/format`, {
 						filesystem,
 						label: label.trim(),
 					});
 					break;
 				case 'label':
-					result = await api.put(`${base}/partitions/${action.part.number}/label`, {
+					result = await api.put<JobAnswer>(`${base}/partitions/${action.part.number}/label`, {
 						label: label.trim(),
 					});
 					break;
 				case 'grow':
-					result = await api.post(`${base}/partitions/${action.part.number}/grow`, {
+					result = await api.post<JobAnswer>(`${base}/partitions/${action.part.number}/grow`, {
 						size: rest ? 0 : growSize,
 					});
 					break;
@@ -210,7 +209,7 @@
 			if (layout) layout.job = result.job;
 			action = null;
 		} catch (err) {
-			actionError = errorText(err instanceof ApiError ? err.code : 'internal');
+			actionError = apiErrorText(err);
 			confirming = false;
 		} finally {
 			busy = false;

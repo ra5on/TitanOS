@@ -115,34 +115,47 @@ test('system information selection keeps deliberate empty selection and ordered 
 	assert.deepEqual(tileOptions({ system: { systemFields: [] } }, 'system').systemFields, []);
 });
 
-test('independent lanes follow reading order without shared-row gaps or shortest-column reordering',async()=>{
- const {positions}=await import('../src/lib/dashboard/positions.ts');
- const items=['system','docker','cpu','vms','memory','volumes'].map(id=>({id}));
- const heights={system:600,docker:150,cpu:200,vms:100,memory:100,volumes:100};
- const result=positions(items,2,heights);
- assert.equal(result.rects.cpu.top,612);
- assert.equal(result.rects.vms.top,162);
- assert.equal(result.rects.volumes.top,274);
- assert.equal(result.rects.cpu.column,0);
- assert.deepEqual(items.map(p=>p.id),Object.keys(result.rects));
- const mobile=positions(items,1,heights,false);
- assert.equal(mobile.rects.docker.top,612);
- assert.equal(mobile.rects.cpu.top,774);
+test('independent lanes follow reading order without shared-row gaps or shortest-column reordering', async () => {
+	const { positions } = await import('../src/lib/dashboard/positions.ts');
+	const items = ['system', 'docker', 'cpu', 'vms', 'memory', 'volumes'].map((id) => ({ id }));
+	const heights = { system: 600, docker: 150, cpu: 200, vms: 100, memory: 100, volumes: 100 };
+	const result = positions(items, 2, heights);
+	assert.equal(result.rects.cpu.top, 612);
+	assert.equal(result.rects.vms.top, 162);
+	assert.equal(result.rects.volumes.top, 274);
+	assert.equal(result.rects.cpu.column, 0);
+	assert.deepEqual(
+		items.map((p) => p.id),
+		Object.keys(result.rects),
+	);
+	const mobile = positions(items, 1, heights, false);
+	assert.equal(mobile.rects.docker.top, 612);
+	assert.equal(mobile.rects.cpu.top, 774);
 });
-test('explicit columns, intentional offsets and spanning tiles retain non-overlapping positions',async()=>{
- const {positions}=await import('../src/lib/dashboard/positions.ts');
- const items=[{id:'a',column:1},{id:'b',column:0,offset:24},{id:'c',span:2,column:0},{id:'d',column:1,offset:16}];
- const heights={a:100,b:200,c:50,d:80};
- const r=positions(items,2,heights).rects;
- assert.equal(r.b.top,24);
- assert.equal(r.c.top,236);
- assert.equal(r.d.top,314);
- const small=positions(items,1,heights,false).rects;
- assert.equal(small.a.column,0);
- assert.equal(small.b.top,112);
- assert.equal(small.c.span,1);
- const sanitized=sanitizeLayout({tiles:[{id:'cpu',column:50,offset:-4,locked:true,height:Infinity}]})[0];
- assert.equal(sanitized.column,3);assert.equal(sanitized.offset,0);assert.equal(sanitized.locked,true);assert.equal(sanitized.height,80);
+test('explicit columns, intentional offsets and spanning tiles retain non-overlapping positions', async () => {
+	const { positions } = await import('../src/lib/dashboard/positions.ts');
+	const items = [
+		{ id: 'a', column: 1 },
+		{ id: 'b', column: 0, offset: 24 },
+		{ id: 'c', span: 2, column: 0 },
+		{ id: 'd', column: 1, offset: 16 },
+	];
+	const heights = { a: 100, b: 200, c: 50, d: 80 };
+	const r = positions(items, 2, heights).rects;
+	assert.equal(r.b.top, 24);
+	assert.equal(r.c.top, 236);
+	assert.equal(r.d.top, 314);
+	const small = positions(items, 1, heights, false).rects;
+	assert.equal(small.a.column, 0);
+	assert.equal(small.b.top, 112);
+	assert.equal(small.c.span, 1);
+	const sanitized = sanitizeLayout({
+		tiles: [{ id: 'cpu', column: 50, offset: -4, locked: true, height: Infinity }],
+	})[0];
+	assert.equal(sanitized.column, 3);
+	assert.equal(sanitized.offset, 0);
+	assert.equal(sanitized.locked, true);
+	assert.equal(sanitized.height, 80);
 });
 test('dropping a tile keeps tiles above the drop point in their lane', async () => {
 	const { positions, dropLayout } = await import('../src/lib/dashboard/positions.ts');

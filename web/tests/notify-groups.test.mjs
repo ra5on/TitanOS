@@ -10,7 +10,10 @@ test('kinds map to groups, unknown ones to system', () => {
 });
 
 test('defaults show everything; malformed settings are bounded', () => {
-	const settings = sanitizeBell({ minSeverity: 'loud', groups: { usb: 'no', assistant: false, evil: false } });
+	const settings = sanitizeBell({
+		minSeverity: 'loud',
+		groups: { usb: 'no', assistant: false, evil: false },
+	});
 	assert.equal(settings.minSeverity, 'info');
 	assert.equal(settings.groups.usb, true);
 	assert.equal(settings.groups.assistant, false);
@@ -24,5 +27,11 @@ test('filters by group and severity, but never hides storage errors', () => {
 	assert.equal(bellShows(settings, { kind: 'backup_failed', severity: 'warning' }), true);
 	assert.equal(bellShows(settings, { kind: 'volume_degraded', severity: 'warning' }), false);
 	assert.equal(bellShows(settings, { kind: 'volume_failed', severity: 'error' }), true);
-	assert.equal(bellShows(sanitizeBell({ minSeverity: 'error', groups: { disks: false } }), { kind: 'disk_unhealthy', severity: 'error' }), true);
+	assert.equal(
+		bellShows(sanitizeBell({ minSeverity: 'error', groups: { disks: false } }), {
+			kind: 'disk_unhealthy',
+			severity: 'error',
+		}),
+		true,
+	);
 });

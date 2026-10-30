@@ -11,12 +11,30 @@
 </script>
 
 <span class="logo" class:stacked style:gap="{size * (stacked ? 0.22 : 0.32)}px">
-	<svg width={size} height={size} viewBox="0 0 28 28" aria-hidden={wordmark} role={wordmark ? undefined : 'img'} aria-label={wordmark ? undefined : 'TitanOS'}>
-		<path class="accent-stroke" d="M14 2 25 8.5v11L14 26 3 19.5v-11Z" fill="none" stroke-width="2" stroke-linejoin="round" />
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 28 28"
+		aria-hidden={wordmark}
+		role={wordmark ? undefined : 'img'}
+		aria-label={wordmark ? undefined : 'TitanOS'}
+	>
+		<path
+			class="accent-stroke"
+			d="M14 2 25 8.5v11L14 26 3 19.5v-11Z"
+			fill="none"
+			stroke-width="2"
+			stroke-linejoin="round"
+		/>
 		<path class="text" d="M8.6 9.3h10.8v2.3H8.6zM12.85 12.6h2.3v7.4h-2.3z" />
 	</svg>
 	{#if wordmark}
-		<svg height={size * (stacked ? 0.44 : 0.71)} viewBox="0 0 576 100" role="img" aria-label="TitanOS">
+		<svg
+			height={size * (stacked ? 0.44 : 0.71)}
+			viewBox="0 0 576 100"
+			role="img"
+			aria-label="TitanOS"
+		>
 			<path
 				class="text"
 				d="M0 0h80v22H0zM29 30h22v70H29zM92 0h22v100H92zM126 0h80v22h-80zM155 30h22v70h-22zM218 100 252 0h16l34 100h-23l-19-58-19 58zM314 0h22v100h-22zM370 0h22v100h-22zM314 0h24l54 100h-24z"

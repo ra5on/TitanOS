@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Checks link, addresses, gateways and name resolution of a network the
 	// NAS runs. A draft is only checkable after "Test" put it in place.
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { NASNetwork } from '#lib/network.ts';
 
 	let {
@@ -27,9 +27,7 @@
 				.checks;
 		} catch (e) {
 			checks = [];
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			busy = false;
 		}

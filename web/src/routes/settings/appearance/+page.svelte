@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Segments from '#lib/components/Segments.svelte';
 	import Slider from '#lib/components/Slider.svelte';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { appearance, saveAppearance } from '#lib/theme/appearance.svelte.ts';
 	import {
 		ACCENT_IDS,
@@ -22,7 +22,7 @@
 		type Appearance,
 		type CustomColors,
 		type FloatingSurface,
-		type ThemeId
+		type ThemeId,
 	} from '#lib/theme/themes.ts';
 	import Preview from './Preview.svelte';
 	import BackgroundEditor from '#lib/dashboard/BackgroundEditor.svelte';
@@ -51,7 +51,7 @@
 	let visual = $state<DashboardVisual>(dashboardVisual(session.dashboard?.visual));
 	const pendingImages = new Map<string, File>();
 	const visualDirty = $derived(
-		JSON.stringify(visual) !== JSON.stringify(dashboardVisual(session.dashboard?.visual))
+		JSON.stringify(visual) !== JSON.stringify(dashboardVisual(session.dashboard?.visual)),
 	);
 	onDestroy(() => {
 		for (const url of Object.values(dashboardScene.urls)) URL.revokeObjectURL(url);
@@ -62,16 +62,25 @@
 	const navItems = $derived(navForRole(session.data?.user?.role ?? 'user'));
 	const navArranged = $derived(arrangeNav(navItems, draft.nav));
 	function toggleNav(id: string, shown: boolean) {
-		draft.nav.hidden = shown ? draft.nav.hidden.filter((other) => other !== id) : [...draft.nav.hidden, id];
+		draft.nav.hidden = shown
+			? draft.nav.hidden.filter((other) => other !== id)
+			: [...draft.nav.hidden, id];
 	}
 
-	const canAdminister = $derived(session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin');
-	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty);
+	const canAdminister = $derived(
+		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
+	);
+	const dirty = $derived(
+		JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty,
+	);
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
 	const ratio = $derived(textContrast(palette));
 
 	const previewLabel = $derived.by(() => {
-		if (draft.theme === 'auto') return t(appearance.systemLight ? 'appearance.previewAutoLight' : 'appearance.previewAutoDark');
+		if (draft.theme === 'auto')
+			return t(
+				appearance.systemLight ? 'appearance.previewAutoLight' : 'appearance.previewAutoDark',
+			);
 		if (draft.style === 'glass' && draft.bg === 'solid') return t('appearance.previewGlassHint');
 		return t('appearance.previewDefault');
 	});
@@ -93,11 +102,11 @@
 	const FLOATING_GROUPS = ['menus', 'dialogs'] as const;
 	const ownOptions = $derived([
 		{ value: 'inherit', label: t('appearance.floating.inherit') },
-		{ value: 'own', label: t('appearance.floating.own') }
+		{ value: 'own', label: t('appearance.floating.own') },
 	]);
 
 	function fail(err: unknown) {
-		message = { text: errorText(err instanceof ApiError ? err.code : 'internal'), warn: true };
+		message = { text: apiErrorText(err), warn: true };
 	}
 
 	async function apply() {
@@ -135,7 +144,9 @@
 
 	function exportTheme() {
 		const { bgVersion: _image, ...theme } = $state.snapshot(draft);
-		const blob = new Blob([JSON.stringify({ titanosTheme: 1, ...theme }, null, '\t') + '\n'], { type: 'application/json' });
+		const blob = new Blob([JSON.stringify({ titanosTheme: 1, ...theme }, null, '\t') + '\n'], {
+			type: 'application/json',
+		});
 		const link = document.createElement('a');
 		link.href = URL.createObjectURL(blob);
 		link.download = 'titanos-theme.json';
@@ -149,7 +160,8 @@
 		if (!file) return;
 		try {
 			const data = JSON.parse(await file.text());
-			if (typeof data !== 'object' || data === null || !('titanosTheme' in data)) throw new Error('not a theme');
+			if (typeof data !== 'object' || data === null || !('titanosTheme' in data))
+				throw new Error('not a theme');
 			draft = { ...sanitizeAppearance(data), bgVersion: draft.bgVersion };
 			message = null;
 		} catch {
@@ -189,8 +201,16 @@
 	<p class="muted">{t('appearance.intro')}</p>
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
-		<button type="button" class="btn" onclick={() => themeFile.click()}>{t('appearance.import')}</button>
-		<input bind:this={themeFile} type="file" accept="application/json,.json" hidden onchange={importTheme} />
+		<button type="button" class="btn" onclick={() => themeFile.click()}
+			>{t('appearance.import')}</button
+		>
+		<input
+			bind:this={themeFile}
+			type="file"
+			accept="application/json,.json"
+			hidden
+			onchange={importTheme}
+		/>
 	{/snippet}
 </PageHead>
 
@@ -201,8 +221,19 @@
 			<div class="themes" role="radiogroup" aria-labelledby="h-theme">
 				{#each THEME_IDS as id (id)}
 					{@const colors = look(id)}
-					<button type="button" class="option theme" role="radio" aria-checked={draft.theme === id} onclick={() => (draft.theme = id)}>
-						<span class="swatch" aria-hidden="true" style:background={colors.bg} style:border-color={colors.border}>
+					<button
+						type="button"
+						class="option theme"
+						role="radio"
+						aria-checked={draft.theme === id}
+						onclick={() => (draft.theme = id)}
+					>
+						<span
+							class="swatch"
+							aria-hidden="true"
+							style:background={colors.bg}
+							style:border-color={colors.border}
+						>
 							<span style:background={colors.surface}><i></i></span>
 							<span style:background={colors.surface}></span>
 						</span>
@@ -215,13 +246,21 @@
 					{#each CUSTOM_FIELDS as field (field)}
 						<label class="color">
 							<input type="color" bind:value={draft.custom[field]} />
-							<span><span>{t(`custom.${field}`)}</span><span class="mono muted">{draft.custom[field].toUpperCase()}</span></span>
+							<span
+								><span>{t(`custom.${field}`)}</span><span class="mono muted"
+									>{draft.custom[field].toUpperCase()}</span
+								></span
+							>
 						</label>
 					{/each}
 				</div>
 				{#if ratio < 4.5}
 					<p class="notice-warn">
-						{t('appearance.contrastWarning', { ratio: new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) + ':1' })}
+						{t('appearance.contrastWarning', {
+							ratio:
+								new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) +
+								':1',
+						})}
 					</p>
 				{/if}
 			{/if}
@@ -232,12 +271,25 @@
 			<div class="accents" role="radiogroup" aria-labelledby="h-accent">
 				{#each ACCENT_IDS as id (id)}
 					<div class="accent">
-						<button type="button" role="radio" aria-label={t(`accent.${id}`)} aria-checked={draft.accent === id} style:background={ACCENTS[id].hex} onclick={() => (draft.accent = id)}></button>
+						<button
+							type="button"
+							role="radio"
+							aria-label={t(`accent.${id}`)}
+							aria-checked={draft.accent === id}
+							style:background={ACCENTS[id].hex}
+							onclick={() => (draft.accent = id)}
+						></button>
 						<span class:muted={draft.accent !== id}>{t(`accent.${id}`)}</span>
 					</div>
 				{/each}
 				<label class="accent">
-					<input type="color" aria-label={t('appearance.customAccent')} class:picked={draft.accent === 'custom'} bind:value={draft.customAccent} oninput={() => (draft.accent = 'custom')} />
+					<input
+						type="color"
+						aria-label={t('appearance.customAccent')}
+						class:picked={draft.accent === 'custom'}
+						bind:value={draft.customAccent}
+						oninput={() => (draft.accent = 'custom')}
+					/>
 					<span class:muted={draft.accent !== 'custom'}>{t('accent.custom')}</span>
 				</label>
 			</div>
@@ -248,16 +300,40 @@
 			<h2 class="tile-title" id="h-style">{t('appearance.style')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-style">
 				{#each SURFACE_STYLES as id (id)}
-					<button type="button" class="option" role="radio" aria-checked={draft.style === id} onclick={() => (draft.style = id)}>
+					<button
+						type="button"
+						class="option"
+						role="radio"
+						aria-checked={draft.style === id}
+						onclick={() => (draft.style = id)}
+					>
 						<span class="option-name">{t(`style.${id}`)}</span>
 						<span class="muted small">{t(`style.${id}Desc`)}</span>
 					</button>
 				{/each}
 			</div>
 			{#if draft.style === 'glass'}
-				<Slider id="glass" label={t('appearance.transparency')} bind:value={draft.glass} limit={LIMITS.glass} unit="%" />
-				<Slider id="blur" label={t('appearance.blur')} bind:value={draft.blur} limit={LIMITS.blur} unit="px" />
-				<Slider id="shine" label={t('appearance.shine')} bind:value={draft.shine} limit={LIMITS.shine} unit="%" />
+				<Slider
+					id="glass"
+					label={t('appearance.transparency')}
+					bind:value={draft.glass}
+					limit={LIMITS.glass}
+					unit="%"
+				/>
+				<Slider
+					id="blur"
+					label={t('appearance.blur')}
+					bind:value={draft.blur}
+					limit={LIMITS.blur}
+					unit="px"
+				/>
+				<Slider
+					id="shine"
+					label={t('appearance.shine')}
+					bind:value={draft.shine}
+					limit={LIMITS.shine}
+					unit="%"
+				/>
 				<p class="hint muted">{t('appearance.glassHint')}</p>
 			{/if}
 		</section>
@@ -276,9 +352,27 @@
 							onchange={(value) => setOwn(draft[key], value === 'own')}
 						/>
 						{#if draft[key].own}
-							<Slider id="{key}-glass" label={t('appearance.transparency')} bind:value={draft[key].glass} limit={LIMITS.glass} unit="%" />
-							<Slider id="{key}-blur" label={t('appearance.blur')} bind:value={draft[key].blur} limit={LIMITS.blur} unit="px" />
-							<Slider id="{key}-shine" label={t('appearance.shine')} bind:value={draft[key].shine} limit={LIMITS.shine} unit="%" />
+							<Slider
+								id="{key}-glass"
+								label={t('appearance.transparency')}
+								bind:value={draft[key].glass}
+								limit={LIMITS.glass}
+								unit="%"
+							/>
+							<Slider
+								id="{key}-blur"
+								label={t('appearance.blur')}
+								bind:value={draft[key].blur}
+								limit={LIMITS.blur}
+								unit="px"
+							/>
+							<Slider
+								id="{key}-shine"
+								label={t('appearance.shine')}
+								bind:value={draft[key].shine}
+								limit={LIMITS.shine}
+								unit="%"
+							/>
 						{/if}
 					</fieldset>
 				{/each}
@@ -287,20 +381,49 @@
 				<p class="hint muted">{t('appearance.floating.opaque')}</p>
 			{/if}
 			<div class:divided={draft.style === 'glass'}>
-				<Slider id="dialog-dim" label={t('appearance.floating.dim')} bind:value={draft.dialogs.dim} limit={LIMITS.dialogDim} unit="%" />
+				<Slider
+					id="dialog-dim"
+					label={t('appearance.floating.dim')}
+					bind:value={draft.dialogs.dim}
+					limit={LIMITS.dialogDim}
+					unit="%"
+				/>
 			</div>
 		</section>
 
 		<section class="tile panel" aria-labelledby="h-shape">
 			<h2 class="tile-title" id="h-shape">{t('appearance.shape')}</h2>
-			<Slider id="r-tile" label={t('appearance.radiusTile')} bind:value={draft.rTile} limit={LIMITS.rTile} unit="px" />
-			<Slider id="r-ctl" label={t('appearance.radiusCtl')} bind:value={draft.rCtl} limit={LIMITS.rCtl} unit="px" />
-			<Slider id="font" label={t('appearance.fontSize')} bind:value={draft.font} limit={LIMITS.font} unit="%" />
+			<Slider
+				id="r-tile"
+				label={t('appearance.radiusTile')}
+				bind:value={draft.rTile}
+				limit={LIMITS.rTile}
+				unit="px"
+			/>
+			<Slider
+				id="r-ctl"
+				label={t('appearance.radiusCtl')}
+				bind:value={draft.rCtl}
+				limit={LIMITS.rCtl}
+				unit="px"
+			/>
+			<Slider
+				id="font"
+				label={t('appearance.fontSize')}
+				bind:value={draft.font}
+				limit={LIMITS.font}
+				unit="%"
+			/>
 			<div class="density">
 				<span id="h-density">{t('appearance.density')}</span>
 				<div class="segments" role="radiogroup" aria-labelledby="h-density">
 					{#each DENSITIES as id (id)}
-						<button type="button" role="radio" aria-checked={draft.density === id} onclick={() => (draft.density = id)}>{t(`density.${id}`)}</button>
+						<button
+							type="button"
+							role="radio"
+							aria-checked={draft.density === id}
+							onclick={() => (draft.density = id)}>{t(`density.${id}`)}</button
+						>
 					{/each}
 				</div>
 			</div>
@@ -308,34 +431,64 @@
 
 		<section class="tile panel" aria-labelledby="h-effects">
 			<h2 class="tile-title" id="h-effects">{t('appearance.effects')}</h2>
-			<Slider id="glow" label={t('dashboard.visual.glow')} bind:value={draft.glow} limit={LIMITS.glow} unit="%" />
+			<Slider
+				id="glow"
+				label={t('dashboard.visual.glow')}
+				bind:value={draft.glow}
+				limit={LIMITS.glow}
+				unit="%"
+			/>
 			<p class="hint muted">{t('dashboard.visual.glowHint')}</p>
 			{#if draft.glow > 0}
 				<label class="check"
-					><input type="checkbox" checked={!draft.glowColor} onchange={(e) => (draft.glowColor = e.currentTarget.checked ? '' : pickedAccent(draft))} />{t('appearance.accent')}</label
+					><input
+						type="checkbox"
+						checked={!draft.glowColor}
+						onchange={(e) => (draft.glowColor = e.currentTarget.checked ? '' : pickedAccent(draft))}
+					/>{t('appearance.accent')}</label
 				>
 				{#if draft.glowColor}
 					<label class="color-field"
-						><input type="color" value={draft.glowColor} oninput={(e) => (draft.glowColor = e.currentTarget.value.toUpperCase())} /><span>{t('dashboard.visual.glowColor')}</span></label
+						><input
+							type="color"
+							value={draft.glowColor}
+							oninput={(e) => (draft.glowColor = e.currentTarget.value.toUpperCase())}
+						/><span>{t('dashboard.visual.glowColor')}</span></label
 					>
 				{/if}
 			{/if}
-			<label class="check divided"><input type="checkbox" bind:checked={draft.motion} />{t('dashboard.visual.smooth')}</label>
+			<label class="check divided"
+				><input type="checkbox" bind:checked={draft.motion} />{t('dashboard.visual.smooth')}</label
+			>
 			{#if draft.motion}
-				<Slider id="duration" label={t('dashboard.visual.duration')} bind:value={draft.duration} limit={LIMITS.duration} unit="ms" />
+				<Slider
+					id="duration"
+					label={t('dashboard.visual.duration')}
+					bind:value={draft.duration}
+					limit={LIMITS.duration}
+					unit="ms"
+				/>
 			{/if}
 			<p class="hint muted">{t('dashboard.visual.motionHint')}</p>
 		</section>
 
 		<section class="tile panel" aria-labelledby="h-fx" id="effects">
 			<h2 class="tile-title" id="h-fx">{t('appearance.fx.title')}</h2>
-			<label class="check"><input type="checkbox" bind:checked={draft.fx.enabled} />{t('appearance.fx.enabled')}</label>
+			<label class="check"
+				><input type="checkbox" bind:checked={draft.fx.enabled} />{t(
+					'appearance.fx.enabled',
+				)}</label
+			>
 			{#if draft.fx.enabled}
 				<div class="fx-list">
 					{#each EFFECT_IDS as id (id)}
 						<label class="check fx">
 							<input type="checkbox" bind:checked={draft.fx[id]} />
-							<span><span>{t(`appearance.fx.${id}`)}</span><span class="muted small">{t(`appearance.fx.${id}Desc`)}</span></span>
+							<span
+								><span>{t(`appearance.fx.${id}`)}</span><span class="muted small"
+									>{t(`appearance.fx.${id}Desc`)}</span
+								></span
+							>
 						</label>
 					{/each}
 				</div>
@@ -354,15 +507,38 @@
 								checked={item.id === NAV_FIXED || !draft.nav.hidden.includes(item.id)}
 								disabled={item.id === NAV_FIXED}
 								onchange={(event) => toggleNav(item.id, event.currentTarget.checked)}
-							/>{t(item.label)}{#if item.id === NAV_FIXED}<span class="muted small">{t('appearance.nav.fixed')}</span>{/if}
+							/>{t(item.label)}{#if item.id === NAV_FIXED}<span class="muted small"
+									>{t('appearance.nav.fixed')}</span
+								>{/if}
 						</label>
-						<button type="button" class="btn small" disabled={index === 0} aria-label={t('appearance.nav.up', { tab: t(item.label) })} title={t('appearance.nav.up', { tab: t(item.label) })} onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, -1))}><Icon name="arrowUp" size={14} /></button>
-						<button type="button" class="btn small" disabled={index === navArranged.length - 1} aria-label={t('appearance.nav.down', { tab: t(item.label) })} title={t('appearance.nav.down', { tab: t(item.label) })} onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, 1))}><Icon name="arrowDown" size={14} /></button>
+						<button
+							type="button"
+							class="btn small"
+							disabled={index === 0}
+							aria-label={t('appearance.nav.up', { tab: t(item.label) })}
+							title={t('appearance.nav.up', { tab: t(item.label) })}
+							onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, -1))}
+							><Icon name="arrowUp" size={14} /></button
+						>
+						<button
+							type="button"
+							class="btn small"
+							disabled={index === navArranged.length - 1}
+							aria-label={t('appearance.nav.down', { tab: t(item.label) })}
+							title={t('appearance.nav.down', { tab: t(item.label) })}
+							onclick={() => (draft.nav.order = moveNav(navItems, draft.nav, item.id, 1))}
+							><Icon name="arrowDown" size={14} /></button
+						>
 					</li>
 				{/each}
 			</ol>
 			<div class="row-actions">
-				<button type="button" class="btn small" onclick={() => (draft.nav = { order: [], hidden: [] })}>{t('appearance.nav.reset')}</button>
+				<button
+					type="button"
+					class="btn small"
+					onclick={() => (draft.nav = { order: [], hidden: [] })}
+					>{t('appearance.nav.reset')}</button
+				>
 			</div>
 			<p class="hint muted">{t('appearance.nav.hint')}</p>
 		</section>
@@ -371,21 +547,47 @@
 			<h2 class="tile-title" id="h-bg">{t('appearance.background')}</h2>
 			<div class="three" role="radiogroup" aria-labelledby="h-bg">
 				{#each BACKGROUNDS as id (id)}
-					<button type="button" class="option center" role="radio" aria-checked={draft.bg === id} onclick={() => (draft.bg = id)}>
+					<button
+						type="button"
+						class="option center"
+						role="radio"
+						aria-checked={draft.bg === id}
+						onclick={() => (draft.bg = id)}
+					>
 						<span class="option-name">{t(`bg.${id}`)}</span>
 					</button>
 				{/each}
 			</div>
 			{#if draft.bg === 'image'}
 				<div class="upload">
-					<span class="muted">{draft.bgVersion > 0 ? t('appearance.imageHint') : `${t('appearance.imageNone')} ${t('appearance.imageHint')}`}</span>
-					<button type="button" class="btn" onclick={() => imageFile?.click()}>{t('appearance.chooseImage')}</button>
+					<span class="muted"
+						>{draft.bgVersion > 0
+							? t('appearance.imageHint')
+							: `${t('appearance.imageNone')} ${t('appearance.imageHint')}`}</span
+					>
+					<button type="button" class="btn" onclick={() => imageFile?.click()}
+						>{t('appearance.chooseImage')}</button
+					>
 					{#if draft.bgVersion > 0}
-						<button type="button" class="btn" onclick={removeImage}>{t('appearance.removeImage')}</button>
+						<button type="button" class="btn" onclick={removeImage}
+							>{t('appearance.removeImage')}</button
+						>
 					{/if}
-					<input bind:this={imageFile} type="file" accept="image/jpeg,image/png,image/webp" hidden onchange={uploadImage} />
+					<input
+						bind:this={imageFile}
+						type="file"
+						accept="image/jpeg,image/png,image/webp"
+						hidden
+						onchange={uploadImage}
+					/>
 				</div>
-				<Slider id="dim" label={t('appearance.dim')} bind:value={draft.dim} limit={LIMITS.dim} unit="%" />
+				<Slider
+					id="dim"
+					label={t('appearance.dim')}
+					bind:value={draft.dim}
+					limit={LIMITS.dim}
+					unit="%"
+				/>
 			{/if}
 		</section>
 
@@ -404,7 +606,9 @@
 		/>
 
 		<div class="apply">
-			<button type="button" class="btn btn-primary" onclick={apply} disabled={saving || !dirty}>{t('appearance.apply')}</button>
+			<button type="button" class="btn btn-primary" onclick={apply} disabled={saving || !dirty}
+				>{t('appearance.apply')}</button
+			>
 			<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>
 			<span class="state" class:warn={message?.warn} role="status">
 				{#if message}{message.text}{:else if dirty}{t('appearance.unsaved')}{/if}

@@ -10,7 +10,11 @@ test('free VM labels map to safe unique identifiers without changing the label',
 		assert.equal(vmLabel({ name: id, displayName: label }), label);
 		assert.notEqual(newVMIdentifier(label, [id]), id);
 	}
-	assert.equal(newVMIdentifier('Home Assistant', ['home-assistant', 'home-assistant-2']), 'home-assistant-3');
+	assert.equal(
+		newVMIdentifier('Home Assistant', ['home-assistant', 'home-assistant-2']),
+		'home-assistant-3',
+	);
 	assert.equal(vmLabel({ name: 'old-vm' }), 'old-vm');
-	for (const label of ['', ' ', 'a\nb', 'a\u202eb', 'a'.repeat(81)]) assert.equal(validVMDisplayName(label), false);
+	for (const label of ['', ' ', 'a\nb', 'a\u202eb', 'a'.repeat(81)])
+		assert.equal(validVMDisplayName(label), false);
 });
