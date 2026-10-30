@@ -68,8 +68,9 @@ darunter die Gruppen mit kleiner Großbuchstaben-Überschrift und Zeilen von
 etwa 32 px mit 16-px-Symbol und Titel. Die aktuelle Seite trägt eine
 Akzenttönung (Text aus Akzent und Textfarbe gemischt, damit auch Hell 4,5:1
 erreicht) und `aria-current="page"`; die Leiste ist ein `nav` mit
-`aria-label`. Gruppen in fester Reihenfolge (`settingsAreas`): System,
-Hardware und Energie, Netzwerk und Zugriff, Daten, Integrationen, Persönlich;
+`aria-label`. Gruppen in fester Reihenfolge (`settingsAreas`, Stand 30.10.2026):
+System, Netzwerk, Sicherheit und Fernzugriff, Hardware und Energie, Daten und
+Speicher, Integrationen, Persönlich; oben „Übersicht“ (Aufmerksamkeit, dieses NAS);
 innerhalb der Gruppen nicht alphabetisch. Bereiche mit Zustand bekommen einen
 Punkt mit Tooltip und Screenreader-Text, optional ein „neu“-Abzeichen
 (`isNew`). Rechts die bisherigen Seiten unverändert (`.settings-page.column`,

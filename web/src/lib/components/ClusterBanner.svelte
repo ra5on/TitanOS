@@ -24,13 +24,17 @@
 
 <style>
 	.cluster-banner {
+		/* Only as wide as its text and button, not across the page. */
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
-		gap: 8px 16px;
+		gap: 8px 12px;
+		width: fit-content;
+		max-width: 100%;
+		box-sizing: border-box;
 		margin-bottom: 16px;
-		padding: 8px 14px;
+		padding: 4px 4px 4px 14px;
+		font-size: 0.875rem;
 		border: 1px solid var(--accent);
 		border-radius: var(--radius-tile);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);

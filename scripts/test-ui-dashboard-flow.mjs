@@ -186,9 +186,11 @@ try {
     .click();
   await page
     .getByRole("menu")
-    .getByRole("menuitem", { name: "WebUI", exact: true })
+    .getByRole("menuitem", { name: /^WebUI\b/ })
+    .first()
     .waitFor();
-  assert.equal(await page.getByRole("menu").locator("a").count(), 5);
+  // Three addresses and "Bearbeiten" (like the menu on the Docker page).
+  assert.equal(await page.getByRole("menu").locator("a").count(), 4);
   await page.waitForFunction(() =>
     document.querySelector("[role=menu]")?.matches(":popover-open"),
   );

@@ -1,7 +1,7 @@
 # WireGuard-Server
 
 Seit 0.34.0 hat TitanOS einen eigenen, möglichst einfachen VPN-Server:
-Einstellungen › Netzwerk und Zugriff › **WireGuard** (nur Besitzer und
+Einstellungen › Sicherheit und Fernzugriff › **WireGuard** (nur Besitzer und
 Administratoren), ab Werk aus.
 
 ## Bedienung

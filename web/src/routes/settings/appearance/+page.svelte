@@ -910,13 +910,16 @@
 	}
 	.layouts {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 12px;
 		margin: 0 0 12px;
 		padding: 0;
 		border: 0;
 	}
+	/* The legend takes a grid cell of its own here; give it the whole row,
+	   so that the two sketches stand side by side below it. */
 	.layouts legend {
+		grid-column: 1 / -1;
 		margin-bottom: 8px;
 		padding: 0;
 		font-weight: 500;

@@ -67,6 +67,14 @@
 	const links = $derived(
 		target.kind === 'docker' && target.primary ? webLinks(target.primary, host, tailscaleHost) : [],
 	);
+	// "nas.local:8096" beside an address, like on the Docker page.
+	function where(href: string): string {
+		try {
+			return new URL(href).host;
+		} catch {
+			return '';
+		}
+	}
 	function close() {
 		if (!busy) onclose();
 	}
@@ -175,14 +183,54 @@
 					/></span
 				>{/if}{name}
 		</div>
-		{#each links as link}<a
-				role="menuitem"
-				href={link.href}
-				target="_blank"
-				rel="noopener noreferrer"
-				onclick={onclose}><Icon name={link.icon} size={16} /><span>{link.label}</span></a
-			>{/each}
 		{#if target.kind === 'docker'}
+			<!-- The same order as the menu on the Docker page: Start/Stop,
+			     addresses, then the actions, removing last. -->
+			{#if running}<button role="menuitem" onclick={() => run('stop')}
+					><Icon name="stop" size={16} /><span>{t('docker.stop')}</span></button
+				>{:else}<button role="menuitem" onclick={() => run('start')}
+					><Icon name="play" size={16} /><span>{t('docker.start')}</span></button
+				>{/if}
+			<hr />
+			{#if links.length > 0}
+				{#each links as link}<a
+						role="menuitem"
+						href={link.href}
+						target="_blank"
+						rel="noopener noreferrer"
+						title={link.label}
+						onclick={onclose}
+						><Icon name={link.icon} size={16} /><span>{link.text}</span><small class="where"
+							>{where(link.href)}</small
+						></a
+					>{/each}
+				<hr />
+			{/if}
+			{#each target.members as c}<button role="menuitem" onclick={() => showLogs(c)}
+					><Icon name="fileText" size={16} /><span
+						>{t('docker.logs')}{target.stack ? ` · ${c.service || c.name}` : ''}</span
+					></button
+				>{/each}
+			{#if target.primary?.state === 'running'}<button
+					role="menuitem"
+					onclick={() =>
+						pick(() => {
+							if (target.kind === 'docker' && target.primary)
+								addContainerConsole(target.primary.id, dockerName(target.primary, 'distinct'));
+							onclose();
+						})}><Icon name="terminal" size={16} /><span>{t('docker.console')}</span></button
+				>{/if}
+			{#if managed}<a role="menuitem" href="/docker/apps/{encodeURIComponent(removeApp)}"
+					><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
+				>{:else}<a role="menuitem" href="/docker"
+					><Icon name="list" size={16} /><span>{t('dashboard.showDetails')}</span></a
+				>{/if}
+			{#if running}<button role="menuitem" onclick={() => run('restart')}
+					><Icon name="restart" size={16} /><span>{t('docker.restart')}</span></button
+				>{/if}
+			<button role="menuitem" onclick={() => run('check')}
+				><Icon name="download" size={16} /><span>{t('docker.checkUpdates')}</span></button
+			>
 			{#if target.stack}<button
 					role="menuitem"
 					onclick={() =>
@@ -194,25 +242,17 @@
 						>{t('dashboard.containers')} ({target.members.length})</span
 					></button
 				>{/if}
-			{#if target.primary?.state === 'running'}<button
-					role="menuitem"
-					onclick={() =>
-						pick(() => {
-							if (target.kind === 'docker' && target.primary)
-								addContainerConsole(target.primary.id, dockerName(target.primary, 'distinct'));
-							onclose();
-						})}><Icon name="terminal" size={16} /><span>{t('docker.console')}</span></button
+			{#if onpin}<button role="menuitem" onclick={pin}
+					><Icon name="plus" size={16} /><span>{t('dashboard.pin')}</span></button
 				>{/if}
-			{#each target.members as c}<button role="menuitem" onclick={() => showLogs(c)}
-					><Icon name="list" size={16} /><span
-						>{t('docker.logs')}{target.stack ? ` · ${c.service || c.name}` : ''}</span
+			{#if !target.stack || managed}<hr />
+				<button role="menuitem" class="danger" onclick={() => pick(() => (dialog = 'remove'))}
+					><Icon name="trash" size={16} /><span
+						>{removeApp
+							? t('dashboard.removeAppAction', { name: removeApp })
+							: t('docker.remove')}</span
 					></button
-				>{/each}
-			<a
-				role="menuitem"
-				href={target.stack && managed ? `/docker/apps/${encodeURIComponent(removeApp)}` : '/docker'}
-				><Icon name="list" size={16} /><span>{t('dashboard.showDetails')}</span></a
-			>
+				>{/if}
 		{:else}
 			{#if running}<a role="menuitem" href="/vms?vm={encodeURIComponent(target.vm.name)}&tab=screen"
 					><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></a
@@ -225,53 +265,32 @@
 						onclose();
 					})}><Icon name="list" size={16} /><span>{t('dashboard.showDetails')}</span></button
 			>
-		{/if}
-		<hr />
-		{#if running}<button
-				role="menuitem"
-				onclick={() => (target.kind === 'vm' ? ask('reboot') : run('restart'))}
-				><Icon name="restart" size={16} /><span
-					>{t(target.kind === 'vm' ? 'vms.reboot' : 'docker.restart')}</span
-				></button
-			><button
-				role="menuitem"
-				onclick={() => (target.kind === 'vm' ? ask('shutdown') : run('stop'))}
-				><Icon name="stop" size={16} /><span
-					>{t(target.kind === 'vm' ? 'vms.shutdown' : 'docker.stop')}</span
-				></button
-			>{:else}<button
-				role="menuitem"
-				disabled={target.kind === 'vm' && (!kvm || !target.vm.available || !!target.vm.job)}
-				title={target.kind === 'vm' && !kvm ? t('vms.noKvm') : undefined}
-				onclick={() => run('start')}
-				><Icon name="play" size={16} /><span
-					>{t(target.kind === 'vm' ? 'vms.start' : 'docker.start')}</span
-				></button
-			>{/if}
-		<hr />
-		{#if target.kind === 'docker'}<button role="menuitem" onclick={() => run('check')}
-				><Icon name="restart" size={16} /><span>{t('docker.checkUpdates')}</span></button
-			>{#if managed}<a
+			<hr />
+			{#if running}<button role="menuitem" onclick={() => ask('reboot')}
+					><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+				><button role="menuitem" onclick={() => ask('shutdown')}
+					><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button
+				>{:else}<button
 					role="menuitem"
-					href="/docker/apps/{encodeURIComponent(target.members[0].app)}"
-					><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
+					disabled={!kvm || !target.vm.available || !!target.vm.job}
+					title={!kvm ? t('vms.noKvm') : undefined}
+					onclick={() => run('start')}
+					><Icon name="play" size={16} /><span>{t('vms.start')}</span></button
 				>{/if}
-		{:else}<a role="menuitem" href="/vms/edit?vm={encodeURIComponent(target.vm.name)}"
+			<hr />
+			<a role="menuitem" href="/vms/edit?vm={encodeURIComponent(target.vm.name)}"
 				><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></a
 			><a role="menuitem" href="/vms?vm={encodeURIComponent(target.vm.name)}&tab=snapshots"
 				><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></a
-			>{/if}
-		{#if onpin}<button role="menuitem" onclick={pin}
-				><Icon name="plus" size={16} /><span>{t('dashboard.pin')}</span></button
-			>{/if}
-		{#if target.kind === 'docker' ? !target.stack || managed : !running}<hr />
-			<button role="menuitem" class="danger" onclick={() => pick(() => (dialog = 'remove'))}
-				><Icon name="trash" size={16} /><span
-					>{removeApp
-						? t('dashboard.removeAppAction', { name: removeApp })
-						: t(target.kind === 'docker' ? 'docker.remove' : 'vms.remove')}</span
-				></button
-			>{/if}
+			>
+			{#if onpin}<button role="menuitem" onclick={pin}
+					><Icon name="plus" size={16} /><span>{t('dashboard.pin')}</span></button
+				>{/if}
+			{#if !running}<hr />
+				<button role="menuitem" class="danger" onclick={() => pick(() => (dialog = 'remove'))}
+					><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
+				>{/if}
+		{/if}
 	</ContextMenu>{/if}
 {#if busy && !dialog}<Dialog title={name} locked onclose={close}
 		><p>{t('common.loading')}</p></Dialog
@@ -320,6 +339,10 @@
 	</Dialog>{/if}
 
 <style>
+	.where {
+		color: var(--muted);
+		font-size: 0.75rem;
+	}
 	.menu-app-icon {
 		display: inline-flex;
 		width: 28px;
