@@ -1,12 +1,16 @@
 # The USB stick (FAT32, label TITANOS) holds the boot files, the system slots
 # and /config. FAT has no permissions, so everything on it is root-only.
 #
-# The stick stays mounted from boot to shutdown. FAT has no journal: flush
-# writes every change through at once, so a power cut or a pulled stick
-# loses at most the write in progress. The last field lets systemd-fsck
-# check the stick once per boot, before it is mounted, and clear the dirty
-# bit left behind. nofail: a missing stick does not stop the boot.
-LABEL=TITANOS  /efi  vfat  rw,umask=0077,flush,nofail,x-systemd.device-timeout=10s  0  2
+# The stick is mounted on first use (titand reads /config when it starts)
+# and then stays mounted until shutdown: an automount without idle timeout.
+# Mounting at boot instead failed when the stick showed up later than the
+# device timeout (slow USB controllers, QEMU); the automount waits for it
+# at first access, when it is there. FAT has no journal: flush writes every
+# change through at once, so a power cut or a pulled stick loses at most
+# the write in progress. The last field lets systemd-fsck check the stick
+# once per boot, before it is first mounted, and clear the dirty bit left
+# behind.
+LABEL=TITANOS  /efi  vfat  rw,umask=0077,flush,noauto,x-systemd.automount,x-systemd.device-timeout=10s  0  2
 
 # The root of the NFS tree. titand bind-mounts the folder of every NFS share
 # into it. A tmpfs of its own, because the overlay of / cannot be exported.
