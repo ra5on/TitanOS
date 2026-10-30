@@ -290,7 +290,6 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		AuthenticatorData string `json:"authenticatorData"`
 		Signature         string `json:"signature"`
 		UserHandle        string `json:"userHandle"`
-		Remember          bool   `json:"remember"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -347,7 +346,7 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("passkey counter not saved", "user", user.Name, "err", err)
 	}
 	slog.Info("login", "user", user.Name, "ip", ip, "with", "passkey")
-	if s.startSession(w, r, user, req.Remember) {
+	if s.startSession(w, r, user) {
 		s.recordEvent(r, user.Name, "login", "passkey", true)
 		if user.Role.CanAdminister() && s.opts.Update != nil {
 			s.opts.Update.CheckAfterLogin()

@@ -34,19 +34,28 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string, maxAge in
 	})
 }
 
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user auth.User, remember bool) bool {
-	create := s.sessions.Create
-	if remember {
-		create = s.sessions.CreateRemembered
-	}
-	token, err := create(user.Name, remoteIP(r), r.UserAgent())
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user auth.User) bool {
+	token, err := s.sessions.Create(user.Name, remoteIP(r), r.UserAgent())
 	if err != nil {
 		slog.Error("create session", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "could not start a session")
 		return false
 	}
-	s.setSessionCookie(w, token, int(auth.SessionMaxAge.Seconds()))
+	session, _ := s.sessions.Peek(token)
+	s.setSessionCookie(w, token, cookieAge(session))
 	return true
+}
+
+// keptCookieAge is how long the browser keeps the cookie of a session that
+// stays logged in: as long as browsers allow (400 days). The NAS decides
+// when the session ends; the cookie is renewed whenever the app starts.
+const keptCookieAge = 400 * 24 * time.Hour
+
+func cookieAge(session auth.Session) int {
+	if session.Remember {
+		return int(keptCookieAge.Seconds())
+	}
+	return int(auth.SessionMaxAge.Seconds())
 }
 
 // ensureUsersLoaded retries reading the accounts if that failed at startup,
@@ -102,6 +111,13 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		answer := userOf(user)
 		res.User = &answer
 		res.Version = s.opts.Version
+		// A login that stays keeps its cookie as long as the browser allows,
+		// also after the setting was switched on for it.
+		if cookie, err := r.Cookie(s.cookieName()); err == nil {
+			if session, ok := s.sessions.Peek(cookie.Value); ok && session.Remember {
+				s.setSessionCookie(w, cookie.Value, cookieAge(session))
+			}
+		}
 	} else if look, _ := s.loginAppearance(); look.HideHost {
 		// The login page was set not to name the NAS.
 		res.Hostname = ""
@@ -114,8 +130,6 @@ type credentials struct {
 	Password string `json:"password"`
 	// Code is the one-time code of an account with two-factor login.
 	Code string `json:"code"`
-	// Remember keeps the login over a restart of the NAS ("stay logged in").
-	Remember bool `json:"remember"`
 }
 
 func (c *credentials) normalize() {
@@ -156,7 +170,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		s.recordEvent(r, user.Name, "setup", "", true)
 		s.opts.Shares.Kick()
 		s.opts.SSH.Kick()
-		if s.startSession(w, r, user, false) {
+		if s.startSession(w, r, user) {
 			writeJSON(w, http.StatusCreated, userOf(user))
 		}
 	}
@@ -227,7 +241,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.opts.Shares.Kick()
 		s.opts.SSH.Kick()
 	}
-	if s.startSession(w, r, user, req.Remember) {
+	if s.startSession(w, r, user) {
 		s.recordEvent(r, user.Name, "login", "", true)
 		if user.Role.CanAdminister() && s.opts.Update != nil {
 			s.opts.Update.CheckAfterLogin()

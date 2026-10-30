@@ -2115,12 +2115,19 @@ func TestLoginCanStayLoggedIn(t *testing.T) {
 	if res, body := ts.do(plain, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword}); res.StatusCode != http.StatusOK {
 		t.Fatalf("login: %d %s", res.StatusCode, body)
 	}
-	if _, err := ts.store.Read(auth.RememberFile); err == nil {
-		t.Fatal("a normal login was written to the stick")
+	if data, err := ts.store.Read(auth.RememberFile); err == nil && string(data) != "{}" {
+		t.Fatalf("a login with the setting off was written to the stick: %s", data)
 	}
-	kept := ts.newClient()
-	if res, body := ts.do(kept, "POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword, Remember: true}); res.StatusCode != http.StatusOK {
-		t.Fatalf("login: %d %s", res.StatusCode, body)
+	if res, body := ts.do(plain, "PUT", "/api/v1/system/login", map[string]int{"stayDays": 7}); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("a choice that is not offered: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.do(plain, "PUT", "/api/v1/system/login", map[string]int{"stayDays": -1}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"stayDays":-1`) {
+		t.Fatalf("switch on: %d %s", res.StatusCode, body)
+	}
+	// The app renews the cookie of a login that stays.
+	res, _ := ts.do(plain, "GET", "/api/v1/session", nil)
+	if cookie := res.Header.Get("Set-Cookie"); !strings.Contains(cookie, "Max-Age=34560000") {
+		t.Errorf("cookie of a kept login: %q", cookie)
 	}
 
 	// A restart of the NAS: a new session store reads only the stick.
@@ -2128,10 +2135,17 @@ func TestLoginCanStayLoggedIn(t *testing.T) {
 	if err := ts.server.sessions.Remember(ts.store); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := ts.do(kept, "GET", "/api/v1/account/sessions", nil); res.StatusCode != http.StatusOK {
-		t.Errorf("remembered login after the restart: %d", res.StatusCode)
+	if res, body := ts.do(plain, "GET", "/api/v1/account/sessions", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"kept":true`) {
+		t.Errorf("login after the restart: %d %s", res.StatusCode, body)
 	}
-	if res, _ := ts.do(plain, "GET", "/api/v1/account/sessions", nil); res.StatusCode != http.StatusUnauthorized {
-		t.Errorf("normal login after the restart: %d", res.StatusCode)
+
+	// A user may not change it.
+	if res, body := ts.do(plain, "POST", "/api/v1/users", map[string]any{"name": "kim", "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
+		t.Fatal(res.StatusCode, string(body))
+	}
+	kim := ts.newClient()
+	ts.do(kim, "POST", "/api/v1/login", credentials{Name: "kim", Password: testPassword})
+	if res, _ := ts.do(kim, "PUT", "/api/v1/system/login", map[string]int{"stayDays": 0}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("user changing the setting: %d", res.StatusCode)
 	}
 }

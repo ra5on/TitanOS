@@ -34,8 +34,9 @@ type Session struct {
 	// session, as required before opening a console.
 	Confirmed time.Time
 	// Remember keeps the session over a restart of the NAS ("stay logged
-	// in"): a hash of its token is kept on the stick. It ends only after
-	// SessionMaxAge, not after SessionIdleTimeout.
+	// in"): a hash of its token is kept on the stick. It ends the chosen
+	// number of days after the login (or never), not after
+	// SessionIdleTimeout. Every session has it while the setting is on.
 	Remember bool `json:",omitempty"`
 }
 
@@ -43,8 +44,8 @@ type Session struct {
 // consoles and other sensitive actions.
 const ConfirmFor = 15 * time.Minute
 
-// Sessions keeps the logins in memory. Nothing about them is written to
-// the stick. With Persist they are also kept in a file in RAM (/run), so
+// Sessions keeps the logins in memory. Only with "stay logged in" (see
+// Remember) is something about them written to the stick. With Persist they are also kept in a file in RAM (/run), so
 // that they outlive a restart of titand, as after an app update, but not
 // a restart of the NAS.
 type Sessions struct {
@@ -59,6 +60,9 @@ type Sessions struct {
 	// last written there, so that only a real change writes again.
 	keep Keeper
 	kept []byte
+	// stay is the setting "stay logged in": days after the login, 0 = off,
+	// StayForever = no end.
+	stay int
 }
 
 // Keeper reads and writes a file of the persistent configuration (/config).
@@ -72,6 +76,23 @@ type Keeper interface {
 // while a session is used.
 const RememberFile = "sessions/remembered.json"
 
+// StayFile holds the setting "stay logged in" of the NAS.
+const StayFile = "system/login.json"
+
+// StayForever keeps a login until it is ended by hand.
+const StayForever = -1
+
+// StayChoices are the settings the page offers: off, days, no end.
+var StayChoices = []int{0, 30, 90, 365, StayForever}
+
+// StaySettings is the content of StayFile.
+type StaySettings struct {
+	StayDays int `json:"stayDays"`
+}
+
+// ErrStayChoice is a setting not in StayChoices.
+var ErrStayChoice = errors.New("unknown choice for staying logged in")
+
 // saveEvery is how often a session that is only used, not changed, is
 // written: what the file misses is when it was last seen.
 const saveEvery = time.Minute
@@ -82,17 +103,9 @@ func NewSessions() *Sessions {
 }
 
 // Create starts a session and returns its secret token for the cookie. Only
-// a hash of the token is kept.
+// a hash of the token is kept. With "stay logged in" on, it outlives a
+// restart of the NAS.
 func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
-	return s.create(user, remoteIP, userAgent, false)
-}
-
-// CreateRemembered starts a session that outlives a restart of the NAS.
-func (s *Sessions) CreateRemembered(user, remoteIP, userAgent string) (string, error) {
-	return s.create(user, remoteIP, userAgent, true)
-}
-
-func (s *Sessions) create(user, remoteIP, userAgent string, remember bool) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -104,7 +117,7 @@ func (s *Sessions) create(user, remoteIP, userAgent string, remember bool) (stri
 	now := s.now()
 	s.prune(now)
 	s.sessions[sha256.Sum256([]byte(token))] = &Session{
-		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent, Remember: remember,
+		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent, Remember: s.stay != 0,
 	}
 	s.save()
 	s.keepRemembered()
@@ -125,7 +138,7 @@ func (s *Sessions) Get(token string) (Session, bool) {
 		return Session{}, false
 	}
 	now := s.now()
-	if expired(session, now) {
+	if s.expired(session, now) {
 		delete(s.sessions, key)
 		s.save()
 		s.keepRemembered()
@@ -147,7 +160,7 @@ func (s *Sessions) Peek(token string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.sessions[sha256.Sum256([]byte(token))]
-	if !ok || expired(session, s.now()) {
+	if !ok || s.expired(session, s.now()) {
 		return Session{}, false
 	}
 	return *session, true
@@ -162,13 +175,70 @@ func (s *Sessions) Delete(token string) {
 	s.keepRemembered()
 }
 
-func expired(session *Session, now time.Time) bool {
-	return (!session.Remember && now.Sub(session.LastSeen) > SessionIdleTimeout) || now.Sub(session.Created) > SessionMaxAge
+func (s *Sessions) expired(session *Session, now time.Time) bool {
+	if session.Remember && s.stay != 0 {
+		return s.stay > 0 && now.Sub(session.Created) > time.Duration(s.stay)*24*time.Hour
+	}
+	return now.Sub(session.LastSeen) > SessionIdleTimeout || now.Sub(session.Created) > SessionMaxAge
+}
+
+// until is when a remembered session ends; zero for no end. The lock is held.
+func (s *Sessions) until(session *Session) time.Time {
+	if s.stay <= 0 {
+		return time.Time{}
+	}
+	return session.Created.Add(time.Duration(s.stay) * 24 * time.Hour)
+}
+
+// Stay returns the setting "stay logged in".
+func (s *Sessions) Stay() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stay
+}
+
+// SetStay changes the setting "stay logged in" and saves it. It applies to
+// the sessions there are as well: switched on, they are kept on the stick
+// from now on; switched off, they end with the next restart of the NAS.
+func (s *Sessions) SetStay(days int) error {
+	if !validStay(days) {
+		return ErrStayChoice
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.keep != nil && days != s.stay {
+		if err := s.keep.WriteJSON(StayFile, StaySettings{StayDays: days}); err != nil {
+			return err
+		}
+	}
+	s.applyStay(days)
+	s.save()
+	return nil
+}
+
+func validStay(days int) bool {
+	for _, choice := range StayChoices {
+		if days == choice {
+			return true
+		}
+	}
+	return false
+}
+
+// applyStay sets the setting in memory and brings the sessions and the
+// stick in line with it. The lock is held.
+func (s *Sessions) applyStay(days int) {
+	s.stay = days
+	for _, session := range s.sessions {
+		session.Remember = days != 0
+	}
+	s.prune(s.now())
+	s.keepRemembered()
 }
 
 func (s *Sessions) prune(now time.Time) {
 	for key, session := range s.sessions {
-		if expired(session, now) {
+		if s.expired(session, now) {
 			delete(s.sessions, key)
 		}
 	}
@@ -218,6 +288,10 @@ type SessionInfo struct {
 	UserAgent string    `json:"userAgent"`
 	// Current marks the session the request came with.
 	Current bool `json:"current"`
+	// Kept is a session that outlives a restart of the NAS; Until is when
+	// it ends, absent for no end.
+	Kept  bool       `json:"kept"`
+	Until *time.Time `json:"until,omitempty"`
 }
 
 func sessionID(key [sha256.Size]byte) string {
@@ -237,7 +311,14 @@ func (s *Sessions) List(user, currentToken string) []SessionInfo {
 	list := []SessionInfo{}
 	for key, session := range s.sessions {
 		if session.User == user {
-			list = append(list, SessionInfo{ID: sessionID(key), Created: session.Created, LastSeen: session.LastSeen, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Current: key == current})
+			info := SessionInfo{ID: sessionID(key), Created: session.Created, LastSeen: session.LastSeen, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Current: key == current}
+			if session.Remember && s.stay != 0 {
+				info.Kept = true
+				if until := s.until(session); !until.IsZero() {
+					info.Until = &until
+				}
+			}
+			list = append(list, info)
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].LastSeen.After(list[j].LastSeen) })
@@ -280,7 +361,7 @@ func (s *Sessions) Persist(path string) error {
 	now := s.now()
 	for hash, session := range stored {
 		raw, err := hex.DecodeString(hash)
-		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || expired(session, now) {
+		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || s.expired(session, now) {
 			continue
 		}
 		s.sessions[[sha256.Size]byte(raw)] = session
@@ -288,9 +369,10 @@ func (s *Sessions) Persist(path string) error {
 	return nil
 }
 
-// Remember keeps sessions with Remember on the stick from now on and takes
-// over those stored there that are not known yet (after a restart of the
-// NAS). Call it after Persist: the file in RAM knows more about them.
+// Remember reads the setting "stay logged in", keeps the sessions on the
+// stick from now on while it is on and takes over those stored there that
+// are not known yet (after a restart of the NAS). Call it after Persist:
+// the file in RAM knows more about them.
 func (s *Sessions) Remember(store Keeper) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -299,7 +381,22 @@ func (s *Sessions) Remember(store Keeper) error {
 		// Not readable: leave the file alone rather than overwrite it.
 		return err
 	}
+	var setting StaySettings
+	switch err := store.ReadJSON(StayFile, &setting); {
+	case errors.Is(err, fs.ErrNotExist):
+		// 0.37.0 kept the logins of a tick on the login page for 30 days.
+		// Whoever used it keeps that until the setting is chosen.
+		setting.StayDays = 0
+		if len(stored) > 0 {
+			setting.StayDays = 30
+		}
+	case err != nil:
+		return err
+	case !validStay(setting.StayDays):
+		setting.StayDays = 0
+	}
 	s.keep = store
+	s.stay = setting.StayDays
 	// What the file holds counts as written: a start alone does not write.
 	written := map[string]Session{}
 	for hash, session := range stored {
@@ -311,7 +408,7 @@ func (s *Sessions) Remember(store Keeper) error {
 	now := s.now()
 	for hash, session := range stored {
 		raw, err := hex.DecodeString(hash)
-		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || !session.Remember || expired(session, now) {
+		if err != nil || len(raw) != sha256.Size || session == nil || session.User == "" || !session.Remember || s.stay == 0 || s.expired(session, now) {
 			continue
 		}
 		key := [sha256.Size]byte(raw)
@@ -320,7 +417,7 @@ func (s *Sessions) Remember(store Keeper) error {
 			s.sessions[key] = session
 		}
 	}
-	s.keepRemembered()
+	s.applyStay(s.stay)
 	return nil
 }
 
@@ -339,7 +436,7 @@ func (s *Sessions) keepRemembered() {
 	now := s.now()
 	stored := map[string]Session{}
 	for key, session := range s.sessions {
-		if session.Remember && !expired(session, now) {
+		if session.Remember && s.stay != 0 && !s.expired(session, now) {
 			stored[hex.EncodeToString(key[:])] = fixed(session)
 		}
 	}
