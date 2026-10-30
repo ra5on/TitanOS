@@ -191,7 +191,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                     ready_seconds = round(time.monotonic() - booted, 1)
                     if boot == '1':
                         request('/setup', {'name': 'enctester', 'password': account})
-                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip()})
+                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip(), 'password': account})
                     else:
                         request('/login', {'name': 'enctester', 'password': account})
                     request('/system/ssh', {'enabled': True}, 'PUT')

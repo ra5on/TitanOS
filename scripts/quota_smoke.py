@@ -17,7 +17,7 @@ def check_share_quotas(boot, request, remote, disks):
         for name, filesystem, serial in VOLUMES:
             disk = disks[serial]
             assert disk.startswith('vd'), disk
-            request('/storage/volumes', {'name': name, 'level': 'raid0', 'filesystem': filesystem, 'disks': [disk], 'erase': [disk]})
+            request('/storage/volumes', {'name': name, 'level': 'raid0', 'filesystem': filesystem, 'disks': [disk], 'erase': [disk], 'identities': {d['name']: d['identity'] for d in request('/storage')['disks']}})
             request(f'/storage/volumes/{name}/quotas', {'enabled': True}, 'PUT')
             request('/shares', {'name': name + '-limited', 'volume': name, 'access': {'storagetester': 'rw'}, 'quota': LIMIT})
             volume = next(v for v in request('/storage')['volumes'] if v['name'] == name)

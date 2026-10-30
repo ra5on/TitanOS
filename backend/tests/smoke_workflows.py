@@ -87,7 +87,7 @@ def smoke(archive,binary,log,timeout):
             process=subprocess.Popen(args,stdin=subprocess.DEVNULL,stdout=serial,stderr=subprocess.STDOUT)
             try:
                 wait(lambda:request('/health').get('ready'),'base boot',timeout)
-                password=secrets.token_urlsafe(24);request('/setup',{'name':'storagetester','password':password});request('/account/ssh-keys',{'key':(directory/'key.pub').read_text().strip()});request('/system/ssh',{'enabled':True},'PUT')
+                password=secrets.token_urlsafe(24);request('/setup',{'name':'storagetester','password':password});request('/account/ssh-keys',{'key':(directory/'key.pub').read_text().strip(),'password':password});request('/system/ssh',{'enabled':True},'PUT')
                 wait(lambda:subprocess.run([*ssh,'true'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0,'SSH',45)
                 inject();print('New backend installed in RAM; session preserved.',flush=True)
                 disks={d['serial']:d for d in request('/storage')['disks']}
@@ -106,7 +106,7 @@ def smoke(archive,binary,log,timeout):
                 assert remote('test ! -e /mnt/foreign/appdata; echo preserved')=='preserved'
                 request('/storage/volumes/foreign',{'confirm':'foreign'},'DELETE');print('Read-only foreign RAID preview, stale identity rejection and non-formatting import passed.',flush=True)
                 def create(name,level,filesystem,indices):
-                    members=names(indices);request('/storage/volumes',{'name':name,'level':level,'filesystem':filesystem,'disks':members,'erase':members});return wait(lambda:next((v for v in request('/storage')['volumes'] if v['name']==name and v['mounted'] and v['state']=='ok'),None),'create '+name,180)
+                    members=names(indices);request('/storage/volumes',{'name':name,'level':level,'filesystem':filesystem,'disks':members,'erase':members,'identities':{d['name']:d['identity'] for d in request('/storage')['disks']}});return wait(lambda:next((v for v in request('/storage')['volumes'] if v['name']==name and v['mounted'] and v['state']=='ok'),None),'create '+name,180)
                 create('array','raid5','ext4',[1,2,3]);create('safe','raid0','ext4',[7]);create('mirror','raid1','btrfs',[5,6])
                 # A genuine foreign native mirror is unregistered only in this
                 # disposable fixture, then previewed and registered without mkfs.

@@ -242,7 +242,7 @@ ip -n titan-peer link set peer30 up
     remote(f'test ! -e {old_root}; test -f {release_root}/fixture.raw')
     print('PASS real plugin-volume cleanup, current release protection and mounted/private directory checks',flush=True)
 
-    token=request('/account/tokens',dict(name='QEMU CLI',scopes=['system:read']))
+    token=request('/account/tokens',dict(name='QEMU CLI',scopes=['system:read'],password=password))
     token_path=directory/'api-token'; token_path.write_text(token['secret']); token_path.chmod(0o600)
     put(token_path,'/root/api-token');remote('chmod 600 /root/api-token')
     # The certificate is trusted explicitly. No TLS verification bypass in CLI.

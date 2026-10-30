@@ -128,7 +128,7 @@ def main():
                     wait(ready)
                     if boot == 1:
                         request('/setup', {'name': 'bridgetest', 'password': password})
-                        request('/account/ssh-keys', {'key': (folder / 'ssh-key.pub').read_text().strip()})
+                        request('/account/ssh-keys', {'key': (folder / 'ssh-key.pub').read_text().strip(), 'password': password})
                         request('/system/ssh', {'enabled': True}, 'PUT')
                     else:
                         request('/login', {'name': 'bridgetest', 'password': password})

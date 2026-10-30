@@ -141,7 +141,7 @@ def run_case(archive, case, log, timeout, force_tcg):
             request('/setup', {'name': 'restoretester', 'password': password})
             disks = {d['serial']: d['name'] for d in request('/storage')['disks']}
             members = [disks['RESTORE1'], disks['RESTORE2']]
-            request('/storage/volumes', {'name': 'tank', 'level': 'raid1', 'filesystem': filesystem, 'disks': members, 'erase': members})
+            request('/storage/volumes', {'name': 'tank', 'level': 'raid1', 'filesystem': filesystem, 'disks': members, 'erase': members, 'identities': {d['name']: d['identity'] for d in request('/storage')['disks']}})
             volume = next(v for v in request('/storage')['volumes'] if v['name'] == 'tank')
             assert volume['mounted'], volume
             request('/shares', {'name': 'Daten', 'volume': 'tank', 'smb': True})
