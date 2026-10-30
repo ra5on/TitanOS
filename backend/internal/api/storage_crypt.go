@@ -27,6 +27,11 @@ func webSession(r *http.Request) bool {
 }
 
 func (s *Server) requireWebSession(w http.ResponseWriter, r *http.Request) bool {
+	// Through another node of the cluster the request came from a browser
+	// session there; that node passes on nothing else (requireOwnSession).
+	if viaCluster(r) {
+		return true
+	}
 	if !webSession(r) || s.sessionToken(r) == "" {
 		writeError(w, http.StatusForbidden, "web_session_required", "only possible on the web interface")
 		return false

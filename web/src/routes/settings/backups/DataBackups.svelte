@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ClusterPair from '#lib/components/ClusterPair.svelte';
  import ApplicationSelection,{type Application} from '#lib/operations/ApplicationSelection.svelte';
  import ProbeDialog from '#lib/operations/ProbeDialog.svelte';
  import RecoveryPanel from '#lib/operations/RecoveryPanel.svelte';
@@ -632,6 +633,7 @@
 					<p class="muted">{t('backup.publicKeyHint')}</p>
 				{/if}
 			{:else if draft.destination.type === 'titanos'}
+				<ClusterPair onpair={(code) => (pairCode = code)} />
 				<label class="block"><span>{t('backup.pairCode')}</span>
 					<textarea class="field mono" rows="3" bind:value={pairCode} spellcheck="false" autocomplete="off" placeholder="titanos-backup:…" required></textarea>
 				</label>

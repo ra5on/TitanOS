@@ -1,3 +1,4 @@
+import { apiPath } from '#lib/cluster-node.ts';
 import { isEditableText } from './text-files.ts';
 export type Favorite = { root: string; path: string; label?:string };
 export function readFavorites(value: string | null): Favorite[] {
@@ -77,7 +78,7 @@ export function thumbnailKind(name: string): ThumbnailKind | null {
 }
 /** The modification time is part of the address, so the browser cache never shows an old version. */
 export function thumbnailURL(root: string, path: string, size: number, modified?: string): string {
- return '/api/v1/files/thumb?' + new URLSearchParams({ root, path, size: String(size), ...(modified ? { v: modified } : {}) });
+ return apiPath('/files/thumb?' + new URLSearchParams({ root, path, size: String(size), ...(modified ? { v: modified } : {}) }));
 }
 export type Photo = { name: string; size: number; modified: string; taken?: string; kind: 'image' | 'video' };
 /** Pictures by date taken (EXIF, else modification time), newest first, or by name. */

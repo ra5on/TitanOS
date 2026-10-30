@@ -1,5 +1,7 @@
 // Thin wrapper around fetch for the titand API.
 
+import { apiPath } from './cluster-node.ts';
+
 export class ApiError extends Error {
 	readonly status: number;
 	readonly code: string;
@@ -36,7 +38,7 @@ async function request<T>(
 
 	let res: Response;
 	try {
-		res = await fetch('/api/v1' + path, init);
+		res = await fetch(apiPath(path), init);
 	} catch {
 		throw new ApiError(0, 'unreachable', 'titand is not reachable');
 	}

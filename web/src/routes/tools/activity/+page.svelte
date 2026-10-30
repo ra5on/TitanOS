@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type Account, type StorageStatus } from '#lib/api.ts';
@@ -100,7 +101,7 @@
 		try {
 			const q = query();
 			q.set('format', format);
-			const response = await fetch(`/api/v1/activity?${q}`, { credentials: 'same-origin' });
+			const response = await fetch(apiPath(`/activity?${q}`), { credentials: 'same-origin' });
 			if (!response.ok)
 				throw new Error((await response.json()).error?.message ?? response.statusText);
 			const url = URL.createObjectURL(await response.blob());

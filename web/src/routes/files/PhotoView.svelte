@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
  // Photo view of one folder: a grid of thumbnails made by titand, ordered by
  // the date taken (EXIF) or by name, and a full-screen viewer with arrow keys
  // and swiping. Nothing is read recursively; originals stay where they are.
@@ -74,7 +75,7 @@
   <div class="viewer" bind:this={viewer} role="group" aria-label={shown.name} onpointerdown={pointerdown} onpointerup={pointerup}>
    {#if shown.kind === 'video' && streamableVideo(shown.name)}
     <!-- svelte-ignore a11y_media_has_caption -->
-    <video controls preload="metadata" poster={thumbnailURL(root, join(shown.name), 1280, shown.modified)} src={'/api/v1/files/download?' + new URLSearchParams({ root, path: join(shown.name), media: '1' })}></video>
+    <video controls preload="metadata" poster={thumbnailURL(root, join(shown.name), 1280, shown.modified)} src={apiPath('/files/download?' + new URLSearchParams({ root, path: join(shown.name), media: '1' }))}></video>
    {:else}
     <img src={thumbnailURL(root, join(shown.name), 1280, shown.modified)} alt={shown.name} />
    {/if}
@@ -82,7 +83,7 @@
     <button type="button" class="btn" onclick={() => step(-1)} aria-label={t('files.previousImage')}>‹</button>
     <span class="info"><strong>{shown.name}</strong> · {formatDateTime(new Date(shown.taken || shown.modified))} · {t('files.photoPosition', { index: current + 1, count: photos.length })}</span>
     <button type="button" class="btn" onclick={() => step(1)} aria-label={t('files.nextImage')}>›</button>
-    <a class="btn" href={'/api/v1/files/download?' + new URLSearchParams({ root, path: join(shown.name) })}>{t('files.download')}</a>
+    <a class="btn" href={apiPath('/files/download?' + new URLSearchParams({ root, path: join(shown.name) }))}>{t('files.download')}</a>
     {#if document.fullscreenEnabled}<button type="button" class="btn" onclick={fullscreen}>{t('files.photoFullscreen')}</button>{/if}
    </div>
   </div>

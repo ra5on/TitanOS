@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ClusterPair from '#lib/components/ClusterPair.svelte';
 	// Btrfs replication: send a volume to another TitanOS (sender side) and
 	// copy what others sent here into a new folder (receiving side).
 	import { api, ApiError } from '#lib/api.ts';
@@ -162,6 +163,7 @@
 			<label class="narrow"><span>{t('replication.volume')}</span>
 				<select class="field" bind:value={editing.volume}>{#each btrfsVolumes as name (name)}<option value={name}>{name}</option>{/each}</select>
 			</label>
+			{#if !editing.id}<ClusterPair onpair={(code) => editing && (editing.code = code)} />{/if}
 			<label><span>{t('replication.code')}</span>
 				<textarea class="field mono" rows="3" bind:value={editing.code} required={!editing.id} placeholder="titanos-backup:…"></textarea>
 				<small class="muted">{t(editing.id ? 'replication.codeKeep' : 'replication.codeHint')}</small>

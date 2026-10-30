@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiSocket } from '#lib/cluster-node.ts';
 	// The screen of a running VM: noVNC in the browser, a WebSocket to
 	// titand, QEMU's VNC server behind it.
 	import { untrack } from 'svelte';
@@ -60,7 +61,7 @@
 			}
 			const connection = new RFB(
 				element,
-				`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1/vms/${vm}/screen`,
+				apiSocket(`/vms/${vm}/screen`),
 			);
 			rfb = connection;
 			connection.background = 'var(--screen-bg)';

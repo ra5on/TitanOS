@@ -1,6 +1,7 @@
 // The chat with the assistant: open or closed, the chats of the account
 // and the one that is open. Chats are kept by the NAS (on a volume); the
 // browser observes background jobs; only the server executes stored actions.
+import { apiPath } from '#lib/cluster-node.ts';
 import { goto } from '$app/navigation';
 import { api, ApiError } from '#lib/api.ts';
 
@@ -281,7 +282,7 @@ async function stream(path: string, body: Record<string, unknown>) {
 	const active = new AbortController();
  controller=active; const view=viewGeneration;
 	try {
-		const res = await fetch('/api/v1' + path, {
+		const res = await fetch(apiPath(path), {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json' },

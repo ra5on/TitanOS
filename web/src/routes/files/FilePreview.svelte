@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
  import Dialog from '#lib/components/Dialog.svelte';
  import { t } from '#lib/i18n/index.svelte.ts';
  import { previewKind } from '#lib/file-actions.ts';
  let {root,path,size,onclose,onprevious,onnext}: {root:string;path:string;size:number;onclose:()=>void;onprevious?:()=>void;onnext?:()=>void}=$props();
  let text=$state(''), url=$state(''), failed=$state(false), loading=$state(true);
- const stream=$derived('/api/v1/files/download?'+new URLSearchParams({root,path,media:'1'}));
+ const stream=$derived(apiPath('/files/download?'+new URLSearchParams({root,path,media:'1'})));
  function keyboard(event:KeyboardEvent){if(kind!=='image'||event.altKey||event.ctrlKey||event.metaKey)return;if(event.key==='ArrowLeft'&&onprevious){event.preventDefault();onprevious();}if(event.key==='ArrowRight'&&onnext){event.preventDefault();onnext();}}
  const kind=$derived(previewKind(path,size));
  $effect(()=>{
@@ -15,7 +16,7 @@
    try {
     if(kind==='audio'||kind==='video'){loading=false;return;}
     if(!kind)throw new Error('unsupported');
-    const res=await fetch('/api/v1/files/download?'+new URLSearchParams({root,path}),{credentials:'same-origin',signal:controller.signal});
+    const res=await fetch(apiPath('/files/download?'+new URLSearchParams({root,path})),{credentials:'same-origin',signal:controller.signal});
     if(!res.ok || Number(res.headers.get('content-length'))>limit || !res.body)throw new Error('unavailable');
     const reader=res.body.getReader(), chunks:Uint8Array[]=[];let length=0;
     for(;;){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>limit){await reader.cancel();throw new Error('too large');}chunks.push(value);}
@@ -35,7 +36,7 @@
  <!-- svelte-ignore a11y_media_has_caption -->
  <video controls preload="metadata" src={stream} onerror={()=>failed=true}></video><p class="muted">{t('files.mediaHint')}</p>{:else if kind==='pdf'}<object data={url} type="application/pdf" aria-label={path}><p>{t('files.pdfFallback')}</p></object>{:else}<pre>{text}</pre>{/if}
  {#if kind==='image'}<div class="gallery"><button class="btn" disabled={!onprevious} onclick={onprevious}>{t('files.previousImage')}</button><button class="btn" disabled={!onnext} onclick={onnext}>{t('files.nextImage')}</button></div>{/if}
- <a class="btn" href={'/api/v1/files/download?'+new URLSearchParams({root,path})}>{t('files.download')}</a>
+ <a class="btn" href={apiPath('/files/download?'+new URLSearchParams({root,path}))}>{t('files.download')}</a>
  <div class="dialog-actions"><button type="button" class="btn" onclick={onclose}>{t('files.editClose')}</button></div>
 </Dialog>
 <style>video{width:100%;max-height:65vh;}audio{width:100%;}object{display:block;width:100%;height:65vh;border:0;}.gallery{display:flex;gap:8px;margin:12px 0;}img{max-width:100%;max-height:65vh;object-fit:contain;}pre{max-height:65vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono,monospace);font-size:0.875rem;}</style>

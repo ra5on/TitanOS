@@ -193,18 +193,6 @@ func (m *Manager) Configure(enabled bool, volume string, mounted []string) error
 func (m *Manager) Pair(name string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.loaded {
-		return "", ErrNotLoaded
-	}
-	if !naming.ValidBackup(name) {
-		return "", fmt.Errorf("%w: name", ErrInvalid)
-	}
-	if len(m.settings.Sources) >= maxSources {
-		return "", ErrTooMany
-	}
-	if slices.ContainsFunc(m.settings.Sources, func(s Source) bool { return strings.EqualFold(s.Name, name) }) {
-		return "", ErrExists
-	}
 	host := ""
 	if m.Host != nil {
 		host = m.Host()
@@ -217,8 +205,45 @@ func (m *Manager) Pair(name string) (string, error) {
 			}
 		}
 	}
-	if host == "" {
+	if host == "" && m.loaded {
 		return "", ErrNoNetwork
+	}
+	token, err := m.addSourceLocked(name)
+	if err != nil {
+		return "", err
+	}
+	payload, _ := json.Marshal(map[string]any{"v": 1, "url": fmt.Sprintf("http://%s/%s", net.JoinHostPort(host, strconv.Itoa(m.port())), name), "user": name, "password": token})
+	return CodePrefix + base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+// ErrNotEnabled says that this NAS takes no backups of others.
+var ErrNotEnabled = errors.New("backuptarget: taking backups of other NAS is off")
+
+// PairToken adds a source for another node of the cluster and returns its
+// token. The cluster carries the requests (see package cluster), so no
+// address of this NAS is needed; taking backups has to be on.
+func (m *Manager) PairToken(name string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.loaded && (!m.settings.Enabled || m.settings.Volume == "") {
+		return "", ErrNotEnabled
+	}
+	return m.addSourceLocked(name)
+}
+
+// addSourceLocked adds a source with a new token; m.mu is held.
+func (m *Manager) addSourceLocked(name string) (string, error) {
+	if !m.loaded {
+		return "", ErrNotLoaded
+	}
+	if !naming.ValidBackup(name) {
+		return "", fmt.Errorf("%w: name", ErrInvalid)
+	}
+	if len(m.settings.Sources) >= maxSources {
+		return "", ErrTooMany
+	}
+	if slices.ContainsFunc(m.settings.Sources, func(s Source) bool { return strings.EqualFold(s.Name, name) }) {
+		return "", ErrExists
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -231,8 +256,7 @@ func (m *Manager) Pair(name string) (string, error) {
 		return "", err
 	}
 	m.settings = next
-	payload, _ := json.Marshal(map[string]any{"v": 1, "url": fmt.Sprintf("http://%s/%s", net.JoinHostPort(host, strconv.Itoa(m.port())), name), "user": name, "password": token})
-	return CodePrefix + base64.RawURLEncoding.EncodeToString(payload), nil
+	return token, nil
 }
 
 func hashToken(token string) string {

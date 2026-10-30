@@ -160,7 +160,9 @@ func (s *Server) consoleAllowed(r *http.Request, user auth.User) bool {
 	name := user.Name
 	_, token := r.Context().Value(apiTokenIdentity{}).(string)
 	_, agent := r.Context().Value(agentIdentity{}).(string)
-	if !token && !agent {
+	// A console opened through another node of the cluster has no cookie
+	// here; that node checks its session.
+	if !token && !agent && !viaCluster(r) {
 		cookie, err := r.Cookie(s.cookieName())
 		if err != nil {
 			return false

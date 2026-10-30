@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	// Confirmation before a restart or shutdown, and the waiting screen after it.
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -107,7 +108,7 @@
 		for (;;) {
 			await new Promise((resolve) => setTimeout(resolve, 3000));
 			try {
-				const res = await fetch('/api/v1/health', { cache: 'no-store' });
+				const res = await fetch(apiPath('/health'), { cache: 'no-store' });
 				if (res.ok && (wasDown || Date.now() - started > 30000)) {
 					location.reload();
 					return;

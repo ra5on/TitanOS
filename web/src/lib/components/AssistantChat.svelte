@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { controlRun } from '#lib/assistant.svelte.ts';
 	// The open chat: messages, what the model read, cards for actions, and
 	// the field for the next question. Used in the side panel and on the
@@ -252,7 +253,7 @@
 		{/if}
 		<label><input type="checkbox" bind:checked={assistant.dryRun} disabled={assistant.busy || !!assistant.run && ['paused','waiting','blocked','confirmation','queued','running'].includes(assistant.run.state)} /> {t('agent.dryRun')}</label>
 		{#if assistant.archived}<span class="muted small">{t('agent.compacted', {count:assistant.archived})}</span>{/if}
-		{#if assistant.chatId}<label><input type="checkbox" bind:checked={diagnosticContent}/>{t('agent.diagnosticContent')}</label><a class="btn" href={`/api/v1/assistant/chats/${assistant.chatId}/diagnostics${diagnosticContent?'?content=true':''}`} download>{t('agent.diagnostics')}</a>{/if}
+		{#if assistant.chatId}<label><input type="checkbox" bind:checked={diagnosticContent}/>{t('agent.diagnosticContent')}</label><a class="btn" href={apiPath(`/assistant/chats/${assistant.chatId}/diagnostics${diagnosticContent?'?content=true':''}`)} download>{t('agent.diagnostics')}</a>{/if}
 	</div>
 
 	<form onsubmit={(event) => { event.preventDefault(); submit(); }}>

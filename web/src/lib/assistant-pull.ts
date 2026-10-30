@@ -1,12 +1,13 @@
 // Loads a model into Ollama; the NAS passes Ollama's progress on as server-
 // sent events. Ollama keeps what it already has, so a retry continues.
+import { apiPath } from '#lib/cluster-node.ts';
 import { ApiError } from './api.ts';
 
 export type PullProgress = { status: string; total: number; completed: number };
 
 /** Resolves when the model is there; throws ApiError (code, detail in message). */
 export async function pullModel(model: string, onprogress: (p: PullProgress) => void, signal?: AbortSignal): Promise<void> {
-	const res = await fetch('/api/v1/assistant/models/pull', {
+	const res = await fetch(apiPath('/assistant/models/pull'), {
 		method: 'POST',
 		credentials: 'same-origin',
 		headers: { 'Content-Type': 'application/json' },

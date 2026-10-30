@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiSocket } from '#lib/cluster-node.ts';
 	// The query of a container console: shell and user, both optional.
 	function containerQuery(shell: string, user?: string): string {
 		const query = new URLSearchParams();
@@ -85,7 +86,7 @@
 		if (!confirmed || !term || socket || phase === 'ended') return;
 		const terminal = term;
 		const path = session.kind === 'nas' ? '/terminal/shell' : session.kind === 'vm' ? `/vms/${session.container}/serial` : session.kind === 'lxc' ? `/lxc/${session.container}/console${session.shell ? '?mode=console' : ''}` : `/docker/containers/${session.container}/console${containerQuery(session.shell, session.user)}`;
-		const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1${path}`);
+		const connection = new WebSocket(apiSocket(path));
 		connection.binaryType = 'arraybuffer';
 		socket = connection;
 		let opened = false;

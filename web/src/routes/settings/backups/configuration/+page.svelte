@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -68,7 +69,7 @@
 	function fetchBackup(backup: Backup) {
 		// The browser saves the file itself; nothing of it passes through the page.
 		const link = document.createElement('a');
-		link.href = `/api/v1/config-backup/download?volume=${encodeURIComponent(backup.volume)}&name=${encodeURIComponent(backup.name)}`;
+		link.href = apiPath(`/config-backup/download?volume=${encodeURIComponent(backup.volume)}&name=${encodeURIComponent(backup.name)}`);
 		link.download = '';
 		link.click();
 	}

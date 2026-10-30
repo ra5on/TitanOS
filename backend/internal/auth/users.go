@@ -132,6 +132,18 @@ type Users struct {
 	loaded bool
 	// pendingTOTP holds secrets that were handed out but not confirmed yet.
 	pendingTOTP map[string]string
+
+	// Changed, if set before use, is told the name of every account
+	// written or removed here, in its own goroutine. The cluster passes the
+	// change on to the other nodes; changes taken over from them with
+	// Import or Forget do not call it.
+	Changed func(name string)
+}
+
+func (u *Users) changed(name string) {
+	if u.Changed != nil {
+		go u.Changed(name)
+	}
 }
 
 // NewUsers returns the accounts in store. Call Load before using them.
@@ -296,6 +308,7 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 		return User{}, err
 	}
 	u.users[name] = user
+	u.changed(name)
 	return user, nil
 }
 
@@ -367,6 +380,7 @@ func (u *Users) update(name string, change func(user *User) error) (User, error)
 		return User{}, err
 	}
 	u.users[name] = user
+	u.changed(name)
 	return user, nil
 }
 
@@ -469,6 +483,7 @@ func (u *Users) Delete(name string) error {
 		return err
 	}
 	delete(u.users, name)
+	u.changed(name)
 	return nil
 }
 
