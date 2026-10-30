@@ -37,6 +37,8 @@ on:
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
       - 'scripts/smoke-storage.py'
+      - 'scripts/smoke-cache.py'
+      - 'backend/internal/storage/cache.go'
       - 'scripts/workflows023_smoke.py'
       - 'scripts/files_usb_smoke.py'
       - 'scripts/smb_backup_smoke.py'
@@ -217,6 +219,12 @@ jobs:
         if: steps.kind.outputs.kind == 'system'
         run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420 --workflows023
 
+      - name: SSD cache with real dm-cache (writeback, switch-off, missing SSD, delete)
+        # Also for app releases: the cache logic is titand's own code, which an
+        # app release changes (scripts/smoke-cache.py, docs/SSD-CACHE.md).
+        timeout-minutes: 40
+        run: python3 scripts/smoke-cache.py out/release/titanos-${{ steps.version.outputs.version }}.zip --output out/validation/cache --timeout 420
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -226,6 +234,9 @@ jobs:
             out/app-update-smoke*.log
             out/storage-smoke*.log
             out/network-smoke*.log
+            out/validation/cache/cache-result.json
+            out/validation/cache/cache-serial.log
+            out/validation/cache/cache-titand-boot*.log
           if-no-files-found: ignore
           retention-days: 7
 

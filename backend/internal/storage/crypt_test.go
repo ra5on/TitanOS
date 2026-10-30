@@ -726,3 +726,68 @@ func (r *failingErase) Run(ctx context.Context, stdin, name string, args ...stri
 	}
 	return r.cryptRunner.Run(ctx, stdin, name, args...)
 }
+
+// busyOnce refuses the first dmsetup remove as busy (udev still probing the
+// wiped device) and, with erased set, reports devices as no LUKS any more
+// once erased, like the real cryptsetup.
+type busyOnce struct {
+	*cryptRunner
+	removes int
+	erased  map[string]bool
+}
+
+func (r *busyOnce) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "dmsetup" && args[0] == "remove" {
+		r.removes++
+		if r.removes == 1 {
+			r.cryptRunner.crypt = append(r.cryptRunner.crypt, "dmsetup remove (busy)")
+			return "", &CommandError{Command: "dmsetup remove", Output: "Device or resource busy", Err: errors.New("exit status 1")}
+		}
+	}
+	if name == "cryptsetup" && (args[0] == "erase" || args[0] == "isLuks") && r.erased[args[len(args)-1]] {
+		return "", &CommandError{Command: "cryptsetup " + args[0], Output: "not a valid LUKS device", Err: errors.New("exit status 1")}
+	}
+	out, err := r.cryptRunner.Run(ctx, stdin, name, args...)
+	if name == "cryptsetup" && args[0] == "erase" && err == nil {
+		r.erased[args[len(args)-1]] = true
+	}
+	return out, err
+}
+
+func TestDeleteEncryptedCachedArrayWaitsForABusyCacheDevice(t *testing.T) {
+	oldTries, oldPause := removeMapperTries, removeMapperPause
+	removeMapperPause = time.Millisecond
+	defer func() { removeMapperTries, removeMapperPause = oldTries, oldPause }()
+	m, _, runner := encryptedCachedArray(t, 0)
+	busy := &busyOnce{cryptRunner: runner, erased: map[string]bool{}}
+	m.runner = busy
+	if err := m.Delete(context.Background(), "tank", "tank"); err != nil {
+		t.Fatal(err)
+	}
+	if busy.removes != 2 || !strings.Contains(runner.commands(), "mdadm --stop") {
+		t.Fatalf("removes %d:\n%s", busy.removes, runner.commands())
+	}
+}
+
+func TestDeleteEncryptedCachedArrayRunsAgainAfterABusyCacheDevice(t *testing.T) {
+	oldTries, oldPause := removeMapperTries, removeMapperPause
+	removeMapperTries, removeMapperPause = 1, time.Millisecond
+	defer func() { removeMapperTries, removeMapperPause = oldTries, oldPause }()
+	m, _, runner := encryptedCachedArray(t, 0)
+	busy := &busyOnce{cryptRunner: runner, erased: map[string]bool{}}
+	m.runner = busy
+	if err := m.Delete(context.Background(), "tank", "tank"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	if _, ok := m.find("tank"); !ok {
+		t.Fatal("volume forgotten after a failed delete")
+	}
+	// The key slots are gone now; the second attempt must not stop at
+	// "not a LUKS device".
+	if err := m.Delete(context.Background(), "tank", "tank"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.find("tank"); ok {
+		t.Fatal("volume still configured")
+	}
+}

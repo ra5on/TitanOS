@@ -1,0 +1,350 @@
+{
+  "image": "Local run: stick of the 0.32.0 build (out/titanos-0.32.0.zip) with titand from branch chore/review-followups (0.38.1 + Delete fix) and the 0.38 fstab/titand.service swapped into the squashfs (owners kept via mksquashfs pseudo file); no mkosi build possible here (no root/subuid mapping). Kernel, dm-cache, dmsetup, cryptsetup and mdadm are those of the 0.32.0 image (kernel 6.12.113+deb13-amd64).",
+  "started": "2026-10-30T13:10:36Z",
+  "zip": "titanos-cachetest.zip",
+  "zipSha256": "b83d90cc09b39da9623fecc466b75e00e90af35bdc7569839e06de38e040f317",
+  "phases": {
+    "environment": {
+      "kernel": "6.12.113+deb13-amd64",
+      "dmsetup": [
+        "Library version:   1.02.205 (2025-02-27)",
+        "Driver version:    4.48.0"
+      ],
+      "dmCache": "loaded",
+      "tools": {
+        "e2fsck": "/usr/sbin/e2fsck",
+        "fsfreeze": "/usr/sbin/fsfreeze",
+        "blkdiscard": "/usr/sbin/blkdiscard",
+        "cryptsetup": "/usr/sbin/cryptsetup",
+        "mdadm": "/usr/sbin/mdadm",
+        "blockdev": "/usr/sbin/blockdev"
+      }
+    },
+    "a": {
+      "cacheConfigured": {
+        "plain": {
+          "mode": "writeback",
+          "disk": "SSD1",
+          "active": false,
+          "missing": false,
+          "removing": false,
+          "usedBlocks": 0,
+          "totalBlocks": 0,
+          "dirtyBlocks": 0,
+          "readHitRate": -1,
+          "blockBytes": 0
+        },
+        "secret": {
+          "mode": "writeback",
+          "disk": "SSD2",
+          "active": false,
+          "missing": false,
+          "removing": false,
+          "usedBlocks": 0,
+          "totalBlocks": 0,
+          "dirtyBlocks": 0,
+          "readHitRate": -1,
+          "blockBytes": 0
+        }
+      },
+      "effectiveBeforeReboot": false,
+      "mountBeforeReboot": "/dev/md127",
+      "mountSource": "/dev/mapper/titanos-cache-plain",
+      "statusAtStart": {
+        "raw": "0 1830912 cache 8 15/16384 512 4/3832 33 58 0 1 0 4 0 1 writeback 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 4,
+        "totalBlocks": 3832,
+        "readHits": 33,
+        "readMisses": 58,
+        "dirty": 0,
+        "mode": "writeback"
+      },
+      "statusAfterWrite": {
+        "raw": "0 1830912 cache 8 15/16384 512 263/3832 36 59 9 3 0 263 257 1 writeback 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 263,
+        "totalBlocks": 3832,
+        "readHits": 36,
+        "readMisses": 59,
+        "dirty": 257,
+        "mode": "writeback"
+      },
+      "table": [
+        "0",
+        "1830912",
+        "cache",
+        "8:1",
+        "\u2026"
+      ],
+      "view": {
+        "mode": "writeback",
+        "disk": "SSD1",
+        "active": true,
+        "missing": false,
+        "removing": false,
+        "usedBlocks": 263,
+        "totalBlocks": 3832,
+        "dirtyBlocks": 258,
+        "readHitRate": 0.13953488372093023,
+        "blockBytes": 262144
+      },
+      "ok": true
+    },
+    "e": {
+      "usbBeforeCache": [
+        "FREE1",
+        "SSD1",
+        "SSD2"
+      ],
+      "usbAfterCache": [
+        "FREE1"
+      ],
+      "usbWhileLocked": [
+        "FREE1"
+      ],
+      "secretCache": {
+        "mode": "writeback",
+        "disk": "SSD2",
+        "active": false,
+        "missing": false,
+        "removing": false,
+        "usedBlocks": 0,
+        "totalBlocks": 0,
+        "dirtyBlocks": 0,
+        "readHitRate": -1,
+        "blockBytes": 0
+      },
+      "dmsetupWhileLocked": [
+        "titanos-cache-plain\t(252:0)"
+      ],
+      "ok": true
+    },
+    "b": {
+      "statusBeforeDisable": {
+        "raw": "0 1830912 cache 8 15/16384 512 263/3832 37 222 14 5 0 263 170 1 writeback 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 263,
+        "totalBlocks": 3832,
+        "readHits": 37,
+        "readMisses": 222,
+        "dirty": 170,
+        "mode": "writeback"
+      },
+      "viewAfterDisable": {
+        "mode": "writeback",
+        "disk": "SSD1",
+        "active": true,
+        "missing": false,
+        "removing": true,
+        "usedBlocks": 361,
+        "totalBlocks": 3832,
+        "dirtyBlocks": 85,
+        "readHitRate": 0.35,
+        "blockBytes": 262144
+      },
+      "writerWhenDisabled": "active",
+      "secondsUntilForgotten": 31.9,
+      "writerWhenForgotten": "inactive",
+      "tableAfter": [
+        "0",
+        "1830912",
+        "linear",
+        "9:127",
+        "0"
+      ],
+      "mountSource": "/dev/mapper/titanos-cache-plain",
+      "filesWritten": 24,
+      "noticeRemoved": 1,
+      "usbAfterRemoval": [
+        "FREE1",
+        "SSD1"
+      ],
+      "kernelErrors": [],
+      "afterReboot": {
+        "mountSource": "/dev/md127",
+        "checksumsMatch": 26,
+        "e2fsck": [
+          "Pass 4: Checking reference counts",
+          "Pass 5: Checking group summary information",
+          "plain: 48/57232 files (2.1% non-contiguous), 81945/228864 blocks",
+          "rc=0"
+        ],
+        "kernelErrors": [],
+        "usb": [
+          "FREE1",
+          "SSD1",
+          "SSD2"
+        ]
+      },
+      "ok": true
+    },
+    "f": {
+      "depsCrypt": [
+        "1",
+        "dependencies",
+        ":",
+        "(titanos-cache-secret)"
+      ],
+      "beforeSwitch": {
+        "raw": "0 1830912 cache 8 21/16384 512 53/3832 83 316 12 768 0 53 2 1 writeback 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 53,
+        "totalBlocks": 3832,
+        "readHits": 83,
+        "readMisses": 316,
+        "dirty": 2,
+        "mode": "writeback"
+      },
+      "secondsToSwitch": 2.5,
+      "afterSwitch": {
+        "raw": "0 1830912 cache 8 21/16384 512 53/3832 0 17 0 24 0 0 0 1 writethrough 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 53,
+        "totalBlocks": 3832,
+        "readHits": 0,
+        "readMisses": 17,
+        "dirty": 0,
+        "mode": "writethrough"
+      },
+      "ok": true
+    },
+    "d": {
+      "statusBeforeDelete": {
+        "raw": "0 1830912 cache 8 21/16384 512 53/3832 84 316 23 1560 0 0 1 1 writeback 2 migration_threshold 2048 smq 0 rw -",
+        "target": "cache",
+        "usedBlocks": 53,
+        "totalBlocks": 3832,
+        "readHits": 84,
+        "readMisses": 316,
+        "dirty": 1,
+        "mode": "writeback"
+      },
+      "mdMembers": [
+        "/dev/vdc1",
+        "/dev/vdd1"
+      ],
+      "luksMagicBefore": {
+        "EN1": 1,
+        "EN2": 1,
+        "SSD2": 1
+      },
+      "secondsToDelete": 0.8,
+      "mapperAfter": [
+        "titanos-cache-plain\t(252:0)"
+      ],
+      "afterDelete": {
+        "EN1": {
+          "devices": [
+            "/dev/vdc"
+          ],
+          "isLuks": [],
+          "luksMagicWholeDisk": 0,
+          "blkid": ""
+        },
+        "EN2": {
+          "devices": [
+            "/dev/vdd"
+          ],
+          "isLuks": [],
+          "luksMagicWholeDisk": 0,
+          "blkid": ""
+        },
+        "SSD2": {
+          "devices": [
+            "/dev/sdb",
+            "/dev/sdb1",
+            "/dev/sdb2"
+          ],
+          "isLuks": [],
+          "luksMagicWholeDisk": 0,
+          "blkid": "/dev/sdb: PTUUID=\"01a78ee8-1d6b-4430-b657-976930e9a3e1\" PTTYPE=\"gpt\""
+        }
+      },
+      "ok": true
+    },
+    "c": {
+      "configured": {
+        "mode": "writethrough",
+        "disk": "SSD1",
+        "active": false,
+        "missing": false,
+        "removing": false,
+        "usedBlocks": 0,
+        "totalBlocks": 0,
+        "dirtyBlocks": 0,
+        "readHitRate": -1,
+        "blockBytes": 0
+      },
+      "boot4": {
+        "mountSource": "/dev/mapper/titanos-cache-plain",
+        "statusWarm": {
+          "raw": "0 1830912 cache 8 15/16384 512 132/3832 516 346 0 139 0 132 0 1 writethrough 2 migration_threshold 2048 smq 0 rw -",
+          "target": "cache",
+          "usedBlocks": 132,
+          "totalBlocks": 3832,
+          "readHits": 516,
+          "readMisses": 346,
+          "dirty": 0,
+          "mode": "writethrough"
+        }
+      },
+      "boot5": {
+        "view": {
+          "mode": "writethrough",
+          "disk": "SSD1",
+          "active": false,
+          "missing": true,
+          "removing": false,
+          "usedBlocks": 0,
+          "totalBlocks": 0,
+          "dirtyBlocks": 0,
+          "readHitRate": -1,
+          "blockBytes": 0
+        },
+        "mountSource": "/dev/md127",
+        "notices": 1,
+        "savedCache": {
+          "mode": "writethrough",
+          "disk": "SSD1",
+          "metaUUID": "4c357e03-3837-4a6d-a0df-70507b95a18f",
+          "dataUUID": "6e37c3c5-d5a9-48b0-897b-990351f0732b",
+          "stale": true
+        },
+        "changed": "0375513dd9b3d9c51a3d8acbe9dbe1c8d241e33ddf8296c19943d9386f71ec12"
+      },
+      "boot6": {
+        "statusAtStart": {
+          "raw": "0 1830912 cache 8 15/16384 512 2/3832 38 53 0 1 0 2 0 1 writethrough 2 migration_threshold 2048 smq 0 rw -",
+          "target": "cache",
+          "usedBlocks": 2,
+          "totalBlocks": 3832,
+          "readHits": 38,
+          "readMisses": 53,
+          "dirty": 0,
+          "mode": "writethrough"
+        },
+        "savedCache": {
+          "mode": "writethrough",
+          "disk": "SSD1",
+          "metaUUID": "4c357e03-3837-4a6d-a0df-70507b95a18f",
+          "dataUUID": "6e37c3c5-d5a9-48b0-897b-990351f0732b"
+        },
+        "readsChangedData": true,
+        "statusAfterRead": {
+          "raw": "0 1830912 cache 8 15/16384 512 31/3832 69 1821 0 19 0 31 0 1 writethrough 2 migration_threshold 2048 smq 0 rw -",
+          "target": "cache",
+          "usedBlocks": 31,
+          "totalBlocks": 3832,
+          "readHits": 69,
+          "readMisses": 1821,
+          "dirty": 0,
+          "mode": "writethrough"
+        }
+      },
+      "ok": true
+    }
+  },
+  "accel": "kvm",
+  "completed": "2026-10-30T13:14:36Z"
+}

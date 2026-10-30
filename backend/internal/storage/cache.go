@@ -489,6 +489,30 @@ func (m *Manager) detachCache(ctx context.Context, volume VolumeConfig) error {
 	return nil
 }
 
+// removeMapperTries and removeMapperPause bound how long removeMapper
+// waits for a busy device (replaced in tests).
+var removeMapperTries, removeMapperPause = 10, time.Second
+
+// removeMapper removes a device-mapper device. Right after a wipe udev
+// still probes the device (a change event for the closed, written device),
+// and for that moment the kernel refuses with "busy": wait for udev and
+// try again. Seen in QEMU with scripts/smoke-cache.py.
+func (m *Manager) removeMapper(ctx context.Context, name string) error {
+	var err error
+	for try := 0; try < removeMapperTries; try++ {
+		m.runner.Run(ctx, "", "udevadm", "settle")
+		if _, err = m.runner.Run(ctx, "", "dmsetup", "remove", name); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(removeMapperPause):
+		}
+	}
+	return err
+}
+
 // target is the target type of a one-line dmsetup table or status.
 func target(line string) string {
 	fields := strings.Fields(line)
