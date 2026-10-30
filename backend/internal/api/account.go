@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/webauthn"
 )
 
 // What everyone does with their own account: the second factor and the
@@ -94,6 +95,69 @@ func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return false
+	}
+	return true
+}
+
+// passkeyAssertion is a passkey's answer to a challenge of
+// handlePasskeyConfirmBegin.
+type passkeyAssertion struct {
+	ChallengeID       string `json:"challengeId"`
+	ID                string `json:"id"`
+	ClientDataJSON    string `json:"clientDataJSON"`
+	AuthenticatorData string `json:"authenticatorData"`
+	Signature         string `json:"signature"`
+	UserHandle        string `json:"userHandle"`
+}
+
+// proof is password (and code) or one of the account's passkeys.
+type proof struct {
+	Password string            `json:"password"`
+	Code     string            `json:"code"`
+	Passkey  *passkeyAssertion `json:"passkey"`
+}
+
+// reconfirmProof is reconfirm that also takes a passkey of the account
+// instead of password and code: it asks for user verification and counts
+// as both factors, as at the login.
+func (s *Server) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) bool {
+	if p.Passkey == nil {
+		return s.reconfirm(w, user, p.Password, p.Code)
+	}
+	key := "user:" + user.Name
+	if wait := s.limiter.RetryAfter(key); wait > 0 {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return false
+	}
+	a := p.Passkey
+	c, ok := s.passkeys.take(a.ChallengeID)
+	if !ok || !c.confirm || c.user != user.Name {
+		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
+		return false
+	}
+	fail := func(why string) bool {
+		s.limiter.Fail(key)
+		slog.Warn("passkey confirmation failed", "user", user.Name, "why", why)
+		writeError(w, http.StatusForbidden, "passkey_failed", "the passkey was not accepted")
+		return false
+	}
+	clientData, err1 := webauthn.Encoding.DecodeString(a.ClientDataJSON)
+	authData, err2 := webauthn.Encoding.DecodeString(a.AuthenticatorData)
+	signature, err3 := webauthn.Encoding.DecodeString(a.Signature)
+	handle, err4 := webauthn.Encoding.DecodeString(a.UserHandle)
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+		return fail("malformed")
+	}
+	owner, passkey, found := s.opts.Users.FindPasskey(a.ID, handle)
+	if !found || owner.Name != user.Name || passkey.RPID != c.rpID {
+		return fail("not a passkey of the account")
+	}
+	count, err := webauthn.Login(clientData, authData, signature, passkey.Credential(), webauthn.Expect{Challenge: c.challenge, Origin: c.origin, RPID: c.rpID})
+	if err != nil {
+		return fail(err.Error())
+	}
+	if err := s.opts.Users.UsePasskey(user.Name, passkey.ID, count); err != nil {
+		slog.Warn("passkey counter not saved", "user", user.Name, "err", err)
 	}
 	return true
 }

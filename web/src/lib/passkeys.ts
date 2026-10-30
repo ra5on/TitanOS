@@ -92,3 +92,52 @@ export async function loginWithPasskey(): Promise<void> {
 		userHandle: toB64(response.userHandle),
 	});
 }
+
+export type PasskeyAssertion = {
+	challengeId: string;
+	id: string;
+	clientDataJSON: string;
+	authenticatorData: string;
+	signature: string;
+	userHandle: string;
+};
+
+type ConfirmOptions = GetOptions & {
+	publicKey: GetOptions['publicKey'] & { allowCredentials: { type: 'public-key'; id: string }[] };
+};
+
+/** Asks one of the account's own passkeys to confirm that it is the account who sits here; the answer goes with the request it protects. */
+export async function confirmWithPasskey(): Promise<PasskeyAssertion> {
+	const options = await api.post<ConfirmOptions>('/account/passkeys/confirm');
+	const p = options.publicKey;
+	const credential = (await navigator.credentials.get({
+		publicKey: {
+			...p,
+			challenge: fromB64(p.challenge),
+			allowCredentials: p.allowCredentials.map((c) => ({ ...c, id: fromB64(c.id) })),
+		},
+	})) as PublicKeyCredential | null;
+	if (!credential) throw new Error('cancelled');
+	const response = credential.response as AuthenticatorAssertionResponse;
+	return {
+		challengeId: options.challengeId,
+		id: toB64(credential.rawId),
+		clientDataJSON: toB64(response.clientDataJSON),
+		authenticatorData: toB64(response.authenticatorData),
+		signature: toB64(response.signature),
+		userHandle: toB64(response.userHandle),
+	};
+}
+
+/** Whether the logged-in account holds a passkey for the address of this page. */
+export async function hasPasskeyHere(): Promise<boolean> {
+	if (!passkeysPossible()) return false;
+	try {
+		const answer = await api.get<{ passkeys: Passkey[]; rpId: string; usable: boolean }>(
+			'/account/passkeys',
+		);
+		return answer.usable && answer.passkeys.some((k) => k.rpId === answer.rpId);
+	} catch {
+		return false;
+	}
+}
