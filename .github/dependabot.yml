@@ -27,3 +27,8 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # svelte-check does not accept TypeScript 7 yet (peer dependency); the
+      # major step comes once it does.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']

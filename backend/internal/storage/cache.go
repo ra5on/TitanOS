@@ -434,20 +434,40 @@ func (m *Manager) flushCache(ctx context.Context, volume VolumeConfig, wait time
 	return nil
 }
 
-// clearCacheSSD makes the SSD of a deleted volume's cache forget it: the
-// metadata start is zeroed (the cache would start empty) and the cache
-// partition discarded where the SSD supports it. Best effort; the SSD is
-// a free disk again afterwards and is wiped before any further use.
+// clearCacheSSD makes the SSD of a forgotten or deleted cache forget it:
+// the metadata start is zeroed (the cache would start empty), so is the
+// start of the cache partition, and the cache partition is discarded where
+// the SSD supports it. Best effort, only once no device uses the SSD; it
+// is a free disk again afterwards and is wiped before any further use.
+//
+// The start of the cache partition matters: its first cache block may hold
+// a copy of the array's first blocks, file system signature and UUID
+// included. udev and blkid then see the volume's file system a second time
+// on the SSD, so the free SSD was not offered under "Format drive" (seen
+// in QEMU with scripts/smoke-cache.py), and two devices carried one UUID.
 func (m *Manager) clearCacheSSD(ctx context.Context, c *CacheConfig) {
 	if !m.cachePresent(c) {
 		return
 	}
-	if err := m.zeroStart(m.partUUIDPath(c.MetaUUID)); err != nil {
-		slog.Warn("clear cache metadata", "err", err)
+	for _, uuid := range []string{c.MetaUUID, c.DataUUID} {
+		if err := m.zeroStart(m.partUUIDPath(uuid)); err != nil {
+			slog.Warn("clear cache partition", "partition", uuid, "err", err)
+		}
 	}
 	if _, err := m.runner.Run(ctx, "", "blkdiscard", "--force", m.partUUIDPath(c.DataUUID)); err != nil {
 		slog.Info("cache partition not discarded", "err", err)
 	}
+}
+
+// forgetCache removes the cache from the configuration of a volume whose
+// cache device no longer uses the SSD (detached, linear or never set up)
+// and clears the SSD.
+func (m *Manager) forgetCache(ctx context.Context, name string, c *CacheConfig) error {
+	if err := m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil }); err != nil {
+		return err
+	}
+	m.clearCacheSSD(ctx, c)
+	return nil
 }
 
 // errCacheDirty says that a cache still holds blocks the array lacks.
@@ -489,6 +509,30 @@ func (m *Manager) detachCache(ctx context.Context, volume VolumeConfig) error {
 	return nil
 }
 
+// removeMapperTries and removeMapperPause bound how long removeMapper
+// waits for a busy device (replaced in tests).
+var removeMapperTries, removeMapperPause = 10, time.Second
+
+// removeMapper removes a device-mapper device. Right after a wipe udev
+// still probes the device (a change event for the closed, written device),
+// and for that moment the kernel refuses with "busy": wait for udev and
+// try again. Seen in QEMU with scripts/smoke-cache.py.
+func (m *Manager) removeMapper(ctx context.Context, name string) error {
+	var err error
+	for try := 0; try < removeMapperTries; try++ {
+		m.runner.Run(ctx, "", "udevadm", "settle")
+		if _, err = m.runner.Run(ctx, "", "dmsetup", "remove", name); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(removeMapperPause):
+		}
+	}
+	return err
+}
+
 // target is the target type of a one-line dmsetup table or status.
 func target(line string) string {
 	fields := strings.Fields(line)
@@ -521,15 +565,15 @@ func (m *Manager) DisableCache(ctx context.Context, name string) error {
 			// the only way to use the array again.
 			return fmt.Errorf("%w: the write cache of %s is not running; mount the volume first so that its blocks can be written back", ErrNotPossible, name)
 		}
-		return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+		return m.forgetCache(ctx, name, volume.Cache)
 	}
 	if target(out) == "linear" {
-		return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+		return m.forgetCache(ctx, name, volume.Cache)
 	}
 	if view, ok := parseCacheStatusOK(out); ok && view.DirtyBlocks == 0 && volume.Cache.Mode == "writethrough" {
 		// A read cache: nothing on the SSD the array lacks.
 		if err := m.detachCache(ctx, volume); err == nil {
-			return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+			return m.forgetCache(ctx, name, volume.Cache)
 		} else if !errors.Is(err, errCacheDirty) {
 			return err
 		}
@@ -557,7 +601,7 @@ func (m *Manager) finishCacheRemoval(ctx context.Context, name string) bool {
 		}
 		return false
 	}
-	if err := m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil }); err != nil {
+	if err := m.forgetCache(ctx, name, volume.Cache); err != nil {
 		slog.Warn("written-back cache not forgotten", "volume", name, "err", err)
 		return false
 	}

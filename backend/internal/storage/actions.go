@@ -560,7 +560,7 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 		// The cache device holds the array open (also one left detached,
 		// as a linear mapping, after the cache was switched off).
 		if _, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name)); err == nil {
-			if _, err := m.runner.Run(ctx, "", "dmsetup", "remove", cacheName(name)); err != nil {
+			if err := m.removeMapper(ctx, cacheName(name)); err != nil {
 				return fmt.Errorf("%w: %v", ErrBusy, err)
 			}
 		}

@@ -6,6 +6,8 @@ export type BackupState = {
 	lastOK: string | null;
 	lastError: string;
 	warning: string;
+	/** Links and special files left out by the last copy (0.38.1). */
+	skipped?: number;
 };
 export type USBBackup = {
 	state?: BackupState;

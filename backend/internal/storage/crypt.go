@@ -976,9 +976,16 @@ func (m *Manager) checkNewMemberPassword(ctx context.Context, volume VolumeConfi
 }
 
 // eraseLUKS destroys the key slots of a LUKS device (cryptsetup erase): its
-// contents can never be read again, whatever password someone has.
+// contents can never be read again, whatever password someone has. A
+// device that is no LUKS device any more counts as erased: a delete that
+// stopped after erasing and wiping (e.g. a busy cache device) must be able
+// to run again.
 func (m *Manager) eraseLUKS(ctx context.Context, device string) error {
 	if _, err := m.runner.Run(ctx, "", "cryptsetup", "erase", "--batch-mode", device); err != nil {
+		if _, notLUKS := m.runner.Run(ctx, "", "cryptsetup", "isLuks", device); notLUKS != nil {
+			slog.Info("LUKS header already gone", "device", device)
+			return nil
+		}
 		slog.Warn("erase LUKS header", "device", device, "err", err)
 		return fmt.Errorf("erase LUKS header on %s: %w", device, err)
 	}
