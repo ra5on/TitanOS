@@ -111,7 +111,13 @@ Signiert und veröffentlicht wird in TitanOS (`.github/workflows/plugin-sign.yml
   des Abbilds passt, signiert Manifeste und Index, veröffentlicht den Satz und
   erhöht `serial` im Zeiger. Treiberupdates hängt er an ihren Kernel-Satz und
   ersetzt dort nur `nvidia-updates.json`; der Entwurf wird danach gelöscht.
-- Voraussetzung: Ein Tag `v*` enthält `plugin-sign.yml` (ab `v0.36.0`).
+- Signiert wird mit `scripts/sign-plugin-set.py` aus diesem Repository (gleiche
+  Dateien, Kommentare und Formate wie früher `sets.py sign`/`pointer` und
+  `nvidia-update-release.py sign` dort, geprüft gegen die Schlüssel des
+  Abbilds). Aus dem Plugin-Repository kommen nur die Dateien der Entwürfe;
+  sein Code läuft nie neben dem Schlüssel.
+- Voraussetzung: Ein Tag `v*` enthält `scripts/sign-plugin-set.py` (ab dem ersten
+  Release nach 0.38.0). Ältere Tags werden für das Signieren nicht mehr gewählt.
 
 In TitanOS (`.github/workflows/release.yml`, `scripts/plugin-set.py`):
 
