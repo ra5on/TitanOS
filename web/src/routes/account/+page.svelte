@@ -14,7 +14,7 @@
 	import Passkeys from './Passkeys.svelte';
 	import WebDav from './WebDav.svelte';
 
-	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean };
+	type Device = { id: string; created: string; lastSeen: string; remoteIP: string; userAgent: string; current: boolean; kept?: boolean; until?: string };
 
 	const user = $derived(session.data?.user);
 	let devices = $state<Device[] | null>(null);
@@ -254,7 +254,7 @@
 				<div class="device">
 					<div>
 						<span class="name">{browser(device.userAgent)}{#if device.current} <span class="chip ok">{t('account.thisDevice')}</span>{/if}</span>
-						<span class="muted mono">{device.remoteIP} · {t('account.since', { time: time.format(new Date(device.created)) })} · {t('account.lastSeen', { time: time.format(new Date(device.lastSeen)) })}</span>
+						<span class="muted mono">{device.remoteIP} · {t('account.since', { time: time.format(new Date(device.created)) })} · {t('account.lastSeen', { time: time.format(new Date(device.lastSeen)) })}{#if device.kept} · {device.until ? t('account.keptUntil', { time: time.format(new Date(device.until)) }) : t('account.keptForever')}{/if}</span>
 					</div>
 					{#if !device.current}<button type="button" class="btn" onclick={() => end(device)}>{t('account.end')}</button>{/if}
 				</div>

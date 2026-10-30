@@ -200,3 +200,35 @@ func (s *Server) handleCertificateRemove(w http.ResponseWriter, r *http.Request)
 	slog.Info("own certificate removed", "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, s.opts.Certificate.Info())
 }
+
+// loginView is the setting "stay logged in" of the NAS.
+type loginView struct {
+	// StayDays is how long a login lasts from the login on, also over a
+	// restart of the NAS: 0 = off (as before), -1 = until ended by hand.
+	StayDays int   `json:"stayDays"`
+	Choices  []int `json:"choices"`
+}
+
+func (s *Server) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, loginView{StayDays: s.sessions.Stay(), Choices: auth.StayChoices})
+}
+
+func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		StayDays *int `json:"stayDays"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.StayDays != nil {
+		if err := s.sessions.SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
+			writeError(w, http.StatusBadRequest, "invalid_stay", err.Error())
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+			return
+		}
+		slog.Info("stay logged in changed", "days", *req.StayDays, "by", currentUser(r).Name, "ip", remoteIP(r))
+	}
+	s.handleLoginSettings(w, r)
+}

@@ -9,6 +9,7 @@
 		history = [],
 		compact = false,
 		showCompactLabel = false,
+		bar = true,
 	}: {
 		value: number | null;
 		label: string;
@@ -17,6 +18,8 @@
 		history?: (number | null)[];
 		compact?: boolean;
 		showCompactLabel?: boolean;
+		/** false = the caller draws its own bar (RAM tile). */
+		bar?: boolean;
 	} = $props();
 	const mode = $derived(options.display === 'auto' ? 'bar' : options.display);
 	const known = $derived(value !== null && Number.isFinite(value));
@@ -43,7 +46,7 @@
 		<span>{!known ? '–' : Math.round(value!)}</span><small>{unit}</small>
 	</div>
 	<span class="label" data-edit-part="labels">{label}</span>
-	{#if compact && mode === 'bar'}<div
+	{#if bar && compact && mode === 'bar'}<div
 			class="bar"
 			role="progressbar"
 			aria-label={label}
@@ -54,7 +57,7 @@
 			<span class="metric-level" class:unknown={!known} style:width="{bounded}%"></span>
 		</div>{/if}
 </div>
-{#if mode === 'bar' && !compact}<div
+{#if bar && mode === 'bar' && !compact}<div
 		class="bar"
 		role="progressbar"
 		aria-valuemin="0"

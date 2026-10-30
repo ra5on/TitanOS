@@ -22,25 +22,6 @@
 	// Set once the password was right and the account asks for a second factor.
 	let needsCode = $state(false);
 	let code = $state('');
-	// "Stay logged in" keeps the login over a restart of the NAS; the
-	// choice is remembered in this browser.
-	const REMEMBER_KEY = 'titanos.remember';
-	let remember = $state(readRemember());
-	function readRemember(): boolean {
-		try {
-			return localStorage.getItem(REMEMBER_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-	function keepChoice() {
-		try {
-			localStorage.setItem(REMEMBER_KEY, remember ? '1' : '0');
-		} catch {
-			// Private mode: the box just starts empty next time.
-		}
-	}
-
 	const passkeys = passkeysPossible();
 
 	async function withPasskey() {
@@ -48,8 +29,7 @@
 		busy = true;
 		error = '';
 		try {
-			keepChoice();
-			await loginWithPasskey(remember);
+			await loginWithPasskey();
 			await refreshSession();
 		} catch (err) {
 			if (err instanceof DOMException || (err instanceof Error && err.message === 'cancelled')) {
@@ -70,8 +50,7 @@
 		busy = true;
 		error = '';
 		try {
-			keepChoice();
-			await login(name, password, code, remember);
+			await login(name, password, code);
 		} catch (err) {
 			if (err instanceof ApiError && err.code === 'second_factor_required') {
 				needsCode = true;
@@ -116,9 +95,6 @@
 			<input class="field" type="password" bind:value={password} autocomplete="current-password" required />
 		</label>
 		{/if}
-		{#if !needsCode}
-			<label class="remember"><input type="checkbox" bind:checked={remember} /><span>{t('auth.remember')}</span></label>
-		{/if}
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<button class="btn btn-primary" type="submit" disabled={busy}>{t('auth.login')}</button>
 		{#if passkeys && !needsCode}
@@ -141,10 +117,5 @@
 		flex-direction: column;
 		gap: 6px;
 		font-size: 0.875rem;
-	}
-	label.remember {
-		flex-direction: row;
-		align-items: center;
-		gap: 8px;
 	}
 </style>

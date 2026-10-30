@@ -114,55 +114,87 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 	if err := first.Remember(stick); err != nil {
 		t.Fatal(err)
 	}
-	if stick.writes != 0 {
-		t.Fatal("a start without remembered logins wrote to the stick")
+	if first.Stay() != 0 || stick.writes != 0 {
+		t.Fatalf("a first start: stay %d, %d writes", first.Stay(), stick.writes)
 	}
-	kept, _ := first.CreateRemembered("alex", "192.0.2.1", "Safari")
 	plain, _ := first.Create("kim", "192.0.2.2", "Firefox")
-	if stick.writes != 1 || strings.Contains(string(stick.files[RememberFile]), kept) || strings.Contains(string(stick.files[RememberFile]), "kim") {
-		t.Fatalf("stick after login: %d writes, %s", stick.writes, stick.files[RememberFile])
-	}
-	first.now = func() time.Time { return time.Now().Add(10 * 24 * time.Hour) }
-	first.Get(kept)
-	if stick.writes != 1 {
-		t.Error("using a remembered login wrote to the stick")
+	if stick.writes != 0 {
+		t.Fatal("a login with the setting off wrote to the stick")
 	}
 
-	// A restart of the NAS: RAM is empty, the stick is not.
+	// Switched on, the setting takes the login there is along.
+	if err := first.SetStay(90); err != nil {
+		t.Fatal(err)
+	}
+	kept, _ := first.Create("alex", "192.0.2.1", "Safari")
+	// Setting, logins after switching on, the new login.
+	if stick.writes != 3 || strings.Contains(string(stick.files[RememberFile]), kept) || !strings.Contains(string(stick.files[RememberFile]), "kim") {
+		t.Fatalf("stick after login: %d writes, %s", stick.writes, stick.files[RememberFile])
+	}
+	first.now = func() time.Time { return time.Now().Add(40 * 24 * time.Hour) }
+	first.Get(kept)
+	if stick.writes != 3 {
+		t.Error("using a remembered login wrote to the stick")
+	}
+	if list := first.List("alex", kept); len(list) != 1 || !list[0].Kept || list[0].Until == nil {
+		t.Errorf("list: %+v", list)
+	}
+
+	// A restart of the NAS: RAM is empty, the stick is not. 40 days are
+	// past the idle time and SessionMaxAge, not past 90 days.
 	second := NewSessions()
-	second.now = func() time.Time { return time.Now().Add(20 * 24 * time.Hour) }
+	second.now = func() time.Time { return time.Now().Add(40 * 24 * time.Hour) }
 	if err := second.Remember(stick); err != nil {
 		t.Fatal(err)
 	}
 	if session, ok := second.Get(kept); !ok || session.User != "alex" || !session.Remember {
 		t.Fatalf("remembered login after the restart: %+v %v", session, ok)
 	}
-	if _, ok := second.Get(plain); ok {
-		t.Error("a normal login outlived the restart")
+	if _, ok := second.Get(plain); !ok {
+		t.Error("a login from before switching on did not outlive the restart")
 	}
-	if stick.writes != 1 {
+	if stick.writes != 3 {
 		t.Error("taking the logins over wrote to the stick")
+	}
+	second.now = func() time.Time { return time.Now().Add(91 * 24 * time.Hour) }
+	if _, ok := second.Get(kept); ok {
+		t.Error("a login outlived the 90 days")
+	}
+
+	// Without an end it stays.
+	if err := second.SetStay(StayForever); err != nil {
+		t.Fatal(err)
+	}
+	forever, _ := second.Create("alex", "192.0.2.1", "Safari")
+	second.now = func() time.Time { return time.Now().Add(5 * 365 * 24 * time.Hour) }
+	if _, ok := second.Get(forever); !ok {
+		t.Error("a login without an end ended")
+	}
+	if list := second.List("alex", forever); len(list) != 1 || !list[0].Kept || list[0].Until != nil {
+		t.Errorf("list without an end: %+v", list)
 	}
 
 	// Ending it, also for the whole account, removes it from the stick.
 	second.DeleteUser("alex", "")
 	third := NewSessions()
 	third.Remember(stick)
-	if _, ok := third.Get(kept); ok {
+	if _, ok := third.Get(forever); ok {
 		t.Error("an ended remembered login came back")
 	}
 
-	// It ends after SessionMaxAge, not after the idle time.
+	// Switched off, the logins end with the next restart and the idle time
+	// counts again.
+	token, _ := third.Create("alex", "192.0.2.1", "Safari")
+	if err := third.SetStay(0); err != nil {
+		t.Fatal(err)
+	}
 	fourth := NewSessions()
 	fourth.Remember(stick)
-	token, _ := fourth.CreateRemembered("alex", "192.0.2.1", "Safari")
-	fourth.now = func() time.Time { return time.Now().Add(SessionIdleTimeout + time.Hour) }
-	if _, ok := fourth.Get(token); !ok {
-		t.Error("a remembered login ended after the idle time")
-	}
-	fourth.now = func() time.Time { return time.Now().Add(SessionMaxAge + time.Hour) }
 	if _, ok := fourth.Get(token); ok {
-		t.Error("a remembered login outlived SessionMaxAge")
+		t.Error("a login outlived the restart with the setting off")
+	}
+	if err := fourth.SetStay(7); err == nil {
+		t.Error("a choice that is not offered was taken")
 	}
 
 	// An unreadable stick is left alone.
@@ -172,8 +204,29 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 	if err := fifth.Remember(stick); err == nil {
 		t.Error("an unreadable stick was not reported")
 	}
-	fifth.CreateRemembered("alex", "192.0.2.1", "Safari")
+	fifth.Create("alex", "192.0.2.1", "Safari")
 	if stick.writes != writes {
 		t.Error("the file on an unreadable stick was overwritten")
+	}
+}
+
+// Whoever ticked "stay logged in" in 0.37.0 keeps 30 days.
+func TestStayFromBeforeTheSetting(t *testing.T) {
+	stick := &memKeeper{files: map[string][]byte{}}
+	old := NewSessions()
+	old.Remember(stick)
+	old.SetStay(30)
+	token, _ := old.Create("alex", "192.0.2.1", "Safari")
+	delete(stick.files, StayFile)
+
+	next := NewSessions()
+	if err := next.Remember(stick); err != nil {
+		t.Fatal(err)
+	}
+	if next.Stay() != 30 {
+		t.Errorf("stay %d", next.Stay())
+	}
+	if _, ok := next.Get(token); !ok {
+		t.Error("the login of 0.37.0 is gone")
 	}
 }

@@ -15,7 +15,7 @@ const keywords: Record<string, string> = {
 	'firewall-recent': 'gesperrt blocked verworfen dropped pakete packets zuletzt recent',
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
-	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access',
+	access: 'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session',
 	assistant:
 		'ki ai assistent assistant chat ollama modell model llm sprachmodell websuche web search duckduckgo',
 	backups:
@@ -81,6 +81,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	access: [
 		{ id: 'ssh', label: 'access.ssh', href: '/settings/access#access-ssh' },
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
+		{ id: 'stay', label: 'stay.title', href: '/settings/access#access-stay' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],
